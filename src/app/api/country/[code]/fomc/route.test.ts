@@ -10,9 +10,13 @@ vi.mock("@/lib/mongodb", () => ({ getDb: () => mockGetDb() }));
 vi.mock("@/lib/api/requireAuth", () => ({
   requireAuthWithCharacter: () => mockRequireAuth(),
 }));
-vi.mock("@/lib/centralBank/helpers", () => ({
-  getCentralBankScope: () => mockGetCentralBankScope(),
-}));
+vi.mock("@/lib/centralBank/helpers", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/centralBank/helpers")>();
+  return {
+    ...actual,
+    getCentralBankScope: () => mockGetCentralBankScope(),
+  };
+});
 vi.mock("@/lib/turn/currentTurn", () => ({
   getCurrentTurn: (...args: unknown[]) => mockGetCurrentTurn(...args),
 }));

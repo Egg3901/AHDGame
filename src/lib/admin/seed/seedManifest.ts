@@ -255,12 +255,6 @@ const REFERENCE: CollectionEntry[] = [
     notes:
       "Idempotent upsert from bootstrap's seedRegistrationLanes; per-turn registration drift mutates it like stateMetrics.",
   },
-  {
-    name: "indexFunds",
-    category: "reference",
-    notes:
-      "Index-fund definitions re-seeded on every fresh start via idempotent bootstrap migrations (index-fund-foundation/seed). Holder state lives in the runtime indexFund* collections.",
-  },
 ];
 
 // ─── Runtime collections ─────────────────────────────────────────────────────
@@ -476,6 +470,12 @@ const RUNTIME: CollectionEntry[] = [
 
   // Private banking (1.1)
   { name: "bankLoans", category: "runtime" },
+  {
+    name: "savingsAccounts",
+    category: "runtime",
+    notes:
+      "Authoritative savings accounts, one per owner and currency; legacy character savings fields are projections of these.",
+  },
   { name: "bankCharterHistory", category: "runtime" },
   { name: "depositInsuranceFunds", category: "runtime" },
   {
@@ -787,7 +787,15 @@ const RUNTIME: CollectionEntry[] = [
       "Per-character general profile (spec, level, xp, trained traits). Runtime rather than preserved: the level/xp is earned fighting this world's battles, and a soft reset retires every character while wiping militaryUnits/formations — so a surviving profile would be orphaned progression keyed to a retired character.",
   },
 
-  // Index-fund holder/runtime state (definitions are reference; see indexFunds).
+  // An indexFunds document mixes the seeded definition with world-bound cash,
+  // units, holdings, baskets, and rebalance state. It must be rebuilt with its
+  // position/transaction collections or old corporation ids survive a reset.
+  {
+    name: "indexFunds",
+    category: "runtime",
+    notes:
+      "Dropped with the world and recreated by the forced idempotent fund bootstrap migrations; definitions and runtime accounting cannot safely survive independently.",
+  },
   { name: "indexFundPositions", category: "runtime" },
   { name: "indexFundRedemptionQueue", category: "runtime" },
   { name: "indexFundSnapshots", category: "runtime" },

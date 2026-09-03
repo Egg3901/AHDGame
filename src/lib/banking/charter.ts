@@ -14,7 +14,8 @@ import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital
 import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
-import { returnDepositBook } from "@/lib/banking/depositBookReturn";
+import { freezeAccountsAt, returnDepositBook } from "@/lib/banking/depositBookReturn";
+import { lifecycleRefusal } from "@/lib/banking/rules/lifecycle";
 import { clampOffsets, getRateCorridors } from "@/lib/banking/regulationQ";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getCurrentTurn } from "@/lib/currentTurn";
@@ -406,8 +407,37 @@ async function revokeCharterInner(
   }
 
   const charter = corporation.bankCharter;
-  const revokedTurn = await getCurrentTurn(db);
+  const currentTurn = await getCurrentTurn(db);
   const now = new Date();
+
+  // Claim the estate before anything moves. The claim puts the charter in the
+  // `resolving` stage, where deposits, loans, payouts and switches are all
+  // refused, and a second revocation racing this one matches nothing. A
+  // revocation that crashed after claiming is finished here as well, under
+  // the turn it was claimed on, so the waterfall's idempotency key is the
+  // same and the money moves once.
+  const claim = await db.collection<Corporation>("corporations").updateOne(
+    {
+      _id: corporationId,
+      "bankCharter.status": "active",
+      "bankCharter.resolutionClaimedTurn": { $exists: false },
+    },
+    {
+      $set: {
+        "bankCharter.resolutionClaimedTurn": currentTurn,
+        "bankCharter.pendingRevocationReason": reason,
+        updatedAt: now,
+      },
+    }
+  );
+  let revokedTurn = currentTurn;
+  if (claim.modifiedCount !== 1) {
+    if (typeof charter.resolutionClaimedTurn !== "number") {
+      return { ok: false, error: "The charter is already being revoked." };
+    }
+    revokedTurn = charter.resolutionClaimedTurn;
+  }
+  await freezeAccountsAt(db, corporationId.toString(), charter.currency as CurrencyCode, now);
 
   // Depositors before shareholders, and the waterfall decides what is left
   // rather than a gate deciding whether anything is returned at all. The
@@ -420,6 +450,9 @@ async function revokeCharterInner(
     releaseResidualToOwner: true,
   });
   if (returned.error) {
+    // Claimed and frozen, not settled. The charter reads as `resolving` and the
+    // recovery worker finishes it; nothing here is undone, because undoing a
+    // half-moved waterfall is the one thing a retry must never do.
     return { ok: false, error: `Could not return the deposit book: ${returned.error}` };
   }
   const refund = returned.ownerResidual;
@@ -433,6 +466,7 @@ async function revokeCharterInner(
 
   const update: {
     $set: Record<string, unknown>;
+    $unset: Record<string, "">;
   } = {
     $set: {
       "bankCharter.status": "revoked",
@@ -440,6 +474,7 @@ async function revokeCharterInner(
       "bankCharter.revokedReason": reason,
       updatedAt: now,
     },
+    $unset: { "bankCharter.pendingRevocationReason": "" },
   };
   // No cash leg here: `returnDepositBook` already moved every currency unit it
   // was going to move, with a netting check on the legs. Writing a second
@@ -470,7 +505,9 @@ export type CharterSwitchBlocker =
   | "illegal_type"
   | "cooldown"
   | "discount_window_outstanding"
-  | "cb_margin_outstanding";
+  | "cb_margin_outstanding"
+  /** The charter's lifecycle stage does not admit a switch (impaired, or not active). */
+  | "lifecycle_stage";
 
 export type CharterSwitchPreview = {
   allowed: boolean;
@@ -504,6 +541,7 @@ const SWITCH_BLOCKER_MESSAGE: Record<CharterSwitchBlocker, string> = {
     "Repay the discount window first. The window is open to deposit-taking charters only, and an investment bank cannot carry one.",
   cb_margin_outstanding:
     "Repay the CB margin line first. Only investment and universal charters may carry margin debt.",
+  lifecycle_stage: "An impaired bank may not change charter type. Restore its capital first.",
 };
 
 function takesDeposits(type: BankCharterType): boolean {
@@ -549,6 +587,10 @@ export async function previewCharterSwitch(
   if (typeof cooldownUntilTurn === "number" && currentTurn < cooldownUntilTurn) {
     blockers.push("cooldown");
   }
+
+  // The stage table, not a band check here: an impaired bank restructuring
+  // its way out of supervision is the case the rule exists for.
+  if (lifecycleRefusal(charter, "switchType")) blockers.push("lifecycle_stage");
 
   // Facilities that do not survive the target charter must be settled first.
   // Carrying them across would leave the bank holding a line it is no longer

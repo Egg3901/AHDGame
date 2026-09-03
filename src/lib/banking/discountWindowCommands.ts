@@ -2,9 +2,11 @@
  * Draw on and repay the discount window.
  *
  * Drawing CREATES money at the central bank, exactly as the CB margin line
- * does: the bank's ring-fenced cash rises and the central bank's balance sheet carries the
- * claim. Repayment destroys it symmetrically. Both legs are ledgered so the
- * money-supply reconciliation sees the same event the bank does.
+ * does: the bank's ring-fenced cash rises and the central bank's balance sheet
+ * carries the claim. Repayment destroys it symmetrically. Both are decided by
+ * the rules boundary and landed by the settlement journal as one transition
+ * (mint or burn leg, vault leg, the debt counter, the central bank's creation
+ * counter), so a crash can no longer leave the cash without the claim.
  */
 
 import { ObjectId, type Db } from "mongodb";
@@ -13,23 +15,16 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { recordAudit } from "@/lib/audit/recordAudit";
-import { canDraw, discountWindowRatePercent, quoteDiscountWindow } from "./discountWindow";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { loadBankingSnapshot } from "@/lib/banking/snapshot";
+import { decideBankCommand } from "@/lib/banking/rules/decide";
+import { settleTransition } from "@/lib/banking/settlementJournal";
 import { charterMay } from "@/lib/banking/rules/capabilities";
+import { discountWindowRatePercent, quoteDiscountWindow } from "./discountWindow";
 
 export type WindowResult =
   | { ok: false; error: string; status: number }
   | { ok: true; outstanding: number; ratePercent: number };
-
-const DENIAL_MESSAGE: Record<string, string> = {
-  charter_inactive: "This bank has no active charter.",
-  not_deposit_taking:
-    "The discount window protects depositors, so it is open to deposit-taking charters only. An investment bank funds itself on the margin line.",
-  no_deposits: "The window is sized against the deposit base, and this bank has none.",
-  cap_exhausted:
-    "This draw would take the bank past its window limit. A bank needing more than that is not illiquid, it is insolvent.",
-  invalid_amount: "Draw amount must be a positive number.",
-};
 
 async function primeRateFor(db: Db, currency: CurrencyCode): Promise<number> {
   const cb = await db
@@ -41,89 +36,124 @@ async function primeRateFor(db: Db, currency: CurrencyCode): Promise<number> {
   return typeof cb?.primeRate === "number" && Number.isFinite(cb.primeRate) ? cb.primeRate : 0;
 }
 
+async function runWindowCommand(
+  db: Db,
+  corporationId: ObjectId,
+  command: { type: "draw_discount_window" | "repay_discount_window"; amount: number },
+  currentTurn: number,
+  txType: "bank_discount_window_draw" | "bank_discount_window_repay"
+): Promise<WindowResult> {
+  const loaded = await loadBankingSnapshot(db, corporationId, { turn: currentTurn });
+  const charter = loaded?.snapshot.charter;
+  if (!loaded || !charter) return { ok: false, error: "No bank charter", status: 404 };
+  const { snapshot, corporation } = loaded;
+  const commandName =
+    command.type === "draw_discount_window"
+      ? "bank.discountWindow.draw"
+      : "bank.discountWindow.repay";
+
+  const decision = decideBankCommand(snapshot, command, {
+    commandId: new ObjectId().toHexString(),
+  });
+  if (!decision.allowed) {
+    emitBankingAuditEvent(
+      {
+        kind: "charter.issued",
+        command: commandName,
+        turn: currentTurn,
+        outcome: "rejected",
+        reason: decision.message,
+        currency: snapshot.currency,
+        bankId: corporationId.toString(),
+        meta: { amount: command.amount },
+      },
+      db
+    );
+    return { ok: false, error: decision.message, status: 400 };
+  }
+
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status === "rejected" || settled.status === "partial" || settled.error) {
+    emitBankingAuditEvent(
+      {
+        ...decision.transition.event,
+        turn: currentTurn,
+        outcome: "rejected",
+        reason: settled.error ?? "settlement did not complete",
+        currency: snapshot.currency,
+        bankId: corporationId.toString(),
+        settlementId: decision.transition.key,
+      },
+      db
+    );
+    return {
+      ok: false,
+      error:
+        command.type === "draw_discount_window"
+          ? "This draw would take the bank past its window limit. A bank needing more than that is not illiquid, it is insolvent."
+          : "Insufficient cash to repay that amount.",
+      status: 409,
+    };
+  }
+
+  const amount = decision.transition.legs.find(
+    (l) => l.kind === "credit" || l.kind === "debit"
+  )?.amount;
+  const moved = amount ?? 0;
+  const now = new Date();
+  const currency = snapshot.currency as CurrencyCode;
+  const ratePercent = discountWindowRatePercent(snapshot.primeRate);
+
+  await emitTx(db, {
+    type: txType,
+    turn: currentTurn,
+    createdAt: now,
+    subjectType: "corporation",
+    subjectId: corporationId,
+    subjectName: corporation.name,
+    amount: command.type === "draw_discount_window" ? moved : -moved,
+    currencyCode: currency,
+    counterpartyType: "government",
+    counterpartyName: `${getCountryIdForCurrency(currency)} central bank`,
+    meta:
+      command.type === "draw_discount_window"
+        ? { kind: "discount_window_draw", ratePercent }
+        : { kind: "discount_window_repay" },
+  });
+
+  emitBankingAuditEvent(
+    {
+      ...decision.transition.event,
+      turn: currentTurn,
+      outcome: "ok",
+      currency,
+      bankId: corporationId.toString(),
+      settlementId: decision.transition.key,
+    },
+    db
+  );
+
+  const before = Math.max(0, charter.discountWindowDebt ?? 0);
+  return {
+    ok: true,
+    outstanding: command.type === "draw_discount_window" ? before + moved : before - moved,
+    ratePercent,
+  };
+}
+
 export async function drawDiscountWindow(
   db: Db,
   corporationId: ObjectId,
   amount: number,
   currentTurn: number
 ): Promise<WindowResult> {
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corporationId });
-  if (!corp?.bankCharter) return { ok: false, error: "No bank charter", status: 404 };
-  const charter = corp.bankCharter;
-  const currency = charter.currency as CurrencyCode;
-  const prime = await primeRateFor(db, currency);
-
-  const allowed = canDraw(charter, amount, prime);
-  if (!allowed.ok)
-    return {
-      ok: false,
-      status: allowed.reason === "charter_inactive" ? 400 : 400,
-      error: DENIAL_MESSAGE[allowed.reason] ?? "Draw refused.",
-    };
-
-  const draw = Math.round(amount);
-  const now = new Date();
-
-  // Guard the cap in the write itself, so two draws in the same instant cannot
-  // both pass the read-side check and take the bank over its limit.
-  const claim = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corporationId,
-      "bankCharter.status": "active",
-      $expr: {
-        $lte: [
-          { $add: [{ $ifNull: ["$bankCharter.discountWindowDebt", 0] }, draw] },
-          allowed.quote.capAnchor,
-        ],
-      },
-    },
-    {
-      $inc: { "bankCharter.cashReserves": draw, "bankCharter.discountWindowDebt": draw },
-      $set: { updatedAt: now },
-    }
+  return runWindowCommand(
+    db,
+    corporationId,
+    { type: "draw_discount_window", amount },
+    currentTurn,
+    "bank_discount_window_draw"
   );
-  if (claim.modifiedCount === 0)
-    return { ok: false, error: DENIAL_MESSAGE.cap_exhausted, status: 409 };
-
-  // Money created at the central bank, mirroring the margin line.
-  await db
-    .collection<CentralBank>("centralBanks")
-    .updateOne(
-      { _id: getBankId(getCountryIdForCurrency(currency)) },
-      { $inc: { netMoneyCreatedLifetime: draw }, $set: { updatedAt: now } }
-    );
-
-  await emitTx(db, {
-    type: "bank_discount_window_draw",
-    turn: currentTurn,
-    createdAt: now,
-    subjectType: "corporation",
-    subjectId: corporationId,
-    subjectName: corp.name,
-    amount: draw,
-    currencyCode: currency,
-    counterpartyType: "government",
-    counterpartyName: `${getCountryIdForCurrency(currency)} central bank`,
-    meta: { kind: "discount_window_draw", ratePercent: discountWindowRatePercent(prime) },
-  });
-
-  recordAudit({
-    source: "api",
-    action: "bank.discountWindow.draw",
-    category: "money",
-    turn: currentTurn,
-    ts: now,
-    subject: { type: "corporation", id: corporationId, name: corp.name },
-    refs: { corporationId },
-    outcome: "ok",
-    meta: { amount: draw, ratePercent: discountWindowRatePercent(prime) },
-  });
-
-  return {
-    ok: true,
-    outstanding: (charter.discountWindowDebt ?? 0) + draw,
-    ratePercent: discountWindowRatePercent(prime),
-  };
 }
 
 export async function repayDiscountWindow(
@@ -132,59 +162,13 @@ export async function repayDiscountWindow(
   amount: number,
   currentTurn: number
 ): Promise<WindowResult> {
-  const corp = await db.collection<Corporation>("corporations").findOne({ _id: corporationId });
-  if (!corp?.bankCharter) return { ok: false, error: "No bank charter", status: 404 };
-  const charter = corp.bankCharter;
-  const outstanding = Math.max(0, charter.discountWindowDebt ?? 0);
-  if (outstanding <= 0)
-    return { ok: false, error: "Nothing is outstanding on the window.", status: 400 };
-
-  const currency = charter.currency as CurrencyCode;
-  const repay = Math.min(Math.round(amount), outstanding);
-  if (!(repay > 0)) return { ok: false, error: "Repayment must be positive.", status: 400 };
-
-  const now = new Date();
-  const claim = await db.collection<Corporation>("corporations").updateOne(
-    {
-      _id: corporationId,
-      "bankCharter.cashReserves": { $gte: repay },
-      "bankCharter.discountWindowDebt": { $gte: repay },
-    },
-    {
-      $inc: { "bankCharter.cashReserves": -repay, "bankCharter.discountWindowDebt": -repay },
-      $set: { updatedAt: now },
-    }
+  return runWindowCommand(
+    db,
+    corporationId,
+    { type: "repay_discount_window", amount },
+    currentTurn,
+    "bank_discount_window_repay"
   );
-  if (claim.modifiedCount === 0)
-    return { ok: false, error: "Insufficient cash to repay that amount.", status: 400 };
-
-  // Repayment destroys the money the draw created.
-  await db
-    .collection<CentralBank>("centralBanks")
-    .updateOne(
-      { _id: getBankId(getCountryIdForCurrency(currency)) },
-      { $inc: { netMoneyCreatedLifetime: -repay }, $set: { updatedAt: now } }
-    );
-
-  await emitTx(db, {
-    type: "bank_discount_window_repay",
-    turn: currentTurn,
-    createdAt: now,
-    subjectType: "corporation",
-    subjectId: corporationId,
-    subjectName: corp.name,
-    amount: -repay,
-    currencyCode: currency,
-    counterpartyType: "government",
-    counterpartyName: `${getCountryIdForCurrency(currency)} central bank`,
-    meta: { kind: "discount_window_repay" },
-  });
-
-  return {
-    ok: true,
-    outstanding: outstanding - repay,
-    ratePercent: discountWindowRatePercent(await primeRateFor(db, currency)),
-  };
 }
 
 /** Read-only quote for the UI. */

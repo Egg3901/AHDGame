@@ -12,7 +12,7 @@ import type { BankCharter, BankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
-import { getCashReserves } from "@/lib/banking/rules/balanceSheet";
+import { getCashReserves, type BalanceSheetOptions } from "@/lib/banking/rules/balanceSheet";
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { getLendableHeadroom } from "@/lib/banking/rules/reserves";
 import { remainingLoanTurns } from "@/lib/banking/rules/lendingMath";
@@ -122,11 +122,15 @@ export function markLoanDefaulted(
  * rule, read by origination and by the CEO's later approval alike.
  */
 export function namedLoanHeadroom(
-  charter: Pick<BankCharter, "type" | "status" | "npcDeposits" | "totalLoans" | "cashReserves">,
-  reserveRatio: number
+  charter: Pick<
+    BankCharter,
+    "type" | "status" | "npcDeposits" | "playerDeposits" | "totalLoans" | "cashReserves"
+  >,
+  reserveRatio: number,
+  options: BalanceSheetOptions = {}
 ): number {
   if (charterMay(charter, "acceptNpcFunding")) {
-    return getLendableHeadroom(charter, reserveRatio);
+    return getLendableHeadroom(charter, reserveRatio, options);
   }
   return Math.max(0, getCashReserves(charter) - Math.max(0, charter.totalLoans ?? 0));
 }

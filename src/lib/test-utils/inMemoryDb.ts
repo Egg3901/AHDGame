@@ -39,33 +39,71 @@ function safePathParts(path: string): string[] {
   return parts;
 }
 
+/** A container a dotted path can descend into: a plain object, or an array by index. */
+type Container = Doc | unknown[];
+
+function isContainer(value: unknown): value is Container {
+  return isPlainObject(value) || Array.isArray(value);
+}
+
+function readPart(cur: Container, part: string): unknown {
+  if (Array.isArray(cur)) {
+    return /^\d+$/.test(part) ? cur[Number(part)] : undefined;
+  }
+  return cur[part];
+}
+
+function writePart(cur: Container, part: string, value: unknown): void {
+  if (Array.isArray(cur)) {
+    if (!/^\d+$/.test(part)) {
+      throw new Error(`inMemoryDb: cannot set non-numeric key "${part}" on an array`);
+    }
+    cur[Number(part)] = value;
+    return;
+  }
+  cur[part] = value;
+}
+
 function getPath(doc: Doc, path: string): unknown {
   let cur: unknown = doc;
   for (const part of safePathParts(path)) {
-    if (!isPlainObject(cur)) return undefined;
-    cur = cur[part];
+    if (!isContainer(cur)) return undefined;
+    cur = readPart(cur, part);
   }
   return cur;
 }
 
+/**
+ * Mongo semantics for dotted paths: `a.0.b` descends into an array element,
+ * as it does on the server. The first version replaced any array on the path
+ * with an empty object, which silently corrupted a journal record's
+ * projection list and made "projection 1 applied" vanish.
+ */
 function setPath(doc: Doc, path: string, value: unknown): void {
   const parts = safePathParts(path);
-  let cur: Doc = doc;
+  let cur: Container = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
-    const next = cur[parts[i]];
-    if (!isPlainObject(next)) cur[parts[i]] = {};
-    cur = cur[parts[i]] as Doc;
+    let next = readPart(cur, parts[i]);
+    if (!isContainer(next)) {
+      next = /^\d+$/.test(parts[i + 1]) ? [] : {};
+      writePart(cur, parts[i], next);
+    }
+    cur = next as Container;
   }
-  cur[parts[parts.length - 1]] = value;
+  writePart(cur, parts[parts.length - 1], value);
 }
 
 function unsetPath(doc: Doc, path: string): void {
   const parts = safePathParts(path);
-  let cur: Doc = doc;
+  let cur: Container = doc;
   for (let i = 0; i < parts.length - 1; i += 1) {
-    const next = cur[parts[i]];
-    if (!isPlainObject(next)) return;
+    const next = readPart(cur, parts[i]);
+    if (!isContainer(next)) return;
     cur = next;
+  }
+  if (Array.isArray(cur)) {
+    if (/^\d+$/.test(parts[parts.length - 1])) cur[Number(parts[parts.length - 1])] = null;
+    return;
   }
   delete cur[parts[parts.length - 1]];
 }
@@ -78,6 +116,18 @@ function sameValue(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+/**
+ * Equality the way Mongo reads it against an array field: the whole array, or
+ * any one element. `{ tags: "x" }` matches `{ tags: ["x", "y"] }`, and
+ * `{ tags: { $ne: "x" } }` does not.
+ */
+function equalsAny(value: unknown, operand: unknown): boolean {
+  if (Array.isArray(value) && !Array.isArray(operand)) {
+    return value.some((item) => sameValue(item, operand));
+  }
+  return sameValue(value, operand);
+}
+
 function matchesCondition(value: unknown, condition: unknown): boolean {
   if (isPlainObject(condition)) {
     const keys = Object.keys(condition);
@@ -86,9 +136,9 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
         const operand = condition[op];
         switch (op) {
           case "$eq":
-            return sameValue(value, operand);
+            return equalsAny(value, operand);
           case "$ne":
-            return !sameValue(value, operand);
+            return !equalsAny(value, operand);
           case "$gte":
             return typeof value === "number" && value >= (operand as number);
           case "$gt":
@@ -98,9 +148,9 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
           case "$lt":
             return typeof value === "number" && value < (operand as number);
           case "$in":
-            return (operand as unknown[]).some((o) => sameValue(value, o));
+            return (operand as unknown[]).some((o) => equalsAny(value, o));
           case "$nin":
-            return !(operand as unknown[]).some((o) => sameValue(value, o));
+            return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":
             return (value !== undefined) === Boolean(operand);
           default:
@@ -109,7 +159,7 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
       });
     }
   }
-  return sameValue(value, condition);
+  return equalsAny(value, condition);
 }
 
 /** Tiny aggregation-expression evaluator, enough for the `$expr` guards. */
@@ -190,7 +240,17 @@ function applyUpdate(doc: Doc, update: Update): void {
     } else if (op === "$push") {
       for (const [path, value] of Object.entries(fields as Doc)) {
         const current = getPath(doc, path);
-        setPath(doc, path, Array.isArray(current) ? [...current, value] : [value]);
+        const base = Array.isArray(current) ? [...current] : [];
+        if (isPlainObject(value) && "$each" in value) {
+          const spec = value as { $each: unknown[]; $slice?: number };
+          let next = [...base, ...spec.$each];
+          if (typeof spec.$slice === "number") {
+            next = spec.$slice < 0 ? next.slice(spec.$slice) : next.slice(0, spec.$slice);
+          }
+          setPath(doc, path, next);
+        } else {
+          setPath(doc, path, [...base, value]);
+        }
       }
     } else {
       throw new Error(`inMemoryDb: unsupported update operator ${op}`);
@@ -274,6 +334,9 @@ class InMemoryCollection {
         for (const [key, condition] of Object.entries(filter)) {
           if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
         }
+        // The server assigns an ObjectId to an upserted document that named
+        // none; readers that key on `_id` must see the same here.
+        if (seed._id === undefined) seed._id = new ObjectId();
         applyUpdate(seed, {
           ...update,
           ...((update.$setOnInsert as Doc)
@@ -347,8 +410,148 @@ class InMemoryCollection {
     return { modifiedCount: modified };
   }
 
-  aggregate() {
-    throw new Error("inMemoryDb: aggregate is not implemented");
+  /**
+   * The pipeline subset the banking passes use: `$match`, `$group` with
+   * `$sum` / `$min` / `$max` / `$avg` / `$first` / `$last` over a field or a
+   * constant, `$project` with 1/0 and `"$field"` aliases, `$sort`, `$limit`,
+   * `$count`. Anything else throws, so a test never passes on a stage the
+   * adapter quietly ignored.
+   */
+  aggregate(pipeline: Doc[] = []) {
+    const run = (): Doc[] => {
+      let rows: Doc[] = this.docs.map((d) => ({ ...d }));
+      for (const stage of pipeline) {
+        const [op] = Object.keys(stage);
+        const spec = stage[op] as Doc;
+        switch (op) {
+          case "$match":
+            rows = rows.filter((row) => matchesFilter(row, spec));
+            break;
+          case "$group": {
+            const groups = new Map<string, Doc>();
+            for (const row of rows) {
+              const idSpec = spec._id;
+              const id =
+                idSpec === null || idSpec === undefined
+                  ? null
+                  : typeof idSpec === "string" && idSpec.startsWith("$")
+                    ? getPath(row, idSpec.slice(1))
+                    : idSpec;
+              const key = JSON.stringify(id === undefined ? null : id);
+              let group = groups.get(key);
+              if (!group) {
+                group = { _id: id ?? null };
+                for (const [field, acc] of Object.entries(spec)) {
+                  if (field === "_id") continue;
+                  const [accOp] = Object.keys(acc as Doc);
+                  group[field] =
+                    accOp === "$sum" ? 0 : accOp === "$avg" ? { sum: 0, n: 0 } : undefined;
+                }
+                groups.set(key, group);
+              }
+              for (const [field, acc] of Object.entries(spec)) {
+                if (field === "_id") continue;
+                const [accOp] = Object.keys(acc as Doc);
+                const operand = (acc as Doc)[accOp];
+                const value =
+                  typeof operand === "string" && operand.startsWith("$")
+                    ? getPath(row, operand.slice(1))
+                    : operand;
+                const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
+                switch (accOp) {
+                  case "$sum":
+                    group[field] = (group[field] as number) + n;
+                    break;
+                  case "$min":
+                    group[field] =
+                      group[field] === undefined ? value : Math.min(group[field] as number, n);
+                    break;
+                  case "$max":
+                    group[field] =
+                      group[field] === undefined ? value : Math.max(group[field] as number, n);
+                    break;
+                  case "$avg": {
+                    const state = group[field] as { sum: number; n: number };
+                    state.sum += n;
+                    state.n += 1;
+                    break;
+                  }
+                  case "$first":
+                    if (group[field] === undefined) group[field] = value;
+                    break;
+                  case "$last":
+                    group[field] = value;
+                    break;
+                  default:
+                    throw new Error(`inMemoryDb: $group accumulator ${accOp} is not implemented`);
+                }
+              }
+            }
+            rows = [...groups.values()].map((group) => {
+              const out: Doc = {};
+              for (const [field, value] of Object.entries(group)) {
+                const acc = spec[field] as Doc | undefined;
+                out[field] =
+                  acc && Object.keys(acc)[0] === "$avg"
+                    ? (value as { n: number }).n > 0
+                      ? (value as { sum: number; n: number }).sum / (value as { n: number }).n
+                      : null
+                    : value;
+              }
+              return out;
+            });
+            break;
+          }
+          case "$project":
+            rows = rows.map((row) => {
+              const out: Doc = {};
+              const includes = Object.values(spec).some((v) => v === 1 || v === true);
+              if (!includes) {
+                Object.assign(out, row);
+                for (const [field, v] of Object.entries(spec))
+                  if (v === 0 || v === false) delete out[field];
+                return out;
+              }
+              if (spec._id !== 0 && spec._id !== false) out._id = row._id;
+              for (const [field, v] of Object.entries(spec)) {
+                if (v === 1 || v === true) out[field] = getPath(row, field);
+                else if (typeof v === "string" && v.startsWith("$"))
+                  out[field] = getPath(row, v.slice(1));
+              }
+              return out;
+            });
+            break;
+          case "$sort": {
+            const entries = Object.entries(spec) as Array<[string, number]>;
+            rows = [...rows].sort((a, b) => {
+              for (const [field, dir] of entries) {
+                const av = getPath(a, field) as number | string;
+                const bv = getPath(b, field) as number | string;
+                if (av === bv) continue;
+                if (av === undefined) return 1;
+                if (bv === undefined) return -1;
+                return (av < bv ? -1 : 1) * (dir < 0 ? -1 : 1);
+              }
+              return 0;
+            });
+            break;
+          }
+          case "$limit":
+            rows = rows.slice(0, spec as unknown as number);
+            break;
+          case "$count":
+            rows = [{ [spec as unknown as string]: rows.length }];
+            break;
+          default:
+            throw new Error(`inMemoryDb: aggregate stage ${op} is not implemented`);
+        }
+      }
+      return rows;
+    };
+    return {
+      toArray: async () => run(),
+      next: async () => run()[0] ?? null,
+    };
   }
 
   async createIndex(): Promise<string> {

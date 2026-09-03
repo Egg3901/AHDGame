@@ -193,12 +193,19 @@ describe("buildBankingHealth", () => {
         },
       ])
     );
-    db.collectionMocks.characters!.aggregate.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([
-        { _id: bankA.toString(), total: 400_000 },
-        { _id: bankB.toString(), total: 50_000 },
-      ]),
-    });
+    db.collectionMocks.characters!.find.mockReturnValue(
+      cursor([
+        {
+          currencyBalances: { savingsHolder: { USD: bankA.toString() }, savings: { USD: 250_000 } },
+        },
+        {
+          currencyBalances: { savingsHolder: { USD: bankA.toString() }, savings: { USD: 150_000 } },
+        },
+        {
+          currencyBalances: { savingsHolder: { USD: bankB.toString() }, savings: { USD: 50_000 } },
+        },
+      ])
+    );
     db.collectionMocks.centralBanks!.findOne.mockResolvedValue({
       _id: "US",
       bankReserveRequirement: 0.1,

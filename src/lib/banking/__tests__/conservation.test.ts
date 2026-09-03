@@ -26,6 +26,7 @@ import { applyMoneyMove } from "@/lib/banking/moneyMove";
 import { returnDepositBook } from "@/lib/banking/depositBookReturn";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBulk: vi.fn() }));
 
 const CORP_ID = new ObjectId();
 const CB_ID = "US";
@@ -82,7 +83,13 @@ function makeWorld(overrides: { cashReserves?: number; npcDeposits?: number; fun
       },
     },
   ]);
-  db.seed("centralBanks", [{ _id: CB_ID, externalBroadMoney: 500_000_000 }]);
+  // The command shells load a policy snapshot, the turn and the prime rate
+  // before deciding; a world without them reads as "banking off".
+  db.seed("gameConfig", [{ _id: "default", privateBankingEnabled: true }]);
+  db.seed("gameState", [{ _id: "current", currentTurn: 1, preset: "2019-default" }]);
+  db.seed("centralBanks", [
+    { _id: CB_ID, countryId: "US", primeRate: 4, externalBroadMoney: 500_000_000 },
+  ]);
   db.seed("depositInsuranceFunds", [{ _id: "USD", balance: overrides.fund ?? 0 }]);
   db.seed("characters", [
     {
@@ -256,7 +263,8 @@ describe("private banking conserves money", () => {
       ],
     });
 
-    expect(move.status).toBe("partial");
+    // Nothing landed, so the record is rejected rather than a repair item.
+    expect(move.status).toBe("rejected");
     expect(charterOf(db).bankCharter.cashReserves).toBe(10_000_000);
     expect(totalMoney(db)).toBe(before);
   });

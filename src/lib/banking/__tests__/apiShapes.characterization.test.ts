@@ -267,6 +267,7 @@ describe("GET /api/banking/corporation/[id]", () => {
       "isCeo",
       "isChair",
       "legalCharterTypes",
+      "lifecycle",
       "loans",
       "privateBankingEnabled",
       "rates",
@@ -520,7 +521,9 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       proposedDelta: 0.25,
       status: "voting",
       ballots: [],
-      playerVoteDeadline: new Date(Date.UTC(2026, 0, 2)),
+      // Far-future wall-clock deadline: the machine refuses ballots past the
+      // player window, so the fixture must stay inside it to ballot.
+      playerVoteDeadline: new Date(Date.UTC(2030, 0, 2)),
       resolvesOnTurn: 120,
     };
   }
@@ -559,6 +562,7 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       "board",
       "canNominate",
       "currentTurn",
+      "governance",
       "hasCommittee",
       "majorityNeeded",
       "meeting",
@@ -572,6 +576,25 @@ describe("GET /api/country/[code]/fomc and POST /vote", () => {
       "viewerIsSenator",
       "viewerSeatId",
     ]);
+    expect(sortedKeys(body.governance)).toEqual([
+      "allowedActions",
+      "currency",
+      "institutionId",
+      "memberCountryIds",
+      "nextDeadline",
+      "normalizedRateChoices",
+      "primeRateOnGrid",
+      "viewerRole",
+    ]);
+    for (const action of body.governance.allowedActions) {
+      expect(action.action).toBeTruthy();
+      expect(typeof action.allowed).toBe("boolean");
+    }
+    const ballot = body.governance.allowedActions.find(
+      (action: { action: string }) => action.action === "cast_ballot"
+    );
+    expect(sortedKeys(ballot)).toEqual(["action", "allowed", "deadlineTurn", "nextDeadline"]);
+    expect(sortedKeys(body.governance.nextDeadline)).toEqual(["kind", "turn"]);
     expect(sortedKeys(body.meeting)).toEqual([
       "agree",
       "disagree",

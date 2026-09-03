@@ -45,6 +45,8 @@ export interface BondMarketPool {
    * bound.
    */
   targetCashLocal: number;
+  /** Latest broad money for the currency, copied from the money supply snapshot each turn. */
+  m2Local?: number;
   lastTurn?: number;
   /**
    * Sovereign demand ratio per issuer country whose paper trades in this

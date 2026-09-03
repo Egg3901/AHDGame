@@ -20,6 +20,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildSavingsInterestAccrualBulkOp } from "@/lib/currency/characterFunds";
 import { getNppAutonomyLevel, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { processNppSavingsInterest } from "@/lib/turn/nppSavingsInterest";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -91,6 +92,10 @@ export async function processSavingsInterestTurn(
   turn: number
 ): Promise<{ charactersProcessed: number; totalInterest: number }> {
   const forexEnabled = await isForexEnabled();
+  // Once accounts are authoritative every accrual and credit below is
+  // mirrored onto the account record; the character fields stay as the
+  // projection existing readers use.
+  const accountsAuthoritative = (await loadBankingPolicy(db)).savingsAccounts === "authoritative";
 
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -155,6 +160,7 @@ export async function processSavingsInterestTurn(
     const nationalSavingsBalance = new Map<CountryId, number>();
 
     const accrualOps: { updateOne: { filter: object; update: object } }[] = [];
+    const accountAccrualOps: { updateOne: { filter: object; update: object } }[] = [];
     for (const char of accrualCharacters) {
       const savings = char.currencyBalances?.savings ?? {};
       const holders = char.currencyBalances?.savingsHolder ?? {};
@@ -183,6 +189,17 @@ export async function processSavingsInterestTurn(
         );
         if (interest <= 0) continue;
         perCharInc[`currencyBalances.pendingSavingsInterest.${currency}`] = interest;
+        if (accountsAuthoritative) {
+          accountAccrualOps.push({
+            updateOne: {
+              filter: { ownerType: "character", ownerId: char._id, currency },
+              update: {
+                $inc: { accruedInterest: interest, version: 1 },
+                $set: { updatedAt: new Date() },
+              },
+            },
+          });
+        }
         // Price interest only against the balance and holder snapshot we read.
         // A concurrent deposit, withdrawal, or bank-routing change makes this
         // operation miss rather than receiving stale-snapshot interest.
@@ -197,6 +214,9 @@ export async function processSavingsInterestTurn(
     }
     if (accrualOps.length > 0) {
       await db.collection("characters").bulkWrite(accrualOps);
+    }
+    if (accountAccrualOps.length > 0) {
+      await db.collection("savingsAccounts").bulkWrite(accountAccrualOps);
     }
 
     // Write national savings balances to centralBanks for inflationRecalc to read.
@@ -232,6 +252,7 @@ export async function processSavingsInterestTurn(
         .toArray();
 
       const creditOps: { updateOne: { filter: object; update: object } }[] = [];
+      const accountCreditOps: { updateOne: { filter: object; update: object } }[] = [];
       const ledgerBatch: Omit<SavingsLedgerEntry, "_id">[] = [];
       const now = new Date();
       // What the central bank is about to pay, by jurisdiction.
@@ -259,6 +280,17 @@ export async function processSavingsInterestTurn(
           );
           perCharInc[`currencyBalances.savings.${currency}`] = amount;
           perCharInc[`currencyBalances.interestEarned.${currency}`] = amount;
+          if (accountsAuthoritative) {
+            accountCreditOps.push({
+              updateOne: {
+                filter: { ownerType: "character", ownerId: char._id, currency },
+                update: {
+                  $inc: { balance: amount, interestEarned: amount, version: 1 },
+                  $set: { accruedInterest: 0, lastSettledTurn: turn, updatedAt: new Date() },
+                },
+              },
+            });
+          }
           // Zero out pending (keep key present so next accrual uses $inc cleanly)
           perCharSet[`currencyBalances.pendingSavingsInterest.${currency}`] = 0;
           const currentSavings =
@@ -289,6 +321,21 @@ export async function processSavingsInterestTurn(
 
       if (creditOps.length > 0) {
         await db.collection("characters").bulkWrite(creditOps);
+        if (accountCreditOps.length > 0) {
+          await db.collection("savingsAccounts").bulkWrite(accountCreditOps);
+          // The central bank's liability on the accounts it holds grows by
+          // what it just credited.
+          await db.collection<CentralBank>("centralBanks").bulkWrite(
+            [...interestPaidByCountry.entries()]
+              .filter(([, amount]) => amount > 0)
+              .map(([countryId, amount]) => ({
+                updateOne: {
+                  filter: { _id: getBankId(countryId) },
+                  update: { $inc: { householdSavingsLiability: Math.round(amount * 100) / 100 } },
+                },
+              }))
+          );
+        }
         // Booked AFTER the credit lands: crediting first and failing here
         // understates money created, which is recoverable from the ledger;
         // booking first and failing there overstates it, which is not.

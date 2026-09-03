@@ -28,7 +28,7 @@
  */
 
 import type { BankCharter } from "@/lib/db/types/bank";
-import { cashBackedDeposits } from "@/lib/banking/rules/balanceSheet";
+import { cashBackedDeposits, type BalanceSheetOptions } from "@/lib/banking/rules/balanceSheet";
 import { charterTypeMay } from "@/lib/banking/rules/capabilities";
 
 /**
@@ -68,10 +68,11 @@ export function discountWindowRatePercent(primeRate: number): number {
 }
 
 export function quoteDiscountWindow(
-  charter: Pick<BankCharter, "npcDeposits" | "discountWindowDebt">,
-  primeRate: number
+  charter: Pick<BankCharter, "npcDeposits" | "playerDeposits" | "discountWindowDebt">,
+  primeRate: number,
+  options: BalanceSheetOptions = {}
 ): DiscountWindowQuote {
-  const deposits = cashBackedDeposits(charter);
+  const deposits = cashBackedDeposits(charter, options);
   const outstanding = Math.max(0, charter.discountWindowDebt ?? 0);
   const capAnchor = deposits * DISCOUNT_WINDOW_CAP_FRACTION;
   return {
@@ -89,9 +90,13 @@ export function quoteDiscountWindow(
  * line, which is what that line is for.
  */
 export function canDraw(
-  charter: Pick<BankCharter, "type" | "status" | "npcDeposits" | "discountWindowDebt">,
+  charter: Pick<
+    BankCharter,
+    "type" | "status" | "npcDeposits" | "playerDeposits" | "discountWindowDebt"
+  >,
   amount: number,
-  primeRate: number
+  primeRate: number,
+  options: BalanceSheetOptions = {}
 ): { ok: true; quote: DiscountWindowQuote } | { ok: false; reason: DiscountWindowDenial } {
   if (charter.status !== "active") return { ok: false, reason: "charter_inactive" };
   if (!charterTypeMay(charter.type, "discountWindow")) {
@@ -99,7 +104,7 @@ export function canDraw(
   }
   if (!Number.isFinite(amount) || amount <= 0) return { ok: false, reason: "invalid_amount" };
 
-  const quote = quoteDiscountWindow(charter, primeRate);
+  const quote = quoteDiscountWindow(charter, primeRate, options);
   if (quote.capAnchor <= 0) return { ok: false, reason: "no_deposits" };
   if (amount > quote.headroomAnchor) return { ok: false, reason: "cap_exhausted" };
   return { ok: true, quote };
@@ -114,11 +119,12 @@ export function canDraw(
  * the same ₳ against a much bigger book.
  */
 export function discountWindowStigma(
-  charter: Pick<BankCharter, "npcDeposits" | "discountWindowDebt">
+  charter: Pick<BankCharter, "npcDeposits" | "playerDeposits" | "discountWindowDebt">,
+  options: BalanceSheetOptions = {}
 ): number {
   const outstanding = Math.max(0, charter.discountWindowDebt ?? 0);
   if (outstanding <= 0) return 0;
-  const cap = cashBackedDeposits(charter) * DISCOUNT_WINDOW_CAP_FRACTION;
+  const cap = cashBackedDeposits(charter, options) * DISCOUNT_WINDOW_CAP_FRACTION;
   if (cap <= 0) return DISCOUNT_WINDOW_STIGMA;
   const usage = Math.min(1, outstanding / cap);
   return DISCOUNT_WINDOW_STIGMA * usage;

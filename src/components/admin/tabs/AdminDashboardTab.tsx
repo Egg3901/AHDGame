@@ -6,6 +6,7 @@ import { TurnControls } from "@/components/TurnControls";
 import { TasksWidget } from "@/components/admin/tasks/TasksWidget";
 import { AdminRegistrationPanel } from "@/components/admin/players/AdminRegistrationPanel";
 import { FeatureGatesPanel } from "@/components/admin/FeatureGatesPanel";
+import { BankingRolloutPanel } from "@/components/admin/BankingRolloutPanel";
 import { ForeignPolicyLedgerPanel } from "@/components/admin/ForeignPolicyLedgerPanel";
 import { ReferralLeaderboardPanel } from "@/components/admin/players/ReferralLeaderboardPanel";
 import { KillSwitchBoard } from "@/components/admin/dashboard/KillSwitchBoard";
@@ -106,6 +107,12 @@ export function AdminDashboardTab({ counts, onNavigate }: AdminDashboardTabProps
         <section>
           <SectionLabel>Feature gates</SectionLabel>
           <FeatureGatesPanel />
+        </section>
+
+        {/* Staged activation of savings accounts: mode, read cohort, gate. */}
+        <section>
+          <SectionLabel>Banking rollout</SectionLabel>
+          <BankingRolloutPanel />
         </section>
 
         <section>

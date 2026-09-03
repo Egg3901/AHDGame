@@ -366,6 +366,20 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     expect(sendMultiCountryGameEvent).not.toHaveBeenCalled();
   });
 
+  it("accepts a valid on-grid action on a bank with an off-grid stored rate", async () => {
+    // A continuous writer once stored raw Taylor-rule values; stepping by
+    // 0.25 from an off-grid base is still off-grid, so the next human action
+    // must validate against the snapped base, not the raw stored value.
+    await setup({ bank: makeMockBank({ primeRate: 4.1 }) });
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ rate: 4.25 }), ctx());
+
+    expect(res.status).toBe(200);
+    const set = db.collectionMocks.centralBanks.updateOne.mock.calls[0][1].$set;
+    expect(set.primeRate).toBe(4.25);
+  });
+
   it("allows chair rate changes once the 6-turn cooldown elapses", async () => {
     await setup({ bank: makeMockBank({ primeRate: 2.0, lastRateChangeTurn: 94 }) });
     const { POST } = await import("./route");

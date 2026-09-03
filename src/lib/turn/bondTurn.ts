@@ -50,6 +50,7 @@ import { autoResolveLingeringDefaults } from "./bondTurnAutoResolve";
 import { applyQePriceSupport } from "@/lib/moneySupply/quantitativeEasing";
 import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
 import { processBondMarketPoolTurn } from "@/lib/bonds/marketPoolTurn";
+import { placeUnsoldBondUnits, settlePlacementProceeds } from "@/lib/bonds/primaryMarket";
 
 export interface BondTurnResult {
   bondsProcessed: number;
@@ -143,6 +144,14 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // FX rates for converting ₳-denominated coupon/face values into each corp's
   // liquidCapital home currency before $inc. Loaded once per turn.
   const fxByCurrency = await loadFxRatesByCurrency(db);
+
+  // Primary market: place unsold units from earlier issues as the pools'
+  // cash allows, and fund the issuers for them. Runs after this turn's
+  // active-bond snapshot, so newly placed units start earning next turn.
+  const placement = await placeUnsoldBondUnits(db, turn, now);
+  if (placement.unitsPlaced > 0) {
+    await settlePlacementProceeds(db, placement, fxByCurrency, now);
+  }
 
   // Get central bank rates for price calculations
   const centralBanks = await db

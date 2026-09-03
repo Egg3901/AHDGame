@@ -1,16 +1,14 @@
 import type { Db, ObjectId } from "mongodb";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
-import {
-  disburseNamedLoan,
-  buildFundConstituentResolver,
-  namedLoanHeadroom,
-} from "@/lib/banking/lending";
+import { buildFundConstituentResolver } from "@/lib/banking/lending";
+import { loadBankingSnapshot } from "@/lib/banking/snapshot";
+import { decideBankCommand } from "@/lib/banking/rules/decide";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import { emitTx } from "@/lib/financialTxLog/emit";
 import { isBlockedBorrower } from "@/lib/banking/blacklist";
 import { isNamedLendingCharter } from "@/lib/banking/charterKinds";
-import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
@@ -131,36 +129,58 @@ async function acceptLoanInner(
   });
   if (!loan) return { ok: false, error: "Loan not found" };
   if (loan.status !== "pending") return { ok: false, error: "Loan is not pending" };
+  if (!loan.borrowerId) return { ok: false, error: "Loan has no borrower" };
 
-  const bankCorp = await db
-    .collection<Corporation>("corporations")
-    .findOne({ _id: bankCorporationId });
-  if (!bankCorp) return { ok: false, error: "Bank corporation not found" };
+  const loaded = await loadBankingSnapshot(db, bankCorporationId);
+  if (!loaded) return { ok: false, error: "Bank corporation not found" };
+  const { snapshot, corporation: bankCorp } = loaded;
   const charter = bankCorp.bankCharter;
   if (!isNamedLendingCharter(charter)) {
     return { ok: false, error: "Bank no longer has an active lending charter" };
   }
 
-  // Re-check headroom and blacklist at decision time.
-  const reserveRatio = await getReserveRequirement(db, charter.currency as CurrencyCode);
-  const headroom = namedLoanHeadroom(charter, reserveRatio);
-  if (loan.outstanding > headroom) {
-    return { ok: false, error: "Insufficient lendable headroom to fund this loan now" };
-  }
+  // Re-check the blacklist at decision time; headroom is re-checked by the
+  // rules against the snapshot.
   const resolveFunds = await buildFundConstituentResolver(db, charter.blacklist?.indexFundIds);
   const blocked =
     loan.borrowerType === "character"
-      ? isBlockedBorrower(charter, { characterId: loan.borrowerId?.toString() }, resolveFunds)
-      : isBlockedBorrower(charter, { corporationId: loan.borrowerId?.toString() }, resolveFunds);
-  if (blocked) return { ok: false, error: "Borrower is on the bank's blacklist" };
+      ? isBlockedBorrower(charter, { characterId: loan.borrowerId.toString() }, resolveFunds)
+      : isBlockedBorrower(charter, { corporationId: loan.borrowerId.toString() }, resolveFunds);
 
-  const decisionTurn = await getCurrentTurn(db);
-  // Claim the loan for disbursement (idempotency guard on `pending`).
-  const claim = await db
-    .collection<BankLoan>("bankLoans")
-    .updateOne({ _id: loanId, status: "pending" }, { $set: { status: "current", decisionTurn } });
-  if (claim.matchedCount !== 1) return { ok: false, error: "Loan is not pending" };
+  const decision = decideBankCommand(
+    snapshot,
+    {
+      type: "disburse_pending_loan",
+      loanId: loanId.toHexString(),
+      borrower: {
+        type: loan.borrowerType === "character" ? "character" : "corporation",
+        id: loan.borrowerId.toString(),
+        blocked,
+      },
+      principal: loan.outstanding,
+    },
+    { commandId: loanId.toHexString() }
+  );
+  if (!decision.allowed) return { ok: false, error: decision.message };
 
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status === "rejected" || settled.error) {
+    return { ok: false, error: settled.error ?? "Loan is not pending" };
+  }
+  if (settled.status === "partial") {
+    // The status flip is guarded on `pending`, so a loan another decision
+    // already moved leaves the projection unmatched. Money that did land is
+    // in the journal's repair queue, never silently lost.
+    return {
+      ok: false,
+      error:
+        settled.appliedLegs.length === 0
+          ? "Loan is not pending"
+          : (settled.error ?? "Loan is not pending"),
+    };
+  }
+
+  const decisionTurn = snapshot.turn;
   const borrowerName =
     loan.borrowerType === "character"
       ? ((
@@ -174,19 +194,31 @@ async function acceptLoanInner(
             .findOne({ _id: loan.borrowerId }, { projection: { name: 1 } })
         )?.name ?? "Borrower");
 
-  const disbursed = await disburseNamedLoan(db, {
-    loan,
-    bankCorporationId,
-    bankName: bankCorp.name,
-    borrowerName,
+  await emitTx(db, {
+    type: "bank_loan_origination",
+    turn: decisionTurn,
+    createdAt: new Date(),
+    ...(loan.borrowerType === "character"
+      ? { subjectType: "character" as const, subjectId: loan.borrowerId, subjectName: borrowerName }
+      : {
+          subjectType: "corporation" as const,
+          subjectId: loan.borrowerId,
+          subjectName: borrowerName,
+        }),
+    amount: loan.principal,
+    currencyCode: loan.currency,
+    counterpartyType: "corporation",
+    counterpartyId: bankCorporationId,
+    counterpartyName: bankCorp.name,
+    meta: {
+      loanId: loan._id.toString(),
+      bankCorporationId: bankCorporationId.toString(),
+      ratePercent: loan.ratePercent,
+      termTurns: loan.termTurns,
+      settlementId: decision.transition.key,
+      approved: true,
+    },
   });
-  if (!disbursed.ok) {
-    // Roll the status back so the CEO can retry once headroom recovers.
-    await db
-      .collection<BankLoan>("bankLoans")
-      .updateOne({ _id: loanId }, { $set: { status: "pending" }, $unset: { decisionTurn: "" } });
-    return disbursed;
-  }
 
   await notifyBorrower(
     db,
@@ -242,25 +274,25 @@ async function rejectLoanInner(
   if (!loan) return { ok: false, error: "Loan not found" };
   if (loan.status !== "pending") return { ok: false, error: "Loan is not pending" };
 
-  const bankCorp = await db
-    .collection<Corporation>("corporations")
-    .findOne({ _id: bankCorporationId }, { projection: { name: 1 } });
-  const bankName = bankCorp?.name ?? "The bank";
+  const loaded = await loadBankingSnapshot(db, bankCorporationId);
+  if (!loaded) return { ok: false, error: "Bank corporation not found" };
+  const { snapshot, corporation } = loaded;
+  const bankName = corporation.name ?? "The bank";
 
-  const decisionTurn = await getCurrentTurn(db);
-  const trimmed = (reason ?? "").trim().slice(0, 280);
-  const res = await db.collection<BankLoan>("bankLoans").updateOne(
-    { _id: loanId, status: "pending" },
-    {
-      $set: {
-        status: "rejected",
-        decisionTurn,
-        ...(trimmed ? { rejectedReason: trimmed } : {}),
-      },
-    }
+  const decision = decideBankCommand(
+    snapshot,
+    { type: "reject_pending_loan", loanId: loanId.toHexString(), reason },
+    { commandId: loanId.toHexString() }
   );
-  if (res.matchedCount !== 1) return { ok: false, error: "Loan is not pending" };
+  if (!decision.allowed) return { ok: false, error: decision.message };
+  const settled = await settleTransition(db, decision.transition);
+  if (settled.status !== "applied" && settled.status !== "replayed") {
+    return { ok: false, error: "Loan is not pending" };
+  }
+  if (settled.appliedProjections.length === 0) return { ok: false, error: "Loan is not pending" };
 
+  const decisionTurn = snapshot.turn;
+  const trimmed = (reason ?? "").trim().slice(0, 280);
   await notifyBorrower(
     db,
     loan,

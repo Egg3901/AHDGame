@@ -17,7 +17,13 @@ import type { DepositInsuranceFund } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { returnDepositBook } from "@/lib/banking/depositBookReturn";
+import {
+  depositBookReturnKey,
+  freezeAccountsAt,
+  returnDepositBook,
+} from "@/lib/banking/depositBookReturn";
+import { resumeSettlement } from "@/lib/banking/settlementJournal";
+import { lifecycleStage } from "@/lib/banking/rules/lifecycle";
 import {
   getGdpAnchorRate,
   loadWorldEraUnitScale,
@@ -50,6 +56,8 @@ export type ResolveFailedBankDepositorsResult = {
   treasuryBackstop: number;
   /** NPC deposits returned to externalBroadMoney. */
   npcReturned: number;
+  /** Set when the waterfall could not settle; the estate stays `resolving` for recovery. */
+  error?: string;
 };
 
 /**
@@ -140,44 +148,101 @@ export async function resolveFailedBankDepositors(
     npcReturned: 0,
   };
 
-  // Claim first, exactly as before: on a database with no transactions the only
-  // safe order is to make a retry a no-op BEFORE any money moves. At most once,
-  // deliberately, because a half-finished resolution is visible and repairable
-  // while a double payout is neither.
+  // Claim first: on a database with no transactions the only safe order is to
+  // make a concurrent attempt a no-op BEFORE any money moves. The claim is the
+  // resolution stamp, not the settlement stamp: it moves the charter into the
+  // `resolving` stage, where nothing is admitted but recovery, and the
+  // settlement stamp lands with the waterfall's own projections. So an estate
+  // that crashed between claim and settlement is visible as `resolving`, is
+  // picked up again by the sweep, and finishes under the SAME idempotency key
+  // (the claim turn), which is what makes the retry a completion rather than
+  // a second payout.
+  const now = new Date();
   const claimed = await db.collection<Corporation>("corporations").findOneAndUpdate(
     {
       _id: corporationId,
       "bankCharter.status": "failed",
+      "bankCharter.resolutionClaimedTurn": { $exists: false },
       $or: [
         { "bankCharter.depositorsResolvedTurn": { $exists: false } },
         { "bankCharter.depositorsResolvedTurn": null },
       ],
     },
-    { $set: { "bankCharter.depositorsResolvedTurn": turn, updatedAt: new Date() } },
-    { returnDocument: "before" }
+    { $set: { "bankCharter.resolutionClaimedTurn": turn, updatedAt: now } },
+    { returnDocument: "after" }
   );
-  if (!claimed?.bankCharter) return empty;
+  let charter = claimed?.bankCharter ?? null;
+  let recovering = false;
+  if (!charter) {
+    // Not ours to claim. Either another attempt holds it, or it is already
+    // settled, or it was claimed earlier and never settled. Only the last is
+    // ours: read it back and decide by stage.
+    const current = await db
+      .collection<Corporation>("corporations")
+      .findOne({ _id: corporationId }, { projection: { bankCharter: 1 } });
+    const stage = lifecycleStage(current?.bankCharter);
+    const claimedOn = current?.bankCharter?.resolutionClaimedTurn;
+    // Recovery is for an estate claimed on an EARLIER turn. One claimed this
+    // turn is in flight in another attempt (the sweep runs once per turn),
+    // and running the waterfall beside it would only race it for the key.
+    if (
+      stage !== "resolving" ||
+      current?.bankCharter?.status !== "failed" ||
+      typeof claimedOn !== "number" ||
+      claimedOn >= turn
+    ) {
+      return empty;
+    }
+    charter = current.bankCharter;
+    recovering = true;
+  }
+  const claimTurn = charter.resolutionClaimedTurn ?? turn;
+  const currency = charter.currency as CurrencyCode;
 
-  await ensureFund(db, claimed.bankCharter.currency as CurrencyCode);
+  // Freeze before the waterfall. Idempotent, so recovery freezes nothing new.
+  await freezeAccountsAt(db, corporationId.toString(), currency, now);
+  await ensureFund(db, currency);
 
+  if (recovering) {
+    // Whatever the earlier attempt left half-done is finished from its own
+    // record first: legs that did not land, then projections. Only then does
+    // the waterfall run again, as a replay that releases the accounts.
+    const resumed = await resumeSettlement(
+      db,
+      depositBookReturnKey(corporationId, "failure", claimTurn)
+    );
+    if (resumed.status === "partial") {
+      return { ...empty, error: resumed.error ?? "resolution could not be resumed" };
+    }
+  }
   const result = await returnDepositBook(db, corporationId, {
     cause: "failure",
-    turn,
+    turn: claimTurn,
     // A failed bank's shareholders are last in line and, by definition of
     // failure, there is nothing left for them. Never release a residual here.
     releaseResidualToOwner: false,
   });
+  if (result.error) {
+    // Claimed, frozen, not settled: the sweep finds it again next turn as
+    // `resolving`, and recovery runs this same function to completion.
+    return { ...empty, error: result.error };
+  }
+  if (recovering && !result.returned) {
+    // The money moved on the earlier attempt; the release just ran. Report
+    // the recovery without inventing amounts.
+    return { ...empty, resolved: true, depositorsResolved: result.depositorsFlipped };
+  }
 
   if (result.fromInsuranceFund > 0 || result.fromTreasury > 0) {
     await emitTx(db, {
       type: "bank_insurance_payout",
-      turn,
+      turn: claimTurn,
       createdAt: new Date(),
       subjectType: "government",
-      countryId: getCountryIdForCurrency(claimed.bankCharter.currency as CurrencyCode),
-      subjectName: `${claimed.bankCharter.currency} deposit insurance`,
+      countryId: getCountryIdForCurrency(currency),
+      subjectName: `${currency} deposit insurance`,
       amount: -(result.fromInsuranceFund + result.fromTreasury),
-      currencyCode: claimed.bankCharter.currency as CurrencyCode,
+      currencyCode: currency,
       counterpartyType: "system",
       counterpartyName: "Household depositors",
       meta: {
