@@ -34,10 +34,8 @@ import {
   resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
-import {
-  isOrderFlowPriceEligible,
-  resolveShareExecutionPrice,
-} from "@/lib/corporations/marketExecution";
+import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
+import { equityPoolDepthMessage, loadEquityQuote } from "@/lib/equities/marketPool";
 import {
   buildOrderFlowWindowInc,
   buildOrderFlowWindowIncReversal,
@@ -117,7 +115,8 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     const resolved = await resolveCorporation(db, id);
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
-    const executionPrice = resolveShareExecutionPrice(corporation);
+    const marketQuote = await loadEquityQuote(db, corporation);
+    const executionPrice = marketQuote.bidPriceLocal;
     const orderFlowEligible = isOrderFlowPriceEligible(
       corporation.publicFloat,
       corporation.totalShares
@@ -149,13 +148,25 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     // treasury split recorded when the issuer buyback was settled.
     let issuerBuybackSplit: EscrowDebitSplit | undefined;
     async function gateIssuerBuyback(): Promise<NextResponse | null> {
+      if (marketQuote.active && shares > marketQuote.bidDepthShares) {
+        return NextResponse.json(
+          {
+            error: equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
+            marketDepthShares: marketQuote.bidDepthShares,
+          },
+          { status: 400 }
+        );
+      }
       const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
       issuerBuybackSplit = settle.split;
       if (!settle.ok) {
         const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
         return NextResponse.json(
           {
-            error: `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
+            error: marketQuote.active
+              ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
+              : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
+            ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
           },
           { status: 400 }
         );

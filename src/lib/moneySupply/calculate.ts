@@ -32,6 +32,8 @@ export interface MoneySupplyComponents {
    * counts toward M2 but not M1.
    */
   bondPoolCash: number;
+  /** Cash held by the finite public-equity market pool. Institutional M2, not M1. */
+  equityPoolCash?: number;
 }
 
 export interface MoneyAggregates extends MoneySupplyComponents {
@@ -64,7 +66,8 @@ export function calculateMoneyAggregates(input: MoneySupplyComponents): MoneyAgg
       normalized.householdSavings +
       normalized.externalBroadMoney +
       normalized.bankDeposits +
-      normalized.bondPoolCash,
+      normalized.bondPoolCash +
+      (normalized.equityPoolCash ?? 0),
   };
 }
 

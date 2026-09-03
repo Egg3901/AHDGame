@@ -117,6 +117,16 @@ export async function POST(request: Request, { params }: RouteParams) {
     const gameState = await getGameState();
     const currentTurn = gameState?.currentTurn ?? 0;
 
+    if (
+      body.type === "share_issuance" &&
+      (corporation.pendingShareIssuance?.remainingShares ?? 0) > 0
+    ) {
+      return NextResponse.json(
+        { error: "This corporation still has an approved share issue awaiting market placement" },
+        { status: 409 }
+      );
+    }
+
     if (body.type === "ticker_change") {
       const conflict = await db
         .collection("corporations")
