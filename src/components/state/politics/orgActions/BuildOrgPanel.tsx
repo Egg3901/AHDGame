@@ -70,6 +70,8 @@ type BuildOrgPreview =
       treasuryAvailable?: number;
       /** Share of the price the treasury covers. `projectedGain` is already scaled by it. */
       fundedFraction?: number;
+      /** Per-state size multiplier already folded into `cashPrice`. */
+      sizeMultiplier?: number;
       projectedGain: number;
       poaches?: PoachLine[];
       factors: BuildOrgFactors;
@@ -180,7 +182,8 @@ export function BuildOrgPanel({
    * the state (half-rate) one. The national button would then charge twice what
    * was quoted. The PS cost is tier-independent (the pressure ladder is per
    * party+state), so both prices derive exactly from the same preview with no
-   * extra request.
+   * extra request — including the per-state size multiplier, which applies to
+   * either pool because it prices the state being organized, not the payer.
    */
   const priceFor = (poolScope: "state" | "national-targeted") => {
     const effectiveCost = preview?.ok ? preview.effectiveCost : null;
@@ -188,7 +191,8 @@ export function BuildOrgPanel({
     const amount = orgBuildCashPrice(
       countryCode.toUpperCase() as CountryId,
       poolScope,
-      effectiveCost
+      effectiveCost,
+      preview?.ok ? (preview.sizeMultiplier ?? 1) : 1
     );
     if (amount <= 0) return "";
     const symbol = CURRENCY_SYMBOLS[currencyCode as keyof typeof CURRENCY_SYMBOLS] ?? "$";
@@ -257,6 +261,7 @@ export function BuildOrgPanel({
               amount: preview.cashPrice,
               currencyCode,
               fundedFraction: preview.fundedFraction,
+              sizeMultiplier: preview.sizeMultiplier,
             }
           : undefined
       }

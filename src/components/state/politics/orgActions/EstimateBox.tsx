@@ -22,7 +22,16 @@ export interface EstimateBoxProps {
    * 2026-09-02; `fundedFraction` below 1 means the treasury can only part-fund
    * the click, and the Org gain shown has already been scaled down to match.
    */
-  funds?: { amount: number; currencyCode: string; fundedFraction?: number };
+  funds?: {
+    amount: number;
+    currencyCode: string;
+    fundedFraction?: number;
+    /**
+     * Per-state size multiplier folded into `amount`. Shown so a player in a
+     * large state can see why the same action costs more here than next door.
+     */
+    sizeMultiplier?: number;
+  };
   gain: {
     /** Row label, e.g. "Estimated Gain" (Build) or "Estimated Effect" (Contest). */
     label: string;
@@ -106,6 +115,13 @@ export function EstimateBox({ variant, tone, cost, funds, gain, factors }: Estim
               {Math.round(funds.amount).toLocaleString("en-US")}
             </span>
           </div>
+          {funds.sizeMultiplier !== undefined && Math.abs(funds.sizeMultiplier - 1) >= 0.05 ? (
+            <div className="text-[10px] text-muted">
+              {funds.sizeMultiplier > 1 ? "Larger" : "Smaller"} state:{" "}
+              {funds.sizeMultiplier.toFixed(2)}× the national average price, because a point of Org
+              here is worth {funds.sizeMultiplier > 1 ? "more" : "less"}.
+            </div>
+          ) : null}
           {funds.fundedFraction !== undefined && funds.fundedFraction < 1 ? (
             <div className="text-[10px] text-warning">
               Partly funded: the treasury covers {Math.round(funds.fundedFraction * 100)}% of this

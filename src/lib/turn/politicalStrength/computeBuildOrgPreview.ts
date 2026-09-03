@@ -22,6 +22,7 @@ import {
 import { isStateInPriorityRegion } from "@/lib/parties/priorityRegion";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
 import { orgBuildCashPrice, resolveOrgBuildFunding } from "@/lib/politicalStrength/buildOrgFunding";
+import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
 
 /**
  * Canonical Build Org projection — the single source of truth shared by the
@@ -53,6 +54,12 @@ export type BuildOrgPreviewResult =
       pressureValue: number;
       /** Cash price of the next click, in the paying tier's local currency. */
       cashPrice: number;
+      /**
+       * Per-state size multiplier already folded into `cashPrice` — above 1 in a
+       * state larger than its country's average, below 1 in a smaller one.
+       * Surfaced so the UI can explain why the same action costs more here.
+       */
+      sizeMultiplier: number;
       /** Balance of the treasury that would pay (state or national, per `scope`). */
       treasuryAvailable: number;
       /**
@@ -215,7 +222,12 @@ export async function computeBuildOrgPreview(
 
   // Cash side. The paying treasury is the one belonging to the tier that pays
   // the PS, so the quote matches what the POST will actually debit.
-  const cashPrice = orgBuildCashPrice(countryId, scope, effectiveCost);
+  // Organizing a big state costs more than a small one: a point of Org is a
+  // share of ITS state, so the same point buys more absolute weight where there
+  // are more people. Normalized to average 1 per country, so this redistributes
+  // between states without moving the overall level.
+  const sizeMultiplier = await resolveOrgBuildSizeMultiplier(db, countryId, upperRegionId);
+  const cashPrice = orgBuildCashPrice(countryId, scope, effectiveCost, sizeMultiplier);
   const treasuryAvailable =
     scope === "state" ? (spenderRow?.treasury ?? 0) : (spenderParty.treasury ?? 0);
   const funding = resolveOrgBuildFunding({ price: cashPrice, treasury: treasuryAvailable });
@@ -261,6 +273,7 @@ export async function computeBuildOrgPreview(
     effectiveCost,
     pressureValue,
     cashPrice,
+    sizeMultiplier,
     treasuryAvailable,
     fundedFraction: funding.fundedFraction,
     projectedGain,
