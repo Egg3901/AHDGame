@@ -11,7 +11,7 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getBankId } from "@/lib/centralBank/helpers";
-import { isBankPropTradingEnabled, isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 import { computeNpcDepositShare, equityCappedDepositCeiling } from "@/lib/banking/deposits";
 import { domesticDepositRetention } from "@/lib/centralBank/marketEffects";
 import {
@@ -139,7 +139,10 @@ type DepositTaker = {
  * the turn explicitly for idempotency keys.
  */
 export async function processBankingTurn(db: Db, turn: number): Promise<BankingTurnSummary> {
-  if (!(await isPrivateBankingEnabled())) {
+  // One config read per turn. Every stage below decides from this snapshot,
+  // so a flag flipped mid-turn cannot split the pass between two policies.
+  const policy = await loadBankingPolicy(db);
+  if (!policy.privateBanking) {
     return { ...ZERO_SUMMARY };
   }
 
@@ -274,7 +277,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   summary.deadBankRecoveredToEstate = deadBankResult.recoveredToEstate;
   summary.deadBankRecoveredToInsurer = deadBankResult.recoveredToInsurer;
 
-  if (await isBankPropTradingEnabled()) {
+  if (policy.propTrading) {
     await serviceInterbankAndCbMargin(db, turn, summary);
   }
 

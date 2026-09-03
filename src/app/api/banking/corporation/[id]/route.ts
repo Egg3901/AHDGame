@@ -5,7 +5,7 @@ import { withNoStore } from "@/lib/api/withNoStore";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
-import { isPrivateBankingEnabled, isBankPropTradingEnabled } from "@/lib/banking/featureFlag";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 import {
   checkCharterEligibility,
   getCharterCapitalRequirement,
@@ -35,7 +35,7 @@ import {
   bandsForProfile,
   getCreditBand,
 } from "@/lib/banking/creditBands";
-import type { Character, Corporation, CorporateSector, GameConfig } from "@/lib/db/types";
+import type { Character, Corporation, CorporateSector } from "@/lib/db/types";
 import type { BankCharter, BankCharterType, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -124,18 +124,9 @@ async function handleGET(_request: Request, { params }: RouteParams) {
     if (!resolved.ok) return resolved.response;
     const { corporation } = resolved;
 
-    const config = await db.collection<GameConfig>("gameConfig").findOne(
-      { _id: "default" },
-      {
-        projection: {
-          privateBankingEnabled: 1,
-          bankPropTradingEnabled: 1,
-          bankContagionEnabled: 1,
-        },
-      }
-    );
-    const privateEnabled = await isPrivateBankingEnabled(config);
-    const propTradingEnabled = await isBankPropTradingEnabled(config);
+    const policy = await loadBankingPolicy(db);
+    const privateEnabled = policy.privateBanking;
+    const propTradingEnabled = policy.propTrading;
 
     const ownsFinancial = !!(await db
       .collection<CorporateSector>("corporateSectors")

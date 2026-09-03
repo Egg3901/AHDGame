@@ -15,6 +15,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+// The console route pulls in most of the banking module graph; under a loaded
+// parallel run its first import can exceed the default budget.
+vi.setConfig({ testTimeout: 60_000 });
+
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({
   requireAuth: vi.fn(),

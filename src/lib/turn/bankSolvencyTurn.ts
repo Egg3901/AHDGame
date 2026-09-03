@@ -5,11 +5,7 @@ import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
-import {
-  isBankContagionEnabled,
-  isBankPropTradingEnabled,
-  isPrivateBankingEnabled,
-} from "@/lib/banking/featureFlag";
+import { loadBankingPolicy } from "@/lib/banking/policy";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getCashReserves } from "@/lib/banking/bankCash";
 import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
@@ -101,11 +97,12 @@ export async function processBankSolvencyTurn(
   db: Db,
   turn: number
 ): Promise<BankSolvencyTurnSummary> {
-  if (!(await isPrivateBankingEnabled())) {
+  const policy = await loadBankingPolicy(db);
+  if (!policy.privateBanking) {
     return { ...ZERO_SUMMARY };
   }
 
-  const propEnabled = await isBankPropTradingEnabled();
+  const propEnabled = policy.propTrading;
 
   const corps = await db
     .collection<Corporation>("corporations")
@@ -150,8 +147,7 @@ export async function processBankSolvencyTurn(
 
     // Contagion: every OTHER active deposit-taking charter in the same currency.
     const newlyPanicked = new Map<string, number>();
-    const contagionOn = await isBankContagionEnabled();
-    if (contagionOn) {
+    if (policy.contagion) {
       const failedByCurrency = new Map<CurrencyCode, ObjectId[]>();
       for (const row of evals) {
         if (!row.failed || !row.isDepositTaking) continue;
