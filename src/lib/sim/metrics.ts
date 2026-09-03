@@ -36,6 +36,27 @@ export interface BalanceReport {
   economy: EconomyMetrics;
   capacity: CapacityMetrics;
   marketAccess: MarketAccessMetrics;
+  /** The banking gate: a sim run is not clean unless this is open at the end. */
+  banking: BankingGateMetrics;
+}
+
+/**
+ * What a sim run must show before a banking change ships: the gate open (no
+ * unfinished settlements from earlier turns, no estate stuck in resolution, no
+ * savings projection drift), and how the charters ended up. The counters are
+ * the turn-level product counters summed over the run's telemetry window, so
+ * a run that "passed" by refusing every command is visible as such.
+ */
+export interface BankingGateMetrics {
+  gateOpen: boolean;
+  gateReasons: string[];
+  activeBanks: number;
+  stages: Record<string, number>;
+  unfinishedSettlements: number;
+  resolvingEstates: number;
+  savingsMode: "off" | "shadow" | "authoritative";
+  savingsDiscrepancies: number;
+  counters: Record<string, number>;
 }
 
 export interface WealthMetrics {
@@ -610,7 +631,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
   const gameState = await db.collection("gameState").findOne({ _id: "current" as never });
   const turn = (gameState?.currentTurn as number | undefined) ?? 0;
 
-  const [wealth, electoral, officeTurnover, crises, economy, capacity, vitalSigns] =
+  const [wealth, electoral, officeTurnover, crises, economy, capacity, vitalSigns, banking] =
     await Promise.all([
       collectWealthMetrics(db),
       collectElectoralMetrics(db),
@@ -621,6 +642,7 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
       db
         .collection<EconomicVitalSigns>("economicVitalSigns")
         .findOne({ turn }, { sort: { turn: -1 } }),
+      collectBankingGateMetrics(db),
     ]);
 
   return {
@@ -632,5 +654,53 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     economy,
     capacity,
     marketAccess: marketAccessMetricsFromSnapshot(vitalSigns),
+    banking,
   };
+}
+
+export async function collectBankingGateMetrics(db: Db): Promise<BankingGateMetrics> {
+  const empty: BankingGateMetrics = {
+    gateOpen: true,
+    gateReasons: [],
+    activeBanks: 0,
+    stages: {},
+    unfinishedSettlements: 0,
+    resolvingEstates: 0,
+    savingsMode: "off",
+    savingsDiscrepancies: 0,
+    counters: {},
+  };
+  try {
+    const { buildBankingHealth } = await import("@/lib/banking/health");
+    const health = await buildBankingHealth(db);
+    const stages: Record<string, number> = {};
+    let activeBanks = 0;
+    for (const currency of health.currencies) {
+      activeBanks += currency.activeBanks;
+      for (const [stage, count] of Object.entries(currency.stages)) {
+        stages[stage] = (stages[stage] ?? 0) + (count ?? 0);
+      }
+    }
+    const counters: Record<string, number> = {};
+    for (const doc of health.telemetry) {
+      for (const [name, value] of Object.entries(doc.counters ?? {})) {
+        if (typeof value === "number") counters[name] = (counters[name] ?? 0) + value;
+      }
+    }
+    return {
+      gateOpen: health.gate.ok,
+      gateReasons: health.gate.reasons,
+      activeBanks,
+      stages,
+      unfinishedSettlements: health.unfinishedSettlements.count,
+      resolvingEstates: health.resolvingEstates.length,
+      savingsMode: health.savingsAccounts.mode,
+      savingsDiscrepancies: health.savingsAccounts.comparison?.totalDiscrepancies ?? 0,
+      counters,
+    };
+  } catch {
+    // Best-effort like every other section: a metrics failure after a long
+    // run must not lose the run. A closed gate is the honest default here.
+    return { ...empty, gateOpen: false, gateReasons: ["banking health could not be collected"] };
+  }
 }

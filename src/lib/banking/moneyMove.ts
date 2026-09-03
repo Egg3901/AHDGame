@@ -225,7 +225,8 @@ export async function completeMoneyMove(
   db: Db,
   key: string,
   appliedLegs: number[],
-  error?: string
+  error?: string,
+  status: MoneyMoveStatus = error ? "partial" : "applied"
 ): Promise<void> {
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
   const existing = await records.findOne({ _id: key });
@@ -234,7 +235,7 @@ export async function completeMoneyMove(
     { _id: key },
     {
       $set: {
-        status: error ? "partial" : "applied",
+        status,
         completedAt: new Date(),
         ...(error ? { error } : {}),
         legs: existing.legs.map((leg, i) => ({ ...leg, applied: appliedLegs.includes(i) })),
@@ -283,10 +284,23 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
     applied.push(i);
   }
 
-  const status: MoneyMoveStatus = failure ? "partial" : "applied";
-  await completeMoneyMove(db, move.key, applied, failure);
+  // A move whose FIRST leg refused (a guard that did not match) moved nothing,
+  // and nothing is not a repair: the key stays claimed so the same attempt
+  // cannot be made twice, but the record is `rejected`, not `partial`, and the
+  // recovery worker leaves it alone. Only a move that landed some legs and not
+  // others is a hole to finish.
+  const status: MoneyMoveStatus = failure
+    ? applied.length === 0
+      ? "rejected"
+      : "partial"
+    : "applied";
+  await completeMoneyMove(db, move.key, applied, failure, status);
   if (failure && move.turn !== undefined) {
-    countBankingEvent(db, move.turn, "partialSettlements");
+    countBankingEvent(
+      db,
+      move.turn,
+      status === "rejected" ? "rejectedSettlements" : "partialSettlements"
+    );
   }
 
   return { status, applied, error: failure };

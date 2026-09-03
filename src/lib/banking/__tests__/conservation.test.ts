@@ -263,7 +263,8 @@ describe("private banking conserves money", () => {
       ],
     });
 
-    expect(move.status).toBe("partial");
+    // Nothing landed, so the record is rejected rather than a repair item.
+    expect(move.status).toBe("rejected");
     expect(charterOf(db).bankCharter.cashReserves).toBe(10_000_000);
     expect(totalMoney(db)).toBe(before);
   });

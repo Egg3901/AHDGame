@@ -410,8 +410,148 @@ class InMemoryCollection {
     return { modifiedCount: modified };
   }
 
-  aggregate() {
-    throw new Error("inMemoryDb: aggregate is not implemented");
+  /**
+   * The pipeline subset the banking passes use: `$match`, `$group` with
+   * `$sum` / `$min` / `$max` / `$avg` / `$first` / `$last` over a field or a
+   * constant, `$project` with 1/0 and `"$field"` aliases, `$sort`, `$limit`,
+   * `$count`. Anything else throws, so a test never passes on a stage the
+   * adapter quietly ignored.
+   */
+  aggregate(pipeline: Doc[] = []) {
+    const run = (): Doc[] => {
+      let rows: Doc[] = this.docs.map((d) => ({ ...d }));
+      for (const stage of pipeline) {
+        const [op] = Object.keys(stage);
+        const spec = stage[op] as Doc;
+        switch (op) {
+          case "$match":
+            rows = rows.filter((row) => matchesFilter(row, spec));
+            break;
+          case "$group": {
+            const groups = new Map<string, Doc>();
+            for (const row of rows) {
+              const idSpec = spec._id;
+              const id =
+                idSpec === null || idSpec === undefined
+                  ? null
+                  : typeof idSpec === "string" && idSpec.startsWith("$")
+                    ? getPath(row, idSpec.slice(1))
+                    : idSpec;
+              const key = JSON.stringify(id === undefined ? null : id);
+              let group = groups.get(key);
+              if (!group) {
+                group = { _id: id ?? null };
+                for (const [field, acc] of Object.entries(spec)) {
+                  if (field === "_id") continue;
+                  const [accOp] = Object.keys(acc as Doc);
+                  group[field] =
+                    accOp === "$sum" ? 0 : accOp === "$avg" ? { sum: 0, n: 0 } : undefined;
+                }
+                groups.set(key, group);
+              }
+              for (const [field, acc] of Object.entries(spec)) {
+                if (field === "_id") continue;
+                const [accOp] = Object.keys(acc as Doc);
+                const operand = (acc as Doc)[accOp];
+                const value =
+                  typeof operand === "string" && operand.startsWith("$")
+                    ? getPath(row, operand.slice(1))
+                    : operand;
+                const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
+                switch (accOp) {
+                  case "$sum":
+                    group[field] = (group[field] as number) + n;
+                    break;
+                  case "$min":
+                    group[field] =
+                      group[field] === undefined ? value : Math.min(group[field] as number, n);
+                    break;
+                  case "$max":
+                    group[field] =
+                      group[field] === undefined ? value : Math.max(group[field] as number, n);
+                    break;
+                  case "$avg": {
+                    const state = group[field] as { sum: number; n: number };
+                    state.sum += n;
+                    state.n += 1;
+                    break;
+                  }
+                  case "$first":
+                    if (group[field] === undefined) group[field] = value;
+                    break;
+                  case "$last":
+                    group[field] = value;
+                    break;
+                  default:
+                    throw new Error(`inMemoryDb: $group accumulator ${accOp} is not implemented`);
+                }
+              }
+            }
+            rows = [...groups.values()].map((group) => {
+              const out: Doc = {};
+              for (const [field, value] of Object.entries(group)) {
+                const acc = spec[field] as Doc | undefined;
+                out[field] =
+                  acc && Object.keys(acc)[0] === "$avg"
+                    ? (value as { n: number }).n > 0
+                      ? (value as { sum: number; n: number }).sum / (value as { n: number }).n
+                      : null
+                    : value;
+              }
+              return out;
+            });
+            break;
+          }
+          case "$project":
+            rows = rows.map((row) => {
+              const out: Doc = {};
+              const includes = Object.values(spec).some((v) => v === 1 || v === true);
+              if (!includes) {
+                Object.assign(out, row);
+                for (const [field, v] of Object.entries(spec))
+                  if (v === 0 || v === false) delete out[field];
+                return out;
+              }
+              if (spec._id !== 0 && spec._id !== false) out._id = row._id;
+              for (const [field, v] of Object.entries(spec)) {
+                if (v === 1 || v === true) out[field] = getPath(row, field);
+                else if (typeof v === "string" && v.startsWith("$"))
+                  out[field] = getPath(row, v.slice(1));
+              }
+              return out;
+            });
+            break;
+          case "$sort": {
+            const entries = Object.entries(spec) as Array<[string, number]>;
+            rows = [...rows].sort((a, b) => {
+              for (const [field, dir] of entries) {
+                const av = getPath(a, field) as number | string;
+                const bv = getPath(b, field) as number | string;
+                if (av === bv) continue;
+                if (av === undefined) return 1;
+                if (bv === undefined) return -1;
+                return (av < bv ? -1 : 1) * (dir < 0 ? -1 : 1);
+              }
+              return 0;
+            });
+            break;
+          }
+          case "$limit":
+            rows = rows.slice(0, spec as unknown as number);
+            break;
+          case "$count":
+            rows = [{ [spec as unknown as string]: rows.length }];
+            break;
+          default:
+            throw new Error(`inMemoryDb: aggregate stage ${op} is not implemented`);
+        }
+      }
+      return rows;
+    };
+    return {
+      toArray: async () => run(),
+      next: async () => run()[0] ?? null,
+    };
   }
 
   async createIndex(): Promise<string> {

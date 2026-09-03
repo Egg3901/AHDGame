@@ -150,15 +150,19 @@ describe("settleTransition", () => {
 
   it("stops before any projection when a guarded debit cannot cover itself", async () => {
     const result = await settleTransition(db as unknown as Db, loanTransition(5_000_000));
-    expect(result.status).toBe("partial");
+    // Nothing landed, so nothing is left to repair: the key is claimed (the
+    // same attempt cannot be made twice) but the record is rejected, not a
+    // hole for the recovery worker.
+    expect(result.status).toBe("rejected");
     expect(result.appliedLegs).toEqual([]);
     expect(result.appliedProjections).toEqual([]);
     expect(corp(db, BANK).bankCharter.cashReserves).toBe(1_000_000);
     expect(corp(db, BORROWER).liquidCapital).toBe(10_000);
     expect(db.collection("bankLoans").docs).toHaveLength(0);
     expect(db.collection("bankingTelemetry").docs[0]).toMatchObject({
-      counters: { partialSettlements: 1 },
+      counters: { rejectedSettlements: 1 },
     });
+    expect(db.collection(MONEY_MOVE_COLLECTION).docs[0]).toMatchObject({ status: "rejected" });
   });
 
   it("rejects an unbalanced transition before claiming its key", async () => {
@@ -178,7 +182,7 @@ describe("settleTransition", () => {
     mixed.legs[0].filter = { ...mixed.legs[0].filter, "bankCharter.currency": "GBP" };
     const result = await settleTransition(db as unknown as Db, mixed);
     // The guard on the debit does not match a USD charter, so nothing moves.
-    expect(result.status).toBe("partial");
+    expect(result.status).toBe("rejected");
     expect(corp(db, BANK).bankCharter.cashReserves).toBe(1_000_000);
     expect(db.collection("bankLoans").docs).toHaveLength(0);
   });

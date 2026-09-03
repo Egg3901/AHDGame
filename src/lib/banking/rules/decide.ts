@@ -259,7 +259,10 @@ export function decideBankCommand(
       }
       const staged = requireStage(charter, "distribute");
       if (staged) return staged;
-      const move = Math.round(Math.min(amount, sheet.distributable));
+      // Floor, never round: distributable is bounded by the cash in the vault,
+      // and rounding up past it by a few cents asks the guarded debit for more
+      // than there is, which fails at the write instead of here.
+      const move = Math.floor(Math.min(amount, sheet.distributable));
       if (move <= 0) {
         return refuse(
           { code: "cap", cap: "distributable", max: Math.max(0, sheet.distributable) },

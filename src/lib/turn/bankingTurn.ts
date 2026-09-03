@@ -431,7 +431,14 @@ async function processOneBank(
   const share = caches.npcShareByBankId.get(bankIdHex) ?? 0;
   const uncappedTargetNpc = share * externalBroadMoney;
   const targetNpc = Math.min(uncappedTargetNpc, npcRoom);
-  const delta = npcFlowDelta(npcDeposits, targetNpc);
+  // An outflow is capped at the cash in the vault: households cannot take out
+  // what is not there. What they could not take stays on the book as deposits
+  // the bank cannot pay, which is what the solvency pass fails a bank for.
+  // Asking the guarded debit for more only refuses the whole flow.
+  const delta = Math.max(
+    npcFlowDelta(npcDeposits, targetNpc),
+    -Math.floor(cashReserves * 100) / 100
+  );
   if (delta !== 0) {
     // The money MOVES. It leaves the central bank's household pool and lands in
     // the bank's cash, which is what a deposit is.
@@ -557,7 +564,87 @@ async function processOneBank(
   const interestMoveKey = turnMoveKey("deposit-interest", bankIdHex, turn);
   let playerInterestSettled = 0;
 
-  if (playerInterestPaid > 0 && creditOps.length > 0) {
+  if (
+    playerInterestPaid > 0 &&
+    creditOps.length > 0 &&
+    policy.savingsAccounts === "authoritative"
+  ) {
+    // Under the account model the interest does not leave the vault: the
+    // depositor's claim grows, the bank's liability grows by the same amount,
+    // and the cash stays where it is as that claim's backing. Paying it out of
+    // the vault as well would charge the bank twice (once in cash, once in
+    // liability) and leave the account's backing short by exactly the
+    // interest. So this is a settlement with no legs and a projection per
+    // account, each stamped, so a crash part-way finishes on the next attempt
+    // and a replay credits nothing twice.
+    const credits = playerCredits
+      .map((pc) => ({ pc, paid: roundSavingsAmount(pc.interest * interestScale, currency) }))
+      .filter(({ paid }) => paid > 0);
+    const settled = await settleTransition(db, {
+      key: interestMoveKey,
+      kind: "deposit_interest",
+      turn,
+      currency,
+      legs: [],
+      projections: [
+        ...credits.map(({ pc, paid }) => ({
+          collection: "savingsAccounts",
+          filter: { ownerType: "character", ownerId: oid(pc.characterId.toString()), currency },
+          update: {
+            $inc: { balance: paid, interestEarned: paid, version: 1 },
+            $set: { lastSettlementKey: interestMoveKey, lastSettledTurn: turn },
+          },
+          note: "deposit interest credited to the account",
+        })),
+        ...credits.map(({ pc, paid }) => ({
+          collection: "characters",
+          filter: { _id: oid(pc.characterId.toString()) },
+          update: {
+            $inc: {
+              [`currencyBalances.savings.${currency}`]: paid,
+              [`currencyBalances.interestEarned.${currency}`]: paid,
+            },
+          },
+          note: "legacy savings projection follows the account",
+        })),
+        {
+          collection: "corporations",
+          filter: { _id: oid(bankIdHex) },
+          update: { $inc: { "bankCharter.playerDeposits": playerInterestPaid } },
+          note: "the bank's player-deposit liability grows by the interest",
+        },
+      ],
+      event: {
+        kind: "account.interest_paid",
+        command: "bank.turn.depositInterest",
+        amount: playerInterestPaid,
+      },
+    });
+    if (settled.status === "applied" || settled.status === "replayed") {
+      playerInterestSettled = playerInterestPaid;
+      const thresholds = await loadTxThresholds(db);
+      await emitTxBulk(
+        db,
+        credits.map(({ pc, paid }) => ({
+          type: "bank_deposit_interest" as const,
+          turn,
+          createdAt: new Date(),
+          subjectType: "character" as const,
+          subjectId: pc.characterId,
+          subjectName: depositorNameById.get(pc.characterId.toString()) ?? "Depositor",
+          amount: paid,
+          currencyCode: currency,
+          counterpartyType: "corporation" as const,
+          counterpartyId: corp._id,
+          counterpartyName: corp.name,
+          meta: { ratePercent: rates.depositRatePercent, retainedAsBacking: true },
+        })),
+        thresholds
+      );
+    } else {
+      result.depositInterestShortfall += playerInterestPaid;
+    }
+  } else if (playerInterestPaid > 0 && creditOps.length > 0) {
     const claim = await claimMoneyMove(db, {
       key: interestMoveKey,
       kind: "deposit_interest",
@@ -599,39 +686,6 @@ async function processOneBank(
         );
       } else {
         await db.collection("characters").bulkWrite(creditOps);
-        // Once accounts are authoritative the interest is a liability the
-        // bank now carries against each account, so the account records and
-        // the bank's player-deposit counter move with the same credit. The
-        // legacy character write above is the projection.
-        if (policy.savingsAccounts === "authoritative") {
-          await db.collection("savingsAccounts").bulkWrite(
-            playerCredits
-              .map((pc) => ({
-                pc,
-                paid: roundSavingsAmount(pc.interest * interestScale, currency),
-              }))
-              .filter(({ paid }) => paid > 0)
-              .map(({ pc, paid }) => ({
-                updateOne: {
-                  filter: { ownerType: "character", ownerId: pc.characterId, currency },
-                  update: {
-                    $inc: { balance: paid, interestEarned: paid, version: 1 },
-                    $set: {
-                      lastSettlementKey: interestMoveKey,
-                      lastSettledTurn: turn,
-                      updatedAt: new Date(),
-                    },
-                  },
-                },
-              }))
-          );
-          await db
-            .collection<Corporation>("corporations")
-            .updateOne(
-              { _id: corp._id },
-              { $inc: { "bankCharter.playerDeposits": playerInterestPaid } }
-            );
-        }
         await completeMoneyMove(db, interestMoveKey, [0, 1]);
         playerInterestSettled = playerInterestPaid;
 
@@ -675,8 +729,12 @@ async function processOneBank(
     // exactly where it is.
     //
     // The player half already moved in the database above; this keeps the
-    // in-memory figure the rest of the pass decides on in step with it.
-    cashReserves = Math.max(0, cashReserves - playerInterestSettled);
+    // in-memory figure the rest of the pass decides on in step with it. Under
+    // the account model nothing left: the interest stayed in the vault as the
+    // account's backing and the liability grew instead.
+    if (policy.savingsAccounts !== "authoritative") {
+      cashReserves = Math.max(0, cashReserves - playerInterestSettled);
+    }
     npcDeposits = Math.max(0, npcDeposits + npcInterestPaid);
     result.depositInterestPaid += totalInterestPaid;
   }
