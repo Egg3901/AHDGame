@@ -412,16 +412,15 @@ async function plan(db: Db, _ctx: HealContext): Promise<HealPlan> {
 
   return {
     affected: targetStates.length,
-    // EMPTY ON PURPOSE, even though `apply` raises each enterprise's plan target.
+    // EMPTY BECAUSE THERE IS NOTHING TO SNAPSHOT: this heal only ever inserts,
+    // and `insertedIds` on the result is the whole of its rollback.
     //
-    // `touched` drives a whole-document snapshot, and rollback restores it with
-    // `replaceOne`. Listing the owning corporations would mean a rollback taken
-    // a few turns later rewinds every OTHER field on a live SOE as well, its
-    // `liquidCapital` included: money created or destroyed, invisible to the
-    // `money-conserving` guard, to undo a sector insert. The plan target is one
-    // additive number and is recoverable by hand from the result notes; a
-    // rewound treasury is not. So rollback stays surgical: delete exactly the
-    // documents `insertedIds` names, and touch nothing else.
+    // DO NOT ADD THE OWNING CORPORATIONS HERE if a future change makes this heal
+    // write to them. `touched` drives a whole-document snapshot that rollback
+    // restores with `replaceOne`, so a rollback taken a few turns later would
+    // rewind every OTHER field on a live SOE as well, its `liquidCapital`
+    // included: money created or destroyed, invisible to the `money-conserving`
+    // guard, to undo a sector insert.
     touched: [],
     // Producing capacity, not currency. No cash, share or capital balance moves;
     // the plants earn from the next turn like any other sector, and the book
@@ -497,20 +496,6 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
 
   const insertedIds: TouchedDocs[] = [{ collection: "corporateSectors", ids: insertedIdList }];
 
-  // Bring the owning enterprise's plan up to the plant list it now operates.
-  // `planTarget` is STICKY (`commandEconomyTurn` only recomputes it from zero),
-  // so leaving it behind would read as permanent over-fulfilment: the director's
-  // grade inflates, the shortfall that drives directed credit shrinks, and the
-  // enterprise is under-funded against its peers for the rest of the run. The
-  // seed path sums it over every plant at build time, which is exactly what an
-  // un-misfired gate would have produced.
-  const planTargetByCorp = new Map<string, number>();
-  for (const doc of stamped) {
-    if (!insertedIdList.includes(String(doc._id))) continue;
-    const corpId = String(doc.corporationId);
-    const revenue = typeof doc.revenue === "number" ? doc.revenue : 0;
-    planTargetByCorp.set(corpId, (planTargetByCorp.get(corpId) ?? 0) + revenue);
-  }
   // THE PLAN TARGET IS NOT THIS HEAL'S TO MOVE, and an earlier version of it
   // did. `soe.planTarget` is documented as a PLAYER-SET number: the Gosplan
   // chair writes it through `POST /command-economy/plan`, and on the live world

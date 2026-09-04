@@ -154,7 +154,8 @@ function productionIncidentDb(options: WorldOptions = {}): {
       },
       updateOne: async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
         corpUpdates.push({ filter, update });
-        // Mirrors the `soe.planTarget must exist` filter the heal writes.
+        // The heal writes no corporation update at all; this exists only so a
+        // test can assert it was never called.
         const target = corps.find((c) => String(c._id) === String(filter._id));
         const hasOverlay = target && "soe" in target;
         return { modifiedCount: hasOverlay ? 1 : 0 };

@@ -622,6 +622,10 @@ describe("nationalizeWholeCorp", () => {
     const { resolveNationalCorporationForSector } = await import("./nationalCorporation");
     vi.mocked(resolveNationalCorporationForSector).mockResolvedValue({ _id: primaryId } as never);
 
+    // The released sector's region has changed hands: its stored country still
+    // says JP, the state says PL.
+    db.collection("states");
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "JP-13", countryId: "PL" });
     const { nationalizeWholeCorp } = await import("./ownershipTransition");
     const result = await nationalizeWholeCorp(db as unknown as Db, {
       countryId: "CN",
@@ -654,6 +658,11 @@ describe("nationalizeWholeCorp", () => {
       $add: [{ $ifNull: ["$revenue", 0] }, 2_000_000], // passthrough at rate 1
     });
     expect(pipeline[0].$set.stateId).toEqual({ $ifNull: ["$stateId", "JP-13"] });
+    // Ticket #1271: the pool row's country comes from the STATE, not from
+    // whatever the released sector last stored. The state below says the region
+    // is Polish while the sector still says JP, so this fails on the old code,
+    // which read `sector.countryId` directly.
+    expect(pipeline[0].$set.countryId).toEqual({ $ifNull: ["$countryId", "PL"] });
     // Stage 2 derives headroomUnits from the revenue stage 1 settled on, so a
     // pool with a missing/stale value heals rather than drifting further.
     const headroom = pipeline[1].$set.headroomUnits as { $multiply: [string, number] };
