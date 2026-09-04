@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   blendedRedeemFxRate,
   calculateBackingRatio,
+  proRataRedemptionCashShare,
   creditFundUnits,
   debitFundUnits,
   INDEX_FUND_AUTO_PAUSE_BACKING_RATIO,
@@ -97,18 +98,22 @@ describe("calculateBackingRatio", () => {
     expect(result.backingRatio).toBeCloseTo(0.65, 5);
   });
 
-  it("subtracts queued redemption payables whose units were already burned", () => {
+  it("counts queued redemption units on the liability side, not against assets", () => {
     const result = calculateBackingRatio({
       cashAnchor: 20_000,
       holdingsValueAnchor: 30_000,
       bondPrincipalAnchor: 5_000,
       openOrdersEscrowAnchor: 10_000,
-      queuedRedemptionLiabilityAnchor: 15_000,
+      queuedRedemptionUnits: 500,
       quotedNav: 100,
       unitSupply: 1000,
     });
-    expect(result.actualBackingValueAnchor).toBe(50_000);
-    expect(result.backingRatio).toBeCloseTo(0.5, 5);
+    // Assets stay whole at 65,000; the queued units widen the claim base to
+    // 1,500 units, so the ratio falls proportionally instead of the assets
+    // being written down twice.
+    expect(result.actualBackingValueAnchor).toBe(65_000);
+    expect(result.quotedLiabilityAnchor).toBe(150_000);
+    expect(result.backingRatio).toBeCloseTo(65_000 / 150_000, 5);
   });
 
   it("does not auto-pause regardless of backing ratio (manual admin control)", () => {
@@ -370,5 +375,70 @@ describe("auto-pause disarming is explicit", () => {
 
   it("keeps the warning band separate from the pause threshold", () => {
     expect(INDEX_FUND_BACKING_WARN_RATIO).toBeGreaterThan(INDEX_FUND_AUTO_PAUSE_BACKING_RATIO);
+  });
+});
+
+describe("proRataRedemptionCashShare", () => {
+  it("gives a lone entry everything the fund can pay", () => {
+    expect(
+      proRataRedemptionCashShare({
+        entryUnits: 1000,
+        unservedUnits: 1000,
+        availableCashAnchor: 50_000,
+      })
+    ).toBe(50_000);
+  });
+
+  it("splits short liquidity in proportion to units, not arrival order", () => {
+    // Two equal entries, only enough cash for one of them.
+    const first = proRataRedemptionCashShare({
+      entryUnits: 1000,
+      unservedUnits: 2000,
+      availableCashAnchor: 100_000,
+    });
+    expect(first).toBe(50_000);
+    // The second is now the only one left, so it takes what remains.
+    const second = proRataRedemptionCashShare({
+      entryUnits: 1000,
+      unservedUnits: 1000,
+      availableCashAnchor: 100_000 - first,
+    });
+    expect(second).toBe(50_000);
+  });
+
+  it("weights a large holder above a small one without starving the small one", () => {
+    const big = proRataRedemptionCashShare({
+      entryUnits: 9000,
+      unservedUnits: 10_000,
+      availableCashAnchor: 100_000,
+    });
+    const small = proRataRedemptionCashShare({
+      entryUnits: 1000,
+      unservedUnits: 1000,
+      availableCashAnchor: 100_000 - big,
+    });
+    expect(big).toBe(90_000);
+    expect(small).toBe(10_000);
+    // The whole pool is distributed; nothing is stranded by the gate.
+    expect(big + small).toBe(100_000);
+  });
+
+  it("pays nothing when the fund has no cash", () => {
+    expect(
+      proRataRedemptionCashShare({ entryUnits: 1000, unservedUnits: 2000, availableCashAnchor: 0 })
+    ).toBe(0);
+  });
+
+  it("treats non-finite or negative inputs as zero", () => {
+    expect(
+      proRataRedemptionCashShare({
+        entryUnits: Number.NaN,
+        unservedUnits: 100,
+        availableCashAnchor: 10,
+      })
+    ).toBe(0);
+    expect(
+      proRataRedemptionCashShare({ entryUnits: -5, unservedUnits: 100, availableCashAnchor: 10 })
+    ).toBe(0);
   });
 });
