@@ -50,6 +50,23 @@ async function main() {
       .collection<{ _id: string; isProcessing?: boolean }>("gameState")
       .updateOne({ _id: "current" }, { $set: { isProcessing: false } });
   }
+  // A profiling world is idle between runs, which trips the cron-drift
+  // auto-pause guard ("no turn completed in 10h"). `gameConfig.simSandbox` is
+  // the flag that exists for exactly this — its own doc note says resuming any
+  // sandbox world fails on the first turn without it. Check rather than
+  // un-pause by hand: silently clearing the pause would also hide a genuine
+  // stall.
+  const config = await db
+    .collection<{ _id: string; simSandbox?: boolean }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { simSandbox: 1 } });
+  if (config?.simSandbox !== true) {
+    throw new Error(
+      "gameConfig.simSandbox is not set on this world, so the cron-drift guard will " +
+        "auto-pause it on the first turn. Set it before profiling: " +
+        'db.gameConfig.updateOne({_id:"default"},{$set:{simSandbox:true}},{upsert:true})'
+    );
+  }
+
   console.log(`Starting from turn ${before?.currentTurn ?? "?"}.`);
 
   const profilePath = argValue("--profile");

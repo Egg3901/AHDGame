@@ -48,7 +48,10 @@ type Inputs = {
   health: GameHealthSnapshot | null;
   reconciliation: LedgerReconciliation | null;
   balanceSnapshot: BalanceSnapshot | null;
-  ledgerEntries: LedgerEntry[];
+  /** Per-account primary-leg turnover over the window (see summarizeLedgerTurnover). */
+  ledgerTurnover: LedgerTurnoverRow[];
+  /** How many ledger entries the window covered; a sample-size input only. */
+  ledgerEntryCount: number;
   commodityParticipants: CommodityParticipant[];
   unownedSectors?: UnownedSector[];
   entryFunnel?: NppMarketEntryFunnel | null;
@@ -416,20 +419,56 @@ function relevantMarketDiagnostics(
   };
 }
 
-function monetaryActivity(balanceSnapshot: BalanceSnapshot | null, entries: LedgerEntry[]) {
+/**
+ * Absolute primary-leg turnover for one account over the measurement window.
+ *
+ * This is all `monetaryActivity` ever needed from the ledger, and collapsing to
+ * it in the database instead of in Node is the difference between loading
+ * 61,398 documents (23.5MB) and 1,389 rows (88KB) on a measured world.
+ */
+export interface LedgerTurnoverRow {
+  account: string;
+  turnover: number;
+}
+
+/**
+ * Roll raw ledger entries into per-account turnover.
+ *
+ * Production does not call this: it runs the equivalent `$group` in Mongo (see
+ * loadLedgerTurnover) rather than shipping every entry over the wire. It exists
+ * so callers that already hold entries in memory — tests asserting velocity
+ * maths from real legs, offline analysis — can produce the same input without
+ * duplicating the rule about which legs count.
+ */
+export function summarizeLedgerTurnover(entries: LedgerEntry[]): LedgerTurnoverRow[] {
+  const byAccount = new Map<string, number>();
+  for (const entry of entries) {
+    for (const leg of entry.legs) {
+      if (leg.role !== "primary") continue;
+      byAccount.set(leg.account, (byAccount.get(leg.account) ?? 0) + Math.abs(leg.anchorAmount));
+    }
+  }
+  return [...byAccount.entries()].map(([account, turnover]) => ({ account, turnover }));
+}
+
+function monetaryActivity(
+  balanceSnapshot: BalanceSnapshot | null,
+  turnoverRows: LedgerTurnoverRow[]
+) {
   const balances = balanceSnapshot?.balances ?? {};
   const activeAccounts = new Set<string>();
   const turnoverByKind = new Map<string, number>();
   let grossTurnover = 0;
-  for (const entry of entries) {
-    for (const leg of entry.legs) {
-      if (leg.role !== "primary" || !isRealAccount(leg.account)) continue;
-      const turnover = Math.abs(leg.anchorAmount);
-      activeAccounts.add(leg.account);
-      grossTurnover += turnover;
-      const kind = accountKind(leg.account);
-      turnoverByKind.set(kind, (turnoverByKind.get(kind) ?? 0) + turnover);
-    }
+  // `isRealAccount` / `accountKind` stay here rather than moving into the
+  // aggregation: the pipeline groups by account, and applying the
+  // classification to ~1.4k grouped rows costs nothing while keeping the one
+  // definition of a "real account" in one place.
+  for (const row of turnoverRows) {
+    if (!isRealAccount(row.account)) continue;
+    activeAccounts.add(row.account);
+    grossTurnover += row.turnover;
+    const kind = accountKind(row.account);
+    turnoverByKind.set(kind, (turnoverByKind.get(kind) ?? 0) + row.turnover);
   }
 
   let total = 0;
@@ -461,6 +500,39 @@ function monetaryActivity(balanceSnapshot: BalanceSnapshot | null, entries: Ledg
     partyVelocity: velocity(["party"]),
     governmentVelocity: velocity(["government"]),
   };
+}
+
+/**
+ * Per-account primary-leg turnover over the window, grouped in Mongo.
+ *
+ * The previous version pulled every ledger entry in the window into Node and
+ * summed the legs there. On a measured world that was 61,398 documents and
+ * 23.5MB for a result of 1,389 rows and 88KB — a 273x difference in what
+ * crosses the wire and gets deserialized, and BSON deserialization is the
+ * single largest consumer of turn CPU.
+ *
+ * Grouping by the full account string rather than by kind is deliberate: it
+ * keeps `isRealAccount` / `accountKind` as the one definition in TypeScript
+ * instead of restating those rules as pipeline expressions that could drift.
+ *
+ * Uses only $match/$unwind/$group/$abs, so it stays within the aggregation
+ * surface the rest of the app relies on.
+ */
+async function loadLedgerTurnover(
+  db: Db,
+  windowStart: number,
+  turn: number
+): Promise<LedgerTurnoverRow[]> {
+  const rows = await db
+    .collection<LedgerEntry>("ledgerEntries")
+    .aggregate<{ _id: string; turnover: number }>([
+      { $match: { turn: { $gte: windowStart, $lte: turn } } },
+      { $unwind: "$legs" },
+      { $match: { "legs.role": "primary" } },
+      { $group: { _id: "$legs.account", turnover: { $sum: { $abs: "$legs.anchorAmount" } } } },
+    ])
+    .toArray();
+  return rows.map((row) => ({ account: row._id, turnover: row.turnover }));
 }
 
 function fillByTurn(flows: CommodityFlow[]): Map<number, number> {
@@ -654,7 +726,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     0
   );
   const totalCredit = input.money.reduce((sum, row) => sum + Math.max(0, row.creditOutstanding), 0);
-  const activity = monetaryActivity(input.balanceSnapshot, input.ledgerEntries);
+  const activity = monetaryActivity(input.balanceSnapshot, input.ledgerTurnover);
   const history = input.history ?? [];
   const coverage = computeCoverage(input.turn, history);
   const measurementReasons: string[] = [];
@@ -990,7 +1062,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       ),
       modeledGrossVelocity48: metric(
         activity.grossVelocity,
-        input.ledgerEntries.length,
+        input.ledgerEntryCount,
         "absolute_primary_ledger_flow_to_closing_balance"
       ),
       householdGrossVelocity48: metric(
@@ -1054,7 +1126,8 @@ export async function snapshotEconomicVitalSigns(
     health,
     reconciliation,
     balanceSnapshot,
-    ledgerEntries,
+    ledgerTurnover,
+    ledgerEntryCount,
     groupMembership,
     exchangeRates,
     unownedSectors,
@@ -1082,10 +1155,10 @@ export async function snapshotEconomicVitalSigns(
     db.collection<GameHealthSnapshot>("gameHealthSnapshots").findOne({ turn }),
     db.collection<LedgerReconciliation>("ledgerReconciliations").findOne({ turn }),
     db.collection<BalanceSnapshot>("balanceSnapshots").findOne({ turn }),
+    loadLedgerTurnover(db, windowStart, turn),
     db
       .collection<LedgerEntry>("ledgerEntries")
-      .find({ turn: { $gte: windowStart, $lte: turn } })
-      .toArray(),
+      .countDocuments({ turn: { $gte: windowStart, $lte: turn } }),
     resolveFormalizedGroups(db),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
@@ -1159,7 +1232,8 @@ export async function snapshotEconomicVitalSigns(
     health,
     reconciliation,
     balanceSnapshot,
-    ledgerEntries,
+    ledgerTurnover,
+    ledgerEntryCount,
     commodityParticipants,
     unownedSectors,
     entryFunnel,

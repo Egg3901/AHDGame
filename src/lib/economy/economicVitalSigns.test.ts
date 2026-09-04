@@ -1,6 +1,6 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
-import { computeEconomicVitalSigns } from "./economicVitalSigns";
+import { computeEconomicVitalSigns, summarizeLedgerTurnover } from "./economicVitalSigns";
 import type { VitalSignsHistoryRow } from "./economicVitalSigns";
 import type { LedgerReconciliation } from "@/lib/ledger/types";
 
@@ -21,7 +21,8 @@ const emptyInput = {
   health: null,
   reconciliation: null,
   balanceSnapshot: null,
-  ledgerEntries: [],
+  ledgerTurnover: [],
+  ledgerEntryCount: 0,
   commodityParticipants: [],
 };
 
@@ -117,7 +118,8 @@ describe("computeEconomicVitalSigns", () => {
       health: null,
       reconciliation: null,
       balanceSnapshot: null,
-      ledgerEntries: [],
+      ledgerTurnover: [],
+  ledgerEntryCount: 0,
       commodityParticipants: [
         {
           commodity: "steel",
@@ -389,7 +391,9 @@ describe("computeEconomicVitalSigns", () => {
           "corporation:active:USD": 100,
         },
       },
-      ledgerEntries: [
+      // Built from real legs so this still exercises the leg-selection rule
+      // (primary legs only) that production now applies in Mongo.
+      ledgerTurnover: summarizeLedgerTurnover([
         {
           _id: new ObjectId(),
           turn: 99,
@@ -428,7 +432,8 @@ describe("computeEconomicVitalSigns", () => {
             },
           ],
         },
-      ],
+      ]),
+      ledgerEntryCount: 1,
       commodityParticipants: [],
     });
 
@@ -560,5 +565,83 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBeNull();
     expect(snapshot.reconciliation.stockVsFlowSkipped).toBe(true);
     expect(snapshot.measurement.reasons).toContain("stock_vs_flow_skipped");
+  });
+});
+
+describe("summarizeLedgerTurnover", () => {
+  /**
+   * Production computes this with a Mongo $group instead, to avoid loading
+   * 61,398 entries for a 1,389-row answer. These pin the rules that both
+   * paths have to agree on: which legs count, and how they combine.
+   */
+  const entry = (legs: { account: string; anchorAmount: number; role: string }[]) => ({
+    _id: new ObjectId(),
+    turn: 1,
+    createdAt: new Date(),
+    txType: "test",
+    emitSite: "test",
+    balanced: true,
+    legs: legs.map((l) => ({
+      account: l.account,
+      amount: l.anchorAmount,
+      anchorAmount: l.anchorAmount,
+      currencyCode: "USD",
+      role: l.role,
+    })),
+  });
+
+  it("counts primary legs and ignores every other role", () => {
+    const rows = summarizeLedgerTurnover([
+      entry([
+        { account: "character:a:USD", anchorAmount: 20, role: "primary" },
+        { account: "mint:x:USD", anchorAmount: -20, role: "contra" },
+      ]),
+    ] as never);
+
+    expect(rows).toEqual([{ account: "character:a:USD", turnover: 20 }]);
+  });
+
+  it("uses absolute amounts, so inflows and outflows both count as turnover", () => {
+    const rows = summarizeLedgerTurnover([
+      entry([{ account: "character:a:USD", anchorAmount: -75, role: "primary" }]),
+    ] as never);
+
+    expect(rows).toEqual([{ account: "character:a:USD", turnover: 75 }]);
+  });
+
+  it("sums across entries and across legs of the same account", () => {
+    const rows = summarizeLedgerTurnover([
+      entry([
+        { account: "character:a:USD", anchorAmount: 10, role: "primary" },
+        { account: "character:a:USD", anchorAmount: -5, role: "primary" },
+      ]),
+      entry([{ account: "character:a:USD", anchorAmount: 2.5, role: "primary" }]),
+    ] as never);
+
+    expect(rows).toEqual([{ account: "character:a:USD", turnover: 17.5 }]);
+  });
+
+  it("keeps accounts separate and does not classify them", () => {
+    const rows = summarizeLedgerTurnover([
+      entry([
+        { account: "character:a:USD", anchorAmount: 10, role: "primary" },
+        { account: "corporation:b:USD", anchorAmount: 30, role: "primary" },
+        // Not a real account. Classification is monetaryActivity's job, not
+        // this function's, so it must survive the roll-up.
+        { account: "mint:c:USD", anchorAmount: 40, role: "primary" },
+      ]),
+    ] as never);
+
+    expect(new Map(rows.map((r) => [r.account, r.turnover]))).toEqual(
+      new Map([
+        ["character:a:USD", 10],
+        ["corporation:b:USD", 30],
+        ["mint:c:USD", 40],
+      ])
+    );
+  });
+
+  it("returns nothing for an empty ledger", () => {
+    expect(summarizeLedgerTurnover([])).toEqual([]);
   });
 });
