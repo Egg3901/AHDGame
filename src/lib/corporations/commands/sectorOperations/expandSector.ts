@@ -418,8 +418,15 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       // shared with `buildCapacity` via `unownedPoolDrawdown`. It used to live
       // inline here and nowhere else, which is exactly how `buildCapacity`
       // shipped without a drawdown at all (#1145).
+      // The pool row is an upsert, and its `countryId` is stamped from this
+      // bucket, so it has to be the HOST country like every other country read
+      // in this function. Taking the corporation's domicile here filed a
+      // brand-new pool row on a foreign state under the founder's own country:
+      // unreachable to the country the capacity is physically in, and counted
+      // as the founder's headroom by the sector browser and the supply math
+      // (ticket #1271, the same defect `buildCapacity` carried).
       const starterDrawdown = unownedPoolDrawdown(
-        { stateId, countryId: corporation.countryId, sectorType },
+        { stateId, countryId: state.countryId, sectorType },
         starterUnits,
         now,
         eraUnitScale

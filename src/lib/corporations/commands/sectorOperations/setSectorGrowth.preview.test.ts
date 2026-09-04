@@ -92,3 +92,48 @@ describe("setSectorGrowth — preview", () => {
     expect(json).not.toHaveProperty("preview");
   });
 });
+
+// Ticket #1271. The growth-cost quote is discounted at the HOST country's prime
+// rate. Resolving that country from the sector's stored value, then the corp,
+// then a literal "US" quoted a foreign operation at somebody else's rates.
+describe("setSectorGrowth — host country resolution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporateSectors");
+    db.collection("states");
+  });
+
+  it("prices against the country the STATE is in, not the corporation's", async () => {
+    await wire();
+    // Corp is domiciled in CN; the sector's stored country is stale.
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "DB", countryId: "PL" });
+
+    await setSectorGrowth(req({ targetGrowthRate: 8 }), { params });
+
+    const { resolveCountryPrimeRate } = await import("@/lib/corporations/sectorGrowthCost");
+    expect(resolveCountryPrimeRate).toHaveBeenCalledWith(expect.anything(), "PL");
+  });
+
+  it("never invents the United States when nothing at all resolves", async () => {
+    // EVERY source cleared: no state row, no sector country, no corporation
+    // country. That is the only shape that reached the old chain's `?? "US"`
+    // literal, so it is the only shape that can prove the literal is gone.
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    await wire();
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { ...corp, countryId: undefined },
+    } as never);
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      ...sector,
+      countryId: undefined,
+    });
+    db.collectionMocks.states.findOne.mockResolvedValue(null);
+
+    await setSectorGrowth(req({ targetGrowthRate: 8 }), { params });
+
+    const { resolveCountryPrimeRate } = await import("@/lib/corporations/sectorGrowthCost");
+    expect(resolveCountryPrimeRate).not.toHaveBeenCalledWith(expect.anything(), "US");
+  });
+});

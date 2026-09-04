@@ -6,6 +6,7 @@ import { clearCountryStateCacheForDb } from "@/lib/countryState/cache";
 import { seedCountryStateFromConfig } from "@/lib/countryState/seed";
 import {
   governmentTypeLabelFor,
+  loadCountryPresentationOverrides,
   resolveCountryIdentity,
   resolveCountryIdentities,
 } from "./countryIdentity";
@@ -126,5 +127,68 @@ describe("resolveCountryIdentities", () => {
 
     expect(out.get("FR")?.name).toBe("France");
     expect(out.get("DE")).toBeDefined();
+  });
+});
+
+describe("loadCountryPresentationOverrides", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("countryState");
+    clearCountryStateCacheForDb(db as unknown as Db);
+  });
+
+  it("returns both overrides in one read, and asks only for rows that have one", async () => {
+    db.collectionMocks.countryState.find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          { _id: "DD", displayNameOverride: "Germany", flagEmojiOverride: "DE-FLAG" },
+        ]),
+    });
+
+    const out = await loadCountryPresentationOverrides(db as unknown as Db);
+
+    expect(out.DD).toEqual({ name: "Germany", flagEmoji: "DE-FLAG" });
+    // One query for the whole world, and it must not read through
+    // `getCountryState`, which self-heals a missing row by INSERTING it.
+    expect(db.collectionMocks.countryState.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.countryState.findOne).not.toHaveBeenCalled();
+    const filter = db.collectionMocks.countryState.find.mock.calls[0][0];
+    expect(filter.$or).toHaveLength(2);
+  });
+
+  it("keeps a country that overrides only one of the two", async () => {
+    db.collectionMocks.countryState.find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([
+          { _id: "DD", displayNameOverride: "Germany" },
+          { _id: "FR", flagEmojiOverride: "FR-FLAG" },
+        ]),
+    });
+
+    const out = await loadCountryPresentationOverrides(db as unknown as Db);
+
+    expect(out.DD).toEqual({ name: "Germany" });
+    expect(out.FR).toEqual({ flagEmoji: "FR-FLAG" });
+  });
+
+  it("treats an empty string or null as no override rather than blanking the country", async () => {
+    db.collectionMocks.countryState.find.mockReturnValue({
+      toArray: () =>
+        Promise.resolve([{ _id: "DD", displayNameOverride: "", flagEmojiOverride: null }]),
+    });
+
+    const out = await loadCountryPresentationOverrides(db as unknown as Db);
+
+    expect(out.DD).toBeUndefined();
+  });
+
+  it("fails soft, because a country under its compiled name beats a 500", async () => {
+    db.collectionMocks.countryState.find.mockImplementation(() => {
+      throw new Error("mongo is down");
+    });
+
+    await expect(loadCountryPresentationOverrides(db as unknown as Db)).resolves.toEqual({});
   });
 });

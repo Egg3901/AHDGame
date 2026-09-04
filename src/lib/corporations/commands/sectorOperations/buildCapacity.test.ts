@@ -447,3 +447,70 @@ describe("buildCapacity — mothball / reactivate", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ─── unowned-pool country attribution (#1271) ─────────────────────────────
+//
+// The pool row is keyed by state and sector, but it CARRIES a countryId that
+// every reader filters on. A sector with no stored countryId resolved it from
+// the corporation and then fell through to a literal "US", so a US-domiciled
+// corp building in a foreign state minted a pool row filed under the United
+// States: unreachable to the country the capacity is physically in, and counted
+// as American headroom by the sector browser and the commodity supply math.
+describe("buildCapacity — unowned pool country attribution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("characters");
+    db.collection("gameState");
+    db.collection("gameConfig");
+    db.collection("unownedSectors");
+    db.collection("states");
+  });
+
+  it("files the pool row under the country the STATE is in, not the corp's", async () => {
+    await wireMocks(sectorDoc({ countryId: undefined, stateId: "UKR_WES" }));
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "UKR_WES", countryId: "UKR" });
+
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 100 }), { params });
+
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("UKR");
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
+  });
+
+  it("prefers the state even over a countryId already stored on the sector", async () => {
+    // The precedence `getSectorOperatingCountryId` sets for the rest of the
+    // codebase. A stored country left stale by a region changing hands is the
+    // case that helper exists for, so taking it first would reintroduce this
+    // bug in its other form. Fails on the old order, which read the sector's
+    // value first and never looked at the state.
+    await wireMocks(sectorDoc({ countryId: "US", stateId: "UKR_WES" }));
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "UKR_WES", countryId: "UKR" });
+
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 100 }), { params });
+
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("UKR");
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
+  });
+
+  it("never invents the United States when nothing at all resolves", async () => {
+    // EVERY source cleared: no state row, no sector country, no corporation
+    // country. That is the only shape that reached the old chain's `?? "US"`
+    // literal, so it is the only shape that can prove the literal is gone.
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    await wireMocks(sectorDoc({ countryId: undefined, stateId: "PL_MAZ" }));
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { ...corporation, countryId: undefined },
+    } as never);
+    db.collectionMocks.states.findOne.mockResolvedValue(null);
+
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 100 }), { params });
+
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
+  });
+});

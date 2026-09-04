@@ -433,6 +433,24 @@ describe("generateCountryOwnedSeedData", () => {
       expect(covered.has("NW")).toBe(true);
       expect(covered.has("NOWHERE")).toBe(false);
     });
+
+    it("gives extraction the same coverage as every other SOE sector", () => {
+      // The symptom side of the bug, and the assertion that would have caught
+      // it from the outside: extraction is the ONE sector type filtered per
+      // state, so a regression in that filter shows up as sixteen sector types
+      // covering every region and the seventeenth covering fewer. Asserted over
+      // states that all carry deposits, so full parity is the correct answer.
+      const depositStates = ddStates.filter((s) => s.id !== "NOWHERE");
+      const data = generateCountryOwnedSeedData(depositStates, "1953-default", true);
+      const soes = data.filter((e) => e.corporation.countryOwnerId === "DD" && e.corporation.soe);
+      expect(soes.length).toBeGreaterThan(1);
+      for (const entry of soes) {
+        expect(
+          entry.sectors.length,
+          `${entry.corporation.soe?.sector} should cover every region`
+        ).toBe(depositStates.length);
+      }
+    });
   });
 
   // Market-economy state enterprises (corporate-sector seed-gap fix): FR/IT/

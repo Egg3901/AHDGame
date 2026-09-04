@@ -68,6 +68,34 @@ describe("splitOffSectorType", () => {
     expect(move[1].$set.corporationId).toEqual(newId);
   });
 
+  it("stamps the split-off with the sector type it operates, not the financial default", async () => {
+    // Ticket #1271: `buildNationalCorporationDoc` defaults `type` to "financial"
+    // for the sovereign-issuer primary. A producing split-off inherited it, and
+    // `corporation.type` is what `expandSector` and `buildCapacity` build into
+    // when no sector is named, so every state enterprise pointed at financial.
+    const primaryId = new ObjectId();
+    const newId = new ObjectId();
+    db.collectionMocks.corporations.findOne.mockResolvedValue(null);
+    const { ensurePrimaryNationalCorporation } = await import("./nationalCorporation");
+    vi.mocked(ensurePrimaryNationalCorporation).mockResolvedValue({ _id: primaryId } as never);
+    db.collectionMocks.corporations.insertOne.mockResolvedValue({ insertedId: newId });
+    db.collectionMocks.corporations.find.mockReturnValue(
+      findCursor([{ _id: primaryId }, { _id: newId }])
+    );
+    db.collectionMocks.corporateSectors.updateMany.mockResolvedValue({ modifiedCount: 0 });
+
+    const { splitOffSectorType } = await import("./restructure");
+    await splitOffSectorType(db as unknown as Db, {
+      countryId: "DD",
+      sectorType: "extraction",
+      newCorpName: "German Extraction Enterprise",
+    });
+
+    const insertedDoc = db.collectionMocks.corporations.insertOne.mock.calls[0][0];
+    expect(insertedDoc.type).toBe("extraction");
+    expect(insertedDoc.assignedSectorTypes).toEqual(["extraction"]);
+  });
+
   it("supports the empty pre-claim case (no sectors yet)", async () => {
     const primaryId = new ObjectId();
     const newId = new ObjectId();

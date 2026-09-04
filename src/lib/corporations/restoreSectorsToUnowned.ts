@@ -83,7 +83,14 @@ export async function restoreSectorsToUnowned(
   const corporationIds = [...new Set(sectors.map((sector) => sector.corporationId.toString()))].map(
     (id) => new ObjectId(id)
   );
-  const [corporations, fxByCurrency] = await Promise.all([
+  // The pool row this restores capacity into CARRIES a countryId, and every
+  // reader filters on it, so it has to be the country the state is in rather
+  // than whatever the sector last stored. A row whose stored value went stale
+  // when its region changed hands would otherwise return its capacity to a
+  // market the country it sits in cannot see (ticket #1271, the shape
+  // `buildCapacity` and `expandSector` carried on the founding side). Batched
+  // alongside the corporation read, so this costs one query for the whole set.
+  const [corporations, fxByCurrency, sectorStates] = await Promise.all([
     db
       .collection<Corporation>("corporations")
       .find({ _id: { $in: corporationIds } })
@@ -94,7 +101,13 @@ export async function restoreSectorsToUnowned(
       })
       .toArray(),
     loadFxRatesByCurrency(db),
+    db
+      .collection<{ _id: string; countryId: string }>("states")
+      .find({ _id: { $in: [...new Set(sectors.map((sector) => sector.stateId))] } })
+      .project<{ _id: string; countryId: string }>({ countryId: 1 })
+      .toArray(),
   ]);
+  const countryByStateId = new Map(sectorStates.map((state) => [state._id, state.countryId]));
   const corporationById = new Map(
     corporations.map((corporation) => [corporation._id.toString(), corporation])
   );
@@ -162,7 +175,8 @@ export async function restoreSectorsToUnowned(
     if (plantsEnabled ? units > 0 : revenue > 0) {
       deltas.push({
         sectorId: sector._id,
-        countryId: sector.countryId,
+        countryId: (countryByStateId.get(sector.stateId) ??
+          sector.countryId) as RestorableSectorDelta["countryId"],
         stateId: sector.stateId,
         sectorType: sector.sectorType,
         revenue,
