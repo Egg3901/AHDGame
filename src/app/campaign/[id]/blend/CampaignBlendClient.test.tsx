@@ -129,7 +129,7 @@ describe("manager view", () => {
 
   it("offers the rally at the race's own action cost", () => {
     renderClient();
-    expect(screen.getByText(/RALLY · 4/)).toBeTruthy();
+    expect(screen.getAllByText(/RALLY · 4/)).toHaveLength(2);
   });
 
   it("names the running mate on the ticket", () => {
@@ -164,7 +164,7 @@ describe("running-mate surrogate", () => {
 
   it("still gets the rally, which shares the ticket's action pool", () => {
     renderClient({ canManage: false, canSurrogate: true });
-    expect(screen.getByText(/RALLY · 4/)).toBeTruthy();
+    expect(screen.getAllByText(/RALLY · 4/)).toHaveLength(2);
   });
 
   it("cannot change the ticket or the managers", () => {
@@ -195,7 +195,7 @@ describe("archived campaign", () => {
 
   it("blocks the rally and says why", () => {
     renderClient({ campaign: campaignFixture({ isArchived: true }) });
-    expect(screen.getByText("This campaign is concluded.")).toBeTruthy();
+    expect(screen.getAllByText("This campaign is concluded.")).toHaveLength(2);
   });
 });
 
@@ -274,5 +274,31 @@ describe("where you are campaigning", () => {
   it("shows nothing there for someone who is not the candidate", () => {
     renderClient({ campaign: { ...campaignFixture(), statePresence: null } });
     expect(screen.queryByText(/Where you are campaigning/i)).toBeNull();
+  });
+});
+
+describe("national support", () => {
+  it("puts the rally and the tour in reach on both layouts", () => {
+    // These were passed only to the desktop rail, which is `hidden lg:block`,
+    // so the largest lever a candidate has could not be reached on a phone.
+    renderClient();
+    expect(screen.getAllByText(/RALLY · 4/)).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /TOUR/ })).toHaveLength(2);
+  });
+
+  it("says the figure is national, and that it applies everywhere", () => {
+    // Unlabelled, the figure sits above two buttons whose scope is not obvious;
+    // support is one scalar applied identically in every state.
+    renderClient();
+    expect(screen.getAllByText("National support")).toHaveLength(2);
+    expect(
+      screen.getAllByText(/Applies in every state, not just the one you are campaigning in\./)
+    ).toHaveLength(2);
+  });
+
+  it("shows the standing to a viewer who cannot act, without the buttons", () => {
+    renderClient({ canManage: false, canSurrogate: false });
+    expect(screen.getAllByText("National support")).toHaveLength(2);
+    expect(screen.queryByText(/RALLY ·/)).toBeNull();
   });
 });

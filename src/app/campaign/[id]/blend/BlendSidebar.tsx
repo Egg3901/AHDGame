@@ -53,6 +53,177 @@ function Block({ children, first }: { children: React.ReactNode; first?: boolean
   );
 }
 
+/**
+ * National support, the drip in flight, and the two actions that move it.
+ *
+ * Shared by both layouts. The rail this sat in is `hidden lg:block`, so a
+ * rail-only version meant the rally and the tour, the largest lever a candidate
+ * has, could not be reached on a phone at all.
+ */
+export function SupportBlock({
+  vm,
+  canAct,
+  busy,
+  onFireRally,
+  onToggleTour,
+}: {
+  vm: CampaignBlendVM;
+  canAct: boolean;
+  busy: string | null;
+  onFireRally: () => void;
+  onToggleTour: () => void;
+}) {
+  if (!vm.support) return null;
+  return (
+    <>
+      <div
+        style={{
+          marginTop: 3,
+          fontFamily: FONT.serif,
+          fontStyle: "italic",
+          fontSize: 12.5,
+          color: BLEND.mutedDim,
+        }}
+      >
+        {vm.railSubtitle}
+      </div>
+      {/* Support is one figure for the candidate, applied identically in every
+          state, so a rally lifts them everywhere rather than where they are
+          camped. The heading alone did not say so and the figure sits directly
+          above two buttons whose scope was not obvious. */}
+      <div
+        style={{
+          marginTop: 2,
+          fontFamily: FONT.serif,
+          fontSize: 12.5,
+          lineHeight: 1.5,
+          color: BLEND.mutedDim,
+        }}
+      >
+        Applies in every state, not just the one you are campaigning in.
+      </div>
+      <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 9 }}>
+        <span
+          style={{
+            fontFamily: FONT.mono,
+            fontSize: 36,
+            fontWeight: 500,
+            letterSpacing: "-0.03em",
+          }}
+        >
+          {vm.support.supportText}
+        </span>
+        <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#60a5fa" }}>
+          {vm.support.dripText} pending
+        </span>
+      </div>
+
+      <div
+        style={{
+          marginTop: 10,
+          height: 6,
+          background: BLEND.trackAlt,
+          overflow: "hidden",
+          position: "relative",
+        }}
+      >
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            left: 0,
+            width: `${vm.support.fillPct.toFixed(1)}%`,
+            background: "linear-gradient(90deg, #7f1d1d, #dc2626)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            top: -3,
+            bottom: -3,
+            left: "50%",
+            width: 1,
+            background: BLEND.mutedDim,
+          }}
+        />
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          display: "flex",
+          justifyContent: "space-between",
+          fontFamily: FONT.mono,
+          fontSize: 9.5,
+          color: BLEND.mutedDimmer,
+        }}
+      >
+        <span>0</span>
+        <span>50 NEUTRAL</span>
+        <span>100</span>
+      </div>
+
+      {canAct ? (
+        <>
+          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              disabled={!vm.support.canRally || busy === "rally"}
+              onClick={onFireRally}
+              style={{
+                flex: 1,
+                border: 0,
+                background: vm.support.canRally ? BLEND.accent : BLEND.hairlineStrong,
+                padding: 9,
+                fontFamily: FONT.mono,
+                fontSize: 10.5,
+                letterSpacing: ".08em",
+                fontWeight: 700,
+                color: vm.support.canRally ? "#fff" : BLEND.muted,
+                cursor: vm.support.canRally ? "pointer" : "not-allowed",
+              }}
+            >
+              RALLY · {vm.support.rallyActionCost}
+            </button>
+            <button
+              type="button"
+              disabled={busy === "tour"}
+              onClick={onToggleTour}
+              style={{
+                flex: 1,
+                border: `1px solid ${BLEND.hairlineStrong}`,
+                background: "transparent",
+                padding: 10,
+                fontFamily: FONT.mono,
+                fontSize: 11.5,
+                letterSpacing: ".08em",
+                fontWeight: 700,
+                cursor: "pointer",
+                color: vm.support.tourActive ? BLEND.negative : BLEND.positive,
+              }}
+            >
+              {vm.support.tourActive ? "STOP TOUR" : "START TOUR"}
+            </button>
+          </div>
+          {vm.support.rallyBlockedReason ? (
+            <div
+              style={{
+                marginTop: 7,
+                fontFamily: FONT.serif,
+                fontStyle: "italic",
+                fontSize: 12.5,
+                color: BLEND.mutedDim,
+              }}
+            >
+              {vm.support.rallyBlockedReason}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </>
+  );
+}
+
 /** The Blend right rail: your standing, and everything you can do about it. */
 export function BlendSidebar({
   vm,
@@ -84,136 +255,14 @@ export function BlendSidebar({
     >
       {vm.support ? (
         <Block first>
-          <Eyebrow>Current support</Eyebrow>
-          <div
-            style={{
-              marginTop: 3,
-              fontFamily: FONT.serif,
-              fontStyle: "italic",
-              fontSize: 12.5,
-              color: BLEND.mutedDim,
-            }}
-          >
-            {vm.railSubtitle}
-          </div>
-          <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 9 }}>
-            <span
-              style={{
-                fontFamily: FONT.mono,
-                fontSize: 36,
-                fontWeight: 500,
-                letterSpacing: "-0.03em",
-              }}
-            >
-              {vm.support.supportText}
-            </span>
-            <span style={{ fontFamily: FONT.mono, fontSize: 12, color: "#60a5fa" }}>
-              {vm.support.dripText} pending
-            </span>
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              height: 6,
-              background: BLEND.trackAlt,
-              overflow: "hidden",
-              position: "relative",
-            }}
-          >
-            <div
-              style={{
-                position: "absolute",
-                top: 0,
-                bottom: 0,
-                left: 0,
-                width: `${vm.support.fillPct.toFixed(1)}%`,
-                background: "linear-gradient(90deg, #7f1d1d, #dc2626)",
-              }}
-            />
-            <div
-              style={{
-                position: "absolute",
-                top: -3,
-                bottom: -3,
-                left: "50%",
-                width: 1,
-                background: BLEND.mutedDim,
-              }}
-            />
-          </div>
-          <div
-            style={{
-              marginTop: 6,
-              display: "flex",
-              justifyContent: "space-between",
-              fontFamily: FONT.mono,
-              fontSize: 9.5,
-              color: BLEND.mutedDimmer,
-            }}
-          >
-            <span>0</span>
-            <span>50 NEUTRAL</span>
-            <span>100</span>
-          </div>
-
-          {canAct ? (
-            <>
-              <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-                <button
-                  type="button"
-                  disabled={!vm.support.canRally || busy === "rally"}
-                  onClick={onFireRally}
-                  style={{
-                    flex: 1,
-                    border: 0,
-                    background: vm.support.canRally ? BLEND.accent : BLEND.hairlineStrong,
-                    padding: 9,
-                    fontFamily: FONT.mono,
-                    fontSize: 10.5,
-                    letterSpacing: ".08em",
-                    fontWeight: 700,
-                    color: vm.support.canRally ? "#fff" : BLEND.muted,
-                    cursor: vm.support.canRally ? "pointer" : "not-allowed",
-                  }}
-                >
-                  RALLY · {vm.support.rallyActionCost}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy === "tour"}
-                  onClick={onToggleTour}
-                  style={{
-                    flex: 1,
-                    border: `1px solid ${BLEND.hairlineStrong}`,
-                    background: "transparent",
-                    padding: 10,
-                    fontFamily: FONT.mono,
-                    fontSize: 11.5,
-                    letterSpacing: ".08em",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    color: vm.support.tourActive ? BLEND.negative : BLEND.positive,
-                  }}
-                >
-                  {vm.support.tourActive ? "STOP TOUR" : "START TOUR"}
-                </button>
-              </div>
-              {vm.support.rallyBlockedReason ? (
-                <div
-                  style={{
-                    marginTop: 7,
-                    fontFamily: FONT.serif,
-                    fontStyle: "italic",
-                    fontSize: 12.5,
-                    color: BLEND.mutedDim,
-                  }}
-                >
-                  {vm.support.rallyBlockedReason}
-                </div>
-              ) : null}
-            </>
-          ) : null}
+          <Eyebrow>National support</Eyebrow>
+          <SupportBlock
+            vm={vm}
+            canAct={canAct}
+            busy={busy}
+            onFireRally={onFireRally}
+            onToggleTour={onToggleTour}
+          />
         </Block>
       ) : null}
 
