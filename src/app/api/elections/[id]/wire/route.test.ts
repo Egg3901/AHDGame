@@ -9,6 +9,9 @@ vi.mock("@/lib/api/rateLimit", () => ({
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
   rateLimitResponse: vi.fn(),
 }));
+vi.mock("@/lib/elections/electionParamResolution", () => ({
+  resolveElectionRouteParam: vi.fn(),
+}));
 
 let db: MockDb;
 const ELECTION_ID = new ObjectId().toString();
@@ -46,6 +49,13 @@ beforeEach(async () => {
   vi.mocked(requireBasicAuth).mockResolvedValue({
     ok: true,
     user: { userId: new ObjectId().toString() },
+  } as never);
+
+  // Default: the route param resolves to a race with the id in the path.
+  const { resolveElectionRouteParam } = await import("@/lib/elections/electionParamResolution");
+  vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+    ok: true,
+    election: { _id: new ObjectId(ELECTION_ID) },
   } as never);
 });
 
@@ -110,9 +120,42 @@ describe("GET /api/elections/[id]/wire", () => {
   });
 
   it("rejects a malformed election id", async () => {
+    const { resolveElectionRouteParam } = await import("@/lib/elections/electionParamResolution");
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+      ok: false,
+      reason: "invalid_id",
+    } as never);
     stubWireRows([]);
     const res = await callRoute("http://t/api/elections/not-an-id/wire", "not-an-id");
     expect(res.status).toBe(400);
+  });
+
+  it("accepts a seat slug and scopes the feed to the race it resolves to", async () => {
+    // The election pages address races as `US-president`, not only by ObjectId;
+    // a slug used to 400 here, so the ticker never loaded on those URLs.
+    const resolvedId = new ObjectId();
+    const { resolveElectionRouteParam } = await import("@/lib/elections/electionParamResolution");
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+      ok: true,
+      election: { _id: resolvedId },
+    } as never);
+
+    const calls = stubWireRows([]);
+    const res = await callRoute("http://t/api/elections/US-president/wire", "US-president");
+
+    expect(res.status).toBe(200);
+    expect(calls.filter).toEqual({ electionId: resolvedId.toString() });
+  });
+
+  it("reports a race that does not exist as not found", async () => {
+    const { resolveElectionRouteParam } = await import("@/lib/elections/electionParamResolution");
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+      ok: false,
+      reason: "not_found",
+    } as never);
+    stubWireRows([]);
+    const res = await callRoute("http://t/api/elections/ZZ-nothing/wire", "ZZ-nothing");
+    expect(res.status).toBe(404);
   });
 
   it("returns an empty list, not a 404, for a race with no wire traffic", async () => {

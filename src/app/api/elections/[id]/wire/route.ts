@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -10,6 +9,7 @@ import {
   RACE_WIRE_DEFAULT_LIMIT,
   RACE_WIRE_MAX_LIMIT,
 } from "@/lib/elections/raceWireFeed";
+import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -23,7 +23,7 @@ const querySchema = z.object({
 // GET /api/elections/[id]/wire — recent wire headlines for one race, newest first.
 // Feeds the ticker strip on the campaign manager and election screens.
 // Auth: requireBasicAuth
-// Errors: 400, 401, 429
+// Errors: 400, 401, 404, 429
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
@@ -33,9 +33,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const { id } = await params;
-    if (!ObjectId.isValid(id)) {
-      return NextResponse.json({ error: "Invalid election id" }, { status: 400 });
-    }
 
     const url = new URL(request.url);
     const parsed = querySchema.safeParse({
@@ -47,8 +44,22 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
+
+    // A race is addressed either by ObjectId or by seat slug ("US-president"),
+    // so this resolves the segment the way the detail route does. Requiring an
+    // ObjectId here 400'd every ticker fetch made from a slug URL, which is the
+    // form the election pages actually link to.
+    const resolved = await resolveElectionRouteParam(db, id);
+    if (!resolved.ok) {
+      const invalid = resolved.reason === "invalid_id";
+      return NextResponse.json(
+        { error: invalid ? "Invalid election id" : "Election not found" },
+        { status: invalid ? 400 : 404 }
+      );
+    }
+
     const items = await getRaceWireFeed(db, {
-      electionId: id,
+      electionId: resolved.election._id.toString(),
       campaignId: parsed.data.campaignId,
       limit: parsed.data.limit ?? RACE_WIRE_DEFAULT_LIMIT,
     });
