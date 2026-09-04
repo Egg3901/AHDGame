@@ -182,14 +182,22 @@ export function formatRoundTripReport(topPhases = 20): string | null {
   if (!roundTripProfilingEnabled()) return null;
   const report = roundTripReport(topPhases);
   if (report.length === 0) return null;
-  const total = totalRoundTrips();
-  const lines = [`[roundtrips] ${total} Mongo round trips this turn, top ${report.length} phases:`];
+  const trips = totalRoundTrips();
+  const docs = totalDocumentsReturned();
+  const lines = [
+    `[roundtrips] ${trips} round trips, ${docs} documents returned this turn.`,
+    `  ranked by documents (what deserialization costs); round trips shown alongside:`,
+    `  ${"docs".padStart(8)} ${"share".padStart(6)} ${"trips".padStart(7)}  phase`,
+  ];
   for (const row of report) {
-    const share = total > 0 ? ((row.roundTrips / total) * 100).toFixed(1) : "0.0";
-    const where = row.topCollections.map((c) => `${c.collection} x${c.roundTrips}`).join(", ");
+    const share = docs > 0 ? ((row.documents / docs) * 100).toFixed(1) : "0.0";
+    const where = row.topCollections
+      .map((c) => `${c.collection} ${c.documents}d/${c.roundTrips}t`)
+      .join(", ");
     lines.push(
-      `  ${String(row.roundTrips).padStart(6)}  ${share.padStart(5)}%  ${row.phase}  (${where})`
+      `  ${String(row.documents).padStart(8)} ${(share + "%").padStart(6)} ${String(row.roundTrips).padStart(7)}  ${row.phase}  (${where})`
     );
   }
   return lines.join("\n");
 }
+

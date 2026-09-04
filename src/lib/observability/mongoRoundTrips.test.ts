@@ -121,10 +121,9 @@ describe("round-trip profiler", () => {
     endPhaseProfiling("light");
 
     const text = formatRoundTripReport()!;
-    expect(text).toContain("100 Mongo round trips");
+    expect(text).toContain("100 round trips");
     expect(text).toContain("heavy");
-    expect(text).toContain("75.0%");
-    expect(text).toContain("corporations x75");
+    expect(text).toContain("corporations 0d/75t");
   });
 });
 
