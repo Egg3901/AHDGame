@@ -150,6 +150,30 @@ export const PRIMARY_HOME_SURGE_COST_ACTIONS = 3;
 export const PRIMARY_HOME_SURGE_PCT = 15;
 
 /**
+ * Vote multiplier a live home-state surge gives a candidate in one state.
+ *
+ * Shared by the stagger phase, which decides the real result, and the
+ * projection that displays it. They apply the same multiplier from the same
+ * function so the board cannot promise a lift the wave does not deliver.
+ *
+ * Gated on `surgeUsed` rather than on the stored rate: primary resolution
+ * clears `primarySurgeUsed` at the end of the cycle and leaves
+ * `primarySurgeBoost` behind, so keying off the rate would boost for ever. The
+ * rate itself comes from the candidate row when present, so a surge already
+ * bought keeps the rate it was bought at if this constant is ever retuned.
+ */
+export function homeStateSurgeMultiplier(input: {
+  surgeUsed?: boolean;
+  surgeBoostPct?: number;
+  homeState?: string | null;
+  stateId: string;
+}): number {
+  if (!input.surgeUsed) return 1;
+  if (!input.homeState || input.homeState !== input.stateId) return 1;
+  return 1 + (input.surgeBoostPct ?? PRIMARY_HOME_SURGE_PCT) / 100;
+}
+
+/**
  * Per-tick projection bonus added to a candidate's primary score for their
  * `primaryCampaignState`. With TICK_CAP=5, a fully-camped candidate gets +7.5
  * score in that state's projection — meaningful relative to the ~65-point

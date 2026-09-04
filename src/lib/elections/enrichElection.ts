@@ -252,6 +252,8 @@ async function applyPresidentialPrimaryDisplay(
             : (characterMap.get(rawCandidate.characterId.toString())?.homeState ?? null),
           primaryCampaignState: rawCandidate.primaryCampaignState ?? null,
           primaryCampaignTicks: rawCandidate.primaryCampaignTicks ?? 0,
+          primarySurgeUsed: rawCandidate.primarySurgeUsed ?? false,
+          primarySurgeBoost: rawCandidate.primarySurgeBoost,
           support: rawCandidate.support,
         };
       })

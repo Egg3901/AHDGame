@@ -12,6 +12,7 @@
  *
  * On top of the vote distribution we apply:
  *   - In-state campaigning tick multiplier (matches stagger behavior)
+ *   - Home-state surge multiplier (matches stagger behavior)
  *   - Extra NPP penalty when a player is in the race (matches stagger)
  *
  * Home-state boost lives inside `distributeVotesByGroupLevelAllocation`
@@ -29,6 +30,7 @@ import {
 } from "@/lib/electionEngine";
 import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
+  homeStateSurgeMultiplier,
   NPP_STAGGER_EXTRA_MULTIPLIER,
 } from "@/lib/electionEngine/constants";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
@@ -66,6 +68,14 @@ export interface ProjectPrimaryInput {
     primaryCampaignTicks?: number;
     /** ElectionCandidate.support — rally mood (undefined → neutral 1.0×). */
     support?: number;
+    /**
+     * True while a home-state surge is live. Primary resolution clears this at
+     * the end of the cycle, which is what ends the boost — the stored rate
+     * below is left behind, so reading that alone would boost for ever.
+     */
+    primarySurgeUsed?: boolean;
+    /** Percentage points the surge was bought at, from the candidate row. */
+    primarySurgeBoost?: number;
   }[];
   /** Target states to project — any that have missing demographics are skipped */
   stateIds: string[];
@@ -220,6 +230,17 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         const ticks = Math.min(meta.primaryCampaignTicks ?? 0, 5);
         votes *= 1 + ticks * PRIMARY_CAMPAIGN_STAGGER_TICK_RATE;
       }
+      // Home-state surge: the one-off paid boost in the candidate's own home
+      // state, live until primary resolution clears the flag. Same
+      // multiplicative shape as the tick bonus above, and read from the same
+      // home-state map that drives HOME_STATE_BONUS_PRIMARY so the two can
+      // never disagree about which state is home.
+      votes *= homeStateSurgeMultiplier({
+        surgeUsed: meta?.primarySurgeUsed,
+        surgeBoostPct: meta?.primarySurgeBoost,
+        homeState: resolvedHomeStateByCandidate.get(ec.candidateId),
+        stateId,
+      });
       // Rally support (matches stagger). Undefined → 1.0×.
       votes *= supportMoodMultiplier(meta?.support);
       if (hasPlayerInPartyPrimary && ec.isNPP) {

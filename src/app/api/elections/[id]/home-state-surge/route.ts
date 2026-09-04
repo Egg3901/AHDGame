@@ -24,15 +24,12 @@ interface RouteParams {
 //
 // One-time per primary cycle. Charges PRIMARY_HOME_SURGE_COST_FUNDS and
 // PRIMARY_HOME_SURGE_COST_ACTIONS, then stamps PRIMARY_HOME_SURGE_PCT onto the
-// candidate as `primarySurgeBoost`.
+// candidate as `primarySurgeBoost` and raises `primarySurgeUsed`.
 //
-// KNOWN GAP, pre-existing and not introduced here: nothing reads
-// `electionCandidates.primarySurgeBoost`. The projection and the stagger phase
-// both read `statePartyOrg.primarySurge`, which this route does not write and
-// which `primaryResolution` clears at the end of the cycle. The surge therefore
-// costs the player funds and actions without moving any vote. Fixing it means
-// changing primary vote maths in the turn engine, so it wants its own change
-// and its own simulation rather than riding along with a UI branch.
+// Those two fields are what the vote maths reads: both the stagger phase and
+// the projection apply `homeStateSurgeMultiplier` for the candidate in their
+// own home state. `primarySurgeUsed` is the gate, so `primaryResolution`
+// clearing it at the end of the cycle is what ends the boost.
 // Auth: requireAuthWithCharacter (must be an active presidential primary candidate)
 // Errors: 400, 401, 403, 404, 409, 429
 export async function POST(request: Request, { params }: RouteParams) {

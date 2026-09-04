@@ -59,6 +59,7 @@ import {
 } from "@/lib/campaigns/shiftPrimaryElectorate";
 import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
+  homeStateSurgeMultiplier,
   PRIMARY_MOMENTUM_WIN_BONUS,
   PRIMARY_MOMENTUM_UPSET_BONUS,
   NPP_STAGGER_EXTRA_MULTIPLIER,
@@ -412,6 +413,8 @@ export async function runPrimaryStaggerWaveIfDue(
       homeState,
       primaryCampaignState: raw?.primaryCampaignState ?? null,
       primaryCampaignTicks: raw?.primaryCampaignTicks ?? 0,
+      primarySurgeUsed: raw?.primarySurgeUsed ?? false,
+      primarySurgeBoost: raw?.primarySurgeBoost,
       support: raw?.support,
     };
   });
@@ -664,9 +667,10 @@ export async function runPrimaryStaggerWaveIfDue(
       const partyOrgForState = new Map<string, number>();
       for (const [key, po] of partyOrgByStateParty.entries()) {
         if (key.startsWith(`${stateId}_`)) {
-          // Add primarySurge bump (home-state surge action) to the org used for
-          // primary vote distribution. Permanent org is unchanged — surge is
-          // cleared at primary resolution.
+          // Any statePartyOrg.primarySurge bump on top of permanent org. The
+          // player's home-state surge does NOT arrive here: it is per-candidate
+          // and applied below, so it advantages the candidate who paid for it
+          // rather than every co-partisan in the state.
           partyOrgForState.set(po.partyId, po.organization + (po.primarySurge ?? 0));
         }
       }
@@ -720,6 +724,30 @@ export async function runPrimaryStaggerWaveIfDue(
             (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
           );
         }
+      }
+
+      // Home-state surge: the one-off paid boost in the candidate's own home
+      // state, in the same multiplicative shape as the tick bump above.
+      //
+      // The action wrote `primarySurgeBoost` on the candidate and nothing ever
+      // read it, so a player paid funds and actions for no change to any vote.
+      // Gated on `primarySurgeUsed` because that is the field primary
+      // resolution clears at the end of the cycle; the stored rate is left
+      // behind, so keying off the rate alone would boost for ever. The rate
+      // comes from the row rather than the constant so a surge already bought
+      // keeps the price it was bought at.
+      for (const ec of partyCandidates) {
+        const rawCandidate = candidates.find((c) => c._id.toString() === ec.candidateId);
+        const multiplier = homeStateSurgeMultiplier({
+          surgeUsed: rawCandidate?.primarySurgeUsed,
+          surgeBoostPct: rawCandidate?.primarySurgeBoost,
+          homeState: homeStateByCandidate.get(ec.candidateId),
+          stateId,
+        });
+        if (multiplier === 1) continue;
+        votesPerCandidate[ec.candidateId] = Math.round(
+          (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
+        );
       }
 
       // Rally support now counts in the primary too. Previously only the

@@ -246,6 +246,19 @@ describe("buildPrimaryPartyDetail", () => {
     expect(Object.keys(detail!.byState.IA)).toEqual([cid]);
   });
 
+  it("hands the projection each candidate's live surge, so a paid boost is drawn", async () => {
+    // The surge sets a flag on the candidate row. If the projection is not told
+    // about it, the board keeps showing the state as though nothing was bought.
+    const filed = candidateRow({ primarySurgeUsed: true, primarySurgeBoost: 15 });
+    const { projectPrimaryByState } = await import("@/lib/primaryProjection");
+
+    await build({ politicalParties: [DEM], electionCandidates: [filed] }, "1");
+
+    const meta = vi.mocked(projectPrimaryByState).mock.calls[0][0].candidateMeta[0];
+    expect(meta.primarySurgeUsed).toBe(true);
+    expect(meta.primarySurgeBoost).toBe(15);
+  });
+
   it("names every state so the picker can be searched by name", async () => {
     const userId = new ObjectId();
     const charId = new ObjectId();

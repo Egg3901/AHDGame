@@ -213,3 +213,90 @@ describe("projectPrimaryByState — GE-style per-state simulation", () => {
     expect(result.stateWinners.XX).toBeNull();
   });
 });
+
+describe("home-state surge", () => {
+  // The surge charges funds and actions for a boost in the candidate's own
+  // home state. Nothing read the flag it set, so it moved no votes at all.
+  const stateMap = new Map([
+    ["IA", makeState("IA")],
+    ["OH", makeState("OH")],
+  ]);
+  const demographicsMap = new Map([
+    ["IA", makeDemographics("IA")],
+    ["OH", makeDemographics("OH")],
+  ]);
+
+  function project(meta: Record<string, unknown>) {
+    return projectPrimaryByState({
+      candidates: [makeCandidate("surger"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "surger", isNPP: false, homeState: "IA", ...meta },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA", "OH"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+    });
+  }
+
+  it("lifts the surging candidate in their own home state", () => {
+    const before = project({});
+    const after = project({ primarySurgeUsed: true, primarySurgeBoost: 15 });
+    expect(after.byState.IA.surger).toBeGreaterThan(before.byState.IA.surger);
+    expect(after.byState.IA.surger / before.byState.IA.surger).toBeCloseTo(1.15, 2);
+  });
+
+  it("leaves every other state alone", () => {
+    const before = project({});
+    const after = project({ primarySurgeUsed: true, primarySurgeBoost: 15 });
+    expect(after.byState.OH.surger).toBe(before.byState.OH.surger);
+    expect(after.byState.IA.rival).toBe(before.byState.IA.rival);
+  });
+
+  it("does nothing once the primary has reset the flag", () => {
+    // Primary resolution clears primarySurgeUsed but leaves the stored rate, so
+    // reading the rate alone would keep boosting a candidate for ever.
+    const before = project({});
+    const after = project({ primarySurgeUsed: false, primarySurgeBoost: 15 });
+    expect(after.byState.IA.surger).toBe(before.byState.IA.surger);
+  });
+
+  it("honours the rate the surge was bought at", () => {
+    const before = project({});
+    const after = project({ primarySurgeUsed: true, primarySurgeBoost: 30 });
+    expect(after.byState.IA.surger / before.byState.IA.surger).toBeCloseTo(1.3, 2);
+  });
+
+  it("does nothing for a candidate with no home state", () => {
+    const result = projectPrimaryByState({
+      candidates: [makeCandidate("nomad"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "nomad", isNPP: false, primarySurgeUsed: true, primarySurgeBoost: 15 },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+    });
+    const plain = projectPrimaryByState({
+      candidates: [makeCandidate("nomad"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "nomad", isNPP: false },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+    });
+    expect(result.byState.IA.nomad).toBe(plain.byState.IA.nomad);
+  });
+});
