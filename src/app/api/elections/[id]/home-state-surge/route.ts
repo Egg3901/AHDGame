@@ -10,17 +10,11 @@ import { isPrimaryEnded } from "@/lib/elections/phases";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
-
-/** Funds required to trigger the surge, paid from the candidate's personal funds. */
-const HOME_STATE_SURGE_COST_FUNDS = 25_000;
-/**
- * Percentage vote boost in the candidate's OWN home state during the primary.
- * Applied only to this candidate (not the whole state party org), so the surge
- * actually advantages the surging candidate rather than scaling everyone.
- */
-const HOME_STATE_SURGE_PCT = 15;
-/** Action cost — smaller than travel since this is once-per-cycle. */
-const HOME_STATE_SURGE_ACTION_COST = 3;
+import {
+  PRIMARY_HOME_SURGE_COST_ACTIONS,
+  PRIMARY_HOME_SURGE_COST_FUNDS,
+  PRIMARY_HOME_SURGE_PCT,
+} from "@/lib/electionEngine/constants";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -107,9 +101,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 400 }
       );
     }
-    if (freshChar.actions < HOME_STATE_SURGE_ACTION_COST) {
+    if (freshChar.actions < PRIMARY_HOME_SURGE_COST_ACTIONS) {
       return NextResponse.json(
-        { error: `Not enough actions — surge costs ${HOME_STATE_SURGE_ACTION_COST}` },
+        { error: `Not enough actions — surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}` },
         { status: 400 }
       );
     }
@@ -118,17 +112,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { rate: homeFxRate } = forexEnabled
       ? await loadCharacterFxRate(db, getHomeCurrency(freshChar))
       : { rate: 1 };
-    // HOME_STATE_SURGE_COST_FUNDS is an ANCHOR-denominated constant. Convert
+    // PRIMARY_HOME_SURGE_COST_FUNDS is an ANCHOR-denominated constant. Convert
     // to LOCAL at the boundary so the gate and the $inc both operate in local
     // units against the canonical currencyBalances.campaign field.
     const costFundsLocal = forexEnabled
-      ? HOME_STATE_SURGE_COST_FUNDS * homeFxRate
-      : HOME_STATE_SURGE_COST_FUNDS;
+      ? PRIMARY_HOME_SURGE_COST_FUNDS * homeFxRate
+      : PRIMARY_HOME_SURGE_COST_FUNDS;
     const balanceLocal = freshChar.currencyBalances?.campaign ?? freshChar.funds ?? 0;
     if (balanceLocal < costFundsLocal) {
       return NextResponse.json(
         {
-          error: `Not enough personal funds — surge costs $${HOME_STATE_SURGE_COST_FUNDS.toLocaleString()}`,
+          error: `Not enough personal funds — surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}`,
         },
         { status: 400 }
       );
@@ -142,12 +136,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           const debitResult = await db.collection<Character>("characters").updateOne(
             {
               _id: character._id,
-              actions: { $gte: HOME_STATE_SURGE_ACTION_COST },
+              actions: { $gte: PRIMARY_HOME_SURGE_COST_ACTIONS },
               [campaignFundsField]: { $gte: costFundsLocal },
             },
             {
               $inc: {
-                actions: -HOME_STATE_SURGE_ACTION_COST,
+                actions: -PRIMARY_HOME_SURGE_COST_ACTIONS,
                 [campaignFundsField]: -costFundsLocal,
               },
               $set: { updatedAt: now },
@@ -163,7 +157,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               {
                 $set: {
                   primarySurgeUsed: true,
-                  primarySurgeBoost: HOME_STATE_SURGE_PCT,
+                  primarySurgeBoost: PRIMARY_HOME_SURGE_PCT,
                   updatedAt: now,
                 },
               },
@@ -175,12 +169,12 @@ export async function POST(request: Request, { params }: RouteParams) {
           const debitResult = await db.collection<Character>("characters").updateOne(
             {
               _id: character._id,
-              actions: { $gte: HOME_STATE_SURGE_ACTION_COST },
+              actions: { $gte: PRIMARY_HOME_SURGE_COST_ACTIONS },
               [campaignFundsField]: { $gte: costFundsLocal },
             },
             {
               $inc: {
-                actions: -HOME_STATE_SURGE_ACTION_COST,
+                actions: -PRIMARY_HOME_SURGE_COST_ACTIONS,
                 [campaignFundsField]: -costFundsLocal,
               },
               $set: { updatedAt: now },
@@ -196,7 +190,7 @@ export async function POST(request: Request, { params }: RouteParams) {
                 {
                   $set: {
                     primarySurgeUsed: true,
-                    primarySurgeBoost: HOME_STATE_SURGE_PCT,
+                    primarySurgeBoost: PRIMARY_HOME_SURGE_PCT,
                     updatedAt: now,
                   },
                 }
@@ -207,7 +201,7 @@ export async function POST(request: Request, { params }: RouteParams) {
               { _id: character._id },
               {
                 $inc: {
-                  actions: HOME_STATE_SURGE_ACTION_COST,
+                  actions: PRIMARY_HOME_SURGE_COST_ACTIONS,
                   [campaignFundsField]: costFundsLocal,
                 },
                 $set: { updatedAt: new Date() },
@@ -235,10 +229,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: `Home-state surge activated in ${freshChar.homeState} — +${HOME_STATE_SURGE_PCT}% votes for you in that state until primary resolves.`,
+      message: `Home-state surge activated in ${freshChar.homeState} — +${PRIMARY_HOME_SURGE_PCT}% votes for you in that state until primary resolves.`,
       homeState: freshChar.homeState,
-      boostPct: HOME_STATE_SURGE_PCT,
-      cost: HOME_STATE_SURGE_COST_FUNDS,
+      boostPct: PRIMARY_HOME_SURGE_PCT,
+      cost: PRIMARY_HOME_SURGE_COST_FUNDS,
     });
   } catch (error) {
     return handleRouteError(error);

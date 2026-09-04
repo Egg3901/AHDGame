@@ -130,6 +130,26 @@ export const NPP_STAGGER_EXTRA_MULTIPLIER = 0.6;
 export const PRIMARY_CAMPAIGN_TICK_CAP = 5;
 
 /**
+ * Home-state surge: a one-off action during the presidential primary that
+ * boosts the candidate in their OWN home state.
+ *
+ * These lived twice: as literals in the primary page's JSX and as private
+ * constants in the surge route. They had already drifted — the page advertised
+ * "+10 party org" while the route granted +15% to the candidate alone. Both
+ * surfaces now read these, so the price and the effect the player is shown are
+ * the price and effect the action charges and grants.
+ */
+export const PRIMARY_HOME_SURGE_COST_FUNDS = 25_000;
+export const PRIMARY_HOME_SURGE_COST_ACTIONS = 3;
+/**
+ * Percentage vote boost in the candidate's own home state, for the remainder of
+ * the primary. Applied to this candidate only, not to the state party org, so
+ * the surge advantages the surging candidate rather than scaling every
+ * co-partisan in the state.
+ */
+export const PRIMARY_HOME_SURGE_PCT = 15;
+
+/**
  * Per-tick projection bonus added to a candidate's primary score for their
  * `primaryCampaignState`. With TICK_CAP=5, a fully-camped candidate gets +7.5
  * score in that state's projection — meaningful relative to the ~65-point

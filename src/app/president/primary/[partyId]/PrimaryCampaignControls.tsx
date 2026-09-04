@@ -82,7 +82,7 @@ export function PrimaryCampaignControls({
   const triggerSurge = async () => {
     if (
       !confirm(
-        `Surge your home state (${homeState})? Cost: $${surgeCostFunds.toLocaleString("en-US")} + ${surgeCostActions} actions. Bumps state party org by +${surgeBoost} for the rest of this primary. One-time per cycle.`
+        `Surge your home state (${homeState})? Cost: $${surgeCostFunds.toLocaleString("en-US")} + ${surgeCostActions} actions. Adds +${surgeBoost}% to your own vote there for the rest of this primary. One-time per cycle.`
       )
     )
       return;
@@ -167,9 +167,9 @@ export function PrimaryCampaignControls({
                 <span className="text-muted">Used this cycle ✓</span>
               ) : (
                 <>
-                  Boost <span className="font-semibold">{homeState}</span> party org by +
-                  {surgeBoost} — ${surgeCostFunds.toLocaleString("en-US")} + {surgeCostActions}{" "}
-                  actions
+                  Add +{surgeBoost}% to your vote in{" "}
+                  <span className="font-semibold">{homeState}</span> for $
+                  {surgeCostFunds.toLocaleString("en-US")} + {surgeCostActions} actions
                 </>
               )}
             </div>

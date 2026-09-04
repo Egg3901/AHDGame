@@ -44,7 +44,12 @@ import {
   isInStaggerWindow,
   resolvePrimaryTurnsToEnd,
 } from "@/lib/elections/primaryViewModel";
-import { PRIMARY_CAMPAIGN_TICK_CAP } from "@/lib/electionEngine/constants";
+import {
+  PRIMARY_CAMPAIGN_TICK_CAP,
+  PRIMARY_HOME_SURGE_COST_ACTIONS,
+  PRIMARY_HOME_SURGE_COST_FUNDS,
+  PRIMARY_HOME_SURGE_PCT,
+} from "@/lib/electionEngine/constants";
 import type { PlayerEndorsement } from "@/lib/db/types";
 
 // Presidential primary standings can change every turn and after live player
@@ -685,9 +690,9 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
             surgeUsed={viewerCandidate.primarySurgeUsed ?? false}
             playerActions={viewerChar.actions ?? 0}
             playerFunds={viewerChar.funds ?? 0}
-            surgeCostFunds={25_000}
-            surgeCostActions={3}
-            surgeBoost={10}
+            surgeCostFunds={PRIMARY_HOME_SURGE_COST_FUNDS}
+            surgeCostActions={PRIMARY_HOME_SURGE_COST_ACTIONS}
+            surgeBoost={PRIMARY_HOME_SURGE_PCT}
             states={STATE_IDS.map((id) => ({
               id,
               name: id,
