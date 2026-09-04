@@ -1,6 +1,13 @@
 /**
- * READ-ONLY dry run of the three #1271 defects against a live world.
- * Runs detect() and plan() only. Never calls apply().
+ * READ-ONLY dry run of the three #1271 defects against the LIVE production
+ * world (`MONGODB_URI_LIVE`).
+ *
+ * Calls `detect()` and `plan()` only, which are read-only by contract, and never
+ * `apply()` or the runner. The `HealContext` below is labelled `prod` because
+ * that is the database this actually opens: labelling it `sandbox` while
+ * pointing at production is the kind of thing somebody later extends into a
+ * write. Note the defects themselves exclude prod from `envs`, so the runner
+ * would refuse an apply here even if one were added.
  */
 import { MongoClient } from "mongodb";
 import { config } from "dotenv";
@@ -16,7 +23,7 @@ const uri = raw.includes("directConnection")
   ? raw
   : raw + (raw.includes("?") ? "&" : "?") + "directConnection=true";
 
-const ctx: HealContext = { env: "sandbox", dryRun: true, now: new Date() };
+const ctx: HealContext = { env: "prod", dryRun: true, now: new Date() };
 
 async function main() {
   const client = new MongoClient(uri);

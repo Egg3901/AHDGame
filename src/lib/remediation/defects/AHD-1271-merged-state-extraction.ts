@@ -52,6 +52,7 @@ import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { generateCountryOwnedSeedData } from "@/lib/seeds/reference/budgets";
 import { CAPITAL_SEED_HEADROOM } from "@/lib/market/capital";
+import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import type {
   Defect,
   DetectResult,
@@ -81,6 +82,7 @@ interface Survey {
   withoutEnterprise: StrandedState[];
   preset: string;
   currentTurn: number;
+  plantsEnabled: boolean;
 }
 
 function seedYear(preset: string, gameYear: number | null | undefined): number | null {
@@ -105,7 +107,7 @@ function seedYear(preset: string, gameYear: number | null | undefined): number |
  * correctly skipped here, exactly as the gate intends.
  */
 async function survey(db: Db): Promise<Survey> {
-  const [gameConfig, gameState, preset] = await Promise.all([
+  const [gameConfig, gameState, preset, marketMode] = await Promise.all([
     db
       .collection<GameConfig>("gameConfig")
       .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
@@ -113,10 +115,18 @@ async function survey(db: Db): Promise<Survey> {
       .collection<GameState>("gameState")
       .findOne({ _id: "current" as never }, { projection: { currentYear: 1, currentTurn: 1 } }),
     loadWorldPreset(db),
+    getMarketSystemModeForDb(db),
   ]);
 
   const currentTurn = gameState?.currentTurn ?? 0;
-  const empty: Survey = { stranded: [], withoutEnterprise: [], preset, currentTurn };
+  const plantsEnabled = marketAtLeast(marketMode, "plants");
+  const empty: Survey = {
+    stranded: [],
+    withoutEnterprise: [],
+    preset,
+    currentTurn,
+    plantsEnabled,
+  };
   if (gameConfig?.commandEconomyEnabled !== true) return empty;
 
   const year = seedYear(preset, gameState?.currentYear ?? null);
@@ -200,7 +210,7 @@ async function survey(db: Db): Promise<Survey> {
     if (soe) stranded.push(row);
     else withoutEnterprise.push(row);
   }
-  return { stranded, withoutEnterprise, preset, currentTurn };
+  return { stranded, withoutEnterprise, preset, currentTurn, plantsEnabled };
 }
 
 function describe(row: StrandedState): string {
@@ -223,8 +233,8 @@ function describe(row: StrandedState): string {
  * states this heal can actually build a plant for, and the rest are reported.
  */
 async function assess(db: Db) {
-  const { stranded, withoutEnterprise, preset, currentTurn } = await survey(db);
-  const docs = await buildSectors(db, stranded, preset, currentTurn);
+  const { stranded, withoutEnterprise, preset, currentTurn, plantsEnabled } = await survey(db);
+  const docs = await buildSectors(db, stranded, preset, currentTurn, plantsEnabled);
   const buildableStates = new Set(docs.map((d) => d.stateId as string));
   return {
     docs,
@@ -264,7 +274,7 @@ async function detect(db: Db): Promise<DetectResult> {
       enterprise: row.soeCorporationName,
     })),
     notes: [
-      `${buildable.length} command-economy state(s) hold deposits with no extraction sector of any kind`,
+      `${buildable.length} command-economy state(s) hold deposits with no extraction sector that this heal can build a plant for`,
       ...skippedNotes(withoutEnterprise, unbuildable),
     ],
   };
@@ -278,7 +288,8 @@ async function buildSectors(
   db: Db,
   stranded: StrandedState[],
   preset: string,
-  currentTurn: number
+  currentTurn: number,
+  plantsEnabled: boolean
 ): Promise<Record<string, unknown>[]> {
   if (stranded.length === 0) return [];
   const strandedIds = stranded.map((s) => s.stateId);
@@ -304,12 +315,20 @@ async function buildSectors(
     (e) => e.corporation.soe && e.corporation.assignedSectorTypes?.[0] === "extraction"
   );
 
-  // PLANTS-GATED: the documents come from `buildSector`, which seeds
-  // `capitalStock` from the same figure it writes `revenue` from, so the plant
-  // has capacity on day one and `sectorTurn` restates the nameplate off that
-  // capacity on the next tick. The revenue field is the legacy view travelling
-  // alongside the quantity, not the quantity itself, exactly as it is on the
-  // sixteen sibling sectors these states already carry.
+  // PLANTS-GATED: the three stamps below are applied ONLY when the world is at
+  // the plants tier, exactly as `expandSector` gates the same fields. They are
+  // answers to questions that only exist under plants, and on a capital-tier
+  // world each one is actively wrong: `sectorTurn` takes a stored `capitalStock`
+  // verbatim there (the 1.1x lazy seed fires only when the field is ABSENT), so
+  // the headroom would make these plants ~10% LARGER than an identically-endowed
+  // neighbour rather than equal to one; and a `plantsStartTurn` on a non-plants
+  // world is the "stale-plants-start-turn" anomaly `plantsTransition` warns
+  // about, which would make these rows skip the one-time migration every sibling
+  // takes when an admin later flips the world.
+  //
+  // The un-stamped document is the seed path's own output, which is exactly what
+  // a capital-tier world should get: `revenue` is the quantity there, and
+  // `capitalStock` is written in lockstep from the same figure.
   const docs: Record<string, unknown>[] = [];
   for (const entry of entries) {
     for (const sector of entry.sectors) {
@@ -323,39 +342,35 @@ async function buildSectors(
         ...sectorData,
         _id: new ObjectId(),
         corporationId: new ObjectId(corpId),
-        // STAMPED, NOT LEFT ABSENT, and this is the one place the heal
-        // deliberately departs from the seed path it otherwise copies.
-        //
-        // `capacityBookAnchor` absent means `sectorCapacityBookAnchor` falls
-        // back to `capitalStock x capacityPricePerUnit` forever, i.e. full LIST
-        // price for capacity nobody paid for. Restructuring salvage,
-        // nationalization compensation and the listing quote all read that
-        // basis and pay out against it, so an absent anchor on eleven plants
-        // dropped into a turn-619 world is a money-creation path the
-        // `money-conserving` guard cannot see. `expandSector` stamps 0 for
-        // exactly this reason ("zero owned capacity, zero paid basis"), and the
-        // state paid nothing for these, so 0 is the honest basis. It is
-        // deliberately more conservative than the sibling sectors, whose
-        // anchors are absent because they were written at seed time.
-        capacityBookAnchor: 0,
-        // Without this the row is a "flip turn" to `sectorBuildQueueTurn` and
-        // `sectorTurn` lifts `capitalStock` to the seeded capacity plus headroom
-        // on the next tick, so the world would not keep the capacity the
-        // operator approved. Stamping it also keeps the shed pass from treating
-        // a brand-new plant as long-idle.
-        plantsStartTurn: currentTurn,
-        // ...and because the flip is skipped, the 10% the flip would have added
-        // is applied HERE instead. Every sibling sector in these states took
-        // that lift on its own flip turn (`seedCapitalStock` is
-        // `impliedOutputUnits x CAPITAL_SEED_HEADROOM`), and under plants
-        // revenue is derived from capacity, so leaving it off would leave the
-        // restored plants permanently ~9% smaller than an identically-endowed
-        // neighbour and pinned at full utilisation from turn one. Same footing
-        // as the sectors beside them is the whole point of using the seed path.
-        capitalStock:
-          typeof sectorData.capitalStock === "number"
-            ? sectorData.capitalStock * CAPITAL_SEED_HEADROOM
-            : sectorData.capitalStock,
+        ...(plantsEnabled
+          ? {
+              // Absent, `sectorCapacityBookAnchor` falls back to `capitalStock x
+              // capacityPricePerUnit` forever, i.e. full LIST price for capacity
+              // nobody paid for. Restructuring salvage, nationalization
+              // compensation and the listing quote all read that basis and pay
+              // out against it, so an absent anchor on plants dropped into a
+              // turn-619 world is a money-creation path the `money-conserving`
+              // guard cannot see. `expandSector` stamps 0 for exactly this
+              // reason, and the state paid nothing for these.
+              capacityBookAnchor: 0,
+              // Without this the row is a "flip turn" and `sectorTurn` lifts
+              // `capitalStock` on the next tick, so the world would not keep the
+              // capacity the operator approved. Stamping it also keeps the shed
+              // pass from reading a brand-new plant as long-idle.
+              plantsStartTurn: currentTurn,
+              // ...and because the flip is skipped, the 10% the flip would have
+              // added is applied HERE instead. Every sibling sector in these
+              // states took that lift on its own flip turn (`seedCapitalStock`
+              // is `impliedOutputUnits x CAPITAL_SEED_HEADROOM`), and under
+              // plants revenue is derived from capacity, so leaving it off would
+              // leave the restored plants permanently ~9% smaller than an
+              // identically-endowed neighbour and pinned at full utilisation.
+              capitalStock:
+                typeof sectorData.capitalStock === "number"
+                  ? sectorData.capitalStock * CAPITAL_SEED_HEADROOM
+                  : sectorData.capitalStock,
+            }
+          : {}),
       });
     }
   }
@@ -377,7 +392,10 @@ async function plan(db: Db, _ctx: HealContext): Promise<HealPlan> {
     // `touched` below).
     "Rolling this run back deletes the plants but leaves each enterprise's " +
       "soe.planTarget raised. The exact per-enterprise amounts are in the apply " +
-      "result, to be reversed by hand if you roll back.",
+      "result. Reverse them by hand before re-applying: the plan target is only " +
+      "ever recomputed from zero, so a rollback followed by a second apply " +
+      "leaves it raised twice and permanently understates the shortfall that " +
+      "drives directed credit.",
   ];
 
   return {

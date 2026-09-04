@@ -89,6 +89,7 @@ async function findMistyped(db: Db): Promise<{
   researchHolders: SplitOffCorp[];
   conflictingSecondary: SplitOffCorp[];
   playerSwitched: SplitOffCorp[];
+  nonEnumClaim: SplitOffCorp[];
 }> {
   const corps = await db
     .collection<SplitOffCorp>("corporations")
@@ -117,6 +118,7 @@ async function findMistyped(db: Db): Promise<{
   const researchHolders: SplitOffCorp[] = [];
   const conflictingSecondary: SplitOffCorp[] = [];
   const playerSwitched: SplitOffCorp[] = [];
+  const nonEnumClaim: SplitOffCorp[] = [];
   let multiClaimCount = 0;
   for (const corp of corps) {
     const claimed = corp.assignedSectorTypes ?? [];
@@ -128,12 +130,15 @@ async function findMistyped(db: Db): Promise<{
       continue;
     }
     const want = claimed[0];
-    // Only ever move `type` to a real CorporationType. A claim outside the
-    // enum is data this heal does not understand and must not act on.
-    if (!CORPORATION_TYPES.includes(want as never)) continue;
+    // Only ever move `type` to a real CorporationType. A claim outside the enum
+    // is data this heal does not understand and must not act on, and it is
+    // REPORTED rather than dropped in silence: an unreadable claim is something
+    // an operator should know about even though nothing here can fix it.
+    if (!CORPORATION_TYPES.includes(want as never)) {
+      nonEnumClaim.push(corp);
+      continue;
+    }
     if (corp.type === want) continue;
-    // `updateCorporationSettings` rejects primary === secondary as invalid, so
-    // writing that pair here would leave a corp its own owner cannot edit.
     // A DELIBERATE SWITCH IS NOT A DEFECT. `typeSwitchTurn` is stamped only by
     // `updateCorporationSettings`, so it means a human chose this type and paid
     // the switch penalty and cooldown for it. An appointed National Corporation
@@ -141,11 +146,20 @@ async function findMistyped(db: Db): Promise<{
     // reads as "mistyped" forever: reverting it would spend their penalty for
     // nothing and the defect would re-open every time they set it back.
     if (corp.typeSwitchTurn != null) playerSwitched.push(corp);
+    // `updateCorporationSettings` rejects primary === secondary as invalid, so
+    // writing that pair here would leave a corp its own owner cannot edit.
     else if (corp.secondaryType === want) conflictingSecondary.push(corp);
     else if (holdsResearch(corp)) researchHolders.push(corp);
     else rows.push(corp);
   }
-  return { rows, multiClaimCount, researchHolders, conflictingSecondary, playerSwitched };
+  return {
+    rows,
+    multiClaimCount,
+    researchHolders,
+    conflictingSecondary,
+    playerSwitched,
+    nonEnumClaim,
+  };
 }
 
 function describe(corp: SplitOffCorp): string {
@@ -153,8 +167,14 @@ function describe(corp: SplitOffCorp): string {
 }
 
 async function detect(db: Db): Promise<DetectResult> {
-  const { rows, multiClaimCount, researchHolders, conflictingSecondary, playerSwitched } =
-    await findMistyped(db);
+  const {
+    rows,
+    multiClaimCount,
+    researchHolders,
+    conflictingSecondary,
+    playerSwitched,
+    nonEnumClaim,
+  } = await findMistyped(db);
   const notes = [`${rows.length} state enterprise(s) report a type they do not operate`];
   if (multiClaimCount > 0) {
     notes.push(
@@ -181,6 +201,13 @@ async function detect(db: Db): Promise<DetectResult> {
       `${playerSwitched.length} enterprise(s) had their type set deliberately by a CEO and are ` +
         `NOT touched: reverting a paid-for switch is not a repair ` +
         `(${playerSwitched.map((c) => `${c.countryOwnerId}/${c.name}`).join(", ")})`
+    );
+  }
+  if (nonEnumClaim.length > 0) {
+    notes.push(
+      `${nonEnumClaim.length} enterprise(s) claim a sector type that is not a real one and are ` +
+        `NOT touched: this heal cannot read the claim, so it cannot act on it ` +
+        `(${nonEnumClaim.map((c) => `${c.countryOwnerId}/${c.name}`).join(", ")})`
     );
   }
   return {
@@ -242,8 +269,14 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
 }
 
 async function verify(db: Db): Promise<VerifyResult> {
-  const { rows, multiClaimCount, researchHolders, conflictingSecondary, playerSwitched } =
-    await findMistyped(db);
+  const {
+    rows,
+    multiClaimCount,
+    researchHolders,
+    conflictingSecondary,
+    playerSwitched,
+    nonEnumClaim,
+  } = await findMistyped(db);
   return {
     ok: rows.length === 0,
     remaining: rows.length,
@@ -255,6 +288,7 @@ async function verify(db: Db): Promise<VerifyResult> {
       `${researchHolders.length} research-holding enterprise(s) remain, by design`,
       `${conflictingSecondary.length} enterprise(s) whose secondary type is the claimed sector remain, by design`,
       `${playerSwitched.length} enterprise(s) with a deliberate CEO type switch remain, by design`,
+      `${nonEnumClaim.length} enterprise(s) with an unreadable sector claim remain, by design`,
     ],
   };
 }

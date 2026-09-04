@@ -496,22 +496,21 @@ describe("buildCapacity — unowned pool country attribution", () => {
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
   });
 
-  it("never falls back to a hardcoded country when nothing else resolves", async () => {
-    // Sector country cleared and no state row, so the OLD chain reached its
-    // `?? "US"` literal. The corporation is Polish here, so "PL" proves the
-    // literal is gone rather than coincidentally agreeing with it.
+  it("never invents the United States when nothing at all resolves", async () => {
+    // EVERY source cleared: no state row, no sector country, no corporation
+    // country. That is the only shape that reached the old chain's `?? "US"`
+    // literal, so it is the only shape that can prove the literal is gone.
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
     await wireMocks(sectorDoc({ countryId: undefined, stateId: "PL_MAZ" }));
     vi.mocked(resolveCorporation).mockResolvedValue({
       ok: true,
-      corporation: { ...corporation, countryId: "PL" },
+      corporation: { ...corporation, countryId: undefined },
     } as never);
     db.collectionMocks.states.findOne.mockResolvedValue(null);
 
     const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 100 }), { params });
 
-    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("PL");
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
   });
 });

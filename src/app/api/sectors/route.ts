@@ -177,7 +177,18 @@ export async function GET(request: Request) {
             projection: { sectorType: 1, stateId: 1, countryId: 1, revenue: 1 },
           })
           .toArray()
-      ).filter((u) => !commandEconomyBlockedCountries.has(hostCountryOf(u.stateId, u.countryId)));
+      )
+        // NO stored-country fallback in the BLOCK test, deliberately, even though
+        // the row label below has one. The badge counts with
+        // `stateId $nin <blocked states>`, which knows nothing about a stored
+        // country, so falling back here would drop a row from the list that the
+        // badge still counted: badge N+1, list N. A pool row on a dissolved
+        // region belongs to no state and so is blocked by nobody, which is
+        // exactly the answer the count gives.
+        .filter(
+          (u) =>
+            !commandEconomyBlockedCountries.has(stateMap.get(u.stateId)?.countryId as CountryId)
+        );
 
       for (const us of unownedSectors) {
         const st = stateMap.get(us.stateId);

@@ -24,6 +24,8 @@ interface WorldOptions {
   /** States that already carry an unowned extraction market. */
   unownedExtractionStates?: string[];
   commandEconomyEnabled?: boolean;
+  /** The world's market tier. The three plants stamps only apply at "plants". */
+  marketSystemMode?: string;
   /** State ids whose insert should throw, to exercise partial failure. */
   failInsertsFor?: string[];
   /** Give the owning corp an soe overlay carrying a plan target. */
@@ -45,6 +47,7 @@ function productionIncidentDb(options: WorldOptions = {}): {
     ownedExtractionStates = ["SN", "BE"],
     unownedExtractionStates = [],
     commandEconomyEnabled = true,
+    marketSystemMode = "plants",
     failInsertsFor = [],
     planTarget = 1_000_000,
   } = options;
@@ -72,10 +75,22 @@ function productionIncidentDb(options: WorldOptions = {}): {
           _id: SOE_ID,
           name: "East German Extraction & Mining Enterprise",
           countryOwnerId: "DD",
+          // The production lookup matches on this, so the fixture must carry it.
+          assignedSectorTypes: ["extraction"],
           ...(planTarget == null ? {} : { soe: { sector: "extraction", planTarget } }),
         },
         ...(contestedEnterprise
-          ? [{ _id: RIVAL_SOE_ID, name: "Rival Mining Combine", countryOwnerId: "DD" }]
+          ? [
+              {
+                _id: RIVAL_SOE_ID,
+                name: "Rival Mining Combine",
+                countryOwnerId: "DD",
+                // Claims extraction too, so it satisfies the SAME query the
+                // production lookup runs. Without this the fixture pinned the
+                // in-memory dedupe rather than the condition it is named for.
+                assignedSectorTypes: ["extraction"],
+              },
+            ]
           : []),
       ];
 
@@ -95,7 +110,8 @@ function productionIncidentDb(options: WorldOptions = {}): {
   const db = {
     collection: (name: string) => ({
       findOne: async () => {
-        if (name === "gameConfig") return { _id: "default", commandEconomyEnabled };
+        if (name === "gameConfig")
+          return { _id: "default", commandEconomyEnabled, marketSystemMode };
         if (name === "gameState")
           return {
             _id: "current",
@@ -105,14 +121,22 @@ function productionIncidentDb(options: WorldOptions = {}): {
           };
         return null;
       },
-      find: () =>
+      // Honours the two filter terms the production queries actually rely on,
+      // so a fixture cannot pass against a query that would return nothing.
+      find: (filter: Record<string, unknown> = {}) =>
         cursor(
           name === "states"
             ? states
             : name === "stateResourceCapacity"
               ? capacities
               : name === "corporations"
-                ? corps
+                ? corps.filter((c) =>
+                    filter.assignedSectorTypes
+                      ? (c as { assignedSectorTypes?: string[] }).assignedSectorTypes?.includes(
+                          filter.assignedSectorTypes as string
+                        )
+                      : true
+                  )
                 : []
         ),
       distinct: async () => {
@@ -251,6 +275,40 @@ describe(DEFECT_ID, () => {
         (seeded.capitalStock as number) * CAPITAL_SEED_HEADROOM,
         6
       );
+    }
+  });
+
+  it("applies none of the three plants stamps on a world below the plants tier", async () => {
+    // They are answers to questions that only exist under plants, and each is
+    // actively wrong below it: `sectorTurn` takes a stored `capitalStock`
+    // verbatim in capital mode, so the headroom would make these plants ~10%
+    // LARGER than their siblings rather than equal, and a `plantsStartTurn` on a
+    // non-plants world makes the row skip the migration every sibling takes when
+    // the world is later flipped. `expandSector` gates the same fields the same
+    // way.
+    const { db, inserted } = productionIncidentDb({ marketSystemMode: "capital" });
+    const plan = await defect.plan(db, ctx);
+    await defect.apply(db, plan, ctx);
+
+    expect(inserted).toHaveLength(3);
+    const seedEntry = generateCountryOwnedSeedData(
+      inserted.map((d) => ({
+        id: d.stateId as string,
+        population: 5_000_000,
+        gdp: 20_000_000_000,
+        countryId: "DD" as const,
+      })),
+      "1953-default",
+      true
+    ).find((e) => e.corporation.soe && e.corporation.assignedSectorTypes?.[0] === "extraction");
+
+    for (const doc of inserted) {
+      expect(doc.capacityBookAnchor).toBeUndefined();
+      expect(doc.plantsStartTurn).toBeUndefined();
+      // The seed path's own figure, un-headroomed: what a capital-tier world
+      // gives every other sector.
+      const seeded = seedEntry!.sectors.find((sec) => sec.stateId === doc.stateId)!;
+      expect(doc.capitalStock).toBe(seeded.capitalStock);
     }
   });
 

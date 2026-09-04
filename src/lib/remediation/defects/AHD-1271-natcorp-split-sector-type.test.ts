@@ -110,6 +110,12 @@ function productionIncidentDb(): { db: Db; corps: Corp[] } {
       updateOne: async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
         const row = corps.find((c) => String(c._id) === String(filter._id));
         if (!row || row.type !== filter.type) return { modifiedCount: 0 };
+        // The apply filter also pins the exact claim array, so a corp whose
+        // claim changed between plan and apply must not be rewritten.
+        const claim = filter.assignedSectorTypes as string[] | undefined;
+        if (claim && JSON.stringify(claim) !== JSON.stringify(row.assignedSectorTypes)) {
+          return { modifiedCount: 0 };
+        }
         row.type = (update.$set as { type: string }).type;
         return { modifiedCount: 1 };
       },

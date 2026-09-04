@@ -60,11 +60,14 @@ function mockDb({
   sectorUpdateModifiedCount = 1,
   corpUpdateModifiedCount = 1,
   isProcessing = false,
+  stateCountryId,
 }: {
   sector: CorporateSector;
   sectorUpdateModifiedCount?: number;
   corpUpdateModifiedCount?: number;
   isProcessing?: boolean;
+  /** The country the sector's STATE is in, when it differs from the stored one. */
+  stateCountryId?: string;
 }) {
   const sectorUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: sectorUpdateModifiedCount });
   const corpUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: corpUpdateModifiedCount });
@@ -108,7 +111,10 @@ function mockDb({
       // unchanged.
       if (name === "states") {
         return {
-          findOne: vi.fn().mockResolvedValue({ _id: sector.stateId, countryId: sector.countryId }),
+          findOne: vi.fn().mockResolvedValue({
+            _id: sector.stateId,
+            countryId: stateCountryId ?? sector.countryId,
+          }),
         };
       }
       throw new Error(`unexpected collection ${name}`);
@@ -324,5 +330,27 @@ describe("attemptUnionBusting — union ban gate (player suggestion #93)", () =>
       expect(result.error).toMatch(/banned under current law/i);
     }
     expect(sectorUpdateOne).not.toHaveBeenCalled();
+  });
+
+  // Ticket #1271. The backlash belongs to the country the WORKFORCE is in. Busting
+  // a union in a foreign plant used to fire the pulse and the union notice at the
+  // corporation's own domicile, hitting the wrong country's labour movement.
+  it("fires the pulse and the union notice at the HOST country, not the corp's", async () => {
+    const corp = makeCorp({ countryId: "US", name: "Amalgamated Steel" });
+    const sector = makeSector(corp._id, { unionization: 50, countryId: "US" });
+    const { db } = mockDb({ sector, stateCountryId: "PL" });
+    const { rollD100 } = await import("@/lib/labour/unionBusting");
+    const { fireUnionBustingSuccessPulse } = await import("@/lib/corporations/sentimentEvents");
+    const { notifyUnionOfBustingAttempt } = await import("@/lib/unions/unionBustingNotice");
+    vi.mocked(rollD100).mockReturnValue(1);
+    vi.mocked(fireUnionBustingSuccessPulse).mockClear();
+    vi.mocked(notifyUnionOfBustingAttempt).mockClear();
+
+    await attemptUnionBusting(db, corp, sector._id.toString(), 10);
+
+    expect(vi.mocked(fireUnionBustingSuccessPulse).mock.calls[0][2]).toBe("PL");
+    expect(vi.mocked(notifyUnionOfBustingAttempt).mock.calls[0][1]).toMatchObject({
+      countryId: "PL",
+    });
   });
 });
