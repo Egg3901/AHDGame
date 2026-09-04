@@ -77,3 +77,40 @@ describe("NPP intelligence switch", () => {
     expect(update.$unset).toHaveProperty("nppIntelligenceOperationsEnabledBy");
   });
 });
+
+describe("the military sabotage switch", () => {
+  it("reads as OFF in an unconfigured world", async () => {
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.sabotage.enabled).toBe(false);
+  });
+
+  it("writes the sabotage field, not the operations one", async () => {
+    const { POST } = await import("./route");
+    const res = await POST(post({ flag: "sabotage", enabled: true }));
+    expect(res.status).toBe(200);
+    const [, update] = db.collectionMocks.gameState.updateOne.mock.calls[0];
+    expect(update.$set.intelligenceMilitarySabotageEnabled).toBe(true);
+    expect(update.$set.nppIntelligenceOperationsEnabled).toBeUndefined();
+  });
+
+  it("defaults to the operations flag when none is named", async () => {
+    // Back-compat: the original body carried only `enabled`.
+    const { POST } = await import("./route");
+    await POST(post({ enabled: true }));
+    const [, update] = db.collectionMocks.gameState.updateOne.mock.calls[0];
+    expect(update.$set.nppIntelligenceOperationsEnabled).toBe(true);
+  });
+
+  it("rejects an unknown flag", async () => {
+    const { POST } = await import("./route");
+    expect((await POST(post({ flag: "everything", enabled: true }))).status).toBe(400);
+  });
+
+  it("clears the sabotage attribution when switched back off", async () => {
+    const { POST } = await import("./route");
+    await POST(post({ flag: "sabotage", enabled: false }));
+    const [, update] = db.collectionMocks.gameState.updateOne.mock.calls[0];
+    expect(update.$unset).toHaveProperty("intelligenceMilitarySabotageEnabledBy");
+  });
+});

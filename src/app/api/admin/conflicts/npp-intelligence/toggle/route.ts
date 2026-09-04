@@ -5,16 +5,31 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
 import type { GameState } from "@/lib/db/types";
-import { nppIntelligenceFlagFrom } from "@/lib/intelligence/flags";
+import { militarySabotageFlagFrom, nppIntelligenceFlagFrom } from "@/lib/intelligence/flags";
 
 const bodySchema = z.object({
+  flag: z.enum(["operations", "sabotage"]).default("operations"),
   enabled: z.boolean(),
 });
 
+/**
+ * Two switches, one route, because they are one admin decision with two halves:
+ * what the intelligence system is allowed to do without a human deciding.
+ * `operations` lets NPP countries act at all; `sabotage` lets a successful
+ * military covert action have real effects, and is held back because its
+ * magnitudes are a balance change whose report could not be produced.
+ */
 const FIELDS = {
-  enabled: "nppIntelligenceOperationsEnabled",
-  by: "nppIntelligenceOperationsEnabledBy",
-  at: "nppIntelligenceOperationsEnabledAt",
+  operations: {
+    enabled: "nppIntelligenceOperationsEnabled",
+    by: "nppIntelligenceOperationsEnabledBy",
+    at: "nppIntelligenceOperationsEnabledAt",
+  },
+  sabotage: {
+    enabled: "intelligenceMilitarySabotageEnabled",
+    by: "intelligenceMilitarySabotageEnabledBy",
+    at: "intelligenceMilitarySabotageEnabledAt",
+  },
 } as const;
 
 // GET /api/admin/conflicts/npp-intelligence/toggle - Read the NPP intelligence switch.
@@ -33,6 +48,9 @@ export async function GET() {
           nppIntelligenceOperationsEnabled: 1,
           nppIntelligenceOperationsEnabledBy: 1,
           nppIntelligenceOperationsEnabledAt: 1,
+          intelligenceMilitarySabotageEnabled: 1,
+          intelligenceMilitarySabotageEnabledBy: 1,
+          intelligenceMilitarySabotageEnabledAt: 1,
         },
       }
     );
@@ -41,6 +59,11 @@ export async function GET() {
         enabled: nppIntelligenceFlagFrom(gameState?.nppIntelligenceOperationsEnabled),
         enabledBy: gameState?.nppIntelligenceOperationsEnabledBy ?? null,
         enabledAt: gameState?.nppIntelligenceOperationsEnabledAt ?? null,
+      },
+      sabotage: {
+        enabled: militarySabotageFlagFrom(gameState?.intelligenceMilitarySabotageEnabled),
+        enabledBy: gameState?.intelligenceMilitarySabotageEnabledBy ?? null,
+        enabledAt: gameState?.intelligenceMilitarySabotageEnabledAt ?? null,
       },
     });
   } catch (error) {
@@ -64,15 +87,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
 
-    const { enabled } = parsed.data;
+    const { flag, enabled } = parsed.data;
+    const fields = FIELDS[flag];
     const db = await getDb();
     const set: Record<string, unknown> = {
-      [FIELDS.enabled]: enabled,
+      [fields.enabled]: enabled,
       updatedAt: new Date(),
     };
     if (enabled) {
-      set[FIELDS.by] = auth.admin.username;
-      set[FIELDS.at] = new Date().toISOString();
+      set[fields.by] = auth.admin.username;
+      set[fields.at] = new Date().toISOString();
     }
 
     await db.collection<GameState>("gameState").updateOne(
@@ -81,11 +105,11 @@ export async function POST(request: Request) {
         ? { $set: set }
         : {
             $set: set,
-            $unset: { [FIELDS.by]: "", [FIELDS.at]: "" },
+            $unset: { [fields.by]: "", [fields.at]: "" },
           }
     );
 
-    return NextResponse.json({ success: true, enabled });
+    return NextResponse.json({ success: true, flag, enabled });
   } catch (error) {
     return handleRouteError(error);
   }

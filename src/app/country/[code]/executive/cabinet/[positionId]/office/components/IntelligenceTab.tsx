@@ -49,10 +49,28 @@ interface AssessmentView {
   covertStageCount: number | null;
 }
 
+interface MilitaryAssessmentView {
+  tier: "none" | "existence" | "estimate" | "exact";
+  atWar: boolean | null;
+  frontCount: number | null;
+  formationCount: number | null;
+  meanReadiness: number | null;
+  figuresAreEstimate: boolean;
+  fronts: Array<{ conflictId: string; supply: number }> | null;
+}
+
 interface AssessmentResponse {
   targetCountryId: string;
+  domain: "strategic" | "military";
   coverage: number;
   assessment: AssessmentView;
+}
+
+interface MilitaryAssessmentResponse {
+  targetCountryId: string;
+  domain: "strategic" | "military";
+  coverage: number;
+  assessment: MilitaryAssessmentView;
 }
 
 interface ServiceView {
@@ -102,6 +120,7 @@ export default function IntelligenceTab({
 }) {
   const [view, setView] = useState<ServiceView | null>(null);
   const [assessments, setAssessments] = useState<AssessmentResponse[]>([]);
+  const [militaryAssessments, setMilitaryAssessments] = useState<MilitaryAssessmentResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -134,6 +153,30 @@ export default function IntelligenceTab({
       )
     ).then((rows) => {
       if (!cancelled) setAssessments(rows.filter((r): r is AssessmentResponse => r !== null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, countryId, positionId]);
+
+  // The military half, read from its OWN coverage row: a service deep in a
+  // country's nuclear programme has not thereby earned a look at its army.
+  useEffect(() => {
+    const targets = (view?.coverage ?? [])
+      .filter((c) => c.domain === "military" && c.value > 0)
+      .map((c) => c.targetCountryId);
+    let cancelled = false;
+    Promise.all(
+      targets.map((target) =>
+        fetchJson<MilitaryAssessmentResponse>(
+          `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence/assessment?target=${target}&domain=military`,
+          { feature: "country-intelligence-assessment-military" }
+        ).catch(() => null)
+      )
+    ).then((rows) => {
+      if (!cancelled) {
+        setMilitaryAssessments(rows.filter((r): r is MilitaryAssessmentResponse => r !== null));
+      }
     });
     return () => {
       cancelled = true;
@@ -284,6 +327,55 @@ export default function IntelligenceTab({
                       ? " Something undeclared is running. Depth unknown."
                       : ""}
                 </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
+        <h2 className="font-serif text-lg text-foreground">Military Assessments</h2>
+        <p className="mt-0.5 max-w-2xl text-sm text-muted">
+          What military coverage buys you. This is what a service can read from the outside, not the
+          view that a nation gives its own command staff.
+        </p>
+        {militaryAssessments.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">
+            No military coverage anywhere. Run a collection operation in the military domain to
+            begin an assessment.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {militaryAssessments.map((a) => (
+              <li
+                key={a.targetCountryId}
+                className="rounded-lg border border-card-border bg-background p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">{a.targetCountryId}</span>
+                  <span className="text-muted">
+                    {TIER_LABEL[a.assessment.tier] ?? a.assessment.tier}
+                  </span>
+                  <span className="ml-auto text-xs text-muted">
+                    Coverage {Math.round(a.coverage)}
+                  </span>
+                </div>
+                <p className="mt-1 text-muted">
+                  {a.assessment.atWar === null
+                    ? "Nothing usable yet."
+                    : a.assessment.atWar
+                      ? `Fighting on ${a.assessment.frontCount} front${a.assessment.frontCount === 1 ? "" : "s"}.`
+                      : "Not currently at war."}
+                  {a.assessment.formationCount !== null
+                    ? ` ${a.assessment.figuresAreEstimate ? "Estimated" : "Confirmed"} ${a.assessment.formationCount} formations at ${a.assessment.meanReadiness} mean readiness.`
+                    : ""}
+                </p>
+                {a.assessment.fronts !== null && a.assessment.fronts.length > 0 && (
+                  <p className="mt-1 text-xs text-muted">
+                    Supply:{" "}
+                    {a.assessment.fronts.map((f) => `${f.conflictId} ${f.supply}`).join(", ")}
+                  </p>
+                )}
               </li>
             ))}
           </ul>
