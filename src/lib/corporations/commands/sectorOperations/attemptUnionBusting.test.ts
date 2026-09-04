@@ -321,8 +321,6 @@ describe("attemptUnionBusting — union ban gate (player suggestion #93)", () =>
           return { findOne: vi.fn().mockResolvedValue(sector), updateOne: sectorUpdateOne };
         if (name === "federalBudget")
           return {
-            // `isUnionsBanned` scopes its read by country, so the fixture answers
-            // per country rather than globally.
             // `isUnionsBanned` reads by the national budget id, so the fixture
             // answers per country the same way.
             findOne: vi.fn().mockImplementation(async (filter: { _id?: string }) => ({

@@ -124,12 +124,42 @@ describe("GET /api/sectors country identity (ticket #1271)", () => {
     await GET(makeRequest("view=owned&country=DD"));
 
     const corpFilter = db.collectionMocks.corporateSectors.find.mock.calls[0][0];
-    expect(corpFilter).toMatchObject({ stateId: { $in: ["NW"] } });
+    // The country's own states, plus a leg for a row whose state no longer
+    // exists: those are still LABELLED from their stored country, so they have
+    // to be findable under it rather than shown under a name whose filter can
+    // never return them.
+    expect(corpFilter.$or[0]).toEqual({ stateId: { $in: ["NW"] } });
+    expect(corpFilter.$or[1]).toMatchObject({ countryId: "DD" });
     expect(corpFilter).not.toHaveProperty("countryId");
-    // ...and the badge is counted on the same basis as the list.
-    expect(db.collectionMocks.corporateSectors.countDocuments).toHaveBeenCalledWith({
-      stateId: { $in: ["NW"] },
+    // ...and the badge is counted on exactly the same basis as the list.
+    expect(db.collectionMocks.corporateSectors.countDocuments).toHaveBeenCalledWith(corpFilter);
+  });
+
+  it("keeps a row whose state no longer exists findable under the name it shows", async () => {
+    // `mergeRegion` re-points sector rows before deleting a region, so this is
+    // debris rather than normal state, and the pool heal deliberately leaves it
+    // for a human. It is still labelled from its stored country, so the filter
+    // has to be able to return it: visible unfiltered and gone the moment you
+    // filter by the country it names would be the worst of both.
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          sectorType: "media",
+          stateId: "GONE",
+          countryId: "US",
+          revenue: 1000,
+        },
+      ]),
     });
+
+    const { GET } = await import("./route");
+    const data = await (await GET(makeRequest("view=unowned&country=US"))).json();
+
+    const filter = db.collectionMocks.unownedSectors.find.mock.calls[0][0];
+    expect(filter.$or[1]).toMatchObject({ countryId: "US" });
+    // Labelled from the stored country, because nothing else is left to use.
+    expect(data.sectors[0]).toMatchObject({ stateId: "GONE", countryId: "US" });
   });
 
   it("labels sector rows with the override too, not the compiled name", async () => {

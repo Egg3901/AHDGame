@@ -137,6 +137,29 @@ export async function GET(request: Request) {
       stateId: string,
       ...fallbacks: (string | null | undefined)[]
     ): CountryId => (stateMap.get(stateId)?.countryId ?? fallbacks.find(Boolean)) as CountryId;
+
+    /**
+     * The country filter, as a query. Used by the rows AND by the badge counts,
+     * so the two cannot disagree.
+     *
+     * The second leg is for a row whose state no longer exists: `mergeRegion`
+     * re-points sector rows before deleting a region, so this is debris rather
+     * than normal state, and the pool heal deliberately leaves it for a human.
+     * It is still LABELLED from its stored country, and without this leg it
+     * would be labelled under a country whose filter could never return it:
+     * visible in the unfiltered list, gone the moment you filter by the country
+     * it names. Findable under the name it is shown under is the only pairing
+     * that is not a lie.
+     */
+    const allStateIds = states.map((st) => st._id);
+    const countryScopedFilter: Record<string, unknown> = filteredStateIds
+      ? {
+          $or: [
+            { stateId: { $in: filteredStateIds } },
+            { stateId: { $nin: allStateIds }, countryId: countryFilter },
+          ],
+        }
+      : {};
     const countryNameOf = (id: CountryId): string =>
       overrides[id]?.name ?? getCountryDisplayName(id, preset);
     const countryFlagOf = (id: CountryId): string =>
@@ -166,9 +189,7 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         unownedFilter.sectorType = sectorTypeFilter;
       }
-      if (filteredStateIds) {
-        unownedFilter.stateId = { $in: filteredStateIds };
-      }
+      Object.assign(unownedFilter, countryScopedFilter);
 
       const unownedSectors = (
         await db
@@ -221,9 +242,7 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         corpFilter.sectorType = sectorTypeFilter;
       }
-      if (filteredStateIds) {
-        corpFilter.stateId = { $in: filteredStateIds };
-      }
+      Object.assign(corpFilter, countryScopedFilter);
       if (view === "forSale") {
         corpFilter.forSale = { $ne: null };
       }
@@ -350,15 +369,14 @@ export async function GET(request: Request) {
     //
     // Counted on the same state-first basis the rows and the filter use, so a
     // badge can never disagree with the list under it.
-    const unownedCountFilter: Record<string, unknown> = {};
-    if (filteredStateIds) {
-      unownedCountFilter.stateId = commandEconomyBlockedCountries.has(countryFilter as CountryId)
-        ? { $in: [] }
-        : { $in: filteredStateIds };
-    } else if (blockedStateIds.length > 0) {
-      unownedCountFilter.stateId = { $nin: blockedStateIds };
-    }
-    const corpCountFilter = filteredStateIds ? { stateId: { $in: filteredStateIds } } : {};
+    const unownedCountFilter: Record<string, unknown> = filteredStateIds
+      ? commandEconomyBlockedCountries.has(countryFilter as CountryId)
+        ? { stateId: { $in: [] } }
+        : { ...countryScopedFilter }
+      : blockedStateIds.length > 0
+        ? { stateId: { $nin: blockedStateIds } }
+        : {};
+    const corpCountFilter = { ...countryScopedFilter };
 
     const [unownedCount, ownedCount, forSaleCount] = await Promise.all([
       db.collection("unownedSectors").countDocuments(unownedCountFilter),
