@@ -1,14 +1,24 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
-import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, getCountryDisplayName, type CountryId } from "@/lib/constants/countries";
+import { fmtMoneyAbs } from "./energy/energyUi";
 
 interface AgencyView {
   tradecraft: number;
   counterIntel: number;
-  budgetRemaining: number;
   foundedTurn: number;
   hasDirector: boolean;
+}
+
+interface FundingView {
+  /** The enacted annual line, local currency. Zero means the law sits at Unfunded. */
+  enactedLine: number;
+  balance: number;
+  accrualPerTurn: number;
+  committedUpkeep: number;
+  collectionCost: number;
+  actionCost: number;
 }
 
 interface NetworkView {
@@ -91,6 +101,7 @@ interface MilitaryAssessmentResponse {
 
 interface ServiceView {
   agency: AgencyView;
+  funding: FundingView;
   turn: number;
   slotsRemaining: number;
   networks: NetworkView[];
@@ -103,6 +114,18 @@ const DOMAIN_LABEL: Record<string, string> = {
   military: "Military",
   economic: "Economic",
 };
+
+type NetworkFundingLevel = "none" | "trickle" | "steady" | "crash";
+
+const FUNDING_LABEL: Record<NetworkFundingLevel, string> = {
+  none: "Unfunded",
+  trickle: "Trickle",
+  steady: "Steady",
+  crash: "Crash",
+};
+
+/** Every country a service could work against, its own excluded. */
+const TARGET_IDS = (Object.keys(COUNTRY_CONFIGS) as CountryId[]).sort();
 
 const TIER_LABEL: Record<string, string> = {
   none: "No assessment",
@@ -176,12 +199,24 @@ function useAssessments<T>(
 export default function IntelligenceTab({
   countryId,
   positionId,
+  currencySymbol = "$",
+  canAct = false,
 }: {
   countryId: CountryId;
   positionId: string;
+  currencySymbol?: string;
+  canAct?: boolean;
 }) {
   const [view, setView] = useState<ServiceView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [netTarget, setNetTarget] = useState("");
+  const [netFunding, setNetFunding] = useState<NetworkFundingLevel>("trickle");
+  const [opTarget, setOpTarget] = useState("");
+  const [opDomain, setOpDomain] = useState<"strategic" | "military" | "economic">("strategic");
+  const [opKind, setOpKind] = useState<"collect" | "action">("collect");
+  const [posture, setPosture] = useState("");
 
   const load = useCallback(() => {
     fetchJson<ServiceView>(
@@ -225,6 +260,41 @@ export default function IntelligenceTab({
 
   const coverageFor = (target: string) => view.coverage.filter((c) => c.targetCountryId === target);
 
+  /**
+   * One submit path for all three controls, so the failure handling and the refetch
+   * are written once. The server's own message is surfaced rather than a generic
+   * one: the refusals here are meaningful (a network still cooling off, an
+   * appropriation that will not stretch) and a director needs to know which it was.
+   */
+  const submit = async (path: string, body: unknown) => {
+    setBusy(true);
+    setProblem(null);
+    try {
+      const res = await fetch(
+        `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence/${path}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        }
+      );
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => ({}))) as { error?: string };
+        setProblem(payload.error ?? "That order did not go through.");
+        return;
+      }
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const opCost = opKind === "action" ? view.funding.actionCost : view.funding.collectionCost;
+  const canAffordOp = view.funding.balance >= opCost;
+  const hasSlot = view.slotsRemaining > 0;
+  const targets = TARGET_IDS.filter((id) => id !== countryId);
+  const spareAccrual = view.funding.accrualPerTurn - view.funding.committedUpkeep;
+
   return (
     <div className="min-w-0 space-y-4">
       <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
@@ -246,12 +316,6 @@ export default function IntelligenceTab({
             <dt className="text-xs uppercase tracking-wide text-muted">Operations Left</dt>
             <dd className="text-lg font-semibold text-foreground">{view.slotsRemaining}</dd>
           </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Budget</dt>
-            <dd className="text-lg font-semibold text-foreground">
-              {view.agency.budgetRemaining.toLocaleString()}
-            </dd>
-          </div>
         </dl>
         {!view.agency.hasDirector && (
           <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-foreground">
@@ -260,6 +324,241 @@ export default function IntelligenceTab({
           </p>
         )}
       </section>
+
+      <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+        <h2 className="font-serif text-lg text-foreground">Appropriation</h2>
+        {view.funding.enactedLine <= 0 ? (
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            No appropriation has been voted. The service keeps its files and runs no operations
+            until the legislature funds it.
+          </p>
+        ) : (
+          <>
+            <p className="mt-0.5 max-w-2xl text-sm text-muted">
+              The enacted line accrues over the year. Networks draw on it every turn whether or not
+              they are used, and an operation is paid for out of what is left.
+            </p>
+            <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">Enacted Line</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.enactedLine)}
+                </dd>
+                <dd className="text-xs text-muted">a year</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">On Hand</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.balance)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">Accrues</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.accrualPerTurn)}
+                </dd>
+                <dd className="text-xs text-muted">a turn</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">Committed</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.committedUpkeep)}
+                </dd>
+                <dd className="text-xs text-muted">a turn, to networks</dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-sm text-muted">
+              An operation costs {fmtMoneyAbs(currencySymbol, view.funding.collectionCost)} to
+              collect, {fmtMoneyAbs(currencySymbol, view.funding.actionCost)} to act.
+            </p>
+            {view.funding.committedUpkeep > view.funding.accrualPerTurn && (
+              <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-foreground">
+                Network upkeep is running ahead of the line. Once the balance is spent, the lowest
+                ranked network stops making progress first, and the rest follow as the shortfall
+                grows. Cut a network back or ask for a larger appropriation.
+              </p>
+            )}
+          </>
+        )}
+      </section>
+
+      {canAct && (
+        <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+          <h2 className="font-serif text-lg text-foreground">Direct the Service</h2>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted">
+            Funding a network is a standing claim on the appropriation every turn. An operation is
+            paid for once, and spends one of the turn&apos;s slots.
+          </p>
+
+          {problem && (
+            <p className="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-foreground">
+              {problem}
+            </p>
+          )}
+
+          <div className="mt-4 grid gap-6 lg:grid-cols-2">
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
+                Fund a Network
+              </h3>
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col text-xs text-muted">
+                  Target
+                  <select
+                    className="mt-1 rounded border border-card-border bg-background p-2 text-sm text-foreground"
+                    value={netTarget}
+                    onChange={(e) => setNetTarget(e.target.value)}
+                  >
+                    <option value="">Choose a country</option>
+                    {targets.map((id) => (
+                      <option key={id} value={id}>
+                        {getCountryDisplayName(id)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col text-xs text-muted">
+                  Funding
+                  <select
+                    className="mt-1 rounded border border-card-border bg-background p-2 text-sm text-foreground"
+                    value={netFunding}
+                    onChange={(e) => setNetFunding(e.target.value as NetworkFundingLevel)}
+                  >
+                    {(Object.keys(FUNDING_LABEL) as NetworkFundingLevel[]).map((f) => (
+                      <option key={f} value={f}>
+                        {FUNDING_LABEL[f]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="rounded bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  disabled={busy || netTarget === ""}
+                  onClick={() =>
+                    submit("network", { targetCountryId: netTarget, funding: netFunding })
+                  }
+                >
+                  Fund Network
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                {spareAccrual >= 0
+                  ? `${fmtMoneyAbs(currencySymbol, spareAccrual)} a turn is uncommitted.`
+                  : "Upkeep already exceeds the line. Anything more will stall a network."}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
+                Run an Operation
+              </h3>
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col text-xs text-muted">
+                  Target
+                  <select
+                    className="mt-1 rounded border border-card-border bg-background p-2 text-sm text-foreground"
+                    value={opTarget}
+                    onChange={(e) => setOpTarget(e.target.value)}
+                  >
+                    <option value="">Choose a country</option>
+                    {view.networks.map((n) => (
+                      <option key={n.targetCountryId} value={n.targetCountryId}>
+                        {getCountryDisplayName(n.targetCountryId as CountryId)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col text-xs text-muted">
+                  Domain
+                  <select
+                    className="mt-1 rounded border border-card-border bg-background p-2 text-sm text-foreground"
+                    value={opDomain}
+                    onChange={(e) =>
+                      setOpDomain(e.target.value as "strategic" | "military" | "economic")
+                    }
+                  >
+                    {Object.keys(DOMAIN_LABEL).map((d) => (
+                      <option key={d} value={d}>
+                        {DOMAIN_LABEL[d]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col text-xs text-muted">
+                  Kind
+                  <select
+                    className="mt-1 rounded border border-card-border bg-background p-2 text-sm text-foreground"
+                    value={opKind}
+                    onChange={(e) => setOpKind(e.target.value as "collect" | "action")}
+                  >
+                    <option value="collect">Collect</option>
+                    <option value="action">Covert action</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="rounded bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  disabled={busy || opTarget === "" || !canAffordOp || !hasSlot}
+                  onClick={() =>
+                    submit("operation", {
+                      targetCountryId: opTarget,
+                      domain: opDomain,
+                      kind: opKind,
+                      opType: opKind === "action" ? "act" : "assess",
+                    })
+                  }
+                >
+                  Run Operation
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                {view.networks.length === 0
+                  ? "No networks yet. Fund one before ordering an operation."
+                  : !canAffordOp
+                    ? `The appropriation cannot cover that operation. It costs ${fmtMoneyAbs(currencySymbol, opCost)}.`
+                    : !hasSlot
+                      ? "Every operation slot for this turn is spent."
+                      : `Costs ${fmtMoneyAbs(currencySymbol, opCost)} and one slot.`}
+              </p>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-muted">
+                Counter-Intelligence Posture
+              </h3>
+              <div className="mt-2 flex flex-wrap items-end gap-3">
+                <label className="flex flex-col text-xs text-muted">
+                  Posture
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className="mt-1 w-24 rounded border border-card-border bg-background p-2 text-sm text-foreground"
+                    value={posture}
+                    placeholder={String(view.agency.counterIntel)}
+                    onChange={(e) => setPosture(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="rounded bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+                  disabled={busy || posture === ""}
+                  onClick={() =>
+                    submit("counter-intel", { counterIntel: Math.round(Number(posture)) })
+                  }
+                >
+                  Set Posture
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-muted">
+                Defence needs no order and costs no slot. It sets how hard this country is to work
+                against.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
 
       <section className="min-w-0 overflow-hidden rounded-xl border border-card-border bg-card p-4 shadow-card">
         <h2 className="font-serif text-lg text-foreground">Networks</h2>

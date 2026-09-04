@@ -193,7 +193,6 @@ export const CABINET_ROUTE_SCOPES: Record<string, CabinetLeverScope | "operation
   // acting director reads the service but does not point it: funding a
   // network abroad and running an operation both outlive the appointment,
   // and an attributed operation is a diplomatic fact the next holder owns.
-  "intelligence/budget": "stance",
   "intelligence/counter-intel": "stance",
   "intelligence/network": "stance",
   "intelligence/operation": "stance",

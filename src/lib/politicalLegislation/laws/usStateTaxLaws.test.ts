@@ -45,9 +45,9 @@ describe("US state tax regional sidecar", () => {
   });
 
   it("is merged into getCatalog but not the core topology catalog", () => {
-    expect(getCoreCatalog("US")).toHaveLength(109);
+    expect(getCoreCatalog("US")).toHaveLength(110);
     expect(getRegionalCatalog("US")).toHaveLength(5);
-    expect(getCatalog("US")).toHaveLength(114);
+    expect(getCatalog("US")).toHaveLength(115);
     expect(getCatalog("US").filter((l) => l.allowedScope === "regional")).toHaveLength(5);
   });
 });

@@ -21,7 +21,11 @@ export type NetworkFunding = "none" | "trickle" | "steady" | "crash";
 
 export type NetworkStatus = "building" | "active" | "burned" | "dormant";
 
-/** One per country. */
+/**
+ * One per country. Holds no money. The service spends `FederalBudget.intelligenceAppropriation`, which
+ * survives a reunification merge where this document does not — `mergeCountry` purges the
+ * intelligence collections.
+ */
 export interface IntelligenceAgency {
   _id: ObjectId;
   countryId: CountryId;
@@ -31,8 +35,6 @@ export interface IntelligenceAgency {
   tradecraft: number;
   /** Defensive posture, 0..100. Derived each turn for NPP countries. */
   counterIntel: number;
-  /** Local currency, topped up from the defence appropriation. */
-  budgetRemaining: number;
   /** DiplomaticActionBudget shape: refreshed lazily on read for a newer turn. */
   opSlots: { turn: number; remaining: number };
   foundedTurn: number;

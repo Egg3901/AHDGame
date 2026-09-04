@@ -8,11 +8,11 @@ describe("DD catalog", () => {
     expect(validateCatalog(DD_LAWS, "DD")).toEqual([]);
   });
 
-  it("carries exactly 63 primaries + 6 tax + 40 secondaries", () => {
-    expect(DD_LAWS.length).toBe(109);
+  it("carries exactly 63 primaries + 6 tax + 41 secondaries", () => {
+    expect(DD_LAWS.length).toBe(110);
     expect(DD_LAWS.filter((l) => l.kind === "primary").length).toBe(63);
     expect(DD_LAWS.filter((l) => l.kind === "tax").length).toBe(6);
-    expect(DD_LAWS.filter((l) => l.kind === "secondary").length).toBe(40);
+    expect(DD_LAWS.filter((l) => l.kind === "secondary").length).toBe(41);
   });
 
   it("spot-check: product-levy slider is the revenue anchor at 28", () => {
@@ -59,5 +59,29 @@ describe("DD catalog", () => {
             .join(",")
         );
     expect(fractions(DD_LAWS)).toEqual(fractions(RU_LAWS));
+  });
+});
+
+describe("intelligence funding law", () => {
+  const law = DD_LAWS.find((l) => l.id === "dd.sec.securityApparatus")!;
+
+  it("is seeded unfunded, so shipping it changes no economy", () => {
+    expect(law).toBeDefined();
+    expect(law.baselineLevel).toBe(0);
+    expect(law.budgetKeyOverride).toBe("intelligence");
+    expect(law.allowedScope).toBe("national");
+  });
+
+  it("carries no cost terms at level 0", () => {
+    // The seed writes a statePolicies row for every law but skips the enactedLaws
+    // insert at level 0, so a level-0 law contributes no spending line at all.
+    expect(law.levels![0].gdpCostFraction).toBeUndefined();
+    expect(law.levels![0].incomeCostFraction).toBeUndefined();
+    expect(law.levels![0].gdpRevenueFraction).toBeUndefined();
+  });
+
+  it("climbs monotonically to half a percent of GDP", () => {
+    const fractions = law.levels!.slice(1).map((l) => l.gdpCostFraction!);
+    expect(fractions).toEqual([0.0005, 0.0015, 0.003, 0.005]);
   });
 });

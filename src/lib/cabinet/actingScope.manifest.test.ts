@@ -32,7 +32,6 @@ const GATED_BY_SHARED_HELPER = new Set([
   "nuclear/test",
   // The intelligence console does the same thing: every mutation goes through
   // `requireIntelligenceHolder` with `intent: "manage"`.
-  "intelligence/budget",
   "intelligence/counter-intel",
   "intelligence/network",
   "intelligence/operation",

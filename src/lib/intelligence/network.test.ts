@@ -28,15 +28,17 @@ function net(over: Partial<IntelligenceNetwork> = {}): IntelligenceNetwork {
 
 describe("stepNetwork", () => {
   it("adds funded progress", () => {
-    expect(stepNetwork(net({ progress: 0 }), 10).progress).toBe(NETWORK_FUNDING_PROGRESS.steady);
+    expect(stepNetwork(net({ progress: 0 }), 10, true).progress).toBe(
+      NETWORK_FUNDING_PROGRESS.steady
+    );
   });
 
   it("adds nothing on no funding", () => {
-    expect(stepNetwork(net({ progress: 7, funding: "none" }), 10).progress).toBe(7);
+    expect(stepNetwork(net({ progress: 7, funding: "none" }), 10, true).progress).toBe(7);
   });
 
   it("converts full progress into a level", () => {
-    const stepped = stepNetwork(net({ level: 1, progress: NETWORK_LEVEL_PROGRESS - 1 }), 10);
+    const stepped = stepNetwork(net({ level: 1, progress: NETWORK_LEVEL_PROGRESS - 1 }), 10, true);
     expect(stepped.level).toBe(2);
     expect(stepped.progress).toBeLessThan(NETWORK_LEVEL_PROGRESS);
   });
@@ -44,34 +46,35 @@ describe("stepNetwork", () => {
   it("never climbs past the level cap", () => {
     const stepped = stepNetwork(
       net({ level: NETWORK_MAX_LEVEL, progress: NETWORK_LEVEL_PROGRESS - 1, funding: "crash" }),
-      10
+      10,
+      true
     );
     expect(stepped.level).toBe(NETWORK_MAX_LEVEL);
     expect(stepped.progress).toBeLessThan(NETWORK_LEVEL_PROGRESS);
   });
 
   it("sheds suspicion on a turn with no operation", () => {
-    expect(stepNetwork(net({ suspicion: 40, lastOpTurn: 0 }), 10).suspicion).toBe(
+    expect(stepNetwork(net({ suspicion: 40, lastOpTurn: 0 }), 10, true).suspicion).toBe(
       40 - SUSPICION_DECAY_IDLE
     );
   });
 
   it("sheds no suspicion on a turn that ran an operation", () => {
-    expect(stepNetwork(net({ suspicion: 40, lastOpTurn: 10 }), 10).suspicion).toBe(40);
+    expect(stepNetwork(net({ suspicion: 40, lastOpTurn: 10 }), 10, true).suspicion).toBe(40);
   });
 
   it("never drives suspicion below zero", () => {
-    expect(stepNetwork(net({ suspicion: 1, lastOpTurn: 0 }), 10).suspicion).toBe(0);
+    expect(stepNetwork(net({ suspicion: 1, lastOpTurn: 0 }), 10, true).suspicion).toBe(0);
   });
 
   it("reactivates a burned network once its cooldown passes", () => {
-    const cooled = stepNetwork(net({ status: "burned", cooledUntilTurn: 10 }), 11);
+    const cooled = stepNetwork(net({ status: "burned", cooledUntilTurn: 10 }), 11, true);
     expect(cooled.status).toBe("active");
     expect(cooled.cooledUntilTurn).toBeNull();
   });
 
   it("leaves a burned network burned inside its cooldown", () => {
-    const still = stepNetwork(net({ status: "burned", cooledUntilTurn: 20 }), 11);
+    const still = stepNetwork(net({ status: "burned", cooledUntilTurn: 20 }), 11, true);
     expect(still.status).toBe("burned");
     expect(still.cooledUntilTurn).toBe(20);
   });
@@ -142,5 +145,29 @@ describe("isNetworkUsable", () => {
   it("accepts a burned network carrying no cooldown, rather than stranding it", () => {
     // A legacy or hand-edited row with no cooldown must not be permanently dead.
     expect(isNetworkUsable(net({ status: "burned", cooledUntilTurn: null }), 15)).toBe(true);
+  });
+});
+
+describe("stepNetwork when the appropriation could not pay", () => {
+  it("makes no progress, without losing the progress it had", () => {
+    expect(stepNetwork(net({ progress: 42 }), 10, false).progress).toBe(42);
+  });
+
+  it("still sheds suspicion, because an unpaid network is a quiet one", () => {
+    // Stalling is not a punishment for operating; it is the absence of funding.
+    // Holding suspicion here would make a starved service permanently hot.
+    expect(
+      stepNetwork(net({ progress: 42, suspicion: 40, lastOpTurn: 0 }), 10, false).suspicion
+    ).toBe(40 - SUSPICION_DECAY_IDLE);
+  });
+
+  it("cannot gain a level while stalled", () => {
+    const stepped = stepNetwork(net({ level: 1, progress: NETWORK_LEVEL_PROGRESS - 1 }), 10, false);
+    expect(stepped.level).toBe(1);
+  });
+
+  it("still lets a burned network come off cooldown, which costs nothing", () => {
+    const cooled = stepNetwork(net({ status: "burned", cooledUntilTurn: 10 }), 11, false);
+    expect(cooled.status).toBe("active");
   });
 });

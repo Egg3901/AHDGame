@@ -8,16 +8,36 @@ import {
 import type { CountryId } from "@/lib/constants/countries";
 import type { IntelligenceAgency, IntelligenceNetwork } from "@/lib/db/types/intelligence";
 import { OP_SLOTS_PER_TURN, TRADECRAFT_DEFAULT } from "@/lib/intelligence/config";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import {
+  applyIntelligenceSettlement,
+  getIntelligenceAppropriation,
+} from "@/lib/db/collections/intelligenceAppropriation";
+import {
+  intelligenceAccrualPerTurn,
+  resolveIntelligenceLineFrom,
+} from "@/lib/intelligence/appropriationLine";
+import { networkUpkeep } from "@/lib/intelligence/cost";
 import { deriveCounterIntel } from "@/lib/intelligence/counterIntel";
 import { stepNetwork } from "@/lib/intelligence/network";
 
 export interface IntelligenceTurnResult {
   networksStepped: number;
   posturesRefreshed: number;
+  /** Countries whose appropriation was settled this turn (accrual minus upkeep). */
+  countriesAccrued: number;
+  /** Networks the appropriation could not pay for, which made no progress. */
+  networksStalled: number;
 }
 
 /**
- * Per-turn intelligence upkeep.
+ * Per-turn intelligence upkeep: settle the appropriation, then step the networks it paid
+ * for, then refresh NPP counter-intelligence posture.
+ *
+ * The money lives HERE rather than in a phase of its own because this pass already loads
+ * every network and every agency, and because whether a network was funded is precisely
+ * what decides whether it advances. A separate phase would need the same two reads and
+ * would have to stay adjacent to this one to stay correct.
  *
  * Deliberately NOT here:
  *
@@ -45,9 +65,84 @@ export async function processIntelligenceTurn(
     agenciesCollection.find({}).toArray(),
   ]);
 
+  // ── Money first ───────────────────────────────────────────────────────────
+  //
+  // Whether a network was paid for is exactly what decides whether it advances, so
+  // the settlement has to happen before the stepping below, in the same pass.
+  // Every country with a LINE, plus every country that owns a network.
+  //
+  // Not just network owners: a service that has just been funded owns nothing yet, and
+  // gating accrual on owning a network would deadlock it — no network means no money,
+  // and no money means it can never run the operation that would build one. Not just
+  // countries with a line either: a service whose line has since lapsed to zero still
+  // owns networks, and their upkeep must still be charged against what it has left.
+  const networkOwners = new Set(networks.map((n) => String(n.ownerCountryId)));
+  const budgetDocs = await db
+    .collection<FederalBudget>("federalBudget")
+    .find({
+      $or: [
+        { "spending.byCategory.intelligence": { $gt: 0 } },
+        { countryId: { $in: [...networkOwners] } },
+      ],
+    })
+    .toArray();
+  const budgetByCountry = new Map(budgetDocs.map((b) => [b.countryId, b]));
+  const owners = [...new Set([...budgetByCountry.keys(), ...networkOwners])];
+
+  const fundedNetworkIds = new Set<string>();
+  let countriesAccrued = 0;
+  let networksStalled = 0;
+
+  for (const owner of owners) {
+    const budget = budgetByCountry.get(owner) ?? null;
+    const gdp = budget?.gdp ?? 0;
+    const accrual = intelligenceAccrualPerTurn(resolveIntelligenceLineFrom(budget));
+
+    // An absent pot must exist before the guarded `$inc` can match it. Seeds to
+    // ZERO, never to a year's accrual — see `getIntelligenceAppropriation`.
+    const pot =
+      budget?.intelligenceAppropriation ?? (await getIntelligenceAppropriation(db, owner));
+    // Cheap pre-check; the authoritative guard is the `$lt: turn` filter on the write.
+    if (pot.accruedThroughTurn >= turn) continue;
+
+    // Descending level, then target id: a director protects the assets they have
+    // already built, and the tie-break keeps the order deterministic across passes.
+    const mine = networks
+      .filter((n) => String(n.ownerCountryId) === owner)
+      .sort(
+        (a, b) =>
+          b.level - a.level || String(a.targetCountryId).localeCompare(String(b.targetCountryId))
+      );
+
+    let available = pot.balance + accrual;
+    let upkeepPaid = 0;
+    for (const net of mine) {
+      const due = networkUpkeep(net.funding, gdp);
+      if (due <= 0) {
+        // `none` costs nothing and earns nothing. Counting it funded keeps the flag
+        // meaning "the turn paid whatever this network asked for".
+        fundedNetworkIds.add(String(net._id));
+        continue;
+      }
+      if (available >= due) {
+        available -= due;
+        upkeepPaid += due;
+        fundedNetworkIds.add(String(net._id));
+      } else {
+        networksStalled += 1;
+      }
+    }
+
+    // ONE guarded write for accrual and upkeep together. Splitting them would leave
+    // the upkeep leg unguarded, and a replayed turn would charge it twice.
+    if (await applyIntelligenceSettlement(db, owner, turn, accrual - upkeepPaid)) {
+      countriesAccrued += 1;
+    }
+  }
+
   const networkOps: AnyBulkWriteOperation<IntelligenceNetwork>[] = [];
   for (const net of networks) {
-    const stepped = stepNetwork(net, turn);
+    const stepped = stepNetwork(net, turn, fundedNetworkIds.has(String(net._id)));
     networkOps.push({
       updateOne: {
         filter: { _id: net._id },
@@ -100,7 +195,6 @@ export async function processIntelligenceTurn(
           $setOnInsert: {
             directorCharacterId: null,
             tradecraft: TRADECRAFT_DEFAULT,
-            budgetRemaining: 0,
             opSlots: { turn, remaining: OP_SLOTS_PER_TURN },
             foundedTurn: turn,
           },
@@ -128,5 +222,10 @@ export async function processIntelligenceTurn(
     }
   }
 
-  return { networksStepped: networkOps.length, posturesRefreshed: agencyOps.length };
+  return {
+    networksStepped: networkOps.length,
+    posturesRefreshed: agencyOps.length,
+    countriesAccrued,
+    networksStalled,
+  };
 }

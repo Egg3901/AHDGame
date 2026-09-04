@@ -157,7 +157,6 @@ export async function getOrCreateAgency(
     directorCharacterId,
     tradecraft: TRADECRAFT_DEFAULT,
     counterIntel: COUNTER_INTEL_DEFAULT,
-    budgetRemaining: 0,
     opSlots: { turn, remaining: OP_SLOTS_PER_TURN },
     foundedTurn: turn,
     updatedAt: new Date(),
