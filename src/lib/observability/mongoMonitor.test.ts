@@ -18,8 +18,9 @@ describe("collectionFromCommand", () => {
 
   it("reads getMore's collection from its separate field, not the cursor id", () => {
     // The driver sends `{ getMore: <Long cursorId>, collection: "name" }`.
+    // The id's exact type does not matter here, only that it is not a string.
     expect(
-      collectionFromCommand("getMore", { getMore: 7331267618912337920n, collection: "ledgerEntries" })
+      collectionFromCommand("getMore", { getMore: { _bsontype: "Long" }, collection: "ledgerEntries" })
     ).toBe("ledgerEntries");
   });
 
@@ -31,7 +32,7 @@ describe("collectionFromCommand", () => {
 
   it("reports unknown when neither is available", () => {
     expect(collectionFromCommand("ping", {})).toBe("unknown");
-    expect(collectionFromCommand("getMore", { getMore: 1n })).toBe("unknown");
+    expect(collectionFromCommand("getMore", { getMore: { _bsontype: "Long" } })).toBe("unknown");
     expect(collectionFromCommand("find", { find: 1, collection: 2 })).toBe("unknown");
   });
 });
