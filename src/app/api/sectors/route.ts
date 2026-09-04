@@ -181,6 +181,16 @@ export async function GET(request: Request) {
       .filter((s) => commandEconomyBlockedCountries.has(s.countryId))
       .map((s) => s._id);
 
+    // The unowned view's scope, blocked-country handling included, so its rows
+    // and its badge are literally the same query. Filtering by a command economy
+    // yields nothing at all: leg two of `countryScopedFilter` would otherwise
+    // still surface a stateless row stamped with that country, which the badge
+    // (correctly) counts as zero.
+    const unownedScopedFilter: Record<string, unknown> =
+      filteredStateIds && commandEconomyBlockedCountries.has(countryFilter as CountryId)
+        ? { stateId: { $in: [] } }
+        : countryScopedFilter;
+
     const rows: SectorRow[] = [];
 
     if (view === "unowned") {
@@ -189,7 +199,7 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         unownedFilter.sectorType = sectorTypeFilter;
       }
-      Object.assign(unownedFilter, countryScopedFilter);
+      Object.assign(unownedFilter, unownedScopedFilter);
 
       const unownedSectors = (
         await db
@@ -370,9 +380,7 @@ export async function GET(request: Request) {
     // Counted on the same state-first basis the rows and the filter use, so a
     // badge can never disagree with the list under it.
     const unownedCountFilter: Record<string, unknown> = filteredStateIds
-      ? commandEconomyBlockedCountries.has(countryFilter as CountryId)
-        ? { stateId: { $in: [] } }
-        : { ...countryScopedFilter }
+      ? { ...unownedScopedFilter }
       : blockedStateIds.length > 0
         ? { stateId: { $nin: blockedStateIds } }
         : {};

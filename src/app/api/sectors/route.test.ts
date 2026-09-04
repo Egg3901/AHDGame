@@ -262,6 +262,11 @@ describe("GET /api/sectors (view=unowned)", () => {
     expect(db.collectionMocks.unownedSectors.countDocuments).toHaveBeenCalledWith({
       stateId: { $in: [] },
     });
+    // ...and the ROW query is the same one, so the list cannot show a stateless
+    // row stamped with that country while the badge reads zero.
+    expect(db.collectionMocks.unownedSectors.find.mock.calls[0][0]).toMatchObject({
+      stateId: { $in: [] },
+    });
   });
 });
 
