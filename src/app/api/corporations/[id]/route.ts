@@ -15,6 +15,7 @@ import {
 } from "@/lib/corporations/redaction";
 import type { CorporationPrivatizationVote, Corporation, CorporationHistory } from "@/lib/db/types";
 import {
+  booksAreExposed,
   getFogFactor,
   applyFogToFinancials,
   applyFogToBalanceSheet,
@@ -185,6 +186,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const isPublicCorp = !corporation.isPrivate && !isNatcorp;
 
     let financialFogMeta: FinancialFogMeta | null = null;
+    // Hoisted beside the fog meta: the payload below reports it so the page can
+    // say WHY an outsider is seeing exact figures.
+    let booksExposed = false;
 
     if (isPublicCorp) {
       let isInsider = authUser?.isAdmin === true;
@@ -215,9 +219,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       // A leaked corporation's books are OUT: the fog is skipped for everyone
       // until the exposure lapses. Expressed as a turn so it expires on its own
       // and nothing has to remember to clear it.
-      const booksExposed =
-        typeof corporation.booksExposedUntilTurn === "number" &&
-        currentTurn <= corporation.booksExposedUntilTurn;
+      booksExposed = booksAreExposed(corporation, currentTurn);
 
       if (!isInsider && !booksExposed) {
         // Last completed quarter boundary turn (turns divisible by FINANCIAL_FOG_QUARTER_TURNS).
@@ -355,6 +357,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       ...detail,
       isPrivate: corporation.isPrivate ?? false,
       financialFogOfWar: financialFogMeta,
+      // Why the figures are exact when the viewer is not an insider: this
+      // company's books were leaked, and are public until this turn.
+      booksExposedUntilTurn: booksExposed ? corporation.booksExposedUntilTurn : null,
       defenceContracts: defence,
     });
   } catch (error) {
