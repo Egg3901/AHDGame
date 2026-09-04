@@ -100,7 +100,6 @@ export async function processIntelligenceTurn(
           $setOnInsert: {
             directorCharacterId: null,
             tradecraft: TRADECRAFT_DEFAULT,
-            budgetRemaining: 0,
             opSlots: { turn, remaining: OP_SLOTS_PER_TURN },
             foundedTurn: turn,
           },

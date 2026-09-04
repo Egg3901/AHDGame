@@ -72,7 +72,6 @@ beforeEach(() => {
     directorCharacterId: HOLDER,
     tradecraft: 5,
     counterIntel: 20,
-    budgetRemaining: 500_000,
     opSlots: { turn: TURN, remaining: 1 },
     foundedTurn: 1,
   });
@@ -173,7 +172,6 @@ describe("GET intelligence console", () => {
       directorCharacterId: HOLDER,
       tradecraft: 5,
       counterIntel: 20,
-      budgetRemaining: 0,
       opSlots: { turn: TURN - 3, remaining: 0 },
       foundedTurn: 1,
     });

@@ -47,7 +47,6 @@ export async function GET(_request: Request, { params }: IntelligenceRouteParams
       agency: {
         tradecraft: agency.tradecraft,
         counterIntel: agency.counterIntel,
-        budgetRemaining: agency.budgetRemaining,
         foundedTurn: agency.foundedTurn,
         hasDirector: agency.directorCharacterId != null,
       },

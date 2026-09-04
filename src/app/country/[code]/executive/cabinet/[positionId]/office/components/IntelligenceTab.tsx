@@ -6,7 +6,6 @@ import type { CountryId } from "@/lib/constants/countries";
 interface AgencyView {
   tradecraft: number;
   counterIntel: number;
-  budgetRemaining: number;
   foundedTurn: number;
   hasDirector: boolean;
 }
@@ -245,12 +244,6 @@ export default function IntelligenceTab({
           <div>
             <dt className="text-xs uppercase tracking-wide text-muted">Operations Left</dt>
             <dd className="text-lg font-semibold text-foreground">{view.slotsRemaining}</dd>
-          </div>
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-muted">Budget</dt>
-            <dd className="text-lg font-semibold text-foreground">
-              {view.agency.budgetRemaining.toLocaleString()}
-            </dd>
           </div>
         </dl>
         {!view.agency.hasDirector && (
