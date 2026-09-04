@@ -46,6 +46,42 @@ export async function loadOpenOrdersEscrowByFundId(
  * Cash owed for queued redemptions whose units have already been removed from
  * unitSupply. This payable is subtracted from NAV backing until the cash leaves.
  */
+/**
+ * Units sitting in the redemption queue whose unit supply was already burned.
+ *
+ * These are still claims on the fund, so NAV must divide by them: a queued
+ * holder is a holder. Marking the claim instead as a fixed cash liability at
+ * the NAV locked when it was requested is what drained GLB50 in Sep 2026 - the
+ * numerator fell as assets fell while the subtracted liability stayed fixed, so
+ * the whole decline landed on the holders who stayed and NAV spiralled to zero.
+ */
+export async function loadQueuedRedemptionUnitsByFundId(
+  db: Db,
+  fundIds?: IdLike[]
+): Promise<Map<string, number>> {
+  const fundObjectIds = toObjectIds(fundIds);
+  const match: Record<string, unknown> = {
+    status: { $in: ["queued", "partial"] },
+    unitsBurnedAtRequest: true,
+  };
+  if (fundObjectIds) {
+    match.fundId = { $in: fundObjectIds };
+  }
+
+  const rows = await db
+    .collection<IndexFundRedemptionQueueEntry>("indexFundRedemptionQueue")
+    .aggregate<{ _id: string; units: number }>([
+      { $match: match },
+      { $group: { _id: { $toString: "$fundId" }, units: { $sum: "$units" } } },
+    ])
+    .toArray();
+  return new Map(rows.map((row) => [row._id, row.units]));
+}
+
+export async function getQueuedRedemptionUnits(db: Db, fundId: IdLike): Promise<number> {
+  return (await loadQueuedRedemptionUnitsByFundId(db, [fundId])).get(fundId.toString()) ?? 0;
+}
+
 export async function loadQueuedRedemptionLiabilityByFundId(
   db: Db,
   fundIds?: IdLike[]

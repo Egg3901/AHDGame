@@ -51,8 +51,12 @@ export type BackingRatioInput = {
   bondPrincipalAnchor?: number;
   /** Sum of escrowAnchor on open fund-owned limit buy orders (cash committed but not yet shares). */
   openOrdersEscrowAnchor?: number;
-  /** Cash owed for queued redemptions whose units have already been burned. */
-  queuedRedemptionLiabilityAnchor?: number;
+  /**
+   * Units queued for redemption whose supply was already burned. Counted as
+   * outstanding units, not as a fixed cash debt: a queued holder holds a
+   * pro-rata claim like everyone else.
+   */
+  queuedRedemptionUnits?: number;
   quotedNav: number;
   unitSupply: number;
 };
@@ -155,19 +159,18 @@ export function calculateBackingRatio(input: BackingRatioInput): BackingRatioRes
   const bondPrincipalAnchor = Number.isFinite(bondPrincipalRaw) ? Math.max(0, bondPrincipalRaw) : 0;
   const openEscrowRaw = input.openOrdersEscrowAnchor ?? 0;
   const openOrdersEscrowAnchor = Number.isFinite(openEscrowRaw) ? Math.max(0, openEscrowRaw) : 0;
-  const queuedLiabilityRaw = input.queuedRedemptionLiabilityAnchor ?? 0;
-  const queuedRedemptionLiabilityAnchor = Number.isFinite(queuedLiabilityRaw)
-    ? Math.max(0, queuedLiabilityRaw)
+  const queuedUnitsRaw = input.queuedRedemptionUnits ?? 0;
+  const queuedRedemptionUnits = Number.isFinite(queuedUnitsRaw)
+    ? Math.max(0, Math.floor(queuedUnitsRaw))
     : 0;
   const actualBackingValueAnchor = Math.max(
     0,
-    cashAnchor +
-      holdingsValueAnchor +
-      bondPrincipalAnchor +
-      openOrdersEscrowAnchor -
-      queuedRedemptionLiabilityAnchor
+    cashAnchor + holdingsValueAnchor + bondPrincipalAnchor + openOrdersEscrowAnchor
   );
-  const quotedLiabilityAnchor = quotedNav * unitSupply;
+  // Queued units are still claims on this backing, so they belong on the
+  // quoted-liability side. Netting them out of assets instead made the ratio
+  // fall faster than the assets did and tripped a spurious backing collapse.
+  const quotedLiabilityAnchor = quotedNav * (unitSupply + queuedRedemptionUnits);
   const backingRatio =
     quotedLiabilityAnchor > 0 ? actualBackingValueAnchor / quotedLiabilityAnchor : 1;
   const shouldAutoPause =
@@ -193,6 +196,36 @@ export function splitIndexFundDividend(grossAnchor: number): FundDividendSplit {
     reinvestAnchor: grossAnchor - passThroughAnchor,
     passThroughAnchor,
   };
+}
+
+/**
+ * One queued entry's share of the cash a fund can currently pay out.
+ *
+ * Water-filling by units: each entry may draw its proportion of what is
+ * available, measured against the units still unserved in this pass. The last
+ * entry is uncapped, so rounding can never strand cash in the fund forever.
+ *
+ * This exists because the queue used to be served first-come-first-served to
+ * exhaustion. One GLB50 holder redeemed over half the fund and was paid out
+ * turn after turn while 2,700 other positions received nothing, which is a run
+ * in every sense. Real funds gate redemptions pro-rata precisely to stop the
+ * first mover taking the whole book.
+ */
+export function proRataRedemptionCashShare(input: {
+  entryUnits: number;
+  /** Units still unserved in this pass, including this entry's. */
+  unservedUnits: number;
+  availableCashAnchor: number;
+}): number {
+  const entryUnits = Number.isFinite(input.entryUnits) ? Math.max(0, input.entryUnits) : 0;
+  const unservedUnits = Number.isFinite(input.unservedUnits) ? Math.max(0, input.unservedUnits) : 0;
+  const availableCashAnchor = Number.isFinite(input.availableCashAnchor)
+    ? Math.max(0, input.availableCashAnchor)
+    : 0;
+  if (entryUnits <= 0 || availableCashAnchor <= 0) return 0;
+  // Nothing else waiting: this entry may take everything the fund can pay.
+  if (unservedUnits <= entryUnits) return availableCashAnchor;
+  return availableCashAnchor * (entryUnits / unservedUnits);
 }
 
 export function quoteCashOnlyRedemption(input: {

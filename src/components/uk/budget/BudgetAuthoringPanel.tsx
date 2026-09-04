@@ -2,6 +2,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { isVotingDeadlinePassed } from "@/lib/legislature/billVotingWindow";
+import { useGameClock } from "@/contexts/useGameClock";
 
 interface TaxLever {
   id: string;
@@ -34,6 +36,16 @@ interface BudgetResponse {
     taxRates: Record<string, number>;
     programLevels: Record<string, number>;
   } | null;
+  /** The Budget's Commons vote-vehicle bill, while one exists (ticket #1268). */
+  voteBill: {
+    id: string;
+    status: string;
+    votesFor: number;
+    votesAgainst: number;
+    votesAbstain: number;
+    votingEndsAt: string | null;
+    votingEndsOnTurn: number | null;
+  } | null;
 }
 
 interface BudgetPreview {
@@ -60,6 +72,7 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
   const [preview, setPreview] = useState<BudgetPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const clock = useGameClock();
 
   useEffect(() => {
     let alive = true;
@@ -120,6 +133,22 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
           setPreview(json as BudgetPreview);
           return;
         }
+        if (action === "table") {
+          // Re-read so the panel picks up the vote-vehicle bill the server just
+          // created (ticket #1268): status, tally, deadline, and bill link.
+          const refreshed = await fetch(endpoint).then((response) =>
+            response.ok ? (response.json() as Promise<BudgetResponse>) : null
+          );
+          if (refreshed) {
+            setData(refreshed);
+            setTaxRates((rates) => ({ ...rates, ...refreshed.budget?.taxRates }));
+            setProgramLevels((levels) => ({
+              ...levels,
+              ...refreshed.budget?.programLevels,
+            }));
+            return;
+          }
+        }
         setData((current) =>
           current
             ? {
@@ -157,6 +186,32 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
   }
 
   const locked = Boolean(data.budget?.status && data.budget.status !== "draft");
+  const voteBill = data.voteBill;
+  const voteTally =
+    voteBill != null
+      ? `${voteBill.votesFor} for, ${voteBill.votesAgainst} against${voteBill.votesAbstain > 0 ? `, ${voteBill.votesAbstain} abstaining` : ""}`
+      : null;
+  const voteDeadlinePassed =
+    voteBill != null &&
+    (voteBill.status === "active" || voteBill.status === "active_other") &&
+    isVotingDeadlinePassed(
+      voteBill.votingEndsAt,
+      clock.realNow,
+      voteBill.votingEndsOnTurn,
+      clock.currentTurn
+    );
+  const voteHeadline =
+    voteBill == null
+      ? null
+      : voteBill.status === "signed"
+        ? "The Budget received Royal Assent."
+        : voteBill.status === "failed"
+          ? "The Budget was defeated in the Commons."
+          : voteBill.status === "enrolled"
+            ? "The Budget cleared the Commons and is under Lords revision before Royal Assent."
+            : voteDeadlinePassed
+              ? "Voting closed. The result resolves on the next turn."
+              : "Before the Commons for a confidence vote.";
   return (
     <div className="space-y-5 rounded-2xl border border-card-border bg-card p-6 shadow-card">
       <div className="flex items-baseline justify-between gap-4">
@@ -298,9 +353,26 @@ export function BudgetAuthoringPanel({ countryCode }: { countryCode: string }) {
       {error ? <p className="text-body-sm text-danger">{error}</p> : null}
 
       {locked ? (
-        <p className="text-body-sm text-muted">
-          The Budget has been tabled before the Commons and can no longer be edited.
-        </p>
+        voteBill && voteHeadline ? (
+          <div className="rounded border border-card-border bg-card-muted p-3 text-body-sm">
+            <p className="font-medium text-foreground">{voteHeadline}</p>
+            <p className="mt-1 text-muted">
+              {voteTally}
+              {voteBill.status === "active" &&
+              !voteDeadlinePassed &&
+              voteBill.votingEndsOnTurn != null
+                ? ` Voting closes turn ${voteBill.votingEndsOnTurn}.`
+                : null}{" "}
+              <a className="underline" href={`/congress/bills/${voteBill.id}`}>
+                View the Commons vote
+              </a>
+            </p>
+          </div>
+        ) : (
+          <p className="text-body-sm text-muted">
+            The Budget has been tabled before the Commons and can no longer be edited.
+          </p>
+        )
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <button

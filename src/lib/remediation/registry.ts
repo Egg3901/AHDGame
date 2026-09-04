@@ -25,6 +25,7 @@ import { defect as commandEconomyPrivateSectorOwnership } from "./defects/AHD-co
 import { defect as tinkyStaleVoteExcess } from "./defects/AHD-tinky-stale-vote-excess";
 import { defect as usMarineLotProgress } from "./defects/AHD-1171-us-marine-lot-progress";
 import { defect as defenceSupplierWindfall } from "./defects/AHD-defence-supplier-windfall";
+import { defect as vfBankRestitution } from "./defects/AHD-1267-vf-bank-restitution";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -50,6 +51,10 @@ export const DEFECTS: Defect[] = [
   tinkyStaleVoteExcess,
   usMarineLotProgress,
   defenceSupplierWindfall,
+  // Ticket #1267: pre-fix hostile merger deleted Vermont Finance's live bank
+  // with the shell. Restitutes Hunt Oil's owner residual and the household
+  // book stranded out of the money supply.
+  vfBankRestitution,
 ];
 
 export function getDefect(id: string): Defect | undefined {
