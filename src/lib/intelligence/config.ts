@@ -90,3 +90,14 @@ export const SABOTAGE_SUPPLY_POINTS = 8;
 export const SABOTAGE_READINESS_POINTS = 10;
 /** Formations one operation can reach. Its readiest, which is where it hurts. */
 export const SABOTAGE_UNIT_COUNT = 5;
+
+// ── Economic operations (phase 4) ───────────────────────────────────────────
+/**
+ * Turns a leaked corporation's books stay public.
+ *
+ * A duration, not a magnitude: the leak changes WHO CAN SEE the real figures and
+ * moves no number itself, so it carries no balance-report gate the way a
+ * production or supply magnitude would. The market reacting to what it can now
+ * read is the point.
+ */
+export const BOOKS_EXPOSED_TURNS = 24;

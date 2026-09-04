@@ -30,6 +30,7 @@ const { getNuclearProgram } = await import("@/lib/db/collections/nuclearPrograms
 const { getCovertNuclearProgram } = await import("@/lib/db/collections/covertNuclearPrograms");
 
 let militaryUnits: Array<{ readiness: number }> = [];
+let corporations: Array<{ isPrivate?: boolean; liquidCapital?: number }> = [];
 
 const HOLDER = "char_holder";
 const TURN = 10;
@@ -97,6 +98,11 @@ beforeEach(() => {
   });
   setCoverage(null);
   militaryUnits = [];
+  corporations = [];
+  db.collection("corporations");
+  db.collectionMocks.corporations.find.mockReturnValue({
+    project: () => ({ toArray: async () => corporations }),
+  });
 });
 
 describe("GET nuclear assessment", () => {
@@ -256,5 +262,33 @@ describe("military assessment", () => {
     setCoverage(ASSESS_EXISTENCE_COVERAGE);
     const body = await (await get("RU")).json();
     expect(body.domain).toBe("strategic");
+  });
+});
+
+describe("economic assessment", () => {
+  it("reads nothing without economic coverage", async () => {
+    const body = await (await get("RU", undefined, undefined, "economic")).json();
+    expect(body.domain).toBe("economic");
+    expect(body.assessment.hasCorporateSector).toBeNull();
+  });
+
+  it("counts the corporate sector at the exact tier", async () => {
+    setCoverage(ASSESS_EXACT_COVERAGE);
+    corporations = [
+      { isPrivate: false, liquidCapital: 100 },
+      { isPrivate: true, liquidCapital: 50 },
+    ];
+    const body = await (await get("RU", undefined, undefined, "economic")).json();
+    expect(body.assessment.corporationCount).toBe(2);
+    expect(body.assessment.publicCount).toBe(1);
+    expect(body.assessment.aggregateLiquidCapital).toBe(150);
+  });
+
+  it("never hands over a specific company's books", async () => {
+    setCoverage(ASSESS_EXACT_COVERAGE);
+    corporations = [{ isPrivate: false, liquidCapital: 100 }];
+    const raw = await (await get("RU", undefined, undefined, "economic")).text();
+    expect(raw).not.toContain('liquidCapital":100');
+    expect(raw).not.toContain("corporations");
   });
 });

@@ -504,6 +504,16 @@ export interface Corporation {
    */
   isPrivate?: boolean;
   /**
+   * Turn until which this corporation's real financials are public, because a
+   * foreign intelligence service leaked them.
+   *
+   * While set and unexpired, `financialFogOfWar` is skipped for every viewer:
+   * the books are simply out. Absent or past means the ordinary quarterly fog
+   * applies. Deliberately a turn rather than a boolean so the exposure lapses on
+   * its own and nothing has to remember to clear it.
+   */
+  booksExposedUntilTurn?: number;
+  /**
    * Game turn when the corporation was founded. Used as the anchor for the
    * late-IPO cooldown so a freshly-founded private corp can't immediately go
    * public. Absent on legacy corps; in practice they were founded long enough

@@ -21,6 +21,7 @@ vi.mock("@/lib/coldwar/tension", () => ({ applyTensionEvent: vi.fn() }));
 vi.mock("./strategicAction", () => ({ applyStrategicAction: vi.fn() }));
 vi.mock("./militaryAction", () => ({ applyMilitaryAction: vi.fn() }));
 vi.mock("./flags", () => ({ readMilitarySabotageEnabled: vi.fn() }));
+vi.mock("./economicAction", () => ({ applyEconomicAction: vi.fn() }));
 vi.mock("@/lib/db/collections/intelligence", () => ({
   getIntelligenceNetworksCollection: async () => ({
     findOne: async () => state.network,
@@ -55,6 +56,7 @@ const { applyTensionEvent } = await import("@/lib/coldwar/tension");
 const { applyStrategicAction } = await import("./strategicAction");
 const { applyMilitaryAction } = await import("./militaryAction");
 const { readMilitarySabotageEnabled } = await import("./flags");
+const { applyEconomicAction } = await import("./economicAction");
 
 const db = {} as Db;
 
@@ -126,6 +128,10 @@ beforeEach(() => {
   });
   // The gate is ON for the effect tests below; its own tests flip it.
   vi.mocked(readMilitarySabotageEnabled).mockResolvedValue(true);
+  vi.mocked(applyEconomicAction).mockResolvedValue({
+    corporationsExposed: 1,
+    exposedUntilTurn: 34,
+  });
 });
 
 describe("runOperation gates", () => {
@@ -426,5 +432,47 @@ describe("the military sabotage balance gate", () => {
     state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
     await run({ domain: "strategic", kind: "action", rolls: { success: 0, compromise: 0.99 } });
     expect(readMilitarySabotageEnabled).not.toHaveBeenCalled();
+  });
+});
+
+describe("economic action effects", () => {
+  it("leaks the books on a successful economic action", async () => {
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "economic",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    expect(applyEconomicAction).toHaveBeenCalledWith(expect.anything(), "RU", 10);
+    expect((r as { message: string }).message).toContain("books are out");
+  });
+
+  it("is NOT balance-gated: a leak moves no number", async () => {
+    // The military gate exists because its magnitudes move battle outcomes. A
+    // leak changes who can read a figure, not the figure.
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "economic", kind: "action", rolls: { success: 0, compromise: 0.99 } });
+    expect(readMilitarySabotageEnabled).not.toHaveBeenCalled();
+  });
+
+  it("says plainly when there was no listed company to leak", async () => {
+    vi.mocked(applyEconomicAction).mockResolvedValue({
+      corporationsExposed: 0,
+      exposedUntilTurn: null,
+    });
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "economic",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    expect((r as { message: string }).message).toContain("no listed company");
+  });
+
+  it("leaks nothing on a collection or a miss", async () => {
+    await run({ domain: "economic", kind: "collect" });
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "economic", kind: "action", rolls: { success: 0.999, compromise: 0.99 } });
+    expect(applyEconomicAction).not.toHaveBeenCalled();
   });
 });

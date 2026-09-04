@@ -212,7 +212,14 @@ export async function GET(request: Request, { params }: RouteParams) {
         }
       }
 
-      if (!isInsider) {
+      // A leaked corporation's books are OUT: the fog is skipped for everyone
+      // until the exposure lapses. Expressed as a turn so it expires on its own
+      // and nothing has to remember to clear it.
+      const booksExposed =
+        typeof corporation.booksExposedUntilTurn === "number" &&
+        currentTurn <= corporation.booksExposedUntilTurn;
+
+      if (!isInsider && !booksExposed) {
         // Last completed quarter boundary turn (turns divisible by FINANCIAL_FOG_QUARTER_TURNS).
         const quarterBoundaryTurn =
           Math.floor(currentTurn / FINANCIAL_FOG_QUARTER_TURNS) * FINANCIAL_FOG_QUARTER_TURNS;

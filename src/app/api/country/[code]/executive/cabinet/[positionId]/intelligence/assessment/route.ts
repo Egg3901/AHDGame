@@ -24,6 +24,8 @@ import { listActiveConflicts } from "@/lib/db/collections/conflicts";
 import { belligerentSideOf } from "@/lib/military/conflictVisibility";
 import { derivedSupplies } from "@/lib/military/occupation";
 import { assessMilitary } from "@/lib/intelligence/militaryAssessment";
+import { assessEconomic } from "@/lib/intelligence/economicAssessment";
+import type { Corporation } from "@/lib/db/types/corporation";
 import { COVERT_CAPABLE, COVERT_STAGES } from "@/lib/military/covertNuclear";
 import { currentCoverage } from "@/lib/intelligence/coverage";
 import {
@@ -53,7 +55,11 @@ export async function GET(request: Request, { params }: IntelligenceRouteParams)
     const turn = await loadCurrentTurn(db);
 
     const requestedDomain = new URL(request.url).searchParams.get("domain") ?? "strategic";
-    if (requestedDomain !== "strategic" && requestedDomain !== "military") {
+    if (
+      requestedDomain !== "strategic" &&
+      requestedDomain !== "military" &&
+      requestedDomain !== "economic"
+    ) {
       return NextResponse.json({ error: "Unknown assessment domain" }, { status: 400 });
     }
 
@@ -74,19 +80,51 @@ export async function GET(request: Request, { params }: IntelligenceRouteParams)
         coverage,
         turn,
         assessment:
-          requestedDomain === "military"
-            ? assessMilitary(
-                { formationCount: 0, meanReadiness: 0, fronts: [] },
+          requestedDomain === "economic"
+            ? assessEconomic(
+                { corporationCount: 0, publicCount: 0, aggregateLiquidCapital: 0 },
                 coverage,
                 targetCountryId,
                 turn
               )
-            : assessNuclear(
-                { hasProgramme: false, warheads: 0, adoptedNodeCount: 0, covert: null },
-                coverage,
-                targetCountryId,
-                turn
-              ),
+            : requestedDomain === "military"
+              ? assessMilitary(
+                  { formationCount: 0, meanReadiness: 0, fronts: [] },
+                  coverage,
+                  targetCountryId,
+                  turn
+                )
+              : assessNuclear(
+                  { hasProgramme: false, warheads: 0, adoptedNodeCount: 0, covert: null },
+                  coverage,
+                  targetCountryId,
+                  turn
+                ),
+      });
+    }
+
+    if (requestedDomain === "economic") {
+      const corps = await db
+        .collection<Corporation>("corporations")
+        .find({ countryId: targetCountryId })
+        .project({ isPrivate: 1, liquidCapital: 1 })
+        .toArray();
+
+      return NextResponse.json({
+        targetCountryId,
+        domain: requestedDomain,
+        coverage,
+        turn,
+        assessment: assessEconomic(
+          {
+            corporationCount: corps.length,
+            publicCount: corps.filter((c) => c.isPrivate !== true).length,
+            aggregateLiquidCapital: corps.reduce((a, c) => a + (c.liquidCapital ?? 0), 0),
+          },
+          coverage,
+          targetCountryId,
+          turn
+        ),
       });
     }
 

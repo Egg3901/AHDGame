@@ -66,6 +66,22 @@ interface AssessmentResponse {
   assessment: AssessmentView;
 }
 
+interface EconomicAssessmentView {
+  tier: "none" | "existence" | "estimate" | "exact";
+  hasCorporateSector: boolean | null;
+  corporationCount: number | null;
+  publicCount: number | null;
+  aggregateLiquidCapital: number | null;
+  figuresAreEstimate: boolean;
+}
+
+interface EconomicAssessmentResponse {
+  targetCountryId: string;
+  domain: "strategic" | "military" | "economic";
+  coverage: number;
+  assessment: EconomicAssessmentView;
+}
+
 interface MilitaryAssessmentResponse {
   targetCountryId: string;
   domain: "strategic" | "military";
@@ -111,6 +127,52 @@ const COMPROMISE_LABEL: Record<string, string> = {
  * the covert nuclear panel, are all inside the office. A standalone page would
  * also have had no navigation into it.
  */
+/**
+ * Assessments for every target this service has coverage on in one domain.
+ *
+ * Fetched per target rather than folded into the console read, so the console
+ * route stays one job and the assessment route stays testable on its own. Each
+ * domain reads its OWN coverage row: a service deep in a country's nuclear
+ * programme has not thereby earned a look at its army or its books.
+ */
+function useAssessments<T>(
+  view: ServiceView | null,
+  countryId: CountryId,
+  positionId: string,
+  domain: "strategic" | "military" | "economic"
+): T[] {
+  const [rows, setRows] = useState<T[]>([]);
+  useEffect(() => {
+    const targets = (view?.coverage ?? [])
+      .filter((c) => c.domain === domain && c.value > 0)
+      .map((c) => c.targetCountryId);
+    // No early return with a synchronous setState: an empty target list flows
+    // through the same promise, so every state write lands in a callback.
+    let cancelled = false;
+    Promise.all(
+      targets.map(
+        (target) =>
+          fetchJson<T>(
+            `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence/assessment?target=${target}&domain=${domain}`,
+            { feature: `country-intelligence-assessment-${domain}` }
+            // A failed assessment drops out rather than blanking the section:
+            // one unreachable target should not hide the others.
+          ).catch(() => null) as Promise<T | null>
+      )
+    ).then((settled) => {
+      // `Promise.all` reports `Awaited<T>`, which TypeScript cannot prove equals
+      // `T` for an unconstrained generic even though every T here is a plain
+      // response object. The cast states what the call site already guarantees.
+      const fetched = settled as (T | null)[];
+      if (!cancelled) setRows(fetched.filter((r): r is T => r !== null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [view, countryId, positionId, domain]);
+  return rows;
+}
+
 export default function IntelligenceTab({
   countryId,
   positionId,
@@ -119,8 +181,6 @@ export default function IntelligenceTab({
   positionId: string;
 }) {
   const [view, setView] = useState<ServiceView | null>(null);
-  const [assessments, setAssessments] = useState<AssessmentResponse[]>([]);
-  const [militaryAssessments, setMilitaryAssessments] = useState<MilitaryAssessmentResponse[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -134,54 +194,19 @@ export default function IntelligenceTab({
 
   useEffect(load, [load]);
 
-  // Assessments are fetched per target rather than folded into the console read,
-  // so the console route stays one job and the assessment route stays testable
-  // on its own. Only targets with strategic coverage are worth asking about.
-  useEffect(() => {
-    const targets = (view?.coverage ?? [])
-      .filter((c) => c.domain === "strategic" && c.value > 0)
-      .map((c) => c.targetCountryId);
-    // No early return with a synchronous setState: an empty target list flows
-    // through the same promise below, so every state write lands in a callback.
-    let cancelled = false;
-    Promise.all(
-      targets.map((target) =>
-        fetchJson<AssessmentResponse>(
-          `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence/assessment?target=${target}`,
-          { feature: "country-intelligence-assessment" }
-        ).catch(() => null)
-      )
-    ).then((rows) => {
-      if (!cancelled) setAssessments(rows.filter((r): r is AssessmentResponse => r !== null));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [view, countryId, positionId]);
-
-  // The military half, read from its OWN coverage row: a service deep in a
-  // country's nuclear programme has not thereby earned a look at its army.
-  useEffect(() => {
-    const targets = (view?.coverage ?? [])
-      .filter((c) => c.domain === "military" && c.value > 0)
-      .map((c) => c.targetCountryId);
-    let cancelled = false;
-    Promise.all(
-      targets.map((target) =>
-        fetchJson<MilitaryAssessmentResponse>(
-          `/api/country/${countryId}/executive/cabinet/${positionId}/intelligence/assessment?target=${target}&domain=military`,
-          { feature: "country-intelligence-assessment-military" }
-        ).catch(() => null)
-      )
-    ).then((rows) => {
-      if (!cancelled) {
-        setMilitaryAssessments(rows.filter((r): r is MilitaryAssessmentResponse => r !== null));
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [view, countryId, positionId]);
+  const assessments = useAssessments<AssessmentResponse>(view, countryId, positionId, "strategic");
+  const militaryAssessments = useAssessments<MilitaryAssessmentResponse>(
+    view,
+    countryId,
+    positionId,
+    "military"
+  );
+  const economicAssessments = useAssessments<EconomicAssessmentResponse>(
+    view,
+    countryId,
+    positionId,
+    "economic"
+  );
 
   if (error) {
     return (
@@ -376,6 +401,48 @@ export default function IntelligenceTab({
                     {a.assessment.fronts.map((f) => `${f.conflictId} ${f.supply}`).join(", ")}
                   </p>
                 )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="min-w-0 rounded-xl border border-card-border bg-card p-4 shadow-card">
+        <h2 className="font-serif text-lg text-foreground">Economic Assessments</h2>
+        <p className="mt-0.5 max-w-2xl text-sm text-muted">
+          The national picture of a country&apos;s corporate sector. Reading one company&apos;s
+          books is a separate act, and takes an operation rather than a threshold.
+        </p>
+        {economicAssessments.length === 0 ? (
+          <p className="mt-2 text-sm text-muted">
+            No economic coverage anywhere. Run a collection operation in the economic domain to
+            begin an assessment.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-2">
+            {economicAssessments.map((a) => (
+              <li
+                key={a.targetCountryId}
+                className="rounded-lg border border-card-border bg-background p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-foreground">{a.targetCountryId}</span>
+                  <span className="text-muted">
+                    {TIER_LABEL[a.assessment.tier] ?? a.assessment.tier}
+                  </span>
+                  <span className="ml-auto text-xs text-muted">
+                    Coverage {Math.round(a.coverage)}
+                  </span>
+                </div>
+                <p className="mt-1 text-muted">
+                  {a.assessment.hasCorporateSector === null
+                    ? "Nothing usable yet."
+                    : a.assessment.hasCorporateSector === false
+                      ? "No corporate sector to speak of."
+                      : a.assessment.corporationCount === null
+                        ? "There is a corporate sector. Size unknown."
+                        : `${a.assessment.figuresAreEstimate ? "Estimated" : "Confirmed"} ${a.assessment.corporationCount} companies, ${a.assessment.publicCount} of them listed.`}
+                </p>
               </li>
             ))}
           </ul>

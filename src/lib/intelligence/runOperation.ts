@@ -29,6 +29,7 @@ import { clampCoverage, currentCoverage } from "./coverage";
 import { applyOperationToNetwork, isNetworkUsable } from "./network";
 import { resolveOperation } from "./resolveOperation";
 import { readMilitarySabotageEnabled } from "./flags";
+import { applyEconomicAction, type EconomicActionResult } from "./economicAction";
 import { applyMilitaryAction, type MilitaryActionResult } from "./militaryAction";
 import { applyStrategicAction, type StrategicActionResult } from "./strategicAction";
 
@@ -198,9 +199,13 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
   // the operator has genuinely found the programme rather than guessed at it.
   let strategicEffect: StrategicActionResult | null = null;
   let militaryEffect: MilitaryActionResult | null = null;
+  let economicEffect: EconomicActionResult | null = null;
   if (kind === "action" && resolution.outcome === "success") {
     if (domain === "strategic") {
       strategicEffect = await applyStrategicAction(db, agency.countryId, targetCountryId, turn);
+    } else if (domain === "economic") {
+      // No balance gate: a leak moves no number, it changes who can read one.
+      economicEffect = await applyEconomicAction(db, targetCountryId, turn);
     } else if (domain === "military") {
       // Gated: the magnitudes are a balance change and their report could not be
       // produced (no engaged front in the live world). While off, the operation
@@ -233,7 +238,8 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     resolution.outcome,
     resolution.compromise,
     strategicEffect,
-    militaryEffect
+    militaryEffect,
+    economicEffect
   );
 
   const opLog = await getIntelligenceOpLogCollection(db);
@@ -310,7 +316,8 @@ function describeOperation(
   outcome: OperationOutcome,
   compromise: OperationCompromise,
   strategicEffect: StrategicActionResult | null,
-  militaryEffect: MilitaryActionResult | null
+  militaryEffect: MilitaryActionResult | null,
+  economicEffect: EconomicActionResult | null
 ): string {
   // A strategic action can succeed against a country that simply has nothing
   // undeclared to break. Reporting that as "did what it was sent to do" would be
@@ -323,6 +330,7 @@ function describeOperation(
     militaryEffect !== null &&
     militaryEffect.frontSabotaged === null &&
     militaryEffect.formationsDegraded === 0;
+  const emptyEconomic = economicEffect !== null && economicEffect.corporationsExposed === 0;
 
   const did =
     outcome === "success"
@@ -330,9 +338,13 @@ function describeOperation(
         ? "The station filed a usable report."
         : emptyStrategic || emptyMilitary
           ? "The team reached the site and found nothing worth breaking."
-          : strategicEffect?.crackdown === true
-            ? "The programme lost ground, and the raid was public."
-            : "The operation did what it was sent to do."
+          : emptyEconomic
+            ? "There was no listed company there whose books were worth taking."
+            : economicEffect !== null
+              ? "The books are out. Every trader can read them now."
+              : strategicEffect?.crackdown === true
+                ? "The programme lost ground, and the raid was public."
+                : "The operation did what it was sent to do."
       : kind === "collect"
         ? "The station came back with nothing usable."
         : "The operation failed to achieve anything.";
