@@ -526,7 +526,12 @@ export default function CabinetOfficePage() {
               )}
 
               {activeTab === "intelligence" && isIntelligence && conflictsEnabled && (
-                <IntelligenceTab countryId={countryId as CountryId} positionId={positionId} />
+                <IntelligenceTab
+                  countryId={countryId as CountryId}
+                  positionId={positionId}
+                  currencySymbol={currencySymbol}
+                  canAct={canAct}
+                />
               )}
 
               {activeTab === "commands" && isDefense && conflictsEnabled && (

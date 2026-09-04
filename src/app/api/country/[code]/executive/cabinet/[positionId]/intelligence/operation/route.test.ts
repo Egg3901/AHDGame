@@ -88,7 +88,6 @@ beforeEach(() => {
     directorCharacterId: HOLDER,
     tradecraft: 5,
     counterIntel: 20,
-    budgetRemaining: 5_000_000,
     opSlots: { turn: 10, remaining: 2 },
     foundedTurn: 1,
   });
@@ -161,7 +160,6 @@ describe("POST intelligence operation", () => {
       directorCharacterId: null,
       tradecraft: 5,
       counterIntel: 20,
-      budgetRemaining: 5_000_000,
       opSlots: { turn: 10, remaining: 2 },
       foundedTurn: 1,
     });

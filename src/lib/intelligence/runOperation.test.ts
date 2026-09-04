@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import type { IntelligenceAgency } from "@/lib/db/types/intelligence";
-import { ACTION_MIN_COVERAGE, COLLECTION_COST, COLLECTION_GAIN } from "./config";
+import { ACTION_MIN_COVERAGE, COLLECTION_GAIN } from "./config";
 
 const state = {
   network: null as Record<string, unknown> | null,
@@ -9,8 +9,14 @@ const state = {
   targetAgency: null as Record<string, unknown> | null,
   /** The acting agency as a re-read would find it after a failed claim. */
   ownAgency: null as Record<string, unknown> | null,
-  /** Whether the atomic budget-and-slot claim matched. */
+  /** Whether the operation-slot claim matched. */
   claimMatched: true,
+  /** Whether the guarded appropriation debit found the money. */
+  debitOk: true,
+  /** The owner's budget document, which is where the money now lives. */
+  budget: { gdp: 5.649e11 } as Record<string, unknown> | null,
+  /** Refunds issued after a lost slot claim. */
+  refunds: [] as number[],
   coverageWrites: [] as unknown[],
   networkWrites: [] as unknown[],
   agencyClaims: [] as unknown[],
@@ -22,6 +28,12 @@ vi.mock("./strategicAction", () => ({ applyStrategicAction: vi.fn() }));
 vi.mock("./militaryAction", () => ({ applyMilitaryAction: vi.fn() }));
 vi.mock("./flags", () => ({ readMilitarySabotageEnabled: vi.fn() }));
 vi.mock("./economicAction", () => ({ applyEconomicAction: vi.fn() }));
+vi.mock("@/lib/db/collections/intelligenceAppropriation", () => ({
+  debitIntelligenceAppropriation: async () => state.debitOk,
+  creditIntelligenceAppropriation: async (_db: unknown, _c: unknown, amount: number) => {
+    state.refunds.push(amount);
+  },
+}));
 vi.mock("@/lib/db/collections/intelligence", () => ({
   getIntelligenceNetworksCollection: async () => ({
     findOne: async () => state.network,
@@ -58,7 +70,10 @@ const { applyMilitaryAction } = await import("./militaryAction");
 const { readMilitarySabotageEnabled } = await import("./flags");
 const { applyEconomicAction } = await import("./economicAction");
 
-const db = {} as Db;
+// The appropriation lives on the budget document, so the stub must serve one.
+const db = {
+  collection: () => ({ findOne: async () => state.budget }),
+} as unknown as Db;
 
 function agency(over: Partial<IntelligenceAgency> = {}): IntelligenceAgency {
   return {
@@ -67,7 +82,6 @@ function agency(over: Partial<IntelligenceAgency> = {}): IntelligenceAgency {
     directorCharacterId: null,
     tradecraft: 5,
     counterIntel: 20,
-    budgetRemaining: 10_000_000,
     opSlots: { turn: 10, remaining: 2 },
     foundedTurn: 1,
     updatedAt: new Date(0),
@@ -116,8 +130,11 @@ beforeEach(() => {
   state.network = network();
   state.coverage = null;
   state.targetAgency = { counterIntel: 20 };
-  state.ownAgency = { budgetRemaining: 10_000_000, opSlots: { turn: 10, remaining: 2 } };
+  state.ownAgency = { opSlots: { turn: 10, remaining: 2 } };
   state.claimMatched = true;
+  state.debitOk = true;
+  state.budget = { gdp: 5.649e11 };
+  state.refunds = [];
   state.coverageWrites = [];
   state.networkWrites = [];
   state.agencyClaims = [];
@@ -164,19 +181,28 @@ describe("runOperation gates", () => {
     expect(await run({ kind: "action" })).toMatchObject({ ok: true });
   });
 
-  it("refuses when the claim finds the budget short", async () => {
-    // The claim is one conditional update, so a refusal is "did not match".
-    // The re-read is what tells the two refusals apart.
-    state.claimMatched = false;
-    state.ownAgency = { budgetRemaining: COLLECTION_COST - 1, opSlots: { turn: 10, remaining: 2 } };
+  it("refuses when the appropriation cannot cover the operation", async () => {
+    // The guarded debit is what refuses, before any slot is touched.
+    state.debitOk = false;
     const r = await run();
     expect(r).toMatchObject({ ok: false, status: 409 });
-    expect((r as { error: string }).error).toContain("afford");
+    expect((r as { error: string }).error).toContain("appropriation cannot cover");
+    expect(state.agencyClaims).toHaveLength(0);
+  });
+
+  it("refunds the appropriation when the slot claim loses the race", async () => {
+    // Money moves first, so a lost slot claim MUST hand it back or the service is
+    // charged for an operation that never ran.
+    state.claimMatched = false;
+    const r = await run();
+    expect(r).toMatchObject({ ok: false, status: 429 });
+    expect(state.refunds).toHaveLength(1);
+    expect(state.refunds[0]).toBeGreaterThan(0);
   });
 
   it("refuses with 429 when the claim finds the turn's slots spent", async () => {
     state.claimMatched = false;
-    state.ownAgency = { budgetRemaining: 10_000_000, opSlots: { turn: 10, remaining: 0 } };
+    state.ownAgency = { opSlots: { turn: 10, remaining: 0 } };
     const r = await run();
     expect(r).toMatchObject({ ok: false, status: 429 });
   });
@@ -192,7 +218,7 @@ describe("runOperation gates", () => {
 
   it("does no further work when the claim is refused", async () => {
     state.claimMatched = false;
-    state.ownAgency = { budgetRemaining: 0, opSlots: { turn: 10, remaining: 2 } };
+    state.ownAgency = { opSlots: { turn: 10, remaining: 2 } };
     await run();
     expect(state.coverageWrites).toHaveLength(0);
     expect(state.networkWrites).toHaveLength(0);

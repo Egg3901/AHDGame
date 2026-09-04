@@ -25,12 +25,16 @@ export const NETWORK_FUNDING_PROGRESS = {
   steady: 9,
   crash: 18,
 } as const;
-/** Cost per turn by funding level, drawn from the intelligence budget. */
-export const NETWORK_FUNDING_COST = {
+/**
+ * Per-network, per-turn upkeep, as a fraction of the OWNER'S GDP. Preserves the ratios the
+ * old flat constants carried (0.53 / 1.47 / 3.47 of a collection operation); only the
+ * denomination is fixed. See OP_COST_GDP_FRACTION below for why flat prices could not work.
+ */
+export const NETWORK_UPKEEP_GDP_FRACTION = {
   none: 0,
-  trickle: 40_000,
-  steady: 110_000,
-  crash: 260_000,
+  trickle: 4.8e-6,
+  steady: 1.32e-5,
+  crash: 3.12e-5,
 } as const;
 /** Turns a burned network stays unusable. */
 export const NETWORK_BURN_COOLDOWN_TURNS = 12;
@@ -50,8 +54,20 @@ export const COLLECTION_MIN_NETWORK_LEVEL = 1;
 export const ACTION_MIN_NETWORK_LEVEL = 2;
 /** Live coverage an action operation needs. The "cannot act blind" gate. */
 export const ACTION_MIN_COVERAGE = 40;
-export const COLLECTION_COST = 75_000;
-export const ACTION_COST = 220_000;
+/**
+ * Operation cost as a fraction of the OWNER'S OWN GDP, not a flat currency amount.
+ *
+ * `federalBudget.gdp` is denominated in each country's own currency — live figures span
+ * RU 1.478e12 down to UK 2.201e10 — so a flat price is not a balance dial, it is a currency
+ * artefact: 75,000 bought the UK three operations a turn and Russia two hundred at the very
+ * same share of GDP. Because the funding line is also a fraction of the same GDP, GDP
+ * CANCELS, and a given funding level affords exactly the same in every country and era.
+ *
+ * Calibrated so level 2 ("Standing Service", 0.0015 of GDP) affords both operation slots
+ * plus one network at `steady`, which is the design centre of the funding ladder.
+ */
+export const OP_COST_GDP_FRACTION = 9.0e-6;
+export const ACTION_COST_GDP_FRACTION = 2.7e-5;
 /** Baseline difficulty, 0..100, before network, coverage and tradecraft. */
 export const COLLECTION_DIFFICULTY = 20;
 export const ACTION_DIFFICULTY = 45;

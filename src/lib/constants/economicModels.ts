@@ -131,6 +131,7 @@ export const KNOWN_SPENDING_CATEGORIES = new Set<string>([
   "healthcare",
   "housing",
   "infrastructure",
+  "intelligence",
   "other",
   "pensions",
   "publicSafety",
