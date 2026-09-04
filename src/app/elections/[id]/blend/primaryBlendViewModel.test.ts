@@ -405,6 +405,19 @@ describe("the state board", () => {
     }
   });
 
+  it("picks the same leader every time when two candidates are level", () => {
+    // The board repaints on every 60s poll. An unstable tiebreak would make a
+    // level state flicker between two colours with nothing having changed.
+    const tied = {
+      ...DETAIL,
+      byState: { ...DETAIL.byState, OH: { c2: 500, c1: 500 } },
+    };
+    const first = buildPrimaryBlendViewModel(boardInput({ detail: tied }));
+    const second = buildPrimaryBlendViewModel(boardInput({ detail: tied }));
+    expect(tile(first, "OH").leaderId).toBe(tile(second, "OH").leaderId);
+    expect(tile(first, "OH").leaderId).toBe("c1");
+  });
+
   it("gives a state with no projected votes no leader", () => {
     const vm = buildPrimaryBlendViewModel(boardInput());
     expect(tile(vm, "TX").leaderId).toBeNull();

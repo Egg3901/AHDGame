@@ -65,6 +65,18 @@ describe("PrimaryTileBoard", () => {
     expect(screen.getByRole("button", { name: "Ohio: First Filer projected to win" })).toBeTruthy();
   });
 
+  it("marks selection without taking the focus ring away from keyboard users", () => {
+    // Selection is drawn with an inset shadow; `outline` stays free for the
+    // browser's focus ring, which an outline-based marker would have replaced
+    // on every unselected tile.
+    renderBoard({ selectedStateId: "IA" });
+    const selected = screen.getByRole("button", { name: /Iowa/ }) as HTMLElement;
+    const unselected = screen.getByRole("button", { name: /Ohio/ }) as HTMLElement;
+    expect(selected.style.boxShadow).toContain("inset");
+    expect(selected.style.outline).toBe("");
+    expect(unselected.style.outline).toBe("");
+  });
+
   it("makes every tile reachable from the keyboard", () => {
     renderBoard();
     // Buttons, not divs: a div grid would strand keyboard users on a control

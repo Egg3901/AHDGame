@@ -52,10 +52,13 @@ export function PrimaryTileBoard({
               cursor: "pointer",
               color: t.ink,
               background: t.background,
-              // Inset so the mark reads against any fill, including a tile
-              // sitting flush against its neighbours.
-              outline: selected ? `2px solid ${t.ink}` : "none",
-              outlineOffset: -3,
+              // Selection is drawn with an inset shadow rather than an outline
+              // so it reads against any fill on a tile sitting flush against
+              // its neighbours, and, more importantly, so it leaves `outline`
+              // free for the browser's own focus ring. Setting outline here
+              // would have taken the focus ring away from keyboard users on
+              // every tile that is not the current selection.
+              boxShadow: selected ? `inset 0 0 0 2px ${t.ink}` : "none",
             }}
           >
             <span style={{ fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 700 }}>

@@ -201,6 +201,8 @@ function WaveStates({
           key={s.id}
           type="button"
           title={s.name}
+          // The chip reads "IA"; the state's name is what identifies it aloud.
+          aria-label={s.name}
           aria-pressed={s.selected}
           onClick={() => onSelect(s.id)}
           style={{
