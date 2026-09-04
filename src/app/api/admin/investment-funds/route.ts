@@ -10,7 +10,7 @@ import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import {
   loadOpenOrdersEscrowByFundId,
-  loadQueuedRedemptionLiabilityByFundId,
+  loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 
 // GET /api/admin/investment-funds — Admin list of all funds (including paused/delisted)
@@ -43,7 +43,7 @@ export async function GET() {
     const exchangeRates = await loadFxRatesRecord(db);
     const fundIds = funds.map((fund) => fund._id);
     const openOrdersEscrowByFundId = await loadOpenOrdersEscrowByFundId(db, fundIds);
-    const queuedLiabilityByFundId = await loadQueuedRedemptionLiabilityByFundId(db, fundIds);
+    const queuedUnitsByFundId = await loadQueuedRedemptionUnitsByFundId(db, fundIds);
     const bondPrincipalByFundId = new Map<string, number>();
     await Promise.all(
       funds.map(async (fund) => {
@@ -60,13 +60,14 @@ export async function GET() {
         const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
         const bondPrincipalAnchor = bondPrincipalByFundId.get(fundId) ?? 0;
         const openOrdersEscrowAnchor = openOrdersEscrowByFundId.get(fundId) ?? 0;
-        const queuedRedemptionLiabilityAnchor = queuedLiabilityByFundId.get(fundId) ?? 0;
+        const queuedRedemptionUnits = queuedUnitsByFundId.get(fundId) ?? 0;
+        // Queued units are claims on this backing, not a deduction from it.
+        // Netting them out here showed a solvent fund as under-backed on the
+        // one dashboard an operator reads during an incident.
         const netBackingAnchor =
-          fund.cashAnchor +
-          holdingsValueAnchor +
-          bondPrincipalAnchor +
-          openOrdersEscrowAnchor -
-          queuedRedemptionLiabilityAnchor;
+          fund.cashAnchor + holdingsValueAnchor + bondPrincipalAnchor + openOrdersEscrowAnchor;
+        const totalClaimUnits = fund.unitSupply + queuedRedemptionUnits;
+        const backingPerUnitAnchor = totalClaimUnits > 0 ? netBackingAnchor / totalClaimUnits : 0;
         return {
           id: fundId,
           slug: fund.slug,
@@ -87,8 +88,9 @@ export async function GET() {
           holdingsValueAnchor,
           bondPrincipalAnchor,
           openOrdersEscrowAnchor,
-          queuedRedemptionLiabilityAnchor,
+          queuedRedemptionUnits,
           netBackingAnchor,
+          backingPerUnitAnchor,
           backingRatio: fund.backingRatio ?? null,
           lastRebalancedAt: fund.lastRebalancedAt ?? null,
           holdingsCount: fund.holdings.length,
