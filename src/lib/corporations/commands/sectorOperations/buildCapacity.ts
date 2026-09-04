@@ -243,12 +243,24 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       }
     }
 
-    let countryId = sector.countryId ?? corporation.countryId;
+    // `countryId` keys the unowned-capacity pool below, so it has to be the
+    // country the STATE is in, never the country the corporation is domiciled
+    // in. The old order fell through to `corporation.countryId` and then to a
+    // literal "US", which is how two `unownedSectors` docs came to sit on
+    // Ukrainian states under the United States: unreachable to Ukraine, and
+    // counted as US capacity by every reader (ticket #1271).
+    let countryId = sector.countryId;
     if (!countryId) {
       const state = await db
         .collection<State>("states")
         .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
-      countryId = state?.countryId ?? "US";
+      countryId = state?.countryId ?? corporation.countryId;
+    }
+    if (!countryId) {
+      return NextResponse.json(
+        { error: "This sector is not in a known country and its capacity cannot be changed." },
+        { status: 409 }
+      );
     }
 
     // No blanket state-owned block here: the appointed CEO of a National

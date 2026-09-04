@@ -447,3 +447,48 @@ describe("buildCapacity — mothball / reactivate", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// ─── unowned-pool country attribution (#1271) ─────────────────────────────
+//
+// The pool row is keyed by state and sector, but it CARRIES a countryId that
+// every reader filters on. A sector with no stored countryId resolved it from
+// the corporation and then fell through to a literal "US", so a US-domiciled
+// corp building in a foreign state minted a pool row filed under the United
+// States: unreachable to the country the capacity is physically in, and counted
+// as American headroom by the sector browser and the commodity supply math.
+describe("buildCapacity — unowned pool country attribution", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporations");
+    db.collection("corporateSectors");
+    db.collection("characters");
+    db.collection("gameState");
+    db.collection("gameConfig");
+    db.collection("unownedSectors");
+    db.collection("states");
+  });
+
+  it("files the pool row under the country the STATE is in, not the corp's", async () => {
+    await wireMocks(sectorDoc({ countryId: undefined, stateId: "UKR_WES" }));
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "UKR_WES", countryId: "UKR" });
+
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 100 }), { params });
+
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("UKR");
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
+  });
+
+  it("does not invent the United States for a state it cannot resolve", async () => {
+    await wireMocks(sectorDoc({ countryId: undefined, stateId: "UKR_WES" }));
+    db.collectionMocks.states.findOne.mockResolvedValue(null);
+
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 100 }), { params });
+
+    // Falls back to the corporation's own country (US here) rather than a
+    // hardcoded literal, and never silently mislabels a foreign state.
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("US");
+  });
+});

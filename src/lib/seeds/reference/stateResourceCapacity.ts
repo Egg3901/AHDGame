@@ -578,3 +578,40 @@ export function getStateResourceCapacity(
 
   return result;
 }
+
+/**
+ * The seed capacity entry for a state, resolved through a country merge.
+ *
+ * WHY THIS IS NOT A PLAIN `map[`${countryId}:${stateId}`]` LOOKUP. Deposits are
+ * geology: they belong to the STATE, and the country half of the key exists only
+ * to disambiguate state codes that two countries both use (CN `HB` vs DE `HB`).
+ * When a country is absorbed, `mergeCountry` re-keys every state onto the
+ * survivor, so a western Land seeded as `DE:NW` is asked for as `DD:NW` from
+ * then on and the direct lookup misses. The caller then reads "no deposits" for
+ * a state whose coal and iron are sitting in `stateResourceCapacity` and being
+ * mined every turn (ticket #1271: German reunification stranded the Ruhr and the
+ * Saar, and the eleven western Laender lost their extraction sectors outright).
+ *
+ * So: exact key first, and on a miss fall back to the state code alone, but ONLY
+ * when exactly one country in the table defines it. An ambiguous code is the
+ * case the compound key was introduced for, and guessing there would route a
+ * state to another country's deposits, which is worse than the miss. Those still
+ * return `undefined`, and `onAmbiguous` lets a caller log the collision.
+ */
+export function resolveStateResourceEntry(
+  map: Record<string, StateResourceCapacityEntry>,
+  countryId: string,
+  stateId: string,
+  onAmbiguous?: (candidateCountryIds: string[]) => void
+): StateResourceCapacityEntry | undefined {
+  const direct = map[`${countryId}:${stateId}`];
+  if (direct) return direct;
+
+  const suffix = `:${stateId}`;
+  const candidates = Object.keys(map).filter((key) => key.endsWith(suffix));
+  if (candidates.length === 1) return map[candidates[0]];
+  if (candidates.length > 1) {
+    onAmbiguous?.(candidates.map((key) => key.slice(0, key.length - suffix.length)));
+  }
+  return undefined;
+}

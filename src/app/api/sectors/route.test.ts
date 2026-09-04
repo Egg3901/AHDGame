@@ -37,6 +37,91 @@ beforeEach(async () => {
   });
 });
 
+describe("GET /api/sectors country identity (ticket #1271)", () => {
+  beforeEach(() => {
+    // A reunified Germany keeps the DD country id and renames itself; the
+    // absorbed DE shell keeps its config entry but holds no territory.
+    db.collection("countryState");
+    db.collectionMocks.states.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "CA", name: "California", countryId: "US" },
+        { _id: "NW", name: "Nordrhein-Westfalen", countryId: "DD" },
+      ]),
+    });
+    db.collectionMocks.countryState.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "DD", displayNameOverride: "Germany" }]),
+    });
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.unownedSectors.countDocuments.mockResolvedValue(0);
+    db.collectionMocks.corporateSectors.countDocuments.mockResolvedValue(0);
+  });
+
+  it("labels the country filter with the name the country now goes by", async () => {
+    const { GET } = await import("./route");
+    const data = await (await GET(makeRequest("view=unowned"))).json();
+
+    const dd = (data.filters.countries as { value: string; label: string }[]).find(
+      (c) => c.value === "DD"
+    );
+    expect(dd?.label).toBe("Germany");
+  });
+
+  it("drops a dissolved country that holds no territory from the filter list", async () => {
+    const { GET } = await import("./route");
+    const data = await (await GET(makeRequest("view=unowned"))).json();
+
+    const values = (data.filters.countries as { value: string }[]).map((c) => c.value);
+    expect(values).toContain("DD");
+    expect(values).toContain("US");
+    // DE is still a compiled country, but reunification left it with no states,
+    // so offering it as a filter could only ever return an empty list.
+    expect(values).not.toContain("DE");
+  });
+
+  it("labels sector rows with the override too, not the compiled name", async () => {
+    // The owned view, which is where the ticket's screenshot showed every
+    // German plant filed under "East Germany".
+    const soeId = new ObjectId();
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([{ currencyCode: "USD", rate: 1 }]),
+    });
+    db.collectionMocks.corporateSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: new ObjectId(),
+          corporationId: soeId,
+          stateId: "NW",
+          countryId: "DD",
+          sectorType: "extraction",
+          revenue: 1000,
+        },
+      ]),
+    });
+    db.collectionMocks.corporations.find.mockReturnValue({
+      project: vi.fn().mockReturnThis(),
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: soeId,
+          name: "German Extraction Enterprise",
+          sequentialId: 900316,
+          countryId: "DD",
+          liquidCurrencyCode: "USD",
+        },
+      ]),
+    });
+
+    const { GET } = await import("./route");
+    const data = await (await GET(makeRequest("view=owned"))).json();
+
+    expect(data.sectors).toHaveLength(1);
+    expect(data.sectors[0]).toMatchObject({ countryId: "DD", countryName: "Germany" });
+  });
+});
+
 describe("GET /api/sectors (view=unowned)", () => {
   it("excludes unowned markets in command-economy countries (RU/USSR) from the row list", async () => {
     db.collectionMocks.unownedSectors.find.mockReturnValue({

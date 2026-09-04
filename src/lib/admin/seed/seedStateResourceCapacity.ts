@@ -1,7 +1,10 @@
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { CountryId } from "@/lib/constants/countries";
-import { getStateResourceCapacity } from "@/lib/seeds/reference/stateResourceCapacity";
+import {
+  getStateResourceCapacity,
+  resolveStateResourceEntry,
+} from "@/lib/seeds/reference/stateResourceCapacity";
 
 /**
  * Seed the `stateResourceCapacity` collection.
@@ -63,10 +66,23 @@ export async function seedStateResourceCapacity(
   for (const state of states) {
     // capacityMap is keyed by `${countryId}:${stateId}` so cross-country
     // state-ID collisions (e.g. CN HB / DE HB) can't accidentally route a
-    // state to the wrong country's resource budget.
-    const entry = capacityMap[`${state.countryId}:${state._id}`];
+    // state to the wrong country's resource budget. `resolveStateResourceEntry`
+    // keeps that guarantee while surviving a country merge: a state absorbed
+    // into another country now reads under the SURVIVOR's id, and a bare
+    // compound lookup would miss and WIPE its deposits to `{}` on the next
+    // re-seed (ticket #1271).
+    const entry = resolveStateResourceEntry(capacityMap, state.countryId, state._id, (candidates) =>
+      log(
+        `seedStateResourceCapacity: ambiguous capacity for ${state._id} ` +
+          `(defined by ${candidates.join(", ")}), seeding empty`
+      )
+    );
     const resources = entry?.resources ?? {};
-    const countryId: CountryId = entry?.countryId ?? state.countryId;
+    // The STATE row owns the country, not the capacity entry: after a merge the
+    // entry still carries the absorbed country's id and copying it back would
+    // undo the re-key `mergeCountry` just performed. Identical for every
+    // unmerged world, where the two always agree.
+    const countryId: CountryId = state.countryId;
 
     ops.push({
       updateOne: {

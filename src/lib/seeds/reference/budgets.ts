@@ -107,7 +107,7 @@ import {
 } from "@/lib/seeds/dd/ddCorporations";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
-import { getStateResourceCapacity } from "./stateResourceCapacity";
+import { getStateResourceCapacity, resolveStateResourceEntry } from "./stateResourceCapacity";
 
 /**
  * Default legal structure stamped on each country's sovereign issuer corporation.
@@ -5239,7 +5239,16 @@ function buildCommandSoeCorpEntries(params: {
     const sectorStates =
       sectorType === "extraction"
         ? states.filter((state) => {
-            const resources = capacityMap[`${countryId}:${state.id}`]?.resources ?? {};
+            // Merge-aware: an absorbed state is asked for under the SURVIVOR's
+            // country id but was seeded under its own, so a direct compound-key
+            // lookup misses and silently strands its deposits (ticket #1271).
+            const resources =
+              resolveStateResourceEntry(capacityMap, countryId, state.id, (candidates) =>
+                log?.(
+                  `[${countryId}] ambiguous resource capacity for ${state.id}: ` +
+                    `defined by ${candidates.join(", ")}, no deposits assigned`
+                )
+              )?.resources ?? {};
             if (Object.keys(resources).length > 0) return true;
             log?.(
               `[${countryId}] skipping extraction SOE sector in ${state.id}: ` +

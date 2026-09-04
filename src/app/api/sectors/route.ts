@@ -17,6 +17,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 
 export type SectorView = "unowned" | "owned" | "forSale";
 export type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "growth";
@@ -82,6 +83,19 @@ export async function GET(request: Request) {
       .toArray();
     const stateMap = new Map(states.map((s) => [s._id, s]));
 
+    // A country that renamed itself must be listed and labelled under the name
+    // it goes by. Reunified Germany keeps `DD` as its country id and carries the
+    // new name in `countryState.displayNameOverride`, so reading the compiled
+    // config alone showed its sectors under "East Germany" while the dissolved
+    // shell still offered "Germany" as a filter that could never match a row
+    // (ticket #1271). `COUNTRY_ORDER` is the compiled roster, so it is narrowed
+    // to countries that still hold territory rather than trusted as a list of
+    // live countries.
+    const nameOverrides = await loadCountryNameOverrides(db);
+    const countriesWithStates = new Set(states.map((s) => s.countryId));
+    const countryNameOf = (id: CountryId): string =>
+      nameOverrides[id] ?? COUNTRY_CONFIGS[id]?.name ?? id;
+
     // Load FX rates for anchor normalization
     const fxByCurrency = await loadFxRatesByCurrency(db);
 
@@ -126,7 +140,7 @@ export async function GET(request: Request) {
           stateId: us.stateId,
           stateName: st?.name ?? us.stateId,
           countryId: us.countryId,
-          countryName: cfg?.name ?? us.countryId,
+          countryName: countryNameOf(us.countryId),
           countryFlag: cfg?.flagEmoji ?? "",
           owned: false,
           corporationId: null,
@@ -220,7 +234,7 @@ export async function GET(request: Request) {
           stateId: s.stateId,
           stateName: st?.name ?? s.stateId,
           countryId: hostCountryId,
-          countryName: cfg?.name ?? hostCountryId,
+          countryName: countryNameOf(hostCountryId),
           countryFlag: cfg?.flagEmoji ?? "",
           owned: true,
           corporationId: s.corporationId.toString(),
@@ -307,9 +321,11 @@ export async function GET(request: Request) {
           value: t,
           label: CORPORATION_TYPE_LABELS[t],
         })),
-        countries: COUNTRY_ORDER.map((id) => ({
+        // Curated order preserved: COUNTRY_ORDER is hand-ordered, not
+        // alphabetical, so this filters and relabels without resequencing.
+        countries: COUNTRY_ORDER.filter((id) => countriesWithStates.has(id)).map((id) => ({
           value: id,
-          label: COUNTRY_CONFIGS[id].name,
+          label: countryNameOf(id),
           flag: COUNTRY_CONFIGS[id].flagEmoji,
         })),
       },

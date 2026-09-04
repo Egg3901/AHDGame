@@ -1,0 +1,185 @@
+// AHD-1271 (c): secondary National Corporations stamped `type: "financial"`.
+//
+// `buildNationalCorporationDoc` defaults `type` to "financial", which is right
+// for the PRIMARY National Corporation — a country's sovereign issuer really is
+// a financial entity — and wrong for the producing split-offs
+// `splitOffSectorType` carves out of it. That path passed `name`,
+// `assignedSectorTypes` and the primary flag but never `type`, so every state
+// enterprise a country created inherited the issuer's default.
+//
+// This is not cosmetic. `corporation.type` is the sector a corp builds into when
+// none is named (`expandSector`, `buildCapacity`) and one of the keys
+// `applyPriceMultipliers` reads, so a German Manufacturing Enterprise whose
+// `type` says financial expands into the financial sector.
+//
+// On live it hit the ten enterprises a reunified Germany carved out after the
+// merge: Manufacturing, Retail, Agriculture, Logistics, Media, Technology,
+// Telecommunications, Real Estate, Healthcare and Automobiles, each holding its
+// own sixteen plants and each reporting itself as a financial firm.
+//
+// Half A (code): `splitOffSectorType` stamps `type` from the sector it claims.
+// Half B (this heal): restate `type` from `assignedSectorTypes` on the corps
+// already carved out.
+
+import type { Db } from "mongodb";
+import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import type { Defect, DetectResult, HealPlan, HealResult, VerifyResult } from "../types";
+
+export const DEFECT_ID = "AHD-1271-natcorp-split-sector-type";
+
+interface SplitOffCorp {
+  _id: unknown;
+  name?: string;
+  countryOwnerId?: string;
+  type?: string;
+  assignedSectorTypes?: string[];
+  isPrimaryNationalCorporation?: boolean;
+}
+
+/**
+ * State-owned split-offs whose `type` contradicts the single sector they claim.
+ *
+ * The PRIMARY National Corporation is excluded by filter, not by inference: it
+ * legitimately carries `type: "financial"` with no assigned sector, and
+ * rewriting it would break the sovereign issuer lookup. A corp claiming more
+ * than one sector type is also skipped — `type` is a single value and there is
+ * no correct answer to pick, so those are reported instead.
+ */
+async function findMistyped(db: Db): Promise<{ rows: SplitOffCorp[]; multiClaimCount: number }> {
+  const corps = await db
+    .collection<SplitOffCorp>("corporations")
+    .find(
+      {
+        countryOwnerId: { $type: "string" },
+        isPrimaryNationalCorporation: { $ne: true },
+        assignedSectorTypes: { $exists: true, $ne: [] },
+      } as Record<string, unknown>,
+      { projection: { name: 1, countryOwnerId: 1, type: 1, assignedSectorTypes: 1 } }
+    )
+    .toArray();
+
+  const rows: SplitOffCorp[] = [];
+  let multiClaimCount = 0;
+  for (const corp of corps) {
+    const claimed = corp.assignedSectorTypes ?? [];
+    if (claimed.length !== 1) {
+      if (claimed.length > 1 && corp.type !== claimed[0]) multiClaimCount++;
+      continue;
+    }
+    const want = claimed[0];
+    // Only ever move `type` to a real CorporationType. A claim outside the
+    // enum is data this heal does not understand and must not act on.
+    if (!CORPORATION_TYPES.includes(want as never)) continue;
+    if (corp.type !== want) rows.push(corp);
+  }
+  return { rows, multiClaimCount };
+}
+
+function describe(corp: SplitOffCorp): string {
+  return `${corp.countryOwnerId}/${corp.name}: ${corp.type} -> ${corp.assignedSectorTypes?.[0]}`;
+}
+
+async function detect(db: Db): Promise<DetectResult> {
+  const { rows, multiClaimCount } = await findMistyped(db);
+  const notes = [`${rows.length} state enterprise(s) report a type they do not operate`];
+  if (multiClaimCount > 0) {
+    notes.push(
+      `${multiClaimCount} enterprise(s) claim several sector types and are NOT touched: \`type\` holds one value and picking one would be a guess`
+    );
+  }
+  return {
+    affected: rows.length,
+    sample: rows.slice(0, 10).map((corp) => ({
+      id: String(corp._id),
+      name: corp.name,
+      countryOwnerId: corp.countryOwnerId,
+      type: corp.type,
+      operates: corp.assignedSectorTypes?.[0],
+    })),
+    notes,
+  };
+}
+
+async function plan(db: Db): Promise<HealPlan> {
+  const { rows } = await findMistyped(db);
+  return {
+    affected: rows.length,
+    touched: [{ collection: "corporations", ids: rows.map((corp) => String(corp._id)) }],
+    // A label, not a balance. No cash, shares or capital move.
+    moneyDelta: 0,
+    summary: `restate \`type\` from the claimed sector on ${rows.length} state enterprise(s)`,
+    notes: rows.slice(0, 20).map(describe),
+  };
+}
+
+async function apply(db: Db, healPlan: HealPlan): Promise<HealResult> {
+  const approved = new Set(
+    healPlan.touched.find((t) => t.collection === "corporations")?.ids ?? []
+  );
+  const { rows } = await findMistyped(db);
+  const now = new Date();
+
+  let updated = 0;
+  for (const corp of rows) {
+    if (!approved.has(String(corp._id))) continue;
+    const want = corp.assignedSectorTypes?.[0];
+    if (!want) continue;
+    const res = await db.collection("corporations").updateOne(
+      // The stale type is part of the filter, so a concurrent correction wins.
+      { _id: corp._id, type: corp.type, assignedSectorTypes: [want] } as Record<string, unknown>,
+      { $set: { type: want, updatedAt: now } }
+    );
+    updated += res.modifiedCount ?? 0;
+  }
+
+  return {
+    documentsScanned: rows.length,
+    documentsUpdated: updated,
+    notes: [
+      `restated ${updated} of ${approved.size} approved enterprise(s)`,
+      ...rows
+        .filter((corp) => approved.has(String(corp._id)))
+        .slice(0, 20)
+        .map(describe),
+    ],
+  };
+}
+
+async function verify(db: Db): Promise<VerifyResult> {
+  const { rows, multiClaimCount } = await findMistyped(db);
+  return {
+    ok: rows.length === 0,
+    remaining: rows.length,
+    notes: [
+      rows.length === 0
+        ? "every single-sector state enterprise reports the sector it operates"
+        : `${rows.length} enterprise(s) still mistyped`,
+      `${multiClaimCount} multi-sector enterprise(s) remain, by design`,
+    ],
+  };
+}
+
+export const defect: Defect = {
+  id: DEFECT_ID,
+  title: "Secondary National Corporations report the primary's financial type",
+  severity: "P2",
+  codeFix: {
+    issue: 1271,
+    mergedTo: "development",
+  },
+  // The seeded SOEs are built by `buildCommandSoeCorpEntries`, which stamps
+  // `type: sectorType` directly and always has. Only the runtime split-off path
+  // could produce the mismatch.
+  seedFix: {
+    status: "not-needed",
+    files: ["src/lib/seeds/reference/budgets.ts"],
+    note: "buildCommandSoeCorpEntries stamps type from the sector; the corruption is runtime-only",
+  },
+  envs: ["dev", "sandbox", "prod"],
+  idempotent: true,
+  guards: ["turn-lock-free", "money-conserving", "max-affected:500"],
+  detect,
+  plan,
+  apply,
+  verify,
+};
