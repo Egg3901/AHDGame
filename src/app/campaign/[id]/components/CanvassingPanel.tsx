@@ -5,6 +5,8 @@ import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { getDemographicCategoriesForCountry } from "@/lib/demographics/countryDemographics";
 import { DE_GROUP_EN_LABELS } from "@/lib/seeds/de/deDemographicCategories";
+import { BLEND, FONT } from "@/components/blend/tokens";
+import { blendButtonStyle, BlendLabel, BlendSelect } from "@/components/blend/BlendControls";
 
 const COST_FUNDS = 100;
 const COST_ACTIONS = 1;
@@ -14,6 +16,11 @@ interface CanvassingPanelProps {
   characterActions?: number;
   characterFunds?: number;
   onResourcesSpent?: () => void;
+  /**
+   * "blend" renders the panel in the Proposal D treatment used by the campaign
+   * manager. The standalone /actions/canvass page keeps the default card.
+   */
+  variant?: "default" | "blend";
 }
 
 type CanvassSource = "home" | "travel" | "primaryCampaign" | "runningMateSurrogate";
@@ -50,8 +57,10 @@ export function CanvassingPanel({
   characterActions,
   characterFunds,
   onResourcesSpent,
+  variant = "default",
 }: CanvassingPanelProps) {
   const { formatFull } = useCurrency();
+  const blend = variant === "blend";
 
   // Country-aware demographic categories (SSOT). US returns multiple categories
   // (race/age/…); voter-group countries (UK/JP/DE/IE/CN/BR) return a single category.
@@ -167,10 +176,22 @@ export function CanvassingPanel({
 
   const QUANTITY_OPTIONS = [1, 5, 10];
 
+  // ── Shell + heading, per variant ──────────────────────────────────────────
+  const shellStyle: React.CSSProperties | undefined = blend ? { marginBottom: 0 } : undefined;
+  const shellClass = blend ? "" : "rounded-lg border border-card-border bg-card p-6";
+
+  const heading = blend ? (
+    <h3 style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
+      Voter canvassing
+    </h3>
+  ) : (
+    <h3 className="text-xl font-bold text-foreground mb-4">Voter Canvassing</h3>
+  );
+
   if (eligibility.status === "loading") {
     return (
-      <div className="rounded-lg border border-card-border bg-card p-6">
-        <h3 className="text-xl font-bold text-foreground mb-4">Voter Canvassing</h3>
+      <div className={shellClass} style={shellStyle}>
+        {heading}
         <div className="min-h-[360px] space-y-4">
           <Skeleton className="h-4 w-3/4" />
           {[1, 2].map((i) => (
@@ -179,14 +200,6 @@ export function CanvassingPanel({
               <Skeleton className="h-10 w-full rounded-md" />
             </div>
           ))}
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-20" />
-            <div className="flex gap-2">
-              {[1, 2, 3, 4].map((i) => (
-                <Skeleton key={i} className="h-9 w-14 rounded-md" />
-              ))}
-            </div>
-          </div>
           <Skeleton className="h-12 w-full rounded-md" />
         </div>
       </div>
@@ -195,19 +208,210 @@ export function CanvassingPanel({
 
   if (eligibility.status === "blocked") {
     return (
-      <div className="rounded-lg border border-card-border bg-card p-6">
-        <h3 className="text-xl font-bold text-foreground mb-4">Voter Canvassing</h3>
-        <p className="text-sm text-muted">{eligibility.message}</p>
+      <div className={shellClass} style={shellStyle}>
+        {heading}
+        {blend ? (
+          <p style={{ margin: 0, fontFamily: FONT.serif, fontSize: 13.5, color: BLEND.muted }}>
+            {eligibility.message}
+          </p>
+        ) : (
+          <p className="text-sm text-muted">{eligibility.message}</p>
+        )}
       </div>
     );
   }
 
   const activeStateId = eligibility.stateId;
   const description = SOURCE_DESCRIPTION[eligibility.source](isSingleCategory);
+  const costSuffix = `${totalActionsCost} action${totalActionsCost !== 1 ? "s" : ""}, ${formatFull(totalFundsCost)}`;
+
+  function quantityStyle(active: boolean, enabled: boolean): React.CSSProperties {
+    return {
+      border: `1px solid ${active ? BLEND.accent : BLEND.hairlineStrong}`,
+      background: active ? "rgba(220,38,38,.12)" : "transparent",
+      color: !enabled ? BLEND.mutedDimmer : active ? BLEND.accentInk : BLEND.ink,
+      padding: "7px 13px",
+      font: "inherit",
+      fontFamily: FONT.mono,
+      fontSize: 12,
+      fontWeight: 600,
+      cursor: enabled ? "pointer" : "not-allowed",
+    };
+  }
+
+  if (blend) {
+    return (
+      <div style={shellStyle}>
+        {heading}
+        <p
+          style={{
+            margin: "0 0 14px",
+            fontFamily: FONT.serif,
+            fontSize: 13.5,
+            lineHeight: 1.55,
+            color: BLEND.muted,
+          }}
+        >
+          Canvassing in <span style={{ color: BLEND.ink, fontWeight: 600 }}>{activeStateId}</span>.{" "}
+          {description}
+        </p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 460 }}>
+          {!isSingleCategory && (
+            <div>
+              <BlendLabel>Demographic category</BlendLabel>
+              <div style={{ marginTop: 6 }}>
+                <BlendSelect
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setSelectedGroup("");
+                  }}
+                >
+                  <option value="">Select category…</option>
+                  {categories.map((cat) => (
+                    <option key={cat.key} value={cat.key}>
+                      {cat.label}
+                    </option>
+                  ))}
+                </BlendSelect>
+              </div>
+            </div>
+          )}
+
+          {activeCategory && (
+            <div>
+              <BlendLabel>{isSingleCategory ? "Voter group" : "Specific group"}</BlendLabel>
+              <div style={{ marginTop: 6 }}>
+                <BlendSelect
+                  value={selectedGroup}
+                  onChange={(e) => setSelectedGroup(e.target.value)}
+                >
+                  <option value="">Select group…</option>
+                  {activeCategory.groups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                      {DE_GROUP_EN_LABELS[group.id] ? ` (${DE_GROUP_EN_LABELS[group.id]})` : ""}
+                    </option>
+                  ))}
+                </BlendSelect>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <BlendLabel>Quantity</BlendLabel>
+            <div style={{ marginTop: 6, display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {QUANTITY_OPTIONS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setCount(n)}
+                  disabled={n > maxCanvasses}
+                  style={quantityStyle(count === n, n <= maxCanvasses)}
+                >
+                  {n}x
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCount(maxCanvasses)}
+                disabled={maxCanvasses < 1}
+                style={quantityStyle(
+                  count === maxCanvasses && !QUANTITY_OPTIONS.includes(maxCanvasses),
+                  maxCanvasses >= 1
+                )}
+              >
+                Max ({maxCanvasses})
+              </button>
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontFamily: FONT.mono,
+                fontSize: 10.5,
+                color: BLEND.mutedDim,
+              }}
+            >
+              TOTAL COST: {costSuffix}
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleCanvass}
+            disabled={!selectedGroup || loading || !canAfford}
+            style={blendButtonStyle("primary", !!selectedGroup && !loading && canAfford, true)}
+          >
+            {loading
+              ? "Canvassing"
+              : `Canvass voters${count > 1 ? ` (${count}x)` : ""} · ${costSuffix}`}
+          </button>
+
+          {message && (
+            <div
+              style={{
+                padding: "11px 14px",
+                borderLeft: `2px solid ${BLEND.hairlineStrong}`,
+                background: "rgba(255,255,255,.02)",
+                fontFamily: FONT.serif,
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: BLEND.ink,
+                whiteSpace: "pre-line",
+              }}
+            >
+              {message}
+            </div>
+          )}
+        </div>
+
+        <div
+          style={{
+            marginTop: 18,
+            paddingTop: 14,
+            borderTop: `1px solid ${BLEND.hairline}`,
+          }}
+        >
+          <div
+            style={{
+              fontFamily: FONT.mono,
+              fontSize: 9.5,
+              letterSpacing: ".16em",
+              textTransform: "uppercase",
+              color: BLEND.mutedDimmer,
+            }}
+          >
+            How canvassing works
+          </div>
+          <ul
+            style={{
+              margin: "8px 0 0",
+              paddingLeft: 18,
+              fontFamily: FONT.serif,
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: BLEND.muted,
+            }}
+          >
+            <li>Effectiveness scales with your alignment to the demographic</li>
+            <li>
+              Twice as effective during active campaign season, the 4 turns before an election
+            </li>
+            <li>Boosts turnout for this demographic in {activeStateId}</li>
+            <li>Modifiers decay 2% per turn toward baseline</li>
+            <li>
+              Diminishing returns apply, so each successive canvass is slightly less effective
+            </li>
+          </ul>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-lg border border-card-border bg-card p-6">
-      <h3 className="text-xl font-bold text-foreground mb-4">Voter Canvassing</h3>
+    <div className={shellClass}>
+      {heading}
       <p className="text-sm text-muted mb-4">
         Canvassing in <span className="font-semibold text-foreground">{activeStateId}</span>.{" "}
         {description}
@@ -294,10 +498,7 @@ export function CanvassingPanel({
               Max ({maxCanvasses})
             </button>
           </div>
-          <div className="mt-2 text-xs text-muted">
-            Total cost: {totalActionsCost} action{totalActionsCost !== 1 ? "s" : ""},{" "}
-            {formatFull(totalFundsCost)}
-          </div>
+          <div className="mt-2 text-xs text-muted">Total cost: {costSuffix}</div>
         </div>
 
         {/* Canvass button */}
@@ -308,7 +509,7 @@ export function CanvassingPanel({
         >
           {loading
             ? "Canvassing..."
-            : `Canvass Voters${count > 1 ? ` (${count}x)` : ""} — ${totalActionsCost} action${totalActionsCost !== 1 ? "s" : ""}, ${formatFull(totalFundsCost)}`}
+            : `Canvass Voters${count > 1 ? ` (${count}x)` : ""} · ${costSuffix}`}
         </button>
 
         {/* Message */}
@@ -328,7 +529,7 @@ export function CanvassingPanel({
           <li>2x more effective during active campaign season (4 turns before election)</li>
           <li>Boosts turnout for this demographic in {activeStateId}</li>
           <li>Modifiers decay 2% per turn toward baseline</li>
-          <li>Diminishing returns apply — each successive canvass is slightly less effective</li>
+          <li>Diminishing returns apply, so each successive canvass is slightly less effective</li>
         </ul>
       </div>
     </div>

@@ -223,18 +223,38 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
   if (error || !campaign) {
     return (
-      <div className="min-h-screen bg-background">
-        <main className="mx-auto max-w-4xl px-6 py-12">
-          <div className="rounded-xl border border-error/30 bg-error/10 p-6 text-center">
-            <p className="text-error">{error || "Campaign not found"}</p>
-            <Link
-              href="/elections"
-              className="mt-4 inline-block text-sm text-muted hover:text-foreground"
-            >
-              Back to Elections
-            </Link>
+      <div
+        className={isEmbedded ? "" : "min-h-screen"}
+        style={{ background: BLEND.page, color: BLEND.ink }}
+      >
+        <div style={{ padding: "48px 26px", maxWidth: 640 }}>
+          <div
+            style={{
+              padding: "14px 18px",
+              borderLeft: `2px solid ${BLEND.negative}`,
+              background: "rgba(255,255,255,.02)",
+              fontFamily: FONT.serif,
+              fontSize: 15,
+              color: BLEND.negative,
+            }}
+          >
+            {error || "Campaign not found"}
           </div>
-        </main>
+          <Link
+            href="/elections"
+            style={{
+              display: "inline-block",
+              marginTop: 16,
+              fontFamily: FONT.mono,
+              fontSize: 11,
+              letterSpacing: ".08em",
+              textTransform: "uppercase",
+              color: BLEND.muted,
+            }}
+          >
+            &lsaquo; Back to elections
+          </Link>
+        </div>
       </div>
     );
   }

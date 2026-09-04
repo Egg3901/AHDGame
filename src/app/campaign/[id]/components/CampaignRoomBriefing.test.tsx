@@ -65,7 +65,7 @@ describe("CampaignRoomBriefing", () => {
   it("renders the delegate path, runway, weakest bucket, and a tradeoff", () => {
     render(<CampaignRoomBriefing campaign={campaignWith(delegateBriefing)} />);
     expect(screen.getByText(/Campaign Room/i)).toBeTruthy();
-    expect(screen.getByText(/Path to Victory — Delegates/i)).toBeTruthy();
+    expect(screen.getByText(/Path to victory: delegates/i)).toBeTruthy();
     expect(screen.getAllByText("120").length).toBeGreaterThan(0);
     expect(screen.getByText(/80 more to clinch/i)).toBeTruthy();
     expect(screen.getByText("Rival")).toBeTruthy();
@@ -92,7 +92,7 @@ describe("CampaignRoomBriefing", () => {
       },
     };
     render(<CampaignRoomBriefing campaign={campaignWith(tipping)} />);
-    expect(screen.getByText(/Path to Victory — Electoral Votes/i)).toBeTruthy();
+    expect(screen.getByText(/Path to victory: electoral votes/i)).toBeTruthy();
     expect(screen.getByText("210")).toBeTruthy();
     expect(screen.getByText(/California/i)).toBeTruthy();
   });
