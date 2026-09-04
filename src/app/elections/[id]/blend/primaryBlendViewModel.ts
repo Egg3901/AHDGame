@@ -12,6 +12,13 @@ import type {
   PartyGroup,
 } from "../components/ElectionDetailTypes";
 import { BLEND } from "@/components/blend/tokens";
+import { buildPerStateSlices } from "@/lib/elections/primaryViewModel";
+import type { CarveUpSlice } from "@/components/elections/primary/CarveUpPanel";
+import type {
+  PrimaryPartyDetail,
+  PrimaryViewerCampaign,
+} from "@/lib/elections/dto/primaryPartyDetail";
+import { contrastTextColor } from "@/lib/utils/colorContrast";
 
 export interface PrimaryBlendInput {
   election: ElectionDetail;
@@ -19,6 +26,14 @@ export interface PrimaryBlendInput {
   selectedPartyId: string | null;
   /** Headlines from the per-race wire feed. */
   wire: string[];
+  /**
+   * Per-party board, carve-up and campaign data, fetched lazily once a party is
+   * selected. Null until it lands, or when the fetch failed: the board, the
+   * carve-up and the campaign block then simply do not render.
+   */
+  detail?: PrimaryPartyDetail | null;
+  /** State the board and carve-up are focused on. Null defaults to the next wave. */
+  selectedStateId?: string | null;
 }
 
 export interface PrimaryPartyVM {
@@ -77,10 +92,37 @@ export interface PrimaryStandingVM {
   statusColor: string;
 }
 
+export interface PrimaryCalendarStateVM {
+  id: string;
+  name: string;
+  selected: boolean;
+}
+
 export interface PrimaryCalendarRowVM {
   label: string;
   statusText: string;
   color: string;
+  /** The wave's states, so a row can expand into selectable chips. */
+  states: PrimaryCalendarStateVM[];
+}
+
+export interface PrimaryTileVM {
+  stateId: string;
+  name: string;
+  leaderId: string | null;
+  leaderName: string | null;
+  background: string;
+  /** Chosen from the fill's own lightness, so a label never fades into it. */
+  ink: string;
+  /** True once the state's wave has fired, so the result is settled. */
+  voted: boolean;
+  title: string;
+}
+
+export interface PrimaryCarveUpVM {
+  stateId: string;
+  stateName: string;
+  slices: CarveUpSlice[];
 }
 
 export interface PrimaryBlendVM {
@@ -101,6 +143,32 @@ export interface PrimaryBlendVM {
   campaignHref: string | null;
   wire: string[];
   vitals: { label: string; value: string; sub?: string; color?: string }[];
+  /** One tile per state on this party's calendar. Empty until the detail loads. */
+  board: PrimaryTileVM[];
+  carveUp: PrimaryCarveUpVM | null;
+  /** The state the board and carve-up agree on. Null when there is no calendar. */
+  selectedStateId: string | null;
+  campaign: PrimaryViewerCampaign | null;
+}
+
+/**
+ * Mix a hex colour toward the Blend track.
+ *
+ * A state that has only been projected reads as the same candidate at lower
+ * conviction rather than as a different one, which keeps the board's colour
+ * legend honest: hue is who leads, strength is how settled it is.
+ */
+function towardTrack(hex: string, amount: number): string {
+  const clean = hex.replace("#", "");
+  if (!/^[0-9a-fA-F]{6}$/.test(clean)) return hex;
+  const channels = [0, 2, 4].map((i) => parseInt(clean.slice(i, i + 2), 16));
+  const track = [0x1a, 0x1a, 0x25]; // BLEND.track
+  const mixed = channels.map((c, i) =>
+    Math.round(c + (track[i] - c) * amount)
+      .toString(16)
+      .padStart(2, "0")
+  );
+  return `#${mixed.join("")}`;
 }
 
 function grouped(n: number): string {
@@ -120,6 +188,7 @@ function selectParty(election: ElectionDetail, selectedPartyId: string | null): 
 
 export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlendVM {
   const { election, selectedPartyId, wire } = inp;
+  const detail = inp.detail ?? null;
 
   const party = selectParty(election, selectedPartyId);
   const candidates = party?.candidates ?? [];
@@ -246,10 +315,31 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
     ? null
     : `You are not filed in the ${party?.partyName ?? "selected"} primary. Switch to your own party to see your standing.`;
 
-  // ── Calendar ──────────────────────────────────────────────────────────────
-  const calendar: PrimaryCalendarRowVM[] = (election.primaryCalendar ?? []).map((w) => {
+  // ── Calendar, board and carve-up ──────────────────────────────────────────
+  // All three read one selection, so a tile and a calendar chip can never
+  // disagree about which state is on screen.
+  const waves = election.primaryCalendar ?? [];
+  const calendarStateIds = waves.flatMap((w) => w.states);
+  const nameFor = (stateId: string) => detail?.stateNameById[stateId] ?? stateId;
+
+  const requested = inp.selectedStateId ?? null;
+  const selectedStateId =
+    requested && calendarStateIds.includes(requested)
+      ? requested
+      : // The next contest still to vote is what a player is deciding about;
+        // fall back to the first on the calendar once they have all run.
+        (waves.find((w) => w.status !== "complete" && w.states.length > 0)?.states[0] ??
+        calendarStateIds[0] ??
+        null);
+
+  const calendar: PrimaryCalendarRowVM[] = waves.map((w) => {
+    const states: PrimaryCalendarStateVM[] = w.states.map((id) => ({
+      id,
+      name: nameFor(id),
+      selected: id === selectedStateId,
+    }));
     if (w.status === "complete") {
-      return { label: w.label, statusText: "COMPLETE", color: BLEND.positive };
+      return { label: w.label, statusText: "COMPLETE", color: BLEND.positive, states };
     }
     // A wave fires with `turnsRemaining` left on the clock, so the wait is the
     // difference between now and that point.
@@ -263,8 +353,54 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
             ? "THIS TURN"
             : `IN ${turnsAway} TURN${turnsAway === 1 ? "" : "S"}`,
       color: BLEND.caution,
+      states,
     };
   });
+
+  const voted = new Set(detail?.votedStateIds ?? []);
+  const candidateById = new Map((detail?.candidates ?? []).map((c) => [c.id, c]));
+
+  // The board lays out the calendar, not the country: a state that never votes
+  // in this party's primary has no tile rather than an inert grey one.
+  const board: PrimaryTileVM[] = detail
+    ? calendarStateIds.map((stateId) => {
+        const votes = Object.entries(detail.byState[stateId] ?? {}).filter(([, v]) => v > 0);
+        // Sorted by candidate id under a tie so the board is stable between polls.
+        votes.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+        const leaderId = votes[0]?.[0] ?? null;
+        const leader = leaderId ? candidateById.get(leaderId) : undefined;
+        const hasVoted = voted.has(stateId);
+        const name = nameFor(stateId);
+
+        const background = leader
+          ? hasVoted
+            ? leader.color
+            : towardTrack(leader.color, 0.55)
+          : BLEND.track;
+
+        return {
+          stateId,
+          name,
+          leaderId,
+          leaderName: leader?.name ?? null,
+          background,
+          ink: leader ? contrastTextColor(background) : BLEND.mutedDim,
+          voted: hasVoted,
+          title: leader
+            ? `${name}: ${leader.name} ${hasVoted ? "won" : "projected to win"}`
+            : `${name}: no projection yet`,
+        };
+      })
+    : [];
+
+  const carveUp: PrimaryCarveUpVM | null =
+    detail && selectedStateId
+      ? {
+          stateId: selectedStateId,
+          stateName: nameFor(selectedStateId),
+          slices: buildPerStateSlices(detail.candidates, detail.byState)[selectedStateId] ?? [],
+        }
+      : null;
 
   // ── Header and vitals ─────────────────────────────────────────────────────
   const headline = `The ${selectedName} primary`;
@@ -321,5 +457,9 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
     campaignHref,
     wire,
     vitals,
+    board,
+    carveUp,
+    selectedStateId,
+    campaign: detail?.viewerCampaign ?? null,
   };
 }

@@ -47,6 +47,12 @@ import {
   PRIMARY_HOME_SURGE_PCT,
 } from "@/lib/electionEngine/constants";
 import type { PrimaryCandidateInfo } from "@/lib/elections/primaryViewModel";
+import type {
+  PrimaryPartyDetail,
+  PrimaryViewerCampaign,
+} from "@/lib/elections/dto/primaryPartyDetail";
+
+export type { PrimaryPartyDetail, PrimaryViewerCampaign };
 
 /** Every state that casts electoral votes, deduplicated across split units. */
 const STATE_IDS = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
@@ -56,48 +62,6 @@ export interface PrimaryDetailViewer {
   userId: string;
   /** Set when the account is acting as a specific profile. */
   activeCharacterId?: string | null;
-}
-
-/**
- * The two personal actions a candidate takes during a primary, plus everything
- * needed to price and gate them.
- *
- * Funds and the surge price are both in LOCAL units, matching the field the
- * surge route actually debits. Quoting the anchor price against a local balance
- * would let the button enable on money the route then refuses.
- */
-export interface PrimaryViewerCampaign {
-  currentCampaignState: string | null;
-  currentTicks: number;
-  tickCap: number;
-  homeState: string | null;
-  surgeUsed: boolean;
-  playerActions: number;
-  playerFunds: number;
-  surgeCostFunds: number;
-  surgeCostActions: number;
-  /** Percentage points of extra vote in the home state, for the whole primary. */
-  surgeBoost: number;
-  states: { id: string; name: string; actionCost: number }[];
-}
-
-export interface PrimaryPartyDetail {
-  /** Always the party's sequential id, whatever form the caller addressed it by. */
-  partyId: string;
-  partyName: string;
-  partyColor: string;
-  /** Live roster, with the display colour each candidate is drawn in. */
-  candidates: PrimaryCandidateInfo[];
-  /**
-   * stateId -> candidateId -> votes. Counted results for a state that has
-   * voted, projected votes everywhere else. Empty before any projection exists.
-   */
-  byState: Record<string, Record<string, number>>;
-  stateNameById: Record<string, string>;
-  /** States whose wave has fired, so a board can separate locked from projected. */
-  votedStateIds: string[];
-  /** Null for a viewer with no candidate in this party's primary. */
-  viewerCampaign: PrimaryViewerCampaign | null;
 }
 
 /** The full assembly, including the pieces only a server component can use. */

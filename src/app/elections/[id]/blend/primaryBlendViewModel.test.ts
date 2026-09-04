@@ -5,6 +5,7 @@ import type {
   CandidateDetail,
 } from "../components/ElectionDetailTypes";
 import { buildPrimaryBlendViewModel, type PrimaryBlendInput } from "./primaryBlendViewModel";
+import type { PrimaryPartyDetail } from "@/lib/elections/dto/primaryPartyDetail";
 
 function candidate(over: Partial<CandidateDetail> = {}): CandidateDetail {
   return {
@@ -313,5 +314,216 @@ describe("copy", () => {
       ...vm.calendar.map((c) => `${c.label} ${c.statusText}`),
     ];
     for (const s of strings) expect(s).not.toMatch(/[–—]/);
+  });
+});
+
+// ── The state board, carve-up and campaign block ──────────────────────────────
+
+function boardElection(): ElectionDetail {
+  return election({
+    primaryCalendar: [
+      {
+        label: "Tier 1, early states",
+        turnsRemaining: 5,
+        states: ["IA", "NH"],
+        status: "complete",
+      },
+      { label: "Tier 2, Super Tuesday", turnsRemaining: 4, states: ["CA"], status: "complete" },
+      {
+        label: "Tier 3, industrial belt",
+        turnsRemaining: 3,
+        states: ["OH", "TX"],
+        status: "upcoming",
+      },
+    ],
+  });
+}
+
+const DETAIL: PrimaryPartyDetail = {
+  partyId: "1",
+  partyName: "Democratic Party",
+  partyColor: "#2563eb",
+  candidates: [
+    { id: "c1", name: "First Filer", color: "#2563eb" },
+    { id: "c2", name: "Second Filer", color: "#dc2626" },
+  ],
+  byState: {
+    IA: { c1: 700, c2: 300 },
+    NH: { c1: 400, c2: 600 },
+    CA: { c1: 900, c2: 100 },
+    OH: { c1: 500, c2: 100 },
+    TX: {},
+  },
+  stateNameById: { IA: "Iowa", NH: "New Hampshire", CA: "California", OH: "Ohio", TX: "Texas" },
+  votedStateIds: ["IA", "NH", "CA"],
+  viewerCampaign: null,
+};
+
+function boardInput(over: Partial<PrimaryBlendInput> = {}): PrimaryBlendInput {
+  return input({ election: boardElection(), detail: DETAIL, ...over });
+}
+
+function tile(vm: ReturnType<typeof buildPrimaryBlendViewModel>, stateId: string) {
+  const found = vm.board.find((t) => t.stateId === stateId);
+  if (!found) throw new Error(`no tile for ${stateId}`);
+  return found;
+}
+
+describe("the state board", () => {
+  it("puts one tile on the board for every state in the calendar, in calendar order", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    expect(vm.board.map((t) => t.stateId)).toEqual(["IA", "NH", "CA", "OH", "TX"]);
+  });
+
+  it("colours each tile by the leading candidate", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    expect(tile(vm, "IA").leaderId).toBe("c1");
+    expect(tile(vm, "NH").leaderId).toBe("c2");
+  });
+
+  it("renders a state that has voted at the leader's full strength", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    expect(tile(vm, "IA").voted).toBe(true);
+    expect(tile(vm, "IA").background.toLowerCase()).toBe("#2563eb");
+  });
+
+  it("damps a state that has only been projected, keeping the leader's hue", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    const projected = tile(vm, "OH");
+    expect(projected.voted).toBe(false);
+    expect(projected.leaderId).toBe("c1");
+    // Same candidate, visibly quieter: neither the full colour nor the empty track.
+    expect(projected.background.toLowerCase()).not.toBe("#2563eb");
+    expect(projected.background).not.toBe(tile(vm, "TX").background);
+  });
+
+  it("keeps every tile's label readable against its own fill", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    for (const t of vm.board) {
+      expect(t.ink).toBeTruthy();
+      expect(t.ink).not.toBe(t.background);
+    }
+  });
+
+  it("gives a state with no projected votes no leader", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    expect(tile(vm, "TX").leaderId).toBeNull();
+    expect(tile(vm, "TX").leaderName).toBeNull();
+  });
+
+  it("names the state and the leader in the title, so colour is never the only signal", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    expect(tile(vm, "IA").title).toContain("Iowa");
+    expect(tile(vm, "IA").title).toContain("First Filer");
+  });
+
+  it("says a state is still to vote rather than naming a winner too early", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    expect(tile(vm, "OH").title.toLowerCase()).toContain("projected");
+    expect(tile(vm, "IA").title.toLowerCase()).not.toContain("projected");
+  });
+
+  it("renders no board at all when the detail has not loaded", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ detail: null }));
+    expect(vm.board).toEqual([]);
+    expect(vm.carveUp).toBeNull();
+    expect(vm.campaign).toBeNull();
+  });
+
+  it("renders no board when the race has no calendar to lay one out on", () => {
+    const vm = buildPrimaryBlendViewModel(
+      boardInput({ election: election({ primaryCalendar: [] }) })
+    );
+    expect(vm.board).toEqual([]);
+  });
+});
+
+describe("the carve-up", () => {
+  it("breaks the selected state down by candidate, largest first", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ selectedStateId: "IA" }));
+    expect(vm.carveUp?.stateName).toBe("Iowa");
+    expect(vm.carveUp?.slices.map((s) => s.candidateId)).toEqual(["c1", "c2"]);
+    expect(vm.carveUp?.slices[0].pct).toBeCloseTo(70, 5);
+    expect(vm.carveUp!.slices.reduce((sum, s) => sum + s.pct, 0)).toBeCloseTo(100, 5);
+  });
+
+  it("defaults to the first state of the next wave still to vote", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ selectedStateId: null }));
+    expect(vm.selectedStateId).toBe("OH");
+  });
+
+  it("falls back to the first state on the calendar once every wave has voted", () => {
+    const allDone = election({
+      primaryCalendar: [
+        { label: "Tier 1", turnsRemaining: 5, states: ["IA"], status: "complete" },
+        { label: "Tier 2", turnsRemaining: 4, states: ["CA"], status: "complete" },
+      ],
+    });
+    const vm = buildPrimaryBlendViewModel(boardInput({ election: allDone, selectedStateId: null }));
+    expect(vm.selectedStateId).toBe("IA");
+  });
+
+  it("ignores a selection that is not on this party's calendar", () => {
+    // Switching party must not leave the previous party's state selected.
+    const vm = buildPrimaryBlendViewModel(boardInput({ selectedStateId: "ZZ" }));
+    expect(vm.selectedStateId).toBe("OH");
+  });
+
+  it("shows no slices for a state nobody has any votes in", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ selectedStateId: "TX" }));
+    expect(vm.carveUp?.stateName).toBe("Texas");
+    expect(vm.carveUp?.slices).toEqual([]);
+  });
+});
+
+describe("the calendar rows", () => {
+  it("expands each wave to its states, marking the selected one", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ selectedStateId: "IA" }));
+    const wave = vm.calendar.find((w) => w.states.some((s) => s.id === "IA"));
+    expect(wave?.states.map((s) => s.id)).toEqual(["IA", "NH"]);
+    expect(wave?.states.find((s) => s.id === "IA")?.selected).toBe(true);
+    expect(wave?.states.find((s) => s.id === "NH")?.selected).toBe(false);
+  });
+
+  it("names the states so a chip reads as a place, not a code", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    const wave = vm.calendar.find((w) => w.states.some((s) => s.id === "IA"));
+    expect(wave?.states.find((s) => s.id === "IA")?.name).toBe("Iowa");
+  });
+
+  it("still lists the wave's states before the detail loads", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ detail: null }));
+    const wave = vm.calendar.find((w) => w.states.some((s) => s.id === "IA"));
+    expect(wave?.states.map((s) => s.id)).toEqual(["IA", "NH"]);
+    expect(wave?.states.find((s) => s.id === "IA")?.name).toBe("IA");
+  });
+});
+
+describe("the viewer's campaign block", () => {
+  const campaign = {
+    currentCampaignState: "IA",
+    currentTicks: 3,
+    tickCap: 5,
+    homeState: "IA",
+    surgeUsed: false,
+    playerActions: 25,
+    playerFunds: 250_000,
+    surgeCostFunds: 25_000,
+    surgeCostActions: 3,
+    surgeBoost: 15,
+    states: [{ id: "IA", name: "Iowa", actionCost: 3 }],
+  };
+
+  it("passes the viewer's campaign through so the view never reads the detail itself", () => {
+    const vm = buildPrimaryBlendViewModel(
+      boardInput({ detail: { ...DETAIL, viewerCampaign: campaign } })
+    );
+    expect(vm.campaign?.currentCampaignState).toBe("IA");
+    expect(vm.campaign?.currentTicks).toBe(3);
+    expect(vm.campaign?.surgeBoost).toBe(15);
+  });
+
+  it("is null for a viewer with no candidate in this party", () => {
+    expect(buildPrimaryBlendViewModel(boardInput()).campaign).toBeNull();
   });
 });
