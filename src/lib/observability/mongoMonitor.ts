@@ -19,7 +19,10 @@
 import * as Sentry from "@sentry/nextjs";
 import type { MongoClient } from "mongodb";
 import type { Span } from "@sentry/nextjs";
-import { recordRoundTrip } from "@/lib/observability/mongoRoundTrips";
+import {
+  recordDocumentsReturned,
+  recordRoundTrip,
+} from "@/lib/observability/mongoRoundTrips";
 
 /** Driver chatter that carries no diagnostic value — never instrumented. */
 const IGNORED_COMMANDS = new Set([
@@ -60,6 +63,13 @@ const pendingSpans = new Map<number, Span>();
 function collectionFromCommand(commandName: string, command: Record<string, unknown>): string {
   const target = command[commandName];
   return typeof target === "string" ? target : "unknown";
+}
+
+/** Documents in a find/getMore/aggregate reply batch; 0 for anything else. */
+function batchSize(reply: unknown): number {
+  const cursor = (reply as { cursor?: { firstBatch?: unknown[]; nextBatch?: unknown[] } })?.cursor;
+  if (!cursor) return 0;
+  return (cursor.firstBatch ?? cursor.nextBatch ?? []).length;
 }
 
 let attached = false;
@@ -117,6 +127,12 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
     if (IGNORED_COMMANDS.has(event.commandName)) return;
     const collection = pendingCollections.get(event.requestId) ?? "unknown";
     pendingCollections.delete(event.requestId);
+
+    // Documents returned, for the round-trip profiler. Round trips rank what
+    // production pays (latency per call); documents rank what singleplayer
+    // pays (deserialization per document), and one aggregate returning 61k
+    // documents is a single round trip.
+    recordDocumentsReturned(collection, batchSize(event.reply));
 
     const span = pendingSpans.get(event.requestId);
     if (span) {

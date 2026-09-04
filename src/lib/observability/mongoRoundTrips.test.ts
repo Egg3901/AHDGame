@@ -4,9 +4,11 @@ import {
   endPhaseProfiling,
   formatRoundTripReport,
   recordRoundTrip,
+  recordDocumentsReturned,
   resetRoundTripProfiler,
   roundTripProfilingEnabled,
   roundTripReport,
+  totalDocumentsReturned,
   totalRoundTrips,
 } from "./mongoRoundTrips";
 
@@ -83,6 +85,7 @@ describe("round-trip profiler", () => {
     expect(roundTripReport()[0]!.topCollections[0]).toEqual({
       collection: "corporations",
       roundTrips: 300,
+      documents: 0,
     });
   });
 
@@ -122,5 +125,67 @@ describe("round-trip profiler", () => {
     expect(text).toContain("heavy");
     expect(text).toContain("75.0%");
     expect(text).toContain("corporations x75");
+  });
+});
+
+describe("document counting", () => {
+  /**
+   * Round trips rank what production pays (latency per call); documents rank
+   * what singleplayer pays (deserialization per document). They diverge
+   * sharply — one aggregate returning 61,398 documents is a single round trip
+   * — so the profiler has to carry both.
+   */
+  it("attributes returned documents to the open phase", () => {
+    enable();
+    beginPhaseProfiling("economicVitalSigns");
+    recordRoundTrip("ledgerEntries");
+    recordDocumentsReturned("ledgerEntries", 61398);
+    endPhaseProfiling("economicVitalSigns");
+
+    const row = roundTripReport()[0]!;
+    expect(row).toMatchObject({ phase: "economicVitalSigns", roundTrips: 1, documents: 61398 });
+    expect(row.topCollections[0]).toEqual({
+      collection: "ledgerEntries",
+      roundTrips: 1,
+      documents: 61398,
+    });
+  });
+
+  it("ranks phases by documents, not by round trips", () => {
+    enable();
+    beginPhaseProfiling("chatty");
+    for (let i = 0; i < 500; i++) {
+      recordRoundTrip("gameState");
+      recordDocumentsReturned("gameState", 1);
+    }
+    endPhaseProfiling("chatty");
+
+    beginPhaseProfiling("heavy");
+    recordRoundTrip("ledgerEntries");
+    recordDocumentsReturned("ledgerEntries", 61398);
+    endPhaseProfiling("heavy");
+
+    // "chatty" wins on round trips, "heavy" on documents. Documents decide.
+    expect(roundTripReport().map((r) => r.phase)).toEqual(["heavy", "chatty"]);
+    expect(totalDocumentsReturned()).toBe(61898);
+    expect(totalRoundTrips()).toBe(501);
+  });
+
+  it("ignores empty and negative batches", () => {
+    enable();
+    beginPhaseProfiling("p");
+    recordDocumentsReturned("things", 0);
+    recordDocumentsReturned("things", -5);
+    endPhaseProfiling("p");
+
+    expect(totalDocumentsReturned()).toBe(0);
+  });
+
+  it("records nothing when profiling is off", () => {
+    delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
+    resetRoundTripProfiler();
+    recordDocumentsReturned("things", 100);
+
+    expect(totalDocumentsReturned()).toBe(0);
   });
 });

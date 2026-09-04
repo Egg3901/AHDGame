@@ -24,8 +24,20 @@
  * boolean check on the hot path and nothing is allocated.
  */
 
-/** Commands per phase, and within a phase, per collection. */
-type PhaseCounts = { total: number; byCollection: Map<string, number> };
+/**
+ * Per phase: how many commands were issued, and how many documents came back.
+ *
+ * Both matter and they rank differently. Round trips are what production pays
+ * for (remote Mongo, latency per call). Documents returned are what
+ * singleplayer pays for (local Mongo, BSON deserialization per document). A
+ * phase can be cheap on one and ruinous on the other: one aggregate returning
+ * 61,398 documents is a single round trip.
+ */
+type PhaseCounts = {
+  total: number;
+  documents: number;
+  byCollection: Map<string, { roundTrips: number; documents: number }>;
+};
 
 interface ProfilerState {
   counts: Map<string, PhaseCounts>;
@@ -74,7 +86,9 @@ export function beginPhaseProfiling(phase: string): void {
   if (!roundTripProfilingEnabled()) return;
   const s = state();
   s.currentPhase = phase;
-  if (!s.counts.has(phase)) s.counts.set(phase, { total: 0, byCollection: new Map() });
+  if (!s.counts.has(phase)) {
+    s.counts.set(phase, { total: 0, documents: 0, byCollection: new Map() });
+  }
 }
 
 export function endPhaseProfiling(phase: string): void {
@@ -89,21 +103,47 @@ export function endPhaseProfiling(phase: string): void {
 export function recordRoundTrip(collection: string): void {
   if (!roundTripProfilingEnabled()) return;
   const s = state();
+  const entry = phaseEntry(s);
+  entry.total += 1;
+  collectionEntry(entry, collection).roundTrips += 1;
+}
+
+function phaseEntry(s: ProfilerState): PhaseCounts {
   const phase = s.currentPhase ?? "(outside any phase)";
   let entry = s.counts.get(phase);
   if (!entry) {
-    entry = { total: 0, byCollection: new Map() };
+    entry = { total: 0, documents: 0, byCollection: new Map() };
     s.counts.set(phase, entry);
   }
-  entry.total += 1;
-  entry.byCollection.set(collection, (entry.byCollection.get(collection) ?? 0) + 1);
+  return entry;
+}
+
+function collectionEntry(entry: PhaseCounts, collection: string) {
+  let row = entry.byCollection.get(collection);
+  if (!row) {
+    row = { roundTrips: 0, documents: 0 };
+    entry.byCollection.set(collection, row);
+  }
+  return row;
+}
+
+/**
+ * Documents a command returned, attributed to the open phase. Called from the
+ * driver monitor with the size of each result batch.
+ */
+export function recordDocumentsReturned(collection: string, count: number): void {
+  if (!roundTripProfilingEnabled() || count <= 0) return;
+  const entry = phaseEntry(state());
+  entry.documents += count;
+  collectionEntry(entry, collection).documents += count;
 }
 
 export interface RoundTripPhaseReport {
   phase: string;
   roundTrips: number;
-  /** The collections this phase talks to most, heaviest first. */
-  topCollections: { collection: string; roundTrips: number }[];
+  documents: number;
+  /** The collections this phase pulls the most documents from, heaviest first. */
+  topCollections: { collection: string; roundTrips: number; documents: number }[];
 }
 
 /** Phases by round-trip count, heaviest first. Does not clear the counters. */
@@ -112,18 +152,25 @@ export function roundTripReport(topPhases = 20): RoundTripPhaseReport[] {
     .map(([phase, entry]) => ({
       phase,
       roundTrips: entry.total,
+      documents: entry.documents,
       topCollections: [...entry.byCollection.entries()]
-        .map(([collection, roundTrips]) => ({ collection, roundTrips }))
-        .sort((a, b) => b.roundTrips - a.roundTrips)
+        .map(([collection, row]) => ({ collection, ...row }))
+        .sort((a, b) => b.documents - a.documents || b.roundTrips - a.roundTrips)
         .slice(0, 3),
     }))
-    .sort((a, b) => b.roundTrips - a.roundTrips)
+    .sort((a, b) => b.documents - a.documents || b.roundTrips - a.roundTrips)
     .slice(0, topPhases);
 }
 
 export function totalRoundTrips(): number {
   let total = 0;
   for (const entry of state().counts.values()) total += entry.total;
+  return total;
+}
+
+export function totalDocumentsReturned(): number {
+  let total = 0;
+  for (const entry of state().counts.values()) total += entry.documents;
   return total;
 }
 
