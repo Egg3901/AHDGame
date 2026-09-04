@@ -332,6 +332,16 @@ describe("buildPrimaryPartyDetail", () => {
       expect(detail?.viewerCampaign).toBeNull();
     });
 
+    it("falls back to the user's character when the active profile is malformed", async () => {
+      // Stale session data must not turn a read into a 500 inside ObjectId; the
+      // viewer still gets their own campaign back.
+      const detail = await build(rows(), "1", {
+        userId: userId.toString(),
+        activeCharacterId: "not-an-object-id",
+      });
+      expect(detail?.viewerCampaign?.currentCampaignState).toBe("IA");
+    });
+
     it("is null for a signed-out viewer", async () => {
       const detail = await build(rows(), "1", null);
       expect(detail?.viewerCampaign).toBeNull();

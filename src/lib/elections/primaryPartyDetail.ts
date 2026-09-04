@@ -409,9 +409,14 @@ async function resolveViewer(
   const { viewer, candidates } = input;
   if (!viewer?.userId) return { viewerCandidate: null, viewerCharacter: null };
 
-  const viewerCharId = viewer.activeCharacterId
-    ? new ObjectId(viewer.activeCharacterId)
-    : ((await getCharacterByUserId(db, viewer.userId))?._id ?? null);
+  // The active profile is server-side state from the user's own record, but a
+  // malformed value would throw inside ObjectId and turn stale session data
+  // into a 500 on a read. Fall back to the user's character instead.
+  const activeId =
+    viewer.activeCharacterId && ObjectId.isValid(viewer.activeCharacterId)
+      ? new ObjectId(viewer.activeCharacterId)
+      : null;
+  const viewerCharId = activeId ?? (await getCharacterByUserId(db, viewer.userId))?._id ?? null;
   if (!viewerCharId) return { viewerCandidate: null, viewerCharacter: null };
 
   const viewerCandidate =
