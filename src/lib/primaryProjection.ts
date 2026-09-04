@@ -219,7 +219,7 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
     );
 
     // Post-distribution adjustments (same shape as the stagger):
-    //   - In-state tick multiplier (up to +15% at cap)
+    //   - In-state tick multiplier (+5% per tick, +25% at the 5-tick cap)
     //   - Extra NPP penalty when a player is in the primary (matches stagger)
     // Home-state is already applied inside distribution via homeStateByCandidate.
     const adjusted: Record<string, number> = {};

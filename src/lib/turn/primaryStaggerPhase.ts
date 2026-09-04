@@ -708,8 +708,8 @@ export async function runPrimaryStaggerWaveIfDue(
         }
       );
 
-      // Apply primaryCampaignTicks as a multiplicative in-state bump: +3% per
-      // tick (cap +15%) for the candidate camped in this state. Sized so
+      // Apply primaryCampaignTicks as a multiplicative in-state bump: +5% per
+      // tick (cap +25%) for the candidate camped in this state. Sized so
       // sustained in-state campaigning meaningfully shifts a competitive state
       // without overriding demographic/ideology alignment.
       for (const ec of partyCandidates) {
