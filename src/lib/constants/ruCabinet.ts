@@ -76,6 +76,16 @@ export const RU_CABINET_POSITIONS = [
     order: 15,
     yearEnabled: 1775,
   },
+  {
+    id: "director_of_intelligence",
+    name: "Minister of State Security",
+    order: 16,
+    yearEnabled: 1775,
+    namesByYear: [
+      { from: 1775, name: "Minister of State Security" },
+      { from: 1954, name: "Chairman of the Committee for State Security" },
+    ],
+  },
 ] as const;
 
 export type RUCabinetPositionId = (typeof RU_CABINET_POSITIONS)[number]["id"];

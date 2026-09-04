@@ -186,6 +186,12 @@ export const INDEX_TARGETS = [
     description:
       "settlementPlays drain + per-turn indexes, the UNIQUE partial index that holds each character to one use of a personal play per turn, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
   },
+  {
+    id: "indexesIntelligence",
+    label: "Indexes — Intelligence",
+    description:
+      "UNIQUE indexes holding one intelligence agency per country, one network per (owner, target) pair and one coverage row per (owner, target, domain), plus the operation-log lookups by target and by owner. The read paths assume those invariants rather than re-checking them, so a world without these is quietly wrong rather than quietly slow.",
+  },
 ] as const satisfies readonly IndexTargetMeta[];
 
 export type IndexTargetId = (typeof INDEX_TARGETS)[number]["id"];

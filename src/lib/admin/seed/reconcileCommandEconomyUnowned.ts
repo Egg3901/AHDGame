@@ -11,9 +11,12 @@
  *   1. Upserts one SOE corporation + per-state plants for every sector in
  *      {@link commandEconomySoeSectors} (matched by assignedSectorTypes so
  *      live ObjectIds from prior id layouts are reused).
- *   2. Deletes unowned docs only for those SOE-covered sector types — so a
+ *   2. Deletes unowned docs and foreign-held corporate sectors only for the
+ *      (country, type, state) triples this run actually covers — so a
  *      dual-track country like CN keeps unowned headroom outside its shorter
- *      SOE set, while full-stack Eastern-bloc countries drain every sector.
+ *      SOE set, and a merge survivor keeps the absorbed regions' sectors the
+ *      seed built no row for (ticket #1271). Never delete what you did not
+ *      replace.
  *
  * Idempotent. Called at the end of `seedUnownedSectors` and from the deploy
  * migration for live worlds.
@@ -133,6 +136,25 @@ export async function reconcileCommandEconomyUnowned(
   let soesReused = 0;
   let sectorsUpserted = 0;
 
+  // States this run actually covers, per (country, sector type). The deletes
+  // below must never reach past them: after a merge (German reunification) the
+  // survivor owns regions the seed never built SOE rows for, and wiping those
+  // regions' sectors while creating nothing in their place destroys live
+  // production instead of reconciling it (ticket #1271).
+  const coveredStatesByCountryType = new Map<
+    string,
+    { countryId: CountryId; sectorType: CorporationType; stateIds: Set<string> }
+  >();
+  const markCovered = (countryId: CountryId, sectorType: CorporationType, stateId: string) => {
+    const key = `${countryId}:${sectorType}`;
+    let covered = coveredStatesByCountryType.get(key);
+    if (!covered) {
+      covered = { countryId, sectorType, stateIds: new Set<string>() };
+      coveredStatesByCountryType.set(key, covered);
+    }
+    covered.stateIds.add(stateId);
+  };
+
   for (const entry of seedEntries) {
     const sectorType = (entry.corporation.assignedSectorTypes?.[0] ??
       entry.corporation.type) as CorporationType;
@@ -199,12 +221,20 @@ export async function reconcileCommandEconomyUnowned(
       soesReused++;
     }
 
-    if (!dryRun) {
-      // Drop sectors for this country/type that still hang off a foreign corp
-      // (ObjectId overwrite fallout from the first #1014 heal).
+    for (const sector of entry.sectors) {
+      markCovered(countryId, sectorType, sector.stateId);
+    }
+
+    // Drop sectors for this country/type that still hang off a foreign corp
+    // (ObjectId overwrite fallout from the first #1014 heal) — but ONLY in
+    // states this run covers with a fresh SOE row. Anything outside that set
+    // (an absorbed region the seed has no row for) keeps its sectors; the
+    // nationalization mechanic, with compensation, is what moves those.
+    if (!dryRun && entry.sectors.length > 0) {
       await db.collection<CorporateSector>("corporateSectors").deleteMany({
         countryId,
         sectorType,
+        stateId: { $in: [...new Set(entry.sectors.map((s) => s.stateId))] },
         corporationId: { $ne: corpId },
       });
     }
@@ -227,17 +257,30 @@ export async function reconcileCommandEconomyUnowned(
     }
   }
 
-  // Drain unowned only where an SOE now covers the sector. CN (and any future
-  // short-list command country) must keep unowned outside its SOE set.
-  const unownedFilter = {
-    $or: commandCountries.map((countryId) => ({
+  // Drain unowned only where an SOE row now covers the (country, type, state).
+  // CN (and any future short-list command country) must keep unowned outside
+  // its SOE set — and after a merge the survivor must keep unowned in regions
+  // the seed built no row for, so a later nationalization still has a pool to
+  // carve into the National Corporation (ticket #1271).
+  const covered = [...coveredStatesByCountryType.values()].map(
+    ({ countryId, sectorType, stateIds }) => ({
       countryId,
-      sectorType: { $in: commandEconomySoeSectors(countryId) },
+      sectorType,
+      stateIds: [...stateIds],
+    })
+  );
+  const unownedFilter = {
+    $or: covered.map(({ countryId, sectorType, stateIds }) => ({
+      countryId,
+      sectorType,
+      stateId: { $in: stateIds },
     })),
   };
 
   let unownedDeleted = 0;
-  if (dryRun) {
+  if (covered.length === 0) {
+    log("reconcileCommandEconomyUnowned: no SOE rows covered — nothing to drain");
+  } else if (dryRun) {
     unownedDeleted = await db
       .collection<UnownedSector>("unownedSectors")
       .countDocuments(unownedFilter);
