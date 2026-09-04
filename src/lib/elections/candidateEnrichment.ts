@@ -396,6 +396,27 @@ export interface PartyGroup {
   partySocial: number;
   hasCompetitivePrimary: boolean;
   candidates: EnrichedCandidate[];
+
+  /**
+   * Presidential primaries only: projected delegates per candidate id, awarded
+   * states locked and the rest projected forward. `candidate.sharePct` carries
+   * the same figure as a percentage of `totalDelegates`; these are the raw
+   * counts the delegate race and the "to clinch" figures need.
+   */
+  projectedDelegates?: Record<string, number>;
+  /** Total delegates at stake in this party's primary. */
+  totalDelegates?: number;
+  /** Delegates needed to clinch the nomination (half the total, plus one). */
+  delegateMajority?: number;
+}
+
+/** One wave of the presidential primary calendar, with its live status. */
+export interface PrimaryCalendarWave {
+  label: string;
+  /** Turns remaining in the primary when this wave fires. */
+  turnsRemaining: number;
+  states: string[];
+  status: "complete" | "upcoming";
 }
 
 export function groupCandidatesByParty(

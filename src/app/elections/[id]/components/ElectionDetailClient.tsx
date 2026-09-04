@@ -21,6 +21,8 @@ import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
+import { PrimaryBlendView } from "../blend/PrimaryBlendView";
+import { BLEND, FONT } from "@/components/blend/tokens";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 
 interface ElectionDetailClientProps {
@@ -37,6 +39,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const { showToast } = useToast();
 
   const [election, setElection] = useState<ElectionDetail | null>(initialElection);
+  const [wire, setWire] = useState<string[]>([]);
   const [loading, setLoading] = useState(initialElection === null);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -105,6 +108,30 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     }
     fetchElection();
   }, [fetchElection]);
+
+  // Per-race wire headlines for the Blend ticker. A quiet race returns an
+  // empty list and the strip renders nothing.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/elections/${id}/wire?limit=8`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setWire(
+          Array.isArray(data?.items)
+            ? data.items.map((i: { headline: string }) => i.headline).filter(Boolean)
+            : []
+        );
+      } catch {
+        // non-critical: the ticker stays hidden
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   useEffect(() => {
     let visibilityTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -228,6 +255,80 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // disagree with the cap the turn resolver actually enforced. Legacy payloads
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
+
+  // Proposal D covers the presidential primary specifically: a delegate race
+  // across party fields. Down-ballot races have no delegate model, so they keep
+  // the existing view.
+  if (election.electionType === "president" && localInPrimary && !localIsUpcoming) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        <PrimaryBlendView election={election} wire={wire} />
+
+        <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
+          <h2 style={{ margin: "0 0 4px", fontFamily: FONT.serif, fontSize: 23, fontWeight: 600 }}>
+            Also on this race
+          </h2>
+          <p
+            style={{
+              margin: "0 0 18px",
+              fontFamily: FONT.serif,
+              fontSize: 14.5,
+              color: BLEND.muted,
+            }}
+          >
+            Filing, the schedule, the state map, and your campaign operations.
+          </p>
+
+          <ElectionHeader
+            election={election}
+            electionYear={electionYear}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            localIsUpcoming={localIsUpcoming}
+            canEnter={canEnter}
+            canWithdraw={canWithdraw}
+            actionLoading={actionLoading}
+            onEnter={handleEnter}
+            onWithdraw={handleWithdraw}
+          />
+
+          <ElectionScheduleCard
+            election={election}
+            localIsUpcoming={localIsUpcoming}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+          />
+
+          <PrimaryMapPills election={election} activeParties={activeParties} />
+
+          <AdminSection
+            electionId={id}
+            electionType={election.electionType}
+            isAdmin={election.isAdmin}
+            adminOpen={adminOpen}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            candidates={election.allCandidates}
+            onToggleAdmin={() => setAdminOpen((o) => !o)}
+            onSuccess={fetchElection}
+          />
+
+          {election.countryId === "US" && !!election.myCharId && (
+            <section id="state-org" className="mt-6 scroll-mt-6">
+              <StateOrganizationTab showHubLink />
+            </section>
+          )}
+
+          {election.countryId === "US" && (
+            <>
+              <CampaignsListPanel electionId={id} />
+              {!!election.myCharId && <CampaignManagerTab electionId={id} />}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

@@ -74,6 +74,27 @@ export interface PartyGroup {
   partySocial: number;
   hasCompetitivePrimary: boolean;
   candidates: CandidateDetail[];
+
+  /**
+   * Presidential primaries only: projected delegates per candidate id, awarded
+   * states locked and the rest projected forward. `candidate.sharePct` is the
+   * same figure expressed as a percentage of `totalDelegates`; these are the
+   * raw counts the delegate race and the "to clinch" figures need.
+   */
+  projectedDelegates?: Record<string, number>;
+  /** Total delegates at stake in this party's primary. */
+  totalDelegates?: number;
+  /** Delegates needed to clinch the nomination (half the total, plus one). */
+  delegateMajority?: number;
+}
+
+/** One wave of the presidential primary calendar, with its live status. */
+export interface PrimaryCalendarWave {
+  label: string;
+  /** Turns remaining in the primary when this wave fires. */
+  turnsRemaining: number;
+  states: string[];
+  status: "complete" | "upcoming";
 }
 
 export interface SnapshotEntry {
@@ -197,6 +218,11 @@ export interface ElectionDetail {
    * cached before ticket-1041 still typecheck; consumers fall back to 1.
    */
   primaryAdvanceCount?: number;
+  /**
+   * Presidential primaries only: the race's stagger calendar, each wave marked
+   * complete or upcoming against the waves the engine has already run.
+   */
+  primaryCalendar?: PrimaryCalendarWave[];
   byParty: PartyGroup[];
   allCandidates: CandidateDetail[];
   snapshotHistory: SnapshotPoint[];

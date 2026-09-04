@@ -15,7 +15,11 @@ import type {
   ContingentElectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
-import type { EnrichedCandidate, PartyGroup } from "@/lib/elections/candidateEnrichment";
+import type {
+  EnrichedCandidate,
+  PartyGroup,
+  PrimaryCalendarWave,
+} from "@/lib/elections/candidateEnrichment";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface PollingData {
@@ -145,6 +149,12 @@ export interface ElectionResponse {
    * (ticket-1041).
    */
   primaryAdvanceCount: number;
+
+  /**
+   * Presidential primaries only: the race's stagger calendar, each wave marked
+   * complete or upcoming against the waves the engine has already run.
+   */
+  primaryCalendar?: PrimaryCalendarWave[];
 
   // Core data (always present)
   candidates: EnrichedCandidate[];

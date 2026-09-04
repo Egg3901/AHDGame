@@ -50,6 +50,7 @@ import {
   groupCandidatesByParty,
   type EnrichedCandidate,
   type PartyGroup,
+  type PrimaryCalendarWave,
 } from "@/lib/elections/candidateEnrichment";
 import { getOrCreateVoteTally } from "@/lib/elections/voteTallyService";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
@@ -95,6 +96,7 @@ import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
 import {
   getAllStaggerStates,
+  getDelegateMajority,
   getPrimaryWaveSchedule,
   getTotalDelegatesForFamily,
   resolvePartyFamily,
@@ -129,6 +131,7 @@ async function applyPresidentialPrimaryDisplay(
   byParty: PartyGroup[];
   polling: PollingData | null;
   displayCandidates: EnrichedCandidate[];
+  primaryCalendar: PrimaryCalendarWave[];
 }> {
   // State membership is identical across schedules; the schedule is threaded so
   // this display path stays coherent with the race's actual calendar even if a
@@ -323,6 +326,11 @@ async function applyPresidentialPrimaryDisplay(
           partySocial: party?.socialPosition ?? rawDisplayCandidates[0]?.partySocial ?? 0,
           hasCompetitivePrimary: rawDisplayCandidates.length > 1,
           candidates: rawDisplayCandidates,
+          // Raw counts alongside the share, so the delegate race can show
+          // "1,946 of 4,833, 471 to clinch" rather than a bare percentage.
+          projectedDelegates,
+          totalDelegates: getTotalDelegatesForFamily(family, preset),
+          delegateMajority: getDelegateMajority(family, preset),
         },
         projectedDelegates,
         getTotalDelegatesForFamily(family, preset),
@@ -333,10 +341,22 @@ async function applyPresidentialPrimaryDisplay(
 
   projectedByParty.sort((a, b) => b.candidates.length - a.candidates.length);
 
+  // The stagger calendar, marked against the waves the engine has already run.
+  // `primaryStaggerWavesRun` is the runtime source of truth for how far the
+  // primary has got, so waves before it are settled and the rest are pending.
+  const wavesRun = tally?.primaryStaggerWavesRun ?? 0;
+  const primaryCalendar: PrimaryCalendarWave[] = schedule.waves.map((wave, i) => ({
+    label: wave.label,
+    turnsRemaining: wave.turnsRemaining,
+    states: wave.states,
+    status: i < wavesRun ? "complete" : "upcoming",
+  }));
+
   return {
     byParty: projectedByParty,
     polling: applyProjectedDelegatePolling(polling, projectedByParty),
     displayCandidates: projectedByParty.flatMap((group) => group.candidates),
+    primaryCalendar,
   };
 }
 
@@ -681,6 +701,8 @@ export async function _enrichElection(
   let economicReferendum: ElectionResponse["economicReferendum"];
   /** Read-through of the tally's factor ledger, fog-of-war applied (president only). */
   let factorLedger: ElectionResponse["factorLedger"];
+  /** Presidential-primary stagger calendar with each wave's live status. */
+  let primaryCalendar: PrimaryCalendarWave[] | undefined;
 
   if (isPresident && inPrimary) {
     const projectedDisplay = await applyPresidentialPrimaryDisplay(
@@ -700,6 +722,7 @@ export async function _enrichElection(
     byParty = projectedDisplay.byParty;
     polling = projectedDisplay.polling;
     displayCandidates = projectedDisplay.displayCandidates;
+    primaryCalendar = projectedDisplay.primaryCalendar;
   }
 
   if (isFull) {
@@ -1220,6 +1243,7 @@ export async function _enrichElection(
     isUpcoming,
     inGeneral,
     primaryAdvanceCount,
+    ...(primaryCalendar ? { primaryCalendar } : {}),
 
     // Core data
     candidates: displayCandidates,
