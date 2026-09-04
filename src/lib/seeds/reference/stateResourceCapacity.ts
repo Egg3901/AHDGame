@@ -578,3 +578,30 @@ export function getStateResourceCapacity(
 
   return result;
 }
+
+/**
+ * Look up a state's resource capacity entry, tolerating a post-merge owner.
+ *
+ * The map is keyed `${countryId}:${stateId}` against the world the reference
+ * was authored for. When a country absorbs another (German reunification: the
+ * FRG Laender accede to DD), the regions cross but the static map keeps their
+ * capacity under the OLD owner (`DE:NW`), so a strict `${countryId}:${stateId}`
+ * lookup reports no resources for land that still sits on the Ruhr coal.
+ * Prefer the live owner's key (cross-country state-id collisions such as
+ * `DE:SN` vs `DD:SN` must keep resolving to the owner's own budget), and fall
+ * back to any other owner key for the same region, sorted for determinism.
+ * Geology does not move when the flag above it changes.
+ */
+export function lookupStateResourceCapacity(
+  capacityMap: Record<string, StateResourceCapacityEntry>,
+  countryId: string,
+  stateId: string
+): StateResourceCapacityEntry | undefined {
+  const own = capacityMap[`${countryId}:${stateId}`];
+  if (own) return own;
+  const suffix = `:${stateId}`;
+  const fallbackKey = Object.keys(capacityMap)
+    .filter((key) => key.endsWith(suffix))
+    .sort()[0];
+  return fallbackKey ? capacityMap[fallbackKey] : undefined;
+}
