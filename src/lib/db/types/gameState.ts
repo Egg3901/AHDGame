@@ -249,6 +249,29 @@ export interface GameState {
   nppOffensiveJoinEnabled?: boolean;
   nppOffensiveJoinEnabledBy?: string;
   nppOffensiveJoinEnabledAt?: string;
+  /**
+   * When true, NPP-run countries build intelligence networks and run operations
+   * of their own. Default false, which leaves them purely defensive.
+   *
+   * This gates INITIATIVE only. Counter-intelligence posture is derived for every
+   * NPP country each turn regardless of this switch, because defence needs no
+   * order: a country nobody is playing still resists being spied on.
+   */
+  /**
+   * When true, a successful military covert action actually degrades the
+   * target's front supply and formation readiness. Default false.
+   *
+   * Off because it is a BALANCE change and the balance report that CLAUDE.md
+   * requires could not be produced: the live world has no engaged front to
+   * measure against (see scripts/sim/reports/). The code ships reviewed and
+   * inert; turning it on is a deliberate act that should follow the report.
+   */
+  intelligenceMilitarySabotageEnabled?: boolean;
+  intelligenceMilitarySabotageEnabledBy?: string;
+  intelligenceMilitarySabotageEnabledAt?: string;
+  nppIntelligenceOperationsEnabled?: boolean;
+  nppIntelligenceOperationsEnabledBy?: string;
+  nppIntelligenceOperationsEnabledAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;

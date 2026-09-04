@@ -4,7 +4,14 @@ import type { CabinetPositionMechanics } from "@/lib/constants/cabinetMechanicsT
 import { isMergerAuthoritySeat } from "@/lib/corporations/mergerReview/constants";
 
 export type CabinetTabId =
-  "overview" | "treasury" | "foreign" | "flagship" | "commands" | "doctrine" | "competition";
+  | "overview"
+  | "treasury"
+  | "foreign"
+  | "flagship"
+  | "commands"
+  | "doctrine"
+  | "competition"
+  | "intelligence";
 
 export interface CabinetTab {
   id: CabinetTabId;
@@ -40,6 +47,11 @@ export function isDefenseMinister(positionId: string): boolean {
 
 export function isForeignMinister(positionId: string): boolean {
   return FOREIGN_POSITION_IDS.has(positionId);
+}
+
+/** The intelligence seat carries the same id in every country that has one. */
+export function isIntelligenceMinister(positionId: string): boolean {
+  return positionId === "director_of_intelligence";
 }
 
 export function isCompetitionSeat(countryId: string, positionId: string): boolean {
@@ -84,6 +96,13 @@ export function resolveCabinetTabs(args: {
     tabs.push({ id: "competition", label: "Merger Review" });
   }
 
+  // The intelligence seat gains its own console. Gated on the Conflicts
+  // subsystem for the same reason Commands and Doctrine are: it is Cold War
+  // machinery, and a world with that switched off should not surface it.
+  if (isIntelligenceMinister(positionId) && conflictsEnabled) {
+    tabs.push({ id: "intelligence", label: "Intelligence" });
+  }
+
   // Defense seats gain Commands + Doctrine when the Conflicts subsystem is enabled.
   if (isDefenseMinister(positionId) && conflictsEnabled) {
     tabs.push({ id: "commands", label: "Commands" });
@@ -94,6 +113,7 @@ export function resolveCabinetTabs(args: {
 }
 
 export function seatIconName(positionId: string, mechanics: CabinetPositionMechanics): string {
+  if (isIntelligenceMinister(positionId)) return "shield";
   if (isDefenseMinister(positionId)) return "shield";
   if (isForeignMinister(positionId)) return "globe";
   const cat = mechanics.nationalMetrics[0]?.category;

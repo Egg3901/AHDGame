@@ -144,7 +144,7 @@ export const PARLIAMENTARY_CABINET_CONFIGS: Record<
     chamberMemberLabel: "Volkskammer Deputy",
     chamberName: "Volkskammer",
     description:
-      "The General Secretary appoints ministers to the Council of Ministers (Ministerrat der DDR) from the deputies of the Volkskammer without a separate confirmation vote. Key seats include the First Deputy Chairman, the Chairman of the State Planning Commission, the Council's liaison to the Staatsbank, the Minister for State Security, and the ministers of foreign affairs, national defence, finance, foreign and internal trade, and agriculture. Ministers can be dismissed at any time, but each post can only be filled once every 24 turns.",
+      "The General Secretary appoints ministers to the Council of Ministers (Ministerrat der DDR) from the deputies of the Volkskammer without a separate confirmation vote. Key seats include the First Deputy Chairman, the Chairman of the State Planning Commission, the Council's liaison to the Staatsbank, the Minister of Internal Affairs, and the ministers of foreign affairs, national defence, finance, foreign and internal trade, and agriculture. Ministers can be dismissed at any time, but each post can only be filled once every 24 turns.",
     hero: {
       src: "/api/images/hero/altes-stadthaus",
       alt: "Altes Stadthaus, Berlin — seat of the Council of Ministers",

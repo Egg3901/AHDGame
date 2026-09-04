@@ -134,6 +134,12 @@ export const UK_CABINET_POSITIONS = [
   },
   { id: "scotland", name: "Secretary of State for Scotland", order: 15, yearEnabled: 1775 },
   { id: "wales", name: "Secretary of State for Wales", order: 16, yearEnabled: 1964 },
+  {
+    id: "director_of_intelligence",
+    name: "Chief of the Secret Intelligence Service",
+    order: 17,
+    yearEnabled: 1909,
+  },
 ] as const;
 
 export type UKCabinetPositionId = (typeof UK_CABINET_POSITIONS)[number]["id"];

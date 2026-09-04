@@ -107,7 +107,7 @@ import {
 } from "@/lib/seeds/dd/ddCorporations";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { computeUnownedSeedRevenue } from "@/lib/admin/seed/seedUnownedSectors";
-import { getStateResourceCapacity } from "./stateResourceCapacity";
+import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateResourceCapacity";
 
 /**
  * Default legal structure stamped on each country's sovereign issuer corporation.
@@ -5239,7 +5239,8 @@ function buildCommandSoeCorpEntries(params: {
     const sectorStates =
       sectorType === "extraction"
         ? states.filter((state) => {
-            const resources = capacityMap[`${countryId}:${state.id}`]?.resources ?? {};
+            const resources =
+              lookupStateResourceCapacity(capacityMap, countryId, state.id)?.resources ?? {};
             if (Object.keys(resources).length > 0) return true;
             log?.(
               `[${countryId}] skipping extraction SOE sector in ${state.id}: ` +

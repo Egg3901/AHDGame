@@ -25,7 +25,8 @@ const { premier, ...sharedCouncilMechanics } = RU_CABINET_MECHANICS;
 /** GDR-authentic department strings, keyed by the shared position id. */
 const DD_DEPARTMENTS: Record<string, string> = {
   minister_of_defence: "Ministry of National Defence",
-  minister_of_internal_affairs: "Ministry for State Security",
+  minister_of_internal_affairs: "Ministry of Internal Affairs",
+  director_of_intelligence: "Ministry for State Security",
   chairman_of_gosplan: "State Planning Commission",
   gosbank_liaison: "Staatsbank der DDR",
   minister_of_internal_trade: "Ministry of Trade and Supply",

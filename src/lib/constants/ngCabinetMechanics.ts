@@ -347,4 +347,26 @@ export const NG_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
     ],
     regionalMetrics: [],
   },
+  director_of_intelligence: {
+    positionId: "director_of_intelligence",
+    department: "Intelligence Service",
+    sealImage: "",
+    nationalMetrics: [
+      {
+        category: "governance",
+        metricId: "publicTrust",
+        label: "Public Trust",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "publicSafety",
+        metricId: "crimeRate",
+        label: "Crime Rate",
+        format: "rate",
+        higherIsBetter: false,
+      },
+    ],
+    regionalMetrics: [],
+  },
 };

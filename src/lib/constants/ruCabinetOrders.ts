@@ -396,4 +396,28 @@ export const RU_MINISTERIAL_ORDERS: Record<string, MinisterialOrderConfig[]> = {
       ],
     },
   ],
+  director_of_intelligence: [
+    {
+      id: "counter_intelligence_sweep",
+      name: "Counter-Intelligence Sweep",
+      description:
+        "Turn the service inward for a season, rolling up foreign networks and the officials who shielded them.",
+      duration: 24,
+      effects: [
+        { metric: "corruptionIndex", modifier: -0.03, scope: "national" },
+        { metric: "publicTrust", modifier: 0.02, scope: "national" },
+      ],
+    },
+    {
+      id: "informant_network_expansion",
+      name: "Informant Network Expansion",
+      description:
+        "Widen the informant rolls. Violent crime falls where the files reach, and so do civil liberties.",
+      duration: 24,
+      effects: [
+        { metric: "violentCrimeRate", modifier: -0.025, scope: "national" },
+        { metric: "civilLiberties", modifier: -0.02, scope: "national" },
+      ],
+    },
+  ],
 };

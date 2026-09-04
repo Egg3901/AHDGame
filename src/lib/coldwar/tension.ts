@@ -31,7 +31,14 @@ export const TENSION_RELAXATION = 0.08;
 const LEDGER_CAP = 24;
 
 export type TensionEventKind =
-  "nuclear-test" | "buildup" | "escalation" | "crisis" | "detente" | "decay";
+  | "nuclear-test"
+  | "buildup"
+  | "escalation"
+  | "crisis"
+  | "detente"
+  | "decay"
+  /** An intelligence operation that was traced back to whoever ran it. */
+  | "espionage";
 
 export interface TensionEvent {
   turn: number;
