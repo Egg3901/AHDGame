@@ -158,8 +158,14 @@ describe(DEFECT_ID, () => {
     expect(plan.touched[0].ids).not.toContain(String(MULTI_ID));
   });
 
-  it("ignores a claim that is not a real sector type", async () => {
+  it("reports a claim that is not a real sector type rather than dropping it silently", async () => {
     const { db } = productionIncidentDb();
+    const result = await defect.detect(db, ctx);
+
+    // Every other exclusion is counted and named for the operator; an
+    // unreadable claim is something they should know about even though nothing
+    // here can fix it.
+    expect(result.notes?.join(" ")).toContain("not a real one");
     const plan = await defect.plan(db, ctx);
     expect(plan.touched[0].ids).not.toContain(String(NONSENSE_ID));
   });

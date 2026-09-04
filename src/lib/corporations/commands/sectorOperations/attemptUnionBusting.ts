@@ -87,10 +87,24 @@ export async function attemptUnionBusting(
   if (!sector) {
     return { ok: false, status: 404, error: "Sector not found" };
   }
+  // ONE COUNTRY, RESOLVED ONCE, used by the ban gate below and by the backlash
+  // at the end. It is the country the WORKFORCE is in, which is the state's, not
+  // wherever the corporation is domiciled (ticket #1271: the precedence
+  // `getSectorOperatingCountryId` sets, and the shape `buildCapacity` and
+  // `expandSector` carried). Resolving it in two places asked the same question
+  // twice and could get two answers: on a plant whose stored country went stale
+  // when its region changed hands, the gate would clear a bust under the old
+  // country's law and then fire the backlash at the new one, letting a CEO pay
+  // for a bust that is moot where it actually lands.
+  const bustingState = await db
+    .collection<State>("states")
+    .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
+  const countryId = bustingState?.countryId ?? sector.countryId ?? corporation.countryId;
+
   // Union ban (player suggestion #93): busting is moot while unions are
   // outlawed — unionization is already decaying to 0 by law and strikes
   // can't trigger, so don't let a CEO pay for nothing.
-  if (await isUnionsBanned(db, sector.countryId)) {
+  if (await isUnionsBanned(db, countryId)) {
     return {
       ok: false,
       status: 403,
@@ -209,16 +223,9 @@ export async function attemptUnionBusting(
     throw error;
   }
 
-  // The pulse and the union notification land in the country the WORKFORCE is
-  // in, which is the state's, not wherever the corporation is domiciled
-  // (ticket #1271: the same precedence `getSectorOperatingCountryId` sets, and
-  // the same shape `buildCapacity` and `expandSector` carried). Busting a union
-  // in a foreign plant otherwise fired the backlash at the wrong country's
-  // labour movement.
-  const bustingState = await db
-    .collection<State>("states")
-    .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
-  const countryId = bustingState?.countryId ?? sector.countryId ?? corporation.countryId;
+  // `countryId` is the one resolved above the ban gate: the same answer the
+  // legality check used, so a bust can never be permitted under one country's
+  // law and land on another's labour movement.
   if (success) {
     await fireUnionBustingSuccessPulse(db, sector.sectorType, countryId);
   } else {

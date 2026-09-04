@@ -3,6 +3,8 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import { attemptUnionBusting } from "./attemptUnionBusting";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import type { CountryId } from "@/lib/constants/countries";
 
 // Standalone-Mongo simulation, matching src/lib/indexFunds/fundCron.test.ts's
 // precedent — runs the sequential (non-transaction) fallback branch directly.
@@ -307,21 +309,48 @@ describe("attemptUnionBusting", () => {
 });
 
 describe("attemptUnionBusting — union ban gate (player suggestion #93)", () => {
-  it("returns 403 while the sector's country has unionsBanned (busting is moot)", async () => {
-    const corp = makeCorp();
-    const sector = makeSector(corp._id, { unionization: 60 });
-    const sectorUpdateOne = vi.fn();
+  /** The gate's db, with the state's country separable from the sector's. */
+  function banGateDb(
+    sector: CorporateSector,
+    { bannedIn, stateCountryId }: { bannedIn: string; stateCountryId?: string }
+  ) {
+    const sectorUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
     const db = {
       collection: (name: string) => {
         if (name === "corporateSectors")
           return { findOne: vi.fn().mockResolvedValue(sector), updateOne: sectorUpdateOne };
         if (name === "federalBudget")
-          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: true }) };
+          return {
+            // `isUnionsBanned` scopes its read by country, so the fixture answers
+            // per country rather than globally.
+            // `isUnionsBanned` reads by the national budget id, so the fixture
+            // answers per country the same way.
+            findOne: vi.fn().mockImplementation(async (filter: { _id?: string }) => ({
+              unionsBanned: filter?._id === getNationalBudgetId(bannedIn as CountryId),
+            })),
+          };
         if (name === "gameState")
           return { findOne: vi.fn().mockResolvedValue({ isProcessing: false }) };
+        if (name === "states")
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              _id: sector.stateId,
+              countryId: stateCountryId ?? sector.countryId,
+            }),
+          };
+        if (name === "gameConfig") return { findOne: vi.fn().mockResolvedValue(null) };
+        if (name === "corporations")
+          return { updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
+    return { db, sectorUpdateOne };
+  }
+
+  it("returns 403 while the sector's country has unionsBanned (busting is moot)", async () => {
+    const corp = makeCorp();
+    const sector = makeSector(corp._id, { unionization: 60 });
+    const { db, sectorUpdateOne } = banGateDb(sector, { bannedIn: "US" });
 
     const result = await attemptUnionBusting(db, corp, sector._id.toString(), 10);
     expect(result.ok).toBe(false);
@@ -330,6 +359,33 @@ describe("attemptUnionBusting — union ban gate (player suggestion #93)", () =>
       expect(result.error).toMatch(/banned under current law/i);
     }
     expect(sectorUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it("asks the law of the country the bust will actually land in", async () => {
+    // Ticket #1271. The gate and the backlash must answer to the same country.
+    // A plant whose stored country went stale when its region changed hands
+    // would otherwise be cleared under the OLD country's law and then have its
+    // backlash fired at the new one: the CEO pays for a bust that is moot where
+    // it lands.
+    const corp = makeCorp({ countryId: "US" });
+    const sector = makeSector(corp._id, { unionization: 60, countryId: "US" });
+    const { db, sectorUpdateOne } = banGateDb(sector, { bannedIn: "PL", stateCountryId: "PL" });
+
+    const result = await attemptUnionBusting(db, corp, sector._id.toString(), 10);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(403);
+    expect(sectorUpdateOne).not.toHaveBeenCalled();
+  });
+
+  it("does not refuse a bust that is legal where it lands", async () => {
+    // The mirror case: the stale stored country bans unions, the country the
+    // plant is actually in does not.
+    const corp = makeCorp({ countryId: "US" });
+    const sector = makeSector(corp._id, { unionization: 60, countryId: "US" });
+    const { db } = banGateDb(sector, { bannedIn: "US", stateCountryId: "PL" });
+
+    const result = await attemptUnionBusting(db, corp, sector._id.toString(), 10);
+    expect(result.ok).toBe(true);
   });
 
   // Ticket #1271. The backlash belongs to the country the WORKFORCE is in. Busting

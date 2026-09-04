@@ -355,8 +355,10 @@ async function buildSectors(
               capacityBookAnchor: 0,
               // Without this the row is a "flip turn" and `sectorTurn` lifts
               // `capitalStock` on the next tick, so the world would not keep the
-              // capacity the operator approved. Stamping it also keeps the shed
-              // pass from reading a brand-new plant as long-idle.
+              // capacity the operator approved. It is also the anchor
+              // `plantsUpkeepRampLambda` measures the governor ramp from, so a
+              // brand-new plant is not billed the full idle-capacity charge from
+              // its first turn.
               plantsStartTurn: currentTurn,
               // ...and because the flip is skipped, the 10% the flip would have
               // added is applied HERE instead. Every sibling sector in these
@@ -391,11 +393,12 @@ async function plan(db: Db, _ctx: HealContext): Promise<HealPlan> {
     // Said out loud because rollback CANNOT undo it, by deliberate design (see
     // `touched` below).
     "Rolling this run back deletes the plants but leaves each enterprise's " +
-      "soe.planTarget raised. The exact per-enterprise amounts are in the apply " +
-      "result. Reverse them by hand before re-applying: the plan target is only " +
-      "ever recomputed from zero, so a rollback followed by a second apply " +
-      "leaves it raised twice and permanently understates the shortfall that " +
-      "drives directed credit.",
+      "soe.planTarget raised, and the plan target is only ever recomputed from " +
+      "zero, so nothing puts it back on its own. Reverse it by hand from the " +
+      "per-enterprise amounts in the apply result, and do so BEFORE re-applying: " +
+      "a target raised against output that is not raises the measured shortfall, " +
+      "which draws the enterprise a larger share of a larger directed-credit " +
+      "budget, and directed credit is only 40 percent savings-backed.",
   ];
 
   return {
