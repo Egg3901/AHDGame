@@ -116,27 +116,34 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   // Per-race wire headlines for the Blend ticker. A quiet race returns an
   // empty list and the strip renders nothing.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
+  //
+  // Polled on the same cadence as the race itself (see the interval below).
+  // Fetching once would freeze the strip at page load: the delegate race and
+  // the board would move on a turn boundary while the returns beside them still
+  // showed whatever had happened before the reader opened the page.
+  const fetchWire = React.useCallback(
+    async (signal?: AbortSignal) => {
       try {
-        const res = await fetch(`/api/elections/${id}/wire?limit=8`);
+        const res = await fetch(`/api/elections/${id}/wire?limit=8`, { signal });
         if (!res.ok) return;
         const data = await res.json();
-        if (cancelled) return;
         setWire(
           Array.isArray(data?.items)
             ? data.items.map((i: { headline: string }) => i.headline).filter(Boolean)
             : []
         );
       } catch {
-        // non-critical: the ticker stays hidden
+        // non-critical: the ticker keeps whatever it last had
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    },
+    [id]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchWire(controller.signal);
+    return () => controller.abort();
+  }, [fetchWire]);
 
   // A concluded presidential race renders the Blend results screen, which is
   // built over the live-results payload (it carries the called flags and the
@@ -167,13 +174,18 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         if (visibilityTimeout) clearTimeout(visibilityTimeout);
-        visibilityTimeout = setTimeout(() => fetchElection(), 100);
+        visibilityTimeout = setTimeout(() => {
+          fetchElection();
+          void fetchWire();
+        }, 100);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
     const t = setInterval(() => {
-      if (document.visibilityState === "visible") fetchElection();
+      if (document.visibilityState !== "visible") return;
+      fetchElection();
+      void fetchWire();
     }, 60_000);
 
     return () => {
@@ -181,7 +193,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       if (visibilityTimeout) clearTimeout(visibilityTimeout);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchElection]);
+  }, [fetchElection, fetchWire]);
 
   const handleEnter = async () => {
     if (!election) return;
