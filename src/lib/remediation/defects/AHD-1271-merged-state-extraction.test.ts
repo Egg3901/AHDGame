@@ -210,7 +210,7 @@ describe(DEFECT_ID, () => {
     const plan = await defect.plan(db, ctx);
 
     expect(plan.touched).toEqual([]);
-    expect(plan.notes?.join(" ")).toContain("soe.planTarget raised");
+    expect(plan.notes?.join(" ")).toContain("rollback deletes exactly the plants it created");
   });
 
   it("builds the plants under the existing enterprise, never a new one", async () => {
@@ -312,25 +312,29 @@ describe(DEFECT_ID, () => {
     }
   });
 
-  it("raises the owning enterprise's plan target by what the new plants produce", async () => {
+  it("never writes the plan target, and reports what the chair would need to add", async () => {
+    // `soe.planTarget` is a PLAYER-SET number. Raising it here would change what
+    // the plan demands of an enterprise as a side effect of repairing its
+    // plants: on the live world it would have gone from 5.0M to about 13.4M,
+    // dropping fulfilment from 0.74 to 0.28 on the turn it applied.
     const { db, inserted, corpUpdates } = productionIncidentDb();
     const plan = await defect.plan(db, ctx);
     const result = await defect.apply(db, plan, ctx);
 
-    expect(corpUpdates).toHaveLength(1);
-    const inc = (corpUpdates[0].update as { $inc: Record<string, number> }).$inc;
-    const expected = Math.round(inserted.reduce((sum, d) => sum + (d.revenue as number), 0));
-    expect(inc["soe.planTarget"]).toBe(expected);
-    expect(result.documentsUpdated).toBe(1);
+    expect(corpUpdates).toHaveLength(0);
+    const added = Math.round(inserted.reduce((sum, d) => sum + (d.revenue as number), 0));
+    expect(result.notes?.join(" ")).toContain(`${added} more revenue of plant`);
+    expect(result.notes?.join(" ")).toContain("was NOT changed");
   });
 
-  it("leaves an enterprise with no soe overlay alone rather than inventing a plan", async () => {
+  it("is insert-only, so nothing it does needs a snapshot to reverse", async () => {
     const { db, corpUpdates } = productionIncidentDb({ planTarget: null });
     const plan = await defect.plan(db, ctx);
     const result = await defect.apply(db, plan, ctx);
 
-    expect(corpUpdates).toHaveLength(1);
-    expect(result.notes?.join(" ")).toContain("carries no soe.planTarget");
+    expect(corpUpdates).toHaveLength(0);
+    expect(plan.touched).toEqual([]);
+    expect(result.insertedIds?.[0].ids).toHaveLength(3);
   });
 
   it("records the ids that landed when a later insert fails", async () => {

@@ -389,16 +389,25 @@ async function plan(db: Db, _ctx: HealContext): Promise<HealPlan> {
     ...buildable.slice(0, 20).map(describe),
     ...skippedNotes(withoutEnterprise, unbuildable),
     "capacityBookAnchor is stamped 0 on every new plant: the state paid nothing " +
-      "for this capacity, so it carries no salvage or compensation basis.",
+      "for this capacity, so it carries no salvage or compensation basis. The " +
+      "eastern plants beside them carry roughly four times their capital stock as " +
+      "book value, seeded at list price on their own flip turn, so the restored " +
+      "plants are deliberately worth less to salvage, to nationalize and to sell.",
+    "Sizing follows the SURVIVOR's sector mix, not the region's authored one: " +
+      "getStateSectorWeights is keyed the same way the capacity table was, so an " +
+      "absorbed region falls back to its new country's baseline. That is the basis " +
+      "the sixteen sibling sectors already in these regions were built on, so the " +
+      "new plants match their neighbours. Re-keying those weights is a balance " +
+      "change and belongs in its own ticket with a simulation report.",
     // Said out loud because rollback CANNOT undo it, by deliberate design (see
     // `touched` below).
-    "Rolling this run back deletes the plants but leaves each enterprise's " +
-      "soe.planTarget raised, and the plan target is only ever recomputed from " +
-      "zero, so nothing puts it back on its own. Reverse it by hand from the " +
-      "per-enterprise amounts in the apply result, and do so BEFORE re-applying: " +
-      "a target raised against output that is not raises the measured shortfall, " +
-      "which draws the enterprise a larger share of a larger directed-credit " +
-      "budget, and directed credit is only 40 percent savings-backed.",
+    "soe.planTarget is left alone: it is the Gosplan chair's number, not a " +
+      "derived one, and moving it would change what the plan demands of an " +
+      "enterprise as a side effect of repairing its plants. The apply result " +
+      "reports how much revenue of plant each enterprise gained, so the chair can " +
+      "raise it deliberately.",
+    "Every write this heal makes is an insert, so a rollback deletes exactly the " +
+      "plants it created and touches nothing else.",
   ];
 
   return {
@@ -502,39 +511,36 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
     const revenue = typeof doc.revenue === "number" ? doc.revenue : 0;
     planTargetByCorp.set(corpId, (planTargetByCorp.get(corpId) ?? 0) + revenue);
   }
-  // NEVER THROWS PAST THIS POINT. The plants are already in the collection and
-  // their ids only reach rollback through the returned result, so a plan-target
-  // update that failed and propagated would take the receipt for live documents
-  // with it. A failure here is recorded in the notes instead; the sectors are
-  // correct either way and the plan target is recoverable by hand.
-  const planTargetNotes: string[] = [];
-  let planTargetsRaised = 0;
-  for (const [corpId, added] of planTargetByCorp) {
-    try {
-      const res = await db
-        .collection("corporations")
-        .updateOne(
-          { _id: new ObjectId(corpId), "soe.planTarget": { $exists: true } },
-          { $inc: { "soe.planTarget": Math.round(added) }, $set: { updatedAt: now } }
-        );
-      if (res.modifiedCount > 0) planTargetsRaised++;
-      planTargetNotes.push(
-        res.modifiedCount > 0
-          ? `raised ${corpId} soe.planTarget by ${Math.round(added)}`
-          : `${corpId} carries no soe.planTarget; left alone`
-      );
-    } catch (error) {
-      planTargetNotes.push(
-        `FAILED to raise ${corpId} soe.planTarget by ${Math.round(added)}, raise it by hand: ` +
-          `${error instanceof Error ? error.message : String(error)}`
-      );
-    }
+  // THE PLAN TARGET IS NOT THIS HEAL'S TO MOVE, and an earlier version of it
+  // did. `soe.planTarget` is documented as a PLAYER-SET number: the Gosplan
+  // chair writes it through `POST /command-economy/plan`, and on the live world
+  // they have (DD's extraction enterprise sits at 5,000,000 against a seed sum
+  // of about 6.5M, with a directive set two turns ago). Raising it by the new
+  // plants' revenue would have taken it to about 13.4M, dropping plan fulfilment
+  // from 0.74 to 0.28 on the turn it applied and multiplying the shortfall that
+  // feeds `cumulativeLosses`, the director's grade and the directed-credit
+  // weights by roughly seven. It also bypassed the
+  // `capacity x MAX_PLAN_TARGET_CAPACITY_MULTIPLE` ceiling every player-facing
+  // write enforces, and it was the one write here a rollback could not undo.
+  //
+  // So the heal reports the figure and leaves the decision with the chair. The
+  // plants are real either way; what the plan demands of them is a choice.
+  const addedRevenueByCorp = new Map<string, number>();
+  for (const doc of stamped) {
+    if (!insertedIdList.includes(String(doc._id))) continue;
+    const corpId = String(doc.corporationId);
+    const revenue = typeof doc.revenue === "number" ? doc.revenue : 0;
+    addedRevenueByCorp.set(corpId, (addedRevenueByCorp.get(corpId) ?? 0) + revenue);
   }
+  const planTargetNotes = [...addedRevenueByCorp].map(
+    ([corpId, added]) =>
+      `${corpId} now operates ${Math.round(added)} more revenue of plant. ` +
+      `soe.planTarget is player-set and was NOT changed; raise it by that much if the plan should cover the restored capacity.`
+  );
 
   return {
     documentsScanned: docs.length,
     documentsInserted: insertedIdList.length,
-    documentsUpdated: planTargetsRaised,
     notes: [
       `built ${insertedIdList.length} extraction plant(s) in ${[...new Set(toInsert.map((d) => d.stateId))].join(", ")}`,
       ...planTargetNotes,

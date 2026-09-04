@@ -358,4 +358,35 @@ describe("shedVacantCeoSectorsToUnowned", () => {
     expect(r.corporateSectorsUpdated).toBe(0);
     expect(db.collectionMocks["corporateSectors"]!.bulkWrite).not.toHaveBeenCalled();
   });
+
+  // Ticket #1271. The pool row this shed creates carries a countryId every
+  // reader filters on. Taking the sector's stored value and falling through to a
+  // literal "US" is the defect the pool heal repairs, still live in the hourly
+  // turn processor, where it could mint replacements for the very rows healed.
+  it("stamps the pool row with the country the STATE is in, never a hardcoded one", async () => {
+    const corpId = new ObjectId();
+    const corp = { _id: corpId, ceoId: null, ceoVacant: true } as unknown as Corporation;
+    const sector = {
+      _id: new ObjectId(),
+      corporationId: corpId,
+      stateId: "UKR_WES",
+      // Stale: the region changed hands and this was not re-scoped.
+      countryId: "US",
+      sectorType: "technology",
+      revenue: 10_000,
+      workers: 100,
+      updatedAt: new Date(0),
+    } as unknown as CorporateSector;
+
+    const lookups = makeMinimalLookups([corp], [sector]);
+    lookups.stateCountryMap = new Map([["UKR_WES", "UKR"]]);
+    await shedVacantCeoSectorsToUnowned(db as unknown as Db, lookups, now);
+
+    const unownedBulk = db.collectionMocks["unownedSectors"]!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { update: { $setOnInsert?: { countryId?: string } } };
+    }>;
+    const stamped = JSON.stringify(unownedBulk[0].updateOne.update);
+    expect(stamped).toContain("UKR");
+    expect(stamped).not.toContain('"US"');
+  });
 });
