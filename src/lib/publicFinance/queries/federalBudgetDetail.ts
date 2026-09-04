@@ -26,6 +26,8 @@ import { estimateCountryOwnedBudgetNetLocal } from "@/lib/budget/publicEnterpris
 import { readStateOwnershipConcentration } from "@/lib/nationalization/concentration";
 import { nationalLawCountryQuery } from "@/lib/policy/nationalPolicyRecords";
 import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
+import { loadDefenseFunding } from "./defenseFunding";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 /** One point on the fiscal-year trend series (stat strip compare + debt sparkline). */
 export interface FyHistoryPoint {
@@ -421,6 +423,18 @@ export async function loadFederalBudgetDetail(params: {
   // State Ownership Concentration Index (SOCI, 0–100) for the State Enterprises card.
   const stateOwnershipConcentration = await readStateOwnershipConcentration(db, budgetCountryId);
 
+  // Defence funding position (live budgets only): the enacted line the
+  // surplus tile counts vs the force's actual upkeep, plus the appropriation
+  // pot. Upkeep beyond the line leaves the treasury as debt without touching
+  // any spending row, which is the usual reason a balance falls under a
+  // surplus (ticket #1269). Read-only; the turn phase stays the sole writer.
+  const defenseFunding = await loadDefenseFunding(
+    db,
+    budgetCountryId,
+    storedNationalBudget,
+    await getGameStatePresetOrDefault(db)
+  );
+
   // Finance-Minister lens gate: only the seated finance-minister-equivalent (or
   // head of government when the seat is vacant) sees the confidential lens.
   const isFinanceMinister = characterId
@@ -433,6 +447,7 @@ export async function loadFederalBudgetDetail(params: {
       budget: resolvedNationalBudget,
       stateEnterpriseNet,
       stateOwnershipConcentration,
+      defenseFunding,
       // Signed national treasury balance (local currency) — the unified fiscal +
       // nationalization cash position. Positive = surplus, negative = national
       // debt. Pre-migration docs fall back to −debt.principal.
