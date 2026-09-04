@@ -1,7 +1,12 @@
-// GET /api/country/[code]/executive/cabinet/[positionId]/intelligence/assessment?target=RU
+// GET .../intelligence/assessment?target=RU&domain=strategic|military
 //
-// What this service currently knows about one target's nuclear posture, graded
-// by live (decayed) `strategic` coverage.
+// What this service currently knows about one target, graded by live (decayed)
+// coverage in the requested domain. `strategic` reads their nuclear posture;
+// `military` reads their fronts, strength and readiness.
+//
+// SIGHT ONLY. Nothing here grants authority, and `conflictVisibility` is
+// untouched: a non-belligerent with coverage gets an intelligence picture, never
+// a belligerent's own command console.
 //
 // The raw facts and the fog factor NEVER leave the server. Serving the factor
 // would make every estimate invertible, which is the mistake financialFogOfWar
@@ -14,6 +19,11 @@ import { handleRouteError } from "@/lib/api/errors";
 import { getCovertNuclearProgram } from "@/lib/db/collections/covertNuclearPrograms";
 import { getNuclearProgram } from "@/lib/db/collections/nuclearPrograms";
 import { getIntelligenceCoverageCollection } from "@/lib/db/collections/intelligence";
+import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
+import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { belligerentSideOf } from "@/lib/military/conflictVisibility";
+import { derivedSupplies } from "@/lib/military/occupation";
+import { assessMilitary } from "@/lib/intelligence/militaryAssessment";
 import { COVERT_CAPABLE, COVERT_STAGES } from "@/lib/military/covertNuclear";
 import { currentCoverage } from "@/lib/intelligence/coverage";
 import {
@@ -42,23 +52,73 @@ export async function GET(request: Request, { params }: IntelligenceRouteParams)
 
     const turn = await loadCurrentTurn(db);
 
+    const requestedDomain = new URL(request.url).searchParams.get("domain") ?? "strategic";
+    if (requestedDomain !== "strategic" && requestedDomain !== "military") {
+      return NextResponse.json({ error: "Unknown assessment domain" }, { status: 400 });
+    }
+
     const coverageRow = await (
       await getIntelligenceCoverageCollection(db)
-    ).findOne({ ownerCountryId: countryId, targetCountryId, domain: "strategic" });
+    ).findOne({ ownerCountryId: countryId, targetCountryId, domain: requestedDomain });
     const coverage = coverageRow
       ? currentCoverage(coverageRow.valueAtCollection, turn - coverageRow.lastCollectedTurn)
       : 0;
 
     // Below the existence tier nothing is revealed, so do not read the target's
-    // programme at all. Cheaper, and it keeps facts the caller has not earned
-    // from ever entering the request.
+    // state at all. Cheaper, and it keeps facts the caller has not earned from
+    // ever entering the request.
     if (assessmentTier(coverage) === "none") {
       return NextResponse.json({
         targetCountryId,
+        domain: requestedDomain,
         coverage,
         turn,
-        assessment: assessNuclear(
-          { hasProgramme: false, warheads: 0, adoptedNodeCount: 0, covert: null },
+        assessment:
+          requestedDomain === "military"
+            ? assessMilitary(
+                { formationCount: 0, meanReadiness: 0, fronts: [] },
+                coverage,
+                targetCountryId,
+                turn
+              )
+            : assessNuclear(
+                { hasProgramme: false, warheads: 0, adoptedNodeCount: 0, covert: null },
+                coverage,
+                targetCountryId,
+                turn
+              ),
+      });
+    }
+
+    if (requestedDomain === "military") {
+      const units = await getMilitaryUnitsCollection(db)
+        .find({ countryId: targetCountryId })
+        .project({ readiness: 1 })
+        .toArray();
+      const meanReadiness =
+        units.length === 0 ? 0 : units.reduce((a, u) => a + (u.readiness ?? 0), 0) / units.length;
+
+      // Derived supply, the same way the game derives it. Serving the stored
+      // base instead would report a figure no battle ever fights at.
+      const conflicts = await listActiveConflicts(db);
+      const fronts = conflicts
+        .filter((c) => belligerentSideOf(c, targetCountryId) !== null)
+        .map((c) => {
+          const supplies = derivedSupplies(c);
+          return {
+            conflictId: String(c._id),
+            supply:
+              belligerentSideOf(c, targetCountryId) === "A" ? supplies.supplyA : supplies.supplyB,
+          };
+        });
+
+      return NextResponse.json({
+        targetCountryId,
+        domain: requestedDomain,
+        coverage,
+        turn,
+        assessment: assessMilitary(
+          { formationCount: units.length, meanReadiness, fronts },
           coverage,
           targetCountryId,
           turn
@@ -91,6 +151,7 @@ export async function GET(request: Request, { params }: IntelligenceRouteParams)
 
     return NextResponse.json({
       targetCountryId,
+      domain: requestedDomain,
       coverage,
       turn,
       assessment,

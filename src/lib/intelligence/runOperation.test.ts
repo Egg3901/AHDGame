@@ -19,6 +19,8 @@ const state = {
 
 vi.mock("@/lib/coldwar/tension", () => ({ applyTensionEvent: vi.fn() }));
 vi.mock("./strategicAction", () => ({ applyStrategicAction: vi.fn() }));
+vi.mock("./militaryAction", () => ({ applyMilitaryAction: vi.fn() }));
+vi.mock("./flags", () => ({ readMilitarySabotageEnabled: vi.fn() }));
 vi.mock("@/lib/db/collections/intelligence", () => ({
   getIntelligenceNetworksCollection: async () => ({
     findOne: async () => state.network,
@@ -51,6 +53,8 @@ vi.mock("@/lib/db/collections/intelligence", () => ({
 
 const { applyTensionEvent } = await import("@/lib/coldwar/tension");
 const { applyStrategicAction } = await import("./strategicAction");
+const { applyMilitaryAction } = await import("./militaryAction");
+const { readMilitarySabotageEnabled } = await import("./flags");
 
 const db = {} as Db;
 
@@ -116,6 +120,12 @@ beforeEach(() => {
   state.networkWrites = [];
   state.agencyClaims = [];
   state.logRows = [];
+  vi.mocked(applyMilitaryAction).mockResolvedValue({
+    frontSabotaged: "war1",
+    formationsDegraded: 3,
+  });
+  // The gate is ON for the effect tests below; its own tests flip it.
+  vi.mocked(readMilitarySabotageEnabled).mockResolvedValue(true);
 });
 
 describe("runOperation gates", () => {
@@ -334,5 +344,87 @@ describe("strategic action reporting", () => {
     state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
     await run({ domain: "strategic", kind: "action", rolls: { success: 0.999, compromise: 0.99 } });
     expect(applyStrategicAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("military action effects", () => {
+  it("runs the military effect for a successful military action", async () => {
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "military", kind: "action", rolls: { success: 0, compromise: 0.99 } });
+    expect(applyMilitaryAction).toHaveBeenCalledWith(expect.anything(), "RU");
+  });
+
+  it("runs no military effect for a collection", async () => {
+    await run({ domain: "military", kind: "collect" });
+    expect(applyMilitaryAction).not.toHaveBeenCalled();
+  });
+
+  it("runs no military effect when the action misses", async () => {
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "military", kind: "action", rolls: { success: 0.999, compromise: 0.99 } });
+    expect(applyMilitaryAction).not.toHaveBeenCalled();
+  });
+
+  it("says plainly when a military action found nothing to break", async () => {
+    vi.mocked(applyMilitaryAction).mockResolvedValue({
+      frontSabotaged: null,
+      formationsDegraded: 0,
+    });
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "military",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    expect((r as { message: string }).message).toContain("nothing worth breaking");
+  });
+
+  it("never runs BOTH domain effects for one operation", async () => {
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "strategic", kind: "action", rolls: { success: 0, compromise: 0.99 } });
+    expect(applyMilitaryAction).not.toHaveBeenCalled();
+  });
+});
+
+describe("the military sabotage balance gate", () => {
+  it("applies no effect at all while the gate is OFF", async () => {
+    // The magnitudes are a balance change whose simulation report could not be
+    // produced (no engaged front in the live world). Shipping them live on
+    // unverified numbers is what the gate exists to prevent.
+    vi.mocked(readMilitarySabotageEnabled).mockResolvedValue(false);
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    const r = await run({
+      domain: "military",
+      kind: "action",
+      rolls: { success: 0, compromise: 0.99 },
+    });
+    expect(applyMilitaryAction).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ ok: true, outcome: "success" });
+    expect((r as { message: string }).message).toContain("nothing worth breaking");
+  });
+
+  it("still charges the operation while the gate is off", async () => {
+    // It costs the slot, the budget and the suspicion either way. A gated effect
+    // must not become a free way to probe a target.
+    vi.mocked(readMilitarySabotageEnabled).mockResolvedValue(false);
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "military", kind: "action", rolls: { success: 0, compromise: 0.99 } });
+    expect(state.agencyClaims).toHaveLength(1);
+    expect(state.logRows).toHaveLength(1);
+  });
+
+  it("applies the effect once the gate is on", async () => {
+    vi.mocked(readMilitarySabotageEnabled).mockResolvedValue(true);
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "military", kind: "action", rolls: { success: 0, compromise: 0.99 } });
+    expect(applyMilitaryAction).toHaveBeenCalled();
+  });
+
+  it("does not consult the gate for a strategic action", async () => {
+    // Strategic effects are not balance-gated: they move a covert programme's
+    // stage, not a battle.
+    state.coverage = { valueAtCollection: 100, lastCollectedTurn: 10 };
+    await run({ domain: "strategic", kind: "action", rolls: { success: 0, compromise: 0.99 } });
+    expect(readMilitarySabotageEnabled).not.toHaveBeenCalled();
   });
 });

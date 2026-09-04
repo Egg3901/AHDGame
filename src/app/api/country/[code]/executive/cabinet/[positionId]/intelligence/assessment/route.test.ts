@@ -15,6 +15,12 @@ vi.mock("@/lib/db/collections/nuclearPrograms", () => ({ getNuclearProgram: vi.f
 vi.mock("@/lib/db/collections/covertNuclearPrograms", () => ({
   getCovertNuclearProgram: vi.fn(),
 }));
+vi.mock("@/lib/db/collections/conflicts", () => ({ listActiveConflicts: vi.fn(async () => []) }));
+vi.mock("@/lib/db/collections/militaryUnits", () => ({
+  getMilitaryUnitsCollection: () => ({
+    find: () => ({ project: () => ({ toArray: async () => militaryUnits }) }),
+  }),
+}));
 
 const { getDb } = await import("@/lib/mongodb");
 const { requireAuth } = await import("@/lib/api/requireAuth");
@@ -22,6 +28,8 @@ const { resolveCabinetOfficeVisibility } = await import("@/lib/cabinet/officeVis
 const { getCountryAccessFromDb } = await import("@/lib/countryAccess");
 const { getNuclearProgram } = await import("@/lib/db/collections/nuclearPrograms");
 const { getCovertNuclearProgram } = await import("@/lib/db/collections/covertNuclearPrograms");
+
+let militaryUnits: Array<{ readiness: number }> = [];
 
 const HOLDER = "char_holder";
 const TURN = 10;
@@ -32,9 +40,10 @@ const call = (positionId = "director_of_intelligence", code = "us") => ({
   params: Promise.resolve({ code, positionId }),
 });
 
-async function get(target = "RU", positionId?: string, code?: string) {
+async function get(target = "RU", positionId?: string, code?: string, domain?: string) {
   const { GET } = await import("./route");
-  const res = await GET(new Request(`http://t?target=${target}`), call(positionId, code));
+  const q = `http://t?target=${target}${domain ? `&domain=${domain}` : ""}`;
+  const res = await GET(new Request(q), call(positionId, code));
   if (!res) throw new Error("route returned no response");
   return res;
 }
@@ -87,6 +96,7 @@ beforeEach(() => {
     characterId: HOLDER,
   });
   setCoverage(null);
+  militaryUnits = [];
 });
 
 describe("GET nuclear assessment", () => {
@@ -196,5 +206,55 @@ describe("GET nuclear assessment", () => {
     const body = await (await get("RU")).json();
     // 100 collected on turn 0, read on turn 10, decaying 2 a turn: 80.
     expect(body.coverage).toBe(80);
+  });
+});
+
+describe("military assessment", () => {
+  it("400s an unknown domain", async () => {
+    expect((await get("RU", undefined, undefined, "political")).status).toBe(400);
+  });
+
+  it("reads nothing without military coverage", async () => {
+    const body = await (await get("RU", undefined, undefined, "military")).json();
+    expect(body.domain).toBe("military");
+    expect(body.assessment.atWar).toBeNull();
+    expect(body.assessment.formationCount).toBeNull();
+  });
+
+  it("reads coverage from the MILITARY row, not the strategic one", async () => {
+    // A service deep in a country's nuclear programme has not thereby earned a
+    // reading of its order of battle.
+    db.collectionMocks.intelligenceCoverage.findOne.mockImplementation(
+      async (f: Record<string, unknown>) =>
+        f.domain === "military"
+          ? { valueAtCollection: ASSESS_EXISTENCE_COVERAGE, lastCollectedTurn: TURN }
+          : { valueAtCollection: ASSESS_EXACT_COVERAGE, lastCollectedTurn: TURN }
+    );
+    const body = await (await get("RU", undefined, undefined, "military")).json();
+    expect(body.assessment.tier).toBe("existence");
+  });
+
+  it("counts formations and reports peace at the exact tier", async () => {
+    setCoverage(ASSESS_EXACT_COVERAGE);
+    militaryUnits = [{ readiness: 80 }, { readiness: 60 }];
+    const body = await (await get("RU", undefined, undefined, "military")).json();
+    expect(body.assessment.formationCount).toBe(2);
+    expect(body.assessment.meanReadiness).toBe(70);
+    expect(body.assessment.atWar).toBe(false);
+    expect(body.assessment.fronts).toEqual([]);
+  });
+
+  it("never serves per-front supply below the exact tier", async () => {
+    setCoverage(ASSESS_ESTIMATE_COVERAGE);
+    militaryUnits = [{ readiness: 80 }];
+    const body = await (await get("RU", undefined, undefined, "military")).json();
+    expect(body.assessment.fronts).toBeNull();
+    expect(body.assessment.figuresAreEstimate).toBe(true);
+  });
+
+  it("defaults to the strategic domain when none is asked for", async () => {
+    setCoverage(ASSESS_EXISTENCE_COVERAGE);
+    const body = await (await get("RU")).json();
+    expect(body.domain).toBe("strategic");
   });
 });

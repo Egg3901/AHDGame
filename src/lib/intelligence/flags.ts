@@ -22,3 +22,22 @@ export async function readNppIntelligenceEnabled(db: Db): Promise<boolean> {
     .findOne({ _id: "current" }, { projection: { nppIntelligenceOperationsEnabled: 1 } });
   return nppIntelligenceFlagFrom(state?.nppIntelligenceOperationsEnabled);
 }
+
+/**
+ * Whether a successful military covert action has real effects.
+ *
+ * Fails closed, and for a different reason than the NPP switch: the magnitudes
+ * are a balance change whose simulation report could not be produced against a
+ * live world with no engaged front. Shipping the effects on unverified numbers
+ * is exactly what the balance gate exists to prevent.
+ */
+export function militarySabotageFlagFrom(value: unknown): boolean {
+  return value === true;
+}
+
+export async function readMilitarySabotageEnabled(db: Db): Promise<boolean> {
+  const state = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { intelligenceMilitarySabotageEnabled: 1 } });
+  return militarySabotageFlagFrom(state?.intelligenceMilitarySabotageEnabled);
+}

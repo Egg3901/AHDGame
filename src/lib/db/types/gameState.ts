@@ -257,6 +257,18 @@ export interface GameState {
    * NPP country each turn regardless of this switch, because defence needs no
    * order: a country nobody is playing still resists being spied on.
    */
+  /**
+   * When true, a successful military covert action actually degrades the
+   * target's front supply and formation readiness. Default false.
+   *
+   * Off because it is a BALANCE change and the balance report that CLAUDE.md
+   * requires could not be produced: the live world has no engaged front to
+   * measure against (see scripts/sim/reports/). The code ships reviewed and
+   * inert; turning it on is a deliberate act that should follow the report.
+   */
+  intelligenceMilitarySabotageEnabled?: boolean;
+  intelligenceMilitarySabotageEnabledBy?: string;
+  intelligenceMilitarySabotageEnabledAt?: string;
   nppIntelligenceOperationsEnabled?: boolean;
   nppIntelligenceOperationsEnabledBy?: string;
   nppIntelligenceOperationsEnabledAt?: string;

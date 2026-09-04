@@ -76,3 +76,17 @@ export const ASSESS_EXACT_COVERAGE = 80;
 
 /** Tension a strategic operation adds when it is ATTRIBUTED. Under a test's. */
 export const STRATEGIC_ATTRIBUTION_TENSION = 6;
+
+// ── Military sabotage (phase 3) ─────────────────────────────────────────────
+//
+// PROVISIONAL, and unlike the rest of this file these three are a BALANCE
+// CHANGE: they move real battle outcomes. They are set by the simulation report
+// at scripts/sim/reports/, not by judgement, and must not be tuned without
+// re-running it.
+
+/** Points taken off a front's SEEDED supply base. Never the derived reading. */
+export const SABOTAGE_SUPPLY_POINTS = 8;
+/** Points taken off each formation's readiness. */
+export const SABOTAGE_READINESS_POINTS = 10;
+/** Formations one operation can reach. Its readiest, which is where it hurts. */
+export const SABOTAGE_UNIT_COUNT = 5;

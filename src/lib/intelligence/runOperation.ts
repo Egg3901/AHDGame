@@ -28,6 +28,8 @@ import {
 import { clampCoverage, currentCoverage } from "./coverage";
 import { applyOperationToNetwork, isNetworkUsable } from "./network";
 import { resolveOperation } from "./resolveOperation";
+import { readMilitarySabotageEnabled } from "./flags";
+import { applyMilitaryAction, type MilitaryActionResult } from "./militaryAction";
 import { applyStrategicAction, type StrategicActionResult } from "./strategicAction";
 
 export type OperationKind = "collect" | "action";
@@ -195,8 +197,19 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
   // world. Reaching it required exact-tier coverage through the action gate, so
   // the operator has genuinely found the programme rather than guessed at it.
   let strategicEffect: StrategicActionResult | null = null;
-  if (domain === "strategic" && kind === "action" && resolution.outcome === "success") {
-    strategicEffect = await applyStrategicAction(db, agency.countryId, targetCountryId, turn);
+  let militaryEffect: MilitaryActionResult | null = null;
+  if (kind === "action" && resolution.outcome === "success") {
+    if (domain === "strategic") {
+      strategicEffect = await applyStrategicAction(db, agency.countryId, targetCountryId, turn);
+    } else if (domain === "military") {
+      // Gated: the magnitudes are a balance change and their report could not be
+      // produced (no engaged front in the live world). While off, the operation
+      // still resolves and still costs and risks everything it normally does; it
+      // simply lands on nothing, and says so.
+      militaryEffect = (await readMilitarySabotageEnabled(db))
+        ? await applyMilitaryAction(db, targetCountryId)
+        : { frontSabotaged: null, formationsDegraded: 0 };
+    }
   }
 
   // ── Compromise costs after ────────────────────────────────────────────────
@@ -219,7 +232,8 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     kind,
     resolution.outcome,
     resolution.compromise,
-    strategicEffect
+    strategicEffect,
+    militaryEffect
   );
 
   const opLog = await getIntelligenceOpLogCollection(db);
@@ -295,19 +309,26 @@ function describeOperation(
   kind: OperationKind,
   outcome: OperationOutcome,
   compromise: OperationCompromise,
-  strategicEffect: StrategicActionResult | null
+  strategicEffect: StrategicActionResult | null,
+  militaryEffect: MilitaryActionResult | null
 ): string {
   // A strategic action can succeed against a country that simply has nothing
   // undeclared to break. Reporting that as "did what it was sent to do" would be
   // a lie, and refusing it at the gate would leak whether a programme exists to
   // an operator whose coverage has not earned that answer.
   const emptyStrategic = strategicEffect !== null && !strategicEffect.sabotaged;
+  // Same honesty rule for a military action that reached a country with nothing
+  // to break: no front to cut and no formations to reach.
+  const emptyMilitary =
+    militaryEffect !== null &&
+    militaryEffect.frontSabotaged === null &&
+    militaryEffect.formationsDegraded === 0;
 
   const did =
     outcome === "success"
       ? kind === "collect"
         ? "The station filed a usable report."
-        : emptyStrategic
+        : emptyStrategic || emptyMilitary
           ? "The team reached the site and found nothing worth breaking."
           : strategicEffect?.crackdown === true
             ? "The programme lost ground, and the raid was public."
