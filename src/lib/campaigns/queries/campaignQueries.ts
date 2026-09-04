@@ -565,10 +565,12 @@ async function buildBriefing(args: {
       // id, not the character identity id — resolve the owner's row id.
       const ownerTallyId = candidateRow?._id.toString() ?? null;
 
-      const ownerNational = tally.factorLedger?.byCandidateNational.find(
-        (c) => c.candidateId === ownerTallyId
+      // The whole field, so "weak" can mean a bucket the owner is losing rather
+      // than merely a small one. Only the owner's own shares are emitted.
+      coalitionWeakness = buildCoalitionWeakness(
+        tally.factorLedger?.byCandidateNational,
+        ownerTallyId
       );
-      coalitionWeakness = buildCoalitionWeakness(ownerNational?.bucketAppeal);
 
       const gameState = await db
         .collection<{ _id: string; preset?: string }>("gameState")

@@ -531,8 +531,8 @@ describe("getCampaignDetail", () => {
         byCandidateNational: [
           {
             candidateId: rowId.toString(),
-            nominalWeight: 0,
-            finalVotes: 0,
+            nominalWeight: 1,
+            finalVotes: 1_000,
             factors: [],
             bucketAppeal: [
               {
@@ -546,6 +546,32 @@ describe("getCampaignDetail", () => {
                 candidateId: rowId.toString(),
                 bucket: "race:black",
                 appealShare: 0.1,
+                demoEP: -0.3,
+                demoSP: -0.2,
+              },
+            ],
+          },
+          {
+            // The rival takes most of the white vote and barely touches the
+            // black vote, so the owner is losing the group that is the LARGER
+            // part of their own coalition. Ranking on the owner's own appeal
+            // share would lead with the group they actually hold.
+            candidateId: rivalId.toString(),
+            nominalWeight: 1,
+            finalVotes: 1_000,
+            factors: [],
+            bucketAppeal: [
+              {
+                candidateId: rivalId.toString(),
+                bucket: "race:white",
+                appealShare: 0.9,
+                demoEP: 0.1,
+                demoSP: 0.2,
+              },
+              {
+                candidateId: rivalId.toString(),
+                bucket: "race:black",
+                appealShare: 0.02,
                 demoEP: -0.3,
                 demoSP: -0.2,
               },
@@ -570,8 +596,13 @@ describe("getCampaignDetail", () => {
       expect(detail.briefing.path.needed).toBeGreaterThan(0);
       expect(detail.briefing.path.leaders[0]).toMatchObject({ delegates: 120, name: "Nominee" });
     }
-    // Weakest census bucket sorts first (0.1 < 0.5) — buckets, never archetypes.
-    expect(detail.briefing?.coalitionWeakness[0]?.bucket).toBe("race:black");
+    // Weakest means the group the owner is LOSING, not the one that happens to
+    // be a small slice of their own coalition: they hold 5/14 of the white vote
+    // and 5/6 of the black vote, so white leads.
+    expect(detail.briefing?.coalitionWeakness[0]?.bucket).toBe("race:white");
+    expect(detail.briefing!.coalitionWeakness[0]!.bucketShare).toBeLessThan(
+      detail.briefing!.coalitionWeakness[1]!.bucketShare
+    );
     expect(detail.briefing?.cashRunway.funds).toBe(500_000);
   });
 

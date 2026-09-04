@@ -236,3 +236,24 @@ describe("in-flight purchases", () => {
     expect(screen.getAllByRole("button", { name: "Upgrade" })).toHaveLength(2);
   });
 });
+
+describe("what a lever costs", () => {
+  // The briefing used to carry an Action tradeoffs card listing all four
+  // levers' prices. It was removed as a duplicate, so the row that spends the
+  // money has to answer "what does this buy, and for how much" on both layouts.
+  it("puts the next tier's effect and price on the desktop row", () => {
+    renderSection();
+    expect(screen.getByText(/NEXT \+\$35k\/turn · \$50,000 · 10 actions/)).toBeTruthy();
+  });
+
+  it("puts the same line on the mobile row, which showed neither before", () => {
+    renderSection({ variant: "mobile" });
+    expect(screen.getByText(/NEXT \+\$35k\/turn · \$50,000 · 10 actions/)).toBeTruthy();
+    expect(screen.getByText("+$270,250/turn income")).toBeTruthy();
+  });
+
+  it("says nothing about a next tier once the lever is maxed", () => {
+    renderSection({ rows: [row({ nextStep: null })] });
+    expect(screen.queryByText(/NEXT /)).toBeNull();
+  });
+});

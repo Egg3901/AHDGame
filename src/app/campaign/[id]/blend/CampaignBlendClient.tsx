@@ -18,6 +18,8 @@ import { BlendOpsSection } from "./BlendOpsSection";
 import { BlendMoneySection } from "./BlendMoneySection";
 import { BlendLedger } from "./BlendLedger";
 import { BlendSidebar } from "./BlendSidebar";
+import { BlendScopeInline } from "@/components/blend/BlendScope";
+import { StatePresencePanel } from "../components/StatePresencePanel";
 import type { PickerResult } from "./BlendCharacterPicker";
 
 export interface CampaignBlendClientProps {
@@ -261,6 +263,34 @@ export function CampaignBlendClient({
         </div>
         <BlendTicker tag="WIRE" items={vm.wire} />
         <BlendVitals cells={vm.vitals} variant="mobile" />
+        {/* The rail this lives in on desktop is `hidden lg:block`, so mobile
+            needs its own copy or the only way to camp, surge or travel
+            disappears below the breakpoint. */}
+        {campaign.statePresence ? (
+          <div style={{ padding: "18px 16px 0" }}>
+            <div
+              style={{
+                paddingBottom: 10,
+                fontFamily: FONT.mono,
+                fontSize: 9.5,
+                letterSpacing: ".16em",
+                textTransform: "uppercase",
+                color: BLEND.mutedDimmer,
+              }}
+            >
+              Where you are campaigning
+            </div>
+            <BlendScopeInline>
+              <StatePresencePanel
+                presence={campaign.statePresence}
+                onChanged={() => {
+                  onRefresh();
+                  onRefreshMe();
+                }}
+              />
+            </BlendScopeInline>
+          </div>
+        ) : null}
         {showOps && opsRows.length > 0 ? (
           <BlendOpsSection
             rows={opsRows}

@@ -265,15 +265,27 @@ export function CoalitionWeaknessCard({ buckets }: { buckets: BriefingCoalitionB
       {buckets.length === 0 ? (
         <Muted>No coalition breakdown available yet.</Muted>
       ) : (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {buckets.map((b) => (
-            <Row
-              key={b.bucket}
-              label={prettyBucket(b.bucket)}
-              value={`${(b.appealShare * 100).toFixed(1)}%`}
-            />
-          ))}
-        </ul>
+        <>
+          <p
+            style={{
+              margin: "0 0 8px",
+              fontFamily: FONT.serif,
+              fontSize: 12.5,
+              color: BLEND.mutedDim,
+            }}
+          >
+            Your share of each group, weakest first.
+          </p>
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {buckets.map((b) => (
+              <Row
+                key={b.bucket}
+                label={prettyBucket(b.bucket)}
+                value={`${(b.bucketShare * 100).toFixed(1)}%`}
+              />
+            ))}
+          </ul>
+        </>
       )}
     </CardShell>
   );

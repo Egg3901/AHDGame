@@ -44,8 +44,8 @@ const delegateBriefing: CampaignBriefing = {
   },
   cashRunway: { funds: 500_000, netPerTurn: -25_000, turnsOfRunway: 20 },
   coalitionWeakness: [
-    { bucket: "race:black", appealShare: 0.1, demoEP: -0.3, demoSP: -0.2 },
-    { bucket: "race:white", appealShare: 0.5, demoEP: 0.1, demoSP: 0.2 },
+    { bucket: "race:black", appealShare: 0.1, bucketShare: 0.12, demoEP: -0.3, demoSP: -0.2 },
+    { bucket: "race:white", appealShare: 0.5, bucketShare: 0.61, demoEP: 0.1, demoSP: 0.2 },
   ],
 };
 

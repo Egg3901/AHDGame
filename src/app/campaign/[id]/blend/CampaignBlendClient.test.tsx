@@ -251,10 +251,13 @@ describe("where you are campaigning", () => {
     },
   };
 
-  it("puts the move controls in the rail, not a long scroll below", () => {
+  it("puts the move controls in reach on both layouts, not a long scroll below", () => {
+    // The desktop rail is `hidden lg:block`, so a single copy would mean the
+    // only way to camp, surge or travel vanishes below the breakpoint. Both
+    // trees render in the DOM, so each control appears exactly twice.
     renderClient({ campaign: { ...campaignFixture(), statePresence: presence } });
-    expect(screen.getAllByText(/Where you are campaigning/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByRole("button", { name: /Change state/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Where you are campaigning/i)).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /Change state/i })).toHaveLength(2);
   });
 
   it("offers travel rather than camping once the primary is over", () => {
@@ -264,7 +267,7 @@ describe("where you are campaigning", () => {
         statePresence: { ...presence, phase: "general" as const, primary: null },
       },
     });
-    expect(screen.getAllByRole("button", { name: /Travel elsewhere/i }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Travel elsewhere/i })).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /Surge home state/i })).toBeNull();
   });
 

@@ -16,7 +16,7 @@ import type {
   BriefingTippingPath,
   CampaignBriefing,
 } from "@/lib/campaigns/dto/campaignView";
-import type { CandidateBucketAppeal } from "@/lib/electionEngine/factorLedger";
+import type { CandidateNationalLedger } from "@/lib/electionEngine/factorLedger";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { allocateElectoralVotes } from "@/lib/turn/electionCalculations";
 import { electoralMajorityFor } from "@/lib/elections/presidentialResolutionDisplay";
@@ -26,24 +26,54 @@ const DEFAULT_TOP_LEADERS = 5;
 const DEFAULT_TOP_TIPPING = 5;
 
 /**
- * The owner candidate's weakest census buckets, weakest first. The ledger sorts
- * bucketAppeal strongest-first; we re-sort ascending on appeal share so the
- * card leads with the coalitions the campaign is under-performing.
+ * The census buckets the owner is losing, worst first.
+ *
+ * Ranked on the owner's share of each bucket across the whole field, not on the
+ * bucket's share of the owner's own appeal. Those are different questions, and
+ * the second one is not the one the card asks: `appealShare` is normalised per
+ * candidate, so a small demographic always sits near the bottom even when the
+ * owner is dominating it, and a large one sits near the top even when the owner
+ * is being beaten there.
+ *
+ * A candidate's absolute pull in a bucket is their share of their own appeal
+ * scaled by the votes that appeal actually won them, so the field's totals per
+ * bucket come from the same ledger without any new engine work.
  */
 export function buildCoalitionWeakness(
-  bucketAppeal: CandidateBucketAppeal[] | undefined,
+  field: CandidateNationalLedger[] | undefined,
+  ownerTallyId: string | null,
   topN: number = DEFAULT_TOP_BUCKETS
 ): BriefingCoalitionBucket[] {
-  if (!bucketAppeal || bucketAppeal.length === 0) return [];
-  return [...bucketAppeal]
-    .sort((a, b) => a.appealShare - b.appealShare)
-    .slice(0, topN)
-    .map((b) => ({
-      bucket: b.bucket,
-      appealShare: b.appealShare,
-      demoEP: b.demoEP,
-      demoSP: b.demoSP,
-    }));
+  if (!field || field.length === 0 || !ownerTallyId) return [];
+  const owner = field.find((c) => c.candidateId === ownerTallyId);
+  if (!owner?.bucketAppeal || owner.bucketAppeal.length === 0) return [];
+
+  // The field's total pull per bucket, owner included.
+  const fieldByBucket = new Map<string, number>();
+  for (const candidate of field) {
+    for (const b of candidate.bucketAppeal ?? []) {
+      fieldByBucket.set(
+        b.bucket,
+        (fieldByBucket.get(b.bucket) ?? 0) + b.appealShare * candidate.finalVotes
+      );
+    }
+  }
+
+  return owner.bucketAppeal
+    .map((b) => {
+      const total = fieldByBucket.get(b.bucket) ?? 0;
+      return {
+        bucket: b.bucket,
+        appealShare: b.appealShare,
+        // An uncontested bucket reads as fully held rather than as a divide by
+        // zero, which is what a one-candidate race genuinely is.
+        bucketShare: total > 0 ? (b.appealShare * owner.finalVotes) / total : 1,
+        demoEP: b.demoEP,
+        demoSP: b.demoSP,
+      };
+    })
+    .sort((a, b) => a.bucketShare - b.bucketShare)
+    .slice(0, topN);
 }
 
 /**

@@ -484,6 +484,32 @@ export function BlendOpsSection({
                     <i key={i} style={s} />
                   ))}
                 </div>
+                {/* Mobile showed neither the current effect nor a price: the
+                    reader got a bar and a plus. The desktop row carries both,
+                    and the briefing card that used to list the costs is gone,
+                    so this row has to answer "what does this buy" on its own. */}
+                <div
+                  style={{
+                    marginTop: 7,
+                    fontFamily: FONT.serif,
+                    fontSize: 13,
+                    color: BLEND.muted,
+                  }}
+                >
+                  {row.effect}
+                </div>
+                {row.nextStep ? (
+                  <div
+                    style={{
+                      marginTop: 2,
+                      fontFamily: FONT.mono,
+                      fontSize: 10.5,
+                      color: BLEND.mutedDimmer,
+                    }}
+                  >
+                    NEXT {row.nextStep.effect} · {row.nextStep.costText}
+                  </div>
+                ) : null}
               </>
             ) : (
               <>

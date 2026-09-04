@@ -271,6 +271,13 @@ export interface BriefingCoalitionBucket {
   bucket: string;
   /** Share of the candidate's appeal contributed by this bucket. */
   appealShare: number;
+  /**
+   * Share of this bucket's appeal, across the whole field, that the candidate
+   * holds. This is what "weak" is ranked on: a bucket where you hold little of
+   * the group is one you are losing, whereas `appealShare` alone ranks small
+   * groups last however well you are doing in them.
+   */
+  bucketShare: number;
   /** Contribution-weighted mean economic lean of the bucket. */
   demoEP: number;
   /** Contribution-weighted mean social lean of the bucket. */
