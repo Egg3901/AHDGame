@@ -194,9 +194,19 @@ export function totalDocumentsReturned(): number {
  * Render the profile for the turn log. Returns null when profiling is off, so
  * callers can skip the work entirely.
  */
+/**
+ * Phases to list. The default shows the head of the distribution; set
+ * AHD_TURN_ROUNDTRIP_TOP to see the tail, which is where an unattributed
+ * bucket hides.
+ */
+function reportPhaseLimit(fallback: number): number {
+  const raw = Number(process.env.AHD_TURN_ROUNDTRIP_TOP);
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+}
+
 export function formatRoundTripReport(topPhases = 20): string | null {
   if (!roundTripProfilingEnabled()) return null;
-  const report = roundTripReport(topPhases);
+  const report = roundTripReport(reportPhaseLimit(topPhases));
   if (report.length === 0) return null;
   const trips = totalRoundTrips();
   const docs = totalDocumentsReturned();
