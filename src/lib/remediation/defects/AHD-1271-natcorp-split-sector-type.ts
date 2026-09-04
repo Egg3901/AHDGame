@@ -231,7 +231,14 @@ async function plan(db: Db): Promise<HealPlan> {
     // A label, not a balance. No cash, shares or capital move.
     moneyDelta: 0,
     summary: `restate \`type\` from the claimed sector on ${rows.length} state enterprise(s)`,
-    notes: rows.slice(0, 20).map(describe),
+    notes: [
+      ...rows.slice(0, 20).map(describe),
+      // The extraction heal keeps `touched` empty precisely to avoid this; an
+      // update heal cannot, because restoring one field IS the snapshot.
+      "Rollback restores each enterprise's WHOLE document as it was at apply " +
+        "time, liquidCapital included, so roll this back promptly or not at all: " +
+        "several turns later it would also rewind everything else that has moved.",
+    ],
   };
 }
 

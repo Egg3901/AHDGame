@@ -113,7 +113,11 @@ async function plan(db: Db): Promise<HealPlan> {
     // Pool rows carry capacity headroom, not currency. Nothing is minted.
     moneyDelta: 0,
     summary: `re-key ${rows.length} unowned pool row(s) onto the country their state is in`,
-    notes: rows.slice(0, 20).map(describe),
+    notes: [
+      ...rows.slice(0, 20).map(describe),
+      "Rollback restores each pool row's whole document as it was at apply time, " +
+        "its headroom included, so roll this back promptly or not at all.",
+    ],
   };
 }
 
