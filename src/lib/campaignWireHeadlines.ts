@@ -109,3 +109,19 @@ export function wireHeadlineFavorabilitySwing(candidate: string, swingPp: number
     ? pick(FAVORABILITY_DOWN_TEMPLATES)(candidate, v)
     : pick(FAVORABILITY_UP_TEMPLATES)(candidate, v);
 }
+
+// ── Local attacks ───────────────────────────────────────────────────────────
+
+// Attribution is deliberate. An attack nobody can trace back to its buyer
+// reads as a bug in the favourability numbers rather than as a rival's move,
+// so every template names both candidates and the state.
+const STATE_ATTACK_TEMPLATES = [
+  (a: string, t: string, s: string) => `${up(a)} OPENS FIRE ON ${up(t)} IN ${up(s)}`,
+  (a: string, t: string, s: string) => `${up(a)} GOES NEGATIVE ON ${up(t)} ACROSS ${up(s)}`,
+  (a: string, t: string, s: string) => `${up(s)} AIRWAVES TURN: ${up(a)} HITS ${up(t)}`,
+  (a: string, t: string, s: string) => `${up(a)} TAKES THE FIGHT TO ${up(t)} IN ${up(s)}`,
+];
+
+export function wireHeadlineStateAttack(actor: string, target: string, stateName: string): string {
+  return pick(STATE_ATTACK_TEMPLATES)(actor, target, stateName);
+}

@@ -36,7 +36,8 @@ export type WireEventType =
   // render time instead of persisting them as events.
   | "campaign_ops_level"
   | "campaign_rally"
-  | "primary_tier_locked";
+  | "primary_tier_locked"
+  | "campaign_state_attack";
 
 export interface WireEvent {
   type: WireEventType;

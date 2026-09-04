@@ -5,6 +5,7 @@ import {
   wireHeadlinePrimaryTierLocked,
   wireHeadlineStateCalled,
   wireHeadlineFavorabilitySwing,
+  wireHeadlineStateAttack,
 } from "./campaignWireHeadlines";
 
 // Player-facing copy: CLAUDE.md forbids em and en dashes in any language.
@@ -126,6 +127,28 @@ describe("wireHeadlineFavorabilitySwing", () => {
     );
     every(
       () => wireHeadlineFavorabilitySwing("Hale", 3.1),
+      (h) => expect(h).not.toMatch(DASHES)
+    );
+  });
+});
+
+describe("wireHeadlineStateAttack", () => {
+  it("names the attacker, the target and the state every time", () => {
+    // An attack nobody can trace back to its buyer reads as a bug in the
+    // favourability numbers rather than as a rival's move.
+    every(
+      () => wireHeadlineStateAttack("Stevenson", "Kefauver", "Iowa"),
+      (h) => {
+        expect(h).toContain("STEVENSON");
+        expect(h).toContain("KEFAUVER");
+        expect(h).toContain("IOWA");
+      }
+    );
+  });
+
+  it("uses no em or en dash", () => {
+    every(
+      () => wireHeadlineStateAttack("Stevenson", "Kefauver", "Iowa"),
       (h) => expect(h).not.toMatch(DASHES)
     );
   });

@@ -9,6 +9,7 @@ import {
   emitOpsLevelWire,
   emitRallyWire,
   emitPrimaryTierWire,
+  emitStateAttackWire,
   investedInLever,
 } from "./raceWireEmit";
 
@@ -149,5 +150,30 @@ describe("state calls", () => {
     // emitter deliberately does not exist.
     const mod = await import("./raceWireEmit");
     expect("emitStateCalledWire" in mod).toBe(false);
+  });
+});
+
+describe("emitStateAttackWire", () => {
+  it("attributes the attack to both candidates and the state, scoped to the race", async () => {
+    await emitStateAttackWire(ELECTION_ID, "Stevenson", "Kefauver", "Iowa");
+    const [type, headline, opts] = vi.mocked(logWireEvent).mock.calls[0];
+    expect(type).toBe("campaign_state_attack");
+    expect(headline).toContain("STEVENSON");
+    expect(headline).toContain("KEFAUVER");
+    expect(headline).toContain("IOWA");
+    expect(opts).toMatchObject({ electionId: ELECTION_ID.toString() });
+  });
+
+  it("stays silent when either name is missing", async () => {
+    await emitStateAttackWire(ELECTION_ID, "", "Kefauver", "Iowa");
+    await emitStateAttackWire(ELECTION_ID, "Stevenson", "", "Iowa");
+    expect(logWireEvent).not.toHaveBeenCalled();
+  });
+
+  it("never throws when the wire is down", async () => {
+    vi.mocked(logWireEvent).mockRejectedValueOnce(new Error("wire is down"));
+    await expect(
+      emitStateAttackWire(ELECTION_ID, "Stevenson", "Kefauver", "Iowa")
+    ).resolves.toBeUndefined();
   });
 });

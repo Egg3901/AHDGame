@@ -4,6 +4,7 @@ import {
   wireHeadlineCampaignOpsLevel,
   wireHeadlineCampaignRally,
   wireHeadlinePrimaryTierLocked,
+  wireHeadlineStateAttack,
 } from "@/lib/campaignWireHeadlines";
 import { CAMPAIGN_CATEGORIES } from "@/lib/campaigns/dto/campaignView";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
@@ -133,3 +134,27 @@ export async function emitPrimaryTierWire(
 // sole authority on outcomes, so persisting a call as an engine event would
 // contradict that. The general-election ticker builds its call headlines with
 // `wireHeadlineStateCalled` from the same projection at render time.
+
+/**
+ * A candidate opened a local attack on a rival in a state.
+ *
+ * Attacks are attributed deliberately: an act against another player that
+ * nobody can trace reads as a bug rather than a mechanic.
+ */
+export async function emitStateAttackWire(
+  electionId: ObjectId | string,
+  actorName: string,
+  targetName: string,
+  stateName: string
+): Promise<void> {
+  try {
+    if (!actorName || !targetName) return;
+    await logWireEvent(
+      "campaign_state_attack",
+      wireHeadlineStateAttack(actorName, targetName, stateName),
+      { electionId: electionId.toString() }
+    );
+  } catch {
+    // Fire-and-forget.
+  }
+}
