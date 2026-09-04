@@ -7,7 +7,6 @@ import { resolveElectionYear } from "@/lib/utils/formatters";
 import { Modal, Skeleton } from "@/components/ui";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { CanvassingPanel } from "./components/CanvassingPanel";
-import { StatePresencePanel } from "./components/StatePresencePanel";
 import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
 import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
@@ -389,17 +388,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               />
             )}
 
-          {/* Where you are, then what being there lets you do. Canvassing is
-              gated on having a state, so the control that sets one sits
-              directly above it rather than somewhere else on the page. */}
-          <StatePresencePanel
-            presence={campaign.statePresence}
-            onChanged={() => {
-              fetchCampaign();
-              fetchMe();
-            }}
-          />
-
+          {/* The control that sets your state lives in the right rail with the
+              other things you can do about your standing. Canvassing stays
+              here because it needs the room, and it names the state it is
+              acting on, so it still reads on its own. */}
           {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
             <CanvassingPanel
               countryId={myCountryId ?? undefined}

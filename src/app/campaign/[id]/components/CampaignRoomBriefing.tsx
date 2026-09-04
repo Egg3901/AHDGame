@@ -1,7 +1,5 @@
 "use client";
 
-import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
-import type { CurrencyCode } from "@/lib/constants/currencies";
 import type {
   BriefingCoalitionBucket,
   CampaignBriefing,
@@ -16,13 +14,14 @@ interface CampaignRoomBriefingProps {
 /**
  * Owner-only campaign-room briefing, in the Blend treatment. Renders the
  * read-only strategic digest the server composed on `campaign.briefing`: the
- * path to victory, the cash runway, and where the coalition is weak. The parent
- * gates this on owner access, so a non-owner never reaches it; it also no-ops
- * defensively if the block is absent.
+ * path to victory, and where the coalition is weak. The parent gates this on
+ * owner access, so a non-owner never reaches it; it also no-ops defensively if
+ * the block is absent.
  *
- * It deliberately does not restate the operations levers. Strategic operations
- * renders those interactively above, with the next tier's effect and price on
- * the row that buys it.
+ * It deliberately restates nothing the page already shows. The operations
+ * levers are rendered interactively above, with the next tier's price on the
+ * row that buys it, and the cash runway rides on the war-chest vital beside
+ * the balance and burn rate it was quoting back.
  */
 export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
   const briefing = campaign.briefing;
@@ -64,10 +63,7 @@ export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
           buys it. What remains below is what the briefing alone knows. */}
       <div className="blend-briefing-grid">
         <PathToVictoryCard path={briefing.path} />
-        <CashRunwayCard cashRunway={briefing.cashRunway} currencyCode={campaign.currencyCode} />
-        <div className="blend-briefing-wide">
-          <CoalitionWeaknessCard buckets={briefing.coalitionWeakness} />
-        </div>
+        <CoalitionWeaknessCard buckets={briefing.coalitionWeakness} />
       </div>
 
       <style>{`
@@ -252,46 +248,6 @@ export function PathToVictoryCard({ path }: { path: CampaignBriefing["path"] }) 
           <Muted>No contested states yet.</Muted>
         </div>
       )}
-    </CardShell>
-  );
-}
-
-export function CashRunwayCard({
-  cashRunway,
-  currencyCode,
-}: {
-  cashRunway: CampaignBriefing["cashRunway"];
-  currencyCode: CurrencyCode;
-}) {
-  const fmt = (v: number) => formatCurrencyFaceAmount(v, currencyCode);
-  const net = cashRunway.netPerTurn;
-  const runway = cashRunway.turnsOfRunway;
-  return (
-    <CardShell title="Cash runway">
-      <div style={{ ...BIG, color: "#fbbf24" }}>{fmt(cashRunway.funds)}</div>
-      <p
-        style={{
-          margin: "5px 0 0",
-          fontFamily: FONT.mono,
-          fontSize: 11.5,
-          color: net >= 0 ? BLEND.positive : BLEND.negative,
-        }}
-      >
-        {net >= 0 ? "+" : "-"}
-        {fmt(Math.abs(net))}/turn
-      </p>
-      <p style={{ margin: "10px 0 0", fontFamily: FONT.serif, fontSize: 13.5, color: BLEND.muted }}>
-        {runway === null ? (
-          <span style={{ color: BLEND.positive }}>Balance is stable or growing.</span>
-        ) : (
-          <>
-            <span style={{ color: BLEND.ink, fontWeight: 600 }}>
-              {runway.toLocaleString("en-US")}
-            </span>{" "}
-            turn{runway === 1 ? "" : "s"} of runway at the current burn.
-          </>
-        )}
-      </p>
     </CardShell>
   );
 }

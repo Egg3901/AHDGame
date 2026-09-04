@@ -4,6 +4,9 @@ import { render, screen } from "@testing-library/react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { CampaignBlendClient } from "./CampaignBlendClient";
 
+// The state-presence controls in the rail navigate on success.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
+
 beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
 });
@@ -222,5 +225,51 @@ describe("sparkline", () => {
     expect(
       screen.getAllByText("Per-turn history starts building from this turn onward.").length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("where you are campaigning", () => {
+  const presence = {
+    electionId: "e1",
+    phase: "primary" as const,
+    currentStateId: "IA",
+    currentStateName: "Iowa",
+    playerActions: 25,
+    states: [{ id: "IA", name: "Iowa", actionCost: 3 }],
+    primary: {
+      currentCampaignState: "IA",
+      currentTicks: 3,
+      tickCap: 5,
+      homeState: "IA",
+      surgeUsed: false,
+      playerActions: 25,
+      playerFunds: 250_000,
+      surgeCostFunds: 25_000,
+      surgeCostActions: 3,
+      surgeBoost: 15,
+      states: [{ id: "IA", name: "Iowa", actionCost: 3 }],
+    },
+  };
+
+  it("puts the move controls in the rail, not a long scroll below", () => {
+    renderClient({ campaign: { ...campaignFixture(), statePresence: presence } });
+    expect(screen.getAllByText(/Where you are campaigning/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: /Change state/i }).length).toBeGreaterThan(0);
+  });
+
+  it("offers travel rather than camping once the primary is over", () => {
+    renderClient({
+      campaign: {
+        ...campaignFixture(),
+        statePresence: { ...presence, phase: "general" as const, primary: null },
+      },
+    });
+    expect(screen.getAllByRole("button", { name: /Travel elsewhere/i }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Surge home state/i })).toBeNull();
+  });
+
+  it("shows nothing there for someone who is not the candidate", () => {
+    renderClient({ campaign: { ...campaignFixture(), statePresence: null } });
+    expect(screen.queryByText(/Where you are campaigning/i)).toBeNull();
   });
 });

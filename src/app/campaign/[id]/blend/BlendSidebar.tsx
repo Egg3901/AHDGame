@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendCharacterPicker, type PickerResult } from "./BlendCharacterPicker";
+import { BlendScopeInline } from "@/components/blend/BlendScope";
+import { StatePresencePanel } from "../components/StatePresencePanel";
+import type { CampaignStatePresence } from "@/lib/elections/dto/campaignStatePresence";
 import type { CampaignBlendVM } from "./campaignBlendViewModel";
 
 export interface BlendSidebarProps {
@@ -20,6 +23,10 @@ export interface BlendSidebarProps {
   onNameRunningMate: (r: PickerResult) => void;
   onAppointManager: (r: PickerResult) => void;
   onRemoveManager: (characterId: string, name: string) => void;
+  /** Where the candidate is campaigning, and the controls to move. */
+  presence?: CampaignStatePresence | null;
+  /** Refetch after a move: the panel's data is built server-side. */
+  onPresenceChanged: () => void;
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
@@ -59,6 +66,8 @@ export function BlendSidebar({
   onNameRunningMate,
   onAppointManager,
   onRemoveManager,
+  presence,
+  onPresenceChanged,
 }: BlendSidebarProps) {
   const [pickingMate, setPickingMate] = useState(false);
 
@@ -208,8 +217,21 @@ export function BlendSidebar({
         </Block>
       ) : null}
 
-      {vm.strength ? (
+      {/* Where you are, high in the rail with the other things you can do
+          about your standing, rather than a long scroll below the fold. */}
+      {presence ? (
         <Block first={!vm.support}>
+          <Eyebrow>Where you are campaigning</Eyebrow>
+          <div style={{ marginTop: 10 }}>
+            <BlendScopeInline>
+              <StatePresencePanel presence={presence} onChanged={onPresenceChanged} />
+            </BlendScopeInline>
+          </div>
+        </Block>
+      ) : null}
+
+      {vm.strength ? (
+        <Block first={!vm.support && !presence}>
           <Eyebrow>Campaign strength</Eyebrow>
           <div
             style={{

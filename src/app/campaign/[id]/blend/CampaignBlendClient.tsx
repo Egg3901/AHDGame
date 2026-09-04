@@ -326,6 +326,11 @@ export function CampaignBlendClient({
               canManageTicket={canManage}
               canAct={canAct}
               busy={busy}
+              presence={campaign.statePresence}
+              onPresenceChanged={() => {
+                onRefresh();
+                onRefreshMe();
+              }}
               onFireRally={() => post("rally", `/api/campaigns/${campaign.id}/rally`)}
               onToggleTour={() =>
                 post("tour", `/api/campaigns/${campaign.id}/rally-tour`, {

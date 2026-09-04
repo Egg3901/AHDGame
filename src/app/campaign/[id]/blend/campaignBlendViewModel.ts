@@ -290,12 +290,20 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   // ── Vitals ────────────────────────────────────────────────────────────────
   const vitals: BlendVitalCell[] = [];
   if (campaign.funds != null) {
+    // The runway rides along with the balance and the burn rather than sitting
+    // in a card of its own further down: that card restated both figures from
+    // this cell to add one sentence, so the reader met the same money twice.
+    const runway = campaign.briefing?.cashRunway?.turnsOfRunway ?? null;
+    const perTurn = campaign.budget
+      ? `${campaign.budget.netIncome >= 0 ? "+" : "-"}${money(Math.abs(campaign.budget.netIncome), symbol)} / turn`
+      : null;
     vitals.push({
       label: "War chest",
       value: formatFundsCompact(campaign.funds, symbol),
-      sub: campaign.budget
-        ? `${campaign.budget.netIncome >= 0 ? "+" : "-"}${money(Math.abs(campaign.budget.netIncome), symbol)} / turn`
-        : undefined,
+      sub:
+        perTurn && runway != null
+          ? `${perTurn} · ${runway.toLocaleString("en-US")} turn${runway === 1 ? "" : "s"} of runway`
+          : (perTurn ?? undefined),
       color: OPS_LEVER_COLOR.fundraising,
     });
   }

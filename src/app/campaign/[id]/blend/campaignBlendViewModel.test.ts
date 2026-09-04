@@ -197,6 +197,35 @@ describe("vitals", () => {
     expect(chest?.sub).not.toContain("+");
   });
 
+  it("carries the runway beside the balance and burn it belongs to", () => {
+    // A Cash runway card used to restate the balance and the burn rate from
+    // this cell just to add the turn count, so the reader met the same money
+    // twice on one page.
+    const burning = campaignFixture();
+    burning.budget!.netIncome = -8_600;
+    burning.briefing = {
+      ...burning.briefing!,
+      cashRunway: { funds: 25_800, netPerTurn: -8_600, turnsOfRunway: 3 },
+    };
+    const chest = buildCampaignBlendViewModel(input({ campaign: burning })).vitals.find(
+      (c) => c.label === "War chest"
+    );
+    expect(chest?.sub).toContain("3 turns of runway");
+  });
+
+  it("says nothing about runway for a campaign that is not burning", () => {
+    const stable = campaignFixture();
+    stable.briefing = {
+      ...stable.briefing!,
+      cashRunway: { funds: 25_800, netPerTurn: 52_400, turnsOfRunway: null },
+    };
+    const chest = buildCampaignBlendViewModel(input({ campaign: stable })).vitals.find(
+      (c) => c.label === "War chest"
+    );
+    expect(chest?.sub).toContain("52,400");
+    expect(chest?.sub).not.toContain("runway");
+  });
+
   it("reads actions per turn from the budget, not a literal", () => {
     const cells = buildCampaignBlendViewModel(input()).vitals;
     expect(cells.find((c) => c.label === "Actions")?.sub).toContain("9");

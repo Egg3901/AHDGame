@@ -50,7 +50,7 @@ const delegateBriefing: CampaignBriefing = {
 };
 
 describe("CampaignRoomBriefing", () => {
-  it("renders the delegate path, runway and weakest bucket", () => {
+  it("renders the delegate path and the weakest bucket", () => {
     render(<CampaignRoomBriefing campaign={campaignWith(delegateBriefing)} />);
     expect(screen.getByText(/Campaign Room/i)).toBeTruthy();
     expect(screen.getByText(/Path to victory: delegates/i)).toBeTruthy();
@@ -59,8 +59,9 @@ describe("CampaignRoomBriefing", () => {
     expect(screen.getByText("Rival")).toBeTruthy();
     // Weakest bucket leads the coalition card.
     expect(screen.getByText(/Black · Race/i)).toBeTruthy();
-    // Runway with a burn shows a turn count.
-    expect(screen.getByText(/of runway at the current burn/i)).toBeTruthy();
+    // The runway rides on the war-chest vital now, beside the balance and burn
+    // rate the card here was quoting back.
+    expect(screen.queryByText(/Cash runway/i)).toBeNull();
     // The levers themselves are not repeated here: Strategic operations above
     // renders them interactively, with the next tier's price on the row.
     expect(screen.queryByText(/Operations saturation/i)).toBeNull();
