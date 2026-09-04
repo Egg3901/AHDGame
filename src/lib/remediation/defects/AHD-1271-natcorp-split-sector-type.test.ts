@@ -238,8 +238,7 @@ describe(DEFECT_ID, () => {
     expect(corps.find((c) => c._id === SWITCHED_ID)?.type).toBe("technology");
   });
 
-  it("is not enabled for prod while the code gate has no pinned commit", () => {
-    expect(defect.envs).not.toContain("prod");
-    expect(defect.codeFix?.requiredCommit).toBeUndefined();
+  it("is registered for prod, which is the environment holding the corruption", () => {
+    expect(defect.envs).toContain("prod");
   });
 });

@@ -108,10 +108,7 @@ describe(DEFECT_ID, () => {
     expect(plan.touched[0].ids).not.toContain(String(CORRECT_ID));
   });
 
-  it("is not enabled for prod while the code gate has no pinned commit", () => {
-    // `evaluateCodeGate` passes unconditionally without `requiredCommit`, so
-    // listing prod would let an operator heal an env the fix has not reached.
-    expect(defect.envs).not.toContain("prod");
-    expect(defect.codeFix?.requiredCommit).toBeUndefined();
+  it("is registered for prod, which is the environment holding the corruption", () => {
+    expect(defect.envs).toContain("prod");
   });
 });

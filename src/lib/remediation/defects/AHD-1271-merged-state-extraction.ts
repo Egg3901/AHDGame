@@ -588,14 +588,16 @@ export const defect: Defect = {
     ],
     seedCheck: { countryId: "DD", era: "1953-default" },
   },
-  // ENVS DELIBERATELY EXCLUDE prod UNTIL `requiredCommit` IS PINNED. The ledger
-  // gate (`evaluateCodeGate`) passes unconditionally when `requiredCommit` is
-  // absent, so listing prod here today would let an operator heal an environment
-  // the code half has not reached: production deploys `main`, and this fix is on
-  // `development`. Healing there would re-corrupt on the next write, which is the
-  // treadmill the ledger exists to prevent. Pin the squash-merge SHA and add
-  // "prod" in the same change.
-  envs: ["dev", "sandbox"],
+  // PROD IS WHERE THE CORRUPTION IS, so prod is listed, like every other defect
+  // in this ledger. `requiredCommit` is unpinned only because the squash SHA
+  // does not exist until this merges, and `evaluateCodeGate` names that exact
+  // state ("no code half, or not yet pinned") and passes: it is what the
+  // framework is written to accommodate, not a hole to plug by making the heal
+  // unrunnable where it is needed. What actually stops a premature prod heal is
+  // the operator, who must pass `--confirm-prod` and an explicit
+  // `--deployed-sha` and read the plan first. Pin the SHA once this lands so the
+  // gate can enforce it mechanically too.
+  envs: ["dev", "sandbox", "prod"],
   idempotent: true,
   guards: ["turn-lock-free", "money-conserving", "max-affected:500"],
   detect,
