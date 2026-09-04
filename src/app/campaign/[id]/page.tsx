@@ -169,71 +169,54 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
-        <main className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-8 space-y-6">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-4 w-36" />
-            <Skeleton className="h-3 w-3 rounded-sm" />
-            <Skeleton className="h-4 w-44" />
+      <div
+        className={isEmbedded ? "" : "min-h-screen"}
+        style={{ background: BLEND.page, color: BLEND.ink }}
+      >
+        <div style={{ padding: "22px 26px", borderBottom: `1px solid ${BLEND.hairlineStrong}` }}>
+          <Skeleton className="h-3 w-40" />
+          <div className="mt-4">
+            <Skeleton className="h-8 w-72" />
           </div>
-
-          {/* Header */}
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-2 min-w-0">
-              <Skeleton className="h-9 w-64" />
-              <div className="flex gap-3">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-32" />
+          <div className="mt-3">
+            <Skeleton className="h-4 w-96" />
+          </div>
+        </div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(4, 1fr)",
+            borderBottom: `1px solid ${BLEND.hairlineStrong}`,
+          }}
+        >
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              style={{
+                padding: "16px 20px",
+                ...(i < 3 ? { borderRight: `1px solid ${BLEND.hairline}` } : {}),
+              }}
+            >
+              <Skeleton className="h-2.5 w-20" />
+              <div className="mt-2">
+                <Skeleton className="h-6 w-24" />
+              </div>
+              <div className="mt-2">
+                <Skeleton className="h-3 w-28" />
               </div>
             </div>
-            <Skeleton className="h-8 w-36 rounded-lg shrink-0" />
-          </div>
-
-          {/* Resource overview */}
-          <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-            <Skeleton className="h-4 w-36" />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="space-y-1">
-                  <Skeleton className="h-2.5 w-16" />
-                  <Skeleton className="h-6 w-24" />
-                </div>
-              ))}
+          ))}
+        </div>
+        <div style={{ padding: "24px 26px" }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{ padding: "14px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}>
+              <Skeleton className="h-5 w-56" />
+              <div className="mt-2">
+                <Skeleton className="h-2 w-full" />
+              </div>
             </div>
-            <Skeleton className="h-2 w-full rounded-full" />
-          </div>
-
-          {/* Operations section */}
-          <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
-            <Skeleton className="h-4 w-44" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="rounded-lg border border-card-border p-3 space-y-2">
-                  <Skeleton className="h-3 w-20" />
-                  <div className="flex items-center justify-between">
-                    <Skeleton className="h-5 w-10" />
-                    <Skeleton className="h-6 w-20 rounded-lg" />
-                  </div>
-                  <Skeleton className="h-1.5 w-full rounded-full" />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Budget section */}
-          <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
-            <Skeleton className="h-4 w-28" />
-            <div className="grid grid-cols-2 gap-4">
-              {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="space-y-1">
-                  <Skeleton className="h-2.5 w-20" />
-                  <Skeleton className="h-5 w-28" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
+          ))}
+        </div>
       </div>
     );
   }
