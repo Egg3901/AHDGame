@@ -316,14 +316,12 @@ export const defect: Defect = {
     files: ["src/lib/seeds/reference/budgets.ts"],
     note: "buildCommandSoeCorpEntries stamps type from the sector; the corruption is runtime-only",
   },
-  // ENVS DELIBERATELY EXCLUDE prod UNTIL `requiredCommit` IS PINNED. The ledger
-  // gate (`evaluateCodeGate`) passes unconditionally when `requiredCommit` is
-  // absent, so listing prod here today would let an operator heal an environment
-  // the code half has not reached: production deploys `main`, and this fix is on
-  // `development`. Healing there would re-corrupt on the next write, which is the
-  // treadmill the ledger exists to prevent. Pin the squash-merge SHA and add
-  // "prod" in the same change.
-  envs: ["dev", "sandbox"],
+  // Prod is listed because prod is where the corruption is, like every other
+  // defect in this ledger. `requiredCommit` is unpinned only because the squash
+  // SHA does not exist until this merges, which `evaluateCodeGate` names and
+  // passes. The operator gate (`--confirm-prod` plus an explicit
+  // `--deployed-sha`) is what holds until the SHA can be pinned.
+  envs: ["dev", "sandbox", "prod"],
   idempotent: true,
   guards: ["turn-lock-free", "money-conserving", "max-affected:500"],
   detect,

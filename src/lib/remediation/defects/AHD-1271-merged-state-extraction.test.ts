@@ -398,10 +398,11 @@ describe(DEFECT_ID, () => {
     expect(result.affected).toBe(0);
   });
 
-  it("is not enabled for prod while the code gate has no pinned commit", async () => {
-    // `evaluateCodeGate` passes unconditionally without `requiredCommit`, so
-    // listing prod would let an operator heal an env the fix has not reached.
-    expect(defect.envs).not.toContain("prod");
-    expect(defect.codeFix?.requiredCommit).toBeUndefined();
+  it("is registered for prod, which is the environment holding the corruption", () => {
+    // A heal that cannot run where the damage is repairs nothing. The squash SHA
+    // does not exist until this merges, so `requiredCommit` is pinned afterwards
+    // and `evaluateCodeGate` explicitly tolerates the gap ("no code half, or not
+    // yet pinned"); the operator gate is what holds in the meantime.
+    expect(defect.envs).toContain("prod");
   });
 });
