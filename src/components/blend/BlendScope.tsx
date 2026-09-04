@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { BLEND, FONT } from "./tokens";
+import { BLEND, BLEND_CONTAINER, FONT } from "./tokens";
 import styles from "./blendScope.module.css";
 
 export interface BlendScopeProps {
@@ -23,7 +23,10 @@ export interface BlendScopeProps {
  */
 export function BlendScope({ title, lede, children }: BlendScopeProps) {
   return (
-    <section style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
+    <section className={BLEND_CONTAINER}>
+      {/* The shell above ends at the container edge, so the separating rule
+          lives inside the column rather than spanning the viewport. */}
+      <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, paddingTop: 24 }} />
       <h2
         style={{
           margin: lede ? "0 0 4px" : "0 0 18px",

@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { BLEND, FONT } from "./tokens";
+import { BLEND, BLEND_CONTAINER, FONT } from "./tokens";
 
 export interface BlendShellProps {
   /** Desktop left rail. Hidden below the breakpoint. */
@@ -21,22 +21,32 @@ export interface BlendShellProps {
  * `lg` the rails drop out and the centre column runs full width, which is what
  * the design's mobile artboards show; the screens supply their own sticky
  * mobile header and fold the rails' content into the stacked body.
+ *
+ * The frame sits in the app's standard page container (`BLEND_CONTAINER`)
+ * rather than running edge to edge. The Claude Design artboards are full-bleed
+ * because an artboard has no browser chrome around it; on a real 1920px screen
+ * that left the rails pinned to the viewport edges while every other page in
+ * the app is a centred `max-w-7xl` column. The dark ground still bleeds to the
+ * edges, so the treatment reads the same.
  */
 export function BlendShell({ left, right, children, rightWidth = 296 }: BlendShellProps) {
   return (
     <div style={{ background: BLEND.page, color: BLEND.ink, fontFamily: FONT.sans }}>
-      {/* Rails are lg-and-up only; the grid template is applied by the class. */}
-      <div
-        className="blend-shell"
-        style={
-          {
-            "--blend-right-width": `${rightWidth}px`,
-          } as React.CSSProperties
-        }
-      >
-        {left ? <div className="blend-shell__rail">{left}</div> : null}
-        <main style={{ minWidth: 0 }}>{children}</main>
-        {right ? <div className="blend-shell__rail">{right}</div> : null}
+      <div className={BLEND_CONTAINER}>
+        {/* Rails are lg-and-up only; the grid template is applied by the class. */}
+        <div
+          className="blend-shell"
+          style={
+            {
+              "--blend-right-width": `${rightWidth}px`,
+              border: `1px solid ${BLEND.hairline}`,
+            } as React.CSSProperties
+          }
+        >
+          {left ? <div className="blend-shell__rail">{left}</div> : null}
+          <main style={{ minWidth: 0 }}>{children}</main>
+          {right ? <div className="blend-shell__rail">{right}</div> : null}
+        </div>
       </div>
       <style>{`
         .blend-shell { display: block; min-height: 900px; }

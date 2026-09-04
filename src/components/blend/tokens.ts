@@ -67,6 +67,15 @@ export const FONT = {
 } as const;
 
 /**
+ * The app's standard page container, so a Blend screen sits in the same centred
+ * column as every other page rather than running to the viewport edges. Matches
+ * the `mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8` pattern used across
+ * `src/app`. Exported as one string so the shell and the retained-panel scope
+ * cannot drift apart.
+ */
+export const BLEND_CONTAINER = "mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8";
+
+/**
  * Per-lever accent for the strategic operations board. Keys match
  * `UpgradeCategory` in `src/lib/campaigns/upgradeCosts.ts`.
  */

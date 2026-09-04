@@ -11,7 +11,7 @@ import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
 import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
 import { CampaignBlendClient } from "./blend/CampaignBlendClient";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND, BLEND_CONTAINER, FONT } from "@/components/blend/tokens";
 import { BlendScope } from "@/components/blend/BlendScope";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -174,7 +174,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         className={isEmbedded ? "" : "min-h-screen"}
         style={{ background: BLEND.page, color: BLEND.ink }}
       >
-        <div style={{ padding: "22px 26px", borderBottom: `1px solid ${BLEND.hairlineStrong}` }}>
+        <div className={BLEND_CONTAINER}>
           <Skeleton className="h-3 w-40" />
           <div className="mt-4">
             <Skeleton className="h-8 w-72" />
@@ -184,10 +184,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           </div>
         </div>
         <div
+          className={BLEND_CONTAINER}
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(4, 1fr)",
-            borderBottom: `1px solid ${BLEND.hairlineStrong}`,
+            borderTop: `1px solid ${BLEND.hairlineStrong}`,
           }}
         >
           {[0, 1, 2, 3].map((i) => (
@@ -208,7 +209,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
             </div>
           ))}
         </div>
-        <div style={{ padding: "24px 26px" }}>
+        <div className={BLEND_CONTAINER}>
           {[0, 1, 2, 3].map((i) => (
             <div key={i} style={{ padding: "14px 0", borderBottom: "1px solid rgba(42,42,61,.6)" }}>
               <Skeleton className="h-5 w-56" />
@@ -228,7 +229,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
         className={isEmbedded ? "" : "min-h-screen"}
         style={{ background: BLEND.page, color: BLEND.ink }}
       >
-        <div style={{ padding: "48px 26px", maxWidth: 640 }}>
+        <div className={BLEND_CONTAINER} style={{ paddingTop: 48, paddingBottom: 48 }}>
           <div
             style={{
               padding: "14px 18px",
@@ -290,9 +291,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
     >
       {!isEmbedded && campaign.electionInfo && (
         <div
+          className={BLEND_CONTAINER}
           style={{
-            padding: "14px 26px",
-            borderBottom: `1px solid ${BLEND.hairline}`,
+            paddingTop: 14,
+            paddingBottom: 14,
             fontFamily: FONT.mono,
             fontSize: 11,
             letterSpacing: ".06em",
@@ -311,9 +313,10 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
 
       {campaign.isArchived && (
         <div
+          className={BLEND_CONTAINER}
           style={{
-            padding: "12px 26px",
-            borderBottom: `1px solid ${BLEND.hairlineStrong}`,
+            paddingTop: 12,
+            paddingBottom: 12,
             fontFamily: FONT.serif,
             fontSize: 14,
             color: BLEND.muted,
