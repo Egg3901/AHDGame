@@ -30,15 +30,29 @@ export function isNetworkUsable(net: IntelligenceNetwork, turn: number): boolean
  * burn already took a level and the operating window, and rebuilding is exactly
  * what a service does after losing a station. Discovery is a setback, not a
  * game over — the same line `covertNuclear` takes with its crackdown.
+ *
+ * `funded` says whether the appropriation actually paid this network's upkeep this
+ * turn. An unfunded network STALLS: it keeps the progress it has and adds none, as
+ * though its funding were `none`. It books no debt, because there is no creditor —
+ * an asset nobody is paying simply goes quiet.
+ *
+ * The parameter is REQUIRED rather than defaulted to `true`. A default would leave
+ * every existing call site silently building for free, which is the exact bug this
+ * closes: `NETWORK_FUNDING_COST` was declared "drawn from the intelligence budget"
+ * and nothing ever charged it.
  */
-export function stepNetwork(net: IntelligenceNetwork, turn: number): IntelligenceNetwork {
+export function stepNetwork(
+  net: IntelligenceNetwork,
+  turn: number,
+  funded: boolean
+): IntelligenceNetwork {
   const ranThisTurn = net.lastOpTurn === turn;
   const suspicion = ranThisTurn
     ? clampSuspicion(net.suspicion)
     : clampSuspicion(net.suspicion - SUSPICION_DECAY_IDLE);
 
   let level = net.level;
-  let progress = net.progress + (NETWORK_FUNDING_PROGRESS[net.funding] ?? 0);
+  let progress = net.progress + (funded ? (NETWORK_FUNDING_PROGRESS[net.funding] ?? 0) : 0);
   while (progress >= NETWORK_LEVEL_PROGRESS && level < NETWORK_MAX_LEVEL) {
     progress -= NETWORK_LEVEL_PROGRESS;
     level += 1;

@@ -13,18 +13,22 @@ import type {
   OperationCompromise,
   OperationOutcome,
 } from "@/lib/db/types/intelligence";
+import type { FederalBudget } from "@/lib/db/types/budget";
 import {
-  ACTION_COST,
+  creditIntelligenceAppropriation,
+  debitIntelligenceAppropriation,
+} from "@/lib/db/collections/intelligenceAppropriation";
+import {
   ACTION_DIFFICULTY,
   ACTION_MIN_COVERAGE,
   ACTION_MIN_NETWORK_LEVEL,
-  COLLECTION_COST,
   COLLECTION_DIFFICULTY,
   COLLECTION_GAIN,
   COLLECTION_MIN_NETWORK_LEVEL,
   OP_SLOTS_PER_TURN,
   STRATEGIC_ATTRIBUTION_TENSION,
 } from "./config";
+import { operationCost } from "./cost";
 import { clampCoverage, currentCoverage } from "./coverage";
 import { applyOperationToNetwork, isNetworkUsable } from "./network";
 import { resolveOperation } from "./resolveOperation";
@@ -114,26 +118,35 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     );
   }
 
-  // ── Claim the budget and the slot ATOMICALLY ──────────────────────────────
+  // ── Claim the money, then the slot ────────────────────────────────────────
   //
-  // Read-then-write would let two concurrent operations each see one slot and a
-  // full purse, both pass, and both spend: the country runs more operations than
-  // it has and can overdraw. One conditional update instead, in the spirit of
-  // `debitAppropriation`'s `$expr` guard, so the loser of a race simply does not
-  // match and is refused.
-  const cost = kind === "action" ? ACTION_COST : COLLECTION_COST;
+  // Two guarded writes rather than one, because the money and the slot now live in
+  // different documents: the appropriation is on the country's budget (it has to
+  // survive a reunification merge, which purges the intelligence collections) and
+  // the slot is on the agency. Each leg is individually atomic, so no race can run
+  // more operations than a country has or overdraw a pot with no overdraft.
+  //
+  // Money first, and refunded if the slot claim loses. The reverse ordering would
+  // charge for an operation that never ran.
+  const budget = await db
+    .collection<FederalBudget>("federalBudget")
+    .findOne({ countryId: agency.countryId });
+  const cost = Math.round(operationCost(kind, budget?.gdp ?? 0));
+
+  if (!(await debitIntelligenceAppropriation(db, agency.countryId, cost))) {
+    return refuse(409, "The appropriation cannot cover that operation.");
+  }
+
   const agencies = await getIntelligenceAgenciesCollection(db);
   const claim = await agencies.updateOne(
     {
       _id: agency._id,
-      budgetRemaining: { $gte: cost },
-      // A budget stamped for an older turn is a full one, so it always qualifies.
+      // A slot record stamped for an older turn is a full one, so it always qualifies.
       $or: [{ "opSlots.turn": { $ne: turn } }, { "opSlots.remaining": { $gt: 0 } }],
     },
     [
       {
         $set: {
-          budgetRemaining: { $subtract: ["$budgetRemaining", cost] },
           opSlots: {
             turn,
             remaining: {
@@ -150,11 +163,10 @@ export async function runOperation(args: RunOperationArgs): Promise<RunOperation
     ]
   );
   if (claim.modifiedCount === 0) {
-    // Re-read to say WHICH constraint refused, rather than guessing.
-    const fresh = await agencies.findOne({ _id: agency._id });
-    if (fresh && fresh.budgetRemaining < cost) {
-      return refuse(409, "The service cannot afford that operation.");
-    }
+    // Unguarded refund: a refused refund would leave the service charged for work
+    // it never did. `creditIntelligenceAppropriation`, never a negative debit —
+    // the debit returns early on a non-positive amount and would silently no-op.
+    await creditIntelligenceAppropriation(db, agency.countryId, cost);
     return refuse(429, "The service has run every operation it can this turn.");
   }
 

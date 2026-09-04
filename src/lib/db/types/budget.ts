@@ -370,6 +370,34 @@ export interface DefenseAppropriation {
   encumbered?: number;
 }
 
+/**
+ * A country's intelligence account: funded from the enacted intelligence line, drained by
+ * network upkeep and by operations.
+ *
+ * A sub-ledger, like {@link DefenseAppropriation} — `processTreasuryTurn` already deducts the
+ * whole annual spending line from `treasuryBalance`, so nothing here is a second charge on
+ * the treasury.
+ *
+ * Three things the defence pot carries that this one deliberately does not:
+ *
+ *  - No OVERDRAFT. An army must be sustained whether or not it is funded; a service that runs
+ *    out of money simply stops operating. So no path here can ever reach the treasury.
+ *  - No `arrearsRatio`. Nothing is owed to anyone — an unpaid network goes quiet rather than
+ *    booking a debt that something later has to collect.
+ *  - No `encumbered`. Operations resolve in the turn they are ordered, so there is no forward
+ *    contract to reserve money against.
+ *
+ * Lives on the BUDGET rather than on the agency document because `mergeCountry` purges the
+ * intelligence collections on reunification: money held there would be destroyed by a merge,
+ * where money held here follows `mergeNationalFisc` like every other national balance.
+ */
+export interface IntelligenceAppropriation {
+  /** Absolute local currency. Never negative — there is no overdraft. */
+  balance: number;
+  /** Highest turn whose accrual has been applied. Replay guard against double-crediting. */
+  accruedThroughTurn: number;
+}
+
 export interface FederalBudget {
   _id: BudgetDocumentId;
   countryId: string;
@@ -449,6 +477,12 @@ export interface FederalBudget {
    * a player as a broken button rather than a data gap.
    */
   defenseAppropriation?: DefenseAppropriation;
+  /**
+   * Intelligence account (see {@link IntelligenceAppropriation}). Absent means UNFUNDED,
+   * which is the correct opening state for every country: unlike the defence pot this one is
+   * never healed to a year's accrual, because nobody has voted the money.
+   */
+  intelligenceAppropriation?: IntelligenceAppropriation;
   /**
    * GDP at the moment this world's military prices were anchored. Unit prices are quoted
    * against `militaryPriceAnchor(gdp, this)` rather than live GDP, so a growing economy

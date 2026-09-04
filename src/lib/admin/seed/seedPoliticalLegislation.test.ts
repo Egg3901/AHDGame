@@ -26,9 +26,9 @@ vi.mock("@/lib/budget/revenue", () => ({
 describe("getProjectedPoliticalLegislationTypes", () => {
   it("projects all core + regional sidecar laws with unique ids", () => {
     const docs = getProjectedPoliticalLegislationTypes();
-    // 436 core + 6 DD Land regional sidecars + 5 US state tax sliders
-    expect(docs.length).toBe(447);
-    expect(new Set(docs.map((d) => d._id)).size).toBe(447);
+    // 440 core + 6 DD Land regional sidecars + 5 US state tax sliders
+    expect(docs.length).toBe(451);
+    expect(new Set(docs.map((d) => d._id)).size).toBe(451);
     expect(docs.some((d) => d._id === "dd.sec.landPolytechnicEducation")).toBe(true);
     expect(docs.find((d) => d._id === "dd.sec.landPolytechnicEducation")?.allowedScope).toBe(
       "state"
@@ -143,7 +143,7 @@ describe("seedPoliticalLegislationBaseline", () => {
   it("seeds one policy record per program law and enacted laws above level 0", async () => {
     await seedPoliticalLegislationBaseline(db as unknown as Db, vi.fn(), 1953);
     const policyUpserts = bulkOps(db.collectionMocks.statePolicies.bulkWrite);
-    // 103 national program laws × 4 countries, + 6 DD Land laws × 6 Länder,
+    // 104 national program laws × 4 countries, + 6 DD Land laws × 6 Länder,
     // + one level-0 regional default per `both` law per region (US/UK/RU have
     // one region each in the mock, DD six). Derived rather than hardcoded so
     // adding a law to a catalog updates the expectation with it.
@@ -152,7 +152,7 @@ describe("seedPoliticalLegislationBaseline", () => {
       (sum, cc) => sum + regionalDefaultLaws(cc, 1953).length * regionCount[cc],
       0
     );
-    expect(policyUpserts.length).toBe(412 + 36 + regionalDefaults);
+    expect(policyUpserts.length).toBe(416 + 36 + regionalDefaults);
     const stateScoped = policyUpserts.filter((c) => (c[0] as { scope?: string }).scope === "state");
     expect(stateScoped.length).toBe(36 + regionalDefaults);
     const lawReplaces = bulkOps(db.collectionMocks.enactedLaws.bulkWrite);
