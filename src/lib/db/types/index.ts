@@ -2,6 +2,7 @@ export * from "./user";
 export * from "./character";
 export * from "./union";
 export type { CharacterStateOrg } from "./characterStateOrg";
+export type { PrimaryStateAction, PrimaryStateActionKind } from "./primaryStateAction";
 export * from "./party";
 export * from "./statePartyOrg";
 export * from "./congressionalDistrict";

@@ -150,6 +150,23 @@ export const PRIMARY_HOME_SURGE_COST_ACTIONS = 3;
 export const PRIMARY_HOME_SURGE_PCT = 15;
 
 /**
+ * State attacks: acts aimed at one rival in one state during the primary.
+ *
+ * Sized against the national opposition-research drain, which is 0.5 points of
+ * favourability per turn at level 1 and hits everywhere. A local attack is
+ * deliberately weaker in absolute terms because it hits one state, so it only
+ * pays when aimed at a state that decides something. The cash cost sits between
+ * a canvass batch and a Presence level (STATE_ORG_COST_FUNDS = 250,000) so that
+ * attacking a rival genuinely competes with building for yourself.
+ *
+ * First pass. Wants a balance issue filed and a cycle of play before live.
+ */
+export const PRIMARY_STATE_ATTACK_DURATION_TURNS = 8;
+export const PRIMARY_LOCAL_ATTACK_FAV_PER_TURN = 0.4;
+export const PRIMARY_LOCAL_ATTACK_COST_FUNDS = 40_000;
+export const PRIMARY_LOCAL_ATTACK_COST_ACTIONS = 4;
+
+/**
  * Vote multiplier a live home-state surge gives a candidate in one state.
  *
  * Shared by the stagger phase, which decides the real result, and the

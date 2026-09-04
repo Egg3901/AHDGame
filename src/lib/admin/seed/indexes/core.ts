@@ -112,6 +112,25 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // primaryStateActions: one row per act against a rival in a state during a
+  // presidential primary. The turn engine reads by (election, state, expiry);
+  // the state operations panel reads "what is being done to me" by
+  // (election, target).
+  await ensureIndex(
+    db,
+    "primaryStateActions",
+    { electionId: 1, stateId: 1, expiresTurn: 1 },
+    { name: "primaryStateActions_election_state_expires" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "primaryStateActions",
+    { electionId: 1, targetCandidateId: 1 },
+    { name: "primaryStateActions_election_target" },
+    log
+  );
+
   await ensureIndex(
     db,
     "npps",
