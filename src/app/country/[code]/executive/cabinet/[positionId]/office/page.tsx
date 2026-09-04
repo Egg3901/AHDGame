@@ -530,6 +530,7 @@ export default function CabinetOfficePage() {
                   countryId={countryId as CountryId}
                   positionId={positionId}
                   currencySymbol={currencySymbol}
+                  canAct={canAct}
                 />
               )}
 
