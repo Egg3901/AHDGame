@@ -32,6 +32,10 @@ import {
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
+import {
+  loadLiveStateActionsForElections,
+  localFavorabilityDrainByTarget,
+} from "@/lib/elections/primaryStateActions";
 import { logger } from "../observability/logger";
 
 export interface CampaignTurnResults {
@@ -132,6 +136,39 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           .collection<Campaign>("campaigns")
           .find({ electionId: { $in: activeElectionIds } })
           .toArray();
+
+        // Live state attacks across every active race, folded in below beside
+        // the national oppo drain. One query for the whole pass, matching how
+        // campaigns are loaded, rather than one per election.
+        //
+        // A target who withdrew keeps their rows until they expire, so the
+        // audit trail survives, but stops taking damage: they are out of the
+        // race.
+        const liveStateActions = await loadLiveStateActionsForElections(db, {
+          electionIds: activeElectionIds,
+          currentTurn: turnNumber,
+        });
+        // Narrowed to the races that actually carry an attack, so one live row
+        // does not pull every active race's candidate list into memory.
+        const attackedElectionIds = [
+          ...new Map(liveStateActions.map((a) => [a.electionId.toString(), a.electionId])).values(),
+        ];
+        const activeCandidateRowIds = new Set(
+          attackedElectionIds.length === 0
+            ? []
+            : (
+                await db
+                  .collection<ElectionCandidate>("electionCandidates")
+                  .find(
+                    { electionId: { $in: attackedElectionIds }, status: "active" },
+                    { projection: { _id: 1 } }
+                  )
+                  .toArray()
+              ).map((c) => c._id.toString())
+        );
+        const localAttackDrainByTarget = localFavorabilityDrainByTarget(
+          liveStateActions.filter((a) => activeCandidateRowIds.has(a.targetCandidateId.toString()))
+        );
 
         // Strategic Operations v2 — incoming opposition-research shield.
         // A candidate defended by a campaign whose Media > Rapid Response
@@ -698,6 +735,20 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                 collection: "unknown", // Will be determined when applying
                 amount: favorabilityDebuff,
               });
+            }
+
+            // State attacks stack with the national drain rather than replacing
+            // it: a candidate under both should lose to both. The shield was
+            // stamped on each row at purchase, so it is not re-applied here.
+            if (applyCampaignPassives) {
+              for (const [targetId, perTurn] of localAttackDrainByTarget) {
+                if (!(perTurn > 0)) continue;
+                const existing = favorabilityChanges.get(targetId);
+                favorabilityChanges.set(targetId, {
+                  collection: existing?.collection ?? "unknown",
+                  amount: (existing?.amount ?? 0) - perTurn * seasonMultiplier,
+                });
+              }
             }
 
             // Travel Presence Bonus: +1.0% favorability/turn while campaigning in a state.
