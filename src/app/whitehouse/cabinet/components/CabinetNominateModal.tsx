@@ -5,7 +5,7 @@ import { Modal } from "@/components/ui";
 interface Position {
   id: string;
   name: string;
-  member: unknown;
+  member: { acting?: boolean } | null;
   nomination: unknown;
 }
 
@@ -33,6 +33,8 @@ export function CabinetNominateModal({
   submitLabel = "Propose",
   nomineeLabel = "Nominee",
   pendingNominationLabel = " (replace pending)",
+  actingHeldLabel = " (acting)",
+  includeActingHeld = false,
 }: {
   open: boolean;
   positions: Position[];
@@ -56,8 +58,25 @@ export function CabinetNominateModal({
    * must not share the same wording.
    */
   pendingNominationLabel?: string;
+  /**
+   * Suffix on a seat held by an acting secretary. Confirmation replaces the
+   * acting holder at once, so the nomination flow labels those seats instead
+   * of hiding them.
+   */
+  actingHeldLabel?: string;
+  /**
+   * List seats held by an acting secretary alongside vacant ones. The
+   * nomination flow sets this: nominating over an acting holder is legal and
+   * confirmation evicts them. The acting-appointment flow must leave it off:
+   * installing an acting secretary requires a vacant seat.
+   */
+  includeActingHeld?: boolean;
 }) {
-  const vacantPositions = positions.filter((p) => !p.member);
+  // Vacant seats are always eligible. Acting-held seats are eligible only for
+  // nomination: a confirmed holder can only be replaced by firing them first.
+  const eligiblePositions = positions.filter(
+    (p) => !p.member || (includeActingHeld && p.member.acting === true)
+  );
 
   return (
     <Modal open={open} title={title} onClose={onCancel}>
@@ -72,13 +91,14 @@ export function CabinetNominateModal({
         className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm mb-4"
       >
         <option value="">Select position</option>
-        {vacantPositions.map((p) => (
+        {eligiblePositions.map((p) => (
           <option key={p.id} value={p.id}>
             {p.name}
+            {p.member?.acting === true ? actingHeldLabel : ""}
             {p.nomination ? pendingNominationLabel : ""}
           </option>
         ))}
-        {vacantPositions.length === 0 && (
+        {eligiblePositions.length === 0 && (
           <option value="" disabled>
             All positions filled
           </option>
