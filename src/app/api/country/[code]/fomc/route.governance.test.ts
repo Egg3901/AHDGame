@@ -227,4 +227,71 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
     expect(body.hasCommittee).toBe(false);
     expect(body.governance).toBeNull();
   });
+
+  // Ticket #1270: the global commandEconomyEnabled flag blocked EVERY bank,
+  // including the US Fed. The gate is per-country (marketization level).
+  // Chair viewer + vacant board so set_rate reaches the command gate
+  // (a carrying board refuses with the committee reason first).
+  function chairOnlyBoard() {
+    return Array.from({ length: 7 }, (_, i) => ({
+      seatId: `seat-${i + 1}`,
+      isChair: i === 0,
+      occupantType: i === 0 ? "player" : "vacant",
+      characterId: i === 0 ? VIEWER_ID : null,
+      characterName: i === 0 ? "Chair" : null,
+      nppId: null,
+      alignment: "hawk",
+      appointedByPresidentId: null,
+      appointedAtTurn: 100,
+      termExpiresAtTurn: 900,
+    }));
+  }
+
+  function dbWithCommandFlag(bank: Record<string, unknown> | null) {
+    return {
+      collection: (name: string) => ({
+        findOne: async () => {
+          if (name === "centralBanks") return bank;
+          if (name === "gameState") return { _id: "current", currentTurn: 381, currentYear: 1960 };
+          if (name === "gameConfig") return { _id: "default", commandEconomyEnabled: true };
+          return null;
+        },
+        find: () => ({ sort: () => ({ toArray: async () => [] }), toArray: async () => [] }),
+      }),
+    };
+  }
+
+  it("command flag on: US chair is not command-blocked", async () => {
+    const bank = bankFixture({ fomcBoard: chairOnlyBoard(), rateChangesThisTerm: 0 });
+    mockGetDb.mockResolvedValue(dbWithCommandFlag(bank));
+    const res = await GET(new Request("http://localhost/api/country/US/fomc"), {
+      params: Promise.resolve({ code: "US" }),
+    });
+    const body = await res.json();
+    expect(body.governance.viewerRole).toBe("chair");
+    expect(actionOf(body, "set_rate").allowed).toBe(true);
+  });
+
+  it("command flag on: RU chair is still command-blocked", async () => {
+    mockRequireAuth.mockResolvedValue({
+      ok: true,
+      user: {
+        isAdmin: false,
+        character: { _id: VIEWER_ID, countryId: "RU", currentOffice: null },
+      },
+    });
+    const bank = bankFixture({
+      countryId: "RU",
+      fomcBoard: chairOnlyBoard(),
+      rateChangesThisTerm: 0,
+    });
+    mockGetDb.mockResolvedValue(dbWithCommandFlag(bank));
+    const res = await GET(new Request("http://localhost/api/country/RU/fomc"), {
+      params: Promise.resolve({ code: "RU" }),
+    });
+    const body = await res.json();
+    const setRate = actionOf(body, "set_rate");
+    expect(setRate.allowed).toBe(false);
+    expect(setRate.reason).toMatch(/command economy/i);
+  });
 });

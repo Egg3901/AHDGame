@@ -16,6 +16,8 @@ import { SovereignHealthPanel } from "@/components/budget/treasury/SovereignHeal
 import { GrantsPanel } from "@/components/budget/treasury/GrantsPanel";
 import { MinisterCallouts } from "@/components/budget/treasury/MinisterCallouts";
 import { FiscalMechanicsNote } from "@/components/budget/treasury/FiscalMechanicsNote";
+import { DefenseFundingNote } from "@/components/budget/treasury/DefenseFundingNote";
+import type { DefenseFundingPosition } from "@/lib/publicFinance/queries/defenseFunding";
 import { BudgetAuthoringPanel } from "@/components/uk/budget/BudgetAuthoringPanel";
 import { PlannedEconomyPanel } from "@/components/economy/PlannedEconomyPanel";
 import { Button, Skeleton, CardSkeleton, StatGridSkeleton, ListRowSkeleton } from "@/components/ui";
@@ -59,6 +61,8 @@ interface BudgetData {
   stateOwnershipConcentration?: number;
   /** Signed national treasury balance (local currency); negative = national debt. */
   treasuryReserve?: number;
+  /** Defence funding position (live budget only; null when the country fields no force). */
+  defenseFunding?: DefenseFundingPosition | null;
   /** Live national GDP in base currency units, summed from every region this
    *  turn. `budget.gdp` is the fiscal-close snapshot and lags this. */
   liveGdpUnits?: number;
@@ -1023,6 +1027,10 @@ export function NationalBudgetClient() {
           spending={budget.spending.total}
           debtInterest={budget.spending.debtInterest ?? 0}
         />
+
+        {isLive && data.defenseFunding ? (
+          <DefenseFundingNote sym={moneyPrefix} funding={data.defenseFunding} />
+        ) : null}
 
         {isLive && countryId === COUNTRY_CONFIGS.UK.id ? (
           <BudgetAuthoringPanel countryCode="uk" />
