@@ -1,7 +1,10 @@
 import type { AnyBulkWriteOperation, Db } from "mongodb";
 import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity";
 import type { CountryId } from "@/lib/constants/countries";
-import { getStateResourceCapacity } from "@/lib/seeds/reference/stateResourceCapacity";
+import {
+  getStateResourceCapacity,
+  lookupStateResourceCapacity,
+} from "@/lib/seeds/reference/stateResourceCapacity";
 
 /**
  * Seed the `stateResourceCapacity` collection.
@@ -63,10 +66,12 @@ export async function seedStateResourceCapacity(
   for (const state of states) {
     // capacityMap is keyed by `${countryId}:${stateId}` so cross-country
     // state-ID collisions (e.g. CN HB / DE HB) can't accidentally route a
-    // state to the wrong country's resource budget.
-    const entry = capacityMap[`${state.countryId}:${state._id}`];
+    // state to the wrong country's resource budget. The lookup prefers the
+    // live owner's key and falls back to a previous owner's (reunification
+    // rescopes the region, not the geology); the doc keeps the live owner.
+    const entry = lookupStateResourceCapacity(capacityMap, state.countryId, state._id);
     const resources = entry?.resources ?? {};
-    const countryId: CountryId = entry?.countryId ?? state.countryId;
+    const countryId: CountryId = state.countryId;
 
     ops.push({
       updateOne: {
