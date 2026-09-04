@@ -16,7 +16,7 @@ const uri = raw.includes("directConnection")
   ? raw
   : raw + (raw.includes("?") ? "&" : "?") + "directConnection=true";
 
-const ctx: HealContext = { env: "prod", dryRun: true, now: new Date() };
+const ctx: HealContext = { env: "sandbox", dryRun: true, now: new Date() };
 
 async function main() {
   const client = new MongoClient(uri);

@@ -23,7 +23,14 @@
 
 import type { Db } from "mongodb";
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
-import type { Defect, DetectResult, HealPlan, HealResult, VerifyResult } from "../types";
+import type {
+  Defect,
+  DetectResult,
+  HealContext,
+  HealPlan,
+  HealResult,
+  VerifyResult,
+} from "../types";
 
 export const DEFECT_ID = "AHD-1271-natcorp-split-sector-type";
 
@@ -34,6 +41,28 @@ interface SplitOffCorp {
   type?: string;
   assignedSectorTypes?: string[];
   isPrimaryNationalCorporation?: boolean;
+  unlockedTechNodeIds?: string[];
+  techDecadeLane?: Record<string, string> | null;
+  secondaryType?: string;
+}
+
+/**
+ * Does this corp hold research that a primary-type switch would silently void?
+ *
+ * Sector-lane tech node ids are PREFIXED BY PRIMARY TYPE, so `getTreeForType`
+ * stops resolving a corp's unlocked ids the moment its `type` moves: the nodes
+ * vanish from `getUnlockedNodes`, and the R&D and cash spent on them go with
+ * them. The product rule for a deliberate switch is that this is the price
+ * (`migrateUnlockedTechOnPrimaryTypeSwitch` drops them and reverses the strength
+ * grants), but that is a CHOICE a player makes. A repair pass must not make it
+ * for them, so a corp carrying unlocks or a decade lane commitment is reported
+ * and left alone. Zero of the thirty live corps qualify, so this costs nothing
+ * today and stops the heal being unsafe the first time one does.
+ */
+function holdsResearch(corp: SplitOffCorp): boolean {
+  return (
+    (corp.unlockedTechNodeIds?.length ?? 0) > 0 || Object.keys(corp.techDecadeLane ?? {}).length > 0
+  );
 }
 
 /**
@@ -44,8 +73,21 @@ interface SplitOffCorp {
  * rewriting it would break the sovereign issuer lookup. A corp claiming more
  * than one sector type is also skipped — `type` is a single value and there is
  * no correct answer to pick, so those are reported instead.
+ *
+ * SCOPED BY `countryOwnerId`, which in practice means National Corporations and
+ * nothing else: that field is written only by `buildNationalCorporationDoc`, the
+ * seed, the command-economy reconcile and `mergeCountry`. A seized private firm
+ * is state-owned through the OTHER half of the codebase's predicate
+ * (`ownershipState: "stateOwned"`), which this filter does not include, and none
+ * of those paths write `assignedSectorTypes` anyway. Every row is named in the
+ * plan for the operator to read before approving.
  */
-async function findMistyped(db: Db): Promise<{ rows: SplitOffCorp[]; multiClaimCount: number }> {
+async function findMistyped(db: Db): Promise<{
+  rows: SplitOffCorp[];
+  multiClaimCount: number;
+  researchHolders: SplitOffCorp[];
+  conflictingSecondary: SplitOffCorp[];
+}> {
   const corps = await db
     .collection<SplitOffCorp>("corporations")
     .find(
@@ -54,25 +96,45 @@ async function findMistyped(db: Db): Promise<{ rows: SplitOffCorp[]; multiClaimC
         isPrimaryNationalCorporation: { $ne: true },
         assignedSectorTypes: { $exists: true, $ne: [] },
       } as Record<string, unknown>,
-      { projection: { name: 1, countryOwnerId: 1, type: 1, assignedSectorTypes: 1 } }
+      {
+        projection: {
+          name: 1,
+          countryOwnerId: 1,
+          type: 1,
+          assignedSectorTypes: 1,
+          unlockedTechNodeIds: 1,
+          techDecadeLane: 1,
+          secondaryType: 1,
+        },
+      }
     )
     .toArray();
 
   const rows: SplitOffCorp[] = [];
+  const researchHolders: SplitOffCorp[] = [];
+  const conflictingSecondary: SplitOffCorp[] = [];
   let multiClaimCount = 0;
   for (const corp of corps) {
     const claimed = corp.assignedSectorTypes ?? [];
     if (claimed.length !== 1) {
-      if (claimed.length > 1 && corp.type !== claimed[0]) multiClaimCount++;
+      // Counted whatever its `type` says. A multi-claim corp is untouched either
+      // way and equally needs a human to decide, so excluding the ones that
+      // happen to match `claimed[0]` would just hide half of them from the note.
+      if (claimed.length > 1) multiClaimCount++;
       continue;
     }
     const want = claimed[0];
     // Only ever move `type` to a real CorporationType. A claim outside the
     // enum is data this heal does not understand and must not act on.
     if (!CORPORATION_TYPES.includes(want as never)) continue;
-    if (corp.type !== want) rows.push(corp);
+    if (corp.type === want) continue;
+    // `updateCorporationSettings` rejects primary === secondary as invalid, so
+    // writing that pair here would leave a corp its own owner cannot edit.
+    if (corp.secondaryType === want) conflictingSecondary.push(corp);
+    else if (holdsResearch(corp)) researchHolders.push(corp);
+    else rows.push(corp);
   }
-  return { rows, multiClaimCount };
+  return { rows, multiClaimCount, researchHolders, conflictingSecondary };
 }
 
 function describe(corp: SplitOffCorp): string {
@@ -80,11 +142,26 @@ function describe(corp: SplitOffCorp): string {
 }
 
 async function detect(db: Db): Promise<DetectResult> {
-  const { rows, multiClaimCount } = await findMistyped(db);
+  const { rows, multiClaimCount, researchHolders, conflictingSecondary } = await findMistyped(db);
   const notes = [`${rows.length} state enterprise(s) report a type they do not operate`];
   if (multiClaimCount > 0) {
     notes.push(
       `${multiClaimCount} enterprise(s) claim several sector types and are NOT touched: \`type\` holds one value and picking one would be a guess`
+    );
+  }
+  if (researchHolders.length > 0) {
+    notes.push(
+      `${researchHolders.length} enterprise(s) hold tech-tree research and are NOT touched: ` +
+        `moving \`type\` voids unlocks bought with R&D, and that is a player's decision ` +
+        `(${researchHolders.map((c) => `${c.countryOwnerId}/${c.name}`).join(", ")})`
+    );
+  }
+  if (conflictingSecondary.length > 0) {
+    notes.push(
+      `${conflictingSecondary.length} enterprise(s) already carry the claimed sector as their ` +
+        `SECONDARY type and are NOT touched: primary and secondary must differ, and writing ` +
+        `both the same would leave a corp its owner cannot edit ` +
+        `(${conflictingSecondary.map((c) => `${c.countryOwnerId}/${c.name}`).join(", ")})`
     );
   }
   return {
@@ -112,12 +189,12 @@ async function plan(db: Db): Promise<HealPlan> {
   };
 }
 
-async function apply(db: Db, healPlan: HealPlan): Promise<HealResult> {
+async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<HealResult> {
   const approved = new Set(
     healPlan.touched.find((t) => t.collection === "corporations")?.ids ?? []
   );
   const { rows } = await findMistyped(db);
-  const now = new Date();
+  const now = ctx.now;
 
   let updated = 0;
   for (const corp of rows) {
@@ -146,7 +223,7 @@ async function apply(db: Db, healPlan: HealPlan): Promise<HealResult> {
 }
 
 async function verify(db: Db): Promise<VerifyResult> {
-  const { rows, multiClaimCount } = await findMistyped(db);
+  const { rows, multiClaimCount, researchHolders, conflictingSecondary } = await findMistyped(db);
   return {
     ok: rows.length === 0,
     remaining: rows.length,
@@ -155,6 +232,8 @@ async function verify(db: Db): Promise<VerifyResult> {
         ? "every single-sector state enterprise reports the sector it operates"
         : `${rows.length} enterprise(s) still mistyped`,
       `${multiClaimCount} multi-sector enterprise(s) remain, by design`,
+      `${researchHolders.length} research-holding enterprise(s) remain, by design`,
+      `${conflictingSecondary.length} enterprise(s) whose secondary type is the claimed sector remain, by design`,
     ],
   };
 }
@@ -175,7 +254,14 @@ export const defect: Defect = {
     files: ["src/lib/seeds/reference/budgets.ts"],
     note: "buildCommandSoeCorpEntries stamps type from the sector; the corruption is runtime-only",
   },
-  envs: ["dev", "sandbox", "prod"],
+  // ENVS DELIBERATELY EXCLUDE prod UNTIL `requiredCommit` IS PINNED. The ledger
+  // gate (`evaluateCodeGate`) passes unconditionally when `requiredCommit` is
+  // absent, so listing prod here today would let an operator heal an environment
+  // the code half has not reached: production deploys `main`, and this fix is on
+  // `development`. Healing there would re-corrupt on the next write, which is the
+  // treadmill the ledger exists to prevent. Pin the squash-merge SHA and add
+  // "prod" in the same change.
+  envs: ["dev", "sandbox"],
   idempotent: true,
   guards: ["turn-lock-free", "money-conserving", "max-affected:500"],
   detect,

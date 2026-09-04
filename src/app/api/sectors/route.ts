@@ -8,7 +8,12 @@ import {
   CORPORATION_TYPE_LABELS,
   type CorporationType,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  COUNTRY_ORDER,
+  getCountryDisplayName,
+  type CountryId,
+} from "@/lib/constants/countries";
 import {
   fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
@@ -17,7 +22,8 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
-import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
+import { loadCountryPresentationOverrides } from "@/lib/country/countryIdentity";
+import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 
 export type SectorView = "unowned" | "owned" | "forSale";
 export type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "growth";
@@ -91,10 +97,26 @@ export async function GET(request: Request) {
     // (ticket #1271). `COUNTRY_ORDER` is the compiled roster, so it is narrowed
     // to countries that still hold territory rather than trusted as a list of
     // live countries.
-    const nameOverrides = await loadCountryNameOverrides(db);
+    //
+    // Three corrections, not one. The runtime override is what reunification
+    // writes; the ERA name is what a 1953 world calls RU ("Soviet Union") and DE
+    // ("West Germany"); and the flag override travels with the rename, so
+    // applying only the name left Germany labelled correctly under the flag of
+    // the state it replaced.
+    //
+    // `loadCountryPresentationOverrides` rather than `resolveCountryIdentities`
+    // because the latter reads through `getCountryState`, which SELF-HEALS a
+    // missing row. This is a public listing endpoint and must not be able to
+    // insert documents as a side effect of someone sorting a table.
+    const [preset, overrides] = await Promise.all([
+      loadWorldPreset(db),
+      loadCountryPresentationOverrides(db),
+    ]);
     const countriesWithStates = new Set(states.map((s) => s.countryId));
     const countryNameOf = (id: CountryId): string =>
-      nameOverrides[id] ?? COUNTRY_CONFIGS[id]?.name ?? id;
+      overrides[id]?.name ?? getCountryDisplayName(id, preset);
+    const countryFlagOf = (id: CountryId): string =>
+      overrides[id]?.flagEmoji ?? COUNTRY_CONFIGS[id]?.flagEmoji ?? "";
 
     // Load FX rates for anchor normalization
     const fxByCurrency = await loadFxRatesByCurrency(db);
@@ -132,7 +154,6 @@ export async function GET(request: Request) {
 
       for (const us of unownedSectors) {
         const st = stateMap.get(us.stateId);
-        const cfg = COUNTRY_CONFIGS[us.countryId];
         rows.push({
           id: us._id.toString(),
           sectorType: us.sectorType,
@@ -141,7 +162,7 @@ export async function GET(request: Request) {
           stateName: st?.name ?? us.stateId,
           countryId: us.countryId,
           countryName: countryNameOf(us.countryId),
-          countryFlag: cfg?.flagEmoji ?? "",
+          countryFlag: countryFlagOf(us.countryId),
           owned: false,
           corporationId: null,
           corporationName: null,
@@ -219,13 +240,18 @@ export async function GET(request: Request) {
       for (const s of ownedSectors) {
         const st = stateMap.get(s.stateId);
         const corp = corpMap.get(s.corporationId.toString());
-        const hostCountryId = (s.countryId ?? st?.countryId ?? corp?.countryId) as CountryId;
+        // STATE FIRST, matching `getSectorOperatingCountryId`, which is the
+        // codebase's answer to this question everywhere else (hostile takeover,
+        // the duplicate-sector repair). A sector row whose stored `countryId` is
+        // stale after its region changed hands would otherwise be labelled under
+        // a country that no longer holds it, and after the filter narrowing above
+        // that country is not even offered as an option to find it under.
+        const hostCountryId = (st?.countryId ?? s.countryId ?? corp?.countryId) as CountryId;
         const revenueAnchor = readCorpEconomicAnchor(
           s.revenue,
           resolveSectorHostCurrencyCode({ countryId: hostCountryId }, corp),
           fxRateForSectorHostFromMap({ countryId: hostCountryId }, corp, fxByCurrency)
         );
-        const cfg = COUNTRY_CONFIGS[hostCountryId];
 
         rows.push({
           id: s._id.toString(),
@@ -235,7 +261,7 @@ export async function GET(request: Request) {
           stateName: st?.name ?? s.stateId,
           countryId: hostCountryId,
           countryName: countryNameOf(hostCountryId),
-          countryFlag: cfg?.flagEmoji ?? "",
+          countryFlag: countryFlagOf(hostCountryId),
           owned: true,
           corporationId: s.corporationId.toString(),
           corporationName: corp?.name ?? "Unknown",
@@ -326,7 +352,7 @@ export async function GET(request: Request) {
         countries: COUNTRY_ORDER.filter((id) => countriesWithStates.has(id)).map((id) => ({
           value: id,
           label: countryNameOf(id),
-          flag: COUNTRY_CONFIGS[id].flagEmoji,
+          flag: countryFlagOf(id),
         })),
       },
     });

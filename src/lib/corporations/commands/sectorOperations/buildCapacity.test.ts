@@ -480,15 +480,32 @@ describe("buildCapacity — unowned pool country attribution", () => {
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
   });
 
-  it("does not invent the United States for a state it cannot resolve", async () => {
-    await wireMocks(sectorDoc({ countryId: undefined, stateId: "UKR_WES" }));
+  it("prefers the state even over a countryId already stored on the sector", async () => {
+    // The precedence `getSectorOperatingCountryId` sets for the rest of the
+    // codebase. A stored country left stale by a region changing hands is the
+    // case that helper exists for, so taking it first would reintroduce this
+    // bug in its other form. Fails on the old order, which read the sector's
+    // value first and never looked at the state.
+    await wireMocks(sectorDoc({ countryId: "US", stateId: "UKR_WES" }));
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "UKR_WES", countryId: "UKR" });
+
+    const { buildCapacity } = await import("./buildCapacity");
+    await buildCapacity(request({ action: "build", units: 100 }), { params });
+
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("UKR");
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
+  });
+
+  it("falls back to the sector's own country before the corporation's", async () => {
+    // Corp is US; the sector says Poland and no state row can be found. The old
+    // chain ended at a literal "US" here.
+    await wireMocks(sectorDoc({ countryId: "PL", stateId: "PL_MAZ" }));
     db.collectionMocks.states.findOne.mockResolvedValue(null);
 
     const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 100 }), { params });
 
-    // Falls back to the corporation's own country (US here) rather than a
-    // hardcoded literal, and never silently mislabels a foreign state.
-    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("US");
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("PL");
+    expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
   });
 });

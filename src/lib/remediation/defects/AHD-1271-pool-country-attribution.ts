@@ -25,7 +25,14 @@
 // the parallel rows a later takeover created; live currently shows none.
 
 import type { Db } from "mongodb";
-import type { Defect, DetectResult, HealPlan, HealResult, VerifyResult } from "../types";
+import type {
+  Defect,
+  DetectResult,
+  HealContext,
+  HealPlan,
+  HealResult,
+  VerifyResult,
+} from "../types";
 
 export const DEFECT_ID = "AHD-1271-pool-country-attribution";
 
@@ -110,7 +117,7 @@ async function plan(db: Db): Promise<HealPlan> {
   };
 }
 
-async function apply(db: Db, healPlan: HealPlan): Promise<HealResult> {
+async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<HealResult> {
   const approved = new Set(
     healPlan.touched.find((t) => t.collection === "unownedSectors")?.ids ?? []
   );
@@ -118,7 +125,7 @@ async function apply(db: Db, healPlan: HealPlan): Promise<HealResult> {
   // being misfiled between plan and apply is left alone rather than rewritten
   // from a stale plan.
   const { rows } = await findMisfiled(db);
-  const now = new Date();
+  const now = ctx.now;
 
   let updated = 0;
   for (const row of rows) {
@@ -176,7 +183,14 @@ export const defect: Defect = {
     files: ["src/lib/admin/seed/seedUnownedSectors.ts"],
     note: "the seeder stamps the country from the state row it is iterating; only buildCapacity could substitute another country",
   },
-  envs: ["dev", "sandbox", "prod"],
+  // ENVS DELIBERATELY EXCLUDE prod UNTIL `requiredCommit` IS PINNED. The ledger
+  // gate (`evaluateCodeGate`) passes unconditionally when `requiredCommit` is
+  // absent, so listing prod here today would let an operator heal an environment
+  // the code half has not reached: production deploys `main`, and this fix is on
+  // `development`. Healing there would re-corrupt on the next write, which is the
+  // treadmill the ledger exists to prevent. Pin the squash-merge SHA and add
+  // "prod" in the same change.
+  envs: ["dev", "sandbox"],
   idempotent: true,
   guards: ["turn-lock-free", "money-conserving", "max-affected:500"],
   detect,

@@ -47,10 +47,14 @@ describe("GET /api/sectors country identity (ticket #1271)", () => {
       toArray: vi.fn().mockResolvedValue([
         { _id: "CA", name: "California", countryId: "US" },
         { _id: "NW", name: "Nordrhein-Westfalen", countryId: "DD" },
+        { _id: "MOS", name: "Moscow", countryId: "RU" },
       ]),
     });
     db.collectionMocks.countryState.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: "DD", displayNameOverride: "Germany" }]),
+      toArray: vi.fn().mockResolvedValue([
+        // A settlement writes BOTH when it renames the survivor.
+        { _id: "DD", displayNameOverride: "Germany", flagEmojiOverride: "🇩🇪" },
+      ]),
     });
     db.collectionMocks.unownedSectors.find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([]),
@@ -67,6 +71,35 @@ describe("GET /api/sectors country identity (ticket #1271)", () => {
       (c) => c.value === "DD"
     );
     expect(dd?.label).toBe("Germany");
+  });
+
+  it("applies the flag override alongside the name, not one without the other", async () => {
+    // Half-correcting this is how a reunified Germany ends up reading "Germany"
+    // under the flag of the state it replaced.
+    const { GET } = await import("./route");
+    const data = await (await GET(makeRequest("view=unowned"))).json();
+
+    const dd = (data.filters.countries as { value: string; flag: string }[]).find(
+      (c) => c.value === "DD"
+    );
+    expect(dd?.flag).toBe("🇩🇪");
+  });
+
+  it("names a country by its era name where no runtime override exists", async () => {
+    // A 1953 world calls RU the Soviet Union. Reading the compiled config alone
+    // listed it as "Russia" while every other surface disagreed.
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      preset: "1953-default",
+    });
+
+    const { GET } = await import("./route");
+    const data = await (await GET(makeRequest("view=unowned"))).json();
+
+    const ru = (data.filters.countries as { value: string; label: string }[]).find(
+      (c) => c.value === "RU"
+    );
+    expect(ru?.label).toBe("Soviet Union");
   });
 
   it("drops a dissolved country that holds no territory from the filter list", async () => {

@@ -355,6 +355,28 @@ describe("expandSector — cross-border founding", () => {
     expect(res.status).toBe(201);
     expect(insertedSector().countryId).toBe("UK");
   });
+
+  it("files the unowned pool row it creates under the HOST country too", async () => {
+    // Ticket #1271. The pool row is an upsert and its `countryId` is stamped
+    // from this bucket, so taking the founder's domicile minted a row on a
+    // foreign state under the founder's own country: unreachable to the country
+    // the capacity is physically in, and counted as the founder's headroom.
+    await wireMocks(true);
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: STATE_ID,
+      name: "England",
+      countryId: "UK",
+    });
+    const { expandSector } = await import("./expandSector");
+    await expandSector(request(), { params });
+
+    const stages = db.collectionMocks.unownedSectors.updateOne.mock.calls[0][1] as Array<{
+      $set: Record<string, unknown>;
+    }>;
+    const stamped = JSON.stringify(stages[0].$set.countryId);
+    expect(stamped).toContain("UK");
+    expect(stamped).not.toContain('"US"');
+  });
 });
 
 describe("expandSector — non-plants path is unchanged", () => {

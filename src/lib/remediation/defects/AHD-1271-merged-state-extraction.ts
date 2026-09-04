@@ -21,9 +21,12 @@
 // the merge. Private founding is banned in a command economy, so no player can
 // close the hole either.
 //
-// Half A (code): `resolveStateResourceEntry` resolves the key through the merge
-// (exact key, then the state code alone when exactly one country defines it,
-// and never a guess when two do).
+// Half A (code): `lookupStateResourceCapacity` resolves the key through the
+// merge, preferring the live owner's own entry and falling back to a previous
+// owner's for the same region. Geology does not move when the flag above it
+// does. (Where two countries both define a region code and neither is the
+// asker, that fallback takes the first by sorted key: a deterministic pick
+// rather than a provably right one. Unreachable today, and pinned by a test.)
 // Half B (this heal): build the plants that were skipped.
 //
 // WHAT THE HEAL WRITES, AND WHY IT IS THE SEED PATH. The sectors are generated
@@ -48,6 +51,7 @@ import { commandEconomySoeSectors, isCommandEconomy } from "@/lib/constants/comm
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 import { generateCountryOwnedSeedData } from "@/lib/seeds/reference/budgets";
+import { CAPITAL_SEED_HEADROOM } from "@/lib/market/capital";
 import type {
   Defect,
   DetectResult,
@@ -76,6 +80,7 @@ interface Survey {
   /** Deposits present, no extraction sector, and no SOE to give it to. */
   withoutEnterprise: StrandedState[];
   preset: string;
+  currentTurn: number;
 }
 
 function seedYear(preset: string, gameYear: number | null | undefined): number | null {
@@ -106,11 +111,12 @@ async function survey(db: Db): Promise<Survey> {
       .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
     db
       .collection<GameState>("gameState")
-      .findOne({ _id: "current" as never }, { projection: { currentYear: 1 } }),
+      .findOne({ _id: "current" as never }, { projection: { currentYear: 1, currentTurn: 1 } }),
     loadWorldPreset(db),
   ]);
 
-  const empty: Survey = { stranded: [], withoutEnterprise: [], preset };
+  const currentTurn = gameState?.currentTurn ?? 0;
+  const empty: Survey = { stranded: [], withoutEnterprise: [], preset, currentTurn };
   if (gameConfig?.commandEconomyEnabled !== true) return empty;
 
   const year = seedYear(preset, gameState?.currentYear ?? null);
@@ -151,6 +157,14 @@ async function survey(db: Db): Promise<Survey> {
   );
 
   // One extraction enterprise per country, looked up the way the rebuild does.
+  //
+  // SORTED, AND A SECOND CANDIDATE DISQUALIFIES THE COUNTRY. `assignedSectorTypes`
+  // is an array-contains match, so a corp that claims extraction alongside other
+  // types matches too. The one-per-(country, type) invariant is enforced at the
+  // runtime paths, but if it is ever broken, silently taking whichever document
+  // the cursor happened to yield last would decide who permanently owns the new
+  // plants. Sorting makes the choice deterministic, and a country with more than
+  // one candidate is routed to `withoutEnterprise` so a human picks.
   const countryIds = [...new Set(commandStates.map((s) => s.countryId as CountryId))];
   const enterprises = await db
     .collection<{ _id: ObjectId; name?: string; countryOwnerId?: string }>("corporations")
@@ -158,8 +172,16 @@ async function survey(db: Db): Promise<Survey> {
       { countryOwnerId: { $in: countryIds }, assignedSectorTypes: "extraction" },
       { projection: { name: 1, countryOwnerId: 1 } }
     )
+    .sort({ _id: 1 })
     .toArray();
-  const soeByCountry = new Map(enterprises.map((c) => [c.countryOwnerId as string, c]));
+  const soeByCountry = new Map<string, { _id: ObjectId; name?: string }>();
+  const contestedCountries = new Set<string>();
+  for (const corp of enterprises) {
+    const owner = corp.countryOwnerId as string;
+    if (soeByCountry.has(owner)) contestedCountries.add(owner);
+    else soeByCountry.set(owner, corp);
+  }
+  for (const owner of contestedCountries) soeByCountry.delete(owner);
 
   const stranded: StrandedState[] = [];
   const withoutEnterprise: StrandedState[] = [];
@@ -178,7 +200,7 @@ async function survey(db: Db): Promise<Survey> {
     if (soe) stranded.push(row);
     else withoutEnterprise.push(row);
   }
-  return { stranded, withoutEnterprise, preset };
+  return { stranded, withoutEnterprise, preset, currentTurn };
 }
 
 function describe(row: StrandedState): string {
@@ -188,27 +210,63 @@ function describe(row: StrandedState): string {
   return `${row.countryId}/${row.stateId} -> ${row.soeCorporationName}: ${deposits}`;
 }
 
-async function detect(db: Db): Promise<DetectResult> {
-  const { stranded, withoutEnterprise } = await survey(db);
-  const notes = [
-    `${stranded.length} command-economy state(s) hold deposits with no extraction sector of any kind`,
-  ];
+/**
+ * One assessment, shared by all four lifecycle steps.
+ *
+ * THE COUNT HAS TO BE THE SAME EVERYWHERE OR THE DEFECT CAN NEVER CLOSE.
+ * `survey` decides "stranded" from the LIVE capacity collection, while the seed
+ * builder decides what it can produce from the STATIC reference and its own
+ * schedule gates. The two drift as a world runs on past its seed year. Where
+ * they disagree and only `detect` counts the difference, the env matrix reads
+ * `detect.affected` and reports dirty, `plan` mints no token because it has
+ * nothing to build, and there is no way to clear it. So every step counts the
+ * states this heal can actually build a plant for, and the rest are reported.
+ */
+async function assess(db: Db) {
+  const { stranded, withoutEnterprise, preset, currentTurn } = await survey(db);
+  const docs = await buildSectors(db, stranded, preset, currentTurn);
+  const buildableStates = new Set(docs.map((d) => d.stateId as string));
+  return {
+    docs,
+    buildable: stranded.filter((s) => buildableStates.has(s.stateId)),
+    unbuildable: stranded.filter((s) => !buildableStates.has(s.stateId)),
+    withoutEnterprise,
+  };
+}
+
+function skippedNotes(withoutEnterprise: StrandedState[], unbuildable: StrandedState[]): string[] {
+  const notes: string[] = [];
   if (withoutEnterprise.length > 0) {
     notes.push(
-      `${withoutEnterprise.length} further state(s) have deposits but their country runs no extraction enterprise, and are NOT healed: nothing was destroyed there, so creating one is a design decision rather than a repair (${withoutEnterprise
+      `${withoutEnterprise.length} state(s) have deposits but their country runs no single extraction enterprise (none at all, or several claiming the sector), and are NOT healed: nothing was destroyed there, so choosing or creating an owner is a design decision rather than a repair (${withoutEnterprise
         .map((r) => `${r.countryId}/${r.stateId}`)
         .join(", ")})`
     );
   }
+  if (unbuildable.length > 0) {
+    notes.push(
+      `${unbuildable.length} state(s) are NOT healed because the seed builder produces no plant for them (live capacity and the static reference disagree): ${unbuildable
+        .map((r) => `${r.countryId}/${r.stateId}`)
+        .join(", ")}`
+    );
+  }
+  return notes;
+}
+
+async function detect(db: Db): Promise<DetectResult> {
+  const { buildable, unbuildable, withoutEnterprise } = await assess(db);
   return {
-    affected: stranded.length,
-    sample: stranded.slice(0, 10).map((row) => ({
+    affected: buildable.length,
+    sample: buildable.slice(0, 10).map((row) => ({
       stateId: row.stateId,
       countryId: row.countryId,
       resources: row.resources,
       enterprise: row.soeCorporationName,
     })),
-    notes,
+    notes: [
+      `${buildable.length} command-economy state(s) hold deposits with no extraction sector of any kind`,
+      ...skippedNotes(withoutEnterprise, unbuildable),
+    ],
   };
 }
 
@@ -219,7 +277,8 @@ async function detect(db: Db): Promise<DetectResult> {
 async function buildSectors(
   db: Db,
   stranded: StrandedState[],
-  preset: string
+  preset: string,
+  currentTurn: number
 ): Promise<Record<string, unknown>[]> {
   if (stranded.length === 0) return [];
   const strandedIds = stranded.map((s) => s.stateId);
@@ -264,6 +323,39 @@ async function buildSectors(
         ...sectorData,
         _id: new ObjectId(),
         corporationId: new ObjectId(corpId),
+        // STAMPED, NOT LEFT ABSENT, and this is the one place the heal
+        // deliberately departs from the seed path it otherwise copies.
+        //
+        // `capacityBookAnchor` absent means `sectorCapacityBookAnchor` falls
+        // back to `capitalStock x capacityPricePerUnit` forever, i.e. full LIST
+        // price for capacity nobody paid for. Restructuring salvage,
+        // nationalization compensation and the listing quote all read that
+        // basis and pay out against it, so an absent anchor on eleven plants
+        // dropped into a turn-619 world is a money-creation path the
+        // `money-conserving` guard cannot see. `expandSector` stamps 0 for
+        // exactly this reason ("zero owned capacity, zero paid basis"), and the
+        // state paid nothing for these, so 0 is the honest basis. It is
+        // deliberately more conservative than the sibling sectors, whose
+        // anchors are absent because they were written at seed time.
+        capacityBookAnchor: 0,
+        // Without this the row is a "flip turn" to `sectorBuildQueueTurn` and
+        // `sectorTurn` lifts `capitalStock` to the seeded capacity plus headroom
+        // on the next tick, so the world would not keep the capacity the
+        // operator approved. Stamping it also keeps the shed pass from treating
+        // a brand-new plant as long-idle.
+        plantsStartTurn: currentTurn,
+        // ...and because the flip is skipped, the 10% the flip would have added
+        // is applied HERE instead. Every sibling sector in these states took
+        // that lift on its own flip turn (`seedCapitalStock` is
+        // `impliedOutputUnits x CAPITAL_SEED_HEADROOM`), and under plants
+        // revenue is derived from capacity, so leaving it off would leave the
+        // restored plants permanently ~9% smaller than an identically-endowed
+        // neighbour and pinned at full utilisation from turn one. Same footing
+        // as the sectors beside them is the whole point of using the seed path.
+        capitalStock:
+          typeof sectorData.capitalStock === "number"
+            ? sectorData.capitalStock * CAPITAL_SEED_HEADROOM
+            : sectorData.capitalStock,
       });
     }
   }
@@ -271,35 +363,49 @@ async function buildSectors(
 }
 
 async function plan(db: Db, _ctx: HealContext): Promise<HealPlan> {
-  const { stranded, withoutEnterprise, preset } = await survey(db);
-  const docs = await buildSectors(db, stranded, preset);
+  const { docs, buildable, unbuildable, withoutEnterprise } = await assess(db);
 
-  const notes = stranded.slice(0, 20).map(describe);
-  if (withoutEnterprise.length > 0) {
-    notes.push(
-      `NOT healed (no extraction enterprise): ${withoutEnterprise
-        .map((r) => `${r.countryId}/${r.stateId}`)
-        .join(", ")}`
-    );
-  }
-  if (docs.length !== stranded.length) {
-    notes.push(
-      `WARNING: ${stranded.length} stranded state(s) but ${docs.length} sector document(s) generated — review before applying`
-    );
-  }
+  const targetStates = buildable.map((s) => s.stateId).sort();
+  const targetCorps = [...new Set(docs.map((d) => String(d.corporationId)))].sort();
+
+  const notes = [
+    ...buildable.slice(0, 20).map(describe),
+    ...skippedNotes(withoutEnterprise, unbuildable),
+    "capacityBookAnchor is stamped 0 on every new plant: the state paid nothing " +
+      "for this capacity, so it carries no salvage or compensation basis.",
+    // Said out loud because rollback CANNOT undo it, by deliberate design (see
+    // `touched` below).
+    "Rolling this run back deletes the plants but leaves each enterprise's " +
+      "soe.planTarget raised. The exact per-enterprise amounts are in the apply " +
+      "result, to be reversed by hand if you roll back.",
+  ];
 
   return {
-    affected: stranded.length,
-    // Nothing is mutated: this heal only inserts. `insertedIds` on the result is
-    // what rollback reads, and a snapshot cannot capture a document that does
-    // not exist yet.
+    affected: targetStates.length,
+    // EMPTY ON PURPOSE, even though `apply` raises each enterprise's plan target.
+    //
+    // `touched` drives a whole-document snapshot, and rollback restores it with
+    // `replaceOne`. Listing the owning corporations would mean a rollback taken
+    // a few turns later rewinds every OTHER field on a live SOE as well, its
+    // `liquidCapital` included: money created or destroyed, invisible to the
+    // `money-conserving` guard, to undo a sector insert. The plan target is one
+    // additive number and is recoverable by hand from the result notes; a
+    // rewound treasury is not. So rollback stays surgical: delete exactly the
+    // documents `insertedIds` names, and touch nothing else.
     touched: [],
     // Producing capacity, not currency. No cash, share or capital balance moves;
-    // the plants earn from the next turn like any other sector.
+    // the plants earn from the next turn like any other sector, and the book
+    // anchor is stamped 0 so no salvage value is created either.
     moneyDelta: 0,
-    summary: `build ${docs.length} missing extraction plant(s) across ${stranded.length} state(s) stranded by a country merge`,
+    // The state and corp ids are IN the summary on purpose. The confirm token
+    // hashes {affected, moneyDelta, summary, touched}, so with an insert-only
+    // heal a counts-only summary would let a token approved for one set of
+    // states authorise a completely different set at the same count.
+    summary:
+      `build ${docs.length} missing extraction plant(s) in ${targetStates.join(", ") || "no states"}` +
+      ` under ${targetCorps.join(", ") || "no enterprise"}, stranded by a country merge`,
     notes,
-    payload: { docs, stateIds: stranded.map((s) => s.stateId) },
+    payload: { docs, stateIds: targetStates },
   };
 }
 
@@ -313,13 +419,20 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
 
   // Re-check emptiness per state inside apply. The approved plan is the source
   // of WHAT to write, but a sector that appeared between plan and apply (a
-  // concurrent reconcile, a second operator) must not be duplicated.
+  // concurrent reconcile, a second operator) must not be duplicated. Both
+  // collections are consulted, matching `survey`: an unowned extraction market
+  // that appeared in the meantime is coverage too, and inserting an owned plant
+  // beside it would count the same capacity twice.
   const stateIds = docs.map((d) => d.stateId as string);
-  const alreadyCovered = new Set(
-    (await db
+  const [ownedNow, unownedNow] = await Promise.all([
+    db
       .collection("corporateSectors")
-      .distinct("stateId", { stateId: { $in: stateIds }, sectorType: "extraction" })) as string[]
-  );
+      .distinct("stateId", { stateId: { $in: stateIds }, sectorType: "extraction" }),
+    db
+      .collection("unownedSectors")
+      .distinct("stateId", { stateId: { $in: stateIds }, sectorType: "extraction" }),
+  ]);
+  const alreadyCovered = new Set([...ownedNow, ...unownedNow] as string[]);
 
   const toInsert = docs.filter((d) => !alreadyCovered.has(d.stateId as string));
   const skipped = docs.length - toInsert.length;
@@ -332,39 +445,108 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
   }
 
   const now = ctx.now;
-  const stamped = toInsert.map((doc) => ({ ...doc, updatedAt: now }));
-  const res = await db
-    .collection("corporateSectors")
-    .insertMany(stamped as never[], { ordered: false });
+  const stamped: Record<string, unknown>[] = toInsert.map((doc) => ({ ...doc, updatedAt: now }));
 
-  const insertedIds: TouchedDocs[] = [
-    {
-      collection: "corporateSectors",
-      ids: Object.values(res.insertedIds).map((id) => String(id)),
-    },
-  ];
+  // INSERTED ONE AT A TIME, ON PURPOSE, and the ids are recorded as they land.
+  //
+  // A single `insertMany` that fails part-way through throws, so the ids of the
+  // rows that DID land never reach the result, and rollback is then told there
+  // is nothing to undo while live plants sit in the collection earning revenue
+  // with no record they exist. At most a few dozen documents, so the round
+  // trips are irrelevant next to being able to reverse the write.
+  const insertedIdList: string[] = [];
+  const failures: string[] = [];
+  for (const doc of stamped) {
+    try {
+      await db.collection("corporateSectors").insertOne(doc as never);
+      insertedIdList.push(String(doc._id));
+    } catch (error) {
+      failures.push(`${doc.stateId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const insertedIds: TouchedDocs[] = [{ collection: "corporateSectors", ids: insertedIdList }];
+
+  // Bring the owning enterprise's plan up to the plant list it now operates.
+  // `planTarget` is STICKY (`commandEconomyTurn` only recomputes it from zero),
+  // so leaving it behind would read as permanent over-fulfilment: the director's
+  // grade inflates, the shortfall that drives directed credit shrinks, and the
+  // enterprise is under-funded against its peers for the rest of the run. The
+  // seed path sums it over every plant at build time, which is exactly what an
+  // un-misfired gate would have produced.
+  const planTargetByCorp = new Map<string, number>();
+  for (const doc of stamped) {
+    if (!insertedIdList.includes(String(doc._id))) continue;
+    const corpId = String(doc.corporationId);
+    const revenue = typeof doc.revenue === "number" ? doc.revenue : 0;
+    planTargetByCorp.set(corpId, (planTargetByCorp.get(corpId) ?? 0) + revenue);
+  }
+  // NEVER THROWS PAST THIS POINT. The plants are already in the collection and
+  // their ids only reach rollback through the returned result, so a plan-target
+  // update that failed and propagated would take the receipt for live documents
+  // with it. A failure here is recorded in the notes instead; the sectors are
+  // correct either way and the plan target is recoverable by hand.
+  const planTargetNotes: string[] = [];
+  let planTargetsRaised = 0;
+  for (const [corpId, added] of planTargetByCorp) {
+    try {
+      const res = await db
+        .collection("corporations")
+        .updateOne(
+          { _id: new ObjectId(corpId), "soe.planTarget": { $exists: true } },
+          { $inc: { "soe.planTarget": Math.round(added) }, $set: { updatedAt: now } }
+        );
+      if (res.modifiedCount > 0) planTargetsRaised++;
+      planTargetNotes.push(
+        res.modifiedCount > 0
+          ? `raised ${corpId} soe.planTarget by ${Math.round(added)}`
+          : `${corpId} carries no soe.planTarget; left alone`
+      );
+    } catch (error) {
+      planTargetNotes.push(
+        `FAILED to raise ${corpId} soe.planTarget by ${Math.round(added)}, raise it by hand: ` +
+          `${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
 
   return {
     documentsScanned: docs.length,
-    documentsInserted: res.insertedCount,
+    documentsInserted: insertedIdList.length,
+    documentsUpdated: planTargetsRaised,
     notes: [
-      `built ${res.insertedCount} extraction plant(s) in ${[...new Set(toInsert.map((d) => d.stateId))].join(", ")}`,
+      `built ${insertedIdList.length} extraction plant(s) in ${[...new Set(toInsert.map((d) => d.stateId))].join(", ")}`,
+      ...planTargetNotes,
       ...(skipped > 0 ? [`${skipped} skipped: a sector appeared since the plan was approved`] : []),
+      ...(failures.length > 0
+        ? [
+            `${failures.length} insert(s) FAILED and the run is incomplete; verify will still report them as stranded: ${failures.join("; ")}`,
+          ]
+        : []),
     ],
     insertedIds,
   };
 }
 
 async function verify(db: Db): Promise<VerifyResult> {
-  const { stranded, withoutEnterprise } = await survey(db);
+  const { stranded, withoutEnterprise, preset, currentTurn } = await survey(db);
+  // Counted the same way `plan` counts `affected`, so a state this heal is not
+  // able to build can never hold the defect open. Anything it CAN build and has
+  // not is a genuine remainder.
+  const docs = await buildSectors(db, stranded, preset, currentTurn);
+  const buildableStates = new Set(docs.map((d) => d.stateId as string));
+  const remaining = stranded.filter((s) => buildableStates.has(s.stateId));
+  const unbuildable = stranded.length - remaining.length;
+
   return {
-    ok: stranded.length === 0,
-    remaining: stranded.length,
+    ok: remaining.length === 0,
+    remaining: remaining.length,
     notes: [
-      stranded.length === 0
-        ? "every command-economy state with deposits now carries an extraction sector"
-        : `${stranded.length} state(s) still stranded`,
-      `${withoutEnterprise.length} state(s) whose country runs no extraction enterprise remain, by design`,
+      remaining.length === 0
+        ? "every command-economy state with deposits and an enterprise now carries an extraction sector"
+        : `${remaining.length} state(s) still stranded: ${remaining.map((r) => `${r.countryId}/${r.stateId}`).join(", ")}`,
+      `${withoutEnterprise.length} state(s) whose country runs no single extraction enterprise remain, by design`,
+      `${unbuildable} state(s) the seed builder produces no plant for remain, by design`,
     ],
   };
 }
@@ -392,7 +574,14 @@ export const defect: Defect = {
     ],
     seedCheck: { countryId: "DD", era: "1953-default" },
   },
-  envs: ["dev", "sandbox", "prod"],
+  // ENVS DELIBERATELY EXCLUDE prod UNTIL `requiredCommit` IS PINNED. The ledger
+  // gate (`evaluateCodeGate`) passes unconditionally when `requiredCommit` is
+  // absent, so listing prod here today would let an operator heal an environment
+  // the code half has not reached: production deploys `main`, and this fix is on
+  // `development`. Healing there would re-corrupt on the next write, which is the
+  // treadmill the ledger exists to prevent. Pin the squash-merge SHA and add
+  // "prod" in the same change.
+  envs: ["dev", "sandbox"],
   idempotent: true,
   guards: ["turn-lock-free", "money-conserving", "max-affected:500"],
   detect,
