@@ -3,7 +3,7 @@ import type { StateResourceCapacity } from "@/lib/db/types/stateResourceCapacity
 import type { CountryId } from "@/lib/constants/countries";
 import {
   getStateResourceCapacity,
-  resolveStateResourceEntry,
+  lookupStateResourceCapacity,
 } from "@/lib/seeds/reference/stateResourceCapacity";
 
 /**
@@ -66,22 +66,11 @@ export async function seedStateResourceCapacity(
   for (const state of states) {
     // capacityMap is keyed by `${countryId}:${stateId}` so cross-country
     // state-ID collisions (e.g. CN HB / DE HB) can't accidentally route a
-    // state to the wrong country's resource budget. `resolveStateResourceEntry`
-    // keeps that guarantee while surviving a country merge: a state absorbed
-    // into another country now reads under the SURVIVOR's id, and a bare
-    // compound lookup would miss and WIPE its deposits to `{}` on the next
-    // re-seed (ticket #1271).
-    const entry = resolveStateResourceEntry(capacityMap, state.countryId, state._id, (candidates) =>
-      log(
-        `seedStateResourceCapacity: ambiguous capacity for ${state._id} ` +
-          `(defined by ${candidates.join(", ")}), seeding empty`
-      )
-    );
+    // state to the wrong country's resource budget. The lookup prefers the
+    // live owner's key and falls back to a previous owner's (reunification
+    // rescopes the region, not the geology); the doc keeps the live owner.
+    const entry = lookupStateResourceCapacity(capacityMap, state.countryId, state._id);
     const resources = entry?.resources ?? {};
-    // The STATE row owns the country, not the capacity entry: after a merge the
-    // entry still carries the absorbed country's id and copying it back would
-    // undo the re-key `mergeCountry` just performed. Identical for every
-    // unmerged world, where the two always agree.
     const countryId: CountryId = state.countryId;
 
     ops.push({

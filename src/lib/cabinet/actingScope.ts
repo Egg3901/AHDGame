@@ -187,6 +187,17 @@ export const CABINET_ROUTE_SCOPES: Record<string, CabinetLeverScope | "operation
   "nuclear/production": "doctrine",
   "nuclear/test": "doctrine",
 
+  // The intelligence console. Every mutation funnels through
+  // `requireIntelligenceHolder` with `intent: "manage"`, which applies the
+  // scope once for the whole console the way the nuclear guard does. An
+  // acting director reads the service but does not point it: funding a
+  // network abroad and running an operation both outlive the appointment,
+  // and an attributed operation is a diplomatic fact the next holder owns.
+  "intelligence/budget": "stance",
+  "intelligence/counter-intel": "stance",
+  "intelligence/network": "stance",
+  "intelligence/operation": "stance",
+
   // Commits money past the appointment.
   "defence-contracts": "procurement",
   "debt-operation": "treasury",

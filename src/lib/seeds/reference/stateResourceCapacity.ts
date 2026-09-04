@@ -580,38 +580,28 @@ export function getStateResourceCapacity(
 }
 
 /**
- * The seed capacity entry for a state, resolved through a country merge.
+ * Look up a state's resource capacity entry, tolerating a post-merge owner.
  *
- * WHY THIS IS NOT A PLAIN `map[`${countryId}:${stateId}`]` LOOKUP. Deposits are
- * geology: they belong to the STATE, and the country half of the key exists only
- * to disambiguate state codes that two countries both use (CN `HB` vs DE `HB`).
- * When a country is absorbed, `mergeCountry` re-keys every state onto the
- * survivor, so a western Land seeded as `DE:NW` is asked for as `DD:NW` from
- * then on and the direct lookup misses. The caller then reads "no deposits" for
- * a state whose coal and iron are sitting in `stateResourceCapacity` and being
- * mined every turn (ticket #1271: German reunification stranded the Ruhr and the
- * Saar, and the eleven western Laender lost their extraction sectors outright).
- *
- * So: exact key first, and on a miss fall back to the state code alone, but ONLY
- * when exactly one country in the table defines it. An ambiguous code is the
- * case the compound key was introduced for, and guessing there would route a
- * state to another country's deposits, which is worse than the miss. Those still
- * return `undefined`, and `onAmbiguous` lets a caller log the collision.
+ * The map is keyed `${countryId}:${stateId}` against the world the reference
+ * was authored for. When a country absorbs another (German reunification: the
+ * FRG Laender accede to DD), the regions cross but the static map keeps their
+ * capacity under the OLD owner (`DE:NW`), so a strict `${countryId}:${stateId}`
+ * lookup reports no resources for land that still sits on the Ruhr coal.
+ * Prefer the live owner's key (cross-country state-id collisions such as
+ * `DE:SN` vs `DD:SN` must keep resolving to the owner's own budget), and fall
+ * back to any other owner key for the same region, sorted for determinism.
+ * Geology does not move when the flag above it changes.
  */
-export function resolveStateResourceEntry(
-  map: Record<string, StateResourceCapacityEntry>,
+export function lookupStateResourceCapacity(
+  capacityMap: Record<string, StateResourceCapacityEntry>,
   countryId: string,
-  stateId: string,
-  onAmbiguous?: (candidateCountryIds: string[]) => void
+  stateId: string
 ): StateResourceCapacityEntry | undefined {
-  const direct = map[`${countryId}:${stateId}`];
-  if (direct) return direct;
-
+  const own = capacityMap[`${countryId}:${stateId}`];
+  if (own) return own;
   const suffix = `:${stateId}`;
-  const candidates = Object.keys(map).filter((key) => key.endsWith(suffix));
-  if (candidates.length === 1) return map[candidates[0]];
-  if (candidates.length > 1) {
-    onAmbiguous?.(candidates.map((key) => key.slice(0, key.length - suffix.length)));
-  }
-  return undefined;
+  const fallbackKey = Object.keys(capacityMap)
+    .filter((key) => key.endsWith(suffix))
+    .sort()[0];
+  return fallbackKey ? capacityMap[fallbackKey] : undefined;
 }

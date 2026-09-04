@@ -1,62 +1,85 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   getStateResourceCapacity,
-  resolveStateResourceEntry,
+  lookupStateResourceCapacity,
   type StateResourceCapacityEntry,
 } from "./stateResourceCapacity";
 
-const MAP: Record<string, StateResourceCapacityEntry> = {
-  "DE:NW": { countryId: "DE", resources: { coal: 90000, iron: 45000 } },
-  "DE:HB": { countryId: "DE", resources: { timber: 750 } },
-  "DD:SN": { countryId: "DD", resources: { coal: 55000 } },
-  "CN:HB": { countryId: "CN", resources: { coal: 1000 } },
-  "US:TX": { countryId: "US", resources: { oil: 450000 } },
-};
+const entry = (countryId: "DE" | "DD", resources: StateResourceCapacityEntry["resources"]) => ({
+  countryId,
+  resources,
+});
 
-describe("resolveStateResourceEntry", () => {
-  it("takes the exact compound key when the state is still in its seeded country", () => {
-    expect(resolveStateResourceEntry(MAP, "DE", "NW")?.resources).toEqual({
-      coal: 90000,
-      iron: 45000,
-    });
+describe("lookupStateResourceCapacity", () => {
+  const map = {
+    "DD:SN": entry("DD", { coal: 55000 }),
+    "DE:SN": entry("DE", { coal: 45000, rare_earth: 1286 }),
+    "DE:NW": entry("DE", { coal: 90000, iron: 45000 }),
+  };
+
+  it("prefers the live owner's key when both owners list the region", () => {
+    expect(lookupStateResourceCapacity(map, "DD", "SN")).toBe(map["DD:SN"]);
+    expect(lookupStateResourceCapacity(map, "DE", "SN")).toBe(map["DE:SN"]);
   });
 
-  it("finds a state absorbed into another country by its unique state code", () => {
-    // Ticket #1271: reunification re-keys the western Laender onto DD, so the
-    // `DD:NW` lookup misses even though the Ruhr deposits are unchanged.
-    expect(resolveStateResourceEntry(MAP, "DD", "NW")?.resources).toEqual({
-      coal: 90000,
-      iron: 45000,
-    });
+  it("falls back to a previous owner's key for an absorbed region (ticket #1271)", () => {
+    // Nordrhein-Westfalen acceded to DD; the static map still keys the Ruhr
+    // deposits under DE, and the geology did not move with the flag.
+    expect(lookupStateResourceCapacity(map, "DD", "NW")).toBe(map["DE:NW"]);
   });
 
-  it("still prefers the exact key over the fallback when both could match", () => {
-    expect(resolveStateResourceEntry(MAP, "CN", "HB")?.resources).toEqual({ coal: 1000 });
-    expect(resolveStateResourceEntry(MAP, "DE", "HB")?.resources).toEqual({ timber: 750 });
+  it("returns undefined when no owner lists the region", () => {
+    expect(lookupStateResourceCapacity(map, "DD", "NOWHERE")).toBeUndefined();
   });
 
-  it("refuses to guess when two countries define the same state code", () => {
-    const onAmbiguous = vi.fn();
-    expect(resolveStateResourceEntry(MAP, "DD", "HB", onAmbiguous)).toBeUndefined();
-    expect(onAmbiguous).toHaveBeenCalledTimes(1);
-    expect(onAmbiguous.mock.calls[0][0].sort()).toEqual(["CN", "DE"]);
+  it("picks the first owner by key order when several list a region the asker does not", () => {
+    // PINS A DELIBERATE AMBIGUITY. The country half of the key exists to keep
+    // colliding region codes apart, so a code defined by two countries that are
+    // BOTH foreign to the asker has no provably right answer. The fallback takes
+    // the first by sorted key rather than refusing, which is safe today only
+    // because no such collision is reachable: the sole colliding codes on the
+    // live map are the five eastern Laender (SN, BB, ST, TH, MV), and DD and DE
+    // each carry their own entry for those, so the exact key always hits first
+    // and this branch never runs for them. If a future merge introduces a code
+    // two countries share and a THIRD asks for it, that country silently
+    // inherits alphabetical-first geology. Kept as a pinned expectation so the
+    // choice is visible rather than incidental.
+    const ambiguous = {
+      "CN:HB": entry("DD", { coal: 1000 }),
+      "DE:HB": entry("DE", { timber: 750 }),
+    };
+    expect(lookupStateResourceCapacity(ambiguous, "PL", "HB")).toBe(ambiguous["CN:HB"]);
   });
+});
 
-  it("returns undefined for a state that carries no deposits anywhere", () => {
-    const onAmbiguous = vi.fn();
-    expect(resolveStateResourceEntry(MAP, "US", "NOWHERE", onAmbiguous)).toBeUndefined();
-    expect(onAmbiguous).not.toHaveBeenCalled();
-  });
+describe("lookupStateResourceCapacity against the live reference map", () => {
+  // The exact shape of the #1271 incident: reunification re-keys the eleven
+  // western Laender onto DD, and every one of them must still report the
+  // deposits it was seeded with. Without this the SOE extraction gate reads
+  // "no resources" and builds no plant, which is how the Ruhr, the Saar and the
+  // Niedersachsen gas fields went unreachable on the live world.
+  const WESTERN_LAENDER = ["BW", "BY", "NW", "HE", "RP", "SL", "NI", "SH", "HH", "BRE", "BE"];
+  const EASTERN_LAENDER = ["MV", "BB", "ST", "SN", "TH"];
 
-  it("resolves every western German Land through a DD survivor on the live map", () => {
-    // The exact shape of the live bug: all eleven states report deposits under
-    // the surviving country id, and none of the codes are ambiguous.
+  it("resolves every western Land under the DD survivor", () => {
     const live = getStateResourceCapacity("1953-default");
-    const west = ["BW", "BY", "NW", "HE", "RP", "SL", "NI", "SH", "HH", "BRE", "BE"];
-    for (const stateId of west) {
-      const entry = resolveStateResourceEntry(live, "DD", stateId);
-      expect(entry, `${stateId} should resolve under DD`).toBeDefined();
-      expect(Object.keys(entry?.resources ?? {}).length).toBeGreaterThan(0);
+    for (const stateId of WESTERN_LAENDER) {
+      const resolved = lookupStateResourceCapacity(live, "DD", stateId);
+      expect(resolved, `${stateId} should resolve under DD`).toBeDefined();
+      expect(
+        Object.keys(resolved?.resources ?? {}).length,
+        `${stateId} should carry deposits`
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps each eastern Land on its own entry rather than the FRG's", () => {
+    // These are the only colliding codes on the map, so they are the ones that
+    // would break first if the exact-key preference were ever dropped.
+    const live = getStateResourceCapacity("1953-default");
+    for (const stateId of EASTERN_LAENDER) {
+      expect(lookupStateResourceCapacity(live, "DD", stateId)?.countryId).toBe("DD");
+      expect(lookupStateResourceCapacity(live, "DE", stateId)?.countryId).toBe("DE");
     }
   });
 });

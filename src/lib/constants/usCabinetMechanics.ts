@@ -1882,4 +1882,26 @@ export const US_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
       sideEffects: { "governance.publicTrust": -0.05 },
     },
   },
+  director_of_intelligence: {
+    positionId: "director_of_intelligence",
+    department: "Central Intelligence Agency",
+    sealImage: "",
+    nationalMetrics: [
+      {
+        category: "governance",
+        metricId: "publicTrust",
+        label: "Public Trust",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "publicSafety",
+        metricId: "crimeRate",
+        label: "Crime Rate",
+        format: "rate",
+        higherIsBetter: false,
+      },
+    ],
+    regionalMetrics: [],
+  },
 };

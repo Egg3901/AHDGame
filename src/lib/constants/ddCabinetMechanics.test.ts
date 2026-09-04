@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DD_CABINET_MECHANICS } from "./ddCabinetMechanics";
 import { DD_CABINET_POSITIONS } from "./ddCabinet";
+import { PERPETUAL_YEAR } from "@/lib/cabinet/rosterEra";
 
 describe("DD cabinet departments", () => {
   it("no department names the USSR", () => {
@@ -54,6 +55,34 @@ describe("Eastern Bloc departments do not inherit GDR-specific names", () => {
       expect(mechanics.gosbank_liaison.department).toBe("State Bank");
       expect(mechanics.gosbank_liaison.departmentByYear).toBeUndefined();
       expect(mechanics.minister_of_internal_affairs.department).toBe("Ministry of the Interior");
+      expect(mechanics.director_of_intelligence.department).toBe("Security Service");
+    }
+  });
+
+  it("no bloc SEAT NAME carries a GDR or Soviet-specific title", async () => {
+    // The department check above never looked at seat names, so a GDR-specific
+    // title could reach eight countries unnoticed. DD's security seat is the
+    // Stasi by name and by its 1950 stand-up; the bloc must carry neither.
+    const {
+      EASTERN_BLOC_GENERAL_SECRETARY_CABINET_POSITIONS,
+      PL_CABINET_POSITIONS,
+      YU_CABINET_POSITIONS,
+      UNION_REPUBLIC_CABINET_POSITIONS,
+    } = await import("./easternBlocCabinet");
+    for (const positions of [
+      EASTERN_BLOC_GENERAL_SECRETARY_CABINET_POSITIONS,
+      PL_CABINET_POSITIONS,
+      YU_CABINET_POSITIONS,
+      UNION_REPUBLIC_CABINET_POSITIONS,
+    ]) {
+      for (const position of positions) {
+        expect(position.name, position.id).not.toMatch(/DDR|Stasi|USSR|Soviet/i);
+      }
+      const security = positions.find((p) => p.id === "director_of_intelligence")!;
+      expect(security.name).toBe("Minister of State Security");
+      // Perpetual, not DD's 1950: Poland's UB dates from 1945 and the rest
+      // likewise predate the MfS.
+      expect(security.yearEnabled).toBe(PERPETUAL_YEAR);
     }
   });
 });
