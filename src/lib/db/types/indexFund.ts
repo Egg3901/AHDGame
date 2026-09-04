@@ -145,6 +145,8 @@ export type IndexFundTransactionKind =
   | "bond_allocation"
   | "bond_sale"
   | "rebalance"
+  /** Holding in a dissolved corporation removed at zero: no buyer can exist. */
+  | "holding_writeoff"
   | "cross_fund_buy"
   | "cross_fund_sell"
   | "liquidity_quote_buy"
