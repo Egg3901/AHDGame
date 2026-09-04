@@ -33,6 +33,7 @@ describe("restoreSectorsToUnowned", () => {
     db.collection("corporateSectors");
     db.collection("exchangeRates");
     db.collection("unownedSectors");
+    db.collection("states");
     db.collectionMocks.unownedSectors.findOneAndUpdate.mockResolvedValue(null);
   });
 
@@ -292,5 +293,51 @@ describe("restoreSectorsToUnowned", () => {
       poolsUpdated: 1,
       totalRevenueRestored: 250,
     });
+  });
+
+  // Ticket #1271. The pool row this credits CARRIES a countryId and every reader
+  // filters on it, so it has to be the country the STATE is in. A sector whose
+  // stored country went stale when its region changed hands would otherwise
+  // return its capacity to a market the country it sits in cannot see.
+  it("credits the pool under the country the STATE is in, not the sector's stale value", async () => {
+    const corpId = new ObjectId();
+    const now = new Date("2026-09-04T12:00:00.000Z");
+
+    db.collectionMocks.corporations.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: async () => [{ _id: corpId, countryId: "US", liquidCurrencyCode: "USD" }],
+      }),
+    });
+    db.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [{ currencyCode: "USD", rate: 1 }],
+    });
+    // The region changed hands: the state says UKR, the sector still says US.
+    db.collectionMocks.states.find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: async () => [{ _id: "UKR_WES", countryId: "UKR" }],
+      }),
+    });
+    db.collectionMocks.corporateSectors.deleteMany.mockResolvedValue({ deletedCount: 1 });
+
+    const { restoreSectorsToUnowned } = await import("./restoreSectorsToUnowned");
+    await restoreSectorsToUnowned(
+      db as unknown as Db,
+      [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          countryId: "US",
+          stateId: "UKR_WES",
+          sectorType: "agriculture",
+          revenue: 250,
+        },
+      ] as never,
+      now
+    );
+
+    const call = db.collectionMocks.unownedSectors.findOneAndUpdate.mock.calls[0];
+    const stages = call[1] as Array<{ $set: Record<string, unknown> }>;
+    expect(JSON.stringify(stages[0].$set.countryId)).toContain("UKR");
+    expect(JSON.stringify(stages[0].$set.countryId)).not.toContain('"US"');
   });
 });

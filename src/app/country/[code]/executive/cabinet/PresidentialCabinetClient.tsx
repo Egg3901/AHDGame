@@ -532,43 +532,67 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
                         </div>
 
                         {position.member ? (
-                          <div className="mt-3 flex items-center gap-3">
-                            <Avatar
-                              url={position.member.avatarUrl}
-                              name={position.member.characterName}
-                              size="h-9 w-9"
-                              className="shrink-0 rounded-lg"
-                            />
-                            <div className="min-w-0">
-                              <Link
-                                href={`/character/${position.member.sequentialId ?? position.member.characterId}`}
-                                className="block truncate text-sm font-medium text-primary hover:underline"
-                              >
-                                {position.member.characterName}
-                              </Link>
-                              {position.member.partyName && position.member.partyColor && (
-                                <div className="mt-1">
-                                  <PartyChip
-                                    partyName={position.member.partyName}
-                                    partyColor={position.member.partyColor}
-                                    partyId={position.member.party}
-                                    logoUrl={position.member.partyLogoUrl}
-                                    countryId={countryId}
-                                  />
-                                </div>
-                              )}
-                              {position.member.acting && (
-                                <div className="mt-2 flex flex-wrap items-center gap-2">
-                                  <Badge color="warning">Acting</Badge>
-                                  {actingTurnsLeft(position.member) !== null && (
-                                    <span className="text-xs text-muted">
-                                      {actingTurnsLeft(position.member)} turns remaining
-                                    </span>
-                                  )}
-                                </div>
-                              )}
+                          <>
+                            <div className="mt-3 flex items-center gap-3">
+                              <Avatar
+                                url={position.member.avatarUrl}
+                                name={position.member.characterName}
+                                size="h-9 w-9"
+                                className="shrink-0 rounded-lg"
+                              />
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/character/${position.member.sequentialId ?? position.member.characterId}`}
+                                  className="block truncate text-sm font-medium text-primary hover:underline"
+                                >
+                                  {position.member.characterName}
+                                </Link>
+                                {position.member.partyName && position.member.partyColor && (
+                                  <div className="mt-1">
+                                    <PartyChip
+                                      partyName={position.member.partyName}
+                                      partyColor={position.member.partyColor}
+                                      partyId={position.member.party}
+                                      logoUrl={position.member.partyLogoUrl}
+                                      countryId={countryId}
+                                    />
+                                  </div>
+                                )}
+                                {position.member.acting && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <Badge color="warning">Acting</Badge>
+                                    {actingTurnsLeft(position.member) !== null && (
+                                      <span className="text-xs text-muted">
+                                        {actingTurnsLeft(position.member)} turns remaining
+                                      </span>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          </div>
+                            {/*
+                              An acting holder does not block confirmation: nominating
+                              here sends the seat to the Senate, and confirming
+                              replaces the caretaker. Offered on the card so the
+                              President is not pushed toward firing first, which
+                              would spend the seat's single acting charge for nothing.
+                            */}
+                            {data.isPresident && position.member.acting && (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                <Button
+                                  variant="secondary"
+                                  onClick={() => {
+                                    setSelectedPositionId(position.id);
+                                    setNominateModal(true);
+                                    setSelectedCharId("");
+                                    setNominateError("");
+                                  }}
+                                >
+                                  Nominate
+                                </Button>
+                              </div>
+                            )}
+                          </>
                         ) : position.nomination ? (
                           <div className="mt-3 rounded-lg border border-warning/30 bg-warning/10 p-3">
                             <div className="flex items-center justify-between gap-3">
@@ -651,6 +675,10 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         submitting={submitting}
         onPositionChange={setSelectedPositionId}
         onCharChange={setSelectedCharId}
+        // Confirmation replaces an acting holder at once, so acting-held
+        // seats stay nominatable. The acting picker below must NOT set this:
+        // installing an acting secretary requires a vacant seat.
+        includeActingHeld
         onSubmit={handleNominate}
         onCancel={() => {
           setNominateModal(false);
