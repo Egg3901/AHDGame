@@ -15,10 +15,7 @@ import type {
   BriefingDelegatePath,
   BriefingTippingPath,
   CampaignBriefing,
-  CampaignUpgrade,
-  OpsTreeView,
 } from "@/lib/campaigns/dto/campaignView";
-import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
 import type { CandidateBucketAppeal } from "@/lib/electionEngine/factorLedger";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { allocateElectoralVotes } from "@/lib/turn/electionCalculations";
@@ -56,45 +53,6 @@ export function buildCoalitionWeakness(
 export function buildCashRunway(funds: number, netPerTurn: number): CampaignBriefing["cashRunway"] {
   const turnsOfRunway = netPerTurn < 0 ? Math.floor(funds / -netPerTurn) : null;
   return { funds, netPerTurn, turnsOfRunway };
-}
-
-/**
- * Per-lever operations saturation: summed invested branch levels against the
- * lever's max (branch count × per-branch cap). Reads the already-built ops-tree
- * view so it matches exactly what the ops modal renders.
- */
-export function buildOpsSaturation(
-  opsTrees: Record<UpgradeCategory, OpsTreeView>
-): CampaignBriefing["opsSaturation"] {
-  return (Object.entries(opsTrees) as [UpgradeCategory, OpsTreeView][]).map(([category, tree]) => {
-    let level = 0;
-    let max = 0;
-    for (const branch of tree.branches) {
-      level += branch.level;
-      max += branch.maxLevel;
-    }
-    return { category, level, max };
-  });
-}
-
-/**
- * Action tradeoffs, composed from the already-localized next-upgrade costs. A
- * maxed lever (null cost) is skipped — there is no next tier to weigh.
- */
-export function buildTradeoffs(
-  sources: { key: string; label: string; cost: CampaignUpgrade | null }[]
-): CampaignBriefing["tradeoffs"] {
-  const out: CampaignBriefing["tradeoffs"] = [];
-  for (const { key, label, cost } of sources) {
-    if (!cost) continue;
-    out.push({
-      actionId: key,
-      label,
-      cost: { funds: cost.funds, actions: cost.actions },
-      expectedEffect: cost.effect,
-    });
-  }
-  return out;
 }
 
 /**

@@ -47,22 +47,10 @@ const delegateBriefing: CampaignBriefing = {
     { bucket: "race:black", appealShare: 0.1, demoEP: -0.3, demoSP: -0.2 },
     { bucket: "race:white", appealShare: 0.5, demoEP: 0.1, demoSP: 0.2 },
   ],
-  opsSaturation: [
-    { category: "fundraising", level: 2, max: 15 },
-    { category: "groundGame", level: 0, max: 15 },
-  ],
-  tradeoffs: [
-    {
-      actionId: "fundraising",
-      label: "Fundraising",
-      cost: { funds: 75_000, actions: 15 },
-      expectedEffect: "+income",
-    },
-  ],
 };
 
 describe("CampaignRoomBriefing", () => {
-  it("renders the delegate path, runway, weakest bucket, and a tradeoff", () => {
+  it("renders the delegate path, runway and weakest bucket", () => {
     render(<CampaignRoomBriefing campaign={campaignWith(delegateBriefing)} />);
     expect(screen.getByText(/Campaign Room/i)).toBeTruthy();
     expect(screen.getByText(/Path to victory: delegates/i)).toBeTruthy();
@@ -73,9 +61,10 @@ describe("CampaignRoomBriefing", () => {
     expect(screen.getByText(/Black · Race/i)).toBeTruthy();
     // Runway with a burn shows a turn count.
     expect(screen.getByText(/of runway at the current burn/i)).toBeTruthy();
-    // Tradeoff effect string + cost render.
-    expect(screen.getByText(/\+income/i)).toBeTruthy();
-    expect(screen.getByText(/\$75,000\.00/)).toBeTruthy();
+    // The levers themselves are not repeated here: Strategic operations above
+    // renders them interactively, with the next tier's price on the row.
+    expect(screen.queryByText(/Operations saturation/i)).toBeNull();
+    expect(screen.queryByText(/Action tradeoffs/i)).toBeNull();
   });
 
   it("renders the tipping path with electoral votes and closest states", () => {

@@ -7,6 +7,7 @@ import { resolveElectionYear } from "@/lib/utils/formatters";
 import { Modal, Skeleton } from "@/components/ui";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { CanvassingPanel } from "./components/CanvassingPanel";
+import { StatePresencePanel } from "./components/StatePresencePanel";
 import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
 import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
@@ -387,6 +388,17 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
                 onResourcesSpent={fetchMe}
               />
             )}
+
+          {/* Where you are, then what being there lets you do. Canvassing is
+              gated on having a state, so the control that sets one sits
+              directly above it rather than somewhere else on the page. */}
+          <StatePresencePanel
+            presence={campaign.statePresence}
+            onChanged={() => {
+              fetchCampaign();
+              fetchMe();
+            }}
+          />
 
           {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
             <CanvassingPanel

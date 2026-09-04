@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { useRouter } from "next/navigation";
+import { StatePickerModal } from "./StatePickerModal";
 
 interface StateOption {
   id: string;
@@ -49,17 +50,8 @@ export function PrimaryCampaignControls({
 }: PrimaryCampaignControlsProps) {
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [stateSearch, setStateSearch] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-
-  const filtered = stateSearch
-    ? states.filter(
-        (s) =>
-          s.name.toLowerCase().includes(stateSearch.toLowerCase()) ||
-          s.id.includes(stateSearch.toUpperCase())
-      )
-    : states;
 
   const selectState = async (stateId: string) => {
     setBusy("camp");
@@ -75,7 +67,6 @@ export function PrimaryCampaignControls({
       if (res.ok) {
         setMessage(`✓ ${data.message}`);
         setPickerOpen(false);
-        setStateSearch("");
         router.refresh();
         onChanged?.();
       } else {
@@ -212,63 +203,16 @@ export function PrimaryCampaignControls({
         </div>
       )}
 
-      {/* State picker modal */}
       {pickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="rounded-xl border border-card-border bg-card max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
-            <div className="px-4 py-3 border-b border-card-border flex items-center justify-between">
-              <h3 className="font-semibold">Pick a state to campaign in</h3>
-              <button
-                type="button"
-                aria-label="Close"
-                onClick={() => setPickerOpen(false)}
-                className="text-muted hover:text-foreground p-1"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="px-4 py-2 border-b border-card-border">
-              <input
-                type="text"
-                value={stateSearch}
-                onChange={(e) => setStateSearch(e.target.value)}
-                placeholder="Search by name or code…"
-                className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
-              />
-              <p className="text-[11px] text-muted mt-1">
-                Cost scales by state EV: 3 (small) → 10 actions (large).
-              </p>
-            </div>
-            <div className="overflow-y-auto flex-1 p-2">
-              {filtered.map((s) => {
-                const canAfford = playerActions >= s.actionCost;
-                const isCurrent = s.id === currentCampaignState;
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    disabled={!canAfford || isCurrent || busy !== null}
-                    onClick={() => selectState(s.id)}
-                    className={`w-full text-left rounded-lg border px-3 py-2 text-sm transition-colors flex items-center justify-between gap-2 ${
-                      isCurrent
-                        ? "border-amber-500/50 bg-amber-500/20 text-amber-400"
-                        : canAfford
-                          ? "border-card-border hover:bg-background"
-                          : "border-card-border/40 opacity-40"
-                    }`}
-                  >
-                    <span className="font-medium">
-                      {s.name} <span className="text-muted text-xs">({s.id})</span>
-                    </span>
-                    <span className="text-xs text-muted tabular-nums">
-                      {isCurrent ? "current" : `${s.actionCost} actions`}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <StatePickerModal
+          title="Pick a state to campaign in"
+          states={states}
+          currentStateId={currentCampaignState}
+          playerActions={playerActions}
+          busy={busy !== null}
+          onPick={selectState}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   );

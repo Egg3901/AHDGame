@@ -572,7 +572,6 @@ describe("getCampaignDetail", () => {
     }
     // Weakest census bucket sorts first (0.1 < 0.5) — buckets, never archetypes.
     expect(detail.briefing?.coalitionWeakness[0]?.bucket).toBe("race:black");
-    expect(detail.briefing?.opsSaturation.length).toBeGreaterThan(0);
     expect(detail.briefing?.cashRunway.funds).toBe(500_000);
   });
 

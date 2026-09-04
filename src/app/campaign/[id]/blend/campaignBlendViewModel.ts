@@ -98,6 +98,14 @@ export interface OpsRowVM {
   segments: React.CSSProperties[];
   expanded: boolean;
   tree: OpsTreeVM | null;
+  /**
+   * What the next tier buys and what it costs.
+   *
+   * The row used to show a bare "+" with no price while a separate briefing
+   * card listed the same four levers' costs, so the reader had to hold two
+   * blocks side by side to answer one question. Null when the lever is maxed.
+   */
+  nextStep: { effect: string; costText: string } | null;
 }
 
 export interface LedgerRowVM {
@@ -328,6 +336,8 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
         const color = OPS_LEVER_COLOR[key];
         const expanded = expandedCategory === key;
 
+        const next = campaign.nextUpgradeCosts?.[key] ?? null;
+
         return {
           key,
           label: meta?.label ?? key,
@@ -339,6 +349,14 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
           segments: blendSegments(invested, 10, color),
           expanded,
           tree: expanded ? buildTreeVM(campaign, key, symbol) : null,
+          nextStep: next
+            ? {
+                effect: next.effect,
+                costText: `${money(next.funds, symbol)} · ${next.actions} action${
+                  next.actions === 1 ? "" : "s"
+                }`,
+              }
+            : null,
         };
       })
     : [];

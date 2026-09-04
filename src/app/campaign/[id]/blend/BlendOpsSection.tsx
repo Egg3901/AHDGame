@@ -517,6 +517,19 @@ export function BlendOpsSection({
                 </span>
                 <span style={{ fontFamily: FONT.serif, fontSize: 13, color: BLEND.muted }}>
                   {row.effect}
+                  {row.nextStep ? (
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: 2,
+                        fontFamily: FONT.mono,
+                        fontSize: 10.5,
+                        color: BLEND.mutedDimmer,
+                      }}
+                    >
+                      NEXT {row.nextStep.effect} · {row.nextStep.costText}
+                    </span>
+                  ) : null}
                 </span>
                 <span
                   style={{

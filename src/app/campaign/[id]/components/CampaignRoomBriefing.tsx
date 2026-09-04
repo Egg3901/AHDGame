@@ -15,10 +15,14 @@ interface CampaignRoomBriefingProps {
 
 /**
  * Owner-only campaign-room briefing, in the Blend treatment. Renders the
- * read-only strategic digest the server composed on `campaign.briefing` (path
- * to victory, cash runway, where the coalition is weak, operations saturation,
- * and action tradeoffs). The parent gates this on owner access, so a non-owner
- * never reaches it; it also no-ops defensively if the block is absent.
+ * read-only strategic digest the server composed on `campaign.briefing`: the
+ * path to victory, the cash runway, and where the coalition is weak. The parent
+ * gates this on owner access, so a non-owner never reaches it; it also no-ops
+ * defensively if the block is absent.
+ *
+ * It deliberately does not restate the operations levers. Strategic operations
+ * renders those interactively above, with the next tier's effect and price on
+ * the row that buys it.
  */
 export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
   const briefing = campaign.briefing;
@@ -51,16 +55,18 @@ export function CampaignRoomBriefing({ campaign }: CampaignRoomBriefingProps) {
         </span>
       </div>
 
+      {/* Operations saturation and action tradeoffs used to sit here, listing
+          the same four levers the Strategic operations block above already
+          renders interactively. The reader met the levers three times on one
+          page, and the two counts even disagreed: saturation summed branch
+          levels only, so a lever read 0/9 here and 0/10 above. The levers now
+          appear once, with the next tier's effect and price on the row that
+          buys it. What remains below is what the briefing alone knows. */}
       <div className="blend-briefing-grid">
         <PathToVictoryCard path={briefing.path} />
         <CashRunwayCard cashRunway={briefing.cashRunway} currencyCode={campaign.currencyCode} />
-        <CoalitionWeaknessCard buckets={briefing.coalitionWeakness} />
-        <OpsSaturationCard saturation={briefing.opsSaturation} />
         <div className="blend-briefing-wide">
-          <ActionTradeoffsCard
-            tradeoffs={briefing.tradeoffs}
-            currencyCode={campaign.currencyCode}
-          />
+          <CoalitionWeaknessCard buckets={briefing.coalitionWeakness} />
         </div>
       </div>
 
@@ -310,109 +316,6 @@ export function CoalitionWeaknessCard({ buckets }: { buckets: BriefingCoalitionB
               label={prettyBucket(b.bucket)}
               value={`${(b.appealShare * 100).toFixed(1)}%`}
             />
-          ))}
-        </ul>
-      )}
-    </CardShell>
-  );
-}
-
-export function OpsSaturationCard({
-  saturation,
-}: {
-  saturation: CampaignBriefing["opsSaturation"];
-}) {
-  return (
-    <CardShell title="Operations saturation">
-      <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
-        {saturation.map((s) => {
-          const max = Math.max(s.max, 1);
-          const pct = Math.min(100, (s.level / max) * 100);
-          const label = s.category.replace(/([A-Z])/g, " $1").trim();
-          return (
-            <li key={s.category}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span
-                  style={{ fontFamily: FONT.serif, fontSize: 13.5, textTransform: "capitalize" }}
-                >
-                  {label}
-                </span>
-                <span
-                  style={{
-                    fontFamily: FONT.mono,
-                    fontSize: 12,
-                    color: BLEND.muted,
-                    fontVariantNumeric: "tabular-nums",
-                  }}
-                >
-                  {s.level}/{s.max}
-                </span>
-              </div>
-              <div style={{ marginTop: 5, height: 4, background: BLEND.trackAlt }}>
-                <div style={{ height: "100%", width: `${pct}%`, background: BLEND.accent }} />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </CardShell>
-  );
-}
-
-export function ActionTradeoffsCard({
-  tradeoffs,
-  currencyCode,
-}: {
-  tradeoffs: CampaignBriefing["tradeoffs"];
-  currencyCode: CurrencyCode;
-}) {
-  const fmt = (v: number) => formatCurrencyFaceAmount(v, currencyCode);
-  return (
-    <CardShell title="Action tradeoffs">
-      {tradeoffs.length === 0 ? (
-        <Muted>Every operation is maxed out.</Muted>
-      ) : (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {tradeoffs.map((t) => (
-            <li
-              key={t.actionId}
-              style={{
-                display: "flex",
-                flexWrap: "wrap",
-                alignItems: "baseline",
-                justifyContent: "space-between",
-                gap: 8,
-                padding: "8px 0",
-                borderBottom: "1px solid rgba(34,34,47,.7)",
-              }}
-            >
-              <span style={{ minWidth: 0 }}>
-                <span style={{ fontFamily: FONT.serif, fontSize: 14, fontWeight: 600 }}>
-                  {t.label}
-                </span>
-                <span
-                  style={{
-                    marginLeft: 8,
-                    fontFamily: FONT.serif,
-                    fontSize: 13,
-                    color: BLEND.muted,
-                  }}
-                >
-                  {t.expectedEffect}
-                </span>
-              </span>
-              <span
-                style={{
-                  flexShrink: 0,
-                  fontFamily: FONT.mono,
-                  fontSize: 11.5,
-                  color: BLEND.muted,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {fmt(t.cost.funds)} · {t.cost.actions} action{t.cost.actions === 1 ? "" : "s"}
-              </span>
-            </li>
           ))}
         </ul>
       )}

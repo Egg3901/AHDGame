@@ -34,7 +34,8 @@ import { projectPrimaryByState, type ProjectionResult } from "@/lib/primaryProje
 import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
-import { ELECTORAL_VOTE_UNITS, getTravelActionCost } from "@/lib/constants/states";
+import { getTravelActionCost } from "@/lib/constants/states";
+import { TRAVEL_STATE_IDS, loadStateTravelOptions } from "@/lib/elections/stateTravelOptions";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { getPartyHex } from "@/lib/utils/politics";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -53,9 +54,6 @@ import type {
 } from "@/lib/elections/dto/primaryPartyDetail";
 
 export type { PrimaryPartyDetail, PrimaryViewerCampaign };
-
-/** Every state that casts electoral votes, deduplicated across split units. */
-const STATE_IDS = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
 
 /** The signed-in user, as both `getAuthUser` and `requireBasicAuth` report them. */
 export interface PrimaryDetailViewer {
@@ -210,11 +208,11 @@ export async function loadPrimaryPartyData(
     loadDemographicCategories(db),
     db
       .collection<State>("states")
-      .find({ _id: { $in: STATE_IDS } })
+      .find({ _id: { $in: TRAVEL_STATE_IDS } })
       .toArray(),
     db
       .collection<StateDemographics>("stateDemographics")
-      .find({ _id: { $in: STATE_IDS } })
+      .find({ _id: { $in: TRAVEL_STATE_IDS } })
       .toArray(),
     fetchEnrichedCandidates(candidates, { includePartyPositions: true, countryId }),
   ]);
@@ -222,7 +220,7 @@ export async function loadPrimaryPartyData(
   const demographicsMap = new Map(demographicsDocs.map((d) => [d._id as string, d]));
 
   const stateNameById: Record<string, string> = {};
-  for (const stateId of STATE_IDS) {
+  for (const stateId of TRAVEL_STATE_IDS) {
     stateNameById[stateId] = stateMap.get(stateId)?.name ?? stateId;
   }
 
@@ -239,7 +237,7 @@ export async function loadPrimaryPartyData(
   const projection = projectPrimaryByState({
     candidates: enriched,
     candidateMeta,
-    stateIds: STATE_IDS,
+    stateIds: TRAVEL_STATE_IDS,
     stateMap,
     demographicsMap,
     categories: categoriesDocs,
@@ -302,7 +300,7 @@ export async function loadPrimaryPartyData(
     viewer,
     candidates,
   });
-  const viewerCampaign = await buildViewerCampaign(db, {
+  const viewerCampaign = await buildPrimaryViewerCampaign(db, {
     viewerCandidate,
     viewerCharacter,
     stateNameById,
@@ -432,17 +430,31 @@ async function resolveViewer(
   return { viewerCandidate, viewerCharacter };
 }
 
-async function buildViewerCampaign(
+/**
+ * The camp and surge controls' data for one candidate.
+ *
+ * Exported because the campaign manager shows the same two controls the primary
+ * screen does, and building it twice would let the two quote different prices
+ * for the same action. Pass the state names and preset when the caller has
+ * already loaded them; otherwise they are fetched here.
+ */
+export async function buildPrimaryViewerCampaign(
   db: Db,
   input: {
     viewerCandidate: ElectionCandidate | null;
     viewerCharacter: Character | null;
-    stateNameById: Record<string, string>;
-    apportionmentPreset: string | undefined;
+    stateNameById?: Record<string, string>;
+    apportionmentPreset?: string | undefined;
   }
 ): Promise<PrimaryViewerCampaign | null> {
-  const { viewerCandidate, viewerCharacter, stateNameById, apportionmentPreset } = input;
+  const { viewerCandidate, viewerCharacter } = input;
   if (!viewerCandidate || !viewerCharacter) return null;
+
+  const loaded = input.stateNameById
+    ? { stateNameById: input.stateNameById, preset: input.apportionmentPreset }
+    : await loadStateTravelOptions(db, input.apportionmentPreset);
+  const stateNameById = loaded.stateNameById;
+  const apportionmentPreset = loaded.preset;
 
   // Price and balance both in LOCAL units, matching the field and rate the
   // surge route debits, so an affordable-looking surge is an affordable one.
@@ -464,7 +476,7 @@ async function buildViewerCampaign(
     surgeCostFunds,
     surgeCostActions: PRIMARY_HOME_SURGE_COST_ACTIONS,
     surgeBoost: PRIMARY_HOME_SURGE_PCT,
-    states: STATE_IDS.map((id) => ({
+    states: TRAVEL_STATE_IDS.map((id) => ({
       id,
       name: stateNameById[id] ?? id,
       actionCost: getTravelActionCost(id, apportionmentPreset),

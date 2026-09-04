@@ -53,6 +53,7 @@ function row(over: Partial<OpsRowVM> = {}): OpsRowVM {
     segments: blendSegments(3, 10, "#fbbf24"),
     expanded: false,
     tree: null,
+    nextStep: { effect: "+$35k/turn", costText: "$50,000 · 10 actions" },
     ...over,
   };
 }
