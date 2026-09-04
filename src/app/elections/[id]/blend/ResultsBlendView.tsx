@@ -101,6 +101,88 @@ function TileBoard({ vm, columns }: { vm: ResultsBlendVM; columns: number }) {
   );
 }
 
+/**
+ * The final standing of every ticket: electoral votes, share and raw votes.
+ *
+ * Rendered without a heading so each layout supplies its own. It appears in
+ * both trees because the desktop rail is `hidden lg:block`, and a rail-only
+ * version meant the actual result of the election was unreadable on a phone.
+ */
+function TicketRows({ vm }: { vm: ResultsBlendVM }) {
+  return (
+    <>
+      {vm.tickets.map((c) => (
+        <div key={c.id} style={{ padding: "12px 0", borderBottom: "1px solid rgba(34,34,47,.7)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <i style={{ width: 12, height: 12, display: "block", background: c.color }} />
+            <span
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontFamily: FONT.serif,
+                fontSize: 15,
+                fontWeight: 600,
+              }}
+            >
+              {c.name}
+            </span>
+            <span style={{ fontFamily: FONT.mono, fontSize: 15 }}>{c.ev}</span>
+            {c.isWinner ? <span style={{ color: BLEND.gold }}>★</span> : null}
+          </div>
+          <div style={{ marginTop: 7, height: 4, background: BLEND.trackAlt }}>
+            <i
+              style={{
+                display: "block",
+                height: "100%",
+                width: `${c.sharePct}%`,
+                background: c.color,
+              }}
+            />
+          </div>
+          <div
+            style={{
+              marginTop: 5,
+              display: "flex",
+              justifyContent: "space-between",
+              fontFamily: FONT.mono,
+              fontSize: 10.5,
+              color: BLEND.mutedDim,
+            }}
+          >
+            <span>{c.pct}%</span>
+            <span>{c.votes}</span>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** The states that decided it, tightest first. */
+function ClosestRows({ vm }: { vm: ResultsBlendVM }) {
+  if (vm.closest.length === 0) return null;
+  return (
+    <>
+      {vm.closest.map((s) => (
+        <div
+          key={s.name}
+          style={{
+            display: "flex",
+            alignItems: "baseline",
+            justifyContent: "space-between",
+            gap: 10,
+            padding: "10px 0",
+            borderBottom: "1px solid rgba(34,34,47,.7)",
+          }}
+        >
+          <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{s.name}</span>
+          <span style={{ fontFamily: FONT.mono, fontSize: 11, color: s.color }}>{s.margin}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** The Blend results screen: serves the concluded page and the live dashboard. */
 export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
   const [rail, setRail] = useState<ResultsRail>("overview");
@@ -384,6 +466,29 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
             </div>
           ) : null}
 
+          {/* The tickets and the closest states lived only in the desktop rail,
+              which is `hidden lg:block`. On a phone that left the board and a
+              winner line with no per-ticket result at all. */}
+          <div style={{ marginBottom: 22 }}>
+            <h2
+              style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+            >
+              {route === "concluded" ? "The final tickets" : "The tickets"}
+            </h2>
+            <TicketRows vm={vm} />
+          </div>
+
+          {vm.closest.length > 0 ? (
+            <div style={{ marginBottom: 22 }}>
+              <h2
+                style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+              >
+                Closest states
+              </h2>
+              <ClosestRows vm={vm} />
+            </div>
+          ) : null}
+
           {vm.showStates ? (
             <div>
               <h2
@@ -457,52 +562,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
                 >
                   {route === "concluded" ? "Final tickets" : "Tickets"}
                 </div>
-                {vm.tickets.map((c) => (
-                  <div
-                    key={c.id}
-                    style={{ padding: "12px 0", borderBottom: "1px solid rgba(34,34,47,.7)" }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                      <i style={{ width: 12, height: 12, display: "block", background: c.color }} />
-                      <span
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          fontFamily: FONT.serif,
-                          fontSize: 15,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {c.name}
-                      </span>
-                      <span style={{ fontFamily: FONT.mono, fontSize: 15 }}>{c.ev}</span>
-                      {c.isWinner ? <span style={{ color: BLEND.gold }}>★</span> : null}
-                    </div>
-                    <div style={{ marginTop: 7, height: 4, background: BLEND.trackAlt }}>
-                      <i
-                        style={{
-                          display: "block",
-                          height: "100%",
-                          width: `${c.sharePct}%`,
-                          background: c.color,
-                        }}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 5,
-                        display: "flex",
-                        justifyContent: "space-between",
-                        fontFamily: FONT.mono,
-                        fontSize: 10.5,
-                        color: BLEND.mutedDim,
-                      }}
-                    >
-                      <span>{c.pct}%</span>
-                      <span>{c.votes}</span>
-                    </div>
-                  </div>
-                ))}
+                <TicketRows vm={vm} />
               </div>
 
               {vm.closest.length > 0 ? (
@@ -518,24 +578,7 @@ export function ResultsBlendView({ data, route }: ResultsBlendViewProps) {
                   >
                     Closest states
                   </div>
-                  {vm.closest.map((s) => (
-                    <div
-                      key={s.name}
-                      style={{
-                        display: "flex",
-                        alignItems: "baseline",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        padding: "10px 0",
-                        borderBottom: "1px solid rgba(34,34,47,.7)",
-                      }}
-                    >
-                      <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{s.name}</span>
-                      <span style={{ fontFamily: FONT.mono, fontSize: 11, color: s.color }}>
-                        {s.margin}
-                      </span>
-                    </div>
-                  ))}
+                  <ClosestRows vm={vm} />
                 </div>
               ) : null}
             </aside>

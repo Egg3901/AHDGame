@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
@@ -146,6 +146,112 @@ function TileBoard({ vm, columns }: { vm: GeneralBlendVM; columns: number }) {
           </span>
           <span style={{ fontFamily: FONT.mono, fontSize: 9, opacity: 0.75 }}>{t.ev}</span>
         </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Your own ticket's electoral votes and where that puts you.
+ *
+ * These three blocks are rendered without headings so each layout supplies its
+ * own, and they appear in both trees. The desktop rail is `hidden lg:block`, so
+ * a rail-only version of this one meant a player on a phone could not see their
+ * own standing on their own election night.
+ */
+function YourTicketBlock({ vm, campaignLink }: { vm: GeneralBlendVM; campaignLink: ReactNode }) {
+  if (!vm.yourTicket) return null;
+  return (
+    <>
+      <div style={{ marginTop: 9, fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
+        {vm.yourTicket.name}
+      </div>
+      <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 9 }}>
+        <span
+          style={{
+            fontFamily: FONT.mono,
+            fontSize: 34,
+            fontWeight: 500,
+            letterSpacing: "-0.03em",
+          }}
+        >
+          {vm.yourTicket.ev}
+        </span>
+        <span
+          style={{
+            fontFamily: FONT.serif,
+            fontSize: 14,
+            color: vm.yourTicket.leadText.startsWith("+") ? BLEND.positive : BLEND.caution,
+          }}
+        >
+          {vm.yourTicket.leadText}
+        </span>
+      </div>
+      {campaignLink}
+    </>
+  );
+}
+
+/** The referendum standing the whole board is being judged against. */
+function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
+  if (!vm.mood) return null;
+  return (
+    <>
+      <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 9 }}>
+        <span style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500 }}>
+          {vm.mood.approval}
+        </span>
+        <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
+          referendum points
+        </span>
+      </div>
+      <p
+        style={{
+          margin: "9px 0 0",
+          fontFamily: FONT.serif,
+          fontSize: 13.5,
+          lineHeight: 1.5,
+          color: BLEND.muted,
+        }}
+      >
+        {vm.mood.note}
+      </p>
+    </>
+  );
+}
+
+/** What moved the vote, ticket drivers then coattails. */
+function WhyItMovedBlock({ vm }: { vm: GeneralBlendVM }) {
+  if (vm.drivers.length + vm.coattailDrivers.length === 0) return null;
+  return (
+    <>
+      <DriverRows rows={vm.drivers} />
+      <DriverRows rows={vm.coattailDrivers} />
+    </>
+  );
+}
+
+/** The board's colour key. Without it the tiles are colour with no legend. */
+function TierLegend({ vm }: { vm: GeneralBlendVM }) {
+  if (vm.tierLegend.length === 0) return null;
+  return (
+    <div
+      style={{
+        marginTop: 14,
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "6px 18px",
+        fontFamily: FONT.mono,
+        fontSize: 10,
+        color: BLEND.mutedDim,
+      }}
+    >
+      <span style={{ letterSpacing: ".1em" }}>MARGIN TIERS:</span>
+      {vm.tierLegend.map((l) => (
+        <span key={l.label} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <i style={{ width: 9, height: 9, display: "block", background: l.swatch }} />
+          {l.label} <span style={{ opacity: 0.6 }}>{l.band}</span>
+        </span>
       ))}
     </div>
   );
@@ -428,6 +534,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                 The board
               </h2>
               <TileBoard vm={vm} columns={6} />
+              <TierLegend vm={vm} />
             </div>
           ) : null}
 
@@ -485,6 +592,58 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             </div>
           ) : null}
 
+          {/* Everything below lived only in the desktop rail, which is
+              `hidden lg:block`. On a phone that meant a player could not see
+              their own ticket's standing on their own election night, nor what
+              had moved the vote. */}
+          {vm.yourTicket ? (
+            <div style={{ marginTop: 24 }}>
+              <h2
+                style={{
+                  margin: "0 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                Your ticket
+              </h2>
+              <YourTicketBlock vm={vm} campaignLink={null} />
+            </div>
+          ) : null}
+
+          {vm.mood ? (
+            <div style={{ marginTop: 24 }}>
+              <h2
+                style={{
+                  margin: "0 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                National mood
+              </h2>
+              <NationalMoodBlock vm={vm} />
+            </div>
+          ) : null}
+
+          {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
+            <div style={{ marginTop: 24 }}>
+              <h2
+                style={{
+                  margin: "0 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                Why it moved
+              </h2>
+              <WhyItMovedBlock vm={vm} />
+            </div>
+          ) : null}
+
           {campaignLink}
         </div>
       </div>
@@ -529,35 +688,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                   >
                     Your ticket
                   </div>
-                  <div
-                    style={{ marginTop: 9, fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}
-                  >
-                    {vm.yourTicket.name}
-                  </div>
-                  <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 9 }}>
-                    <span
-                      style={{
-                        fontFamily: FONT.mono,
-                        fontSize: 34,
-                        fontWeight: 500,
-                        letterSpacing: "-0.03em",
-                      }}
-                    >
-                      {vm.yourTicket.ev}
-                    </span>
-                    <span
-                      style={{
-                        fontFamily: FONT.serif,
-                        fontSize: 14,
-                        color: vm.yourTicket.leadText.startsWith("+")
-                          ? BLEND.positive
-                          : BLEND.caution,
-                      }}
-                    >
-                      {vm.yourTicket.leadText}
-                    </span>
-                  </div>
-                  {campaignLink}
+                  <YourTicketBlock vm={vm} campaignLink={campaignLink} />
                 </div>
               ) : null}
 
@@ -574,25 +705,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                   >
                     National mood
                   </div>
-                  <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 9 }}>
-                    <span style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500 }}>
-                      {vm.mood.approval}
-                    </span>
-                    <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
-                      referendum points
-                    </span>
-                  </div>
-                  <p
-                    style={{
-                      margin: "9px 0 0",
-                      fontFamily: FONT.serif,
-                      fontSize: 13.5,
-                      lineHeight: 1.5,
-                      color: BLEND.muted,
-                    }}
-                  >
-                    {vm.mood.note}
-                  </p>
+                  <NationalMoodBlock vm={vm} />
                 </div>
               ) : null}
 
@@ -609,8 +722,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                   >
                     Why it moved
                   </div>
-                  <DriverRows rows={vm.drivers} />
-                  <DriverRows rows={vm.coattailDrivers} />
+                  <WhyItMovedBlock vm={vm} />
                 </div>
               ) : null}
             </aside>
@@ -640,35 +752,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               lede="Margin tiers, the same shading the popular-vote map uses."
             >
               <TileBoard vm={vm} columns={11} />
-              <div
-                style={{
-                  marginTop: 14,
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: "6px 18px",
-                  fontFamily: FONT.mono,
-                  fontSize: 10,
-                  color: BLEND.mutedDim,
-                }}
-              >
-                <span style={{ letterSpacing: ".1em" }}>MARGIN TIERS:</span>
-                {vm.tierLegend.map((l) => (
-                  <span
-                    key={l.label}
-                    style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
-                  >
-                    <i
-                      style={{
-                        width: 9,
-                        height: 9,
-                        display: "block",
-                        background: l.swatch,
-                      }}
-                    />
-                    {l.label} <span style={{ opacity: 0.6 }}>{l.band}</span>
-                  </span>
-                ))}
-              </div>
+              <TierLegend vm={vm} />
             </BlendSection>
           ) : null}
 
