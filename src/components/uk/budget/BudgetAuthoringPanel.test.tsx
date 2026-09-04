@@ -5,6 +5,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BudgetAuthoringPanel } from "./BudgetAuthoringPanel";
 
+// Drive the game clock so the vote-deadline copy is deterministic.
+let mockClock = { realNow: new Date("2026-09-03T12:00:00Z"), currentTurn: 600 };
+vi.mock("@/contexts/useGameClock", () => ({
+  useGameClock: () => mockClock,
+}));
+
 const BASE = {
   fiscalYear: 1961,
   isChancellor: true,
@@ -42,7 +48,10 @@ const BASE = {
 };
 
 beforeEach(() => vi.restoreAllMocks());
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  mockClock = { realNow: new Date("2026-09-03T12:00:00Z"), currentTurn: 600 };
+});
 
 describe("BudgetAuthoringPanel", () => {
   it("hydrates live statutory settings and enables tabling only after a real change", async () => {
@@ -145,5 +154,98 @@ describe("BudgetAuthoringPanel", () => {
     render(<BudgetAuthoringPanel countryCode="uk" />);
     await waitFor(() => expect(screen.getByText(/tabled before the Commons/)).toBeTruthy());
     expect(screen.queryByText("Save draft")).toBeNull();
+  });
+
+  it("links a tabled Budget to its live Commons vote (ticket #1268)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...BASE,
+          budget: {
+            status: "tabled",
+            taxRates: { "uk.tax.incomeTax": 50 },
+            programLevels: { "uk.defense.armedForces.primary": 1 },
+          },
+          voteBill: {
+            id: "6a989d7118db27ccb4c3cd23",
+            status: "active",
+            votesFor: 297,
+            votesAgainst: 221,
+            votesAbstain: 0,
+            votingEndsAt: "2026-09-03T22:04:33.627Z",
+            votingEndsOnTurn: 605,
+          },
+        }),
+      })
+    );
+    render(<BudgetAuthoringPanel countryCode="uk" />);
+    await waitFor(() =>
+      expect(screen.getByText("Before the Commons for a confidence vote.")).toBeTruthy()
+    );
+    expect(screen.getByText(/297 for, 221 against/)).toBeTruthy();
+    expect(screen.getByText(/Voting closes turn 605/)).toBeTruthy();
+    const link = screen.getByRole("link", { name: "View the Commons vote" });
+    expect(link.getAttribute("href")).toBe("/congress/bills/6a989d7118db27ccb4c3cd23");
+  });
+
+  it("says the result resolves next turn once voting closes", async () => {
+    mockClock = { realNow: new Date("2026-09-03T23:00:00Z"), currentTurn: 606 };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...BASE,
+          budget: {
+            status: "tabled",
+            taxRates: { "uk.tax.incomeTax": 50 },
+            programLevels: { "uk.defense.armedForces.primary": 1 },
+          },
+          voteBill: {
+            id: "6a989d7118db27ccb4c3cd23",
+            status: "active",
+            votesFor: 297,
+            votesAgainst: 221,
+            votesAbstain: 0,
+            votingEndsAt: "2026-09-03T22:04:33.627Z",
+            votingEndsOnTurn: 605,
+          },
+        }),
+      })
+    );
+    render(<BudgetAuthoringPanel countryCode="uk" />);
+    await waitFor(() =>
+      expect(screen.getByText("Voting closed. The result resolves on the next turn.")).toBeTruthy()
+    );
+  });
+
+  it("announces Royal Assent once the vote-vehicle bill is signed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...BASE,
+          budget: {
+            status: "passed",
+            taxRates: { "uk.tax.incomeTax": 50 },
+            programLevels: { "uk.defense.armedForces.primary": 1 },
+          },
+          voteBill: {
+            id: "6a989d7118db27ccb4c3cd23",
+            status: "signed",
+            votesFor: 297,
+            votesAgainst: 221,
+            votesAbstain: 0,
+            votingEndsAt: "2026-09-03T22:04:33.627Z",
+            votingEndsOnTurn: 605,
+          },
+        }),
+      })
+    );
+    render(<BudgetAuthoringPanel countryCode="uk" />);
+    await waitFor(() => expect(screen.getByText("The Budget received Royal Assent.")).toBeTruthy());
   });
 });
