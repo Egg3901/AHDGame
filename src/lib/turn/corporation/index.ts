@@ -105,7 +105,7 @@ import { advertisingDeliveredValueByCorp } from "./advertisingDeliveredValue";
 import { createCorporationTurnTimer, type CorporationTurnResult } from "./corporationTurnRuntime";
 import { processEquityMarketPoolTurn } from "@/lib/equities/marketPoolTurn";
 import { placePendingShareIssuances } from "@/lib/equities/primaryMarket";
-import { creditEquityPool, readEquityPool } from "@/lib/equities/marketPool";
+import { creditEquityPoolsBatch } from "@/lib/equities/marketPool";
 
 export type { CorporationTurnResult } from "./corporationTurnRuntime";
 
@@ -1154,12 +1154,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporations").bulkWrite(corpOps as any[]);
   }
-  for (const accrual of equityPoolDividendAccruals) {
-    // Missing pool means a pre-migration/seed world: preserve the legacy sink
-    // rather than creating a zero-target pool halfway through a turn.
-    if (!(await readEquityPool(db, accrual.currency))) continue;
-    await creditEquityPool(db, accrual.currency, accrual.amountLocal, "dividendsIn", now);
-  }
+  // One read plus one bulk write, instead of two serial round trips per
+  // accrual against a collection holding one document per currency. Missing
+  // pools are still skipped rather than upserted, preserving the legacy sink
+  // on pre-migration worlds.
+  await creditEquityPoolsBatch(db, equityPoolDividendAccruals, "dividendsIn", now);
   mark("sector+corp bulkWrites");
 
   // Contracts and surveys read the post-bulkWrite snapshot so this turn's

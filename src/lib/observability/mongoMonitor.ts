@@ -19,6 +19,7 @@
 import * as Sentry from "@sentry/nextjs";
 import type { MongoClient } from "mongodb";
 import type { Span } from "@sentry/nextjs";
+import { recordRoundTrip } from "@/lib/observability/mongoRoundTrips";
 
 /** Driver chatter that carries no diagnostic value — never instrumented. */
 const IGNORED_COMMANDS = new Set([
@@ -86,6 +87,9 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
       event.command as Record<string, unknown>
     );
     pendingCollections.set(event.requestId, collection);
+    // Per-phase round-trip attribution (AHD_TURN_ROUNDTRIP_PROFILE=1). A
+    // boolean check when off.
+    recordRoundTrip(collection);
 
     // Only materialize a DB span when we're already inside a RECORDING trace
     // (a sampled request/turn transaction). This is the single most important
