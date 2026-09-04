@@ -22,6 +22,7 @@ import { StateOrganizationTab } from "@/app/political-operations/components/Stat
 import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
+import { GeneralBlendView } from "../blend/GeneralBlendView";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 
@@ -255,6 +256,97 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // disagree with the cap the turn resolver actually enforced. Legacy payloads
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
+
+  // Proposal D's general screen is the presidential electoral-college view: an
+  // EV bar, a state tile board and persuasion drivers. Down-ballot races have
+  // no college, so they keep the existing view.
+  if (
+    election.electionType === "president" &&
+    isGeneralPhase &&
+    !localIsEnded &&
+    !localIsUpcoming
+  ) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        <GeneralBlendView
+          election={election}
+          electionId={id}
+          wire={wire}
+          onRefresh={fetchElection}
+        />
+
+        <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
+          <h2 style={{ margin: "0 0 4px", fontFamily: FONT.serif, fontSize: 23, fontWeight: 600 }}>
+            Also on this race
+          </h2>
+          <p
+            style={{
+              margin: "0 0 18px",
+              fontFamily: FONT.serif,
+              fontSize: 14.5,
+              color: BLEND.muted,
+            }}
+          >
+            The full map, the schedule, and your campaign operations.
+          </p>
+
+          <ElectionHeader
+            election={election}
+            electionYear={electionYear}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            localIsUpcoming={localIsUpcoming}
+            canEnter={canEnter}
+            canWithdraw={canWithdraw}
+            actionLoading={actionLoading}
+            onEnter={handleEnter}
+            onWithdraw={handleWithdraw}
+          />
+
+          <GeneralPhaseView
+            election={election}
+            electionId={id}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            amInRace={amInRace}
+            onSuccess={fetchElection}
+          />
+
+          <ElectionScheduleCard
+            election={election}
+            localIsUpcoming={localIsUpcoming}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+          />
+
+          <AdminSection
+            electionId={id}
+            electionType={election.electionType}
+            isAdmin={election.isAdmin}
+            adminOpen={adminOpen}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            candidates={election.allCandidates}
+            onToggleAdmin={() => setAdminOpen((o) => !o)}
+            onSuccess={fetchElection}
+          />
+
+          {election.countryId === "US" && !!election.myCharId && (
+            <section id="state-org" className="mt-6 scroll-mt-6">
+              <StateOrganizationTab showHubLink />
+            </section>
+          )}
+
+          {election.countryId === "US" && (
+            <>
+              <CampaignsListPanel electionId={id} />
+              {!!election.myCharId && <CampaignManagerTab electionId={id} />}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Proposal D covers the presidential primary specifically: a delegate race
   // across party fields. Down-ballot races have no delegate model, so they keep
