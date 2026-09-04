@@ -23,6 +23,8 @@ import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
+import { ResultsBlendView } from "../blend/ResultsBlendView";
+import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 
@@ -41,6 +43,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
   const [election, setElection] = useState<ElectionDetail | null>(initialElection);
   const [wire, setWire] = useState<string[]>([]);
+  const [results, setResults] = useState<ElectionResultsResponse | null>(null);
   const [loading, setLoading] = useState(initialElection === null);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -133,6 +136,28 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       cancelled = true;
     };
   }, [id]);
+
+  // A concluded presidential race renders the Blend results screen, which is
+  // built over the live-results payload (it carries the called flags and the
+  // EV threshold the detail payload does not).
+  const needsResults = election?.electionType === "president" && election?.isEnded === true;
+  useEffect(() => {
+    if (!needsResults) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/elections/${id}/results`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (!cancelled) setResults(payload);
+      } catch {
+        // non-critical: the page falls back to the existing concluded view
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, needsResults]);
 
   useEffect(() => {
     let visibilityTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -256,6 +281,44 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // disagree with the cap the turn resolver actually enforced. Legacy payloads
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
+
+  // Concluded presidential race: the same Blend results screen the live
+  // dashboard uses, chipped "Concluded". Falls through to the existing view
+  // until the results payload arrives, or if it fails to load.
+  if (election.electionType === "president" && localIsEnded && results) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        <ResultsBlendView data={results} route="concluded" />
+
+        <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
+          <h2 style={{ margin: "0 0 18px", fontFamily: FONT.serif, fontSize: 23, fontWeight: 600 }}>
+            Also on this race
+          </h2>
+
+          <GeneralPhaseView
+            election={election}
+            electionId={id}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            amInRace={amInRace}
+            onSuccess={fetchElection}
+          />
+
+          <AdminSection
+            electionId={id}
+            electionType={election.electionType}
+            isAdmin={election.isAdmin}
+            adminOpen={adminOpen}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            candidates={election.allCandidates}
+            onToggleAdmin={() => setAdminOpen((o) => !o)}
+            onSuccess={fetchElection}
+          />
+        </div>
+      </div>
+    );
+  }
 
   // Proposal D's general screen is the presidential electoral-college view: an
   // EV bar, a state tile board and persuasion drivers. Down-ballot races have
