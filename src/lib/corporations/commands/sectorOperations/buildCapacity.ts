@@ -243,13 +243,28 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       }
     }
 
-    let countryId = sector.countryId ?? corporation.countryId;
-    if (!countryId) {
-      const state = await db
-        .collection<State>("states")
-        .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
-      countryId = state?.countryId ?? "US";
-    }
+    // `countryId` keys the unowned-capacity pool below, the prime rate the build
+    // is financed at and the country stamped on the action log, so it has to be
+    // the country the STATE is in, never the country the corporation is
+    // domiciled in. The old order fell through to `corporation.countryId` and
+    // then to a literal "US", which is how two `unownedSectors` docs came to sit
+    // on Ukrainian states under the United States: unreachable to Ukraine, and
+    // counted as US capacity by every reader (ticket #1271).
+    //
+    // The state is read UNCONDITIONALLY and preferred over the sector's stored
+    // value, which is the precedence `getSectorOperatingCountryId` sets for the
+    // rest of the codebase: a stored `countryId` left stale by a region changing
+    // hands is exactly the case that helper exists for, and taking it first
+    // would reintroduce the bug in its other form.
+    const sectorState = await db
+      .collection<State>("states")
+      .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
+    // No guard on the result: `CorporateSector.countryId` and
+    // `Corporation.countryId` are both required, so the chain always resolves,
+    // and the sibling `setSectorGrowth` carries no guard either. An unreachable
+    // branch here would only have implied the two files disagree about whether
+    // this can fail.
+    const countryId = sectorState?.countryId ?? sector.countryId ?? corporation.countryId;
 
     // No blanket state-owned block here: the appointed CEO of a National
     // Corporation legitimately builds, mothballs and manages its capacity

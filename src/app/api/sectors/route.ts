@@ -8,7 +8,12 @@ import {
   CORPORATION_TYPE_LABELS,
   type CorporationType,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  COUNTRY_ORDER,
+  getCountryDisplayName,
+  type CountryId,
+} from "@/lib/constants/countries";
 import {
   fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
@@ -17,6 +22,8 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { loadCommandEconomyBlockedCountries } from "@/lib/economy/queries/commandEconomyMarketGate";
+import { loadCountryPresentationOverrides } from "@/lib/country/countryIdentity";
+import { loadWorldPreset } from "@/lib/currency/gdpAnchorRate";
 
 export type SectorView = "unowned" | "owned" | "forSale";
 export type SectorSort = "revenue" | "type" | "state" | "country" | "margin" | "growth";
@@ -82,6 +89,82 @@ export async function GET(request: Request) {
       .toArray();
     const stateMap = new Map(states.map((s) => [s._id, s]));
 
+    // A country that renamed itself must be listed and labelled under the name
+    // it goes by. Reunified Germany keeps `DD` as its country id and carries the
+    // new name in `countryState.displayNameOverride`, so reading the compiled
+    // config alone showed its sectors under "East Germany" while the dissolved
+    // shell still offered "Germany" as a filter that could never match a row
+    // (ticket #1271). `COUNTRY_ORDER` is the compiled roster, so it is narrowed
+    // to countries that still hold territory rather than trusted as a list of
+    // live countries.
+    //
+    // Three corrections, not one. The runtime override is what reunification
+    // writes; the ERA name is what a 1953 world calls RU ("Soviet Union") and DE
+    // ("West Germany"); and the flag override travels with the rename, so
+    // applying only the name left Germany labelled correctly under the flag of
+    // the state it replaced.
+    //
+    // `loadCountryPresentationOverrides` rather than `resolveCountryIdentities`
+    // because the latter reads through `getCountryState`, which SELF-HEALS a
+    // missing row. This is a public listing endpoint and must not be able to
+    // insert documents as a side effect of someone sorting a table.
+    const [preset, overrides] = await Promise.all([
+      loadWorldPreset(db),
+      loadCountryPresentationOverrides(db),
+    ]);
+    const countriesWithStates = new Set(states.map((s) => s.countryId));
+
+    // WHICH COUNTRY A SECTOR IS IN IS DECIDED BY ITS STATE, in one place, and the
+    // row labels, the country filter and the tab badges all use it. They have to
+    // agree: labelling a row from its state while filtering on its stored
+    // `countryId` means a row whose stored value went stale when its region
+    // changed hands is shown under one country and findable under another, or
+    // under none at all once the filter list is narrowed to countries that hold
+    // territory. Expressing the filter as `stateId in (that country's states)`
+    // IS the state-first rule, and it stays a database query.
+    const stateIdsByCountry = new Map<CountryId, string[]>();
+    for (const s of states) {
+      const list = stateIdsByCountry.get(s.countryId);
+      if (list) list.push(s._id);
+      else stateIdsByCountry.set(s.countryId, [s._id]);
+    }
+    const filteredStateIds =
+      countryFilter && countryFilter in COUNTRY_CONFIGS
+        ? (stateIdsByCountry.get(countryFilter) ?? [])
+        : null;
+    /** The country a row is in: its state's, then whatever it stored. */
+    const hostCountryOf = (
+      stateId: string,
+      ...fallbacks: (string | null | undefined)[]
+    ): CountryId => (stateMap.get(stateId)?.countryId ?? fallbacks.find(Boolean)) as CountryId;
+
+    /**
+     * The country filter, as a query. Used by the rows AND by the badge counts,
+     * so the two cannot disagree.
+     *
+     * The second leg is for a row whose state no longer exists: `mergeRegion`
+     * re-points sector rows before deleting a region, so this is debris rather
+     * than normal state, and the pool heal deliberately leaves it for a human.
+     * It is still LABELLED from its stored country, and without this leg it
+     * would be labelled under a country whose filter could never return it:
+     * visible in the unfiltered list, gone the moment you filter by the country
+     * it names. Findable under the name it is shown under is the only pairing
+     * that is not a lie.
+     */
+    const allStateIds = states.map((st) => st._id);
+    const countryScopedFilter: Record<string, unknown> = filteredStateIds
+      ? {
+          $or: [
+            { stateId: { $in: filteredStateIds } },
+            { stateId: { $nin: allStateIds }, countryId: countryFilter },
+          ],
+        }
+      : {};
+    const countryNameOf = (id: CountryId): string =>
+      overrides[id]?.name ?? getCountryDisplayName(id, preset);
+    const countryFlagOf = (id: CountryId): string =>
+      overrides[id]?.flagEmoji ?? COUNTRY_CONFIGS[id]?.flagEmoji ?? "";
+
     // Load FX rates for anchor normalization
     const fxByCurrency = await loadFxRatesByCurrency(db);
 
@@ -94,6 +177,19 @@ export async function GET(request: Request) {
       db,
       COUNTRY_ORDER
     );
+    const blockedStateIds = states
+      .filter((s) => commandEconomyBlockedCountries.has(s.countryId))
+      .map((s) => s._id);
+
+    // The unowned view's scope, blocked-country handling included, so its rows
+    // and its badge are literally the same query. Filtering by a command economy
+    // yields nothing at all: leg two of `countryScopedFilter` would otherwise
+    // still surface a stateless row stamped with that country, which the badge
+    // (correctly) counts as zero.
+    const unownedScopedFilter: Record<string, unknown> =
+      filteredStateIds && commandEconomyBlockedCountries.has(countryFilter as CountryId)
+        ? { stateId: { $in: [] } }
+        : countryScopedFilter;
 
     const rows: SectorRow[] = [];
 
@@ -103,9 +199,7 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         unownedFilter.sectorType = sectorTypeFilter;
       }
-      if (countryFilter && countryFilter in COUNTRY_CONFIGS) {
-        unownedFilter.countryId = countryFilter;
-      }
+      Object.assign(unownedFilter, unownedScopedFilter);
 
       const unownedSectors = (
         await db
@@ -114,20 +208,30 @@ export async function GET(request: Request) {
             projection: { sectorType: 1, stateId: 1, countryId: 1, revenue: 1 },
           })
           .toArray()
-      ).filter((u) => !commandEconomyBlockedCountries.has(u.countryId));
+      )
+        // NO stored-country fallback in the BLOCK test, deliberately, even though
+        // the row label below has one. The badge counts with
+        // `stateId $nin <blocked states>`, which knows nothing about a stored
+        // country, so falling back here would drop a row from the list that the
+        // badge still counted: badge N+1, list N. A pool row on a dissolved
+        // region belongs to no state and so is blocked by nobody, which is
+        // exactly the answer the count gives.
+        .filter(
+          (u) =>
+            !commandEconomyBlockedCountries.has(stateMap.get(u.stateId)?.countryId as CountryId)
+        );
 
       for (const us of unownedSectors) {
         const st = stateMap.get(us.stateId);
-        const cfg = COUNTRY_CONFIGS[us.countryId];
         rows.push({
           id: us._id.toString(),
           sectorType: us.sectorType,
           sectorTypeLabel: CORPORATION_TYPE_LABELS[us.sectorType],
           stateId: us.stateId,
           stateName: st?.name ?? us.stateId,
-          countryId: us.countryId,
-          countryName: cfg?.name ?? us.countryId,
-          countryFlag: cfg?.flagEmoji ?? "",
+          countryId: hostCountryOf(us.stateId, us.countryId),
+          countryName: countryNameOf(hostCountryOf(us.stateId, us.countryId)),
+          countryFlag: countryFlagOf(hostCountryOf(us.stateId, us.countryId)),
           owned: false,
           corporationId: null,
           corporationName: null,
@@ -148,9 +252,7 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         corpFilter.sectorType = sectorTypeFilter;
       }
-      if (countryFilter && countryFilter in COUNTRY_CONFIGS) {
-        corpFilter.countryId = countryFilter;
-      }
+      Object.assign(corpFilter, countryScopedFilter);
       if (view === "forSale") {
         corpFilter.forSale = { $ne: null };
       }
@@ -205,13 +307,18 @@ export async function GET(request: Request) {
       for (const s of ownedSectors) {
         const st = stateMap.get(s.stateId);
         const corp = corpMap.get(s.corporationId.toString());
-        const hostCountryId = (s.countryId ?? st?.countryId ?? corp?.countryId) as CountryId;
+        // STATE FIRST, matching `getSectorOperatingCountryId`, which is the
+        // codebase's answer to this question everywhere else (hostile takeover,
+        // the duplicate-sector repair). A sector row whose stored `countryId` is
+        // stale after its region changed hands would otherwise be labelled under
+        // a country that no longer holds it, and after the filter narrowing above
+        // that country is not even offered as an option to find it under.
+        const hostCountryId = hostCountryOf(s.stateId, s.countryId, corp?.countryId);
         const revenueAnchor = readCorpEconomicAnchor(
           s.revenue,
           resolveSectorHostCurrencyCode({ countryId: hostCountryId }, corp),
           fxRateForSectorHostFromMap({ countryId: hostCountryId }, corp, fxByCurrency)
         );
-        const cfg = COUNTRY_CONFIGS[hostCountryId];
 
         rows.push({
           id: s._id.toString(),
@@ -220,8 +327,8 @@ export async function GET(request: Request) {
           stateId: s.stateId,
           stateName: st?.name ?? s.stateId,
           countryId: hostCountryId,
-          countryName: cfg?.name ?? hostCountryId,
-          countryFlag: cfg?.flagEmoji ?? "",
+          countryName: countryNameOf(hostCountryId),
+          countryFlag: countryFlagOf(hostCountryId),
           owned: true,
           corporationId: s.corporationId.toString(),
           corporationName: corp?.name ?? "Unknown",
@@ -269,23 +376,22 @@ export async function GET(request: Request) {
     // countries the same way the row query above does — an explicit country
     // filter that itself points at a blocked country correctly counts to 0
     // rather than falling back to the unfiltered total.
-    const unownedCountFilter: Record<string, unknown> = {};
-    if (countryFilter) {
-      unownedCountFilter.countryId = commandEconomyBlockedCountries.has(countryFilter)
-        ? { $in: [] }
-        : countryFilter;
-    } else if (commandEconomyBlockedCountries.size > 0) {
-      unownedCountFilter.countryId = { $nin: [...commandEconomyBlockedCountries] };
-    }
+    //
+    // Counted on the same state-first basis the rows and the filter use, so a
+    // badge can never disagree with the list under it.
+    const unownedCountFilter: Record<string, unknown> = filteredStateIds
+      ? { ...unownedScopedFilter }
+      : blockedStateIds.length > 0
+        ? { stateId: { $nin: blockedStateIds } }
+        : {};
+    const corpCountFilter = { ...countryScopedFilter };
 
     const [unownedCount, ownedCount, forSaleCount] = await Promise.all([
       db.collection("unownedSectors").countDocuments(unownedCountFilter),
-      db
-        .collection("corporateSectors")
-        .countDocuments(countryFilter ? { countryId: countryFilter } : {}),
+      db.collection("corporateSectors").countDocuments(corpCountFilter),
       db.collection("corporateSectors").countDocuments({
         forSale: { $ne: null },
-        ...(countryFilter ? { countryId: countryFilter } : {}),
+        ...corpCountFilter,
       }),
     ]);
 
@@ -307,10 +413,12 @@ export async function GET(request: Request) {
           value: t,
           label: CORPORATION_TYPE_LABELS[t],
         })),
-        countries: COUNTRY_ORDER.map((id) => ({
+        // Curated order preserved: COUNTRY_ORDER is hand-ordered, not
+        // alphabetical, so this filters and relabels without resequencing.
+        countries: COUNTRY_ORDER.filter((id) => countriesWithStates.has(id)).map((id) => ({
           value: id,
-          label: COUNTRY_CONFIGS[id].name,
-          flag: COUNTRY_CONFIGS[id].flagEmoji,
+          label: countryNameOf(id),
+          flag: countryFlagOf(id),
         })),
       },
     });

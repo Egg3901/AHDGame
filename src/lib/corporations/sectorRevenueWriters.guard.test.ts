@@ -270,6 +270,16 @@ const ALLOWED_WRITERS: Record<string, WriterEntry> = {
     status: "plants-gated",
     reason: "Natcorp seed grants capitalStock units under plants; revenue written in lockstep.",
   },
+  "src/lib/remediation/defects/AHD-1271-merged-state-extraction.ts": {
+    writeSites: 1,
+    status: "plants-gated",
+    reason:
+      "Rebuilds extraction plants a country merge stranded, from the SAME seed path " +
+      "(`generateCountryOwnedSeedData` -> `buildSector`) the SOE rebuild used, so " +
+      "capitalStock is seeded in lockstep and the nameplate is restated from that " +
+      "capacity next tick. Insert-only, and the sizing basis matches the sibling " +
+      "sectors already in those states rather than inventing a mid-run valuation.",
+  },
 
   // ─── Found only once the regex was replaced by a brace scanner ────────────
   // All five hid from the old rule: the first two behind a `? {} :` ternary and
@@ -363,6 +373,11 @@ const MUST_BE_PLANTS_AWARE = [
   // attested, so they belong in the enforced list — leaving them out means the
   // one regression this guard was written for is still the one it cannot catch.
   "src/lib/nationalization/nationalizeSectorWide.ts",
+  // The #1271 extraction heal. Enforced rather than merely allowed: it is a new
+  // writer, it writes through the seed builder, and the whole point of the heal
+  // is that these plants must sit on the same capacity basis as the sectors
+  // beside them.
+  "src/lib/remediation/defects/AHD-1271-merged-state-extraction.ts",
   "src/lib/nationalization/privatizeAsset.ts",
 ];
 

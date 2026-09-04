@@ -1,6 +1,13 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Bond, CentralBank, Character, Corporation, CorporateSector } from "@/lib/db/types";
+import type {
+  Bond,
+  CentralBank,
+  Character,
+  Corporation,
+  CorporateSector,
+  State,
+} from "@/lib/db/types";
 import type { UnownedSector } from "@/lib/db/types/unownedSector";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -336,6 +343,16 @@ async function releaseSectorToUnowned(
     // under plants it converts through the pool's default mix, the same
     // conversion `restoreSectorsToUnowned` applies to its capacity leg.
     const creditAmount = plantsEnabled ? revenueAnchor * unitsPerAnchor : revenueAnchor;
+    // The pool row this release creates carries a countryId every reader filters
+    // on, so it is the country the STATE is in and never whatever the sector
+    // last stored (ticket #1271: the same defect `buildCapacity`, `expandSector`,
+    // `restoreSectorsToUnowned` and the shed passes carried). Only read when the
+    // row may not exist yet, since `$ifNull` leaves an existing row's country
+    // alone either way.
+    const releaseState = await db
+      .collection<State>("states")
+      .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
+    const releaseCountryId = releaseState?.countryId ?? sector.countryId;
     await db.collection<UnownedSector>("unownedSectors").updateOne(
       { stateId: sector.stateId, sectorType: sector.sectorType },
       [
@@ -343,7 +360,7 @@ async function releaseSectorToUnowned(
           $set: {
             _id: { $ifNull: ["$_id", new ObjectId()] },
             stateId: { $ifNull: ["$stateId", sector.stateId] },
-            countryId: { $ifNull: ["$countryId", sector.countryId] },
+            countryId: { $ifNull: ["$countryId", releaseCountryId] },
             sectorType: { $ifNull: ["$sectorType", sector.sectorType] },
             createdAt: { $ifNull: ["$createdAt", now] },
             [creditField]: {

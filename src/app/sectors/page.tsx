@@ -140,6 +140,19 @@ export default function SectorsPage() {
     setDefaultsApplied(true);
   }, [navData, defaultsApplied]);
 
+  // A country that has been absorbed no longer appears in the filter list, but a
+  // player whose character or corporation still points at it would have had it
+  // preselected above: the select renders with no matching option and the list
+  // comes back empty with nothing to explain why. Clear it so they land on the
+  // unfiltered view instead (ticket #1271).
+  const availableCountries = data?.filters.countries;
+  useEffect(() => {
+    if (!availableCountries || !countryFilter) return;
+    if (!availableCountries.some((c) => c.value === countryFilter)) {
+      setCountryFilter("");
+    }
+  }, [availableCountries, countryFilter]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError("");

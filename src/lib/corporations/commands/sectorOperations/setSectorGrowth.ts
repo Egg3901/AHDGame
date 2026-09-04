@@ -84,13 +84,17 @@ export async function setSectorGrowth(request: Request, { params }: RouteParams)
     // and recharges based on that trended rate — if we wrote target-based cost
     // here, the UI would jump on every slider tick and snap back next turn.
     const activeGrowthRate = sector.currentGrowthRate ?? sector.growthRate ?? 0;
-    let countryId = sector.countryId ?? corporation.countryId;
-    if (!countryId) {
-      const state = await db
-        .collection<State>("states")
-        .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
-      countryId = state?.countryId ?? "US";
-    }
+    // Host country, not the corporation's domicile: this feeds the prime rate
+    // the growth-cost quote is discounted at and the country stamped on the
+    // action log. The old chain fell through to the corp and then to a literal
+    // "US", which quoted a foreign operation at American rates (ticket #1271,
+    // the same defect `buildCapacity` and `expandSector` carried). State first,
+    // matching `getSectorOperatingCountryId`: a stored `countryId` left stale by
+    // a region changing hands is the case that precedence exists for.
+    const sectorState = await db
+      .collection<State>("states")
+      .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
+    const countryId = sectorState?.countryId ?? sector.countryId ?? corporation.countryId;
     const primeRate = await resolveCountryPrimeRate(db, countryId);
     // Dominance penalty: dominant sectors (>{@link DOMINANCE_MARKET_SHARE_THRESHOLD}%
     // of (state, sectorType) market share) pay a 1.75–3× growth-cost multiplier —

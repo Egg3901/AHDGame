@@ -97,6 +97,63 @@ export async function resolveCountryIdentity(
   };
 }
 
+export interface CountryPresentationOverride {
+  name?: string;
+  flagEmoji?: string;
+}
+
+/**
+ * Both runtime presentation overrides for the whole world, in ONE read.
+ *
+ * `resolveCountryIdentities` is the richer answer, but it goes through
+ * `getCountryState`, which SELF-HEALS a missing row: it writes. That is fine on
+ * a page render and wrong on a hot public listing endpoint, which should not be
+ * able to insert documents as a side effect of someone sorting a table. This is
+ * the read-only half, and it fails soft for the same reason its sibling does:
+ * a country under its compiled name is a far better outcome than a 500.
+ *
+ * Name and flag travel together on purpose. A settlement writes both when it
+ * renames the survivor (`displayNameOverride` + `flagEmojiOverride`), so
+ * applying one without the other is how a reunified Germany ends up labelled
+ * "Germany" under the flag of the state it replaced.
+ */
+export async function loadCountryPresentationOverrides(
+  db: Db
+): Promise<Partial<Record<CountryId, CountryPresentationOverride>>> {
+  try {
+    const rows = await db
+      .collection<{
+        _id: CountryId;
+        displayNameOverride?: string | null;
+        flagEmojiOverride?: string | null;
+      }>("countryState")
+      .find(
+        {
+          $or: [
+            { displayNameOverride: { $type: "string", $ne: "" } },
+            { flagEmojiOverride: { $type: "string", $ne: "" } },
+          ],
+        },
+        { projection: { displayNameOverride: 1, flagEmojiOverride: 1 } }
+      )
+      .toArray();
+    const out: Partial<Record<CountryId, CountryPresentationOverride>> = {};
+    for (const row of rows) {
+      const entry: CountryPresentationOverride = {};
+      if (typeof row.displayNameOverride === "string" && row.displayNameOverride.length > 0) {
+        entry.name = row.displayNameOverride;
+      }
+      if (typeof row.flagEmojiOverride === "string" && row.flagEmojiOverride.length > 0) {
+        entry.flagEmoji = row.flagEmojiOverride;
+      }
+      if (entry.name || entry.flagEmoji) out[row._id] = entry;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Every runtime display-name override in the world, for hydrating the client.
  *

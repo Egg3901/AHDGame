@@ -227,7 +227,9 @@ export async function shedSectorsForCorps(
             nameplateAnchor *
             unownedHeadroomUnitsPerAnchor(s.sectorType as CorporationType, lookups.eraUnitScale);
           const key = `${s.stateId}\0${s.sectorType}`;
-          const countryId = (s.countryId ?? "US") as CountryId;
+          // Host country, not a hardcoded one: the pool row this creates carries
+          // a countryId every reader filters on (ticket #1271).
+          const countryId = (lookups.stateCountryMap.get(s.stateId) ?? s.countryId) as CountryId;
           const prev = unownedDeltas.get(key);
           if (prev) prev.units += poolUnits;
           else
@@ -268,7 +270,13 @@ export async function shedSectorsForCorps(
           fxRateForSectorHostFromMap(s, null, lookups.exchangeRatesByCurrency)
         );
         const key = `${s.stateId}\0${s.sectorType}`;
-        const countryId = (s.countryId ?? "US") as CountryId;
+        // The pool row this shed creates carries a countryId every reader
+        // filters on, so it is the country the STATE is in and never a
+        // hardcoded one (ticket #1271: the same defect `buildCapacity`,
+        // `expandSector` and `restoreSectorsToUnowned` carried, still live in
+        // the turn processor, where it could mint replacements for exactly the
+        // rows the pool heal repairs).
+        const countryId = (lookups.stateCountryMap.get(s.stateId) ?? s.countryId) as CountryId;
         const prev = unownedDeltas.get(key);
         if (prev) prev.revenue += shedRevAnchor;
         else
