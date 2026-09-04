@@ -121,6 +121,31 @@ describe("PresidentialCabinetClient acting appointments", () => {
     expect(screen.getByText(/14 turns remaining/i)).toBeTruthy();
   });
 
+  it("offers Nominate on an acting-held seat so the President need not fire first", async () => {
+    mockFetch({
+      positions: [
+        {
+          ...TREASURY,
+          member: {
+            characterId: "aaaaaaaaaaaaaaaaaaaaaaaa",
+            characterName: "Acting Secretary",
+            confirmedAt: new Date(0).toISOString(),
+            acting: true,
+            actingExpiresOnTurn: 424,
+          },
+          nomination: null,
+          actingChargeSpent: true,
+        },
+      ],
+    });
+    render(<PresidentialCabinetClient countryId="US" />);
+
+    // Ticket #1273: the card used to offer only Fire, pushing the President
+    // to dismiss the caretaker (and waste the one acting charge) before the
+    // seat could go to the Senate.
+    expect(await screen.findByRole("button", { name: /^nominate$/i })).toBeTruthy();
+  });
+
   it("hides the control in a country that does not run acting appointments", async () => {
     mockFetch({
       actingEnabled: false,
