@@ -2,12 +2,12 @@ import { describe, it, expect } from "vitest";
 import { RU_CABINET_POSITIONS } from "./ruCabinet";
 
 describe("RU_CABINET_POSITIONS (Council of Ministers, spec §3 / D7)", () => {
-  it("has 16 uniquely-identified seats with contiguous orders", () => {
-    expect(RU_CABINET_POSITIONS).toHaveLength(16);
+  it("has 17 uniquely-identified seats with contiguous orders", () => {
+    expect(RU_CABINET_POSITIONS).toHaveLength(17);
     const ids = RU_CABINET_POSITIONS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(16);
+    expect(new Set(ids).size).toBe(17);
     expect([...RU_CABINET_POSITIONS.map((p) => p.order)].sort((a, b) => a - b)).toEqual(
-      Array.from({ length: 16 }, (_, i) => i)
+      Array.from({ length: 17 }, (_, i) => i)
     );
   });
 

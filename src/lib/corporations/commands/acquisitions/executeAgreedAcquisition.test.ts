@@ -57,22 +57,41 @@ function makeOffer(priceAnchor = 1_000_000) {
   };
 }
 
+function makeCharter(charteredTurn: number) {
+  return {
+    type: "retail",
+    status: "active",
+    currency: "USD",
+    charteredTurn,
+    postedCapital: 50_000_000,
+    depositOffset: 0,
+    lendingOffset: 0,
+    cashReserves: 123_410_000,
+    npcDeposits: 71_110_000,
+  };
+}
+
 function makeDb({
   bonds = 0,
   crossHoldings = 0,
   sectors = [] as unknown[],
   targetCash = 5_000_000,
+  targetCharter,
+  acquirerCharter,
 }: {
   bonds?: number;
   crossHoldings?: number;
   sectors?: unknown[];
   targetCash?: number;
+  targetCharter?: Record<string, unknown>;
+  acquirerCharter?: Record<string, unknown>;
 }) {
   const acquirer = {
     _id: ACQ,
     name: "AcquireCo",
     liquidCapital: 1_000_000_000,
     liquidCurrencyCode: "USD",
+    ...(acquirerCharter ? { bankCharter: acquirerCharter } : {}),
   };
   const target = {
     _id: TGT,
@@ -82,6 +101,7 @@ function makeDb({
     sequentialId: 42,
     totalShares: 1_000,
     shareholders: [{ characterId: new ObjectId(), shares: 1_000 }],
+    ...(targetCharter ? { bankCharter: targetCharter } : {}),
   };
   const deleteOne = vi.fn().mockResolvedValue({ deletedCount: 1 });
   const corpFindOne = vi.fn(({ _id }: { _id: ObjectId }) => {
@@ -89,21 +109,31 @@ function makeDb({
     if (_id.equals(TGT)) return Promise.resolve(target);
     return Promise.resolve(null);
   });
+  const corpUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1, matchedCount: 1 });
+  const bankUpdateMany = vi.fn().mockResolvedValue({ modifiedCount: 0 });
   const db = {
     collection: vi.fn((name: string) => {
       if (name === "corporations")
         return {
           findOne: corpFindOne,
           countDocuments: vi.fn().mockResolvedValue(crossHoldings),
+          updateOne: corpUpdateOne,
           deleteOne,
         };
       if (name === "bonds") return { countDocuments: vi.fn().mockResolvedValue(bonds) };
       if (name === "corporateSectors")
         return { find: vi.fn().mockReturnValue({ toArray: () => Promise.resolve(sectors) }) };
+      if (
+        name === "bankLoans" ||
+        name === "interbankLoans" ||
+        name === "savingsAccounts" ||
+        name === "characters"
+      )
+        return { updateMany: bankUpdateMany };
       return {};
     }),
   } as unknown as Db;
-  return { db, deleteOne };
+  return { db, deleteOne, corpUpdateOne, bankUpdateMany };
 }
 
 describe("executeAgreedAcquisition", () => {
@@ -184,5 +214,51 @@ describe("executeAgreedAcquisition", () => {
     await executeAgreedAcquisition({ db, offer: makeOffer(1_000_000) as never, currentTurn: 200 });
     const payCall = vi.mocked(payShareholders).mock.calls[0];
     expect(payCall[5]).toEqual({ turn: 200, kind: "agreed_acquisition" });
+  });
+
+  it("moves the target bank to the acquirer instead of deleting it (ticket-1267)", async () => {
+    const { db, deleteOne, corpUpdateOne, bankUpdateMany } = makeDb({
+      sectors: [],
+      targetCharter: makeCharter(150),
+    });
+    const r = await executeAgreedAcquisition({
+      db,
+      offer: makeOffer(1_000_000) as never,
+      currentTurn: 200,
+    });
+
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.bankCharterTransferred).toBe(true);
+    expect(deleteOne).toHaveBeenCalledWith({ _id: TGT });
+    const claimCall = corpUpdateOne.mock.calls.find(
+      ([filter]) =>
+        (filter as Record<string, unknown>)._id === ACQ &&
+        "bankCharter" in (filter as Record<string, unknown>)
+    );
+    expect(claimCall).toBeDefined();
+    expect((claimCall?.[1] as { $set: Record<string, unknown> }).$set.bankCharter).toMatchObject({
+      charteredTurn: 150,
+    });
+    expect(bankUpdateMany).toHaveBeenCalled();
+  });
+
+  it("blocks acquiring a banked target when the acquirer already operates a bank", async () => {
+    const { db, deleteOne } = makeDb({
+      targetCharter: makeCharter(150),
+      acquirerCharter: makeCharter(100),
+    });
+    const r = await executeAgreedAcquisition({
+      db,
+      offer: makeOffer(1_000_000) as never,
+      currentTurn: 200,
+    });
+
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error).toMatch(/already operates a bank/);
+      expect(r.status).toBe(400);
+    }
+    expect(vi.mocked(atomicallyDebitCorpLiquidCapital)).not.toHaveBeenCalled();
+    expect(deleteOne).not.toHaveBeenCalled();
   });
 });

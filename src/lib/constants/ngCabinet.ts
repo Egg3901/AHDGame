@@ -69,6 +69,12 @@ export const NG_CABINET_POSITIONS = [
     order: 14,
   },
   { id: "minister_of_environment", yearEnabled: 1775, name: "Minister of Environment", order: 15 },
+  {
+    id: "director_of_intelligence",
+    yearEnabled: 1775,
+    name: "Director of the Intelligence Service",
+    order: 16,
+  },
 ] as const;
 
 export type NGCabinetPositionId = (typeof NG_CABINET_POSITIONS)[number]["id"];

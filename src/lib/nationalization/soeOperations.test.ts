@@ -281,4 +281,38 @@ describe("processSoeOperations", () => {
     expect(db.collectionMocks.macroMetrics.bulkWrite).not.toHaveBeenCalled();
     expect(db.collectionMocks.politicalMetrics.bulkWrite).not.toHaveBeenCalled();
   });
+
+  it("backs an SOE loss from the OWNING treasury, not the domicile (ticket #1269)", async () => {
+    const corpId = new ObjectId();
+    // A firm nationalised abroad keeps its domicile on `countryId` while
+    // ownership moves to `countryOwnerId` (mergeCountry.ts documents this
+    // split). Profits remit to the owner and the budget books the enterprise
+    // under the owner, so the loss must be covered by the owner too —
+    // otherwise the owner shows a phantom surplus while the domicile's
+    // treasury drains for an enterprise it does not own.
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursor([
+        {
+          _id: corpId,
+          countryId: "DE",
+          countryOwnerId: "DD",
+          ownershipState: "stateOwned",
+          isNationalized: true,
+          liquidCapital: -1000,
+          liquidCurrencyCode: "USD",
+        },
+      ])
+    );
+    db.collectionMocks.corporateSectors.find.mockReturnValue(cursor([]));
+    db.collectionMocks.macroMetrics.find.mockReturnValue(cursor([]));
+    db.collectionMocks.politicalMetrics.find.mockReturnValue(cursor([]));
+
+    const { processSoeOperations } = await import("./soeOperations");
+    const result = await processSoeOperations(db as unknown as Db, NOW);
+
+    expect(result.soeCorps).toBe(1);
+    const calls = db.collectionMocks.federalBudget.updateOne.mock.calls;
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls[0][0]).toEqual({ countryId: "DD" });
+  });
 });

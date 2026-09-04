@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveCabinetTabs, isDefenseMinister } from "./cabinetTabs";
+import { resolveCabinetTabs, isDefenseMinister, isIntelligenceMinister } from "./cabinetTabs";
 import type { CabinetPositionMechanics } from "@/lib/constants/cabinetMechanicsTypes";
 
 const base: CabinetPositionMechanics = {
@@ -152,5 +152,45 @@ describe("resolveCabinetTabs", () => {
       competitionQueueApplies: true,
     });
     expect(tabs.some((t) => t.id === "competition")).toBe(false);
+  });
+});
+
+describe("the intelligence seat's console tab", () => {
+  const intel = { ...base, positionId: "director_of_intelligence" };
+
+  it("recognises the seat in every country, since the id is shared", () => {
+    expect(isIntelligenceMinister("director_of_intelligence")).toBe(true);
+    expect(isIntelligenceMinister("secretary_of_defense")).toBe(false);
+  });
+
+  it("gives the seat an Intelligence tab when Conflicts is enabled", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "director_of_intelligence",
+      mechanics: intel,
+      conflictsEnabled: true,
+    });
+    expect(tabs.some((t) => t.id === "intelligence")).toBe(true);
+  });
+
+  it("withholds it while the Conflicts subsystem is off", () => {
+    // Same reasoning as Commands and Doctrine: this is Cold War machinery.
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "director_of_intelligence",
+      mechanics: intel,
+      conflictsEnabled: false,
+    });
+    expect(tabs.some((t) => t.id === "intelligence")).toBe(false);
+  });
+
+  it("never gives the tab to another seat", () => {
+    const tabs = resolveCabinetTabs({
+      countryId: "US",
+      positionId: "secretary_of_defense",
+      mechanics: { ...base, positionId: "secretary_of_defense" },
+      conflictsEnabled: true,
+    });
+    expect(tabs.some((t) => t.id === "intelligence")).toBe(false);
   });
 });

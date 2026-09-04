@@ -1351,4 +1351,26 @@ export const UK_CABINET_MECHANICS: Record<string, CabinetPositionMechanics> = {
       effects: { gdpGrowth: 0.05, unemploymentRate: -0.04 },
     },
   },
+  director_of_intelligence: {
+    positionId: "director_of_intelligence",
+    department: "Secret Intelligence Service",
+    sealImage: "",
+    nationalMetrics: [
+      {
+        category: "governance",
+        metricId: "publicTrust",
+        label: "Public Trust",
+        format: "index",
+        higherIsBetter: true,
+      },
+      {
+        category: "publicSafety",
+        metricId: "crimeRate",
+        label: "Crime Rate",
+        format: "rate",
+        higherIsBetter: false,
+      },
+    ],
+    regionalMetrics: [],
+  },
 };
