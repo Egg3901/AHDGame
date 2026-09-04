@@ -383,8 +383,33 @@ describe("the state board", () => {
 
   it("renders a state that has voted at the leader's full strength", () => {
     const vm = buildPrimaryBlendViewModel(boardInput());
-    expect(tile(vm, "IA").voted).toBe(true);
-    expect(tile(vm, "IA").background.toLowerCase()).toBe("#2563eb");
+    const iowa = tile(vm, "IA");
+    expect(iowa.voted).toBe(true);
+    // Full strength means the leader's own colour, undamped.
+    const leaderSegment = vm.delegateRace?.segments.find((s) => s.id === iowa.leaderId);
+    expect(iowa.background.toLowerCase()).toBe(leaderSegment!.color.toLowerCase());
+  });
+
+  it("paints a candidate the same colour on the tiles and in the delegate bar", () => {
+    // A four-way primary with no campaign colours set used to draw four
+    // identical party-blue segments, while the board, coloured server-side,
+    // used a distinct palette. The same candidate could be two colours on one
+    // screen.
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    const segments = vm.delegateRace!.segments;
+    expect(new Set(segments.map((s) => s.color)).size).toBe(segments.length);
+
+    for (const t of vm.board) {
+      if (!t.leaderId || !t.voted) continue;
+      const segment = segments.find((s) => s.id === t.leaderId);
+      if (segment) expect(t.background.toLowerCase()).toBe(segment.color.toLowerCase());
+    }
+  });
+
+  it("gives each candidate in the field their own colour, not the party's", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput());
+    const colors = vm.field.map((f) => f.color);
+    expect(new Set(colors).size).toBe(colors.length);
   });
 
   it("damps a state that has only been projected, keeping the leader's hue", () => {

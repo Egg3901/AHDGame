@@ -12,6 +12,7 @@ import type {
   PartyGroup,
 } from "../components/ElectionDetailTypes";
 import { BLEND } from "@/components/blend/tokens";
+import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { buildPerStateSlices } from "@/lib/elections/primaryViewModel";
 import type { CarveUpSlice } from "@/components/elections/primary/CarveUpPanel";
 import type {
@@ -194,6 +195,22 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
 
   const party = selectParty(election, selectedPartyId);
   const candidates = party?.candidates ?? [];
+
+  // One colour per candidate for the whole screen.
+  //
+  // The delegate bar and the field rows used to fall back to the party's colour
+  // whenever a candidate had set no campaign colour, which is the normal case:
+  // a four-way primary drew as four identical blue segments. The board, built
+  // server-side, already used this palette, so the same candidate could be one
+  // colour in the bar and another on the tiles. Same function, same candidate
+  // ids and same campaign colours as the builder, so the two agree.
+  const colorById = buildCandidateColorMap(
+    candidates.map((c) => ({ candidateId: c.id, campaignColor: c.campaignColor ?? null })),
+    party?.partyId ?? "",
+    party?.partyColor
+  );
+  const colorFor = (candidateId: string): string =>
+    colorById[candidateId] ?? party?.partyColor ?? BLEND.muted;
   const advanceCount = election.primaryAdvanceCount ?? 1;
   const currentTurn = election.gameState?.currentTurn ?? null;
 
@@ -243,7 +260,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
       isYou: c.isYou,
       isNPP: c.isNPP,
       statusText: advancing ? "Advancing" : "Eliminated at close",
-      color: c.campaignColor ?? party?.partyColor ?? BLEND.muted,
+      color: colorFor(c.id),
       // Bars are scaled against the leader so a tight field still reads.
       barPct: topPct > 0 ? Math.max(0, Math.min(100, ((c.sharePct ?? 0) / topPct) * 100)) : 0,
     };
@@ -266,7 +283,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
         return {
           id: c.id,
           name: c.characterName,
-          color: c.campaignColor ?? party.partyColor,
+          color: colorFor(c.id),
           widthPct,
           // A sliver cannot hold a number legibly.
           label: widthPct > 6 ? grouped(d) : "",
@@ -384,14 +401,16 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
         votes.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
         const leaderId = votes[0]?.[0] ?? null;
         const leader = leaderId ? candidateById.get(leaderId) : undefined;
+        const leaderColor = leaderId ? colorFor(leaderId) : null;
         const hasVoted = voted.has(stateId);
         const name = nameFor(stateId);
 
-        const background = leader
-          ? hasVoted
-            ? leader.color
-            : towardTrack(leader.color, 0.55)
-          : BLEND.track;
+        const background =
+          leader && leaderColor
+            ? hasVoted
+              ? leaderColor
+              : towardTrack(leaderColor, 0.55)
+            : BLEND.track;
 
         return {
           stateId,
@@ -413,7 +432,15 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
       ? {
           stateId: selectedStateId,
           stateName: nameFor(selectedStateId),
-          slices: buildPerStateSlices(detail.candidates, detail.byState)[selectedStateId] ?? [],
+          // Recoloured through the same map as the bar and the tiles: the
+          // server builds its own from the candidate rows, and if that set ever
+          // differs from the payload's the palette index would shift and a
+          // candidate would change colour between the donut and the board.
+          slices:
+            buildPerStateSlices(
+              detail.candidates.map((c) => ({ ...c, color: colorFor(c.id) })),
+              detail.byState
+            )[selectedStateId] ?? [],
           detailHref: `/president/primary/${detail.partyId}/state/${selectedStateId}`,
         }
       : null;
