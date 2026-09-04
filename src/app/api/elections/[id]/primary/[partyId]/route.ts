@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
-import { ELECTION_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { buildPrimaryPartyDetail } from "@/lib/elections/primaryPartyDetail";
 
@@ -26,11 +26,11 @@ export async function GET(request: Request, { params }: RouteParams) {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
 
-    const rateLimit = checkRateLimit(
-      `election:${auth.user.userId}`,
-      ELECTION_LIMITS.maxRequests,
-      ELECTION_LIMITS.windowMs
-    );
+    // Its own read budget, matching the wire feed this screen also polls.
+    // The shared `election:` bucket is 20/minute and every other member of it
+    // is an action the player takes (enter, vote, surge, travel); browsing
+    // parties here must not spend the budget they need to act.
+    const rateLimit = checkRateLimit(auth.user.userId, 60, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
     const { id, partyId } = await params;

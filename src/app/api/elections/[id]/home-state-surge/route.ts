@@ -20,7 +20,19 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-// POST /api/elections/[id]/home-state-surge — One-time per primary cycle, bumps the candidate's home-state party org by +HOME_STATE_SURGE_BOOST for the remainder of the primary.
+// POST /api/elections/[id]/home-state-surge
+//
+// One-time per primary cycle. Charges PRIMARY_HOME_SURGE_COST_FUNDS and
+// PRIMARY_HOME_SURGE_COST_ACTIONS, then stamps PRIMARY_HOME_SURGE_PCT onto the
+// candidate as `primarySurgeBoost`.
+//
+// KNOWN GAP, pre-existing and not introduced here: nothing reads
+// `electionCandidates.primarySurgeBoost`. The projection and the stagger phase
+// both read `statePartyOrg.primarySurge`, which this route does not write and
+// which `primaryResolution` clears at the end of the cycle. The surge therefore
+// costs the player funds and actions without moving any vote. Fixing it means
+// changing primary vote maths in the turn engine, so it wants its own change
+// and its own simulation rather than riding along with a UI branch.
 // Auth: requireAuthWithCharacter (must be an active presidential primary candidate)
 // Errors: 400, 401, 403, 404, 409, 429
 export async function POST(request: Request, { params }: RouteParams) {
@@ -103,7 +115,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     if (freshChar.actions < PRIMARY_HOME_SURGE_COST_ACTIONS) {
       return NextResponse.json(
-        { error: `Not enough actions — surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}` },
+        { error: `Not enough actions. The surge costs ${PRIMARY_HOME_SURGE_COST_ACTIONS}.` },
         { status: 400 }
       );
     }
@@ -122,7 +134,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (balanceLocal < costFundsLocal) {
       return NextResponse.json(
         {
-          error: `Not enough personal funds — surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}`,
+          error: `Not enough personal funds. The surge costs $${PRIMARY_HOME_SURGE_COST_FUNDS.toLocaleString()}.`,
         },
         { status: 400 }
       );
@@ -229,7 +241,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: `Home-state surge activated in ${freshChar.homeState} — +${PRIMARY_HOME_SURGE_PCT}% votes for you in that state until primary resolves.`,
+      message: `Home-state surge activated in ${freshChar.homeState}. You gain +${PRIMARY_HOME_SURGE_PCT}% of the vote there until the primary resolves.`,
       homeState: freshChar.homeState,
       boostPct: PRIMARY_HOME_SURGE_PCT,
       cost: PRIMARY_HOME_SURGE_COST_FUNDS,

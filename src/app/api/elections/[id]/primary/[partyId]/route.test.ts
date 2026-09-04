@@ -6,7 +6,6 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
 vi.mock("@/lib/api/rateLimit", () => ({
-  ELECTION_LIMITS: { maxRequests: 60, windowMs: 60000 },
   checkRateLimit: vi.fn().mockReturnValue({ ok: true }),
   rateLimitResponse: vi.fn(),
 }));
@@ -155,6 +154,14 @@ describe("GET /api/elections/[id]/primary/[partyId]", () => {
 
     const res = await callRoute(ELECTION_OID.toString(), "1");
     expect(res.status).toBe(401);
+  });
+
+  it("spends a read budget of its own, not the player's action budget", async () => {
+    // The shared `election:` bucket is for actions the player takes. Browsing
+    // parties here must not leave them unable to camp in a state.
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    await callRoute(ELECTION_OID.toString(), "1");
+    expect(vi.mocked(checkRateLimit).mock.calls[0][0]).toBe(USER_ID);
   });
 
   it("rate limits", async () => {

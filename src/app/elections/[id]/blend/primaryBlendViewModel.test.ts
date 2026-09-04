@@ -527,3 +527,41 @@ describe("the viewer's campaign block", () => {
     expect(buildPrimaryBlendViewModel(boardInput()).campaign).toBeNull();
   });
 });
+
+describe("waves whose record disagrees with the board", () => {
+  // `primaryStaggerWavesRun` counts waves; `primaryWaveHistory` lists the states
+  // that voted. This screen shows both at once, so a wave the counter has not
+  // caught up with must not read as upcoming beside a board that has settled it.
+  const staleCounter = () =>
+    election({
+      primaryCalendar: [
+        { label: "Tier 1", turnsRemaining: 5, states: ["IA", "NH"], status: "complete" },
+        { label: "Tier 2", turnsRemaining: 4, states: ["CA"], status: "upcoming" },
+        { label: "Tier 3", turnsRemaining: 3, states: ["OH", "TX"], status: "upcoming" },
+      ],
+    });
+
+  it("reads a wave as complete once every one of its states has voted", () => {
+    const vm = buildPrimaryBlendViewModel(boardInput({ election: staleCounter() }));
+    expect(vm.calendar.find((w) => w.label === "Tier 2")?.statusText).toBe("COMPLETE");
+  });
+
+  it("does not offer a settled wave as the next contest to look at", () => {
+    const vm = buildPrimaryBlendViewModel(
+      boardInput({ election: staleCounter(), selectedStateId: null })
+    );
+    expect(vm.selectedStateId).toBe("OH");
+  });
+
+  it("leaves a part-voted wave upcoming, since it still has contests to run", () => {
+    const partly = election({
+      primaryCalendar: [
+        { label: "Tier 1", turnsRemaining: 5, states: ["IA", "ZZ"], status: "upcoming" },
+        { label: "Tier 3", turnsRemaining: 3, states: ["OH"], status: "upcoming" },
+      ],
+    });
+    const vm = buildPrimaryBlendViewModel(boardInput({ election: partly, selectedStateId: null }));
+    expect(vm.calendar.find((w) => w.label === "Tier 1")?.statusText).not.toBe("COMPLETE");
+    expect(vm.selectedStateId).toBe("IA");
+  });
+});

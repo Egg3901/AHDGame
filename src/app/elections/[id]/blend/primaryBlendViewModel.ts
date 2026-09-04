@@ -323,6 +323,20 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
   const waves = election.primaryCalendar ?? [];
   const calendarStateIds = waves.flatMap((w) => w.states);
   const nameFor = (stateId: string) => detail?.stateNameById[stateId] ?? stateId;
+  const voted = new Set(detail?.votedStateIds ?? []);
+
+  /**
+   * Whether a wave has run.
+   *
+   * The payload's own flag counts waves (`primaryStaggerWavesRun`) while the
+   * detail lists the states that actually voted (`primaryWaveHistory`). They
+   * are two records of one fact, and this screen is the first to show them side
+   * by side: a wave whose states have all voted must not read as upcoming next
+   * to a board that has already settled them. Either record alone is enough,
+   * which is how the deep dive reconciles an ad-hoc admin force-resolve too.
+   */
+  const isWaveComplete = (w: (typeof waves)[number]) =>
+    w.status === "complete" || (w.states.length > 0 && w.states.every((s) => voted.has(s)));
 
   const requested = inp.selectedStateId ?? null;
   const selectedStateId =
@@ -330,7 +344,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
       ? requested
       : // The next contest still to vote is what a player is deciding about;
         // fall back to the first on the calendar once they have all run.
-        (waves.find((w) => w.status !== "complete" && w.states.length > 0)?.states[0] ??
+        (waves.find((w) => !isWaveComplete(w) && w.states.length > 0)?.states[0] ??
         calendarStateIds[0] ??
         null);
 
@@ -340,7 +354,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
       name: nameFor(id),
       selected: id === selectedStateId,
     }));
-    if (w.status === "complete") {
+    if (isWaveComplete(w)) {
       return { label: w.label, statusText: "COMPLETE", color: BLEND.positive, states };
     }
     // A wave fires with `turnsRemaining` left on the clock, so the wait is the
@@ -359,7 +373,6 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
     };
   });
 
-  const voted = new Set(detail?.votedStateIds ?? []);
   const candidateById = new Map((detail?.candidates ?? []).map((c) => [c.id, c]));
 
   // The board lays out the calendar, not the country: a state that never votes
