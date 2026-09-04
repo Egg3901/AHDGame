@@ -193,6 +193,54 @@ function CampaignBlock({
   );
 }
 
+/**
+ * The wave calendar: when each tier votes, and which states are in it.
+ *
+ * Rendered without a heading so each layout supplies its own, the way
+ * {@link StateBoard} does. It appears in both trees: the desktop rail is
+ * `hidden lg:block`, so a rail-only calendar left mobile with no way to see the
+ * schedule and no state chips to select from.
+ */
+function CalendarWaves({
+  vm,
+  onSelect,
+}: {
+  vm: PrimaryBlendVM;
+  onSelect: (stateId: string) => void;
+}) {
+  if (vm.calendar.length === 0) return null;
+  return (
+    <>
+      {vm.calendar.map((k) => (
+        <div key={k.label} style={{ borderBottom: "1px solid rgba(34,34,47,.7)" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 10,
+              padding: "10px 0",
+            }}
+          >
+            <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{k.label}</span>
+            <span
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 10.5,
+                color: k.color,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {k.statusText}
+            </span>
+          </div>
+          <WaveStates states={k.states} onSelect={onSelect} />
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** Chips for one calendar wave, so a wave row can be selected down to a state. */
 function WaveStates({
   states,
@@ -472,6 +520,23 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
         <BlendVitals cells={vm.vitals} variant="mobile" />
 
         <div style={{ padding: "18px 16px" }}>
+          {/* Without this, a reader on another party's primary sees a dash in
+              the vitals and no reason for it; the rail that carries the
+              explanation on desktop is hidden here. */}
+          {vm.standingNote ? (
+            <p
+              style={{
+                margin: "0 0 18px",
+                fontFamily: FONT.serif,
+                fontSize: 13.5,
+                lineHeight: 1.55,
+                color: BLEND.muted,
+              }}
+            >
+              {vm.standingNote}
+            </p>
+          ) : null}
+
           {vm.delegateRace ? (
             <>
               <h2
@@ -513,6 +578,25 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                 projected.
               </p>
               <StateBoard vm={vm} columns={6} onSelect={selectState} />
+            </>
+          ) : null}
+
+          {/* The calendar sits with the board because the two drive the same
+              selection. Without it here, mobile had no schedule at all and the
+              board was the only way to reach a state. */}
+          {vm.calendar.length > 0 ? (
+            <>
+              <h2
+                style={{
+                  margin: "24px 0 8px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                The calendar
+              </h2>
+              <CalendarWaves vm={vm} onSelect={selectState} />
             </>
           ) : null}
 
@@ -727,32 +811,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                   >
                     Calendar
                   </div>
-                  {vm.calendar.map((k) => (
-                    <div key={k.label} style={{ borderBottom: "1px solid rgba(34,34,47,.7)" }}>
-                      <div
-                        style={{
-                          display: "flex",
-                          alignItems: "baseline",
-                          justifyContent: "space-between",
-                          gap: 10,
-                          padding: "10px 0",
-                        }}
-                      >
-                        <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{k.label}</span>
-                        <span
-                          style={{
-                            fontFamily: FONT.mono,
-                            fontSize: 10.5,
-                            color: k.color,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {k.statusText}
-                        </span>
-                      </div>
-                      <WaveStates states={k.states} onSelect={selectState} />
-                    </div>
-                  ))}
+                  <CalendarWaves vm={vm} onSelect={selectState} />
                 </div>
               ) : null}
 

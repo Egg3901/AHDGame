@@ -177,3 +177,45 @@ describe("PrimaryBlendView", () => {
     );
   });
 });
+
+describe("the wave calendar", () => {
+  // The desktop rail is `hidden lg:block`. A rail-only calendar left mobile
+  // with no schedule and no state chips, so the board was the only way to
+  // reach a state there. Both trees render, so each row appears twice.
+  it("reaches both layouts, not just the desktop rail", async () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+
+    await waitFor(() => expect(screen.getAllByText("Mid-March Wave").length).toBeGreaterThan(0));
+    expect(screen.getAllByText("Mid-March Wave")).toHaveLength(2);
+    expect(screen.getAllByText("Iowa Caucus")).toHaveLength(2);
+  });
+
+  it("offers every wave's states as chips on both layouts", async () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+
+    // Named for assistive tech, labelled by code on screen.
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Ohio" }).length).toBeGreaterThan(0)
+    );
+    expect(screen.getAllByRole("button", { name: "Ohio" })).toHaveLength(2);
+  });
+
+  it("moves the carve-up when a chip is chosen", async () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={election()} wire={[]} />);
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("button", { name: "Iowa" }).length).toBeGreaterThan(0)
+    );
+    // The mobile copy comes first in the DOM; clicking it drives the shared
+    // selection, so the desktop tile for Iowa becomes the pressed one too.
+    screen.getAllByRole("button", { name: "Iowa" })[0].click();
+
+    await waitFor(() => {
+      const tiles = screen.getAllByRole("button", { name: "Iowa: First Filer won" });
+      expect(tiles.every((t) => t.getAttribute("aria-pressed") === "true")).toBe(true);
+    });
+  });
+});
