@@ -47,7 +47,7 @@ export const DD_CABINET_POSITIONS = [
   { id: "minister_of_finance", name: "Minister of Finance", order: 4, yearEnabled: 1775 },
   {
     id: "minister_of_internal_affairs",
-    name: "Minister for State Security",
+    name: "Minister of Internal Affairs",
     order: 5,
     yearEnabled: 1775,
   },
@@ -107,6 +107,12 @@ export const DD_CABINET_POSITIONS = [
       { from: 1775, name: "State Secretary for Higher Education" },
       { from: 1967, name: "Minister of Higher and Technical Education" },
     ],
+  },
+  {
+    id: "director_of_intelligence",
+    name: "Minister for State Security",
+    order: 16,
+    yearEnabled: 1950,
   },
 ] as const;
 

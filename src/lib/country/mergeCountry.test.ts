@@ -730,4 +730,45 @@ describe("mergeCountry", () => {
     expect(res.electionsCancelled).toBe(0);
     expect(prime(db, "elections").deleteMany).not.toHaveBeenCalled();
   });
+  it("purges the dissolving country's intelligence, as owner AND as target", async () => {
+    // A dissolved country leaves the registry entirely, so rows naming it would
+    // be invisible to every surface while the turn phase still read them.
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+
+    expect(prime(db, "intelligenceAgencies").deleteMany).toHaveBeenCalledWith({
+      countryId: "DD",
+    });
+    for (const collection of ["intelligenceNetworks", "intelligenceCoverage"]) {
+      expect(prime(db, collection).deleteMany).toHaveBeenCalledWith({
+        $or: [{ ownerCountryId: "DD" }, { targetCountryId: "DD" }],
+      });
+    }
+  });
+
+  it("does NOT hand the survivor the dissolved country's networks", async () => {
+    // A network is access built by a service that no longer exists. Inheriting
+    // one would make dissolving a state a cheap way to buy reach.
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    expect(prime(db, "intelligenceNetworks").updateMany).not.toHaveBeenCalled();
+  });
+
+  it("leaves the operation log alone, because the incidents did happen", async () => {
+    const { mergeCountry } = await import("./mergeCountry");
+    await mergeCountry(db as unknown as Db, {
+      fromCountryId: "DD",
+      toCountryId: "DE",
+      currentTurn: 412,
+    });
+    expect(prime(db, "intelligenceOpLog").deleteMany).not.toHaveBeenCalled();
+  });
 });

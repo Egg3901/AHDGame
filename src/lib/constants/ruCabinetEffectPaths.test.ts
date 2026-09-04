@@ -132,6 +132,9 @@ describe("RU cabinet mechanics coverage", () => {
     "first_deputy_premier",
     "minister_of_foreign_affairs",
     "gosbank_liaison",
+    // The security service is a national instrument: it runs networks abroad and
+    // counter-intelligence at home, neither of which sites in one republic.
+    "director_of_intelligence",
   ]);
   /** Foreign Trade's lever is its trade-posture tier, not a crisis deployment. */
   const NO_EMERGENCY = new Set([...NO_REGIONAL_TARGET, "minister_of_foreign_trade"]);

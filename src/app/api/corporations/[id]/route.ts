@@ -15,6 +15,7 @@ import {
 } from "@/lib/corporations/redaction";
 import type { CorporationPrivatizationVote, Corporation, CorporationHistory } from "@/lib/db/types";
 import {
+  booksAreExposed,
   getFogFactor,
   applyFogToFinancials,
   applyFogToBalanceSheet,
@@ -185,6 +186,9 @@ export async function GET(request: Request, { params }: RouteParams) {
     const isPublicCorp = !corporation.isPrivate && !isNatcorp;
 
     let financialFogMeta: FinancialFogMeta | null = null;
+    // Hoisted beside the fog meta: the payload below reports it so the page can
+    // say WHY an outsider is seeing exact figures.
+    let booksExposed = false;
 
     if (isPublicCorp) {
       let isInsider = authUser?.isAdmin === true;
@@ -212,7 +216,12 @@ export async function GET(request: Request, { params }: RouteParams) {
         }
       }
 
-      if (!isInsider) {
+      // A leaked corporation's books are OUT: the fog is skipped for everyone
+      // until the exposure lapses. Expressed as a turn so it expires on its own
+      // and nothing has to remember to clear it.
+      booksExposed = booksAreExposed(corporation, currentTurn);
+
+      if (!isInsider && !booksExposed) {
         // Last completed quarter boundary turn (turns divisible by FINANCIAL_FOG_QUARTER_TURNS).
         const quarterBoundaryTurn =
           Math.floor(currentTurn / FINANCIAL_FOG_QUARTER_TURNS) * FINANCIAL_FOG_QUARTER_TURNS;
@@ -348,6 +357,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       ...detail,
       isPrivate: corporation.isPrivate ?? false,
       financialFogOfWar: financialFogMeta,
+      // Only present when it means something. Sending `null` on every response
+      // would change the payload shape for every corporation in the game to
+      // carry a field that is empty virtually always.
+      ...(booksExposed ? { booksExposedUntilTurn: corporation.booksExposedUntilTurn } : {}),
       defenceContracts: defence,
     });
   } catch (error) {

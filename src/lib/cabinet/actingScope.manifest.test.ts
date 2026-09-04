@@ -30,6 +30,12 @@ const GATED_BY_SHARED_HELPER = new Set([
   "nuclear/covert/funding",
   "nuclear/production",
   "nuclear/test",
+  // The intelligence console does the same thing: every mutation goes through
+  // `requireIntelligenceHolder` with `intent: "manage"`.
+  "intelligence/budget",
+  "intelligence/counter-intel",
+  "intelligence/network",
+  "intelligence/operation",
 ]);
 
 /** Every route.ts under the cabinet position tree, keyed as the manifest keys it. */

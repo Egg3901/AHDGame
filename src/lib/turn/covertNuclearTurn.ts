@@ -1,9 +1,7 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { applyTensionEvent } from "@/lib/coldwar/tension";
-import { createSystemNewsPost } from "@/lib/news";
-import { CRACKDOWN_TENSION_SPIKE, stepCovertProgram } from "@/lib/military/covertNuclear";
+import { stepCovertProgram } from "@/lib/military/covertNuclear";
+import { applyCovertCrackdown } from "@/lib/military/covertCrackdown";
 import {
   getCovertNuclearProgramsCollection,
   emptyCovertNuclearProgram,
@@ -16,12 +14,8 @@ import {
   uncommittedFrom,
 } from "@/lib/db/collections/defenseAppropriation";
 
-/**
- * A crackdown embarrasses the government that got caught: modest approval hit,
- * applied the same way crisis approval effects land (a flat $inc on the
- * governmentApprovals doc, which the approval dynamics then work back).
- */
-export const CRACKDOWN_APPROVAL_HIT = -3;
+// Re-exported from its new home so existing importers keep working.
+export { CRACKDOWN_APPROVAL_HIT } from "@/lib/military/covertCrackdown";
 
 export interface CovertNuclearTurnResult {
   spent: number;
@@ -87,27 +81,9 @@ export async function applyCovertNuclearTurn(
   }
 
   if (result.discovered) {
-    const countryName = COUNTRY_CONFIGS[countryId].name;
-    await applyTensionEvent(
-      db,
-      turn,
-      "crisis",
-      "Soviet inspectors raid East German facilities",
-      CRACKDOWN_TENSION_SPIKE
-    );
-    // Same shape as crisis approval effects: a flat $inc on the country's
-    // governmentApprovals doc, worked back by the approval dynamics.
-    await db
-      .collection("governmentApprovals")
-      .updateOne(
-        { _id: countryId as unknown as import("mongodb").ObjectId },
-        { $inc: { approvalRating: CRACKDOWN_APPROVAL_HIT } }
-      );
-    await createSystemNewsPost(
-      `Soviet inspection teams have raided undeclared industrial facilities in the ${countryName}. Moscow has issued a formal rebuke. Officials in Berlin declined to comment.`,
-      "executive",
-      { title: "Soviet Crackdown in East Germany" }
-    );
+    // Shared with the patron's intelligence service, which can reach the same
+    // event by finding the programme and acting on it. See covertCrackdown.ts.
+    await applyCovertCrackdown(db, countryId, turn);
   }
 
   return { spent: result.spent, discovered: result.discovered };
