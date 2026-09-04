@@ -80,22 +80,24 @@ export const OPS_LEVER_COLOR = {
 /**
  * Build the segmented level bar Blend uses for operation levels: `total`
  * equal-width blocks, the first `filled` of them in `color` and the remainder
- * on the track. Returns inline style strings, one per segment.
+ * on the track. Returns one React style object per segment.
  *
  * `filled` is clamped into `[0, total]` so a caller passing an unclamped
  * invested count (or a negative from a partially loaded payload) still renders
  * exactly `total` segments.
  */
-export function blendSegments(filled: number, total: number, color: string): string[] {
+export function blendSegments(filled: number, total: number, color: string): React.CSSProperties[] {
   const count = Math.max(0, Math.floor(total));
   const lit = Math.max(0, Math.min(count, Math.floor(filled)));
-  const out: string[] = [];
+  const out: React.CSSProperties[] = [];
   for (let i = 0; i < count; i++) {
-    out.push(
-      `height: 8px; flex: 1; border-radius: 2px; display: block; background: ${
-        i < lit ? color : BLEND.hairlineStrong
-      }`
-    );
+    out.push({
+      height: 8,
+      flex: 1,
+      borderRadius: 2,
+      display: "block",
+      background: i < lit ? color : BLEND.hairlineStrong,
+    });
   }
   return out;
 }

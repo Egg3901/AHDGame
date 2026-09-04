@@ -61,27 +61,34 @@ describe("blendSegments", () => {
   it("fills the invested segments and leaves the rest on the track colour", () => {
     const segs = blendSegments(3, 10, "#60a5fa");
     expect(segs).toHaveLength(10);
-    for (let i = 0; i < 3; i++) expect(segs[i]).toContain("#60a5fa");
-    for (let i = 3; i < 10; i++) expect(segs[i]).toContain(BLEND.hairlineStrong);
+    for (let i = 0; i < 3; i++) expect(segs[i].background).toBe("#60a5fa");
+    for (let i = 3; i < 10; i++) expect(segs[i].background).toBe(BLEND.hairlineStrong);
   });
 
   it("handles the fully empty and fully filled ends", () => {
-    expect(blendSegments(0, 3, "#fbbf24").every((s) => s.includes(BLEND.hairlineStrong))).toBe(
+    expect(blendSegments(0, 3, "#fbbf24").every((s) => s.background === BLEND.hairlineStrong)).toBe(
       true
     );
-    expect(blendSegments(3, 3, "#fbbf24").every((s) => s.includes("#fbbf24"))).toBe(true);
+    expect(blendSegments(3, 3, "#fbbf24").every((s) => s.background === "#fbbf24")).toBe(true);
   });
 
   it("clamps an over-filled count rather than emitting extra segments", () => {
     const segs = blendSegments(99, 4, "#fbbf24");
     expect(segs).toHaveLength(4);
-    expect(segs.every((s) => s.includes("#fbbf24"))).toBe(true);
+    expect(segs.every((s) => s.background === "#fbbf24")).toBe(true);
   });
 
   it("never emits a negative or fractional segment count", () => {
     expect(blendSegments(-2, 5, "#fbbf24")).toHaveLength(5);
-    expect(blendSegments(-2, 5, "#fbbf24").every((s) => s.includes(BLEND.hairlineStrong))).toBe(
-      true
-    );
+    expect(
+      blendSegments(-2, 5, "#fbbf24").every((s) => s.background === BLEND.hairlineStrong)
+    ).toBe(true);
+  });
+
+  it("returns style objects React can apply directly", () => {
+    // Style strings would need a setAttribute escape hatch in every consumer.
+    const [seg] = blendSegments(1, 1, "#fbbf24");
+    expect(seg.display).toBe("block");
+    expect(seg.borderRadius).toBe(2);
   });
 });

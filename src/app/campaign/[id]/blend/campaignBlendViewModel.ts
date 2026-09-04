@@ -67,7 +67,7 @@ export interface OpsBranchVM {
   description: string;
   level: number;
   maxLevel: number;
-  segments: string[];
+  segments: React.CSSProperties[];
   effect: string;
   costText: string;
   maintenanceText: string;
@@ -95,7 +95,7 @@ export interface OpsRowVM {
   color: string;
   invested: number;
   level: string;
-  segments: string[];
+  segments: React.CSSProperties[];
   expanded: boolean;
   tree: OpsTreeVM | null;
 }
