@@ -60,9 +60,17 @@ const SPAN_STATUS_ERROR = 2 as const;
  */
 const pendingSpans = new Map<number, Span>();
 
-function collectionFromCommand(commandName: string, command: Record<string, unknown>): string {
+export function collectionFromCommand(commandName: string, command: Record<string, unknown>): string {
+  // Most commands name their collection as the command's own value
+  // (`{find: "corporations"}`). `getMore` does not: its value is the cursor
+  // id, and the collection sits in a separate field. Without this branch every
+  // paginated batch was attributed to "unknown" — and since large result sets
+  // are exactly the ones that paginate, that was most of the documents the
+  // turn deserializes.
   const target = command[commandName];
-  return typeof target === "string" ? target : "unknown";
+  if (typeof target === "string") return target;
+  const named = command.collection;
+  return typeof named === "string" ? named : "unknown";
 }
 
 /** Documents in a find/getMore/aggregate reply batch; 0 for anything else. */
