@@ -115,14 +115,26 @@ describe("setSectorGrowth — host country resolution", () => {
     expect(resolveCountryPrimeRate).toHaveBeenCalledWith(expect.anything(), "PL");
   });
 
-  it("never falls back to a hardcoded country when the state cannot be resolved", async () => {
+  it("never falls back to a hardcoded country when nothing else resolves", async () => {
+    // Both the sector's and the corporation's country are cleared, so the OLD
+    // chain reached its `?? "US"` literal. Anything but "US" proves the literal
+    // is gone; here the corp fallback is the last thing standing.
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
     await wire();
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: { ...corp, countryId: "PL" },
+    } as never);
+    db.collectionMocks.corporateSectors.findOne.mockResolvedValue({
+      ...sector,
+      countryId: undefined,
+    });
     db.collectionMocks.states.findOne.mockResolvedValue(null);
 
     await setSectorGrowth(req({ targetGrowthRate: 8 }), { params });
 
     const { resolveCountryPrimeRate } = await import("@/lib/corporations/sectorGrowthCost");
-    // The sector's own country, then the corp's. Never "US".
-    expect(resolveCountryPrimeRate).toHaveBeenCalledWith(expect.anything(), "CN");
+    expect(resolveCountryPrimeRate).toHaveBeenCalledWith(expect.anything(), "PL");
+    expect(resolveCountryPrimeRate).not.toHaveBeenCalledWith(expect.anything(), "US");
   });
 });

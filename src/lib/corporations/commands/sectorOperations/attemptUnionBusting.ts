@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { Corporation, CorporateSector, State } from "@/lib/db/types";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameState } from "@/lib/gameState";
 import { isTurnProcessingNow } from "@/lib/turn/processingLock";
@@ -209,7 +209,16 @@ export async function attemptUnionBusting(
     throw error;
   }
 
-  const countryId = sector.countryId ?? corporation.countryId;
+  // The pulse and the union notification land in the country the WORKFORCE is
+  // in, which is the state's, not wherever the corporation is domiciled
+  // (ticket #1271: the same precedence `getSectorOperatingCountryId` sets, and
+  // the same shape `buildCapacity` and `expandSector` carried). Busting a union
+  // in a foreign plant otherwise fired the backlash at the wrong country's
+  // labour movement.
+  const bustingState = await db
+    .collection<State>("states")
+    .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
+  const countryId = bustingState?.countryId ?? sector.countryId ?? corporation.countryId;
   if (success) {
     await fireUnionBustingSuccessPulse(db, sector.sectorType, countryId);
   } else {

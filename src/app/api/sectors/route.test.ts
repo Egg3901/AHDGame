@@ -114,6 +114,24 @@ describe("GET /api/sectors country identity (ticket #1271)", () => {
     expect(values).not.toContain("DE");
   });
 
+  it("filters on the same country it labels rows with", async () => {
+    // Labelling a row from its state while filtering on its stored `countryId`
+    // means a row whose stored value went stale is shown under one country and
+    // findable under another, or under none at all once the filter list is
+    // narrowed to countries that hold territory. The filter is expressed as the
+    // country's STATES so the two can never disagree.
+    const { GET } = await import("./route");
+    await GET(makeRequest("view=owned&country=DD"));
+
+    const corpFilter = db.collectionMocks.corporateSectors.find.mock.calls[0][0];
+    expect(corpFilter).toMatchObject({ stateId: { $in: ["NW"] } });
+    expect(corpFilter).not.toHaveProperty("countryId");
+    // ...and the badge is counted on the same basis as the list.
+    expect(db.collectionMocks.corporateSectors.countDocuments).toHaveBeenCalledWith({
+      stateId: { $in: ["NW"] },
+    });
+  });
+
   it("labels sector rows with the override too, not the compiled name", async () => {
     // The owned view, which is where the ticket's screenshot showed every
     // German plant filed under "East Germany".
@@ -188,11 +206,13 @@ describe("GET /api/sectors (view=unowned)", () => {
     expect(stateIds).not.toContain("UKR");
 
     // The badge count query itself must also exclude command-economy countries
-    // (not just the row list), so it can't silently overcount.
+    // (not just the row list), so it can't silently overcount. Expressed as the
+    // command economies' STATES, so the count agrees with the rows and the
+    // filter about which country a sector is in (ticket #1271).
     expect(db.collectionMocks.unownedSectors.countDocuments).toHaveBeenCalledWith(
       expect.objectContaining({
-        countryId: expect.objectContaining({
-          $nin: expect.arrayContaining(["RU"]),
+        stateId: expect.objectContaining({
+          $nin: expect.arrayContaining(["UKR"]),
         }),
       })
     );
@@ -210,7 +230,7 @@ describe("GET /api/sectors (view=unowned)", () => {
 
     expect(response.status).toBe(200);
     expect(db.collectionMocks.unownedSectors.countDocuments).toHaveBeenCalledWith({
-      countryId: { $in: [] },
+      stateId: { $in: [] },
     });
   });
 });

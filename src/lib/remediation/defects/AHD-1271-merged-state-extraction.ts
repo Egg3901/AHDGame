@@ -211,7 +211,7 @@ function describe(row: StrandedState): string {
 }
 
 /**
- * One assessment, shared by all four lifecycle steps.
+ * One assessment, shared by detect, plan and verify.
  *
  * THE COUNT HAS TO BE THE SAME EVERYWHERE OR THE DEFECT CAN NEVER CLOSE.
  * `survey` decides "stranded" from the LIVE capacity collection, while the seed
@@ -529,24 +529,18 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
 }
 
 async function verify(db: Db): Promise<VerifyResult> {
-  const { stranded, withoutEnterprise, preset, currentTurn } = await survey(db);
-  // Counted the same way `plan` counts `affected`, so a state this heal is not
-  // able to build can never hold the defect open. Anything it CAN build and has
-  // not is a genuine remainder.
-  const docs = await buildSectors(db, stranded, preset, currentTurn);
-  const buildableStates = new Set(docs.map((d) => d.stateId as string));
-  const remaining = stranded.filter((s) => buildableStates.has(s.stateId));
-  const unbuildable = stranded.length - remaining.length;
+  // The SAME assessment `detect` and `plan` use, so a state this heal cannot
+  // build can never hold the defect open and the three can never disagree.
+  const { buildable, unbuildable, withoutEnterprise } = await assess(db);
 
   return {
-    ok: remaining.length === 0,
-    remaining: remaining.length,
+    ok: buildable.length === 0,
+    remaining: buildable.length,
     notes: [
-      remaining.length === 0
+      buildable.length === 0
         ? "every command-economy state with deposits and an enterprise now carries an extraction sector"
-        : `${remaining.length} state(s) still stranded: ${remaining.map((r) => `${r.countryId}/${r.stateId}`).join(", ")}`,
-      `${withoutEnterprise.length} state(s) whose country runs no single extraction enterprise remain, by design`,
-      `${unbuildable} state(s) the seed builder produces no plant for remain, by design`,
+        : `${buildable.length} state(s) still stranded: ${buildable.map((r) => `${r.countryId}/${r.stateId}`).join(", ")}`,
+      ...skippedNotes(withoutEnterprise, unbuildable),
     ],
   };
 }
@@ -559,12 +553,20 @@ export const defect: Defect = {
     issue: 1271,
     mergedTo: "development",
   },
-  // The seed half is the gate itself, and it is fixed: `buildCommandSoeCorpEntries`
-  // now resolves the capacity key through `resolveStateResourceEntry`, so a
-  // rebuild or a world reset places the plants instead of skipping them.
-  // `seedStateResourceCapacity` carried the same bare-key lookup and would have
-  // WIPED the deposits of every merged-in state on the next re-seed; it is fixed
-  // in the same change.
+  // The seed half is the gate itself, and it is fixed upstream (#1405):
+  // `buildCommandSoeCorpEntries` resolves the capacity key through
+  // `lookupStateResourceCapacity`, so a rebuild or a world reset places the
+  // plants instead of skipping them. `seedStateResourceCapacity` carried the
+  // same bare-key lookup and would have WIPED the deposits of every merged-in
+  // state on the next re-seed; fixed in the same upstream change.
+  //
+  // ONE HAZARD FOR THE OPERATOR. Now that the gate is fixed,
+  // `reconcileCommandEconomyUnowned` will build these same plants itself if it
+  // is ever re-run, but from the raw seed path: no `plantsStartTurn`, no
+  // `capacityBookAnchor`, i.e. a full list-price salvage basis. Worse, running
+  // it AFTER this heal `$set`s `capitalStock` back to the un-headroomed value
+  // while leaving `plantsStartTurn` stamped, silently undoing the 1.1x. Run one
+  // or the other, not both.
   seedFix: {
     status: "fixed",
     files: [

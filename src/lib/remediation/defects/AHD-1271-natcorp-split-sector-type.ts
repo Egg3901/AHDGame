@@ -44,6 +44,7 @@ interface SplitOffCorp {
   unlockedTechNodeIds?: string[];
   techDecadeLane?: Record<string, string> | null;
   secondaryType?: string;
+  typeSwitchTurn?: number | null;
 }
 
 /**
@@ -87,6 +88,7 @@ async function findMistyped(db: Db): Promise<{
   multiClaimCount: number;
   researchHolders: SplitOffCorp[];
   conflictingSecondary: SplitOffCorp[];
+  playerSwitched: SplitOffCorp[];
 }> {
   const corps = await db
     .collection<SplitOffCorp>("corporations")
@@ -105,6 +107,7 @@ async function findMistyped(db: Db): Promise<{
           unlockedTechNodeIds: 1,
           techDecadeLane: 1,
           secondaryType: 1,
+          typeSwitchTurn: 1,
         },
       }
     )
@@ -113,6 +116,7 @@ async function findMistyped(db: Db): Promise<{
   const rows: SplitOffCorp[] = [];
   const researchHolders: SplitOffCorp[] = [];
   const conflictingSecondary: SplitOffCorp[] = [];
+  const playerSwitched: SplitOffCorp[] = [];
   let multiClaimCount = 0;
   for (const corp of corps) {
     const claimed = corp.assignedSectorTypes ?? [];
@@ -130,11 +134,18 @@ async function findMistyped(db: Db): Promise<{
     if (corp.type === want) continue;
     // `updateCorporationSettings` rejects primary === secondary as invalid, so
     // writing that pair here would leave a corp its own owner cannot edit.
-    if (corp.secondaryType === want) conflictingSecondary.push(corp);
+    // A DELIBERATE SWITCH IS NOT A DEFECT. `typeSwitchTurn` is stamped only by
+    // `updateCorporationSettings`, so it means a human chose this type and paid
+    // the switch penalty and cooldown for it. An appointed National Corporation
+    // CEO can do that, and `assignedSectorTypes` stays as carved, so such a corp
+    // reads as "mistyped" forever: reverting it would spend their penalty for
+    // nothing and the defect would re-open every time they set it back.
+    if (corp.typeSwitchTurn != null) playerSwitched.push(corp);
+    else if (corp.secondaryType === want) conflictingSecondary.push(corp);
     else if (holdsResearch(corp)) researchHolders.push(corp);
     else rows.push(corp);
   }
-  return { rows, multiClaimCount, researchHolders, conflictingSecondary };
+  return { rows, multiClaimCount, researchHolders, conflictingSecondary, playerSwitched };
 }
 
 function describe(corp: SplitOffCorp): string {
@@ -142,7 +153,8 @@ function describe(corp: SplitOffCorp): string {
 }
 
 async function detect(db: Db): Promise<DetectResult> {
-  const { rows, multiClaimCount, researchHolders, conflictingSecondary } = await findMistyped(db);
+  const { rows, multiClaimCount, researchHolders, conflictingSecondary, playerSwitched } =
+    await findMistyped(db);
   const notes = [`${rows.length} state enterprise(s) report a type they do not operate`];
   if (multiClaimCount > 0) {
     notes.push(
@@ -162,6 +174,13 @@ async function detect(db: Db): Promise<DetectResult> {
         `SECONDARY type and are NOT touched: primary and secondary must differ, and writing ` +
         `both the same would leave a corp its owner cannot edit ` +
         `(${conflictingSecondary.map((c) => `${c.countryOwnerId}/${c.name}`).join(", ")})`
+    );
+  }
+  if (playerSwitched.length > 0) {
+    notes.push(
+      `${playerSwitched.length} enterprise(s) had their type set deliberately by a CEO and are ` +
+        `NOT touched: reverting a paid-for switch is not a repair ` +
+        `(${playerSwitched.map((c) => `${c.countryOwnerId}/${c.name}`).join(", ")})`
     );
   }
   return {
@@ -223,7 +242,8 @@ async function apply(db: Db, healPlan: HealPlan, ctx: HealContext): Promise<Heal
 }
 
 async function verify(db: Db): Promise<VerifyResult> {
-  const { rows, multiClaimCount, researchHolders, conflictingSecondary } = await findMistyped(db);
+  const { rows, multiClaimCount, researchHolders, conflictingSecondary, playerSwitched } =
+    await findMistyped(db);
   return {
     ok: rows.length === 0,
     remaining: rows.length,
@@ -234,6 +254,7 @@ async function verify(db: Db): Promise<VerifyResult> {
       `${multiClaimCount} multi-sector enterprise(s) remain, by design`,
       `${researchHolders.length} research-holding enterprise(s) remain, by design`,
       `${conflictingSecondary.length} enterprise(s) whose secondary type is the claimed sector remain, by design`,
+      `${playerSwitched.length} enterprise(s) with a deliberate CEO type switch remain, by design`,
     ],
   };
 }

@@ -3,13 +3,16 @@ import { ObjectId, type Db } from "mongodb";
 import { DEFECT_ID, defect } from "./AHD-1271-natcorp-split-sector-type";
 import type { HealContext } from "../types";
 
-const ctx: HealContext = { env: "prod", dryRun: true, now: new Date("2026-09-04T12:00:00Z") };
+const ctx: HealContext = { env: "sandbox", dryRun: true, now: new Date("2026-09-04T12:00:00Z") };
 
 const MISTYPED_ID = new ObjectId();
 const CORRECT_ID = new ObjectId();
 const MULTI_ID = new ObjectId();
 const PRIMARY_ID = new ObjectId();
 const NONSENSE_ID = new ObjectId();
+const RESEARCH_ID = new ObjectId();
+const SECONDARY_ID = new ObjectId();
+const SWITCHED_ID = new ObjectId();
 
 interface Corp {
   _id: ObjectId;
@@ -18,6 +21,10 @@ interface Corp {
   type: string;
   assignedSectorTypes: string[];
   isPrimaryNationalCorporation?: boolean;
+  unlockedTechNodeIds?: string[];
+  techDecadeLane?: Record<string, string>;
+  secondaryType?: string;
+  typeSwitchTurn?: number;
 }
 
 /**
@@ -54,6 +61,30 @@ function productionIncidentDb(): { db: Db; corps: Corp[] } {
       countryOwnerId: "DD",
       type: "financial",
       assignedSectorTypes: ["not_a_sector"],
+    },
+    {
+      _id: RESEARCH_ID,
+      name: "Researching Enterprise",
+      countryOwnerId: "DD",
+      type: "financial",
+      assignedSectorTypes: ["technology"],
+      unlockedTechNodeIds: ["financial-1950s-a"],
+    },
+    {
+      _id: SECONDARY_ID,
+      name: "Second Line Enterprise",
+      countryOwnerId: "DD",
+      type: "financial",
+      assignedSectorTypes: ["logistics"],
+      secondaryType: "logistics",
+    },
+    {
+      _id: SWITCHED_ID,
+      name: "Player Switched Enterprise",
+      countryOwnerId: "DD",
+      type: "technology",
+      assignedSectorTypes: ["media"],
+      typeSwitchTurn: 600,
     },
     {
       _id: PRIMARY_ID,
@@ -149,5 +180,54 @@ describe(DEFECT_ID, () => {
     const again = await defect.apply(db, plan, ctx);
 
     expect(again.documentsUpdated).toBe(0);
+  });
+
+  it("will not void research a CEO paid for", async () => {
+    // Sector-lane tech node ids are prefixed by primary type, so moving `type`
+    // makes them stop resolving: the unlocks and the R&D behind them vanish.
+    // That is a price a player may choose to pay, not one a repair may impose.
+    const { db, corps } = productionIncidentDb();
+    const result = await defect.detect(db, ctx);
+
+    expect(result.notes?.join(" ")).toContain("hold tech-tree research");
+    const plan = await defect.plan(db, ctx);
+    expect(plan.touched[0].ids).not.toContain(String(RESEARCH_ID));
+
+    await defect.apply(db, plan, ctx);
+    expect(corps.find((c) => c._id === RESEARCH_ID)?.type).toBe("financial");
+  });
+
+  it("will not make primary and secondary the same type", async () => {
+    // `updateCorporationSettings` rejects that pair, so writing it would leave a
+    // corp its own owner cannot edit.
+    const { db, corps } = productionIncidentDb();
+    const result = await defect.detect(db, ctx);
+
+    expect(result.notes?.join(" ")).toContain("SECONDARY type");
+    const plan = await defect.plan(db, ctx);
+    expect(plan.touched[0].ids).not.toContain(String(SECONDARY_ID));
+
+    await defect.apply(db, plan, ctx);
+    expect(corps.find((c) => c._id === SECONDARY_ID)?.type).toBe("financial");
+  });
+
+  it("will not revert a type a CEO deliberately switched to", async () => {
+    // `typeSwitchTurn` is stamped only by the settings command, so it means a
+    // human chose this and paid the penalty and cooldown for it. Reverting would
+    // spend that for nothing and re-open the defect every time they set it back.
+    const { db, corps } = productionIncidentDb();
+    const result = await defect.detect(db, ctx);
+
+    expect(result.notes?.join(" ")).toContain("set deliberately by a CEO");
+    const plan = await defect.plan(db, ctx);
+    expect(plan.touched[0].ids).not.toContain(String(SWITCHED_ID));
+
+    await defect.apply(db, plan, ctx);
+    expect(corps.find((c) => c._id === SWITCHED_ID)?.type).toBe("technology");
+  });
+
+  it("is not enabled for prod while the code gate has no pinned commit", () => {
+    expect(defect.envs).not.toContain("prod");
+    expect(defect.codeFix?.requiredCommit).toBeUndefined();
   });
 });

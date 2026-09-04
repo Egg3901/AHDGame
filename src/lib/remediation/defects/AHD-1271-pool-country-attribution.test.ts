@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { DEFECT_ID, defect } from "./AHD-1271-pool-country-attribution";
 import type { HealContext } from "../types";
 
-const ctx: HealContext = { env: "prod", dryRun: true, now: new Date("2026-09-04T12:00:00Z") };
+const ctx: HealContext = { env: "sandbox", dryRun: true, now: new Date("2026-09-04T12:00:00Z") };
 
 const MISFILED_ID = new ObjectId();
 const CORRECT_ID = new ObjectId();
@@ -106,5 +106,12 @@ describe(DEFECT_ID, () => {
     await defect.apply(db, plan, ctx);
 
     expect(plan.touched[0].ids).not.toContain(String(CORRECT_ID));
+  });
+
+  it("is not enabled for prod while the code gate has no pinned commit", () => {
+    // `evaluateCodeGate` passes unconditionally without `requiredCommit`, so
+    // listing prod would let an operator heal an env the fix has not reached.
+    expect(defect.envs).not.toContain("prod");
+    expect(defect.codeFix?.requiredCommit).toBeUndefined();
   });
 });

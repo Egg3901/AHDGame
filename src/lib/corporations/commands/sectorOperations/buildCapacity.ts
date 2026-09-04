@@ -259,13 +259,12 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const sectorState = await db
       .collection<State>("states")
       .findOne({ _id: sector.stateId }, { projection: { countryId: 1 } });
+    // No guard on the result: `CorporateSector.countryId` and
+    // `Corporation.countryId` are both required, so the chain always resolves,
+    // and the sibling `setSectorGrowth` carries no guard either. An unreachable
+    // branch here would only have implied the two files disagree about whether
+    // this can fail.
     const countryId = sectorState?.countryId ?? sector.countryId ?? corporation.countryId;
-    if (!countryId) {
-      return NextResponse.json(
-        { error: "This sector is not in a known country and its capacity cannot be changed." },
-        { status: 409 }
-      );
-    }
 
     // No blanket state-owned block here: the appointed CEO of a National
     // Corporation legitimately builds, mothballs and manages its capacity

@@ -102,6 +102,15 @@ function mockDb({
       if (name === "gameConfig") {
         return { findOne: vi.fn().mockResolvedValue(null) };
       }
+      // The pulse and the union notice fire at the country the WORKFORCE is in,
+      // which is the state's (ticket #1271). These fixtures keep the sector and
+      // its state in the same country, so every existing expectation is
+      // unchanged.
+      if (name === "states") {
+        return {
+          findOne: vi.fn().mockResolvedValue({ _id: sector.stateId, countryId: sector.countryId }),
+        };
+      }
       throw new Error(`unexpected collection ${name}`);
     },
   } as unknown as Db;

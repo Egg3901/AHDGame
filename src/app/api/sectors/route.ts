@@ -113,6 +113,30 @@ export async function GET(request: Request) {
       loadCountryPresentationOverrides(db),
     ]);
     const countriesWithStates = new Set(states.map((s) => s.countryId));
+
+    // WHICH COUNTRY A SECTOR IS IN IS DECIDED BY ITS STATE, in one place, and the
+    // row labels, the country filter and the tab badges all use it. They have to
+    // agree: labelling a row from its state while filtering on its stored
+    // `countryId` means a row whose stored value went stale when its region
+    // changed hands is shown under one country and findable under another, or
+    // under none at all once the filter list is narrowed to countries that hold
+    // territory. Expressing the filter as `stateId in (that country's states)`
+    // IS the state-first rule, and it stays a database query.
+    const stateIdsByCountry = new Map<CountryId, string[]>();
+    for (const s of states) {
+      const list = stateIdsByCountry.get(s.countryId);
+      if (list) list.push(s._id);
+      else stateIdsByCountry.set(s.countryId, [s._id]);
+    }
+    const filteredStateIds =
+      countryFilter && countryFilter in COUNTRY_CONFIGS
+        ? (stateIdsByCountry.get(countryFilter) ?? [])
+        : null;
+    /** The country a row is in: its state's, then whatever it stored. */
+    const hostCountryOf = (
+      stateId: string,
+      ...fallbacks: (string | null | undefined)[]
+    ): CountryId => (stateMap.get(stateId)?.countryId ?? fallbacks.find(Boolean)) as CountryId;
     const countryNameOf = (id: CountryId): string =>
       overrides[id]?.name ?? getCountryDisplayName(id, preset);
     const countryFlagOf = (id: CountryId): string =>
@@ -130,6 +154,9 @@ export async function GET(request: Request) {
       db,
       COUNTRY_ORDER
     );
+    const blockedStateIds = states
+      .filter((s) => commandEconomyBlockedCountries.has(s.countryId))
+      .map((s) => s._id);
 
     const rows: SectorRow[] = [];
 
@@ -139,8 +166,8 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         unownedFilter.sectorType = sectorTypeFilter;
       }
-      if (countryFilter && countryFilter in COUNTRY_CONFIGS) {
-        unownedFilter.countryId = countryFilter;
+      if (filteredStateIds) {
+        unownedFilter.stateId = { $in: filteredStateIds };
       }
 
       const unownedSectors = (
@@ -150,7 +177,7 @@ export async function GET(request: Request) {
             projection: { sectorType: 1, stateId: 1, countryId: 1, revenue: 1 },
           })
           .toArray()
-      ).filter((u) => !commandEconomyBlockedCountries.has(u.countryId));
+      ).filter((u) => !commandEconomyBlockedCountries.has(hostCountryOf(u.stateId, u.countryId)));
 
       for (const us of unownedSectors) {
         const st = stateMap.get(us.stateId);
@@ -160,9 +187,9 @@ export async function GET(request: Request) {
           sectorTypeLabel: CORPORATION_TYPE_LABELS[us.sectorType],
           stateId: us.stateId,
           stateName: st?.name ?? us.stateId,
-          countryId: us.countryId,
-          countryName: countryNameOf(us.countryId),
-          countryFlag: countryFlagOf(us.countryId),
+          countryId: hostCountryOf(us.stateId, us.countryId),
+          countryName: countryNameOf(hostCountryOf(us.stateId, us.countryId)),
+          countryFlag: countryFlagOf(hostCountryOf(us.stateId, us.countryId)),
           owned: false,
           corporationId: null,
           corporationName: null,
@@ -183,8 +210,8 @@ export async function GET(request: Request) {
       if (sectorTypeFilter && CORPORATION_TYPES.includes(sectorTypeFilter)) {
         corpFilter.sectorType = sectorTypeFilter;
       }
-      if (countryFilter && countryFilter in COUNTRY_CONFIGS) {
-        corpFilter.countryId = countryFilter;
+      if (filteredStateIds) {
+        corpFilter.stateId = { $in: filteredStateIds };
       }
       if (view === "forSale") {
         corpFilter.forSale = { $ne: null };
@@ -246,7 +273,7 @@ export async function GET(request: Request) {
         // stale after its region changed hands would otherwise be labelled under
         // a country that no longer holds it, and after the filter narrowing above
         // that country is not even offered as an option to find it under.
-        const hostCountryId = (st?.countryId ?? s.countryId ?? corp?.countryId) as CountryId;
+        const hostCountryId = hostCountryOf(s.stateId, s.countryId, corp?.countryId);
         const revenueAnchor = readCorpEconomicAnchor(
           s.revenue,
           resolveSectorHostCurrencyCode({ countryId: hostCountryId }, corp),
@@ -309,23 +336,25 @@ export async function GET(request: Request) {
     // countries the same way the row query above does — an explicit country
     // filter that itself points at a blocked country correctly counts to 0
     // rather than falling back to the unfiltered total.
+    //
+    // Counted on the same state-first basis the rows and the filter use, so a
+    // badge can never disagree with the list under it.
     const unownedCountFilter: Record<string, unknown> = {};
-    if (countryFilter) {
-      unownedCountFilter.countryId = commandEconomyBlockedCountries.has(countryFilter)
+    if (filteredStateIds) {
+      unownedCountFilter.stateId = commandEconomyBlockedCountries.has(countryFilter as CountryId)
         ? { $in: [] }
-        : countryFilter;
-    } else if (commandEconomyBlockedCountries.size > 0) {
-      unownedCountFilter.countryId = { $nin: [...commandEconomyBlockedCountries] };
+        : { $in: filteredStateIds };
+    } else if (blockedStateIds.length > 0) {
+      unownedCountFilter.stateId = { $nin: blockedStateIds };
     }
+    const corpCountFilter = filteredStateIds ? { stateId: { $in: filteredStateIds } } : {};
 
     const [unownedCount, ownedCount, forSaleCount] = await Promise.all([
       db.collection("unownedSectors").countDocuments(unownedCountFilter),
-      db
-        .collection("corporateSectors")
-        .countDocuments(countryFilter ? { countryId: countryFilter } : {}),
+      db.collection("corporateSectors").countDocuments(corpCountFilter),
       db.collection("corporateSectors").countDocuments({
         forSale: { $ne: null },
-        ...(countryFilter ? { countryId: countryFilter } : {}),
+        ...corpCountFilter,
       }),
     ]);
 
