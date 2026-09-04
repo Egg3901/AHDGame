@@ -100,7 +100,7 @@ export function buildPublicV1OpenApiDocument(baseUrl: string): PublicOpenApiDocu
       title: "A House Divided Public API",
       version: "1.1.0",
       description:
-        "Read-only public game-state interface. Version 1 is additive-only: existing fields are not removed or renamed.",
+        "Read-only public game-state interface. Version 1 is additive-only: existing fields are not removed or renamed. Requests are rate limited per key per endpoint in a one-minute window; Supporter+ keys get 1.5x the base allowance and Supporter++ keys 3x. Read the live allowance from the X-RateLimit-Limit response header.",
     },
     servers: [{ url: baseUrl }],
     paths,

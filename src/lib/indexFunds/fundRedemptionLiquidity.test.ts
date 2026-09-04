@@ -95,7 +95,7 @@ describe("sellFundHoldingShares", () => {
     shareBuybackMode: undefined,
   };
 
-  function buildMockDb() {
+  function buildMockDb(equityPool: Record<string, unknown> | null = null) {
     let cashAnchor = baseFund.cashAnchor;
     const fundTransactions: unknown[] = [];
 
@@ -128,6 +128,9 @@ describe("sellFundHoldingShares", () => {
         if (name === "indexFunds") return indexFundsColl;
         if (name === "corporations") return corporationsColl;
         if (name === "indexFundTransactions") return fundTransactionsColl;
+        if (name === "equityMarketPools") {
+          return { findOne: vi.fn().mockResolvedValue(equityPool) };
+        }
         return { updateOne: vi.fn(), insertOne: vi.fn(), find: vi.fn() };
       }),
       _getCashAnchor: () => cashAnchor,
@@ -214,6 +217,58 @@ describe("sellFundHoldingShares", () => {
     const updateCall = mockDb._indexFundsColl.updateOne.mock.calls[0];
     expect(updateCall[0]).toEqual({ _id: fundId });
     expect(updateCall[1]).toMatchObject({ $inc: { cashAnchor: expect.any(Number) } });
+  });
+
+  it("partially fills at the finite pool's bid depth", async () => {
+    const mockDb = buildMockDb({
+      _id: "USD",
+      cashLocal: 49,
+      targetCashLocal: 49,
+    });
+    const { debitSharesFromFund } = await import("@/lib/corporations/shareholderOps");
+
+    const result = await sellFundHoldingShares(
+      mockDb as unknown as import("mongodb").Db,
+      baseFund,
+      corpId,
+      50
+    );
+
+    expect(result.sharesSold).toBe(5); // $49 / $9.80 bid
+    expect(result.cashRaisedAnchor).toBe(49);
+    expect(debitSharesFromFund).toHaveBeenCalledWith(
+      expect.anything(),
+      corpId,
+      fundId,
+      5,
+      expect.anything(),
+      expect.anything()
+    );
+  });
+
+  it("keeps explicit corporate buyouts issuer-funded at fair mid", async () => {
+    const mockDb = buildMockDb({
+      _id: "USD",
+      cashLocal: 0,
+      targetCashLocal: 100,
+    });
+    const { settleFloatSellDebit } = await import("@/lib/corporations/shareEscrowSettlement");
+
+    const result = await sellFundHoldingShares(
+      mockDb as unknown as import("mongodb").Db,
+      baseFund,
+      corpId,
+      50,
+      { settlementCounterparty: "issuer" }
+    );
+
+    expect(result).toMatchObject({ sharesSold: 50, cashRaisedAnchor: 500 });
+    expect(settleFloatSellDebit).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ _id: corpId }),
+      500,
+      expect.objectContaining({ counterparty: "issuer" })
+    );
   });
 });
 

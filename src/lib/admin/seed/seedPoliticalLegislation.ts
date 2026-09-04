@@ -27,6 +27,10 @@ import { countryFiscalBase } from "@/lib/politicalLegislation/fiscalBase";
 import { budgetKeyForLaw } from "@/lib/politicalLegislation/budgetKeys";
 import { REGIONAL_SUPPLEMENT_FACTOR, lawTargets } from "@/lib/politicalLegislation/dynamics";
 import { projectLawToLegislationType } from "@/lib/politicalLegislation/project";
+import {
+  REGIONAL_DEFAULT_LEVEL,
+  regionalDefaultLaws,
+} from "@/lib/politicalLegislation/regionalDefaults";
 import { LAW_COUNTRY_IDS, type LawCountryId } from "@/lib/politicalLegislation/types";
 import { DD_LAND_STATE_IDS } from "@/lib/politicalLegislation/laws/ddLandLaws";
 import { refreshNationalBudgetRevenue } from "@/lib/budget/revenue";
@@ -160,11 +164,23 @@ export async function seedPoliticalLegislationBaseline(
       lawCount++;
     }
 
-    // Regional sidecar baselines (DD Land laws today): statePolicies only —
-    // no enactedLaws, no budget sync. Live regions intersect the authored
-    // Land id list so a drifted world cannot invent phantom Bezirke.
+    // Regional statePolicies baselines — no enactedLaws, no budget sync. Two
+    // sets, seeded through one loop because they differ only in level:
+    //
+    //   - Regional sidecars (DD Land laws today) at their authored
+    //     `baselineLevelFor` — a region really does start with these enacted.
+    //   - `both` laws at level 0 (`regionalDefaultLaws`): the region has no
+    //     program of its own on top of the national law YET, but it may propose
+    //     one, so it needs a current-law row to propose against. Without it the
+    //     whole "Current law -> Proposed" block — fiscal comparison and metric
+    //     chips included — renders nothing. See regionalDefaults.ts for why the
+    //     level must be 0 and not the national baseline.
+    //
+    // Live regions intersect the authored Land id list so a drifted world
+    // cannot invent phantom Bezirke.
     const regionalLaws = getRegionalCatalog(countryId, year).filter((law) => law.kind !== "tax");
-    if (regionalLaws.length > 0) {
+    const defaultLaws = regionalDefaultLaws(countryId, year);
+    if (regionalLaws.length > 0 || defaultLaws.length > 0) {
       const allowed = countryId === "DD" ? new Set<string>(DD_LAND_STATE_IDS) : null;
       const states = await db
         .collection<{ _id: string }>("states")
@@ -174,8 +190,9 @@ export async function seedPoliticalLegislationBaseline(
         .map((s) => String(s._id))
         .filter((id) => (allowed ? allowed.has(id) : true));
       for (const stateId of regionIds) {
-        for (const law of regionalLaws) {
-          const level = baselineLevelFor(law, year);
+        for (const law of [...regionalLaws, ...defaultLaws]) {
+          const level =
+            law.allowedScope === "regional" ? baselineLevelFor(law, year) : REGIONAL_DEFAULT_LEVEL;
           const doc = projectLawToLegislationType(law);
           const option = doc.policyOptions![level];
           policyOps.push({

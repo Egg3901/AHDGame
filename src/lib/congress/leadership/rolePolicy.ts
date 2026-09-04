@@ -9,9 +9,9 @@
  *
  * Behaviour by kind:
  * - `any-seated`         — every party with at least one seat in the chamber
- *                          (Speaker, Pro Tempore, Bundestagspräsident).
+ *                          (Speaker, Bundestagspräsident).
  * - `largest-single-party` — only the chamber's largest single party
- *                            (Majority Leader/Whip).
+ *                            (Pro Tempore, Majority Leader/Whip).
  * - `non-coalition`      — every chamber party not in the majority bloc
  *                          (Minority Leader/Whip).
  * - `majority-coalition` — every party in the majority bloc. Kept expressible
@@ -28,7 +28,10 @@ export type RoleEligibilityPolicy =
 
 export const POLICY_BY_ROLE: Record<LeadershipRole, RoleEligibilityPolicy> = {
   speaker_of_the_house: { kind: "any-seated" },
-  president_pro_tempore: { kind: "any-seated" },
+  // Pro Tempore is a majority-party office: the largest single party runs,
+  // votes, and holds it. A sitting Pro Tempore who leaves that party is
+  // vacated by `reconcileLeadershipPartyEligibility`.
+  president_pro_tempore: { kind: "largest-single-party" },
   speaker_of_the_bundestag: { kind: "any-seated" },
   chair_npcsc: { kind: "any-seated" },
   chair_cppcc: { kind: "largest-single-party" },

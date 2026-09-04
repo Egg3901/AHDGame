@@ -6,6 +6,7 @@ import { getCountryAccess } from "@/lib/countryAccess";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { getGameState } from "@/lib/gameState";
 import { getDb } from "@/lib/mongodb";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 import { loadCountryWarNotice } from "@/lib/military/countryAtWar";
 import { WartimeBanner } from "./WartimeBanner";
 import { PeaceBanner } from "./PeaceBanner";
@@ -63,8 +64,12 @@ export default async function CountryLayout({ params, children }: Props) {
   const wartime = war ? <WartimeBanner notice={war} /> : null;
 
   const isAdmin = user?.isAdmin === true;
-  // Era-aware display name (e.g. "West Germany" in 1979) for the banners/headings.
-  const name = getCountryDisplayName(countryId, gameState?.preset);
+  // Era-aware AND runtime-aware. The era alias ("West Germany" while the GDR
+  // exists) is seed data and does not know the GDR has been absorbed; a unified
+  // Germany must not go on introducing itself as one half of itself.
+  const name = (
+    await getDb().then((db) => resolveCountryIdentity(db, countryId, gameState?.preset))
+  ).name;
 
   // Declared here with the war strip and used by all three viewable branches below,
   // for the same reason: which branch a reader lands in must not change whether they

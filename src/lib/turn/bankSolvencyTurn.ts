@@ -1,15 +1,13 @@
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
-import type { CentralBank } from "@/lib/db/types/centralBank";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
-import {
-  isBankContagionEnabled,
-  isBankPropTradingEnabled,
-  isPrivateBankingEnabled,
-} from "@/lib/banking/featureFlag";
+import { loadBankingPolicy, type BankingPolicySnapshot } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
+import { recordBankingStage } from "@/lib/banking/telemetry";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getCashReserves } from "@/lib/banking/bankCash";
 import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
@@ -23,24 +21,18 @@ import {
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { discountWindowStigma } from "@/lib/banking/discountWindow";
 import { isDepositTakingCharter } from "@/lib/banking/charterKinds";
+import { charterMay } from "@/lib/banking/rules/capabilities";
+import { RUN_FAILURE_COVER_FRACTION } from "@/lib/banking/rules/balanceSheet";
+import {
+  CONTAGION_PANIC_TURNS,
+  FLIGHT_RATE_BY_BAND,
+  depositFlight,
+  depositTakerFails,
+  propBankFails,
+} from "@/lib/banking/rules/solvency";
 
-/**
- * Provisional - fraction of npcDeposits that flee per solvency turn by band.
- * Independent of bankingTurn's normal NPC flow cap.
- */
-export const FLIGHT_RATE_BY_BAND: Readonly<Record<"amber" | "red", number>> = {
-  amber: 0.1,
-  red: 0.3,
-};
-
-/**
- * Provisional - fail when liquid+posted < this fraction of required reserves,
- * but only while the warning band is already red.
- */
-export const RUN_FAILURE_COVER_FRACTION = 0.5;
-
-/** Provisional - panicTurns stamped onto same-currency peers on a failure. */
-export const CONTAGION_PANIC_TURNS = 4;
+// Defined in the rules zone; re-exported for the turn's tests and dashboards.
+export { CONTAGION_PANIC_TURNS, FLIGHT_RATE_BY_BAND, RUN_FAILURE_COVER_FRACTION };
 
 export type BankSolvencyTurnSummary = {
   banksEvaluated: number;
@@ -71,11 +63,7 @@ const ZERO_SUMMARY: BankSolvencyTurnSummary = {
 };
 
 function isPropRunningCharter(charter: BankCharter | undefined): charter is BankCharter {
-  return (
-    charter != null &&
-    charter.status === "active" &&
-    (charter.type === "investment" || charter.type === "universal")
-  );
+  return charterMay(charter, "proprietaryTrading");
 }
 
 type EvalResult = {
@@ -104,11 +92,12 @@ export async function processBankSolvencyTurn(
   db: Db,
   turn: number
 ): Promise<BankSolvencyTurnSummary> {
-  if (!(await isPrivateBankingEnabled())) {
+  const policy = await loadBankingPolicy(db);
+  if (!policy.privateBanking) {
     return { ...ZERO_SUMMARY };
   }
 
-  const propEnabled = await isBankPropTradingEnabled();
+  const propEnabled = policy.propTrading;
 
   const corps = await db
     .collection<Corporation>("corporations")
@@ -141,8 +130,9 @@ export async function processBankSolvencyTurn(
     const reserveByCurrency = new Map<CurrencyCode, number>();
     const evals: EvalResult[] = [];
 
+    const solvencyStarted = Date.now();
     for (const corp of candidates) {
-      const result = await evaluateOneBank(db, turn, corp, reserveByCurrency, propEnabled);
+      const result = await evaluateOneBank(db, turn, corp, reserveByCurrency, policy);
       if (!result) continue;
       evals.push(result.row);
       summary.banksEvaluated += 1;
@@ -150,11 +140,11 @@ export async function processBankSolvencyTurn(
       if (result.row.failed) summary.failures += 1;
       if (result.forcedLiquidation) summary.forcedLiquidations += 1;
     }
+    recordBankingStage(db, turn, "solvency", Date.now() - solvencyStarted);
 
     // Contagion: every OTHER active deposit-taking charter in the same currency.
     const newlyPanicked = new Map<string, number>();
-    const contagionOn = await isBankContagionEnabled();
-    if (contagionOn) {
+    if (policy.contagion) {
       const failedByCurrency = new Map<CurrencyCode, ObjectId[]>();
       for (const row of evals) {
         if (!row.failed || !row.isDepositTaking) continue;
@@ -249,12 +239,16 @@ export async function processBankSolvencyTurn(
     .project({ _id: 1 })
     .toArray();
 
+  const resolutionStarted = Date.now();
   for (const failed of unresolved) {
     const resolution = await resolveFailedBankDepositors(db, failed._id, turn);
     if (!resolution.resolved) continue;
     summary.depositorsResolved += 1;
     summary.insurancePaid += resolution.insurancePaid;
     summary.haircutsApplied += resolution.haircutsApplied;
+  }
+  if (unresolved.length > 0) {
+    recordBankingStage(db, turn, "resolution", Date.now() - resolutionStarted);
   }
 
   return summary;
@@ -265,8 +259,9 @@ async function evaluateOneBank(
   turn: number,
   corp: Corporation,
   reserveByCurrency: Map<CurrencyCode, number>,
-  propEnabled: boolean
+  policy: BankingPolicySnapshot
 ): Promise<{ row: EvalResult; forcedLiquidation: boolean } | null> {
+  const propEnabled = policy.propTrading;
   const live = await db
     .collection<Corporation>("corporations")
     .findOne({ _id: corp._id }, { projection: { liquidCapital: 1, bankCharter: 1 } });
@@ -339,23 +334,28 @@ async function evaluateOneBank(
     cashReserves,
     postedCapital,
     // The cash-backed base. Player pointer deposits are excluded for the same
-    // reason they are excluded from the reserve requirement.
-    cashBackedDeposits: Math.max(0, npcDeposits),
+    // reason they are excluded from the reserve requirement; once the
+    // currency's savings accounts are authoritative they are cash the bank
+    // holds and a liability it owes, and they count.
+    cashBackedDeposits:
+      Math.max(0, npcDeposits) +
+      (savingsReadsAuthoritative(policy, currency) ? Math.max(0, charter.playerDeposits ?? 0) : 0),
     totalLoans,
     reserveRatioRequired,
     arrearsOutstanding,
     defaultsLastTurn,
     panicTurns: panicTurnsBefore,
     forcedLiquidation,
-    discountWindowStigma: discountWindowStigma(charter),
+    discountWindowStigma: discountWindowStigma(charter, {
+      playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, currency),
+    }),
   });
 
   let fled = 0;
   if (depositTaking) {
     const priorBand = charter.warningBand;
     if (priorBand === "amber" || priorBand === "red") {
-      const rate = FLIGHT_RATE_BY_BAND[priorBand];
-      const outflow = Math.min(npcDeposits * rate, Math.max(0, cashReserves));
+      const outflow = depositFlight({ priorBand, npcDeposits, cashReserves });
       if (outflow > 0) {
         const cbDocId = getBankId(getCountryIdForCurrency(currency));
         // Fleeing depositors take their money with them. Capped at what the
@@ -422,15 +422,22 @@ async function evaluateOneBank(
 
   let fails = false;
   if (depositTaking) {
-    // Cash-backed base only, matching bankingTurn's reserve requirement.
-    const requiredLiquidity = reserveRatioRequired * npcDeposits;
-    // Not `+ postedCapital`: posted capital is a memo of cash already inside the
+    // Cash-backed base only, matching bankingTurn's reserve requirement. Not
+    // `+ postedCapital`: posted capital is a memo of cash already inside the
     // reserve balance, so adding it counted the same money twice.
-    const cover = cashReserves;
-    fails = priorBand === "red" && cover < RUN_FAILURE_COVER_FRACTION * requiredLiquidity;
+    fails = depositTakerFails({
+      priorBand,
+      cashReserves,
+      requiredLiquidity:
+        reserveRatioRequired *
+        (npcDeposits +
+          (savingsReadsAuthoritative(policy, currency)
+            ? Math.max(0, charter.playerDeposits ?? 0)
+            : 0)),
+    });
   } else if (propRunning) {
     // Investment banks: red band + insolvent equity base.
-    fails = band === "red" && equityBase <= 0;
+    fails = propBankFails({ band, equityBase });
   }
 
   if (fails) {
@@ -446,6 +453,28 @@ async function evaluateOneBank(
     };
     await archiveCharter(db, corp._id, failedCharter, turn, "failed");
     await writeOffLenderSideInterbankOnFailure(db, corp._id, turn);
+    emitBankingAuditEvent(
+      {
+        kind: "bank.failed",
+        command: depositTaking ? "bank.solvency.run" : "bank.solvency.insolvency",
+        turn,
+        outcome: "ok",
+        currency,
+        bankId: corp._id.toString(),
+        statusBefore: "active",
+        statusAfter: "failed",
+        amount: npcDeposits,
+        meta: {
+          charterType: charter.type,
+          confidence,
+          band,
+          cashReserves,
+          totalLoans,
+          equityBase,
+        },
+      },
+      db
+    );
     await db.collection<Corporation>("corporations").updateOne(
       {
         _id: corp._id,

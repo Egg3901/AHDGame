@@ -31,6 +31,10 @@ import { buildActiveNationalBillFilter } from "@/lib/legislature/nationalBillSco
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import type { PeaceOfferDoc } from "@/lib/db/types/peaceOffer";
 import type { PersistedSphereMembership } from "@/lib/world/spheres/membershipStore";
+import {
+  ballotIsPlayerOnly,
+  type OrgBallotKind,
+} from "@/lib/internationalOrganizations/resolutionRules";
 import { isNppAutonomyActive } from "./featureFlag";
 import { executeForeignPolicyChoice } from "./foreignPolicyActions";
 import {
@@ -78,6 +82,8 @@ export interface ForeignPolicyResult {
   acted: boolean;
   decisionRecorded: boolean;
   choice: ForeignPolicyChoice | null;
+  /** Ballots cast this turn, which do not compete for the action slot. */
+  ballotsCast: number;
   skipReason?: "inactive" | "off" | "no-government" | "no-choice";
 }
 
@@ -139,6 +145,13 @@ interface PersistedForeignPolicyDecision {
   headNppName: string;
   selected: ForeignPolicyChoice | null;
   alternatives: ForeignPolicyChoice[];
+  /**
+   * Ballots cast this turn. Separate from `selected` because voting is not the
+   * country's one strategic action — see `processAutonomousForeignPolicy`.
+   */
+  ballots?: ForeignPolicyChoice[];
+  /** How many of `ballots` the write path actually landed. */
+  ballotsCast?: number;
   acted: boolean;
   executionStatus: "planned" | "claimed" | "executed" | "rejected" | "no_action";
   executionNote: string;
@@ -454,6 +467,25 @@ function organizationThatCanTable(
   });
 }
 
+/**
+ * Ballots this planner must not cast, because the country can never be on their
+ * roll.
+ *
+ * An admission and a bloc war entry are decided by the player-enabled members
+ * alone (`ballotIsPlayerOnly`), and the planner only ever runs for a country
+ * that is NOT player-enabled — `isNppAutonomyActive` requires exactly that. So
+ * every such ballot it cast was guaranteed to be ignored by the resolver.
+ *
+ * Writing them was never free. The row still lands on the proposal, where it is
+ * read back by anything listing who has voted, so a bloc showed "yes" rows from
+ * members whose consent the tally beside them did not count (ticket #1257). And
+ * now that ballots no longer compete for the country's one strategic action,
+ * these would be cast reliably every cycle rather than occasionally.
+ */
+function planningCountryHoldsNoBallot(kind: OrgBallotKind): boolean {
+  return ballotIsPlayerOnly(kind);
+}
+
 function voteCandidates(
   context: ForeignPolicyContext,
   opinions: Map<CountryId, CountryOpinion>
@@ -462,6 +494,7 @@ function voteCandidates(
   const sourceOrganizations = memberOrganizations(context.memberships, context.countryId);
 
   for (const proposal of context.pendingMemberships) {
+    if (planningCountryHoldsNoBallot("membership_proposal")) continue;
     if (!sourceOrganizations.has(proposal.organizationId)) continue;
     if (proposal.proposingCountryId === context.countryId) continue;
     if (alreadyVoted(proposal.votes, context.countryId)) continue;
@@ -487,6 +520,7 @@ function voteCandidates(
   }
 
   for (const item of context.pendingLegislation) {
+    if (planningCountryHoldsNoBallot(item.type)) continue;
     if (!sourceOrganizations.has(item.organizationId)) continue;
     if (alreadyVoted(item.votes, context.countryId)) continue;
     if (item.type === "free_trade_agreement" && !item.parties.includes(context.countryId)) {
@@ -1200,6 +1234,7 @@ export async function processAutonomousForeignPolicy(
       acted: false,
       decisionRecorded: false,
       choice: null,
+      ballotsCast: 0,
       skipReason: "inactive",
     };
   }
@@ -1212,6 +1247,7 @@ export async function processAutonomousForeignPolicy(
       acted: false,
       decisionRecorded: false,
       choice: null,
+      ballotsCast: 0,
       skipReason: "no-government",
     };
   }
@@ -1222,12 +1258,32 @@ export async function processAutonomousForeignPolicy(
       acted: false,
       decisionRecorded: false,
       choice: null,
+      ballotsCast: 0,
       skipReason: "off",
     };
   }
 
+  // BALLOTS ARE NOT THE COUNTRY'S ONE ACTION, and separating them here is the
+  // whole of ticket #1257.
+  //
+  // A country plans once every six turns and executes a single top-ranked
+  // choice. Casting a ballot used to compete for that slot against embargoes,
+  // tariffs and war conduct, so a 24-turn ballot gave each member four contested
+  // chances to vote and it lost most of them — the more so after #1233 raised
+  // war conduct above the routine band precisely to stop votes crowding IT out.
+  // Under unanimity one member losing all four is a permanent veto, which is how
+  // China closed 5-of-7 and North Korea 2-of-7 in the Warsaw Pact with not one
+  // "no" cast against either.
+  //
+  // A foreign ministry can vote in its bloc AND raise a tariff in the same week;
+  // the two were never really rivals. So every eligible ballot is cast, and the
+  // ranked action is chosen from what is left.
   const ranked = rankChoices(context);
-  const topChoice = ranked[0];
+  const isBallot = (c: ForeignPolicyChoice) =>
+    c.type === "vote_org_yes" || c.type === "vote_org_no";
+  const ballots = ranked.filter(isBallot);
+  const strategic = ranked.filter((c) => !isBallot(c));
+  const topChoice = strategic[0];
   const choice = topChoice && topChoice.score >= MINIMUM_ACTION_SCORE ? topChoice : null;
   const decision: PersistedForeignPolicyDecision = {
     _id: new ObjectId(),
@@ -1238,15 +1294,23 @@ export async function processAutonomousForeignPolicy(
     headNppId: context.head._id,
     headNppName: context.head.name,
     selected: choice,
-    alternatives: ranked.slice(0, MAX_ALTERNATIVES),
+    // Alternatives are the strategic field only: a ballot is not a road not
+    // taken any more, it is cast, and `ballots` below is where it is recorded.
+    alternatives: strategic.slice(0, MAX_ALTERNATIVES),
+    ballots,
     acted: false,
     executionStatus: context.mode === "shadow" ? "planned" : choice ? "claimed" : "no_action",
+    // The audit row is the only account of why a country did what it did, and a
+    // flat "no action" on a turn that cast four ballots is how #1257 stayed
+    // invisible for as long as it did. Say which of the two happened.
     executionNote:
       context.mode === "shadow"
         ? "Shadow mode records intent without changing world state."
         : choice
           ? "Active decision claimed before command execution."
-          : "No permitted choice cleared the action threshold.",
+          : ballots.length > 0
+            ? `No choice cleared the action threshold; ${ballots.length} ballot(s) to cast.`
+            : "No permitted choice cleared the action threshold.",
     createdAt: now,
   };
   const decisions = db.collection<PersistedForeignPolicyDecision>(DECISION_COLLECTION);
@@ -1258,6 +1322,23 @@ export async function processAutonomousForeignPolicy(
   const decisionRecorded = write.upsertedCount > 0;
 
   let acted = false;
+  let ballotsCast = 0;
+  if (context.mode === "active" && decisionRecorded) {
+    // Ballots first, and every one of them. `decisionRecorded` still gates the
+    // write so a restarted worker replaying the turn cannot vote twice; the
+    // per-item `alreadyVoted` filter in `voteCandidates` is the second guard.
+    for (const ballot of ballots) {
+      const cast = await executeForeignPolicyChoice(
+        db,
+        countryId,
+        context.head,
+        ballot,
+        currentTurn,
+        now
+      );
+      if (cast.acted) ballotsCast++;
+    }
+  }
   if (context.mode === "active" && choice && decisionRecorded) {
     const execution = await executeForeignPolicyChoice(
       db,
@@ -1279,6 +1360,12 @@ export async function processAutonomousForeignPolicy(
       }
     );
   }
+  if (ballotsCast > 0) {
+    await decisions.updateOne(
+      { _id: decision._id, countryId, turn: currentTurn },
+      { $set: { ballotsCast } }
+    );
+  }
 
   return {
     ran: true,
@@ -1286,6 +1373,7 @@ export async function processAutonomousForeignPolicy(
     acted,
     decisionRecorded,
     choice,
+    ballotsCast,
     ...(choice ? {} : { skipReason: "no-choice" as const }),
   };
 }

@@ -42,8 +42,64 @@ function makeRequest(campaignId: string): Request {
   });
 }
 
+function makeBatchRequest(campaignId: string, clicks: number | "max" | unknown): Request {
+  return new Request(`http://localhost/api/campaigns/${campaignId}/campaign-strength`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ clicks }),
+  });
+}
+
 function makeParams(id: string) {
   return { params: Promise.resolve({ id }) };
+}
+
+/** Standard presidential-contribution mock world, parameterised by the bits each test varies. */
+function batchWorld(opts: {
+  charId: ObjectId;
+  campaignOid: ObjectId;
+  electionOid: ObjectId;
+  npi: number;
+  actions: number;
+  funds: number;
+  currentCS: number;
+}) {
+  const { charId, campaignOid, electionOid, npi, actions, funds, currentCS } = opts;
+  return {
+    campaigns: {
+      findOne: vi.fn().mockResolvedValue({
+        _id: campaignOid,
+        electionId: electionOid,
+        candidateId: new ObjectId(),
+        campaignStrength: currentCS,
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+    },
+    elections: {
+      findOne: vi.fn().mockResolvedValue({
+        _id: electionOid,
+        electionType: "president",
+        countryId: "US",
+        status: "active",
+      }),
+    },
+    characters: {
+      findOne: vi.fn().mockResolvedValue({
+        _id: charId,
+        name: "Supporter One",
+        nationalInfluence: npi,
+        actions,
+        funds,
+        countryId: "US",
+      }),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }),
+    },
+    electionCandidates: {
+      findOne: vi.fn().mockResolvedValue({ characterName: "Candidate One", party: "1" }),
+    },
+    gameState: { findOne: vi.fn().mockResolvedValue({ currentTurn: 42 }) },
+    activityLog: { insertOne: vi.fn().mockResolvedValue({ insertedId: new ObjectId() }) },
+  } as Record<string, any>;
 }
 
 describe("POST /api/campaigns/[id]/campaign-strength", () => {
@@ -511,5 +567,204 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
       "currencyBalances.campaign": -expectedLocalCost,
     });
     expect(charUpdate[1].$inc).not.toHaveProperty("funds");
+  });
+});
+
+/**
+ * Batched Support (x1 / x5 / Max on the presidential race page). The contract
+ * the UI sells the player is that a batch costs what the same number of single
+ * clicks costs, so these assert against the per-click primitives rather than
+ * against hard-coded numbers.
+ */
+describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsForexEnabled.mockResolvedValue(false);
+  });
+
+  it("charges a clicks:5 batch as five single contributions", async () => {
+    const charId = new ObjectId();
+    const campaignOid = new ObjectId();
+    const electionOid = new ObjectId();
+    const npi = 100;
+    const perClick = npi * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
+    const currentCS = 1_000;
+
+    mockRequireAuth.mockResolvedValueOnce({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        isAdmin: false,
+        character: { _id: charId, nationalInfluence: npi, actions: 50, funds: 5_000_000 },
+        hasCharacter: true,
+      },
+    } as any);
+    const collections = batchWorld({
+      charId,
+      campaignOid,
+      electionOid,
+      npi,
+      actions: 50,
+      funds: 5_000_000,
+      currentCS,
+    });
+    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeBatchRequest(campaignOid.toString(), 5),
+      makeParams(campaignOid.toString())
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.clicks).toBe(5);
+    expect(body.strengthAdded).toBeCloseTo(perClick * 5);
+    // Funds: the exact integral across the whole span, which equals the sum of
+    // the five separate charges.
+    expect(body.costFunds).toBeCloseTo(campaignStrengthContributionCost(currentCS, perClick * 5));
+    // Actions: five clicks' worth, NOT ceil(5 * perClick / POINTS_PER_ACTION),
+    // which would be a 2.5x discount at this influence level.
+    expect(body.costActions).toBe(campaignStrengthContributionActions(perClick) * 5);
+    expect(body.costActions).toBeGreaterThan(campaignStrengthContributionActions(perClick * 5));
+    expect(collections.campaigns.updateOne.mock.calls[0][1].$inc.campaignStrength).toBeCloseTo(
+      perClick * 5
+    );
+  });
+
+  it("resolves clicks:max server-side against the actions the player really has", async () => {
+    const charId = new ObjectId();
+    const campaignOid = new ObjectId();
+    const electionOid = new ObjectId();
+    const npi = 100; // perClick 75 -> exactly 1 action each
+    const perClick = npi * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
+
+    mockRequireAuth.mockResolvedValueOnce({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        isAdmin: false,
+        character: { _id: charId, nationalInfluence: npi, actions: 7, funds: 500_000_000 },
+        hasCharacter: true,
+      },
+    } as any);
+    const collections = batchWorld({
+      charId,
+      campaignOid,
+      electionOid,
+      npi,
+      actions: 7,
+      funds: 500_000_000,
+      currentCS: 0,
+    });
+    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeBatchRequest(campaignOid.toString(), "max"),
+      makeParams(campaignOid.toString())
+    );
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.clicks).toBe(7);
+    expect(body.costActions).toBe(7);
+    expect(body.strengthAdded).toBeCloseTo(perClick * 7);
+  });
+
+  it("rejects clicks:max with a resource error rather than a zero-value contribution", async () => {
+    const charId = new ObjectId();
+    const campaignOid = new ObjectId();
+    const electionOid = new ObjectId();
+    const npi = 100;
+
+    mockRequireAuth.mockResolvedValueOnce({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        isAdmin: false,
+        character: { _id: charId, nationalInfluence: npi, actions: 0, funds: 5_000_000 },
+        hasCharacter: true,
+      },
+    } as any);
+    const collections = batchWorld({
+      charId,
+      campaignOid,
+      electionOid,
+      npi,
+      actions: 0,
+      funds: 5_000_000,
+      currentCS: 0,
+    });
+    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeBatchRequest(campaignOid.toString(), "max"),
+      makeParams(campaignOid.toString())
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/insufficient actions/i);
+    expect(collections.campaigns.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects a malformed clicks value before touching the database", async () => {
+    const campaignOid = new ObjectId();
+    mockRequireAuth.mockResolvedValueOnce({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        isAdmin: false,
+        character: { _id: new ObjectId(), nationalInfluence: 100, actions: 50, funds: 5_000_000 },
+        hasCharacter: true,
+      },
+    } as any);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      makeBatchRequest(campaignOid.toString(), 0),
+      makeParams(campaignOid.toString())
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/clicks/i);
+    expect(mockGetDb).not.toHaveBeenCalled();
+  });
+
+  it("still treats an empty body as a single click", async () => {
+    const charId = new ObjectId();
+    const campaignOid = new ObjectId();
+    const electionOid = new ObjectId();
+    const npi = 100;
+    const perClick = npi * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
+
+    mockRequireAuth.mockResolvedValueOnce({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        isAdmin: false,
+        character: { _id: charId, nationalInfluence: npi, actions: 50, funds: 5_000_000 },
+        hasCharacter: true,
+      },
+    } as any);
+    const collections = batchWorld({
+      charId,
+      campaignOid,
+      electionOid,
+      npi,
+      actions: 50,
+      funds: 5_000_000,
+      currentCS: 0,
+    });
+    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+
+    const { POST } = await import("./route");
+    const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.clicks).toBe(1);
+    expect(body.strengthAdded).toBeCloseTo(perClick);
   });
 });

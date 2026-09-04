@@ -109,7 +109,7 @@ export async function fetchEnrichedCandidates(
     // party and therefore cancels there, the honest reading is 1.0 across the
     // board: the pie becomes real popularity, and the quota does the regime's
     // work in the open.
-    if (isBlocListCountry(electionCountry)) {
+    if (runtime.governmentType === "onePartyState" && isBlocListCountry(electionCountry)) {
       effectiveMultipliers = { ruling: 1, approved: 1, independent: 1, banned: 0 };
     }
     if (honestOverride) {

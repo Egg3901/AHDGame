@@ -45,6 +45,7 @@ import {
   resolveExpiredLeadershipElections,
   vacateLeadershipAfterElections,
 } from "@/lib/congress/leadershipElections";
+import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
 import { processSettlementTurn } from "@/lib/turn/settlementPhase";
 import { processInternationalOrganizationsTurn } from "@/lib/turn/internationalOrganizationsPhase";
@@ -102,6 +103,7 @@ import { recomputeSharePricesAfterBondTurn } from "@/lib/turn/corporation/recomp
 import { processSavingsInterestTurn } from "@/lib/turn/savingsInterestTurn";
 import { processNpcBankPolicyTurn } from "@/lib/banking/npcBanks";
 import { processBankingTurn } from "@/lib/turn/bankingTurn";
+import { processSavingsShadowTurn } from "@/lib/savings/shadow";
 import { runPensionTurn } from "@/lib/pensions/pensionTurn";
 import { processBankSolvencyTurn } from "@/lib/turn/bankSolvencyTurn";
 import { processBankSupervision } from "@/lib/banking/supervision";
@@ -392,6 +394,23 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
             loanPrincipalRepaid: Math.round(bankingResult.loanPrincipalRepaid * 100) / 100,
             defaultsWrittenOff: Math.round(bankingResult.defaultsWrittenOff * 100) / 100,
             npcDepositDelta: Math.round(bankingResult.npcDepositDelta * 100) / 100,
+            unfinishedSettlements: bankingResult.unfinishedSettlements,
+          };
+        }
+
+        // Shadow savings accounts: materialize the account representation from
+        // the legacy character fields and compare every projection, AFTER the
+        // banking turn so the comparison sees this turn's interest and flows.
+        // No live behaviour changes while the mode is shadow.
+        const savingsShadowResult = await runtime.runPhase("savingsShadowTurn", () =>
+          processSavingsShadowTurn(context.db, newTurn)
+        );
+        if (savingsShadowResult) {
+          phaseResults.savingsShadowTurn = {
+            mode: savingsShadowResult.mode,
+            accountsRefreshed: savingsShadowResult.accountsRefreshed,
+            currenciesCompared: savingsShadowResult.comparison.currencies.length,
+            discrepancies: savingsShadowResult.comparison.totalDiscrepancies,
           };
         }
 
@@ -1172,6 +1191,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
               entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
             );
         }
+
+        // Vacate any majority-gated leadership office whose holder has left the
+        // majority party, opening a 24-turn election for the seat. Sequenced
+        // ahead of the batch below so the races it opens exist before
+        // `resolveExpiredLeadershipElections` walks the same collections.
+        await runtime.runPhase("leadershipPartyEligibility", () =>
+          reconcileAllLeadershipPartyEligibility(db, gameNow)
+        );
 
         await Promise.all([
           ...(foundingActive

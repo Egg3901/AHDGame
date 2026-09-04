@@ -357,6 +357,87 @@ function findUnsafeAuthCachedRoutes() {
  * @param {string} filePath
  * @param {RegExp[]} excludePatterns
  */
+// ---------------------------------------------------------------------------
+// Portable rules core
+// ---------------------------------------------------------------------------
+// A system's rules (formulas, eligibility, resolution, state transitions) have
+// to be able to run outside this server process. The hourly turn loop is one
+// host for them, the headless harness in scripts/sim/ is another, and further
+// hosts are planned. Running a system somewhere new must be a copy of the rules
+// module, not a rewrite of it.
+//
+// The portable zone is `rules.ts` and any `rules/` directory under src/.
+// Inside it: plain data in, plain data out, no ambient inputs. Randomness
+// arrives as an injected rng, time arrives as the turn number or in-game date,
+// the database stays with the caller. The shell (a turn phase or an API route)
+// loads documents, calls the rules, and writes the results back.
+
+const PORTABLE_ZONE = /(?:^|\/)rules(?:\/|\.tsx?$)/;
+
+const PORTABLE_BANS = [
+  {
+    label: "database access",
+    pattern:
+      /\bdb\.collection[<(]|from\s+["'](?:mongodb|@\/lib\/mongodb|@\/lib\/db\/collections[^"']*)["']/,
+    hint: "the caller loads and saves; rules take plain data and string ids",
+  },
+  {
+    label: "wall clock",
+    pattern: /new Date\(\s*\)|Date\.now\(/,
+    hint: "take the turn number or the in-game date as a parameter",
+  },
+  {
+    label: "ambient randomness",
+    pattern: /Math\.random\(/,
+    hint: "take a seeded rng as a parameter so the same inputs replay identically",
+  },
+  {
+    label: "environment",
+    pattern: /process\.env/,
+    hint: "read config in the shell and pass it in",
+  },
+  {
+    label: "network or telemetry",
+    pattern: /\bfetch\(|from\s+["']@sentry\//,
+    hint: "rules return what happened; the shell reports it",
+  },
+  {
+    label: "app-layer import",
+    pattern: /from\s+["']@\/app\//,
+    hint: "rules cannot depend on routes, pages, or app-owned types",
+  },
+  {
+    label: "asynchrony",
+    pattern: /\bawait\s|\basync\s+function\b|\basync\s*\(/,
+    hint: "pure rules resolve synchronously; anything worth awaiting belongs in the shell",
+  },
+];
+
+function findPortabilityViolations() {
+  const root = path.resolve(process.cwd(), "src");
+  /** @type {{ file: string, line: number, label: string, hint: string, content: string }[]} */
+  const violations = [];
+  for (const file of walkDir(root)) {
+    const rel = path.relative(process.cwd(), file).replace(/\\/g, "/");
+    if (!PORTABLE_ZONE.test(rel)) continue;
+    if (/\.(test|integration\.test|spec)\.tsx?$/.test(rel)) continue;
+    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+    lines.forEach((line, index) => {
+      for (const ban of PORTABLE_BANS) {
+        if (!ban.pattern.test(line)) continue;
+        violations.push({
+          file: rel,
+          line: index + 1,
+          label: ban.label,
+          hint: ban.hint,
+          content: line.trim(),
+        });
+      }
+    });
+  }
+  return violations;
+}
+
 function isExcluded(filePath, excludePatterns) {
   const normalizedPath = filePath.replace(/\\/g, "/");
   return excludePatterns.some((pattern) => pattern.test(normalizedPath));
@@ -693,6 +774,24 @@ function main() {
     warningCount += sizeFindings.warn.length;
   } else {
     console.log(`PASS file size <= ${SIZE_WARN_LOC} LOC`);
+  }
+
+  // ---- portable rules core ---------------------------------------------
+  const portabilityViolations = findPortabilityViolations();
+  if (portabilityViolations.length > 0) {
+    console.log(`FAIL non-portable code in the rules zone (${portabilityViolations.length})`);
+    console.log(
+      "   `rules.ts` and `rules/**` hold logic that must run without this server: no database, no clock, no randomness, no environment, no network. Move the ambient input to the caller and pass it in."
+    );
+    for (const v of portabilityViolations) {
+      console.log(`   ${v.file}:${v.line}  ${v.label}`);
+      console.log(`      ${v.content}`);
+      console.log(`      ${v.hint}`);
+    }
+    console.log();
+    blockingCount += portabilityViolations.length;
+  } else {
+    console.log("PASS rules zone is portable (no database, clock, rng, env, or network)");
   }
 
   // ---- root middleware tripwire ----------------------------------------

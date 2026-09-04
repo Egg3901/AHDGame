@@ -5,9 +5,10 @@ import { useParams } from "next/navigation";
 import { Avatar } from "@/components/Avatar";
 import { PartyChip } from "@/app/congress/components/CongressShared";
 import { Skeleton } from "@/components/ui";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useVicePresidentOffice, type VpOfficeHolder } from "./useVicePresidentOffice";
 import { VpActionPanel } from "./components/VpActionPanel";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 function HolderRow({ label, holder }: { label: string; holder: VpOfficeHolder | null }) {
   return (
@@ -47,10 +48,11 @@ function HolderRow({ label, holder }: { label: string; holder: VpOfficeHolder | 
 }
 
 export default function VicePresidentOfficePage() {
+  const resolveCountryName = useCountryDisplayName();
   const params = useParams();
   const countryCode = (params.code as string).toLowerCase();
   const countryId = countryCode.toUpperCase() as CountryId;
-  const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;
+  const countryName = resolveCountryName(countryId);
 
   const { data, loading, error, refetch } = useVicePresidentOffice(countryCode);
 

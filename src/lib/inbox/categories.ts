@@ -99,6 +99,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   wire_received: "treasury",
   corp_credit_rating_change: "treasury",
   corp_bond_due_soon: "treasury",
+  cb_auction_shortfall: "treasury",
   corp_bond_repaid: "treasury",
   corp_bond_auto_refinanced: "treasury",
   corp_bond_auto_restructured: "treasury",

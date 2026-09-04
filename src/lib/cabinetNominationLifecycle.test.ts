@@ -95,6 +95,58 @@ describe("processCabinetNominationLifecycle — holder seating", () => {
     );
   });
 
+  it("vacates the nominee's existing seat before seating them in the new one", async () => {
+    // Regression: a sitting secretary confirmed to a second position tripped
+    // the cabinetMembers_countryId_characterId unique index on insert, so the
+    // nomination stayed active and the phase failed every turn (turns 524-536,
+    // 2026-08-31). A confirmed move must vacate the old office first.
+    const nomineeId = new ObjectId();
+    const nomination = {
+      _id: new ObjectId(),
+      status: "active",
+      countryId: "US",
+      positionId: "attorney_general",
+      nomineeCharacterId: nomineeId,
+      nomineeCharacterName: "Sitting Secretary",
+      nomineeParty: "republican",
+      proposedByPresidentId: new ObjectId(),
+      votes: {},
+    };
+    db.collectionMocks.cabinetNominations.find.mockImplementation(
+      (query: Record<string, unknown>) => {
+        const orClause = (query?.$or as Array<{ votingEndsOnTurn?: Record<string, unknown> }>)?.[0]
+          ?.votingEndsOnTurn;
+        const isExpiredQuery = !!orClause && "$lte" in orClause;
+        return {
+          toArray: vi.fn().mockResolvedValue(isExpiredQuery ? [nomination] : []),
+        } as never;
+      }
+    );
+
+    const { computeCabinetNominationTally } =
+      await import("@/lib/congress/governmentVoteBreakdown");
+    vi.mocked(computeCabinetNominationTally).mockResolvedValue({
+      votesFor: 60,
+      votesAgainst: 40,
+      votesAbstain: 0,
+    } as never);
+
+    const { processCabinetNominationLifecycle } = await import("./cabinetNominationLifecycle");
+    await processCabinetNominationLifecycle(new Date(0));
+
+    expect(db.collectionMocks.cabinetMembers.deleteMany).toHaveBeenCalledWith({
+      countryId: "US",
+      characterId: nomineeId,
+    });
+    // The vacate must land before the insert, or the unique index still throws.
+    const vacateOrder = db.collectionMocks.cabinetMembers.deleteMany.mock.invocationCallOrder[0];
+    const insertOrder = db.collectionMocks.cabinetMembers.insertOne.mock.invocationCallOrder[0];
+    expect(vacateOrder).toBeLessThan(insertOrder);
+    const inserted = db.collectionMocks.cabinetMembers.insertOne.mock.calls[0][0];
+    expect(inserted.positionId).toBe("attorney_general");
+    expect(inserted.characterId).toBe(nomineeId);
+  });
+
   it("does not reset cooldowns when a nominee is rejected", async () => {
     const nomination = {
       _id: new ObjectId(),

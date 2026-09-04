@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button, Input, Label } from "@/components/ui";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+
 import {
   isValidCustomOrganizationSlug,
   INTERNATIONAL_ORGANIZATION_ORDER,
@@ -14,6 +14,7 @@ import {
   type OrganizationCategory,
 } from "@/lib/constants/orgCategory";
 import type { OrgViewerInfo } from "../orgTypes";
+import { useEntityName } from "../useEntityName";
 
 /** Derive a URL-safe, lowercase org id from the short name (players never see the slug). */
 function slugifyOrgName(value: string): string {
@@ -61,6 +62,7 @@ export function CreateOrgForm({
   viewer: OrgViewerInfo | null;
   onCreated: (orgId: string) => void;
 }) {
+  const entityName = useEntityName();
   const viewerCountry = viewer?.foreignMinisterOf ?? viewer?.headOfGovernmentOf ?? null;
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -170,8 +172,8 @@ export function CreateOrgForm({
             Found a new international organization
           </h3>
           <p className="mt-1 text-xs text-muted">
-            {COUNTRY_CONFIGS[viewerCountry].name} will become the sole founding member. Other
-            countries can apply to join.
+            {entityName(viewerCountry)} will become the sole founding member. Other countries can
+            apply to join.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div className="sm:col-span-2">

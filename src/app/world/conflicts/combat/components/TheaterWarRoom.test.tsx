@@ -4,6 +4,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { TheaterWarRoom } from "./TheaterWarRoom";
 import { natMods } from "@/lib/military/doctrineTree";
 import type { CombatState } from "../useCombatState";
+import { BLOCKADE } from "@/lib/navair/blockade";
 
 let fetchMock: ReturnType<typeof vi.fn>;
 beforeEach(() => {
@@ -76,6 +77,7 @@ const state = {
   country: "US",
   countryCode: "us",
   positionId: "secretary_of_defense",
+  canWrite: true,
 } as unknown as CombatState;
 
 /** The forecast URL for a given target, once one has been requested. */
@@ -285,5 +287,67 @@ describe("TheaterWarRoom coalition rules", () => {
     render(<TheaterWarRoom state={state} natMods={natMods({})} dispatch={vi.fn()} />);
     await screen.findByText("64%");
     expect(screen.queryByText(/allied contingents/i)).toBeNull();
+  });
+});
+
+/**
+ * Worn hulls at the front.
+ *
+ * Blockade pressure has always fallen with hull condition, and nothing has ever said so.
+ * A commander watching a blockade fail to bite had no way to tell the reason was the state
+ * of their own ships rather than a broken mechanic.
+ */
+describe("TheaterWarRoom worn hull warning", () => {
+  function stateWithFleet(fleet: Record<string, unknown>[]) {
+    const base = state.units[0];
+    return {
+      ...state,
+      units: [...state.units, ...fleet.map((f, i) => ({ ...base, _id: `n${i}`, ...f }))],
+    } as unknown as CombatState;
+  }
+
+  it("says how many ships are too worn to blockade, and both ways out", () => {
+    render(
+      <TheaterWarRoom
+        state={stateWithFleet([
+          { domain: "naval", theaterId: "afghan", integrity: 15 },
+          { domain: "naval", theaterId: "afghan", integrity: 30 },
+          { domain: "naval", theaterId: "afghan", integrity: 95 },
+        ])}
+        natMods={natMods({})}
+        dispatch={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/2 of your ships/i)).toBeDefined();
+    expect(screen.getByText(/home port/i)).toBeDefined();
+    expect(screen.getByText(/defence contract/i)).toBeDefined();
+  });
+
+  it("says nothing when the fleet at this front is in good condition", () => {
+    render(
+      <TheaterWarRoom
+        state={stateWithFleet([
+          { domain: "naval", theaterId: "afghan", integrity: BLOCKADE.wornKnee + 5 },
+        ])}
+        natMods={natMods({})}
+        dispatch={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/of your ships/i)).toBeNull();
+  });
+
+  // Ground formations have no condition to speak of and are not blockading anything.
+  it("ignores ground formations at the same front", () => {
+    render(
+      <TheaterWarRoom
+        state={stateWithFleet([{ domain: "ground", theaterId: "afghan", integrity: 5 }])}
+        natMods={natMods({})}
+        dispatch={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText(/of your ships/i)).toBeNull();
   });
 });

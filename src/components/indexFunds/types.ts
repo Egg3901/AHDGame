@@ -9,7 +9,7 @@ export interface FundListItem {
   name: string;
   tickerSymbol: string;
   scope: "global" | "country";
-  kind: "broad" | "sector";
+  kind: "broad" | "sector" | "bond";
   countryId: string | null;
   sectorType: string | null;
   anchorCurrencyCode: string;
@@ -44,7 +44,7 @@ export interface FundDetail {
   name: string;
   tickerSymbol: string;
   scope: "global" | "country";
-  kind: "broad" | "sector";
+  kind: "broad" | "sector" | "bond";
   countryId: string | null;
   sectorType: string | null;
   anchorCurrencyCode: string;

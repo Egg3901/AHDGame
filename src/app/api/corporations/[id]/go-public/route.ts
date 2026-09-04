@@ -66,18 +66,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }
 
-    // No financial-ledger leg here: going public only creates float inventory and
-    // moves no cash. The former `late_ipo_proceeds` corp_capital_seed row recorded
-    // a self-counterparty mint (corp credited with no payer) that double-paid the
-    // issuer once the float was bought (Bug #0624). Proceeds are realized — and
-    // ledgered — when the float is actually purchased.
-
     logWireEvent("corporation_ipo", wireHeadlineCorpIpo(corporation.name, parsed.data.floatPct), {
       href: `/corporation/${corporation.sequentialId ?? corporation._id}`,
     });
 
     return NextResponse.json({
       newShares: result.newShares,
+      requestedShares: result.requestedShares,
+      pendingShares: result.pendingShares,
       proceeds: result.proceeds,
       totalSharesAfter: result.totalSharesAfter,
     });

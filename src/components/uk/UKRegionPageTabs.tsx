@@ -5,6 +5,7 @@ import { UKRegionPageTabsPolitics } from "./UKRegionPageTabsPolitics";
 import { RegionPartiesTab } from "@/components/region/RegionPartiesTab";
 import { countryUrl } from "@/lib/urls";
 import { UKRegionPageTabsMetrics } from "./UKRegionPageTabsMetrics";
+import { RegionRegistryTab } from "@/components/state/RegionRegistryTab";
 import { DemographicsAndTurnoutTab } from "@/components/state/StatePageTabsDemographicsAndTurnout";
 import { StateElections } from "@/components/StateElections";
 import { StateEconomy } from "@/components/state/StateEconomy";
@@ -189,6 +190,20 @@ export function UKRegionPageTabs({
       }
     }
 
+    // ── Metrics ──
+    // Same registry the other region pages get. UK is one of the four board
+    // countries, so leaving it behind would be exactly the inconsistency the
+    // promotion set out to remove.
+    if (superTab === "metrics") {
+      return (
+        <RegionRegistryTab
+          countryId="UK"
+          regionId={stateForTabs?._id ?? region.id}
+          regionName={stateForTabs?.name ?? region.name}
+        />
+      );
+    }
+
     // ── Demographics ──
     if (superTab === "demographics") {
       if (subTab === "demographics" || subTab === "") {
@@ -204,7 +219,8 @@ export function UKRegionPageTabs({
           />
         );
       }
-      if (subTab === "metrics") {
+      // The legacy stateMetrics boards, renamed Statistics.
+      if (subTab === "statistics") {
         return <UKRegionPageTabsMetrics regionId={region.id} />;
       }
     }
@@ -227,6 +243,8 @@ export function UKRegionPageTabs({
   return (
     <RegionTabNav
       isAdmin={isAdmin}
+      // UK is one of the four board countries.
+      hasRegistry
       renderContent={renderContent}
       preTabContent={
         <RegionReferendumCampaign countryId="UK" regionId={stateForTabs?._id ?? region.id} />

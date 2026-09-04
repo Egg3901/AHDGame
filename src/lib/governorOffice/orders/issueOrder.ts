@@ -16,6 +16,7 @@ import {
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { generateOrderNews } from "@/lib/news";
 import { ladderBounds } from "@/lib/legislature/policyLadder";
+import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 
 export interface IssueOrderInput {
   countryId: CountryId;
@@ -111,7 +112,19 @@ export async function issueOrder(db: Db, input: IssueOrderInput): Promise<IssueO
     .collection<LegislationType>("legislationTypes")
     .findOne({ _id: legislationTypeId });
   const { maxIndex, centerIndex } = ladderBounds(legType?.policyOptions?.length);
-  const before = clamp(priorPolicy?.policyOptionIndex ?? centerIndex, 0, maxIndex);
+  // A region with no row for a new-generation `both` law sits at level 0, which
+  // is what getEnactedLevel reports to the engine and what
+  // /api/game/current-policies now reports to IssueOrderModal. Falling straight
+  // through to the ladder centre made this write a level the region never had —
+  // and disagree with the step the player was shown before they confirmed.
+  // National scope keeps the centre: those rows ARE seeded, so a missing one
+  // means something else is wrong and must not be quietly rewritten to 0.
+  const regionalDefault = scope === "state" ? regionalDefaultLevel(legislationTypeId) : undefined;
+  const before = clamp(
+    priorPolicy?.policyOptionIndex ?? regionalDefault ?? centerIndex,
+    0,
+    maxIndex
+  );
   const desired = before + effectDirection * steps;
   const after = clamp(desired, 0, maxIndex);
   if (after === before) {

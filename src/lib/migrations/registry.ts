@@ -60,6 +60,14 @@ import { migration as rescheduleEconCountryBills } from "./entries/2026-08-27-re
 import { migration as equityLiquidityIndexes } from "./entries/2026-08-28-equity-liquidity-indexes";
 import { migration as redistrictingAuthorityLegislative } from "./entries/2026-08-26-redistricting-authority-legislative";
 import { migration as purgeRetiredRuMetricRegions } from "./entries/2026-08-30-purge-retired-ru-metric-regions";
+import { migration as regionalDefaultLawsNewgen } from "./entries/2026-08-31-regional-default-laws-newgen";
+import { migration as retireOrphanSovereignFloat } from "./entries/2026-09-03-retire-orphan-sovereign-float";
+import { migration as bondMarketPools } from "./entries/2026-09-03-bond-market-pools";
+import { migration as bondMarketPoolWorkingBalance } from "./entries/2026-09-03-bond-market-pool-working-balance";
+import { migration as bondFundSeed } from "./entries/2026-09-03-bond-fund-seed";
+import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
+import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
+import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-party-org-rekey";
 import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 
 export const MIGRATIONS: Migration[] = [
@@ -182,14 +190,42 @@ export const MIGRATIONS: Migration[] = [
   // UKR, BEL, and BLT were old RU regions. They now exist as separate country
   // region sets, but their obsolete RU metric rows survived the split.
   purgeRetiredRuMetricRegions,
+  // New-generation `both` laws are proposable in a region but only ever seeded
+  // a NATIONAL statePolicies row, so a region bill rendered no current law —
+  // and LawProvisionComparison drops the fiscal comparison and metric chips
+  // with it. Backfill the level-0 regional default the engine already assumes.
+  regionalDefaultLawsNewgen,
+  // Quarterly rollover reissued maturing sovereign series even when the budget
+  // owed nothing, so surplus countries carried paper against a principal of
+  // zero (FR: 4.2T FRF). Retire the pool-held units before the pool is seeded.
+  retireOrphanSovereignFloat,
+  // The bond float was a phantom counterparty that minted on sells and burned
+  // on buys. One pool per currency now holds that inventory and real cash,
+  // seeded at a share of broad money so it can buy from day one.
+  bondMarketPools,
+  // Phase 3 primary market: the pool re-buys each quarter's sovereign rollover
+  // before the maturing series pays it back, so it needs that face in cash.
+  bondMarketPoolWorkingBalance,
+  // Phase 4: bond index funds, the player-facing leg of the bond market.
+  bondFundSeed,
+  // Equity public float gets the same finite cash counterparty as bonds.
+  equityMarketPools,
+  // indexFunds survived resets while corporations and fund positions were
+  // wiped. Remove those old-world references and reconcile live claims.
+  repairOrphanIndexFundState,
+  // Ticket #1256: a party renumber / region fuse leaves statePartyOrg rows
+  // whose compound _id names a different party or region than their fields;
+  // field-triple readers and _id readers then disagree about who owns the org.
+  // Re-derive _id from the authoritative fields and index the triple unique.
+  statePartyOrgRekey,
   // Intelligence spine: three UNIQUE guards the agency/network/coverage read
   // paths assume rather than re-check, plus the operation-log lookups. A live
   // world never re-seeds, so seedIndexes alone would never reach it.
   intelligenceIndexes,
 ];
 
-// D13 rollback drill — registered but deliberately OUTSIDE the deploy chain.
-// `MIGRATIONS` is walked automatically on deploy; a plants→capital rollback is
+// D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
+// `MIGRATIONS` is walked by the no-flag migration runner; a plants→capital rollback is
 // an explicit human act, not something a deploy should ever perform. Kept here
 // (and typed) so it cannot rot, and so `--only` can target it by id —
 // scripts/run-migrations.ts widens its candidate list to include this array

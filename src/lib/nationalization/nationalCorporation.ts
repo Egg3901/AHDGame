@@ -63,6 +63,16 @@ export function buildNationalCorporationDoc(
  * `isPrimaryNationalCorporation`; falls back to any `{ countryOwnerId }` for
  * pre-backfill safety (the existing seeded SOE), and stamps the primary flag +
  * empty `assignedSectorTypes` ("the remainder") on create.
+ *
+ * ONE PRIMARY PER COUNTRY IS AN INVARIANT, not a preference. This read — like
+ * the sovereign bond issuer lookup and the State Enterprises panel — takes a
+ * single document, so with two flagged corporations it returns whichever the
+ * natural order yields and every caller silently routes into it. No tiebreak
+ * here can recover the right answer, because nothing on the document says which
+ * of the two the country means. The invariant is therefore enforced where it can
+ * be broken: `mergeNationalCorporations` in `country/mergeCountry.ts` folds the
+ * absorbed state's primary into the survivor's when one country absorbs another.
+ * Ticket #1254 is what this looks like when it is not held.
  */
 export async function ensurePrimaryNationalCorporation(
   db: Db,
@@ -70,14 +80,15 @@ export async function ensurePrimaryNationalCorporation(
 ): Promise<Corporation> {
   const corps = db.collection<Corporation>("corporations");
 
-  const primary = await corps.findOne({
-    countryOwnerId: countryId,
-    isPrimaryNationalCorporation: true,
-  });
+  const primary = await corps
+    .find({ countryOwnerId: countryId, isPrimaryNationalCorporation: true })
+    .sort({ _id: 1 })
+    .limit(1)
+    .next();
   if (primary) return primary;
 
   // Pre-backfill fallback: an existing seeded NatCorp not yet flagged primary.
-  const legacy = await corps.findOne({ countryOwnerId: countryId });
+  const legacy = await corps.find({ countryOwnerId: countryId }).sort({ _id: 1 }).limit(1).next();
   if (legacy) return legacy;
 
   const doc = buildNationalCorporationDoc(countryId, {

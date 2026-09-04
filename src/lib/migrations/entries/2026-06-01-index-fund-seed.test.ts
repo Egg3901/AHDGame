@@ -11,8 +11,8 @@ describe("2026-06-01-index-fund-seed migration", () => {
 
   it("seeds exactly the number of definitions in getAllFundDefinitions", () => {
     const definitions = getAllFundDefinitions();
-    // 16 country funds (8 countries × 2 each) + 1 global broad + 17 sector = 34
-    expect(definitions.length).toBe(34);
+    // 16 country funds (8 countries × 2 each) + 1 global broad + 17 sector + 12 bond = 46
+    expect(definitions.length).toBe(46);
   });
 
   it("produces valid fund documents with all required fields", () => {
@@ -22,7 +22,7 @@ describe("2026-06-01-index-fund-seed migration", () => {
       expect(def.name).toBeTruthy();
       expect(def.ticker).toBeTruthy();
       expect(["country", "global"]).toContain(def.scope);
-      expect(["broad", "sector"]).toContain(def.kind);
+      expect(["broad", "sector", "bond"]).toContain(def.kind);
       expect(def.anchorCurrencyCode).toBeTruthy();
     }
   });

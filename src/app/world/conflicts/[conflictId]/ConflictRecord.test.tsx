@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { READINESS_DRIFT_STEP } from "@/lib/military/readinessDrift";
 import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
 import type { SideForce } from "./conflictRecordView";
 
@@ -840,6 +840,18 @@ describe("separate peace on the record", () => {
     expect(container.textContent).toMatch(/frozen for 240 turns/);
   });
 
+  it("describes a reunification settlement without calling it a procurement freeze", () => {
+    // Every term reader fell through to demilitarisation, so an unknown term was
+    // published to the public record as whatever the last branch happened to be.
+    const reunify: ConflictRecordView = {
+      ...settled,
+      settlements: [{ ...settled.settlements![0], term: { kind: "reunification" as const } }],
+    };
+    const { container } = render(<ConflictRecord conflict={reunify} />);
+    expect(container.textContent).toMatch(/reunif/i);
+    expect(container.textContent).not.toMatch(/procurement/i);
+  });
+
   it("publishes the justification, so the war's history says WHY it ended", () => {
     render(<ConflictRecord conflict={settled} />);
     expect(screen.getByText(/We could not sustain the campaign\./)).toBeTruthy();
@@ -862,6 +874,28 @@ describe("separate peace on the record", () => {
   it("renders no settlement section on a war nobody has settled", () => {
     render(<ConflictRecord conflict={base} />);
     expect(screen.queryByText(/SEPARATE PEACE/)).toBeNull();
+  });
+
+  // Ticket #1246: a "you get out" deal (leaver = the recipient) was rendered with
+  // the SENDER's name in "X left the war". The page maps `o.leaver ?? o.fromCountry`
+  // into the row; these pin the two renderings apart.
+  it("names the recipient as the leaver when the deal took the recipient out", () => {
+    const them: ConflictRecordView = {
+      ...base,
+      settlements: [
+        {
+          id: "o2",
+          leaver: "CN",
+          other: "UK",
+          term: { kind: "white_peace" as const },
+          justification: null,
+          turn: 532,
+        },
+      ],
+    };
+    render(<ConflictRecord conflict={them} />);
+    expect(screen.getByText(/CN left the war on turn 532, settling with UK/)).toBeTruthy();
+    expect(screen.queryByText(/UK left the war on turn 532/)).toBeNull();
   });
 });
 
@@ -938,6 +972,10 @@ describe("the dictate panel on a won war", () => {
     target: "TR",
     targetName: "Turkey",
     turnsLeft: 18,
+    targetParties: [
+      { id: 1, name: "Republican People's Party", abbreviation: "CHP" },
+      { id: 2, name: "Democrat Party", abbreviation: "DP" },
+    ],
   };
 
   it("is absent for a viewer the server did not authorize", () => {
@@ -974,5 +1012,26 @@ describe("the dictate panel on a won war", () => {
     render(<ConflictRecord conflict={{ ...base, dictate }} />);
     const radios = screen.getAllByRole("radio");
     expect(radios.filter((r) => (r as HTMLInputElement).checked)).toHaveLength(1);
+  });
+
+  it("offers the target's parties once a one-party state is chosen", () => {
+    render(<ConflictRecord conflict={{ ...base, dictate }} />);
+    // Hidden until the system that HAS a ruling party is selected: a republic
+    // forms its government from the chamber, so there is nothing to name.
+    expect(screen.queryByText(/Republican People's Party/)).toBeNull();
+
+    // The term's own fields render only under the selected radio.
+    fireEvent.click(screen.getByRole("radio", { name: /Regime change/ }));
+    // Still hidden: a republic is the default system and names no ruling party.
+    expect(screen.queryByText(/Republican People's Party/)).toBeNull();
+
+    fireEvent.change(screen.getByRole("combobox", { name: /New system/i }), {
+      target: { value: "onePartyState" },
+    });
+
+    expect(screen.getByText(/CHP \(Republican People's Party\)/)).toBeTruthy();
+    expect(screen.getByText(/DP \(Democrat Party\)/)).toBeTruthy();
+    // The default leaves the choice to the conversion, which is how this shipped.
+    expect(screen.getByText(/Let the strongest party take power/)).toBeTruthy();
   });
 });

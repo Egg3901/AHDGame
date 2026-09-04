@@ -11,6 +11,7 @@ import {
 import type { PartyData } from "./types";
 import type { TreasuryAction } from "./treasuryReducer";
 import { fmt } from "./helpers";
+import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
 
 interface TreasuryGotvControlProps {
   party: PartyData;
@@ -45,7 +46,12 @@ export function TreasuryGotvControl({
         selectedGotvDemo.socialLean
       )
     : 0;
-  const gotvRawPerState = gotvSpend / 51;
+  // National spend is divided across this country's regions only (ticket
+  // #1265); falls back to 51 for cached responses predating regionCount.
+  const regionCount = party.regionCount || 51;
+  const isUs = countryId === DEFAULT_LEGACY_COUNTRY_ID;
+  const regionWord = isUs ? "state parties" : "regions";
+  const gotvRawPerState = gotvSpend / regionCount;
   const gotvEstBoost = selectedGotvDemo
     ? (gotvRawPerState / DOLLARS_PER_TURNOUT_POINT) * gotvAlignMult
     : 0;
@@ -77,7 +83,8 @@ export function TreasuryGotvControl({
         </div>
       </div>
       <p className="text-[11px] text-muted/60 mb-3 ml-6">
-        Nationwide voter mobilization. Spending is divided equally across all 51 state parties.
+        Nationwide voter mobilization. Spending is divided equally across all {regionCount}{" "}
+        {regionWord}.
       </p>
 
       <div className="flex items-center gap-4">
@@ -166,7 +173,9 @@ export function TreasuryGotvControl({
             </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted">Per state (51)</span>
+            <span className="text-muted">
+              Per {isUs ? "state" : "region"} ({regionCount})
+            </span>
             <span className="font-medium tabular-nums text-muted">
               {fmt(gotvRawPerState, party.countryId)} / hr
             </span>

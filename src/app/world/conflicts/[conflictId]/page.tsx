@@ -10,6 +10,7 @@ import { entityName } from "@/app/world/international-organizations/entityLabel"
 import { getDb } from "@/lib/mongodb";
 import { getConflictByNumber } from "@/lib/db/collections/conflicts";
 import { getPeaceOffersCollection } from "@/lib/db/collections/peaceOffers";
+import { loadPartyChoices, loadPartyChoicesFor, partyDisplayName } from "@/lib/military/peaceOffer";
 import { warGoalLabel } from "@/lib/military/warGoals";
 import { getBattleReportsCollection, theaterRecord } from "@/lib/db/collections/battleReports";
 import { listDeclarationHistory } from "@/lib/db/collections/battleDeclarations";
@@ -47,6 +48,7 @@ import {
   declarationOutcome,
   forceReadiness,
   recoveringCount,
+  settlementRow,
   type SideForce,
 } from "./conflictRecordView";
 import { verdictOf, openingLine, momentumOf } from "./recordCopy";
@@ -55,6 +57,8 @@ import type { PendingChip } from "./NextTickStrip";
 import { ConflictRecord, type ConflictRecordView } from "./ConflictRecord";
 import { conflictToFront } from "@/lib/military/createConflict";
 import { getTheaterState } from "@/lib/db/collections/theaterState";
+import { loadTermSettlement } from "@/lib/settlement/queries/termSettlement";
+import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 
 /** How many engagements the record lists, newest first. */
 const BATTLE_LIMIT = 50;
@@ -83,6 +87,11 @@ export default async function ConflictRecordPage({
   if (!/^[1-9]\d*$/.test(conflictId)) notFound();
 
   const db = await getDb();
+  // One read for the whole page: these name many countries, and resolving each
+  // separately would be a round trip per belligerent.
+  const nameOverrides = await loadCountryNameOverrides(db);
+  const countryNameOf = (id: string) =>
+    nameOverrides[id as CountryId] ?? COUNTRY_CONFIGS[id as CountryId]?.name ?? id;
   const doc = await getConflictByNumber(db, Number(conflictId));
   if (!doc) notFound();
 
@@ -345,6 +354,16 @@ export default async function ConflictRecordPage({
       : ownSide === "B"
         ? (doc.sideB.backer ?? "neutral")
         : "neutral";
+  // Party lists for every country a settlement on this war converted, in ONE
+  // query: the record needs names and the terms store ids. Only the terms that
+  // actually name a party contribute, so an ordinary war loads nothing.
+  const settlementParties = await loadPartyChoicesFor(
+    db,
+    settlements
+      .filter((o) => o.term.kind === "regime_change" && o.term.rulingPartyId != null)
+      .map((o) => o.toCountry)
+  );
+
   // The dictate panel, shown ONLY to the negotiator of the country that won this
   // war outright. Null for everyone else, including the losing side and the winning
   // side's allies: a coalition victory yields one term, and the panel is where that
@@ -366,8 +385,17 @@ export default async function ConflictRecordPage({
           conflictId: doc._id,
           countryCode: viewerCountry.toLowerCase(),
           target: doc.termsWindow.target,
-          targetName: COUNTRY_CONFIGS[doc.termsWindow.target]?.name ?? doc.termsWindow.target,
+          targetName: countryNameOf(doc.termsWindow.target),
           turnsLeft: Math.max(0, doc.termsWindow.closesTurn - currentTurn),
+          // The parties the victor may install, when they convert the loser to a
+          // one-party state. Loaded from the same helper the route validates
+          // against, so anything offered here is accepted there.
+          targetParties: await loadPartyChoices(db, doc.termsWindow.target),
+          // Offered on any war this question is riding. The victor holding the terms
+          // window is a founding belligerent by construction (`openTermsWindow` names
+          // `principalOf`), and EITHER founder may settle Germany, so nothing further
+          // needs checking here. Same loader the route validates against.
+          canDictateReunification: (await loadTermSettlement(db, doc._id)) !== null,
         }
       : null;
 
@@ -678,11 +706,11 @@ export default async function ConflictRecordPage({
     treatyNotes: (doc.treatyEntries ?? [])
       .filter((e) => sideACountries.includes(e.countryId) || sideBCountries.includes(e.countryId))
       .map((e) => ({
-        country: COUNTRY_CONFIGS[e.countryId]?.name ?? e.countryId,
+        country: countryNameOf(e.countryId),
         organization:
           INTERNATIONAL_ORGANIZATIONS[e.organizationId as keyof typeof INTERNATIONAL_ORGANIZATIONS]
             ?.name ?? e.organizationId,
-        defending: COUNTRY_CONFIGS[e.defending]?.name ?? e.defending,
+        defending: countryNameOf(e.defending),
       })),
     control: doc.control,
     controlStart,
@@ -727,14 +755,27 @@ export default async function ConflictRecordPage({
       note: momentum.note,
       sideBLabel: doc.sideB.label,
     },
-    settlements: settlements.map((o) => ({
-      id: o._id.toString(),
-      leaver: o.fromCountry,
-      other: o.toCountry,
-      term: o.term,
-      justification: o.justification ?? null,
-      turn: o.resolvedTurn ?? o.offeredTurn,
-    })),
+    settlements: settlements.map((o) => {
+      // Narrowed into a local: the `.find` callback below closes over the term
+      // and loses the discriminant otherwise.
+      const term = o.term;
+      const namedParty =
+        term.kind === "regime_change" && term.rulingPartyId != null ? term.rulingPartyId : null;
+      return {
+        // Who left and who they settled with comes from `settlementRow`, which
+        // reads the pair off `leaver` the way the engine does (ticket #1246).
+        ...settlementRow(o),
+        term,
+        // The term stores a party id and the record needs a name. Resolved from
+        // the batch loaded above, so a war with several converting settlements is
+        // still one query. Keyed on the RECIPIENT, because a term always lands on
+        // the recipient whichever party the deal removes.
+        rulingPartyName:
+          namedParty != null
+            ? partyDisplayName(settlementParties.get(o.toCountry), namedParty)
+            : null,
+      };
+    }),
     tier,
     canAct,
     viewerCountry,

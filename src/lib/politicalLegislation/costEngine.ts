@@ -13,7 +13,7 @@
  */
 
 import { COST_INCOME_ANCHORS } from "./costAnchors";
-import type { LawCountryId, LawLevel } from "./types";
+import type { LawLevel, CostAnchorCountryId } from "./types";
 
 export interface FiscalBase {
   /** Absolute local currency (NOT the states collection's millions unit). */
@@ -31,7 +31,12 @@ export interface LawFiscal {
 export function computeLawCost(
   level: LawLevel,
   base: FiscalBase,
-  countryId: LawCountryId,
+  // The ANCHOR axis, not the catalogue one: this parameter is used for exactly
+  // one thing, `COST_INCOME_ANCHORS[countryId]`. A unified Germany prices its
+  // rescoped laws through an anchor without owning a catalogue, and demanding a
+  // catalogue country here is what pushed "DE" into `LawCountryId` and broke six
+  // exhaustive tables that key off it.
+  countryId: CostAnchorCountryId,
   incomeBandIndex: number | null | undefined
 ): LawFiscal {
   const bandIndex = incomeBandIndex ?? 1.0;

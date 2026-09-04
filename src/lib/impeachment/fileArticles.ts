@@ -9,6 +9,7 @@ import {
 } from "@/lib/constants/countries";
 import { getLowerChamberOfficeType } from "@/lib/legislature/chamberOfficeType";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { governorOfficialFilter } from "@/lib/db/electedOfficialScope";
 import { getGameState } from "@/lib/gameState";
 import { badRequest, forbidden } from "@/lib/api/errors";
 import {
@@ -24,18 +25,6 @@ export interface FileImpeachmentOpts {
   state?: string;
   /** Required for "president"; optional cross-check for "governor" (resolved from state). */
   targetCharacterId?: ObjectId;
-}
-
-/** Country-scoped governor filter (US governor rows predate the explicit countryId). */
-function governorFilter(countryId: CountryId, state: string): Record<string, unknown> {
-  if (countryId === COUNTRY_CONFIGS.US.id) {
-    return {
-      officeType: "governor",
-      state,
-      $or: [{ countryId }, { countryId: { $exists: false } }],
-    };
-  }
-  return { officeType: "governor", countryId, state };
 }
 
 /**
@@ -89,7 +78,7 @@ export async function fileArticlesOfImpeachment(
       }
     }
 
-    const governor = await officials.findOne(governorFilter(countryId, state));
+    const governor = await officials.findOne(governorOfficialFilter(countryId, state));
     if (!governor || !governor.characterId) {
       throw badRequest(`There is no sitting governor of ${state} to impeach.`);
     }

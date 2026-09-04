@@ -13,9 +13,11 @@ import {
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
-import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
 import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
+import { loadEquityQuote } from "@/lib/equities/marketPool";
+import type { EquityMarketPool } from "@/lib/db/types";
+import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
 
 /** Per-character delta for a corp, plus the fill price for new-entry cost basis. */
 interface ShareDelta {
@@ -90,6 +92,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   // capped at the issuer's treasury, so a limit order can't mint money via the
   // float the way the market-sell cap already prevents.
   const corpTreasuryDeltas = new Map<string, number>(); // corpId -> liquidCapital delta (local)
+  const poolCashRemaining = new Map<CurrencyCode, number>();
+  const poolFlows = new Map<CurrencyCode, { purchasesIn: number; salesOut: number }>();
   // ── Index-fund-owned buy orders ──────────────────────────────────────────
   // Fund share credits per corp (corp → fund → ShareDelta) applied after the
   // corp bulk writes via creditSharesToFund.
@@ -106,7 +110,10 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     const corp = corpMap.get(corpIdStr);
     if (!corp) continue;
 
-    const currentPrice = resolveShareExecutionPrice(corp) ?? 0.01;
+    const marketQuote = await loadEquityQuote(db, corp);
+    if (marketQuote.active && !poolCashRemaining.has(marketQuote.currency)) {
+      poolCashRemaining.set(marketQuote.currency, marketQuote.poolCashLocal);
+    }
     // Target corp's FX rate, applied to every local-currency amount in this
     // corp's fill loop (price × shares, escrow diffs, proceeds).
     const targetFxRate = fxRateForCorpFromMap(corp, fxByCurrency);
@@ -119,6 +126,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
 
     for (const order of orders) {
       const charIdStr = order.characterId?.toString();
+      const currentPrice =
+        order.type === "buy" ? marketQuote.askPriceLocal : marketQuote.bidPriceLocal;
 
       if (order.type === "buy" && currentPrice <= order.pricePerShare) {
         // Fill buy order if public float has shares
@@ -166,9 +175,21 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           availableFloat -= toFill;
           corpFloatDeltas.set(corpIdStr, (corpFloatDeltas.get(corpIdStr) ?? 0) - toFill);
 
-          // Buyer's payment (actual fill cost) flows into the issuer treasury.
-          treasuryRemaining += actualCostLocal;
-          treasuryDelta += actualCostLocal;
+          if (marketQuote.active) {
+            poolCashRemaining.set(
+              marketQuote.currency,
+              (poolCashRemaining.get(marketQuote.currency) ?? 0) + actualCostLocal
+            );
+            const flow = poolFlows.get(marketQuote.currency) ?? {
+              purchasesIn: 0,
+              salesOut: 0,
+            };
+            flow.purchasesIn += actualCostLocal;
+            poolFlows.set(marketQuote.currency, flow);
+          } else {
+            treasuryRemaining += actualCostLocal;
+            treasuryDelta += actualCostLocal;
+          }
 
           historyEmits.push({
             corporationId: new ObjectId(corpIdStr),
@@ -225,9 +246,18 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         availableFloat -= toFill;
         corpFloatDeltas.set(corpIdStr, (corpFloatDeltas.get(corpIdStr) ?? 0) - toFill);
 
-        // Buyer's payment (actual fill cost) flows into the issuer treasury.
-        treasuryRemaining += actualCostLocal;
-        treasuryDelta += actualCostLocal;
+        if (marketQuote.active) {
+          poolCashRemaining.set(
+            marketQuote.currency,
+            (poolCashRemaining.get(marketQuote.currency) ?? 0) + actualCostLocal
+          );
+          const flow = poolFlows.get(marketQuote.currency) ?? { purchasesIn: 0, salesOut: 0 };
+          flow.purchasesIn += actualCostLocal;
+          poolFlows.set(marketQuote.currency, flow);
+        } else {
+          treasuryRemaining += actualCostLocal;
+          treasuryDelta += actualCostLocal;
+        }
 
         // Queue history entry — buy: from = float (null), to = character.
         // currentPrice (= corp.sharePrice) is stored in the target corp's
@@ -260,7 +290,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         // the liquidity provider an exit and would bypass the guarded dual
         // debit of its cap-table and fund holdings ledgers.
         if (order.placerFundId) continue;
-        // Fill sell order: add shares to public float, pay seller at limit price.
+        // Fill sell order at the executable bid (which is at least the seller's
+        // limit), add the shares to public float, and pay the seller.
         // Character sell orders are not debited at placement, so a reverse split
         // (or any later sale) can leave sharesRemaining far above the live
         // holding. Capping here stops the fill from driving the seller negative
@@ -274,14 +305,27 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           const available = Math.max(0, held + alreadyDebited);
           toFill = Math.min(toFill, available);
         }
+        if (marketQuote.active) {
+          const cashAvailable = poolCashRemaining.get(marketQuote.currency) ?? 0;
+          const cashLimitedShares =
+            currentPrice > 0 ? Math.floor((cashAvailable + 1e-9) / currentPrice) : 0;
+          toFill = Math.min(toFill, cashLimitedShares);
+        }
         if (toFill <= 0) continue;
 
-        const proceedsLocal = toFill * order.pricePerShare;
-        // Treasury cap: the issuer buys the shares back from its own
-        // liquidCapital. If it can't cover, leave the order open (no mint).
-        if (treasuryRemaining < proceedsLocal) continue;
-        treasuryRemaining -= proceedsLocal;
-        treasuryDelta -= proceedsLocal;
+        const proceedsLocal = toFill * currentPrice;
+        if (marketQuote.active) {
+          const remainingCash = poolCashRemaining.get(marketQuote.currency) ?? 0;
+          poolCashRemaining.set(marketQuote.currency, remainingCash - proceedsLocal);
+          const flow = poolFlows.get(marketQuote.currency) ?? { purchasesIn: 0, salesOut: 0 };
+          flow.salesOut += proceedsLocal;
+          poolFlows.set(marketQuote.currency, flow);
+        } else {
+          // Compatibility fallback for worlds without a pool.
+          if (treasuryRemaining < proceedsLocal) continue;
+          treasuryRemaining -= proceedsLocal;
+          treasuryDelta -= proceedsLocal;
+        }
         const proceedsAnchor = corpLiquidCapitalToAnchor(proceedsLocal, corp, targetFxRate);
 
         // Corp sell orders: pay the placing corporation, not the CEO character.
@@ -320,7 +364,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           corporationId: new ObjectId(corpIdStr),
           kind: "limit_fill",
           shares: toFill,
-          pricePerShareAnchor: corpLiquidCapitalToAnchor(order.pricePerShare, corp, targetFxRate),
+          pricePerShareAnchor: corpLiquidCapitalToAnchor(currentPrice, corp, targetFxRate),
           corpCurrencyCode,
           fromPartyRef: order.placerCorporationId
             ? { corporationId: order.placerCorporationId }
@@ -344,6 +388,32 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     }
 
     if (treasuryDelta !== 0) corpTreasuryDeltas.set(corpIdStr, treasuryDelta);
+  }
+
+  // Commit each currency's net dealer cash leg before any shares move. The
+  // turn lock prevents API trades from interleaving; the filter is still a
+  // final guard against an unexpected concurrent debit.
+  for (const [currency, flow] of poolFlows) {
+    const purchasesIn = Math.round(flow.purchasesIn * 100) / 100;
+    const salesOut = Math.round(flow.salesOut * 100) / 100;
+    const net = Math.round((purchasesIn - salesOut) * 100) / 100;
+    const update = await db.collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION).updateOne(
+      {
+        _id: currency,
+        ...(net < 0 ? { cashLocal: { $gte: -net } } : {}),
+      },
+      {
+        $inc: {
+          cashLocal: net,
+          ...(purchasesIn > 0 ? { "lifetime.purchasesIn": purchasesIn } : {}),
+          ...(salesOut > 0 ? { "lifetime.salesOut": salesOut } : {}),
+        },
+        $set: { updatedAt: now },
+      }
+    );
+    if (update.matchedCount !== 1) {
+      throw new Error(`Equity market pool ${currency} could not settle queued share orders`);
+    }
   }
 
   // Apply corporation shareholder updates atomically (per-character positional ops)
@@ -508,9 +578,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     await db.collection("corporations").bulkWrite(corpPayOps);
   }
 
-  // Treasury-backed market maker: apply each issuer's net liquidCapital delta
-  // from float fills (already in the issuer's local currency). Buy fills credit,
-  // sell fills debit — so the float trades conserve money against the treasury.
+  // Legacy fallback for worlds without a currency pool.
   if (corpTreasuryDeltas.size > 0) {
     const treasuryOps = [...corpTreasuryDeltas.entries()]
       .filter(([, delta]) => delta !== 0)
@@ -529,9 +597,8 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   // Credit fund cap-table holdings for each (corp, fund) buy fill, then refund
   // unused escrow to each fund's cashAnchor. Float deltas were already applied
   // above (corpFloatDeltas), so pass shares-only credits here (no extra float
-  // $inc — that would double-decrement). The issuer treasury already received
-  // the buyer payment via corpTreasuryDeltas, conserving money exactly as for a
-  // character/corp buy.
+  // $inc because that would double-decrement). Pool-backed fills have already posted
+  // the matching buyer cash leg above.
   if (fundShareholderUpdates.size > 0) {
     for (const [corpIdStr, fundDeltas] of fundShareholderUpdates) {
       const corp = corpMap.get(corpIdStr);

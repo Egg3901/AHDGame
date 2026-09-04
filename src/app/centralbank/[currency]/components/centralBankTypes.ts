@@ -115,6 +115,7 @@ export interface MoneySupplyView {
   creditOutstanding: number;
   sovereignBondsOutstanding: number;
   centralBankBondHoldings: number;
+  bondPoolCash?: number;
   netMoneyCreatedLifetime: number;
   lastOperationTurn: number | null;
   lastPolicyEvaluation: {

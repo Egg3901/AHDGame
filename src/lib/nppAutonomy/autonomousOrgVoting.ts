@@ -31,7 +31,6 @@ import type { ProposalVoteRecord } from "@/lib/db/types/internationalOrganizatio
 import {
   getOrganizationLeadershipElectionsCollection,
   getOrganizationLegislationCollection,
-  getOrganizationProposalsCollection,
 } from "@/lib/db/collections";
 import { getMembers } from "@/lib/internationalOrganizations/service";
 import { upsertPendingOrganizationVote } from "@/lib/internationalOrganizations/voteWrite";
@@ -143,23 +142,17 @@ export async function castAutonomousOrgVotes(db: Db, currentTurn: number): Promi
     };
   };
 
-  // ── 1. Membership proposals — eligible voters = members minus applicant ─────
-  const proposalsCol = await getOrganizationProposalsCollection(db);
-  const pendingProposals = await proposalsCol.find({ status: "pending" }).toArray();
-  for (const proposal of pendingProposals) {
-    const members = await getMembersCached(db, caches, proposal.organizationId);
-    for (const member of members) {
-      if (member === proposal.proposingCountryId) continue;
-      if (alreadyVoted(proposal.votes as ProposalVoteRecord[], member)) continue;
-      if (!(await isAutonomyActiveCached(db, caches, member))) continue;
-      const res = await upsertPendingOrganizationVote(
-        proposalsCol,
-        proposal._id,
-        await buildVote(member)
-      );
-      if (res.matchedCount > 0) votesCast++;
-    }
-  }
+  // ── 1. Membership proposals — NOT VOTED ON HERE ────────────────────────────
+  //
+  // An admission is decided by the player-enabled members alone, and every
+  // country this function speaks for is autonomy-active, which means it is NOT
+  // player-enabled. So a ballot cast here could never be counted by the
+  // resolver — it only landed on the proposal for the panels to display,
+  // showing consent beside a tally that ignored it (ticket #1257).
+  //
+  // The instruments below are different and are still voted: an FTA is decided
+  // by its named parties whoever runs them, and a leadership election by the
+  // wider policy roll, which autonomy-active members are on.
 
   // ── 2. FTA legislation — eligible voters = named parties ────────────────────
   const legislationCol = await getOrganizationLegislationCollection(db);

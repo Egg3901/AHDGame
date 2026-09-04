@@ -6,7 +6,7 @@ import {
   CROSS_COUNTRY_RELOCATION_MULTIPLIER,
   MIN_CORPORATION_DISSOLUTION_AGE_TURNS,
 } from "@/lib/constants/corporations";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { useEnabledCountries } from "@/contexts/RegisteredCountriesContext";
 import { LEGAL_STRUCTURES, type LegalStructureId } from "@/lib/constants/legalStructures";
 import { getLegalStructureForCorp, isListedOnlyStructure } from "@/lib/corporations/legalStructure";
@@ -19,6 +19,7 @@ import { useCeoAdminState, type StateOption, type DissolvePreviewData } from "./
 import { CaretakerCeoCard } from "./CaretakerCeoCard";
 import { TickerChangeCard } from "./TickerChangeCard";
 import { SuperShareAdoptionCard } from "./SuperShareAdoptionCard";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface CeoAdminSubtabProps {
   corporation: CorporationDetail;
@@ -37,6 +38,7 @@ export default function CeoAdminSubtab({
   onRelocate: _onRelocate,
   onDissolve,
 }: CeoAdminSubtabProps) {
+  const resolveCountryName = useCountryDisplayName();
   // Relocation targets are player-live countries only — a CEO can't move a corp to a
   // registered-but-not-yet-enabled country.
   const enabledCountries = useEnabledCountries();
@@ -567,7 +569,7 @@ export default function CeoAdminSubtab({
             >
               {enabledCountries.map((c) => (
                 <option key={c} value={c}>
-                  {COUNTRY_CONFIGS[c].name}
+                  {resolveCountryName(c)}
                 </option>
               ))}
             </select>

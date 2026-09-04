@@ -87,4 +87,15 @@ describe("CommandsTab", () => {
     expect(screen.getAllByText("Central Asian Front").length).toBeGreaterThan(0);
     expect(screen.queryByText("afghan")).toBeNull();
   });
+
+  // Ticket #1243: support's navigation for a blockade is "Defence office > Commands >
+  // Naval and air command", but nothing on this tab carried that name. The player went
+  // exactly there, found no such control, and filed this. The door into the fleet page
+  // is part of the tab's contract now.
+  it("links to naval and air command under its own name", () => {
+    render(<CommandsTab {...props} />);
+
+    const link = screen.getByRole("link", { name: "Naval and air command" }).getAttribute("href");
+    expect(link).toBe("/country/us/navair");
+  });
 });

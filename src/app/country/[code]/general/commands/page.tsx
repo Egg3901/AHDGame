@@ -17,6 +17,7 @@ import { resolveGameYear } from "@/lib/era/era";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 import { CommandingGeneralClient, type DefenceOfficeLink } from "./CommandingGeneralClient";
 import { unitsForCommandPage } from "./commandForce";
+import { resolveCountryIdentity } from "@/lib/country/countryIdentity";
 
 /**
  * The Commanding General's own page — where a CG employs the Command the defense
@@ -42,6 +43,7 @@ export default async function CommandingGeneralPage({
   const characterId = authUser?.character?._id ? String(authUser.character._id) : null;
 
   const db = await getDb();
+  const { name: countryName } = await resolveCountryIdentity(db, countryId);
   // The roster is loaded up front, not just to list generals: a command keeps its
   // `commandingGeneralId` when that character emigrates or is dismissed, so the
   // stored id alone is not authority. `requireCommandingGeneral` re-checks the same
@@ -62,8 +64,8 @@ export default async function CommandingGeneralPage({
         <div className="rounded-xl border border-card-border bg-card p-6">
           <h1 className="mb-2 text-lg font-semibold text-foreground">Commanding General</h1>
           <p className="text-[13px] text-muted">
-            You do not lead a command in {COUNTRY_CONFIGS[countryId].name}. The Secretary of Defense
-            appoints a commanding general for each theater command.
+            You do not lead a command in {countryName}. The Secretary of Defense appoints a
+            commanding general for each theater command.
           </p>
         </div>
       </div>

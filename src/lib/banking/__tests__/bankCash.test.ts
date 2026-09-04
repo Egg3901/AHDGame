@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
-import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter } from "@/lib/db/types/bank";
+
+vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/audit/recordAudit", () => ({ recordAudit: vi.fn(), recordAuditBulk: vi.fn() }));
 import {
   getCashReserves,
   injectBankCapital,
@@ -113,126 +116,123 @@ describe("reserve arithmetic", () => {
   });
 });
 
-describe("injectBankCapital", () => {
-  let db: MockDb;
+describe("injectBankCapital and upstreamBankCash through the journal", () => {
   const corpId = new ObjectId();
 
-  beforeEach(() => {
+  function world(over: Partial<BankCharter> = {}, liquidCapital = 1_000_000): InMemoryDb {
+    const memory = createInMemoryDb();
+    memory.seed("gameConfig", [{ _id: "default", privateBankingEnabled: true }]);
+    memory.seed("gameState", [{ _id: "current", currentTurn: 12, preset: "2019-default" }]);
+    memory.seed("centralBanks", [
+      { _id: "US", countryId: "US", primeRate: 4, bankReserveRequirement: 0.2 },
+    ]);
+    memory.seed("corporations", [
+      {
+        _id: corpId,
+        name: "Bank",
+        countryId: "US",
+        liquidCapital,
+        liquidCurrencyCode: "USD",
+        bankCharter: charter(over),
+      },
+    ]);
+    return memory;
+  }
+
+  function corp(memory: InMemoryDb) {
+    return memory.collection("corporations").docs[0] as {
+      liquidCapital: number;
+      bankCharter: BankCharter;
+    };
+  }
+
+  beforeEach(async () => {
     vi.clearAllMocks();
-    db = createMockDb();
-    db.collection("corporations");
   });
 
-  it("moves cash across in one atomic write and books the memo", async () => {
-    db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-      _id: corpId,
+  it("moves cash across and books the memo, exactly once", async () => {
+    const memory = world();
+    const result = await injectBankCapital(memory as unknown as Db, corpId, 100_000, "cmd-a");
+    expect(result).toEqual({
+      ok: true,
+      amount: 100_000,
+      cashReserves: 600_000,
       liquidCapital: 900_000,
-      bankCharter: charter({ cashReserves: 600_000, postedCapital: 200_000 }),
     });
-
-    const result = await injectBankCapital(db as unknown as Db, corpId, 100_000);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.cashReserves).toBe(600_000);
-
-    const [filter, update] = db.collectionMocks.corporations!.findOneAndUpdate.mock.calls[0];
-    // Both balances move in the same document update: the transfer cannot
-    // half-apply, which matters because standalone Mongo has no transactions.
-    expect(update.$inc).toEqual({
-      liquidCapital: -100_000,
-      "bankCharter.cashReserves": 100_000,
-      "bankCharter.postedCapital": 100_000,
-    });
-    expect(filter.liquidCapital).toEqual({ $gte: 100_000 });
-    expect(filter["bankCharter.status"]).toBe("active");
+    expect(corp(memory).bankCharter.postedCapital).toBe(200_000);
+    // The same command id is the same command: a retry moves nothing more.
+    const again = await injectBankCapital(memory as unknown as Db, corpId, 100_000, "cmd-a");
+    expect(again.ok).toBe(true);
+    expect(corp(memory).bankCharter.cashReserves).toBe(600_000);
+    expect(corp(memory).bankCharter.postedCapital).toBe(200_000);
   });
 
-  it("is capped only by the corporation's cash — no supervisory gate inbound", async () => {
-    db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 0,
-      bankCharter: charter({ capitalStanding: "undercapitalized", cashReserves: 1_000_000 }),
-    });
+  it("is capped only by the corporation's cash, with no supervisory gate inbound", async () => {
     // An undercapitalized bank is exactly the one that most needs capital, so
     // the inbound direction must not refuse it.
-    const result = await injectBankCapital(db as unknown as Db, corpId, 500_000);
+    const memory = world({ capitalStanding: "undercapitalized" }, 500_000);
+    const result = await injectBankCapital(memory as unknown as Db, corpId, 500_000);
     expect(result.ok).toBe(true);
+    expect(corp(memory).liquidCapital).toBe(0);
+    const tooMuch = await injectBankCapital(memory as unknown as Db, corpId, 1);
+    expect(tooMuch).toEqual({ ok: false, error: "The corporation does not hold that much cash." });
   });
 
   it("rejects a non-positive amount without touching the database", async () => {
+    const memory = world();
     for (const bad of [0, -1, Number.NaN]) {
-      const result = await injectBankCapital(db as unknown as Db, corpId, bad);
+      const result = await injectBankCapital(memory as unknown as Db, corpId, bad);
       expect(result.ok).toBe(false);
     }
-    expect(db.collectionMocks.corporations!.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(corp(memory).bankCharter.cashReserves).toBe(500_000);
+    expect(memory.collection("bankMoneyMoves").docs).toHaveLength(0);
   });
-});
-
-describe("upstreamBankCash", () => {
-  let db: MockDb;
-  const corpId = new ObjectId();
-
-  beforeEach(() => {
-    vi.clearAllMocks();
-    db = createMockDb();
-    db.collection("corporations");
-  });
-
-  function mockBank(over: Partial<BankCharter> = {}) {
-    db.collectionMocks.corporations!.findOne.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 0,
-      bankCharter: charter(over),
-    });
-    db.collectionMocks.corporations!.findOneAndUpdate.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 300_000,
-      bankCharter: charter({ ...over, cashReserves: 200_000 }),
-    });
-  }
 
   it("pays out the surplus and re-gates the requirement inside the write", async () => {
-    mockBank();
-    const result = await upstreamBankCash(db as unknown as Db, corpId, 300_000, 0.2);
-    expect(result.ok).toBe(true);
-
-    const [filter, update] = db.collectionMocks.corporations!.findOneAndUpdate.mock.calls[0];
-    expect(update.$inc.liquidCapital).toBe(300_000);
-    expect(update.$inc["bankCharter.cashReserves"]).toBe(-300_000);
-    // The read above can go stale against a concurrent injection or a banking
-    // turn moving deposits; the one thing this must never do is leave the bank
-    // short, so the requirement is re-checked atomically.
-    expect(JSON.stringify(filter.$expr)).toContain("bankCharter.cashReserves");
+    const memory = world();
+    // 500k held, 200k required at 20%, equity 300k: 300k distributable.
+    const result = await upstreamBankCash(memory as unknown as Db, corpId, 300_000, 0.2);
+    expect(result).toEqual({
+      ok: true,
+      amount: 300_000,
+      cashReserves: 200_000,
+      liquidCapital: 1_300_000,
+    });
+    // The guarded debit carried the requirement: a second identical payout
+    // finds no surplus and is refused before any write.
+    const second = await upstreamBankCash(memory as unknown as Db, corpId, 300_000, 0.2);
+    expect(second.ok).toBe(false);
+    expect(corp(memory).bankCharter.cashReserves).toBe(200_000);
   });
 
   it("clamps to the surplus rather than paying what was asked", async () => {
-    mockBank();
-    const result = await upstreamBankCash(db as unknown as Db, corpId, 999_999_999, 0.2);
+    const memory = world();
+    const result = await upstreamBankCash(memory as unknown as Db, corpId, 999_999_999, 0.2);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.amount).toBe(300_000);
   });
 
   it("refuses a bank that failed its stress test", async () => {
-    mockBank({ capitalStanding: "stressed" });
-    const result = await upstreamBankCash(db as unknown as Db, corpId, 1_000, 0.2);
+    const memory = world({ capitalStanding: "stressed" });
+    const result = await upstreamBankCash(memory as unknown as Db, corpId, 1_000, 0.2);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/stress test/i);
-    expect(db.collectionMocks.corporations!.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(corp(memory).bankCharter.cashReserves).toBe(500_000);
   });
 
   it("tells an undercapitalized bank to post capital rather than take it", async () => {
-    mockBank({ capitalStanding: "undercapitalized" });
-    const result = await upstreamBankCash(db as unknown as Db, corpId, 1_000, 0.2);
+    const memory = world({ capitalStanding: "undercapitalized" });
+    const result = await upstreamBankCash(memory as unknown as Db, corpId, 1_000, 0.2);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/undercapitalized/i);
   });
 
   it("refuses when every penny is required against deposits", async () => {
-    mockBank({ cashReserves: 200_000 });
-    const result = await upstreamBankCash(db as unknown as Db, corpId, 1_000, 0.2);
+    const memory = world({ cashReserves: 200_000 });
+    const result = await upstreamBankCash(memory as unknown as Db, corpId, 1_000, 0.2);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toMatch(/no distributable capital/i);
@@ -241,27 +241,24 @@ describe("upstreamBankCash", () => {
   it("refuses to pay the owner out of an NPC-deposit-inflated reserve base", async () => {
     // Negative book equity despite reserves far above the requirement: the
     // exploit path from ticket #1088 must not reach the write.
-    db.collectionMocks.corporations!.findOne.mockResolvedValue({
-      _id: corpId,
-      liquidCapital: 0,
-      bankCharter: charter({
-        cashReserves: 1_020_159_685,
-        npcDeposits: 1_303_882_142,
-        totalDeposits: 1_303_882_142,
-        totalLoans: 124_295_401,
-      }),
+    const memory = world({
+      cashReserves: 1_020_159_685,
+      npcDeposits: 1_303_882_142,
+      totalDeposits: 1_303_882_142,
+      totalLoans: 124_295_401,
     });
-    const result = await upstreamBankCash(db as unknown as Db, corpId, 100_000_000, 0.1);
+    memory.collection("centralBanks").docs[0].bankReserveRequirement = 0.1;
+    const result = await upstreamBankCash(memory as unknown as Db, corpId, 100_000_000, 0.1);
     expect(result.ok).toBe(false);
-    expect(db.collectionMocks.corporations!.findOneAndUpdate).not.toHaveBeenCalled();
+    expect(corp(memory).bankCharter.cashReserves).toBe(1_020_159_685);
   });
 
   it("never books negative contributed capital when paying out earnings", async () => {
     // 500k held against 100k ever posted: the bank earned the rest, and paying
     // it out must not drive the memo below zero.
-    mockBank({ postedCapital: 100_000 });
-    await upstreamBankCash(db as unknown as Db, corpId, 300_000, 0.2);
-    const [, update] = db.collectionMocks.corporations!.findOneAndUpdate.mock.calls[0];
-    expect(update.$inc["bankCharter.postedCapital"]).toBe(-100_000);
+    const memory = world({ postedCapital: 100_000 });
+    await upstreamBankCash(memory as unknown as Db, corpId, 300_000, 0.2);
+    expect(corp(memory).bankCharter.postedCapital).toBe(0);
+    expect(corp(memory).bankCharter.cashReserves).toBe(200_000);
   });
 });

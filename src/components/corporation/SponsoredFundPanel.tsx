@@ -7,13 +7,14 @@ import {
   CORPORATION_TYPE_LABELS,
   type CorporationType,
 } from "@/lib/constants/corporations";
-import { ALL_COUNTRY_IDS, COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import {
   FUND_CHARTER_FEE_ANCHOR,
   FUND_MIN_SEED_CAPITAL_ANCHOR,
   MAX_EXPENSE_RATIO_ANNUAL,
   MIN_EXPENSE_RATIO_ANNUAL,
 } from "@/lib/indexFunds/sponsorship/constants";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 const fmt = (n: number) => "₳" + Math.round(n).toLocaleString("en-US");
 
@@ -86,6 +87,7 @@ function SponsoredFundList({ corpId, refreshKey }: { corpId: string; refreshKey:
  * collisions, cash on hand).
  */
 export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
+  const resolveCountryName = useCountryDisplayName();
   const [name, setName] = useState("");
   const [ticker, setTicker] = useState("");
   const [scope, setScope] = useState<"country" | "global">("country");
@@ -234,7 +236,7 @@ export default function SponsoredFundPanel({ corpId }: { corpId: string }) {
                   <option value="">Pick a country…</option>
                   {ALL_COUNTRY_IDS.map((id) => (
                     <option key={id} value={id}>
-                      {COUNTRY_CONFIGS[id].name}
+                      {resolveCountryName(id)}
                     </option>
                   ))}
                 </select>

@@ -18,6 +18,7 @@ import { accountId } from "@/lib/ledger/accounts";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
 import { planOpenMarketOperation } from "./quantitativeEasing";
+import { bondPoolCurrency, creditBondPool, debitBondPoolGated } from "@/lib/bonds/marketPool";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 
 export const MONETARY_OPERATION_COOLDOWN_TURNS = 6;
@@ -68,6 +69,14 @@ export async function executeMonetaryOperation(
       throw new Error("QT would retire more external deposits than remain");
     const supportDelta = plan.qeSupportRatio - (bond.qeSupportRatio ?? 0);
     const marketPrice = Math.min(2, Math.max(0.05, bond.marketPrice * (1 + supportDelta * 0.5)));
+    // The float is the bond market pool's inventory. QE buys it from the pool,
+    // so the new deposits land in the pool; QT sells back and the pool must
+    // have the cash, or the operation is too large for the market.
+    const poolCurrency = bondPoolCurrency(bond);
+    if (input.type === "qt") {
+      const debit = await debitBondPoolGated(db, poolCurrency, plan.consideration, "qtOut", now);
+      if (!debit.ok) throw new Error("The bond market cannot absorb a sale of this size right now");
+    }
     await db.collection<Bond>("bonds").updateOne(
       { _id: bond._id },
       {
@@ -80,6 +89,9 @@ export async function executeMonetaryOperation(
         },
       }
     );
+    if (input.type === "qe") {
+      await creditBondPool(db, poolCurrency, plan.consideration, "qeIn", now);
+    }
     record = {
       type: input.type,
       turn: input.turn,

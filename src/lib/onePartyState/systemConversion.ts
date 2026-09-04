@@ -22,7 +22,11 @@ import { COUNTRY_CONFIGS, type CountryId, type GovernmentType } from "@/lib/cons
 import { updateCountryState } from "@/lib/countryState";
 import { getRegimeEscalationCollection } from "@/lib/db/collections/regimeEscalation";
 import { recordCountryEvent } from "@/lib/turn/history/recordCountryEvent";
+import { governmentSystemLabel } from "@/lib/military/peaceTerm";
 import { clearAllRegimeStatusForCountry } from "./regimeStatusReset";
+
+/** The country's player-facing name, falling back to its code. */
+const countryName = (id: CountryId): string => COUNTRY_CONFIGS[id]?.name ?? id;
 import { bootstrapNewSystem } from "./conversionBootstrap";
 
 /** Forced-path defaults — design § Stage 4 forced conversion. */
@@ -72,10 +76,15 @@ export async function triggerSystemConversion(
     countryId,
     turn: currentTurn,
     eventType: "regime_escalation",
+    // The country's NAME and the system's player-facing LABEL, not the two raw
+    // keys. This is a country-history entry a player reads, and it had been
+    // rendering as "DD adopts parliamentaryRepublic via constitutional
+    // convention". `details.targetSystem` below keeps the raw value for anything
+    // reading the entry as data.
     title:
       inputs.path === "voluntary"
-        ? `${countryId} adopts ${inputs.targetSystem} via constitutional convention`
-        : `${countryId} regime collapses into ${inputs.targetSystem}`,
+        ? `${countryName(countryId)} adopts a ${governmentSystemLabel(inputs.targetSystem)} via constitutional convention`
+        : `${countryName(countryId)} regime collapses into a ${governmentSystemLabel(inputs.targetSystem)}`,
     details: {
       subtype: "conversion",
       path: inputs.path,

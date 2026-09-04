@@ -16,7 +16,7 @@ import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import {
   loadOpenOrdersEscrowByFundId,
-  loadQueuedRedemptionLiabilityByFundId,
+  loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 
 const schema = z.object({
@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     const exchangeRates = await loadFxRatesRecord(db);
     const fundIds = funds.map((fund) => fund._id);
     const openOrdersEscrowByFundId = await loadOpenOrdersEscrowByFundId(db, fundIds);
-    const queuedLiabilityByFundId = await loadQueuedRedemptionLiabilityByFundId(db, fundIds);
+    const queuedUnitsByFundId = await loadQueuedRedemptionUnitsByFundId(db, fundIds);
 
     const now = new Date();
     const results: {
@@ -67,13 +67,13 @@ export async function POST(request: Request) {
       const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
       const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
       const openOrdersEscrowAnchor = openOrdersEscrowByFundId.get(fund._id.toString()) ?? 0;
-      const queuedRedemptionLiabilityAnchor = queuedLiabilityByFundId.get(fund._id.toString()) ?? 0;
+      const queuedRedemptionUnits = queuedUnitsByFundId.get(fund._id.toString()) ?? 0;
       const currentBacking =
         fund.cashAnchor +
         holdingsValueAnchor +
         bondPrincipalAnchor +
         openOrdersEscrowAnchor -
-        queuedRedemptionLiabilityAnchor;
+        queuedRedemptionUnits;
       const liability = fund.quotedNav * fund.unitSupply;
       const target = targetRatio * liability;
       const shortfall = target - currentBacking;
@@ -97,14 +97,14 @@ export async function POST(request: Request) {
       const newNav =
         recomputeNav(
           { ...fund, cashAnchor: newCashAnchor },
-          { bondPrincipalAnchor, openOrdersEscrowAnchor, queuedRedemptionLiabilityAnchor }
+          { bondPrincipalAnchor, openOrdersEscrowAnchor, queuedRedemptionUnits }
         ) ?? fund.quotedNav;
       const backing = calculateBackingRatio({
         cashAnchor: newCashAnchor,
         holdingsValueAnchor,
         bondPrincipalAnchor,
         openOrdersEscrowAnchor,
-        queuedRedemptionLiabilityAnchor,
+        queuedRedemptionUnits,
         quotedNav: newNav,
         unitSupply: fund.unitSupply,
       });

@@ -8,7 +8,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { regionUrl } from "@/lib/urls";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
 import { CorporationLogo } from "@/components/corporation/CorporationLogo";
 import { CAPACITY_UNIT_LABEL, formatUnits } from "./plantsPresentation";
 import {
@@ -16,6 +16,7 @@ import {
   facilitySingular,
   facilityVocabulary,
 } from "@/lib/constants/facilityVocabulary";
+import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 
 interface Competitor {
   corpId: string;
@@ -93,6 +94,7 @@ export default function ExpandMarketModal({
   initialSectorType,
   initialStateId,
 }: ExpandMarketModalProps) {
+  const resolveCountryName = useCountryDisplayName();
   const { formatAmount } = useCurrency();
   const router = useRouter();
   // Any sector type is buildable, so honor an incoming type in either mode and
@@ -170,7 +172,7 @@ export default function ExpandMarketModal({
       setSuggestions(data.suggestions ?? []);
       setAvailableCountries(
         ((data.availableCountries as string[]) ?? [])
-          .map((id) => ({ id, name: COUNTRY_CONFIGS[id as CountryId]?.name ?? id }))
+          .map((id) => ({ id, name: resolveCountryName(id as CountryId) }))
           .sort((a, b) => a.name.localeCompare(b.name))
       );
       if (typeof data.liquidCapital === "number") {
@@ -682,8 +684,7 @@ export default function ExpandMarketModal({
                           const facilityCount = foundingQuote?.starterUnits
                             ? Math.floor((s.headroomUnits ?? 0) / foundingQuote.starterUnits)
                             : 0;
-                          const countryName =
-                            COUNTRY_CONFIGS[s.countryId as CountryId]?.name ?? s.countryId;
+                          const countryName = resolveCountryName(s.countryId as CountryId);
 
                           return (
                             <li key={s.stateId}>

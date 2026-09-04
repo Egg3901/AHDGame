@@ -4,7 +4,7 @@
  * fund cashAnchor); the fund cron redeploys cash into bonds to maintain 25%.
  */
 
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Bond, IndexFund } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -13,6 +13,9 @@ import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporati
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
 import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
+import { getAllFundDefinitions, type BondFundUniverse } from "@/lib/indexFunds/fundDefinitions";
+import { CREDIT_RATINGS, type CreditRating } from "@/lib/db/types/centralBank";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 
 export const MAX_GLOBAL_SOVEREIGN_ISSUES_PER_PASS = 48;
 
@@ -83,7 +86,108 @@ export function rankSovereignIssuesForBreadth(bonds: Bond[]): Bond[] {
   });
 }
 
-/** Buy sovereign bonds from public float until the 25% reserve floor is met. */
+function ratingIndex(rating: string | undefined, fallback: CreditRating = "BBB"): number {
+  const idx = CREDIT_RATINGS.indexOf((rating ?? fallback) as CreditRating);
+  return idx >= 0 ? idx : CREDIT_RATINGS.indexOf(fallback);
+}
+
+/** Inclusive rating bounds: `minRating` is the worst grade allowed, `maxRating` the best. */
+export function ratingWithinUniverse(
+  rating: string | undefined,
+  universe: Pick<BondFundUniverse, "minRating" | "maxRating">
+): boolean {
+  const idx = ratingIndex(rating);
+  if (universe.minRating && idx > CREDIT_RATINGS.indexOf(universe.minRating)) return false;
+  if (universe.maxRating && idx < CREDIT_RATINGS.indexOf(universe.maxRating)) return false;
+  return true;
+}
+
+/**
+ * The bonds a bond fund may buy right now: its universe's issuer type, its
+ * rating band (sovereign rating from the budget, corporate from the issuer's
+ * snapshot), home paper only for country funds, and for global funds only
+ * currencies with a live rate and no capital controls.
+ */
+export async function loadBondFundCandidates(
+  db: Db,
+  fund: Pick<IndexFund, "countryId" | "anchorCurrencyCode" | "scope">,
+  universe: BondFundUniverse
+): Promise<Bond[]> {
+  const homeCountryId = resolveFundBondCountryId(fund);
+  const query: Record<string, unknown> = {
+    matured: false,
+    defaulted: { $ne: true },
+    publicFloat: { $gt: 0 },
+    ...(universe.issuerType === "sovereign"
+      ? { issuerType: "sovereign" }
+      : { issuerType: { $ne: "sovereign" } }),
+    ...(universe.homeOnly ? { countryId: homeCountryId } : {}),
+  };
+  const bonds = await db.collection<Bond>("bonds").find(query).toArray();
+  if (bonds.length === 0) return [];
+
+  let eligible = bonds;
+  if (universe.minRating || universe.maxRating) {
+    if (universe.issuerType === "sovereign") {
+      const countryIds = [...new Set(bonds.flatMap((b) => (b.countryId ? [b.countryId] : [])))];
+      const budgets = await db
+        .collection<{ _id: string; creditRating?: string }>("federalBudget")
+        .find(
+          { _id: { $in: countryIds.map((id) => getNationalBudgetId(id)) } },
+          { projection: { creditRating: 1 } }
+        )
+        .toArray();
+      const ratingByBudgetId = new Map(budgets.map((b) => [String(b._id), b.creditRating]));
+      eligible = bonds.filter(
+        (b) =>
+          b.countryId &&
+          ratingWithinUniverse(ratingByBudgetId.get(getNationalBudgetId(b.countryId)), universe)
+      );
+    } else {
+      const corpIds = [...new Set(bonds.map((b) => b.corporationId.toString()))];
+      const corps = await db
+        .collection<{ _id: ObjectId; creditRatingSnapshot?: string }>("corporations")
+        .find(
+          { _id: { $in: corpIds.map((id) => new ObjectId(id)) } },
+          { projection: { creditRatingSnapshot: 1 } }
+        )
+        .toArray();
+      const ratingByCorp = new Map(corps.map((c) => [c._id.toString(), c.creditRatingSnapshot]));
+      eligible = bonds.filter((b) =>
+        ratingWithinUniverse(ratingByCorp.get(b.corporationId.toString()), universe)
+      );
+    }
+  }
+  if (universe.homeOnly) return rankSovereignIssuesForBreadth(eligible);
+
+  const currencyRows = await db
+    .collection<{ currencyCode?: string; rate?: number; capitalControls?: boolean }>(
+      "exchangeRates"
+    )
+    .find({})
+    .project({ currencyCode: 1, rate: 1, capitalControls: 1 })
+    .toArray();
+  const tradable = new Set(
+    currencyRows.flatMap((row) =>
+      row.currencyCode && typeof row.rate === "number" && row.rate > 0 ? [row.currencyCode] : []
+    )
+  );
+  const controlled = new Set(
+    currencyRows.flatMap((row) =>
+      row.currencyCode && row.capitalControls === true ? [row.currencyCode] : []
+    )
+  );
+  return rankSovereignIssuesForBreadth(
+    eligible.filter((bond) => isGlobalFundBondEligible(bond, homeCountryId, tradable, controlled))
+  ).slice(0, MAX_GLOBAL_SOVEREIGN_ISSUES_PER_PASS);
+}
+
+/**
+ * Buy bonds from the market pool until the fund's bond target is met: the
+ * 25% reserve floor for equity funds, everything past the cash buffer for a
+ * bond fund (which draws on its definition's universe instead of home
+ * sovereign paper).
+ */
 export async function deployBondReserveFromCash(
   db: Db,
   fund: IndexFund,
@@ -104,6 +208,13 @@ export async function deployBondReserveFromCash(
   }
 
   const countryId = resolveFundBondCountryId(fund);
+  const bondUniverse =
+    fund.kind === "bond"
+      ? getAllFundDefinitions().find((d) => d.slug === fund.slug)?.bondUniverse
+      : undefined;
+  if (fund.kind === "bond" && !bondUniverse) {
+    return { deployedAnchor: 0, unitsPurchased: 0, countryId };
+  }
   const globalDemandEnabled = options?.liquidityTargetEnabled === true && fund.scope === "global";
   const bondQuery = {
     issuerType: "sovereign",
@@ -112,13 +223,15 @@ export async function deployBondReserveFromCash(
     defaulted: { $ne: true },
     publicFloat: { $gt: 0 },
   } as const;
-  let bonds = await db
-    .collection<Bond>("bonds")
-    .find(bondQuery)
-    .sort({ maturityTurn: 1, publicFloat: -1 })
-    .toArray();
+  let bonds = bondUniverse
+    ? await loadBondFundCandidates(db, fund, bondUniverse)
+    : await db
+        .collection<Bond>("bonds")
+        .find(bondQuery)
+        .sort({ maturityTurn: 1, publicFloat: -1 })
+        .toArray();
 
-  if (globalDemandEnabled) {
+  if (globalDemandEnabled && !bondUniverse) {
     const currencyRows = await db
       .collection<{ currencyCode?: string; rate?: number; capitalControls?: boolean }>(
         "exchangeRates"
@@ -158,9 +271,10 @@ export async function deployBondReserveFromCash(
     const unitCostAnchor = costPerUnitAnchor(bond, fxRates);
     if (unitCostAnchor <= 0) continue;
 
-    const issueBudgetAnchor = options?.liquidityTargetEnabled
-      ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
-      : budgetAnchor;
+    const issueBudgetAnchor =
+      options?.liquidityTargetEnabled || bondUniverse
+        ? bondAllocationBudgetForIssue(budgetAnchor, bonds.length - index)
+        : budgetAnchor;
     const maxUnitsByBudget = Math.floor(issueBudgetAnchor / unitCostAnchor);
     const maxUnitsByFloat = Math.floor(bond.publicFloat ?? 0);
     const maxUnitsByPosition = sovereignBondRemainingCapacityUnits(bond, "fundId", fund._id);

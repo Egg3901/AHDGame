@@ -4,7 +4,12 @@ import type { CurrencyCode } from "../../constants/currencies";
 import type { CorporationType } from "../../constants/corporations";
 
 export type IndexFundScope = "country" | "global";
-export type IndexFundKind = "broad" | "sector";
+/**
+ * `broad` and `sector` are equity index funds with a bond reserve; `bond` is a
+ * bond fund: no equities, a cash buffer, and the rest in the bonds its
+ * definition's universe allows (see `BOND_FUND_DEFINITIONS`).
+ */
+export type IndexFundKind = "broad" | "sector" | "bond";
 export type IndexFundStatus = "active" | "paused" | "winding_down" | "delisted";
 export type IndexFundPauseReason = "manual" | "backing_ratio" | "constituent_delisted";
 
@@ -138,7 +143,10 @@ export type IndexFundTransactionKind =
   | "dividend_reinvest"
   | "dividend_pass_through"
   | "bond_allocation"
+  | "bond_sale"
   | "rebalance"
+  /** Holding in a dissolved corporation removed at zero: no buyer can exist. */
+  | "holding_writeoff"
   | "cross_fund_buy"
   | "cross_fund_sell"
   | "liquidity_quote_buy"

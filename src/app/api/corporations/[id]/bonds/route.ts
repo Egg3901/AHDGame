@@ -13,6 +13,12 @@ import type { Corporation, Bond, CorporateSector } from "@/lib/db/types";
 import { getTurnReferenceData } from "@/lib/corporations/turnReferenceData";
 import { withCorpLock } from "@/lib/corporations/corpMoneyLock";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { bondPoolCurrency } from "@/lib/bonds/marketPool";
+import {
+  debitPoolForPrimary,
+  planCorporateUnderwriting,
+  readPoolForPrimary,
+} from "@/lib/bonds/primaryMarket";
 import type { BondMaturityTurns } from "@/lib/db/types/bond";
 import {
   BOND_ISSUANCE_FREEZE_UNTIL,
@@ -727,6 +733,37 @@ export async function POST(request: Request, { params }: RouteParams) {
       postCorpFxRate
     );
 
+    // Primary market: the currency's bond market pool underwrites what it can
+    // afford and wants at par. The corp is funded for those units only; the
+    // rest places turn by turn as the pool's cash allows. A world with no pool
+    // for this currency (seeds, pre-migration) keeps the old full funding.
+    const poolCurrency = bondPoolCurrency({ currencyCode: corpCurrencyCode ?? undefined });
+    const pool = await readPoolForPrimary(db, poolCurrency);
+    let placedUnits = totalUnits;
+    if (pool) {
+      const plan = planCorporateUnderwriting({
+        requestedUnits: totalUnits,
+        poolCashLocal: pool.cashLocal,
+        poolM2Local: pool.m2Local,
+        rating: creditResult.rating,
+        pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
+      });
+      placedUnits = plan.placedUnits;
+      if (placedUnits > 0) {
+        const paid = await debitPoolForPrimary(
+          db,
+          poolCurrency,
+          placedUnits,
+          BOND_UNIT_FACE_VALUE,
+          now
+        );
+        if (paid <= 0) placedUnits = 0;
+      }
+    }
+    const unsoldUnits = totalUnits - placedUnits;
+    const placedFaceValueLocal = placedUnits * BOND_UNIT_FACE_VALUE;
+    const primaryFillRatio = totalUnits > 0 ? placedUnits / totalUnits : 1;
+
     const bondDoc: Omit<Bond, "_id"> = {
       corporationId: corporation._id,
       faceValue: BOND_UNIT_FACE_VALUE,
@@ -735,8 +772,11 @@ export async function POST(request: Request, { params }: RouteParams) {
       issuedAtTurn: currentTurn,
       maturityTurn: currentTurn + maturityTurns,
       marketPrice: 1.0, // Issued at par
-      totalIssued: actualFaceValueLocal,
-      publicFloat: totalUnits, // All units available for purchase initially
+      totalIssued: placedFaceValueLocal,
+      publicFloat: placedUnits,
+      requestedUnits: totalUnits,
+      unsoldUnits,
+      primaryFillRatio,
       holders: [],
       defaulted: false,
       defaultedAtTurn: null,
@@ -751,21 +791,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       updatedAt: now,
     };
 
-    // Proceeds go to liquidCapital which is itself LOCAL — direct $inc.
-    const faceValueInCorpCapital = actualFaceValueLocal;
+    // Proceeds for the placed units go to liquidCapital, which is itself LOCAL.
+    const faceValueInCorpCapital = placedFaceValueLocal;
 
     const insertResult = await db.collection("bonds").insertOne(bondDoc);
     // Serialize the treasury credit against other same-corp money ops (e.g. a
     // hostile takeover firing on this corp in the same instant) so the two
     // writes can't interleave and drop one (issue #2949).
-    await withCorpLock(corporation._id, () =>
-      db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: corporation._id },
-          { $inc: { liquidCapital: faceValueInCorpCapital }, $set: { updatedAt: now } }
-        )
-    );
+    if (faceValueInCorpCapital > 0) {
+      await withCorpLock(corporation._id, () =>
+        db
+          .collection<Corporation>("corporations")
+          .updateOne(
+            { _id: corporation._id },
+            { $inc: { liquidCapital: faceValueInCorpCapital }, $set: { updatedAt: now } }
+          )
+      );
+    }
     const insertedBondId = insertResult.insertedId;
 
     void emitTx(db, {
@@ -777,7 +819,14 @@ export async function POST(request: Request, { params }: RouteParams) {
       subjectName: corporation.name,
       amount: faceValueInCorpCapital,
       currencyCode: (corpCurrencyCode ?? "USD") as CurrencyCode,
-      meta: { bondId: insertedBondId.toString(), units: totalUnits, couponRate, maturityTurns },
+      meta: {
+        bondId: insertedBondId.toString(),
+        units: placedUnits,
+        requestedUnits: totalUnits,
+        unsoldUnits,
+        couponRate,
+        maturityTurns,
+      },
     });
 
     const matLabel =
@@ -797,6 +846,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       maturityTurn: currentTurn + maturityTurns,
       creditRating: creditResult.rating,
       units: totalUnits,
+      unitsPlaced: placedUnits,
+      unitsUnsold: unsoldUnits,
+      fillRatio: Math.round(primaryFillRatio * 10_000) / 10_000,
+      proceeds: placedFaceValueLocal,
     });
   } catch (error) {
     return handleRouteError(error);

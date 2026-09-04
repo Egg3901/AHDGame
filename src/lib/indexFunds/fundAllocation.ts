@@ -49,11 +49,29 @@ export function computeTotalFundBackingAnchor(
   return computeHoldingsValueAnchor(fund) + bondPrincipal + cashAnchor;
 }
 
-/** At most 75% of backing in equities; at least 25% in the bond/cash reserve bucket. */
+/** A bond fund holds no equities: everything past the cash buffer goes into bonds. */
+export const BOND_FUND_MAX_EQUITY_ALLOCATION = 0;
+export const BOND_FUND_MIN_RESERVE_ALLOCATION = 1;
+
+/**
+ * Equity funds: at most 75% of backing in equities; at least 25% in the
+ * bond/cash reserve bucket. Bond funds: no equities, everything in the reserve
+ * bucket, and the bond target is the whole bucket less the cash buffer.
+ */
 export function computeFundAllocationBreakdown(
-  fund: Pick<IndexFund, "cashAnchor" | "holdings" | "bondAllocations">,
+  fund: Pick<IndexFund, "cashAnchor" | "holdings" | "bondAllocations"> & {
+    kind?: IndexFund["kind"];
+  },
   options?: { bondPrincipalAnchor?: number; bondLiquidityTargetEnabled?: boolean }
 ): FundAllocationBreakdown {
+  const isBondFund = fund.kind === "bond";
+  const maxEquityShare = isBondFund
+    ? BOND_FUND_MAX_EQUITY_ALLOCATION
+    : INDEX_FUND_MAX_EQUITY_ALLOCATION;
+  const minReserveShare = isBondFund
+    ? BOND_FUND_MIN_RESERVE_ALLOCATION
+    : INDEX_FUND_MIN_BOND_RESERVE_ALLOCATION;
+  const liquidityTarget = isBondFund || options?.bondLiquidityTargetEnabled === true;
   const holdingsValueAnchor = computeHoldingsValueAnchor(fund);
   const bondPrincipalAnchor = options?.bondPrincipalAnchor ?? sumBondPrincipalAnchor(fund);
   const cashAnchor = Number.isFinite(fund.cashAnchor) ? Math.max(0, fund.cashAnchor) : 0;
@@ -79,18 +97,18 @@ export function computeFundAllocationBreakdown(
   }
 
   const reserveValueAnchor = bondPrincipalAnchor + cashAnchor;
-  const maxEquityValueAnchor = INDEX_FUND_MAX_EQUITY_ALLOCATION * totalBackingAnchor;
-  const minReserveValueAnchor = INDEX_FUND_MIN_BOND_RESERVE_ALLOCATION * totalBackingAnchor;
+  const maxEquityValueAnchor = maxEquityShare * totalBackingAnchor;
+  const minReserveValueAnchor = minReserveShare * totalBackingAnchor;
   const equityHeadroomAnchor = Math.max(0, maxEquityValueAnchor - holdingsValueAnchor);
   const reserveShortfallAnchor = Math.max(0, minReserveValueAnchor - reserveValueAnchor);
   const minCashBufferAnchor = Math.min(
     cashAnchor,
     INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION * totalBackingAnchor
   );
-  const targetBondValueAnchor = options?.bondLiquidityTargetEnabled
+  const targetBondValueAnchor = liquidityTarget
     ? Math.max(0, minReserveValueAnchor - minCashBufferAnchor)
     : bondPrincipalAnchor + reserveShortfallAnchor;
-  const bondDeploymentNeededAnchor = options?.bondLiquidityTargetEnabled
+  const bondDeploymentNeededAnchor = liquidityTarget
     ? Math.max(0, targetBondValueAnchor - bondPrincipalAnchor)
     : reserveShortfallAnchor;
   const cashAvailableForBondDeployAnchor = Math.max(

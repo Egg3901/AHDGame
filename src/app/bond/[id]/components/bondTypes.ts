@@ -26,6 +26,15 @@ export interface BondDetail {
   publicFloat: number;
   heldUnits: number;
   publicFloatPercentage: number;
+  /** Pool bid / ask per unit (LOCAL); absent on older responses. */
+  bidPricePerUnit?: number;
+  askPricePerUnit?: number;
+  /** Units the market pool can buy right now at its bid. */
+  marketDepthUnits?: number;
+  /** Primary market: units the issuer asked for, and how many are still placing. */
+  requestedUnits?: number | null;
+  unsoldUnits?: number;
+  primaryFillRatio?: number | null;
   defaulted: boolean;
   defaultedAtTurn: number | null;
   defaultCure?: {

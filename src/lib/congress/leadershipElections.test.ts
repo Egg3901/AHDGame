@@ -118,7 +118,10 @@ describe("triggerLeadershipElectionsAfterChamberVote", () => {
     );
   });
 
-  it("auto-nominates a Pro Tempore incumbent even when their party is no longer in the majority bloc", async () => {
+  it("reopens the Pro Tempore race but does not re-seed an incumbent outside the majority party", async () => {
+    // Pro Tempore is `largest-single-party`, not `any-seated`: leaving the
+    // majority party ends eligibility to run for it, so the reopened race must
+    // not seed the defector back onto the ballot unopposed.
     const incumbentId = new ObjectId();
     const { getSenateComposition } = await import("@/lib/congress/senateComposition");
     vi.mocked(getSenateComposition).mockResolvedValue({
@@ -132,7 +135,7 @@ describe("triggerLeadershipElectionsAfterChamberVote", () => {
         ? {
             role: "president_pro_tempore",
             characterId: incumbentId,
-            characterName: "Out Of Bloc Pro Tempore",
+            characterName: "Defected Pro Tempore",
             party: "OPP",
           }
         : null;
@@ -151,22 +154,17 @@ describe("triggerLeadershipElectionsAfterChamberVote", () => {
     const { triggerLeadershipElectionsAfterChamberVote } = await import("./leadershipElections");
     await triggerLeadershipElectionsAfterChamberVote(db as unknown as Db, "senate", new Date());
 
-    expect(db.collectionMocks["senateLeadershipNominations"]!.updateOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        role: "pro_tempore",
-        nomineeId: incumbentId,
-        status: { $in: ["open", "voting"] },
-      }),
-      expect.objectContaining({
-        $setOnInsert: expect.objectContaining({
-          nomineeId: incumbentId,
-          nomineeParty: "OPP",
-          nominatedByName: "Incumbent",
-          role: "pro_tempore",
-        }),
-      }),
+    // The race itself reopens...
+    expect(db.collectionMocks["senateLeadershipElections"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "pro_tempore" },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "voting" }) }),
       { upsert: true }
     );
+    // ...but the ineligible incumbent is not put on the ballot.
+    const proTemNominations = db.collectionMocks[
+      "senateLeadershipNominations"
+    ]!.updateOne.mock.calls.filter((call) => (call[0] as { role?: string }).role === "pro_tempore");
+    expect(proTemNominations).toHaveLength(0);
   });
 
   it("does not auto-nominate a House Majority Leader incumbent from a coalition partner", async () => {
@@ -367,7 +365,7 @@ describe("clearIneligibleHouseLeadershipNominations", () => {
     );
   });
 
-  it("is a no-op for any-seated policy roles (Speaker / Pro Tem / Bundestagspraesident)", async () => {
+  it("is a no-op for any-seated policy roles (Speaker / Bundestagspraesident)", async () => {
     // The function only iterates House election roles, none of which are
     // currently any-seated. But within the loop the early-`continue` for
     // any-seated should never call find()/updateMany() for those roles.

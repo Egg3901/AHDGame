@@ -269,11 +269,15 @@ export function FundTable({
                   const href = `${fundBasePath}/${fund.slug}`;
                   const ccy = fund.anchorCurrencyCode as CurrencyCode;
                   const scopeLabel =
-                    fund.scope === "country"
-                      ? (fund.countryId ?? "Country")
-                      : fund.kind === "sector"
-                        ? "Global Sector"
-                        : "Global";
+                    fund.kind === "bond"
+                      ? fund.scope === "country"
+                        ? `${fund.countryId ?? "Country"} Bonds`
+                        : "Global Bonds"
+                      : fund.scope === "country"
+                        ? (fund.countryId ?? "Country")
+                        : fund.kind === "sector"
+                          ? "Global Sector"
+                          : "Global";
                   return (
                     <tr
                       key={fund.id}

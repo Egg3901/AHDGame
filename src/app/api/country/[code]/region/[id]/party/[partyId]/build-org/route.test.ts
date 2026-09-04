@@ -18,6 +18,13 @@ vi.mock("@/lib/parties/commands/spendPoliticalStrength", () => ({
   NATIONAL_GEOGRAPHY_SENTINEL: "__national__",
 }));
 vi.mock("@/lib/turn/partyOrg/presence", () => ({ checkPartyPresence: vi.fn() }));
+vi.mock("@/lib/parties/commands/chargeOrgBuildFunds", () => ({
+  chargeOrgBuildFunds: vi.fn(),
+}));
+vi.mock("@/lib/politicalStrength/orgBuildStateSize", () => ({
+  resolveOrgBuildSizeMultiplier: vi.fn().mockResolvedValue(1),
+  clearOrgBuildSizeCache: vi.fn(),
+}));
 
 function makeRequest() {
   return new Request("http://localhost/api/country/us/region/CA/party/1/build-org", {
@@ -68,6 +75,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: new ObjectId(),
@@ -81,7 +89,8 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     const { checkPartyPresence } = await import("@/lib/turn/partyOrg/presence");
     vi.mocked(checkPartyPresence).mockResolvedValue(true);
 
-    // Default: spender's state-party row found, sufficient state.
+    // Default: spender's state-party row found, sufficient state PS and a
+    // treasury that fully funds the click's cash price.
     db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
       _id: spenderRowId,
       stateId,
@@ -89,6 +98,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 20,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
       viceChairId: new ObjectId(),
@@ -104,6 +114,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 20,
           politicalStrength: 10,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -112,6 +123,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 30,
           politicalStrength: 8,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -124,6 +136,17 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       newPoliticalStrength: 10 - BUILD_ORG_BASE_PS_COST,
       newPressure: 1,
     });
+
+    // Default: the treasury covers the click in full.
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+    vi.mocked(chargeOrgBuildFunds).mockImplementation(async (input) => ({
+      charged: input.amount,
+    }));
+
+    // Default: an average-sized state, so prices read as the flat rate.
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(1);
   });
 
   it("rejects invalid country code", async () => {
@@ -160,6 +183,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 30,
           politicalStrength: 8,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -168,6 +192,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: nationalChairId,
@@ -246,6 +271,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 0,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: false,
       chairId: stateChairId,
     });
@@ -311,6 +337,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 20,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: new ObjectId(),
       viceChairId: new ObjectId(),
@@ -340,6 +367,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: new ObjectId(),
@@ -377,6 +405,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: nationalChairId,
@@ -442,6 +471,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
     vi.mocked(findPartyBySequentialId).mockResolvedValue({
       _id: new ObjectId(),
       sequentialId: 1,
+      treasury: 50_000_000,
       countryId: "US",
       name: "Test Party",
       chairId: dualId, // national chair
@@ -465,6 +495,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 20,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: dualId,
     });
@@ -501,6 +532,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 20,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: new ObjectId(),
       viceChairId: new ObjectId(),
@@ -538,6 +570,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 100,
           politicalStrength: 10,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -546,6 +579,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 0, // no Org → not a poachable rival
           politicalStrength: 10,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -556,6 +590,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 100,
       politicalStrength: 10,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
     });
@@ -639,6 +674,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 60,
       politicalStrength: 29,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
     });
@@ -651,6 +687,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 60,
           politicalStrength: 29,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -659,6 +696,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 20,
           politicalStrength: 6,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_3`,
@@ -667,6 +705,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 20,
           politicalStrength: 4,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -706,6 +745,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       countryId: "US",
       organization: 60,
       politicalStrength: 29,
+      treasury: 10_000_000,
       hasPresence: true,
       chairId: stateChairId,
     });
@@ -718,6 +758,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 60,
           politicalStrength: 29,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_2`,
@@ -726,6 +767,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 20,
           politicalStrength: 5,
+          treasury: 10_000_000,
         },
         {
           _id: `${stateId}_3`,
@@ -734,6 +776,7 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
           countryId: "US",
           organization: 20,
           politicalStrength: 5,
+          treasury: 10_000_000,
         },
       ],
     } as never);
@@ -774,5 +817,287 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/build-org", () =>
       params: Promise.resolve({ code: "us", id: stateId, partyId }),
     });
     expect(response.status).toBe(200);
+  });
+
+  // ── Treasury cost (2026-09-02) ──────────────────────────────────────────
+
+  it("charges the STATE treasury for a state-scope click and reports the cash cost", async () => {
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    // US state rate 37,500 × 0.075 × 1 PS.
+    const expectedPrice = Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST);
+    expect(chargeOrgBuildFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: "state",
+        stateRowId: spenderRowId,
+        partyId,
+        countryId: "US",
+        amount: expectedPrice,
+      }),
+      expect.anything()
+    );
+    expect(body.cashPrice).toBeCloseTo(expectedPrice, 6);
+    expect(body.cashCost).toBeCloseTo(expectedPrice, 6);
+    expect(body.fundedFraction).toBe(1);
+  });
+
+  it("charges the NATIONAL treasury when the national pool pays the PS", async () => {
+    const nationalChairId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "nationalChair",
+        isAdmin: false,
+        character: { _id: nationalChairId, name: "National Chair" },
+      },
+    } as never);
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      treasury: 50_000_000,
+      countryId: "US",
+      name: "Test Party",
+      chairId: nationalChairId,
+      viceChairId: new ObjectId(),
+    } as never);
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+
+    // US national rate 75,000 × 0.075 × 1 PS — twice the state price.
+    expect(chargeOrgBuildFunds).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scope: "national-targeted",
+        amount: Math.round(75_000 * 0.075 * BUILD_ORG_BASE_PS_COST),
+      }),
+      expect.anything()
+    );
+  });
+
+  it("returns 400 and spends NO PS when the treasury is below the funded floor", async () => {
+    // 10% of the price is under the 25% floor.
+    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
+      _id: spenderRowId,
+      stateId,
+      partyId,
+      countryId: "US",
+      organization: 20,
+      politicalStrength: 10,
+      treasury: 37_500 * 0.075 * 0.1,
+      hasPresence: true,
+      chairId: stateChairId,
+      viceChairId: new ObjectId(),
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(400);
+
+    // A refused click must cost the player nothing: no PS debit, no pressure
+    // escalation, no Org change, no cash movement.
+    const { spendPoliticalStrength } =
+      await import("@/lib/parties/commands/spendPoliticalStrength");
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+    expect(spendPoliticalStrength).not.toHaveBeenCalled();
+    expect(chargeOrgBuildFunds).not.toHaveBeenCalled();
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("scales the Org gain down when the treasury only partly funds the click", async () => {
+    const { POST } = await import("./route");
+    const fullResponse = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    const fullBody = await fullResponse.json();
+
+    // Same state, but the charge only recovers half the price. The statePartyOrg
+    // findOne mock is a fixed resolved value, so the second call sees identical
+    // Org / PS — only the funded share differs.
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+    vi.mocked(chargeOrgBuildFunds).mockImplementation(async (input) => ({
+      charged: input.amount / 2,
+    }));
+
+    const halfResponse = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    const halfBody = await halfResponse.json();
+
+    expect(halfResponse.status).toBe(200);
+    expect(halfBody.fundedFraction).toBeCloseTo(0.5, 6);
+    expect(halfBody.orgGain).toBeCloseTo(fullBody.orgGain * 0.5, 6);
+  });
+
+  // Organizing a big state costs more than a small one. Both halves of the bill
+  // — the affordability gate and the debit — must use the same multiplier, or a
+  // click could pass the gate at one price and be charged another.
+  it("charges the size-scaled price in a larger-than-average state", async () => {
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(1.6);
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    const expected = Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST * 1.6);
+    expect(body.cashPrice).toBe(expected);
+    expect(chargeOrgBuildFunds).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: expected }),
+      expect.anything()
+    );
+  });
+
+  it("charges less in a smaller-than-average state", async () => {
+    const { resolveOrgBuildSizeMultiplier } =
+      await import("@/lib/politicalStrength/orgBuildStateSize");
+    vi.mocked(resolveOrgBuildSizeMultiplier).mockResolvedValue(0.5);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    const body = await response.json();
+
+    expect(body.cashPrice).toBe(Math.round(37_500 * 0.075 * BUILD_ORG_BASE_PS_COST * 0.5));
+  });
+
+  it("quotes the next click against the pool this one spent", async () => {
+    // Dual-role officer spending the national pool: the follow-up estimate the
+    // overview card renders must price the national tier, not the state one.
+    const officerId = new ObjectId();
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        username: "dual",
+        isAdmin: false,
+        character: { _id: officerId, name: "Dual Officer" },
+      },
+    } as never);
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: new ObjectId(),
+      sequentialId: 1,
+      treasury: 50_000_000,
+      countryId: "US",
+      name: "Test Party",
+      chairId: officerId,
+      viceChairId: new ObjectId(),
+    } as never);
+    db.collectionMocks["statePartyOrg"]!.findOne.mockResolvedValue({
+      _id: spenderRowId,
+      stateId,
+      partyId,
+      countryId: "US",
+      organization: 20,
+      politicalStrength: 10,
+      treasury: 10_000_000,
+      hasPresence: true,
+      chairId: officerId,
+      viceChairId: new ObjectId(),
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequestWithBody({ psPool: "national" }), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.nextPreview.ok).toBe(true);
+    expect(body.nextPreview.scope).toBe("national-targeted");
+  });
+
+  it("floors a click whose treasury vanished after the PS was committed", async () => {
+    // The charge recovered nothing (a concurrent debit drained the row). PS is
+    // already spent, so the click must still land at the minimum funded share
+    // rather than buying zero Org.
+    const { chargeOrgBuildFunds } = await import("@/lib/parties/commands/chargeOrgBuildFunds");
+    vi.mocked(chargeOrgBuildFunds).mockResolvedValue({ charged: 0 });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.fundedFraction).toBe(0.25);
+    expect(body.orgGain).toBeGreaterThan(0);
+  });
+
+  it("resolves the spender row by compound _id when its fields drifted (ticket #1256)", async () => {
+    // A party renumber (country merge) rewrote statePartyOrg.partyId but not
+    // the compound _id. Before the fix the field-triple read missed SED's row
+    // entirely and the poach pass treated the miskeyed rows as rivals —
+    // clicking Build Org for SED drained the number the party page displayed.
+    // The read must fall back to the compound _id so the spender's own row
+    // resolves.
+    const drifted = {
+      _id: "CA_7", // stale suffix; party 1's canonical key is CA_1
+      stateId,
+      partyId: "1",
+      countryId: "US",
+      organization: 36,
+      politicalStrength: 29,
+      treasury: 10_000_000, // post-pricing routes fund-floor on treasury
+      hasPresence: true,
+      chairId: stateChairId,
+    };
+    // findStatePartyOrgRow probes the field triple first, then the compound
+    // _id. This fixture is the post-drift live shape: NEITHER probe can match
+    // the triple (partyId "1" lives on a row whose _id says CA_7), so the _id
+    // probe is what resolves it. Return the drifted row for both probes —
+    // auth + eligibility re-read the same row through the same helper.
+    db.collectionMocks["statePartyOrg"]!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) =>
+        filter._id === "CA_7" || filter.partyId === "1" ? drifted : null
+    );
+    db.collectionMocks["statePartyOrg"]!.find.mockReturnValue({
+      toArray: async () => [
+        drifted,
+        {
+          _id: `${stateId}_2`,
+          stateId,
+          partyId: "2",
+          countryId: "US",
+          organization: 20,
+          politicalStrength: 6,
+        },
+      ],
+    } as never);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    // The spender's own row resolved: the build proceeds from org 36.
+    expect(body.ok).toBe(true);
+    expect(body.newOrg).toBeGreaterThanOrEqual(36);
   });
 });

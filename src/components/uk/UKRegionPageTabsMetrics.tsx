@@ -9,7 +9,6 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getStatsIdentity } from "@/lib/constants/nationalStatsIdentity";
 import { RegionalMetricsHeader } from "@/components/metrics/RegionalMetricsHeader";
 import { RegionalStatBoards } from "@/components/metrics/RegionalStatBoards";
-import { RegionalRegistryBoard } from "@/app/country/[code]/political-metrics/components/RegionalRegistryBoard";
 import { ApprovalTooltip } from "@/components/ApprovalTooltip";
 import { ApprovalChart } from "@/components/charts/ApprovalChart";
 import { SectionLabel } from "@/components/ui";
@@ -177,10 +176,6 @@ export function UKRegionPageTabsMetrics({ regionId }: { regionId: string }) {
           </p>
         )}
       </div>
-
-      {/* SP6: the region's own political registry — the nine category scores
-          from this region's politicalMetrics doc, in the national card grammar. */}
-      <RegionalRegistryBoard countryId="UK" regionId={regionId} regionName={stateName} />
 
       {/* UK Regional Budget Summary */}
       {budget && <UKBudgetPanel budget={budget} />}

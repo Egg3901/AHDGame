@@ -485,3 +485,43 @@ export function persuasionResistance(reg: number | undefined): number {
 export function effectivePeelableFraction(reg: number | undefined): number {
   return transferableShare(reg) * (1 - persuasionResistance(reg));
 }
+
+// ─── Money-driver spend stock ────────────────────────────────────────────────
+//
+// Ticket #1261: the money driver used to read raw spend-this-turn, which
+// forgets everything every turn. A steady spender who idles one turn read
+// exactly like a side that never spent at all, and any-spend vs ~nothing
+// saturated the log-ratio bar over pocket change. The driver now reads a
+// decaying stock of recent spend instead: each turn's spend is added in and
+// the carried balance fades. Hoarded treasuries still score zero (the stock
+// only grows through actual spend), steady spending beats one-shot splurges
+// over time, and idle turns fade gradually instead of cliffing to zero —
+// the same fade-not-cliff treatment Support already gets via
+// SUPPORT_DECAY_PER_TURN. Cycle reset is free: campaign rows are deleted on
+// resolution, so no stock carries into the next election.
+
+/**
+ * Fraction of a campaign's spend stock carried from one turn to the next.
+ * `0.8` = half-life ~3.1 turns, steady state 5x per-turn spend. A 100x
+ * one-time splurge outscores steady spending for ~13 turns, then loses —
+ * recency matters, but so does persistence. Tuning knob, not invariant.
+ */
+export const SPEND_STOCK_RETENTION = 0.8;
+
+/** Stock values below $1 are dust: dropped to keep rows self-cleaning. */
+export const SPEND_STOCK_DUST_CUTOFF = 1;
+
+/**
+ * One turn of spend-stock rollover. Pure helper; the turn-phase sweep in
+ * `campaignSpendReset.ts` applies the same math as a DB pipeline update.
+ */
+export function rollSpendStock(
+  stock: number | undefined,
+  spendThisTurn: number | undefined,
+  retention: number = SPEND_STOCK_RETENTION
+): number | undefined {
+  const prior = typeof stock === "number" && stock > 0 ? stock : 0;
+  const fresh = typeof spendThisTurn === "number" && spendThisTurn > 0 ? spendThisTurn : 0;
+  const rolled = prior * retention + fresh;
+  return rolled < SPEND_STOCK_DUST_CUTOFF ? undefined : rolled;
+}

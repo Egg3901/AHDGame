@@ -125,7 +125,9 @@ export function processSectors(
   /** gameConfig.commandEconomyEnabled — gates the soft-budget exemptions. */
   commandEconomyEnabled: boolean = false,
   /** gameConfig.privateBankingEnabled — branch/commodity capacity split. */
-  privateBankingEnabled: boolean = false
+  privateBankingEnabled: boolean = false,
+  /** Currency pools that supersede issuer-funded share-buyback escrow. */
+  equityMarketPoolCurrencies: ReadonlySet<CurrencyCode> = new Set()
 ): SectorCalculationsResult {
   const currentTurn = typeof turn === "number" ? turn : 1;
 
@@ -205,6 +207,7 @@ export function processSectors(
     fee: number;
   }> = [];
   const fundDividendAccruals: FundDividendAccrual[] = [];
+  const equityPoolDividendAccruals: SectorCalculationsResult["equityPoolDividendAccruals"] = [];
   const marketingSpendAnchorByBuyerId = new Map<string, number>();
   const advertisingSellerDeliveredValues = [
     ...(market.advertisingSellerDeliveredValueAnchorByCorpId ?? new Map()),
@@ -743,8 +746,7 @@ export function processSectors(
       !imfBailoutActive &&
       payoutDividendRate > 0 &&
       netIncomeBeforeDividends > 0 &&
-      corp.shareholders &&
-      corp.shareholders.length > 0
+      ((corp.shareholders?.length ?? 0) > 0 || (corp.publicFloat ?? 0) > 0)
     ) {
       const rawDividendPool = netIncomeBeforeDividends * (payoutDividendRate / 100);
       hourlyDividendPayout = Math.min(rawDividendPool, Math.max(0, netIncomeBeforeDividends));
@@ -791,6 +793,19 @@ export function processSectors(
             corpDividendPaymentsAnchorByCorpCurrency.set(hid, byCcy);
           }
         }
+      }
+      const floatShares = Math.max(0, Math.min(totalShares, corp.publicFloat ?? 0));
+      const floatDividendAnchor = hourlyDividendPayout * (floatShares / totalShares);
+      if (floatDividendAnchor > 0) {
+        equityPoolDividendAccruals.push({
+          corporationId: corp._id,
+          currency: (resolvedHomeCurrency ?? "USD") as CurrencyCode,
+          amountLocal: writeCorpEconomicLocal(
+            floatDividendAnchor,
+            resolvedHomeCurrency,
+            localFxRate
+          ),
+        });
       }
     }
 
@@ -952,6 +967,7 @@ export function processSectors(
     // by both this bulk op and the initial snapshot. The settlement pass later
     // applies its delta to both representations before pricing and persistence.
     const escrowFundingMove =
+      !equityMarketPoolCurrencies.has((resolvedHomeCurrency ?? "USD") as CurrencyCode) &&
       getShareBuybackMode(corp) === "escrow"
         ? computeEscrowFundingTransfer({
             fundingPerTurn: corp.escrowFundingPerTurn,
@@ -1285,6 +1301,7 @@ export function processSectors(
     corpDividendPaymentsAnchorByCorpCurrency,
     sectorFxSpreadFees,
     fundDividendAccruals,
+    equityPoolDividendAccruals,
     domesticIncomeByCountry,
     foreignIncomeByCountry,
     domesticIncomeByOperatingState,

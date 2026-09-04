@@ -2,7 +2,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import { commodityMixWeight as mixWeight } from "@/lib/constants/commodities";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 import { LOYAL_POOL_FRACTION, SLICE_NOISE_FLOOR } from "@/lib/market/brandLoyalty";
-import { isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import { isStateScopedCommodity, supplyAgreementScopeKey } from "@/lib/market/commodityMarketScope";
 
 /**
  * Market clearing — Tier 3 (Fix 2) of the structural market rework
@@ -361,20 +361,26 @@ export function computeClearingFactors(args: {
   loyaltySliceEnabled?: boolean;
   /**
    * Private supply agreements (supplyAgreementsEnabled). Per supplier corp, the
-   * contracted output units per commodity. computeClearingFactors distributes
+   * contracted output units per scope key. computeClearingFactors distributes
    * each corp's contracted volume across its selling sectors for that commodity
    * and guarantees their fill before loyalty/cheapest-first.
+   *
+   * Keys are {@link supplyAgreementScopeKey}: a bare commodity is a
+   * corporation-wide reservation split across every book the corp sells in;
+   * `commodity@stateId` is a state-scoped reservation that lands only in that
+   * state's book, on that state's sectors.
    */
-  contractedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<CommodityType, number>>;
+  contractedByCorpCommodity?: ReadonlyMap<string, ReadonlyMap<string, number>>;
   /** sectorId → owning corpId, required to resolve contracts to sectors. */
   sectorCorpId?: ReadonlyMap<string, string>;
   /**
-   * Optional settlement sink: supplier corpId → commodity → contracted units
+   * Optional settlement sink: supplier corpId → scope key → contracted units
    * that ACTUALLY cleared this pass. The caller uses it to settle the bilateral
    * price premium (a contract-for-difference) as a separate cash transfer, so
-   * the revenue/tax/share-price legs stay untouched.
+   * the revenue/tax/share-price legs stay untouched. Keyed exactly like
+   * `contractedByCorpCommodity`.
    */
-  contractSettlementOut?: Map<string, Map<CommodityType, number>>;
+  contractSettlementOut?: Map<string, Map<string, number>>;
   /**
    * Optional production sink: supplier corpId → commodity → the units that corp
    * actually OFFERED this pass (under plants, its real produced units for that
@@ -593,6 +599,10 @@ export function computeClearingFactors(args: {
     const sold = new Map<string, number>();
     const contractedCorpBySector = new Map<string, string>();
     const contractedShareBySector = new Map<string, number>();
+    // Which reservation(s) a sector's contracted share came from, so the
+    // settlement sink can credit a state contract and a corporation-wide one
+    // separately. Shares sum to `contractedShareBySector`.
+    const contractedKeysBySector = new Map<string, Array<{ key: string; share: number }>>();
     for (const [g, groupSellers] of partitioned) {
       const bal = balanceForBook(g, commodity);
       const laggedSupply = bal?.supply ?? 0;
@@ -609,6 +619,14 @@ export function computeClearingFactors(args: {
       let contractedUnitsById: Map<string, number> | undefined;
       if (args.contractedByCorpCommodity && args.sectorCorpId) {
         contractedUnitsById = new Map<string, number>();
+        // A state book also carries the state-scoped reservations addressed to
+        // it. Those are whole, not sliced by unit weight: the contract named
+        // this state, so its plants here are the only ones that can fill it.
+        const bookStateId = g.startsWith(STATE_GROUP_PREFIX)
+          ? g.slice(STATE_GROUP_PREFIX.length)
+          : null;
+        const stateKey =
+          bookStateId != null ? supplyAgreementScopeKey(commodity, bookStateId) : null;
         const unitsByCorp = new Map<string, { total: number; sellers: ClearingSeller[] }>();
         for (const s of groupSellers) {
           const corpId = args.sectorCorpId.get(s.id);
@@ -619,17 +637,32 @@ export function computeClearingFactors(args: {
           unitsByCorp.set(corpId, e);
         }
         for (const [corpId, e] of unitsByCorp) {
-          const contractedAll = args.contractedByCorpCommodity.get(corpId)?.get(commodity) ?? 0;
+          const byKey = args.contractedByCorpCommodity.get(corpId);
+          const contractedAll = byKey?.get(commodity) ?? 0;
           const allUnits = corpUnitsTotal.get(corpId) ?? 0;
-          // This group's slice of the corp's contracted volume, by unit weight.
-          const contracted = allUnits > 0 ? contractedAll * (e.total / allUnits) : 0;
+          // This group's slice of the corp's corporation-wide volume, by unit weight.
+          const wide = allUnits > 0 ? contractedAll * (e.total / allUnits) : 0;
+          const stateContracted = stateKey != null ? (byKey?.get(stateKey) ?? 0) : 0;
+          const contracted = Math.max(0, wide) + Math.max(0, stateContracted);
           if (contracted <= 0 || e.total <= 0) continue;
           const take = Math.min(contracted, e.total);
+          // Both reservations shrink together when the book cannot cover them.
+          const fillRatio = take / contracted;
           for (const s of e.sellers) {
             const sectorShare = (take * s.units) / e.total;
             contractedUnitsById.set(s.id, sectorShare);
             contractedCorpBySector.set(s.id, corpId);
             contractedShareBySector.set(s.id, sectorShare);
+            const keys: Array<{ key: string; share: number }> = [];
+            if (wide > 0)
+              keys.push({ key: commodity, share: (wide * fillRatio * s.units) / e.total });
+            if (stateContracted > 0 && stateKey != null) {
+              keys.push({
+                key: stateKey,
+                share: (stateContracted * fillRatio * s.units) / e.total,
+              });
+            }
+            contractedKeysBySector.set(s.id, keys);
           }
         }
       }
@@ -666,10 +699,17 @@ export function computeClearingFactors(args: {
         const filledFraction = sold.get(sectorId) ?? 0;
         const filledUnits = seller ? Math.min(contractedShare, filledFraction * seller.units) : 0;
         if (filledUnits <= 0) continue;
-        const byCommodity =
-          args.contractSettlementOut.get(corpId) ?? new Map<CommodityType, number>();
-        byCommodity.set(commodity, (byCommodity.get(commodity) ?? 0) + filledUnits);
-        args.contractSettlementOut.set(corpId, byCommodity);
+        const byKey = args.contractSettlementOut.get(corpId) ?? new Map<string, number>();
+        // Credit each reservation its share of what actually filled.
+        const keys = contractedKeysBySector.get(sectorId) ?? [
+          { key: commodity, share: contractedShare },
+        ];
+        for (const { key, share } of keys) {
+          if (!(share > 0)) continue;
+          const credited = filledUnits * (share / contractedShare);
+          byKey.set(key, (byKey.get(key) ?? 0) + credited);
+        }
+        args.contractSettlementOut.set(corpId, byKey);
       }
     }
   }

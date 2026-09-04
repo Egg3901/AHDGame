@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   isOfferLive,
   validatePeaceOffer,
+  withdrawalGate,
   sideWouldEmpty,
   maxIndemnityForGdp,
+  partyDisplayName,
   PEACE_INDEMNITY_MAX_GDP_SHARE,
 } from "../peaceOffer";
 import { PEACE_OFFER_DURATION_TURNS, TRUCE_TURNS } from "@/lib/db/types/peaceOffer";
@@ -480,6 +482,211 @@ describe("the buy-out gate", () => {
     expect(buyOut(war(), "DD", { kind: "white_peace" } as never).ok).toBe(true);
   });
 
+  it("refuses buying out the opposing PRINCIPAL even when its side still stands", () => {
+    // Poland joined on its own rather than under the Pact, so DD leaving releases
+    // nobody and the roster does not empty. The war ends anyway, because both
+    // principals settled it — so this is a buy-out and the gate has to see it.
+    const withJoiner = war({
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>);
+    const res = buyOut(withJoiner, "DD");
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/not far enough forward/i);
+  });
+
+  it("allows that buy-out once the front is deep enough", () => {
+    const withJoiner = war({
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+      control: 25,
+    } as unknown as Partial<ConflictDoc>);
+    expect(buyOut(withJoiner, "DD").ok).toBe(true);
+  });
+
+  it("still allows peeling a mere JOINER off the opposing side", () => {
+    // PL is not its side's principal, so its departure decides nothing and the gate
+    // stays out of the way however the front looks.
+    const withJoiner = war({
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>);
+    expect(
+      validatePeaceOffer(
+        withJoiner,
+        "US",
+        "PL",
+        { kind: "indemnity" as const, payer: "US", amount: 10 },
+        "PL",
+        1e12
+      ).ok
+    ).toBe(true);
+  });
+
+  it("says WHY the departure ends the war, so the copy can tell the truth", () => {
+    // The two roads end the war for different reasons, and the panel says something
+    // false if it assumes the roster one: on the principal road the losing side is
+    // still full of allies.
+    const joined = {
+      sideB: { label: "East Germany", countries: ["DD", "PL"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "PL", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>;
+    expect(withdrawalGate(war(joined), "US", "DD").endsWarReason).toBe("principals");
+    expect(withdrawalGate(war(), "US", "DD").endsWarReason).toBe("roster");
+    expect(withdrawalGate(war(joined), "US", "PL").endsWarReason).toBe(null);
+  });
+
+  it("refuses a reunification the challenger itself withdraws under", () => {
+    // "We leave the war AND Germany reunifies on our terms" is winning the question
+    // by surrendering: the departure hands the war to the incumbent while the term
+    // settles the crisis for the challenger. The two cannot both be true.
+    const res = validatePeaceOffer(
+      war(),
+      "DD",
+      "US",
+      { kind: "reunification" as const },
+      "DD",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/withdraw|leave/i);
+  });
+
+  it("lets the INCUMBENT principal offer it, withdrawing itself", () => {
+    // Either founder may put it on the table. From the incumbent it reads as a
+    // capitulation: we leave the war, and Germany reunifies on your terms.
+    const res = validatePeaceOffer(
+      war(),
+      "US",
+      "DD",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(true);
+  });
+
+  it("refuses it from a country that did not start the war", () => {
+    // RU was dragged in under the Pact. A guest cannot settle the question its
+    // principal is fighting over, in either direction.
+    const res = validatePeaceOffer(
+      war(),
+      "RU",
+      "US",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/started|founder|principal/i);
+  });
+
+  it("refuses it when the country ADDRESSED did not start the war", () => {
+    const joined = {
+      sideA: { label: "United States", countries: ["US", "GR"], kind: "coalition" },
+      joinTurns: [{ countryId: "GR", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>;
+    const res = validatePeaceOffer(
+      war(joined),
+      "DD",
+      "GR",
+      { kind: "reunification" as const },
+      "GR",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+  });
+
+  it("refuses a reunification the CHALLENGER is not party to", () => {
+    // `qualifyWar` only bars an anchor Germany that a treaty dragged in, so a DD that
+    // JOINED a war can be its challenger without founding a side. Two other founders
+    // could then settle Germany between themselves, deciding the question over the
+    // head of the country whose outcome it is.
+    const ddJoined = {
+      sideA: { label: "United States", countries: ["US"], kind: "state" },
+      sideB: { label: "Warsaw Pact", countries: ["RU", "DD"], kind: "coalition" },
+      treatyEntries: [],
+      joinTurns: [{ countryId: "DD", turn: 20, control: 100 }],
+    } as unknown as Partial<ConflictDoc>;
+    const res = validatePeaceOffer(
+      war(ddJoined),
+      "RU",
+      "US",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.error).toMatch(/East Germany|challenger/i);
+  });
+
+  it("is UNGATED on the front, where the same demand as an indemnity is refused", () => {
+    // The differential is the whole assertion. `war()` opens at control 100 from a
+    // start of 100, so side A has taken no ground at all: an indemnity demanding the
+    // same withdrawal is refused on exactly this board, and a reunification is not.
+    // Asserting only that it passes would not distinguish "ungated" from "the gate
+    // happened not to fire".
+    const indemnity = validatePeaceOffer(
+      war(),
+      "US",
+      "DD",
+      { kind: "indemnity" as const, payer: "DD" as const, amount: 10 },
+      "DD",
+      1e12,
+      "presidential",
+      null,
+      { challenger: "US" }
+    );
+    expect(indemnity.ok).toBe(false);
+
+    const reunification = validatePeaceOffer(
+      war(),
+      "US",
+      "DD",
+      { kind: "reunification" as const },
+      "DD",
+      null,
+      "presidential",
+      null,
+      { challenger: "US" }
+    );
+    expect(reunification.ok).toBe(true);
+  });
+
+  it("allows a reunification the OTHER side withdraws under", () => {
+    const res = validatePeaceOffer(
+      war(),
+      "DD",
+      "US",
+      { kind: "reunification" as const },
+      "US",
+      null,
+      "presidential",
+      null,
+      { challenger: "DD" }
+    );
+    expect(res.ok).toBe(true);
+  });
+
   it("never gates an offer to leave YOURSELF", () => {
     // Walking away is always yours to propose, whatever the ground looks like.
     expect(validatePeaceOffer(war(), "US", "DD", { kind: "white_peace" as const }, "US").ok).toBe(
@@ -508,5 +715,27 @@ describe("the buy-out gate", () => {
         1e12
       ).ok
     ).toBe(false);
+  });
+});
+
+describe("partyDisplayName", () => {
+  const choices = [
+    { id: 1, name: "Sozialdemokratische Partei", abbreviation: "SPD" },
+    { id: 7, name: "Sozialistische Einheitspartei" },
+  ];
+
+  it("prefers the abbreviation, which is what a field value and a clause both want", () => {
+    expect(partyDisplayName(choices, 1)).toBe("SPD");
+  });
+
+  it("falls back to the full name for a party carrying no abbreviation", () => {
+    // The wire resolved on `?.abbreviation` alone, so such a party reported as
+    // though the settlement had named nobody.
+    expect(partyDisplayName(choices, 7)).toBe("Sozialistische Einheitspartei");
+  });
+
+  it("is null for an id the country does not hold, and for no list at all", () => {
+    expect(partyDisplayName(choices, 99)).toBeNull();
+    expect(partyDisplayName(undefined, 1)).toBeNull();
   });
 });

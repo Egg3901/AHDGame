@@ -26,6 +26,7 @@ import { getConflictsCollection } from "@/lib/db/collections/conflicts";
 import { createSystemNewsPost } from "@/lib/news";
 import { sendNewsEvent } from "@/lib/discordWebhooks";
 import { buildSettledDispatch, type WarDispatch, type WarWireEvent } from "./warWire";
+import { loadPartyChoices, partyDisplayName } from "./peaceOffer";
 
 /**
  * The stamp this sweep writes. Typed rather than inlined so the query filter and the
@@ -78,7 +79,23 @@ export async function emitWarWire(db: Db, _currentTurn: number): Promise<{ posts
     );
     if (claimed.modifiedCount !== 1) continue;
 
-    await postWarWire(buildSettledDispatch(conflict));
+    // The term stores a party ID; the dispatch needs a name. Resolved HERE
+    // rather than in the builder, which is pure by design so the copy stays
+    // testable without a database. Only loaded for the one term that names a
+    // party, so an indemnity does not pay for a query it never reads.
+    const settlement = conflict.settlement;
+    const namedParty =
+      settlement &&
+      settlement.term.kind === "regime_change" &&
+      settlement.term.rulingPartyId != null
+        ? settlement.term.rulingPartyId
+        : null;
+    const rulingPartyName =
+      settlement && namedParty != null
+        ? partyDisplayName(await loadPartyChoices(db, settlement.target), namedParty)
+        : null;
+
+    await postWarWire(buildSettledDispatch(conflict, rulingPartyName));
     posts++;
   }
 

@@ -41,7 +41,11 @@ interface SharePurchaseAtMarketViewProps {
   myCurrencyBalances: Partial<Record<string, number>> | undefined;
   autoConvertEnabled: boolean;
   onAutoConvertChange: ((enabled: boolean) => void) | undefined;
-  corporationSharePrice: number;
+  marketBidPrice: number;
+  marketAskPrice: number;
+  referencePrice: number;
+  marketDepthShares: number;
+  equityMarketPoolActive: boolean;
   personalCashAnchor: number;
   myCorpLiquidInternal: number;
   myCorpLiquidCurrency: CurrencyCode;
@@ -57,6 +61,7 @@ interface SharePurchaseAtMarketViewProps {
   floatInsufficient: boolean;
   floatFundsShort: boolean;
   sellAtMarketInsufficient: boolean;
+  marketDepthInsufficient: boolean;
   ratesNeededButMissing: boolean;
   homeCurrencyCode: CurrencyCode;
   corpCurrency: CurrencyCode;
@@ -88,7 +93,11 @@ export function SharePurchaseAtMarketView({
   myCurrencyBalances,
   autoConvertEnabled,
   onAutoConvertChange,
-  corporationSharePrice,
+  marketBidPrice,
+  marketAskPrice,
+  referencePrice,
+  marketDepthShares,
+  equityMarketPoolActive,
   personalCashAnchor,
   myCorpLiquidInternal,
   myCorpLiquidCurrency,
@@ -104,6 +113,7 @@ export function SharePurchaseAtMarketView({
   floatInsufficient,
   floatFundsShort,
   sellAtMarketInsufficient,
+  marketDepthInsufficient,
   ratesNeededButMissing,
   homeCurrencyCode,
   corpCurrency,
@@ -158,6 +168,28 @@ export function SharePurchaseAtMarketView({
 
   return (
     <div className="space-y-4">
+      {equityMarketPoolActive && (
+        <div className="grid grid-cols-3 gap-2 rounded-lg border border-card-border bg-card-elevated/40 p-3 text-xs">
+          <div>
+            <div className="text-muted">Bid</div>
+            <div className="mt-0.5 tabular-nums font-semibold text-error">
+              {formatAmount(toInternalFrom(marketBidPrice, corpCurrency), corpCurrency)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted">Ask</div>
+            <div className="mt-0.5 tabular-nums font-semibold text-success">
+              {formatAmount(toInternalFrom(marketAskPrice, corpCurrency), corpCurrency)}
+            </div>
+          </div>
+          <div>
+            <div className="text-muted">Bid depth</div>
+            <div className="mt-0.5 tabular-nums font-semibold">
+              {marketDepthShares.toLocaleString("en-US")} shares
+            </div>
+          </div>
+        </div>
+      )}
       {/* Buy / Sell toggle */}
       <div className="flex overflow-hidden rounded-lg border border-card-border text-xs">
         <button
@@ -544,7 +576,11 @@ export function SharePurchaseAtMarketView({
               {!sellAsInvestmentBank && (sellAsCorp ? myCorporationShares : myShares) > 0 && (
                 <button
                   type="button"
-                  onClick={() => resetQuantity(sellAsCorp ? myCorporationShares : myShares)}
+                  onClick={() =>
+                    resetQuantity(
+                      Math.min(sellAsCorp ? myCorporationShares : myShares, marketDepthShares)
+                    )
+                  }
                   className="text-xs text-muted hover:text-foreground transition-colors"
                 >
                   Sell all
@@ -583,6 +619,11 @@ export function SharePurchaseAtMarketView({
                   : `You only own ${myShares.toLocaleString("en-US")} shares.`}
               </p>
             )}
+            {marketDepthInsufficient && (
+              <p className="mt-1 text-xs text-error">
+                The market can currently absorb {marketDepthShares.toLocaleString("en-US")} shares.
+              </p>
+            )}
           </div>
 
           {quantity > 0 && (
@@ -591,7 +632,12 @@ export function SharePurchaseAtMarketView({
                 <span className="text-muted">Proceeds</span>
                 <span className="tabular-nums font-medium text-success">
                   {formatAmount(
-                    toInternalFrom(Math.round(quantity * corporationSharePrice), corpCurrency),
+                    toInternalFrom(
+                      Math.round(
+                        quantity * (sellAsInvestmentBank ? referencePrice : marketBidPrice)
+                      ),
+                      corpCurrency
+                    ),
                     corpCurrency
                   )}
                 </span>

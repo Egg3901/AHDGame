@@ -187,6 +187,7 @@ export type {
 } from "./corporationVote";
 export type { ShareListing, ShareOffer } from "./shareListings";
 export type { ShareTradeHistory, ShareTradeKind, ShareTradeParty } from "./shareTradeHistory";
+export type { EquityMarketPool, EquityMarketPoolFlowKind } from "./equityMarketPool";
 export type { CommodityFlow } from "./commodityFlow";
 export type { CommodityPrice } from "./commodityPrice";
 export type { CommodityPriceHistory } from "./commodityPriceHistory";
@@ -220,6 +221,7 @@ export {
   AGGRESSIVE_CUT_SCRUTINY,
   RATE_CHANGE_COOLDOWN_TURNS,
   RATE_CHANGES_PER_TERM,
+  RATE_HISTORY_MAX,
   getEffectiveRate,
   getRateScale,
 } from "./centralBank";
@@ -238,6 +240,8 @@ export {
   SOVEREIGN_BOND_MATURITY_ADMIN_OPTIONS,
 } from "./bond";
 export type { BondHistory } from "./bondHistory";
+export type { BondMarketPool, BondMarketPoolFlowKind } from "./bondMarketPool";
+export { BOND_MARKET_POOLS_COLLECTION } from "./bondMarketPool";
 export type { StockExchangeSnapshot, StockExchangeListing } from "./stockExchangeSnapshot";
 export type { InvestorRankingSnapshot, InvestorRanking } from "./investorRankingSnapshot";
 export type { WealthListSnapshot, WealthListEntry } from "./wealthListSnapshot";

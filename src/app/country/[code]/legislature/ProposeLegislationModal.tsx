@@ -22,6 +22,10 @@ import { TariffProvisionEditor } from "@/components/bills/TariffProvisionEditor"
 import { EmbargoProvisionEditor } from "@/components/bills/EmbargoProvisionEditor";
 import { SubsidySectorSelect } from "@/components/bills/SubsidySectorSelect";
 import {
+  CentralBankProvisionEditor,
+  type CentralBankIndependenceAction,
+} from "@/components/bills/CentralBankProvisionEditor";
+import {
   NationalizationProvisionEditor,
   toNatPayload,
   validateNatRows,
@@ -204,10 +208,29 @@ export function ProposeLegislationModal({
   // Central bank independence — opt-in, economy category. grant hands
   // rate-setting to the bank; revoke returns it to the government.
   const [includeCbIndependence, setIncludeCbIndependence] = useState(false);
-  const [cbIndependenceAction, setCbIndependenceAction] = useState<"grant" | "revoke">("grant");
+  const [cbIndependenceAction, setCbIndependenceAction] =
+    useState<CentralBankIndependenceAction>("grant");
   // Union ban (player suggestion #93): "bias" = the slider law; "ban"/"repeal_ban"
   // are standalone actions that leave the bias untouched at enactment.
   const [unionLawAction, setUnionLawAction] = useState<"bias" | "ban" | "repeal_ban">("bias");
+
+  // Provisions that stand on their own: they carry the whole bill and need no
+  // accompanying policy provision. "Return rate-setting to the government" and
+  // a franchise change are complete statutes by themselves, and requiring an
+  // unrelated policy row alongside them made a bank-independence bill
+  // impossible to propose at all (#1250) — the blank starter row could not be
+  // removed and could not pass the "every provision needs a policy type" gate.
+  // One provision each: an electoral-law bill carries the franchise and the
+  // registration regime on a single provision, however many axes it sets.
+  const standaloneProvisionCount =
+    (isCentralBankCat && includeCbIndependence ? 1 : 0) +
+    (isElectoralCat && (includeVotingAge || includeRegAccess) ? 1 : 0);
+  const hasStandaloneProvision = standaloneProvisionCount > 0;
+  // A standalone provision occupies one of the bill's MAX_PROVISIONS slots, so
+  // the policy rows get what is left. Without this the form happily built a
+  // four-provision bill out of three rows plus a checkbox and the body schema
+  // refused it with "At most 3 provisions" (#1250).
+  const maxPolicyRows = Math.max(0, MAX_PROVISIONS - standaloneProvisionCount);
 
   const blockedProvisionKeys = new Set(
     (blockedProvisions ?? []).map((bp) => `${bp.legislationTypeId}:${bp.policyOptionId}`)
@@ -279,12 +302,12 @@ export function ProposeLegislationModal({
   }
 
   function addRow() {
-    if (rows.length >= MAX_PROVISIONS) return;
+    if (rows.length >= maxPolicyRows) return;
     setRows((prev) => [...prev, { ...EMPTY_PROVISION_ROW }]);
   }
 
   function removeRow(index: number) {
-    if (rows.length <= 1) return;
+    if (rows.length <= (hasStandaloneProvision ? 0 : 1)) return;
     setRows((prev) => prev.filter((_, i) => i !== index));
   }
 
@@ -346,11 +369,27 @@ export function ProposeLegislationModal({
         });
       }
     } else {
-      if (rows.some((r) => !r.legislationTypeId)) {
+      // A bill whose whole content is a standalone provision needs no policy
+      // row: an untouched blank starter row there is the ABSENCE of a policy
+      // provision, not an incomplete one, so drop it instead of refusing the
+      // bill. A row the player actually started still has to be finished.
+      const policyRows = hasStandaloneProvision ? rows.filter((r) => r.legislationTypeId) : rows;
+      if (policyRows.some((r) => !r.legislationTypeId)) {
         showToast("Every provision needs a policy type.", "error");
         return;
       }
-      for (const r of rows) {
+      // The row cap already accounts for the standalone provision, but a player
+      // can fill the rows first and tick the box afterwards, which the cap
+      // cannot retract. Say so here rather than letting the body schema refuse
+      // the bill with a bare count.
+      if (policyRows.length + standaloneProvisionCount > MAX_PROVISIONS) {
+        showToast(
+          `A bill carries at most ${MAX_PROVISIONS} provisions, and the option selected below is one of them. Remove a policy provision.`,
+          "error"
+        );
+        return;
+      }
+      for (const r of policyRows) {
         const lt = legislationTypes.find((t) => t._id === r.legislationTypeId);
         if (lt?.policyOptions?.length && !r.policyOptionId) {
           showToast("Every provision needs a policy option selected.", "error");
@@ -367,7 +406,7 @@ export function ProposeLegislationModal({
           }
         }
       }
-      provisionsPayload = rows.map((r) => ({
+      provisionsPayload = policyRows.map((r) => ({
         legislationTypeId: r.legislationTypeId,
         ...(r.policyOptionId ? { policyOptionId: r.policyOptionId } : {}),
         effectDirection: r.effectDirection,
@@ -431,7 +470,10 @@ export function ProposeLegislationModal({
           ? natRows.length
           : isSubsidyCat
             ? subsidyProvisions.length
-            : rows.length
+            : // Standalone provisions ride the same ladder server-side, so they
+              // have to be counted here too or the modal quotes a cost the
+              // proposal then charges more than.
+              rows.filter((r) => r.legislationTypeId).length + standaloneProvisionCount
   );
   const submitBlockedByActiveBill = hasActiveBill && !adminOverride;
   const submitDisabled =
@@ -441,11 +483,18 @@ export function ProposeLegislationModal({
     !summary.trim() ||
     // Custom (flavor) bills carry no provisions, so the default empty provision
     // row must not gate submission (#910 — Propose button dead for custom bills).
+    // A bill carrying a standalone provision is the same case: its content is
+    // complete without a policy row, so the untouched blank starter row must not
+    // grey out Propose either (#1250). Without one, an empty row list is not a
+    // proposable bill: every non-custom category needs at least one provision,
+    // and the player can reach zero rows by removing them and then clearing the
+    // standalone provision that allowed it.
     (!isCustomCat &&
       !isTradeCat &&
       !isSubsidyCat &&
       !isNatCat &&
-      rows.some((r) => !r.legislationTypeId));
+      !hasStandaloneProvision &&
+      (rows.length === 0 || rows.some((r) => !r.legislationTypeId)));
 
   const chamberSelectable = chambers.length > 1;
 
@@ -771,17 +820,31 @@ export function ProposeLegislationModal({
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium">
-                  Provisions ({rows.length}/{MAX_PROVISIONS})
+                  Provisions ({rows.length}/{maxPolicyRows})
                 </label>
                 <button
                   type="button"
                   onClick={addRow}
-                  disabled={rows.length >= MAX_PROVISIONS}
+                  disabled={rows.length >= maxPolicyRows}
                   className="rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
                 >
                   + Add Provision
                 </button>
               </div>
+              {hasStandaloneProvision && rows.some((r) => !r.legislationTypeId) && (
+                <p className="text-[11px] leading-snug text-muted">
+                  {rows.every((r) => !r.legislationTypeId)
+                    ? "This bill carries no policy provision. It will be proposed with only the provision selected below, which is a complete statute on its own."
+                    : "Provisions left blank will be dropped from this bill."}
+                </p>
+              )}
+              {rows.length === 0 && (
+                <p className="rounded-lg border border-dashed border-card-border bg-background/40 p-3 text-[11px] leading-snug text-muted">
+                  {hasStandaloneProvision
+                    ? "No policy provisions. This bill carries only the provision selected below."
+                    : "This bill has no provisions. Add one, or select a provision below, before proposing it."}
+                </p>
+              )}
               {rows.map((row, idx) => {
                 const lt = legislationTypes.find((t) => t._id === row.legislationTypeId);
                 const options = lt?.policyOptions ?? [];
@@ -795,7 +858,7 @@ export function ProposeLegislationModal({
                       <span className="text-xs font-semibold uppercase tracking-wider text-muted">
                         Provision {idx + 1}
                       </span>
-                      {rows.length > 1 && (
+                      {(rows.length > 1 || hasStandaloneProvision) && (
                         <button
                           type="button"
                           onClick={() => removeRow(idx)}
@@ -987,47 +1050,12 @@ export function ProposeLegislationModal({
           )}
           {/* Central bank independence — economy bills only. */}
           {isCentralBankCat && (
-            <div className="rounded-lg border border-dashed border-amber-500/35 bg-amber-500/5 p-3 space-y-3">
-              <p className="text-xs font-medium text-muted">Central bank (optional)</p>
-              <label className="flex cursor-pointer items-center gap-2 text-xs text-muted">
-                <input
-                  type="checkbox"
-                  checked={includeCbIndependence}
-                  onChange={(e) => setIncludeCbIndependence(e.target.checked)}
-                  className="rounded"
-                />
-                Change who sets the policy rate
-              </label>
-              <div className="flex items-center gap-3 text-xs text-muted">
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="cb-independence-action"
-                    checked={cbIndependenceAction === "grant"}
-                    disabled={!includeCbIndependence}
-                    onChange={() => setCbIndependenceAction("grant")}
-                  />
-                  Grant the bank independence
-                </label>
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="radio"
-                    name="cb-independence-action"
-                    checked={cbIndependenceAction === "revoke"}
-                    disabled={!includeCbIndependence}
-                    onChange={() => setCbIndependenceAction("revoke")}
-                  />
-                  Return rate-setting to the government
-                </label>
-              </div>
-              <p className="text-[11px] italic text-muted/60">
-                {!includeCbIndependence
-                  ? "No central-bank provision will be included in this bill."
-                  : cbIndependenceAction === "grant"
-                    ? "On enactment the bank sets its own rate through its policy committee."
-                    : "On enactment the head of government and the finance minister set the rate."}
-              </p>
-            </div>
+            <CentralBankProvisionEditor
+              include={includeCbIndependence}
+              onIncludeChange={setIncludeCbIndependence}
+              action={cbIndependenceAction}
+              onActionChange={setCbIndependenceAction}
+            />
           )}
           {/* Electoral law — social bills only. Each axis is opt-in on its own:
               a bill touching the franchise must not silently reset the

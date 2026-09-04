@@ -831,4 +831,90 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
     expect(data.message).toContain("1 whole plant from Flower News");
     expect(data.message).not.toContain("whole plants");
   });
+
+  it("notifies the defender with sector, state, and book value (suggestion #324)", async () => {
+    const attackerCharId = new ObjectId();
+    const attackerCorpId = new ObjectId();
+    const defenderCorpId = new ObjectId();
+    const defenderUserId = new ObjectId();
+    const targetSectorId = new ObjectId();
+    const attacker = {
+      _id: attackerCorpId,
+      ceoId: attackerCharId,
+      name: "Attacker Corp",
+      liquidCapital: 1_000_000,
+      marketingStrength: 200,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+    };
+    const defender = {
+      _id: defenderCorpId,
+      name: "Flower News",
+      liquidCapital: 1_000_000,
+      marketingStrength: 100,
+      countryId: "US",
+      liquidCurrencyCode: "USD",
+      userId: defenderUserId,
+    };
+    const target = {
+      _id: targetSectorId,
+      corporationId: defenderCorpId,
+      countryId: "US",
+      stateId: "CA",
+      sectorType: "energy",
+      strategyId: "standard",
+      revenue: 1_000_000,
+      capitalStock: 1_000,
+      capacityBookAnchor: 1_000_000,
+      plantCount: 4,
+      plantUnitRemainder: 0,
+    };
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 526 });
+    db.collectionMocks.states.findOne.mockResolvedValue({
+      _id: "CA",
+      countryId: "US",
+      name: "California",
+    });
+    db.collectionMocks.users.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      activeCharacterType: "regular",
+    });
+    const { getCharacterByUserId } = await import("@/lib/db/characterLookup");
+    vi.mocked(getCharacterByUserId).mockResolvedValue({ _id: attackerCharId } as never);
+    const { randomInt } = await import("node:crypto");
+    vi.mocked(randomInt as unknown as () => number).mockReturnValue(0);
+    db.collectionMocks.corporations.findOne
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender)
+      .mockResolvedValueOnce(attacker)
+      .mockResolvedValueOnce(defender);
+    db.collectionMocks.corporations.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.findOne
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(target)
+      .mockResolvedValueOnce(null);
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks.corporateSectors.insertOne.mockResolvedValue({ insertedId: new ObjectId() });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ sectorId: targetSectorId.toHexString() }), ctx());
+    expect(response.status).toBe(200);
+
+    const { createNotification } = await import("@/lib/notifications");
+    expect(createNotification).toHaveBeenCalledTimes(1);
+    const payload = vi.mocked(createNotification).mock.calls[0][0] as {
+      message: string;
+      metadata: Record<string, unknown>;
+    };
+    expect(payload.message).toContain("Energy");
+    expect(payload.message).toContain("California");
+    expect(payload.message).toContain("book value");
+    expect(payload.metadata).toMatchObject({
+      stateName: "California",
+      countryId: "US",
+      captureKind: "capacity",
+      splitSucceeded: true,
+    });
+    expect(payload.metadata.bookValueTransferredAnchor).toBeGreaterThan(0);
+  });
 });

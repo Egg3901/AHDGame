@@ -8,6 +8,9 @@ import {
   BUILD_ORG_BASE_PS_COST,
   STATE_PS_CAP_DEFAULT,
 } from "@/lib/politicalStrength/strengthConstants";
+import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
+import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
+import type { CountryId } from "@/lib/constants/countries";
 import {
   FactorsExplainer,
   type BuildOrgFactors,
@@ -47,6 +50,10 @@ interface PoachLine {
 
 interface BuildOrgResult {
   psCost: number;
+  /** Cash actually debited from the paying treasury. */
+  cashCost?: number;
+  /** Share of the full price the treasury covered; below 1 shrinks the gain. */
+  fundedFraction?: number;
   orgGain: number;
   factors: BuildOrgFactors;
   poaches?: PoachLine[];
@@ -57,6 +64,14 @@ type BuildOrgPreview =
       ok: true;
       effectiveCost: number;
       pressureValue: number;
+      /** Cash price of the next click, in the paying tier's local currency. */
+      cashPrice?: number;
+      /** Balance of the treasury that would pay. */
+      treasuryAvailable?: number;
+      /** Share of the price the treasury covers. `projectedGain` is already scaled by it. */
+      fundedFraction?: number;
+      /** Per-state size multiplier already folded into `cashPrice`. */
+      sizeMultiplier?: number;
       projectedGain: number;
       poaches?: PoachLine[];
       factors: BuildOrgFactors;
@@ -89,6 +104,10 @@ export function BuildOrgPanel({
   const [lastResult, setLastResult] = useState<BuildOrgResult | null>(null);
 
   const apiUrl = regionPartyApiUrl(countryCode, stateId, partyId);
+  // Build Org bills the paying tier's treasury, which is denominated in the
+  // country's own currency — never the anchor.
+  const currencyCode =
+    COUNTRY_CURRENCY_MAP[countryCode.toUpperCase() as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
   const { eligibleScopes, poolPS } = usePsSpendScope(
     countryCode,
     stateId,
@@ -116,8 +135,17 @@ export function BuildOrgPanel({
       }
       setLastResult(d as BuildOrgResult);
       setBumpKey((k) => k + 1);
+      const cashCost = d.cashCost as number | undefined;
+      const cash =
+        cashCost !== undefined
+          ? ` and ${CURRENCY_SYMBOLS[currencyCode as keyof typeof CURRENCY_SYMBOLS] ?? "$"}${Math.round(cashCost).toLocaleString("en-US")}`
+          : "";
+      const partly =
+        typeof d.fundedFraction === "number" && d.fundedFraction < 1
+          ? ` (partly funded: the treasury covered ${Math.round((d.fundedFraction as number) * 100)}% of the price)`
+          : "";
       showToast(
-        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS`,
+        `+${(d.orgGain as number).toFixed(2)} Org for ${(d.psCost as number).toFixed(0)} PS${cash}${partly}`,
         "success"
       );
       onSuccess();
@@ -146,6 +174,31 @@ export function BuildOrgPanel({
     ? "National Political Strength reserve. Build Org from a national officer role spends this pool (not the state party's PS)."
     : "Political Strength (PS) reserve for this state party. Build Org spends from the state pool (or national pool if you have that authority). Cap shown is the effective max.";
 
+  /**
+   * Per-pool cash price for the button tooltips.
+   *
+   * The estimate box can only show one tier's price — the one the preview
+   * resolved, which for an officer holding BOTH a national and a state seat is
+   * the state (half-rate) one. The national button would then charge twice what
+   * was quoted. The PS cost is tier-independent (the pressure ladder is per
+   * party+state), so both prices derive exactly from the same preview with no
+   * extra request — including the per-state size multiplier, which applies to
+   * either pool because it prices the state being organized, not the payer.
+   */
+  const priceFor = (poolScope: "state" | "national-targeted") => {
+    const effectiveCost = preview?.ok ? preview.effectiveCost : null;
+    if (effectiveCost === null) return "";
+    const amount = orgBuildCashPrice(
+      countryCode.toUpperCase() as CountryId,
+      poolScope,
+      effectiveCost,
+      preview?.ok ? (preview.sizeMultiplier ?? 1) : 1
+    );
+    if (amount <= 0) return "";
+    const symbol = CURRENCY_SYMBOLS[currencyCode as keyof typeof CURRENCY_SYMBOLS] ?? "$";
+    return ` and ${symbol}${amount.toLocaleString("en-US")}`;
+  };
+
   const buttonAnim = bumpKey > 0 ? "ps-bloom" : "";
   const counterAnim = bumpKey > 0 ? "ps-counter-pulse" : "";
   const tileAnim = bumpKey > 0 ? "ps-row-flash" : "";
@@ -169,8 +222,8 @@ export function BuildOrgPanel({
               ? `Need ${BUILD_ORG_BASE_PS_COST} PS minimum`
               : "Spend PS to grow Org in this state"
       }
-      stateTitle={`Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}`}
-      nationalTitle={`Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}`}
+      stateTitle={`Spend from state pool${poolPS ? ` (${poolPS.statePoolPS.toFixed(0)} PS)` : ""}${priceFor("state")}`}
+      nationalTitle={`Spend from national pool${poolPS ? ` (${poolPS.nationalPoolPS.toFixed(0)} PS)` : ""}${priceFor("national-targeted")}`}
       buttonAnim={buttonAnim}
       onSpend={handleClick}
     />
@@ -181,6 +234,15 @@ export function BuildOrgPanel({
       variant="last"
       tone="build"
       cost={{ effectivePS: lastResult.psCost, basePS: lastResult.psCost, ladderPS: 0 }}
+      funds={
+        lastResult.cashCost !== undefined
+          ? {
+              amount: lastResult.cashCost,
+              currencyCode,
+              fundedFraction: lastResult.fundedFraction,
+            }
+          : undefined
+      }
       gain={{ label: "Gain", value: lastResult.orgGain, sign: "+", unit: "Org" }}
       factors={lastResult.factors}
     />
@@ -193,6 +255,16 @@ export function BuildOrgPanel({
         basePS: BUILD_ORG_BASE_PS_COST,
         ladderPS: Math.max(0, preview.effectiveCost - BUILD_ORG_BASE_PS_COST),
       }}
+      funds={
+        preview.cashPrice !== undefined
+          ? {
+              amount: preview.cashPrice,
+              currencyCode,
+              fundedFraction: preview.fundedFraction,
+              sizeMultiplier: preview.sizeMultiplier,
+            }
+          : undefined
+      }
       gain={{ label: "Estimated Gain", value: preview.projectedGain, sign: "+", unit: "Org" }}
       factors={preview.factors}
     />

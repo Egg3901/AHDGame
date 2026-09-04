@@ -47,6 +47,9 @@ vi.mock("@/lib/admin/seed/seedStatePolicies", () => ({
 }));
 
 describe("resetGameWorld", () => {
+  it("wipes indexFunds with the rest of the world-bound fund ledger", () => {
+    expect(getRuntimeCollectionNames()).toContain("indexFunds");
+  });
   let db: MockDb;
 
   beforeEach(() => {

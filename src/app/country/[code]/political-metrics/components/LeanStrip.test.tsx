@@ -12,7 +12,7 @@ const metrics = [-5, -3, -1, 0, 1, 3, 5].map((lean, i) => ({
   lean,
   leanLabel: "Mixed",
   displayName: `Metric ${i}`,
-  nationalValue: 10 * i + 20,
+  value: 10 * i + 20,
   status: "Stable",
 }));
 

@@ -5,7 +5,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { getCostClass, resolveEraSpendingCost } from "@/lib/era/legislationCostCatalog";
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
-import type { LawCountryId } from "@/lib/politicalLegislation/types";
+import type { CostAnchorCountryId } from "@/lib/politicalLegislation/types";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -45,7 +45,7 @@ function v2AnnualCost(
   model: NonNullable<LegislationPolicyOption["costModelV2"]>,
   context: BudgetCostContext
 ): number {
-  const countryId = context.countryId as LawCountryId | undefined;
+  const countryId = context.countryId as CostAnchorCountryId | undefined;
   if (!context.v2Base || !countryId || !(countryId in COST_INCOME_ANCHORS)) {
     throw new Error(
       `costModelV2 pricing requires v2Base and a political-legislation countryId (got ${String(
@@ -249,10 +249,14 @@ export function calculatePolicyOptionAnnualCost(
   typeId?: string
 ): number | undefined {
   if (!policyOption) return undefined;
-  // §5.1 generation discriminator: costModelV2 routes FIRST; the legacy paths
-  // below run byte-identically for every old-generation option.
   if (policyOption.costModelV2) {
-    return v2AnnualCost(policyOption.costModelV2, context);
+    const prefix = typeId?.split(".")[0]?.toUpperCase();
+    const anchorCountryId =
+      prefix && prefix in COST_INCOME_ANCHORS ? (prefix as CostAnchorCountryId) : undefined;
+    return v2AnnualCost(policyOption.costModelV2, {
+      ...context,
+      countryId: anchorCountryId ?? context.countryId,
+    });
   }
   const era = eraSpendingCost(
     typeId,
@@ -273,11 +277,13 @@ export function calculatePolicyOptionAnnualCost(
 }
 
 export function calculateEnactedLawAnnualCost(law: EnactedLaw, context: BudgetCostContext): number {
-  // §5.1 generation discriminator — see calculatePolicyOptionAnnualCost.
   if (law.costModelV2) {
+    const prefix = law.legislationTypeId?.split(".")[0]?.toUpperCase();
+    const anchorCountryId =
+      prefix && prefix in COST_INCOME_ANCHORS ? (prefix as CostAnchorCountryId) : undefined;
     return v2AnnualCost(law.costModelV2, {
       ...context,
-      countryId: context.countryId ?? law.countryId,
+      countryId: anchorCountryId ?? context.countryId ?? law.countryId,
     });
   }
   const era = eraSpendingCost(

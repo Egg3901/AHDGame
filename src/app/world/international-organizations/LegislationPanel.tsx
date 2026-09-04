@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui";
 import { postBillProposalWithElectionConfirmation } from "@/components/bills/BillAutoFailWarning";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { useEntityName } from "./useEntityName";
 import { CountryFlag } from "@/components/CountryFlag";
 import type { CountryId } from "@/lib/constants/countries";
 import type { ProposalVote } from "@/lib/db/types/internationalOrganization";
@@ -47,6 +47,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
       .map((measure) => measure.organizationLegislationId!.toString())
   );
 
+  const entityName = useEntityName();
   const [showForm, setShowForm] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [submitting, setSubmitting] = useState(false);
@@ -140,7 +141,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
         );
       }
       setWithdrawSuccess(
-        `${COUNTRY_CONFIGS[viewerFmCountry].name}'s withdrawal from ${legislationTitle} was sent to the legislature.`
+        `${entityName(viewerFmCountry)}'s withdrawal from ${legislationTitle} was sent to the legislature.`
       );
       setPendingWithdrawalIdsLocal((prev) => new Set(prev).add(legislationId));
       onChange();
@@ -175,8 +176,8 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
         <div className="rounded-xl border border-primary/30 bg-primary/5 p-5">
           <h4 className="text-sm font-semibold text-foreground">Propose a free-trade agreement</h4>
           <p className="mt-1 text-xs text-muted">
-            {COUNTRY_CONFIGS[viewerFmCountry].name} is automatically included. Select the other
-            parties (must all be {org.def.shortName} members).
+            {entityName(viewerFmCountry)} is automatically included. Select the other parties (must
+            all be {org.def.shortName} members).
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {org.members
@@ -246,10 +247,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
                 <div>
                   <h5 className="text-sm font-semibold text-foreground">{l.title}</h5>
                   <p className="mt-1 text-xs text-muted">
-                    Parties:{" "}
-                    {(l.parties as CountryId[])
-                      .map((p) => COUNTRY_CONFIGS[p]?.name ?? p)
-                      .join(", ")}
+                    Parties: {(l.parties as CountryId[]).map((p) => entityName(p)).join(", ")}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-2">
@@ -302,9 +300,12 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
             const parties = l.parties as CountryId[];
             // A ratified agreement binds every party, but only parties that can
             // vote decide it — the resolver narrows the ballot the same way, so
-            // the roster must not await a vote that will never be cast.
+            // the roster must not await a vote that will never be cast. The roll
+            // here is the wider one: a party decides its OWN agreement, so a
+            // modelled neighbour votes on it even though it holds no ballot on
+            // an admission.
             const votingParties = parties.filter((p) =>
-              org.members.some((m) => m.countryId === p && m.hasVote)
+              org.members.some((m) => m.countryId === p && m.hasPolicyVote)
             );
             const votes = dedupeOrganizationVotes(l.votes);
             const partyVotes = votes.filter((v) =>
@@ -340,10 +341,7 @@ export function LegislationPanel({ org, viewer, currentTurn, votingWindowTurns, 
                   <div>
                     <h5 className="text-sm font-semibold text-foreground">{l.title}</h5>
                     <p className="mt-0.5 text-xs text-muted">
-                      Parties:{" "}
-                      {(l.parties as CountryId[])
-                        .map((p) => COUNTRY_CONFIGS[p]?.name ?? p)
-                        .join(", ")}
+                      Parties: {(l.parties as CountryId[]).map((p) => entityName(p)).join(", ")}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">
                       Introduced by {l.proposedByCharacterName} · closes in {turnsLeft} turn

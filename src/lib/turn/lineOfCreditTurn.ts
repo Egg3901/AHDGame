@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { Character, CentralBank, Corporation } from "@/lib/db/types";
 import type { LocPaymentMode } from "@/lib/db/types/character";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -31,6 +31,9 @@ import {
   getPersonalBalance,
   getSavingsBalance,
 } from "@/lib/currency/characterFunds";
+import { runSavingsCommand } from "@/lib/savings/accountsShell";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -69,6 +72,44 @@ function mergeIncFragments(fragments: Record<string, number>[]): Record<string, 
  * freeze draws when interest due exceeds that income. Gated by lineOfCreditEnabled.
  * Runs after corporation turn (same tick as fund generation) so personal balances include payouts.
  */
+/**
+ * Take the savings half of a line-of-credit payment.
+ *
+ * Under the legacy pointer model a savings balance was a number on the
+ * character and nothing stood behind it, so the payment simply decremented it.
+ * Once a currency's savings accounts are the book of record that is no longer
+ * true: the balance is the account, and the cash behind it sits in the central
+ * bank's household pool or in a bank's vault. Decrementing the projection there
+ * would leave the account still holding money whose backing never moved, which
+ * is the hole this whole subsystem exists to close.
+ *
+ * So for a cohort currency the shortfall is WITHDRAWN from the account first,
+ * through the journal: backing leaves the holder, lands in the wallet, and the
+ * payment below then takes it out of the wallet like any other cash. The
+ * command id is derived from the character, currency and turn, so a retried
+ * turn replays the same settlement instead of withdrawing twice.
+ *
+ * Returns the amount that reached the wallet, which the caller deducts from
+ * personal rather than from savings.
+ */
+async function drawSavingsForPayment(
+  db: Db,
+  characterId: ObjectId,
+  currency: CurrencyCode,
+  amount: number,
+  turn: number
+): Promise<{ movedToWallet: number; error?: string }> {
+  const withdrawn = await runSavingsCommand(
+    db,
+    characterId,
+    currency,
+    { type: "withdraw", amount },
+    `loc-service:${characterId.toString()}:${currency}:${turn}`
+  );
+  if (!withdrawn.ok) return { movedToWallet: 0, error: withdrawn.error };
+  return { movedToWallet: amount };
+}
+
 export async function processLineOfCreditTurn(
   db: Db,
   turn: number,
@@ -84,6 +125,9 @@ export async function processLineOfCreditTurn(
     return { charactersProcessed: 0, paymentsInternal: 0 };
   }
 
+  // One policy read per turn, like every other banking-aware pass: a flag
+  // flipped mid-turn must not split this pass between two models.
+  const bankingPolicy = await loadBankingPolicy(db);
   const rates = await loadExchangeRatesMap(db);
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -337,7 +381,25 @@ export async function processLineOfCreditTurn(
       const fromSavings = roundSavingsAmount(Math.max(0, totalDeduct - fromPersonal), c);
       if (fromPersonal > 0)
         deductIncs.push(buildPersonalBalanceInc(-fromPersonal, c, forexEnabled));
-      if (fromSavings > 0) deductIncs.push(buildSavingsBalanceInc(-fromSavings, c, forexEnabled));
+      if (fromSavings > 0) {
+        if (savingsReadsAuthoritative(bankingPolicy, c)) {
+          // Move the backing out of the account and into the wallet first, then
+          // take the whole amount from the wallet below.
+          const drawn = await drawSavingsForPayment(db, char._id, c, fromSavings, turn);
+          if (drawn.movedToWallet > 0) {
+            deductIncs.push(buildPersonalBalanceInc(-drawn.movedToWallet, c, forexEnabled));
+          } else {
+            // The account could not cover it (frozen holder, a bank that cannot
+            // pay). The payment simply goes short this turn and the arrears the
+            // block above already recorded stand.
+            console.warn(
+              `[line-of-credit] savings draw refused for character ${char._id.toString()} ${c} on turn ${turn}: ${drawn.error ?? "unknown"}`
+            );
+          }
+        } else {
+          deductIncs.push(buildSavingsBalanceInc(-fromSavings, c, forexEnabled));
+        }
+      }
     }
     const personalDeduct = mergeIncFragments(deductIncs);
 

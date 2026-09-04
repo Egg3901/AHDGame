@@ -1,4 +1,4 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import {
   COUNTRY_CONFIGS,
   DEFAULT_OPS_VOTE_MULTIPLIERS,
@@ -39,6 +39,37 @@ export interface InstallOnePartyStateOptions {
    * degrades to the ordinary resolution rather than banning everyone.
    */
   rulingPartyId?: number;
+  /**
+   * Non-ruling parties that are TOLERATED (`approved`) rather than banned.
+   *
+   * The default -- everyone but the ruling party is banned -- is right for a
+   * conversion imposed on a country from outside, which is what the
+   * `regime_change` peace term is. It is wrong for a merge: the absorbed state
+   * arrives with its own settled arrangement, and the GDR's is a National Front
+   * of four tolerated bloc parties beside the SED. Banning them on the way in
+   * would have the winning side dissolve its own coalition at the moment it won.
+   *
+   * Ids that do not name a party of this country are ignored, and the ruling
+   * party is never demoted to `approved` by appearing here.
+   */
+  toleratedPartyIds?: number[];
+  /**
+   * Vacate every elected office held by a party this install BANS.
+   *
+   * Off by default so the shipped `regime_change` peace term keeps behaving
+   * exactly as it did. Reunification turns it on: without it the unified
+   * chamber seats the banned western parties at 71% of a state their own
+   * parties are outlawed in, and the ruling party governs as a 28.9% minority
+   * of a chamber that is nominally opposed to it.
+   *
+   * VACATES, does not reapportion. The seats stay in the chamber's nominal size
+   * -- that is `getLiveLowerChamberSeats` summing region `houseDistricts`, and
+   * the western Laender genuinely still exist -- they simply stand empty until
+   * something fills them. That keeps the change reversible: a regime that later
+   * democratises refills them at the next election rather than having to
+   * reconstruct a chamber somebody deleted.
+   */
+  vacateBannedSeats?: boolean;
 }
 
 export async function installOnePartyState(
@@ -75,18 +106,40 @@ export async function installOnePartyState(
   if (rulingPartyId != null) {
     const col = db.collection<PoliticalParty>("politicalParties");
     const now = new Date();
-    // Two `updateMany`s rather than a loop, mirroring `clearAllRegimeStatusForCountry`.
+    // Only ids that name a real party of this country, and never the ruling one
+    // -- a party cannot be both `ruling` and `approved`, and the two
+    // `updateMany`s below would otherwise race on which wrote last.
+    const tolerated = (opts?.toleratedPartyIds ?? []).filter(
+      (id) => id !== rulingPartyId && parties.some((p) => p.sequentialId === id)
+    );
+
+    // Three `updateMany`s rather than a loop, mirroring `clearAllRegimeStatusForCountry`.
     await col.updateMany(
       { countryId, sequentialId: rulingPartyId },
       { $set: { regimeStatus: "ruling", updatedAt: now } }
     );
+    if (tolerated.length > 0) {
+      await col.updateMany(
+        { countryId, sequentialId: { $in: tolerated } },
+        { $set: { regimeStatus: "approved", updatedAt: now } }
+      );
+    }
     // Everyone else is BANNED, not `approved`. A settlement that installs a single
     // party installs a single party; leaving the others merely approved would be a
-    // different constitutional outcome than the one imposed.
-    await col.updateMany(
-      { countryId, sequentialId: { $ne: rulingPartyId } },
-      { $set: { regimeStatus: "banned", updatedAt: now } }
-    );
+    // different constitutional outcome than the one imposed. Callers that mean to
+    // tolerate a bloc say so through `toleratedPartyIds`.
+    const bannedIds = parties
+      .map((p) => p.sequentialId)
+      .filter((id) => id !== rulingPartyId && !tolerated.includes(id));
+    if (bannedIds.length > 0) {
+      await col.updateMany(
+        { countryId, sequentialId: { $in: bannedIds } },
+        { $set: { regimeStatus: "banned", updatedAt: now } }
+      );
+      if (opts?.vacateBannedSeats) {
+        await vacateSeatsOfParties(db, countryId, parties, bannedIds, now);
+      }
+    }
   }
 
   // The per-turn escalation driver needs a document to advance. Without this the
@@ -101,6 +154,92 @@ export async function installOnePartyState(
     title: `${COUNTRY_CONFIGS[countryId]?.name ?? countryId} is reconstituted as a one-party state`,
     details: { subtype: "conversion", path: "forced", targetSystem: "onePartyState" },
   }).catch((err) => console.error(`${countryId} install history write failed:`, err));
+}
+
+/**
+ * Empty every elected office held by one of the banned parties.
+ *
+ * The seats are VACATED, not reassigned: the chamber's nominal size comes from
+ * region `houseDistricts` and is untouched, so the rows simply stop existing and
+ * the seats stand empty until an election refills them. Reassigning them to the
+ * ruling party would be inventing a result no ballot produced.
+ *
+ * Matches `party` the same three ways `resolveRulingParty` does -- sequentialId
+ * first, then name, then abbreviation. Production writes `String(sequentialId)`,
+ * but the display surfaces have written the other two, and a vacate that missed
+ * those rows would leave banned members seated with no sign of why.
+ *
+ * The holders' denormalised `currentOffice` is cleared only for holders left
+ * with NO remaining seat in this country, so a member who somehow still holds an
+ * office through another party keeps the pointer to it.
+ */
+async function vacateSeatsOfParties(
+  db: Db,
+  countryId: CountryId,
+  parties: PoliticalParty[],
+  bannedIds: number[],
+  now: Date
+): Promise<void> {
+  const banned = new Set(bannedIds);
+  const tokens = new Set<string>();
+  for (const party of parties) {
+    if (!banned.has(party.sequentialId)) continue;
+    tokens.add(String(party.sequentialId));
+    if (party.name) tokens.add(party.name);
+    if (party.abbreviation) tokens.add(party.abbreviation);
+  }
+
+  // AMBIGUOUS TOKENS ARE DROPPED, and this is not hypothetical: reunification
+  // leaves Germany holding TWO parties abbreviated "CDU" — the western one it
+  // bans and the eastern one it tolerates. A name or abbreviation shared with a
+  // party that is NOT banned cannot identify a bench, so matching on it would
+  // unseat the tolerated party's members alongside the banned one's.
+  //
+  // `sequentialId` is never dropped: it is unique per country by index, it is
+  // what production actually stores, and it is the only token that is safe by
+  // construction.
+  for (const party of parties) {
+    if (banned.has(party.sequentialId)) continue;
+    if (party.name) tokens.delete(party.name);
+    if (party.abbreviation) tokens.delete(party.abbreviation);
+  }
+  for (const id of banned) tokens.add(String(id));
+
+  if (tokens.size === 0) return;
+
+  const officials = db.collection<ElectedOfficial>("electedOfficials");
+  const doomed = await officials.find({ countryId, party: { $in: [...tokens] } }).toArray();
+  if (doomed.length === 0) return;
+
+  const characterIds = doomed.map((o) => o.characterId).filter(Boolean) as ObjectId[];
+  const nppIds = doomed.map((o) => o.nppId).filter(Boolean) as ObjectId[];
+
+  await officials.deleteMany({ _id: { $in: doomed.map((o) => o._id) } });
+
+  // AFTER the delete: "still seated" has to be measured against the rows that
+  // survive, not the ones about to go.
+  const stillSeated = await officials
+    .find({ countryId, $or: [{ characterId: { $in: characterIds } }, { nppId: { $in: nppIds } }] })
+    .toArray();
+  const seatedCharacters = new Set(stillSeated.map((o) => o.characterId?.toString()));
+  const seatedNpps = new Set(stillSeated.map((o) => o.nppId?.toString()));
+
+  const clearCharacters = characterIds.filter((id) => !seatedCharacters.has(id.toString()));
+  const clearNpps = nppIds.filter((id) => !seatedNpps.has(id.toString()));
+
+  if (clearCharacters.length > 0) {
+    await db
+      .collection("characters")
+      .updateMany(
+        { _id: { $in: clearCharacters } },
+        { $set: { currentOffice: null, updatedAt: now } }
+      );
+  }
+  if (clearNpps.length > 0) {
+    await db
+      .collection("npps")
+      .updateMany({ _id: { $in: clearNpps } }, { $set: { currentOffice: null, updatedAt: now } });
+  }
 }
 
 /**

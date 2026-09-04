@@ -127,7 +127,7 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
   });
 
   it("returns 400 when the atomic debit guard reports insufficient funds", async () => {
-    // Cost = 1000 units × $1000 face × 1.0 marketPrice = $1,000,000.
+    // Cost = 1000 units × $1000 face × 1.01 ask (mid 1.0 + 1% sovereign half spread) = $1,010,000.
     // Pre-buy the character has $1M, so the SECOND of two parallel buys would
     // fail. We simulate that here by having findOneAndUpdate return null.
     db.collectionMocks["characters"]!.findOneAndUpdate.mockResolvedValue(null);
@@ -186,10 +186,10 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
     const filter = calls[0][0] as Record<string, unknown>;
     expect(filter._id).toEqual(charId);
     const balanceField = filter["currencyBalances.personal.USD"] as { $gte?: number };
-    expect(balanceField?.$gte).toBe(1_000_000);
+    expect(balanceField?.$gte).toBe(1_010_000);
 
     const update = calls[0][1] as { $inc: Record<string, number> };
-    expect(update.$inc["currencyBalances.personal.USD"]).toBe(-1_000_000);
+    expect(update.$inc["currencyBalances.personal.USD"]).toBe(-1_010_000);
   });
 
   it("on guarded debit success, writes the bond holder and emits bond_purchase tx", async () => {
@@ -229,7 +229,7 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
     expect(vi.mocked(emitTx)).toHaveBeenCalledTimes(1);
     const txArg = vi.mocked(emitTx).mock.calls[0][1];
     expect(txArg.type).toBe("bond_purchase");
-    expect(txArg.amount).toBe(-1_000_000);
+    expect(txArg.amount).toBe(-1_010_000);
     expect(txArg.subjectType).toBe("character");
   });
 
@@ -266,7 +266,7 @@ describe("bond buy — atomic balance-gated debit (regression)", () => {
     const refundAmount = (refundCall![1] as { $inc: Record<string, number> }).$inc[
       "currencyBalances.personal.USD"
     ];
-    expect(refundAmount).toBe(1_000_000);
+    expect(refundAmount).toBe(1_010_000);
 
     // No tx should be emitted on failure.
     const { emitTx } = await import("@/lib/financialTxLog/emit");

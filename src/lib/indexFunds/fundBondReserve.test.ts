@@ -18,6 +18,7 @@ import {
   deployBondReserveFromCash,
   isGlobalFundBondEligible,
   rankSovereignIssuesForBreadth,
+  ratingWithinUniverse,
   resolveFundBondCountryId,
 } from "./fundBondReserve";
 
@@ -191,5 +192,17 @@ describe("global sovereign demand", () => {
     };
     await deployBondReserveFromCash(db, controlFund, 0, { liquidityTargetEnabled: false });
     expect(bondFind.mock.calls[1][0]).toMatchObject({ countryId: "US" });
+  });
+});
+
+describe("ratingWithinUniverse", () => {
+  it("treats minRating as the worst grade allowed and maxRating as the best", () => {
+    expect(ratingWithinUniverse("AAA", { minRating: "BBB" })).toBe(true);
+    expect(ratingWithinUniverse("BB", { minRating: "BBB" })).toBe(false);
+    expect(ratingWithinUniverse("BB", { maxRating: "BB" })).toBe(true);
+    expect(ratingWithinUniverse("A", { maxRating: "BB" })).toBe(false);
+    // Unrated corporates read as BBB: investment grade, not high yield.
+    expect(ratingWithinUniverse(undefined, { minRating: "BBB" })).toBe(true);
+    expect(ratingWithinUniverse(undefined, { maxRating: "BB" })).toBe(false);
   });
 });

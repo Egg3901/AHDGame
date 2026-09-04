@@ -25,6 +25,7 @@ import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import { getEnactedLevels } from "@/lib/politicalLegislation/enactedLevels";
 import type { FederalBudget } from "@/lib/db/types/budget";
+import type { Bill } from "@/lib/db/types/legislation";
 import {
   getBudgetForFiscalYear,
   upsertBudgetDraft,
@@ -116,10 +117,33 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
     const ctx = await resolveContext(request, code);
     if ("error" in ctx) return ctx.error;
 
-    const [budget, federalBudget, enactedLevels] = await Promise.all([
+    const [budget, federalBudget, enactedLevels, voteBill] = await Promise.all([
       getBudgetForFiscalYear(ctx.db, ctx.fiscalYear),
       ctx.db.collection<FederalBudget>("federalBudget").findOne({ _id: "UK" }),
       getEnactedLevels(ctx.db, "UK"),
+      // The Budget's vote-vehicle bill (ticket #1268): without this the panel
+      // shows a bare "tabled" state while the Commons vote is pending and the
+      // Chancellor cannot tell the vote is progressing.
+      ctx.db
+        .collection<Bill>("bills")
+        .find(
+          { countryId: "UK", category: "budget", budgetFiscalYear: ctx.fiscalYear },
+          {
+            projection: {
+              status: 1,
+              votesFor: 1,
+              votesAgainst: 1,
+              votesAbstain: 1,
+              votingEndsAt: 1,
+              votingEndsOnTurn: 1,
+              proposedTurn: 1,
+            },
+            sort: { proposedTurn: -1 },
+            limit: 1,
+          }
+        )
+        .toArray()
+        .then((bills) => bills[0] ?? null),
     ]);
     return NextResponse.json({
       fiscalYear: ctx.fiscalYear,
@@ -151,6 +175,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
             status: budget.status,
             taxRates: budget.taxRates,
             programLevels: budget.programLevels ?? {},
+          }
+        : null,
+      voteBill: voteBill
+        ? {
+            id: voteBill._id.toString(),
+            status: voteBill.status,
+            votesFor: voteBill.votesFor ?? 0,
+            votesAgainst: voteBill.votesAgainst ?? 0,
+            votesAbstain: voteBill.votesAbstain ?? 0,
+            votingEndsAt: voteBill.votingEndsAt?.toISOString() ?? null,
+            votingEndsOnTurn: voteBill.votingEndsOnTurn ?? null,
           }
         : null,
     });
@@ -216,9 +251,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         provisions: compiled.provisions,
       });
       if (!tabled.ok) return NextResponse.json({ error: tabled.error }, { status: 400 });
+      // Hand the client the vote-vehicle bill id so the panel can link straight
+      // to the Commons vote (ticket #1268).
+      return NextResponse.json({
+        ok: true,
+        tabled: true,
+        billId: tabled.billId?.toString() ?? null,
+      });
     }
 
-    return NextResponse.json({ ok: true, tabled: action === "table" });
+    return NextResponse.json({ ok: true, tabled: false });
   } catch (err) {
     return handleRouteError(err);
   }

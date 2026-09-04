@@ -27,6 +27,7 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   // other exports used by the file but not by executeFundShareBuy
   getFundById: vi.fn(),
   listActiveFunds: vi.fn(),
+  listServiceableFunds: vi.fn(),
   updateFundNav: vi.fn(),
   updateFundConstituents: vi.fn(),
   setFundStatus: vi.fn(),
@@ -42,6 +43,21 @@ vi.mock("@/lib/corporations/shareholderOps", () => ({
 
 vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
   applyFloatBuyCredit: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock("@/lib/equities/marketPool", () => ({
+  loadEquityQuote: vi.fn().mockImplementation((_db, corp: { sharePrice: number }) =>
+    Promise.resolve({
+      active: false,
+      currency: "USD",
+      midPriceLocal: corp.sharePrice,
+      bidPriceLocal: corp.sharePrice,
+      askPriceLocal: corp.sharePrice,
+      bidDepthShares: Number.MAX_SAFE_INTEGER,
+      poolCash: 0,
+      targetCash: 0,
+    })
+  ),
 }));
 
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({
@@ -301,16 +317,33 @@ describe("fundCron — recomputeNav", () => {
     expect(navWithEscrow).toBeCloseTo(100, 0);
   });
 
-  it("subtracts queued redemption liabilities after units are burned", () => {
+  it("counts queued redemption units as outstanding rather than as a payable", () => {
     const fund: IndexFund = {
       ...baseFund,
       cashAnchor: 10_000_000,
       holdings: [],
       unitSupply: 90_000,
     };
-    const nav = recomputeNav(fund, { queuedRedemptionLiabilityAnchor: 1_000_000 });
-    // Backing available to remaining holders is 9M after the queued payable.
+    // 10M over 90K held + 10K queued = 100. A queued holder is still a holder.
+    const nav = recomputeNav(fund, { queuedRedemptionUnits: 10_000 });
     expect(nav).toBeCloseTo(100, 0);
+  });
+
+  it("does not let a queued claim push NAV down as assets fall", () => {
+    // The GLB50 failure: a large redemption is queued, then the book halves.
+    // Under the old fixed-cash-liability model the remaining holders absorbed
+    // the entire decline and NAV collapsed to zero. Pro-rata, everyone takes
+    // the same proportional hit and NAV stays positive and honest.
+    const before = recomputeNav(
+      { ...baseFund, cashAnchor: 10_000_000, holdings: [], unitSupply: 50_000 },
+      { queuedRedemptionUnits: 50_000 }
+    );
+    const after = recomputeNav(
+      { ...baseFund, cashAnchor: 5_000_000, holdings: [], unitSupply: 50_000 },
+      { queuedRedemptionUnits: 50_000 }
+    );
+    expect(before).toBeCloseTo(100, 0);
+    expect(after).toBeCloseTo(50, 0);
   });
 });
 

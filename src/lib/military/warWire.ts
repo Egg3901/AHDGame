@@ -24,7 +24,7 @@
  * country's own money.
  */
 import type { ConflictDoc } from "@/lib/db/types/conflict";
-import type { PeaceTerm } from "@/lib/military/peaceTerm";
+import { governmentSystemLabel, type PeaceTerm } from "@/lib/military/peaceTerm";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { DISCORD_COLORS, type DiscordEmbed } from "@/lib/discordWebhooks";
 
@@ -58,12 +58,13 @@ function settledTitle(conflict: ConflictDoc): string {
   if (term.kind === "white_peace") return `${conflict.name} ends where it began`;
   if (term.kind === "regime_change") return `${name(loser)} is made to change its government`;
   if (term.kind === "demilitarisation") return `${name(loser)} is disarmed by treaty`;
+  if (term.kind === "reunification") return "Germany is made one";
   if (term.amount > 0) return `${name(loser)} pays for the peace`;
   return `${conflict.name} ends with nothing taken`;
 }
 
 /** Prose carrying no digits: the figures live in the fields, where they can be read. */
-function settledBody(conflict: ConflictDoc): string {
+function settledBody(conflict: ConflictDoc, rulingPartyName?: string | null): string {
   const s = conflict.settlement;
   if (!s) {
     return (
@@ -87,15 +88,45 @@ function settledBody(conflict: ConflictDoc): string {
     );
   }
   if (s.term.kind === "regime_change") {
+    // A one-party conversion is not "going to the polls" in any sense a reader
+    // would recognise, and where the victor NAMED the party it is the whole
+    // substance of the settlement. Reporting it as a generic change of system
+    // would leave the dispatch describing something milder than what happened.
+    if (s.term.targetSystem === "onePartyState") {
+      // No name means the settlement named no party and the strongest bench took
+      // power on its own. Saying so is more honest than implying a choice the
+      // victor did not make.
+      const ruler = rulingPartyName ? `under the ${rulingPartyName}` : "under its strongest party";
+      return (
+        `${conflict.name} is over, and ${loser} ${how}. Its government falls with the ` +
+        `war and it is reconstituted as a one-party state ${ruler}, with every other ` +
+        `party banned.`
+      );
+    }
     return (
       `${conflict.name} is over, and ${loser} ${how}. Its government falls with the war, ` +
-      `and it will go to the polls under a system ${winner} chose for it.`
+      `and it will go to the polls as a ${governmentSystemLabel(s.term.targetSystem)}, ` +
+      `a system ${winner} chose for it.`
     );
   }
   if (s.term.kind === "demilitarisation") {
     return (
       `${conflict.name} is over, and ${loser} ${how}. Its armouries stay shut to new ` +
       `orders for as long as the settlement holds, while what it already bought keeps arriving.`
+    );
+  }
+  if (s.term.kind === "reunification") {
+    // NAMES NEITHER PARTY, deliberately. `imposedBy` and `target` record which end of
+    // the deal was written where, and for this term that says nothing about who
+    // prevailed: either founder may propose it, and from the incumbent it is an offer
+    // to withdraw AND concede, which stamps the WINNER as the target. Casting the
+    // target as the side that gave way then reports the war exactly backwards. The
+    // term settles the question rather than landing on a country, so the prose says
+    // so and leaves both signatories out of the claim.
+    return (
+      `${conflict.name} is over, and the German question is answered on the East's ` +
+      `terms: the two states become one, and the settlement is carried into a single ` +
+      `German government.`
     );
   }
   if (s.term.amount > 0) {
@@ -110,16 +141,31 @@ function settledBody(conflict: ConflictDoc): string {
   );
 }
 
-/** The term as one labelled field value. */
-export function termFieldValue(term: PeaceTerm): string {
+/**
+ * The term as one labelled field value.
+ *
+ * `rulingPartyName` is the party a one-party conversion installs, resolved by the
+ * caller because the term stores an id and this function is pure. Absent, the
+ * value simply names the system, which is what a conversion that named no party
+ * actually did.
+ */
+export function termFieldValue(term: PeaceTerm, rulingPartyName?: string | null): string {
   if (term.kind === "white_peace") return "White peace, status quo";
   if (term.kind === "indemnity") {
     return term.amount > 0
       ? `Indemnity: ${term.amount.toLocaleString("en-US")} from ${name(term.payer)}`
       : "White peace";
   }
-  if (term.kind === "regime_change") return `Regime change: ${term.targetSystem}`;
-  return `Demilitarisation: ${term.turns} turns`;
+  if (term.kind === "regime_change") {
+    // `governmentSystemLabel`, not the raw key: this string is read by players,
+    // and the enum reached them verbatim as "onePartyState".
+    const system = governmentSystemLabel(term.targetSystem);
+    return rulingPartyName
+      ? `Regime change: ${system} under the ${rulingPartyName}`
+      : `Regime change: ${system}`;
+  }
+  if (term.kind === "demilitarisation") return `Demilitarisation: ${term.turns} turns`;
+  return "German reunification";
 }
 
 /**
@@ -129,9 +175,12 @@ export function termFieldValue(term: PeaceTerm): string {
  * there is not: a war whose window lapsed took no term, and that reads as a white
  * peace rather than as a missing record.
  */
-export function buildSettledDispatch(conflict: ConflictDoc): WarDispatch {
+export function buildSettledDispatch(
+  conflict: ConflictDoc,
+  rulingPartyName?: string | null
+): WarDispatch {
   const title = settledTitle(conflict);
-  const body = settledBody(conflict);
+  const body = settledBody(conflict, rulingPartyName);
   const s = conflict.settlement;
 
   const fields: NonNullable<DiscordEmbed["fields"]> = [
@@ -143,7 +192,11 @@ export function buildSettledDispatch(conflict: ConflictDoc): WarDispatch {
           : "The front line held",
       inline: true,
     },
-    { name: "Terms", value: s ? termFieldValue(s.term) : "None taken", inline: true },
+    {
+      name: "Terms",
+      value: s ? termFieldValue(s.term, rulingPartyName) : "None taken",
+      inline: true,
+    },
     {
       name: "Settled by",
       value: s?.path === "dictated" ? "Force of arms" : "Negotiation",

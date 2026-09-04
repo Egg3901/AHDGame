@@ -9,6 +9,7 @@ import { StateDrawer } from "./StateDrawer";
 import { StatePartyMap, countryHasMap, type MapColorBy } from "./StatePartyMap";
 import { sumBulkEstimate, type BulkMode, type BulkPreview } from "./bulkEstimate";
 import { orgTier, toneColor } from "./orgTier";
+import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 
 export interface StatePartyHQProps {
   countryId: string;
@@ -23,6 +24,16 @@ export interface StatePartyHQProps {
    * this pool (not the per-state totals shown in the table) — ticket #1059.
    */
   nationalPoliticalStrength: number;
+  /**
+   * National party treasury, in the party's local currency. Bulk Build Org
+   * debits it once per selected state, so it is the cost that scales with the
+   * size of the selection and needs checking before the run starts.
+   *
+   * `undefined` means "not known here", and the cash guard is skipped rather
+   * than treating it as an empty treasury — a caller that omits it should get
+   * the old behaviour, not a permanently blocked button.
+   */
+  nationalTreasury?: number;
   /** Refresh national party data after a bulk national-PS spend. */
   onNationalPsSpent?: () => void;
 }
@@ -33,6 +44,23 @@ function fmtMoney(v: number): string {
   return `$${v.toFixed(0)}`;
 }
 
+/**
+ * Currency-correct money for the bulk Build Org readouts.
+ *
+ * `fmtMoney` above hardcodes `$` and is duplicated in `StateDrawer` and
+ * `StatePartyTable`, so every HQ money figure reads as dollars regardless of the
+ * party's country. That is a pre-existing issue wider than this surface and is
+ * left alone here; new copy uses the party's real symbol rather than adding to
+ * it.
+ */
+function fmtLocalMoney(v: number, countryId: string): string {
+  const code = COUNTRY_CURRENCY_MAP[countryId.toUpperCase() as keyof typeof COUNTRY_CURRENCY_MAP];
+  const symbol = CURRENCY_SYMBOLS[code as keyof typeof CURRENCY_SYMBOLS] ?? "$";
+  if (v >= 1_000_000) return `${symbol}${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${symbol}${(v / 1_000).toFixed(0)}K`;
+  return `${symbol}${Math.round(v).toLocaleString("en-US")}`;
+}
+
 export function StatePartyHQ({
   countryId,
   partyId,
@@ -40,6 +68,7 @@ export function StatePartyHQ({
   canManage,
   canSpendPs,
   nationalPoliticalStrength,
+  nationalTreasury,
   onNationalPsSpent,
 }: StatePartyHQProps) {
   const { showToast } = useToast();
@@ -59,6 +88,15 @@ export function StatePartyHQ({
   useEffect(() => {
     setNationalPs(nationalPoliticalStrength);
   }, [nationalPoliticalStrength]);
+  // Same reason as `nationalPs`: the parent's refetch after a bulk run is async,
+  // so without a local copy a chair who immediately selects a second batch is
+  // checked against the pre-run balance. The server would still refuse the
+  // overdraw, but that is exactly the half-finished run this guard exists to
+  // avoid.
+  const [natTreasury, setNatTreasury] = useState(nationalTreasury);
+  useEffect(() => {
+    setNatTreasury(nationalTreasury);
+  }, [nationalTreasury]);
 
   // Per-region preview cache for the live bulk Build Org estimate.
   const [buildPreviews, setBuildPreviews] = useState<Record<string, BulkPreview>>({});
@@ -93,7 +131,11 @@ export function StatePartyHQ({
       void (async () => {
         try {
           const base = regionPartyApiUrl(countryId, region, partyId);
-          const res = await fetch(`${base}/build-org/preview`);
+          // Quote the NATIONAL tier: the bulk run always posts
+          // `psPool: "national"`, and the tier sets the cash rate and which
+          // treasury pays. Without this an officer who also holds a state seat
+          // in a selected state is quoted that state's (half) price.
+          const res = await fetch(`${base}/build-org/preview?psPool=national`);
           const d = await res.json();
           setBuildPreviews((c) => ({ ...c, [region]: d }));
         } catch {
@@ -239,11 +281,22 @@ export function StatePartyHQ({
       );
       return;
     }
+    // Cash check mirrors the PS one. Without it the run starts, drains the
+    // national treasury partway down the selection, and the remaining states
+    // come back refused — a half-done bulk with no warning up front.
+    if (overBudget && estimate) {
+      showToast(
+        `Not enough national funds: need ${fmtLocalMoney(estimate.totalCash, countryId)}, have ${fmtLocalMoney(natTreasury ?? 0, countryId)}`,
+        "error"
+      );
+      return;
+    }
     setBusy(true);
     try {
       let done = 0;
       let failed = 0;
       let spent = 0;
+      let spentCash = 0;
       let firstError = "";
       const noteFail = async (res?: Response) => {
         failed += 1;
@@ -265,6 +318,12 @@ export function StatePartyHQ({
           done += 1;
           const d = await res.json().catch(() => ({}));
           if (typeof d?.psCost === "number") spent += d.psCost;
+          if (typeof d?.cashCost === "number") {
+            spentCash += d.cashCost;
+            // Keep the local balance in step with the run so a second batch
+            // selected before the parent refetch lands is checked honestly.
+            setNatTreasury((t) => (t === undefined ? t : Math.max(0, t - d.cashCost)));
+          }
           if (typeof d?.newPS === "number") setNationalPs(d.newPS);
         } else await noteFail(res);
       }
@@ -276,11 +335,12 @@ export function StatePartyHQ({
         return;
       }
 
+      const cashPart = spentCash > 0 ? ` and ${fmtLocalMoney(spentCash, countryId)}` : "";
       showToast(
         failed > 0
-          ? `Built org in ${done} states from national PS · ${failed} failed`
+          ? `Built org in ${done} states from national PS${cashPart} · ${failed} failed`
           : `Built org in ${done} states from national PS` +
-              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS before recovery)` : ""),
+              (spent > 0 ? ` (−${spent.toFixed(0)} Nat'l PS before recovery${cashPart})` : ""),
         failed > 0 ? "info" : "success"
       );
       setBulkMode(null);
@@ -297,6 +357,10 @@ export function StatePartyHQ({
     if (!bulkMode) return null;
     return sumBulkEstimate({ selected: [...sel], previews: buildPreviews });
   }, [bulkMode, sel, buildPreviews]);
+
+  /** Only guard when the balance is actually known — see `nationalTreasury`. */
+  const overBudget =
+    natTreasury !== undefined && estimate !== null && estimate.totalCash > natTreasury + 1e-6;
 
   const openRow = openId ? (rows.find((r) => r.regionId === openId) ?? null) : null;
 
@@ -383,7 +447,20 @@ export function StatePartyHQ({
               <span className="font-medium">
                 Build Org · Nat&apos;l PS · {estimate.states} states · Est.{" "}
                 <b className="tabular-nums">{estimate.totalPS} Nat&apos;l PS</b>
-                <span className="text-muted"> (have {nationalPs.toFixed(1)})</span> ·{" "}
+                <span className="text-muted"> (have {nationalPs.toFixed(1)})</span>
+                {estimate.totalCash > 0 ? (
+                  <>
+                    {" · "}
+                    <b className="tabular-nums">{fmtLocalMoney(estimate.totalCash, countryId)}</b>
+                    {natTreasury !== undefined ? (
+                      <span className="text-muted">
+                        {" "}
+                        (have {fmtLocalMoney(natTreasury, countryId)})
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}{" "}
+                ·{" "}
                 {estimate.states > 1 ? (
                   <>
                     avg{" "}
@@ -400,14 +477,24 @@ export function StatePartyHQ({
                 {estimate.totalPS > nationalPs + 1e-6 ? (
                   <span className="ml-2 font-semibold text-error">Insufficient national PS</span>
                 ) : null}
+                {overBudget ? (
+                  <span className="ml-2 font-semibold text-error">Insufficient national funds</span>
+                ) : null}
               </span>
               <span className="flex gap-2">
                 <button
-                  disabled={busy || estimate.states === 0 || estimate.totalPS > nationalPs + 1e-6}
+                  disabled={
+                    busy ||
+                    estimate.states === 0 ||
+                    estimate.totalPS > nationalPs + 1e-6 ||
+                    overBudget
+                  }
                   onClick={() => runBulkSpend()}
                   className="rounded-md bg-primary px-3 py-1 font-medium text-white disabled:opacity-50"
                 >
-                  {busy ? "Working…" : `Confirm (${estimate.totalPS} Nat'l PS)`}
+                  {busy
+                    ? "Working…"
+                    : `Confirm (${estimate.totalPS} Nat'l PS${estimate.totalCash > 0 ? ` · ${fmtLocalMoney(estimate.totalCash, countryId)}` : ""})`}
                 </button>
                 <button
                   className="text-muted hover:text-foreground"

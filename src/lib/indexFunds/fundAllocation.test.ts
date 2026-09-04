@@ -66,3 +66,18 @@ describe("computeFundAllocationBreakdown", () => {
     expect(breakdown.cashAvailableForBondDeployAnchor).toBeCloseTo(3_750_000, 0);
   });
 });
+
+describe("bond funds", () => {
+  it("puts everything past the cash buffer into bonds and allows no equities", () => {
+    const breakdown = computeFundAllocationBreakdown(
+      { kind: "bond", cashAnchor: 1_000, holdings: [], bondAllocations: [] },
+      { bondPrincipalAnchor: 0 }
+    );
+    expect(breakdown.maxEquityValueAnchor).toBe(0);
+    expect(breakdown.stockPurchaseBudgetAnchor).toBe(0);
+    // Buffer is 5% of 1,000 backing: target 950, all deployable from cash.
+    expect(breakdown.targetBondValueAnchor).toBe(950);
+    expect(breakdown.bondDeploymentNeededAnchor).toBe(950);
+    expect(breakdown.cashAvailableForBondDeployAnchor).toBe(950);
+  });
+});

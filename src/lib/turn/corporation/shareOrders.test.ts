@@ -110,7 +110,140 @@ function setupOpenBuyOrder(opts: {
   });
 }
 
+function setupOpenSellOrder(opts: {
+  corpId: ObjectId;
+  characterId: ObjectId;
+  shares: number;
+  orderLimitPrice: number;
+  currentSharePrice: number;
+  heldShares: number;
+}) {
+  const orderDoc = {
+    _id: new ObjectId(),
+    corporationId: opts.corpId,
+    characterId: opts.characterId,
+    type: "sell",
+    shares: opts.shares,
+    sharesRemaining: opts.shares,
+    pricePerShare: opts.orderLimitPrice,
+    escrowAmount: 0,
+    status: "open",
+  };
+  db.collection("shareOrders").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([orderDoc]),
+  });
+  const corpDoc = {
+    _id: opts.corpId,
+    name: "Test Corp",
+    sharePrice: opts.currentSharePrice,
+    fundamentalSharePrice: opts.currentSharePrice,
+    publicFloat: 0,
+    totalShares: 1_000,
+    shareholders: [{ characterId: opts.characterId, shares: opts.heldShares }],
+    liquidCurrencyCode: "USD",
+    countryId: "US",
+  };
+  db.collection("corporations").find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([corpDoc]),
+    project: vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: opts.corpId, name: "Test Corp" }]),
+    }),
+  });
+  db.collection("characters").find.mockReturnValue({
+    project: vi.fn().mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ _id: opts.characterId, name: "Seller", countryId: "US" }]),
+    }),
+  });
+}
+
 describe("fillPendingShareOrders", () => {
+  it("settles queued public-float buys into the currency pool", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const charId = new ObjectId();
+    setupOpenBuyOrder({
+      corpId,
+      characterId: charId,
+      shares: 10,
+      orderLimitPrice: 200,
+      currentSharePrice: 100,
+      fundamentalSharePrice: 100,
+      publicFloat: 50,
+      totalShares: 1_000,
+      existingShareholders: [],
+      charName: "Pool Buyer",
+    });
+    const pool = db.collection("equityMarketPools");
+    pool.findOne.mockResolvedValue({
+      _id: "USD",
+      cashLocal: 10_000,
+      targetCashLocal: 10_000,
+    });
+    pool.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
+
+    expect(pool.updateOne).toHaveBeenCalledWith(
+      { _id: "USD" },
+      expect.objectContaining({
+        $inc: expect.objectContaining({
+          cashLocal: 1_020,
+          "lifetime.purchasesIn": 1_020,
+        }),
+      })
+    );
+  });
+
+  it("partially fills queued sells at the pool's bid and finite cash depth", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const sellerId = new ObjectId();
+    setupOpenSellOrder({
+      corpId,
+      characterId: sellerId,
+      shares: 10,
+      orderLimitPrice: 90,
+      currentSharePrice: 100,
+      heldShares: 10,
+    });
+    const pool = db.collection("equityMarketPools");
+    pool.findOne.mockResolvedValue({
+      _id: "USD",
+      cashLocal: 245,
+      targetCashLocal: 245,
+    });
+    pool.updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
+
+    // Bid is $98, so $245 of cash can absorb two whole shares.
+    expect(pool.updateOne).toHaveBeenCalledWith(
+      { _id: "USD", cashLocal: { $gte: 196 } },
+      expect.objectContaining({
+        $inc: expect.objectContaining({ cashLocal: -196, "lifetime.salesOut": 196 }),
+      })
+    );
+    const orderUpdate = db.collection("shareOrders").bulkWrite.mock.calls[0][0][0];
+    expect(orderUpdate.updateOne.update.$set).toMatchObject({
+      status: "open",
+      sharesRemaining: 8,
+    });
+    const corpOps = db.collection("corporations").bulkWrite.mock.calls[0][0];
+    expect(corpOps).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            update: expect.objectContaining({
+              $inc: expect.objectContaining({ "shareholders.$.shares": -2 }),
+            }),
+          }),
+        }),
+      ])
+    );
+  });
+
   it("stamps avgCostPerShare on newly-pushed shareholder entries at current market price", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
     const corpId = new ObjectId();

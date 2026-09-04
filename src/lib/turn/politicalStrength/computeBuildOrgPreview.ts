@@ -21,6 +21,8 @@ import {
 } from "@/lib/turn/politicalStrength/buildOrgGain";
 import { isStateInPriorityRegion } from "@/lib/parties/priorityRegion";
 import { resolveUnmannedDefaultCaptureMultiplier } from "@/lib/parties/unmannedDefenseShield";
+import { orgBuildCashPrice, resolveOrgBuildFunding } from "@/lib/politicalStrength/buildOrgFunding";
+import { resolveOrgBuildSizeMultiplier } from "@/lib/politicalStrength/orgBuildStateSize";
 
 /**
  * Canonical Build Org projection — the single source of truth shared by the
@@ -50,6 +52,22 @@ export type BuildOrgPreviewResult =
       effectiveCost: number;
       /** Current per-(party, state) pressure-ladder value. */
       pressureValue: number;
+      /** Cash price of the next click, in the paying tier's local currency. */
+      cashPrice: number;
+      /**
+       * Per-state size multiplier already folded into `cashPrice` — above 1 in a
+       * state larger than its country's average, below 1 in a smaller one.
+       * Surfaced so the UI can explain why the same action costs more here.
+       */
+      sizeMultiplier: number;
+      /** Balance of the treasury that would pay (state or national, per `scope`). */
+      treasuryAvailable: number;
+      /**
+       * `min(1, treasury / cashPrice)` — the share of the click the treasury can
+       * fund. `projectedGain` and `poaches` below are ALREADY scaled by this, so
+       * consumers must not apply it a second time.
+       */
+      fundedFraction: number;
       /** Org% the next click actually grants — clamped exactly as the POST applies it. */
       projectedGain: number;
       /** Per-rival poach losses the next click would inflict (loss > 0 only). */
@@ -66,7 +84,11 @@ export type BuildOrgPreviewResult =
       eligibleScopes: SpenderScopeEligibility;
       priorityRegionBonusApplied: boolean;
     }
-  | { ok: false; reason: "no-presence" | "auth" | "no-headroom"; message: string };
+  | {
+      ok: false;
+      reason: "no-presence" | "auth" | "no-headroom" | "insufficient-funds";
+      message: string;
+    };
 
 export interface ComputeBuildOrgPreviewParams {
   countryId: CountryId;
@@ -75,11 +97,24 @@ export interface ComputeBuildOrgPreviewParams {
   /** Resolved spender party doc (national tier). */
   spenderParty: PoliticalParty;
   authUser: AuthUserWithCharacter;
+  /**
+   * Which PS pool the caller intends to spend, when it already knows.
+   *
+   * Load-bearing for the money side: the tier decides both the rate (national is
+   * twice state) and which treasury is checked. The national HQ's bulk tool
+   * always posts `psPool: "national"`, so without this a dual-role officer would
+   * be quoted the state price against the state treasury and then charged the
+   * national price against the national one.
+   *
+   * Honored only where the spender is actually eligible for that tier;
+   * `resolveSpenderScope` falls back otherwise.
+   */
+  preferredScope?: "state" | "national-targeted";
 }
 
 export async function computeBuildOrgPreview(
   db: Db,
-  { countryId, upperRegionId, spenderParty, authUser }: ComputeBuildOrgPreviewParams
+  { countryId, upperRegionId, spenderParty, authUser, preferredScope }: ComputeBuildOrgPreviewParams
 ): Promise<BuildOrgPreviewResult> {
   // The spender row MAY be absent (seed deliberately omits e.g. CDU in Bayern).
   // Project from a virtual 0% row so the preview matches the POST's bootstrap —
@@ -176,7 +211,7 @@ export async function computeBuildOrgPreview(
     };
   }
 
-  const scope = resolveSpenderScope(spenderParty, spenderRow, authUser);
+  const scope = resolveSpenderScope(spenderParty, spenderRow, authUser, preferredScope);
   const eligibleScopes = resolveSpenderScopeEligibility(spenderParty, spenderRow, authUser);
 
   const pressureRow = await db
@@ -185,22 +220,46 @@ export async function computeBuildOrgPreview(
   const pressureValue = pressureRow?.value ?? 0;
   const effectiveCost = effectivePsCost(BUILD_ORG_BASE_PS_COST, pressureValue);
 
-  // Project the gain EXACTLY as the POST applies it: priority-region bonus on the
-  // effect (not the cost), then re-clamp the pool slice to the unaffiliated
-  // remainder and each poach to the rival's current Org. Without this the preview
-  // over-reports gain in a saturated / oversaturated state.
+  // Cash side. The paying treasury is the one belonging to the tier that pays
+  // the PS, so the quote matches what the POST will actually debit.
+  // Organizing a big state costs more than a small one: a point of Org is a
+  // share of ITS state, so the same point buys more absolute weight where there
+  // are more people. Normalized to average 1 per country, so this redistributes
+  // between states without moving the overall level.
+  const sizeMultiplier = await resolveOrgBuildSizeMultiplier(db, countryId, upperRegionId);
+  const cashPrice = orgBuildCashPrice(countryId, scope, effectiveCost, sizeMultiplier);
+  const treasuryAvailable =
+    scope === "state" ? (spenderRow?.treasury ?? 0) : (spenderParty.treasury ?? 0);
+  const funding = resolveOrgBuildFunding({ price: cashPrice, treasury: treasuryAvailable });
+  if (!funding.ok) {
+    return {
+      ok: false,
+      reason: "insufficient-funds",
+      message:
+        scope === "state"
+          ? "This state party cannot afford to organize here. Build Org costs money as well as Political Strength; top up the state treasury or ask the national party for a transfer."
+          : "The national party cannot afford to organize here. Build Org costs money as well as Political Strength; raise funds before building again.",
+    };
+  }
+
+  // Project the gain EXACTLY as the POST applies it: priority-region bonus and
+  // funded fraction on the effect (not the cost), then re-clamp the pool slice
+  // to the unaffiliated remainder and each poach to the rival's current Org.
+  // Without this the preview over-reports gain in a saturated / oversaturated
+  // state, or for a click the treasury can only partly fund.
   const priorityBonus = isStateInPriorityRegion(spenderParty, upperRegionId)
     ? 1 + PRIORITY_REGION_EFFECT_BONUS
     : 1;
+  const effectMultiplier = priorityBonus * funding.fundedFraction;
   const poolAvailablePct = Math.max(0, 100 - totalPartyOrgPct);
-  const appliedPoolGain = Math.min(breakdown.poolGain * priorityBonus, poolAvailablePct);
+  const appliedPoolGain = Math.min(breakdown.poolGain * effectMultiplier, poolAvailablePct);
   const rivalOrgById = new Map(rivalRows.map((r) => [r.partyId, r.organization ?? 0]));
   const appliedPoaches = breakdown.rivalPoaches
     .map((p) => {
       const rivalParty = partyBySeq.get(p.partyId);
       return {
         partyId: p.partyId,
-        loss: Math.min(p.loss * priorityBonus, rivalOrgById.get(p.partyId) ?? 0),
+        loss: Math.min(p.loss * effectMultiplier, rivalOrgById.get(p.partyId) ?? 0),
         ...(rivalParty
           ? { partyName: rivalParty.name, abbreviation: rivalParty.abbreviation }
           : {}),
@@ -213,6 +272,10 @@ export async function computeBuildOrgPreview(
     ok: true,
     effectiveCost,
     pressureValue,
+    cashPrice,
+    sizeMultiplier,
+    treasuryAvailable,
+    fundedFraction: funding.fundedFraction,
     projectedGain,
     poaches: appliedPoaches,
     factors: breakdown.factors,

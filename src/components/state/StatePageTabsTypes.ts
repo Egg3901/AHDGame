@@ -192,21 +192,8 @@ export interface StatePageTabsProps {
   bucketProfile?: BucketProfileSection[] | null;
 }
 
-export interface PolicyRecordResponse {
-  legislationTypeId: string;
-  name: string;
-  policyDomain: string;
-  economic: number;
-  social: number;
-  nationalOnly: boolean;
-  policyOptionName: string | null;
-  hasEconomic?: boolean;
-  hasSocial?: boolean;
-  enactedByKind?: "bill" | "order" | "expiry" | null;
-  activeOrder?: {
-    orderId: string;
-    issuedByName: string;
-    issuedAtTurn: number;
-    expiresAtTurn: number;
-  } | null;
-}
+// PolicyRecordResponse used to live here as a narrower copy of the canonical
+// shape in @/lib/policy/types — it predated the statute book and lacked
+// metricEffects, the field the effect pills render from. The Laws tab now uses
+// the canonical type directly, so the copy is gone rather than left to rot as a
+// second definition someone could pick up by mistake.

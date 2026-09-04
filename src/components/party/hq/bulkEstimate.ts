@@ -6,13 +6,30 @@
 export type BulkMode = "build";
 
 export type BulkPreview =
-  { ok: true; effectiveCost: number; projectedGain?: number } | { ok: false; reason?: string };
+  | {
+      ok: true;
+      effectiveCost: number;
+      projectedGain?: number;
+      /** Cash price of this state's click. Absent on a pre-2026-09-02 response. */
+      cashPrice?: number;
+    }
+  | { ok: false; reason?: string };
 
 export interface BulkEstimateResult {
   /** Number of eligible (ok) selected states. */
   states: number;
   /** Total PS cost across eligible states. */
   totalPS: number;
+  /**
+   * Total cash price across eligible states, in the party's local currency.
+   *
+   * Bulk Build Org spends the NATIONAL pool, so every selected state bills one
+   * shared treasury — unlike the PS ladder, which is per-state. That makes the
+   * cash the cost that actually scales with the size of the selection, and it
+   * has to be totalled and checked before the run rather than discovered when
+   * the loop starts failing halfway through.
+   */
+  totalCash: number;
   /** Total Org gain across eligible states, 2-decimal rounded. */
   totalDelta: number;
   /** Selected states whose preview returned ok:false (no presence / nothing to build). */
@@ -32,6 +49,7 @@ export function sumBulkEstimate(input: {
 }): BulkEstimateResult {
   let states = 0;
   let totalPS = 0;
+  let totalCash = 0;
   let totalDelta = 0;
   const skipped: string[] = [];
   const pending: string[] = [];
@@ -48,12 +66,14 @@ export function sumBulkEstimate(input: {
     }
     states += 1;
     totalPS += p.effectiveCost;
+    totalCash += p.cashPrice ?? 0;
     totalDelta += p.projectedGain ?? 0;
   }
 
   return {
     states,
     totalPS,
+    totalCash,
     totalDelta: Math.round(totalDelta * 100) / 100,
     skipped,
     pending,

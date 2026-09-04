@@ -13,6 +13,20 @@ export const INITIAL_CONFIDENCE = 75;
 /** Confidence bump on leadership renewal (re-election, confirmation). */
 export const RENEWAL_BUMP = 5;
 
+/**
+ * Confidence bump the carried head of government takes when their state
+ * absorbs another — the reunification dividend.
+ *
+ * Larger than `RENEWAL_BUMP` on purpose: a renewal is the party confirming the
+ * leader it already had, while this is the leader delivering the territorial
+ * settlement the regime exists to pursue. Still well short of the 20 points
+ * between confidence bands, so it strengthens a leader without promoting one
+ * out of a crisis in a single step.
+ *
+ * BALANCE CONSTANT.
+ */
+export const REUNIFICATION_BUMP = 10;
+
 /** Maximum confidence cap. */
 export const MAX_CONFIDENCE = 95;
 

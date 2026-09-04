@@ -1,13 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 
-const stubDb = () =>
+/**
+ * `mode` drives the NPP foreign-policy rollout, `nppGoverned` lists countries
+ * with a formed NPP-headed government (the roll `ballotVotingMembers` widens by
+ * on a majority ballot).
+ */
+const stubDb = (mode = "off", nppGoverned: string[] = []) =>
   ({
-    collection: () => ({
+    collection: (name?: string) => ({
       findOne: async () => ({
         _id: "current",
         preset: "1953-default",
-        nppForeignPolicyMode: "off",
+        nppForeignPolicyMode: mode,
+      }),
+      find: () => ({
+        toArray: async () =>
+          name === "governmentFormations"
+            ? nppGoverned.map((countryId) => ({ _id: countryId, countryId }))
+            : [],
       }),
     }),
   }) as unknown as Db;
@@ -70,7 +81,10 @@ function accessSilencing(...silent: string[]) {
 const PROPOSAL_ID = new ObjectId("507f1f77bcf86cd7994390b1");
 
 /** Runs the phase with one pending admission for FR carrying `votes`. */
-async function runProposal(votes: { countryId: string; vote: "yes" | "no" | "abstain" }[]) {
+async function runProposal(
+  votes: { countryId: string; vote: "yes" | "no" | "abstain" }[],
+  db: Db = stubDb()
+) {
   const collections = await import("@/lib/db/collections");
   const empty = () => ({
     find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
@@ -107,7 +121,7 @@ async function runProposal(votes: { countryId: string; vote: "yes" | "no" | "abs
     updateOne: proposalUpdate,
   } as never);
 
-  await processInternationalOrganizationsTurn(stubDb(), 10);
+  await processInternationalOrganizationsTurn(db, 10);
 
   const status = proposalUpdate.mock.calls[0]?.[1]?.$set?.status as string | undefined;
   return { admitted: admitMember.mock.calls.length > 0, status };
@@ -149,6 +163,27 @@ describe("membership proposal resolution", () => {
     const access = await import("@/lib/countryAccess");
     vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("UK") as never);
     const { admitted, status } = await runProposal([{ countryId: "US", vote: "yes" }]);
+    expect(admitted).toBe(true);
+    expect(status).toBe("approved");
+  });
+
+  it("does not seat an NPP-governed member on an admission ballot in active mode", async () => {
+    // Ticket #1257. An NPP government plans once every six turns and casts one
+    // ranked action, so over a 24-turn ballot it has four contested chances to
+    // vote and routinely spends all four elsewhere. On a MAJORITY ballot that
+    // silence merely costs a yes; under unanimity it is a permanent veto, and it
+    // made every Warsaw Pact admission unwinnable — China closed 5-of-7 and
+    // North Korea 2-of-7 with not one "no" cast against either.
+    roster = ["US", "UK", "PL"];
+    const access = await import("@/lib/countryAccess");
+    vi.mocked(access.getAllCountryAccess).mockResolvedValue(accessSilencing("PL") as never);
+    const { admitted, status } = await runProposal(
+      [
+        { countryId: "US", vote: "yes" },
+        { countryId: "UK", vote: "yes" },
+      ],
+      stubDb("active", ["PL"])
+    );
     expect(admitted).toBe(true);
     expect(status).toBe("approved");
   });

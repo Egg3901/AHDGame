@@ -63,6 +63,7 @@ import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
+import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import {
   calculateFederalRevenue,
   calculateStateRevenue,
@@ -780,7 +781,15 @@ async function processProvisionEnactment(
   // it on the curated-score path so signs stay correct. (#2899 — ticket 921.)
   const optionCount = lt?.policyOptions?.length ?? 0;
   const centerIndex = optionCount ? Math.floor(optionCount / 2) : 3;
-  const rawOldIndex = oldPolicy?.policyOptionIndex ?? centerIndex;
+  // A region with no row for a new-generation `both` law sits at level 0 — what
+  // getEnactedLevel reports to the engine, and what the propose modal now
+  // previews the shift from. Falling through to the centre scored the approval
+  // swing as 2 -> 3 instead of 0 -> 3, so the enacted outcome contradicted the
+  // preview its own voters were shown. National scope keeps the centre: those
+  // rows ARE seeded, so a missing one is a different problem.
+  const regionalDefault =
+    scope === "state" ? regionalDefaultLevel(provision.legislationTypeId) : undefined;
+  const rawOldIndex = oldPolicy?.policyOptionIndex ?? regionalDefault ?? centerIndex;
   const oldPolicyIndex = optionCount
     ? Math.max(0, Math.min(optionCount - 1, rawOldIndex))
     : rawOldIndex;
