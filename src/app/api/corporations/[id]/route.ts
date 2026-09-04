@@ -357,9 +357,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       ...detail,
       isPrivate: corporation.isPrivate ?? false,
       financialFogOfWar: financialFogMeta,
-      // Why the figures are exact when the viewer is not an insider: this
-      // company's books were leaked, and are public until this turn.
-      booksExposedUntilTurn: booksExposed ? corporation.booksExposedUntilTurn : null,
+      // Only present when it means something. Sending `null` on every response
+      // would change the payload shape for every corporation in the game to
+      // carry a field that is empty virtually always.
+      ...(booksExposed ? { booksExposedUntilTurn: corporation.booksExposedUntilTurn } : {}),
       defenceContracts: defence,
     });
   } catch (error) {
