@@ -2,12 +2,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import type { CountryId } from "@/lib/constants/countries";
+import { fmtMoneyAbs } from "./energy/energyUi";
 
 interface AgencyView {
   tradecraft: number;
   counterIntel: number;
   foundedTurn: number;
   hasDirector: boolean;
+}
+
+interface FundingView {
+  /** The enacted annual line, local currency. Zero means the law sits at Unfunded. */
+  enactedLine: number;
+  balance: number;
+  accrualPerTurn: number;
+  committedUpkeep: number;
+  collectionCost: number;
+  actionCost: number;
 }
 
 interface NetworkView {
@@ -90,6 +101,7 @@ interface MilitaryAssessmentResponse {
 
 interface ServiceView {
   agency: AgencyView;
+  funding: FundingView;
   turn: number;
   slotsRemaining: number;
   networks: NetworkView[];
@@ -175,9 +187,11 @@ function useAssessments<T>(
 export default function IntelligenceTab({
   countryId,
   positionId,
+  currencySymbol = "$",
 }: {
   countryId: CountryId;
   positionId: string;
+  currencySymbol?: string;
 }) {
   const [view, setView] = useState<ServiceView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -251,6 +265,63 @@ export default function IntelligenceTab({
             The service has no director. Existing networks keep running and existing files stay
             readable, but no new work can be funded until the seat is filled.
           </p>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-card-border bg-card p-4 shadow-card">
+        <h2 className="font-serif text-lg text-foreground">Appropriation</h2>
+        {view.funding.enactedLine <= 0 ? (
+          <p className="mt-2 max-w-2xl text-sm text-muted">
+            No appropriation has been voted. The service keeps its files and runs no operations
+            until the legislature funds it.
+          </p>
+        ) : (
+          <>
+            <p className="mt-0.5 max-w-2xl text-sm text-muted">
+              The enacted line accrues over the year. Networks draw on it every turn whether or not
+              they are used, and an operation is paid for out of what is left.
+            </p>
+            <dl className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">Enacted Line</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.enactedLine)}
+                </dd>
+                <dd className="text-xs text-muted">a year</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">On Hand</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.balance)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">Accrues</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.accrualPerTurn)}
+                </dd>
+                <dd className="text-xs text-muted">a turn</dd>
+              </div>
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted">Committed</dt>
+                <dd className="text-lg font-semibold text-foreground">
+                  {fmtMoneyAbs(currencySymbol, view.funding.committedUpkeep)}
+                </dd>
+                <dd className="text-xs text-muted">a turn, to networks</dd>
+              </div>
+            </dl>
+            <p className="mt-3 text-sm text-muted">
+              An operation costs {fmtMoneyAbs(currencySymbol, view.funding.collectionCost)} to
+              collect, {fmtMoneyAbs(currencySymbol, view.funding.actionCost)} to act.
+            </p>
+            {view.funding.committedUpkeep > view.funding.accrualPerTurn && (
+              <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-foreground">
+                Network upkeep is running ahead of the line. Once the balance is spent, the lowest
+                ranked network stops making progress first, and the rest follow as the shortfall
+                grows. Cut a network back or ask for a larger appropriation.
+              </p>
+            )}
+          </>
         )}
       </section>
 

@@ -12,6 +12,12 @@ import {
   getIntelligenceNetworksCollection,
   getIntelligenceOpLogCollection,
 } from "@/lib/db/collections/intelligence";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import {
+  intelligenceAccrualPerTurn,
+  resolveIntelligenceLineFrom,
+} from "@/lib/intelligence/appropriationLine";
+import { networkUpkeep, operationCost } from "@/lib/intelligence/cost";
 import { currentCoverage } from "@/lib/intelligence/coverage";
 import { slotsRemaining } from "@/lib/intelligence/slots";
 import {
@@ -43,12 +49,34 @@ export async function GET(_request: Request, { params }: IntelligenceRouteParams
         .toArray(),
     ]);
 
+    // The money, from the budget rather than the agency: the pot has to survive a
+    // reunification merge, which purges the intelligence collections.
+    const budget = await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne(
+        { countryId },
+        { projection: { gdp: 1, spending: 1, intelligenceAppropriation: 1 } }
+      );
+    const gdp = budget?.gdp ?? 0;
+    const enactedLine = resolveIntelligenceLineFrom(budget);
+
     return NextResponse.json({
       agency: {
         tradecraft: agency.tradecraft,
         counterIntel: agency.counterIntel,
         foundedTurn: agency.foundedTurn,
         hasDirector: agency.directorCharacterId != null,
+      },
+      funding: {
+        enactedLine,
+        balance: budget?.intelligenceAppropriation?.balance ?? 0,
+        accrualPerTurn: intelligenceAccrualPerTurn(enactedLine),
+        // What the standing network portfolio already claims every turn. The
+        // console needs this to show when upkeep has outrun the line, which is
+        // the moment networks start stalling.
+        committedUpkeep: networks.reduce((sum, n) => sum + networkUpkeep(n.funding, gdp), 0),
+        collectionCost: operationCost("collect", gdp),
+        actionCost: operationCost("action", gdp),
       },
       turn,
       slotsRemaining: slotsRemaining(agency, turn),

@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { COVERAGE_DECAY_PER_TURN, OP_SLOTS_PER_TURN } from "@/lib/intelligence/config";
+import { intelligenceAccrualPerTurn } from "@/lib/intelligence/appropriationLine";
+import { networkUpkeep, operationCost } from "@/lib/intelligence/cost";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
@@ -177,5 +179,74 @@ describe("GET intelligence console", () => {
     });
     const body = await (await get()).json();
     expect(body.slotsRemaining).toBe(OP_SLOTS_PER_TURN);
+  });
+});
+
+describe("the appropriation block", () => {
+  const GDP = 5.649e11;
+  const STANDING_LINE = GDP * 0.0015;
+
+  it("reports an unfunded service as zero across the board", async () => {
+    // The seeded state for every country: the law exists at Unfunded, so there is
+    // no line, no accrual and no pot.
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue(null);
+    const body = await (await get()).json();
+    expect(body.funding.enactedLine).toBe(0);
+    expect(body.funding.balance).toBe(0);
+    expect(body.funding.accrualPerTurn).toBe(0);
+    expect(body.funding.committedUpkeep).toBe(0);
+  });
+
+  it("spreads an enacted line over the game year and reports the pot", async () => {
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      countryId: "US",
+      gdp: GDP,
+      spending: { byCategory: { intelligence: STANDING_LINE } },
+      intelligenceAppropriation: { balance: 4242, accruedThroughTurn: TURN },
+    });
+    const body = await (await get()).json();
+    expect(body.funding.enactedLine).toBe(STANDING_LINE);
+    expect(body.funding.balance).toBe(4242);
+    expect(body.funding.accrualPerTurn).toBeCloseTo(intelligenceAccrualPerTurn(STANDING_LINE), 3);
+    expect(body.funding.collectionCost).toBeCloseTo(operationCost("collect", GDP), 3);
+    expect(body.funding.actionCost).toBeCloseTo(operationCost("action", GDP), 3);
+  });
+
+  it("sums what the standing networks already claim each turn", async () => {
+    // This is the figure that tells a director upkeep has outrun the line, which
+    // is the moment networks begin to stall.
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockResolvedValue({
+      countryId: "US",
+      gdp: GDP,
+      spending: { byCategory: { intelligence: STANDING_LINE } },
+    });
+    db.collectionMocks.intelligenceNetworks.find.mockReturnValue(
+      cursor([
+        {
+          targetCountryId: "RU",
+          level: 2,
+          progress: 0,
+          funding: "steady",
+          suspicion: 0,
+          status: "active",
+          cooledUntilTurn: null,
+        },
+        {
+          targetCountryId: "UK",
+          level: 1,
+          progress: 0,
+          funding: "none",
+          suspicion: 0,
+          status: "active",
+          cooledUntilTurn: null,
+        },
+      ])
+    );
+    const body = await (await get()).json();
+    // "none" contributes nothing, so the total is the one steady network.
+    expect(body.funding.committedUpkeep).toBeCloseTo(networkUpkeep("steady", GDP), 3);
   });
 });
