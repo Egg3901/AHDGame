@@ -176,11 +176,19 @@ function StateBoard({
 }
 
 /** The two personal primary actions, in whichever column has room for them. */
-function CampaignBlock({ vm, electionId }: { vm: PrimaryBlendVM; electionId: string }) {
+function CampaignBlock({
+  vm,
+  electionId,
+  onChanged,
+}: {
+  vm: PrimaryBlendVM;
+  electionId: string;
+  onChanged: () => void;
+}) {
   if (!vm.campaign) return null;
   return (
     <BlendScopeInline>
-      <PrimaryCampaignControls electionId={electionId} {...vm.campaign} />
+      <PrimaryCampaignControls electionId={electionId} {...vm.campaign} onChanged={onChanged} />
     </BlendScopeInline>
   );
 }
@@ -244,6 +252,11 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
   // previous party's projection therefore cannot render under a new party's
   // heading even for one frame, and there is no window in which a slow response
   // lands against the wrong selection.
+  // Bumped when an action lands, so the board and the campaign block reflect it.
+  // router.refresh() only re-runs the server render; this detail is fetched
+  // here, so without this the panel would still show the state from before the
+  // player camped or surged.
+  const [reloadCount, setReloadCount] = useState(0);
   const [loaded, setLoaded] = useState<{ key: string; detail: PrimaryPartyDetail } | null>(null);
   const [selection, setSelection] = useState<{ key: string; stateId: string } | null>(null);
 
@@ -272,7 +285,7 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
     return () => {
       cancelled = true;
     };
-  }, [electionId, partyId, key]);
+  }, [electionId, partyId, key, reloadCount]);
 
   const vm = useMemo(
     () =>
@@ -505,7 +518,11 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
 
           {vm.campaign ? (
             <div style={{ marginTop: 24 }}>
-              <CampaignBlock vm={vm} electionId={electionId} />
+              <CampaignBlock
+                vm={vm}
+                electionId={electionId}
+                onChanged={() => setReloadCount((n) => n + 1)}
+              />
             </div>
           ) : null}
 
@@ -753,7 +770,11 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                   >
                     Your primary campaign
                   </div>
-                  <CampaignBlock vm={vm} electionId={electionId} />
+                  <CampaignBlock
+                    vm={vm}
+                    electionId={electionId}
+                    onChanged={() => setReloadCount((n) => n + 1)}
+                  />
                 </div>
               ) : null}
             </aside>

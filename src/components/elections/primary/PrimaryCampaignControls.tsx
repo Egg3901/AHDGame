@@ -23,6 +23,13 @@ interface PrimaryCampaignControlsProps {
   surgeCostActions: number;
   surgeBoost: number;
   states: StateOption[];
+  /**
+   * Called after an action lands, for a host that keeps this panel's data in
+   * client state. `router.refresh()` alone only re-runs the server render, so a
+   * screen that fetched its campaign state itself would keep showing the state
+   * from before the action.
+   */
+  onChanged?: () => void;
 }
 
 export function PrimaryCampaignControls({
@@ -38,6 +45,7 @@ export function PrimaryCampaignControls({
   surgeCostActions,
   surgeBoost,
   states,
+  onChanged,
 }: PrimaryCampaignControlsProps) {
   const router = useRouter();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -69,6 +77,7 @@ export function PrimaryCampaignControls({
         setPickerOpen(false);
         setStateSearch("");
         router.refresh();
+        onChanged?.();
       } else {
         setMessage(`✗ ${data.error}`);
       }
@@ -95,6 +104,7 @@ export function PrimaryCampaignControls({
       if (res.ok) {
         setMessage(`✓ ${data.message}`);
         router.refresh();
+        onChanged?.();
       } else {
         setMessage(`✗ ${data.error}`);
       }
