@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { deriveMinisterFlags, deriveMinisterProjection, type MinisterInputs } from "./ministerLens";
+import {
+  deriveMinisterFlags,
+  deriveMinisterProjection,
+  describeProjectionAssumptions,
+  MINISTER_SPENDING_DRIFT_PP,
+  type MinisterInputs,
+} from "./ministerLens";
 
 const base: MinisterInputs = {
   sym: "$",
@@ -82,5 +88,27 @@ describe("deriveMinisterProjection", () => {
     // base: 2% growth, tiny 1.4 deficit ⇒ ratio eases despite debt creeping up.
     const p = deriveMinisterProjection(base);
     expect(p.projDebtToGdp).toBeLessThan(p.currentDebtToGdp);
+  });
+
+  it("prices spending growth off inflation plus the exported demographic drift", () => {
+    const p = deriveMinisterProjection({ ...base, inflationRate: 0, gdpGrowth: 0 });
+    expect(p.projSpending).toBeCloseTo(
+      base.spendingTotal * (1 + MINISTER_SPENDING_DRIFT_PP / 100),
+      10
+    );
+  });
+});
+
+describe("describeProjectionAssumptions", () => {
+  it("states the ticket-1272 UK inputs that produced the 1B-deficit card", () => {
+    expect(describeProjectionAssumptions({ gdpGrowth: -9.334, inflationRate: 1.51 })).toBe(
+      "Assumes -9.3% real GDP growth, 1.5% inflation; spending +2.9% (inflation + 1.4pp demographics)."
+    );
+  });
+
+  it("signs positive growth explicitly", () => {
+    expect(describeProjectionAssumptions({ gdpGrowth: 2, inflationRate: 2 })).toBe(
+      "Assumes +2.0% real GDP growth, 2.0% inflation; spending +3.4% (inflation + 1.4pp demographics)."
+    );
   });
 });
