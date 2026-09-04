@@ -12,6 +12,7 @@ import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePane
 import { CampaignRoomBriefing } from "./components/CampaignRoomBriefing";
 import { CampaignBlendClient } from "./blend/CampaignBlendClient";
 import { BLEND, FONT } from "@/components/blend/tokens";
+import { BlendScope } from "@/components/blend/BlendScope";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
 export default function CampaignDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -352,23 +353,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
       (isOwner && campaign.electionInfo?.electionType === "president" && !campaign.isArchived) ||
       (canSurrogate && campaign.runningMateSurrogate) ||
       (canManage && campaign.electionInfo && !campaign.electionInfo.isEnded) ? (
-        <div
-          style={{
-            borderTop: `1px solid ${BLEND.hairlineStrong}`,
-            padding: "24px 26px",
-          }}
-        >
-          <h2
-            style={{
-              margin: "0 0 16px",
-              fontFamily: FONT.serif,
-              fontSize: 23,
-              fontWeight: 600,
-            }}
-          >
-            Also on this campaign
-          </h2>
-
+        <BlendScope title="Also on this campaign">
           {isOwner &&
             campaign.electionInfo?.electionType === "president" &&
             !campaign.isArchived && (
@@ -429,7 +414,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               RESET OPPOSITION RESEARCH
             </button>
           )}
-        </div>
+        </BlendScope>
       ) : null}
 
       <Modal

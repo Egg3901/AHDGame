@@ -25,7 +25,8 @@ import { PrimaryBlendView } from "../blend/PrimaryBlendView";
 import { GeneralBlendView } from "../blend/GeneralBlendView";
 import { ResultsBlendView } from "../blend/ResultsBlendView";
 import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
-import { BLEND, FONT } from "@/components/blend/tokens";
+import { BLEND } from "@/components/blend/tokens";
+import { BlendScope } from "@/components/blend/BlendScope";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 
 interface ElectionDetailClientProps {
@@ -290,11 +291,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         <ResultsBlendView data={results} route="concluded" />
 
-        <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
-          <h2 style={{ margin: "0 0 18px", fontFamily: FONT.serif, fontSize: 23, fontWeight: 600 }}>
-            Also on this race
-          </h2>
-
+        <BlendScope title="Also on this race">
           <GeneralPhaseView
             election={election}
             electionId={id}
@@ -315,7 +312,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onToggleAdmin={() => setAdminOpen((o) => !o)}
             onSuccess={fetchElection}
           />
-        </div>
+        </BlendScope>
       </div>
     );
   }
@@ -338,21 +335,10 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           onRefresh={fetchElection}
         />
 
-        <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
-          <h2 style={{ margin: "0 0 4px", fontFamily: FONT.serif, fontSize: 23, fontWeight: 600 }}>
-            Also on this race
-          </h2>
-          <p
-            style={{
-              margin: "0 0 18px",
-              fontFamily: FONT.serif,
-              fontSize: 14.5,
-              color: BLEND.muted,
-            }}
-          >
-            The full map, the schedule, and your campaign operations.
-          </p>
-
+        <BlendScope
+          title="Also on this race"
+          lede="The full map, the schedule, and your campaign operations."
+        >
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -406,7 +392,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
               {!!election.myCharId && <CampaignManagerTab electionId={id} />}
             </>
           )}
-        </div>
+        </BlendScope>
       </div>
     );
   }
@@ -419,21 +405,10 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
         <PrimaryBlendView election={election} wire={wire} />
 
-        <div style={{ borderTop: `1px solid ${BLEND.hairlineStrong}`, padding: "24px 26px" }}>
-          <h2 style={{ margin: "0 0 4px", fontFamily: FONT.serif, fontSize: 23, fontWeight: 600 }}>
-            Also on this race
-          </h2>
-          <p
-            style={{
-              margin: "0 0 18px",
-              fontFamily: FONT.serif,
-              fontSize: 14.5,
-              color: BLEND.muted,
-            }}
-          >
-            Filing, the schedule, the state map, and your campaign operations.
-          </p>
-
+        <BlendScope
+          title="Also on this race"
+          lede="Filing, the schedule, the state map, and your campaign operations."
+        >
           <ElectionHeader
             election={election}
             electionYear={electionYear}
@@ -480,7 +455,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
               {!!election.myCharId && <CampaignManagerTab electionId={id} />}
             </>
           )}
-        </div>
+        </BlendScope>
       </div>
     );
   }
