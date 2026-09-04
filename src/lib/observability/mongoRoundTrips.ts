@@ -138,6 +138,22 @@ export function recordDocumentsReturned(collection: string, count: number): void
   collectionEntry(entry, collection).documents += count;
 }
 
+/**
+ * Bracket a span of work that is not a `runPhase` phase, so its reads are
+ * attributable instead of landing in "(outside any phase)".
+ *
+ * Turn setup runs before the first phase and was the single largest bucket in
+ * the profile precisely because nothing bracketed it.
+ */
+export async function withPhaseProfiling<T>(name: string, fn: () => Promise<T>): Promise<T> {
+  beginPhaseProfiling(name);
+  try {
+    return await fn();
+  } finally {
+    endPhaseProfiling(name);
+  }
+}
+
 export interface RoundTripPhaseReport {
   phase: string;
   roundTrips: number;

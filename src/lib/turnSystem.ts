@@ -33,7 +33,10 @@ import {
   createInitialTurnPhaseStatuses,
   finalizeAbortedPhaseStatuses,
 } from "@/simulation/engine/phaseTelemetry";
-import { formatRoundTripReport } from "@/lib/observability/mongoRoundTrips";
+import {
+  formatRoundTripReport,
+  withPhaseProfiling,
+} from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
@@ -416,15 +419,20 @@ export async function processTurn(): Promise<{
       }
     );
 
-    const context = await buildTurnExecutionContext({
-      db,
-      gameState,
-      config,
-      warnings,
-      activeIteration,
-      phaseStatuses,
-      startTimeMs: startTime,
-    });
+    // Bracketed so its reads are attributable: turn setup runs before the
+    // first phase, and was the largest single bucket in the round-trip profile
+    // only because nothing named it.
+    const context = await withPhaseProfiling("turnSetup", () =>
+      buildTurnExecutionContext({
+        db,
+        gameState,
+        config,
+        warnings,
+        activeIteration,
+        phaseStatuses,
+        startTimeMs: startTime,
+      })
+    );
     const runtime = createTurnPhaseRuntime({
       db,
       phaseStatuses,
