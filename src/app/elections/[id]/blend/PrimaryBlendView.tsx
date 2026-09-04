@@ -1,13 +1,18 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import { BlendVitals } from "@/components/blend/BlendVitals";
+import { BlendScopeInline } from "@/components/blend/BlendScope";
+import { CarveUpPanel } from "@/components/elections/primary/CarveUpPanel";
+import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
+import type { PrimaryPartyDetail } from "@/lib/elections/dto/primaryPartyDetail";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
+import { PrimaryTileBoard } from "./PrimaryTileBoard";
 import {
   buildPrimaryBlendViewModel,
   type PrimaryBlendVM,
@@ -130,6 +135,93 @@ function DelegateRace({ vm, height }: { vm: PrimaryBlendVM; height: number }) {
   );
 }
 
+/**
+ * The state board and, beneath it, the carve-up of whichever state is chosen.
+ *
+ * Rendered without a heading of its own so each layout can supply the one it
+ * uses, the way {@link DelegateRace} does.
+ */
+function StateBoard({
+  vm,
+  columns,
+  onSelect,
+}: {
+  vm: PrimaryBlendVM;
+  columns: number;
+  onSelect: (stateId: string) => void;
+}) {
+  if (vm.board.length === 0) return null;
+  return (
+    <>
+      <PrimaryTileBoard
+        tiles={vm.board}
+        selectedStateId={vm.selectedStateId}
+        onSelect={onSelect}
+        columns={columns}
+      />
+      {vm.carveUp ? (
+        <div style={{ marginTop: 18 }}>
+          <BlendScopeInline>
+            <CarveUpPanel
+              stateName={vm.carveUp.stateName}
+              stateId={vm.carveUp.stateId}
+              slices={vm.carveUp.slices}
+              detailHref={vm.carveUp.detailHref}
+            />
+          </BlendScopeInline>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** The two personal primary actions, in whichever column has room for them. */
+function CampaignBlock({ vm, electionId }: { vm: PrimaryBlendVM; electionId: string }) {
+  if (!vm.campaign) return null;
+  return (
+    <BlendScopeInline>
+      <PrimaryCampaignControls electionId={electionId} {...vm.campaign} />
+    </BlendScopeInline>
+  );
+}
+
+/** Chips for one calendar wave, so a wave row can be selected down to a state. */
+function WaveStates({
+  states,
+  onSelect,
+}: {
+  states: PrimaryBlendVM["calendar"][number]["states"];
+  onSelect: (stateId: string) => void;
+}) {
+  if (states.length === 0) return null;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, paddingBottom: 10 }}>
+      {states.map((s) => (
+        <button
+          key={s.id}
+          type="button"
+          title={s.name}
+          aria-pressed={s.selected}
+          onClick={() => onSelect(s.id)}
+          style={{
+            padding: "3px 7px",
+            border: `1px solid ${s.selected ? BLEND.accent : BLEND.chipBorder}`,
+            borderRadius: 3,
+            cursor: "pointer",
+            fontFamily: FONT.mono,
+            fontSize: 9.5,
+            letterSpacing: ".04em",
+            color: s.selected ? BLEND.accentInk : BLEND.mutedDim,
+            background: s.selected ? "rgba(220,38,38,.12)" : "transparent",
+          }}
+        >
+          {s.id}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The Blend primary-election screen (Proposal D). */
 export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
   const [partyId, setPartyId] = useState<string | null>(
@@ -139,9 +231,57 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
       null
   );
 
+  // The per-party board, carve-up and campaign block. Fetched lazily on party
+  // selection rather than carried on the 60s election poll: it is a few hundred
+  // numbers per party, and most viewers only ever look at one of them.
+  const electionId = election.id;
+  const key = partyId ? `${electionId}:${partyId}` : null;
+
+  // Both of these are stamped with the party they belong to and then read back
+  // through a match, rather than being cleared when the party changes. A
+  // previous party's projection therefore cannot render under a new party's
+  // heading even for one frame, and there is no window in which a slow response
+  // lands against the wrong selection.
+  const [loaded, setLoaded] = useState<{ key: string; detail: PrimaryPartyDetail } | null>(null);
+  const [selection, setSelection] = useState<{ key: string; stateId: string } | null>(null);
+
+  const detail = loaded && loaded.key === key ? loaded.detail : null;
+  const selectedStateId = selection && selection.key === key ? selection.stateId : null;
+  const selectState = (stateId: string) => {
+    if (key) setSelection({ key, stateId });
+  };
+
+  useEffect(() => {
+    if (!key || !partyId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch(`/api/elections/${electionId}/primary/${partyId}`);
+        if (!res.ok) return;
+        const payload = (await res.json()) as PrimaryPartyDetail;
+        if (!cancelled) setLoaded({ key, detail: payload });
+      } catch {
+        // Non-critical, same posture as the wire ticker: the board, carve-up
+        // and campaign block stay hidden and the rest of the screen stands.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [electionId, partyId, key]);
+
   const vm = useMemo(
-    () => buildPrimaryBlendViewModel({ election, selectedPartyId: partyId, wire }),
-    [election, partyId, wire]
+    () =>
+      buildPrimaryBlendViewModel({
+        election,
+        selectedPartyId: partyId,
+        wire,
+        detail,
+        selectedStateId,
+      }),
+    [election, partyId, wire, detail, selectedStateId]
   );
 
   const campaignLink = vm.campaignHref ? (
@@ -331,6 +471,40 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               </h2>
               <DelegateRace vm={vm} height={30} />
             </>
+          ) : null}
+
+          {vm.board.length > 0 ? (
+            <>
+              <h2
+                style={{
+                  margin: "24px 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                The state board
+              </h2>
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  fontFamily: FONT.serif,
+                  fontSize: 13.5,
+                  lineHeight: 1.55,
+                  color: BLEND.muted,
+                }}
+              >
+                Coloured by whoever leads. States that have voted are settled; the rest are
+                projected.
+              </p>
+              <StateBoard vm={vm} columns={6} onSelect={selectState} />
+            </>
+          ) : null}
+
+          {vm.campaign ? (
+            <div style={{ marginTop: 24 }}>
+              <CampaignBlock vm={vm} electionId={electionId} />
+            </div>
           ) : null}
 
           <h2
@@ -535,30 +709,49 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
                     Calendar
                   </div>
                   {vm.calendar.map((k) => (
-                    <div
-                      key={k.label}
-                      style={{
-                        display: "flex",
-                        alignItems: "baseline",
-                        justifyContent: "space-between",
-                        gap: 10,
-                        padding: "10px 0",
-                        borderBottom: "1px solid rgba(34,34,47,.7)",
-                      }}
-                    >
-                      <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{k.label}</span>
-                      <span
+                    <div key={k.label} style={{ borderBottom: "1px solid rgba(34,34,47,.7)" }}>
+                      <div
                         style={{
-                          fontFamily: FONT.mono,
-                          fontSize: 10.5,
-                          color: k.color,
-                          whiteSpace: "nowrap",
+                          display: "flex",
+                          alignItems: "baseline",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          padding: "10px 0",
                         }}
                       >
-                        {k.statusText}
-                      </span>
+                        <span style={{ fontFamily: FONT.serif, fontSize: 14 }}>{k.label}</span>
+                        <span
+                          style={{
+                            fontFamily: FONT.mono,
+                            fontSize: 10.5,
+                            color: k.color,
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {k.statusText}
+                        </span>
+                      </div>
+                      <WaveStates states={k.states} onSelect={selectState} />
                     </div>
                   ))}
+                </div>
+              ) : null}
+
+              {vm.campaign ? (
+                <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
+                  <div
+                    style={{
+                      paddingBottom: 10,
+                      fontFamily: FONT.mono,
+                      fontSize: 9.5,
+                      letterSpacing: ".16em",
+                      textTransform: "uppercase",
+                      color: BLEND.mutedDimmer,
+                    }}
+                  >
+                    Your primary campaign
+                  </div>
+                  <CampaignBlock vm={vm} electionId={electionId} />
                 </div>
               ) : null}
             </aside>
@@ -577,6 +770,15 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
           {vm.delegateRace ? (
             <BlendSection title="Projected delegate race" lede={vm.delegateRace.lede}>
               <DelegateRace vm={vm} height={36} />
+            </BlendSection>
+          ) : null}
+
+          {vm.board.length > 0 ? (
+            <BlendSection
+              title="The state board"
+              lede="Coloured by whoever leads. States that have voted are settled; the rest are projected."
+            >
+              <StateBoard vm={vm} columns={11} onSelect={selectState} />
             </BlendSection>
           ) : null}
 

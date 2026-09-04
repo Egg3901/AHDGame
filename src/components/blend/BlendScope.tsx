@@ -54,3 +54,16 @@ export function BlendScope({ title, lede, children }: BlendScopeProps) {
     </section>
   );
 }
+
+/**
+ * The palette scope on its own, without the container, rule or heading.
+ *
+ * For a non-Blend component that belongs inside a section the Blend layout has
+ * already opened, such as the carve-up under the state board or the campaign
+ * controls in the right rail. Wrapping those in the full {@link BlendScope}
+ * would restate a heading and a container the surrounding section already
+ * provides.
+ */
+export function BlendScopeInline({ children }: { children: ReactNode }) {
+  return <div className={styles.scope}>{children}</div>;
+}

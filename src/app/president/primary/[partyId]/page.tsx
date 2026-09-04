@@ -36,7 +36,7 @@ import { getAuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { ObjectId } from "mongodb";
 import { summarizePrimaryProjection } from "@/lib/elections/presidentialPrimaryDisplay";
-import { PrimaryCampaignControls } from "./PrimaryCampaignControls";
+import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
 import { EndorseButton } from "./EndorseButton";
 import { PrimaryShellClient } from "./PrimaryShellClient";
 import {

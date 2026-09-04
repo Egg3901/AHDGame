@@ -123,6 +123,8 @@ export interface PrimaryCarveUpVM {
   stateId: string;
   stateName: string;
   slices: CarveUpSlice[];
+  /** The per-state drill-down, which the board deliberately does not replace. */
+  detailHref: string;
 }
 
 export interface PrimaryBlendVM {
@@ -399,6 +401,7 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
           stateId: selectedStateId,
           stateName: nameFor(selectedStateId),
           slices: buildPerStateSlices(detail.candidates, detail.byState)[selectedStateId] ?? [],
+          detailHref: `/president/primary/${detail.partyId}/state/${selectedStateId}`,
         }
       : null;
 
