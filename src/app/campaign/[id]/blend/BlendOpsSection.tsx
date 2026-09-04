@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
+import { BlendCharacterPicker, type PickerResult } from "./BlendCharacterPicker";
 import type { OpsRowVM, OpsBranchVM, OpsTreeVM } from "./campaignBlendViewModel";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
 
@@ -15,6 +17,8 @@ export interface BlendOpsSectionProps {
   onToggle: (category: UpgradeCategory) => void;
   onUnlock: (category: UpgradeCategory) => void;
   onUpgrade: (category: UpgradeCategory, branch: "a" | "b" | "c") => void;
+  /** Change the opposition-research target. Omitted for viewers who may not. */
+  onRetarget?: (targetId: string) => void;
   variant?: "desktop" | "mobile";
 }
 
@@ -160,6 +164,7 @@ function Tree({
   pending,
   onUnlock,
   onUpgrade,
+  onRetarget,
   variant,
 }: {
   tree: OpsTreeVM;
@@ -169,8 +174,10 @@ function Tree({
   pending: string | null;
   onUnlock: () => void;
   onUpgrade: (branch: "a" | "b" | "c") => void;
+  onRetarget?: (targetId: string) => void;
   variant: "desktop" | "mobile";
 }) {
+  const [retargeting, setRetargeting] = useState(false);
   const unlockPending = pending === category;
   const unlockEnabled = canAct && tree.starterAffordable && !unlockPending;
 
@@ -293,9 +300,43 @@ function Tree({
           >
             Current target
           </span>
-          <span style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600 }}>
-            {tree.targetName}
+          <span style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <span style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600 }}>
+              {tree.targetName}
+            </span>
+            {onRetarget ? (
+              <button
+                type="button"
+                onClick={() => setRetargeting((v) => !v)}
+                style={{
+                  border: 0,
+                  background: "transparent",
+                  padding: 0,
+                  fontFamily: FONT.mono,
+                  fontSize: 10,
+                  letterSpacing: ".1em",
+                  textTransform: "uppercase",
+                  color: BLEND.muted,
+                  cursor: "pointer",
+                }}
+              >
+                {retargeting ? "Cancel" : "Change"}
+              </button>
+            ) : null}
           </span>
+        </div>
+      ) : null}
+
+      {tree.requiresTarget && onRetarget && retargeting ? (
+        <div style={{ marginBottom: 14 }}>
+          <BlendCharacterPicker
+            placeholder="Search an opponent to research…"
+            excludeIds={[]}
+            onPick={(r: PickerResult) => {
+              setRetargeting(false);
+              onRetarget(r.id);
+            }}
+          />
         </div>
       ) : null}
 
@@ -343,6 +384,7 @@ export function BlendOpsSection({
   onToggle,
   onUnlock,
   onUpgrade,
+  onRetarget,
   variant = "desktop",
 }: BlendOpsSectionProps) {
   const mobile = variant === "mobile";
@@ -509,6 +551,7 @@ export function BlendOpsSection({
               pending={pending}
               onUnlock={() => onUnlock(row.key)}
               onUpgrade={(b) => onUpgrade(row.key, b)}
+              onRetarget={onRetarget}
               variant={variant}
             />
           ) : null}

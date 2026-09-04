@@ -85,6 +85,14 @@ export interface CampaignData {
 
   campaignStrength?: number;
 
+  /**
+   * Presidential tickets: the named running mate, resolved from the candidate's
+   * `runningMateId`. Carried here so the campaign board can show and change the
+   * ticket without pulling the whole election payload. Null when none is named.
+   */
+  runningMateName?: string | null;
+  runningMateCharacterId?: string | null;
+
   oppositionTargetId: string | null;
   oppositionTargetName: string | null;
 

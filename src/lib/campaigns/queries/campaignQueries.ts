@@ -181,6 +181,28 @@ export async function getCampaignDetail(
         }
       : undefined;
 
+  // Named running mate, for the campaign board's ticket block. Presidential
+  // tickets only, so down-ballot races skip both lookups entirely.
+  let runningMateName: string | null = null;
+  let runningMateCharacterId: string | null = null;
+  if (election?.electionType === "president") {
+    const ticketRow = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .findOne(
+        { electionId: campaign.electionId, characterId: campaign.candidateId },
+        { projection: { runningMateId: 1 } }
+      );
+    if (ticketRow?.runningMateId) {
+      const mate = await db
+        .collection<{ name?: string }>("characters")
+        .findOne({ _id: ticketRow.runningMateId }, { projection: { name: 1 } });
+      if (mate?.name) {
+        runningMateName = mate.name;
+        runningMateCharacterId = ticketRow.runningMateId.toString();
+      }
+    }
+  }
+
   const base: CampaignData = {
     id: campaign._id.toString(),
     electionId: campaign.electionId.toString(),
@@ -216,6 +238,8 @@ export async function getCampaignDetail(
     // Only the nominee (or an admin) may change managers, and not on an
     // archived campaign. Managers themselves cannot appoint further managers.
     canAppointManagers: (isNominee || isAdmin) && campaign.status !== "archived",
+    runningMateName,
+    runningMateCharacterId,
     oppositionTargetId: canSeeExact ? campaign.oppositionTargetId?.toString() || null : null,
     oppositionTargetName: canSeeExact ? campaign.oppositionTargetName : null,
     fogLastUpdated:
