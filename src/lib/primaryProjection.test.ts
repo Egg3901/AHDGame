@@ -300,3 +300,95 @@ describe("home-state surge", () => {
     expect(result.byState.IA.nomad).toBe(plain.byState.IA.nomad);
   });
 });
+
+describe("vote suppression", () => {
+  // Rivals paying to remove a slice of a candidate's vote in one state. The
+  // board runs the same helper the wave does, so it cannot show a lead the
+  // stagger is about to take away.
+  const stateMap = new Map([
+    ["IA", makeState("IA")],
+    ["OH", makeState("OH")],
+  ]);
+  const demographicsMap = new Map([
+    ["IA", makeDemographics("IA")],
+    ["OH", makeDemographics("OH")],
+  ]);
+
+  function suppressionRow(over: Record<string, unknown> = {}) {
+    return {
+      _id: "row1",
+      electionId: "e1",
+      actorCandidateId: "rival",
+      targetCandidateId: "target",
+      targetCharacterId: "target",
+      stateId: "IA",
+      kind: "voteSuppression",
+      magnitude: 2.5,
+      shieldApplied: 0,
+      appliedTurn: 10,
+      expiresTurn: 18,
+      createdAt: new Date(),
+      ...over,
+    } as never;
+  }
+
+  function project(extra: Record<string, unknown> = {}) {
+    return projectPrimaryByState({
+      candidates: [makeCandidate("target"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "target", isNPP: false, homeState: "IA" },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA", "OH"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+      ...extra,
+    });
+  }
+
+  it("shows the hit before the wave delivers it", () => {
+    const before = project();
+    const after = project({ currentTurn: 12, stateActions: [suppressionRow()] });
+    expect(after.byState.IA.target).toBeLessThan(before.byState.IA.target);
+    expect(after.byState.IA.target / before.byState.IA.target).toBeCloseTo(0.975, 2);
+  });
+
+  it("leaves every other candidate and every other state alone", () => {
+    const before = project();
+    const after = project({ currentTurn: 12, stateActions: [suppressionRow()] });
+    expect(after.byState.IA.rival).toBe(before.byState.IA.rival);
+    expect(after.byState.OH.target).toBe(before.byState.OH.target);
+  });
+
+  it("ignores a favourability attack, which campaignTurn already applies", () => {
+    const before = project();
+    const after = project({
+      currentTurn: 12,
+      stateActions: [suppressionRow({ kind: "localFavorability" })],
+    });
+    expect(after.byState.IA.target).toBe(before.byState.IA.target);
+  });
+
+  it("ignores a row that has expired", () => {
+    const before = project();
+    const after = project({
+      currentTurn: 12,
+      stateActions: [suppressionRow({ expiresTurn: 12 })],
+    });
+    expect(after.byState.IA.target).toBe(before.byState.IA.target);
+  });
+
+  it("is a strict no-op when a caller passes no rows", () => {
+    // Every existing caller omits both fields; none of them may move.
+    expect(project({ currentTurn: 12 })).toEqual(project());
+    expect(project({ stateActions: [] })).toEqual(project());
+  });
+
+  it("ignores rows when the caller gave no turn to measure them against", () => {
+    // Guessing a window would make an expired attack live again.
+    expect(project({ stateActions: [suppressionRow()] })).toEqual(project());
+  });
+});

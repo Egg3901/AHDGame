@@ -23,7 +23,12 @@
  * detail page for candidates who haven't voted yet.
  */
 
-import type { DemographicCategory, StateDemographics, State } from "@/lib/db/types";
+import type {
+  DemographicCategory,
+  PrimaryStateAction,
+  StateDemographics,
+  State,
+} from "@/lib/db/types";
 import {
   distributeVotesByGroupLevelAllocation,
   type EnrichedCandidate,
@@ -31,6 +36,7 @@ import {
 import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
   homeStateSurgeMultiplier,
+  stateAttackMultiplier,
   NPP_STAGGER_EXTRA_MULTIPLIER,
 } from "@/lib/electionEngine/constants";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
@@ -86,6 +92,18 @@ export interface ProjectPrimaryInput {
   categories: DemographicCategory[];
   /** Per-state party-org lookup: key = `${stateId}_${partyId}` -> organization */
   statePartyOrgs: Map<string, number>;
+  /**
+   * Live state-action rows for this race. The projection applies the same
+   * vote-suppression rule the stagger will, so the board does not show a lead
+   * the wave is about to remove. Omitted → no suppression at all.
+   */
+  stateActions?: PrimaryStateAction[];
+  /**
+   * The turn the suppression windows are measured against. Required alongside
+   * `stateActions`; without it the rows are ignored rather than guessed at,
+   * because guessing would make an expired attack live again.
+   */
+  currentTurn?: number;
   /** Party position — unused for intra-party math but kept for symmetry with stagger */
   partyPosition: PartyPosition;
   /**
@@ -241,6 +259,18 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         homeState: resolvedHomeStateByCandidate.get(ec.candidateId),
         stateId,
       });
+      // Vote suppression: rivals paying to remove a slice of this candidate's
+      // vote in this state. Same helper the stagger runs, so the board and the
+      // wave cannot disagree. Both fields must be present — a caller passing
+      // rows without a turn gets no suppression rather than a guessed window.
+      if (input.stateActions?.length && input.currentTurn != null) {
+        votes *= stateAttackMultiplier({
+          actions: input.stateActions,
+          candidateId: ec.candidateId,
+          stateId,
+          currentTurn: input.currentTurn,
+        });
+      }
       // Rally support (matches stagger). Undefined → 1.0×.
       votes *= supportMoodMultiplier(meta?.support);
       if (hasPlayerInPartyPrimary && ec.isNPP) {
