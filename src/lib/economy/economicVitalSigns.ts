@@ -1142,7 +1142,13 @@ export async function snapshotEconomicVitalSigns(
       .toArray(),
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<CommoditySourcingDoc>("commoditySourcingFlows").find({ turn }).toArray(),
-    db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
+    // `plantsPnl` is ~48% of a corporateSectors document and nothing here
+    // reads it. See sectorTurn (writes it, complete overwrite) and
+    // analyzeSectorProfitability (the only turn-side reader, fed elsewhere).
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find({}, { projection: { plantsPnl: 0 } })
+      .toArray(),
     db.collection<StockExchangeSnapshot>("stockExchangeSnapshots").findOne({ _id: "global" }),
     db
       .collection<ShareTradeHistory>("shareTradeHistory")

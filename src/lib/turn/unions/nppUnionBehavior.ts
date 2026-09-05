@@ -247,7 +247,11 @@ export async function processNppUnionBehavior(
 
   const activeLed = led.filter((union) => !orphaned.some((id) => id.equals(union._id)));
   const [sectors, corporations, campaignSnapshot, activeAgreements] = await Promise.all([
-    db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
+    // `plantsPnl` is ~48% of the document and union behaviour never reads it.
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find({}, { projection: { plantsPnl: 0 } })
+      .toArray(),
     db
       .collection<Corporation>("corporations")
       .find(
