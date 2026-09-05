@@ -133,14 +133,14 @@ describe("wireHeadlineFavorabilitySwing", () => {
 });
 
 describe("wireHeadlineStateAttack", () => {
-  const KINDS = ["localFavorability", "voteSuppression", "turnoutSuppression"] as const;
+  const KINDS = ["localFavorability", "voteSuppression"] as const;
 
   it("names the attacker, the target and the state for every kind", () => {
     // An attack nobody can trace back to its buyer reads as a bug in the
     // numbers rather than as a rival's move.
     for (const kind of KINDS) {
       every(
-        () => wireHeadlineStateAttack(kind, "Stevenson", "Kefauver", "Iowa", "union households"),
+        () => wireHeadlineStateAttack(kind, "Stevenson", "Kefauver", "Iowa"),
         (h) => {
           expect(h).toContain("STEVENSON");
           expect(h).toContain("KEFAUVER");
@@ -150,34 +150,10 @@ describe("wireHeadlineStateAttack", () => {
     }
   });
 
-  it("names the group a turnout attack targeted", () => {
-    // That attack lowers one group's turnout for everyone in the state rather
-    // than hitting one candidate, so hiding the group would leave it
-    // untraceable.
-    every(
-      () =>
-        wireHeadlineStateAttack(
-          "turnoutSuppression",
-          "Stevenson",
-          "Kefauver",
-          "Iowa",
-          "union households"
-        ),
-      (h) => expect(h).toContain("UNION HOUSEHOLDS")
-    );
-  });
-
-  it("still reads when no group label was supplied", () => {
-    every(
-      () => wireHeadlineStateAttack("turnoutSuppression", "Stevenson", "Kefauver", "Iowa"),
-      (h) => expect(h).toContain("STEVENSON")
-    );
-  });
-
   it("uses no em or en dash", () => {
     for (const kind of KINDS) {
       every(
-        () => wireHeadlineStateAttack(kind, "Stevenson", "Kefauver", "Iowa", "union households"),
+        () => wireHeadlineStateAttack(kind, "Stevenson", "Kefauver", "Iowa"),
         (h) => expect(h).not.toMatch(DASHES)
       );
     }

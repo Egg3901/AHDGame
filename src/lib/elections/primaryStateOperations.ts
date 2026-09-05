@@ -25,7 +25,6 @@ import { loadStateTravelOptions } from "@/lib/elections/stateTravelOptions";
 import { loadLiveStateActions } from "@/lib/elections/primaryStateActions";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
-import { getDemographicCategoriesForCountry } from "@/lib/demographics/countryDemographics";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
@@ -34,9 +33,6 @@ import {
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
   PRIMARY_LOCAL_ATTACK_FAV_POINTS,
   PRIMARY_STATE_ATTACK_DURATION_TURNS,
-  PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
-  PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS,
-  PRIMARY_TURNOUT_SUPPRESSION_POINTS,
   PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS,
   PRIMARY_VOTE_SUPPRESSION_COST_FUNDS,
   PRIMARY_VOTE_SUPPRESSION_PCT,
@@ -160,18 +156,11 @@ export async function buildStateOperations(
 
   // A turnout attack names a group, and a row that hid which one would leave
   // the hit untraceable for the person it landed on.
-  const groupLabels = new Map(
-    getDemographicCategoriesForCountry(election.countryId).flatMap((c) =>
-      c.groups.map((g) => [g.id, g.name] as const)
-    )
-  );
-
   const toAttackRow = (a: PrimaryStateAction, actorName?: string): LiveAttackRow => ({
     kind: a.kind,
     stateId: a.stateId,
     stateName: stateNameById[a.stateId] ?? a.stateId,
     ...(actorName ? { actorName } : {}),
-    ...(a.bucket ? { bucketLabel: groupLabels.get(a.bucket) ?? a.bucket } : {}),
     expiresTurn: a.expiresTurn,
   });
 
@@ -226,7 +215,6 @@ export async function buildStateOperations(
         `${PRIMARY_LOCAL_ATTACK_COST_ACTIONS} actions.`,
       costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate,
       costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
-      needsBucket: false,
       shielded: true,
     },
     {
@@ -238,21 +226,7 @@ export async function buildStateOperations(
         `Costs ${money(PRIMARY_VOTE_SUPPRESSION_COST_FUNDS)} and ${PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS} actions.`,
       costFunds: PRIMARY_VOTE_SUPPRESSION_COST_FUNDS * rate,
       costActions: PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS,
-      needsBucket: false,
       shielded: true,
-    },
-    {
-      kind: "turnoutSuppression",
-      label: "Suppress a group's turnout",
-      description:
-        `Takes ${PRIMARY_TURNOUT_SUPPRESSION_POINTS} points off one group's turnout in one state. ` +
-        `It lowers that group's turnout for everyone there, including you, so aim it at a group a ` +
-        `rival depends on. It fades slowly rather than expiring. ` +
-        `Costs ${money(PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS)} and ${PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS} actions.`,
-      costFunds: PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS * rate,
-      costActions: PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
-      needsBucket: true,
-      shielded: false,
     },
   ];
 

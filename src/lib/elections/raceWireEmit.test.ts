@@ -179,19 +179,6 @@ describe("emitStateAttackWire", () => {
 });
 
 describe("emitStateAttackWire, per kind", () => {
-  it("carries the group through for a turnout attack", async () => {
-    await emitStateAttackWire(
-      ELECTION_ID,
-      "turnoutSuppression",
-      "Stevenson",
-      "Kefauver",
-      "Iowa",
-      "union households"
-    );
-    const [, headline] = vi.mocked(logWireEvent).mock.calls[0];
-    expect(headline).toContain("UNION HOUSEHOLDS");
-  });
-
   it("reads as a count operation for vote suppression", async () => {
     await emitStateAttackWire(ELECTION_ID, "voteSuppression", "Stevenson", "Kefauver", "Iowa");
     const [, headline] = vi.mocked(logWireEvent).mock.calls[0];

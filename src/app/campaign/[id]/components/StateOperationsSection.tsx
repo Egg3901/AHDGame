@@ -5,10 +5,6 @@ import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
 import { StatePickerModal } from "@/components/elections/primary/StatePickerModal";
-import {
-  DemographicPickerModal,
-  type DemographicPick,
-} from "@/components/elections/primary/DemographicPickerModal";
 import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import type { PrimaryStateActionKind } from "@/lib/db/types";
@@ -71,18 +67,9 @@ function Note({ children }: { children: React.ReactNode }) {
 
 /**
  * A running attack, in the same words whichever direction it points.
- *
- * A turnout attack gets different words on purpose. Its `expiresTurn` is the
- * attacker's cooldown, not the end of the effect: that decays on the same slow
- * curve every turnout modifier does. Counting it down would print a duration
- * the mechanic does not have.
  */
 function attackLine(row: LiveAttackRow, currentTurn: number): string {
   const where = row.actorName ? `${row.actorName} in ${row.stateName}` : row.stateName;
-  if (row.kind === "turnoutSuppression") {
-    const group = row.bucketLabel ?? "a group";
-    return `${where}, ${group} turnout, fading slowly`;
-  }
   const left = Math.max(0, row.expiresTurn - currentTurn);
   return `${where}, ${left} ${left === 1 ? "turn" : "turns"} left`;
 }
@@ -112,7 +99,6 @@ export function StateOperationsSection({
   } | null>(null);
   // Set once the state is chosen for an attack that also names a group, so the
   // second chooser knows where it is acting.
-  const [pendingState, setPendingState] = useState<string | null>(null);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceBusy, setPresenceBusy] = useState(false);
   const [presenceMessage, setPresenceMessage] = useState("");
@@ -162,25 +148,10 @@ export function StateOperationsSection({
         ? `Needs ${money(attack.costFunds)} in the war chest.`
         : null;
 
-  /** Fire, or ask for the group first when the attack names one. */
   const chooseState = (stateId: string) => {
     if (!attackTarget) return;
-    if (attackTarget.attack.needsBucket) {
-      setPendingState(stateId);
-      return;
-    }
     onAttack(attackTarget.candidateId, attackTarget.attack.kind, stateId, undefined);
     setAttackTarget(null);
-  };
-
-  const chooseGroup = (group: DemographicPick) => {
-    if (!attackTarget || !pendingState) return;
-    onAttack(attackTarget.candidateId, attackTarget.attack.kind, pendingState, {
-      categoryKey: group.categoryKey,
-      bucket: group.bucket,
-    });
-    setAttackTarget(null);
-    setPendingState(null);
   };
 
   return (
@@ -445,8 +416,7 @@ export function StateOperationsSection({
         {view.shieldPct > 0 ? (
           <Note>
             Rapid Response is blunting {Math.round(view.shieldPct * 100)}% of incoming ads and vote
-            suppression. It does not cover turnout suppression, which acts on the electorate rather
-            than on you.
+            suppression, which is everything a rival can open on you here.
           </Note>
         ) : null}
       </div>
@@ -469,7 +439,7 @@ export function StateOperationsSection({
         />
       ) : null}
 
-      {attackTarget && !pendingState ? (
+      {attackTarget ? (
         <StatePickerModal
           title="Pick a state to attack in"
           states={camp.states}
@@ -481,20 +451,6 @@ export function StateOperationsSection({
           unaffordable={() => !canAfford(attackTarget.attack)}
           onPick={chooseState}
           onClose={() => setAttackTarget(null)}
-        />
-      ) : null}
-
-      {attackTarget && pendingState ? (
-        <DemographicPickerModal
-          title="Pick a group to target"
-          countryId={view.countryId}
-          footnote="Their turnout falls in that state for everyone, including you. Aim it at a group a rival depends on."
-          busy={busy !== null}
-          onPick={chooseGroup}
-          onClose={() => {
-            setAttackTarget(null);
-            setPendingState(null);
-          }}
         />
       ) : null}
     </section>

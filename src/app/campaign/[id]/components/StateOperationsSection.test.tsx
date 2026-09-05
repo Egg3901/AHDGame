@@ -52,28 +52,16 @@ function view(over: Partial<StateOperationsView> = {}): StateOperationsView {
           "Their favourability there falls 0.4 a turn for 8 turns. Costs $40,000 and 4 actions.",
         costFunds: 40_000,
         costActions: 4,
-        needsBucket: false,
         shielded: true,
       },
       {
         kind: "voteSuppression",
         label: "Suppress their vote",
         description:
-          "Takes 2.5% off their vote in one state for 8 turns. Costs $70,000 and 5 actions.",
+          "Takes 10% off their vote in one state for 8 turns. Costs $70,000 and 5 actions.",
         costFunds: 70_000,
         costActions: 5,
-        needsBucket: false,
         shielded: true,
-      },
-      {
-        kind: "turnoutSuppression",
-        label: "Suppress a group's turnout",
-        description:
-          "Takes 1.5 points off one group's turnout in one state. Costs $50,000 and 4 actions.",
-        costFunds: 50_000,
-        costActions: 4,
-        needsBucket: true,
-        shielded: false,
       },
     ],
     ...over,
@@ -113,12 +101,17 @@ describe("StateOperationsSection", () => {
     expect(row.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("shows all three attacks when a rival is opened", () => {
+  it("shows both attacks when a rival is opened", () => {
     renderSection();
     fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
     expect(screen.getByRole("button", { name: /Local attack/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Suppress their vote/ })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Suppress a group's turnout/ })).toBeTruthy();
+  });
+
+  it("offers no turnout attack, which was pulled before release", () => {
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
+    expect(screen.queryByRole("button", { name: /turnout/i })).toBeNull();
   });
 
   it("prints each attack's own description, verbatim from the view", () => {
@@ -155,27 +148,15 @@ describe("StateOperationsSection", () => {
     expect(onAttack).toHaveBeenCalledWith("r1", "voteSuppression", "IA", undefined);
   });
 
-  it("asks for a group as well as a state when the attack names one", () => {
-    renderSection();
-    fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Suppress a group's turnout/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Iowa/ }));
-    // The state is chosen; now the group, from the canvassing vocabulary.
-    expect(screen.getByText("Pick a group to target")).toBeTruthy();
-  });
-
-  it("passes the group back with the attack", () => {
+  it("fires on the state without asking for anything else", () => {
+    // The group picker existed for the turnout attack alone. With that pulled,
+    // no shipped attack names a group, so picking the state is the last step.
     const { onAttack } = renderSection();
     fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
-    fireEvent.click(screen.getByRole("button", { name: /Suppress a group's turnout/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Suppress their vote/ }));
     fireEvent.click(screen.getByRole("button", { name: /Iowa/ }));
-    fireEvent.click(screen.getAllByTestId("demographic-group-option")[0]);
-    expect(onAttack).toHaveBeenCalledWith(
-      "r1",
-      "turnoutSuppression",
-      "IA",
-      expect.objectContaining({ categoryKey: expect.any(String), bucket: expect.any(String) })
-    );
+    expect(screen.queryByText("Pick a group to target")).toBeNull();
+    expect(onAttack).toHaveBeenCalledWith("r1", "voteSuppression", "IA", undefined);
   });
 
   it("names who is attacking you, so a hit can be traced", () => {
@@ -215,9 +196,12 @@ describe("StateOperationsSection", () => {
     expect(screen.getByText(/25% of incoming ads and vote/)).toBeTruthy();
   });
 
-  it("says what the shield does not cover, since it blunts two of the three", () => {
+  it("no longer carves out an exception it does not have", () => {
+    // It used to name turnout suppression as the kind the shield missed. That
+    // attack was pulled, so the shield now covers everything on offer and
+    // saying otherwise would invent a hole in it.
     renderSection({ shieldPct: 0.25 });
-    expect(screen.getByText(/does not cover turnout suppression/i)).toBeTruthy();
+    expect(screen.queryByText(/does not cover/i)).toBeNull();
   });
 
   it("disables an attack the campaign cannot pay for, and says why", () => {
@@ -292,31 +276,8 @@ describe("StateOperationsSection", () => {
   });
 });
 
-describe("how a turnout attack reads against you", () => {
-  const turnoutRow = {
-    kind: "turnoutSuppression" as const,
-    stateId: "NH",
-    stateName: "New Hampshire",
-    actorName: "Rival Filer",
-    bucketLabel: "Evangelicals",
-    expiresTurn: 18,
-  };
-
-  it("names the group it hit", () => {
-    renderSection({ liveAgainstYou: [turnoutRow] });
-    expect(screen.getByText(/Evangelicals turnout/)).toBeTruthy();
-  });
-
-  it("does not count down, because that effect does not expire", () => {
-    // expiresTurn on a turnout row is the attacker's cooldown. The effect
-    // itself decays on the same slow curve every turnout modifier does, so a
-    // countdown would print a duration the mechanic does not have.
-    renderSection({ liveAgainstYou: [turnoutRow] });
-    expect(screen.queryByText(/turns left/)).toBeNull();
-    expect(screen.getByText(/fading slowly/)).toBeTruthy();
-  });
-
-  it("still counts down the kinds that do expire", () => {
+describe("how a live attack against you reads", () => {
+  it("counts down the turns it has left", () => {
     renderSection({
       liveAgainstYou: [
         {
@@ -329,12 +290,5 @@ describe("how a turnout attack reads against you", () => {
       ],
     });
     expect(screen.getByText(/6 turns left/)).toBeTruthy();
-  });
-
-  it("reads without a label if the group id is unknown to this country", () => {
-    renderSection({
-      liveAgainstYou: [{ ...turnoutRow, bucketLabel: undefined }],
-    });
-    expect(screen.getByText(/a group turnout/)).toBeTruthy();
   });
 });

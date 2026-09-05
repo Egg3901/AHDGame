@@ -147,14 +147,13 @@ export async function emitStateAttackWire(
   kind: PrimaryStateActionKind,
   actorName: string,
   targetName: string,
-  stateName: string,
-  bucketLabel?: string
+  stateName: string
 ): Promise<void> {
   try {
     if (!actorName || !targetName) return;
     await logWireEvent(
       "campaign_state_attack",
-      wireHeadlineStateAttack(kind, actorName, targetName, stateName, bucketLabel),
+      wireHeadlineStateAttack(kind, actorName, targetName, stateName),
       { electionId: electionId.toString() }
     );
   } catch {

@@ -172,7 +172,7 @@ describe("POST /api/elections/[id]/state-attack", () => {
     expect(res.status).toBe(200);
     const inserted = db.collectionMocks.primaryStateActions!.insertOne.mock.calls[0][0];
     expect(inserted.kind).toBe("voteSuppression");
-    expect(inserted.magnitude).toBe(2.5);
+    expect(inserted.magnitude).toBe(10);
     const [, update] = db.collectionMocks.campaigns!.updateOne.mock.calls[0];
     expect(update.$inc.funds).toBe(-70_000);
   });
@@ -292,106 +292,20 @@ describe("POST /api/elections/[id]/state-attack", () => {
   });
 });
 
-describe("turnout suppression", () => {
-  // A real US group: LAYER1_DEMOGRAPHICS carries `evangelicals` under the
-  // `ideology` category. An invented id must be refused, not written.
-  const GROUP = { categoryKey: "ideology", bucket: "evangelicals" };
-
-  function turnoutDoc(current = 0) {
-    return {
-      _id: "IA",
-      countryId: "US",
-      modifiers: { ideology: { evangelicals: current } },
-      lastUpdated: new Date("2026-01-01"),
-    };
-  }
-
-  it("refuses a turnout attack with no group named", async () => {
+describe("the attack that was pulled before release", () => {
+  it("refuses turnout suppression outright", async () => {
+    // It took points off one group's turnout for every candidate in the state,
+    // the buyer included, and simulation put its effect at 0.00pp of the
+    // delegate count at every price tested. The route no longer names the kind,
+    // so a client that still asks for it is turned away rather than charged.
     const res = await callRoute(body({ kind: "turnoutSuppression" }));
     expect(res.status).toBe(400);
     expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
   });
 
-  it("refuses a group the country does not have", async () => {
-    const res = await callRoute(
-      body({ kind: "turnoutSuppression", categoryKey: "ideology", bucket: "not_a_real_group" })
-    );
-    expect(res.status).toBe(400);
-    expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
-  });
-
-  it("refuses a state with no turnout data rather than charging for nothing", async () => {
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(null);
-    const res = await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    expect(res.status).toBe(404);
-    expect(db.collectionMocks.characters!.updateOne).not.toHaveBeenCalled();
-  });
-
-  it("lowers the group's turnout modifier in that state", async () => {
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(0));
-    const res = await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    expect(res.status).toBe(200);
-    const [, update] = db.collectionMocks.stateDemographicTurnout!.updateOne.mock.calls[0];
-    expect(update.$set["modifiers.ideology.evangelicals"]).toBeCloseTo(-1.5, 6);
-  });
-
-  it("guards the write on the value it read, so a racing canvass is not clobbered", async () => {
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(0));
-    await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    const [filter] = db.collectionMocks.stateDemographicTurnout!.updateOne.mock.calls[0];
-    expect(filter.lastUpdated).toEqual(new Date("2026-01-01"));
-  });
-
-  it("charges nobody when the turnout write loses the race", async () => {
-    // Production Mongo is standalone, so runWithOptionalTransaction takes the
-    // sequential path and a throw rolls nothing back on its own. Without an
-    // explicit refund the player pays for an attack that never landed.
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(0));
-    db.collection("stateDemographicTurnout").updateOne.mockResolvedValue({ modifiedCount: 0 });
-    const res = await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    expect(res.status).toBe(409);
-    expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
-
-    const charInc = db.collectionMocks.characters!.updateOne.mock.calls.map(
-      (c) => (c[1] as { $inc?: { actions?: number } }).$inc?.actions ?? 0
-    );
-    const campInc = db.collectionMocks.campaigns!.updateOne.mock.calls.map(
-      (c) => (c[1] as { $inc?: { funds?: number } }).$inc?.funds ?? 0
-    );
-    // Net zero: everything taken was handed back.
-    expect(charInc.reduce((a, b) => a + b, 0)).toBe(0);
-    expect(campInc.reduce((a, b) => a + b, 0)).toBe(0);
-  });
-
-  it("diminishes against a group already pushed away from zero", async () => {
-    // The existing curve resists movement in either direction, so a group
-    // already at +10 takes half the hit. Same rule canvassing runs into.
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(10));
-    await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    const [, update] = db.collectionMocks.stateDemographicTurnout!.updateOne.mock.calls[0];
-    expect(update.$set["modifiers.ideology.evangelicals"]).toBeCloseTo(10 - 0.75, 6);
-  });
-
-  it("records the group on the row, so the hit can be traced", async () => {
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(0));
-    await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    const inserted = db.collectionMocks.primaryStateActions!.insertOne.mock.calls[0][0];
-    expect(inserted.bucket).toBe("evangelicals");
-    // Rapid Response guards a candidate; this one acts on an electorate.
-    expect(inserted.shieldApplied).toBe(0);
-  });
-
-  it("leaves no bucket on an attack that names no group", async () => {
-    await callRoute(body({ kind: "voteSuppression" }));
-    const inserted = db.collectionMocks.primaryStateActions!.insertOne.mock.calls[0][0];
-    expect("bucket" in inserted).toBe(false);
-  });
-
-  it("charges its own price, not the local attack's", async () => {
-    db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(0));
-    await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
-    const [, update] = db.collectionMocks.campaigns!.updateOne.mock.calls[0];
-    expect(update.$inc.funds).toBe(-50_000);
+  it("takes no money for it either", async () => {
+    await callRoute(body({ kind: "turnoutSuppression" }));
+    expect(db.collectionMocks.campaigns!.updateOne).not.toHaveBeenCalled();
   });
 });
 

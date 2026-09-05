@@ -133,13 +133,11 @@ describe("buildStateOperations", () => {
     expect(view?.opponents.map((o) => o.name)).toEqual(["Rival Filer"]);
   });
 
-  it("offers all three attacks, in the order the panel shows them", async () => {
+  it("offers both attacks, in the order the panel shows them", async () => {
+    // Turnout suppression was a third here and was pulled before release: it
+    // measured 0.00pp of the delegate count at every price simulated.
     const view = await build({ electionCandidates: ROSTER });
-    expect(view?.attacks.map((a) => a.kind)).toEqual([
-      "localFavorability",
-      "voteSuppression",
-      "turnoutSuppression",
-    ]);
+    expect(view?.attacks.map((a) => a.kind)).toEqual(["localFavorability", "voteSuppression"]);
   });
 
   it("prices each attack from the constants, not a literal", async () => {
@@ -150,13 +148,6 @@ describe("buildStateOperations", () => {
     expect(view?.attacks.find((a) => a.kind === "voteSuppression")?.costFunds).toBe(
       PRIMARY_VOTE_SUPPRESSION_COST_FUNDS
     );
-  });
-
-  it("marks the one attack that names a group", async () => {
-    const view = await build({ electionCandidates: ROSTER });
-    expect(view?.attacks.filter((a) => a.needsBucket).map((a) => a.kind)).toEqual([
-      "turnoutSuppression",
-    ]);
   });
 
   it("says which attacks Rapid Response covers", async () => {
@@ -280,39 +271,5 @@ describe("buildStateOperations", () => {
   it("gives each candidate their own colour, so the field is not one block", async () => {
     const view = await build({ electionCandidates: ROSTER });
     expect(view?.opponents[0].color).toMatch(/^#/);
-  });
-});
-
-describe("a turnout attack in the live lists", () => {
-  it("carries the group's display name, so the hit can be read", async () => {
-    const view = await build({
-      electionCandidates: ROSTER,
-      primaryStateActions: [
-        attackRow({
-          actorCandidateId: RIVAL_ROW,
-          targetCandidateId: MY_ROW,
-          targetCharacterId: ME,
-          kind: "turnoutSuppression",
-          bucket: "evangelicals",
-        }),
-      ],
-      states: [{ _id: "IA", name: "Iowa" }],
-    });
-    expect(view?.liveAgainstYou[0].bucketLabel).toBe("Evangelicals");
-  });
-
-  it("leaves the label off the kinds that name no group", async () => {
-    const view = await build({
-      electionCandidates: ROSTER,
-      primaryStateActions: [
-        attackRow({
-          actorCandidateId: RIVAL_ROW,
-          targetCandidateId: MY_ROW,
-          targetCharacterId: ME,
-        }),
-      ],
-      states: [{ _id: "IA", name: "Iowa" }],
-    });
-    expect(view?.liveAgainstYou[0].bucketLabel).toBeUndefined();
   });
 });

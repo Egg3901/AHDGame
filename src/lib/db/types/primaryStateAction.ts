@@ -10,7 +10,16 @@ import type { ObjectId } from "mongodb";
  * `primarySurgeBoost` and nothing ever read it. Rows are also an audit trail,
  * which matters when the act is against another player.
  */
-export type PrimaryStateActionKind = "localFavorability" | "voteSuppression" | "turnoutSuppression";
+/**
+ * A third kind, `turnoutSuppression`, was built and then pulled before release:
+ * it took points off one demographic group's turnout in one state, for every
+ * candidate there including the buyer. Simulated across 2- to 5-candidate
+ * fields it moved the delegate count by 0.00pp at every price tested, because
+ * no group is concentrated enough behind one candidate for a symmetric cut to
+ * favour anyone. Restoring it needs the demographic spread to be sharper
+ * first, not a bigger number.
+ */
+export type PrimaryStateActionKind = "localFavorability" | "voteSuppression";
 
 export interface PrimaryStateAction {
   _id: ObjectId;
@@ -39,7 +48,11 @@ export interface PrimaryStateAction {
   magnitude: number;
   /** Fraction the target's shield absorbed, 0..1, stamped at purchase. */
   shieldApplied: number;
-  /** Reserved for turnoutSuppression in phase 2. */
+  /**
+   * The demographic group an action names, for kinds that target one. No
+   * shipped kind does; kept because rows are an audit trail and the field costs
+   * nothing to carry.
+   */
   bucket?: string;
   appliedTurn: number;
   /** Exclusive: the engine ignores rows at or past this turn. */

@@ -184,11 +184,21 @@ export const PRIMARY_LOCAL_ATTACK_COST_ACTIONS = 4;
  * Vote suppression: points of the target's vote removed in one state while the
  * attack is live.
  *
- * The only one of the three attacks that touches the count directly, so it is
- * the dearest. 2.5 points of one state's vote is deliberately small: enough to
- * decide a state already inside the margin, never enough to take one outright.
+ * The only one of the attacks that touches the count directly, so it is the
+ * dearest. It shipped at 2.5 points on the theory that small was safe — enough
+ * to decide a state already inside the margin, never enough to take one
+ * outright. Simulated across 2- to 5-candidate fields, 2.5 turned out to be
+ * under the noise floor rather than merely modest: buying it in one state cost
+ * the target 0.03pp of the delegate count, and buying it in the five largest
+ * states cost 0.10pp. A player spending 70,000 and 5 actions could not see what
+ * they had bought.
+ *
+ * At 10 the same purchases cost 0.18pp / one state and 0.41pp / three states —
+ * a lever that decides close states without deciding the race, which is what
+ * the 2.5 was reaching for. PRIMARY_VOTE_SUPPRESSION_FLOOR still caps the whole
+ * field's convergence at 15% of a state's vote.
  */
-export const PRIMARY_VOTE_SUPPRESSION_PCT = 2.5;
+export const PRIMARY_VOTE_SUPPRESSION_PCT = 10;
 export const PRIMARY_VOTE_SUPPRESSION_COST_FUNDS = 70_000;
 export const PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS = 5;
 
@@ -201,17 +211,19 @@ export const PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS = 5;
  */
 export const PRIMARY_VOTE_SUPPRESSION_FLOOR = 0.85;
 
-/**
- * Turnout suppression: percentage points taken off the targeted group's turnout
- * modifier in that state, before the existing diminishing-returns curve.
+/*
+ * Turnout suppression was the third state attack and is not shipped. It took
+ * points off one group's turnout in a state for every candidate there, the
+ * buyer included, so it only ever paid when aimed at a group a rival depended
+ * on disproportionately. Simulation says no group is that concentrated: across
+ * 2- to 5-candidate fields it moved the leader's delegate share by 0.00pp at
+ * 1.5, 4 and 8 points, and reached -0.03pp only at 15 points in a field already
+ * decided. It was a 50,000-and-4-action purchase a player could not detect.
  *
- * Cheaper than vote suppression because it is indirect. It lowers the group's
- * turnout for every candidate in the state, including the buyer, so it only
- * pays when aimed at a group a rival depends on.
+ * The premise is sound and the fix is not a bigger number — it is a sharper
+ * per-state demographic spread, without which the cut is symmetric by
+ * construction. Left out rather than left in doing nothing.
  */
-export const PRIMARY_TURNOUT_SUPPRESSION_POINTS = 1.5;
-export const PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS = 50_000;
-export const PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS = 4;
 
 /**
  * Vote multiplier the live vote-suppression rows impose on one candidate in one

@@ -346,28 +346,16 @@ describe("state operations", () => {
           "Their favourability there falls 0.4 a turn for 8 turns. Costs $40,000 and 4 actions.",
         costFunds: 40_000,
         costActions: 4,
-        needsBucket: false,
         shielded: true,
       },
       {
         kind: "voteSuppression",
         label: "Suppress their vote",
         description:
-          "Takes 2.5% off their vote in one state for 8 turns. Costs $70,000 and 5 actions.",
+          "Takes 10% off their vote in one state for 8 turns. Costs $70,000 and 5 actions.",
         costFunds: 70_000,
         costActions: 5,
-        needsBucket: false,
         shielded: true,
-      },
-      {
-        kind: "turnoutSuppression",
-        label: "Suppress a group's turnout",
-        description:
-          "Takes 1.5 points off one group's turnout in one state. Costs $50,000 and 4 actions.",
-        costFunds: 50_000,
-        costActions: 4,
-        needsBucket: true,
-        shielded: false,
       },
     ],
   };

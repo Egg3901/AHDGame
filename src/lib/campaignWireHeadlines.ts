@@ -130,35 +130,14 @@ const VOTE_SUPPRESSION_TEMPLATES = [
   (a: string, t: string, s: string) => `${up(a)} WORKS TO CUT ${up(t)}'S ${up(s)} MARGIN`,
 ];
 
-// The turnout set names the group as well. That attack lowers one group's
-// turnout for everyone in the state rather than hitting one candidate, so a
-// headline that hid which group would leave it untraceable.
-const TURNOUT_SUPPRESSION_TEMPLATES = [
-  (a: string, t: string, s: string, g: string) =>
-    `${up(a)} MOVES ON ${up(g)} IN ${up(s)}, WITH ${up(t)} IN THE FRAME`,
-  (a: string, t: string, s: string, g: string) =>
-    `${up(s)} ${up(g)} TURNOUT TARGETED BY ${up(a)} AGAINST ${up(t)}`,
-  (a: string, t: string, s: string, g: string) =>
-    `${up(a)} LEANS ON ${up(g)} TURNOUT IN ${up(s)} TO BLUNT ${up(t)}`,
-];
-
 export function wireHeadlineStateAttack(
   kind: PrimaryStateActionKind,
   actor: string,
   target: string,
-  stateName: string,
-  bucketLabel?: string
+  stateName: string
 ): string {
   if (kind === "voteSuppression") {
     return pick(VOTE_SUPPRESSION_TEMPLATES)(actor, target, stateName);
-  }
-  if (kind === "turnoutSuppression") {
-    return pick(TURNOUT_SUPPRESSION_TEMPLATES)(
-      actor,
-      target,
-      stateName,
-      bucketLabel ?? "that vote"
-    );
   }
   return pick(LOCAL_FAVOURABILITY_TEMPLATES)(actor, target, stateName);
 }
