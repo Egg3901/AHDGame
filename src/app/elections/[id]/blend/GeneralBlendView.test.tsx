@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { CandidateDetail, ElectionDetail } from "../components/ElectionDetailTypes";
 import { GeneralBlendView } from "./GeneralBlendView";
 
@@ -156,20 +156,18 @@ describe("the hero is the ticket list in a two-way race", () => {
   it("offers no endorse button on the reader's own ticket", () => {
     // The route refuses it ("You cannot endorse yourself", 400), so the button
     // could never do anything but fail. It was rendered anyway, and the failure
-    // was silent.
+    // was silent. c1 is the reader; two tickets, two trees, so an ungated
+    // version of this would render four buttons rather than two.
     renderView();
-    for (const button of screen.getAllByRole("button", { name: /Endorse/ })) {
-      // Walk up to the hero column and check whose it is.
-      expect(button.closest("div")?.textContent ?? "").not.toContain("First Ticket");
-    }
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+    expect(screen.getAllByText("First Ticket").length).toBeGreaterThan(0);
   });
 
   it("still offers it on a rival's ticket", () => {
+    // The fixture's c1 is the reader and c2 is the rival, so exactly one
+    // button per tree survives the guard.
     renderView();
-    const names = screen
-      .getAllByRole("button", { name: /Endorse/ })
-      .map((b) => b.parentElement?.textContent ?? "");
-    expect(names.every((t) => t.includes("Second Ticket"))).toBe(true);
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
   });
 
   it("prints the leader's electoral votes only where each one earns its place", () => {
@@ -180,5 +178,94 @@ describe("the hero is the ticket list in a two-way race", () => {
     // same number, and the tickets table repeated it a third time. If this
     // count rises, something started echoing the hero again.
     expect(screen.getAllByText("276")).toHaveLength(5);
+  });
+});
+
+describe("the hero's two sides stay level", () => {
+  // As two independent flex columns, any asymmetry between the sides — a
+  // running mate on one, no endorse button on the reader's own — pushed one
+  // column down and the two big electoral-vote figures stopped lining up.
+  // A grid of shared rows aligns them by construction.
+  //
+  // The phone drew its own inline copy of this block, so it had the same fault
+  // and would not have been fixed by a change to the desktop hero. Both trees
+  // now call one function, and these assertions check every copy of the hero
+  // rather than the first one they find.
+  // The two even columns are the hero's own signature; the board's grid is
+  // `repeat(N, 1fr)` and the tickets table's columns are fixed widths, so
+  // neither answers this selector. If the hero ever goes back to free columns
+  // it matches nothing and the count assertion fails.
+  const heroGrids = (container: HTMLElement) =>
+    Array.from(
+      container.querySelectorAll<HTMLElement>('div[style*="grid-template-columns: 1fr 1fr"]')
+    );
+
+  it("draws the hero once per tree, from one shared function", () => {
+    const { container } = renderView();
+    expect(heroGrids(container)).toHaveLength(2);
+  });
+
+  it("lays each pair out as a two-column grid, not two free columns", () => {
+    const { container } = renderView();
+    for (const grid of heroGrids(container)) {
+      expect(grid.style.display).toBe("grid");
+    }
+  });
+
+  it("fills every row for both tickets, so no row can be half empty", () => {
+    const { container } = renderView();
+    const grids = heroGrids(container);
+    expect(grids).toHaveLength(2);
+    for (const grid of grids) {
+      // Name, party, figure and share for each ticket, plus an endorse row the
+      // rival fills and the reader's own side leaves empty. An odd count would
+      // mean some row exists on one side only, which is how the figures drifted.
+      expect(grid.children.length).toBeGreaterThan(0);
+      expect(grid.children.length % 2).toBe(0);
+    }
+  });
+
+  it("puts the same two electoral-vote figures in both heroes", () => {
+    const { container } = renderView();
+    const figures = heroGrids(container).map((grid) =>
+      Array.from(grid.children)
+        .map((cell) => cell.textContent ?? "")
+        .filter((text) => /^\d+$/.test(text))
+    );
+    expect(figures[0]).toEqual(["276", "251"]);
+    expect(figures[1]).toEqual(figures[0]);
+  });
+});
+
+describe("a refused endorsement says why", () => {
+  it("shows the route's reason instead of doing nothing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "That endorsement is already spent" }),
+      })
+    );
+    renderView();
+    fireEvent.click(screen.getAllByRole("button", { name: /Endorse/ })[0]);
+    // Once per tree: the message sits under the electoral-vote bar, which both
+    // layouts draw.
+    await waitFor(() =>
+      expect(screen.getAllByText("That endorsement is already spent")).toHaveLength(2)
+    );
+  });
+
+  it("falls back to its own wording when the route sends none", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    renderView();
+    fireEvent.click(screen.getAllByRole("button", { name: /Endorse/ })[0]);
+    await waitFor(() => expect(screen.getAllByText(/did not go through/)).toHaveLength(2));
+  });
+
+  it("says so when the request never lands", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    renderView();
+    fireEvent.click(screen.getAllByRole("button", { name: /Endorse/ })[0]);
+    await waitFor(() => expect(screen.getAllByText(/Network error/)).toHaveLength(2));
   });
 });

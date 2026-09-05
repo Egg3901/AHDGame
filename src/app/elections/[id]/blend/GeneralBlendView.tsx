@@ -22,7 +22,16 @@ export interface GeneralBlendViewProps {
   onRefresh: () => void;
 }
 
-function EvBar({ vm, height }: { vm: GeneralBlendVM; height: number }) {
+function EvBar({
+  vm,
+  height,
+  error,
+}: {
+  vm: GeneralBlendVM;
+  height: number;
+  /** A refused endorsement, shown here because this sits under the buttons. */
+  error?: string | null;
+}) {
   return (
     <>
       <div style={{ position: "relative", height, display: "flex", background: BLEND.track }}>
@@ -85,6 +94,18 @@ function EvBar({ vm, height }: { vm: GeneralBlendVM; height: number }) {
       >
         {vm.projectionNote}
       </div>
+      {error ? (
+        <div
+          style={{
+            marginTop: 6,
+            fontFamily: FONT.serif,
+            fontSize: 13,
+            color: BLEND.negative,
+          }}
+        >
+          {error}
+        </div>
+      ) : null}
     </>
   );
 }
@@ -274,14 +295,26 @@ function TierLegend({ vm }: { vm: GeneralBlendVM }) {
 export function GeneralBlendView({ election, electionId, wire, onRefresh }: GeneralBlendViewProps) {
   const [rail, setRail] = useState<GeneralRail>("overview");
   const [busy, setBusy] = useState<string | null>(null);
+  /** Why the last endorsement was refused, or null. */
+  const [endorseError, setEndorseError] = useState<string | null>(null);
 
   const vm = useMemo(
     () => buildGeneralBlendViewModel({ election, wire, rail }),
     [election, wire, rail]
   );
 
+  /**
+   * Endorse or un-endorse a ticket.
+   *
+   * A refusal used to be swallowed whole: the handler acted only on `res.ok`,
+   * so a rejected endorsement left the button looking like it did nothing and
+   * said nothing about why. The route has real reasons to say no — the race has
+   * ended, the endorsement is already spent elsewhere — and the reader is
+   * entitled to hear them.
+   */
   async function toggleEndorse(candidateId: string, currentlyEndorsed: boolean) {
     setBusy(candidateId);
+    setEndorseError(null);
     try {
       const res = await fetch(`/api/elections/${electionId}/endorse`, {
         method: currentlyEndorsed ? "DELETE" : "POST",
@@ -292,9 +325,14 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               body: JSON.stringify({ candidateId }),
             }),
       });
-      if (res.ok) onRefresh();
+      if (res.ok) {
+        onRefresh();
+        return;
+      }
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      setEndorseError(body.error || "That endorsement did not go through.");
     } catch {
-      // Non-fatal: the row keeps its previous state until the next poll.
+      setEndorseError("Network error. Try again.");
     } finally {
       setBusy(null);
     }
@@ -332,7 +370,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
    * ("You cannot endorse yourself", 400), so the button could never do anything
    * but fail; offering it was an affordance that had no action behind it.
    */
-  const endorseButton = (c: GeneralTicketVM, align: "left" | "right") => {
+  const endorseButton = (c: GeneralTicketVM) => {
     if (c.isYou) return null;
     return (
       <button
@@ -340,8 +378,6 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         disabled={busy === c.id}
         onClick={() => toggleEndorse(c.id, c.endorsed)}
         style={{
-          marginTop: 8,
-          alignSelf: align === "right" ? "flex-end" : "flex-start",
           padding: "4px 10px",
           font: "inherit",
           fontFamily: FONT.mono,
@@ -369,71 +405,141 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
     );
   };
 
-  const heroPair = (
+  /**
+   * The two leading tickets, side by side.
+   *
+   * A grid of shared ROWS rather than two independent columns. As two flex
+   * columns bottom-aligned, any difference in content height between them —
+   * one ticket having a running mate, or the reader's own ticket having no
+   * endorse button — pushed one side down and the two big electoral-vote
+   * figures stopped lining up. Rows align by construction, whatever each side
+   * happens to carry.
+   */
+  const heroCell = (
+    c: GeneralTicketVM,
+    i: number,
+    row: string,
+    style: React.CSSProperties,
+    content: React.ReactNode
+  ) => (
     <div
+      key={`${c.id}-${row}`}
       style={{
         display: "flex",
-        alignItems: "flex-end",
-        justifyContent: "space-between",
-        gap: 24,
-        marginBottom: 18,
+        justifyContent: i === 0 ? "flex-start" : "flex-end",
+        textAlign: i === 0 ? "left" : "right",
+        ...style,
       }}
     >
-      {vm.topTwo.map((c, i) => (
-        <div
-          key={c.id}
-          style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: i === 0 ? "flex-start" : "flex-end",
-            textAlign: i === 0 ? "left" : "right",
-          }}
-        >
-          <div style={{ fontFamily: FONT.serif, fontSize: 19, fontWeight: 600 }}>{c.name}</div>
-          <div
-            style={{
-              marginTop: 2,
-              fontFamily: FONT.mono,
-              fontSize: 10,
-              letterSpacing: ".12em",
-              textTransform: "uppercase",
-              color: BLEND.mutedDim,
-            }}
-          >
-            {c.party}
-          </div>
-          {c.mate ? (
-            <div
-              style={{
+      {content}
+    </div>
+  );
+
+  /**
+   * The two leading tickets, side by side, at a given type scale.
+   *
+   * One function for both trees. The phone used to draw its own inline copy of
+   * this block, so a fix applied to one layout left the other as it was — and
+   * both copies had the same latent fault, since each side was an independent
+   * flex column. Any asymmetry between them (one ticket with a running mate,
+   * the reader's own ticket with no endorse button) pushed one column down and
+   * the two big electoral-vote figures stopped lining up. Shared grid rows
+   * align by construction, whatever each side happens to carry.
+   */
+  const heroPair = (scale: {
+    name: number;
+    party: number;
+    mate: number;
+    ev: number;
+    share: number;
+    /** The phone has no room for the popular-vote total beside the share. */
+    withVotes: boolean;
+    columnGap: number;
+    marginBottom: number;
+  }) => (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 1fr",
+        columnGap: scale.columnGap,
+        alignItems: "end",
+        marginBottom: scale.marginBottom,
+      }}
+    >
+      {vm.topTwo.map((c, i) =>
+        heroCell(
+          c,
+          i,
+          "name",
+          { fontFamily: FONT.serif, fontSize: scale.name, fontWeight: 600 },
+          c.name
+        )
+      )}
+      {vm.topTwo.map((c, i) =>
+        heroCell(
+          c,
+          i,
+          "party",
+          {
+            marginTop: 2,
+            fontFamily: FONT.mono,
+            fontSize: scale.party,
+            letterSpacing: ".12em",
+            textTransform: "uppercase",
+            color: BLEND.mutedDim,
+          },
+          c.party
+        )
+      )}
+      {/* Rendered for both sides even when only one has a mate, so the row
+          exists and the figures below it stay level. */}
+      {vm.topTwo.some((c) => c.mate)
+        ? vm.topTwo.map((c, i) =>
+            heroCell(
+              c,
+              i,
+              "mate",
+              {
                 marginTop: 2,
                 fontFamily: FONT.serif,
                 fontStyle: "italic",
-                fontSize: 13,
+                fontSize: scale.mate,
                 color: BLEND.mutedDim,
-              }}
-            >
-              with {c.mate}
-            </div>
-          ) : null}
-          <div
-            style={{
-              marginTop: 7,
-              fontFamily: FONT.mono,
-              fontSize: 50,
-              lineHeight: 1,
-              fontWeight: 500,
-              letterSpacing: "-0.04em",
-              color: c.color,
-            }}
-          >
-            {c.ev}
-          </div>
-          <div style={{ marginTop: 4, fontFamily: FONT.mono, fontSize: 12, color: BLEND.muted }}>
-            {c.pct}% · {c.votes}
-          </div>
-          {endorseButton(c, i === 0 ? "left" : "right")}
-        </div>
-      ))}
+                minHeight: 18,
+              },
+              c.mate ? `with ${c.mate}` : ""
+            )
+          )
+        : null}
+      {vm.topTwo.map((c, i) =>
+        heroCell(
+          c,
+          i,
+          "ev",
+          {
+            marginTop: 7,
+            fontFamily: FONT.mono,
+            fontSize: scale.ev,
+            lineHeight: 1,
+            fontWeight: 500,
+            letterSpacing: "-0.04em",
+            color: c.color,
+          },
+          c.ev
+        )
+      )}
+      {vm.topTwo.map((c, i) =>
+        heroCell(
+          c,
+          i,
+          "share",
+          { marginTop: 4, fontFamily: FONT.mono, fontSize: scale.share, color: BLEND.muted },
+          scale.withVotes ? `${c.pct}% · ${c.votes}` : `${c.pct}%`
+        )
+      )}
+      {vm.topTwo.some((c) => !c.isYou)
+        ? vm.topTwo.map((c, i) => heroCell(c, i, "endorse", { marginTop: 8 }, endorseButton(c)))
+        : null}
     </div>
   );
 
@@ -476,9 +582,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
       >
         {c.votes}
       </span>
-      <span style={{ display: "flex", justifyContent: "flex-end" }}>
-        {endorseButton(c, "right")}
-      </span>
+      <span style={{ display: "flex", justifyContent: "flex-end" }}>{endorseButton(c)}</span>
     </div>
   ));
 
@@ -539,54 +643,18 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         <div style={{ padding: 16 }}>
           {vm.showCollege && vm.topTwo.length > 0 ? (
             <div style={{ marginBottom: 22 }}>
-              <div style={{ display: "flex", gap: 20 }}>
-                {vm.topTwo.map((c) => (
-                  <div key={c.id} style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-                    <div style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600 }}>
-                      {c.name}
-                    </div>
-                    {c.mate ? (
-                      <div
-                        style={{
-                          marginTop: 2,
-                          fontFamily: FONT.serif,
-                          fontStyle: "italic",
-                          fontSize: 12,
-                          color: BLEND.mutedDim,
-                        }}
-                      >
-                        with {c.mate}
-                      </div>
-                    ) : null}
-                    <div
-                      style={{
-                        marginTop: 5,
-                        fontFamily: FONT.mono,
-                        fontSize: 38,
-                        lineHeight: 1,
-                        fontWeight: 500,
-                        letterSpacing: "-0.04em",
-                        color: c.color,
-                      }}
-                    >
-                      {c.ev}
-                    </div>
-                    <div
-                      style={{
-                        marginTop: 3,
-                        fontFamily: FONT.mono,
-                        fontSize: 11,
-                        color: BLEND.muted,
-                      }}
-                    >
-                      {c.pct}%
-                    </div>
-                    {endorseButton(c, "left")}
-                  </div>
-                ))}
-              </div>
+              {heroPair({
+                name: 15,
+                party: 9,
+                mate: 12,
+                ev: 38,
+                share: 11,
+                withVotes: false,
+                columnGap: 16,
+                marginBottom: 0,
+              })}
               <div style={{ marginTop: 14 }}>
-                <EvBar vm={vm} height={28} />
+                <EvBar vm={vm} height={28} error={endorseError} />
               </div>
             </div>
           ) : null}
@@ -827,8 +895,17 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             <section
               style={{ padding: "24px 26px", borderBottom: `1px solid ${BLEND.hairlineStrong}` }}
             >
-              {heroPair}
-              <EvBar vm={vm} height={34} />
+              {heroPair({
+                name: 19,
+                party: 10,
+                mate: 13,
+                ev: 50,
+                share: 12,
+                withVotes: true,
+                columnGap: 24,
+                marginBottom: 18,
+              })}
+              <EvBar vm={vm} height={34} error={endorseError} />
             </section>
           ) : null}
 
