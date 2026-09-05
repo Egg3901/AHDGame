@@ -114,9 +114,9 @@ describe("nothing on this screen is won", () => {
     expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(2);
   });
 
-  it("labels the tickets' columns rather than leaving bare numbers", () => {
+  it("labels the hero's figures as projected", () => {
     renderView();
-    expect(screen.getAllByText(/Projected electoral votes/)).toHaveLength(2);
+    expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(2);
   });
 
   it("uses one masthead label across both layouts", () => {
@@ -127,5 +127,38 @@ describe("nothing on this screen is won", () => {
     const mastheads = screen.getAllByText(/^(Election Night|The Campaign)$/);
     expect(mastheads).toHaveLength(2);
     expect(new Set(mastheads.map((n) => n.textContent)).size).toBe(1);
+  });
+});
+
+describe("the hero is the ticket list in a two-way race", () => {
+  // The table repeated the hero's name, electoral votes, share and popular vote
+  // for the same two people, adding only the running mate and the endorse
+  // button. Both of those now live on the hero, so the table earns its place
+  // only once a third ticket exists.
+  it("draws no separate tickets table for two tickets", () => {
+    renderView();
+    expect(screen.queryByText("The tickets")).toBeNull();
+  });
+
+  it("offers no dead Tickets pane in the rail", () => {
+    renderView();
+    expect(screen.queryByRole("button", { name: /^Tickets/ })).toBeNull();
+  });
+
+  it("puts the endorse control on both layouts, which the table never did", () => {
+    // The table was desktop-only, so a player on a phone could not endorse
+    // anybody at all.
+    renderView();
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(4);
+  });
+
+  it("prints the leader's electoral votes only where each one earns its place", () => {
+    renderView();
+    // Five, and every one is deliberate: the hero figure and the reader's own
+    // "Your ticket" standing, once per tree, plus the rail's nav badge. The bar
+    // used to label its own segment too, ~20px under a 50px rendering of the
+    // same number, and the tickets table repeated it a third time. If this
+    // count rises, something started echoing the hero again.
+    expect(screen.getAllByText("276")).toHaveLength(5);
   });
 });

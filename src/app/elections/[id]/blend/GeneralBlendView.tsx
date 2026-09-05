@@ -12,6 +12,7 @@ import {
   type DriverRowVM,
   type GeneralBlendVM,
   type GeneralRail,
+  type GeneralTicketVM,
 } from "./generalBlendViewModel";
 
 export interface GeneralBlendViewProps {
@@ -40,9 +41,7 @@ function EvBar({ vm, height }: { vm: GeneralBlendVM; height: number }) {
               fontWeight: 700,
               fontSize: 13,
             }}
-          >
-            {s.label}
-          </div>
+          />
         ))}
         <div style={{ flex: 1 }} />
         {/* Majority marker at the live threshold, not a fixed 50.19%. */}
@@ -321,6 +320,47 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
     </Link>
   ) : null;
 
+  /**
+   * The endorse control, shared by the hero and the tickets table.
+   *
+   * It used to exist only inside the table, which the mobile tree never
+   * rendered, so a player on a phone could not endorse anybody. Defining it
+   * once means the affordance cannot go missing from one layout again.
+   */
+  const endorseButton = (c: GeneralTicketVM, align: "left" | "right") => (
+    <button
+      type="button"
+      disabled={busy === c.id}
+      onClick={() => toggleEndorse(c.id, c.endorsed)}
+      style={{
+        marginTop: 8,
+        alignSelf: align === "right" ? "flex-end" : "flex-start",
+        padding: "4px 10px",
+        font: "inherit",
+        fontFamily: FONT.mono,
+        fontSize: 10.5,
+        letterSpacing: ".06em",
+        fontWeight: 700,
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+        cursor: busy === c.id ? "not-allowed" : "pointer",
+        ...(c.endorsed
+          ? {
+              border: "1px solid rgba(34,197,94,.4)",
+              background: "rgba(34,197,94,.12)",
+              color: BLEND.positive,
+            }
+          : {
+              border: `1px solid ${BLEND.hairlineStrong}`,
+              background: "transparent",
+              color: BLEND.muted,
+            }),
+      }}
+    >
+      {busy === c.id ? "…" : c.endorsed ? "Endorsed" : "Endorse"}
+    </button>
+  );
+
   const heroPair = (
     <div
       style={{
@@ -332,7 +372,15 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
       }}
     >
       {vm.topTwo.map((c, i) => (
-        <div key={c.id} style={{ textAlign: i === 0 ? "left" : "right" }}>
+        <div
+          key={c.id}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: i === 0 ? "flex-start" : "flex-end",
+            textAlign: i === 0 ? "left" : "right",
+          }}
+        >
           <div style={{ fontFamily: FONT.serif, fontSize: 19, fontWeight: 600 }}>{c.name}</div>
           <div
             style={{
@@ -346,6 +394,19 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           >
             {c.party}
           </div>
+          {c.mate ? (
+            <div
+              style={{
+                marginTop: 2,
+                fontFamily: FONT.serif,
+                fontStyle: "italic",
+                fontSize: 13,
+                color: BLEND.mutedDim,
+              }}
+            >
+              with {c.mate}
+            </div>
+          ) : null}
           <div
             style={{
               marginTop: 7,
@@ -362,6 +423,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           <div style={{ marginTop: 4, fontFamily: FONT.mono, fontSize: 12, color: BLEND.muted }}>
             {c.pct}% · {c.votes}
           </div>
+          {endorseButton(c, i === 0 ? "left" : "right")}
         </div>
       ))}
     </div>
@@ -406,36 +468,8 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
       >
         {c.votes}
       </span>
-      <span style={{ textAlign: "right" }}>
-        <button
-          type="button"
-          disabled={busy === c.id}
-          onClick={() => toggleEndorse(c.id, c.endorsed)}
-          style={{
-            padding: "4px 10px",
-            font: "inherit",
-            fontFamily: FONT.mono,
-            fontSize: 10.5,
-            letterSpacing: ".06em",
-            fontWeight: 700,
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-            cursor: busy === c.id ? "not-allowed" : "pointer",
-            ...(c.endorsed
-              ? {
-                  border: "1px solid rgba(34,197,94,.4)",
-                  background: "rgba(34,197,94,.12)",
-                  color: BLEND.positive,
-                }
-              : {
-                  border: `1px solid ${BLEND.hairlineStrong}`,
-                  background: "transparent",
-                  color: BLEND.muted,
-                }),
-          }}
-        >
-          {busy === c.id ? "…" : c.endorsed ? "Endorsed" : "Endorse"}
-        </button>
+      <span style={{ display: "flex", justifyContent: "flex-end" }}>
+        {endorseButton(c, "right")}
       </span>
     </div>
   ));
@@ -499,10 +533,23 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             <div style={{ marginBottom: 22 }}>
               <div style={{ display: "flex", gap: 20 }}>
                 {vm.topTwo.map((c) => (
-                  <div key={c.id} style={{ flex: 1 }}>
+                  <div key={c.id} style={{ flex: 1, display: "flex", flexDirection: "column" }}>
                     <div style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600 }}>
                       {c.name}
                     </div>
+                    {c.mate ? (
+                      <div
+                        style={{
+                          marginTop: 2,
+                          fontFamily: FONT.serif,
+                          fontStyle: "italic",
+                          fontSize: 12,
+                          color: BLEND.mutedDim,
+                        }}
+                      >
+                        with {c.mate}
+                      </div>
+                    ) : null}
                     <div
                       style={{
                         marginTop: 5,
@@ -526,12 +573,32 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                     >
                       {c.pct}%
                     </div>
+                    {endorseButton(c, "left")}
                   </div>
                 ))}
               </div>
               <div style={{ marginTop: 14 }}>
                 <EvBar vm={vm} height={28} />
               </div>
+            </div>
+          ) : null}
+
+          {/* The reader's own standing, above the board rather than below it and
+              the tickets list. The desktop rail puts this top-right, so a phone
+              burying it under 48 tiles was the odd one out. */}
+          {vm.yourTicket ? (
+            <div style={{ marginBottom: 22 }}>
+              <h2
+                style={{
+                  margin: "0 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                Your ticket
+              </h2>
+              <YourTicketBlock vm={vm} campaignLink={null} />
             </div>
           ) : null}
 
@@ -552,7 +619,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             </div>
           ) : null}
 
-          {vm.showTickets ? (
+          {vm.showTickets && vm.showTicketsTable ? (
             <div>
               <h2
                 style={{ margin: "0 0 2px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
@@ -622,21 +689,6 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               `hidden lg:block`. On a phone that meant a player could not see
               their own ticket's standing on their own election night, nor what
               had moved the vote. */}
-          {vm.yourTicket ? (
-            <div style={{ marginTop: 24 }}>
-              <h2
-                style={{
-                  margin: "0 0 4px",
-                  fontFamily: FONT.serif,
-                  fontSize: 20,
-                  fontWeight: 600,
-                }}
-              >
-                Your ticket
-              </h2>
-              <YourTicketBlock vm={vm} campaignLink={null} />
-            </div>
-          ) : null}
 
           {vm.mood ? (
             <div style={{ marginTop: 24 }}>
@@ -782,7 +834,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             </BlendSection>
           ) : null}
 
-          {vm.showTickets ? (
+          {vm.showTickets && vm.showTicketsTable ? (
             <BlendSection
               title="The tickets"
               lede="Projected electoral votes · vote share"

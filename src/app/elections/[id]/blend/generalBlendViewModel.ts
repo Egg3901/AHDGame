@@ -39,6 +39,11 @@ export interface GeneralTicketVM {
 export interface EvSegmentVM {
   id: string;
   widthPct: number;
+  /**
+   * The bar sits directly under the hero pair, which prints the same figure at
+   * 50px. Kept for a caller that shows the bar on its own; the general screen
+   * does not render it.
+   */
   label: string;
   color: string;
 }
@@ -84,6 +89,16 @@ export interface GeneralBlendVM {
   showCollege: boolean;
   showBoard: boolean;
   showTickets: boolean;
+  /**
+   * Whether the standalone tickets table is worth drawing.
+   *
+   * The hero pair already carries the top two by name, party, running mate,
+   * electoral votes, share, popular vote and the endorse button. In the normal
+   * two-way presidential race the table repeated every one of those for the
+   * same two people, so it earns its place only once a third ticket exists and
+   * the hero cannot show them all.
+   */
+  showTicketsTable: boolean;
   tickets: GeneralTicketVM[];
   topTwo: GeneralTicketVM[];
   evSegments: EvSegmentVM[];
@@ -316,11 +331,17 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
     .filter(Boolean)
     .join(" · ");
 
+  // A third ticket is what the table exists for; below that the hero is the
+  // ticket list, so a "Tickets" pane would open on an empty column.
+  const showTicketsTable = tickets.length > 2;
+
   const railItems: GeneralBlendVM["railItems"] = [
     { id: "overview", label: "Overview" },
     { id: "college", label: "Electoral college", badge: leader ? String(leader.ev) : "" },
     { id: "board", label: "Battleground", badge: String(tiles.length) },
-    { id: "tickets", label: "Tickets", badge: String(tickets.length) },
+    ...(showTicketsTable
+      ? [{ id: "tickets" as const, label: "Tickets", badge: String(tickets.length) }]
+      : []),
   ];
 
   return {
@@ -349,6 +370,7 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
     showCollege: rail === "overview" || rail === "college",
     showBoard: rail === "overview" || rail === "board",
     showTickets: rail === "overview" || rail === "tickets",
+    showTicketsTable,
     tickets,
     topTwo: tickets.slice(0, 2),
     evSegments,
