@@ -655,7 +655,7 @@ export async function runNppCorporateAttacks(
   // All corporateSectors, once — grouped by owning corp (own-market lookup)
   // and by (stateId, sectorType) bucket (rival lookup), replacing the two
   // per-attacker queries above.
-  // `plantsPnl` is ~48% of the document and attack targeting never reads it.
+  // `plantsPnl` is ~15% of the collection and attack targeting never reads it.
   const allSectors = await db
     .collection<CorporateSector>("corporateSectors")
     .find({}, { projection: { plantsPnl: 0 } })

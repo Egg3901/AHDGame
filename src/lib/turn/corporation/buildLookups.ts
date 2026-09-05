@@ -187,7 +187,7 @@ export async function buildCorporationLookups(
     worldPreset,
   ] = await Promise.all([
     db.collection<Corporation>("corporations").find({}).toArray(),
-    // `plantsPnl` is ~48% of the document. corporationTurn writes it via
+    // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
     // sectorTurn as a complete overwrite and never reads the prior value.
     db
       .collection<CorporateSector>("corporateSectors")
