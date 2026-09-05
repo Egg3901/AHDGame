@@ -72,6 +72,20 @@ function EvBar({ vm, height }: { vm: GeneralBlendVM; height: number }) {
         <span>{vm.threshold} TO WIN</span>
         <span>{vm.totalEv}</span>
       </div>
+      {/* Nothing on this screen is won. It renders only while a race is
+          running; a concluded one gets the results screen. Sits inside the bar
+          so it cannot be added to one layout and forgotten in the other. */}
+      <div
+        style={{
+          marginTop: 7,
+          fontFamily: FONT.serif,
+          fontSize: 12.5,
+          fontStyle: "italic",
+          color: BLEND.mutedDim,
+        }}
+      >
+        {vm.projectionNote}
+      </div>
     </>
   );
 }
@@ -453,7 +467,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               color: BLEND.muted,
             }}
           >
-            <span>Election Night</span>
+            <span>{vm.kicker}</span>
             <span style={{ fontFamily: FONT.mono, letterSpacing: ".06em" }}>
               {vm.closesIn != null ? `${vm.closesIn} TURNS` : ""}
             </span>
@@ -541,10 +555,22 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           {vm.showTickets ? (
             <div>
               <h2
-                style={{ margin: "0 0 8px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
+                style={{ margin: "0 0 2px", fontFamily: FONT.serif, fontSize: 20, fontWeight: 600 }}
               >
                 The tickets
               </h2>
+              <p
+                style={{
+                  margin: "0 0 10px",
+                  fontFamily: FONT.mono,
+                  fontSize: 9.5,
+                  letterSpacing: ".14em",
+                  textTransform: "uppercase",
+                  color: BLEND.mutedDimmer,
+                }}
+              >
+                Projected electoral votes · vote share
+              </p>
               {vm.tickets.map((c) => (
                 <div
                   key={c.id}
@@ -729,7 +755,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           }
         >
           <BlendHeader
-            kicker="Election Night"
+            kicker={vm.kicker}
             readout={vm.turnReadout}
             headline={vm.headline}
             standfirst={vm.standfirst}
@@ -757,7 +783,11 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           ) : null}
 
           {vm.showTickets ? (
-            <BlendSection title="The tickets" ruled={false}>
+            <BlendSection
+              title="The tickets"
+              lede="Projected electoral votes · vote share"
+              ruled={false}
+            >
               {ticketRows}
             </BlendSection>
           ) : null}

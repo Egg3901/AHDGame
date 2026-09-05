@@ -67,6 +67,13 @@ export interface DriverRowVM {
   unit: "pts" | "%";
 }
 
+/**
+ * Turns from the close within which the screen may call itself "Election
+ * Night". The general runs 48 turns; a race with more than this left is a
+ * campaign being polled, not a count being read out.
+ */
+export const FINAL_STRETCH_TURNS = 4;
+
 export interface GeneralBlendVM {
   headline: string;
   standfirst: string;
@@ -81,6 +88,10 @@ export interface GeneralBlendVM {
   topTwo: GeneralTicketVM[];
   evSegments: EvSegmentVM[];
   evRemainderPct: number;
+  /** Masthead label: "Election Night" only once the count is closing. */
+  kicker: string;
+  /** One line saying the figures on this screen are a forecast. */
+  projectionNote: string;
   thresholdPct: number;
   threshold: number;
   totalEv: number;
@@ -323,6 +334,17 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
         : closesIn === 0
           ? "FINAL TURN"
           : `LIVE TALLY · ${closesIn} TURN${closesIn === 1 ? "" : "S"}`,
+    /**
+     * The masthead. "Election Night" belongs to a race being counted out, not
+     * to one with half its turns left: this screen only ever renders a running
+     * race, so it says what it is until the count is genuinely closing.
+     */
+    kicker: closesIn != null && closesIn > FINAL_STRETCH_TURNS ? "The Campaign" : "Election Night",
+    /** Every figure here is a forecast from the votes banked so far. */
+    projectionNote:
+      closesIn === 0
+        ? "Final turn. Every figure is still a projection until the race resolves."
+        : "Projected from votes banked so far. No state is won until the race resolves.",
     railItems,
     showCollege: rail === "overview" || rail === "college",
     showBoard: rail === "overview" || rail === "board",

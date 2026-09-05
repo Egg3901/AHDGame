@@ -4,7 +4,10 @@ import { buildGeneralHeadline } from "./generalHeadline";
 const DASHES = /[–—]/;
 
 describe("buildGeneralHeadline", () => {
-  it("says the leader has cleared the threshold once they reach it", () => {
+  it("calls a leader past the threshold projected, never won", () => {
+    // This headline sits on a race that is still RUNNING — a concluded one gets
+    // the results screen. "clears 270" on a race with half its turns left reads
+    // as a called result, which is the one thing this screen must not say.
     const { headline } = buildGeneralHeadline({
       leaderName: "Frontrunner",
       leaderEv: 276,
@@ -15,7 +18,29 @@ describe("buildGeneralHeadline", () => {
     });
     expect(headline).toContain("Frontrunner");
     expect(headline).toContain("270");
-    expect(headline).toMatch(/clears/i);
+    expect(headline).toMatch(/projected/i);
+    expect(headline).not.toMatch(/clears|wins|won|takes/i);
+  });
+
+  it("never claims a win in any of its phrasings", () => {
+    const cases = [
+      { leaderEv: 276, runnerUpEv: 251, outstandingEv: 11 },
+      { leaderEv: 240, runnerUpEv: 230, outstandingEv: 68 },
+      { leaderEv: 269, runnerUpEv: 269, outstandingEv: 0 },
+      { leaderEv: 0, runnerUpEv: 0, outstandingEv: 538 },
+    ];
+    for (const c of cases) {
+      const { headline, standfirst } = buildGeneralHeadline({
+        leaderName: "Frontrunner",
+        threshold: 270,
+        popularMarginPp: 1.2,
+        ...c,
+      });
+      // Votes really are "banked" as they accumulate; it is a claim about
+      // the OUTCOME this screen must never make.
+      expect(`${headline} ${standfirst}`).not.toMatch(/\bwins?\b|\bwon\b|\bclears\b/i);
+      expect(`${headline} ${standfirst}`).not.toMatch(/banked an electoral vote/i);
+    }
   });
 
   it("says the leader is short while they are under it", () => {
@@ -29,6 +54,20 @@ describe("buildGeneralHeadline", () => {
     });
     expect(headline).toMatch(/short of/i);
     expect(headline).toContain("240");
+  });
+
+  it("calls unallocated electoral votes unprojected, not uncounted", () => {
+    // "outstanding" reads as votes still being counted. They are states with no
+    // projected leader yet; nothing here is counted to a conclusion.
+    const { standfirst } = buildGeneralHeadline({
+      leaderName: "Frontrunner",
+      leaderEv: 240,
+      runnerUpEv: 230,
+      threshold: 270,
+      outstandingEv: 68,
+      popularMarginPp: 0.4,
+    });
+    expect(standfirst).toMatch(/not yet projected/i);
   });
 
   it("reads a level race as deadlocked", () => {

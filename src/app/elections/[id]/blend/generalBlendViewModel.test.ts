@@ -282,3 +282,45 @@ describe("copy", () => {
     for (const s of strings) expect(s).not.toMatch(/[–—]/);
   });
 });
+
+describe("the masthead does not cry election night early", () => {
+  // The general runs 48 turns. A race with half of them left is a campaign
+  // being polled, not a count being read out.
+  it("reads as a campaign while the count is far from closing", () => {
+    const vm = buildGeneralBlendViewModel(
+      input({
+        election: election({
+          endTurn: 100,
+          gameState: { isActive: true, pausedAt: null, currentTurn: 60 },
+        }),
+      })
+    );
+    expect(vm.kicker).toBe("The Campaign");
+  });
+
+  it("becomes election night once the count is closing", () => {
+    const vm = buildGeneralBlendViewModel(
+      input({
+        election: election({
+          endTurn: 100,
+          gameState: { isActive: true, pausedAt: null, currentTurn: 98 },
+        }),
+      })
+    );
+    expect(vm.kicker).toBe("Election Night");
+  });
+
+  it("always carries a line saying the figures are a projection", () => {
+    for (const currentTurn of [60, 98, 100]) {
+      const vm = buildGeneralBlendViewModel(
+        input({
+          election: election({
+            endTurn: 100,
+            gameState: { isActive: true, pausedAt: null, currentTurn },
+          }),
+        })
+      );
+      expect(vm.projectionNote).toMatch(/projection|projected/i);
+    }
+  });
+});

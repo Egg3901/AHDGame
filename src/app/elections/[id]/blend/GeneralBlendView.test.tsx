@@ -104,3 +104,28 @@ describe("GeneralBlendView", () => {
     expect(screen.getAllByText("PA")).toHaveLength(2);
   });
 });
+
+describe("nothing on this screen is won", () => {
+  // GeneralBlendView renders only while a race is RUNNING; a concluded one gets
+  // ResultsBlendView. So every figure here is a forecast from the votes banked
+  // so far, and the screen has to say so rather than reading as a called result.
+  it("says the figures are projected, on both layouts", () => {
+    renderView();
+    expect(screen.getAllByText(/No state is won until the race resolves/)).toHaveLength(2);
+  });
+
+  it("labels the tickets' columns rather than leaving bare numbers", () => {
+    renderView();
+    expect(screen.getAllByText(/Projected electoral votes/)).toHaveLength(2);
+  });
+
+  it("uses one masthead label across both layouts", () => {
+    // The mobile masthead had its own hardcoded "Election Night", so fixing the
+    // desktop kicker alone left the two trees disagreeing about what the race
+    // even is.
+    renderView();
+    const mastheads = screen.getAllByText(/^(Election Night|The Campaign)$/);
+    expect(mastheads).toHaveLength(2);
+    expect(new Set(mastheads.map((n) => n.textContent)).size).toBe(1);
+  });
+});
