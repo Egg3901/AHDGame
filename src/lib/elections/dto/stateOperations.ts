@@ -25,6 +25,17 @@ export interface LiveAttackRow {
   stateName: string;
   /** Present only on rows aimed at the viewer, so a hit can be traced. */
   actorName?: string;
+  /**
+   * The group a turnout attack named, for display. Absent on the other kinds.
+   */
+  bucketLabel?: string;
+  /**
+   * For `localFavorability` and `voteSuppression` this is when the effect
+   * stops. For `turnoutSuppression` it is only when the attacker may buy
+   * another one there: that effect decays rather than expiring, so a countdown
+   * would be a duration the mechanic does not have. Read `kind` before
+   * rendering this.
+   */
   expiresTurn: number;
 }
 

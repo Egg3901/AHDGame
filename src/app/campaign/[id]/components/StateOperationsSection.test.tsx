@@ -291,3 +291,50 @@ describe("StateOperationsSection", () => {
     expect(screen.getByText("You are running unopposed.")).toBeTruthy();
   });
 });
+
+describe("how a turnout attack reads against you", () => {
+  const turnoutRow = {
+    kind: "turnoutSuppression" as const,
+    stateId: "NH",
+    stateName: "New Hampshire",
+    actorName: "Rival Filer",
+    bucketLabel: "Evangelicals",
+    expiresTurn: 18,
+  };
+
+  it("names the group it hit", () => {
+    renderSection({ liveAgainstYou: [turnoutRow] });
+    expect(screen.getByText(/Evangelicals turnout/)).toBeTruthy();
+  });
+
+  it("does not count down, because that effect does not expire", () => {
+    // expiresTurn on a turnout row is the attacker's cooldown. The effect
+    // itself decays on the same slow curve every turnout modifier does, so a
+    // countdown would print a duration the mechanic does not have.
+    renderSection({ liveAgainstYou: [turnoutRow] });
+    expect(screen.queryByText(/turns left/)).toBeNull();
+    expect(screen.getByText(/fading slowly/)).toBeTruthy();
+  });
+
+  it("still counts down the kinds that do expire", () => {
+    renderSection({
+      liveAgainstYou: [
+        {
+          kind: "voteSuppression",
+          stateId: "NH",
+          stateName: "New Hampshire",
+          actorName: "Rival Filer",
+          expiresTurn: 18,
+        },
+      ],
+    });
+    expect(screen.getByText(/6 turns left/)).toBeTruthy();
+  });
+
+  it("reads without a label if the group id is unknown to this country", () => {
+    renderSection({
+      liveAgainstYou: [{ ...turnoutRow, bucketLabel: undefined }],
+    });
+    expect(screen.getByText(/a group turnout/)).toBeTruthy();
+  });
+});

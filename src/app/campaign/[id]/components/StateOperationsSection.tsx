@@ -69,13 +69,22 @@ function Note({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** A running attack, in the same words whichever direction it points. */
+/**
+ * A running attack, in the same words whichever direction it points.
+ *
+ * A turnout attack gets different words on purpose. Its `expiresTurn` is the
+ * attacker's cooldown, not the end of the effect: that decays on the same slow
+ * curve every turnout modifier does. Counting it down would print a duration
+ * the mechanic does not have.
+ */
 function attackLine(row: LiveAttackRow, currentTurn: number): string {
+  const where = row.actorName ? `${row.actorName} in ${row.stateName}` : row.stateName;
+  if (row.kind === "turnoutSuppression") {
+    const group = row.bucketLabel ?? "a group";
+    return `${where}, ${group} turnout, fading slowly`;
+  }
   const left = Math.max(0, row.expiresTurn - currentTurn);
-  const turns = `${left} ${left === 1 ? "turn" : "turns"} left`;
-  return row.actorName
-    ? `${row.actorName} in ${row.stateName}, ${turns}`
-    : `${row.stateName}, ${turns}`;
+  return `${where}, ${left} ${left === 1 ? "turn" : "turns"} left`;
 }
 
 /**

@@ -25,6 +25,7 @@ import { loadStateTravelOptions } from "@/lib/elections/stateTravelOptions";
 import { loadLiveStateActions } from "@/lib/elections/primaryStateActions";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
+import { getDemographicCategoriesForCountry } from "@/lib/demographics/countryDemographics";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
@@ -157,11 +158,20 @@ export async function buildStateOperations(
   });
   const myRowId = mine._id.toString();
 
+  // A turnout attack names a group, and a row that hid which one would leave
+  // the hit untraceable for the person it landed on.
+  const groupLabels = new Map(
+    getDemographicCategoriesForCountry(election.countryId).flatMap((c) =>
+      c.groups.map((g) => [g.id, g.name] as const)
+    )
+  );
+
   const toAttackRow = (a: PrimaryStateAction, actorName?: string): LiveAttackRow => ({
     kind: a.kind,
     stateId: a.stateId,
     stateName: stateNameById[a.stateId] ?? a.stateId,
     ...(actorName ? { actorName } : {}),
+    ...(a.bucket ? { bucketLabel: groupLabels.get(a.bucket) ?? a.bucket } : {}),
     expiresTurn: a.expiresTurn,
   });
 

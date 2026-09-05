@@ -282,3 +282,37 @@ describe("buildStateOperations", () => {
     expect(view?.opponents[0].color).toMatch(/^#/);
   });
 });
+
+describe("a turnout attack in the live lists", () => {
+  it("carries the group's display name, so the hit can be read", async () => {
+    const view = await build({
+      electionCandidates: ROSTER,
+      primaryStateActions: [
+        attackRow({
+          actorCandidateId: RIVAL_ROW,
+          targetCandidateId: MY_ROW,
+          targetCharacterId: ME,
+          kind: "turnoutSuppression",
+          bucket: "evangelicals",
+        }),
+      ],
+      states: [{ _id: "IA", name: "Iowa" }],
+    });
+    expect(view?.liveAgainstYou[0].bucketLabel).toBe("Evangelicals");
+  });
+
+  it("leaves the label off the kinds that name no group", async () => {
+    const view = await build({
+      electionCandidates: ROSTER,
+      primaryStateActions: [
+        attackRow({
+          actorCandidateId: RIVAL_ROW,
+          targetCandidateId: MY_ROW,
+          targetCharacterId: ME,
+        }),
+      ],
+      states: [{ _id: "IA", name: "Iowa" }],
+    });
+    expect(view?.liveAgainstYou[0].bucketLabel).toBeUndefined();
+  });
+});
