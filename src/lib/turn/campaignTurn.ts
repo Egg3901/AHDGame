@@ -166,8 +166,8 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                   .toArray()
               ).map((c) => c._id.toString())
         );
-        const localAttackDrainByTarget = localFavorabilityDrainByTarget(
-          liveStateActions.filter((a) => activeCandidateRowIds.has(a.targetCandidateId.toString()))
+        const liveAttacksOnActiveTargets = liveStateActions.filter((a) =>
+          activeCandidateRowIds.has(a.targetCandidateId.toString())
         );
 
         // Strategic Operations v2 — incoming opposition-research shield.
@@ -283,7 +283,8 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           updateOne: { filter: { _id: ObjectId }; update: UpdateFilter<ElectionCandidate> };
         }[] = [];
         const passiveEffectsData: {
-          campaign: Campaign;
+          /** Absent on the one pass-level entry: the state-attack drain. */
+          campaign?: Campaign;
           favorabilityChanges: Map<string, { collection: string; amount: number }>;
         }[] = [];
 
@@ -737,20 +738,6 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               });
             }
 
-            // State attacks stack with the national drain rather than replacing
-            // it: a candidate under both should lose to both. The shield was
-            // stamped on each row at purchase, so it is not re-applied here.
-            if (applyCampaignPassives) {
-              for (const [targetId, perTurn] of localAttackDrainByTarget) {
-                if (!(perTurn > 0)) continue;
-                const existing = favorabilityChanges.get(targetId);
-                favorabilityChanges.set(targetId, {
-                  collection: existing?.collection ?? "unknown",
-                  amount: (existing?.amount ?? 0) - perTurn * seasonMultiplier,
-                });
-              }
-            }
-
             // Travel Presence Bonus: +1.0% favorability/turn while campaigning in a state.
             // Phase 5.5 keeps this presidential-only — the travel system that records
             // candidate travelState only fires for presidential races (per the
@@ -852,6 +839,44 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           await db.collection<ElectionCandidate>("electionCandidates").bulkWrite(candidateOps);
         }
 
+        // State attacks are applied ONCE for the whole pass, as a single
+        // pass-level entry. They belong to the attack rows, not to any campaign
+        // in the loop above, so folding them into each campaign's map would
+        // have multiplied every drain by the number of campaigns processed.
+        //
+        // They stack with the national opposition drain rather than replacing
+        // it: a candidate under both should lose to both. The shield was
+        // stamped on each row at purchase, so it is not re-applied here.
+        if (liveAttacksOnActiveTargets.length > 0) {
+          const attacksByElection = new Map<string, typeof liveAttacksOnActiveTargets>();
+          for (const action of liveAttacksOnActiveTargets) {
+            const key = action.electionId.toString();
+            const bucket = attacksByElection.get(key);
+            if (bucket) bucket.push(action);
+            else attacksByElection.set(key, [action]);
+          }
+
+          const stateAttackChanges = new Map<string, { collection: string; amount: number }>();
+          for (const [electionId, rows] of attacksByElection) {
+            // The same final-stretch doubling the other passive effects take,
+            // read from the attack's own race rather than from whichever
+            // campaign happened to be in hand when the drain was summed.
+            const endTurn = electionDataMap.get(electionId)?.endTurn;
+            const multiplier = typeof endTurn === "number" && endTurn - turnNumber <= 4 ? 2 : 1;
+            for (const [targetId, perTurn] of localFavorabilityDrainByTarget(rows)) {
+              if (!(perTurn > 0)) continue;
+              const existing = stateAttackChanges.get(targetId);
+              stateAttackChanges.set(targetId, {
+                collection: "unknown",
+                amount: (existing?.amount ?? 0) - perTurn * multiplier,
+              });
+            }
+          }
+          if (stateAttackChanges.size > 0) {
+            passiveEffectsData.push({ favorabilityChanges: stateAttackChanges });
+          }
+        }
+
         // Apply passive effects using bulkWrite
         await applyPassiveEffectsBulk(passiveEffectsData, db);
 
@@ -879,7 +904,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
 async function applyPassiveEffectsBulk(
   passiveEffectsData: {
-    campaign: Campaign;
+    campaign?: Campaign;
     favorabilityChanges: Map<string, { collection: string; amount: number }>;
   }[],
   db: ReturnType<typeof getDb> extends Promise<infer T> ? T : never
