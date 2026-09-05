@@ -106,9 +106,9 @@ export function computeSeatEstimates(
   const seats: Record<string, number> = {};
   for (const [cid] of allEntries) seats[cid] = 0;
 
-  // Cube-law re-split of the top-two party groups (party from the tally's
-  // candidateParties map; candidates without one stand alone). Effective
-  // weights sum to poolVotes, so the Largest Remainder step is untouched.
+  // Winner's-bonus re-weighting by tapered bloc membership (party from the
+  // tally's candidateParties map; candidates without one stand alone).
+  // Effective weights sum to poolVotes, so Largest Remainder is untouched.
   const effectiveVotes =
     majoritarianBonus && pool.length > 1
       ? applyMajoritarianBonus(
@@ -121,7 +121,7 @@ export function computeSeatEstimates(
             };
           }),
           majoritarianBonus
-        )
+        ).effective
       : undefined;
 
   const allocs = pool.map(([cid, v]) => {

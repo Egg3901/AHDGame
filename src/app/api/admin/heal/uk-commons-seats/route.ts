@@ -15,7 +15,6 @@ import type {
 import { getUkCommonsSeats } from "@/lib/constants/states";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { allocateSeats, getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
-import { loadCommonsOrgRankings } from "@/lib/turn/election/commonsOrgRanking";
 
 interface RegionDiagnostic {
   region: string;
@@ -203,11 +202,6 @@ export async function POST() {
       .collection<{ _id: string; currentYear?: number }>("gameState")
       .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
     const majoritarianBonus = getMajoritarianBonus("commons", gsForYear?.currentYear);
-    // Ticket #1032: per-region org rankings decide which two parties the
-    // FPTP boost belongs to; one bulk query, then attach per region below.
-    const orgRankings = majoritarianBonus
-      ? await loadCommonsOrgRankings(db, "UK")
-      : new Map<string, string[]>();
 
     // Recreate from election results
     const toInsert: ElectedOfficial[] = [];
@@ -242,9 +236,7 @@ export async function POST() {
         ranked,
         totalVotesCast,
         undefined,
-        majoritarianBonus && orgRankings.get(region)?.length
-          ? { ...majoritarianBonus, orgRanking: orgRankings.get(region) }
-          : majoritarianBonus,
+        majoritarianBonus,
         undefined,
         commonsSeats
       );

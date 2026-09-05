@@ -355,6 +355,7 @@ export function GeneralPhaseView({
             candidates={election.allCandidates}
             isEnded={localIsEnded}
             totalSeats={election.totalSeats}
+            majoritarianBonusApplied={election.majoritarianBonusApplied}
             electionType={election.electionType}
             electionId={election.id}
             myCharId={election.myCharId}
