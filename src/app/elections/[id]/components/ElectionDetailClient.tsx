@@ -426,7 +426,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
 
         <BlendScope
           title="Also on this race"
-          lede="Filing, the schedule, the state map, and your campaign operations."
+          lede="Filing, the state map, and your campaign operations."
         >
           <ElectionHeader
             election={election}
@@ -441,11 +441,15 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onWithdraw={handleWithdraw}
           />
 
+          {/* The primary masthead already reads "CLOSES IN N TURNS", so the
+              strip restated the countdown in a box of its own, exactly as it
+              did on the general screen. */}
           <ElectionScheduleCard
             election={election}
             localIsUpcoming={localIsUpcoming}
             localInPrimary={localInPrimary}
             localIsEnded={localIsEnded}
+            showStatusStrip={false}
           />
 
           <PrimaryMapPills election={election} activeParties={activeParties} />
