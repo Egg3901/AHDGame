@@ -40,6 +40,19 @@ cpSync(STANDALONE, OUT, { recursive: true });
 cpSync(path.join(ROOT, ".next", "static"), path.join(OUT, ".next", "static"), { recursive: true });
 cpSync(path.join(ROOT, "public"), path.join(OUT, "public"), { recursive: true });
 cpSync(path.join(ROOT, "scripts", "singleplayer", "launch.mjs"), path.join(OUT, "launch.mjs"));
+
+// The file trace is generous; none of these are read at runtime.
+for (const dir of [
+  "tests",
+  "e2e",
+  "docs",
+  "tools",
+  "eslint-rules",
+  ".github",
+  path.join(".next", "cache"),
+]) {
+  rmSync(path.join(OUT, dir), { recursive: true, force: true });
+}
 writeFileSync(
   path.join(OUT, "README.txt"),
   [

@@ -295,8 +295,14 @@ async function startMongod(bin) {
   return child;
 }
 
-function authSecret() {
-  const file = path.join(HOME, "auth-secret");
+/**
+ * The app refuses to boot without its secrets, so a local install mints its
+ * own once and keeps them in the data directory. Nothing outside this
+ * machine ever needs them; they exist to satisfy the same validation the
+ * hosted game runs.
+ */
+function persistentSecret(name) {
+  const file = path.join(HOME, name);
   if (existsSync(file)) return readFileSync(file, "utf8").trim();
   const secret = randomBytes(48).toString("base64url");
   writeFileSync(file, secret, { mode: 0o600 });
@@ -316,7 +322,9 @@ function startApp() {
     SINGLEPLAYER_ADMIN: "1",
     SINGLEPLAYER_HOME: HOME,
     MONGODB_URI: `mongodb://127.0.0.1:${MONGO_PORT}/${DB_NAME}`,
-    AUTH_SECRET: authSecret(),
+    AUTH_SECRET: persistentSecret("auth-secret"),
+    CRON_SECRET: persistentSecret("cron-secret"),
+    ADMIN_REGISTRATION_KEY: persistentSecret("admin-registration-key"),
     PORT: String(APP_PORT),
     HOSTNAME: "127.0.0.1",
   };
