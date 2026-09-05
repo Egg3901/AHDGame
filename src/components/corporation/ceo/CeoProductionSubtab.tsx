@@ -790,11 +790,17 @@ export default function CeoProductionSubtab({
                           <span className="text-xs font-normal text-muted"> /turn</span>
                         </PolicyMetricBlock>
                         <PolicyMetricBlock
-                          label="Margin"
-                          tooltip={<p className="text-muted">Effective profit margin.</p>}
+                          label={sector.fillAdjustedMarginPct != null ? "Net margin" : "Margin"}
+                          tooltip={
+                            <p className="text-muted">
+                              {sector.fillAdjustedMarginPct != null
+                                ? `Profit over every cost, upkeep included. Effective margin on sold units only: ${sector.effectiveProfitMargin}%.`
+                                : "Effective profit margin."}
+                            </p>
+                          }
                           valueClassName="font-bold text-foreground"
                         >
-                          {sector.effectiveProfitMargin}%
+                          {sector.fillAdjustedMarginPct ?? sector.effectiveProfitMargin}%
                         </PolicyMetricBlock>
                         <PolicyMetricBlock
                           label="Profit"

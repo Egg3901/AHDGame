@@ -210,14 +210,64 @@ export function buildIndexFundTargetConstituents(input: {
     return { constituents: [], streaks: screened.streaks, droppedIds: screened.droppedIds };
   }
 
+  const weights = capSingleNameWeights(
+    ranked.map((row) => row.marketCapAnchor / totalMarketCapAnchor),
+    INDEX_FUND_MAX_SINGLE_NAME_WEIGHT
+  );
+
   return {
     constituents: ranked.map((row, index) => ({
       corporationId: row.corporationId,
       marketCapAnchor: row.marketCapAnchor,
-      targetWeight: row.marketCapAnchor / totalMarketCapAnchor,
+      targetWeight: weights[index],
       rank: index + 1,
     })),
     streaks: screened.streaks,
     droppedIds: screened.droppedIds,
   };
+}
+
+/**
+ * Maximum share of a fund's equity target any one constituent may hold.
+ *
+ * Pure market-cap weighting had no clamp, which is how one fund put 57 percent
+ * of its NAV into a single corporation during the phantom-valuation episode.
+ * The valuation bug is fixed; this removes the amplifier.
+ */
+export const INDEX_FUND_MAX_SINGLE_NAME_WEIGHT = 0.2;
+
+/**
+ * Cap each weight at `cap` and hand the excess to the uncapped names pro rata,
+ * iterating until no name is over the cap. Weights that already sum to 1 stay
+ * summing to 1. When the cap cannot be honoured (fewer than `1/cap` names) the
+ * weights are returned unchanged: a two-name fund is market-cap weighted, not
+ * pretend-diversified.
+ */
+export function capSingleNameWeights(weights: number[], cap: number): number[] {
+  const n = weights.length;
+  if (n === 0) return [];
+  if (!(cap > 0) || cap >= 1 || n * cap < 1) return weights.slice();
+  const out = weights.slice();
+  const capped = new Array<boolean>(n).fill(false);
+  for (let iter = 0; iter < n; iter += 1) {
+    let excess = 0;
+    let freeMass = 0;
+    for (let i = 0; i < n; i += 1) {
+      if (capped[i]) continue;
+      if (out[i] > cap) {
+        excess += out[i] - cap;
+        out[i] = cap;
+        capped[i] = true;
+      } else {
+        freeMass += out[i];
+      }
+    }
+    if (excess <= 0) break;
+    if (freeMass <= 0) break;
+    for (let i = 0; i < n; i += 1) {
+      if (capped[i]) continue;
+      out[i] += (excess * out[i]) / freeMass;
+    }
+  }
+  return out;
 }

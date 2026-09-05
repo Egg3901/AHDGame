@@ -731,12 +731,26 @@ export default function FinancialsTab({
                       >
                         <div className="flex items-center gap-2">
                           <span className="text-muted text-xs">{sector.stateName}</span>
-                          <span
-                            className={`text-[10px] tabular-nums ${sector.effectiveProfitMargin <= 0 ? "text-error" : "text-muted/60"}`}
-                            title={`Effective margin: ${sector.effectiveProfitMargin}%`}
-                          >
-                            {sector.effectiveProfitMargin}% margin
-                          </span>
+                          {(() => {
+                            // Net margin over the full cost bill when the
+                            // engine has one (plants); the effective margin
+                            // divides by sold revenue only and read 30% on
+                            // sectors losing money to upkeep.
+                            const net = sector.fillAdjustedMarginPct ?? null;
+                            const shown = net ?? sector.effectiveProfitMargin;
+                            return (
+                              <span
+                                className={`text-[10px] tabular-nums ${shown <= 0 ? "text-error" : "text-muted/60"}`}
+                                title={
+                                  net != null
+                                    ? `Net margin over every cost, upkeep included. Effective margin on sold units only: ${sector.effectiveProfitMargin}%`
+                                    : `Effective margin: ${sector.effectiveProfitMargin}%`
+                                }
+                              >
+                                {shown}% {net != null ? "net" : "margin"}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <span
                           className={`font-medium tabular-nums text-sm ${
