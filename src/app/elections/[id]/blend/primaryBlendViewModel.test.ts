@@ -603,3 +603,36 @@ describe("waves whose record disagrees with the board", () => {
     expect(vm.selectedStateId).toBe("IA");
   });
 });
+
+describe("projected delegates versus delegates won", () => {
+  // The field's headline number forecasts where the primary ENDS. For most of a
+  // primary nothing has been awarded at all, so an unlabelled figure beside a
+  // name reads as a running score.
+  function withParty(over: Partial<PartyGroup>) {
+    return buildPrimaryBlendViewModel(input({ election: election({ byParty: [party(over)] }) }));
+  }
+
+  it("reports nothing won before the first wave has fired", () => {
+    const vm = withParty({ awardedDelegates: { c1: 0, c2: 0, c3: 0, c4: 0 } });
+    expect(vm.field[0].delegates).toBe("1,946");
+    expect(vm.field[0].delegatesAwarded).toBeNull();
+  });
+
+  it("reports nothing won when the payload carries no awarded figures at all", () => {
+    // Every caller that predates this field must keep behaving as it did.
+    const vm = buildPrimaryBlendViewModel(input());
+    expect(vm.field[0].delegatesAwarded).toBeNull();
+  });
+
+  it("separates what is locked in once waves start awarding", () => {
+    const vm = withParty({ awardedDelegates: { c1: 312, c2: 96, c3: 0, c4: 0 } });
+    expect(vm.field[0].delegates).toBe("1,946");
+    expect(vm.field[0].delegatesAwarded).toBe("312");
+  });
+
+  it("shows a zero for a candidate who has won none while others have", () => {
+    // Blank here would read as "not yet counted" rather than "beaten so far".
+    const vm = withParty({ awardedDelegates: { c1: 312, c2: 96, c3: 0, c4: 0 } });
+    expect(vm.field[2].delegatesAwarded).toBe("0");
+  });
+});

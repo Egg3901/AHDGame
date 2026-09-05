@@ -367,16 +367,42 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
     </Link>
   ) : null;
 
+  /** Shared by the header and every row, so the columns cannot drift apart. */
+  const fieldGrid: React.CSSProperties = {
+    display: "grid",
+    gridTemplateColumns: "30px minmax(0, 1fr) 150px 108px 96px",
+    gap: 16,
+    alignItems: "center",
+  };
+
   const fieldRows = (
     <>
+      {/* The delegate column used to be a bare number, which reads as a count
+          already won. It is a forecast of the final total for most of a
+          primary, so it says so. */}
+      <div
+        style={{
+          ...fieldGrid,
+          padding: "0 0 8px",
+          borderBottom: `1px solid ${BLEND.hairlineStrong}`,
+          fontFamily: FONT.mono,
+          fontSize: 9.5,
+          letterSpacing: ".14em",
+          textTransform: "uppercase",
+          color: BLEND.mutedDimmer,
+        }}
+      >
+        <span />
+        <span>Candidate</span>
+        <span>Outlook</span>
+        <span>Vote share</span>
+        <span style={{ textAlign: "right" }}>Projected del.</span>
+      </div>
       {vm.field.map((c) => (
         <div
           key={c.id}
           style={{
-            display: "grid",
-            gridTemplateColumns: "30px minmax(0, 1fr) 150px 108px 78px",
-            gap: 16,
-            alignItems: "center",
+            ...fieldGrid,
             padding: "14px 0",
             borderBottom: "1px solid rgba(42,42,61,.6)",
             ...(c.isYou ? { background: "rgba(220,38,38,.04)" } : {}),
@@ -457,8 +483,23 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               {c.pct}%
             </span>
           </span>
-          <span style={{ textAlign: "right", fontFamily: FONT.mono, fontSize: 15 }}>
-            {c.delegates ?? "—"}
+          <span style={{ textAlign: "right" }}>
+            <span style={{ display: "block", fontFamily: FONT.mono, fontSize: 15 }}>
+              {c.delegates ?? "—"}
+            </span>
+            {c.delegatesAwarded ? (
+              <span
+                style={{
+                  display: "block",
+                  marginTop: 2,
+                  fontFamily: FONT.mono,
+                  fontSize: 10.5,
+                  color: BLEND.mutedDim,
+                }}
+              >
+                {c.delegatesAwarded} won
+              </span>
+            ) : null}
           </span>
         </div>
       ))}
@@ -655,7 +696,9 @@ export function PrimaryBlendView({ election, wire }: PrimaryBlendViewProps) {
               >
                 <span style={{ fontFamily: FONT.serif }}>{c.statusText}</span>
                 <span style={{ fontFamily: FONT.mono }}>
-                  {c.delegates ? `${c.delegates} del.` : ""}
+                  {c.delegates
+                    ? `${c.delegates} proj.${c.delegatesAwarded ? ` · ${c.delegatesAwarded} won` : ""}`
+                    : ""}
                 </span>
               </div>
             </div>

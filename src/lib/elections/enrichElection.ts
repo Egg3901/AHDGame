@@ -331,6 +331,7 @@ async function applyPresidentialPrimaryDisplay(
           // Raw counts alongside the share, so the delegate race can show
           // "1,946 of 4,833, 471 to clinch" rather than a bare percentage.
           projectedDelegates,
+          awardedDelegates: projectionSummary.awardedDelegatesByCandidate,
           totalDelegates: getTotalDelegatesForFamily(family, preset),
           delegateMajority: getDelegateMajority(family, preset),
         },

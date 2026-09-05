@@ -219,3 +219,49 @@ describe("the wave calendar", () => {
     });
   });
 });
+
+describe("the delegate column says what it is", () => {
+  // A bare number beside a candidate's name reads as a count already won. It is
+  // a forecast of the FINAL total, and for most of a primary nothing has been
+  // awarded at all.
+  function withDelegates(awardedDelegates?: Record<string, number>) {
+    const base = election();
+    return {
+      ...base,
+      byParty: [
+        {
+          ...base.byParty[0],
+          projectedDelegates: { "1-a": 1695 },
+          ...(awardedDelegates ? { awardedDelegates } : {}),
+        },
+        base.byParty[1],
+      ],
+    } as unknown as ElectionDetail;
+  }
+
+  it("labels the figure as projected in both layouts", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={withDelegates()} wire={[]} />);
+
+    // Desktop labels the column once in its header; mobile labels every row,
+    // because a phone has no header to hang it on.
+    expect(screen.getAllByText("Projected del.")).toHaveLength(1);
+    expect(screen.getAllByText(/1,695 proj\./)).toHaveLength(1);
+  });
+
+  it("does not claim any delegates are won before a wave has awarded them", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={withDelegates()} wire={[]} />);
+    expect(screen.queryByText(/won/)).toBeNull();
+  });
+
+  it("shows what is locked in once a wave has awarded some", () => {
+    stubFetch(() => detailFor("1", "First Filer"));
+    render(<PrimaryBlendView election={withDelegates({ "1-a": 312 })} wire={[]} />);
+    // Once per tree: desktop puts it under the forecast, mobile appends it to
+    // the same line. Counting is the point — six blocks on this branch shipped
+    // desktop-only because a test asserted "at least one".
+    expect(screen.getAllByText(/312 won/)).toHaveLength(2);
+    expect(screen.getAllByText(/1,695 proj\. · 312 won/)).toHaveLength(1);
+  });
+});

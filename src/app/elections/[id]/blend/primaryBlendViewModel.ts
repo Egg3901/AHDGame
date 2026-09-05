@@ -54,7 +54,10 @@ export interface PrimaryFieldRowVM {
   name: string;
   blurb: string;
   pct: string;
+  /** Projected FINAL delegate count, not a running total. */
   delegates: string | null;
+  /** Delegates already awarded, or null when the primary has awarded none yet. */
+  delegatesAwarded: string | null;
   advancing: boolean;
   isYou: boolean;
   isNPP: boolean;
@@ -244,6 +247,12 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
 
   // ── The field ─────────────────────────────────────────────────────────────
   const topPct = candidates.reduce((m, c) => Math.max(m, c.sharePct ?? 0), 0);
+  // Delegates actually locked in so far. Zero for everyone until the first wave
+  // fires, which is most of a primary: the headline figure beside a name is a
+  // forecast of the FINAL total, and unlabelled it reads as a running score.
+  const awarded = party?.awardedDelegates;
+  const anyAwarded = awarded ? Object.values(awarded).some((d) => d > 0) : false;
+
   const field: PrimaryFieldRowVM[] = candidates.map((c, i) => {
     const advancing = i < advanceCount;
     return {
@@ -256,6 +265,9 @@ export function buildPrimaryBlendViewModel(inp: PrimaryBlendInput): PrimaryBlend
         party?.projectedDelegates && party.projectedDelegates[c.id] != null
           ? grouped(party.projectedDelegates[c.id])
           : null,
+      /** Locked in so far. Null while nothing in this primary has been awarded. */
+      delegatesAwarded:
+        anyAwarded && awarded && awarded[c.id] != null ? grouped(awarded[c.id]) : null,
       advancing,
       isYou: c.isYou,
       isNPP: c.isNPP,

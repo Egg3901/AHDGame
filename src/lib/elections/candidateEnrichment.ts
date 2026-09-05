@@ -404,6 +404,11 @@ export interface PartyGroup {
    * counts the delegate race and the "to clinch" figures need.
    */
   projectedDelegates?: Record<string, number>;
+  /**
+   * Delegates actually awarded so far — the locked-in subset of
+   * `projectedDelegates`, which is otherwise a forecast of the final total.
+   */
+  awardedDelegates?: Record<string, number>;
   /** Total delegates at stake in this party's primary. */
   totalDelegates?: number;
   /** Delegates needed to clinch the nomination (half the total, plus one). */
