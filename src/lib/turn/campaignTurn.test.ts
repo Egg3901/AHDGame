@@ -1103,14 +1103,15 @@ describe("primary state attacks", () => {
     return null;
   }
 
-  it("drains the target by the attack's rate", async () => {
-    expect(await drainForTarget(1)).toBeCloseTo(-0.4, 6);
+  it("does not touch national favourability, because the attack is state-scoped", async () => {
+    // The drain used to land here, on `characters.favorability`, which is one
+    // national scalar: an attack bought in Iowa moved all 51 states and stacked
+    // once per state bought. It is applied by the stagger now, inside the state
+    // it names, through the vote distribution's favourability delta.
+    expect(await drainForTarget(1)).toBeNull();
   });
 
-  it("applies the drain once for the pass, not once per campaign in it", async () => {
-    // The drain belongs to the attack row, not to any campaign being iterated.
-    // Folded into each campaign's passive map it was summed once per campaign,
-    // so a field of eight candidates took eight times the advertised rate.
-    expect(await drainForTarget(6)).toBeCloseTo(-0.4, 6);
+  it("stays out of it however many campaigns are in the pass", async () => {
+    expect(await drainForTarget(6)).toBeNull();
   });
 });

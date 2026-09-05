@@ -3,7 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import {
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
-  PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
+  PRIMARY_LOCAL_ATTACK_FAV_POINTS,
   PRIMARY_VOTE_SUPPRESSION_COST_FUNDS,
 } from "@/lib/electionEngine/constants";
 
@@ -146,7 +146,7 @@ describe("buildStateOperations", () => {
     const view = await build({ electionCandidates: ROSTER });
     const local = view?.attacks.find((a) => a.kind === "localFavorability");
     expect(local?.costFunds).toBe(PRIMARY_LOCAL_ATTACK_COST_FUNDS);
-    expect(local?.description).toContain(String(PRIMARY_LOCAL_ATTACK_FAV_PER_TURN));
+    expect(local?.description).toContain(String(PRIMARY_LOCAL_ATTACK_FAV_POINTS));
     expect(view?.attacks.find((a) => a.kind === "voteSuppression")?.costFunds).toBe(
       PRIMARY_VOTE_SUPPRESSION_COST_FUNDS
     );

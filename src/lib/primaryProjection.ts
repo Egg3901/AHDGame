@@ -37,6 +37,7 @@ import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
   homeStateSurgeMultiplier,
   stateAttackMultiplier,
+  stateFavorabilityDeltas,
   NPP_STAGGER_EXTRA_MULTIPLIER,
 } from "@/lib/electionEngine/constants";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
@@ -240,6 +241,18 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         currentStateId: stateId,
         countryId,
         liveTurnouts: input.liveTurnouts?.[stateId],
+        // Local attacks: a state-scoped favourability penalty, applied through
+        // the approval curve inside distribution rather than as a flat slice
+        // off the count. Undefined for a state nobody is being attacked in.
+        favorabilityDeltaByCandidate:
+          input.stateActions?.length && input.currentTurn != null
+            ? stateFavorabilityDeltas({
+                actions: input.stateActions,
+                candidateIds: candidates.map((c) => c.candidateId),
+                stateId,
+                currentTurn: input.currentTurn,
+              })
+            : undefined,
         stateOrgByCandidate: stateOrgByStateAndCandidate?.get(stateId),
         homeStateByCandidate: resolvedHomeStateByCandidate,
         hasPlayerInRace: hasPlayerInPartyPrimary,

@@ -32,10 +32,6 @@ import {
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
-import {
-  loadLiveStateActionsForElections,
-  localFavorabilityDrainByTarget,
-} from "@/lib/elections/primaryStateActions";
 import { logger } from "../observability/logger";
 
 export interface CampaignTurnResults {
@@ -137,38 +133,10 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           .find({ electionId: { $in: activeElectionIds } })
           .toArray();
 
-        // Live state attacks across every active race, folded in below beside
-        // the national oppo drain. One query for the whole pass, matching how
-        // campaigns are loaded, rather than one per election.
-        //
-        // A target who withdrew keeps their rows until they expire, so the
-        // audit trail survives, but stops taking damage: they are out of the
-        // race.
-        const liveStateActions = await loadLiveStateActionsForElections(db, {
-          electionIds: activeElectionIds,
-          currentTurn: turnNumber,
-        });
-        // Narrowed to the races that actually carry an attack, so one live row
-        // does not pull every active race's candidate list into memory.
-        const attackedElectionIds = [
-          ...new Map(liveStateActions.map((a) => [a.electionId.toString(), a.electionId])).values(),
-        ];
-        const activeCandidateRowIds = new Set(
-          attackedElectionIds.length === 0
-            ? []
-            : (
-                await db
-                  .collection<ElectionCandidate>("electionCandidates")
-                  .find(
-                    { electionId: { $in: attackedElectionIds }, status: "active" },
-                    { projection: { _id: 1 } }
-                  )
-                  .toArray()
-              ).map((c) => c._id.toString())
-        );
-        const liveAttacksOnActiveTargets = liveStateActions.filter((a) =>
-          activeCandidateRowIds.has(a.targetCandidateId.toString())
-        );
+        // Primary state attacks are NOT applied here. A local attack is scoped
+        // to the state it was bought in and lands through the stagger's own
+        // per-state favourability delta; reading it here as well would move
+        // every state in the country from a purchase that named one.
 
         // Strategic Operations v2 — incoming opposition-research shield.
         // A candidate defended by a campaign whose Media > Rapid Response
@@ -837,44 +805,6 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         // so the stored value cannot exceed PRIMARY_CAMPAIGN_TICK_CAP.
         if (candidateOps.length > 0) {
           await db.collection<ElectionCandidate>("electionCandidates").bulkWrite(candidateOps);
-        }
-
-        // State attacks are applied ONCE for the whole pass, as a single
-        // pass-level entry. They belong to the attack rows, not to any campaign
-        // in the loop above, so folding them into each campaign's map would
-        // have multiplied every drain by the number of campaigns processed.
-        //
-        // They stack with the national opposition drain rather than replacing
-        // it: a candidate under both should lose to both. The shield was
-        // stamped on each row at purchase, so it is not re-applied here.
-        if (liveAttacksOnActiveTargets.length > 0) {
-          const attacksByElection = new Map<string, typeof liveAttacksOnActiveTargets>();
-          for (const action of liveAttacksOnActiveTargets) {
-            const key = action.electionId.toString();
-            const bucket = attacksByElection.get(key);
-            if (bucket) bucket.push(action);
-            else attacksByElection.set(key, [action]);
-          }
-
-          const stateAttackChanges = new Map<string, { collection: string; amount: number }>();
-          for (const [electionId, rows] of attacksByElection) {
-            // The same final-stretch doubling the other passive effects take,
-            // read from the attack's own race rather than from whichever
-            // campaign happened to be in hand when the drain was summed.
-            const endTurn = electionDataMap.get(electionId)?.endTurn;
-            const multiplier = typeof endTurn === "number" && endTurn - turnNumber <= 4 ? 2 : 1;
-            for (const [targetId, perTurn] of localFavorabilityDrainByTarget(rows)) {
-              if (!(perTurn > 0)) continue;
-              const existing = stateAttackChanges.get(targetId);
-              stateAttackChanges.set(targetId, {
-                collection: "unknown",
-                amount: (existing?.amount ?? 0) - perTurn * multiplier,
-              });
-            }
-          }
-          if (stateAttackChanges.size > 0) {
-            passiveEffectsData.push({ favorabilityChanges: stateAttackChanges });
-          }
         }
 
         // Apply passive effects using bulkWrite

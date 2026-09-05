@@ -220,9 +220,19 @@ describe("vote suppression in the primary wave", () => {
     expect(ratio).toBeLessThan(0.98);
   });
 
-  it("ignores a favourability attack, which campaignTurn already applies", async () => {
+  it("applies a favourability attack bought in this state", async () => {
     const clean = await runIowaWave([]);
-    const hit = await runIowaWave([suppressionRow({ kind: "localFavorability" })]);
+    const hit = await runIowaWave([suppressionRow({ kind: "localFavorability", magnitude: 6 })]);
+    expect(hit[TARGET_ROW.toString()]).toBeLessThan(clean[TARGET_ROW.toString()]);
+  });
+
+  it("ignores a favourability attack bought somewhere else", async () => {
+    // It used to drain the national scalar, so a purchase in New Hampshire
+    // moved Iowa too. Scoped now.
+    const clean = await runIowaWave([]);
+    const hit = await runIowaWave([
+      suppressionRow({ kind: "localFavorability", magnitude: 6, stateId: "NH" }),
+    ]);
     expect(hit[TARGET_ROW.toString()]).toBe(clean[TARGET_ROW.toString()]);
   });
 

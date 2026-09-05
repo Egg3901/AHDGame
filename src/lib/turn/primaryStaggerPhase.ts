@@ -62,6 +62,7 @@ import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
   homeStateSurgeMultiplier,
   stateAttackMultiplier,
+  stateFavorabilityDeltas,
   PRIMARY_MOMENTUM_WIN_BONUS,
   PRIMARY_MOMENTUM_UPSET_BONUS,
   NPP_STAGGER_EXTRA_MULTIPLIER,
@@ -720,6 +721,14 @@ export async function runPrimaryStaggerWaveIfDue(
           stateOrgByCandidate: stateOrgByStateAndCandidate.get(stateId),
           homeStateByCandidate,
           liveTurnouts,
+          // Local attacks: a state-scoped favourability penalty, read from the
+          // same helper the projection runs so the board and the night agree.
+          favorabilityDeltaByCandidate: stateFavorabilityDeltas({
+            actions: liveStateActions,
+            candidateIds: partyCandidates.map((c) => c.candidateId),
+            stateId,
+            currentTurn,
+          }),
           hasPlayerInRace: partyCandidates.some((c) => !c.isNPP),
         }
       );

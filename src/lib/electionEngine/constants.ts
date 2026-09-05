@@ -164,7 +164,19 @@ export const PRIMARY_HOME_SURGE_PCT = 15;
  * First pass. Wants a balance issue filed and a cycle of play before live.
  */
 export const PRIMARY_STATE_ATTACK_DURATION_TURNS = 8;
-export const PRIMARY_LOCAL_ATTACK_FAV_PER_TURN = 0.4;
+
+/**
+ * Local favourability hit: points off the target's favourability IN THAT STATE
+ * while the attack is live, before the shield.
+ *
+ * A standing penalty rather than an accruing drain. It once fed the candidate's
+ * NATIONAL favourability, so an attack bought in Iowa moved every state in the
+ * country and stacked once per state bought: the balance simulation had a
+ * single purchase flipping a tight primary and five purchases burying it.
+ * Scoped here to the state it names, which is what its price, its name and its
+ * own button copy always claimed.
+ */
+export const PRIMARY_LOCAL_ATTACK_FAV_POINTS = 6;
 export const PRIMARY_LOCAL_ATTACK_COST_FUNDS = 40_000;
 export const PRIMARY_LOCAL_ATTACK_COST_ACTIONS = 4;
 
@@ -219,6 +231,59 @@ export const PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS = 4;
  * The shield is the one stamped on each row at purchase, not the defender's
  * current tree: an action already paid for keeps the terms it was bought under.
  */
+/**
+ * Points of favourability the live local attacks take off one candidate in one
+ * state. Zero for a candidate nobody has attacked there.
+ *
+ * Read by the stagger and the projection through
+ * `favorabilityDeltaByCandidate`, so the board and the night agree, and by
+ * nothing else: this is the whole of the mechanic now that it no longer touches
+ * the national scalar.
+ */
+export function stateFavorabilityPenalty(input: {
+  actions: PrimaryStateAction[];
+  candidateId: string;
+  stateId: string;
+  currentTurn: number;
+}): number {
+  let points = 0;
+  for (const action of input.actions) {
+    if (action.kind !== "localFavorability") continue;
+    if (action.stateId !== input.stateId) continue;
+    if (action.targetCandidateId.toString() !== input.candidateId) continue;
+    if (action.expiresTurn <= input.currentTurn) continue;
+    points += action.magnitude * (1 - action.shieldApplied);
+  }
+  return points;
+}
+
+/**
+ * Every candidate's state-scoped favourability delta for one state, in the
+ * shape `distributeVotesByGroupLevelAllocation` takes. Undefined when nothing
+ * is live there, so the option is a strict no-op for an unattacked state.
+ */
+export function stateFavorabilityDeltas(input: {
+  actions: PrimaryStateAction[];
+  candidateIds: string[];
+  stateId: string;
+  currentTurn: number;
+}): Record<string, number> | undefined {
+  let any = false;
+  const out: Record<string, number> = {};
+  for (const candidateId of input.candidateIds) {
+    const points = stateFavorabilityPenalty({
+      actions: input.actions,
+      candidateId,
+      stateId: input.stateId,
+      currentTurn: input.currentTurn,
+    });
+    if (points <= 0) continue;
+    out[candidateId] = -points;
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
 export function stateAttackMultiplier(input: {
   actions: PrimaryStateAction[];
   /** electionCandidates._id as a string, matching what both vote loops iterate. */

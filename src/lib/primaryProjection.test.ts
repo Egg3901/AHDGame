@@ -363,13 +363,24 @@ describe("vote suppression", () => {
     expect(after.byState.OH.target).toBe(before.byState.OH.target);
   });
 
-  it("ignores a favourability attack, which campaignTurn already applies", () => {
+  it("applies a favourability attack in the state it was bought in", () => {
     const before = project();
     const after = project({
       currentTurn: 12,
-      stateActions: [suppressionRow({ kind: "localFavorability" })],
+      stateActions: [suppressionRow({ kind: "localFavorability", magnitude: 6 })],
     });
-    expect(after.byState.IA.target).toBe(before.byState.IA.target);
+    expect(after.byState.IA.target).toBeLessThan(before.byState.IA.target);
+  });
+
+  it("leaves every other state alone, which is the whole point of the rework", () => {
+    // The drain used to feed the candidate's NATIONAL favourability, so an
+    // attack bought in Iowa moved all 51 states and stacked once per purchase.
+    const before = project();
+    const after = project({
+      currentTurn: 12,
+      stateActions: [suppressionRow({ kind: "localFavorability", magnitude: 6 })],
+    });
+    expect(after.byState.OH.target).toBe(before.byState.OH.target);
   });
 
   it("ignores a row that has expired", () => {

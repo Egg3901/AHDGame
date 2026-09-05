@@ -32,7 +32,7 @@ import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
 import {
   PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
-  PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
+  PRIMARY_LOCAL_ATTACK_FAV_POINTS,
   PRIMARY_STATE_ATTACK_DURATION_TURNS,
   PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
   PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS,
@@ -220,9 +220,10 @@ export async function buildStateOperations(
       kind: "localFavorability",
       label: "Local attack",
       description:
-        `Runs negative ads against them in one state: their favourability there falls ` +
-        `${PRIMARY_LOCAL_ATTACK_FAV_PER_TURN} a turn for ${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns. ` +
-        `Costs ${money(PRIMARY_LOCAL_ATTACK_COST_FUNDS)} and ${PRIMARY_LOCAL_ATTACK_COST_ACTIONS} actions.`,
+        `Runs negative ads against them in one state: their favourability there is ` +
+        `${PRIMARY_LOCAL_ATTACK_FAV_POINTS} points lower for ${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns, ` +
+        `and nowhere else. Costs ${money(PRIMARY_LOCAL_ATTACK_COST_FUNDS)} and ` +
+        `${PRIMARY_LOCAL_ATTACK_COST_ACTIONS} actions.`,
       costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate,
       costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
       needsBucket: false,
