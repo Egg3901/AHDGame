@@ -15,8 +15,8 @@
  */
 
 import { connectDb, closeDb } from "../utils/db";
-import { SINGLEPLAYER_USER_ID, isLocalMongoUri } from "@/lib/singleplayer";
-import { ObjectId } from "mongodb";
+import { isLocalMongoUri } from "@/lib/singleplayer";
+import { ensureSingleplayerUser } from "@/lib/singleplayerServer";
 
 function argValue(flag: string): string | undefined {
   const index = process.argv.indexOf(flag);
@@ -25,45 +25,20 @@ function argValue(flag: string): string | undefined {
 
 async function main() {
   const uri = process.env.MONGODB_URI ?? "";
-  // The same rule the runtime enforces. A new-game script that can reach a
-  // shared cluster would write a fixed-id user into somebody else's world.
   if (!isLocalMongoUri(uri)) {
     throw new Error(
       `Refusing to run: MONGODB_URI does not point at this machine (${uri || "unset"}). ` +
         `Singleplayer setup only ever writes to a local database.`
     );
   }
-
   const displayName = argValue("--display-name") ?? "Player";
   const db = await connectDb();
-  const users = db.collection("users");
-  const _id = new ObjectId(SINGLEPLAYER_USER_ID);
-  const now = new Date();
-
-  const existing = await users.findOne({ _id });
-  if (existing) {
-    console.log(`Local player already exists (${existing.username}). Nothing to do.`);
-    return;
-  }
-
-  await users.insertOne({
-    _id,
-    email: "player@localhost",
-    username: "player",
-    displayName,
-    // Not a hash of anything. Singleplayer has no login path that reads it.
-    password: "!singleplayer-no-login",
-    role: "player",
-    isAdmin: false,
-    hasCompletedSetup: false,
-    createdAt: now,
-    updatedAt: now,
-    lastLogin: now,
-    lastActivity: now,
-  });
-
-  console.log(`Created local player "${displayName}" (${SINGLEPLAYER_USER_ID}).`);
-  console.log(`Start the app and it will take you to character creation.`);
+  const { created } = await ensureSingleplayerUser(db, displayName);
+  console.log(
+    created
+      ? `Created local player "${displayName}". Start the app and it will take you to character creation.`
+      : "Local player already exists. Nothing to do."
+  );
 }
 
 main()

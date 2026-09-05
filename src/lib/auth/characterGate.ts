@@ -29,6 +29,9 @@ const ALLOWLIST_PREFIXES = [
   // Character-creation destinations.
   "/create-character",
   "/create-imperial-character",
+  // Singleplayer start screen: "start over" wipes the character on purpose
+  // and the player has to be able to get back here afterwards.
+  "/singleplayer",
   // Auth + session entry/exit.
   "/login",
   "/register",

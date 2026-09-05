@@ -23,6 +23,10 @@ describe("isCharacterGatedPath", () => {
     }
   });
 
+  it("allows the singleplayer start screen, which exists to replace a wiped character", () => {
+    expect(isCharacterGatedPath("/singleplayer")).toBe(false);
+  });
+
   it("allows the character-creation destinations", () => {
     expect(isCharacterGatedPath("/create-character")).toBe(false);
     expect(isCharacterGatedPath("/create-imperial-character")).toBe(false);
