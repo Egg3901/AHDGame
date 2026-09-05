@@ -107,6 +107,14 @@ describe("the Blend general page does not print the same standing twice", () => 
     expect(generalPhaseProps[0].showElectoralMap).toBe(false);
   });
 
+  it("tells the general phase view to leave out the national mood gauge", () => {
+    // The rail states the same figure and now carries the same components, so
+    // the card below repeated a number whose neighbouring bars were a
+    // different quantity entirely.
+    renderPage();
+    expect(generalPhaseProps[0].showNationalMood).toBe(false);
+  });
+
   it("tells the schedule card to leave out its deadline strip", () => {
     renderPage();
     expect(scheduleProps).toHaveLength(1);
@@ -120,6 +128,7 @@ describe("the Blend general page does not print the same standing twice", () => 
     renderPage({ electionType: "senate", state: "PA" } as Partial<ElectionDetail>);
     for (const props of generalPhaseProps) {
       expect(props.showCollegeSummary).not.toBe(false);
+      expect(props.showNationalMood).not.toBe(false);
     }
     for (const props of scheduleProps) {
       expect(props.showStatusStrip).not.toBe(false);

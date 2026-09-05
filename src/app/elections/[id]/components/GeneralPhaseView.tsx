@@ -93,6 +93,11 @@ interface GeneralPhaseViewProps {
    * States twice.
    */
   showElectoralMap?: boolean;
+  /**
+   * Whether to draw the National Mood gauge. False where a caller states the
+   * same figure and the same components above it.
+   */
+  showNationalMood?: boolean;
 }
 
 export function GeneralPhaseView({
@@ -103,6 +108,7 @@ export function GeneralPhaseView({
   amInRace,
   showCollegeSummary = true,
   showElectoralMap = true,
+  showNationalMood = true,
   onSuccess,
 }: GeneralPhaseViewProps) {
   const resolveCountryName = useCountryDisplayName();
@@ -310,7 +316,7 @@ export function GeneralPhaseView({
             the national channel is visible before election day. Renders for the
             live race and for resolved races that carry the snapshot; older
             races have no field and the card returns null. */}
-        {election.electionType === "president" && !localInPrimary && (
+        {showNationalMood && election.electionType === "president" && !localInPrimary && (
           <NationalMoodGauge data={election.economicReferendum} />
         )}
 

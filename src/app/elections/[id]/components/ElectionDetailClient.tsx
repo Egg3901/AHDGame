@@ -383,6 +383,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onSuccess={fetchElection}
             showCollegeSummary={false}
             showElectoralMap={false}
+            showNationalMood={false}
           />
 
           <ElectionScheduleCard

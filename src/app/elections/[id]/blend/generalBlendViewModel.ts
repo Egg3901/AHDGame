@@ -115,7 +115,28 @@ export interface GeneralBlendVM {
   tierLegend: TierLegendVM[];
   drivers: DriverRowVM[];
   coattailDrivers: DriverRowVM[];
-  mood: { approval: string; note: string } | null;
+  /**
+   * The referendum standing, with the components that produced it.
+   *
+   * The breakdown travels with the number deliberately. The page used to print
+   * this figure twice — here and again in a card lower down — and the two
+   * carried different bars underneath: the rail's neighbouring "Why it moved"
+   * rows are the persuasion drivers behind a candidate's vote, not the
+   * economic components behind this shift, so a reader met one heading, one
+   * number, and two unrelated explanations.
+   */
+  mood: {
+    approval: string;
+    note: string;
+    /** What the economy contributed, in points, largest first. */
+    components: { label: string; value: string; positive: boolean }[];
+    /** Present only when an enacted bill earned credit against the penalty. */
+    credit: string | null;
+    /** Present only when consecutive terms weigh on the penalty. */
+    fatigue: string | null;
+    /** The turn the engine recorded this on. */
+    readOn: string;
+  } | null;
   yourTicket: { name: string; ev: number; leadText: string } | null;
   campaignHref: string | null;
   wire: string[];
@@ -278,6 +299,7 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
 
   // ── National mood ─────────────────────────────────────────────────────────
   const econ = election.economicReferendum;
+  const forgivenessPct = Math.round((econ?.forgivenessFrac ?? 0) * 100);
   const mood = econ
     ? {
         approval: econ.sharePts.toFixed(1),
@@ -286,6 +308,20 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
             ? `Median voter sits at ${election.medianVoter.ep.toFixed(0)} economic, ${election.medianVoter.sp.toFixed(0)} social.`
             : ""
         }`.trim(),
+        components: [...econ.components]
+          .sort((a, b) => Math.abs(b.contributionPts) - Math.abs(a.contributionPts))
+          .map((c) => ({
+            label: c.label,
+            value: `${c.contributionPts >= 0 ? "+" : "-"}${Math.abs(c.contributionPts).toFixed(1)}`,
+            positive: c.contributionPts >= 0,
+          })),
+        credit:
+          forgivenessPct > 0 ? `Response credit forgives ${forgivenessPct}% of the penalty.` : null,
+        fatigue:
+          econ.fatigueMultiplier > 1
+            ? `Time in office weighs the penalty ${econ.fatigueMultiplier.toFixed(1)} times heavier.`
+            : null,
+        readOn: `Read on turn ${grouped(econ.recordedTurn)}.`,
       }
     : null;
 

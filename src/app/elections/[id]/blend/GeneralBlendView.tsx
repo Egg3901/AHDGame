@@ -238,14 +238,25 @@ function YourTicketBlock({ vm, campaignLink }: { vm: GeneralBlendVM; campaignLin
   );
 }
 
-/** The referendum standing the whole board is being judged against. */
+/**
+ * The referendum standing the whole board is being judged against, with what
+ * fed it.
+ *
+ * The components sit here rather than in a card further down the page. The
+ * figure used to appear in both places under the same heading, and the bars
+ * beneath each were different quantities — the block below this one is "Why it
+ * moved", the persuasion drivers behind a candidate's vote, which is not what
+ * moves this number. Keeping the economic components against the economic
+ * figure is what tells the two apart.
+ */
 function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
   if (!vm.mood) return null;
+  const mood = vm.mood;
   return (
     <>
       <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 9 }}>
         <span style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500 }}>
-          {vm.mood.approval}
+          {mood.approval}
         </span>
         <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
           referendum points
@@ -260,8 +271,62 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
           color: BLEND.muted,
         }}
       >
-        {vm.mood.note}
+        {mood.note}
       </p>
+      {mood.components.length > 0 ? (
+        <>
+          <div
+            style={{
+              margin: "14px 0 2px",
+              fontFamily: FONT.mono,
+              fontSize: 9,
+              letterSpacing: ".14em",
+              textTransform: "uppercase",
+              color: BLEND.mutedDim,
+            }}
+          >
+            What feeds it
+          </div>
+          {mood.components.map((c) => (
+            <div
+              key={c.label}
+              style={{
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 10,
+                padding: "7px 0",
+                borderBottom: "1px solid rgba(34,34,47,.7)",
+              }}
+            >
+              <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>{c.label}</span>
+              <span
+                style={{
+                  fontFamily: FONT.mono,
+                  fontSize: 12,
+                  color: c.positive ? BLEND.positive : BLEND.negative,
+                }}
+              >
+                {c.value} pts
+              </span>
+            </div>
+          ))}
+        </>
+      ) : null}
+      {[mood.credit, mood.fatigue, mood.readOn].filter(Boolean).map((line) => (
+        <p
+          key={line as string}
+          style={{
+            margin: "8px 0 0",
+            fontFamily: FONT.serif,
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            color: BLEND.mutedDim,
+          }}
+        >
+          {line}
+        </p>
+      ))}
     </>
   );
 }

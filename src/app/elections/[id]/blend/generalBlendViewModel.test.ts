@@ -365,3 +365,67 @@ describe("when the tickets table earns its place", () => {
     expect(vm.railItems.some((i) => i.id === "tickets")).toBe(true);
   });
 });
+
+describe("the national mood carries its own breakdown", () => {
+  // The figure used to appear twice on the page — here and in a card lower
+  // down — under the same heading, with different bars beneath each. The rows
+  // next to this one in the rail are the persuasion drivers behind a
+  // candidate's vote, which is a different quantity from the economy's push on
+  // the incumbent, so the components have to travel with the number that they
+  // actually explain.
+  const withReferendum = (over: Record<string, unknown> = {}) =>
+    buildGeneralBlendViewModel({
+      election: {
+        ...election(),
+        economicReferendum: {
+          miseryIndex: 0.3,
+          sharePts: -0.1,
+          components: [
+            { key: "unemployment", label: "Unemployment", contributionPts: 0 },
+            { key: "inflation", label: "Inflation", contributionPts: -0.14 },
+            { key: "realIncomes", label: "Real incomes", contributionPts: 0.02 },
+          ],
+          fatigueMultiplier: 1,
+          recordedTurn: 7,
+          ...over,
+        },
+      } as unknown as ElectionDetail,
+      wire: [],
+      rail: "overview",
+    });
+
+  it("lists what fed the figure, largest contribution first", () => {
+    const mood = withReferendum().mood;
+    expect(mood?.components.map((c) => c.label)).toEqual([
+      "Inflation",
+      "Real incomes",
+      "Unemployment",
+    ]);
+  });
+
+  it("signs each contribution so a drag reads as a drag", () => {
+    const mood = withReferendum().mood;
+    expect(mood?.components[0]).toMatchObject({ value: "-0.1", positive: false });
+    expect(mood?.components[1]).toMatchObject({ value: "+0.0", positive: true });
+  });
+
+  it("says when enacted bills forgave part of the penalty", () => {
+    expect(withReferendum({ forgivenessFrac: 0.25 }).mood?.credit).toMatch(/25%/);
+    expect(withReferendum().mood?.credit).toBeNull();
+  });
+
+  it("says when time in office weighs the penalty heavier", () => {
+    expect(withReferendum({ fatigueMultiplier: 1.5 }).mood?.fatigue).toMatch(/1\.5/);
+    expect(withReferendum().mood?.fatigue).toBeNull();
+  });
+
+  it("names the turn it was read on, since it is a snapshot", () => {
+    expect(withReferendum().mood?.readOn).toBe("Read on turn 7.");
+  });
+
+  it("has no mood at all for a race with no referendum snapshot", () => {
+    expect(
+      buildGeneralBlendViewModel({ election: election(), wire: [], rail: "overview" }).mood
+    ).toBeNull();
+  });
+});
