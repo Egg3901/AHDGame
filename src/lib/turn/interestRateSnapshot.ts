@@ -7,6 +7,8 @@ import { getNationalDocId } from "@/lib/constants/nationalScope";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getEraTrendGdpGrowth } from "@/lib/constants/monetaryEra";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import type { State } from "@/lib/db/types/state";
+import { gdpWeightedGrowth } from "@/lib/country/nationalGdpGrowth";
 import { FOREX_AND_MACRO_CHART_HISTORY_TURNS } from "@/lib/constants/turnTime";
 
 const HISTORY_CAP = FOREX_AND_MACRO_CHART_HISTORY_TURNS;
@@ -69,6 +71,36 @@ export async function snapshotInterestRateHistory(db: Db, turn: number): Promise
       : [];
   const metricsById = new Map(nationalMetricsDocs.map((m) => [m._id.toString(), m]));
 
+  // Regional fallback for the countries with no national doc. Only ten
+  // countries have one; the rest (FR, IT, ES, SE, TR, GR, AT, FI, the bloc)
+  // were snapshotting the era trend constant every turn, so forexTurn and the
+  // legitimacy collectors read a flat +4.5 for 240 turns while their regions
+  // were live and varying. GDP-weighted mean of the country's regions, the
+  // same quantity the national doc caches for the ten that have it.
+  const bankCountryIds = banks.map((b) => String(b.countryId));
+  const [regionStates, regionMetrics] = await Promise.all([
+    db
+      .collection<State>("states")
+      .find({ countryId: { $in: bankCountryIds } }, { projection: { countryId: 1, gdp: 1 } })
+      .toArray(),
+    db
+      .collection<StateMetrics>("macroMetrics")
+      .find(
+        { countryId: { $in: bankCountryIds } },
+        { projection: { countryId: 1, "economic.gdpGrowth.value": 1 } }
+      )
+      .toArray(),
+  ]);
+  const regionGrowthById = new Map(
+    regionMetrics.map((m) => [String(m._id), m.economic?.gdpGrowth?.value])
+  );
+  const regionRowsByCountry = new Map<string, Array<{ growth?: number; gdp: number }>>();
+  for (const s of regionStates) {
+    const rows = regionRowsByCountry.get(String(s.countryId)) ?? [];
+    rows.push({ growth: regionGrowthById.get(String(s._id)), gdp: s.gdp ?? 0 });
+    regionRowsByCountry.set(String(s.countryId), rows);
+  }
+
   // `?? fallback` lets NaN through (typeof NaN === "number"). These
   // snapshots feed forexTurn on the next turn, so a single NaN here
   // re-poisons exchangeRates every turn forever — guard all reads.
@@ -84,9 +116,11 @@ export async function snapshotInterestRateHistory(db: Db, turn: number): Promise
 
     const nationalDocId = getNationalDocId(countryId);
     const nationalMetricsDoc = nationalDocId ? metricsById.get(nationalDocId) : null;
+    const nationalGrowth = nationalMetricsDoc?.economic?.gdpGrowth?.value;
+    const regionalGrowth = gdpWeightedGrowth(regionRowsByCountry.get(String(countryId)) ?? []);
     const gdpGrowth = finiteOr(
-      nationalMetricsDoc?.economic?.gdpGrowth?.value,
-      getEraTrendGdpGrowth(countryId, currentYear) ?? 2.5
+      nationalGrowth,
+      finiteOr(regionalGrowth, getEraTrendGdpGrowth(countryId, currentYear) ?? 2.5)
     );
 
     const ratePoint: TurnSnapshot = { turn, rate: finiteOr(bank.primeRate, 0) };
