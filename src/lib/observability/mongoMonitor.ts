@@ -19,10 +19,7 @@
 import * as Sentry from "@sentry/nextjs";
 import type { MongoClient } from "mongodb";
 import type { Span } from "@sentry/nextjs";
-import {
-  recordDocumentsReturned,
-  recordRoundTrip,
-} from "@/lib/observability/mongoRoundTrips";
+import { recordDocumentsReturned, recordRoundTrip } from "@/lib/observability/mongoRoundTrips";
 
 /** Driver chatter that carries no diagnostic value — never instrumented. */
 const IGNORED_COMMANDS = new Set([
@@ -60,7 +57,10 @@ const SPAN_STATUS_ERROR = 2 as const;
  */
 const pendingSpans = new Map<number, Span>();
 
-export function collectionFromCommand(commandName: string, command: Record<string, unknown>): string {
+export function collectionFromCommand(
+  commandName: string,
+  command: Record<string, unknown>
+): string {
   // Most commands name their collection as the command's own value
   // (`{find: "corporations"}`). `getMore` does not: its value is the cursor
   // id, and the collection sits in a separate field. Without this branch every

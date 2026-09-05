@@ -20,7 +20,10 @@ describe("collectionFromCommand", () => {
     // The driver sends `{ getMore: <Long cursorId>, collection: "name" }`.
     // The id's exact type does not matter here, only that it is not a string.
     expect(
-      collectionFromCommand("getMore", { getMore: { _bsontype: "Long" }, collection: "ledgerEntries" })
+      collectionFromCommand("getMore", {
+        getMore: { _bsontype: "Long" },
+        collection: "ledgerEntries",
+      })
     ).toBe("ledgerEntries");
   });
 

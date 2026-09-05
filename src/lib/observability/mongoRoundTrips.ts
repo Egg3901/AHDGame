@@ -251,4 +251,3 @@ export function formatRoundTripReport(topPhases = 20): string | null {
   }
   return lines.join("\n");
 }
-

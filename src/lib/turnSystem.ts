@@ -33,10 +33,7 @@ import {
   createInitialTurnPhaseStatuses,
   finalizeAbortedPhaseStatuses,
 } from "@/simulation/engine/phaseTelemetry";
-import {
-  formatRoundTripReport,
-  withPhaseProfiling,
-} from "@/lib/observability/mongoRoundTrips";
+import { formatRoundTripReport, withPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";

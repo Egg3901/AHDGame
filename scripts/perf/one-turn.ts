@@ -30,7 +30,11 @@ import { connectDb, closeDb } from "../utils/db";
  */
 function isLocalMongoUri(uri: string): boolean {
   if (uri.startsWith("mongodb+srv://")) return false;
-  const hosts = uri.replace(/^mongodb:\/\//, "").split("/")[0].split("@").pop();
+  const hosts = uri
+    .replace(/^mongodb:\/\//, "")
+    .split("/")[0]
+    .split("@")
+    .pop();
   if (!hosts) return false;
   return hosts.split(",").every((hostPort) => {
     const host = hostPort.split(":")[0];

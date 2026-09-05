@@ -119,7 +119,7 @@ describe("computeEconomicVitalSigns", () => {
       reconciliation: null,
       balanceSnapshot: null,
       ledgerTurnover: [],
-  ledgerEntryCount: 0,
+      ledgerEntryCount: 0,
       commodityParticipants: [
         {
           commodity: "steel",
