@@ -347,6 +347,7 @@ export function NavbarWrapper({
           username: navData.user.username,
           isAdmin: navData.user.isAdmin,
           isModerator: navData.user.isModerator,
+          singleplayer: navData.user.singleplayer === true,
           canSeeCampaignManager: navData.user.canSeeCampaignManager,
           patreonTier: navData.user.patreonTier ?? null,
           isPatronActive: navData.user.isPatronActive ?? false,

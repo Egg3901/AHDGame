@@ -206,9 +206,12 @@ export async function processTurn(): Promise<{
       //
       // Undefined in production (runWorld.ts is the only writer), so this is
       // inert there — the same shape as simTurnPhaseMode below.
+      // A singleplayer world only advances when the player asks it to, so a
+      // gap of days between turns is the normal case, not a dead cron.
       const simSandbox =
+        isSingleplayer() ||
         (await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" }))?.simSandbox ===
-        true;
+          true;
       if (preLockState) {
         // #2815: detect a stale lock left by a turn that crashed after phases
         // began applying writes. Recorded here; the recovery close-out runs

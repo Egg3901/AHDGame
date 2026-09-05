@@ -13,7 +13,9 @@
  * seat card always renders a dignified placeholder even offline.
  */
 
-const SCOTUS_CDN_BASE = "https://cdn.ahousedividedgame.com/static/scotus";
+import { CDN_BASE } from "@/lib/images/cdnUrls";
+
+const SCOTUS_CDN_BASE = `${CDN_BASE}/static/scotus`;
 
 /** Hero banner: the U.S. Supreme Court building. */
 export const SCOTUS_HERO_IMAGE_URL = `${SCOTUS_CDN_BASE}/building.webp`;
