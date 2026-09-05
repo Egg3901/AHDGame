@@ -18,6 +18,35 @@ describe("formatElectionTypeLabel", () => {
     expect(formatElectionTypeLabel("senate", "NG")).toBe("Senate");
     expect(formatElectionTypeLabel("regionalCouncil", "NG")).toBe("State House of Assembly");
   });
+
+  // These chambers hold live elections but have no entry in either label map,
+  // so the old `?? electionType` fallback showed players the raw internal key
+  // ("Running: senat"). They cannot simply be added to ELECTION_TYPE_LABEL_MAP
+  // without also giving them a position (see electionMethod.test.ts), which
+  // would change live election resolution, so the fallback presents them.
+  it.each([
+    ["senat", "Senat"],
+    ["senato", "Senato"],
+    ["senado", "Senado"],
+    ["chamber", "Chamber"],
+    ["eduskunta", "Eduskunta"],
+    ["nationalrat", "Nationalrat"],
+    ["vouli", "Vouli"],
+  ])("presents the unregistered %s chamber as %s", (type, expected) => {
+    expect(formatElectionTypeLabel(type)).toBe(expected);
+  });
+
+  it("splits a camelCase type rather than echoing it", () => {
+    expect(formatElectionTypeLabel("someFutureChamber")).toBe("Some Future Chamber");
+  });
+
+  it("never renders an election type as a raw lowercase key", () => {
+    // Office-key aliases share MULTI_SEAT_TYPES with election types; both go
+    // through the same formatter, so neither may come back lowercase.
+    for (const type of MULTI_SEAT_TYPES) {
+      expect(formatElectionTypeLabel(type)).not.toMatch(/^[a-z]/);
+    }
+  });
 });
 
 describe("officeKeyForElectionType", () => {
