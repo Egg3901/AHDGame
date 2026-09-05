@@ -72,6 +72,11 @@ const nextConfig: NextConfig = {
   // Railway containers are ephemeral — no previous .next to clean.
   // Setting false preserves the .next/cache nixpacks restores before each build,
   // enabling Turbopack incremental compilation across deploys.
+  // Singleplayer builds DO want standalone output: it is what makes the shipped
+  // bundle small, and the instrumentation it skips (node-cron, auto-seed) is
+  // exactly what a local world must not run. Production stays on `next start`
+  // for the reasons above.
+  ...(process.env.SINGLEPLAYER === "1" ? { output: "standalone" as const } : {}),
   cleanDistDir: !railwayEnv,
   serverExternalPackages: ["mongodb"],
   allowedDevOrigins: ["127.0.0.1"],
