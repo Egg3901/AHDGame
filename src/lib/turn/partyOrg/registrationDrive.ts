@@ -13,6 +13,12 @@
  * reuse them for its estimate readout and the turn processor for application.
  */
 
+import {
+  sourceFromSurplus,
+  type SurplusPartyDelta,
+  type SurplusPartyView,
+} from "./surplusSourcing";
+
 /**
  * Per-state, per-turn hard ceiling on the registration boost (percentage
  * points). Kept intentionally small so a large treasury cannot outpace the
@@ -69,4 +75,59 @@ export function planRegistrationDriveDraw(
   const fromUnregistered = Math.min(applied, availableUnregistered);
   const fromIndependent = applied - fromUnregistered;
   return { applied, fromUnregistered, fromIndependent };
+}
+
+/** Where a drive's registration gain actually came from, and how much landed. */
+export interface RegistrationDriveSourcing {
+  /** Total registration points applied to the buying party. */
+  applied: number;
+  /** The non-party pool portion (unregistered first, then independent). */
+  pool: RegistrationDriveDraw;
+  /** Negative deltas for parties that gave up surplus to cover the rest. */
+  surplus: SurplusPartyDelta[];
+}
+
+/**
+ * Plan a registration drive's full sourcing waterfall for one state:
+ * non-party pool first, then the shortfall from parties holding Reg above
+ * their own Org target — the same rule passive drift uses.
+ *
+ * Why the surplus leg exists: the drive was pool-only, and every US state's
+ * Independent + Unregistered buckets have been 0 since live turn ~155 (RU
+ * ~176, UK ~143), so a fully funded drive applied literally nothing. Passive
+ * drift got a surplus fallback when the same thing froze it; the drive did
+ * not, and quietly became inert in every saturated country.
+ *
+ * The buying party never funds its own drive: it is passed as a climber to
+ * `sourceFromSurplus`, which excludes climbers from the donor set. No relief
+ * is applied — unlike passive drift, a paid drive can reach a governor's
+ * home-field registration.
+ */
+export function planRegistrationDriveSourcing(
+  boost: number,
+  poolUnregistered: number,
+  poolIndependent: number,
+  views: SurplusPartyView[],
+  buyerPartyId: string,
+  regLagBelowOrg: number = 0
+): RegistrationDriveSourcing {
+  const wanted = Math.max(0, boost);
+  const pool = planRegistrationDriveDraw(wanted, poolUnregistered, poolIndependent);
+  const shortfall = wanted - pool.applied;
+  if (shortfall <= 0) return { applied: pool.applied, pool, surplus: [] };
+
+  const buyer = views.find((v) => v.partyId === buyerPartyId);
+  const climbers: SurplusPartyDelta[] = buyer
+    ? [
+        {
+          partyId: buyer.partyId,
+          rowId: buyer.rowId,
+          delta: shortfall,
+          newReg: buyer.regPct + shortfall,
+        },
+      ]
+    : [];
+  const surplus = sourceFromSurplus(views, climbers, shortfall, regLagBelowOrg);
+  const fromSurplus = surplus.reduce((sum, d) => sum - d.delta, 0);
+  return { applied: pool.applied + fromSurplus, pool, surplus };
 }

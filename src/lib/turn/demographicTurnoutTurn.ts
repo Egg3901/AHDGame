@@ -39,9 +39,10 @@ import {
 import { resolveCanvassGroup } from "@/lib/demographics/countryDemographics";
 import {
   calculateRegistrationDriveBoost,
-  planRegistrationDriveDraw,
+  planRegistrationDriveSourcing,
 } from "./partyOrg/registrationDrive";
 import { DEFAULT_LEGACY_COUNTRY_ID, type CountryId } from "@/lib/constants/countries";
+import { REG_LAG_BELOW_ORG_PCT_BY_COUNTRY } from "./partyOrg/pacingConstants";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -326,6 +327,7 @@ export async function processPartyGOTV(
   // Registration-drive (suggestion #81) staged writes, committed after the loop.
   const registrationPoolMap = new Map<string, StateRegistrationPool>(); // `${countryId}:${stateId}`
   const statePartyRowsByCountryParty = new Map<string, StatePartyOrg[]>(); // `${countryId}:${partyId}`
+  const statePartyRowsByCountryState = new Map<string, StatePartyOrg[]>(); // `${countryId}:${stateId}`
   const registrationRegDeltas = new Map<string, number>(); // statePartyOrg._id -> +reg pp
   const registrationPoolUnregDrawn = new Map<string, number>(); // pool._id -> pp drawn from unregistered
   const registrationPoolIndepDrawn = new Map<string, number>(); // pool._id -> pp drawn from independent
@@ -499,6 +501,12 @@ export async function processPartyGOTV(
         const list = statePartyRowsByCountryParty.get(key);
         if (list) list.push(spo);
         else statePartyRowsByCountryParty.set(key, [spo]);
+        // Per-state index: surplus sourcing needs every party's standing in
+        // the state, not just the buying party's.
+        const stateKey = `${spo.countryId}:${spo.stateId}`;
+        const stateList = statePartyRowsByCountryState.get(stateKey);
+        if (stateList) stateList.push(spo);
+        else statePartyRowsByCountryState.set(stateKey, [spo]);
       }
     }
   }
@@ -732,18 +740,60 @@ export async function processPartyGOTV(
           for (const { spo, pool } of targets) {
             const unregDrawn = registrationPoolUnregDrawn.get(pool._id) ?? 0;
             const indepDrawn = registrationPoolIndepDrawn.get(pool._id) ?? 0;
-            const draw = planRegistrationDriveDraw(
+            // Pool first, then the shortfall from parties above their own Org
+            // target. Reads each row's staged delta so several drives in the
+            // same turn cannot double-spend one donor's surplus.
+            //
+            // Org here is one phase stale: `partyOrgTurn` applies org decay
+            // between this phase and `regDriftDecay`. That decay only lowers
+            // Org, which lowers each donor's target and therefore RAISES its
+            // true surplus — so the staleness can only make this under-draw,
+            // never push a donor below its target.
+            const stateViews = (
+              statePartyRowsByCountryState.get(`${spo.countryId}:${spo.stateId}`) ?? [spo]
+            ).map((row) => ({
+              rowId: row._id,
+              partyId: row.partyId,
+              orgPct: row.organization ?? 0,
+              regPct: (row.registration ?? 0) + (registrationRegDeltas.get(row._id) ?? 0),
+            }));
+            const sourcing = planRegistrationDriveSourcing(
               desiredBoost,
               pool.unregistered - unregDrawn,
-              pool.independent - indepDrawn
+              pool.independent - indepDrawn,
+              stateViews,
+              spo.partyId,
+              REG_LAG_BELOW_ORG_PCT_BY_COUNTRY[spo.countryId as CountryId] ?? 0
             );
-            if (draw.applied <= 0) continue;
+            const draw = sourcing.pool;
+            if (sourcing.applied <= 0) continue;
             anyApplied = true;
 
-            const cumulativeReg = (registrationRegDeltas.get(spo._id) ?? 0) + draw.applied;
+            const cumulativeReg = (registrationRegDeltas.get(spo._id) ?? 0) + sourcing.applied;
             registrationRegDeltas.set(spo._id, cumulativeReg);
             registrationPoolUnregDrawn.set(pool._id, unregDrawn + draw.fromUnregistered);
             registrationPoolIndepDrawn.set(pool._id, indepDrawn + draw.fromIndependent);
+
+            // Donors give up surplus; stage their negative deltas and ledger
+            // rows so the state's registration total is conserved.
+            for (const donor of sourcing.surplus) {
+              const donorCumulative = (registrationRegDeltas.get(donor.rowId) ?? 0) + donor.delta;
+              registrationRegDeltas.set(donor.rowId, donorCumulative);
+              const donorRow = statePartyOrgMap.get(donor.rowId);
+              registrationLedgerRows.push({
+                turn: turn ?? 0,
+                countryId: budgetCountryId,
+                stateId: spo.stateId,
+                partyId: donor.partyId,
+                metric: "reg",
+                delta: donor.delta,
+                value: (donorRow?.registration ?? 0) + donorCumulative,
+                source: "passive",
+                actorId: null,
+                createdAt: now,
+                note: "passive:registrationDrive",
+              });
+            }
 
             // Ledger: reg gain + matching pool draws (keeps the 100% invariant).
             registrationLedgerRows.push({
@@ -752,7 +802,7 @@ export async function processPartyGOTV(
               stateId: spo.stateId,
               partyId: budget.partyId,
               metric: "reg",
-              delta: draw.applied,
+              delta: sourcing.applied,
               value: (spo.registration ?? 0) + cumulativeReg,
               source: "passive",
               actorId: null,

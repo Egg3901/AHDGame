@@ -12,12 +12,20 @@ const NEUTRAL_COLOR = "#6b6b7a";
 /** Default lookback window (turns) for the movement sparkline. */
 export const REG_LEDGER_LOOKBACK_TURNS = 24;
 /**
- * Upper bound on `reg` ledger rows one party can receive in a single turn:
- * renormalize + drift + decay from `regDriftDecay`, plus a registration-drive
- * row from `demographicTurnoutTurn`. Used to size the over-fetch so the
- * per-turn collapse still covers the full lookback window.
+ * Upper bound on `reg` ledger rows one party can receive in a single turn.
+ * Used to size the over-fetch so the per-turn collapse still covers the full
+ * lookback window.
+ *
+ * Budget: 3 from `regDriftDecay` (renormalize + drift + decay) plus, from
+ * `demographicTurnoutTurn`, the party's own registration-drive row AND one
+ * NEGATIVE row for every rival whose drive sources its surplus. That last term
+ * scales with the number of parties funding drives in the state — all six US
+ * parties currently do, which is 8 rows in a turn against the old budget of 4,
+ * and an undersized budget silently returns half the requested window rather
+ * than failing. 16 leaves headroom for a country with a wider roster; it only
+ * costs a larger capped read on an indexed query.
  */
-const MAX_REG_ROWS_PER_TURN = 4;
+const MAX_REG_ROWS_PER_TURN = 16;
 
 /**
  * Read the per-state Registration headline + recent movement. First reader of
@@ -66,7 +74,9 @@ export async function getStateRegLedger(
   // A party can carry several `reg` rows in one turn: renormalize, drift
   // (including a negative drift row when its surplus is sourced by a climbing
   // rival), and decay are each written separately, in that order, within one
-  // batch insert. The sparkline wants one point per turn holding the running
+  // batch insert — plus registration-drive rows from the earlier GOTV phase,
+  // both its own gain and a negative row per rival drive that sourced its
+  // surplus. The sparkline wants one point per turn holding the running
   // total after the LAST of those writes, so over-fetch by the maximum rows a
   // turn can carry, keep the greatest _id per turn (ObjectIds in a batch are
   // generated in array order), and only then cut to the lookback window. The
