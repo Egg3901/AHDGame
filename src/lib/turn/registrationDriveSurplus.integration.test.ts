@@ -174,6 +174,80 @@ describe("processPartyGOTV — registration drive with an exhausted pool", () =>
     expect(regRows.some((r) => (r as { delta: number }).delta < 0)).toBe(true);
   });
 
+  it("does not let two rival drives spend the same donor's surplus twice", async () => {
+    // Two parties fund drives in the same state and the same turn, wanting
+    // 0.02 pp each, against a donor holding only 0.03 pp of surplus. Each
+    // budget is planned separately, so without reading the staged deltas the
+    // second drive would see the donor's ORIGINAL registration and both would
+    // be granted in full — minting 0.01 pp from nothing and pushing the donor
+    // below its own Org target.
+    const donor = data.statePartyOrg[1] as { registration: number; organization: number };
+    const originalReg = donor.registration;
+    donor.registration = 10.03; // org is 10, so exactly 0.03 pp of surplus
+    const second = {
+      _id: new ObjectId(),
+      partyId: "6",
+      countryId: "US",
+      scope: "national" as const,
+      gotvBudgetPerTurn: 0,
+      gotvBudgetPercent: 0,
+      suppressionBudgetPercent: 0,
+      orgBuildingPercent: 0,
+      registrationBudgetPercent: 10,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    data.statePartyOrg.push({
+      _id: "PA_6",
+      countryId: "US",
+      stateId: "PA",
+      partyId: "6",
+      organization: 20,
+      registration: 5,
+      treasury: 0,
+    });
+    (data.politicalParties as unknown[]).push({
+      _id: new ObjectId(),
+      sequentialId: 6,
+      countryId: "US",
+      name: "Second Buyer",
+      treasury: 1_000_000,
+      nationalTaxRate: 10,
+      economicPosition: 0,
+      socialPosition: 0,
+    });
+    const { getPartyBudgetCollection } = await import("@/lib/db/collections");
+    vi.mocked(getPartyBudgetCollection).mockResolvedValue({
+      find: () => ({ toArray: async () => [budget, second] }),
+    } as never);
+
+    try {
+      const { processPartyGOTV } = await import("@/lib/turn/demographicTurnoutTurn");
+      await processPartyGOTV(undefined, [], undefined, 1000, undefined, undefined, undefined, 42);
+
+      const regByRow = new Map<string, number>();
+      for (const op of bulkWrites["statePartyOrg"] ?? []) {
+        const inc = op.updateOne?.update.$inc as { registration?: number } | undefined;
+        if (inc?.registration !== undefined) {
+          regByRow.set(op.updateOne!.filter._id as string, inc.registration);
+        }
+      }
+
+      const gained = (regByRow.get("PA_1") ?? 0) + (regByRow.get("PA_6") ?? 0);
+      const given = -(regByRow.get("PA_2") ?? 0);
+
+      // Nothing is minted: what the buyers gain is exactly what the donor gives.
+      expect(gained).toBeCloseTo(given, 9);
+      // And the donor is capped at its surplus, never pushed below its target.
+      expect(given).toBeCloseTo(0.03, 9);
+      expect(donor.registration + (regByRow.get("PA_2") ?? 0)).toBeCloseTo(10, 9);
+    } finally {
+      donor.registration = originalReg;
+      (data.statePartyOrg as unknown[]).pop();
+      (data.politicalParties as unknown[]).pop();
+    }
+  });
+
   it("applies nothing and charges nothing when no rival holds surplus", async () => {
     const donor = data.statePartyOrg[1] as { registration: number };
     const originalReg = donor.registration;

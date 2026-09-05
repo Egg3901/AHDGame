@@ -288,6 +288,27 @@ describe("seedAdmittedStatePolitics — party roster drifted from the seed", () 
 
   const decision = { stateId: "AK", name: "Alaska", year: 1959, hazard: 0.2 };
 
+  it("creates the major-party org rows for the RESOLVED parties, not the hardcoded seq ids", async () => {
+    // `buildMajorPartyOrgsForState` hardcodes Republican = sequentialId 2. On
+    // the live world seq 2 is the Farmer-Labor Party and the Republicans are
+    // seq 6, so admission handed FLP the Republicans' starting organisation in
+    // both Alaska and Hawaii (live AK_2 org 53.49, HI_2 org 22.89, while the
+    // real Republican rows sat at 4.60 / 8.42 unseeded).
+    await seedAdmittedStatePolitics(
+      db as unknown as Db,
+      [decision],
+      new Date("2026-01-01"),
+      "1953-default"
+    );
+
+    const orgOps = db.collectionMocks.statePartyOrg!.bulkWrite.mock.calls[0]![0] as Array<{
+      updateOne: { filter: { _id: string } };
+    }>;
+    const ids = orgOps.map((op) => op.updateOne.filter._id).sort();
+    expect(ids).toEqual(["AK_1", "AK_6"]);
+    expect(ids).not.toContain("AK_2");
+  });
+
   it("still creates the registration pool row when a seed party cannot be matched by abbreviation", async () => {
     await seedAdmittedStatePolitics(
       db as unknown as Db,

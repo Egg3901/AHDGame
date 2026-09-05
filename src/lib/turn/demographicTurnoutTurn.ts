@@ -743,6 +743,12 @@ export async function processPartyGOTV(
             // Pool first, then the shortfall from parties above their own Org
             // target. Reads each row's staged delta so several drives in the
             // same turn cannot double-spend one donor's surplus.
+            //
+            // Org here is one phase stale: `partyOrgTurn` applies org decay
+            // between this phase and `regDriftDecay`. That decay only lowers
+            // Org, which lowers each donor's target and therefore RAISES its
+            // true surplus — so the staleness can only make this under-draw,
+            // never push a donor below its target.
             const stateViews = (
               statePartyRowsByCountryState.get(`${spo.countryId}:${spo.stateId}`) ?? [spo]
             ).map((row) => ({

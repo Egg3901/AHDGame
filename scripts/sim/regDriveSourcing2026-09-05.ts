@@ -185,6 +185,93 @@ function replay(
   return { turns: null, finalReg: buyer.registration ?? 0, target };
 }
 
+/**
+ * Worst-case party Reg erosion per country from the decay lapse alone (no
+ * drive), replaying each state with the lapse off and on. The lapse is a global
+ * constant, so a US-only report would understate the change's blast radius.
+ */
+async function reportCrossCountryLapse(): Promise<void> {
+  const raw = process.env.MONGODB_URI_LIVE;
+  if (!raw) return;
+  const client = new MongoClient(raw + (raw.includes("?") ? "&" : "?") + "directConnection=true", {
+    serverSelectionTimeoutMS: 20000,
+  });
+  await client.connect();
+  try {
+    const db = client.db();
+    const pools = await db
+      .collection<StateRegistrationPool>("stateRegistrationPool")
+      .find({})
+      .toArray();
+    const orgs = await db.collection<StatePartyOrg>("statePartyOrg").find({}).toArray();
+    const gs = await db.collection("gameState").findOne({ _id: "current" as never });
+    const biasBy =
+      (gs as { registrationAccessBiasByCountry?: Record<string, number> } | null)
+        ?.registrationAccessBiasByCountry ?? {};
+
+    const byCountry = new Map<string, StateRegistrationPool[]>();
+    for (const p of pools) {
+      const list = byCountry.get(p.countryId) ?? [];
+      list.push(p);
+      byCountry.set(p.countryId, list);
+    }
+
+    console.log("\nDecay lapse is global — worst party Reg erosion per country over 2000 turns:");
+    console.log("CC   states   worst drop   where");
+    for (const [cc, cPools] of [...byCountry].sort()) {
+      let worstDrop = 0;
+      let worstLabel = "";
+      for (const poolRow of cPools) {
+        const base = orgs.filter((o) => o.countryId === cc && o.stateId === poolRow.stateId);
+        if (base.length === 0) continue;
+        const run = (lapse: number) => {
+          const parties = base.map((p) => ({ ...p }));
+          const pool = { ...poolRow };
+          for (let t = 1; t <= 2000; t++) {
+            const planned = planStateRegDriftDecay({
+              countryId: cc as never,
+              stateId: poolRow.stateId,
+              parties,
+              pool,
+              turn: t,
+              now: new Date(),
+              registrationAccessBias: biasBy[cc.toUpperCase()] ?? 0,
+              decayLapseToPoolShare: lapse,
+            });
+            if (!planned) break;
+            for (const u of planned.partyUpdates) {
+              const r = parties.find((p) => p._id === u.rowId);
+              if (r) r.registration = u.newReg;
+            }
+            pool.independent = planned.poolUpdate.newIndependent;
+            pool.unregistered = planned.poolUpdate.newUnregistered;
+          }
+          return parties;
+        };
+        const a = run(0);
+        const b = run(0.5);
+        for (const p of base) {
+          const ra = a.find((x) => x._id === p._id)?.registration ?? 0;
+          const rb = b.find((x) => x._id === p._id)?.registration ?? 0;
+          if (ra - rb > worstDrop) {
+            worstDrop = ra - rb;
+            worstLabel = `${poolRow.stateId}/p${p.partyId} ${ra.toFixed(1)} -> ${rb.toFixed(1)}`;
+          }
+        }
+      }
+      console.log(
+        `${cc.padEnd(4)} ${String(cPools.length).padStart(6)}   ${worstDrop.toFixed(2).padStart(6)} pp   ${worstLabel}`
+      );
+    }
+    console.log(
+      "A sole dominant party is its own only eligible catcher, so one-party worlds " +
+        "(CN) are untouched; erosion needs a second organised party to redistribute to."
+    );
+  } finally {
+    await client.close();
+  }
+}
+
 function fmt(t: number | null): string {
   if (t === null) return `  >${HORIZON}`;
   return `${String(t).padStart(5)} (${(t / TURNS_PER_YEAR).toFixed(1)}y)`;
@@ -242,6 +329,11 @@ async function main(): Promise<void> {
     `Design target band for a stronghold shift is 150-300 turns ` +
       `(STRONGHOLD_FALL_TIME_TURNS_TARGET).`
   );
+
+  // The decay lapse is GLOBAL, so the report cannot stop at the US. Worst-case
+  // party erosion per country over 2000 turns (41.7 in-game years), measured by
+  // replaying every state with the lapse off and on.
+  await reportCrossCountryLapse();
 
   // Decay-split effect in isolation, on a representative state shape.
   console.log("\nDecay split, per state per turn (6 parties, US -50 rate 0.006):");

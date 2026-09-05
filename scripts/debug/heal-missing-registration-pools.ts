@@ -37,6 +37,16 @@
  * shares for parties whose row still sits at the untouched bootstrap default.
  * It never overwrites an existing pool row, and never lowers a party's Reg.
  *
+ * ⚠️ WHAT IT DELIBERATELY DOES NOT TOUCH — a second live consequence of the
+ * same root cause. `buildMajorPartyOrgsForState` hardcodes Republican =
+ * sequentialId 2, so admission also wrote the REPUBLICANS' starting
+ * organisation (25) onto whatever party holds seq 2 — the Farmer-Labor Party.
+ * Live: `AK_2` org 53.49 and `HI_2` org 22.89 (drifted up from the seeded 25),
+ * while the real Republican rows sat at 4.60 / 8.42. The code fix stops this
+ * happening again, but FLP has been playing on that organisation for in-game
+ * decades and rolling it back is a balance decision, not a repair. Raise it
+ * with the user before touching those two rows.
+ *
  * DRY RUN BY DEFAULT. Pass `--apply` to write, `--live` to target
  * MONGODB_URI_LIVE, `--shares` to also apply the skipped party shares.
  *

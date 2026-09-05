@@ -12,6 +12,26 @@ function cursor(rows: unknown[]) {
   };
 }
 
+/**
+ * Cursor that actually HONOURS `.limit()`, so the over-fetch sizing is under
+ * test rather than assumed. `cursor` above returns every row regardless, which
+ * makes the row-budget invisible.
+ */
+function limitedCursor(rows: unknown[]) {
+  let cap = rows.length;
+  const c = {
+    toArray: vi.fn(async () => rows.slice(0, cap)),
+    sort: vi.fn(() => c),
+    limit: vi.fn((n: number) => {
+      cap = n;
+      return c;
+    }),
+    skip: vi.fn(() => c),
+    project: vi.fn(() => c),
+  };
+  return c;
+}
+
 describe("getStateRegLedger", () => {
   let db: MockDb;
 
@@ -125,5 +145,42 @@ describe("getStateRegLedger", () => {
     expect(result.movement[0].turn).toBe(97);
     expect(result.movement[23].turn).toBe(120);
     expect(result.movement[23].regPct).toBeCloseTo(70, 9);
+  });
+
+  it("fills the lookback window when a party carries a donor row per rival drive", async () => {
+    // A party is not limited to renormalize + drift + decay + its own drive
+    // row: it also takes one NEGATIVE drive row for every rival whose
+    // registration drive sources its surplus. With six US parties funding
+    // drives that is 8 reg rows in a single turn, and an over-fetch budgeted
+    // for 4 silently returns half the requested window.
+    const ROWS_PER_TURN = 8;
+    coll("statePartyOrg").find.mockReturnValue(
+      cursor([{ _id: "GA_1", partyId: "1", organization: 13.5, registration: 70 }])
+    );
+    coll("politicalParties").find.mockReturnValue(cursor([]));
+    const rows: unknown[] = [];
+    const hex = (n: number) => n.toString(16).padStart(24, "0");
+    for (let turn = 120; turn >= 1; turn--) {
+      for (let i = ROWS_PER_TURN - 1; i >= 0; i--) {
+        rows.push({
+          _id: hex(turn * ROWS_PER_TURN + i),
+          turn,
+          partyId: "1",
+          metric: "reg",
+          value: 70 - 0.1 * (120 - turn),
+        });
+      }
+    }
+    coll("orgRegLedger").find.mockReturnValue(limitedCursor(rows));
+    const { getStateRegLedger } = await import("./getStateRegLedger");
+    const result = await getStateRegLedger(db as unknown as Db, {
+      countryId: "US",
+      stateId: "GA",
+      lookbackTurns: 24,
+    });
+
+    expect(result.movement).toHaveLength(24);
+    expect(result.movement[0].turn).toBe(97);
+    expect(result.movement[23].turn).toBe(120);
   });
 });
