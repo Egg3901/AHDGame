@@ -360,6 +360,35 @@ function openBrowser(url) {
   child.unref();
 }
 
+/**
+ * The port opens before the game is usable: on a fresh database the server
+ * seeds its reference data during the first request, which can take a
+ * while. "ready" means the singleplayer status route answers, nothing less,
+ * so a host that acts on the ready line never races that setup.
+ */
+async function waitForGame(base, deadlineMs) {
+  const started = Date.now();
+  let announced = false;
+  for (;;) {
+    try {
+      const res = await fetch(`${base}/api/singleplayer/status`, {
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.ok) return;
+    } catch {
+      // Not up yet.
+    }
+    if (Date.now() - started > deadlineMs) {
+      throw new Error(`the game did not answer within ${deadlineMs / 1000}s of its port opening`);
+    }
+    if (!announced) {
+      announced = true;
+      log("waiting for the game to finish first-run setup");
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+
 async function warmAssets(base) {
   try {
     const status = await (await fetch(`${base}/api/singleplayer/status`)).json();
@@ -415,6 +444,7 @@ try {
   app = startApp();
   await waitForPort(APP_PORT, "app", 120_000);
   const base = `http://127.0.0.1:${APP_PORT}`;
+  await waitForGame(base, 600_000);
   log(`ready at ${base}`);
   if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);
   void warmAssets(base);
