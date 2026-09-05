@@ -28,6 +28,24 @@ export interface LiveAttackRow {
   expiresTurn: number;
 }
 
+export interface AttackOption {
+  kind: PrimaryStateActionKind;
+  /** Button label. */
+  label: string;
+  /**
+   * One line saying what it does and what it costs, assembled server-side so no
+   * figure is typed into markup and the copy can be asserted without a browser.
+   */
+  description: string;
+  /** Already converted into the campaign's currency. */
+  costFunds: number;
+  costActions: number;
+  /** True for turnoutSuppression: the viewer must also name a demographic group. */
+  needsBucket: boolean;
+  /** Whether the target's Rapid Response blunts it, for an honest shield line. */
+  shielded: boolean;
+}
+
 export interface OpponentRow {
   candidateId: string;
   name: string;
@@ -81,10 +99,8 @@ export interface StateOperationsView {
    * row inside it cannot quote two different prices.
    */
   campaignFxRate: number;
-  /**
-   * What the local attack costs and does, so no figure is typed into markup.
-   * `costFunds` is already converted into the campaign's currency, matching
-   * `camp.surgeCostFunds`.
-   */
-  localAttack: { costFunds: number; costActions: number; perTurn: number; turns: number };
+  /** Every attack the viewer can buy, in the order the panel shows them. */
+  attacks: AttackOption[];
+  /** Drives the demographic chooser, which is country-specific. */
+  countryId: string;
 }

@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import {
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
   PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
+  PRIMARY_VOTE_SUPPRESSION_COST_FUNDS,
 } from "@/lib/electionEngine/constants";
 
 vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn() }));
@@ -132,10 +133,44 @@ describe("buildStateOperations", () => {
     expect(view?.opponents.map((o) => o.name)).toEqual(["Rival Filer"]);
   });
 
-  it("prices the local attack from the constants, not a literal", async () => {
+  it("offers all three attacks, in the order the panel shows them", async () => {
     const view = await build({ electionCandidates: ROSTER });
-    expect(view?.localAttack.costFunds).toBe(PRIMARY_LOCAL_ATTACK_COST_FUNDS);
-    expect(view?.localAttack.perTurn).toBe(PRIMARY_LOCAL_ATTACK_FAV_PER_TURN);
+    expect(view?.attacks.map((a) => a.kind)).toEqual([
+      "localFavorability",
+      "voteSuppression",
+      "turnoutSuppression",
+    ]);
+  });
+
+  it("prices each attack from the constants, not a literal", async () => {
+    const view = await build({ electionCandidates: ROSTER });
+    const local = view?.attacks.find((a) => a.kind === "localFavorability");
+    expect(local?.costFunds).toBe(PRIMARY_LOCAL_ATTACK_COST_FUNDS);
+    expect(local?.description).toContain(String(PRIMARY_LOCAL_ATTACK_FAV_PER_TURN));
+    expect(view?.attacks.find((a) => a.kind === "voteSuppression")?.costFunds).toBe(
+      PRIMARY_VOTE_SUPPRESSION_COST_FUNDS
+    );
+  });
+
+  it("marks the one attack that names a group", async () => {
+    const view = await build({ electionCandidates: ROSTER });
+    expect(view?.attacks.filter((a) => a.needsBucket).map((a) => a.kind)).toEqual([
+      "turnoutSuppression",
+    ]);
+  });
+
+  it("says which attacks Rapid Response covers", async () => {
+    // The shield line has to be honest: it blunts two of the three.
+    const view = await build({ electionCandidates: ROSTER });
+    expect(view?.attacks.filter((a) => a.shielded).map((a) => a.kind)).toEqual([
+      "localFavorability",
+      "voteSuppression",
+    ]);
+  });
+
+  it("names the country, so the group chooser offers the right vocabulary", async () => {
+    const view = await build({ electionCandidates: ROSTER });
+    expect(view?.countryId).toBe("US");
   });
 
   it("carries the war chest, which is the pool an attack is charged to", async () => {
@@ -153,7 +188,13 @@ describe("buildStateOperations", () => {
       electionCandidates: ROSTER,
       exchangeRates: [{ currencyCode: "USD", rate: 2 }],
     });
-    expect(view?.localAttack.costFunds).toBe(PRIMARY_LOCAL_ATTACK_COST_FUNDS * 2);
+    expect(view?.attacks.find((a) => a.kind === "localFavorability")?.costFunds).toBe(
+      PRIMARY_LOCAL_ATTACK_COST_FUNDS * 2
+    );
+    // The copy has to move with the price, or the panel quotes anchor units.
+    expect(view?.attacks.find((a) => a.kind === "voteSuppression")?.description).toContain(
+      (PRIMARY_VOTE_SUPPRESSION_COST_FUNDS * 2).toLocaleString("en-US")
+    );
     expect(view?.campaignFxRate).toBe(2);
   });
 

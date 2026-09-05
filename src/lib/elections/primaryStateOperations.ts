@@ -33,8 +33,15 @@ import {
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
   PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
   PRIMARY_STATE_ATTACK_DURATION_TURNS,
+  PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
+  PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS,
+  PRIMARY_TURNOUT_SUPPRESSION_POINTS,
+  PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS,
+  PRIMARY_VOTE_SUPPRESSION_COST_FUNDS,
+  PRIMARY_VOTE_SUPPRESSION_PCT,
 } from "@/lib/electionEngine/constants";
 import type {
+  AttackOption,
   LiveAttackRow,
   OpponentRow,
   StateOperationsView,
@@ -195,6 +202,49 @@ export async function buildStateOperations(
       ? getOpsBranchMagnitude("mediaSpending", "c", shieldTree.c)
       : 0;
 
+  // Prices in the campaign's own currency, and every figure in the copy read
+  // from the constants rather than typed into it.
+  const money = (anchor: number) => `$${Math.round(anchor * rate).toLocaleString("en-US")}`;
+  const attacks: AttackOption[] = [
+    {
+      kind: "localFavorability",
+      label: "Local attack",
+      description:
+        `Runs negative ads against them in one state: their favourability there falls ` +
+        `${PRIMARY_LOCAL_ATTACK_FAV_PER_TURN} a turn for ${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns. ` +
+        `Costs ${money(PRIMARY_LOCAL_ATTACK_COST_FUNDS)} and ${PRIMARY_LOCAL_ATTACK_COST_ACTIONS} actions.`,
+      costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate,
+      costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
+      needsBucket: false,
+      shielded: true,
+    },
+    {
+      kind: "voteSuppression",
+      label: "Suppress their vote",
+      description:
+        `Takes ${PRIMARY_VOTE_SUPPRESSION_PCT}% off their vote in one state for ` +
+        `${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns, on the board as well as on the night. ` +
+        `Costs ${money(PRIMARY_VOTE_SUPPRESSION_COST_FUNDS)} and ${PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS} actions.`,
+      costFunds: PRIMARY_VOTE_SUPPRESSION_COST_FUNDS * rate,
+      costActions: PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS,
+      needsBucket: false,
+      shielded: true,
+    },
+    {
+      kind: "turnoutSuppression",
+      label: "Suppress a group's turnout",
+      description:
+        `Takes ${PRIMARY_TURNOUT_SUPPRESSION_POINTS} points off one group's turnout in one state. ` +
+        `It lowers that group's turnout for everyone there, including you, so aim it at a group a ` +
+        `rival depends on. It fades slowly rather than expiring. ` +
+        `Costs ${money(PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS)} and ${PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS} actions.`,
+      costFunds: PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS * rate,
+      costActions: PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
+      needsBucket: true,
+      shielded: false,
+    },
+  ];
+
   return {
     electionId: election._id.toString(),
     currentTurn,
@@ -210,11 +260,7 @@ export async function buildStateOperations(
     shieldPct,
     campaignFunds: myCampaign?.funds ?? 0,
     campaignFxRate: rate,
-    localAttack: {
-      costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate,
-      costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
-      perTurn: PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
-      turns: PRIMARY_STATE_ATTACK_DURATION_TURNS,
-    },
+    countryId: election.countryId,
+    attacks,
   };
 }
