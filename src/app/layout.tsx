@@ -28,6 +28,7 @@ import { MassCrashAlertBanner } from "@/components/MassCrashAlertBanner";
 import { MaintenancePartialBanner } from "@/components/MaintenancePartialBanner";
 import { PollBannerNotice } from "@/components/PollBannerNotice";
 import { Analytics } from "@vercel/analytics/next";
+import { isSingleplayer } from "@/lib/singleplayer";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AdSlot } from "@/components/AdSlot";
 import { AdSenseSlot } from "@/components/AdSenseSlot";
@@ -245,6 +246,9 @@ export default async function RootLayout({
   // community screen can result in Google-served ads on a non-editorial page,
   // even when no manual AdSense component is mounted there.
   const renderGoogleCmp = shouldRenderGooglePrivacyMessaging(pathname, host) && !isNativeApp;
+  // Server component, so this is a plain call. Throws on a deployment
+  // that sets SINGLEPLAYER, by design: see @/lib/singleplayer.
+  const singleplayer = isSingleplayer();
   const renderConsentManagedGoogleTags = shouldRenderConsentManagedGoogleTags(pathname);
   const googleTagBootstrap = buildGoogleTagBootstrapScript(
     GA_MEASUREMENT_ID,
@@ -357,36 +361,44 @@ export default async function RootLayout({
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}
                           {!isNativeApp && <CookieConsentBanner />}
-                          {renderConsentManagedGoogleTags ? (
+                          {/* A singleplayer build runs on the player's machine with no
+                              account and nothing to measure. None of the telemetry or
+                              ad tags below have a job there, and the Vercel ones are
+                              dead even in production. */}
+                          {!singleplayer && (
                             <>
+                              {renderConsentManagedGoogleTags ? (
+                                <>
+                                  <Script
+                                    src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+                                    strategy="afterInteractive"
+                                  />
+                                  <Script
+                                    id="google-analytics"
+                                    strategy="afterInteractive"
+                                    dangerouslySetInnerHTML={{
+                                      __html: googleTagBootstrap,
+                                    }}
+                                  />
+                                  <Script
+                                    id="google-ads"
+                                    strategy="afterInteractive"
+                                    dangerouslySetInnerHTML={{
+                                      __html: `gtag('config', '${GOOGLE_ADS_ID}');`,
+                                    }}
+                                  />
+                                </>
+                              ) : null}
                               <Script
-                                src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+                                id="umami-analytics"
+                                src="https://analytics.ahousedividedgame.com/script.js"
+                                data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
                                 strategy="afterInteractive"
                               />
-                              <Script
-                                id="google-analytics"
-                                strategy="afterInteractive"
-                                dangerouslySetInnerHTML={{
-                                  __html: googleTagBootstrap,
-                                }}
-                              />
-                              <Script
-                                id="google-ads"
-                                strategy="afterInteractive"
-                                dangerouslySetInnerHTML={{
-                                  __html: `gtag('config', '${GOOGLE_ADS_ID}');`,
-                                }}
-                              />
+                              <Analytics />
+                              <SpeedInsights />
                             </>
-                          ) : null}
-                          <Script
-                            id="umami-analytics"
-                            src="https://analytics.ahousedividedgame.com/script.js"
-                            data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
-                            strategy="afterInteractive"
-                          />
-                          <Analytics />
-                          <SpeedInsights />
+                          )}
                         </CharacterStatsProvider>
                       </ToastProvider>
                     </FeedbackProvider>
