@@ -5,16 +5,29 @@ import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
 import { StatePickerModal } from "@/components/elections/primary/StatePickerModal";
+import {
+  DemographicPickerModal,
+  type DemographicPick,
+} from "@/components/elections/primary/DemographicPickerModal";
 import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import type { PrimaryStateActionKind } from "@/lib/db/types";
-import type { LiveAttackRow, StateOperationsView } from "@/lib/elections/dto/stateOperations";
+import type {
+  AttackOption,
+  LiveAttackRow,
+  StateOperationsView,
+} from "@/lib/elections/dto/stateOperations";
 
 export interface StateOperationsSectionProps {
   view: StateOperationsView;
   /** Which attack is in flight, as `${targetCandidateId}:${kind}`. */
   busy: string | null;
-  onAttack: (targetCandidateId: string, kind: PrimaryStateActionKind, stateId: string) => void;
+  onAttack: (
+    targetCandidateId: string,
+    kind: PrimaryStateActionKind,
+    stateId: string,
+    group?: { categoryKey: string; bucket: string }
+  ) => void;
   /** Refetch after anything here lands: the hub is built server-side. */
   onChanged: () => void;
   variant?: "desktop" | "mobile";
@@ -83,13 +96,14 @@ export function StateOperationsSection({
 }: StateOperationsSectionProps) {
   const mobile = variant === "mobile";
   const { camp, presence, canvass } = view.positives;
-  const { localAttack } = view;
-
   const [openOpponent, setOpenOpponent] = useState<string | null>(null);
   const [attackTarget, setAttackTarget] = useState<{
     candidateId: string;
-    kind: PrimaryStateActionKind;
+    attack: AttackOption;
   } | null>(null);
+  // Set once the state is chosen for an attack that also names a group, so the
+  // second chooser knows where it is acting.
+  const [pendingState, setPendingState] = useState<string | null>(null);
   const [presenceOpen, setPresenceOpen] = useState(false);
   const [presenceBusy, setPresenceBusy] = useState(false);
   const [presenceMessage, setPresenceMessage] = useState("");
@@ -129,20 +143,36 @@ export function StateOperationsSection({
 
   // Actions come out of the candidate; the money comes out of the campaign.
   // `camp.playerFunds` is the candidate's own balance and pays for the surge,
-  // not for this.
-  const canAffordAttack =
-    camp.playerActions >= localAttack.costActions && view.campaignFunds >= localAttack.costFunds;
-  const attackReason =
-    camp.playerActions < localAttack.costActions
-      ? `Needs ${localAttack.costActions} actions.`
-      : view.campaignFunds < localAttack.costFunds
-        ? `Needs ${money(localAttack.costFunds)} in the war chest.`
+  // not for these.
+  const canAfford = (attack: AttackOption) =>
+    camp.playerActions >= attack.costActions && view.campaignFunds >= attack.costFunds;
+  const reasonFor = (attack: AttackOption) =>
+    camp.playerActions < attack.costActions
+      ? `Needs ${attack.costActions} actions.`
+      : view.campaignFunds < attack.costFunds
+        ? `Needs ${money(attack.costFunds)} in the war chest.`
         : null;
 
-  const attackDescription =
-    `Runs negative ads against them in one state: their favourability there falls ` +
-    `${localAttack.perTurn} a turn for ${localAttack.turns} turns. ` +
-    `Costs ${money(localAttack.costFunds)} and ${localAttack.costActions} actions.`;
+  /** Fire, or ask for the group first when the attack names one. */
+  const chooseState = (stateId: string) => {
+    if (!attackTarget) return;
+    if (attackTarget.attack.needsBucket) {
+      setPendingState(stateId);
+      return;
+    }
+    onAttack(attackTarget.candidateId, attackTarget.attack.kind, stateId, undefined);
+    setAttackTarget(null);
+  };
+
+  const chooseGroup = (group: DemographicPick) => {
+    if (!attackTarget || !pendingState) return;
+    onAttack(attackTarget.candidateId, attackTarget.attack.kind, pendingState, {
+      categoryKey: group.categoryKey,
+      bucket: group.bucket,
+    });
+    setAttackTarget(null);
+    setPendingState(null);
+  };
 
   return (
     <section
@@ -253,7 +283,7 @@ export function StateOperationsSection({
         ) : (
           view.opponents.map((o) => {
             const open = openOpponent === o.candidateId;
-            const pending = busy === `${o.candidateId}:localFavorability`;
+            const pendingKind = (kind: string) => busy === `${o.candidateId}:${kind}`;
             return (
               <div key={o.candidateId}>
                 <button
@@ -310,45 +340,53 @@ export function StateOperationsSection({
 
                 {open ? (
                   <div style={{ padding: "12px 0 16px" }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
-                      <button
-                        type="button"
-                        disabled={!canAffordAttack || pending}
-                        onClick={() =>
-                          setAttackTarget({
-                            candidateId: o.candidateId,
-                            kind: "localFavorability",
-                          })
-                        }
-                        style={{
-                          border: `1px solid ${canAffordAttack ? BLEND.negative : BLEND.hairlineStrong}`,
-                          background: "transparent",
-                          padding: "7px 13px",
-                          fontFamily: FONT.mono,
-                          fontSize: 10.5,
-                          letterSpacing: ".08em",
-                          fontWeight: 700,
-                          textTransform: "uppercase",
-                          color: canAffordAttack ? BLEND.negative : BLEND.mutedDim,
-                          cursor: canAffordAttack && !pending ? "pointer" : "not-allowed",
-                        }}
-                      >
-                        {pending ? "Working" : "Local attack"}
-                      </button>
-                      {attackReason ? (
-                        <span
-                          style={{
-                            alignSelf: "center",
-                            fontFamily: FONT.mono,
-                            fontSize: 10.5,
-                            color: BLEND.mutedDim,
-                          }}
-                        >
-                          {attackReason}
-                        </span>
-                      ) : null}
-                    </div>
-                    <Note>{attackDescription}</Note>
+                    {/* Buttons wrap rather than sitting in a fixed grid, so
+                        three of them stack cleanly on a narrow phone. */}
+                    {view.attacks.map((attack) => {
+                      const affordable = canAfford(attack);
+                      const pending = pendingKind(attack.kind);
+                      const reason = reasonFor(attack);
+                      return (
+                        <div key={attack.kind} style={{ marginBottom: 14 }}>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+                            <button
+                              type="button"
+                              disabled={!affordable || pending}
+                              onClick={() =>
+                                setAttackTarget({ candidateId: o.candidateId, attack })
+                              }
+                              style={{
+                                border: `1px solid ${affordable ? BLEND.negative : BLEND.hairlineStrong}`,
+                                background: "transparent",
+                                padding: "7px 13px",
+                                fontFamily: FONT.mono,
+                                fontSize: 10.5,
+                                letterSpacing: ".08em",
+                                fontWeight: 700,
+                                textTransform: "uppercase",
+                                color: affordable ? BLEND.negative : BLEND.mutedDim,
+                                cursor: affordable && !pending ? "pointer" : "not-allowed",
+                              }}
+                            >
+                              {pending ? "Working" : attack.label}
+                            </button>
+                            {reason ? (
+                              <span
+                                style={{
+                                  alignSelf: "center",
+                                  fontFamily: FONT.mono,
+                                  fontSize: 10.5,
+                                  color: BLEND.mutedDim,
+                                }}
+                              >
+                                {reason}
+                              </span>
+                            ) : null}
+                          </div>
+                          <Note>{attack.description}</Note>
+                        </div>
+                      );
+                    })}
                     {o.liveAgainstThem.length > 0 ? (
                       <div style={{ marginTop: 10 }}>
                         <Eyebrow>Live against them</Eyebrow>
@@ -397,8 +435,9 @@ export function StateOperationsSection({
         )}
         {view.shieldPct > 0 ? (
           <Note>
-            Rapid Response is blunting {Math.round(view.shieldPct * 100)}% of every hit that lands
-            on you.
+            Rapid Response is blunting {Math.round(view.shieldPct * 100)}% of incoming ads and vote
+            suppression. It does not cover turnout suppression, which acts on the electorate rather
+            than on you.
           </Note>
         ) : null}
       </div>
@@ -421,21 +460,32 @@ export function StateOperationsSection({
         />
       ) : null}
 
-      {attackTarget ? (
+      {attackTarget && !pendingState ? (
         <StatePickerModal
           title="Pick a state to attack in"
           states={camp.states}
           currentStateId={null}
           playerActions={camp.playerActions}
           busy={busy !== null}
-          footnote={attackDescription}
-          trailingFor={() => `${localAttack.costActions} actions`}
-          unaffordable={() => !canAffordAttack}
-          onPick={(stateId) => {
-            onAttack(attackTarget.candidateId, attackTarget.kind, stateId);
-            setAttackTarget(null);
-          }}
+          footnote={attackTarget.attack.description}
+          trailingFor={() => `${attackTarget.attack.costActions} actions`}
+          unaffordable={() => !canAfford(attackTarget.attack)}
+          onPick={chooseState}
           onClose={() => setAttackTarget(null)}
+        />
+      ) : null}
+
+      {attackTarget && pendingState ? (
+        <DemographicPickerModal
+          title="Pick a group to target"
+          countryId={view.countryId}
+          footnote="Their turnout falls in that state for everyone, including you. Aim it at a group a rival depends on."
+          busy={busy !== null}
+          onPick={chooseGroup}
+          onClose={() => {
+            setAttackTarget(null);
+            setPendingState(null);
+          }}
         />
       ) : null}
     </section>

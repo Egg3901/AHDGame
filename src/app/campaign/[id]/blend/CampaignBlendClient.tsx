@@ -156,12 +156,13 @@ export function CampaignBlendClient({
   const handleAttack = async (
     targetCandidateId: string,
     kind: PrimaryStateActionKind,
-    stateId: string
+    stateId: string,
+    group?: { categoryKey: string; bucket: string }
   ) => {
     const ok = await post(
       `${targetCandidateId}:${kind}`,
       `/api/elections/${campaign.electionId}/state-attack`,
-      { targetCandidateId, kind, stateId }
+      { targetCandidateId, kind, stateId, ...(group ?? {}) }
     );
     if (ok) setReloadOps((n) => n + 1);
   };

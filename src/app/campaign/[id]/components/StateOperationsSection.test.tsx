@@ -43,7 +43,39 @@ function view(over: Partial<StateOperationsView> = {}): StateOperationsView {
     shieldPct: 0,
     campaignFunds: 1_200_000,
     campaignFxRate: 1,
-    localAttack: { costFunds: 40_000, costActions: 4, perTurn: 0.4, turns: 8 },
+    countryId: "US",
+    attacks: [
+      {
+        kind: "localFavorability",
+        label: "Local attack",
+        description:
+          "Their favourability there falls 0.4 a turn for 8 turns. Costs $40,000 and 4 actions.",
+        costFunds: 40_000,
+        costActions: 4,
+        needsBucket: false,
+        shielded: true,
+      },
+      {
+        kind: "voteSuppression",
+        label: "Suppress their vote",
+        description:
+          "Takes 2.5% off their vote in one state for 8 turns. Costs $70,000 and 5 actions.",
+        costFunds: 70_000,
+        costActions: 5,
+        needsBucket: false,
+        shielded: true,
+      },
+      {
+        kind: "turnoutSuppression",
+        label: "Suppress a group's turnout",
+        description:
+          "Takes 1.5 points off one group's turnout in one state. Costs $50,000 and 4 actions.",
+        costFunds: 50_000,
+        costActions: 4,
+        needsBucket: true,
+        shielded: false,
+      },
+    ],
     ...over,
   };
 }
@@ -81,24 +113,22 @@ describe("StateOperationsSection", () => {
     expect(row.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("says what the attack does and what it costs", () => {
+  it("shows all three attacks when a rival is opened", () => {
     renderSection();
     fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
-    const copy = screen.getByText(/0\.4 a turn/);
-    expect(copy.textContent).toContain("$40,000");
-    expect(copy.textContent).toContain("8 turns");
+    expect(screen.getByRole("button", { name: /Local attack/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Suppress their vote/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Suppress a group's turnout/ })).toBeTruthy();
   });
 
-  it("takes every figure from the view, so no price is typed into the markup", () => {
-    // The home-state surge sat inert for months because a route and an engine
-    // each held their own copy of one number.
-    renderSection({
-      localAttack: { costFunds: 12_345, costActions: 2, perTurn: 1.5, turns: 3 },
-    });
+  it("prints each attack's own description, verbatim from the view", () => {
+    // The copy is assembled server-side from the constants. A panel that built
+    // its own sentence would be a second source for every figure in it.
+    renderSection();
     fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
-    const copy = screen.getByText(/1\.5 a turn/);
-    expect(copy.textContent).toContain("$12,345");
-    expect(copy.textContent).toContain("3 turns");
+    for (const attack of view().attacks) {
+      expect(screen.getByText(attack.description)).toBeTruthy();
+    }
   });
 
   it("asks which state before attacking, since an attack names one", () => {
@@ -114,7 +144,38 @@ describe("StateOperationsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
     fireEvent.click(screen.getByRole("button", { name: /Local attack/ }));
     fireEvent.click(screen.getByRole("button", { name: /Iowa/ }));
-    expect(onAttack).toHaveBeenCalledWith("r1", "localFavorability", "IA");
+    expect(onAttack).toHaveBeenCalledWith("r1", "localFavorability", "IA", undefined);
+  });
+
+  it("does not ask for a group when the attack does not name one", () => {
+    const { onAttack } = renderSection();
+    fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Suppress their vote/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Iowa/ }));
+    expect(onAttack).toHaveBeenCalledWith("r1", "voteSuppression", "IA", undefined);
+  });
+
+  it("asks for a group as well as a state when the attack names one", () => {
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Suppress a group's turnout/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Iowa/ }));
+    // The state is chosen; now the group, from the canvassing vocabulary.
+    expect(screen.getByText("Pick a group to target")).toBeTruthy();
+  });
+
+  it("passes the group back with the attack", () => {
+    const { onAttack } = renderSection();
+    fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Suppress a group's turnout/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Iowa/ }));
+    fireEvent.click(screen.getAllByTestId("demographic-group-option")[0]);
+    expect(onAttack).toHaveBeenCalledWith(
+      "r1",
+      "turnoutSuppression",
+      "IA",
+      expect.objectContaining({ categoryKey: expect.any(String), bucket: expect.any(String) })
+    );
   });
 
   it("names who is attacking you, so a hit can be traced", () => {
@@ -151,7 +212,12 @@ describe("StateOperationsSection", () => {
 
   it("says how much of an incoming hit Rapid Response is absorbing", () => {
     renderSection({ shieldPct: 0.25 });
-    expect(screen.getByText(/25% of every hit/)).toBeTruthy();
+    expect(screen.getByText(/25% of incoming ads and vote/)).toBeTruthy();
+  });
+
+  it("says what the shield does not cover, since it blunts two of the three", () => {
+    renderSection({ shieldPct: 0.25 });
+    expect(screen.getByText(/does not cover turnout suppression/i)).toBeTruthy();
   });
 
   it("disables an attack the campaign cannot pay for, and says why", () => {
@@ -161,7 +227,22 @@ describe("StateOperationsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
     const btn = screen.getByRole("button", { name: /Local attack/ }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
-    expect(screen.getByText(/Needs 4 actions/)).toBeTruthy();
+    expect(screen.getAllByText(/Needs 4 actions/).length).toBeGreaterThan(0);
+  });
+
+  it("gates each attack on its own price, not on the cheapest", () => {
+    // 4 actions buys the local attack and the turnout one; vote suppression
+    // costs 5 and must stay closed.
+    renderSection({
+      positives: { ...view().positives, camp: { ...view().positives.camp, playerActions: 4 } },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Rival Filer/ }));
+    expect(
+      (screen.getByRole("button", { name: /Local attack/ }) as HTMLButtonElement).disabled
+    ).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: /Suppress their vote/ }) as HTMLButtonElement).disabled
+    ).toBe(true);
   });
 
   it("disables an attack the war chest cannot pay for, and says why", () => {
