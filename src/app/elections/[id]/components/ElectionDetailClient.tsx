@@ -347,9 +347,13 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
           onRefresh={fetchElection}
         />
 
+        {/* Everything the hero above does not already say. The college bar, the
+            per-ticket tally and the deadline strip all appear up there, so the
+            blocks below are asked to leave them out rather than print the same
+            standing twice on one page. */}
         <BlendScope
           title="Also on this race"
-          lede="The full map, the schedule, and your campaign operations."
+          lede="The full map, the trends, and your campaign operations."
         >
           <ElectionHeader
             election={election}
@@ -371,6 +375,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             localIsEnded={localIsEnded}
             amInRace={amInRace}
             onSuccess={fetchElection}
+            showCollegeSummary={false}
           />
 
           <ElectionScheduleCard
@@ -378,6 +383,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             localIsUpcoming={localIsUpcoming}
             localInPrimary={localInPrimary}
             localIsEnded={localIsEnded}
+            showStatusStrip={false}
           />
 
           <AdminSection

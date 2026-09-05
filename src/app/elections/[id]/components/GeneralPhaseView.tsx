@@ -82,6 +82,11 @@ interface GeneralPhaseViewProps {
   localIsEnded: boolean;
   amInRace: boolean;
   onSuccess: () => void;
+  /**
+   * Whether this view states the college standing and the per-ticket numbers
+   * itself. False when a caller has already put both above it.
+   */
+  showCollegeSummary?: boolean;
 }
 
 export function GeneralPhaseView({
@@ -90,6 +95,7 @@ export function GeneralPhaseView({
   localInPrimary,
   localIsEnded,
   amInRace,
+  showCollegeSummary = true,
   onSuccess,
 }: GeneralPhaseViewProps) {
   const resolveCountryName = useCountryDisplayName();
@@ -251,20 +257,24 @@ export function GeneralPhaseView({
           localIsEnded={localIsEnded}
         />
 
-        <div>
-          <h2 className="text-lg font-semibold">
-            {localIsEnded
-              ? "Final Election Results"
-              : isProjectedGeneral
-                ? "General Election — Live Projection"
-                : "General Election — Live Tally"}
-          </h2>
-          <p className="text-xs text-muted mt-0.5">
-            {isProjectedGeneral
-              ? "Seats projected by demographic reach and regional support each turn."
-              : "Votes allocated by demographic reach each turn. Final 4 turns = 25%; earlier turns = 75%."}
-          </p>
-        </div>
+        {/* Names the tally table it introduces, so it is dropped alongside it
+            rather than left heading a section with no tally under it. */}
+        {showCollegeSummary && (
+          <div>
+            <h2 className="text-lg font-semibold">
+              {localIsEnded
+                ? "Final Election Results"
+                : isProjectedGeneral
+                  ? "General Election — Live Projection"
+                  : "General Election — Live Tally"}
+            </h2>
+            <p className="text-xs text-muted mt-0.5">
+              {isProjectedGeneral
+                ? "Seats projected by demographic reach and regional support each turn."
+                : "Votes allocated by demographic reach each turn. Final 4 turns = 25%; earlier turns = 75%."}
+            </p>
+          </div>
+        )}
 
         {/* Phase 5b shell — battleground tiers + Reg / Persuasion side panels.
             Mounted alongside the existing PresidentialMapWithStateDetail per
@@ -366,6 +376,7 @@ export function GeneralPhaseView({
             clockRows={blendClockRows}
             electorate={blendElectorate}
             partyDisplayById={election.partyDisplayById}
+            showCollegeSummary={showCollegeSummary}
           />
         ) : (
           <GeneralElectionNoTallyPanel

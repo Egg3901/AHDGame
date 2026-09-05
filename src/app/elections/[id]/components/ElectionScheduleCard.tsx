@@ -11,6 +11,16 @@ interface ElectionScheduleCardProps {
   localIsUpcoming: boolean;
   localInPrimary: boolean;
   localIsEnded: boolean;
+  /**
+   * Whether to draw the deadline strip.
+   *
+   * False where the page already counts the race down above — the Blend
+   * screens carry the turns remaining in their masthead, so the strip restated
+   * it in a box of its own. The full timeline behind the disclosure is not a
+   * countdown and stays either way: it is the only place absolute dates for
+   * every phase are listed.
+   */
+  showStatusStrip?: boolean;
 }
 
 /**
@@ -24,13 +34,14 @@ export function ElectionScheduleCard({
   localIsUpcoming,
   localInPrimary,
   localIsEnded,
+  showStatusStrip = true,
 }: ElectionScheduleCardProps) {
   if (!election.endTime && !election.primaryEndTime) return null;
   const phaseStatus = buildElectionPhaseStatusSummary(election);
 
   return (
     <div className="mb-6">
-      <ElectionPhaseStatusStrip phaseStatus={phaseStatus} />
+      {showStatusStrip && <ElectionPhaseStatusStrip phaseStatus={phaseStatus} />}
 
       <details className="group mt-2">
         <summary className="cursor-pointer list-none text-[11px] font-medium text-muted hover:text-foreground">
