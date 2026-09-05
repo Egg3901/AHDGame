@@ -87,6 +87,12 @@ interface GeneralPhaseViewProps {
    * itself. False when a caller has already put both above it.
    */
   showCollegeSummary?: boolean;
+  /**
+   * Whether to draw the electoral map. False where a caller has folded it into
+   * a tabbed maps section of its own, so the page does not draw the United
+   * States twice.
+   */
+  showElectoralMap?: boolean;
 }
 
 export function GeneralPhaseView({
@@ -96,6 +102,7 @@ export function GeneralPhaseView({
   localIsEnded,
   amInRace,
   showCollegeSummary = true,
+  showElectoralMap = true,
   onSuccess,
 }: GeneralPhaseViewProps) {
   const resolveCountryName = useCountryDisplayName();
@@ -216,7 +223,7 @@ export function GeneralPhaseView({
           at a glance, and it used to sit below the mood gauge, the factor
           ledger and the battleground shell: three analysis cards that only
           make sense once you have seen the map they decompose. */}
-      {isUS && election.electionType === "president" && !localInPrimary && (
+      {showElectoralMap && isUS && election.electionType === "president" && !localInPrimary && (
         <PresidentialMapWithStateDetail
           electionId={electionId}
           electoralMapData={election.generalVotes?.electoralMapData ?? {}}

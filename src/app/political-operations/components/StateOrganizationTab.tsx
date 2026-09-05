@@ -90,9 +90,15 @@ function generalBonusPct(level: number): number {
 
 export function StateOrganizationTab({
   showHubLink = false,
+  showHeading = true,
 }: {
   /** When true, link out to the dedicated Political Operations hub. */
   showHubLink?: boolean;
+  /**
+   * Whether to print the "Campaign Presence" heading. False where a tab above
+   * already names this pane, so the section is not titled twice.
+   */
+  showHeading?: boolean;
 } = {}) {
   const [rows, setRows] = useState<StateOrgRow[]>([]);
   const [homeState, setHomeState] = useState<string | null>(null);
@@ -234,7 +240,7 @@ export function StateOrganizationTab({
     <div>
       <div className="mb-4 rounded-lg border border-card-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-medium">Campaign Presence</h3>
+          {showHeading ? <h3 className="font-medium">Campaign Presence</h3> : <span />}
           {showHubLink && (
             <Link
               href="/political-operations"

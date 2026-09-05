@@ -19,6 +19,7 @@ import { CampaignsListPanel } from "./CampaignsListPanel";
 import { CampaignManagerTab } from "./CampaignManagerTab";
 import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
+import { RaceMapsSection } from "./RaceMapsSection";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
@@ -368,6 +369,11 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onWithdraw={handleWithdraw}
           />
 
+          {/* Both full maps of this race, behind one tab. Drawn here rather
+              than inside the phase view because the electoral map has to lead
+              the analysis cards that decompose it. */}
+          {election.countryId === "US" && <RaceMapsSection election={election} electionId={id} />}
+
           <GeneralPhaseView
             election={election}
             electionId={id}
@@ -376,6 +382,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             amInRace={amInRace}
             onSuccess={fetchElection}
             showCollegeSummary={false}
+            showElectoralMap={false}
           />
 
           <ElectionScheduleCard
@@ -397,12 +404,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onToggleAdmin={() => setAdminOpen((o) => !o)}
             onSuccess={fetchElection}
           />
-
-          {election.countryId === "US" && !!election.myCharId && (
-            <section id="state-org" className="mt-6 scroll-mt-6">
-              <StateOrganizationTab showHubLink />
-            </section>
-          )}
 
           {election.countryId === "US" && (
             <>
