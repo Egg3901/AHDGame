@@ -47,6 +47,7 @@ import {
 } from "@/lib/elections/presidentialRuleset";
 import { initPresidentVoteTally } from "@/lib/presidentialElectionEngine";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
+import { loadLiveStateActions } from "@/lib/elections/primaryStateActions";
 import { distributeVotesByGroupLevelAllocation } from "@/lib/electionEngine/voteDistribution";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
@@ -60,6 +61,7 @@ import {
 import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
   homeStateSurgeMultiplier,
+  stateAttackMultiplier,
   PRIMARY_MOMENTUM_WIN_BONUS,
   PRIMARY_MOMENTUM_UPSET_BONUS,
   NPP_STAGGER_EXTRA_MULTIPLIER,
@@ -344,6 +346,14 @@ export async function runPrimaryStaggerWaveIfDue(
   const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
   const turnoutMap = new Map(turnoutDocs.map((t) => [t._id as string, t]));
 
+  // Live state actions for this race, read once for the wave rather than per
+  // state. Only `voteSuppression` rows are read below; `localFavorability` is
+  // applied by campaignTurn against favourability, not here.
+  const liveStateActions = await loadLiveStateActions(db, {
+    electionId: election._id,
+    currentTurn,
+  });
+
   // Seeded snapshots for the granular substrate's legislation lean-drift fold.
   // Only fetched when the flag is on so the legacy path pays no extra read.
   const demographicDefaultsByState = granularElectorateEnabled
@@ -492,6 +502,12 @@ export async function runPrimaryStaggerWaveIfDue(
       partyCandidates.some((c) => c.candidateId === m.candidateId)
     );
     const { stateWinners, byState } = projectPrimaryByState({
+      // Suppression is applied to the EXPECTED share as well as to the result.
+      // Without this the target would be punished twice: fewer votes on the
+      // night, and a momentum penalty for "missing" an expectation that never
+      // accounted for the attack. One purchase, one effect.
+      stateActions: liveStateActions,
+      currentTurn,
       candidates: partyCandidates,
       candidateMeta: metaForParty,
       stateIds: waveStates,
@@ -743,6 +759,24 @@ export async function runPrimaryStaggerWaveIfDue(
           surgeBoostPct: rawCandidate?.primarySurgeBoost,
           homeState: homeStateByCandidate.get(ec.candidateId),
           stateId,
+        });
+        if (multiplier === 1) continue;
+        votesPerCandidate[ec.candidateId] = Math.round(
+          (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
+        );
+      }
+
+      // Vote suppression: rivals paying to remove a slice of this candidate's
+      // vote in this state. Same multiplicative shape as the surge above, and
+      // the same helper the projection runs, so the board and the wave cannot
+      // disagree. Exactly 1 for anyone not under attack, so this block is a
+      // strict no-op for every race with no live rows.
+      for (const ec of partyCandidates) {
+        const multiplier = stateAttackMultiplier({
+          actions: liveStateActions,
+          candidateId: ec.candidateId,
+          stateId,
+          currentTurn,
         });
         if (multiplier === 1) continue;
         votesPerCandidate[ec.candidateId] = Math.round(
