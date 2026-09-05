@@ -167,12 +167,25 @@ describe("POST /api/elections/[id]/state-attack", () => {
     expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
   });
 
-  it("rejects a phase-2 kind nothing reads yet", async () => {
-    // Accepting `voteSuppression` before the engine reads it would charge a
-    // player for nothing, exactly as the home-state surge did for months.
+  it("opens a vote-suppression attack and charges its own price", async () => {
     const res = await callRoute(body({ kind: "voteSuppression" }));
-    expect(res.status).toBe(400);
-    expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
+    const inserted = db.collectionMocks.primaryStateActions!.insertOne.mock.calls[0][0];
+    expect(inserted.kind).toBe("voteSuppression");
+    expect(inserted.magnitude).toBe(2.5);
+    const [, update] = db.collectionMocks.campaigns!.updateOne.mock.calls[0];
+    expect(update.$inc.funds).toBe(-70_000);
+  });
+
+  it("lets the kinds run at once on the same rival in the same state", async () => {
+    // The duplicate query is scoped to the kind, so three different weapons may
+    // run together; a second of the SAME kind is refused.
+    db.collection("primaryStateActions").findOne.mockImplementation(
+      async (filter: Record<string, unknown>) =>
+        filter.kind === "localFavorability" ? { _id: new ObjectId() } : null
+    );
+    expect((await callRoute(body({ kind: "voteSuppression" }))).status).toBe(200);
+    expect((await callRoute(body({ kind: "localFavorability" }))).status).toBe(409);
   });
 
   it("rejects a code that is not a US electoral unit", async () => {

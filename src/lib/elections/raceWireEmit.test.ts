@@ -155,7 +155,7 @@ describe("state calls", () => {
 
 describe("emitStateAttackWire", () => {
   it("attributes the attack to both candidates and the state, scoped to the race", async () => {
-    await emitStateAttackWire(ELECTION_ID, "Stevenson", "Kefauver", "Iowa");
+    await emitStateAttackWire(ELECTION_ID, "localFavorability", "Stevenson", "Kefauver", "Iowa");
     const [type, headline, opts] = vi.mocked(logWireEvent).mock.calls[0];
     expect(type).toBe("campaign_state_attack");
     expect(headline).toContain("STEVENSON");
@@ -165,15 +165,37 @@ describe("emitStateAttackWire", () => {
   });
 
   it("stays silent when either name is missing", async () => {
-    await emitStateAttackWire(ELECTION_ID, "", "Kefauver", "Iowa");
-    await emitStateAttackWire(ELECTION_ID, "Stevenson", "", "Iowa");
+    await emitStateAttackWire(ELECTION_ID, "localFavorability", "", "Kefauver", "Iowa");
+    await emitStateAttackWire(ELECTION_ID, "localFavorability", "Stevenson", "", "Iowa");
     expect(logWireEvent).not.toHaveBeenCalled();
   });
 
   it("never throws when the wire is down", async () => {
     vi.mocked(logWireEvent).mockRejectedValueOnce(new Error("wire is down"));
     await expect(
-      emitStateAttackWire(ELECTION_ID, "Stevenson", "Kefauver", "Iowa")
+      emitStateAttackWire(ELECTION_ID, "localFavorability", "Stevenson", "Kefauver", "Iowa")
     ).resolves.toBeUndefined();
+  });
+});
+
+describe("emitStateAttackWire, per kind", () => {
+  it("carries the group through for a turnout attack", async () => {
+    await emitStateAttackWire(
+      ELECTION_ID,
+      "turnoutSuppression",
+      "Stevenson",
+      "Kefauver",
+      "Iowa",
+      "union households"
+    );
+    const [, headline] = vi.mocked(logWireEvent).mock.calls[0];
+    expect(headline).toContain("UNION HOUSEHOLDS");
+  });
+
+  it("reads as a count operation for vote suppression", async () => {
+    await emitStateAttackWire(ELECTION_ID, "voteSuppression", "Stevenson", "Kefauver", "Iowa");
+    const [, headline] = vi.mocked(logWireEvent).mock.calls[0];
+    expect(headline).toContain("STEVENSON");
+    expect(headline).toContain("IOWA");
   });
 });

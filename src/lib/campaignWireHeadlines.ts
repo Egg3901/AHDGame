@@ -10,6 +10,8 @@
  * race wire can grow separately.
  */
 
+import type { PrimaryStateActionKind } from "@/lib/db/types";
+
 /** Pick a random element from an array. */
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
@@ -110,18 +112,53 @@ export function wireHeadlineFavorabilitySwing(candidate: string, swingPp: number
     : pick(FAVORABILITY_UP_TEMPLATES)(candidate, v);
 }
 
-// ── Local attacks ───────────────────────────────────────────────────────────
+// ── State attacks ───────────────────────────────────────────────────────────
 
-// Attribution is deliberate. An attack nobody can trace back to its buyer
-// reads as a bug in the favourability numbers rather than as a rival's move,
-// so every template names both candidates and the state.
-const STATE_ATTACK_TEMPLATES = [
+// Attribution is deliberate for all three kinds. An attack nobody can trace
+// back to its buyer reads as a bug in the numbers rather than as a rival's
+// move, so every template names both candidates and the state.
+const LOCAL_FAVOURABILITY_TEMPLATES = [
   (a: string, t: string, s: string) => `${up(a)} OPENS FIRE ON ${up(t)} IN ${up(s)}`,
   (a: string, t: string, s: string) => `${up(a)} GOES NEGATIVE ON ${up(t)} ACROSS ${up(s)}`,
   (a: string, t: string, s: string) => `${up(s)} AIRWAVES TURN: ${up(a)} HITS ${up(t)}`,
   (a: string, t: string, s: string) => `${up(a)} TAKES THE FIGHT TO ${up(t)} IN ${up(s)}`,
 ];
 
-export function wireHeadlineStateAttack(actor: string, target: string, stateName: string): string {
-  return pick(STATE_ATTACK_TEMPLATES)(actor, target, stateName);
+const VOTE_SUPPRESSION_TEMPLATES = [
+  (a: string, t: string, s: string) => `${up(a)} MOVES TO SHAVE ${up(t)}'S COUNT IN ${up(s)}`,
+  (a: string, t: string, s: string) => `${up(s)} OPERATION AIMS TO HOLD ${up(t)} DOWN FOR ${up(a)}`,
+  (a: string, t: string, s: string) => `${up(a)} WORKS TO CUT ${up(t)}'S ${up(s)} MARGIN`,
+];
+
+// The turnout set names the group as well. That attack lowers one group's
+// turnout for everyone in the state rather than hitting one candidate, so a
+// headline that hid which group would leave it untraceable.
+const TURNOUT_SUPPRESSION_TEMPLATES = [
+  (a: string, t: string, s: string, g: string) =>
+    `${up(a)} MOVES ON ${up(g)} IN ${up(s)}, WITH ${up(t)} IN THE FRAME`,
+  (a: string, t: string, s: string, g: string) =>
+    `${up(s)} ${up(g)} TURNOUT TARGETED BY ${up(a)} AGAINST ${up(t)}`,
+  (a: string, t: string, s: string, g: string) =>
+    `${up(a)} LEANS ON ${up(g)} TURNOUT IN ${up(s)} TO BLUNT ${up(t)}`,
+];
+
+export function wireHeadlineStateAttack(
+  kind: PrimaryStateActionKind,
+  actor: string,
+  target: string,
+  stateName: string,
+  bucketLabel?: string
+): string {
+  if (kind === "voteSuppression") {
+    return pick(VOTE_SUPPRESSION_TEMPLATES)(actor, target, stateName);
+  }
+  if (kind === "turnoutSuppression") {
+    return pick(TURNOUT_SUPPRESSION_TEMPLATES)(
+      actor,
+      target,
+      stateName,
+      bucketLabel ?? "that vote"
+    );
+  }
+  return pick(LOCAL_FAVOURABILITY_TEMPLATES)(actor, target, stateName);
 }

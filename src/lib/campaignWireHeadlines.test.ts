@@ -133,23 +133,53 @@ describe("wireHeadlineFavorabilitySwing", () => {
 });
 
 describe("wireHeadlineStateAttack", () => {
-  it("names the attacker, the target and the state every time", () => {
+  const KINDS = ["localFavorability", "voteSuppression", "turnoutSuppression"] as const;
+
+  it("names the attacker, the target and the state for every kind", () => {
     // An attack nobody can trace back to its buyer reads as a bug in the
-    // favourability numbers rather than as a rival's move.
+    // numbers rather than as a rival's move.
+    for (const kind of KINDS) {
+      every(
+        () => wireHeadlineStateAttack(kind, "Stevenson", "Kefauver", "Iowa", "union households"),
+        (h) => {
+          expect(h).toContain("STEVENSON");
+          expect(h).toContain("KEFAUVER");
+          expect(h).toContain("IOWA");
+        }
+      );
+    }
+  });
+
+  it("names the group a turnout attack targeted", () => {
+    // That attack lowers one group's turnout for everyone in the state rather
+    // than hitting one candidate, so hiding the group would leave it
+    // untraceable.
     every(
-      () => wireHeadlineStateAttack("Stevenson", "Kefauver", "Iowa"),
-      (h) => {
-        expect(h).toContain("STEVENSON");
-        expect(h).toContain("KEFAUVER");
-        expect(h).toContain("IOWA");
-      }
+      () =>
+        wireHeadlineStateAttack(
+          "turnoutSuppression",
+          "Stevenson",
+          "Kefauver",
+          "Iowa",
+          "union households"
+        ),
+      (h) => expect(h).toContain("UNION HOUSEHOLDS")
+    );
+  });
+
+  it("still reads when no group label was supplied", () => {
+    every(
+      () => wireHeadlineStateAttack("turnoutSuppression", "Stevenson", "Kefauver", "Iowa"),
+      (h) => expect(h).toContain("STEVENSON")
     );
   });
 
   it("uses no em or en dash", () => {
-    every(
-      () => wireHeadlineStateAttack("Stevenson", "Kefauver", "Iowa"),
-      (h) => expect(h).not.toMatch(DASHES)
-    );
+    for (const kind of KINDS) {
+      every(
+        () => wireHeadlineStateAttack(kind, "Stevenson", "Kefauver", "Iowa", "union households"),
+        (h) => expect(h).not.toMatch(DASHES)
+      );
+    }
   });
 });

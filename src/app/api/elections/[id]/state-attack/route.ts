@@ -22,6 +22,12 @@ import {
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
   PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
   PRIMARY_STATE_ATTACK_DURATION_TURNS,
+  PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
+  PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS,
+  PRIMARY_TURNOUT_SUPPRESSION_POINTS,
+  PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS,
+  PRIMARY_VOTE_SUPPRESSION_COST_FUNDS,
+  PRIMARY_VOTE_SUPPRESSION_PCT,
 } from "@/lib/electionEngine/constants";
 import type {
   Campaign,
@@ -29,18 +35,49 @@ import type {
   ElectionCandidate,
   GameState,
   PrimaryStateAction,
+  PrimaryStateActionKind,
   State,
 } from "@/lib/db/types";
+
+/**
+ * What each kind costs and does, so the gate, the debit and the stored row all
+ * read one table instead of three scattered constants.
+ *
+ * `costFunds` is anchor-denominated and converted into the campaign's own
+ * currency below, exactly as the Presence build route does.
+ */
+const ATTACK_TERMS: Record<
+  PrimaryStateActionKind,
+  { costFunds: number; costActions: number; magnitude: number; shielded: boolean }
+> = {
+  localFavorability: {
+    costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS,
+    costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
+    magnitude: PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
+    shielded: true,
+  },
+  voteSuppression: {
+    costFunds: PRIMARY_VOTE_SUPPRESSION_COST_FUNDS,
+    costActions: PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS,
+    magnitude: PRIMARY_VOTE_SUPPRESSION_PCT,
+    shielded: true,
+  },
+  turnoutSuppression: {
+    costFunds: PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS,
+    costActions: PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS,
+    magnitude: PRIMARY_TURNOUT_SUPPRESSION_POINTS,
+    // Rapid Response guards a candidate. This one acts on an electorate.
+    shielded: false,
+  },
+};
 
 const schema = z.object({
   targetCandidateId: z.string().regex(HEX_OBJECT_ID_REGEX, "Invalid candidate ID format"),
   stateId: z.string().length(2),
-  /**
-   * Only the kind that has engine maths behind it. Phase 2 widens this; until
-   * then, accepting a kind nothing reads would charge a player for nothing,
-   * which is exactly what the home-state surge did for months.
-   */
-  kind: z.literal("localFavorability"),
+  kind: z.enum(["localFavorability", "voteSuppression", "turnoutSuppression"]),
+  /** Required for turnoutSuppression; validated against the country's groups. */
+  categoryKey: z.string().min(1).max(64).optional(),
+  bucket: z.string().min(1).max(64).optional(),
 });
 
 interface RouteParams {
@@ -69,7 +106,8 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { targetCandidateId, stateId } = parsed.data;
+    const { targetCandidateId, stateId, kind } = parsed.data;
+    const terms = ATTACK_TERMS[kind];
 
     const { id: electionParam } = await params;
     const db = await getDb();
@@ -148,7 +186,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       actorCandidateId: actor._id,
       targetCandidateId: target._id,
       stateId,
-      kind: "localFavorability",
+      kind,
     });
     if (already) {
       return NextResponse.json(
@@ -170,7 +208,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     const { rate } = forexEnabled
       ? await loadCharacterFxRate(db, getHomeCurrency(character))
       : { rate: 1 };
-    const costFundsLocal = PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate;
+    const costFundsLocal = terms.costFunds * rate;
     if ((campaign.funds ?? 0) < costFundsLocal) {
       return NextResponse.json(
         {
@@ -182,11 +220,9 @@ export async function POST(request: Request, { params }: RouteParams) {
     const freshChar = await db
       .collection<Character>("characters")
       .findOne({ _id: character._id }, { projection: { actions: 1 } });
-    if (!freshChar || freshChar.actions < PRIMARY_LOCAL_ATTACK_COST_ACTIONS) {
+    if (!freshChar || freshChar.actions < terms.costActions) {
       return NextResponse.json(
-        {
-          error: `Not enough actions. A local attack costs ${PRIMARY_LOCAL_ATTACK_COST_ACTIONS}.`,
-        },
+        { error: `Not enough actions. That costs ${terms.costActions}.` },
         { status: 400 }
       );
     }
@@ -198,7 +234,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       .findOne({ electionId: election._id, candidateId: target.characterId });
     const shieldTree = targetCampaign?.mediaSpendingTree;
     const shieldApplied =
-      shieldTree?.starter && shieldTree.c > 0
+      terms.shielded && shieldTree?.starter && shieldTree.c > 0
         ? getOpsBranchMagnitude("mediaSpending", "c", shieldTree.c)
         : 0;
 
@@ -216,8 +252,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       targetCandidateId: target._id,
       targetCharacterId: target.characterId,
       stateId,
-      kind: "localFavorability",
-      magnitude: PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
+      kind,
+      magnitude: terms.magnitude,
       shieldApplied,
       appliedTurn: currentTurn,
       expiresTurn: currentTurn + PRIMARY_STATE_ATTACK_DURATION_TURNS,
@@ -229,8 +265,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       const charDebit = await db
         .collection<Character>("characters")
         .updateOne(
-          { _id: character._id, actions: { $gte: PRIMARY_LOCAL_ATTACK_COST_ACTIONS } },
-          { $inc: { actions: -PRIMARY_LOCAL_ATTACK_COST_ACTIONS }, $set: { updatedAt: now } },
+          { _id: character._id, actions: { $gte: terms.costActions } },
+          { $inc: { actions: -terms.costActions }, $set: { updatedAt: now } },
           opts
         );
       if (charDebit.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
@@ -266,6 +302,7 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     void emitStateAttackWire(
       election._id,
+      kind,
       character.name,
       target.characterName ?? "a rival",
       stateName

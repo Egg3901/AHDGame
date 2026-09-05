@@ -8,6 +8,7 @@ import {
 } from "@/lib/campaignWireHeadlines";
 import { CAMPAIGN_CATEGORIES } from "@/lib/campaigns/dto/campaignView";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
+import type { PrimaryStateActionKind } from "@/lib/db/types";
 
 /**
  * Emitters for the per-race wire.
@@ -143,15 +144,17 @@ export async function emitPrimaryTierWire(
  */
 export async function emitStateAttackWire(
   electionId: ObjectId | string,
+  kind: PrimaryStateActionKind,
   actorName: string,
   targetName: string,
-  stateName: string
+  stateName: string,
+  bucketLabel?: string
 ): Promise<void> {
   try {
     if (!actorName || !targetName) return;
     await logWireEvent(
       "campaign_state_attack",
-      wireHeadlineStateAttack(actorName, targetName, stateName),
+      wireHeadlineStateAttack(kind, actorName, targetName, stateName, bucketLabel),
       { electionId: electionId.toString() }
     );
   } catch {
