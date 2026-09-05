@@ -2,6 +2,8 @@
  * Constants for the election engine.
  */
 
+import type { PrimaryStateAction } from "@/lib/db/types";
+
 // ─── FPTP vote-splitting constants ───────────────────────────────────────────
 //
 // In First Past the Post states, the vote-splitting (spoiler) effect is modelled
@@ -165,6 +167,77 @@ export const PRIMARY_STATE_ATTACK_DURATION_TURNS = 8;
 export const PRIMARY_LOCAL_ATTACK_FAV_PER_TURN = 0.4;
 export const PRIMARY_LOCAL_ATTACK_COST_FUNDS = 40_000;
 export const PRIMARY_LOCAL_ATTACK_COST_ACTIONS = 4;
+
+/**
+ * Vote suppression: points of the target's vote removed in one state while the
+ * attack is live.
+ *
+ * The only one of the three attacks that touches the count directly, so it is
+ * the dearest. 2.5 points of one state's vote is deliberately small: enough to
+ * decide a state already inside the margin, never enough to take one outright.
+ */
+export const PRIMARY_VOTE_SUPPRESSION_PCT = 2.5;
+export const PRIMARY_VOTE_SUPPRESSION_COST_FUNDS = 70_000;
+export const PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS = 5;
+
+/**
+ * Floor on the combined vote multiplier. No candidate loses more than 15% of a
+ * state's vote to suppression, however many rivals converge on them.
+ *
+ * The one-live-attack-per-pair rule limits a single attacker; nothing limited
+ * the field until this did.
+ */
+export const PRIMARY_VOTE_SUPPRESSION_FLOOR = 0.85;
+
+/**
+ * Turnout suppression: percentage points taken off the targeted group's turnout
+ * modifier in that state, before the existing diminishing-returns curve.
+ *
+ * Cheaper than vote suppression because it is indirect. It lowers the group's
+ * turnout for every candidate in the state, including the buyer, so it only
+ * pays when aimed at a group a rival depends on.
+ */
+export const PRIMARY_TURNOUT_SUPPRESSION_POINTS = 1.5;
+export const PRIMARY_TURNOUT_SUPPRESSION_COST_FUNDS = 50_000;
+export const PRIMARY_TURNOUT_SUPPRESSION_COST_ACTIONS = 4;
+
+/**
+ * Vote multiplier the live vote-suppression rows impose on one candidate in one
+ * state.
+ *
+ * Shared by the stagger phase, which decides the real result, and the
+ * projection that displays it, exactly as `homeStateSurgeMultiplier` is. They
+ * apply the same rule from the same function so the board cannot promise what
+ * the wave will not deliver.
+ *
+ * Returns exactly 1 for a candidate with no live rows against them in this
+ * state, so the vote path is byte-identical for everyone not under attack.
+ * `localFavorability` rows are ignored here on purpose: `campaignTurn` already
+ * applies those against favourability, and applying them again against votes
+ * would charge one purchase to two mechanics.
+ *
+ * The shield is the one stamped on each row at purchase, not the defender's
+ * current tree: an action already paid for keeps the terms it was bought under.
+ */
+export function stateAttackMultiplier(input: {
+  actions: PrimaryStateAction[];
+  /** electionCandidates._id as a string, matching what both vote loops iterate. */
+  candidateId: string;
+  stateId: string;
+  currentTurn: number;
+}): number {
+  let points = 0;
+  for (const action of input.actions) {
+    if (action.kind !== "voteSuppression") continue;
+    if (action.stateId !== input.stateId) continue;
+    if (action.targetCandidateId.toString() !== input.candidateId) continue;
+    // `expiresTurn` is exclusive, matching `liveActionFilter`.
+    if (action.expiresTurn <= input.currentTurn) continue;
+    points += action.magnitude * (1 - action.shieldApplied);
+  }
+  if (points <= 0) return 1;
+  return Math.max(PRIMARY_VOTE_SUPPRESSION_FLOOR, 1 - points / 100);
+}
 
 /**
  * Vote multiplier a live home-state surge gives a candidate in one state.
