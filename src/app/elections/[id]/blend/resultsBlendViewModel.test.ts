@@ -232,10 +232,13 @@ describe("board", () => {
     expect(vm.tiles[0].title).toMatch(/not reporting/i);
   });
 
-  it("uses dark ink on the near-white toss-up shades", () => {
+  it("inks every reporting tile light, because no tier is pale on this board", () => {
+    // Shades run toward the page rather than toward white now, so the tightest
+    // races are the dimmest tiles instead of the brightest ones and none of
+    // them needs dark ink.
     const vm = buildResultsBlendViewModel(input());
     // AZ at 0.8pp is a toss-up.
-    expect(vm.tiles.find((t) => t.stateId === "AZ")?.ink).toBe("#14141c");
+    expect(vm.tiles.find((t) => t.stateId === "AZ")?.ink).toBe("#ffffff");
   });
 });
 

@@ -9,7 +9,8 @@
 
 import type { ElectionDetail, CandidateDetail } from "../components/ElectionDetailTypes";
 import { buildGeneralElectionViewModel, type MarginTier } from "@/lib/elections/generalViewModel";
-import { shadeColorForTier } from "@/components/elections/general/BattlegroundMap";
+import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
+import { BLEND } from "@/components/blend/tokens";
 import { computePersuasionDriverDisplay } from "@/lib/elections/computePersuasionDriverDisplay";
 import type { DriverDisplayInputs } from "@/lib/elections/computePersuasionDriverDisplay";
 import type { PersuasionDriverCandidate } from "@/components/elections/general/PersuasionDrivers";
@@ -206,10 +207,10 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
 
   const tiles: BoardTileVM[] = Object.entries(model.marginByState)
     .map(([stateId, info]) => {
-      const background = shadeColorForTier(info.leaderColor, info.tier);
-      // Lean and toss-up shades are near-white whichever side leads, so ink
-      // follows the shade rather than the party.
-      const ink = info.tier === "lean" || info.tier === "tossup" ? "#14141c" : "#ffffff";
+      // Shaded against the page the tiles sit on, so a looser tier fades into
+      // the board rather than blowing out toward white.
+      const background = shadeColorForTier(info.leaderColor, info.tier, BLEND.page);
+      const ink = readableInk(background);
       const leader = byId.get(info.leaderId);
       return {
         stateId,
@@ -225,7 +226,7 @@ export function buildGeneralBlendViewModel(inp: GeneralBlendInput): GeneralBlend
     label: t.label,
     band: t.band,
     // A neutral grey run through the same shading shows the ramp itself.
-    swatch: shadeColorForTier("#9CA3AF", t.tier),
+    swatch: shadeColorForTier("#9CA3AF", t.tier, BLEND.page),
   }));
 
   // ── Persuasion drivers ────────────────────────────────────────────────────

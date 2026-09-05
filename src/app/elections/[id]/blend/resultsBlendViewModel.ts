@@ -8,7 +8,7 @@
  */
 
 import type { ElectionResultsResponse, ResultsUnit } from "@/lib/elections/liveResults/types";
-import { shadeColorForTier } from "@/components/elections/general/BattlegroundMap";
+import { readableInk, shadeColorForTier } from "@/lib/elections/marginTierShade";
 import { classifyMarginTier } from "@/lib/elections/generalViewModel";
 import { BLEND } from "@/components/blend/tokens";
 
@@ -138,9 +138,9 @@ export function buildResultsBlendViewModel(inp: ResultsBlendInput): ResultsBlend
       const leader = leaderId ? byId.get(leaderId) : undefined;
       const color = leader?.partyColor ?? BLEND.mutedDimmer;
       const tier = classifyMarginTier(u.leaderMarginPct);
-      const background = u.totalVotes === 0 ? BLEND.track : shadeColorForTier(color, tier);
-      const ink =
-        u.totalVotes === 0 || tier === "lean" || tier === "tossup" ? "#14141c" : "#ffffff";
+      const background =
+        u.totalVotes === 0 ? BLEND.track : shadeColorForTier(color, tier, BLEND.page);
+      const ink = readableInk(background);
       return {
         stateId: u.id,
         ev: u.weight,

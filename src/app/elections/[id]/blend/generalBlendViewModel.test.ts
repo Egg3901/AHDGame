@@ -177,12 +177,30 @@ describe("battleground board", () => {
     expect(vm.tiles.find((t) => t.stateId === "CA")?.ev).toBe(54);
   });
 
-  it("uses dark ink on the near-white toss-up and lean shades", () => {
-    // AZ is 50.4 to 49.6, a 0.8pp toss-up.
+  it("inks every tile light, because no tier is pale on this board", () => {
+    // The shades used to run toward white as the margin narrowed, so a
+    // toss-up needed dark ink to stay legible. They now run toward the page
+    // instead — a toss-up is the dimmest tile, not the brightest — and the ink
+    // follows the shade's own lightness rather than the tier.
     const vm = buildGeneralBlendViewModel(input());
-    expect(vm.tiles.find((t) => t.stateId === "AZ")?.ink).toBe("#14141c");
-    // CA is 70 to 30, safe, so light ink on a dark shade.
+    // AZ is 50.4 to 49.6, a 0.8pp toss-up; CA is 70 to 30, safe.
+    expect(vm.tiles.find((t) => t.stateId === "AZ")?.ink).toBe("#ffffff");
     expect(vm.tiles.find((t) => t.stateId === "CA")?.ink).toBe("#ffffff");
+  });
+
+  it("dims a state's tile as its margin narrows", () => {
+    // The ordering is the board's whole message, and the old ramp did not have
+    // one: safe came out darker than likely, then lean and toss-up blew past
+    // both toward white. Certainty has to read as presence, monotonically.
+    const vm = buildGeneralBlendViewModel(input());
+    const luma = (id: string) => {
+      const shade = vm.tiles.find((t) => t.stateId === id)?.background ?? "";
+      const m = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(shade);
+      if (!m) throw new Error(`tile ${id} is not an rgb shade: ${shade}`);
+      return (Number(m[1]) * 299 + Number(m[2]) * 587 + Number(m[3]) * 114) / 1000;
+    };
+    // CA safe (40pp), PA lean (?), AZ toss-up (0.8pp).
+    expect(luma("CA")).toBeGreaterThan(luma("AZ"));
   });
 
   it("names the leader and margin in each tile's title", () => {
