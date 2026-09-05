@@ -142,7 +142,9 @@ describe("supporter provider", () => {
   });
 
   it("forwards patreon as the provider when that is who granted it", () => {
-    render(<ProfileHeader {...baseProps} patreonTier="supporter-plus" supporterProvider="patreon" />);
+    render(
+      <ProfileHeader {...baseProps} patreonTier="supporter-plus" supporterProvider="patreon" />
+    );
 
     expect(patreonBadgeProps.at(-1)).toMatchObject({
       tier: "supporter-plus",
