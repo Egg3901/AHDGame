@@ -263,7 +263,8 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           nppIds.length > 0
             ? db
                 .collection("npps")
-                .find({ _id: { $in: nppIds } })
+                // `policies` is ~94% of an NPP document and is not read here.
+                .find({ _id: { $in: nppIds } }, { projection: { policies: 0 } })
                 .toArray()
             : Promise.resolve([]),
         ]);
