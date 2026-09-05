@@ -1,4 +1,12 @@
 /**
+ * How general election votes are split between candidates. distributeVotesBySwingFlow
+ * gives each party a nominal share from organization, turnout and the sitting
+ * executive's coattail, then moves persuadable voters between parties by candidate
+ * appeal. A candidate's state political influence enters through normalizeNPI,
+ * which maps 0..100 influence to a 0..1 multiplier on a square-root curve
+ * (25 gives 0.5, 50 gives 0.71, 100 gives 1).
+ */
+/**
  * §7.3.2 swing-flow vote distribution for general elections.
  *
  * Parallel implementation to `distributeVotesByGroupLevelAllocation` —

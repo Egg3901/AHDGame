@@ -1,4 +1,9 @@
 /**
+ * Converting a local-currency figure to US dollars for cross-country comparisons.
+ * toUsd divides by a fixed base rate per country (GBP 0.75, JPY 106, EUR 0.92,
+ * CNY 7.2, BRL 5.0); these are seed-time base rates, not the live exchange rate.
+ */
+/**
  * Static base exchange rates (local currency per 1 USD).
  * Sourced from exchangeRates.baseRate at game seed time.
  * Used to normalize currency-valued state metrics to USD for

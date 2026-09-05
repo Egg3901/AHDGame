@@ -1,5 +1,12 @@
 // src/lib/turn/nppCorporationBehavior.ts
 /**
+ * What NPP-run corporations do each turn. processNppCorporationDecisions has each
+ * one read sector profitability, set growth by margin band, size marketing,
+ * logistics and R&D budgets as a share of revenue, divest losing sectors, expand
+ * only when profitable (makeNppCorpDecision), set dividends from margin and keep
+ * a cash floor.
+ */
+/**
  * NPP Corporation AI Behavior
  *
  * Each turn, NPP-run corporations make autonomous decisions:

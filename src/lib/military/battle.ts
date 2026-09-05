@@ -1,3 +1,10 @@
+/**
+ * How a battle is resolved. forecast gives the odds before an attack; computeBattle
+ * runs the seeded rounds and reports per-unit results and casualties (BattleResult).
+ * supplyState is the army logistics check: a front's throughput (infrastructure,
+ * depots, Logistics command, airlift) against the demand of every formation on
+ * the side, cut by enemy interdiction from bombers or a blockade.
+ */
 // Battle resolution engine, ported verbatim from the Combat Command design's
 // DCLogic (forecast/computeBattle/applyOutcome). Pure + seeded — the caller
 // passes a BattleContext (units, role assignments, general assignments, national

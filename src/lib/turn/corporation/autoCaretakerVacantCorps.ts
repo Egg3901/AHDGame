@@ -1,4 +1,11 @@
 /**
+ * What happens to a corporation whose CEO left, retired or was removed. Each turn
+ * installCaretakersForVacantCorps gives every CEO-less player corp
+ * (isEligibleForAutoCaretaker) a free in-country NPP as caretaker CEO, so the corp
+ * keeps running and keeps its value instead of shedding 10% of its sectors a turn.
+ * An idle but still seated CEO is not replaced.
+ */
+/**
  * Auto-install NPP caretakers on corporations left CEO-less by a HARD DEPARTURE.
  *
  * When a human CEO retires, relocates, resigns, loses residency, is deleted, or

@@ -1,4 +1,11 @@
 /**
+ * Freight, shipping capacity and why a Logistics sector shows idle capacity. Only
+ * physical goods crossing a state line use the shared freight pool: bulk cargo
+ * (steel, coal, food and similar) and special cargo (electronics, pharmaceuticals,
+ * vehicles), which costs three times the capacity per unit. Energy and natural gas
+ * move by grid and use none; services are never shipped (FREIGHT_CLASS_BY_COMMODITY).
+ */
+/**
  * Freight classification for the landed-price sourcing pass.
  *
  * Every commodity is either physically shipped (in one of three freight
