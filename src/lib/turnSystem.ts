@@ -33,6 +33,7 @@ import {
   createInitialTurnPhaseStatuses,
   finalizeAbortedPhaseStatuses,
 } from "@/simulation/engine/phaseTelemetry";
+import { formatRoundTripReport, withPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
@@ -415,15 +416,20 @@ export async function processTurn(): Promise<{
       }
     );
 
-    const context = await buildTurnExecutionContext({
-      db,
-      gameState,
-      config,
-      warnings,
-      activeIteration,
-      phaseStatuses,
-      startTimeMs: startTime,
-    });
+    // Bracketed so its reads are attributable: turn setup runs before the
+    // first phase, and was the largest single bucket in the round-trip profile
+    // only because nothing named it.
+    const context = await withPhaseProfiling("turnSetup", () =>
+      buildTurnExecutionContext({
+        db,
+        gameState,
+        config,
+        warnings,
+        activeIteration,
+        phaseStatuses,
+        startTimeMs: startTime,
+      })
+    );
     const runtime = createTurnPhaseRuntime({
       db,
       phaseStatuses,
@@ -513,6 +519,11 @@ export async function processTurn(): Promise<{
     const nppSuffix = nppActions
       ? `, NPP actions: ${nppActions.actionsExecuted}/${nppActions.nppsProcessed} (build:${nppActions.buildDonorBase} camp:${nppActions.campaign} adv:${nppActions.advertise} donate:${nppActions.partyDonation} skip:${nppActions.skipped})`
       : "";
+    // Per-phase Mongo round-trip profile (AHD_TURN_ROUNDTRIP_PROFILE=1).
+    // Turn cost on production is round-trip bound, so this ranks phases by
+    // the thing that actually costs, not by local wall clock.
+    const roundTripProfile = formatRoundTripReport();
+    if (roundTripProfile) console.log(roundTripProfile);
     console.log(
       `[Turn] #${context.newTurn} - ${context.characters.length} chars, $${context.phaseResults.fundGeneration?.totalGenerated?.toLocaleString() ?? "?"} generated, ${context.phaseResults.partyActions?.totalActionsGenerated ?? "?"} party actions generated, ${context.phaseResults.campaignTurn?.campaignsProcessed ?? "?"} campaigns ($${context.phaseResults.campaignTurn?.totalFundsGenerated?.toLocaleString() ?? "?"} funds, ${context.phaseResults.campaignTurn?.totalActionsGenerated ?? "?"} actions), ${context.phaseResults.partyElections?.stateElectionsCompleted ?? "?"} state elections completed${nppSuffix}${warningsSuffix}`
     );

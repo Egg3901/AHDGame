@@ -101,6 +101,17 @@ export interface MarketFormationSnapshot {
   emptyByCountry: Array<{ countryId: string; cells: number; facilityReady: number }>;
   emptyBySector: Array<{ sectorType: CorporationType; cells: number; facilityReady: number }>;
   emptyByState: Array<{ countryId: string; stateId: string; cells: number }>;
+  /**
+   * A bounded SAMPLE of empty cells, not the full set. The complete list ran
+   * to ~1MB per turn on a persisted per-turn snapshot, and nothing outside the
+   * producer ever read it: every aggregate a consumer wants (`emptyCells`,
+   * `emptyShare`, `emptyByCountry`, `emptyBySector`, `emptyByState`,
+   * `classificationCounts`) is already on this document. `emptyCells` remains
+   * the true total; `emptyMarketCellsOmitted` says how many rows are missing
+   * here so a reader is never misled into treating the sample as complete.
+   */
   emptyMarketCells: EmptyMarketCell[];
+  /** Rows dropped from `emptyMarketCells` by the sample cap. */
+  emptyMarketCellsOmitted?: number;
   basis: string;
 }

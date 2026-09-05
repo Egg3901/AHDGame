@@ -99,7 +99,13 @@ export async function processArchetypeApprovalDecay(): Promise<{
   // Process NPPs with archetype approvals
   const npps = await db
     .collection<NPP>("npps")
-    .find({ archetypeApprovals: { $exists: true, $ne: {} }, retiredAt: null })
+    // `policies` is ~94% of an NPP document (~30KB of ~31KB) and is not read
+    // here. Turn CPU is 30% BSON deserialization; not fetching what nothing
+    // reads is the cheapest lever on it.
+    .find(
+      { archetypeApprovals: { $exists: true, $ne: {} }, retiredAt: null },
+      { projection: { policies: 0 } }
+    )
     .toArray();
 
   const nppOps: {
