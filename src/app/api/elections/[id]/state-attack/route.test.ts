@@ -230,6 +230,16 @@ describe("POST /api/elections/[id]/state-attack", () => {
     expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
   });
 
+  it("charges the war chest in the campaign's own currency", async () => {
+    // The constant is anchor-denominated. Comparing it against a local balance
+    // would let a campaign in a weak currency buy at a fraction of the price.
+    db.collection("exchangeRates").findOne.mockResolvedValue({ currencyCode: "USD", rate: 2 });
+    const res = await callRoute();
+    expect(res.status).toBe(200);
+    const [, update] = db.collectionMocks.campaigns!.updateOne.mock.calls[0];
+    expect(update.$inc.funds).toBe(-80_000);
+  });
+
   it("refuses a campaign that cannot afford it", async () => {
     db.collection("campaigns").findOne.mockImplementation(
       async (filter: Record<string, unknown>) => {

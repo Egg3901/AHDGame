@@ -25,6 +25,8 @@ import { loadStateTravelOptions } from "@/lib/elections/stateTravelOptions";
 import { loadLiveStateActions } from "@/lib/elections/primaryStateActions";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
+import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
 import {
   PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
@@ -186,6 +188,15 @@ export async function buildStateOperations(
       ? getOpsBranchMagnitude("mediaSpending", "c", shieldTree.c)
       : 0;
 
+  // The attack is charged to the campaign in its own currency, so the price
+  // quoted here is converted the same way `surgeCostFunds` is. Quoting the
+  // anchor figure against a local balance is the "two sources, two prices" bug
+  // in a second guise.
+  const forexEnabled = await isForexEnabled();
+  const { rate } = forexEnabled
+    ? await loadCharacterFxRate(db, getHomeCurrency(character))
+    : { rate: 1 };
+
   return {
     electionId: election._id.toString(),
     currentTurn,
@@ -199,8 +210,9 @@ export async function buildStateOperations(
     opponents,
     liveAgainstYou,
     shieldPct,
+    campaignFunds: myCampaign?.funds ?? 0,
     localAttack: {
-      costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS,
+      costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate,
       costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
       perTurn: PRIMARY_LOCAL_ATTACK_FAV_PER_TURN,
       turns: PRIMARY_STATE_ATTACK_DURATION_TURNS,

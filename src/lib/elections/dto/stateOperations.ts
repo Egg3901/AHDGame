@@ -51,9 +51,9 @@ export interface StateOperationsView {
      */
     presence: StatePresenceRow[];
     /**
-     * Whether canvassing is open and where. The existing CanvassingPanel is
-     * embedded under this row rather than reimplemented; this only drives the
-     * heading and the blocked reason.
+     * Whether canvassing is open and where. The canvassing desk itself already
+     * renders further down the campaign page, so the hub states the status and
+     * the blocked reason rather than embedding a second copy of it.
      */
     canvass: { available: boolean; stateId: string | null; reason: string | null };
   };
@@ -62,6 +62,19 @@ export interface StateOperationsView {
   liveAgainstYou: LiveAttackRow[];
   /** The viewer's Rapid Response shield, 0..1. */
   shieldPct: number;
-  /** What the local attack costs and does, so no figure is typed into markup. */
+  /**
+   * The campaign war chest, in the campaign's own currency.
+   *
+   * An attack is charged to the campaign, not to the candidate, so gating the
+   * button on `positives.camp.playerFunds` (which is the character's own
+   * balance, and is what the home-state surge spends) would compare the wrong
+   * pool and offer an action the server refuses.
+   */
+  campaignFunds: number;
+  /**
+   * What the local attack costs and does, so no figure is typed into markup.
+   * `costFunds` is already converted into the campaign's currency, matching
+   * `camp.surgeCostFunds`.
+   */
   localAttack: { costFunds: number; costActions: number; perTurn: number; turns: number };
 }

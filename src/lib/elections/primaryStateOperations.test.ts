@@ -138,6 +138,24 @@ describe("buildStateOperations", () => {
     expect(view?.localAttack.perTurn).toBe(PRIMARY_LOCAL_ATTACK_FAV_PER_TURN);
   });
 
+  it("carries the war chest, which is the pool an attack is charged to", async () => {
+    // `positives.camp.playerFunds` is the candidate's own balance and pays for
+    // the home-state surge; gating an attack on it would compare the wrong pool.
+    const view = await build({
+      electionCandidates: ROSTER,
+      campaigns: [{ _id: new ObjectId(), candidateId: ME, funds: 1_200_000 }],
+    });
+    expect(view?.campaignFunds).toBe(1_200_000);
+  });
+
+  it("quotes the attack in the campaign's own currency", async () => {
+    const view = await build({
+      electionCandidates: ROSTER,
+      exchangeRates: [{ currencyCode: "USD", rate: 2 }],
+    });
+    expect(view?.localAttack.costFunds).toBe(PRIMARY_LOCAL_ATTACK_COST_FUNDS * 2);
+  });
+
   it("reports what the viewer has live against a rival, named by state", async () => {
     const view = await build({
       electionCandidates: ROSTER,

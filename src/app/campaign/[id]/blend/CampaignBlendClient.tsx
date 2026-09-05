@@ -20,6 +20,9 @@ import { BlendLedger } from "./BlendLedger";
 import { BlendSidebar, SupportBlock } from "./BlendSidebar";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { StatePresencePanel } from "../components/StatePresencePanel";
+import { StateOperationsSection } from "../components/StateOperationsSection";
+import type { StateOperationsView } from "@/lib/elections/dto/stateOperations";
+import type { PrimaryStateActionKind } from "@/lib/db/types";
 import type { PickerResult } from "./BlendCharacterPicker";
 
 export interface CampaignBlendClientProps {
@@ -62,6 +65,8 @@ export function CampaignBlendClient({
   const [personalAmount, setPersonalAmount] = useState("");
   const [treasuryAmount, setTreasuryAmount] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [ops, setOps] = useState<{ key: string; view: StateOperationsView } | null>(null);
+  const [reloadOps, setReloadOps] = useState(0);
 
   const vm = useMemo(
     () =>
@@ -81,6 +86,36 @@ export function CampaignBlendClient({
   // A pane switch should never leave the reader parked on a ledger page that
   // no longer exists.
   useEffect(() => setLedgerPage(0), [rail]);
+
+  // The state operations hub. Fetched here rather than served with the page so
+  // an attack can refresh it without a full round trip. Keyed by election and
+  // read back through a match, so a response for a race the viewer has left
+  // cannot paint over the one they are looking at.
+  const opsKey = campaign.electionId ?? "";
+  const opsView = ops && ops.key === opsKey ? ops.view : null;
+
+  useEffect(() => {
+    if (!opsKey) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/elections/${opsKey}/state-operations`);
+        // 404 is the ordinary answer for a race with nothing to act on (a
+        // general election, a non-US seat, a viewer who is not a candidate).
+        if (!res.ok) return;
+        const payload = (await res.json()) as StateOperationsView | null;
+        // A 200 carrying something else is not the hub. Rendering it would
+        // throw inside the section and take the whole manager down with it.
+        if (!payload?.positives?.camp) return;
+        if (!cancelled) setOps({ key: opsKey, view: payload });
+      } catch {
+        // Non-critical: the section stays hidden and the rest of the page stands.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [opsKey, reloadOps]);
 
   const post = useCallback(
     async (key: string, url: string, body?: unknown) => {
@@ -117,6 +152,29 @@ export function CampaignBlendClient({
   const opsRows = canManage ? vm.ops : vm.ops.filter((o) => o.key === "fundraising");
 
   const contributionsOpen = !campaign.isArchived && !campaign.campaignSuspended;
+
+  const handleAttack = async (
+    targetCandidateId: string,
+    kind: PrimaryStateActionKind,
+    stateId: string
+  ) => {
+    const ok = await post(
+      `${targetCandidateId}:${kind}`,
+      `/api/elections/${campaign.electionId}/state-attack`,
+      { targetCandidateId, kind, stateId }
+    );
+    if (ok) setReloadOps((n) => n + 1);
+  };
+
+  // Camping and the home-state surge now live in the hub, so the standalone
+  // presence panel would duplicate them. Travel has no hub, so the general
+  // phase keeps it, and the primary keeps it too until the hub has loaded:
+  // dropping it outright would put a working action back out of reach, which
+  // is the bug this branch has already fixed three times.
+  const presencePanel =
+    campaign.statePresence && (campaign.statePresence.phase === "general" || !opsView)
+      ? campaign.statePresence
+      : null;
 
   const handleContribute = async (source: "personal" | "treasury") => {
     const raw = source === "personal" ? personalAmount : treasuryAmount;
@@ -182,6 +240,19 @@ export function CampaignBlendClient({
             })
           }
           onRetarget={onRetarget}
+        />
+      ) : null}
+
+      {showOps && opsView ? (
+        <StateOperationsSection
+          view={opsView}
+          busy={busy}
+          onAttack={handleAttack}
+          onChanged={() => {
+            onRefresh();
+            onRefreshMe();
+            setReloadOps((n) => n + 1);
+          }}
         />
       ) : null}
 
@@ -294,7 +365,7 @@ export function CampaignBlendClient({
           </div>
         ) : null}
 
-        {campaign.statePresence ? (
+        {presencePanel ? (
           <div style={{ padding: "18px 16px 0" }}>
             <div
               style={{
@@ -310,7 +381,7 @@ export function CampaignBlendClient({
             </div>
             <BlendScopeInline>
               <StatePresencePanel
-                presence={campaign.statePresence}
+                presence={presencePanel}
                 onChanged={() => {
                   onRefresh();
                   onRefreshMe();
@@ -334,6 +405,19 @@ export function CampaignBlendClient({
               post(`${c}:${b}`, `/api/campaigns/${campaign.id}/upgrade`, { category: c, branch: b })
             }
             onRetarget={onRetarget}
+          />
+        ) : null}
+        {showOps && opsView ? (
+          <StateOperationsSection
+            view={opsView}
+            busy={busy}
+            variant="mobile"
+            onAttack={handleAttack}
+            onChanged={() => {
+              onRefresh();
+              onRefreshMe();
+              setReloadOps((n) => n + 1);
+            }}
           />
         ) : null}
         {showMoney && vm.money ? (
@@ -384,7 +468,7 @@ export function CampaignBlendClient({
               canManageTicket={canManage}
               canAct={canAct}
               busy={busy}
-              presence={campaign.statePresence}
+              presence={presencePanel}
               onPresenceChanged={() => {
                 onRefresh();
                 onRefreshMe();

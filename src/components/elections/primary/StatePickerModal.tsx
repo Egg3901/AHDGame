@@ -12,6 +12,16 @@ interface StatePickerModalProps {
   busy: boolean;
   onPick: (stateId: string) => void;
   onClose: () => void;
+  /**
+   * The line under the search box. Defaults to the camping/travel price, which
+   * is what `actionCost` means; any caller whose action is priced differently
+   * MUST pass its own, or the modal quotes a price the server never charges.
+   */
+  footnote?: string;
+  /** Trailing label per row. Defaults to the camping/travel action cost. */
+  trailingFor?: (state: StateTravelOption) => string;
+  /** Whether a row is unaffordable. Defaults to the camping/travel action cost. */
+  unaffordable?: (state: StateTravelOption) => boolean;
 }
 
 /**
@@ -30,6 +40,9 @@ export function StatePickerModal({
   busy,
   onPick,
   onClose,
+  footnote = "Cost scales by state EV: 3 (small) to 10 actions (large).",
+  trailingFor = (s) => `${s.actionCost} actions`,
+  unaffordable = (s) => playerActions < s.actionCost,
 }: StatePickerModalProps) {
   const [search, setSearch] = useState("");
 
@@ -62,16 +75,14 @@ export function StatePickerModal({
             placeholder="Search by name or code…"
             className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm"
           />
-          <p className="text-[11px] text-muted mt-1">
-            Cost scales by state EV: 3 (small) to 10 actions (large).
-          </p>
+          <p className="text-[11px] text-muted mt-1">{footnote}</p>
         </div>
         <div className="overflow-y-auto flex-1 p-2">
           {filtered.length === 0 ? (
             <p className="px-3 py-4 text-sm text-muted">No state matches that search.</p>
           ) : (
             filtered.map((s) => {
-              const canAfford = playerActions >= s.actionCost;
+              const canAfford = !unaffordable(s);
               const isCurrent = s.id === currentStateId;
               return (
                 <button
@@ -91,7 +102,7 @@ export function StatePickerModal({
                     {s.name} <span className="text-muted text-xs">({s.id})</span>
                   </span>
                   <span className="text-xs text-muted tabular-nums">
-                    {isCurrent ? "current" : `${s.actionCost} actions`}
+                    {isCurrent ? "current" : trailingFor(s)}
                   </span>
                 </button>
               );

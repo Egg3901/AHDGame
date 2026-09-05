@@ -13,6 +13,8 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { getElectoralVoteUnits } from "@/lib/constants/states";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
+import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
+import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { liveActionFilter } from "@/lib/elections/primaryStateActions";
 import { emitStateAttackWire } from "@/lib/elections/raceWireEmit";
 import {
@@ -161,10 +163,18 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (!campaign) {
       return NextResponse.json({ error: "You have no campaign in this race" }, { status: 403 });
     }
-    if ((campaign.funds ?? 0) < PRIMARY_LOCAL_ATTACK_COST_FUNDS) {
+    // The constant is anchor-denominated and the war chest is in the campaign's
+    // own currency, so the price is converted before it is compared, exactly as
+    // the Presence build route does.
+    const forexEnabled = await isForexEnabled();
+    const { rate } = forexEnabled
+      ? await loadCharacterFxRate(db, getHomeCurrency(character))
+      : { rate: 1 };
+    const costFundsLocal = PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate;
+    if ((campaign.funds ?? 0) < costFundsLocal) {
       return NextResponse.json(
         {
-          error: `Not enough campaign funds. A local attack costs $${PRIMARY_LOCAL_ATTACK_COST_FUNDS.toLocaleString("en-US")}.`,
+          error: `Not enough campaign funds. A local attack costs $${Math.round(costFundsLocal).toLocaleString("en-US")}.`,
         },
         { status: 400 }
       );
@@ -221,8 +231,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       const campDebit = await db
         .collection<Campaign>("campaigns")
         .updateOne(
-          { _id: campaign._id, funds: { $gte: PRIMARY_LOCAL_ATTACK_COST_FUNDS } },
-          { $inc: { funds: -PRIMARY_LOCAL_ATTACK_COST_FUNDS }, $set: { updatedAt: now } },
+          { _id: campaign._id, funds: { $gte: costFundsLocal } },
+          { $inc: { funds: -costFundsLocal }, $set: { updatedAt: now } },
           opts
         );
       if (campDebit.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");

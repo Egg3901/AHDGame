@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { CampaignBlendClient } from "./CampaignBlendClient";
 
@@ -300,5 +300,96 @@ describe("national support", () => {
     renderClient({ canManage: false, canSurrogate: false });
     expect(screen.getAllByText("National support")).toHaveLength(2);
     expect(screen.queryByText(/RALLY ·/)).toBeNull();
+  });
+});
+
+describe("state operations", () => {
+  const hub = {
+    electionId: "e1",
+    currentTurn: 12,
+    positives: {
+      camp: {
+        currentCampaignState: "IA",
+        currentTicks: 3,
+        tickCap: 5,
+        homeState: "IA",
+        surgeUsed: false,
+        playerActions: 25,
+        playerFunds: 250_000,
+        surgeCostFunds: 25_000,
+        surgeCostActions: 3,
+        surgeBoost: 15,
+        states: [{ id: "IA", name: "Iowa", actionCost: 3 }],
+      },
+      presence: [],
+      canvass: { available: true, stateId: "IA", reason: null },
+    },
+    opponents: [
+      {
+        candidateId: "r1",
+        name: "Rival Filer",
+        color: "#EF4444",
+        delegates: 942,
+        liveAgainstThem: [],
+      },
+    ],
+    liveAgainstYou: [],
+    shieldPct: 0,
+    campaignFunds: 1_200_000,
+    localAttack: { costFunds: 40_000, costActions: 4, perTurn: 0.4, turns: 8 },
+  };
+
+  it("reaches both layouts, not the desktop shell alone", async () => {
+    // Counting is the point: six blocks on this branch shipped invisible on
+    // mobile because a test asserted "at least one" and a rail-only render
+    // satisfied it.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => hub }));
+    renderClient();
+    await waitFor(() => expect(screen.getAllByText("State operations")).toHaveLength(2));
+    expect(screen.getAllByRole("button", { name: /Rival Filer/ })).toHaveLength(2);
+  });
+
+  const primaryPresence = {
+    electionId: "e1",
+    phase: "primary" as const,
+    currentStateId: "IA",
+    currentStateName: "Iowa",
+    playerActions: 25,
+    states: [{ id: "IA", name: "Iowa", actionCost: 3 }],
+    primary: hub.positives.camp,
+  };
+
+  it("does not duplicate camping into the rail once the hub carries it", async () => {
+    // Camping and the surge live in the hub now. The rail's presence panel is
+    // the fallback for the general phase and for a hub that never arrived; two
+    // copies of one control is the complaint this whole section answers.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => hub }));
+    renderClient({ campaign: { ...campaignFixture(), statePresence: primaryPresence } });
+    await waitFor(() => expect(screen.getAllByText("State operations")).toHaveLength(2));
+    expect(screen.queryByText(/Where you are campaigning/i)).toBeNull();
+    expect(screen.getAllByRole("button", { name: /Change state/i })).toHaveLength(2);
+  });
+
+  it("keeps camping reachable when the hub does not load", async () => {
+    // A failed fetch must not take the only camping control off the page.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    renderClient({ campaign: { ...campaignFixture(), statePresence: primaryPresence } });
+    await waitFor(() => expect(screen.getAllByText(/Where you are campaigning/i)).toHaveLength(2));
+    expect(screen.queryAllByText("State operations")).toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: /Change state/i })).toHaveLength(2);
+  });
+
+  it("keeps travel in the rail during the general, where the hub does not run", async () => {
+    // The hub is a primary mechanic. Removing the panel outright would put the
+    // travel action back out of reach, which is the bug this branch has
+    // already fixed three times.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({}) }));
+    renderClient({
+      campaign: {
+        ...campaignFixture(),
+        statePresence: { ...primaryPresence, phase: "general" as const, primary: null },
+      },
+    });
+    expect(screen.getAllByRole("button", { name: /Travel elsewhere/i })).toHaveLength(2);
   });
 });
