@@ -10,8 +10,15 @@
  * Plain Node, no dependencies: this file is copied next to the standalone
  * `server.js` by scripts/singleplayer/package.mjs and has to run from there.
  *
- *   node launch.mjs            start (downloads MongoDB on first run)
- *   node launch.mjs --port N   serve on a different port (default 3111)
+ *   node launch.mjs                 start (downloads MongoDB on first run)
+ *   node launch.mjs --port N        serve on a different port (default 3111)
+ *   node launch.mjs --home DIR      data directory (default ~/.a-house-divided)
+ *   node launch.mjs --no-browser    do not open a browser; a host app will
+ *   node launch.mjs --parent-pid P  exit, taking MongoDB with it, when P dies
+ *
+ * The last two exist for the desktop client, which runs this file under a
+ * bundled Node and shows the game in its own window. Readiness is announced
+ * on stdout as a single line, "[ahd] ready at http://127.0.0.1:<port>".
  *
  * Environment overrides: SINGLEPLAYER_HOME (data directory), MONGOD_PATH
  * (use an existing mongod instead of fetching one), SINGLEPLAYER_MONGO_PORT.
@@ -40,10 +47,12 @@ function arg(flag, fallback) {
 }
 
 const HOME = path.resolve(
-  process.env.SINGLEPLAYER_HOME || path.join(homedir(), ".a-house-divided")
+  arg("--home", process.env.SINGLEPLAYER_HOME || path.join(homedir(), ".a-house-divided"))
 );
 const APP_PORT = Number(arg("--port", process.env.PORT || 3111));
-const MONGO_PORT = Number(process.env.SINGLEPLAYER_MONGO_PORT || 27117);
+const MONGO_PORT = Number(arg("--mongo-port", process.env.SINGLEPLAYER_MONGO_PORT || 27117));
+const OPEN_BROWSER = !process.argv.includes("--no-browser");
+const PARENT_PID = Number(arg("--parent-pid", 0));
 const DATA_DIR = path.join(HOME, "data");
 const MONGO_DIR = path.join(HOME, "mongodb");
 const MONGOD = path.join(MONGO_DIR, WIN ? "mongod.exe" : "mongod");
@@ -362,6 +371,25 @@ async function warmAssets(base) {
 
 // ---------------------------------------------------------------------------
 
+/**
+ * A host app that dies without warning (crash, force quit, Windows has no
+ * signals to send) would leave a MongoDB and a game server behind. Poll the
+ * parent instead of trusting it to say goodbye.
+ */
+function watchParent() {
+  if (!PARENT_PID) return;
+  const timer = setInterval(() => {
+    try {
+      process.kill(PARENT_PID, 0);
+    } catch {
+      log(`parent process ${PARENT_PID} is gone`);
+      clearInterval(timer);
+      shutdown(0);
+    }
+  }, 2000);
+  timer.unref();
+}
+
 let shuttingDown = false;
 let mongo = null;
 let app = null;
@@ -388,8 +416,9 @@ try {
   await waitForPort(APP_PORT, "app", 120_000);
   const base = `http://127.0.0.1:${APP_PORT}`;
   log(`ready at ${base}`);
-  openBrowser(`${base}/singleplayer`);
+  if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);
   void warmAssets(base);
+  watchParent();
 } catch (error) {
   console.error("[ahd]", error instanceof Error ? error.message : error);
   shutdown(1);
