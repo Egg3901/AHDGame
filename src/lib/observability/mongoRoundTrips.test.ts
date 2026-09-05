@@ -188,3 +188,67 @@ describe("document counting", () => {
     expect(totalDocumentsReturned()).toBe(0);
   });
 });
+
+describe("attribution via the audit context", () => {
+  /**
+   * runPhase establishes an AsyncLocalStorage audit context per phase with a
+   * "turn:<n>:<phase>" trace id. Preferring it over the mutable pointer is what
+   * lets a read issued from an async continuation still land on its phase.
+   */
+  it("attributes to the phase named in the audit trace id", async () => {
+    enable();
+    const { runInAuditContext } = await import("@/lib/observability/context");
+
+    runInAuditContext("turn:42:corporationTurn", () => {
+      recordRoundTrip("corporateSectors");
+      recordDocumentsReturned("corporateSectors", 3140);
+    });
+
+    expect(roundTripReport()[0]).toMatchObject({
+      phase: "corporationTurn",
+      documents: 3140,
+    });
+  });
+
+  it("survives an await inside the phase, which the mutable pointer cannot", async () => {
+    enable();
+    const { runInAuditContext } = await import("@/lib/observability/context");
+
+    await runInAuditContext("turn:42:economicVitalSigns", async () => {
+      await Promise.resolve();
+      recordDocumentsReturned("ledgerEntries", 61398);
+    });
+
+    expect(roundTripReport()[0]).toMatchObject({
+      phase: "economicVitalSigns",
+      documents: 61398,
+    });
+  });
+
+  it("keeps phase names that contain colons intact", async () => {
+    enable();
+    const { runInAuditContext } = await import("@/lib/observability/context");
+
+    runInAuditContext("turn:7:some:odd:phase", () => recordRoundTrip("things"));
+
+    expect(roundTripReport()[0]!.phase).toBe("some:odd:phase");
+  });
+
+  it("falls back to the bracket for non-phase spans with no audit context", () => {
+    enable();
+    beginPhaseProfiling("turnSetup");
+    recordDocumentsReturned("states", 238);
+    endPhaseProfiling("turnSetup");
+
+    expect(roundTripReport()[0]).toMatchObject({ phase: "turnSetup", documents: 238 });
+  });
+
+  it("ignores trace ids that are not turn phases", async () => {
+    enable();
+    const { runInAuditContext } = await import("@/lib/observability/context");
+
+    runInAuditContext("api:some-request", () => recordRoundTrip("things"));
+
+    expect(roundTripReport()[0]!.phase).toBe("(outside any phase)");
+  });
+});

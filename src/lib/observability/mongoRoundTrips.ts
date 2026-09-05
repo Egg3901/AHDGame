@@ -24,6 +24,8 @@
  * boolean check on the hot path and nothing is allocated.
  */
 
+import { getAuditRequestContext } from "@/lib/observability/context";
+
 /**
  * Per phase: how many commands were issued, and how many documents came back.
  *
@@ -108,8 +110,31 @@ export function recordRoundTrip(collection: string): void {
   collectionEntry(entry, collection).roundTrips += 1;
 }
 
+/**
+ * The phase a command belongs to.
+ *
+ * Prefers the audit context, which `runPhase` already establishes per phase via
+ * AsyncLocalStorage with a `turn:<n>:<phase>` trace id. That follows async
+ * boundaries, so a read issued from a continuation inside a phase is still
+ * attributed to it — the mutable pointer below cannot do that, and it was why
+ * a quarter of all documents landed in "(outside any phase)".
+ *
+ * Falls back to the pointer for spans bracketed by `withPhaseProfiling`, which
+ * are not phases and have no audit context.
+ */
+function currentPhaseName(s: ProfilerState): string {
+  const traceId = getAuditRequestContext()?.traceId;
+  if (traceId?.startsWith("turn:")) {
+    // "turn:<n>:<phase>" — the phase may itself contain colons, so take the
+    // remainder rather than a fixed field.
+    const phase = traceId.split(":").slice(2).join(":");
+    if (phase) return phase;
+  }
+  return s.currentPhase ?? "(outside any phase)";
+}
+
 function phaseEntry(s: ProfilerState): PhaseCounts {
-  const phase = s.currentPhase ?? "(outside any phase)";
+  const phase = currentPhaseName(s);
   let entry = s.counts.get(phase);
   if (!entry) {
     entry = { total: 0, documents: 0, byCollection: new Map() };
