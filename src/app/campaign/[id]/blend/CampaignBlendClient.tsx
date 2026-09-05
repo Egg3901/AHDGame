@@ -334,6 +334,23 @@ export function CampaignBlendClient({
         </div>
         <BlendTicker tag="WIRE" items={vm.wire} />
         <BlendVitals cells={vm.vitals} variant="mobile" />
+        {/* Every failed action sets `error`, but the banner that shows it lives
+            in `body`, which only the desktop shell renders. Without this copy a
+            refused upgrade, rally or attack failed silently on a phone. */}
+        {error ? (
+          <div
+            data-testid="campaign-error"
+            style={{
+              padding: "10px 16px",
+              borderBottom: `1px solid ${BLEND.hairlineStrong}`,
+              fontFamily: FONT.serif,
+              fontSize: 14,
+              color: BLEND.negative,
+            }}
+          >
+            {error}
+          </div>
+        ) : null}
         {/* The rail these live in on desktop is `hidden lg:block`, so mobile
             needs its own copy or the only way to rally, camp, surge or travel
             disappears below the breakpoint. */}
@@ -428,7 +445,10 @@ export function CampaignBlendClient({
               personalAmount,
               treasuryAmount,
               busy: busy === "contribute",
-              error,
+              // The mobile banner above carries `error` now. Repeating it here
+              // put a refused rally or attack inside the money section, which
+              // is not where it happened.
+              error: null,
             }}
             variant="mobile"
             onPersonalAmount={setPersonalAmount}

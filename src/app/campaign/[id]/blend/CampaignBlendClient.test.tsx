@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
 import { CampaignBlendClient } from "./CampaignBlendClient";
 
@@ -391,5 +391,23 @@ describe("state operations", () => {
       },
     });
     expect(screen.getAllByRole("button", { name: /Travel elsewhere/i })).toHaveLength(2);
+  });
+});
+
+describe("action failures", () => {
+  it("shows a refused action on both layouts, not the desktop shell alone", async () => {
+    // Every failed action sets one `error`, and the banner that renders it sits
+    // in `body`, which only the desktop shell mounts. A refused upgrade, rally
+    // or attack was invisible on a phone.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: "Not enough funds for that." }),
+      })
+    );
+    renderClient();
+    fireEvent.click(screen.getAllByRole("button", { name: /RALLY/ })[0]);
+    await waitFor(() => expect(screen.getAllByText("Not enough funds for that.")).toHaveLength(2));
   });
 });
