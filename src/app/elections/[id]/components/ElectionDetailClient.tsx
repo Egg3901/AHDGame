@@ -19,7 +19,6 @@ import { CampaignsListPanel } from "./CampaignsListPanel";
 import { CampaignManagerTab } from "./CampaignManagerTab";
 import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
-import { RaceMapsSection } from "./RaceMapsSection";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
 import { PrimaryBlendView } from "../blend/PrimaryBlendView";
@@ -369,11 +368,6 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onWithdraw={handleWithdraw}
           />
 
-          {/* Both full maps of this race, behind one tab. Drawn here rather
-              than inside the phase view because the electoral map has to lead
-              the analysis cards that decompose it. */}
-          {election.countryId === "US" && <RaceMapsSection election={election} electionId={id} />}
-
           <GeneralPhaseView
             election={election}
             electionId={id}
@@ -382,8 +376,8 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             amInRace={amInRace}
             onSuccess={fetchElection}
             showCollegeSummary={false}
-            showElectoralMap={false}
             showNationalMood={false}
+            tabbedDetail
           />
 
           <ElectionScheduleCard
@@ -406,12 +400,10 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onSuccess={fetchElection}
           />
 
-          {election.countryId === "US" && (
-            <>
-              <CampaignsListPanel electionId={id} />
-              {!!election.myCharId && <CampaignManagerTab electionId={id} />}
-            </>
-          )}
+          {/* "Your Campaign" used to follow this, repeating the funds, actions
+              and levels the list already shows against your own row, behind a
+              second link to the same page. */}
+          {election.countryId === "US" && <CampaignsListPanel electionId={id} />}
         </BlendScope>
       </div>
     );

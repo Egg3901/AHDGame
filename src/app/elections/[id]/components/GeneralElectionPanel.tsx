@@ -58,6 +58,7 @@ export function GeneralElectionPanel({
   electorate,
   partyDisplayById,
   showCollegeSummary = true,
+  showTrends = true,
 }: {
   tally: GeneralVotes;
   candidates: CandidateDetail[];
@@ -91,6 +92,11 @@ export function GeneralElectionPanel({
    * displays below are not duplicated and still render.
    */
   showCollegeSummary?: boolean;
+  /**
+   * Whether to draw the trend charts. False where a caller has given them a
+   * pane of their own, so the page does not plot the same race twice.
+   */
+  showTrends?: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -458,14 +464,16 @@ export function GeneralElectionPanel({
         )}
 
         {/* Charts */}
-        <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
-          <div className="text-sm font-semibold mb-3">Election Trends</div>
-          <GeneralVoteCharts
-            snapshots={tally.turnSnapshots}
-            series={lineSeries}
-            evByTurn={tally.evByTurn}
-          />
-        </div>
+        {showTrends && (
+          <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
+            <div className="text-sm font-semibold mb-3">Election Trends</div>
+            <GeneralVoteCharts
+              snapshots={tally.turnSnapshots}
+              series={lineSeries}
+              evByTurn={tally.evByTurn}
+            />
+          </div>
+        )}
 
         {/* Enhanced Resolved Election Display */}
         {isEnded && tally.stateVoteData && (

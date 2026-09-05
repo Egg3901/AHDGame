@@ -51,7 +51,9 @@ vi.mock("./PresidentialMapWithStateDetail", () => ({
 vi.mock("./ElectionHeader", () => ({ ElectionHeader: () => null }));
 vi.mock("./AdminSection", () => ({ AdminSection: () => null }));
 vi.mock("./CampaignsListPanel", () => ({ CampaignsListPanel: () => null }));
-vi.mock("./CampaignManagerTab", () => ({ CampaignManagerTab: () => null }));
+vi.mock("./CampaignManagerTab", () => ({
+  CampaignManagerTab: () => <div data-testid="campaign-manager" />,
+}));
 vi.mock("@/app/political-operations/components/StateOrganizationTab", () => ({
   StateOrganizationTab: () => null,
 }));
@@ -102,9 +104,18 @@ describe("the Blend general page does not print the same standing twice", () => 
     expect(generalPhaseProps[0].showCollegeSummary).toBe(false);
   });
 
-  it("tells the general phase view to leave out the electoral map", () => {
+  it("asks the general phase view to fold its detail views into tabs", () => {
+    // The map, campaign presence, the trends chart, the state drivers and the
+    // factor ledger used to run down the page one after another.
     renderPage();
-    expect(generalPhaseProps[0].showElectoralMap).toBe(false);
+    expect(generalPhaseProps[0].tabbedDetail).toBe(true);
+  });
+
+  it("drops the Your Campaign card, which the campaigns list already covers", () => {
+    // It repeated the funds, actions and levels shown against your own row in
+    // that list, behind a second link to the same page.
+    const { queryByTestId } = renderPage();
+    expect(queryByTestId("campaign-manager")).toBeNull();
   });
 
   it("tells the general phase view to leave out the national mood gauge", () => {
@@ -129,45 +140,10 @@ describe("the Blend general page does not print the same standing twice", () => 
     for (const props of generalPhaseProps) {
       expect(props.showCollegeSummary).not.toBe(false);
       expect(props.showNationalMood).not.toBe(false);
+      expect(props.tabbedDetail).not.toBe(true);
     }
     for (const props of scheduleProps) {
       expect(props.showStatusStrip).not.toBe(false);
     }
-  });
-});
-
-describe("the two full maps of this race share one section", () => {
-  // The page drew the United States twice at full size — the electoral map up
-  // top, the campaign-presence map further down — to say two different things
-  // about the same fifty states. One section, one tab.
-  it("draws a single maps section, not one per map", () => {
-    const { container } = renderPage();
-    expect(container.querySelectorAll("#state-org")).toHaveLength(1);
-  });
-
-  it("offers both maps as tabs and opens on the electoral one", () => {
-    const { getByRole } = renderPage();
-    expect(getByRole("button", { name: "Electoral" }).getAttribute("aria-pressed")).toBe("true");
-    expect(getByRole("button", { name: "Campaign presence" }).getAttribute("aria-pressed")).toBe(
-      "false"
-    );
-  });
-
-  it("keeps the #state-org anchor, which two live links still point at", () => {
-    // CampaignManagerTab links to it on this page and the presidential primary
-    // page links to it from outside. The section moved; the anchor did not.
-    const { container } = renderPage();
-    expect(container.querySelector("#state-org")).toBeTruthy();
-  });
-
-  it("shows the electoral map alone when there is no character to build with", () => {
-    // The presence pane needs a character. Without one there is nothing to swap
-    // to, so the tabs go away rather than opening on a pane that can only
-    // refuse.
-    const { queryByRole, getByTestId } = renderPage({
-      myCharId: null,
-    } as Partial<ElectionDetail>);
-    expect(queryByRole("button", { name: "Campaign presence" })).toBeNull();
-    expect(getByTestId("electoral-map")).toBeTruthy();
   });
 });

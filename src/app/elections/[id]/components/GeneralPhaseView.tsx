@@ -21,6 +21,10 @@ import {
 } from "@/components/elections/general/PersuasionDrivers";
 import { NationalMoodGauge } from "@/components/elections/general/NationalMoodGauge";
 import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCard";
+import { RaceDetailTabs, type RaceDetailPane } from "./RaceDetailTabs";
+import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
+import { GeneralVoteCharts, type LineSeries } from "./ElectionDetailCharts";
+import { buildGeneralColors } from "@/lib/utils/politics";
 import { states as referenceStates } from "@/lib/seeds/reference/states";
 import { getSubdivisionMode } from "@/lib/maps/subdivisionConfig";
 import { UK_REGION_NAMES, RU_REGION_NAMES } from "@/lib/constants/states";
@@ -88,11 +92,11 @@ interface GeneralPhaseViewProps {
    */
   showCollegeSummary?: boolean;
   /**
-   * Whether to draw the electoral map. False where a caller has folded it into
-   * a tabbed maps section of its own, so the page does not draw the United
-   * States twice.
+   * Fold the presidential detail views — the map, campaign presence, the
+   * trends chart, the state drivers and the factor ledger — into one tabbed
+   * section rather than stacking them down the page.
    */
-  showElectoralMap?: boolean;
+  tabbedDetail?: boolean;
   /**
    * Whether to draw the National Mood gauge. False where a caller states the
    * same figure and the same components above it.
@@ -107,7 +111,7 @@ export function GeneralPhaseView({
   localIsEnded,
   amInRace,
   showCollegeSummary = true,
-  showElectoralMap = true,
+  tabbedDetail = false,
   showNationalMood = true,
   onSuccess,
 }: GeneralPhaseViewProps) {
@@ -222,14 +226,120 @@ export function GeneralPhaseView({
       />
     ) : null;
 
+  const isPresidentialGeneral = election.electionType === "president" && !localInPrimary;
+
+  const electoralMap = (
+    <PresidentialMapWithStateDetail
+      electionId={electionId}
+      electoralMapData={election.generalVotes?.electoralMapData ?? {}}
+      electoralVotesByCandidate={election.generalVotes?.electoralVotesByCandidate}
+      candidateNames={election.generalVotes?.candidateNames ?? {}}
+      candidateParties={election.generalVotes?.candidateParties ?? {}}
+      candidateColors={election.generalVotes?.candidateColors ?? {}}
+      stateVoteData={election.generalVotes?.stateVoteData}
+      stateVotesOverTime={election.generalVotes?.stateVotesOverTime}
+      candidateTravelStates={Object.fromEntries(
+        election.allCandidates.filter((c) => c.travelState).map((c) => [c.id, c.travelState!])
+      )}
+      showHeading={false}
+    />
+  );
+
+  const factorLedger = (
+    <FactorLedgerCard
+      countryId={election.countryId}
+      data={election.factorLedger}
+      candidates={Object.entries(election.generalVotes?.candidateNames ?? {}).map(([id, name]) => ({
+        id,
+        name,
+        color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
+      }))}
+    />
+  );
+
+  const stateDrivers = (
+    <GeneralElectionShellClient
+      countryId="US"
+      persuasionCandidates={persuasionCandidates}
+      persuasionInputs={persuasionInputs}
+      viewModel={buildGeneralElectionViewModel({
+        candidates: Object.entries(election.generalVotes?.candidateNames ?? {}).map(
+          ([id, name]) => {
+            const partyId = election.generalVotes?.candidateParties?.[id] ?? "";
+            return {
+              id,
+              name,
+              color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
+              partyAbbr: election.partyDisplayById?.[partyId]?.abbr ?? (partyId || "?"),
+            };
+          }
+        ),
+        stateVoteData: Object.fromEntries(
+          Object.entries(election.generalVotes?.stateVoteData ?? {}).map(([stateId, d]) => [
+            stateId,
+            d.votesByCandidate,
+          ])
+        ),
+        regByState: election.regByState,
+        partyDisplayById: election.partyDisplayById,
+        stateNameById: US_STATE_NAME_BY_ID,
+      })}
+    />
+  );
+
+  /**
+   * The trend charts, which otherwise sit inside the tally panel further down.
+   * Colours come from the same `buildGeneralColors` the panel uses, so the two
+   * cannot give one candidate two colours.
+   */
+  const trends = election.generalVotes ? (
+    <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
+      <GeneralVoteCharts
+        snapshots={election.generalVotes.turnSnapshots ?? []}
+        series={((): LineSeries[] => {
+          const colors = buildGeneralColors(election.allCandidates);
+          return election.allCandidates.map((c) => ({
+            id: c.id,
+            name: c.characterName,
+            color: colors.get(c.id) ?? c.partyColor,
+          }));
+        })()}
+        evByTurn={election.generalVotes.evByTurn}
+      />
+    </div>
+  ) : null;
+
+  const detailPanes: RaceDetailPane[] = tabbedDetail
+    ? [
+        ...(isUS ? [{ id: "map", label: "Electoral", content: electoralMap }] : []),
+        ...(isUS && election.myCharId
+          ? [
+              {
+                id: "presence",
+                label: "Campaign presence",
+                content: <StateOrganizationTab showHubLink showHeading={false} />,
+                hash: "#state-org",
+              },
+            ]
+          : []),
+        ...(trends ? [{ id: "trends", label: "Trends", content: trends }] : []),
+        ...(isUS ? [{ id: "drivers", label: "State drivers", content: stateDrivers }] : []),
+        { id: "ledger", label: "Factor ledger", content: factorLedger },
+      ]
+    : [];
+
   return (
     <div className="space-y-4">
+      {tabbedDetail && isPresidentialGeneral ? (
+        <RaceDetailTabs panes={detailPanes} title="Race detail" />
+      ) : null}
+
       {/* The electoral map leads the presidential page, directly under the
           year + race title. It is the one view that answers "who is winning"
           at a glance, and it used to sit below the mood gauge, the factor
           ledger and the battleground shell: three analysis cards that only
           make sense once you have seen the map they decompose. */}
-      {showElectoralMap && isUS && election.electionType === "president" && !localInPrimary && (
+      {!tabbedDetail && isUS && election.electionType === "president" && !localInPrimary && (
         <PresidentialMapWithStateDetail
           electionId={electionId}
           electoralMapData={election.generalVotes?.electoralMapData ?? {}}
@@ -322,55 +432,12 @@ export function GeneralPhaseView({
 
         {/* Factor Ledger — the read-only decomposition of each candidate's
             projected votes into named factors, teed off the engine's own math.
-            Sits beside National Mood; renders null for races with no ledger. */}
-        {election.electionType === "president" && !localInPrimary && (
-          <FactorLedgerCard
-            countryId={election.countryId}
-            data={election.factorLedger}
-            candidates={Object.entries(election.generalVotes?.candidateNames ?? {}).map(
-              ([id, name]) => ({
-                id,
-                name,
-                color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
-              })
-            )}
-          />
-        )}
+            Renders null for races with no ledger. */}
+        {!tabbedDetail && election.electionType === "president" && !localInPrimary && factorLedger}
 
-        {isUS && election.electionType === "president" && !localInPrimary && (
-          <GeneralElectionShellClient
-            countryId="US"
-            persuasionCandidates={persuasionCandidates}
-            persuasionInputs={persuasionInputs}
-            viewModel={buildGeneralElectionViewModel({
-              candidates: Object.entries(election.generalVotes?.candidateNames ?? {}).map(
-                ([id, name]) => {
-                  const partyId = election.generalVotes?.candidateParties?.[id] ?? "";
-                  return {
-                    id,
-                    name,
-                    color: election.generalVotes?.candidateColors?.[id] ?? "#9CA3AF",
-                    partyAbbr: election.partyDisplayById?.[partyId]?.abbr ?? (partyId || "?"),
-                  };
-                }
-              ),
-              stateVoteData: Object.fromEntries(
-                Object.entries(election.generalVotes?.stateVoteData ?? {}).map(([stateId, d]) => [
-                  stateId,
-                  d.votesByCandidate,
-                ])
-              ),
-              // Per-state registration-lean breakdown, computed server-side in
-              // `_enrichElection` from `statePartyOrg.registration` + the
-              // `stateRegistrationPool` buckets. Undefined for states without
-              // seeded registration → the card shows its honest 'no data
-              // tracked' placeholder per state.
-              regByState: election.regByState,
-              partyDisplayById: election.partyDisplayById,
-              stateNameById: US_STATE_NAME_BY_ID,
-            })}
-          />
-        )}
+        {!tabbedDetail && isUS && election.electionType === "president" && !localInPrimary
+          ? stateDrivers
+          : null}
 
         {election.generalVotes ? (
           <GeneralElectionPanel
