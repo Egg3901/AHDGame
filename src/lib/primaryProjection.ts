@@ -93,6 +93,15 @@ export interface ProjectPrimaryInput {
   /** Per-state party-org lookup: key = `${stateId}_${partyId}` -> organization */
   statePartyOrgs: Map<string, number>;
   /**
+   * Per-state live turnout by group id, from `resolveTurnout`.
+   *
+   * This is the channel party GOTV, player canvassing and turnout suppression
+   * all write, and the stagger has always read it. Omitted → the distribution
+   * falls back to stored and default turnout, which is exactly the behaviour
+   * every caller had before this field existed.
+   */
+  liveTurnouts?: Record<string, Record<string, number>>;
+  /**
    * Live state-action rows for this race. The projection applies the same
    * vote-suppression rule the stagger will, so the board does not show a lead
    * the wave is about to remove. Omitted → no suppression at all.
@@ -230,6 +239,7 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         // projection stays in sync with the live stagger.
         currentStateId: stateId,
         countryId,
+        liveTurnouts: input.liveTurnouts?.[stateId],
         stateOrgByCandidate: stateOrgByStateAndCandidate?.get(stateId),
         homeStateByCandidate: resolvedHomeStateByCandidate,
         hasPlayerInRace: hasPlayerInPartyPrimary,

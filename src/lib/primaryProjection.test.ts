@@ -392,3 +392,47 @@ describe("vote suppression", () => {
     expect(project({ stateActions: [suppressionRow()] })).toEqual(project());
   });
 });
+
+describe("turnout modifiers", () => {
+  // GOTV, canvassing and turnout suppression all reach the vote through
+  // `stateDemographicTurnout`. The stagger has always read it; the board never
+  // did, so every one of those effects moved the result and left the
+  // projection showing the old number.
+  const stateMap = new Map([["IA", makeState("IA")]]);
+  const demographicsMap = new Map([["IA", makeDemographics("IA")]]);
+
+  function project(extra: Record<string, unknown> = {}) {
+    return projectPrimaryByState({
+      candidates: [makeCandidate("a"), makeCandidate("b")],
+      candidateMeta: [
+        { candidateId: "a", isNPP: false },
+        { candidateId: "b", isNPP: false },
+      ],
+      stateIds: ["IA"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+      ...extra,
+    });
+  }
+
+  it("responds when a group's turnout is pulled down", () => {
+    // The fixture has one group, so this scales the whole state's pool rather
+    // than shifting the balance between candidates. The point is that the
+    // projection reads the channel at all.
+    const base = project();
+    const damped = project({ liveTurnouts: { IA: { all: 10 } } });
+    expect(damped.byState.IA.a).toBeLessThan(base.byState.IA.a);
+  });
+
+  it("is unchanged when no turnout map is passed", () => {
+    // Every caller that has not been updated must behave exactly as before.
+    expect(project({ liveTurnouts: undefined })).toEqual(project());
+  });
+
+  it("ignores a turnout map that names no state the projection is running", () => {
+    expect(project({ liveTurnouts: { NH: { all: 10 } } })).toEqual(project());
+  });
+});

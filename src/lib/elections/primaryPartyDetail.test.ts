@@ -13,6 +13,11 @@ vi.mock("@/lib/demographics/categoryCatalog", () => ({ loadDemographicCategories
 vi.mock("@/lib/primaryRegionalBonusLoader", () => ({ loadRegionalBonusMaps: vi.fn() }));
 vi.mock("@/lib/primaryProjection", () => ({ projectPrimaryByState: vi.fn() }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn() }));
+// The projection needs a turn to measure suppression windows against, and
+// getGameTime reaches for its own handle rather than taking the caller's.
+vi.mock("@/lib/time/gameTime", () => ({
+  getGameTime: vi.fn().mockResolvedValue({ currentTurn: 12, effectiveNow: new Date() }),
+}));
 vi.mock("@/lib/currency/characterFunds", () => ({
   getHomeCurrency: vi.fn().mockReturnValue("USD"),
   loadCharacterFxRate: vi.fn(),
@@ -359,5 +364,42 @@ describe("buildPrimaryPartyDetail", () => {
       const detail = await build(rows(), "1", null);
       expect(detail?.viewerCampaign).toBeNull();
     });
+  });
+});
+
+describe("what the builder feeds the projection", () => {
+  async function projectionInput(rows: Record<string, unknown[]> = {}) {
+    const { projectPrimaryByState } = await import("@/lib/primaryProjection");
+    vi.mocked(projectPrimaryByState).mockClear();
+    await build({ politicalParties: [DEM], electionCandidates: [candidateRow()], ...rows }, "1");
+    return vi.mocked(projectPrimaryByState).mock.calls[0][0];
+  }
+
+  it("resolves turnout per state, so the board reads the channel the wave does", async () => {
+    // Party GOTV, canvassing and turnout suppression all write
+    // stateDemographicTurnout. The stagger has always read it; the board did
+    // not, so all three moved the result and left the projection alone.
+    const input = await projectionInput({
+      states: [{ _id: "IA", countryId: "US", name: "Iowa", population: 3_000_000 }],
+      stateDemographics: [
+        {
+          _id: "IA",
+          countryId: "US",
+          categoryWeights: { voterGroups: 100 },
+          groups: { all: { population: 3_000_000, economicLean: -1, socialLean: -1, turnout: 60 } },
+        },
+      ],
+      stateDemographicTurnout: [
+        { _id: "IA", countryId: "US", modifiers: { voterGroups: { all: -5 } } },
+      ],
+    });
+    expect(input.liveTurnouts).toBeDefined();
+    expect(input.liveTurnouts?.IA).toBeDefined();
+  });
+
+  it("passes the live attack rows and the turn they are measured against", async () => {
+    const input = await projectionInput();
+    expect(input.currentTurn).toBe(12);
+    expect(Array.isArray(input.stateActions)).toBe(true);
   });
 });
