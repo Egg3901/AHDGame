@@ -86,6 +86,7 @@ import { getNationalNpiOrdinalRank } from "@/lib/character/nationalNpiOrdinalRan
 import { getFinancialData } from "@/lib/character/financialData";
 import { unionContributionIncomePerTurn } from "@/lib/unions/unionContributionIncome";
 import { ACTION_HOARDING_THRESHOLD } from "@/lib/actions/recommendationsConstants";
+import { isPatreonActive } from "@/lib/db/types";
 
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 
@@ -121,6 +122,10 @@ async function getCharacterData() {
   const statePartyKey = `${character.homeState}_${character.party}`;
 
   const viewerUser = userDoc;
+  const supporterActive = isPatreonActive(
+    viewerUser?.patreonTier ?? null,
+    viewerUser?.patreonExpiresAt ?? null
+  );
   const [
     homeState,
     gameConfig,
@@ -333,11 +338,17 @@ async function getCharacterData() {
     discordUsername: viewerUser?.discordUsername ?? null,
     discordAvatar: viewerUser?.discordAvatar ?? null,
     lastActivity: viewerUser?.lastActivity ?? null,
-    patreonHighlightColor: viewerUser?.patreonHighlightColor ?? null,
-    patreonTier: viewerUser?.patreonTier ?? null,
-    patreonExpiresAt: viewerUser?.patreonExpiresAt ?? null,
-    patreonSince: viewerUser?.patreonSince ?? null,
-    patreonProfileBorder: viewerUser?.patreonProfileBorder ?? null,
+    // Gate on active status exactly as the public profile does
+    // (src/app/character/[id]/page.tsx). Without this the owner keeps their
+    // badge, border and highlight colour after the pledge lapses while every
+    // other player correctly sees none of it — the two pages disagreed about
+    // the same person.
+    patreonHighlightColor: supporterActive ? (viewerUser?.patreonHighlightColor ?? null) : null,
+    patreonTier: supporterActive ? (viewerUser?.patreonTier ?? null) : null,
+    patreonExpiresAt: supporterActive ? (viewerUser?.patreonExpiresAt ?? null) : null,
+    patreonSince: supporterActive ? (viewerUser?.patreonSince ?? null) : null,
+    patreonProfileBorder: supporterActive ? (viewerUser?.patreonProfileBorder ?? null) : null,
+    supporterProvider: supporterActive ? (viewerUser?.supporterProvider ?? null) : null,
     countrySlug: charCountryId?.toLowerCase() ?? "us",
     partyNames,
     partyHistory,
@@ -397,6 +408,7 @@ export default async function ProfilePage() {
     patreonExpiresAt,
     patreonSince,
     patreonProfileBorder,
+    supporterProvider,
     countrySlug,
     partyNames,
     partyHistory,
@@ -613,6 +625,7 @@ export default async function ProfilePage() {
           patreonExpiresAt={patreonExpiresAt}
           patreonSince={patreonSince}
           patreonProfileBorder={patreonProfileBorder}
+          supporterProvider={supporterProvider}
           ownProfileHref={buildCharacterHref(character)}
         />
 

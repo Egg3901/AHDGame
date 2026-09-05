@@ -2,7 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import type { Character, PoliticalParty } from "@/lib/db/types";
-import type { PatreonTier, ProfileBorderKey } from "@/lib/db/types";
+import type { PatreonTier, ProfileBorderKey, SupporterProvider } from "@/lib/db/types";
 import { getCountryConfig } from "@/lib/constants/countries";
 import type { CountryId } from "@/lib/constants/countries";
 import { ProfilePictureUpload } from "@/components/ProfilePictureUpload";
@@ -32,6 +32,9 @@ interface ProfileHeaderProps {
   patreonExpiresAt?: Date | null;
   patreonSince?: Date | null;
   patreonProfileBorder?: ProfileBorderKey | null;
+  /** Which system granted the benefits. Drives provider-neutral badge copy so a
+   *  Lakeside subscriber is not described as a Patreon patron. */
+  supporterProvider?: SupporterProvider | null;
   /** Own profile href for the copy-link button (omit on other players' profiles) */
   ownProfileHref?: string;
   /** Link shown in the header action area on other players' profiles (e.g. wiki profile) */
@@ -58,6 +61,7 @@ export function ProfileHeader({
   patreonExpiresAt,
   patreonSince,
   patreonProfileBorder,
+  supporterProvider,
   ownProfileHref,
   wikiProfileHref,
 }: ProfileHeaderProps) {
@@ -156,6 +160,7 @@ export function ProfileHeader({
                   tier={patreonTier ?? null}
                   expiresAt={patreonExpiresAt}
                   since={patreonSince}
+                  provider={supporterProvider ?? undefined}
                 />
                 {user.isAdmin && (
                   <span className="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-warning sm:text-[10px]">
