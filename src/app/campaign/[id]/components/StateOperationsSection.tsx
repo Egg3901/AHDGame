@@ -9,7 +9,7 @@ import {
   DemographicPickerModal,
   type DemographicPick,
 } from "@/components/elections/primary/DemographicPickerModal";
-import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
+import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import type { PrimaryStateActionKind } from "@/lib/db/types";
 import type {
@@ -119,11 +119,11 @@ export function StateOperationsSection({
 
   const levelByState = new Map(presence.map((p) => [p.stateId, p.level]));
 
-  // Priced from the same function the build route charges with, per state, so
-  // the escalating ladder cannot be misquoted as a flat toll, and converted with
-  // the one rate the view carries so it agrees with the row above.
+  // Priced by the same helper every other presence screen uses, per state, so
+  // the escalating ladder cannot be misquoted as a flat toll and the three
+  // builders cannot quote three figures for one level.
   const presenceCost = (stateId: string) =>
-    stateOrgLevelCost(levelByState.get(stateId) ?? 0) * view.campaignFxRate;
+    statePresenceNextCost(levelByState.get(stateId) ?? 0, view.campaignFxRate);
 
   const buildPresence = async (stateId: string) => {
     setPresenceBusy(true);

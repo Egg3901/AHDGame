@@ -28,7 +28,7 @@ import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
 import { getDemographicCategoriesForCountry } from "@/lib/demographics/countryDemographics";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
+import { statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 import {
   PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
   PRIMARY_LOCAL_ATTACK_COST_FUNDS,
@@ -110,7 +110,7 @@ export async function buildStateOperations(
       stateId: r.stateId,
       name: stateNameById[r.stateId] ?? r.stateId,
       level: r.level,
-      nextCost: stateOrgLevelCost(r.level) * rate,
+      nextCost: statePresenceNextCost(r.level, rate),
     }));
 
   // ── The field ─────────────────────────────────────────────────────────────
