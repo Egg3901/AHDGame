@@ -3,6 +3,7 @@ import {
   NON_PARTY_BUCKET_INDEPENDENT_BIAS,
   PASSIVE_REG_DECAY_RATE,
   PASSIVE_REG_DRIFT_RATE,
+  REG_DECAY_LAPSE_TO_POOL_SHARE,
   REG_DRIFT_CATCH_ELIGIBILITY_ORG_PCT,
   STRONGHOLD_FALL_TIME_TURNS_TARGET,
 } from "./pacingConstants";
@@ -52,5 +53,14 @@ describe("pacingConstants", () => {
   it("stronghold-fall target is in the documented 150-300 turn band", () => {
     expect(STRONGHOLD_FALL_TIME_TURNS_TARGET).toBeGreaterThanOrEqual(150);
     expect(STRONGHOLD_FALL_TIME_TURNS_TARGET).toBeLessThanOrEqual(300);
+  });
+
+  it("decay lapse share keeps both routes alive", () => {
+    // Strictly between 0 and 1. At 0 the pool becomes a one-way sink again —
+    // the defect that disabled the registration drive in every saturated
+    // country. At 1 no rival ever inherits a lapsed registration, which
+    // removes the catch-up route organised parties are meant to have.
+    expect(REG_DECAY_LAPSE_TO_POOL_SHARE).toBeGreaterThan(0);
+    expect(REG_DECAY_LAPSE_TO_POOL_SHARE).toBeLessThan(1);
   });
 });

@@ -24,6 +24,19 @@ import {
   type AdmissionDecision,
 } from "@/lib/elections/statehoodAdmission";
 import { buildMajorPartyOrgsForState } from "@/lib/seeds/reference/statePartyOrg";
+import { politicalParties as SEED_PARTIES } from "@/lib/seeds/reference/politicalParties";
+import { logger } from "@/lib/observability/logger";
+
+/**
+ * Canonical US seed name for each seeded abbreviation, used as a fallback when
+ * a live world has renamed a party away from the abbreviation the registration
+ * seeds still use (e.g. "REP" → "GOP" on the production world).
+ */
+const US_SEED_PARTY_NAME_BY_ABBR = new Map(
+  SEED_PARTIES.filter((p) => p.countryId === "US" && p.abbreviation && p.name).map(
+    (p) => [p.abbreviation.toUpperCase(), p.name.trim().toLowerCase()] as const
+  )
+);
 
 export interface StatehoodResult {
   ran: boolean;
@@ -135,20 +148,38 @@ export async function seedAdmittedStatePolitics(
     if (!registrationSeed) {
       throw new Error(`Statehood seed is missing 1953 registration data for ${stateId}`);
     }
+    // Fetch the whole US roster rather than filtering on the seed's
+    // abbreviations: a live world can rename a party, and the renamed row must
+    // still be reachable by the name fallback below.
     const parties = await db
       .collection<PoliticalParty>("politicalParties")
-      .find({
-        countryId: "US",
-        abbreviation: { $in: registrationSeed.parties.map((party) => party.abbr) },
-      })
+      .find({ countryId: "US" })
       .toArray();
     const partyByAbbr = new Map(
-      parties.map((party) => [party.abbreviation.toUpperCase(), party] as const)
+      parties.map((party) => [party.abbreviation?.toUpperCase(), party] as const)
+    );
+    const partyByName = new Map(
+      parties.map((party) => [party.name?.trim().toLowerCase(), party] as const)
     );
     for (const share of registrationSeed.parties) {
-      const party = partyByAbbr.get(share.abbr);
+      // Abbreviation first, then the canonical seed's NAME for that
+      // abbreviation. Parties are player-mutable while seeds are static, so an
+      // abbreviation alone is too brittle a key — the live world renamed the
+      // seeded "REP" to "GOP", which used to abort the whole admission.
+      const canonicalName = US_SEED_PARTY_NAME_BY_ABBR.get(share.abbr.toUpperCase());
+      const party =
+        partyByAbbr.get(share.abbr.toUpperCase()) ??
+        (canonicalName ? partyByName.get(canonicalName) : undefined);
       if (!party) {
-        throw new Error(`Statehood seed cannot find US party ${share.abbr} for ${stateId}`);
+        // Warn and continue rather than throw. Aborting here used to strand the
+        // admission after the org rows were written but before the
+        // registration-pool upsert, leaving the state permanently outside the
+        // drift/decay phase (it skips states with no pool row).
+        logger.warn(
+          "Statehood",
+          `No US party matches seed abbreviation "${share.abbr}" for ${stateId} — skipping its registration shares`
+        );
+        continue;
       }
       // Orgs were upserted above via buildMajorPartyOrgsForState. Do not call
       // ensureStatePartyOrgRow here — its political gate re-reads admittedYear

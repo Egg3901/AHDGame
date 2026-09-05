@@ -58,6 +58,26 @@ export const PASSIVE_REG_DRIFT_RATE = 0.075 as const;
 export const PASSIVE_REG_DECAY_RATE = 0.004 as const;
 
 /**
+ * Share of each turn's decayed Reg that LAPSES back to the non-party pool
+ * (Independent + Unregistered) instead of being redistributed to rival
+ * parties. The remainder still routes via the sqrt(Org) eligibility weights.
+ *
+ * Why this exists: decay used to reach the pool only when NO party in the
+ * state cleared `REG_DRIFT_CATCH_ELIGIBILITY_ORG_PCT` — i.e. essentially
+ * never. Every lapsed registration was inherited by a rival instead, so with
+ * drift drawing the pool down one-directionally the pool was a one-way sink.
+ * It emptied in every US state by live turn ~155 (RU ~176, UK ~143) and could
+ * never refill, which permanently disabled the pool-sourced Registration
+ * Drive and pushed each state toward an unrealistic 100% party-registered
+ * electorate. Splitting the decay models the two things that actually happen
+ * to a lapsed registration: some voters switch party, some fall off the rolls.
+ *
+ * 0.5 = an even split, the reading the design's own language supports
+ * ("Reg loses a small amount each turn unless actively maintained").
+ */
+export const REG_DECAY_LAPSE_TO_POOL_SHARE = 0.5 as const;
+
+/**
  * Eligibility threshold for a party to "catch" drifted Reg.
  * Parties below this Org% in a state cannot absorb Reg from drift / decay
  * routing — the displaced share routes to non-party buckets instead

@@ -263,3 +263,65 @@ describe("seedAdmittedStatePolitics", () => {
     expect(db.collectionMocks.elections).toBeUndefined();
   });
 });
+
+// Live worlds drift away from the seed's party roster: on the production world
+// the seeded "REP" was replaced and the Republican Party now carries the
+// abbreviation "GOP". Admission used to throw on that unresolved abbreviation,
+// aborting mid-way — after the org rows and DEM's shares were written but
+// BEFORE the stateRegistrationPool upsert. AK (admitted in-game 1955) and HI
+// (1965) both carry that exact signature live: DEM seeded, Republicans not,
+// pool row absent, so drift and the registration drive are frozen there.
+describe("seedAdmittedStatePolitics — party roster drifted from the seed", () => {
+  let db: MockDb;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("politicalParties");
+    db.collectionMocks.politicalParties!.find.mockReturnValue({
+      toArray: async () => [
+        { countryId: "US", abbreviation: "DEM", name: "Democratic Party", sequentialId: 1 },
+        // Same party, renamed: the seed still says "REP".
+        { countryId: "US", abbreviation: "GOP", name: "Republican Party", sequentialId: 6 },
+      ],
+    } as never);
+  });
+
+  const decision = { stateId: "AK", name: "Alaska", year: 1959, hazard: 0.2 };
+
+  it("still creates the registration pool row when a seed party cannot be matched by abbreviation", async () => {
+    await seedAdmittedStatePolitics(
+      db as unknown as Db,
+      [decision],
+      new Date("2026-01-01"),
+      "1953-default"
+    );
+
+    expect(db.collectionMocks.stateRegistrationPool!.updateOne).toHaveBeenCalledWith(
+      { _id: "US_AK" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ independent: 24, unregistered: 14 }),
+      }),
+      { upsert: true }
+    );
+  });
+
+  it("falls back to the canonical seed name so the renamed party still gets its shares", async () => {
+    await seedAdmittedStatePolitics(
+      db as unknown as Db,
+      [decision],
+      new Date("2026-01-01"),
+      "1953-default"
+    );
+
+    // AK's 1953 override gives REP org 22 / reg 30 — those must land on the
+    // renamed GOP row (sequentialId 6), not be silently dropped.
+    const orgWrites = db.collectionMocks.statePartyOrg!.updateOne.mock.calls;
+    const gopWrite = orgWrites.find((call) => (call[0] as { _id: string })._id === "AK_6");
+    expect(gopWrite).toBeDefined();
+    expect(gopWrite![1]).toEqual(
+      expect.objectContaining({
+        $set: expect.objectContaining({ organization: 22, registration: 30 }),
+      })
+    );
+  });
+});
