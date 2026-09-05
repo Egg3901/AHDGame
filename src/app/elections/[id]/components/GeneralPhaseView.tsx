@@ -325,6 +325,7 @@ export function GeneralPhaseView({
             Sits beside National Mood; renders null for races with no ledger. */}
         {election.electionType === "president" && !localInPrimary && (
           <FactorLedgerCard
+            countryId={election.countryId}
             data={election.factorLedger}
             candidates={Object.entries(election.generalVotes?.candidateNames ?? {}).map(
               ([id, name]) => ({
