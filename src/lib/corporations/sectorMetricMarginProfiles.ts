@@ -1,3 +1,10 @@
+/**
+ * Why two corps in the same sector (for example retail) earn different margins in
+ * different states. computeStateMetricMarginModifier turns a state's metrics
+ * (unemployment, grid reliability, corruption, workforce skill, crime, broadband,
+ * roads, carbon, cost of living) into a margin modifier weighted by the sector's
+ * strategy, capped at 0.75 points per metric, 2 per channel and 8 in total.
+ */
 import {
   getBroadbandMarginModifier,
   getCarbonEmissionsMarginModifier,

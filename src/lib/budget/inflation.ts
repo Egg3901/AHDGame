@@ -1,4 +1,12 @@
 /**
+ * What pushes a country's inflation up or down. calculateInflationWithBreakdown
+ * returns the signed contribution of each driver: the unemployment and GDP growth
+ * gaps, the prime rate versus neutral, the deficit as a share of GDP, tariffs,
+ * wage growth, commodity prices, currency depreciation, savings outflow, housing
+ * costs and money supply, then smooths toward last turn and toward the 2% target.
+ * The result is clamped to MIN_INFLATION..MAX_INFLATION.
+ */
+/**
  * Dynamic inflation calculation per country.
  *
  * Combines real economic drivers that the game already tracks:

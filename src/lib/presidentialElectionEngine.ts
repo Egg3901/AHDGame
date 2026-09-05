@@ -1,4 +1,12 @@
 /**
+ * How the presidential election is decided and who is on track to win. Votes
+ * accumulate per state (and per Maine and Nebraska district) each turn through
+ * accumulatePresidentVoteTurn using the swing-flow model; a state's partisan lean
+ * nudges candidates by at most 20% (leanVoteMultiplier), independents pay
+ * INDEPENDENT_VOTE_PENALTY, and the tally started by initPresidentVoteTally
+ * resolves the Electoral College.
+ */
+/**
  * Presidential election vote accumulation and tally initialization.
  * Per-state (and ME/NE district) vote accumulation; Electoral College resolution.
  */

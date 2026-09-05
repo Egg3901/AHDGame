@@ -1,3 +1,10 @@
+/**
+ * Army unit stats and how one formation's combat value is computed. Posture
+ * (POSTURES: Garrison, Standard, Forward-Deployed, High Alert) scales upkeep and
+ * power; veterancy (VET), tech level (TECH), equipment (EQ) and readiness feed
+ * combatValue; terrain (TERRAIN) and roles (ROLES) set frontage and capacity.
+ * effUpkeep is what a formation costs to keep each turn.
+ */
 // Combat unit model + per-unit combat math, ported verbatim from the Combat
 // Command design's DCLogic. Pure functions: doctrine + general modifiers are
 // passed in (from doctrineTree.natMods and generals.genMods) so nothing here

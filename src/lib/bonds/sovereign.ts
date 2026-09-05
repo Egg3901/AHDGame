@@ -1,4 +1,12 @@
 /**
+ * Government debt and why it grows: sovereign bond issuance. Every 12 turns
+ * (shouldIssueQuarterlySovereignBondSeries) a country running a deficit issues a
+ * quarter of its annual deficit as bonds (calculateQuarterlyIssuanceAmount) at
+ * prime plus a term premium (getSovereignCouponRate); maturing bonds roll over
+ * (calculateSovereignRolloverAmount) and unsold units are monetized. The budget's
+ * debt principal and debt interest line move with each issue.
+ */
+/**
  * Sovereign bond issuance + gov-budget accounting.
  *
  * **Currency (v0.2.6):** Sovereign bonds are issued in the country's currency

@@ -1,3 +1,10 @@
+/**
+ * Naval and air standing orders: what a fleet or wing does when nobody gives it
+ * orders. defaultNavalMission returns to port below WITHDRAW_INTEGRITY (35) or
+ * WITHDRAW_READINESS (25) or in peacetime, fights for sea control when a hostile
+ * fleet shares the region, puts submarines on sea denial, blockades an enemy's
+ * trade approaches, else transits. defaultAirMission does the same for air wings.
+ */
 import * as M from "./map";
 import { homeRegionOf } from "@/lib/military/regionTopology";
 import { tradeApproaches } from "./blockade";
