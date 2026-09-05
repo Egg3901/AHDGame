@@ -172,14 +172,34 @@ describe("the hero is the ticket list in a two-way race", () => {
 
   it("prints the leader's electoral votes only where each one earns its place", () => {
     renderView();
-    // Five, and every one is deliberate: the hero figure and the reader's own
-    // "Your ticket" standing, once per tree, plus the rail's nav badge. The bar
-    // used to label its own segment too, ~20px under a 50px rendering of the
-    // same number, and the tickets table repeated it a third time. If this
-    // count rises, something started echoing the hero again.
-    expect(screen.getAllByText("276")).toHaveLength(5);
+    // Three bare figures, every one deliberate: the reader's own "Your ticket"
+    // standing once per tree, plus the rail's nav badge. The hero's own two
+    // now carry their unit and sit under a "Current projection" label, so they
+    // read as "276 EV" instead. The bar used to label its own segment too,
+    // ~20px under a 50px rendering of the same number, and the tickets table
+    // repeated it a third time. If either count rises, something started
+    // echoing the hero again.
+    expect(screen.getAllByText("276")).toHaveLength(3);
+    expect(screen.getAllByText("276 EV")).toHaveLength(2);
   });
 });
+
+/**
+ * The hero grids, one per tree.
+ *
+ * The two even columns are the hero's own signature; the board's grid is
+ * `repeat(N, 1fr)` and the tickets table's columns are fixed widths, so neither
+ * answers this selector. If the hero ever goes back to free columns it matches
+ * nothing and the count assertion fails.
+ */
+const heroGrids = (container: HTMLElement) =>
+  Array.from(
+    container.querySelectorAll<HTMLElement>('div[style*="grid-template-columns: 1fr 1fr"]')
+  );
+
+/** One string per grid cell, in document order. */
+const cellText = (grid: HTMLElement) =>
+  Array.from(grid.children).map((cell) => cell.textContent ?? "");
 
 describe("the hero's two sides stay level", () => {
   // As two independent flex columns, any asymmetry between the sides — a
@@ -191,15 +211,6 @@ describe("the hero's two sides stay level", () => {
   // and would not have been fixed by a change to the desktop hero. Both trees
   // now call one function, and these assertions check every copy of the hero
   // rather than the first one they find.
-  // The two even columns are the hero's own signature; the board's grid is
-  // `repeat(N, 1fr)` and the tickets table's columns are fixed widths, so
-  // neither answers this selector. If the hero ever goes back to free columns
-  // it matches nothing and the count assertion fails.
-  const heroGrids = (container: HTMLElement) =>
-    Array.from(
-      container.querySelectorAll<HTMLElement>('div[style*="grid-template-columns: 1fr 1fr"]')
-    );
-
   it("draws the hero once per tree, from one shared function", () => {
     const { container } = renderView();
     expect(heroGrids(container)).toHaveLength(2);
@@ -217,23 +228,60 @@ describe("the hero's two sides stay level", () => {
     const grids = heroGrids(container);
     expect(grids).toHaveLength(2);
     for (const grid of grids) {
-      // Name, party, figure and share for each ticket, plus an endorse row the
-      // rival fills and the reader's own side leaves empty. An odd count would
-      // mean some row exists on one side only, which is how the figures drifted.
+      // Name, party, two labelled figures and a share for each ticket, plus an
+      // endorse row the rival fills and the reader's own side leaves empty. An
+      // odd count would mean a row exists on one side only, which is how the
+      // figures drifted apart.
       expect(grid.children.length).toBeGreaterThan(0);
       expect(grid.children.length % 2).toBe(0);
     }
   });
 
-  it("puts the same two electoral-vote figures in both heroes", () => {
+  it("renders both heroes from the same figures", () => {
     const { container } = renderView();
-    const figures = heroGrids(container).map((grid) =>
-      Array.from(grid.children)
-        .map((cell) => cell.textContent ?? "")
-        .filter((text) => /^\d+$/.test(text))
-    );
-    expect(figures[0]).toEqual(["276", "251"]);
-    expect(figures[1]).toEqual(figures[0]);
+    const [mobile, desktop] = heroGrids(container).map(cellText);
+    // The trees differ in type size and nothing else. Any divergence here means
+    // a layout has started deciding for itself what to show.
+    expect(mobile).toEqual(desktop);
+  });
+});
+
+describe("the hero separates what is counted from what is forecast", () => {
+  // No state is awarded until the race resolves — the engine writes electoral
+  // votes only at resolution, and until then the API derives them by
+  // winner-take-all over the ballots banked so far. So the electoral figure is
+  // a forecast for the whole general, and leading with it unlabelled invited it
+  // to be read as votes already won. The banked ballots are the real count, so
+  // they carry the hero figure and the forecast is named as one.
+  it("leads with the banked vote, then names the electoral figure a projection", () => {
+    const { container } = renderView();
+    for (const grid of heroGrids(container)) {
+      const text = cellText(grid);
+      expect(text).toContain("Votes banked");
+      expect(text).toContain("69.5M");
+      expect(text).toContain("Current projection");
+      expect(text).toContain("276 EV");
+      // Counted first, forecast second — the order is the whole point.
+      expect(text.indexOf("Votes banked")).toBeLessThan(text.indexOf("Current projection"));
+      expect(text.indexOf("69.5M")).toBeLessThan(text.indexOf("276 EV"));
+    }
+  });
+
+  it("never prints a bare electoral figure that could read as won", () => {
+    const { container } = renderView();
+    for (const grid of heroGrids(container)) {
+      // toContain is exact on array members, so "276 EV" is not "276".
+      expect(cellText(grid)).not.toContain("276");
+      expect(cellText(grid)).not.toContain("251");
+      expect(cellText(grid)).toContain("276 EV");
+    }
+  });
+
+  it("labels the reader's own standing in the rail as a projection too", () => {
+    renderView();
+    // Two hero cells and one rail block per tree: (2 + 1) x 2. The rail carried
+    // the same derived figure at 34px with nothing saying what it was.
+    expect(screen.getAllByText("Current projection")).toHaveLength(6);
   });
 });
 

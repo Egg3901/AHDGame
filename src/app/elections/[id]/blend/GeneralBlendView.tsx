@@ -200,7 +200,19 @@ function YourTicketBlock({ vm, campaignLink }: { vm: GeneralBlendVM; campaignLin
       <div style={{ marginTop: 9, fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
         {vm.yourTicket.name}
       </div>
-      <div style={{ marginTop: 8, display: "flex", alignItems: "baseline", gap: 9 }}>
+      <div
+        style={{
+          marginTop: 9,
+          fontFamily: FONT.mono,
+          fontSize: 9,
+          letterSpacing: ".14em",
+          textTransform: "uppercase",
+          color: BLEND.mutedDim,
+        }}
+      >
+        Current projection
+      </div>
+      <div style={{ marginTop: 3, display: "flex", alignItems: "baseline", gap: 9 }}>
         <span
           style={{
             fontFamily: FONT.mono,
@@ -405,16 +417,15 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
     );
   };
 
-  /**
-   * The two leading tickets, side by side.
-   *
-   * A grid of shared ROWS rather than two independent columns. As two flex
-   * columns bottom-aligned, any difference in content height between them —
-   * one ticket having a running mate, or the reader's own ticket having no
-   * endorse button — pushed one side down and the two big electoral-vote
-   * figures stopped lining up. Rows align by construction, whatever each side
-   * happens to carry.
-   */
+  /** The small caps label that says which of the two figures follows. */
+  const labelStyle = (fontSize: number): React.CSSProperties => ({
+    fontFamily: FONT.mono,
+    fontSize,
+    letterSpacing: ".14em",
+    textTransform: "uppercase",
+    color: BLEND.mutedDim,
+  });
+
   const heroCell = (
     c: GeneralTicketVM,
     i: number,
@@ -438,22 +449,30 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
   /**
    * The two leading tickets, side by side, at a given type scale.
    *
+   * Counted first, forecast second. The hero figure is the ballots the engine
+   * has actually banked; the electoral votes under it are read off those same
+   * ballots by winner-take-all and are a projection, because no state is
+   * awarded until the race resolves — mid-race there is no such thing as an
+   * electoral vote a ticket already holds. Leading with the electoral figure
+   * unlabelled invited it to be read as won. Each half is named and the two
+   * are ruled apart.
+   *
    * One function for both trees. The phone used to draw its own inline copy of
    * this block, so a fix applied to one layout left the other as it was — and
    * both copies had the same latent fault, since each side was an independent
    * flex column. Any asymmetry between them (one ticket with a running mate,
    * the reader's own ticket with no endorse button) pushed one column down and
-   * the two big electoral-vote figures stopped lining up. Shared grid rows
-   * align by construction, whatever each side happens to carry.
+   * the figures stopped lining up. Shared grid rows align by construction,
+   * whatever each side happens to carry.
    */
   const heroPair = (scale: {
     name: number;
     party: number;
     mate: number;
-    ev: number;
+    label: number;
+    votes: number;
     share: number;
-    /** The phone has no room for the popular-vote total beside the share. */
-    withVotes: boolean;
+    projection: number;
     columnGap: number;
     marginBottom: number;
   }) => (
@@ -511,21 +530,27 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             )
           )
         : null}
+      {/* The counted half. These are ballots the engine has actually banked, so
+          they carry the hero figure; the electoral votes below them are read
+          off the same ballots and are a forecast until the race resolves. */}
+      {vm.topTwo.map((c, i) =>
+        heroCell(c, i, "votes-label", { marginTop: 9, ...labelStyle(scale.label) }, "Votes banked")
+      )}
       {vm.topTwo.map((c, i) =>
         heroCell(
           c,
           i,
-          "ev",
+          "votes",
           {
-            marginTop: 7,
+            marginTop: 3,
             fontFamily: FONT.mono,
-            fontSize: scale.ev,
+            fontSize: scale.votes,
             lineHeight: 1,
             fontWeight: 500,
             letterSpacing: "-0.04em",
             color: c.color,
           },
-          c.ev
+          c.votes
         )
       )}
       {vm.topTwo.map((c, i) =>
@@ -534,11 +559,43 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           i,
           "share",
           { marginTop: 4, fontFamily: FONT.mono, fontSize: scale.share, color: BLEND.muted },
-          scale.withVotes ? `${c.pct}% · ${c.votes}` : `${c.pct}%`
+          `${c.pct}%`
+        )
+      )}
+      {/* The forecast half, ruled off so the two cannot be read as one figure. */}
+      {vm.topTwo.map((c, i) =>
+        heroCell(
+          c,
+          i,
+          "projection-label",
+          {
+            marginTop: 11,
+            paddingTop: 8,
+            borderTop: `1px solid ${BLEND.hairline}`,
+            ...labelStyle(scale.label),
+          },
+          "Current projection"
+        )
+      )}
+      {vm.topTwo.map((c, i) =>
+        heroCell(
+          c,
+          i,
+          "projection",
+          {
+            marginTop: 3,
+            fontFamily: FONT.mono,
+            fontSize: scale.projection,
+            lineHeight: 1,
+            fontWeight: 500,
+            letterSpacing: "-0.02em",
+            color: c.color,
+          },
+          `${c.ev} EV`
         )
       )}
       {vm.topTwo.some((c) => !c.isYou)
-        ? vm.topTwo.map((c, i) => heroCell(c, i, "endorse", { marginTop: 8 }, endorseButton(c)))
+        ? vm.topTwo.map((c, i) => heroCell(c, i, "endorse", { marginTop: 10 }, endorseButton(c)))
         : null}
     </div>
   );
@@ -647,9 +704,10 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                 name: 15,
                 party: 9,
                 mate: 12,
-                ev: 38,
+                label: 8,
+                votes: 34,
                 share: 11,
-                withVotes: false,
+                projection: 20,
                 columnGap: 16,
                 marginBottom: 0,
               })}
@@ -899,9 +957,10 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                 name: 19,
                 party: 10,
                 mate: 13,
-                ev: 50,
+                label: 9,
+                votes: 46,
                 share: 12,
-                withVotes: true,
+                projection: 25,
                 columnGap: 24,
                 marginBottom: 18,
               })}
