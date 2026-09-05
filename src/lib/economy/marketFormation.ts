@@ -20,6 +20,13 @@ export type {
   MarketFormationSnapshot,
 } from "@/lib/db/types/marketFormation";
 
+/**
+ * How many empty-cell rows the per-turn snapshot keeps. The list is a
+ * diagnostic sample, not a data source: at ~460 bytes a row the uncapped list
+ * reached ~1MB on every turn's document.
+ */
+const EMPTY_MARKET_CELL_SAMPLE_CAP = 250;
+
 type MarketValue = {
   demand: number;
   supply: number;
@@ -214,6 +221,27 @@ export function computeMarketFormationSnapshot(args: {
     ? funnel.diagnostics.filter((row) => typeof row.reason === "string").length
     : 0;
 
+  // Persisted snapshots are one document per turn, and the full cell list was
+  // ~1MB of each. Nothing outside this module reads it; every aggregate a
+  // consumer needs is computed above and returned alongside. Keep a bounded,
+  // deterministically ordered sample so the diagnostic ("show me examples")
+  // survives, and record how many rows were dropped.
+  //
+  // Order: facility-ready first (the actionable ones — a corporation could
+  // enter tomorrow), then largest headroom, then a stable key so the sample
+  // does not churn between turns for no reason.
+  const sampledEmptyCells = [...emptyMarketCells]
+    .sort(
+      (a, b) =>
+        Number(b.facilityReady) - Number(a.facilityReady) ||
+        b.headroomUnits - a.headroomUnits ||
+        a.countryId.localeCompare(b.countryId) ||
+        a.stateId.localeCompare(b.stateId) ||
+        a.sectorType.localeCompare(b.sectorType)
+    )
+    .slice(0, EMPTY_MARKET_CELL_SAMPLE_CAP);
+  const omittedEmptyCells = emptyMarketCells.length - sampledEmptyCells.length;
+
   return {
     cellsObserved: universe.size,
     activeCells: activeBuckets.size,
@@ -246,7 +274,8 @@ export function computeMarketFormationSnapshot(args: {
         return { countryId: countryId!, stateId: stateId!, cells: value.cells };
       })
       .sort((a, b) => b.cells - a.cells || a.stateId.localeCompare(b.stateId)),
-    emptyMarketCells,
+    emptyMarketCells: sampledEmptyCells,
+    ...(omittedEmptyCells > 0 ? { emptyMarketCellsOmitted: omittedEmptyCells } : {}),
     basis:
       "active corporate sectors plus unowned pools; facility headroom; state demand, local supply, and delivered supply; current-turn NPP entry outcomes",
   };
