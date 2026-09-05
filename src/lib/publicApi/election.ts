@@ -69,20 +69,98 @@ function hasResolvedResult(status: Election["status"]): boolean {
  * Shares are computed off the total on the row, so they sum to ~100 even before
  * the result is finalised; `finalized` says whether the count is done.
  */
-type PublicCandidateStats =
-  | Pick<Character, "favorability" | "politicalInfluence">
-  | Pick<NPP, "favorability" | "politicalInfluence">;
+type PublicCandidateStats = Pick<Character | NPP, "favorability" | "politicalInfluence">;
+
+/**
+ * Whether a race seats more than one member, and so has a seat split to report.
+ *
+ * Shared by the list and detail endpoints so the two cannot drift on which races
+ * expose `seatsEstimate` — the same race reporting a split on one endpoint and
+ * not the other is worse than either answer on its own.
+ */
+function isMultiSeatRace(election: Pick<Election, "totalSeats">): boolean {
+  return (election.totalSeats ?? 1) > 1;
+}
+
+/**
+ * Favorability and political influence for each candidate, keyed by the
+ * `electionCandidates` ROW id.
+ *
+ * The key is the whole difficulty. Vote tallies are keyed by the candidate row
+ * `_id` — `initElectionVoteTally` seeds `totalVotes[c._id]`, and the primary
+ * resolver writes `candidateNames[c._id]` — NOT by `characterId`. The stats
+ * themselves live on the character, or on the NPP for a non-party candidate. So
+ * the candidate row is the hop between the two id spaces, and a map keyed by
+ * character id joins against nothing: every stat would read `null` in
+ * production while mocked tests keyed to characters still pass.
+ *
+ * Rows are many-to-one onto an identity, not one-to-one: entering a race
+ * withdraws the prior row and inserts a fresh one, so one character can own
+ * several rows in the same race. Stats are resolved per identity and then
+ * projected onto every row that identity holds.
+ */
+async function loadCandidateStats(
+  db: Db,
+  candidates: ElectionCandidate[]
+): Promise<Map<string, PublicCandidateStats>> {
+  const identityOf = (c: ElectionCandidate): ObjectId | null =>
+    (c.isNPP ? (c.nppId ?? c.characterId) : c.characterId) ?? null;
+
+  const characterIds: ObjectId[] = [];
+  const nppIds: ObjectId[] = [];
+  for (const c of candidates) {
+    const identity = identityOf(c);
+    if (!identity) continue;
+    if (c.isNPP && c.nppId) nppIds.push(identity);
+    else characterIds.push(identity);
+  }
+
+  const projection = { _id: 1, favorability: 1, politicalInfluence: 1 } as const;
+  const [characters, npps] = await Promise.all([
+    characterIds.length > 0
+      ? db
+          .collection<Character>("characters")
+          .find({ _id: { $in: characterIds } })
+          .project<Pick<Character, "_id" | "favorability" | "politicalInfluence">>(projection)
+          .toArray()
+      : Promise.resolve([]),
+    nppIds.length > 0
+      ? db
+          .collection<NPP>("npps")
+          .find({ _id: { $in: nppIds } })
+          .project<Pick<NPP, "_id" | "favorability" | "politicalInfluence">>(projection)
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+
+  const statsByIdentity = new Map<string, PublicCandidateStats>();
+  for (const character of characters) statsByIdentity.set(character._id.toString(), character);
+  for (const npp of npps) statsByIdentity.set(npp._id.toString(), npp);
+
+  const statsByCandidateRow = new Map<string, PublicCandidateStats>();
+  for (const c of candidates) {
+    const identity = identityOf(c);
+    const stats = identity ? statsByIdentity.get(identity.toString()) : undefined;
+    if (stats) statsByCandidateRow.set(c._id.toString(), stats);
+  }
+  return statsByCandidateRow;
+}
 
 function toElectionResults(
   tally: ElectionVoteTally,
-  statsById: Map<string, PublicCandidateStats>,
+  statsByCandidateRow: Map<string, PublicCandidateStats>,
   isMultiSeat: boolean
 ) {
   const totalVotes = Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0);
   const candidates = Object.entries(tally.totalVotes ?? {})
     .map(([candidateId, votes]) => {
-      const stats = statsById.get(candidateId);
+      const stats = statsByCandidateRow.get(candidateId);
       return {
+        // The candidate ROW id, which is what the tally is keyed by and so what
+        // `seatsEstimate` is keyed by too. `characterId` carries the same value
+        // under a name that has never matched its contents; it is kept as an
+        // alias so existing callers are unchanged. Join on `id`.
+        id: candidateId,
         characterId: candidateId,
         characterName: tally.candidateNames?.[candidateId] ?? null,
         party: tally.candidateParties?.[candidateId] ?? null,
@@ -236,41 +314,12 @@ export async function queryElectionList(
     talliesByElection.set(t.electionId.toString(), t);
   }
 
-  const candidateCharacterIds = allCandidates
-    .filter((c) => !c.isNPP && c.characterId)
-    .map((c) => c.characterId)
-    .filter((id): id is ObjectId => id != null);
-  const candidateNppIds = allCandidates
-    .filter((c) => c.isNPP && c.nppId)
-    .map((c) => c.nppId)
-    .filter((id): id is ObjectId => id != null);
-  const [characters, npps] = await Promise.all([
-    candidateCharacterIds.length > 0
-      ? db
-          .collection<Pick<Character, "_id" | "favorability" | "politicalInfluence">>("characters")
-          .find({ _id: { $in: candidateCharacterIds } })
-          .project<Pick<Character, "_id" | "favorability" | "politicalInfluence">>({
-            _id: 1,
-            favorability: 1,
-            politicalInfluence: 1,
-          })
-          .toArray()
-      : Promise.resolve([]),
-    candidateNppIds.length > 0
-      ? db
-          .collection<Pick<NPP, "_id" | "favorability" | "politicalInfluence">>("npps")
-          .find({ _id: { $in: candidateNppIds } })
-          .project<Pick<NPP, "_id" | "favorability" | "politicalInfluence">>({
-            _id: 1,
-            favorability: 1,
-            politicalInfluence: 1,
-          })
-          .toArray()
-      : Promise.resolve([]),
-  ]);
-  const statsById = new Map<string, PublicCandidateStats>();
-  for (const character of characters) statsById.set(character._id.toString(), character);
-  for (const npp of npps) statsById.set(npp._id.toString(), npp);
+  // Gated on the opt-in: the default list response carries no candidate stats,
+  // so the hot path must not pay two collection reads to build a map it throws
+  // away. Only `?results=true` widens the query.
+  const statsByCandidateRow = results
+    ? await loadCandidateStats(db, allCandidates)
+    : new Map<string, PublicCandidateStats>();
 
   const gameTime = await getGameTime();
 
@@ -322,11 +371,14 @@ export async function queryElectionList(
       formerCandidates,
       ...(finalVotes ? { finalVotes } : {}),
       // Opt-in: detailed per-candidate standings from the tally already loaded
-      // above, so `?results=true` costs no extra query. `null` when a race has
-      // no tally yet, to stay distinguishable from a race with zero votes cast.
+      // above, so the standings themselves cost no extra query — only the
+      // candidate stats widen it, and only on this branch. `null` when a race
+      // has no tally yet, to stay distinguishable from one with zero votes cast.
       ...(results
         ? {
-            results: tally ? toElectionResults(tally, statsById, (e.totalSeats ?? 1) > 1) : null,
+            results: tally
+              ? toElectionResults(tally, statsByCandidateRow, isMultiSeatRace(e))
+              : null,
           }
         : {}),
     };
@@ -420,7 +472,7 @@ export async function queryElectionDetail(db: Db, electionId: string) {
   const { phase, flags, phaseEndTurn, phaseEndTime } = resolveElectionPhase(election, gameTime);
   const { inPrimary, inGeneral, isUpcoming, isEnded } = flags;
 
-  const isSingleSeat = !election.totalSeats || election.totalSeats === 1;
+  const statsByCandidateRow = await loadCandidateStats(db, allCandidateRows);
 
   const latestTallySnapshot =
     tally && tally.turnSnapshots && tally.turnSnapshots.length > 0
@@ -435,6 +487,7 @@ export async function queryElectionDetail(db: Db, electionId: string) {
 
   const toDetailCandidate = (c: ElectionCandidate) => {
     const party = partyMap.get(c.party);
+    const stats = statsByCandidateRow.get(c._id.toString());
     return {
       id: c._id.toString(),
       characterId: c.characterId?.toString() ?? null,
@@ -445,8 +498,12 @@ export async function queryElectionDetail(db: Db, electionId: string) {
       partyColor: party?.color ?? null,
       isNPP: c.isNPP ?? false,
       status: c.status ?? "active",
-      favorability: null,
-      politicalInfluence: null,
+      // Declared since this endpoint shipped but hardcoded null until now, so a
+      // caller could read the key and never get a number. Same source as the
+      // list endpoint's opt-in standings: the character, or the NPP for a
+      // non-party candidate.
+      favorability: stats?.favorability ?? null,
+      politicalInfluence: stats?.politicalInfluence ?? null,
       economicPosition: null,
       socialPosition: null,
       primaryScore: null,
@@ -498,7 +555,7 @@ export async function queryElectionDetail(db: Db, electionId: string) {
           totalVotes: Object.values(tally.totalVotes ?? {}).reduce((a, b) => a + b, 0),
           finalized: hasResolvedResult(election.status),
           latestSnapshot: latestTallySnapshot,
-          ...(!isSingleSeat ? { seatsEstimate: tally.seatsEstimate ?? null } : {}),
+          ...(isMultiSeatRace(election) ? { seatsEstimate: tally.seatsEstimate ?? null } : {}),
         }
       : null,
   };
