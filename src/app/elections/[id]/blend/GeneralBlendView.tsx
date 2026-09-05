@@ -325,41 +325,49 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
    *
    * It used to exist only inside the table, which the mobile tree never
    * rendered, so a player on a phone could not endorse anybody. Defining it
-   * once means the affordance cannot go missing from one layout again.
+   * once means the affordance cannot go missing from one layout again — and
+   * that the self-endorsement guard cannot be applied to one and not the other.
+   *
+   * Nothing is rendered for the reader's own ticket. The route refuses it
+   * ("You cannot endorse yourself", 400), so the button could never do anything
+   * but fail; offering it was an affordance that had no action behind it.
    */
-  const endorseButton = (c: GeneralTicketVM, align: "left" | "right") => (
-    <button
-      type="button"
-      disabled={busy === c.id}
-      onClick={() => toggleEndorse(c.id, c.endorsed)}
-      style={{
-        marginTop: 8,
-        alignSelf: align === "right" ? "flex-end" : "flex-start",
-        padding: "4px 10px",
-        font: "inherit",
-        fontFamily: FONT.mono,
-        fontSize: 10.5,
-        letterSpacing: ".06em",
-        fontWeight: 700,
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
-        cursor: busy === c.id ? "not-allowed" : "pointer",
-        ...(c.endorsed
-          ? {
-              border: "1px solid rgba(34,197,94,.4)",
-              background: "rgba(34,197,94,.12)",
-              color: BLEND.positive,
-            }
-          : {
-              border: `1px solid ${BLEND.hairlineStrong}`,
-              background: "transparent",
-              color: BLEND.muted,
-            }),
-      }}
-    >
-      {busy === c.id ? "…" : c.endorsed ? "Endorsed" : "Endorse"}
-    </button>
-  );
+  const endorseButton = (c: GeneralTicketVM, align: "left" | "right") => {
+    if (c.isYou) return null;
+    return (
+      <button
+        type="button"
+        disabled={busy === c.id}
+        onClick={() => toggleEndorse(c.id, c.endorsed)}
+        style={{
+          marginTop: 8,
+          alignSelf: align === "right" ? "flex-end" : "flex-start",
+          padding: "4px 10px",
+          font: "inherit",
+          fontFamily: FONT.mono,
+          fontSize: 10.5,
+          letterSpacing: ".06em",
+          fontWeight: 700,
+          textTransform: "uppercase",
+          whiteSpace: "nowrap",
+          cursor: busy === c.id ? "not-allowed" : "pointer",
+          ...(c.endorsed
+            ? {
+                border: "1px solid rgba(34,197,94,.4)",
+                background: "rgba(34,197,94,.12)",
+                color: BLEND.positive,
+              }
+            : {
+                border: `1px solid ${BLEND.hairlineStrong}`,
+                background: "transparent",
+                color: BLEND.muted,
+              }),
+        }}
+      >
+        {busy === c.id ? "…" : c.endorsed ? "Endorsed" : "Endorse"}
+      </button>
+    );
+  };
 
   const heroPair = (
     <div

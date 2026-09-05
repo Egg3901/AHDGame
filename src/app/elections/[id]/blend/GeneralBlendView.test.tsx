@@ -147,9 +147,29 @@ describe("the hero is the ticket list in a two-way race", () => {
 
   it("puts the endorse control on both layouts, which the table never did", () => {
     // The table was desktop-only, so a player on a phone could not endorse
-    // anybody at all.
+    // anybody at all. One button per rival per tree: the fixture's c1 is the
+    // reader, so only c2 gets one.
     renderView();
-    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(4);
+    expect(screen.getAllByRole("button", { name: /Endorse/ })).toHaveLength(2);
+  });
+
+  it("offers no endorse button on the reader's own ticket", () => {
+    // The route refuses it ("You cannot endorse yourself", 400), so the button
+    // could never do anything but fail. It was rendered anyway, and the failure
+    // was silent.
+    renderView();
+    for (const button of screen.getAllByRole("button", { name: /Endorse/ })) {
+      // Walk up to the hero column and check whose it is.
+      expect(button.closest("div")?.textContent ?? "").not.toContain("First Ticket");
+    }
+  });
+
+  it("still offers it on a rival's ticket", () => {
+    renderView();
+    const names = screen
+      .getAllByRole("button", { name: /Endorse/ })
+      .map((b) => b.parentElement?.textContent ?? "");
+    expect(names.every((t) => t.includes("Second Ticket"))).toBe(true);
   });
 
   it("prints the leader's electoral votes only where each one earns its place", () => {
