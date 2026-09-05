@@ -336,11 +336,11 @@ function openBrowser(url) {
     : process.platform === "darwin"
       ? ["open", [url]]
       : ["xdg-open", [url]];
-  try {
-    spawn(cmd[0], cmd[1], { stdio: "ignore", detached: true }).unref();
-  } catch {
-    log(`open ${url} in your browser`);
-  }
+  const child = spawn(cmd[0], cmd[1], { stdio: "ignore", detached: true });
+  // No opener on this machine (headless box, minimal container): say where
+  // to go instead of dying on the child's ENOENT.
+  child.on("error", () => log(`open ${url} in your browser`));
+  child.unref();
 }
 
 async function warmAssets(base) {

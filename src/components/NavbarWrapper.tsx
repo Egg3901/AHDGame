@@ -55,6 +55,7 @@ interface NavbarWrapperState {
     username: string;
     isAdmin?: boolean;
     isModerator?: boolean;
+    singleplayer?: boolean;
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;

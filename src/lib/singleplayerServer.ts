@@ -3,6 +3,7 @@ import path from "path";
 import { ObjectId, type Db } from "mongodb";
 import { SINGLEPLAYER_USER_ID, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { CDN_GEO } from "@/lib/images/cdnUrls";
+import type { GameState } from "@/lib/db/types";
 
 /**
  * Node-only singleplayer helpers. `@/lib/singleplayer` must stay importable
@@ -16,13 +17,13 @@ import { CDN_GEO } from "@/lib/images/cdnUrls";
  * The launcher sets `SINGLEPLAYER_HOME`; the default matches what it uses
  * when nothing is configured so both sides agree without coordination.
  */
-export function singleplayerHomeDir(env: NodeJS.ProcessEnv = process.env): string {
+export function singleplayerHomeDir(env: Record<string, string | undefined> = process.env): string {
   const configured = env.SINGLEPLAYER_HOME?.trim();
   if (configured) return path.resolve(configured);
   return path.join(os.homedir(), ".a-house-divided");
 }
 
-export function singleplayerCdnDir(env: NodeJS.ProcessEnv = process.env): string {
+export function singleplayerCdnDir(env: Record<string, string | undefined> = process.env): string {
   return path.join(singleplayerHomeDir(env), "cdn");
 }
 
@@ -84,11 +85,8 @@ export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
   const userId = new ObjectId(SINGLEPLAYER_USER_ID);
   const [gameState, character] = await Promise.all([
     db
-      .collection("gameState")
-      .findOne(
-        { _id: "current" as never },
-        { projection: { currentTurn: 1, preset: 1, isProcessing: 1 } }
-      ),
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentTurn: 1, preset: 1, isProcessing: 1 } }),
     db.collection("characters").findOne({ userId }, { projection: { _id: 1, name: 1 } }),
   ]);
   return {

@@ -31,7 +31,11 @@ export async function POST(request: Request) {
   if (denied) return denied;
 
   try {
-    const body = await parseJsonBody(request, bodySchema);
+    const parsed = await parseJsonBody(request, bodySchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
+    const body = parsed.data;
     const preset = body.preset ?? DEFAULT_SEED_PRESET;
     if (!isKnownPreset(preset)) {
       return NextResponse.json({ error: `Unknown preset "${preset}"` }, { status: 400 });
