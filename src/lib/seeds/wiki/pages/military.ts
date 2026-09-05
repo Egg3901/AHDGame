@@ -13,6 +13,8 @@ import { warWalkthroughContent } from "../content/warWalkthrough";
 import { defenceProcurementContent } from "../content/defenceProcurement";
 import { nuclearProgrammeContent } from "../content/nuclearProgramme";
 import { coldWarTensionContent } from "../content/coldWarTension";
+import { navalVesselClassesContent } from "../content/navalVesselClasses";
+import { blockadesContent } from "../content/blockades";
 
 /**
  * Conflicts & Military.
@@ -202,5 +204,31 @@ export const militaryPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "mechanics",
     estimatedReadTime: 6,
+  },
+  {
+    slug: "naval-vessel-classes",
+    title: "Naval Vessel Classes & Standing Orders",
+    description:
+      "The five hulls (carrier, destroyer, submarine, frigate, amphibious group), what each does at sea, berth costs and basing, the six naval postures and their readiness costs, default orders, surface actions, sea control, detection and repair.",
+    content: navalVesselClassesContent,
+    category: "military",
+    extraTags: ["naval", "navy", "carrier", "submarine", "destroyer", "ships", "sea control"],
+    difficulty: "intermediate",
+    contentType: "reference",
+    estimatedReadTime: 8,
+    lastUpdated: "2026-09-05",
+  },
+  {
+    slug: "blockades",
+    title: "Blockades",
+    description:
+      "How a naval blockade is established, which water and postures count, how closure is measured against port defence, what it does to the target's trade, what it costs the blockader, and how it ends.",
+    content: blockadesContent,
+    category: "military",
+    extraTags: ["naval", "blockade", "trade", "embargo", "war"],
+    difficulty: "intermediate",
+    contentType: "mechanics",
+    estimatedReadTime: 7,
+    lastUpdated: "2026-09-05",
   },
 ];
