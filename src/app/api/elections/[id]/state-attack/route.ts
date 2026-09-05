@@ -202,6 +202,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? getOpsBranchMagnitude("mediaSpending", "c", shieldTree.c)
         : 0;
 
+    // Read before the money moves. Everything after the debit is reporting; a
+    // lookup that throws there would 500 on an attack the player has already
+    // paid for.
+    const stateName =
+      (await db.collection<State>("states").findOne({ _id: stateId }, { projection: { name: 1 } }))
+        ?.name ?? stateId;
+
     const now = new Date();
     const row: Omit<PrimaryStateAction, "_id"> = {
       electionId: election._id,
@@ -256,10 +263,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
       throw error;
     }
-
-    const stateName =
-      (await db.collection<State>("states").findOne({ _id: stateId }, { projection: { name: 1 } }))
-        ?.name ?? stateId;
 
     void emitStateAttackWire(
       election._id,

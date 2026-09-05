@@ -35,7 +35,11 @@ import { loadRegionalBonusMaps } from "@/lib/primaryRegionalBonusLoader";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { getTravelActionCost } from "@/lib/constants/states";
-import { TRAVEL_STATE_IDS, loadStateTravelOptions } from "@/lib/elections/stateTravelOptions";
+import {
+  TRAVEL_STATE_IDS,
+  loadStateTravelOptions,
+  travelStateIds,
+} from "@/lib/elections/stateTravelOptions";
 import { buildCandidateColorMap } from "@/lib/campaigns/candidateColor";
 import { getPartyHex } from "@/lib/utils/politics";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
@@ -476,7 +480,10 @@ export async function buildPrimaryViewerCampaign(
     surgeCostFunds,
     surgeCostActions: PRIMARY_HOME_SURGE_COST_ACTIONS,
     surgeBoost: PRIMARY_HOME_SURGE_PCT,
-    states: TRAVEL_STATE_IDS.map((id) => ({
+    // Scoped to the world's own apportionment: the camp, travel, presence and
+    // attack routes all validate against it, so offering the modern fifty on a
+    // 1953 world was offering states the server refuses.
+    states: travelStateIds(apportionmentPreset).map((id) => ({
       id,
       name: stateNameById[id] ?? id,
       actionCost: getTravelActionCost(id, apportionmentPreset),

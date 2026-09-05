@@ -12,13 +12,37 @@
 
 import type { Db } from "mongodb";
 import type { State } from "@/lib/db/types";
-import { ELECTORAL_VOTE_UNITS, getTravelActionCost } from "@/lib/constants/states";
+import {
+  ELECTORAL_VOTE_UNITS,
+  getElectoralVoteUnits,
+  getTravelActionCost,
+} from "@/lib/constants/states";
 import type { StateTravelOption } from "@/lib/elections/dto/campaignStatePresence";
 
 export type { StateTravelOption };
 
-/** Every state that casts electoral votes, deduplicated across split units. */
+/**
+ * Every state that casts electoral votes under the modern map, deduplicated
+ * across split units.
+ *
+ * This is the NAMING list: broad on purpose, so a state a candidate reached by
+ * some other route still resolves to a name. What a player may CHOOSE is
+ * `travelStateIds(preset)` — see below.
+ */
 export const TRAVEL_STATE_IDS = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
+
+/**
+ * The states a player may actually be offered, for the apportionment preset the
+ * world is running.
+ *
+ * Every route behind these pickers validates against
+ * `getElectoralVoteUnits(preset)`, so a list built from the modern map offered
+ * Alaska, Hawaii and DC on a 1953 world and the server answered "Invalid US
+ * state code". One source for both sides of the same question.
+ */
+export function travelStateIds(preset: string | undefined): string[] {
+  return [...new Set(getElectoralVoteUnits(preset).map((u) => u.stateId))];
+}
 
 export interface StateTravelOptions {
   options: StateTravelOption[];
@@ -45,7 +69,7 @@ export async function loadStateTravelOptions(db: Db, preset?: string): Promise<S
   }
 
   return {
-    options: TRAVEL_STATE_IDS.map((id) => ({
+    options: travelStateIds(resolvedPreset).map((id) => ({
       id,
       name: stateNameById[id],
       actionCost: getTravelActionCost(id, resolvedPreset),
