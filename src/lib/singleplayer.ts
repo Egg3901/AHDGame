@@ -36,6 +36,13 @@
  */
 export const SINGLEPLAYER_USER_ID = "504c41594552" + "000000000001";
 
+/**
+ * Just the environment lookups these helpers perform. Narrower than
+ * `NodeJS.ProcessEnv`, which this repo augments with required keys such as
+ * NODE_ENV, so callers and tests can pass only the vars under test.
+ */
+export type SingleplayerEnv = Record<string, string | undefined>;
+
 function flagIsSet(value: string | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";
 }
@@ -47,7 +54,7 @@ function flagIsSet(value: string | undefined): boolean {
  * `NEXT_PUBLIC_BASE_URL` is included because the desktop build always points
  * at loopback: a public origin means this is serving somebody else.
  */
-function deploymentSignals(env: NodeJS.ProcessEnv = process.env): string[] {
+function deploymentSignals(env: SingleplayerEnv = process.env): string[] {
   const signals: string[] = [];
   if (env.RAILWAY_ENVIRONMENT_NAME) signals.push("RAILWAY_ENVIRONMENT_NAME");
   if (env.RAILWAY_SERVICE_NAME) signals.push("RAILWAY_SERVICE_NAME");
@@ -97,7 +104,7 @@ export function isLocalMongoUri(uri: string): boolean {
  * Whether singleplayer has been requested. Requesting it is not the same as
  * being allowed it: call `assertSingleplayerAllowed` before acting on this.
  */
-export function singleplayerRequested(env: NodeJS.ProcessEnv = process.env): boolean {
+export function singleplayerRequested(env: SingleplayerEnv = process.env): boolean {
   return flagIsSet(env.SINGLEPLAYER);
 }
 
@@ -116,7 +123,7 @@ export class SingleplayerNotAllowedError extends Error {
  * Throws when singleplayer is requested on anything that looks like a server.
  * Safe to call when singleplayer is not requested: it does nothing.
  */
-export function assertSingleplayerAllowed(env: NodeJS.ProcessEnv = process.env): void {
+export function assertSingleplayerAllowed(env: SingleplayerEnv = process.env): void {
   if (!flagIsSet(env.SINGLEPLAYER)) return;
   const signals = deploymentSignals(env);
   if (signals.length > 0) throw new SingleplayerNotAllowedError(signals);
@@ -127,14 +134,14 @@ export function assertSingleplayerAllowed(env: NodeJS.ProcessEnv = process.env):
  * false on a deployment, so the bypass can never degrade into "off" on a
  * machine that was one env var away from serving every request as one user.
  */
-export function isSingleplayer(env: NodeJS.ProcessEnv = process.env): boolean {
+export function isSingleplayer(env: SingleplayerEnv = process.env): boolean {
   if (!flagIsSet(env.SINGLEPLAYER)) return false;
   assertSingleplayerAllowed(env);
   return true;
 }
 
 /** Whether the local player also gets the admin surfaces. Opt-in. */
-export function singleplayerIsAdmin(env: NodeJS.ProcessEnv = process.env): boolean {
+export function singleplayerIsAdmin(env: SingleplayerEnv = process.env): boolean {
   return isSingleplayer(env) && flagIsSet(env.SINGLEPLAYER_ADMIN);
 }
 
@@ -143,7 +150,7 @@ export function singleplayerIsAdmin(env: NodeJS.ProcessEnv = process.env): boole
  * in `@/lib/auth`. Signed by the middleware with the local `AUTH_SECRET`, so
  * downstream verification is the ordinary path and not a special case.
  */
-export function singleplayerSessionClaims(env: NodeJS.ProcessEnv = process.env): {
+export function singleplayerSessionClaims(env: SingleplayerEnv = process.env): {
   userId: string;
   email: string;
   username: string;

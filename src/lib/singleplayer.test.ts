@@ -7,6 +7,7 @@ import {
   singleplayerIsAdmin,
   SingleplayerNotAllowedError,
   SINGLEPLAYER_USER_ID,
+  type SingleplayerEnv,
 } from "./singleplayer";
 import { ObjectId } from "mongodb";
 
@@ -16,7 +17,7 @@ import { ObjectId } from "mongodb";
  * more than one person. Every case below is a way that could happen.
  */
 
-const LOCAL: NodeJS.ProcessEnv = {
+const LOCAL: SingleplayerEnv = {
   SINGLEPLAYER: "1",
   MONGODB_URI: "mongodb://127.0.0.1:27099/ahd-singleplayer",
   NEXT_PUBLIC_BASE_URL: "http://127.0.0.1:3111",
