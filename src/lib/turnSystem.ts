@@ -42,6 +42,7 @@ import {
   combinePhasePredicates,
   getSingleplayerPhasePredicate,
 } from "@/simulation/phases/singleplayerPhases";
+import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
 
@@ -447,9 +448,12 @@ export async function processTurn(): Promise<{
       // commands available by design has no one to defraud, and the scans were
       // ~18% of every document a turn deserializes. Composed with the sim
       // profile predicate so a headless sim run keeps its own filtering.
+      // In a shared world the same scans run on a cadence instead of every
+      // turn; their rolling windows make that lossless.
       shouldRunPhase: combinePhasePredicates(
         getSimTurnPhasePredicate(config?.simTurnPhaseMode),
-        getSingleplayerPhasePredicate(isSingleplayer())
+        getSingleplayerPhasePredicate(isSingleplayer()),
+        getAnomalyScanCadencePredicate(gameState.currentTurn)
       ),
       // Audit traceId convention "turn:<n>:<phase>" (forensics plan §3.1, T2.7).
       turn: nextTurnNumber,
