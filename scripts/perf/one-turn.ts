@@ -23,7 +23,20 @@
 import { writeFileSync } from "node:fs";
 import { Session } from "node:inspector/promises";
 import { connectDb, closeDb } from "../utils/db";
-import { isLocalMongoUri } from "@/lib/singleplayer";
+
+/**
+ * True when a Mongo URI addresses this machine. This script advances a real
+ * turn, so it must never be pointed at a shared database.
+ */
+function isLocalMongoUri(uri: string): boolean {
+  if (uri.startsWith("mongodb+srv://")) return false;
+  const hosts = uri.replace(/^mongodb:\/\//, "").split("/")[0].split("@").pop();
+  if (!hosts) return false;
+  return hosts.split(",").every((hostPort) => {
+    const host = hostPort.split(":")[0];
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  });
+}
 
 function argValue(flag: string): string | undefined {
   const i = process.argv.indexOf(flag);
