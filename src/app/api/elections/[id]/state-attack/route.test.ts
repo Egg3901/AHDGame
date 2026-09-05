@@ -343,11 +343,24 @@ describe("turnout suppression", () => {
   });
 
   it("charges nobody when the turnout write loses the race", async () => {
+    // Production Mongo is standalone, so runWithOptionalTransaction takes the
+    // sequential path and a throw rolls nothing back on its own. Without an
+    // explicit refund the player pays for an attack that never landed.
     db.collection("stateDemographicTurnout").findOne.mockResolvedValue(turnoutDoc(0));
     db.collection("stateDemographicTurnout").updateOne.mockResolvedValue({ modifiedCount: 0 });
     const res = await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
     expect(res.status).toBe(409);
     expect(db.collectionMocks.primaryStateActions!.insertOne).not.toHaveBeenCalled();
+
+    const charInc = db.collectionMocks.characters!.updateOne.mock.calls.map(
+      (c) => (c[1] as { $inc?: { actions?: number } }).$inc?.actions ?? 0
+    );
+    const campInc = db.collectionMocks.campaigns!.updateOne.mock.calls.map(
+      (c) => (c[1] as { $inc?: { funds?: number } }).$inc?.funds ?? 0
+    );
+    // Net zero: everything taken was handed back.
+    expect(charInc.reduce((a, b) => a + b, 0)).toBe(0);
+    expect(campInc.reduce((a, b) => a + b, 0)).toBe(0);
   });
 
   it("diminishes against a group already pushed away from zero", async () => {
@@ -379,5 +392,32 @@ describe("turnout suppression", () => {
     await callRoute(body({ kind: "turnoutSuppression", ...GROUP }));
     const [, update] = db.collectionMocks.campaigns!.updateOne.mock.calls[0];
     expect(update.$inc.funds).toBe(-50_000);
+  });
+});
+
+describe("what happens when a write fails halfway", () => {
+  it("hands back the actions when the campaign cannot pay after all", async () => {
+    // The $gte guard on the funds update is the last line of defence against a
+    // racing spend. Losing it must not leave the character short of actions.
+    db.collection("campaigns").updateOne.mockResolvedValue({ modifiedCount: 0 });
+    const res = await callRoute();
+    expect(res.status).toBe(409);
+    const charInc = db.collectionMocks.characters!.updateOne.mock.calls.map(
+      (c) => (c[1] as { $inc?: { actions?: number } }).$inc?.actions ?? 0
+    );
+    expect(charInc.reduce((a, b) => a + b, 0)).toBe(0);
+  });
+
+  it("hands everything back when the row cannot be written", async () => {
+    db.collection("primaryStateActions").insertOne.mockRejectedValue(new Error("disk on fire"));
+    await expect(callRoute()).resolves.toBeDefined();
+    const charInc = db.collectionMocks.characters!.updateOne.mock.calls.map(
+      (c) => (c[1] as { $inc?: { actions?: number } }).$inc?.actions ?? 0
+    );
+    const campInc = db.collectionMocks.campaigns!.updateOne.mock.calls.map(
+      (c) => (c[1] as { $inc?: { funds?: number } }).$inc?.funds ?? 0
+    );
+    expect(charInc.reduce((a, b) => a + b, 0)).toBe(0);
+    expect(campInc.reduce((a, b) => a + b, 0)).toBe(0);
   });
 });

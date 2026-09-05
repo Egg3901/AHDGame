@@ -327,6 +327,35 @@ export async function POST(request: Request, { params }: RouteParams) {
       createdAt: now,
     };
 
+    /**
+     * Give back what was taken when a later step fails.
+     *
+     * Production Mongo is a standalone instance, so `runWithOptionalTransaction`
+     * runs the sequential path and a throw rolls nothing back on its own: the
+     * player would be charged for an attack that never landed. Inside a real
+     * transaction the abort already undoes these, and re-crediting there would
+     * be undone with everything else, so this is safe on both paths.
+     */
+    const refund = async (what: { actions: boolean; funds: boolean }) => {
+      const stamp = new Date();
+      if (what.actions) {
+        await db
+          .collection<Character>("characters")
+          .updateOne(
+            { _id: character._id },
+            { $inc: { actions: terms.costActions }, $set: { updatedAt: stamp } }
+          );
+      }
+      if (what.funds) {
+        await db
+          .collection<Campaign>("campaigns")
+          .updateOne(
+            { _id: campaign._id },
+            { $inc: { funds: costFundsLocal }, $set: { updatedAt: stamp } }
+          );
+      }
+    };
+
     const debit = async (session?: ClientSession) => {
       const opts = session ? { session } : {};
       const charDebit = await db
@@ -345,20 +374,29 @@ export async function POST(request: Request, { params }: RouteParams) {
           { $inc: { funds: -costFundsLocal }, $set: { updatedAt: now } },
           opts
         );
-      if (campDebit.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-      if (turnoutWrite) {
-        const turnoutResult = await db
-          .collection<StateDemographicTurnout>("stateDemographicTurnout")
-          .updateOne(turnoutWrite.filter, turnoutWrite.update, opts);
-        // Somebody else moved this state's turnout between the read and the
-        // write. Fail rather than overwrite them; the player is not charged.
-        if (turnoutResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
+      if (campDebit.modifiedCount === 0) {
+        // Only the character's actions were taken. Hand them back.
+        await refund({ actions: true, funds: false });
+        throw new Error("INSUFFICIENT_RESOURCES");
       }
 
-      await db
-        .collection<PrimaryStateAction>("primaryStateActions")
-        .insertOne(row as PrimaryStateAction, opts);
+      try {
+        if (turnoutWrite) {
+          const turnoutResult = await db
+            .collection<StateDemographicTurnout>("stateDemographicTurnout")
+            .updateOne(turnoutWrite.filter, turnoutWrite.update, opts);
+          // Somebody else moved this state's turnout between the read and the
+          // write. Refuse rather than overwrite them.
+          if (turnoutResult.modifiedCount === 0) throw new Error("TURNOUT_RACE");
+        }
+
+        await db
+          .collection<PrimaryStateAction>("primaryStateActions")
+          .insertOne(row as PrimaryStateAction, opts);
+      } catch (error) {
+        await refund({ actions: true, funds: true });
+        throw error;
+      }
     };
 
     try {
@@ -367,9 +405,16 @@ export async function POST(request: Request, { params }: RouteParams) {
         () => debit()
       );
     } catch (error) {
-      if ((error as Error).message === "INSUFFICIENT_RESOURCES") {
+      const message = (error as Error).message;
+      if (message === "INSUFFICIENT_RESOURCES") {
         return NextResponse.json(
           { error: "Your actions or campaign funds changed. Please try again." },
+          { status: 409 }
+        );
+      }
+      if (message === "TURNOUT_RACE") {
+        return NextResponse.json(
+          { error: "Somebody else moved that state's turnout first. Try again." },
           { status: 409 }
         );
       }
@@ -387,7 +432,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({
       success: true,
-      message: `Local attack opened on ${target.characterName ?? "your rival"} in ${stateName}. It runs for ${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns.`,
+      message:
+        kind === "turnoutSuppression"
+          ? `${resolvedGroup?.label ?? "That group"} turnout is down in ${stateName}. It fades slowly rather than expiring.`
+          : `Opened on ${target.characterName ?? "your rival"} in ${stateName}. It runs for ${PRIMARY_STATE_ATTACK_DURATION_TURNS} turns.`,
       expiresTurn: row.expiresTurn,
       shieldApplied,
     });
