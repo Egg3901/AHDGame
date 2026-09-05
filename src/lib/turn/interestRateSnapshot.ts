@@ -77,7 +77,7 @@ export async function snapshotInterestRateHistory(db: Db, turn: number): Promise
   // legitimacy collectors read a flat +4.5 for 240 turns while their regions
   // were live and varying. GDP-weighted mean of the country's regions, the
   // same quantity the national doc caches for the ten that have it.
-  const bankCountryIds = banks.map((b) => String(b.countryId));
+  const bankCountryIds = banks.map((b) => b.countryId as CountryId);
   const [regionStates, regionMetrics] = await Promise.all([
     db
       .collection<State>("states")
