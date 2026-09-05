@@ -38,6 +38,11 @@ import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
+import {
+  combinePhasePredicates,
+  getSingleplayerPhasePredicate,
+} from "@/simulation/phases/singleplayerPhases";
+import { isSingleplayer } from "@/lib/singleplayer";
 import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
 
 // Re-export public helpers consumed by other modules
@@ -438,7 +443,14 @@ export async function processTurn(): Promise<{
       // SIM-ONLY: sandbox worldsim can set gameConfig.simTurnPhaseMode to skip
       // the economy phases. Undefined in prod (config?.simTurnPhaseMode absent) →
       // full turn, unchanged.
-      shouldRunPhase: getSimTurnPhasePredicate(config?.simTurnPhaseMode),
+      // Singleplayer skips the anti-abuse scans: one account with cheat
+      // commands available by design has no one to defraud, and the scans were
+      // ~18% of every document a turn deserializes. Composed with the sim
+      // profile predicate so a headless sim run keeps its own filtering.
+      shouldRunPhase: combinePhasePredicates(
+        getSimTurnPhasePredicate(config?.simTurnPhaseMode),
+        getSingleplayerPhasePredicate(isSingleplayer())
+      ),
       // Audit traceId convention "turn:<n>:<phase>" (forensics plan §3.1, T2.7).
       turn: nextTurnNumber,
     });

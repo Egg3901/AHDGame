@@ -5,7 +5,14 @@
  *
  * Matched by `bypassNextImageOptimization` — pass `unoptimized` to `next/image`.
  */
-export const CDN_BASE = "https://cdn.ahousedividedgame.com";
+/**
+ * Where static assets live. Production serves them from Cloudflare R2. A
+ * singleplayer build has no network to rely on, so it sets
+ * NEXT_PUBLIC_CDN_BASE to a path served from the app itself and ships the
+ * assets alongside. NEXT_PUBLIC_ is inlined at build time, which is what we
+ * want: the choice is made when the build is made, not per request.
+ */
+export const CDN_BASE = process.env.NEXT_PUBLIC_CDN_BASE || "https://cdn.ahousedividedgame.com";
 
 export function cdnStatic(category: string, slug: string, ext: "webp" | "png" = "webp"): string {
   return `${CDN_BASE}/static/${category}/${slug}.${ext}`;
