@@ -34,6 +34,7 @@ import {
 } from "@/lib/npp/actionPoints";
 import { resolvePartyTier } from "@/lib/parties/partyTier";
 import { getOfficeLabel } from "@/lib/utils/politics";
+import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 
 export type { PartyInfluenceCalculation } from "./partyExecutorCalculations";
 export type { ExecutePartyInfluenceInput } from "./partyExecutorTypes";
@@ -625,6 +626,31 @@ export async function executeNationalPartyInfluence(
 export { calculatePartyInfluenceChance } from "./partyExecutorCalculations";
 export { hasActivePlayersInState } from "./partyExecutorValidation";
 
+/**
+ * Display label for the race an NPP is currently standing in, for the roster's
+ * "Running: ..." tag. Uses the country-aware election-type map so non-US races
+ * read as their own chamber rather than a raw type string, and only names the
+ * state when the seat sits outside the NPP's home state (the roster row already
+ * prints the home state beside the name).
+ */
+function buildCandidacyLabel(
+  election:
+    Pick<Election, "state" | "electionType" | "senateClass" | "chamberClass"> | null | undefined,
+  countryId: CountryId,
+  homeState: string
+): string | null {
+  if (!election) return null;
+  const chamber = formatElectionTypeLabel(election.electionType, countryId);
+  const classSuffix =
+    election.electionType === "senate" && election.senateClass
+      ? ` (Class ${election.senateClass})`
+      : election.chamberClass
+        ? ` (Class ${election.chamberClass})`
+        : "";
+  const statePrefix = election.state && election.state !== homeState ? `${election.state} ` : "";
+  return `${statePrefix}${chamber}${classSuffix}`;
+}
+
 export async function getStatePartyInfluenceOptions(
   statePartyOrg: StatePartyOrg,
   party: PoliticalParty,
@@ -635,6 +661,7 @@ export async function getStatePartyInfluenceOptions(
   partyName: string;
   nppsInState: Array<{
     id: string;
+    sequentialId: number | null;
     name: string;
     party: string;
     estimatedChance: number;
@@ -693,6 +720,7 @@ export async function getStatePartyInfluenceOptions(
       : null;
     return {
       id: npp._id.toString(),
+      sequentialId: npp.sequentialId ?? null,
       name: npp.name,
       party: npp.party,
       estimatedChance: calculation.finalChance,
@@ -706,15 +734,7 @@ export async function getStatePartyInfluenceOptions(
       currentOfficeLabel: npp.currentOffice
         ? getOfficeLabel(npp.currentOffice, party.countryId)
         : null,
-      activeCandidacyLabel: activeElection
-        ? `${activeElection.state} ${activeElection.electionType}${
-            activeElection.electionType === "senate" && activeElection.senateClass
-              ? ` (Class ${activeElection.senateClass})`
-              : activeElection.chamberClass
-                ? ` (Class ${activeElection.chamberClass})`
-                : ""
-          }`
-        : null,
+      activeCandidacyLabel: buildCandidacyLabel(activeElection, party.countryId, npp.homeState),
     };
   });
 
@@ -745,6 +765,7 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
     string,
     Array<{
       id: string;
+      sequentialId: number | null;
       name: string;
       party: string;
       estimatedChance: number;
@@ -783,6 +804,7 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
     string,
     Array<{
       id: string;
+      sequentialId: number | null;
       name: string;
       party: string;
       estimatedChance: number;
@@ -845,6 +867,7 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
       : null;
     nppsByState[npp.homeState].push({
       id: npp._id.toString(),
+      sequentialId: npp.sequentialId ?? null,
       name: npp.name,
       party: npp.party,
       estimatedChance: calculation.finalChance,
@@ -856,15 +879,7 @@ export async function getNationalPartyInfluenceOptions(party: PoliticalParty): P
         stubbornness: npp.personality.stubbornness,
       },
       currentOfficeLabel: npp.currentOffice ? getOfficeLabel(npp.currentOffice, countryId) : null,
-      activeCandidacyLabel: activeElection
-        ? `${activeElection.state} ${activeElection.electionType}${
-            activeElection.electionType === "senate" && activeElection.senateClass
-              ? ` (Class ${activeElection.senateClass})`
-              : activeElection.chamberClass
-                ? ` (Class ${activeElection.chamberClass})`
-                : ""
-          }`
-        : null,
+      activeCandidacyLabel: buildCandidacyLabel(activeElection, countryId, npp.homeState),
     });
   }
 

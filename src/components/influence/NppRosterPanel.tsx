@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { formatLocalFunds } from "@/lib/actions";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ActionOption, NPPOption } from "./types";
@@ -319,19 +320,18 @@ export function NppRosterPanel({
                   </td>
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-2">
-                      <button
-                        type="button"
+                      <Link
+                        href={`/politicians/npp/${n.sequentialId ?? n.id}`}
                         className="font-medium text-primary hover:underline"
-                        onClick={() => setDrawerId(n.id)}
                       >
                         {n.name}
-                      </button>
+                      </Link>
                       <span className="text-xs text-muted">
                         {n.homeState}
                         {n.currentOfficeLabel
                           ? ` · ${n.currentOfficeLabel}`
                           : n.activeCandidacyLabel
-                            ? ` · Running`
+                            ? ` · Running: ${n.activeCandidacyLabel}`
                             : ""}
                       </span>
                       {flags.length > 0 && (

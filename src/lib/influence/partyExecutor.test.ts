@@ -202,13 +202,73 @@ describe("getStatePartyInfluenceOptions", () => {
     expect(options.nppsInState.find((npp) => npp.name === "Candidate NPP")).toEqual(
       expect.objectContaining({
         name: "Candidate NPP",
-        activeCandidacyLabel: "AK senate (Class 2)",
+        activeCandidacyLabel: "Senate (Class 2)",
       })
     );
     expect(options.nppsInState.find((npp) => npp.name === "Office Holder")).toEqual(
       expect.objectContaining({
         name: "Office Holder",
         currentOfficeLabel: "senator (AK)",
+      })
+    );
+  });
+
+  it("names the race with the country's election-type label and flags an out-of-state run", async () => {
+    const stateParty = {
+      _id: "AK_1",
+      stateId: "AK",
+      partyId: "1",
+      organization: 55,
+      politicalStrength: 12,
+      treasury: 250000,
+    } as StatePartyOrg;
+    const party = {
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "NG",
+      name: "Peoples Party",
+      treasury: 500000,
+      politicalStrength: 20,
+    } as PoliticalParty;
+    const candidateId = new ObjectId();
+    const electionId = new ObjectId();
+
+    db.collectionMocks.npps.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: candidateId,
+          sequentialId: 77,
+          name: "Travelling Candidate",
+          party: "1",
+          homeState: "AK",
+          currentOffice: null,
+          retiredAt: null,
+          favorability: 45,
+          politicalInfluence: 11,
+          personality: { loyalty: 58, ambition: 60, stubbornness: 42 },
+        },
+      ]),
+      sort: vi.fn().mockReturnThis(),
+    });
+    db.collectionMocks.electionCandidates.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: new ObjectId(), electionId, nppId: candidateId, isNPP: true, status: "active" },
+        ]),
+    });
+    db.collectionMocks.elections.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: electionId, state: "NV", electionType: "house" }]),
+    });
+
+    const options = await getStatePartyInfluenceOptions(stateParty, party, true);
+
+    // NG renames "house"; the race sits outside the NPP's home state, so the
+    // label leads with the state the seat is actually in.
+    expect(options.nppsInState[0]).toEqual(
+      expect.objectContaining({
+        sequentialId: 77,
+        activeCandidacyLabel: "NV House of Representatives",
       })
     );
   });
