@@ -144,7 +144,7 @@ describe("computeDriftDeltas", () => {
 });
 
 describe("computeDecayDeltas", () => {
-  it("each party loses up to rate; loss redistributed via sqrt(org) to eligible parties", () => {
+  it("lapses REG_DECAY_LAPSE_TO_POOL_SHARE of the loss to the pool and redistributes the rest", () => {
     const result = computeDecayDeltas(
       [
         { rowId: "a", partyId: "1", orgPct: 36, regPct: 40 }, // eligible (>= 10)
@@ -153,16 +153,54 @@ describe("computeDecayDeltas", () => {
       0.004,
       10
     );
-    // Total lost = 0.004 + 0.004 = 0.008. Caught back by sqrt(36) + sqrt(16) = 6 + 4 = 10 weights.
-    // Party 1 catches 6/10 of 0.008 = 0.0048. Net delta = -0.004 + 0.0048 = +0.0008
-    // Party 2 catches 4/10 of 0.008 = 0.0032. Net delta = -0.004 + 0.0032 = -0.0008
+    // Total lost = 0.004 + 0.004 = 0.008. Half (0.004) lapses to the pool; the
+    // other half is caught back via sqrt(36) + sqrt(16) = 6 + 4 = 10 weights.
+    // Party 1 catches 6/10 of 0.004 = 0.0024. Net delta = -0.004 + 0.0024 = -0.0016
+    // Party 2 catches 4/10 of 0.004 = 0.0016. Net delta = -0.004 + 0.0016 = -0.0024
     const p1 = result.partyDeltas.find((d) => d.partyId === "1")!;
     const p2 = result.partyDeltas.find((d) => d.partyId === "2")!;
-    expect(p1.delta).toBeCloseTo(0.0008);
-    expect(p2.delta).toBeCloseTo(-0.0008);
-    // No pool delta since eligible parties absorbed it
-    expect(result.poolDelta.independent).toBe(0);
-    expect(result.poolDelta.unregistered).toBe(0);
+    expect(p1.delta).toBeCloseTo(-0.0016, 6);
+    expect(p2.delta).toBeCloseTo(-0.0024, 6);
+    // The lapsed half reaches the pool, split by the 1.5 independent bias.
+    expect(result.poolDelta.independent).toBeCloseTo(0.0024, 6);
+    expect(result.poolDelta.unregistered).toBeCloseTo(0.0016, 6);
+  });
+
+  it("routes nothing to the pool at a zero lapse share (the pre-change behaviour)", () => {
+    // The balance harness replays the old world by disabling the lapse; with
+    // eligible catchers present that must reproduce full redistribution.
+    const result = computeDecayDeltas(
+      [
+        { rowId: "a", partyId: "1", orgPct: 36, regPct: 40 },
+        { rowId: "b", partyId: "2", orgPct: 16, regPct: 20 },
+      ],
+      0.004,
+      10,
+      1.5,
+      undefined,
+      0
+    );
+    expect(result.poolDelta.independent).toBeCloseTo(0, 10);
+    expect(result.poolDelta.unregistered).toBeCloseTo(0, 10);
+    const p1 = result.partyDeltas.find((d) => d.partyId === "1")!;
+    expect(p1.delta).toBeCloseTo(0.0008, 6);
+  });
+
+  it("conserves the decayed total across parties and pool", () => {
+    const result = computeDecayDeltas(
+      [
+        { rowId: "a", partyId: "1", orgPct: 36, regPct: 40 },
+        { rowId: "b", partyId: "2", orgPct: 16, regPct: 20 },
+        { rowId: "c", partyId: "3", orgPct: 4, regPct: 9 }, // not eligible to catch
+      ],
+      0.004,
+      10
+    );
+    const partySum = result.partyDeltas.reduce((sum, d) => sum + d.delta, 0);
+    const poolSum = result.poolDelta.independent + result.poolDelta.unregistered;
+
+    // Nothing is minted or destroyed: what parties lose, the pool gains.
+    expect(partySum + poolSum).toBeCloseTo(0, 10);
   });
 
   it("if no eligible parties, lost amount routes to pool with bias", () => {
@@ -392,10 +430,13 @@ describe("planStateRegDriftDecay", () => {
       now: new Date(),
     });
     if (!planned) throw new Error("expected plan");
-    // No drift rows for party 1 (zero delta); decay still loses 0.004,
-    // routed via 10% eligibility (party eligible at Org=30) — caught back
-    // by itself, net zero. No party update emitted.
-    expect(planned.partyUpdates.length).toBe(0);
+    // BR has no lag entry → target = Org = 30 = Reg, so there is no drift.
+    expect(planned.ledgerRows.some((r) => r.source === "drift")).toBe(false);
+    // Decay still runs: the party loses 0.004 and, as the sole eligible
+    // catcher, takes back only the redistributed half — the other half
+    // lapses to the pool rather than being inherited.
+    const decayRow = planned.ledgerRows.find((r) => r.source === "decay" && r.partyId === "1");
+    expect(decayRow?.delta).toBeCloseTo(-0.002, 6);
   });
 
   it("does not overdraw an exhausted non-party pool (ticket #1133)", () => {
@@ -456,9 +497,15 @@ describe("planStateRegDriftDecay", () => {
     expect(total).toBeCloseTo(100, 6);
     expect(planned.poolUpdate.newIndependent).toBeGreaterThanOrEqual(0);
     expect(planned.poolUpdate.newUnregistered).toBeGreaterThanOrEqual(0);
-    // The pool is drained to zero first; the rest of the step comes from GOP,
-    // whose Reg (49.98) sits above its Org (40). Nothing is minted.
-    expect(planned.poolUpdate.newIndependent).toBeCloseTo(0, 6);
+    // Drift drains the pool's whole 0.02 first; the rest of the step comes
+    // from GOP, whose Reg (49.98) sits above its Org (40). Nothing is minted.
+    // (The end-of-turn balance is not 0: decay lapses its share back in after
+    // drift has emptied it — see REG_DECAY_LAPSE_TO_POOL_SHARE.)
+    const poolDrift = planned.ledgerRows.find(
+      (r) =>
+        r.source === "drift" && r.partyId === POOL_SENTINEL_PARTY_ID && r.metric === "independent"
+    );
+    expect(poolDrift?.delta).toBeCloseTo(-0.02, 6);
     const gopSourced = planned.ledgerRows.find(
       (r) => r.source === "drift" && r.partyId === "gop" && r.delta < 0
     );
@@ -814,7 +861,14 @@ describe("planStateRegDriftDecay — surplus sourcing when the pool is empty", (
       now,
     });
     if (!planned) throw new Error("expected plan");
-    expect(planned.poolUpdate.newIndependent).toBeCloseTo(0, 6);
+    // Drift takes the pool's whole 0.02 before touching any party's surplus.
+    // (Decay lapses its share back in afterwards, so the end-of-turn balance
+    // is above 0 — see REG_DECAY_LAPSE_TO_POOL_SHARE.)
+    const poolDrift = planned.ledgerRows.find(
+      (r) =>
+        r.source === "drift" && r.partyId === POOL_SENTINEL_PARTY_ID && r.metric === "independent"
+    );
+    expect(poolDrift?.delta).toBeCloseTo(-0.02, 6);
     const sourced = planned.ledgerRows.find(
       (r) => r.source === "drift" && r.partyId === "a" && r.delta < 0
     );
