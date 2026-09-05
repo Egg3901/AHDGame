@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render as rtlRender, screen } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { Character, PoliticalParty } from "@/lib/db/types";
@@ -53,8 +53,14 @@ vi.mock("./ProfilePictureLightbox", () => ({
   ProfilePictureLightbox: () => <div data-testid="pfp-lightbox" />,
 }));
 
+/** Captures what ProfileHeader hands the badge, so prop forwarding is testable
+ *  without rendering the badge's own markup. */
+const patreonBadgeProps: Record<string, unknown>[] = [];
 vi.mock("@/components/patreon/PatreonBadge", () => ({
-  PatreonBadge: () => null,
+  PatreonBadge: (props: Record<string, unknown>) => {
+    patreonBadgeProps.push(props);
+    return null;
+  },
 }));
 
 vi.mock("@/components/CampaignSongPlayer", () => ({
@@ -112,5 +118,42 @@ describe("ProfileHeader region badge", () => {
     );
 
     expect(screen.getByRole("link", { name: "XY_Z" })).toBeTruthy();
+  });
+});
+
+describe("supporter provider", () => {
+  /**
+   * PatreonBadge has always accepted a `provider` so a Lakeside subscription
+   * reads differently from a Patreon pledge. Nothing ever passed it, so every
+   * supporter was described as a Patreon patron regardless of who they paid.
+   * The badge renders its own copy; what this file owns is the forwarding.
+   */
+  beforeEach(() => {
+    patreonBadgeProps.length = 0;
+  });
+
+  it("forwards the supporter provider to the badge", () => {
+    render(<ProfileHeader {...baseProps} patreonTier="supporter" supporterProvider="stripe" />);
+
+    expect(patreonBadgeProps.at(-1)).toMatchObject({
+      tier: "supporter",
+      provider: "stripe",
+    });
+  });
+
+  it("forwards patreon as the provider when that is who granted it", () => {
+    render(<ProfileHeader {...baseProps} patreonTier="supporter-plus" supporterProvider="patreon" />);
+
+    expect(patreonBadgeProps.at(-1)).toMatchObject({
+      tier: "supporter-plus",
+      provider: "patreon",
+    });
+  });
+
+  it("sends undefined rather than null when there is no provider", () => {
+    // The badge's prop is optional; passing null would defeat its own default.
+    render(<ProfileHeader {...baseProps} patreonTier="supporter" supporterProvider={null} />);
+
+    expect(patreonBadgeProps.at(-1)?.provider).toBeUndefined();
   });
 });

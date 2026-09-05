@@ -456,6 +456,7 @@ async function getCharacterById(characterId: string) {
       patreonSince: patreonActive ? (user?.patreonSince ?? null) : null,
       patreonProfileBorder: patreonActive ? (user?.patreonProfileBorder ?? null) : null,
       patreonHighlightColor: patreonActive ? (user?.patreonHighlightColor ?? null) : null,
+      supporterProvider: patreonActive ? (user?.supporterProvider ?? null) : null,
       gameConfig,
       maxNPI,
       maxDonorLevel,
@@ -555,6 +556,7 @@ export default async function CharacterPage({ params }: PageProps) {
     patreonSince,
     patreonProfileBorder,
     patreonHighlightColor,
+    supporterProvider,
     gameConfig,
     maxNPI,
     maxDonorLevel,
@@ -919,6 +921,7 @@ export default async function CharacterPage({ params }: PageProps) {
           patreonExpiresAt={patreonExpiresAt}
           patreonSince={patreonSince}
           patreonProfileBorder={patreonProfileBorder}
+          supporterProvider={supporterProvider}
           wikiProfileHref={
             typeof character.sequentialId === "number"
               ? `/wiki/${playerWikiSlug(character.sequentialId)}`
