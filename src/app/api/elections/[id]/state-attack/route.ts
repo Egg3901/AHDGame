@@ -13,6 +13,11 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { getElectoralVoteUnits } from "@/lib/constants/states";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
+import {
+  getDemographicCategoriesForCountry,
+  resolveCanvassGroup,
+} from "@/lib/demographics/countryDemographics";
+import { applyDiminishingReturns } from "@/lib/utils/diminishingReturns";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { liveActionFilter } from "@/lib/elections/primaryStateActions";
@@ -37,6 +42,7 @@ import type {
   PrimaryStateAction,
   PrimaryStateActionKind,
   State,
+  StateDemographicTurnout,
 } from "@/lib/db/types";
 
 /**
@@ -195,6 +201,36 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // A turnout attack names a demographic group, and the group has to be one
+    // the country actually has: the id is written straight into the turnout
+    // document as a modifier key, so an invented one would create a bucket
+    // nothing reads and charge the player for it.
+    let resolvedGroup: { categoryKey: string; bucket: string; label: string } | null = null;
+    if (kind === "turnoutSuppression") {
+      if (!parsed.data.categoryKey || !parsed.data.bucket) {
+        return NextResponse.json(
+          { error: "Name the group whose turnout you are targeting." },
+          { status: 400 }
+        );
+      }
+      const resolved = resolveCanvassGroup(
+        election.countryId,
+        parsed.data.categoryKey,
+        parsed.data.bucket
+      );
+      if (!resolved) {
+        return NextResponse.json(
+          { error: "That is not a group in this country." },
+          { status: 400 }
+        );
+      }
+      const label =
+        getDemographicCategoriesForCountry(election.countryId)
+          .find((c) => c.key === resolved.categoryKey)
+          ?.groups.find((g) => g.id === parsed.data.bucket)?.name ?? parsed.data.bucket;
+      resolvedGroup = { categoryKey: resolved.categoryKey, bucket: parsed.data.bucket, label };
+    }
+
     const campaign = await db
       .collection<Campaign>("campaigns")
       .findOne({ electionId: election._id, candidateId: character._id });
@@ -245,6 +281,36 @@ export async function POST(request: Request, { params }: RouteParams) {
       (await db.collection<State>("states").findOne({ _id: stateId }, { projection: { name: 1 } }))
         ?.name ?? stateId;
 
+    // Read before the money moves: the optimistic filter below needs a value to
+    // guard on, and a state with no turnout document has to fail before
+    // anything is charged.
+    let turnoutWrite: { filter: Record<string, unknown>; update: Record<string, unknown> } | null =
+      null;
+    if (resolvedGroup) {
+      const turnoutDoc = await db
+        .collection<StateDemographicTurnout>("stateDemographicTurnout")
+        .findOne({ _id: stateId });
+      if (!turnoutDoc) {
+        return NextResponse.json({ error: "No turnout data for that state." }, { status: 404 });
+      }
+      const current =
+        turnoutDoc.modifiers?.[resolvedGroup.categoryKey]?.[resolvedGroup.bucket] ?? 0;
+      // The same sequence canvassing runs, with a negative boost.
+      // `applyDiminishingReturns` is Math.abs-based, so it diminishes correctly
+      // in both directions, and the existing clamp bounds the stacking.
+      const adjusted = applyDiminishingReturns(current, -terms.magnitude);
+      const next = Math.max(-20, Math.min(20, current + adjusted));
+      turnoutWrite = {
+        filter: { _id: stateId, lastUpdated: turnoutDoc.lastUpdated },
+        update: {
+          $set: {
+            [`modifiers.${resolvedGroup.categoryKey}.${resolvedGroup.bucket}`]: next,
+            lastUpdated: new Date(),
+          },
+        },
+      };
+    }
+
     const now = new Date();
     const row: Omit<PrimaryStateAction, "_id"> = {
       electionId: election._id,
@@ -253,6 +319,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       targetCharacterId: target.characterId,
       stateId,
       kind,
+      ...(resolvedGroup ? { bucket: resolvedGroup.bucket } : {}),
       magnitude: terms.magnitude,
       shieldApplied,
       appliedTurn: currentTurn,
@@ -280,6 +347,15 @@ export async function POST(request: Request, { params }: RouteParams) {
         );
       if (campDebit.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
 
+      if (turnoutWrite) {
+        const turnoutResult = await db
+          .collection<StateDemographicTurnout>("stateDemographicTurnout")
+          .updateOne(turnoutWrite.filter, turnoutWrite.update, opts);
+        // Somebody else moved this state's turnout between the read and the
+        // write. Fail rather than overwrite them; the player is not charged.
+        if (turnoutResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
+      }
+
       await db
         .collection<PrimaryStateAction>("primaryStateActions")
         .insertOne(row as PrimaryStateAction, opts);
@@ -305,7 +381,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       kind,
       character.name,
       target.characterName ?? "a rival",
-      stateName
+      stateName,
+      resolvedGroup?.label
     );
 
     return NextResponse.json({
