@@ -97,8 +97,10 @@ export function StateOperationsSection({
   const levelByState = new Map(presence.map((p) => [p.stateId, p.level]));
 
   // Priced from the same function the build route charges with, per state, so
-  // the escalating ladder cannot be misquoted as a flat toll.
-  const presenceCost = (stateId: string) => stateOrgLevelCost(levelByState.get(stateId) ?? 0);
+  // the escalating ladder cannot be misquoted as a flat toll, and converted with
+  // the one rate the view carries so it agrees with the row above.
+  const presenceCost = (stateId: string) =>
+    stateOrgLevelCost(levelByState.get(stateId) ?? 0) * view.campaignFxRate;
 
   const buildPresence = async (stateId: string) => {
     setPresenceBusy(true);

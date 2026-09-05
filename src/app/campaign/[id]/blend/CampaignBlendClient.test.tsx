@@ -336,6 +336,7 @@ describe("state operations", () => {
     liveAgainstYou: [],
     shieldPct: 0,
     campaignFunds: 1_200_000,
+    campaignFxRate: 1,
     localAttack: { costFunds: 40_000, costActions: 4, perTurn: 0.4, turns: 8 },
   };
 

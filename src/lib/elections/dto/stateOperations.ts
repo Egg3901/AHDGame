@@ -12,7 +12,10 @@ export interface StatePresenceRow {
   stateId: string;
   name: string;
   level: number;
-  /** Cost of the next level, from stateOrgLevelCost. */
+  /**
+   * Cost of the next level there, from `stateOrgLevelCost` and already
+   * converted into the campaign's currency.
+   */
   nextCost: number;
 }
 
@@ -71,6 +74,13 @@ export interface StateOperationsView {
    * pool and offer an action the server refuses.
    */
   campaignFunds: number;
+  /**
+   * Anchor to the campaign's currency. The presence ladder is priced per state
+   * off that state's own level, so the chooser has to run `stateOrgLevelCost`
+   * itself; this is the one rate it converts with, so the row above it and the
+   * row inside it cannot quote two different prices.
+   */
+  campaignFxRate: number;
   /**
    * What the local attack costs and does, so no figure is typed into markup.
    * `costFunds` is already converted into the campaign's currency, matching

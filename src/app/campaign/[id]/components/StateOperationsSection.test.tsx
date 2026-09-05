@@ -42,6 +42,7 @@ function view(over: Partial<StateOperationsView> = {}): StateOperationsView {
     liveAgainstYou: [],
     shieldPct: 0,
     campaignFunds: 1_200_000,
+    campaignFxRate: 1,
     localAttack: { costFunds: 40_000, costActions: 4, perTurn: 0.4, turns: 8 },
     ...over,
   };
@@ -190,6 +191,13 @@ describe("StateOperationsSection", () => {
     // Iowa has none, so it is offered at the base price; New Hampshire is at 5.
     expect(screen.getByRole("button", { name: /Iowa/ }).textContent).toContain("L0");
     expect(screen.getByRole("button", { name: /New Hampshire/ }).textContent).toContain("L5");
+  });
+
+  it("quotes presence in the campaign's currency, not in anchor units", () => {
+    renderSection({ campaignFxRate: 2 });
+    fireEvent.click(screen.getByRole("button", { name: /Build presence/ }));
+    // Level 0 in Iowa is the base price, doubled by the rate the view carries.
+    expect(screen.getByRole("button", { name: /Iowa/ }).textContent).toContain("$500,000");
   });
 
   it("says nothing is running against you when nothing is", () => {

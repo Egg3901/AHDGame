@@ -154,6 +154,27 @@ describe("buildStateOperations", () => {
       exchangeRates: [{ currencyCode: "USD", rate: 2 }],
     });
     expect(view?.localAttack.costFunds).toBe(PRIMARY_LOCAL_ATTACK_COST_FUNDS * 2);
+    expect(view?.campaignFxRate).toBe(2);
+  });
+
+  it("quotes the presence ladder in the campaign's own currency too", async () => {
+    // stateOrgLevelCost is anchor-denominated; the war chest is not.
+    const plain = await build({
+      electionCandidates: ROSTER,
+      characterStateOrg: [
+        { _id: new ObjectId(), characterId: ME, stateId: "NH", level: 3, totalInvested: 0 },
+      ],
+    });
+    const doubled = await build({
+      electionCandidates: ROSTER,
+      characterStateOrg: [
+        { _id: new ObjectId(), characterId: ME, stateId: "NH", level: 3, totalInvested: 0 },
+      ],
+      exchangeRates: [{ currencyCode: "USD", rate: 2 }],
+    });
+    expect(doubled?.positives.presence[0].nextCost).toBe(
+      (plain?.positives.presence[0].nextCost ?? 0) * 2
+    );
   });
 
   it("reports what the viewer has live against a rival, named by state", async () => {

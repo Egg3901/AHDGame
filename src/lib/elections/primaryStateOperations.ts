@@ -84,6 +84,13 @@ export async function buildStateOperations(
   const { stateNameById } = await loadStateTravelOptions(db);
 
   // ── Presence ──────────────────────────────────────────────────────────────
+  // Presence is charged to the campaign in its own currency, so the ladder is
+  // quoted in it too. `stateOrgLevelCost` is anchor-denominated.
+  const forexEnabled = await isForexEnabled();
+  const { rate } = forexEnabled
+    ? await loadCharacterFxRate(db, getHomeCurrency(character))
+    : { rate: 1 };
+
   const orgRows = await db
     .collection<CharacterStateOrg>("characterStateOrg")
     .find({ characterId: character._id })
@@ -95,7 +102,7 @@ export async function buildStateOperations(
       stateId: r.stateId,
       name: stateNameById[r.stateId] ?? r.stateId,
       level: r.level,
-      nextCost: stateOrgLevelCost(r.level),
+      nextCost: stateOrgLevelCost(r.level) * rate,
     }));
 
   // ── The field ─────────────────────────────────────────────────────────────
@@ -188,15 +195,6 @@ export async function buildStateOperations(
       ? getOpsBranchMagnitude("mediaSpending", "c", shieldTree.c)
       : 0;
 
-  // The attack is charged to the campaign in its own currency, so the price
-  // quoted here is converted the same way `surgeCostFunds` is. Quoting the
-  // anchor figure against a local balance is the "two sources, two prices" bug
-  // in a second guise.
-  const forexEnabled = await isForexEnabled();
-  const { rate } = forexEnabled
-    ? await loadCharacterFxRate(db, getHomeCurrency(character))
-    : { rate: 1 };
-
   return {
     electionId: election._id.toString(),
     currentTurn,
@@ -211,6 +209,7 @@ export async function buildStateOperations(
     liveAgainstYou,
     shieldPct,
     campaignFunds: myCampaign?.funds ?? 0,
+    campaignFxRate: rate,
     localAttack: {
       costFunds: PRIMARY_LOCAL_ATTACK_COST_FUNDS * rate,
       costActions: PRIMARY_LOCAL_ATTACK_COST_ACTIONS,
