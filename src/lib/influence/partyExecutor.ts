@@ -632,6 +632,11 @@ export { hasActivePlayersInState } from "./partyExecutorValidation";
  * read as their own chamber rather than a raw type string, and only names the
  * state when the seat sits outside the NPP's home state (the roster row already
  * prints the home state beside the name).
+ *
+ * Nationwide races (president, and any other country-level seat) store the
+ * COUNTRY id in `election.state` rather than a region id, so they always look
+ * like they sit outside the home state. Skip the prefix for those, or a
+ * presidential run renders as "US President".
  */
 function buildCandidacyLabel(
   election:
@@ -647,7 +652,9 @@ function buildCandidacyLabel(
       : election.chamberClass
         ? ` (Class ${election.chamberClass})`
         : "";
-  const statePrefix = election.state && election.state !== homeState ? `${election.state} ` : "";
+  const isNationwide = election.state === countryId;
+  const statePrefix =
+    election.state && !isNationwide && election.state !== homeState ? `${election.state} ` : "";
   return `${statePrefix}${chamber}${classSuffix}`;
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { buildNppHref } from "@/lib/utils/profileUrls";
 import { formatLocalFunds } from "@/lib/actions";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ActionOption, NPPOption } from "./types";
@@ -321,7 +322,10 @@ export function NppRosterPanel({
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-2">
                       <Link
-                        href={`/politicians/npp/${n.sequentialId ?? n.id}`}
+                        href={buildNppHref({
+                          sequentialId: n.sequentialId ?? undefined,
+                          _id: n.id,
+                        })}
                         className="font-medium text-primary hover:underline"
                       >
                         {n.name}

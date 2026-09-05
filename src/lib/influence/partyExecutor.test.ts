@@ -272,6 +272,63 @@ describe("getStatePartyInfluenceOptions", () => {
       })
     );
   });
+
+  it("does not prefix a nationwide race with the country id", async () => {
+    const stateParty = {
+      _id: "AK_1",
+      stateId: "AK",
+      partyId: "1",
+      organization: 55,
+      politicalStrength: 12,
+      treasury: 250000,
+    } as StatePartyOrg;
+    const party = {
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "US",
+      name: "Democratic Party",
+      treasury: 500000,
+      politicalStrength: 20,
+    } as PoliticalParty;
+    const candidateId = new ObjectId();
+    const electionId = new ObjectId();
+
+    db.collectionMocks.npps.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: candidateId,
+          name: "White House Hopeful",
+          party: "1",
+          homeState: "AK",
+          currentOffice: null,
+          retiredAt: null,
+          favorability: 45,
+          politicalInfluence: 11,
+          personality: { loyalty: 58, ambition: 60, stubbornness: 42 },
+        },
+      ]),
+      sort: vi.fn().mockReturnThis(),
+    });
+    db.collectionMocks.electionCandidates.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: new ObjectId(), electionId, nppId: candidateId, isNPP: true, status: "active" },
+        ]),
+    });
+    // Nationwide races store the country id in `state` (verified against live
+    // data: US president -> state "US", NG president -> state "NG"), so a naive
+    // "state differs from homeState" test would render "US President".
+    db.collectionMocks.elections.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([{ _id: electionId, state: "US", electionType: "president" }]),
+    });
+
+    const options = await getStatePartyInfluenceOptions(stateParty, party, true);
+
+    expect(options.nppsInState[0].activeCandidacyLabel).toBe("President");
+  });
 });
 
 describe("executeNationalPartyInfluence", () => {
