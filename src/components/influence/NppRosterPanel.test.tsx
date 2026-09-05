@@ -29,6 +29,7 @@ const ACTIONS: ActionOption[] = [
 const NPPS: NPPOption[] = [
   {
     id: "a",
+    sequentialId: 42,
     name: "Ada Low",
     party: "9",
     estimatedChance: 80,
@@ -40,7 +41,7 @@ const NPPS: NPPOption[] = [
       stubbornness: 30,
     },
     currentOfficeLabel: null,
-    activeCandidacyLabel: null,
+    activeCandidacyLabel: "Senate (Class 2)",
   },
   {
     id: "b",
@@ -78,6 +79,21 @@ function setup(scope: "state" | "national" = "national") {
 }
 
 describe("NppRosterPanel", () => {
+  it("names the race a candidate is running in rather than a bare Running tag", () => {
+    setup();
+    expect(screen.getByText(/Running: Senate \(Class 2\)/)).toBeTruthy();
+  });
+
+  it("links each NPP name to their profile, falling back to the id without a sequentialId", () => {
+    setup();
+    expect(screen.getByRole("link", { name: "Ada Low" }).getAttribute("href")).toBe(
+      "/politicians/npp/42"
+    );
+    expect(screen.getByRole("link", { name: "Ben Hi" }).getAttribute("href")).toBe(
+      "/politicians/npp/b"
+    );
+  });
+
   it("renders a roster row per NPP with an attention dot on the flagged one", () => {
     setup();
     expect(screen.getByText("Ada Low")).toBeTruthy();

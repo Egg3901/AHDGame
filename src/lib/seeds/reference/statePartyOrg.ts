@@ -63,6 +63,30 @@ const DEMOCRAT_SEQ_ID = "1";
 const REPUBLICAN_SEQ_ID = "2";
 
 /**
+ * Which seeded party each generated sequentialId stands for.
+ *
+ * The ids above are only correct in a world whose roster still matches the
+ * seed. A live world can retire or rename a seeded party — production has
+ * sequentialId 2 as the Farmer-Labor Party with the Republicans at 6 — so any
+ * caller writing these rows into a running world must remap them onto the
+ * party it actually resolves for each abbreviation. See
+ * `seedAdmittedStatePolitics`, where not remapping handed FLP the Republicans'
+ * starting organisation in Alaska and Hawaii.
+ */
+export const MAJOR_PARTY_ABBR_BY_SEQ_ID: Readonly<Record<string, string>> = {
+  [DEMOCRAT_SEQ_ID]: "DEM",
+  [REPUBLICAN_SEQ_ID]: "REP",
+};
+
+/**
+ * The seeded ids `buildMajorPartyOrgsForState` emits, derived from the mapping
+ * above so the two can never fall out of step: a party added to the mapping is
+ * generated, and a generated party always has an abbreviation for callers that
+ * must remap it onto a live roster.
+ */
+const MAJOR_PARTY_SEQ_IDS = Object.keys(MAJOR_PARTY_ABBR_BY_SEQ_ID);
+
+/**
  * Calculate initial party org from state political lean (non-zero-sum).
  * Each party has a baseline presence plus bonus in favorable states.
  *
@@ -128,8 +152,7 @@ export function buildMajorPartyOrgsForState(
 ): Omit<StatePartyOrg, "createdAt" | "updatedAt">[] {
   if (!isUsElectoralState(stateId)) return [];
   const lean = stateLean(stateId, margins);
-  const partySeqIds = [DEMOCRAT_SEQ_ID, REPUBLICAN_SEQ_ID];
-  return partySeqIds.map((partyId) => ({
+  return MAJOR_PARTY_SEQ_IDS.map((partyId) => ({
     _id: `${stateId}_${partyId}`,
     countryId: "US" as const,
     stateId,

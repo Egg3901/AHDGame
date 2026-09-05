@@ -130,10 +130,36 @@ export const COUNTRY_ELECTION_TYPE_LABELS: Partial<Record<CountryId, Record<stri
   },
 };
 
-/** Returns a display label for an election type, falling back to the raw string. */
+/**
+ * Last-resort presentation for an election type with no entry in either map.
+ * Several live chambers sit in that gap (FR `senat`, IT/TR `senato`, ES
+ * `senado`, BR `chamber`, AT `nationalrat`, FI `eduskunta`, GR `vouli`), and
+ * echoing the key showed players raw internal strings like "Running: senat".
+ *
+ * They are deliberately NOT added to ELECTION_TYPE_LABEL_MAP: that map is a
+ * registry, and `electionMethod.test.ts` asserts every key in it also has a
+ * POSITION_BY_ELECTION_TYPE entry. Giving these types a position would change
+ * which method `getElectionMethod` returns for live elections in eight
+ * countries, which is a gameplay change that needs its own issue rather than a
+ * display fix. Capitalising the key is presentation only and changes no
+ * resolution behaviour.
+ */
+function humanizeElectionType(electionType: string): string {
+  if (!electionType) return electionType;
+  return electionType
+    .replace(/[_-]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+/**
+ * Returns a display label for an election type. Falls back to a capitalised
+ * form of the key rather than the raw key, so no surface shows players an
+ * internal string.
+ */
 export function formatElectionTypeLabel(electionType: string, countryId?: CountryId): string {
   const override = countryId ? COUNTRY_ELECTION_TYPE_LABELS[countryId]?.[electionType] : undefined;
-  return override ?? ELECTION_TYPE_LABEL_MAP[electionType] ?? electionType;
+  return override ?? ELECTION_TYPE_LABEL_MAP[electionType] ?? humanizeElectionType(electionType);
 }
 
 /**

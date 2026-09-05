@@ -3,7 +3,13 @@ import {
   REG_DRIVE_MAX_BOOST_PER_STATE,
   calculateRegistrationDriveBoost,
   planRegistrationDriveDraw,
+  planRegistrationDriveSourcing,
 } from "./registrationDrive";
+import type { SurplusPartyView } from "./surplusSourcing";
+
+function view(partyId: string, orgPct: number, regPct: number): SurplusPartyView {
+  return { rowId: `row_${partyId}`, partyId, orgPct, regPct };
+}
 
 // Player suggestion #81 — voter-registration drive helpers.
 
@@ -55,5 +61,65 @@ describe("planRegistrationDriveDraw", () => {
     expect(draw.applied).toBe(0);
     expect(draw.fromUnregistered).toBe(0);
     expect(draw.fromIndependent).toBe(0);
+  });
+});
+
+describe("planRegistrationDriveSourcing", () => {
+  const buyer = "gop";
+
+  it("takes the whole boost from the pool when the pool can cover it", () => {
+    const views = [view(buyer, 40, 10), view("dem", 20, 50)];
+    const plan = planRegistrationDriveSourcing(0.1, 5, 5, views, buyer);
+
+    expect(plan.applied).toBeCloseTo(0.1, 6);
+    expect(plan.pool.applied).toBeCloseTo(0.1, 6);
+    expect(plan.surplus).toEqual([]);
+  });
+
+  it("sources the shortfall from over-registered parties when the pool is empty", () => {
+    // Every US state pool has been 0 since live turn ~155; without this the
+    // drive applied nothing at all.
+    const views = [view(buyer, 40, 10), view("dem", 20, 50)];
+    const plan = planRegistrationDriveSourcing(0.1, 0, 0, views, buyer);
+
+    expect(plan.applied).toBeCloseTo(0.1, 6);
+    expect(plan.pool.applied).toBe(0);
+    expect(plan.surplus).toHaveLength(1);
+    expect(plan.surplus[0].partyId).toBe("dem");
+    expect(plan.surplus[0].delta).toBeCloseTo(-0.1, 6);
+  });
+
+  it("draws the pool first and only the remainder from surplus", () => {
+    const views = [view(buyer, 40, 10), view("dem", 20, 50)];
+    const plan = planRegistrationDriveSourcing(0.1, 0.04, 0, views, buyer);
+
+    expect(plan.pool.applied).toBeCloseTo(0.04, 6);
+    expect(plan.surplus[0].delta).toBeCloseTo(-0.06, 6);
+    expect(plan.applied).toBeCloseTo(0.1, 6);
+  });
+
+  it("never draws from the buying party's own surplus", () => {
+    // The buyer is itself above target; it must not fund its own drive.
+    const views = [view(buyer, 10, 40)];
+    const plan = planRegistrationDriveSourcing(0.1, 0, 0, views, buyer);
+
+    expect(plan.applied).toBe(0);
+    expect(plan.surplus).toEqual([]);
+  });
+
+  it("applies only what pool and surplus can jointly supply", () => {
+    const views = [view(buyer, 40, 10), view("dem", 20, 20.03)];
+    const plan = planRegistrationDriveSourcing(0.1, 0, 0, views, buyer);
+
+    // Donor surplus is 0.03; nothing is minted beyond it.
+    expect(plan.applied).toBeCloseTo(0.03, 6);
+  });
+
+  it("applies nothing when neither pool nor surplus can supply", () => {
+    const views = [view(buyer, 40, 10), view("dem", 20, 20)];
+    const plan = planRegistrationDriveSourcing(0.1, 0, 0, views, buyer);
+
+    expect(plan.applied).toBe(0);
+    expect(plan.surplus).toEqual([]);
   });
 });

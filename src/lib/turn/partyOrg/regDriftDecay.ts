@@ -23,6 +23,7 @@ import {
   NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY,
   PASSIVE_REG_DECAY_RATE,
   PASSIVE_REG_DRIFT_RATE,
+  REG_DECAY_LAPSE_TO_POOL_SHARE,
   REG_DRIFT_CATCH_ELIGIBILITY_ORG_PCT,
   REG_LAG_BELOW_ORG_PCT_BY_COUNTRY,
 } from "./pacingConstants";
@@ -30,6 +31,15 @@ import {
   registrationDecayMultiplier,
   registrationDriftMultiplier,
 } from "@/lib/elections/electoralLaws";
+import {
+  sourceFromSurplus,
+  type SurplusPartyDelta,
+  type SurplusPartyView,
+} from "./surplusSourcing";
+
+// Re-exported so existing importers (and tests) keep their entry point while
+// the implementation lives in the DB-free `surplusSourcing` module.
+export { sourceFromSurplus };
 
 /**
  * Politics turn-phase steps 3-4 merged: passive Org→Reg drift then Reg decay
@@ -76,19 +86,9 @@ export interface RegDriftDecayResult {
   ledgerRowsWritten: number;
 }
 
-interface PartyView {
-  rowId: string;
-  partyId: string;
-  orgPct: number;
-  regPct: number;
-}
+type PartyView = SurplusPartyView;
 
-interface PartyDelta {
-  partyId: string;
-  rowId: string;
-  delta: number;
-  newReg: number;
-}
+type PartyDelta = SurplusPartyDelta;
 
 interface PoolDelta {
   independent: number;
@@ -144,7 +144,12 @@ export function computeDecayDeltas(
    * Governor home-field decay relief: the named party loses
    * `loss × (1 − factor)` instead of the full `loss`. `factor` in [0, 1].
    */
-  decayRelief?: { partyId: string; factor: number }
+  decayRelief?: { partyId: string; factor: number },
+  /**
+   * Share of the decayed total that lapses to the non-party pool instead of
+   * being inherited by organised rivals. See REG_DECAY_LAPSE_TO_POOL_SHARE.
+   */
+  lapseToPoolShare: number = REG_DECAY_LAPSE_TO_POOL_SHARE
 ): { partyDeltas: PartyDelta[]; poolDelta: PoolDelta } {
   // Each party loses (min(rate, regPct)), reduced for the governor's party.
   const losses = parties.map((p) => {
@@ -163,6 +168,12 @@ export function computeDecayDeltas(
   const eligible = parties.filter((p) => p.orgPct >= eligibilityOrgPct);
   const totalWeight = eligible.reduce((sum, p) => sum + Math.sqrt(p.orgPct), 0);
 
+  // Split the loss: part lapses off the rolls (back to the non-party pool),
+  // the rest is inherited by organised rivals. Without the lapsed share the
+  // pool is a one-way sink — see REG_DECAY_LAPSE_TO_POOL_SHARE.
+  const lapsedToPool = totalLost * lapseToPoolShare;
+  const redistributed = totalLost - lapsedToPool;
+
   // Build per-party net deltas: -loss + caught share (if eligible).
   const byPartyId = new Map<string, { rowId: string; delta: number; regPct: number }>();
   for (const l of losses) {
@@ -170,7 +181,7 @@ export function computeDecayDeltas(
   }
   for (const p of eligible) {
     if (totalWeight === 0) break;
-    const share = (Math.sqrt(p.orgPct) / totalWeight) * totalLost;
+    const share = (Math.sqrt(p.orgPct) / totalWeight) * redistributed;
     const cur = byPartyId.get(p.partyId);
     if (cur) {
       cur.delta += share;
@@ -190,15 +201,18 @@ export function computeDecayDeltas(
     });
   }
 
-  // If no party is eligible, the entire totalLost goes to non-party buckets
-  // with the configured bias. Otherwise the eligible parties absorbed it.
+  // The lapsed share always reaches the non-party buckets, split by the
+  // configured bias. When no party is eligible to catch anything, the
+  // redistributed share has no recipient and lapses too — so the whole
+  // totalLost routes here, preserving the original no-eligible behaviour.
   const poolDelta: PoolDelta = { independent: 0, unregistered: 0 };
-  if (eligible.length === 0 && totalLost > 0) {
+  const toPool = eligible.length === 0 || totalWeight === 0 ? totalLost : lapsedToPool;
+  if (toPool > 0) {
     const indWeight = independentBias;
     const unregWeight = 1;
     const denom = indWeight + unregWeight;
-    poolDelta.independent = (totalLost * indWeight) / denom;
-    poolDelta.unregistered = (totalLost * unregWeight) / denom;
+    poolDelta.independent = (toPool * indWeight) / denom;
+    poolDelta.unregistered = (toPool * unregWeight) / denom;
   }
 
   return { partyDeltas, poolDelta };
@@ -253,80 +267,6 @@ function capPositiveDeltas(deltas: PartyDelta[], capacity: number): number {
     d.delta = scaled;
   }
   return cap;
-}
-
-/**
- * Source a drift shortfall from parties whose Reg sits ABOVE their drift
- * target (`max(0, Org − lag)`), in proportion to each party's surplus.
- *
- * Why this exists: drift only ever drew from the non-party pool, and once a
- * state's Independent + Unregistered buckets are exhausted (every US state by
- * live turn ~140) `capPositiveDeltas` scaled every climb to zero. From then on
- * the only mover was the 0.004 pp/turn decay, and registration was frozen
- * against parties that had built real Org. Organised opposition is exactly the
- * "real political cause" seeded registration is meant to respond to, so the
- * shortfall now comes from the over-registered incumbents instead of nowhere.
- *
- * Bounds:
- *   - a party never gives more than its surplus (Reg never drops below target);
- *   - the governor's party contributes at `(1 − relief.factor)` weight, the
- *     same home-field defence its decay already enjoys;
- *   - a state where no party is below target has no shortfall and is untouched,
- *     so an unchallenged Solid South seed stays as durable as before.
- *
- * Returns negative `PartyDelta`s for the sourced parties (their total is
- * `-min(shortfall, Σ surplus)`) so they merge into the drift deltas and ledger
- * exactly like any other drift movement.
- */
-export function sourceFromSurplus(
-  views: PartyView[],
-  climbers: PartyDelta[],
-  shortfall: number,
-  regLagBelowOrg: number = 0,
-  relief?: { partyId: string; factor: number }
-): PartyDelta[] {
-  if (shortfall <= 0) return [];
-  const climbing = new Set(climbers.map((d) => d.partyId));
-  const donors = views
-    .filter((p) => !climbing.has(p.partyId))
-    .map((p) => {
-      const target = Math.max(0, p.orgPct - regLagBelowOrg);
-      const surplus = p.regPct - target;
-      const weight = relief && p.partyId === relief.partyId ? Math.max(0, 1 - relief.factor) : 1;
-      return { view: p, surplus, weight, drawn: 0 };
-    })
-    .filter((d) => d.surplus > 0 && d.weight > 0);
-  if (donors.length === 0) return [];
-
-  // Water-fill: distribute by (surplus × weight), cap each donor at its
-  // surplus, and re-spread any remainder over the donors still under cap.
-  let remaining = Math.min(
-    shortfall,
-    donors.reduce((sum, d) => sum + d.surplus, 0)
-  );
-  const EPS = 1e-12;
-  while (remaining > EPS) {
-    const open = donors.filter((d) => d.surplus - d.drawn > EPS);
-    if (open.length === 0) break;
-    const totalWeight = open.reduce((sum, d) => sum + (d.surplus - d.drawn) * d.weight, 0);
-    if (totalWeight <= 0) break;
-    const batch = remaining;
-    for (const d of open) {
-      const share = (batch * (d.surplus - d.drawn) * d.weight) / totalWeight;
-      const take = Math.min(share, d.surplus - d.drawn);
-      d.drawn += take;
-      remaining -= take;
-    }
-  }
-
-  return donors
-    .filter((d) => d.drawn > 0)
-    .map((d) => ({
-      partyId: d.view.partyId,
-      rowId: d.view.rowId,
-      delta: -d.drawn,
-      newReg: d.view.regPct - d.drawn,
-    }));
 }
 
 /**
@@ -420,6 +360,13 @@ interface ProcessStateInput {
    * Absent/0 = the neutral regime, byte-identical to the pre-law behaviour.
    */
   registrationAccessBias?: number | null;
+  /**
+   * Override for `REG_DECAY_LAPSE_TO_POOL_SHARE`. Production never sets this;
+   * it exists so the balance harness in `scripts/sim/` can replay the
+   * pre-change world (share 0 — decay reaches the pool only when no party is
+   * eligible) against the shipped one in the same run.
+   */
+  decayLapseToPoolShare?: number;
 }
 
 /**
@@ -533,7 +480,8 @@ export function planStateRegDriftDecay(input: ProcessStateInput): ProcessStateOu
     decayRate,
     REG_DRIFT_CATCH_ELIGIBILITY_ORG_PCT,
     independentBias,
-    decayRelief
+    decayRelief,
+    input.decayLapseToPoolShare ?? REG_DECAY_LAPSE_TO_POOL_SHARE
   );
 
   const driftPoolDelta = applyPoolResidual(
