@@ -8,6 +8,7 @@ import type {
 } from "@/lib/db/types";
 import type { Db } from "mongodb";
 import { createTurnPhaseTelemetry } from "@/simulation/engine/phaseTelemetry";
+import { beginPhaseProfiling, endPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
 import { withSpan } from "@/lib/observability/spans";
 import type { TurnPhaseRuntime } from "@/simulation/engine/types";
 import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
@@ -212,6 +213,7 @@ export function createTurnPhaseRuntime(input: {
           traceId,
           async () => {
             await setPhaseStatus(name, "running");
+            beginPhaseProfiling(name);
             Sentry.addBreadcrumb({
               category: "turn.phase",
               message: `Phase "${name}" started`,
@@ -291,6 +293,7 @@ export function createTurnPhaseRuntime(input: {
       warnings.push(`${name}: ${message}`);
       return null;
     } finally {
+      endPhaseProfiling(name);
       clearInterval(heartbeatTimer);
       if (timeoutId) clearTimeout(timeoutId);
     }

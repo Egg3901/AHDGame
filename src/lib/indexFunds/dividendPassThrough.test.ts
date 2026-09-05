@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import { processIndexFundDividend } from "@/lib/indexFunds/dividendPassThrough";
+import {
+  processIndexFundDividend,
+  processIndexFundDividendsBatch,
+} from "@/lib/indexFunds/dividendPassThrough";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/financialTxLog/emit", () => ({
@@ -218,6 +221,179 @@ describe("dividendPassThrough", () => {
       expect(result.passedThroughAnchor).toBe(250_000);
       expect(result.holdersPaid).toBe(0);
       expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
+    });
+  });
+
+  /**
+   * The batched path is what `corporationTurn` runs. Its correctness claim is
+   * that aggregating N accruals into a handful of bulk `$inc`s lands the same
+   * balances as N separate calls. These pin the arithmetic that claim rests
+   * on: per-accrual flooring must happen BEFORE summation, and invalid
+   * accruals must be dropped rather than poisoning a total with NaN.
+   *
+   * Full state-level equivalence across all six written collections is proved
+   * against a real Mongo by scripts/perf/dividend-equivalence.ts, which a
+   * mock-backed test cannot do.
+   */
+  describe("processIndexFundDividendsBatch", () => {
+    let db: MockDb;
+    const fundId = new ObjectId();
+    const corporationId = new ObjectId();
+    const characterId = new ObjectId();
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+      db = createMockDb();
+      for (const name of [
+        "indexFunds",
+        "indexFundPositions",
+        "corporations",
+        "characters",
+        "imperialCharacters",
+        "npps",
+        "gameState",
+        "indexFundTransactions",
+        "financialTxLog",
+      ]) {
+        db.collection(name);
+      }
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+      db.collectionMocks["indexFunds"]!.findOne.mockResolvedValue({
+        _id: fundId,
+        slug: "batch-fund",
+        name: "Batch Fund",
+        tickerSymbol: "BATCH",
+        unitSupply: 1000,
+        quotedNav: 100,
+        anchorCurrencyCode: "USD",
+        cashAnchor: 0,
+      });
+      db.collectionMocks["indexFundPositions"]!.find.mockReturnValue(
+        makeCursor([
+          { _id: new ObjectId(), fundId, holderKind: "character", characterId, units: 1000 },
+        ])
+      );
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([{ _id: corporationId, name: "Payer Corp" }])
+      );
+      db.collectionMocks["characters"]!.find.mockReturnValue(
+        makeCursor([{ _id: characterId, name: "Batch Holder" }])
+      );
+      db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ forexEnabled: false });
+    });
+
+    /**
+     * Total of every `$inc` the batch issued against a collection, summed
+     * across fields. Deliberately field-agnostic: the balance field depends
+     * on whether forex is on (`cashOnHand` vs
+     * `currencyBalances.personal.<CCY>`), and what these tests pin is the
+     * amount credited, not where it is stored.
+     */
+    function totalInc(collection: string): number {
+      const calls = db.collectionMocks[collection]!.bulkWrite.mock.calls;
+      let sum = 0;
+      for (const [ops] of calls) {
+        for (const op of ops as { updateOne?: { update?: { $inc?: Record<string, number> } } }[]) {
+          for (const value of Object.values(op.updateOne?.update?.$inc ?? {})) {
+            if (typeof value === "number") sum += value;
+          }
+        }
+      }
+      return sum;
+    }
+
+    it("sums repeated accruals to the same total as separate calls", async () => {
+      const accruals = Array.from({ length: 5 }, () => ({
+        fundId,
+        corporationId,
+        amountAnchor: 1_000_000,
+        shares: 500,
+      }));
+
+      await processIndexFundDividendsBatch(db as unknown as Db, accruals, { turn: 42 });
+
+      // 5 x 1,000,000 gross => 5 x 750,000 reinvested, 5 x 250,000 passed through.
+      const fundCalls = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls;
+      let fundCash = 0;
+      for (const [ops] of fundCalls) {
+        for (const op of ops as { updateOne?: { update?: { $inc?: Record<string, number> } } }[]) {
+          fundCash += op.updateOne?.update?.$inc?.cashAnchor ?? 0;
+        }
+      }
+      expect(fundCash).toBe(3_750_000);
+      // The sole holder owns the whole float, so it takes the entire 25%.
+      expect(totalInc("characters")).toBe(1_250_000);
+    });
+
+    it("floors each accrual to 2dp before summing, not after", async () => {
+      // 40 x 0.004 is 0.16 in total but zero once each is floored to a cent
+      // first. Summing before flooring would credit a sixth of a cent.
+      const accruals = Array.from({ length: 40 }, () => ({
+        fundId,
+        corporationId,
+        amountAnchor: 0.004,
+        shares: 1,
+      }));
+
+      await processIndexFundDividendsBatch(db as unknown as Db, accruals, { turn: 42 });
+
+      expect(totalInc("characters")).toBe(0);
+    });
+
+    it("drops non-finite and non-positive accruals instead of poisoning totals", async () => {
+      const accruals = [
+        { fundId, corporationId, amountAnchor: 1_000_000, shares: 500 },
+        { fundId, corporationId, amountAnchor: Number.NaN, shares: 500 },
+        { fundId, corporationId, amountAnchor: Number.POSITIVE_INFINITY, shares: 500 },
+        { fundId, corporationId, amountAnchor: 0, shares: 500 },
+        { fundId, corporationId, amountAnchor: -5_000, shares: 500 },
+      ];
+
+      await processIndexFundDividendsBatch(db as unknown as Db, accruals, { turn: 42 });
+
+      const credited = totalInc("characters");
+      expect(Number.isFinite(credited)).toBe(true);
+      expect(credited).toBe(250_000);
+    });
+
+    it("writes nothing at all when every accrual is invalid", async () => {
+      await processIndexFundDividendsBatch(
+        db as unknown as Db,
+        [{ fundId, corporationId, amountAnchor: 0, shares: 1 }],
+        { turn: 42 }
+      );
+
+      expect(db.collectionMocks["indexFunds"]!.bulkWrite).not.toHaveBeenCalled();
+      expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
+    });
+
+    it("keeps per-corporation transaction granularity across the batch", async () => {
+      const otherCorp = new ObjectId();
+      db.collectionMocks["corporations"]!.find.mockReturnValue(
+        makeCursor([
+          { _id: corporationId, name: "Payer Corp" },
+          { _id: otherCorp, name: "Other Corp" },
+        ])
+      );
+
+      await processIndexFundDividendsBatch(
+        db as unknown as Db,
+        [
+          { fundId, corporationId, amountAnchor: 1_000_000, shares: 500 },
+          { fundId, corporationId: otherCorp, amountAnchor: 2_000_000, shares: 900 },
+        ],
+        { turn: 42 }
+      );
+
+      const inserted = db.collectionMocks["indexFundTransactions"]!.insertMany.mock.calls.flatMap(
+        ([docs]) => docs as { corporationId?: ObjectId }[]
+      );
+      // Two rows per accrual (reinvest + pass-through), attributed per corp.
+      expect(inserted.length).toBe(4);
+      const byCorp = new Set(inserted.map((d) => d.corporationId?.toString()));
+      expect(byCorp).toEqual(new Set([corporationId.toString(), otherCorp.toString()]));
     });
   });
 });
