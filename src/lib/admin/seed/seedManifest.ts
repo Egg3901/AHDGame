@@ -869,6 +869,12 @@ const RUNTIME: CollectionEntry[] = [
   // Per-country / per-state runtime + histories.
   { name: "countryLeaderStates", category: "runtime" },
   { name: "characterStateOrg", category: "runtime" },
+  {
+    name: "primaryStateActions",
+    category: "runtime",
+    notes:
+      "One row per act a presidential primary candidate has running against a rival in a state. Rows carry their own expiry, so a reset that drops them simply clears every live attack.",
+  },
   { name: "rulingPartyPurgeEvents", category: "runtime" },
   { name: "redistrictLedger", category: "runtime" },
   { name: "stateApprovalHistory", category: "runtime" },
