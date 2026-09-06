@@ -14,6 +14,7 @@ import type {
   State,
   GameConfig,
   Character,
+  SingleplayerDifficulty,
 } from "@/lib/db/types";
 import { projectNppGeneration, calculateTaxAmount } from "@/lib/utils/fundGeneration";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
@@ -26,6 +27,12 @@ import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import {
+  NPP_ACTIONS_PER_TURN,
+  NPP_ACTION_CAP,
+  singleplayerNppTuning,
+} from "@/lib/singleplayerDifficulty/rules";
+import { isSingleplayer } from "@/lib/singleplayer";
 
 /*
  * NPPs receive 2 action points per turn (vs. 3+ for player characters). The
@@ -35,8 +42,6 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
  * prevents NPPs from accumulating enough points to dominate expensive actions
  * if left unprocessed for multiple turns.
  */
-const NPP_ACTIONS_PER_TURN = 2;
-const NPP_ACTION_CAP = 100;
 const BATCH_SIZE = 100;
 
 export interface NppFundGenerationResult {
@@ -61,6 +66,15 @@ export async function processNppFundGeneration(
   if (config?.nppEconomyEnabled === false) {
     return { nppsProcessed: 0, totalGenerated: 0, totalStateTax: 0, totalNationalTax: 0 };
   }
+  const singleplayerState = isSingleplayer()
+    ? await db
+        .collection<{
+          _id: string;
+          singleplayerConfig?: { difficulty?: SingleplayerDifficulty };
+        }>("gameState")
+        .findOne({ _id: "current" }, { projection: { singleplayerConfig: 1 } })
+    : null;
+  const tuning = singleplayerNppTuning(singleplayerState?.singleplayerConfig?.difficulty);
 
   const stateMap =
     preloadedStateMap ??
@@ -127,10 +141,15 @@ export async function processNppFundGeneration(
         // reaches here when enabled.
         nppEconomyEnabled: true,
       });
-      const grossFundsLocal = campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US");
+      const grossFundsLocal =
+        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US") *
+        (singleplayerState ? tuning.fundMultiplier : 1);
 
       const currentActions = finite(npp.actionPoints);
-      const newActions = Math.min(NPP_ACTION_CAP, currentActions + NPP_ACTIONS_PER_TURN);
+      const newActions = Math.min(
+        singleplayerState ? tuning.actionPointCap : NPP_ACTION_CAP,
+        currentActions + (singleplayerState ? tuning.actionPointsPerTurn : NPP_ACTIONS_PER_TURN)
+      );
 
       let stateTaxAmountLocal = 0;
       let nationalTaxAmountLocal = 0;

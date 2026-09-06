@@ -101,6 +101,7 @@ function passthrough(request: NextRequest): NextResponse {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") ?? "";
+  const singleplayer = isSingleplayer();
 
   // Singleplayer: one account, on the player's machine, nobody to log in as.
   // Mint the local player's session here rather than special-casing auth
@@ -108,8 +109,18 @@ export async function proxy(request: NextRequest) {
   // early with the cookie attached; the retried request then flows through
   // the normal path below. See @/lib/singleplayer for the guards that stop
   // this running anywhere that serves more than one person.
-  if (isSingleplayer() && !request.cookies.get(AUTH_COOKIE_NAME)) {
+  if (singleplayer && !request.cookies.get(AUTH_COOKIE_NAME)) {
     return await grantSingleplayerSession(request);
+  }
+
+  // The local build has no account lifecycle. Keep old bookmarks to the
+  // public auth pages inside the local launcher rather than showing a sign-in,
+  // registration, or logout screen for the fixed local session.
+  if (
+    singleplayer &&
+    (pathname === "/login" || pathname === "/register" || pathname === "/logout")
+  ) {
+    return NextResponse.redirect(new URL("/singleplayer", request.url));
   }
 
   // Canonical host is the apex domain. www duplicates every page (splits SEO

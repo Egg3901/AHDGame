@@ -8,6 +8,9 @@ import { buildGovernmentTypeMap } from "@/lib/landing/governmentTypeMap";
 import { fetchDiscordInviteStats } from "@/lib/discord/inviteStats";
 import type { DiscordInviteStats } from "@/lib/discord/inviteStats";
 import { SandboxHome } from "./_landing-v2/SandboxHome";
+import { isSingleplayer } from "@/lib/singleplayer";
+import { getDb } from "@/lib/mongodb";
+import { singleplayerStatus } from "@/lib/singleplayerServer";
 
 // Auth redirect must stay per-request. Mongo marketing data is served from a
 // short in-process TTL cache (see getCachedLandingData) so anonymous stampedes
@@ -23,6 +26,14 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function LandingPage() {
+  if (isSingleplayer()) {
+    const status = await singleplayerStatus(await getDb());
+    if (!status.hasWorld) redirect("/singleplayer");
+    if (status.mode === "worldsim") redirect("/singleplayer/worldsim");
+    if (!status.hasCharacter) redirect("/create-character");
+    redirect("/profile");
+  }
+
   const user = await getAuthUser();
   if (user) {
     redirect("/profile");

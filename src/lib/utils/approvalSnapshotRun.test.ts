@@ -89,6 +89,20 @@ describe("snapshotApprovalsForTurn", () => {
     expect(snapshotted()).toContain("RU");
   });
 
+  it("pulls in an inactive belligerent while its defeat modifier is active", async () => {
+    wire({
+      conflicts: [
+        conflict({
+          status: "resolved",
+          endTurn: 500,
+          outcome: { winner: "A", note: "" },
+        }),
+      ],
+    });
+    await run();
+    expect(snapshotted()).toContain("RU");
+  });
+
   it("does not release a guest that is still fighting", async () => {
     wire({ conflicts: [conflict()], documented: [...ACTIVE, "DD", "RU"] });
     const result = await run();

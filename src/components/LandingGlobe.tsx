@@ -148,6 +148,8 @@ export function LandingGlobe({
   enhanced = false,
   blocColoring = false,
   bare = false,
+  navigationDisabled = false,
+  allowBareZoom = false,
   initialRotation,
   initialZoom,
   geoUrl,
@@ -180,6 +182,10 @@ export function LandingGlobe({
    * drag/zoom interaction are retained. Default false.
    */
   bare?: boolean;
+  /** Keep the globe interactive while suppressing country navigation. */
+  navigationDisabled?: boolean;
+  /** Allow wheel zoom when bare mode is used inside a dedicated viewport. */
+  allowBareZoom?: boolean;
   /** Initial rotation [lon→ -λ, lat→ -φ, γ]. Default [-35,-15,0]. */
   initialRotation?: [number, number, number];
   /** Initial zoom multiplier. Default 1. */
@@ -969,17 +975,18 @@ export function LandingGlobe({
 
     const handler = (e: WheelEvent) => {
       markInteraction();
-      // Bare mode remains page-scroll-only; the listener just cancels the tour.
-      if (bare) return;
+      // Bare landing backgrounds remain page-scroll-only. Dedicated viewers
+      // can opt into wheel zoom without changing the landing behavior.
+      if (bare && !allowBareZoom) return;
       e.preventDefault();
       const factor = e.deltaY > 0 ? 0.94 : 1.06;
       zoomRef.current = Math.max(0.8, Math.min(2.5, zoomRef.current * factor));
       imperativeUpdate();
     };
 
-    el.addEventListener("wheel", handler, { passive: bare });
+    el.addEventListener("wheel", handler, { passive: bare && !allowBareZoom });
     return () => el.removeEventListener("wheel", handler);
-  }, [isLoaded, imperativeUpdate, bare, markInteraction]);
+  }, [isLoaded, imperativeUpdate, bare, allowBareZoom, markInteraction]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     markInteraction();
@@ -1131,6 +1138,7 @@ export function LandingGlobe({
 
   const handleCountryClick = (id: string) => {
     markInteraction();
+    if (navigationDisabled) return;
     if (id.startsWith("bi:")) {
       const owner = id.slice(3).split(":")[0] as CountryId;
       const access = countryAccess?.[owner];
@@ -1212,6 +1220,7 @@ export function LandingGlobe({
   const showLandingClickHint = Boolean(
     hoveredMapped?.path &&
     tooltipAccess &&
+    !navigationDisabled &&
     (tooltipAccess.tone === "active" || tooltipAccess.tone === "beta" || tooltipAccess.econOnly)
   );
 

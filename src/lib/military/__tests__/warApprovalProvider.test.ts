@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { computeWarApproval } from "../warApproval";
+import { resolvedWarDefeatEffect } from "../rules/warDefeat";
 
 function cursorOf<T>(data: T[]) {
   return {
@@ -76,6 +77,90 @@ describe("computeWarApproval", () => {
     wire([conflict({ status: "resolved", endTurn: 60 })]);
     const result = await computeWarApproval(db as unknown as Db, "US", 5000, fresh);
     expect(result.modifiers).toEqual([]);
+  });
+
+  it("penalizes every losing coalition country after a resolved war", async () => {
+    wire([
+      conflict({
+        status: "resolved",
+        endTurn: 100,
+        outcome: { winner: "B", note: "" },
+        sideA: { label: "West", countries: ["US", "UK"], kind: "coalition" },
+        sideB: { label: "East", countries: ["DD"], kind: "coalition" },
+      }),
+    ]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, fresh);
+    expect(chipOf(result, "war_defeat")?.effect).toBe(-5);
+  });
+
+  it("does not penalize a winner or a stalemate, and expires after three years", async () => {
+    wire([conflict({ status: "resolved", endTurn: 100, outcome: { winner: "B", note: "" } })]);
+    expect(
+      chipOf(await computeWarApproval(db as unknown as Db, "RU", 100, fresh), "war_defeat")
+    ).toBeUndefined();
+    wire([
+      conflict({ status: "resolved", endTurn: 100, outcome: { winner: "stalemate", note: "" } }),
+    ]);
+    expect(
+      chipOf(await computeWarApproval(db as unknown as Db, "US", 100, fresh), "war_defeat")
+    ).toBeUndefined();
+    wire([conflict({ status: "resolved", endTurn: 100, outcome: { winner: "B", note: "" } })]);
+    expect(
+      chipOf(await computeWarApproval(db as unknown as Db, "US", 244, fresh), "war_defeat")
+    ).toBeUndefined();
+  });
+
+  it("fades a defeat across the full three-year window", async () => {
+    const resolved = conflict({
+      status: "resolved",
+      endTurn: 100,
+      outcome: { winner: "B", note: "" },
+    });
+    wire([resolved]);
+    expect(
+      chipOf(await computeWarApproval(db as unknown as Db, "US", 210, fresh), "war_defeat")?.effect
+    ).toBe(-1.2);
+    expect(resolvedWarDefeatEffect(resolved, "US", 243)).toBeCloseTo(0, 5);
+    expect(
+      chipOf(await computeWarApproval(db as unknown as Db, "US", 244, fresh), "war_defeat")
+    ).toBeUndefined();
+  });
+
+  it("ignores malformed resolved history", async () => {
+    wire([
+      conflict({ status: "active", endTurn: 100, outcome: { winner: "B", note: "" } }),
+      conflict({ status: "resolved", endTurn: Number.NaN, outcome: { winner: "B", note: "" } }),
+      conflict({
+        status: "resolved",
+        endTurn: 100,
+        outcome: { winner: "invalid", note: "" },
+      } as never),
+    ]);
+    expect(
+      chipOf(await computeWarApproval(db as unknown as Db, "US", 100, fresh), "war_defeat")
+    ).toBeUndefined();
+  });
+
+  it("caps overlapping defeat penalties and fades them linearly", async () => {
+    wire([
+      conflict({
+        _id: "war_one",
+        status: "resolved",
+        endTurn: 100,
+        outcome: { winner: "B", note: "" },
+      }),
+      conflict({
+        _id: "war_two",
+        status: "resolved",
+        endTurn: 100,
+        outcome: { winner: "B", note: "" },
+      }),
+    ]);
+    const result = await computeWarApproval(db as unknown as Db, "US", 100, fresh);
+    expect(chipOf(result, "war_defeat")?.effect).toBe(-10);
+
+    const rollover = await computeWarApproval(db as unknown as Db, "US", 147, fresh);
+    expect(chipOf(rollover, "war_defeat")?.effect).toBe(-6.8);
   });
 
   it("ignores a conflict the country merely hosts without fighting", async () => {

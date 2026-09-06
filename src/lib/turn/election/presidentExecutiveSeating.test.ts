@@ -14,6 +14,7 @@ import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
 vi.mock("@/lib/cabinetTransition", () => ({
   clearCabinetOnTransition: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/singleplayer", () => ({ isSingleplayer: vi.fn(() => true) }));
 
 const NOW = new Date("2025-11-15T00:00:00Z");
 
@@ -40,13 +41,17 @@ beforeEach(() => {
   }
   db.collectionMocks["electedOfficials"]!.findOne.mockResolvedValue(null);
   // Both the winner-character and VP-character lookups read from characters.findOne.
-  db.collectionMocks["characters"]!.findOne.mockResolvedValue({
-    _id: new ObjectId(),
-    name: "Exec",
-    party: "1",
-    careerHistory: [],
-    executiveTermsServed: 0,
-  });
+  db.collectionMocks["characters"]!.findOne.mockImplementation(async (filter) =>
+    (filter as Record<string, unknown>).singleplayerHeadOfState
+      ? null
+      : {
+          _id: new ObjectId(),
+          name: "Exec",
+          party: "1",
+          careerHistory: [],
+          executiveTermsServed: 0,
+        }
+  );
 });
 
 describe("seatPresidentialExecutive", () => {
@@ -112,5 +117,40 @@ describe("seatPresidentialExecutive", () => {
     const set = (winnerUpdate![1] as { $set: Record<string, unknown> }).$set;
     expect(set["executiveTermsServed.BR"]).toBe(1);
     expect(set["executiveTermsServed.US"]).toBeUndefined();
+  });
+
+  it("keeps the local head of state seated when an election resolves", async () => {
+    const pinnedId = new ObjectId();
+    const winnerId = new ObjectId();
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: pinnedId,
+      countryId: "US",
+      name: "Permanent President",
+      party: "1",
+      singleplayerHeadOfState: true,
+    });
+    const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
+    await seatPresidentialExecutive(db as unknown as Db, {
+      election: makeElection(),
+      winnerCandidate: {
+        _id: new ObjectId(),
+        isNPP: false,
+        characterId: winnerId,
+        characterName: "Election Winner",
+        party: "2",
+      } as unknown as ElectionCandidate,
+      now: NOW,
+    });
+
+    expect(db.collectionMocks["characters"]!.updateOne).toHaveBeenCalledWith(
+      { _id: pinnedId },
+      expect.objectContaining({
+        $set: expect.objectContaining({ currentOffice: { type: "president" } }),
+      })
+    );
+    expect(db.collectionMocks["characters"]!.updateOne).not.toHaveBeenCalledWith(
+      { _id: winnerId },
+      expect.anything()
+    );
   });
 });

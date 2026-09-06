@@ -977,6 +977,12 @@ const RUNTIME: CollectionEntry[] = [
 
 const PRESERVED: CollectionEntry[] = [
   {
+    name: "clientSimulationStatistics",
+    category: "preserved",
+    notes:
+      "Anonymous desktop run aggregates expire through a 30-day TTL index, independently of world resets.",
+  },
+  {
     name: "users",
     category: "preserved",
     notes:
