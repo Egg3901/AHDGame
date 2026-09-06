@@ -730,7 +730,12 @@ function startApp() {
   // long as anyone waited. Bisected on a Windows runner 2026-09-06 against
   // one build: inherited stdio froze every time, captured pipes never did.
   // Capturing is also what lets a failure report include the server's output.
-  const child = spawn(process.execPath, [server], {
+  //
+  // A turn allocates hundreds of MB of short-lived objects while decoding
+  // documents. V8's default young generation (16MB semi-spaces) collects that
+  // constantly; 64MB cut GC from 10% to 7% of turn CPU in profiling and shaved
+  // about 2s off a 24s turn. Costs ~150MB of memory, which a desktop has.
+  const child = spawn(process.execPath, ["--max-semi-space-size=64", server], {
     env,
     stdio: APP_STDIO_INHERIT ? "inherit" : ["ignore", "pipe", "pipe"],
   });

@@ -35,6 +35,10 @@ import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import { getPresetById } from "@/lib/constants/historicalSeats";
 import { seedStrategicSectors } from "./seedStrategicSectors";
 import { seedMilitaryUnits } from "./seedMilitaryUnits";
+import {
+  captureSeedRosterUpkeepPin,
+  clearSeedRosterUpkeepPinCache,
+} from "@/lib/military/seedRosterUpkeepPin";
 import { seedNationalManpower } from "./seedNationalManpower";
 import { seedCabinetEstates } from "./seedCabinetEstates";
 import { seedEnergyPlants } from "./seedEnergyPlants";
@@ -885,6 +889,21 @@ export async function runRegionDerivedStage(
   // Defense order-of-battle. Era-gated per country via `getBranches`, so a 1953
   // world gives DE nothing (its branches carry establishedYear 1955).
   await seedMilitaryUnits(db, preset);
+
+  // Pin THIS world's upkeep denominators, from the code that just seeded it.
+  //
+  // Written unconditionally, not only when missing. `gameConfig` is manifest category
+  // `reference` so teardown does not sweep it, and a pin left from the previous world
+  // would otherwise hold this one to the old world's numbers, which is a worse version
+  // of the bug the pin exists to fix. See `seedRosterUpkeepPin.ts`.
+  await db
+    .collection("gameConfig")
+    .updateOne(
+      { _id: "default" as unknown as never },
+      { $set: { seedRosterUpkeep: captureSeedRosterUpkeepPin(preset) } },
+      { upsert: true }
+    );
+  clearSeedRosterUpkeepPinCache();
 
   // Replacement-manpower pool at 25% of each nation's ceiling. Population is
   // read from `states`; running earlier silently wrote zeros — which is why the

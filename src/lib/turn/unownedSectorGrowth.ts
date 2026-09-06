@@ -63,7 +63,23 @@ export async function processUnownedSectorGrowth(db: Db): Promise<number> {
   const [unownedSectors, corpSectors, nationalCorpIds, plantsEnabled, eraUnitScale] =
     await Promise.all([
       db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
-      db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
+      db
+        .collection<CorporateSector>("corporateSectors")
+        .find(
+          {},
+          {
+            // Six scalars of a 2.5KB document; the rest is never read here.
+            projection: {
+              stateId: 1,
+              sectorType: 1,
+              revenue: 1,
+              corporationId: 1,
+              nationalizedAtTurn: 1,
+              currentGrowthRate: 1,
+            },
+          }
+        )
+        .toArray(),
       loadNationalCorpIds(db),
       getMarketSystemModeForDb(db).then((mode) => marketAtLeast(mode, "plants")),
       loadWorldEraUnitScale(db),

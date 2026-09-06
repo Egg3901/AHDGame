@@ -33,7 +33,12 @@ import {
   createInitialTurnPhaseStatuses,
   finalizeAbortedPhaseStatuses,
 } from "@/simulation/engine/phaseTelemetry";
-import { formatRoundTripReport, withPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
+import {
+  formatRoundTripReport,
+  resetRoundTripCounts,
+  totalRoundTrips,
+  withPhaseProfiling,
+} from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
@@ -44,7 +49,7 @@ import {
 } from "@/simulation/phases/singleplayerPhases";
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
-import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
+import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -414,6 +419,9 @@ export async function processTurn(): Promise<{
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
     const phaseStatuses = createInitialTurnPhaseStatuses();
     phaseStatusesForFailure = phaseStatuses;
+    // Per-phase Mongo round-trip counts start from zero every turn; runPhase
+    // checks each phase against src/simulation/engine/turnPhaseBudgets.ts.
+    resetRoundTripCounts();
     currentPhaseRef.current = "turn_bootstrap";
 
     const nextTurnNumber = gameState.currentTurn + 1;
@@ -480,14 +488,16 @@ export async function processTurn(): Promise<{
       await adapter.execute(context, runtime);
     }
 
-    // Diagnostic only, never throws. `federalBudget.surplus` and
-    // `debt.principal` are caches of an expression, and both drift intra-year
-    // on the live world even though every writer maintains them on its own
-    // write. Runs HERE, after every phase, because live `updatedAt` values show
-    // budget writes landing well after the corporation phase that recomputes
-    // them. See lib/budget/budgetInvariants.
+    // Reconciles, never throws. `federalBudget.surplus` and `debt.principal` are
+    // caches of an expression, and both drift intra-year on the live world even
+    // though every writer maintains them on its own write. This used to only log
+    // the drift, which was wrong: the stored `surplus` gates treasury transfers
+    // against the debt ceiling and sizes sovereign bond issuance, so a stale cache
+    // is wrong money rather than noise. Runs HERE, after every phase, because live
+    // `updatedAt` values show budget writes landing well after the corporation
+    // phase that recomputes them. See lib/budget/budgetInvariants.
     if (!localSingleplayer) {
-      await reportFederalBudgetInvariantBreaches(db, context.newTurn);
+      await reconcileFederalBudgetInvariants(db, context.newTurn);
     }
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
@@ -576,6 +586,7 @@ export async function processTurn(): Promise<{
     console.info("[Turn] Completed", {
       turn: context.newTurn,
       durationMs,
+      mongoRoundTrips: totalRoundTrips(),
       characters: context.characters.length,
       warnings: warnings.length,
       fundsGenerated: context.phaseResults.fundGeneration?.totalGenerated ?? 0,

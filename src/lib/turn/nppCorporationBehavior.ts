@@ -249,6 +249,7 @@ export async function processNppCorporationDecisions(
   // Fetch all sectors for these corps in one query
   const corpIds = nppCorps.map((c) => c._id);
   const allSectors = await db
+    // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
     .collection<CorporateSector>("corporateSectors")
     .find({ corporationId: { $in: corpIds } })
     .toArray();

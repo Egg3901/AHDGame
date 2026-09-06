@@ -19,7 +19,12 @@
 import * as Sentry from "@sentry/nextjs";
 import type { MongoClient } from "mongodb";
 import type { Span } from "@sentry/nextjs";
-import { recordDocumentsReturned, recordRoundTrip } from "@/lib/observability/mongoRoundTrips";
+import { calculateObjectSize } from "bson";
+import {
+  recordDocumentsReturned,
+  recordRoundTrip,
+  roundTripProfilingEnabled,
+} from "@/lib/observability/mongoRoundTrips";
 import { isSingleplayer } from "@/lib/singleplayer";
 
 /** Driver chatter that carries no diagnostic value — never instrumented. */
@@ -74,11 +79,26 @@ export function collectionFromCommand(
   return typeof named === "string" ? named : "unknown";
 }
 
-/** Documents in a find/getMore/aggregate reply batch; 0 for anything else. */
-function batchSize(reply: unknown): number {
+/** Documents in a find/getMore/aggregate reply batch; empty for anything else. */
+function replyBatch(reply: unknown): unknown[] {
   const cursor = (reply as { cursor?: { firstBatch?: unknown[]; nextBatch?: unknown[] } })?.cursor;
-  if (!cursor) return 0;
-  return (cursor.firstBatch ?? cursor.nextBatch ?? []).length;
+  if (!cursor) return [];
+  return cursor.firstBatch ?? cursor.nextBatch ?? [];
+}
+
+/**
+ * BSON size of a reply batch. Re-serializing every returned document is far
+ * too expensive for the hot path, so this only runs under the profiler, where
+ * bytes are the metric that ranks singleplayer cost: a 31KB NPP and a 150-byte
+ * position are both "one document".
+ */
+function batchBytes(batch: unknown[]): number {
+  let bytes = 0;
+  for (const doc of batch) {
+    if (doc && typeof doc === "object")
+      bytes += calculateObjectSize(doc as Record<string, unknown>);
+  }
+  return bytes;
 }
 
 let attached = false;
@@ -153,7 +173,12 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
     // production pays (latency per call); documents rank what singleplayer
     // pays (deserialization per document), and one aggregate returning 61k
     // documents is a single round trip.
-    recordDocumentsReturned(collection, batchSize(event.reply));
+    const batch = replyBatch(event.reply);
+    recordDocumentsReturned(
+      collection,
+      batch.length,
+      roundTripProfilingEnabled() ? batchBytes(batch) : 0
+    );
 
     const span = pendingSpans.get(event.requestId);
     if (span) {

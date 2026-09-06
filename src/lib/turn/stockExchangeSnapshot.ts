@@ -166,7 +166,10 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       const [allSectors, historyRows] = await Promise.all([
         database
           .collection<CorporateSector>("corporateSectors")
-          .find({ corporationId: { $in: corpIds } })
+          .find(
+            { corporationId: { $in: corpIds } },
+            { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+          )
           .toArray(),
         database
           .collection<CorporationHistory>("corporationHistory")

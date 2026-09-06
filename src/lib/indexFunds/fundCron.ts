@@ -1388,7 +1388,9 @@ export async function runIndexFundCron(
   ).filter((fund): fund is IndexFund => fund !== null);
   for (const fund of funds) {
     try {
-      const refreshedFund = (await getFundById(db, fund._id)) ?? fund;
+      // `funds` was just re-read above and nothing writes between; the old
+      // per-fund re-read here was a duplicate round trip.
+      const refreshedFund = fund;
 
       const paidRedemptions = await processQueuedRedemptions(
         db,

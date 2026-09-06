@@ -105,6 +105,13 @@ export async function buildCorporationLookups(
   db: Db,
   options?: {
     /**
+     * Skip the per-sector `buildQueue` (30% of every sector document). Only
+     * the corporation turn advances build orders; the share-price recompute
+     * reads none of it. Never set this on the corporation turn: sectorTurn
+     * rebuilds the queue from what it loaded and writes it back.
+     */
+    omitBuildQueue?: boolean;
+    /**
      * Plants tier (marketSystemMode >= "plants"): compute per-sector market
      * share on the owned-capacity basis instead of revenue. Omitted/false
      * keeps the legacy revenue-based share exactly.
@@ -189,9 +196,19 @@ export async function buildCorporationLookups(
     db.collection<Corporation>("corporations").find({}).toArray(),
     // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
     // sectorTurn as a complete overwrite and never reads the prior value.
+    // `soldByCommodity` is likewise overwritten by sector telemetry.
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { plantsPnl: 0 } })
+      .find(
+        {},
+        {
+          projection: {
+            plantsPnl: 0,
+            soldByCommodity: 0,
+            ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
+          },
+        }
+      )
       .toArray(),
     // Legacy-shaped view so the headline maps, condition modifiers, and the
     // margin engine's stored-value reads keep their single-doc shape.
