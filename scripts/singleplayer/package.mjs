@@ -26,7 +26,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const OUT = path.join(ROOT, "dist", "singleplayer");
 const STANDALONE = path.join(ROOT, ".next", "standalone");
 
-const build = spawnSync("npx", ["next", "build"], {
+const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+const build = spawnSync(npx, ["next", "build"], {
   cwd: ROOT,
   stdio: "inherit",
   env: {
@@ -36,6 +37,9 @@ const build = spawnSync("npx", ["next", "build"], {
     NEXT_TELEMETRY_DISABLED: "1",
   },
 });
+if (build.error) {
+  console.error(`failed to start Next.js build: ${build.error.message}`);
+}
 if (build.status !== 0) process.exit(build.status ?? 1);
 if (!existsSync(path.join(STANDALONE, "server.js"))) {
   console.error("standalone output missing; next.config.ts only emits it when SINGLEPLAYER=1");
