@@ -1,5 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
-import { shouldStartHostedBackgroundServices } from "@/lib/startupMode";
+import { shouldStartHostedBackgroundServices, shouldRunCronInWebProcess } from "@/lib/startupMode";
 
 /**
  * Log a heap+rss snapshot under [boot] so we can correlate boot-time
@@ -135,9 +135,14 @@ export async function register() {
     }
 
     // Start in-process cron jobs (turn processing, stock exchange, fog of war).
-    // Railway runs a persistent server — node-cron is the correct scheduler here.
+    // Railway runs a persistent server, so node-cron is the correct scheduler here.
     // Vercel crons (vercel.json) are not executed on Railway.
-    if (hostedBackgroundEnabled)
+    //
+    // Unless a dedicated worker owns the schedule. Turns running inside the web server
+    // is why every web deploy kills the turn in flight; `CRON_OWNER=worker` moves the
+    // whole schedule into a service that web deploys do not restart. Unset by default,
+    // so this is inert until that service exists.
+    if (shouldRunCronInWebProcess(process.env))
       try {
         const { initializeCronJobs } = await import("@/lib/cron");
         logBootHeap("after cron module import");

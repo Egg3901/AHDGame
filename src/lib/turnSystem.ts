@@ -26,7 +26,12 @@ import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefau
 import { DEFAULT_CYCLE_ANCHOR_CONTEXT } from "@/lib/elections/cycleAnchorContext";
 import { seedUnownedSectors } from "@/lib/admin/seed/seedUnownedSectors";
 import { processGameHealthSnapshot } from "@/lib/turn/gameHealthSnapshot";
-import { TURN_LOCK_STALE_MS, shouldRecoverCrashedTurn } from "@/lib/turn/processingLock";
+import {
+  TURN_LOCK_STALE_MS,
+  shouldRecoverCrashedTurn,
+  turnHasCommittedWrites,
+  TURN_BOOTSTRAP_PHASE,
+} from "@/lib/turn/processingLock";
 import { getLatestCompletedTurnRealTime } from "@/lib/turn/turnLogQueries";
 import { isAutoPauseDrift, formatDriftHours } from "@/lib/time/clockDrift";
 import {
@@ -129,6 +134,42 @@ export async function releaseLocalProcessingLock(reason: string): Promise<boolea
   if (!localTurnLockHeld) return false;
   try {
     const db = await getDb();
+
+    // How far did this turn get? A full release wipes `processingPhase` and
+    // `processingPhaseStatuses`, which are exactly the fields `shouldRecoverCrashedTurn`
+    // reads to decide whether re-running would double-apply. Releasing a turn that had
+    // already committed writes therefore made the NEXT cron re-run it from the start and
+    // pay every additive income phase twice: fund generation, corp dividends, savings
+    // interest, bond coupons, treasury. The #2815 guard exists to prevent precisely that,
+    // and a clean shutdown was defeating it.
+    const live = await db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { processingPhase: 1 } });
+    const committed = turnHasCommittedWrites(live?.processingPhase);
+
+    if (committed) {
+      // Keep the lock held and the evidence intact. `processingAbandonedAt` makes the
+      // lock read as stale IMMEDIATELY, so the next cron consumes this turn rather than
+      // serving the full 20-minute wait first. A deploy then costs the remainder of one
+      // turn instead of that turn plus the next slot.
+      await db
+        .collection<GameState>("gameState")
+        .updateOne(
+          { _id: "current", isProcessing: true },
+          { $set: { processingAbandonedAt: new Date(), updatedAt: new Date() } }
+        );
+      localTurnLockHeld = false;
+      invalidateGameStateCache();
+      console.warn(
+        `[Turn System] Abandoned in-flight turn on ${reason} at phase ${live?.processingPhase}. ` +
+          `Lock left held with evidence intact; the next tick will consume the turn rather ` +
+          `than re-running and double-applying it.`
+      );
+      return true;
+    }
+
+    // Nothing committed yet, so the turn is losslessly re-runnable: release outright and
+    // let the next container simply run it.
     await db.collection<GameState>("gameState").updateOne(
       { _id: "current", isProcessing: true },
       {
@@ -140,6 +181,7 @@ export async function releaseLocalProcessingLock(reason: string): Promise<boolea
           processingHeartbeatAt: null,
           processingPhase: null,
           processingPhaseStatuses: null,
+          processingAbandonedAt: null,
           updatedAt: new Date(),
         },
       }
@@ -155,6 +197,14 @@ export async function releaseLocalProcessingLock(reason: string): Promise<boolea
     });
     return false;
   }
+}
+
+/** What a crashed previous holder left behind, for a resumed turn. */
+interface CrashedTurnRecovery {
+  targetTurn: number;
+  lastPhase: string;
+  /** Phases the dead holder already applied; the resumed turn must not repeat them. */
+  appliedPhases: Set<string>;
 }
 
 export async function processTurn(): Promise<{
@@ -178,7 +228,9 @@ export async function processTurn(): Promise<{
   // committing writes), we must NOT re-run that turn — that would double-apply
   // committed income phases. Captured from the pre-lock snapshot, acted on once
   // we hold the lock.
-  let crashedTurnRecovery: { targetTurn: number; lastPhase: string } | null = null;
+  let crashedTurnRecovery: CrashedTurnRecovery | null = null;
+  /** Set when this turn is a resume; drives the phase skip set below. */
+  let resumedFromCrash: CrashedTurnRecovery | null = null;
 
   try {
     const db = await getDb();
@@ -223,9 +275,23 @@ export async function processTurn(): Promise<{
           typeof preLockState.processingTargetTurn === "number" &&
           typeof preLockState.processingPhase === "string"
         ) {
+          // Everything the dead process recorded as completed, PLUS the phase it was
+          // inside when it died. Completed phases must not repeat because their writes
+          // landed; the interrupted one must not repeat because part of its writes may
+          // have landed and no phase is guaranteed idempotent halfway through. Losing
+          // that single phase is the price of resuming, against losing the ~150 the
+          // turn had not reached yet, which is what consuming the turn cost.
+          const applied = new Set<string>();
+          for (const [phase, telemetry] of Object.entries(
+            preLockState.processingPhaseStatuses ?? {}
+          )) {
+            const status = (telemetry as { status?: string } | null)?.status;
+            if (status === "completed" || status === "running") applied.add(phase);
+          }
           crashedTurnRecovery = {
             targetTurn: preLockState.processingTargetTurn,
             lastPhase: preLockState.processingPhase,
+            appliedPhases: applied,
           };
         }
         const lastTp = new Date(preLockState.lastTurnProcessed);
@@ -316,6 +382,10 @@ export async function processTurn(): Promise<{
             processingHeartbeatAt: { $exists: false },
             updatedAt: { $lt: staleLockCutoff },
           },
+          // A lock whose holder announced its own death on the way out. Acquirable at
+          // once: there is no process left to wait for, and serving the full staleness
+          // window here is what makes a redeploy cost a second turn slot.
+          { processingAbandonedAt: { $ne: null, $exists: true } },
         ],
       },
       {
@@ -325,8 +395,10 @@ export async function processTurn(): Promise<{
           processingStartedAt: lockAcquiredAt,
           processingTargetTurn: null,
           processingHeartbeatAt: lockAcquiredAt,
-          processingPhase: "turn_bootstrap",
+          processingPhase: TURN_BOOTSTRAP_PHASE,
           processingPhaseStatuses: null,
+          // Never inherit the previous holder's abandon marker: this lock is live.
+          processingAbandonedAt: null,
         },
       },
       { returnDocument: "after" }
@@ -348,62 +420,43 @@ export async function processTurn(): Promise<{
     activeIteration = gameState.iteration ? { ...gameState.iteration } : undefined;
 
     // #2815: the previous holder died mid-turn after phases began committing.
-    // Re-running would double-apply the income phases it already committed, so
-    // consume the turn number instead of re-executing it: advance the clock
-    // past the crashed turn and skip. The race guard (target === currentTurn+1
-    // against the freshly locked state) ensures a concurrent completion between
-    // the pre-lock read and lock acquisition can't cause a spurious skip.
+    // Re-running the turn from the start would double-apply every additive income
+    // phase it already landed, so this used to CONSUME the turn: advance the clock
+    // past it and run nothing.
+    //
+    // That is far more expensive than it needs to be. A turn is ~157 phases, and a
+    // redeploy usually kills one a few seconds in, so consuming discarded ~150 phases
+    // that had not run at all: every election, settlement, metric and snapshot the turn
+    // had not reached. On a world that redeploys several times an hour, that is the
+    // outage.
+    //
+    // It now RESUMES instead. `appliedPhases` names what must not run again, `runPhase`
+    // skips exactly those, and the rest of the turn executes normally and completes
+    // normally, advancing the clock itself. Safe because a phase reads only the turn
+    // context (a read-only snapshot of characters and states, built at turn start) and
+    // writes its own `phaseResults` entry; no phase consumes another's results, so
+    // skipping one cannot starve a later one of an input.
+    //
+    // The race guard (target === currentTurn+1 against the freshly locked state) still
+    // ensures a concurrent completion between the pre-lock read and lock acquisition
+    // cannot cause a spurious resume.
     if (crashedTurnRecovery && crashedTurnRecovery.targetTurn === gameState.currentTurn + 1) {
-      const recoveredTurn = crashedTurnRecovery.targetTurn;
-      const startingYear = gameState.startingYear ?? STARTING_YEAR;
-      // Same offset-aware year `reconcileGameStateClock` computes — deriving it
-      // from the raw turn wrote a year AHEAD of the calendar on a world with a
-      // founding phase, and every direct `gameState.currentYear` reader (the
-      // cabinet roster gate among them) saw it until the next turn repaired it
-      // (#1208).
-      const recoveredYear = yearOfTurn(recoveredTurn, startingYear, {
-        preIterationActive: gameState.preIteration?.active,
-        preIterationTurns: gameState.preIterationTurns,
-      });
-      // Advance the game clock by exactly one turn (as a normal completion would),
-      // so currentTurn and lastTurnProcessed stay in lockstep and don't drift a
-      // turn apart at year boundaries.
-      const recoveredLastTurnProcessed = new Date(
-        new Date(gameState.lastTurnProcessed).getTime() + MS_PER_TURN
-      );
-      await db.collection<GameState>("gameState").updateOne(
-        { _id: "current" },
-        {
-          $set: {
-            // reconcileGameStateClock uses max(currentTurn, latestLog.turn), so
-            // this only moves the pointer forward and is never repaired back.
-            currentTurn: recoveredTurn,
-            currentYear: recoveredYear,
-            lastTurnProcessed: recoveredLastTurnProcessed,
-            isProcessing: false,
-            processingKind: null,
-            processingStartedAt: null,
-            processingTargetTurn: null,
-            processingHeartbeatAt: null,
-            processingPhase: null,
-            processingPhaseStatuses: null,
-            updatedAt: lockAcquiredAt,
-          },
-        }
-      );
-      localTurnLockHeld = false;
-      invalidateGameTimeCache();
-      invalidateGameStateCache();
+      resumedFromCrash = crashedTurnRecovery;
       const message =
-        `Recovered crashed turn ${recoveredTurn}: skipped re-run to prevent double-apply ` +
-        `(previous holder died at phase "${crashedTurnRecovery.lastPhase}")`;
+        `Resuming crashed turn ${crashedTurnRecovery.targetTurn}: skipping ` +
+        `${crashedTurnRecovery.appliedPhases.size} phase(s) already applied by the previous ` +
+        `holder, which died at phase "${crashedTurnRecovery.lastPhase}"`;
       console.warn(`[Turn System] ${message}`);
-      Sentry.captureMessage("Turn recovery: skipped re-run to prevent double-apply", {
+      Sentry.captureMessage("Turn recovery: resuming after crash", {
         level: "warning",
         fingerprint: ["turn-crash-recovery"],
-        extra: { recoveredTurn, lastPhase: crashedTurnRecovery.lastPhase },
+        extra: {
+          recoveredTurn: crashedTurnRecovery.targetTurn,
+          lastPhase: crashedTurnRecovery.lastPhase,
+          skippedPhases: [...crashedTurnRecovery.appliedPhases],
+        },
       });
-      return { success: false, turn: recoveredTurn, message, warnings: [message] };
+      warnings.push(message);
     }
 
     const repairedClock = await reconcileGameStateClock(gameState);
@@ -447,6 +500,9 @@ export async function processTurn(): Promise<{
       phaseStatuses,
       warnings,
       currentPhaseRef,
+      // Empty on every normal turn. On a resume, the phases the dead holder already
+      // applied, which `runPhase` skips rather than repeating.
+      alreadyApplied: resumedFromCrash?.appliedPhases,
       // SIM-ONLY: sandbox worldsim can set gameConfig.simTurnPhaseMode to skip
       // the economy phases. Undefined in prod (config?.simTurnPhaseMode absent) →
       // full turn, unchanged.
