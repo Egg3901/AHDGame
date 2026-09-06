@@ -114,6 +114,15 @@ describe("overhangInjectionFromIssuance", () => {
 });
 
 describe("shortageIndexFrom", () => {
+  it("limits physical scarcity to a mild annual repression consequence", () => {
+    const addedShortage = shortageIndexFrom(20, 500) - shortageIndexFrom(20, 0);
+    expect(addedShortage).toBeGreaterThan(0);
+    expect(addedShortage).toBeLessThanOrEqual(6);
+    // At 60% repression, even maximum physical stress adds under two
+    // legitimacy points per 48-turn year, holding other drivers fixed.
+    expect((addedShortage / 100) * 0.6 * 48).toBeLessThan(2);
+  });
+
   it("stays finite and within [0, 100]", () => {
     const samples = [
       shortageIndexFrom(0),
