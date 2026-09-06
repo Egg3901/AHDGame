@@ -8,8 +8,21 @@ import {
 } from "@/lib/clientDiagnostics";
 
 export const dynamic = "force-dynamic";
+let windowStartedAt = 0;
+let receivedInWindow = 0;
+
+function acceptWithinGlobalBudget(now: number): boolean {
+  if (now - windowStartedAt >= 60_000) {
+    windowStartedAt = now;
+    receivedInWindow = 0;
+  }
+  receivedInWindow += 1;
+  return receivedInWindow <= 120;
+}
 
 export async function POST(request: Request) {
+  if (!acceptWithinGlobalBudget(Date.now()))
+    return NextResponse.json({ error: "Try again later" }, { status: 429 });
   if (request.headers.get("content-type")?.split(";")[0]?.trim() !== "application/json")
     return NextResponse.json({ error: "Unsupported content type" }, { status: 415 });
   const declared = Number(request.headers.get("content-length") ?? 0);
