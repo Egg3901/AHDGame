@@ -277,6 +277,7 @@ export async function processRegionalBudgets(
   const allLegTypeIds = [...new Set(allRegionalPolicies.map((p) => p.legislationTypeId))];
 
   const legTypes = await db
+    // full-read(legislationTypes): policyOptions tables price every state law
     .collection<LegislationType>("legislationTypes")
     .find({ _id: { $in: allLegTypeIds } })
     .toArray();

@@ -958,7 +958,18 @@ export async function recordPrimarySnapshots(
     allNppIds.length > 0
       ? db
           .collection<NPP>("npps")
-          .find({ _id: { $in: allNppIds } })
+          .find(
+            { _id: { $in: allNppIds } },
+            {
+              projection: {
+                "policies.economic": 1,
+                "policies.social": 1,
+                favorability: 1,
+                politicalInfluence: 1,
+                homeState: 1,
+              },
+            }
+          )
           .toArray()
       : Promise.resolve([] as NPP[]),
   ]);

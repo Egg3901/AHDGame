@@ -69,7 +69,13 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     equityPools,
   ] = await Promise.all([
     db.collection("characters").find({}).toArray(),
-    db.collection("npps").find({}).toArray(),
+    db
+      .collection("npps")
+      .find(
+        {},
+        { projection: { countryId: 1, funds: 1, currencyBalances: 1, nppInvestmentCashAnchor: 1 } }
+      )
+      .toArray(),
     // Corp-level liquidCapital is the SSOT insolvency keys on and sectorTurn
     // $inc's every turn. CorporateSector has no liquidCapital field.
     db.collection("corporations").find({}).toArray(),

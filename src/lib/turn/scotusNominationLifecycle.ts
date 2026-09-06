@@ -168,7 +168,7 @@ export async function processScotusNominationLifecycle(
   const npps = nppIds.length
     ? await database
         .collection<NPP>("npps")
-        .find({ _id: { $in: nppIds } })
+        .find({ _id: { $in: nppIds } }, { projection: { party: 1 } })
         .toArray()
     : [];
   const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));

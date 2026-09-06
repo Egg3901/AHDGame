@@ -192,6 +192,22 @@ export interface LoadedEquityQuote extends EquityPoolQuote {
 }
 
 /** Load the pool's executable quote. A missing pool preserves legacy mid-price settlement. */
+/**
+ * Every pool keyed by currency. There is one document per currency, so a
+ * turn loop that quotes hundreds of corporations should read this once and
+ * pass it to `loadEquityQuote` instead of re-reading the same few documents
+ * per corporation.
+ */
+export async function loadEquityPoolsByCurrency(
+  db: Db
+): Promise<Map<CurrencyCode, EquityMarketPool>> {
+  const pools = await db
+    .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
+    .find({})
+    .toArray();
+  return new Map(pools.map((pool) => [pool._id as CurrencyCode, pool]));
+}
+
 export async function loadEquityQuote(
   db: Db,
   corporation: Pick<
@@ -202,10 +218,13 @@ export async function loadEquityQuote(
     | "publicFloat"
     | "sharePrice"
     | "totalShares"
-  >
+  >,
+  options?: { pools?: ReadonlyMap<CurrencyCode, EquityMarketPool> }
 ): Promise<LoadedEquityQuote> {
   const currency = equityPoolCurrency(corporation);
-  const pool = await readEquityPool(db, currency);
+  const pool = options?.pools
+    ? (options.pools.get(currency) ?? null)
+    : await readEquityPool(db, currency);
   const mid = resolveShareExecutionPrice(corporation);
   if (!pool) {
     return {

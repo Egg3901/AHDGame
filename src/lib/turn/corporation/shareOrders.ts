@@ -15,7 +15,7 @@ import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
 import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
-import { loadEquityQuote } from "@/lib/equities/marketPool";
+import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
 import type { EquityMarketPool } from "@/lib/db/types";
 import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
 
@@ -106,11 +106,13 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     updateOne: { filter: Record<string, unknown>; update: Record<string, unknown> };
   }[] = [];
 
+  // One pool document per currency; read them once for the whole loop.
+  const equityPools = await loadEquityPoolsByCurrency(db);
   for (const [corpIdStr, orders] of ordersByCorp) {
     const corp = corpMap.get(corpIdStr);
     if (!corp) continue;
 
-    const marketQuote = await loadEquityQuote(db, corp);
+    const marketQuote = await loadEquityQuote(db, corp, { pools: equityPools });
     if (marketQuote.active && !poolCashRemaining.has(marketQuote.currency)) {
       poolCashRemaining.set(marketQuote.currency, marketQuote.poolCashLocal);
     }

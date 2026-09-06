@@ -60,7 +60,7 @@ export async function recomputeSharePricesAfterBondTurn(
 ): Promise<RecomputeSharePricesResult> {
   const database = db ?? (await getDb());
   const [lookups, gameState, marketMode] = await Promise.all([
-    buildCorporationLookups(database),
+    buildCorporationLookups(database, { omitBuildQueue: true }),
     getGameState(database),
     getMarketSystemModeForDb(database),
   ]);

@@ -287,9 +287,8 @@ export async function deployBondReserveFromCash(
     deployedAnchor += purchase.costAnchor;
     unitsPurchased += purchase.units;
     budgetAnchor -= purchase.costAnchor;
-
-    const refreshed = await db.collection<IndexFund>("indexFunds").findOne({ _id: fund._id });
-    if (refreshed) fund = refreshed;
+    // The purchase debits fund cash atomically; nothing below reads the
+    // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
   }
 
   return { deployedAnchor, unitsPurchased, countryId };
