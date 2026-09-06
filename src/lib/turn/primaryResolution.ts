@@ -51,6 +51,7 @@ import {
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
+import { createVoteTurnMemo } from "@/lib/electionEngine/tallyManagement";
 import { resolveTurnWindow } from "@/lib/electionEngine/voteCalculations";
 import { eraYearContextFromGameState } from "@/lib/era/context";
 import {
@@ -1686,6 +1687,7 @@ export async function accumulateGeneralElectionVotes(
           registrationPoolByState,
           demographicDefaultsByState: new Map(demoDefaults.map((d) => [d._id as string, d])),
           governingPartyIdsByCountry: new Map(governingPartyEntries),
+          turnMemo: createVoteTurnMemo(),
         };
       })(),
     ]);
@@ -1742,7 +1744,7 @@ export async function accumulateGeneralElectionVotes(
         if (!existing && activeCandidates.length > 0) {
           await initElectionVoteTally(election._id, activeCandidates, election.state as string);
         }
-        await accumulateVoteTurn(election._id, turn, now, { approvalMap, preload });
+        await accumulateVoteTurn(election._id, turn, now, { approvalMap, preload, election });
       }
     } catch (err) {
       logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);

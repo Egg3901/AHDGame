@@ -50,7 +50,7 @@ import {
   buildPresidentialModifierByParty,
 } from "./presidentialCoattail";
 import { computeMedianVoter } from "./medianVoter";
-import { fetchEnrichedCandidates } from "./candidateEnrichment";
+import { fetchEnrichedCandidates, type EnrichmentParty } from "./candidateEnrichment";
 import type { AccumulateVoteTurnPreload } from "./types";
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
@@ -76,13 +76,54 @@ import {
 
 // ─── Accumulate one turn of votes into a tally ───────────────────────────────
 
+/**
+ * Per-turn memo for the lookups whose inputs repeat across a turn's elections.
+ * Promises, not values, so concurrent callers share one in-flight read.
+ */
+export interface VoteTurnMemo {
+  presidentByCountry: Map<string, Promise<Awaited<ReturnType<typeof resolvePresidentApproval>>>>;
+  govExecutiveByState: Map<
+    string,
+    Promise<Awaited<ReturnType<typeof resolveGovExecutiveApproval>>>
+  >;
+  partiesByCountry: Map<string, Promise<EnrichmentParty[]>>;
+}
+
+export function createVoteTurnMemo(): VoteTurnMemo {
+  return {
+    presidentByCountry: new Map(),
+    govExecutiveByState: new Map(),
+    partiesByCountry: new Map(),
+  };
+}
+
+function memoized<T>(
+  map: Map<string, Promise<T>> | undefined,
+  key: string,
+  load: () => Promise<T>
+): Promise<T> {
+  if (!map) return load();
+  let pending = map.get(key);
+  if (!pending) {
+    pending = load();
+    map.set(key, pending);
+  }
+  return pending;
+}
+
 export async function accumulateVoteTurn(
   electionId: ObjectId,
   turnNumber: number,
   now: Date,
-  options?: { approvalMap?: Map<string, number>; preload?: AccumulateVoteTurnPreload }
+  options?: {
+    approvalMap?: Map<string, number>;
+    preload?: AccumulateVoteTurnPreload;
+    /** The election document, when the caller already holds it; saves a read per election. */
+    election?: Election;
+  }
 ): Promise<void> {
   const db = await getDb();
+  const memo = options?.preload?.turnMemo;
 
   const [tally, candidates] = await Promise.all([
     db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId }),
@@ -100,7 +141,8 @@ export async function accumulateVoteTurn(
   // this turn's snapshot has already been counted.
   if (tally.turnSnapshots?.some((s) => s.turn === turnNumber)) return;
 
-  const election = await db.collection<Election>("elections").findOne({ _id: electionId });
+  const election =
+    options?.election ?? (await db.collection<Election>("elections").findOne({ _id: electionId }));
   if (!election || !election.endTime) return;
 
   const stateId = election.state as string;
@@ -265,7 +307,10 @@ export async function accumulateVoteTurn(
   const preloadedApproval = options?.approvalMap?.get(election.state.toUpperCase());
   const [approvalPct, enriched, partyGroupFavorabilityByKey] = await Promise.all([
     preloadedApproval ?? getStateApprovalForElection(election.state),
-    fetchEnrichedCandidates(candidates, { countryId: electionCountryId }),
+    fetchEnrichedCandidates(candidates, {
+      countryId: electionCountryId,
+      partiesCache: memo?.partiesByCountry,
+    }),
     loadPartyGroupFavorability(db, electionCountryId, turnNumber),
   ]);
   const approvalDecimal = approvalPct / 100;
@@ -478,14 +523,18 @@ export async function accumulateVoteTurn(
     // nationwide (US only). Excludes the presidential race itself. A vacant
     // presidency or a party not present in this race no-ops to neutral.
     isGeneralElection && !isOwnHeadOfGovernmentRace
-      ? resolvePresidentApproval(db, electionCountryId)
+      ? memoized(memo?.presidentByCountry, electionCountryId, () =>
+          resolvePresidentApproval(db, electionCountryId)
+        )
       : undefined,
     // Governor coattail (§7.3.2 govModifier) — the sitting regional
     // executive's party gets a small nominal-share bonus in its own state's
     // down-ballot generals, and the own-race path feeds the same approval
     // into the incumbency driver.
     wantsGovCoattail || wantsOwnExecIncumbency
-      ? resolveGovExecutiveApproval(db, electionCountryId, stateId)
+      ? memoized(memo?.govExecutiveByState, `${electionCountryId}:${stateId}`, () =>
+          resolveGovExecutiveApproval(db, electionCountryId, stateId)
+        )
       : undefined,
     // Single-seat legislative own-race (US Senate): flat incumbency shield
     // keyed to the sitting senator, decaying with tenure to a +1 floor. Null
