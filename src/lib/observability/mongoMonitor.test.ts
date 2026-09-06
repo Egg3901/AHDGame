@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collectionFromCommand } from "./mongoMonitor";
+import { collectionFromCommand, mongoMonitorWanted } from "./mongoMonitor";
 
 /**
  * Collection attribution drives both the Sentry `db` breadcrumbs and the
@@ -37,5 +37,19 @@ describe("collectionFromCommand", () => {
     expect(collectionFromCommand("ping", {})).toBe("unknown");
     expect(collectionFromCommand("getMore", { getMore: { _bsontype: "Long" } })).toBe("unknown");
     expect(collectionFromCommand("find", { find: 1, collection: 2 })).toBe("unknown");
+  });
+});
+
+describe("mongoMonitorWanted", () => {
+  it("instruments hosted processes by default", () => {
+    expect(mongoMonitorWanted({})).toBe(true);
+  });
+
+  it("honours the explicit opt-out", () => {
+    expect(mongoMonitorWanted({ OBSERVABILITY_DB_MONITOR: "false" })).toBe(false);
+  });
+
+  it("stays off the singleplayer critical path", () => {
+    expect(mongoMonitorWanted({ SINGLEPLAYER: "1" })).toBe(false);
   });
 });

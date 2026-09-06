@@ -94,6 +94,13 @@ export interface ResetAndBootstrapOptions {
   preIteration?: boolean;
   /** Skip the operator conformance audit for isolated local player worlds. */
   skipDiagnostic?: boolean;
+  /**
+   * Whether to open and close the run's `adminLogs` audit row. Defaults on:
+   * the hosted game's operators read it. A singleplayer world has no operator
+   * and returns its log lines to the caller, so it passes false and keeps two
+   * database writes and a 200-line log tail off first-run setup.
+   */
+  recordRunLog?: boolean;
   log?: (msg: string) => void;
 }
 
@@ -190,7 +197,8 @@ export async function resetAndBootstrapGameWorld(
   let phaseReached = "seal";
   let aborted = false;
   let finalized: Awaited<ReturnType<typeof finalizeResetGameWorld>> | null = null;
-  await openResetRunLog(db, run, { preset, mode, adminUsername });
+  const recordRunLog = options.recordRunLog !== false;
+  if (recordRunLog) await openResetRunLog(db, run, { preset, mode, adminUsername });
 
   try {
     // 1) TEARDOWN. Wipes runtime state, retires or deletes characters, stamps the
@@ -349,13 +357,14 @@ export async function resetAndBootstrapGameWorld(
     }
     // Always closed, on every path. `closeResetRunLog` is best-effort inside,
     // so a bookkeeping failure can never replace the reset's real error.
-    await closeResetRunLog(db, run, {
-      status: run.status(aborted),
-      phaseReached,
-      details: finalized?.adminDetails ?? `Reset ${run.status(aborted)} in ${phaseReached}`,
-      logs,
-      deleteProfiles,
-      adminUsername,
-    });
+    if (recordRunLog)
+      await closeResetRunLog(db, run, {
+        status: run.status(aborted),
+        phaseReached,
+        details: finalized?.adminDetails ?? `Reset ${run.status(aborted)} in ${phaseReached}`,
+        logs,
+        deleteProfiles,
+        adminUsername,
+      });
   }
 }

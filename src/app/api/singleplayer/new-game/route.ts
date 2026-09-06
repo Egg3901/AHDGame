@@ -72,6 +72,8 @@ export async function POST(request: Request) {
       db,
       preset,
       deleteProfiles: true,
+      skipDiagnostic: true,
+      recordRunLog: false,
       log: (line) => logs.push(line),
     });
 
