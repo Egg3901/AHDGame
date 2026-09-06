@@ -6,13 +6,17 @@ import { NPP_AUTONOMY_LEVEL_RANK, nppAutonomyLevelAtLeast } from "../featureFlag
 
 describe("autonomy level rank", () => {
   it("orders every level", () => {
-    expect(NPP_AUTONOMY_LEVEL_RANK).toEqual({ off: 0, v0: 1, v1: 2, v2: 3, v3: 4, v4: 5 });
+    expect(NPP_AUTONOMY_LEVEL_RANK).toEqual({ off: 0, v0: 1, v1: 2, v2: 3, v3: 4, v4: 5, v5: 6 });
   });
 
-  it("treats v4 as satisfying every lower tier", () => {
-    for (const min of ["off", "v0", "v1", "v2", "v3", "v4"] as const) {
-      expect(nppAutonomyLevelAtLeast("v4", min)).toBe(true);
+  it("treats the top tier as satisfying every lower tier", () => {
+    for (const min of ["off", "v0", "v1", "v2", "v3", "v4", "v5"] as const) {
+      expect(nppAutonomyLevelAtLeast("v5", min)).toBe(true);
     }
+  });
+
+  it("does not let v4 satisfy v5", () => {
+    expect(nppAutonomyLevelAtLeast("v4", "v5")).toBe(false);
   });
 
   it("does not treat a lower level as satisfying a higher one", () => {
@@ -47,10 +51,13 @@ describe("autonomy level rank", () => {
 
     const offenders: string[] = [];
     // e.g. `getNppAutonomyLevel(db)) === "v3"` or `autonomyLevel !== "v2"`.
+    // Keep the character class in step with NPP_AUTONOMY_LEVEL_RANK: a new
+    // tier the regex does not cover is a tier this guard silently stops
+    // policing, which is how the bug below shipped the second time.
     // Only the numbered tiers: comparing against "off" is the legitimate
     // "is autonomy on at all" check, since "off" is a boundary rather than a
     // tier and has nothing above it to accidentally exclude.
-    const pattern = /(?:AutonomyLevel|autonomyLevel)[^;\n]*?[!=]==\s*["']v[0-4]["']/;
+    const pattern = /(?:AutonomyLevel|autonomyLevel)[^;\n]*?[!=]==\s*["']v[0-5]["']/;
     const isComment = (line: string) => /^\s*(?:\/\/|\/?\*)/.test(line);
 
     for (const file of files) {
