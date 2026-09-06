@@ -388,6 +388,14 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
 
       // Fetch outstanding bonds for interest cost calculation + coupon income from held bonds
       const allBonds = await database.collection<Bond>("bonds").find({ matured: false }).toArray();
+      const bondsByCorpId = new Map<string, Bond[]>();
+      for (const bond of allBonds) {
+        if (!bond.corporationId) continue;
+        const corpKey = bond.corporationId.toString();
+        const corpBonds = bondsByCorpId.get(corpKey) ?? [];
+        corpBonds.push(bond);
+        bondsByCorpId.set(corpKey, corpBonds);
+      }
 
       // Live era year for the metric existence gate on margin signals; null
       // while eraSystemEnabled is off (legacy behavior). Fetched AFTER the main
@@ -482,7 +490,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       for (const corp of corporations) {
         const corpKey = corp._id.toString();
         const corpSectors = sectorsByCorpId.get(corpKey) ?? [];
-        const corpBonds = allBonds.filter((b) => b.corporationId?.toString() === corpKey);
+        const corpBonds = bondsByCorpId.get(corpKey) ?? [];
 
         // The per-corp income statement below runs in the corp's home currency.
         // Sector economic fields are stored in each sector's HOST-state currency,
