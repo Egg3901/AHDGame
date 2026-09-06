@@ -4,10 +4,11 @@ title: Local worlds no longer freeze on their first start on Windows
 summary: >-
   On Windows a new local world could sit at "still building the world" for
   minutes and then give up, while the same build started in seconds on Linux.
-  The game server was loading every one of its 1,500 pages and routes before
-  answering anything, and Windows scans each freshly installed file the first
-  time it is read. Local worlds now load only what they use, and the launcher
-  says which step it is on and why a step failed.
+  The game server was started on the launcher's own input and output handles,
+  and on Windows that left it accepting connections without ever answering.
+  The server now runs on its own captured output, loads only the pages it is
+  asked for, stops its database cleanly when you quit, and the launcher says
+  which step it is on and why a step failed.
 tags: [singleplayer, desktop, windows, launcher]
 # How big this change is, which sets how it is grouped in the release post.
 # One of: major | minor | patch | hotfix
@@ -18,11 +19,15 @@ areas: [backend]
 
 ## What changed
 
+- The game server's output is now captured by the launcher instead of being
+  shared with it. On Windows, sharing those handles left the server accepting
+  connections but never answering, for as long as anyone waited; this was the
+  freeze. Capturing the output is also what lets a failure report show what
+  the server said.
 - The local game server no longer preloads all of its pages and routes at
-  startup. Only the multiplayer site needs that; a local world loads them as
-  it goes. On Windows the preload took minutes, because every freshly installed
-  file is scanned the first time it is read, and no request was answered until
-  it finished.
+  startup, which held every request for four seconds on Linux and seven on
+  Windows. Only the multiplayer site needs that; a local world loads pages as
+  it goes.
 - The launcher now reports each startup step in plain words: starting the
   database, starting the game server, loading the game's code, preparing your
   account. Each step has its own deadline and a failure names the step, shows

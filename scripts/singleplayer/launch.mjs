@@ -723,6 +723,13 @@ function startApp() {
     PORT: String(APP_PORT),
     HOSTNAME: "127.0.0.1",
   };
+  // Captured pipes, never inherited handles. This is the Windows first-start
+  // fix: when the launcher itself runs under a host's pipes (the desktop
+  // client, the smoke test) and the game server inherited those same handles,
+  // the server on Windows accepted connections but answered nothing, for as
+  // long as anyone waited. Bisected on a Windows runner 2026-09-06 against
+  // one build: inherited stdio froze every time, captured pipes never did.
+  // Capturing is also what lets a failure report include the server's output.
   const child = spawn(process.execPath, [server], {
     env,
     stdio: APP_STDIO_INHERIT ? "inherit" : ["ignore", "pipe", "pipe"],

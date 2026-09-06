@@ -82,13 +82,12 @@ const nextConfig: NextConfig = {
         output: "standalone" as const,
         experimental: {
           // Next preloads every page and route module right after "Ready"
-          // (1,300+ API routes, 200+ pages) with synchronous requires. A local
-          // player needs a handful of them, and on Windows the first read of
-          // each freshly installed chunk goes through antivirus scanning, so
-          // that loop starved every request for minutes: the launcher saw the
-          // port open and then no answer at all. Load on demand instead.
-          // SINGLEPLAYER_PRELOAD_ENTRIES=1 restores the default for
-          // measuring that stall in the smoke workflow.
+          // (1,300+ API routes, 200+ pages) with synchronous requires, and no
+          // request is answered until that finishes: measured at 4s on Linux
+          // and 7s on Windows runners. A local player needs a handful of those
+          // modules, so load them on demand and answer at once.
+          // SINGLEPLAYER_PRELOAD_ENTRIES=1 restores the default for the smoke
+          // workflow's measurements.
           preloadEntriesOnStart: process.env.SINGLEPLAYER_PRELOAD_ENTRIES === "1",
         },
       }
