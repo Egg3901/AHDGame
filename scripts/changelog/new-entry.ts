@@ -1,26 +1,28 @@
 /**
- * Create a dev changelog entry that cannot collide with a parallel branch.
+ * Write the changelog note for a change, in the same pull request as the change.
  *
  * Usage:
  *   npm run changelog:new -- "Union dues cost campaign funds"
- *   npm run changelog:new -- "Title" --topic union-dues --version 1.2.21
+ *   npm run changelog:new -- "Title" --topic union-dues
  *   npm run changelog:new -- "Title" --badges minor --areas backend,engine
  *
- * The topic defaults to the current git branch name, which is unique per branch
- * by construction, so two people running this at the same moment still get two
- * different files. The version defaults to the next unused patch, but it is only
- * a suggestion: if another branch lands the same number first, both entries
- * still merge cleanly and the release owner renumbers at their leisure.
+ * The note carries no version. It lands in content/changelog/unreleased/ named
+ * for its topic, which defaults to the current branch and is therefore unique
+ * per branch by construction, so two branches never write the same path.
+ * `npm run changelog:release` folds every note into one release post and
+ * assigns the version then.
+ *
+ * This used to hand out the next unused patch number, which made a version a
+ * per-pull-request unit and took the numbering to 1.4.63 in six weeks.
  */
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
-import { DEV_POSTS_DIR } from "../../src/lib/changelog/paths";
+import { UNRELEASED_DIR } from "../../src/lib/changelog/paths";
 import {
-  devEntryFileName,
   toEntrySuffix,
   unknownValueMessage,
-  usedDevVersions,
+  unreleasedFileName,
 } from "../../src/lib/changelog/entryFiles";
 import { AREA_VALUES, BADGE_VALUES } from "../../src/lib/changelog/types";
 
@@ -65,26 +67,14 @@ function currentBranch(): string {
   }
 }
 
-function nextPatch(): string {
-  const versions = usedDevVersions().map((v) => v.split(".").map(Number));
-  const [maj, min] = versions.reduce(
-    (best, v) => (v[0] > best[0] || (v[0] === best[0] && v[1] > best[1]) ? v : best),
-    [0, 0, 0]
-  );
-  const patch = versions
-    .filter((v) => v[0] === maj && v[1] === min)
-    .reduce((max, v) => Math.max(max, v[2]), -1);
-  return `${maj}.${min}.${patch + 1}`;
-}
-
 function main(): void {
   const flagValues = new Set(
-    ["topic", "version", "badges", "areas"].map(flag).filter((v): v is string => v !== undefined)
+    ["topic", "badges", "areas"].map(flag).filter((v): v is string => v !== undefined)
   );
   const title = process.argv.slice(2).find((a) => !a.startsWith("--") && !flagValues.has(a));
   if (!title) {
     console.error(
-      'Usage: npm run changelog:new -- "Title of the change" [--topic slug] [--version 1.2.21]' +
+      'Usage: npm run changelog:new -- "Title of the change" [--topic slug]' +
         " [--badges patch] [--areas backend,engine]"
     );
     console.error(`  badges: ${BADGE_VALUES.join(", ")}`);
@@ -94,17 +84,16 @@ function main(): void {
 
   const badges = vocabularyFlag("badges", BADGE_VALUES) ?? ["patch"];
   const areas = vocabularyFlag("areas", AREA_VALUES) ?? [];
-  const version = flag("version") ?? nextPatch();
   const topic = toEntrySuffix(flag("topic") ?? currentBranch().replace(/^[a-z]+\//, ""));
   if (!topic) {
     console.error("Could not derive a topic; pass --topic <slug>.");
     process.exit(1);
   }
 
-  const fileName = devEntryFileName(version, topic);
-  const filePath = path.join(DEV_POSTS_DIR, fileName);
+  const fileName = unreleasedFileName(topic);
+  const filePath = path.join(UNRELEASED_DIR, fileName);
   if (fs.existsSync(filePath)) {
-    console.error(`${fileName} already exists.`);
+    console.error(`${fileName} already exists; edit it or pass a different --topic.`);
     process.exit(1);
   }
 
@@ -114,14 +103,16 @@ function main(): void {
   // authors guessed: "minor", "bugfix", "balance" and "engine" all reached CI
   // and each one cost a full build cycle on development.
   const body = `---
-version: "${version}"
 date: ${date}
 title: ${title}
 summary: >-
-  One or two sentences on what changed and why it matters.
+  One or two sentences on what changed and why it matters. This is the text
+  that appears under the change in the release post, so write it for a reader
+  who was not in the pull request.
 # Free text. What the change was about: economy, elections, balance, corporations.
 tags: []
-# How big the release is. One of: ${BADGE_VALUES.join(" | ")}
+# How big this change is, which sets how it is grouped in the release post.
+# One of: ${BADGE_VALUES.join(" | ")}
 badges: [${badges.join(", ")}]
 # Which part of the codebase moved. Any of: ${AREA_VALUES.join(" | ")}
 areas: [${areas.join(", ")}]
@@ -131,7 +122,7 @@ areas: [${areas.join(", ")}]
 
 - 
 `;
-  fs.mkdirSync(DEV_POSTS_DIR, { recursive: true });
+  fs.mkdirSync(UNRELEASED_DIR, { recursive: true });
   fs.writeFileSync(filePath, body, "utf-8");
   console.log(path.relative(process.cwd(), filePath));
 }
