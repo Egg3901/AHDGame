@@ -504,6 +504,11 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         display: "flex",
         justifyContent: i === 0 ? "flex-start" : "flex-end",
         textAlign: i === 0 ? "left" : "right",
+        // A grid item's default `min-width: auto` floors the track at its
+        // widest word. On a phone each track is roughly 160px, and `body` is
+        // `overflow-x: clip`, so a long name would push the other ticket off
+        // a screen that cannot scroll sideways to reach it.
+        minWidth: 0,
         ...style,
       }}
     >

@@ -237,6 +237,19 @@ describe("the hero's two sides stay level", () => {
     }
   });
 
+  it("lets a long name give way rather than widen its track", () => {
+    // Grid items default to min-width:auto, which floors a track at its widest
+    // word. `body` is overflow-x: clip, so on a phone — where each track is
+    // about 160px — a long name would push the other ticket off a screen that
+    // cannot scroll sideways to reach it.
+    const { container } = renderView();
+    for (const grid of heroGrids(container)) {
+      for (const cell of Array.from(grid.children) as HTMLElement[]) {
+        expect(cell.style.minWidth).toBe("0");
+      }
+    }
+  });
+
   it("renders both heroes from the same figures", () => {
     const { container } = renderView();
     const [mobile, desktop] = heroGrids(container).map(cellText);

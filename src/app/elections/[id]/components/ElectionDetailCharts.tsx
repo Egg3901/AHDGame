@@ -732,7 +732,10 @@ export function LineGraph({
       {activeIndex != null && active ? (
         <div
           role="tooltip"
-          className="pointer-events-none absolute z-10 min-w-[7rem] rounded-lg border border-card-border bg-card px-2.5 py-2 shadow-panel"
+          // `body` is `overflow-x: clip`, so a readout wider than the screen is
+          // not merely ugly — it is cut off and unreachable. Cap it, and let a
+          // long name give way rather than push the figure out.
+          className="pointer-events-none absolute z-10 min-w-[7rem] max-w-[min(16rem,70vw)] rounded-lg border border-card-border bg-card px-2.5 py-2 shadow-panel"
           style={{
             left: `${xPct}%`,
             top: `${yPct}%`,
@@ -747,14 +750,17 @@ export function LineGraph({
           ) : (
             readout.map((r) => (
               <div key={r.se.id} className="flex items-baseline justify-between gap-3 text-xs">
-                <span className="flex items-center gap-1.5">
+                <span className="flex min-w-0 items-center gap-1.5">
                   <span
                     className="h-2 w-2 shrink-0 rounded-full"
                     style={{ backgroundColor: r.se.color }}
                   />
-                  <span className="text-foreground">{r.se.name}</span>
+                  <span className="truncate text-foreground">{r.se.name}</span>
                 </span>
-                <span className="tabular-nums font-medium" style={{ color: r.se.color }}>
+                <span
+                  className="shrink-0 whitespace-nowrap tabular-nums font-medium"
+                  style={{ color: r.se.color }}
+                >
                   {(tooltipValue ?? yLabel)(r.v)}
                 </span>
               </div>
