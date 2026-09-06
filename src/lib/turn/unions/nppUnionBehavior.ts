@@ -247,11 +247,27 @@ export async function processNppUnionBehavior(
 
   const activeLed = led.filter((union) => !orphaned.some((id) => id.equals(union._id)));
   const [sectors, corporations, campaignSnapshot, activeAgreements] = await Promise.all([
-    // `buildQueue` and `plantsPnl` are ~45% of the collection and union
-    // behaviour never reads either.
+    // Union behaviour needs the employer/scope key plus the worker-weighted
+    // bargaining signals below. A broad exclusion projection decodes unrelated
+    // plant and market telemetry for every sector, even though this phase only
+    // reads these eight fields.
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 1,
+            corporationId: 1,
+            countryId: 1,
+            sectorType: 1,
+            workers: 1,
+            unionization: 1,
+            wageLevel: 1,
+            profitMargin: 1,
+          },
+        }
+      )
       .toArray(),
     db
       .collection<Corporation>("corporations")
