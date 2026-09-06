@@ -474,13 +474,38 @@ export async function processNppSupplyAgreements(
   if (nppCorps.length === 0) return { accepted: 0, cancelled: 0, proposed: 0 };
 
   const corpIds = nppCorps.map((c) => c._id);
-  const sectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find(
-      { corporationId: { $in: corpIds } },
-      { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
-    )
-    .toArray();
+  // These reads share only the already-resolved NPP cohort. Launching them
+  // together removes three sequential database waits from the turn's NPP
+  // supply-agreement phase.
+  const [sectors, rawAgreements, commodityPriceDocs, gameState] = await Promise.all([
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find(
+        { corporationId: { $in: corpIds } },
+        { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+      )
+      .toArray(),
+    db
+      .collection<SupplyAgreement>("supplyAgreements")
+      .find({
+        status: { $in: ["pending", "active", "cancelling"] },
+        $or: [{ supplierCorpId: { $in: corpIds } }, { buyerCorpId: { $in: corpIds } }],
+      })
+      .toArray(),
+    db
+      .collection<{
+        commodity: string;
+        turn?: number;
+        basePrice?: number;
+        globalPrice?: number;
+        nationalPrices?: Record<string, number>;
+      }>("commodityPrices")
+      .find({})
+      .toArray(),
+    db
+      .collection<GameState>("gameState")
+      .findOne({ _id: "current" }, { projection: { currentYear: 1 } }),
+  ]);
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   for (const s of sectors) {
     const key = s.corporationId.toString();
@@ -491,13 +516,6 @@ export async function processNppSupplyAgreements(
 
   const parties = nppCorps.map((c) => toParty(c, sectorsByCorp.get(c._id.toString()) ?? []));
 
-  const rawAgreements = await db
-    .collection<SupplyAgreement>("supplyAgreements")
-    .find({
-      status: { $in: ["pending", "active", "cancelling"] },
-      $or: [{ supplierCorpId: { $in: corpIds } }, { buyerCorpId: { $in: corpIds } }],
-    })
-    .toArray();
   const agreements: ExistingNppAgreement[] = rawAgreements.map((a) => ({
     id: a._id!.toString(),
     supplierCorpId: a.supplierCorpId.toString(),
@@ -509,16 +527,6 @@ export async function processNppSupplyAgreements(
     status: a.status,
   }));
 
-  const commodityPriceDocs = await db
-    .collection<{
-      commodity: string;
-      turn?: number;
-      basePrice?: number;
-      globalPrice?: number;
-      nationalPrices?: Record<string, number>;
-    }>("commodityPrices")
-    .find({})
-    .toArray();
   const priceByCommodity = new Map<
     string,
     {
@@ -545,11 +553,7 @@ export async function processNppSupplyAgreements(
   // Planned economies produce a different commodity from the same media plant
   // and are derated differently, so the capacity checks inside the matcher need
   // both to size a contract against what the sink will credit.
-  const currentYear = (
-    await db
-      .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1 } })
-  )?.currentYear;
+  const currentYear = gameState?.currentYear;
   const decisions = decideNppSupplyAgreements({
     turn,
     plantsEnabled,
@@ -561,33 +565,21 @@ export async function processNppSupplyAgreements(
     commandEconomyEnabled: cfg?.commandEconomyEnabled === true,
   });
 
+  const activations = decisions.filter(
+    (decision): decision is Extract<NppAgreementDecision, { action: "activate" }> =>
+      decision.action === "activate"
+  );
+  const cancellations = decisions.filter(
+    (decision): decision is Extract<NppAgreementDecision, { action: "cancelNotice" }> =>
+      decision.action === "cancelNotice"
+  );
   let accepted = 0;
   let cancelled = 0;
   let proposed = 0;
   const inserts: SupplyAgreement[] = [];
 
   for (const d of decisions) {
-    if (d.action === "activate") {
-      const res = await db
-        .collection<SupplyAgreement>("supplyAgreements")
-        .updateOne(
-          { _id: new ObjectId(d.agreementId), status: "pending" },
-          { $set: { status: "active", updatedAt: now } }
-        );
-      if (res.modifiedCount > 0) accepted += 1;
-    } else if (d.action === "cancelNotice") {
-      const res = await db.collection<SupplyAgreement>("supplyAgreements").updateOne(
-        { _id: new ObjectId(d.agreementId), status: "active" },
-        {
-          $set: {
-            status: "cancelling",
-            cancelEffectiveTurn: turn + CONTRACT_CANCEL_NOTICE_TURNS,
-            updatedAt: now,
-          },
-        }
-      );
-      if (res.modifiedCount > 0) cancelled += 1;
-    } else {
+    if (d.action === "propose") {
       inserts.push({
         volumeCapBasis: "scaledCapacity",
         supplierCorpId: new ObjectId(d.supplierCorpId),
@@ -606,8 +598,40 @@ export async function processNppSupplyAgreements(
     }
   }
 
+  const agreementsCollection = db.collection<SupplyAgreement>("supplyAgreements");
+  const [activationResult, cancellationResult] = await Promise.all([
+    activations.length > 0
+      ? agreementsCollection.bulkWrite(
+          activations.map((decision) => ({
+            updateOne: {
+              filter: { _id: new ObjectId(decision.agreementId), status: "pending" },
+              update: { $set: { status: "active", updatedAt: now } },
+            },
+          }))
+        )
+      : null,
+    cancellations.length > 0
+      ? agreementsCollection.bulkWrite(
+          cancellations.map((decision) => ({
+            updateOne: {
+              filter: { _id: new ObjectId(decision.agreementId), status: "active" },
+              update: {
+                $set: {
+                  status: "cancelling",
+                  cancelEffectiveTurn: turn + CONTRACT_CANCEL_NOTICE_TURNS,
+                  updatedAt: now,
+                },
+              },
+            },
+          }))
+        )
+      : null,
+  ]);
+  accepted = activationResult?.modifiedCount ?? 0;
+  cancelled = cancellationResult?.modifiedCount ?? 0;
+
   if (inserts.length > 0) {
-    await db.collection<SupplyAgreement>("supplyAgreements").insertMany(inserts);
+    await agreementsCollection.insertMany(inserts);
   }
 
   return { accepted, cancelled, proposed };

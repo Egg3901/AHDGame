@@ -246,24 +246,27 @@ export async function processNppCorporationDecisions(
       divestedSectorIds: allDivestedSectorIds,
     };
 
-  // Fetch all sectors for these corps in one query
   const corpIds = nppCorps.map((c) => c._id);
-  const allSectors = await db
-    // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
-    .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: { $in: corpIds } })
-    .toArray();
-
   // Resolve each corp's CEO NPP so its personality can shape the corp's behavior.
   // ceoId holds the NPP _id when ceoType === "npp".
   const ceoNppIds = nppCorps.filter((c) => c.ceoType === "npp" && c.ceoId).map((c) => c.ceoId);
-  const ceoNpps =
+  // All four reads depend only on the NPP cohort. Start them together rather
+  // than making the decision phase wait for each collection in sequence.
+  const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors] = await Promise.all([
+    db
+      // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: { $in: corpIds } })
+      .toArray(),
     ceoNppIds.length > 0
-      ? await db
+      ? db
           .collection<NPP>("npps")
           .find({ _id: { $in: ceoNppIds } }, { projection: { personality: 1 } })
           .toArray()
-      : [];
+      : Promise.resolve([]),
+    db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
+    db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
+  ]);
   const archetypeByNppId = new Map<string, CeoArchetype>();
   for (const npp of ceoNpps) {
     if (npp.personality) {
@@ -280,10 +283,6 @@ export async function processNppCorporationDecisions(
 
   // Commodity price snapshot for macro-aware production policy (SP5). One doc
   // per commodity; keep the latest turn if duplicates exist.
-  const commodityPriceDocs = await db
-    .collection<CommodityPrice>("commodityPrices")
-    .find({})
-    .toArray();
   const priceByCommodity = new Map<string, CommodityPrice>();
   for (const doc of commodityPriceDocs) {
     const existing = priceByCommodity.get(doc.commodity);
@@ -315,9 +314,6 @@ export async function processNppCorporationDecisions(
   };
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
-
-  // Fetch unowned sectors in bulk for expansion decisions
-  const unownedSectors = await db.collection<UnownedSector>("unownedSectors").find({}).toArray();
 
   // Index unowned sectors by countryId for fast lookup
   const unownedByCountry = new Map<string, UnownedSector[]>();
