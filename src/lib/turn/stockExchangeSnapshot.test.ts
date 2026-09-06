@@ -226,10 +226,11 @@ describe("stockExchangeSnapshot", () => {
 
     it("fetches sector data for revenue/income calculations", async () => {
       const corpId = new ObjectId();
+      const sectorChain = createMockChain([createSector({ corporationId: corpId })]);
       mockCollection
         .mockReturnValueOnce(createMockChain([createCorporation({ _id: corpId })]))
         .mockReturnValueOnce(createMockChain([createCharacter()]))
-        .mockReturnValueOnce(createMockChain([createSector({ corporationId: corpId })]))
+        .mockReturnValueOnce(sectorChain)
         .mockReturnValueOnce(createMockChain([])) // history
         .mockReturnValueOnce(createMockChain([createStateMetrics()]))
         .mockReturnValueOnce(createMockChain([createState()]))
@@ -241,6 +242,27 @@ describe("stockExchangeSnapshot", () => {
 
       const sectorCall = mockCollection.mock.calls.find((c) => c[0] === "corporateSectors");
       expect(sectorCall).toBeDefined();
+      expect(sectorChain.find).toHaveBeenCalledWith(
+        { corporationId: { $in: [corpId] } },
+        expect.objectContaining({
+          projection: {
+            corporationId: 1,
+            countryId: 1,
+            stateId: 1,
+            sectorType: 1,
+            revenue: 1,
+            realizedRevenue: 1,
+            currentGrowthCost: 1,
+            profitMargin: 1,
+            targetGrowthRate: 1,
+            strategyId: 1,
+            transitionFromStrategyId: 1,
+            transitionStartTurn: 1,
+            negativeProductionSustainedTurns: 1,
+            productionPolicyLevel: 1,
+          },
+        })
+      );
     });
 
     it("fetches 24-turn price history", async () => {

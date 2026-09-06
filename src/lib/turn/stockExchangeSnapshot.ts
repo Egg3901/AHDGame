@@ -168,7 +168,28 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           .collection<CorporateSector>("corporateSectors")
           .find(
             { corporationId: { $in: corpIds } },
-            { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+            {
+              // Snapshot valuation reads the sector income inputs and margin
+              // selectors below, not plant queues or turn telemetry. Keeping
+              // this explicit prevents the exchange refresh from decoding the
+              // full sector document for every public listing.
+              projection: {
+                corporationId: 1,
+                countryId: 1,
+                stateId: 1,
+                sectorType: 1,
+                revenue: 1,
+                realizedRevenue: 1,
+                currentGrowthCost: 1,
+                profitMargin: 1,
+                targetGrowthRate: 1,
+                strategyId: 1,
+                transitionFromStrategyId: 1,
+                transitionStartTurn: 1,
+                negativeProductionSustainedTurns: 1,
+                productionPolicyLevel: 1,
+              },
+            }
           )
           .toArray(),
         database
