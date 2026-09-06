@@ -23,6 +23,7 @@ import type { CandidateBucketAppeal } from "@/lib/electionEngine/factorLedger";
 import { buildGeneralElectionViewModel } from "@/lib/elections/generalViewModel";
 import { allocateElectoralVotes } from "@/lib/turn/electionCalculations";
 import { electoralMajorityFor } from "@/lib/elections/presidentialResolutionDisplay";
+import type { ElectoralVoteUnit } from "@/lib/constants/states";
 
 const DEFAULT_TOP_BUCKETS = 5;
 const DEFAULT_TOP_LEADERS = 5;
@@ -131,7 +132,7 @@ export function buildDelegatePath(
  */
 export function buildTippingPath(input: {
   totalVotesByUnit: Record<string, Record<string, number>>;
-  evUnits: { unitId: string; ev: number; stateId: string }[];
+  evUnits: ElectoralVoteUnit[];
   ownerTallyId: string | null;
   candidateIds: string[];
   stateNameById: Record<string, string>;
