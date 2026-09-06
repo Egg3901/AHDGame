@@ -149,10 +149,10 @@ console.log(`   side A dead : ${avg(co.a).padStart(9)} /battle`);
 console.log(`   side B dead : ${avg(co.d).padStart(9)} /battle`);
 console.log(`   A per B     : ${(co.a / co.d).toFixed(2)} : 1`);
 
-// ── 4. Reinforcement value ─────────────────────────────────────────────────────
-// Does adding an ally to a full front help or hurt? Six divisions arrive as one
-// contingent; measure the side's dead and what it inflicts, before and after.
-console.log("\n4. REINFORCEMENT — adding 6 divisions to an already-committed front");
+// ── 4. Reinforcement below the cap ─────────────────────────────────────────────
+// Six divisions arrive at a front that still has room for them, so every one of
+// them reaches the line. This is the ordinary case, not the overflow case.
+console.log("\n4. REINFORCEMENT (front has room) — adding 6 divisions to 12");
 const before = run([side("US", "A", 12)], enemy());
 const after = run([side("US", "A", 12), side("IT", "A", 6)], enemy());
 console.log(
@@ -165,5 +165,26 @@ console.log(
   `   marginal          : ${after.a - before.a >= 0 ? "+" : ""}${avg(after.a - before.a)} own dead/battle ` +
     `for ${after.d - before.d >= 0 ? "+" : ""}${avg(after.d - before.d)} enemy dead ` +
     `(${((after.a - before.a) / Math.max(1, after.d - before.d)).toFixed(1)} own per enemy)`
+);
+
+// ── 5. Reinforcement PAST the cap ──────────────────────────────────────────────
+// The front holds about 90 of these divisions. Past that the engagement plan plays
+// the overflow as `rear`, which fights at 0.10 and bleeds at 0.15 — so the question
+// is what the surplus costs when it cannot reach the line at all. Depth is heavily
+// discounted, but the discount is applied to each formation's own full headcount,
+// so a reinforcement that never sees the enemy is not free.
+console.log("\n5. REINFORCEMENT (front is full) — the overflow is played as depth");
+const atCap = run([side("US", "A", 90)], enemy());
+const overCap = run([side("US", "A", 90), side("IT", "A", 30)], enemy());
+console.log(
+  `   90 divisions      : ${avg(atCap.a).padStart(7)} dead/battle, inflicts ${avg(atCap.d)}`
+);
+console.log(
+  `   120 divisions     : ${avg(overCap.a).padStart(7)} dead/battle, inflicts ${avg(overCap.d)}`
+);
+console.log(
+  `   marginal          : ${overCap.a - atCap.a >= 0 ? "+" : ""}${avg(overCap.a - atCap.a)} own dead/battle ` +
+    `for ${overCap.d - atCap.d >= 0 ? "+" : ""}${avg(overCap.d - atCap.d)} enemy dead ` +
+    `(${((overCap.a - atCap.a) / Math.max(1, overCap.d - atCap.d)).toFixed(1)} own per enemy)`
 );
 console.log("");
