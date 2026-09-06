@@ -89,6 +89,11 @@ export function createTurnPhaseRuntime(input: {
   warnings: string[];
   currentPhaseRef: { current: string | null };
   /**
+   * Phase names a crashed previous holder already applied, for a resumed turn. Empty
+   * or absent on every normal turn. See the resume gate in `runPhase`.
+   */
+  alreadyApplied?: Set<string>;
+  /**
    * SIM-ONLY predicate. When provided and it returns false for a phase, the
    * phase is marked skipped and its fn never runs (headless worldsim
    * elections-only profile — see simTurnProfiles.ts). Omitted in prod → no
@@ -103,7 +108,7 @@ export function createTurnPhaseRuntime(input: {
    */
   turn?: number;
 }): TurnPhaseRuntime {
-  const { db, phaseStatuses, warnings, currentPhaseRef, shouldRunPhase } = input;
+  const { db, phaseStatuses, warnings, currentPhaseRef, shouldRunPhase, alreadyApplied } = input;
   const turn = input.turn ?? 0;
   let lastFlushAtMs = 0;
 
@@ -196,6 +201,20 @@ export function createTurnPhaseRuntime(input: {
     // phaseResult). No predicate (prod/cron) → this branch is never taken.
     if (shouldRunPhase && !shouldRunPhase(name)) {
       await markPhaseSkipped(name, "simElectionsOnly", "skipped: sim elections-only profile");
+      return null;
+    }
+    // RESUME GATE. This turn is a re-entry into a turn a previous process began and
+    // did not finish, and `alreadyApplied` names the phases that must not run again:
+    // the ones it recorded as completed, plus the single phase it was inside when it
+    // died. Running either would double-apply writes that already landed.
+    //
+    // Before this existed the whole turn was CONSUMED on recovery, so one redeploy
+    // landing mid-turn discarded every remaining phase, roughly 150 of them, including
+    // every election, metric and settlement the turn had not reached yet. Skipping the
+    // handful that already ran and continuing is strictly better: the cost of a deploy
+    // falls from a whole turn to the one phase that was interrupted.
+    if (alreadyApplied?.has(name)) {
+      await markPhaseSkipped(name, "upstreamAbort", "skipped: already applied before crash");
       return null;
     }
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
