@@ -1,3 +1,5 @@
+import { demandSupplyGapPct } from "./administeredPricing";
+
 /** Pure command-economy rules that do not require a database or runtime state. */
 
 export interface CountryPhysicalFlowRow {
@@ -19,19 +21,35 @@ const finiteNonNegative = (value: number): number | null =>
 export function countryPhysicalDemandSupplyGapPct(
   rows: readonly CountryPhysicalFlowRow[]
 ): number | null {
-  let weightedGap = 0;
-  let weight = 0;
+  const validRows: Array<{ gap: number; volume: number; price: number }> = [];
+  let maxVolume = 0;
+  let maxPrice = 0;
   for (const row of rows) {
     if (row.basis !== "country_scoped_ledger") continue;
     const supply = finiteNonNegative(row.supply);
     const demand = finiteNonNegative(row.demand);
     const price = finiteNonNegative(row.price ?? Number.NaN);
     if (supply == null || demand == null || price == null || price <= 0) continue;
-    const flowValue = Math.max(supply, demand) * price;
-    if (flowValue <= 0) continue;
-    const gap = demand > supply ? ((demand - supply) / (supply + 1)) * 100 : 0;
-    weightedGap += gap * flowValue;
-    weight += flowValue;
+    const volume = Math.max(supply, demand);
+    if (!(volume > 0)) continue;
+    // Keep the gap bounded at the consumer's 500-point ceiling and defer
+    // multiplying volume by price until both have been normalised. A direct
+    // value multiplication can overflow for otherwise valid ledger numbers.
+    const gap = Math.min(500, demandSupplyGapPct(supply, demand));
+    if (!Number.isFinite(gap)) continue;
+    validRows.push({ gap, volume, price });
+    maxVolume = Math.max(maxVolume, volume);
+    maxPrice = Math.max(maxPrice, price);
   }
-  return weight > 0 ? weightedGap / weight : null;
+  if (!(maxVolume > 0) || !(maxPrice > 0)) return null;
+
+  let weightedGap = 0;
+  let weight = 0;
+  for (const row of validRows) {
+    const normalizedWeight = (row.volume / maxVolume) * (row.price / maxPrice);
+    if (!(normalizedWeight > 0) || !Number.isFinite(normalizedWeight)) continue;
+    weightedGap += row.gap * normalizedWeight;
+    weight += normalizedWeight;
+  }
+  return weight > 0 && Number.isFinite(weightedGap) ? weightedGap / weight : null;
 }

@@ -177,6 +177,26 @@ describe("countryPhysicalDemandSupplyGapPct", () => {
       ])
     ).toBeNull();
   });
+
+  it("stays finite when valid ledger values would overflow value weighting", () => {
+    const gap = countryPhysicalDemandSupplyGapPct([
+      {
+        basis: "country_scoped_ledger",
+        supply: Number.MAX_VALUE,
+        demand: Number.MAX_VALUE,
+        price: Number.MAX_VALUE,
+      },
+      {
+        basis: "country_scoped_ledger",
+        supply: Number.MAX_VALUE / 2,
+        demand: Number.MAX_VALUE,
+        price: Number.MAX_VALUE,
+      },
+    ]);
+    expect(Number.isFinite(gap)).toBe(true);
+    expect(gap).toBeGreaterThan(0);
+    expect(gap).toBeLessThanOrEqual(500);
+  });
 });
 
 describe("blackMarketPremiumFrom", () => {
