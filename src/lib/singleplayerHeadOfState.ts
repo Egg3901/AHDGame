@@ -58,12 +58,10 @@ export async function seatSingleplayerHeadOfState(
     {
       $set: {
         characterId: null,
-        characterName: null,
-        party: null,
         isNPP: false,
         updatedAt: args.now,
       },
-      $unset: { nppId: "" },
+      $unset: { nppId: "", characterName: "", party: "" },
     }
   );
   await db
