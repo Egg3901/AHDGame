@@ -57,6 +57,7 @@
  */
 
 import type { CommodityType } from "@/lib/constants/commodities";
+import { DEFAULT_SECTOR_PROFIT_MARGIN_PCT } from "@/lib/corporations/sectorProfitBasis";
 import { priceRealizationFactor } from "@/lib/market/priceRealization";
 
 /** One commodity's consumption line for a turn. */
@@ -464,10 +465,18 @@ export function ownerIdleUnits(args: {
  * anchor — a legacy row, a sector that has not run a plants turn — it falls
  * back to the live basis, which is the pre-change behaviour.
  *
- * Clamped to [0, 1]: a basis above 1 would be a sector whose costs exceed its
- * revenue claiming an idle unit costs more than a running one, and a negative
- * basis would pay the owner to hold idle plant.
+ * Clamped to [0, IDLE_UPKEEP_BASIS_MAX]. A negative basis would pay the owner
+ * to hold idle plant. The upper bound used to be 1, which let a sector whose
+ * FIRST plants turn was input-starved (margin at or below zero) stamp a basis
+ * of 1 and hold it forever: every idle unit billed at the full running-unit
+ * cost, for the life of the sector, because of the turn it happened to be born
+ * on. 937 of 5,733 live sectors carried a held basis at or above 0.9. A fixed
+ * site cost is not the whole unit cost; the default sector margin gives the
+ * ceiling, so no sector's idle unit can be priced above a healthy sector's
+ * cost share.
  */
+export const IDLE_UPKEEP_BASIS_MAX = 1 - DEFAULT_SECTOR_PROFIT_MARGIN_PCT / 100;
+
 export function idleUpkeepUnitPrice(args: {
   mixPrice: number;
   turnsPerDay: number;
@@ -483,7 +492,7 @@ export function idleUpkeepUnitPrice(args: {
     typeof anchoredMarginBasis === "number" && Number.isFinite(anchoredMarginBasis)
       ? anchoredMarginBasis
       : liveMarginBasis;
-  const basis = Number.isFinite(raw) ? Math.max(0, Math.min(1, raw)) : 0;
+  const basis = Number.isFinite(raw) ? Math.max(0, Math.min(IDLE_UPKEEP_BASIS_MAX, raw)) : 0;
   return (mixPrice / turnsPerDay) * basis;
 }
 
