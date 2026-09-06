@@ -25,4 +25,20 @@ describe("advanceOutputGap", () => {
     expect(advanceOutputGap(-1e9, -50, 3, TPY).gap).toBeGreaterThanOrEqual(OUTPUT_GAP_BOUND[0]);
     expect(Number.isFinite(advanceOutputGap(NaN, NaN, NaN, TPY).gdpGrowth)).toBe(true);
   });
+
+  it("bounds growth and reconciles the gap when the integrated rate would exceed 15%", () => {
+    const r = advanceOutputGap(-10, 10, 2, TPY);
+
+    expect(r.gdpGrowth).toBeCloseTo(15, 9);
+    expect(r.gap).toBeCloseTo(-10 + (15 - 2) / TPY, 9);
+    expect(r.gdpGrowth).toBeCloseTo(2 + (r.gap - -10) * TPY, 9);
+  });
+
+  it("applies the same reconciliation at the lower growth boundary", () => {
+    const r = advanceOutputGap(10, -10, 2, TPY);
+
+    expect(r.gdpGrowth).toBeCloseTo(-15, 9);
+    expect(r.gap).toBeCloseTo(10 + (-15 - 2) / TPY, 9);
+    expect(r.gdpGrowth).toBeCloseTo(2 + (r.gap - 10) * TPY, 9);
+  });
 });
