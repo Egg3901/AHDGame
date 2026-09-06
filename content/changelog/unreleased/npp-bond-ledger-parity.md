@@ -1,5 +1,4 @@
 ---
-version: "1.4.62"
 date: "2026-09-06"
 title: NPP bond purchases use the financial ledger subject model
 summary: >-
