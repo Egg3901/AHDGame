@@ -1,5 +1,4 @@
 ---
-version: "1.4.65"
 date: 2026-09-06
 title: Idle upkeep can no longer be priced at a running unit's full cost
 summary: >-

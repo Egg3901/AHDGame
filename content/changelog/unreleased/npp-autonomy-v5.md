@@ -1,5 +1,4 @@
 ---
-version: "1.4.62"
 date: "2026-09-06"
 era: "Beta 2"
 title: NPP autonomy v5 and a difficulty policy that changes decisions, not entitlements
