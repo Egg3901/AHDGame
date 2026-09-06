@@ -34,7 +34,6 @@ import {
   getMajoritarianBonus,
   getMultiSeatMinShare,
 } from "@/lib/turn/election/seatAllocation";
-import { rankPartiesByOrganization } from "@/lib/turn/election/commonsOrgRanking";
 import { turnVoteWeight, resolveTurnWindow } from "./voteCalculations";
 import { distributeVotesByGroupLevelAllocation } from "./voteDistribution";
 import { distributeVotesBySwingFlow } from "./voteDistributionSwingFlow";
@@ -699,12 +698,11 @@ export async function accumulateVoteTurn(
     // will actually seat. Gated on the CURRENT in-game year exactly like the
     // resolver — undefined (proportional, byte-identical estimate) once the
     // world's clock reaches 1999, or when no year is available.
-    const baseBonus = getMajoritarianBonus(electionType, currentYear);
-    // Ticket #1032: the boost belongs to the two best-organized parties in
-    // the state; statePartyOrgs is already loaded for this state above.
-    const majoritarianBonus = baseBonus
-      ? { ...baseBonus, orgRanking: rankPartiesByOrganization(statePartyOrgs) }
-      : undefined;
+    // Tickets #1276 / #1277: the boost is decided by votes alone now, so no
+    // per-state organization ranking is threaded in. That removed the input
+    // whose sub-point drift relocated 9 to 20 seats between consecutive turns
+    // of the same count.
+    const majoritarianBonus = getMajoritarianBonus(electionType, currentYear);
     const effectiveVotes =
       majoritarianBonus && pool.length > 1
         ? applyMajoritarianBonus(
@@ -714,7 +712,7 @@ export async function accumulateVoteTurn(
               group: groupKey(ec),
             })),
             majoritarianBonus
-          )
+          ).effective
         : undefined;
 
     // Calculate proportional seats with remainders for pool candidates

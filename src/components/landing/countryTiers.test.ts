@@ -231,8 +231,11 @@ describe("roster tables stay in sync with the world entity manifest", () => {
     expect(economicPowerFeatureIdsForEra("1953")).toBe(
       ECONOMIC_POWER_FEATURE_IDS_BY_PRESET["1953-default"]
     );
-    // 2023 has no manifest preset — an empty roster, never a throw.
+    // Every supported preset resolves its roster; unknown eras remain empty.
     expect(battlegroundFeatureIdsForEra("2023")).toEqual([]);
-    expect(economicPowerFeatureIdsForEra("2023")).toEqual([]);
+    expect(economicPowerFeatureIdsForEra("2023")).toBe(
+      ECONOMIC_POWER_FEATURE_IDS_BY_PRESET["2023-default"]
+    );
+    expect(economicPowerFeatureIdsForEra("2099")).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
-import { listActiveConflicts } from "@/lib/db/collections/conflicts";
+import { getConflictsCollection } from "@/lib/db/collections/conflicts";
+import { WAR_DEFEAT_WINDOW_TURNS } from "@/lib/military/rules/warDefeat";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import { snapshotApprovalHistory } from "@/lib/utils/governmentApproval";
 import {
@@ -49,7 +50,17 @@ export async function snapshotApprovalsForTurn(db: Db, turn: number): Promise<Ap
   const approvals = db.collection<GovernmentApproval>("governmentApprovals");
 
   const [conflicts, documentedDocs, seededStateCountries] = await Promise.all([
-    listActiveConflicts(db),
+    getConflictsCollection(db)
+      .find({
+        $or: [
+          { status: { $ne: "resolved" } },
+          {
+            status: "resolved",
+            endTurn: { $gte: turn - (WAR_DEFEAT_WINDOW_TURNS - 1), $lte: turn },
+          },
+        ],
+      })
+      .toArray(),
     // Every country that already has an approval document, not merely those with
     // exhaustion left to heal. Two reasons, and the second is the load-bearing
     // one. Exhaustion only moves on a turn the snapshot runs for that country, so

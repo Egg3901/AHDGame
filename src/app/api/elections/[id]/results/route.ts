@@ -8,11 +8,8 @@ import { conditionalJson } from "@/lib/api/conditionalJson";
 import { withApiMetrics } from "@/lib/observability/apiMetrics";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { computeSeatEstimates } from "@/lib/elections/buildPollingData";
+import { resolvedSeatsEstimate } from "@/lib/elections/resolvedSeatsEstimate";
 import { getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
-import {
-  loadCommonsOrgRankings,
-  withCommonsOrgRanking,
-} from "@/lib/turn/election/commonsOrgRanking";
 import { isLiveElectionResultsEnabled } from "@/lib/elections/liveResults/featureFlag";
 import {
   computeBaselineReportingPct,
@@ -261,20 +258,23 @@ async function handleGet(
     const rosterIds = new Set([...rosterDocIds, ...tallyOnlyIds]);
 
     // ── Seat projections (multi-seat races) ───────────────────────────────
+    // #1277: same rule as `enrichElection` — a finalized tally's allocation is
+    // authoritative, anything earlier is a projection. This used to read
+    // `tally.seatsEstimate ?? compute(...)`, but `accumulateVoteTurn` rewrites
+    // that field every turn, so the fallback was near-dead and a LIVE race was
+    // served last turn's estimate instead of one built from the current roster.
+    // `resolvedSeatsEstimate(tally, null)` first so a finalized race
+    // short-circuits before the org-ranking round-trip, exactly as the old
+    // `??` did.
     const seatsEstimate =
       !isPresident && tally
-        ? (tally.seatsEstimate ??
+        ? (resolvedSeatsEstimate(tally, null) ??
           computeSeatEstimates(
             election.electionType,
             election.totalSeats,
             tally,
             rosterIds,
-            await withCommonsOrgRanking(
-              db,
-              getMajoritarianBonus(election.electionType, gameState?.currentYear),
-              election.countryId ?? "UK",
-              election.state
-            )
+            getMajoritarianBonus(election.electionType, gameState?.currentYear)
           ))
         : null;
 
@@ -327,8 +327,7 @@ async function handleGet(
       partyMap,
       finalHour?.progress ?? null,
       isEnded,
-      nationalBonus,
-      nationalBonus ? await loadCommonsOrgRankings(db, election.countryId ?? "UK") : undefined
+      nationalBonus
     );
 
     // ── Summary ───────────────────────────────────────────────────────────

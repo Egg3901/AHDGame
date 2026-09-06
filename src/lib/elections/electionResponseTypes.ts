@@ -152,6 +152,12 @@ export interface ElectionResponse {
   polling: PollingData | null;
   /** Seat estimates for multi-seat races (house/stateSenate/commons/regionalCouncil). Always computed. */
   seatsEstimate: Record<string, number> | null;
+  /**
+   * True when the FPTP winner's bonus governs this race (UK Commons in a
+   * historical in-game year). Seats are then decided on re-weighted votes, so
+   * display surfaces must not narrate them as bought at the Hare quota (#1276).
+   */
+  majoritarianBonusApplied?: boolean;
 
   /** Current officeholder for single-seat races (senate, governor, president, primeMinister). Null for multi-seat races. */
   incumbent: { name: string; party: string; partyColor: string | null } | null;

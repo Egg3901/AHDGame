@@ -118,6 +118,7 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "752", // SE
     "792", // TR
   ],
+  "2023-default": ["156", "276", "372", "392", "826", "840"],
   "2019-default": [
     "156", // CN
     "276", // DE
@@ -180,6 +181,7 @@ export const BATTLEGROUND_FEATURE_IDS_BY_PRESET: Readonly<Record<string, readonl
   "1999-default": [],
   "2007-default": [],
   "2019-default": [],
+  "2023-default": [],
 };
 
 /** Economic-Power feature ids for a landing era id (e.g. "1953"). */
