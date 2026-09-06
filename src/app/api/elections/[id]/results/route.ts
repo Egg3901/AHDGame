@@ -179,7 +179,11 @@ async function handleGet(
       let unitIds: string[];
       const evByUnit = new Map<string, number>();
       if (election.countryId === "US") {
-        const apportionment = await loadApportionment(db, gameState?.preset);
+        const apportionment = await loadApportionment(
+          db,
+          gameState?.preset,
+          gameState?.currentYear
+        );
         for (const u of apportionment.electoralVoteUnits) evByUnit.set(u.unitId, u.ev);
         unitIds = [
           ...new Set([

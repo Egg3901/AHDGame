@@ -392,7 +392,7 @@ export async function _enrichElection(
     electoralVotes: evByState,
     electoralVoteUnits: evUnits,
     houseSeats,
-  } = await loadApportionment(db, gameState?.preset);
+  } = await loadApportionment(db, gameState?.preset, gameState?.currentYear);
 
   // For state-level primary alignment, look up the cached lean of the seat's region.
   // Presidential races have no single regional electorate, so they skip this fetch.
