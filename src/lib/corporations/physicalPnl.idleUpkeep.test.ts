@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ownerIdleUnits, idleUpkeepUnitPrice } from "./physicalPnl";
+import { ownerIdleUnits, idleUpkeepUnitPrice, IDLE_UPKEEP_BASIS_MAX } from "./physicalPnl";
 import { IDLE_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
 
 /**
@@ -95,7 +95,7 @@ describe("idleUpkeepUnitPrice", () => {
     expect(healthy).toBeCloseTo((240 / 24) * 0.55, 10);
   });
 
-  it("is bounded above by one running unit's cost, however bad the margin gets", () => {
+  it("is bounded above by the default cost share, however bad the margin gets", () => {
     // Unanchored fallback: a sector at −300% derived margin would have had a
     // live basis of 4.0, i.e. an idle unit costing 4x a running one.
     const price = idleUpkeepUnitPrice({
@@ -104,10 +104,29 @@ describe("idleUpkeepUnitPrice", () => {
       anchoredMarginBasis: null,
       liveMarginBasis: 4.0,
     });
-    expect(price).toBeCloseTo(240 / 24, 10);
-    // Which is the FULL unit price — and IDLE_UPKEEP_FRACTION then takes 30% of
-    // it, so an idle unit can never cost more than a running one.
+    expect(IDLE_UPKEEP_BASIS_MAX).toBeCloseTo(0.65, 10);
+    expect(price).toBeCloseTo((240 / 24) * IDLE_UPKEEP_BASIS_MAX, 10);
     expect(price * IDLE_UPKEEP_FRACTION).toBeLessThan(240 / 24);
+  });
+
+  it("caps a basis stamped on a starved first turn instead of holding it at the full unit cost", () => {
+    // Live regression: 937 sectors held an anchor at or above 0.9 because their
+    // first plants turn ran at a zero or negative margin. That anchor priced
+    // every idle unit at a running unit's full cost for the life of the sector.
+    const starved = idleUpkeepUnitPrice({
+      mixPrice: 240,
+      turnsPerDay: 24,
+      anchoredMarginBasis: 1.0092,
+      liveMarginBasis: 0.3,
+    });
+    const healthy = idleUpkeepUnitPrice({
+      mixPrice: 240,
+      turnsPerDay: 24,
+      anchoredMarginBasis: 0.55,
+      liveMarginBasis: 0.3,
+    });
+    expect(starved).toBeCloseTo((240 / 24) * IDLE_UPKEEP_BASIS_MAX, 10);
+    expect(healthy).toBeCloseTo((240 / 24) * 0.55, 10);
   });
 
   it("never pays the owner to hold idle plant", () => {
