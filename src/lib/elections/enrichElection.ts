@@ -584,6 +584,24 @@ export async function _enrichElection(
   const activeCandidateIdSet = new Set(displayCandidates.map((c) => c.id));
   const activeCandidates = candidates.filter((c) => activeCandidateIdSet.has(c._id.toString()));
 
+  // Rows restored from the tally have no candidacy document, so they are absent
+  // from `activeCandidates`. Polling must still see them or its donut rescales
+  // to a survivors-only denominator while the results panel uses the published
+  // one — the same race reading 37.1% on the election card and 32.4% on its
+  // detail page. Structural rows are enough; polling needs only these fields.
+  const pollingCandidates = [
+    ...activeCandidates,
+    ...displayCandidates
+      .filter((c) => !activeCandidates.some((a) => a._id.toString() === c.id))
+      .map((c) => ({
+        _id: c.id,
+        characterId: null,
+        characterName: c.characterName,
+        party: c.party,
+        isNPP: c.isNPP,
+      })),
+  ];
+
   // Polling data (always computed for both views).
   // Ended races: omit live character.party so polling colours stay on the
   // candidacy-row (ballot) party — same historical rule as map colours (#939).
@@ -593,7 +611,7 @@ export async function _enrichElection(
     election.electionType,
     countryId,
     inPrimary,
-    activeCandidates,
+    pollingCandidates,
     parties,
     tally,
     latestPrimarySnapshot,

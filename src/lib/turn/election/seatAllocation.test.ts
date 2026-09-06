@@ -833,6 +833,54 @@ describe("applyMajoritarianBonus — power-law transform", () => {
     expect(eff1.get("x")).toBeCloseTo(eff1.get("y")!, 9);
   });
 
+  it("conserves the pool total across randomised shapes", () => {
+    // Conservation is what lets Largest Remainder keep seat counts exact. If
+    // the re-weighting ever leaked or created votes, every downstream seat
+    // total would drift silently rather than fail loudly, so pin it over many
+    // shapes rather than the few hand-built ones above.
+    let seed = 20260905;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) % 2147483648;
+      return seed / 2147483648;
+    };
+    for (let run = 0; run < 400; run++) {
+      const groups = 1 + Math.floor(rand() * 7);
+      const pool = Array.from({ length: groups }, (_, g) => ({
+        id: `c${g}`,
+        votes: Math.floor(rand() * 100_000),
+        group: `party:${g}`,
+      }));
+      const total = pool.reduce((s, c) => s + c.votes, 0);
+      const { effective } = applyMajoritarianBonus(pool, {
+        exponent: UK_COMMONS_FPTP_EXPONENT,
+        taper: UK_COMMONS_BONUS_TAPER,
+      });
+      const out = [...effective.values()].reduce((s, v) => s + v, 0);
+      expect(out).toBeCloseTo(total, 4);
+      // No negative or non-finite weight can ever reach Largest Remainder.
+      for (const v of effective.values()) {
+        expect(Number.isFinite(v)).toBe(true);
+        expect(v).toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it("never lets a group out-weight one that polled more", () => {
+    // Monotonicity of the transform itself: more votes must never yield less
+    // effective weight, or a party could lose seats by gaining votes.
+    const pool = [
+      { id: "a", votes: 500, group: "party:a" },
+      { id: "b", votes: 400, group: "party:b" },
+      { id: "c", votes: 399, group: "party:c" },
+      { id: "d", votes: 100, group: "party:d" },
+    ];
+    const { effective } = applyMajoritarianBonus(pool, { exponent: UK_COMMONS_FPTP_EXPONENT });
+    const weights = pool.map((c) => effective.get(c.id)!);
+    for (let i = 1; i < weights.length; i++) {
+      expect(weights[i - 1]).toBeGreaterThanOrEqual(weights[i]);
+    }
+  });
+
   it("reports whether it actually re-weighted, for honest display copy", () => {
     // Two contesting groups: nothing outside the bloc, so no boost fires and
     // the quota narrative on the results panel would have been accurate.

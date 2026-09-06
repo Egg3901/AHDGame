@@ -196,26 +196,29 @@ export function getMajoritarianBonus(
  * Applies the power-law winner's bonus to an allocation pool, returning
  * per-candidate EFFECTIVE vote weights (same total as the input votes).
  *
- * Shape (ticket #1032 rework): the two groups that BENEFIT are the region's
- * leading party by VOTES plus the best-ORGANIZED other party
- * (`config.orgRanking`), always two DIFFERENT parties, falling back to the
- * next party by pooled votes when organization cannot fill a slot. The
- * boost is the pair VERSUS the
- * rest of the pool: the duopoly's combined share is amplified by the power
- * law — pair weight ∝ (pair share)^exponent against (rest share)^exponent —
- * and every other group is scaled down to conserve the total. BETWEEN the
- * two beneficiaries the boosted weight is split in plain proportion to
- * their compared pooled scores (no amplification inside the pair), so the
- * big two settle proportionally while third parties get the classic FPTP
- * squeeze. Pre-#1032 the boost was instead a re-split INSIDE the top-two by
- * pooled votes, which let three mid-tier candidates out-pool one
- * front-runner and have that lead amplified — players correctly read that
- * as neither FPTP nor PR. Within a group, weight is distributed across the
- * group's candidates proportional to their own votes. Feeding the effective
- * weights through the existing Largest Remainder step keeps conservation,
- * threshold exclusion, and determinism exactly as before. NOTE: when the
- * eligibility gate leaves only the duopoly in the pool there is nothing to
- * squeeze and the allocation is exactly proportional.
+ * Shape (tickets #1276 / #1277). The boosted BLOC is chosen by VOTES alone:
+ * the region's leading group and the runner-up are full members, and every
+ * other group joins with weight `min(1, (v / runnerUpVotes) ^ taper)`. The
+ * boost is that bloc VERSUS the rest of the pool: bloc weight ∝
+ * (bloc share)^exponent against (rest share)^exponent, with the remainder
+ * scaled down to conserve the total. Full members all scale by the same
+ * factor, so they settle in plain proportion to their compared pooled scores;
+ * a tapered group sits between the boosted and squeezed scales in proportion
+ * to its membership, which is what removes the discontinuity at the runner-up
+ * boundary rather than relocating it.
+ *
+ * Pre-#1276 the second slot was the best-ORGANIZED other party, an invisible
+ * stat players moved several points per turn — it flipped between consecutive
+ * turns of one count and moved 9 to 20 seats each time. Pre-#1032 the boost
+ * was a re-split INSIDE the top-two by pooled votes, which let three mid-tier
+ * candidates out-pool one front-runner and have that lead amplified.
+ *
+ * Within a group, weight is distributed across the group's candidates
+ * proportional to their own votes. Feeding the effective weights through the
+ * existing Largest Remainder step keeps conservation, threshold exclusion and
+ * determinism exactly as before. NOTE: when the eligibility gate leaves only
+ * two groups in the pool every member weighs 1, the bloc IS the pool, and the
+ * allocation is exactly proportional.
  */
 export function applyMajoritarianBonus(
   pool: { id: string; votes: number; group: string }[],

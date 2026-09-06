@@ -96,6 +96,53 @@ describe("appendHistoricalTallyCandidates", () => {
     expect(restored.isYou).toBe(false);
   });
 
+  it("does not show one person twice when a duplicate candidacy was deleted", () => {
+    // The partial unique index on characterId allows a second candidacy once
+    // the first is withdrawn. Restored rows have no characterId, so they slip
+    // past the caller's same-character de-duplication.
+    const dupe = {
+      totalVotes: { a: 808931, b: 533035, ghost: 4000 },
+      candidateNames: { a: "Peter Wood", b: "David Brown", ghost: "Peter Wood" },
+      candidateParties: { a: "2", b: "1", ghost: "2" },
+    };
+    expect(appendHistoricalTallyCandidates(survivors, dupe, party)).toEqual(survivors);
+  });
+
+  it("restores only the first of two deleted rows sharing a name", () => {
+    const twoGhosts = {
+      totalVotes: { a: 10, g1: 500, g2: 400 },
+      candidateNames: { a: "Peter Wood", g1: "Tom Marshall", g2: "Tom Marshall" },
+      candidateParties: { a: "2", g1: "6", g2: "6" },
+    };
+    const out = appendHistoricalTallyCandidates(survivors, twoGhosts, party);
+    expect(out.filter((c) => c.characterName === "Tom Marshall")).toHaveLength(1);
+  });
+
+  it("keeps both nameless rows rather than collapsing them on the placeholder", () => {
+    // Two unnamed deleted rows must not dedupe against each other, or the
+    // second one's votes leave the denominator.
+    const nameless = {
+      totalVotes: { a: 10, g1: 500, g2: 400 },
+      candidateNames: { a: "Peter Wood" },
+      candidateParties: { a: "2", g1: "6", g2: "3" },
+    };
+    const out = appendHistoricalTallyCandidates(survivors, nameless, party);
+    expect(out.filter((c) => c.characterName === "Former candidate")).toHaveLength(2);
+    expect(out.map((c) => c.id)).toEqual(expect.arrayContaining(["g1", "g2"]));
+  });
+
+  it("labels a candidate with no recorded party as independent", () => {
+    // Matches how the results route defaults tally-only candidates; an empty
+    // party id would render as a blank abbreviation.
+    const noParty = {
+      totalVotes: { a: 10, gone: 700 },
+      candidateNames: { a: "Peter Wood", gone: "Tom Marshall" },
+      candidateParties: { a: "2" },
+    };
+    const out = appendHistoricalTallyCandidates(survivors, noParty, party);
+    expect(out.find((c) => c.id === "gone")!.party).toBe("independent");
+  });
+
   it("handles a missing tally", () => {
     expect(appendHistoricalTallyCandidates(survivors, null, party)).toEqual(survivors);
     expect(appendHistoricalTallyCandidates(survivors, undefined, party)).toEqual(survivors);
