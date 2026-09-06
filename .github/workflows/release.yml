@@ -1,0 +1,82 @@
+name: Release
+
+# One tag and one GitHub release per version in package.json.
+#
+# Only `npm run changelog:release` moves that version, and it does so once per
+# release rather than once per pull request, so this fires when a release
+# actually lands on main and does nothing on every other merge. Reruns are
+# free: an existing tag is treated as done.
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  tag-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Tags are what tell this job a version has already shipped, and the
+          # annotated tag needs real history behind it.
+          fetch-depth: 0
+
+      - name: Read the version
+        id: version
+        run: echo "value=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version is already tagged
+        id: check
+        run: |
+          if git rev-parse -q --verify "refs/tags/v${{ steps.version.outputs.value }}" >/dev/null; then
+            echo "already tagged v${{ steps.version.outputs.value }}, nothing to do"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.needed == 'true'
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+        if: steps.check.outputs.needed == 'true'
+
+      # Written to files rather than step outputs: a release title is prose
+      # and will eventually contain a quote or a colon that breaks $GITHUB_OUTPUT.
+      - name: Build the release notes
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          npx tsx scripts/changelog/release-body.ts "$VERSION" --title > /tmp/release-title.txt
+          npx tsx scripts/changelog/release-body.ts "$VERSION" > /tmp/release-body.md
+          { cat /tmp/release-title.txt; echo; cat /tmp/release-body.md; } > /tmp/tag-message.txt
+
+      - name: Tag the release
+        if: steps.check.outputs.needed == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$VERSION" -F /tmp/tag-message.txt
+          git push origin "v$VERSION"
+
+      - name: Publish the GitHub release
+        if: steps.check.outputs.needed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          gh release create "v$VERSION" \
+            --title "$(cat /tmp/release-title.txt)" \
+            --notes-file /tmp/release-body.md \
+            --verify-tag

@@ -77,6 +77,9 @@ interface SimRunDoc {
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
   preservePlayerRail?: boolean;
+  /** Autonomy tier and local-world difficulty the run was configured with. */
+  autonomyLevel?: string;
+  difficulty?: string;
 }
 
 function arg(flag: string): string | undefined {
@@ -95,10 +98,30 @@ function hasFlag(flag: string): boolean {
  * same seed at v3 and v4 is the A/B that tells you whether letting autonomy into
  * player-enabled countries changed the balance.
  */
-const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4";
-if (AUTONOMY_LEVEL !== "v3" && AUTONOMY_LEVEL !== "v4") {
-  throw new Error(`--autonomy must be v3 or v4 (got "${AUTONOMY_LEVEL}")`);
+const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4" | "v5";
+if (!(["v3", "v4", "v5"] as const).includes(AUTONOMY_LEVEL)) {
+  throw new Error(`--autonomy must be v3, v4, or v5 (got "${AUTONOMY_LEVEL}")`);
 }
+
+/**
+ * Local-world difficulty for the run. Writes a `singleplayerConfig` onto the
+ * sandbox `gameState`, which is what both halves of difficulty key off:
+ * `singleplayerDifficulty/rules/index.ts` for NPP resources and
+ * `singleplayerDifficulty/rules/behavior.ts` for decision competence.
+ *
+ * Omitted leaves `singleplayerConfig` absent, which is exactly a hosted world —
+ * resolving to `normal` everywhere. So a run without this flag is unchanged from
+ * every run of this harness that came before it.
+ */
+const SIM_DIFFICULTIES = ["easy", "normal", "hard"] as const;
+const difficultyRaw = arg("difficulty");
+if (
+  difficultyRaw &&
+  !SIM_DIFFICULTIES.includes(difficultyRaw as (typeof SIM_DIFFICULTIES)[number])
+) {
+  throw new Error(`--difficulty must be one of ${SIM_DIFFICULTIES.join(", ")}`);
+}
+const difficulty = difficultyRaw as (typeof SIM_DIFFICULTIES)[number] | undefined;
 const foreignPolicyMode = (arg("foreign-policy") ?? "shadow") as NppForeignPolicyMode;
 if (!(["off", "shadow", "active"] as const).includes(foreignPolicyMode)) {
   throw new Error(`--foreign-policy must be off, shadow, or active (got "${foreignPolicyMode}")`);
@@ -514,6 +537,25 @@ async function main() {
       preservePlayerRail
     );
 
+    if (difficulty) {
+      log(`Setting local-world difficulty (${difficulty})`);
+      await db.collection<GameState>("gameState").updateOne(
+        { _id: "current" },
+        {
+          $set: {
+            singleplayerConfig: {
+              mode: "worldsim",
+              difficulty,
+              nppAutonomyLevel: AUTONOMY_LEVEL,
+              featureFlags: {},
+              permanentHeadOfState: false,
+              configuredAt: new Date(),
+            },
+          },
+        }
+      );
+    }
+
     // Some countries' authored historical seat data (historicalSeats.ts) falls
     // short of that country's own configured legislature size — found via this
     // harness: Nigeria's ENTIRE 1991 legislature (360 House + 109 Senate seats)
@@ -595,7 +637,14 @@ async function main() {
       { _id: runId },
       {
         $setOnInsert: { runId, preset, seed, dbName, startedAt: new Date() },
-        $set: { status: "running", currentTurn: 0, error: null, updatedAt: new Date() },
+        $set: {
+          status: "running",
+          currentTurn: 0,
+          error: null,
+          autonomyLevel: AUTONOMY_LEVEL,
+          ...(difficulty ? { difficulty } : {}),
+          updatedAt: new Date(),
+        },
       },
       { upsert: true }
     );
@@ -608,7 +657,13 @@ async function main() {
       { _id: runId },
       {
         $setOnInsert: { runId, preset, seed, dbName, startedAt: new Date() },
-        $set: { status: "running", error: null, updatedAt: new Date() },
+        $set: {
+          status: "running",
+          error: null,
+          autonomyLevel: AUTONOMY_LEVEL,
+          ...(difficulty ? { difficulty } : {}),
+          updatedAt: new Date(),
+        },
       },
       { upsert: true }
     );

@@ -4,6 +4,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { PRIVATE_PAGE_CACHE_CONTROL } from "./src/lib/cacheHeaders";
+import { retiredChangelogRedirects } from "./src/lib/changelog/retiredSlugs";
 
 // Railway's build context no longer exposes the .git directory, so `git
 // rev-parse` fails on every deploy build (#2772). Prefer Railway's injected
@@ -209,6 +210,9 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // Public changelog posts folded into their release by the 2026-09-06
+      // consolidation. These addresses are linked from Discord and the wiki.
+      ...retiredChangelogRedirects(),
       {
         // The in-app API reference page was retired in favor of the canonical
         // docs site (docs.lakesidegames.net, source: Egg3901/ahd-docs). Keeping

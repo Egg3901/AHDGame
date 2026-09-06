@@ -17,9 +17,15 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 export const dynamic = "force-dynamic";
 
 /**
- * Return the authored world controls the setup screen can display. NPP
- * autonomy is reported from game state; no separate difficulty value is
- * invented until the game rules define one.
+ * Return the authored world controls the setup screen can display.
+ *
+ * Both axes are reported from persisted state, never invented here:
+ *   - `autonomyLevel` (game state) — WHICH activities autonomous politicians may
+ *     perform.
+ *   - `difficulty` (singleplayerConfig) — HOW COMPETENTLY they perform them, plus
+ *     the NPP resource tuning in `singleplayerDifficulty/rules/index.ts`. Local
+ *     worlds only; a hosted world has no singleplayerConfig and reports the
+ *     `normal` default, which is the shipped behavior.
  */
 export async function GET(request: Request) {
   const denied = requireSingleplayer(request);

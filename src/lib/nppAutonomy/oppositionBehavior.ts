@@ -21,6 +21,15 @@ import { complianceMultiplier } from "@/lib/turn/npp/crossPressure";
  */
 export const OPPOSITION_BIAS_BASE = 20;
 
+/**
+ * Bounds on the difficulty coordination multiplier. The opposition can be made
+ * more or less disciplined, never absent and never overwhelming: at the ceiling
+ * the bias is 30, still under the ±100 clamp the vote applies and still
+ * compliance-scaled, so a low-loyalty maverick can break ranks at any setting.
+ */
+const MIN_OPPOSITION_COORDINATION = 0.5;
+const MAX_OPPOSITION_COORDINATION = 1.5;
+
 export interface OppositionParty {
   partyId: string;
   seats: number;
@@ -58,11 +67,24 @@ export function computeOppositionVoteForce(
     sponsorParty: string | undefined;
     governingPartyId: string | null;
     oppositionPartyId: string | null;
+    /**
+     * Difficulty's opposition-discipline multiplier
+     * (`NppBehaviorPolicy.oppositionCoordination`). 1 is the shipped bias and is
+     * what every hosted/multiplayer world resolves to. Above 1 the opposition
+     * holds together better against government bills; below 1 it is easier to
+     * peel apart. Clamped here as well as at the policy table, because this is
+     * the value that reaches a vote.
+     */
+    coordination?: number;
   }
 ): number {
   const { sponsorParty, governingPartyId, oppositionPartyId } = params;
   if (!governingPartyId || !oppositionPartyId) return 0;
   if (npp.party !== oppositionPartyId) return 0;
   if (!sponsorParty || sponsorParty !== governingPartyId) return 0;
-  return -OPPOSITION_BIAS_BASE * complianceMultiplier(npp);
+  const coordination = Math.max(
+    MIN_OPPOSITION_COORDINATION,
+    Math.min(MAX_OPPOSITION_COORDINATION, params.coordination ?? 1)
+  );
+  return -OPPOSITION_BIAS_BASE * coordination * complianceMultiplier(npp);
 }

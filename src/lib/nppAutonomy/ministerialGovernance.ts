@@ -52,6 +52,9 @@ import { METRIC_TO_DOMAIN } from "./selectNppBill";
 import { deriveGoverningArchetype, governingArchetypeModifiers } from "./governingArchetype";
 import { loadDomainHealth } from "./governingMetrics";
 import { nppAutonomyAtLeast } from "./featureFlag";
+import { ministerialCommitmentHolds } from "./v5/rules/governingGoals";
+import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
+import type { NppBehaviorPolicy } from "@/lib/singleplayerDifficulty/rules/behavior";
 
 /** Map a position metric to its agenda domain, or null if it has no mapping. */
 function domainForMetric(category: string, metricId: string): string | null {
@@ -168,6 +171,14 @@ export function planMinisterialActions(params: {
   actionsAvailable: number;
   /** Current `domain → health`; items already at/above target are not pursued. */
   domainHealth?: Record<string, number>;
+  /**
+   * V5 commitment hold. Supplied only at v5: the minister keeps its standing
+   * tier unless the brief is materially failing (`shortfall` against
+   * `policy.replanShortfallThreshold`), an emergency has arrived, or the
+   * standing tier has stopped advancing the agenda at all. Omitted below v5, so
+   * the tier decision is byte-identical to v4.
+   */
+  commitment?: { shortfall: number; policy: NppBehaviorPolicy };
 }): MinisterialPlan {
   const {
     agenda,
@@ -178,6 +189,7 @@ export function planMinisterialActions(params: {
     activeOrderIds,
     actionsAvailable,
     domainHealth,
+    commitment,
   } = params;
   const positionMetrics: MetricConfig[] = [
     ...mechanics.nationalMetrics,
@@ -209,15 +221,35 @@ export function planMinisterialActions(params: {
   let tier: string | null = null;
   if (mechanics.tierSetting) {
     let best: { id: string; score: number } | null = null;
+    let currentScore = 0;
     for (const option of mechanics.tierSetting.options) {
       const effects = Object.entries(option.effects).map(([metric, modifier]) => ({
         metric,
         modifier,
       }));
       const score = scoreLeverAlignment(effects, positionMetrics, agendaByDomain);
+      if (option.id === currentTier) currentScore = score;
       if (!best || score > best.score) best = { id: option.id, score };
     }
     if (best && best.score > 0 && best.id !== currentTier) tier = best.id;
+    // V5 anti-oscillation: the 24-turn cooldown below stops per-turn churn, but
+    // once it lapses a minister would otherwise flip posture on any marginal
+    // score change. A standing commitment is kept unless there is a reason to
+    // break it.
+    if (
+      tier &&
+      commitment &&
+      ministerialCommitmentHolds({
+        currentTier,
+        bestTier: tier,
+        currentScore,
+        shortfall: commitment.shortfall,
+        crisis: [...agendaByDomain.values()].some((item) => item.crisis === true),
+        policy: commitment.policy,
+      })
+    ) {
+      tier = null;
+    }
   }
 
   // Orders: rank available, agenda-advancing, not-already-active orders; issue
@@ -286,10 +318,21 @@ async function applyMinisterialPlanForMinister(
     domainHealth: Record<string, number>;
     currentTurn: number;
     now: Date;
+    /** V5 commitment hold for this minister's brief. Omitted below v5. */
+    commitment?: { shortfall: number; policy: NppBehaviorPolicy };
   }
 ): Promise<{ tierSet: boolean; ordersIssued: number }> {
-  const { countryId, minister, mechanics, agenda, personality, domainHealth, currentTurn, now } =
-    args;
+  const {
+    countryId,
+    minister,
+    mechanics,
+    agenda,
+    personality,
+    domainHealth,
+    currentTurn,
+    now,
+    commitment,
+  } = args;
   if (!minister.nppId) return { tierSet: false, ordersIssued: 0 };
 
   const settingsCol = getCabinetSettingsCollection(db);
@@ -314,6 +357,7 @@ async function applyMinisterialPlanForMinister(
     activeOrderIds,
     actionsAvailable: minister.ministerialActions ?? 0,
     domainHealth,
+    commitment,
   });
 
   let tierSet = false;
@@ -398,6 +442,10 @@ export async function runMinisterialGovernance(
   const gov = await getGovernmentFormationsCollection(db).findOne({ _id: countryId });
   if (!gov || gov.status !== "formed") return INACTIVE;
   const agenda = gov.governingAgenda?.items ?? [];
+  // V5: the commitment hold. Loaded once per country per call, not per minister.
+  const commitmentPolicy = (await nppAutonomyAtLeast(db, countryId, "v5"))
+    ? await loadNppBehaviorPolicy(db)
+    : null;
   if (agenda.length === 0) return { ran: true, tiersSet: 0, ordersIssued: 0, reshuffled: 0 };
 
   const membersCol = getCabinetMembersCollection(db);
@@ -433,11 +481,15 @@ export async function runMinisterialGovernance(
 
   let reshuffled = 0;
   const survivors: typeof ministers = [];
+  // Shortfall per surviving minister, computed once here and reused by the V5
+  // commitment hold below rather than recomputed inside the action loop.
+  const shortfallByPosition = new Map<string, number>();
   for (const minister of ministers) {
     const mechanics = getCabinetMechanics(countryId, minister.positionId);
     const shortfall = mechanics
       ? ministerShortfall(positionDomains(mechanics), agendaByDomain, domainHealth)
       : 0;
+    shortfallByPosition.set(minister.positionId, shortfall);
     if (mechanics && shouldReshuffleMinister(shortfall, reshufflePropensity)) {
       await membersCol.deleteOne({ countryId, positionId: minister.positionId });
       reshuffled++;
@@ -473,6 +525,14 @@ export async function runMinisterialGovernance(
       domainHealth,
       currentTurn,
       now,
+      ...(commitmentPolicy
+        ? {
+            commitment: {
+              shortfall: shortfallByPosition.get(minister.positionId) ?? 0,
+              policy: commitmentPolicy,
+            },
+          }
+        : {}),
     });
     if (applied.tierSet) tiersSet++;
     ordersIssued += applied.ordersIssued;
