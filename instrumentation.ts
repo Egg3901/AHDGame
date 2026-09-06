@@ -118,16 +118,20 @@ export async function register() {
       }
     }
 
-    // Check transaction support at boot
-    try {
-      const { assertTransactionSupportAtBoot } = await import("@/lib/db/transactionSupport");
-      await assertTransactionSupportAtBoot();
-      logBootHeap("after transaction-support check");
-    } catch (err) {
-      console.warn(
-        "[db] transaction-support check failed:",
-        err instanceof Error ? err.message : err
-      );
+    // Standalone singleplayer MongoDB does not support transactions. Avoid two
+    // server-selection waits before the first status response by keeping this
+    // hosted deployment check out of local startup entirely.
+    if (hostedBackgroundEnabled) {
+      try {
+        const { assertTransactionSupportAtBoot } = await import("@/lib/db/transactionSupport");
+        await assertTransactionSupportAtBoot();
+        logBootHeap("after transaction-support check");
+      } catch (err) {
+        console.warn(
+          "[db] transaction-support check failed:",
+          err instanceof Error ? err.message : err
+        );
+      }
     }
 
     // Start in-process cron jobs (turn processing, stock exchange, fog of war).
