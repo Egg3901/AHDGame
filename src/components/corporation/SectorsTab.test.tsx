@@ -291,6 +291,33 @@ describe("SectorsTab type rail and dossier", () => {
     expect(screen.queryByRole("tablist", { name: "Operating strategy" })).toBeNull();
   });
 
+  it("still filters the table for a sector type the constants no longer name", () => {
+    // `sectorType` is a plain string on the wire and a row can carry a type
+    // that predates a rename. The chip must still filter, even though there is
+    // no dossier, palette or strategy table to open for it.
+    const legacy = [
+      ...mixedSectors,
+      sector({
+        _id: "x1",
+        sectorType: "shipbuilding" as never,
+        stateId: "ME",
+        stateName: "Maine",
+        displayName: "Bath Yards",
+      }),
+    ];
+    render(<SectorsTab {...baseProps} sectors={legacy} isCeo />);
+    const rail = screen.getByRole("tablist", { name: "Sector type" });
+    const chip = within(rail).getByRole("tab", { name: /shipbuilding/ });
+
+    fireEvent.click(chip);
+    expect(chip.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getAllByText("Bath Yards").length).toBeGreaterThan(0);
+    expect(screen.queryAllByText("Cleveland Works")).toHaveLength(0);
+    // No dossier and no strategy panel: there is nothing known to describe.
+    expect(screen.queryByText(/ division$/)).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "Operating strategy" })).toBeNull();
+  });
+
   it("shows no proposed levers to an outsider", () => {
     render(<SectorsTab {...baseProps} sectors={mixedSectors} isCeo={false} />);
     const rail = screen.getByRole("tablist", { name: "Sector type" });

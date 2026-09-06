@@ -209,34 +209,34 @@ export default function SectorsTab({
     }));
   }, [sectors]);
 
-  // A type chip does two jobs: it filters the table (the old `All types`
-  // select) and it opens that type's dossier. One piece of state drives both,
-  // so the heading, the banner and the rows can never disagree about which
-  // division you are looking at. Empty means "all sectors".
-  // Validated against the types actually owned. Abandoning the last sector of
-  // the open division would otherwise leave `filterType` pointing at a type
-  // that no longer exists: the rail would snap back to "All sectors" while the
-  // table stayed filtered to nothing, showing an empty list with no
-  // explanation. Everything downstream reads this, never the raw state.
-  // Resolved to the element OUT OF `CORPORATION_TYPES`, not cast from the
-  // control's own string. The type filter is set from a `<select>`'s
-  // `e.target.value`, and this value goes on to become the expand modal's
-  // `initialSectorType`, which the modal interpolates into a link href. Passing
-  // the raw string through carried DOM text all the way into a URL
-  // (CodeQL js/xss-through-dom); resolving through the constant means what
-  // flows onward is a compile-time string. The ownership test stays: it must
-  // also be a type this corporation actually operates.
-  const dossierType =
-    filterType && sectorTypes.some((t) => t.value === filterType)
-      ? (CORPORATION_TYPES.find((t) => t === filterType) ?? null)
-      : null;
-  // Every read of the type filter goes through this, never through the raw
-  // state, so a value that has gone stale is simply inert rather than
-  // filtering the table down to nothing. Deliberately NOT healed in an effect:
-  // synchronously clearing state from an effect cascades a second render on
-  // every pass, and there is nothing to heal — the derived value is already
-  // correct.
-  const activeTypeFilter = dossierType ?? "";
+  // A type chip does two jobs, and they have different preconditions.
+  //
+  // Filtering the table only needs the type to be one this corporation owns.
+  // `sectorType` is a plain string on the wire, and a sector can carry a type
+  // that predates a rename — the rail already falls back to the raw value for
+  // its label, exactly like facilityVocabulary and getTypeColor do. Those
+  // chips still have to filter, or they are dead controls.
+  //
+  // Validating against what is owned also stops a stale value from surviving:
+  // abandoning the last sector of the open division would otherwise leave
+  // `filterType` naming a type that no longer exists and filter the table down
+  // to nothing with no explanation. Deliberately not healed in an effect —
+  // clearing state synchronously from one cascades a render every pass, and
+  // the derived value is already correct.
+  const activeTypeFilter =
+    filterType && sectorTypes.some((t) => t.value === filterType) ? filterType : "";
+
+  // Opening a dossier needs more: a KNOWN type, resolved to the element out of
+  // `CORPORATION_TYPES` rather than cast from the control's own string. This
+  // value becomes the expand modal's `initialSectorType`, which the modal
+  // interpolates into a link href, so passing the raw string through carried
+  // DOM text from a `<select>` all the way into a URL (CodeQL
+  // js/xss-through-dom). Resolving through the constant means what flows
+  // onward is a compile-time string. An unowned or unknown type simply gets no
+  // dossier, while the table above still filters.
+  const dossierType = activeTypeFilter
+    ? (CORPORATION_TYPES.find((t) => t === activeTypeFilter) ?? null)
+    : null;
   const dossierSectors = useMemo(
     () => (dossierType ? sectors.filter((s) => s.sectorType === dossierType) : []),
     [sectors, dossierType]
@@ -247,11 +247,17 @@ export default function SectorsTab({
     logisticsStrength,
     hasSecondaryType,
   };
-  const dossierPlural = dossierType ? facilityPlural(dossierType) : "";
+  // Sectors under the current filter, dossier or not, so the header count and
+  // the heading both describe what the table is actually showing.
+  const filteredTypeSectors = useMemo(
+    () => (activeTypeFilter ? sectors.filter((s) => s.sectorType === activeTypeFilter) : sectors),
+    [sectors, activeTypeFilter]
+  );
+  const dossierPlural = activeTypeFilter ? facilityPlural(activeTypeFilter) : "";
   // "Extraction & Mining" is the only type label that carries a second half;
   // "Extraction mines" reads, "Extraction & Mining mines" does not.
-  const dossierHeading = dossierType
-    ? `${(CORPORATION_TYPE_LABELS[dossierType] ?? dossierType).split(" &")[0]} ${dossierPlural}`
+  const dossierHeading = activeTypeFilter
+    ? `${(CORPORATION_TYPE_LABELS[activeTypeFilter as CorporationType] ?? activeTypeFilter).split(" &")[0]} ${dossierPlural}`
     : "Owned Sectors";
 
   const sortedSectors = useMemo(() => {
@@ -294,10 +300,10 @@ export default function SectorsTab({
           <button
             type="button"
             role="tab"
-            aria-selected={!dossierType}
+            aria-selected={!activeTypeFilter}
             onClick={() => setFilterType("")}
             className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-2.5 text-[11px] font-semibold transition-colors ${
-              dossierType
+              activeTypeFilter
                 ? "border-card-border text-muted hover:text-foreground"
                 : "border-muted/50 bg-card-elevated text-foreground"
             }`}
@@ -309,7 +315,7 @@ export default function SectorsTab({
           </button>
           {sectorTypes.map((t) => {
             const palette = sectorTypePalette(t.value);
-            const on = dossierType === t.value;
+            const on = activeTypeFilter === t.value;
             return (
               <button
                 key={t.value}
@@ -409,7 +415,7 @@ export default function SectorsTab({
             </div>
             {/* The type rail above owns this choice once a division is open;
                 two controls for one filter is how they drift apart. */}
-            {!dossierType && (
+            {!activeTypeFilter && (
               <select
                 className="rounded-lg border border-card-border bg-card px-2 py-1.5 text-xs text-foreground"
                 value={activeTypeFilter}
@@ -441,7 +447,7 @@ export default function SectorsTab({
                 className="rounded border border-card-border px-1.5 py-1 text-[10px] text-muted hover:text-foreground"
                 title="Clear the text filter"
               >
-                ✕ {sortedSectors.length}/{dossierType ? dossierSectors.length : sectors.length}
+                ✕ {sortedSectors.length}/{filteredTypeSectors.length}
               </button>
             )}
           </div>
