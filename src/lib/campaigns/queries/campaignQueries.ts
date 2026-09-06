@@ -23,6 +23,7 @@ import {
   legacyManagersAsList,
 } from "@/lib/campaigns/access";
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
+import { buildCampaignStatePresence } from "@/lib/elections/campaignStatePresence";
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
@@ -31,18 +32,12 @@ import {
   getCampaignCurrency,
 } from "@/lib/campaigns/campaignCurrency";
 import type { CampaignData, CampaignBriefing } from "@/lib/campaigns/dto/campaignView";
-import {
-  buildOpsTrees,
-  CAMPAIGN_CATEGORIES,
-  type CampaignUpgrade,
-} from "@/lib/campaigns/dto/campaignView";
+import { buildOpsTrees } from "@/lib/campaigns/dto/campaignView";
 import {
   buildCashRunway,
   buildCoalitionWeakness,
   buildDelegatePath,
-  buildOpsSaturation,
   buildTippingPath,
-  buildTradeoffs,
 } from "@/lib/campaigns/briefing";
 import { getDelegateMajority, resolvePartyFamily } from "@/lib/constants/primaryCalendar";
 import { loadApportionment } from "@/lib/elections/apportionment";
@@ -181,6 +176,38 @@ export async function getCampaignDetail(
         }
       : undefined;
 
+  // Named running mate, for the campaign board's ticket block. Presidential
+  // tickets only, so down-ballot races skip both lookups entirely.
+  let runningMateName: string | null = null;
+  let runningMateCharacterId: string | null = null;
+  if (election?.electionType === "president") {
+    const ticketRow = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .findOne(
+        { electionId: campaign.electionId, characterId: campaign.candidateId },
+        { projection: { runningMateId: 1 } }
+      );
+    if (ticketRow?.runningMateId) {
+      const mate = await db
+        .collection<{ name?: string }>("characters")
+        .findOne({ _id: ticketRow.runningMateId }, { projection: { name: 1 } });
+      if (mate?.name) {
+        runningMateName = mate.name;
+        runningMateCharacterId = ticketRow.runningMateId.toString();
+      }
+    }
+  }
+
+  // Where the candidate is campaigning, and the controls to move there. Only
+  // for the candidate themself: travelling and camping spend that character's
+  // own actions, which is why both routes gate on the authenticated character
+  // rather than on manager access.
+  const viewerIsCandidate =
+    user?.character != null && user.character._id.toString() === campaign.candidateId.toString();
+  const statePresence = viewerIsCandidate
+    ? await buildCampaignStatePresence(db, { election, character: user!.character! })
+    : null;
+
   const base: CampaignData = {
     id: campaign._id.toString(),
     electionId: campaign.electionId.toString(),
@@ -216,6 +243,9 @@ export async function getCampaignDetail(
     // Only the nominee (or an admin) may change managers, and not on an
     // archived campaign. Managers themselves cannot appoint further managers.
     canAppointManagers: (isNominee || isAdmin) && campaign.status !== "archived",
+    runningMateName,
+    statePresence,
+    runningMateCharacterId,
     oppositionTargetId: canSeeExact ? campaign.oppositionTargetId?.toString() || null : null,
     oppositionTargetName: canSeeExact ? campaign.oppositionTargetName : null,
     fogLastUpdated:
@@ -444,8 +474,8 @@ export async function getCampaignDetail(
   // Campaign-room briefing (owner-only, read-only). Composes data the engine /
   // tally already produced — never recomputes vote math. Skipped for archived
   // campaigns (no live plan to brief). Delegate/tipping paths and coalition
-  // weakness are presidential concepts read off the tally; cash runway, ops
-  // saturation, and tradeoffs apply to any race.
+  // weakness are presidential concepts read off the tally; the cash runway
+  // applies to any race.
   const briefing =
     campaign.status === "archived"
       ? undefined
@@ -455,8 +485,6 @@ export async function getCampaignDetail(
           election,
           candidateRow,
           isGeneralPhase,
-          opsTrees,
-          nextUpgradeCosts,
           netPerTurn: toLocal(income) - toLocal(maintenance),
         });
 
@@ -511,8 +539,8 @@ export async function getCampaignDetail(
  * data: the presidential tally (delegate map / per-unit votes / factor ledger),
  * the just-built ops-tree view, and the localized next-upgrade costs. Presidential
  * intel (path + coalition weakness) is loaded only for a president race with a
- * tally; every other campaign still gets cash runway, ops saturation, and
- * tradeoffs. No vote math is recomputed anywhere here.
+ * tally; every other campaign still gets its cash runway. No vote math is
+ * recomputed anywhere here.
  */
 async function buildBriefing(args: {
   db: Db;
@@ -520,23 +548,11 @@ async function buildBriefing(args: {
   election: Election | null;
   candidateRow: ElectionCandidate | null;
   isGeneralPhase: boolean;
-  opsTrees: NonNullable<CampaignData["opsTrees"]>;
-  nextUpgradeCosts: CampaignData["nextUpgradeCosts"];
   netPerTurn: number;
 }): Promise<CampaignBriefing> {
-  const { db, campaign, election, candidateRow, isGeneralPhase, opsTrees, nextUpgradeCosts } = args;
+  const { db, campaign, election, candidateRow, isGeneralPhase } = args;
 
   const cashRunway = buildCashRunway(campaign.funds, args.netPerTurn);
-  const opsSaturation = buildOpsSaturation(opsTrees);
-  const tradeoffs = buildTradeoffs(
-    CAMPAIGN_CATEGORIES.map((cat) => ({
-      key: cat.key,
-      label: cat.label,
-      cost: (nextUpgradeCosts?.[cat.key as keyof NonNullable<typeof nextUpgradeCosts>] ??
-        null) as CampaignUpgrade | null,
-    }))
-  );
-
   let path: CampaignBriefing["path"];
   let coalitionWeakness: CampaignBriefing["coalitionWeakness"] = [];
 
@@ -549,10 +565,12 @@ async function buildBriefing(args: {
       // id, not the character identity id — resolve the owner's row id.
       const ownerTallyId = candidateRow?._id.toString() ?? null;
 
-      const ownerNational = tally.factorLedger?.byCandidateNational.find(
-        (c) => c.candidateId === ownerTallyId
+      // The whole field, so "weak" can mean a bucket the owner is losing rather
+      // than merely a small one. Only the owner's own shares are emitted.
+      coalitionWeakness = buildCoalitionWeakness(
+        tally.factorLedger?.byCandidateNational,
+        ownerTallyId
       );
-      coalitionWeakness = buildCoalitionWeakness(ownerNational?.bucketAppeal);
 
       const gameState = await db
         .collection<{ _id: string; preset?: string; currentYear?: number }>("gameState")
@@ -600,8 +618,6 @@ async function buildBriefing(args: {
     ...(path ? { path } : {}),
     cashRunway,
     coalitionWeakness,
-    opsSaturation,
-    tradeoffs,
   };
 }
 

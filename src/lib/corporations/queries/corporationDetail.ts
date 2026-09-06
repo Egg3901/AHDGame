@@ -49,7 +49,6 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import { perTurnCouponPayment } from "@/lib/constants/bonds";
 import { getBondIssuerDisplayName } from "@/lib/bonds/sovereign";
-import { loyaltyLabel } from "@/lib/market/brandLoyalty";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
   getForeignTariffMarginModifier,
@@ -69,10 +68,7 @@ import {
   fxRateForCorpFromMap,
   loadValuationFxRates,
   resolveCorpLiquidCurrencyCode,
-  resolveSectorHostCurrencyCode,
-  fxRateForSectorHostFromMap,
 } from "@/lib/currency/corporationCapital";
-import { readCorpEconomicAnchor, writeCorpEconomicLocal } from "@/lib/currency/corpEconomyFields";
 import {
   CORPORATION_TYPE_LABELS,
   TURNS_PER_DAY,
@@ -440,6 +436,10 @@ async function buildHostileTakeoverEligibility(
   return null;
 }
 
+import { buildSectorCurrencyRestatement } from "./corporationDetail/currencyRestatement";
+import { computeRevenueRealizationRatio } from "./corporationDetail/realizationRatio";
+import { buildBrandLoyaltyFields } from "./corporationDetail/brandLoyalty";
+
 export async function loadCorporationDetailView(args: {
   db: Db;
   corporation: Corporation;
@@ -652,22 +652,12 @@ export async function loadCorporationDetailView(args: {
   // but sector economic fields are stored in each sector's HOST-state currency.
   // Restate host -> ₳ -> corp so the sector rows, totals, profit, and workers all
   // stay single-currency. Identity for domestic sectors (host == corp).
-  const pageCorpCcy = resolveCorpLiquidCurrencyCode(corporation);
-  const pageCorpRate = fxRateForCorpFromMap(corporation, fxByCurrency);
-  const sectorFieldToAnchor = (
-    amount: number,
-    sector: Pick<CorporateSector, "countryId">
-  ): number =>
-    readCorpEconomicAnchor(
-      amount,
-      resolveSectorHostCurrencyCode(sector, corporation),
-      fxRateForSectorHostFromMap(sector, corporation, fxByCurrency)
-    );
-  const sectorFieldToCorpCcy = (
-    amount: number,
-    sector: Pick<CorporateSector, "countryId">
-  ): number =>
-    writeCorpEconomicLocal(sectorFieldToAnchor(amount, sector), pageCorpCcy, pageCorpRate);
+  const {
+    corpCurrency: pageCorpCcy,
+    corpRate: pageCorpRate,
+    toAnchor: sectorFieldToAnchor,
+    toCorpCurrency: sectorFieldToCorpCcy,
+  } = buildSectorCurrencyRestatement(corporation, fxByCurrency);
 
   const macroByCountry = new Map<string, MacroEconomicValues>(
     federalBudgets.map((b) => [
@@ -827,27 +817,12 @@ export async function loadCorporationDetailView(args: {
   // realization, and keeps every downstream Income Statement line
   // (maintenance, growth cost, regulatory burden, subsidy, profit) internally
   // consistent since they all scale off the same corrected `financialRevenue`.
-  const latestHistoryForRealization = await db
-    .collection<{ revenue?: number }>("corporationHistory")
-    .findOne(
-      { corporationId: corporation._id },
-      { sort: { turn: -1 }, projection: { revenue: 1 } }
-    );
-  const nameplateHourlyRevenueLocal = sectors.reduce((sum, sector) => {
-    const multiplier = getRevenueMultiplier(sector.productionPolicyLevel ?? 0);
-    return sum + (sectorFieldToCorpCcy(sector.revenue, sector) * multiplier) / TURNS_PER_DAY;
-  }, 0);
-  const realizedHourlyRevenueLocal =
-    typeof latestHistoryForRealization?.revenue === "number"
-      ? latestHistoryForRealization.revenue
-      : null;
-  // No history yet (brand-new corp) or a degenerate nameplate total ⇒ no
-  // correction we can trust; fall back to the pre-fix (nameplate) behavior
-  // rather than dividing by ~0 or applying a ratio computed from nothing.
-  const revenueRealizationRatio =
-    realizedHourlyRevenueLocal != null && nameplateHourlyRevenueLocal > 0
-      ? Math.max(0, realizedHourlyRevenueLocal / nameplateHourlyRevenueLocal)
-      : 1;
+  const revenueRealizationRatio = await computeRevenueRealizationRatio(
+    db,
+    corporation,
+    sectors,
+    sectorFieldToCorpCcy
+  );
 
   let totalRevenue = 0;
   let totalMaintenanceCosts = 0;
@@ -2193,23 +2168,7 @@ export async function loadCorporationDetailView(args: {
   // norm are owner-only intel. Everyone else gets the hidden 5-label scale, never
   // the number. Absent ⇒ feature disabled for this corp; omit entirely so the UI
   // hides the indicator rather than showing a misleading 0.
-  const viewerIsOwner =
-    !!viewerUserId &&
-    corporation.userId?.toString() === viewerUserId &&
-    !corporation.countryOwnerId;
-  const brandLoyaltyValue = corporation.brandLoyalty;
-  const brandLoyaltyFields =
-    brandLoyaltyValue != null
-      ? {
-          brandLoyaltyLabel: loyaltyLabel(brandLoyaltyValue),
-          ...(viewerIsOwner
-            ? {
-                brandLoyalty: Math.round(brandLoyaltyValue * 10) / 10,
-                brandPostureNorm: corporation.brandPostureNorm,
-              }
-            : {}),
-        }
-      : {};
+  const brandLoyaltyFields = buildBrandLoyaltyFields(corporation, viewerUserId);
 
   // Corp-level physical P&L rollup (plants only). One object rather than eight
   // loose keys so a client can test `physical != null` as its plants switch and

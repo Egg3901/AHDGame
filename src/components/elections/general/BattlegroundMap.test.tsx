@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { render as rtlRender } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { HoverCard, shadeColorForTier } from "./BattlegroundMap";
+import { HoverCard } from "./BattlegroundMap";
 import enElections from "../../../../messages/en/elections.json";
 
 function render(ui: React.ReactElement) {
@@ -12,44 +12,6 @@ function render(ui: React.ReactElement) {
     </NextIntlClientProvider>
   );
 }
-
-describe("shadeColorForTier", () => {
-  it("safe darkens the base color", () => {
-    const safe = shadeColorForTier("#ff0000", "safe");
-    // r * 0.7 = 178.5 → floor 178 → 0xb2
-    expect(safe).toBe("rgb(178, 0, 0)");
-  });
-
-  it("likely returns the base color unchanged", () => {
-    expect(shadeColorForTier("#0000ff", "likely")).toBe("#0000ff");
-  });
-
-  it("lean lightens toward white (50% blend)", () => {
-    const lean = shadeColorForTier("#0000ff", "lean");
-    // r: 0 + (255-0)*0.5 = 127.5 → 127. g: same. b: 255 + (255-255)*0.5 = 255
-    expect(lean).toBe("rgb(127, 127, 255)");
-  });
-
-  it("tossup tints near-white (85% blend)", () => {
-    const tossup = shadeColorForTier("#0000ff", "tossup");
-    expect(tossup).toBe("rgb(216, 216, 255)");
-  });
-
-  it("falls back to base color for invalid hex", () => {
-    expect(shadeColorForTier("not-a-color", "safe")).toBe("not-a-color");
-  });
-
-  it("each tier produces a visually distinct shade", () => {
-    const base = "#3366ff";
-    const safe = shadeColorForTier(base, "safe");
-    const likely = shadeColorForTier(base, "likely");
-    const lean = shadeColorForTier(base, "lean");
-    const tossup = shadeColorForTier(base, "tossup");
-    expect(safe).not.toBe(likely);
-    expect(likely).not.toBe(lean);
-    expect(lean).not.toBe(tossup);
-  });
-});
 
 describe("HoverCard", () => {
   it("renders state name, candidate rows with shares, and tier line", () => {

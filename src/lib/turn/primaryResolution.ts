@@ -1436,6 +1436,8 @@ async function recordPresidentialStatePollingSnapshots(
           homeState,
           primaryCampaignState: c.primaryCampaignState ?? null,
           primaryCampaignTicks: c.primaryCampaignTicks ?? 0,
+          primarySurgeUsed: c.primarySurgeUsed ?? false,
+          primarySurgeBoost: c.primarySurgeBoost,
         };
       });
       const { byState } = projectPrimaryByState({

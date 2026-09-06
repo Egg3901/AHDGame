@@ -133,6 +133,11 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           .find({ electionId: { $in: activeElectionIds } })
           .toArray();
 
+        // Primary state attacks are NOT applied here. A local attack is scoped
+        // to the state it was bought in and lands through the stagger's own
+        // per-state favourability delta; reading it here as well would move
+        // every state in the country from a purchase that named one.
+
         // Strategic Operations v2 — incoming opposition-research shield.
         // A candidate defended by a campaign whose Media > Rapid Response
         // branch (mediaSpendingTree.c, effectType oppoShieldPct) is unlocked
@@ -246,7 +251,8 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
           updateOne: { filter: { _id: ObjectId }; update: UpdateFilter<ElectionCandidate> };
         }[] = [];
         const passiveEffectsData: {
-          campaign: Campaign;
+          /** Absent on the one pass-level entry: the state-attack drain. */
+          campaign?: Campaign;
           favorabilityChanges: Map<string, { collection: string; amount: number }>;
         }[] = [];
 
@@ -829,7 +835,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
 async function applyPassiveEffectsBulk(
   passiveEffectsData: {
-    campaign: Campaign;
+    campaign?: Campaign;
     favorabilityChanges: Map<string, { collection: string; amount: number }>;
   }[],
   db: ReturnType<typeof getDb> extends Promise<infer T> ? T : never

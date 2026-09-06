@@ -24,6 +24,10 @@ import type {
   MarginInfo,
   MarginTier,
 } from "@/lib/elections/generalViewModel";
+import { shadeColorForTier } from "@/lib/elections/marginTierShade";
+
+/** This map is drawn on the light page ground. */
+const MAP_GROUND = "#ffffff";
 
 /** Translated tier label lookup. Built inline where `t` is available. */
 function tierLabels(t: ReturnType<typeof useTranslations>): Record<MarginTier, string> {
@@ -41,29 +45,6 @@ const TIER_BAND: Record<MarginTier, string> = {
   lean: "5–10pp",
   tossup: "< 5pp",
 };
-
-/**
- * Apply the 4-tier shading to a candidate's party color. Matches the
- * popular-vote shading already used by PresidentialMapWithStateDetail
- * so users see the same visual language across maps.
- */
-export function shadeColorForTier(color: string, tier: MarginTier): string {
-  const r = parseInt(color.slice(1, 3), 16);
-  const g = parseInt(color.slice(3, 5), 16);
-  const b = parseInt(color.slice(5, 7), 16);
-  if ([r, g, b].some(Number.isNaN)) return color;
-  if (tier === "safe") {
-    return `rgb(${Math.floor(r * 0.7)}, ${Math.floor(g * 0.7)}, ${Math.floor(b * 0.7)})`;
-  }
-  if (tier === "likely") {
-    return color;
-  }
-  if (tier === "lean") {
-    return `rgb(${Math.floor(r + (255 - r) * 0.5)}, ${Math.floor(g + (255 - g) * 0.5)}, ${Math.floor(b + (255 - b) * 0.5)})`;
-  }
-  // tossup — nearly white with a tint
-  return `rgb(${Math.floor(r + (255 - r) * 0.85)}, ${Math.floor(g + (255 - g) * 0.85)}, ${Math.floor(b + (255 - b) * 0.85)})`;
-}
 
 /**
  * Compact per-state hover card content rendered as the `tooltipNode` of
@@ -126,7 +107,7 @@ export function BattlegroundMap({
   for (const [stateId, info] of Object.entries(marginByState)) {
     const card = hoverCardByState?.[stateId];
     stateData[stateId] = {
-      color: shadeColorForTier(info.leaderColor, info.tier),
+      color: shadeColorForTier(info.leaderColor, info.tier, MAP_GROUND),
       tooltip: [`${info.leaderId} +${info.margin.toFixed(1)}pp · ${TIER_LABEL[info.tier]}`],
       tooltipNode: card ? <HoverCard data={card} /> : undefined,
     };
@@ -171,7 +152,7 @@ export function BattlegroundMap({
             <span key={tier} className="flex items-center gap-1.5 text-muted">
               <span
                 className="inline-block h-3 w-3 rounded-sm"
-                style={{ backgroundColor: shadeColorForTier("#9CA3AF", tier) }}
+                style={{ backgroundColor: shadeColorForTier("#9CA3AF", tier, MAP_GROUND) }}
               />
               <span>
                 {TIER_LABEL[tier]}{" "}

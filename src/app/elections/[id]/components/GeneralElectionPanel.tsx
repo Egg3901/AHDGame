@@ -58,6 +58,8 @@ export function GeneralElectionPanel({
   clockRows,
   electorate,
   partyDisplayById,
+  showCollegeSummary = true,
+  showTrends = true,
 }: {
   tally: GeneralVotes;
   candidates: CandidateDetail[];
@@ -83,6 +85,21 @@ export function GeneralElectionPanel({
   electorate?: RegionElectorate;
   /** Party abbreviations, from the response's `partyDisplayById`. */
   partyDisplayById?: Record<string, { abbr: string; color: string }>;
+  /**
+   * Whether to draw the electoral-college bar and the per-ticket table.
+   *
+   * False where a caller has already stated both above this panel — the Blend
+   * general screen leads with the college bar and folds each ticket's numbers
+   * into its hero, so this panel repeated the whole standing a second time
+   * further down the same page. The map, the trends and the resolved-race
+   * displays below are not duplicated and still render.
+   */
+  showCollegeSummary?: boolean;
+  /**
+   * Whether to draw the trend charts. False where a caller has given them a
+   * pane of their own, so the page does not plot the same race twice.
+   */
+  showTrends?: boolean;
 }) {
   const router = useRouter();
   const { showToast } = useToast();
@@ -400,7 +417,7 @@ export function GeneralElectionPanel({
         )}
 
         {/* Unified Electoral Vote Distribution Bar */}
-        {electoralVotes && (
+        {showCollegeSummary && electoralVotes && (
           <ElectoralCollegeBar
             sorted={sorted}
             colorMap={colorMap}
@@ -427,35 +444,39 @@ export function GeneralElectionPanel({
           )}
 
         {/* Detailed stats table */}
-        <PresidentialCandidateTable
-          sorted={sorted}
-          colorMap={colorMap}
-          tally={tally}
-          grandTotal={grandTotal}
-          totalVotesCast={totalVotesCast}
-          isEnded={isEnded}
-          electoralVotes={electoralVotes}
-          winnerCandidateId={winnerCandidateId}
-          canEndorse={canEndorse}
-          endorsedCandidateId={endorsedCandidateId}
-          endorsing={endorsing}
-          onEndorse={handleEndorse}
-          canSupport={canSupport}
-          supporting={supporting}
-          onSupport={handleSupportOpen}
-          campaignStrengthOverrides={campaignStrengthOverrides}
-          showCampaignStrength={isPresident}
-        />
+        {showCollegeSummary && (
+          <PresidentialCandidateTable
+            sorted={sorted}
+            colorMap={colorMap}
+            tally={tally}
+            grandTotal={grandTotal}
+            totalVotesCast={totalVotesCast}
+            isEnded={isEnded}
+            electoralVotes={electoralVotes}
+            winnerCandidateId={winnerCandidateId}
+            canEndorse={canEndorse}
+            endorsedCandidateId={endorsedCandidateId}
+            endorsing={endorsing}
+            onEndorse={handleEndorse}
+            canSupport={canSupport}
+            supporting={supporting}
+            onSupport={handleSupportOpen}
+            campaignStrengthOverrides={campaignStrengthOverrides}
+            showCampaignStrength={isPresident}
+          />
+        )}
 
         {/* Charts */}
-        <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
-          <div className="text-sm font-semibold mb-3">Election Trends</div>
-          <GeneralVoteCharts
-            snapshots={tally.turnSnapshots}
-            series={lineSeries}
-            evByTurn={tally.evByTurn}
-          />
-        </div>
+        {showTrends && (
+          <div className="rounded-xl border border-card-border bg-card p-4 sm:p-5">
+            <div className="text-sm font-semibold mb-3">Election Trends</div>
+            <GeneralVoteCharts
+              snapshots={tally.turnSnapshots}
+              series={lineSeries}
+              evByTurn={tally.evByTurn}
+            />
+          </div>
+        )}
 
         {/* Enhanced Resolved Election Display */}
         {isEnded && tally.stateVoteData && (
