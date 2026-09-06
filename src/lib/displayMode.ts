@@ -12,6 +12,20 @@ export function isNativeAppUserAgent(userAgent: string): boolean {
 }
 
 /**
+ * The AHDClient mobile shell (Android and iOS). It keeps the site's own
+ * navbar and footer, unlike the Capacitor app, but must not carry ad slots,
+ * consent prompts or the cookie banner inside an app webview.
+ */
+export function isClientShellUserAgent(userAgent: string): boolean {
+  return userAgent.includes("AHDClient-Mobile/");
+}
+
+/** Any in-app webview: no ads, no consent prompts, no cookie banner. */
+export function isInAppWebViewUserAgent(userAgent: string): boolean {
+  return isNativeAppUserAgent(userAgent) || isClientShellUserAgent(userAgent);
+}
+
+/**
  * True when site chrome (navbar, footer) is suppressed.
  * Matches NavbarWrapper / SiteFooter: `displayMode === "focused"`.
  */

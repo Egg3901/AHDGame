@@ -25,6 +25,7 @@ import {
   recordRoundTrip,
   roundTripProfilingEnabled,
 } from "@/lib/observability/mongoRoundTrips";
+import { isSingleplayer } from "@/lib/singleplayer";
 
 /** Driver chatter that carries no diagnostic value — never instrumented. */
 const IGNORED_COMMANDS = new Set([
@@ -103,12 +104,24 @@ function batchBytes(batch: unknown[]): number {
 let attached = false;
 
 /**
+ * Whether to instrument commands at all. Off under an explicit opt-out, and
+ * off in singleplayer: nothing collects the breadcrumbs there (Sentry is
+ * disabled without a hosting marker), and first-run world creation issues
+ * tens of thousands of commands on a player's machine, where per-command
+ * bookkeeping is pure cost on the critical path.
+ */
+export function mongoMonitorWanted(env: Record<string, string | undefined> = process.env): boolean {
+  if (env.OBSERVABILITY_DB_MONITOR === "false") return false;
+  return !isSingleplayer(env);
+}
+
+/**
  * Attach command-monitoring listeners to a MongoClient. Idempotent and a no-op
  * under test. The client must be created with `monitorCommands: true`.
  */
 export function attachMongoCommandMonitor(client: MongoClient): void {
   if (attached || process.env.NODE_ENV === "test") return;
-  if (process.env.OBSERVABILITY_DB_MONITOR === "false") return;
+  if (!mongoMonitorWanted()) return;
   attached = true;
 
   client.on("commandStarted", (event) => {

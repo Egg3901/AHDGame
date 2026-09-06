@@ -77,7 +77,21 @@ const nextConfig: NextConfig = {
   // bundle small, and the instrumentation it skips (node-cron, auto-seed) is
   // exactly what a local world must not run. Production stays on `next start`
   // for the reasons above.
-  ...(process.env.SINGLEPLAYER === "1" ? { output: "standalone" as const } : {}),
+  ...(process.env.SINGLEPLAYER === "1"
+    ? {
+        output: "standalone" as const,
+        experimental: {
+          // Next preloads every page and route module right after "Ready"
+          // (1,300+ API routes, 200+ pages) with synchronous requires, and no
+          // request is answered until that finishes: measured at 4s on Linux
+          // and 7s on Windows runners. A local player needs a handful of those
+          // modules, so load them on demand and answer at once.
+          // SINGLEPLAYER_PRELOAD_ENTRIES=1 restores the default for the smoke
+          // workflow's measurements.
+          preloadEntriesOnStart: process.env.SINGLEPLAYER_PRELOAD_ENTRIES === "1",
+        },
+      }
+    : {}),
   cleanDistDir: !railwayEnv,
   // The standalone Turbopack build gives an explicitly external MongoDB
   // package a generated require alias. That alias is not emitted into the

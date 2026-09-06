@@ -55,7 +55,7 @@ describe("POST /api/singleplayer/new-game", () => {
   it("keeps the empty body compatible with normal defaults", async () => {
     expect((await POST(request({}))).status).toBe(200);
     expect(mocks.resetAndBootstrapGameWorld).toHaveBeenCalledWith(
-      expect.objectContaining({ preset: "2019-default" })
+      expect.objectContaining({ preset: "2019-default", skipDiagnostic: true, recordRunLog: false })
     );
     expect(mocks.setSingleplayerConfig).toHaveBeenCalledWith(
       expect.anything(),
