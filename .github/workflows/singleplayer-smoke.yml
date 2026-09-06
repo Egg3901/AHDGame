@@ -43,12 +43,22 @@ on:
         description: "Poll the status route directly, as the original launcher did (diagnostic)"
         type: boolean
         default: false
+      app_stdio:
+        description: "Game server stdio: captured pipes, or inherited as the original launcher did (diagnostic)"
+        type: choice
+        options: [pipe, inherit]
+        default: pipe
+      probe_redirect:
+        description: "Probe redirect handling: manual, or follow as the original launcher did (diagnostic)"
+        type: choice
+        options: [manual, follow]
+        default: manual
 
 permissions:
   contents: read
 
 concurrency:
-  group: singleplayer-smoke-${{ github.ref }}-${{ inputs.preload_entries }}-${{ inputs.launcher }}-${{ inputs.probe_timeout_ms }}-${{ inputs.skip_health_probe }}
+  group: singleplayer-smoke-${{ github.ref }}-${{ inputs.preload_entries }}-${{ inputs.launcher }}-${{ inputs.probe_timeout_ms }}-${{ inputs.skip_health_probe }}-${{ inputs.app_stdio }}-${{ inputs.probe_redirect }}
   cancel-in-progress: true
 
 jobs:
@@ -89,3 +99,5 @@ jobs:
           SINGLEPLAYER_READY_TIMEOUT_MS: ${{ inputs.ready_timeout_seconds && format('{0}000', inputs.ready_timeout_seconds) || '120000' }}
           SINGLEPLAYER_PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms || '30000' }}
           SINGLEPLAYER_SKIP_HEALTH_PROBE: ${{ inputs.skip_health_probe && '1' || '0' }}
+          SINGLEPLAYER_APP_STDIO: ${{ inputs.app_stdio || 'pipe' }}
+          SINGLEPLAYER_PROBE_REDIRECT: ${{ inputs.probe_redirect || 'manual' }}

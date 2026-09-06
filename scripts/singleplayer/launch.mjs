@@ -282,6 +282,11 @@ const PORT_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_PORT_TIMEOUT_MS) || 120_
 // the smoke workflow, as is skipping the health probe.
 const PROBE_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_PROBE_TIMEOUT_MS) || 30_000;
 const SKIP_HEALTH_PROBE = process.env.SINGLEPLAYER_SKIP_HEALTH_PROBE === "1";
+// Two more bisect knobs for the smoke workflow, never set by players: run the
+// game server on inherited stdio instead of captured pipes, and let probes
+// follow redirects instead of reporting them.
+const APP_STDIO_INHERIT = process.env.SINGLEPLAYER_APP_STDIO === "inherit";
+const PROBE_REDIRECT = process.env.SINGLEPLAYER_PROBE_REDIRECT === "follow" ? "follow" : "manual";
 const SHUTDOWN_TIMEOUT_MS = 15_000;
 const OUTPUT_TAIL_LINES = 40;
 
@@ -485,7 +490,10 @@ export function portFree(port) {
 export async function probe(url, { fetchImpl = fetch, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
   let res;
   try {
-    res = await fetchImpl(url, { signal: AbortSignal.timeout(timeoutMs), redirect: "manual" });
+    res = await fetchImpl(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: PROBE_REDIRECT,
+    });
   } catch (error) {
     const name = error?.name ?? "";
     if (name === "TimeoutError" || name === "AbortError")
@@ -715,8 +723,11 @@ function startApp() {
     PORT: String(APP_PORT),
     HOSTNAME: "127.0.0.1",
   };
-  const child = spawn(process.execPath, [server], { env, stdio: ["ignore", "pipe", "pipe"] });
-  captureOutput(child, appTail);
+  const child = spawn(process.execPath, [server], {
+    env,
+    stdio: APP_STDIO_INHERIT ? "inherit" : ["ignore", "pipe", "pipe"],
+  });
+  if (!APP_STDIO_INHERIT) captureOutput(child, appTail);
   child.once("exit", (code) => {
     if (!shuttingDown) {
       console.error(`[ahd] app exited unexpectedly (code ${code})`);
