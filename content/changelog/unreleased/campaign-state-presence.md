@@ -1,5 +1,4 @@
 ---
-version: "1.4.52"
 date: 2026-09-04
 title: "Getting to a state, and the levers listed once"
 summary: >-

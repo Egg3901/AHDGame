@@ -1,5 +1,4 @@
 ---
-version: "1.4.53"
 date: 2026-09-04
 title: "Coalition weakness means a group you are losing"
 summary: >-

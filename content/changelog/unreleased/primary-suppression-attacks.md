@@ -1,5 +1,4 @@
 ---
-version: "1.4.55"
 date: 2026-09-04
 title: "One more way to fight a rival in a state"
 summary: >-

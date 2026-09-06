@@ -1,5 +1,4 @@
 ---
-version: "1.4.51"
 date: 2026-09-04
 title: "The home-state surge moves votes"
 summary: >-

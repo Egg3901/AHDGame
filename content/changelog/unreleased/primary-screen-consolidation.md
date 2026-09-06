@@ -1,5 +1,4 @@
 ---
-version: "1.4.50"
 date: 2026-09-04
 title: "The presidential primary reads in one place"
 summary: >-

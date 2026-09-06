@@ -1,5 +1,4 @@
 ---
-version: "1.4.54"
 date: 2026-09-04
 title: "State operations: one hub, and something to do about a rival"
 summary: >-
