@@ -1,3 +1,4 @@
+import { constantPriceOutput } from "./rules/outputVolume";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
@@ -605,6 +606,9 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     prevRealized?: number;
     prevRealizedTurn?: number;
     prevRealizedUnit?: "host";
+    producedUnits?: number;
+    prevOutputEma?: number;
+    prevOutputSnapshots?: Array<{ turn: number; value: number }>;
     prevRevenueEma?: number;
     prevRevenueSnapshots?: Array<{ turn: number; value: number }>;
     prevMetrics?: unknown[];
@@ -629,6 +633,8 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
                 : {}),
             }
           : {}),
+        sectorOutputEma: opts.prevOutputEma,
+        sectorOutputSnapshots: opts.prevOutputSnapshots,
         ...(opts.prevRevenueEma !== undefined ? { sectorRevenueEma: opts.prevRevenueEma } : {}),
         ...(opts.prevRevenueSnapshots !== undefined
           ? { sectorRevenueSnapshots: opts.prevRevenueSnapshots }
@@ -640,6 +646,8 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
         _id: "secA",
         stateId: "s1",
         countryId: opts.countryId ?? "US",
+        sectorType: "manufacturing",
+        producedUnits: opts.producedUnits,
         revenue: opts.revenue,
         ...(opts.realizedRevenue !== undefined ? { realizedRevenue: opts.realizedRevenue } : {}),
         currentGrowthRate: opts.currentGrowthRate,
@@ -774,6 +782,63 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueUnit).toBe("host");
   });
 
+  it("feeds mature constant-price output through the real provider and registry", async () => {
+    const output = constantPriceOutput({ sectorType: "manufacturing", producedUnits: 100 }, 10)!;
+    seedWorld({
+      mode: "plants",
+      revenue: 1000,
+      realizedRevenue: 800,
+      currentGrowthRate: 3,
+      producedUnits: 100,
+      prevRealized: 1000,
+      prevRealizedUnit: "host",
+      prevRevenueEma: 1000,
+      prevRevenueSnapshots: [{ turn: 1, value: 1000 }],
+      prevOutputEma: output,
+      prevOutputSnapshots: [{ turn: 1, value: output }],
+    });
+    const { metricOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(metricOps[0].updateOne.update.$set["economic.sectorGrowth.value"]).toBe(0);
+  });
+
+  it("cold-starts volume separately from the old money trend", async () => {
+    seedWorld({
+      mode: "plants",
+      revenue: 1000,
+      realizedRevenue: 800,
+      currentGrowthRate: 3,
+      producedUnits: 100,
+      prevRealized: 1000,
+      prevRealizedUnit: "host",
+      prevRevenueEma: 1000,
+      prevRevenueSnapshots: [{ turn: 1, value: 1000 }],
+    });
+    const { stateOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    const fields = stateOps[0].updateOne.update.$set;
+    expect(fields.sectorOutputEma).toBeGreaterThan(0);
+    expect(fields.sectorOutputSnapshots).toEqual([{ turn: 10, value: fields.sectorOutputEma }]);
+    expect(fields.sectorRevenueEma).toBe(970);
+  });
+
+  it("discards an incomplete physical history instead of treating missing data as zero output", async () => {
+    seedWorld({
+      mode: "plants",
+      revenue: 1000,
+      currentGrowthRate: 3,
+      prevOutputEma: 500,
+      prevOutputSnapshots: [{ turn: 1, value: 500 }],
+    });
+    const { stateOps } = captureOps();
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(stateOps[0].updateOne.update.$set.sectorOutputEma).toBeUndefined();
+    expect(stateOps[0].updateOne.update.$unset).toMatchObject({
+      sectorOutputEma: "",
+      sectorOutputSnapshots: "",
+    });
+  });
+
   it("seeds a fresh host trend on the legacy-to-host flip", async () => {
     seedWorld({
       mode: "plants",
@@ -806,6 +871,8 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     const { stateOps } = captureOps();
     await runMetricEngine(db as unknown as Db, 10);
     expect(stateOps[0].updateOne.update.$unset).toEqual({
+      sectorOutputEma: "",
+      sectorOutputSnapshots: "",
       sectorRealizedRevenueUnit: "",
       sectorRevenueEma: "",
       sectorRevenueSnapshots: "",

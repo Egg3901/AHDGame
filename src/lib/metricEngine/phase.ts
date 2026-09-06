@@ -1,3 +1,4 @@
+import { sumObservedOutput } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { StateMetrics, GameConfig } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
@@ -264,7 +265,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       .find({})
       .project<PrevMetricsDoc>(PREV_PROJECTION)
       .toArray(),
-    sectorRevenueTaxProvider(db),
+    sectorRevenueTaxProvider(db, turn),
     // Per-country prime rate drives capital investment (P1c-0). Batched here so
     // there is no per-region round trip.
     db.collection<{ _id: string; primeRate?: number }>("centralBanks").find({}).toArray(),
@@ -520,6 +521,19 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       trendActive && revenueEmaNow !== undefined
         ? updateRevenueSnapshots(priorSnapshots, turn, revenueEmaNow)
         : undefined;
+    // Keep physical history separate: comparing a new volume level with an old
+    // money snapshot would create an artificial recession or boom at migration.
+    const outputNow = trendActive ? sumObservedOutput(ownedForState) : null;
+    const outputEmaNow =
+      outputNow !== null ? advanceRevenueEma(finite(state.sectorOutputEma), outputNow) : undefined;
+    const outputTrendBaseline =
+      outputEmaNow !== undefined
+        ? selectRevenueTrendBaseline(state.sectorOutputSnapshots, turn)
+        : null;
+    const outputSnapshots =
+      outputEmaNow !== undefined
+        ? updateRevenueSnapshots(state.sectorOutputSnapshots, turn, outputEmaNow)
+        : undefined;
     const payload: SectorRevenueTaxPayload = {
       owned: ownedForState,
       plantsEnabled: sectorTax.plantsEnabled,
@@ -528,6 +542,8 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       turnsSincePrev: prevRealizedTurn !== undefined ? turn - prevRealizedTurn : undefined,
       revenueEmaNow,
       revenueTrendBaseline,
+      outputEmaNow,
+      outputTrendBaseline,
       unowned: sectorTax.unownedByState.get(state._id) ?? [],
       federalSalesTax:
         sectorTax.federalSalesTaxByCountry.get(countryId) ??
@@ -892,18 +908,26 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
             // Trailing-trend state (host-tagged plants worlds only). The first
             // plants turn is unit-untagged, so this starts one turn later with
             // a clean host-only series.
+            ...(outputEmaNow !== undefined ? { sectorOutputEma: outputEmaNow } : {}),
+            ...(outputSnapshots !== undefined ? { sectorOutputSnapshots: outputSnapshots } : {}),
             ...(revenueEmaNow !== undefined ? { sectorRevenueEma: revenueEmaNow } : {}),
             ...(nextSnapshots !== undefined ? { sectorRevenueSnapshots: nextSnapshots } : {}),
           },
           // Dropping below plants returns the stored one-turn baseline to the
           // legacy unit. Remove the host tag and trend state so a later flip
           // starts a fresh host-only EMA and snapshot log on that exact turn.
-          ...(!sectorTax.plantsEnabled
+          ...(!sectorTax.plantsEnabled || outputEmaNow === undefined
             ? {
                 $unset: {
-                  sectorRealizedRevenueUnit: "" as const,
-                  sectorRevenueEma: "" as const,
-                  sectorRevenueSnapshots: "" as const,
+                  sectorOutputEma: "" as const,
+                  sectorOutputSnapshots: "" as const,
+                  ...(!sectorTax.plantsEnabled
+                    ? {
+                        sectorRealizedRevenueUnit: "" as const,
+                        sectorRevenueEma: "" as const,
+                        sectorRevenueSnapshots: "" as const,
+                      }
+                    : {}),
                 },
               }
             : {}),

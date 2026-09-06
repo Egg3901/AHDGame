@@ -76,6 +76,9 @@ export interface SectorRevenueTaxPayload {
    * the node measures growth over the baseline span instead of annualizing one
    * turn's delta by 48 — the one-turn path stays as the cold-start fallback.
    */
+  /** Constant-price production trend, preferred once a baseline matures. */
+  outputEmaNow?: number;
+  outputTrendBaseline?: RevenueTrendBaseline | null;
   revenueEmaNow?: number;
   revenueTrendBaseline?: RevenueTrendBaseline | null;
 }
@@ -130,7 +133,11 @@ export const sectorGrowthNode: RegistryNode = {
     const trailingSignal = p.plantsEnabled
       ? computeTrailingRevenueGrowthRate(p.revenueEmaNow, p.revenueTrendBaseline, TURNS_PER_YEAR)
       : null;
+    const outputSignal = p.plantsEnabled
+      ? computeTrailingRevenueGrowthRate(p.outputEmaNow, p.outputTrendBaseline, TURNS_PER_YEAR)
+      : null;
     const plantsSignal =
+      outputSignal ??
       trailingSignal ??
       (p.plantsEnabled
         ? computeRealizedRevenueGrowthRate(
