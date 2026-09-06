@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import type { User } from "@/lib/db/types";
-import { isPatreonActive } from "@/lib/db/types";
+import { isPatreonActive, isPlusOrBetter } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
 import { cookies } from "next/headers";
 import { getAuthUserFromToken } from "@/lib/auth";
@@ -33,17 +33,20 @@ export async function GET() {
     }
   );
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 401 });
+  const supporter = isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null);
+  const singleplayerEntitled =
+    Boolean(user.singleplayerEntitledAt) || (supporter && isPlusOrBetter(user.patreonTier ?? null));
 
   return NextResponse.json(
     {
       linked: true,
       displayName: user.displayName || user.username,
-      supporter: isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null),
+      supporter,
       singleplayer: {
-        entitled: Boolean(user.singleplayerEntitledAt),
+        entitled: singleplayerEntitled,
         // A bounded cache keeps officially entitled players working through a
         // short outage without making revocation permanently ineffective.
-        expiresAt: user.singleplayerEntitledAt
+        expiresAt: singleplayerEntitled
           ? new Date(Date.now() + OFFLINE_ENTITLEMENT_GRACE_MS).toISOString()
           : null,
       },
