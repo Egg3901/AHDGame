@@ -31,6 +31,9 @@ import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import { careerArchetypeModifiers } from "@/lib/nppAutonomy/v3/careerArchetype";
 import { identifyOppositionParty } from "@/lib/nppAutonomy/oppositionBehavior";
 import { computeGoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
+import { committedGoalDomains } from "@/lib/nppAutonomy/v5/rules/governingGoals";
+import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
+import type { NppBehaviorPolicy } from "@/lib/singleplayerDifficulty/rules/behavior";
 // The cap/cooldown pair now comes from nppSponsorLimitsForCountry, which selects
 // between the non-player constants and the tighter player-country ones.
 import {
@@ -312,6 +315,8 @@ async function loadGovernmentDirectives(
   fiscalStance?: PersistedFiscalStance;
   governingPartyId?: string | null;
   seatsByParty?: Record<string, number>;
+  /** V5: the domains the government currently holds a persistent goal on. */
+  goalDomains?: ReadonlySet<string>;
 }> {
   const gov = await getGovernmentFormationsCollection(db).findOne(
     { _id: countryId },
@@ -321,6 +326,7 @@ async function loadGovernmentDirectives(
         governingAgenda: 1,
         fiscalStance: 1,
         governingPartyId: 1,
+        governingGoals: 1,
       },
     }
   );
@@ -333,11 +339,15 @@ async function loadGovernmentDirectives(
   // 513/360). A stale zero here would silently suppress the opposition's
   // rival-bill sponsorship (V1.7) every turn.
   const seatsByParty = await tallySeatsByParty(db, countryId);
+  // Absent below v5 (nothing writes it there), so the goal bias is inert.
+  const goals = gov.governingGoals?.goals;
+  const goalDomains = goals && goals.length > 0 ? committedGoalDomains(goals) : undefined;
   return {
     agenda: items && items.length > 0 ? items : undefined,
     fiscalStance: gov.fiscalStance ?? undefined,
     governingPartyId: gov.governingPartyId,
     seatsByParty,
+    goalDomains: goalDomains && goalDomains.size > 0 ? goalDomains : undefined,
   };
 }
 
@@ -399,6 +409,13 @@ interface PartySponsorshipAttempt {
   currentPolicyOptionIds: ReadonlyMap<string, string>;
   agenda?: GoverningAgendaItem[];
   fiscalStance?: PersistedFiscalStance;
+  /** V5: domains carrying a standing government goal; biases selection toward them. */
+  goalDomains?: ReadonlySet<string>;
+  /**
+   * Difficulty behavior policy. `normal` (and every hosted/multiplayer world)
+   * resolves to the shipped selection: every candidate evaluated, no minimum score.
+   */
+  policy: NppBehaviorPolicy;
   /** Log tag distinguishing the governing pass from the opposition pass. */
   tag: string;
   /**
@@ -481,7 +498,14 @@ async function attemptPartySponsorship(a: PartySponsorshipAttempt): Promise<numb
     a.agenda,
     a.fiscalStance,
     a.currentPolicyOptionIds,
-    recentLegislationTypeIds
+    recentLegislationTypeIds,
+    {
+      goalDomains: a.goalDomains,
+      policy: a.policy,
+      // Country + party + turn: one slate per decision, a different one next
+      // decision, and identical on a replay of the same turn.
+      slateSalt: `${countryId}:${party}:${currentTurn}`,
+    }
   );
   if (!selection) {
     console.log(`[nppBillSponsorship] ${countryId} (${tag}): no bill selected`);
@@ -541,6 +565,11 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
   // cooldown back to the flat one the moment the level was raised to v4.
   const autonomyLevel = await getNppAutonomyLevel(db);
   const v3Active = nppAutonomyLevelAtLeast(autonomyLevel, "v3");
+
+  // Difficulty behavior policy — one read for the whole phase, not one per
+  // country. Hosted/multiplayer worlds have no singleplayerConfig and resolve to
+  // `normal`, which is the shipped selection behavior.
+  const behaviorPolicy = await loadNppBehaviorPolicy(db);
 
   // Group nppOfficials by countryId
   const officialsByCountry = new Map<CountryId, ElectedOfficial[]>();
@@ -666,6 +695,7 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       currentPolicyOptionIds,
       v3Active,
       isPlayerCountry,
+      policy: behaviorPolicy,
     };
 
     // Governing party (V1.5 agenda + V1.6 fiscal posture). The party-scoped
@@ -678,6 +708,7 @@ export async function processNppBillSponsorship(ctx: NPPContext): Promise<number
       party: majorityParty,
       agenda: directives.agenda,
       fiscalStance: directives.fiscalStance,
+      goalDomains: directives.goalDomains,
       tag: "gov",
     });
 

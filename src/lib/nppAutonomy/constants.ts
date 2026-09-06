@@ -29,6 +29,16 @@ export const NPP_SPONSOR_AGENDA_WEIGHT = 0.6;
 export const NPP_SPONSOR_FISCAL_WEIGHT = 0.4;
 
 /**
+ * Weight applied to the V5 goal bias: when the government holds a persistent
+ * goal on a bill's policy domain, that bill gets this much extra score on top of
+ * the agenda bias it already earns. Kept below `NPP_SPONSOR_AGENDA_WEIGHT` on
+ * purpose — a standing commitment should tilt a close call toward the domain the
+ * government has actually committed to, not override urgency or platform fit.
+ * Zero contribution below v5, where no goals exist.
+ */
+export const NPP_SPONSOR_GOAL_WEIGHT = 0.3;
+
+/**
  * Maximum number of nppSponsored bills that may be simultaneously active
  * (non-terminal) in a single country before sponsorship is throttled off.
  */
