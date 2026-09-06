@@ -476,7 +476,10 @@ export async function estimateCountryOwnedBudgetNetLocal(
   const [allSectors, fxByCurrency] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ corporationId: { $in: corporationIds } })
+      .find(
+        { corporationId: { $in: corporationIds } },
+        { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+      )
       .toArray(),
     loadFxRatesByCurrency(db),
   ]);

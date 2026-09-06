@@ -528,7 +528,10 @@ export async function fetchMarketSharePercentForSectors(
   const [siblingSectors, unownedDocs, states, fxByCurrency, preset] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ stateId: { $in: stateIds }, sectorType: { $in: types } })
+      .find(
+        { stateId: { $in: stateIds }, sectorType: { $in: types } },
+        { projection: { _id: 1, stateId: 1, sectorType: 1, countryId: 1, revenue: 1 } }
+      )
       .toArray(),
     db
       .collection<UnownedSector>("unownedSectors")

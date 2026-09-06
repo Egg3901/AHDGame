@@ -17,6 +17,12 @@ export interface TurnPhaseTelemetry {
   updatedAt: Date;
   reason: TurnPhaseSkipReason | null;
   message: string | null;
+  /** Mongo commands the phase issued. Always counted; see turnPhaseBudgets.ts. */
+  roundTrips?: number;
+  /** The phase's round-trip budget at the time it ran. */
+  roundTripBudget?: number;
+  /** True when roundTrips exceeded roundTripBudget. Warn-only, never fails the turn. */
+  overBudget?: boolean;
 }
 
 export type TurnPhaseTelemetryMap = Record<string, TurnPhaseTelemetry>;

@@ -33,7 +33,12 @@ import {
   createInitialTurnPhaseStatuses,
   finalizeAbortedPhaseStatuses,
 } from "@/simulation/engine/phaseTelemetry";
-import { formatRoundTripReport, withPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
+import {
+  formatRoundTripReport,
+  resetRoundTripCounts,
+  totalRoundTrips,
+  withPhaseProfiling,
+} from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
@@ -414,6 +419,9 @@ export async function processTurn(): Promise<{
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
     const phaseStatuses = createInitialTurnPhaseStatuses();
     phaseStatusesForFailure = phaseStatuses;
+    // Per-phase Mongo round-trip counts start from zero every turn; runPhase
+    // checks each phase against src/simulation/engine/turnPhaseBudgets.ts.
+    resetRoundTripCounts();
     currentPhaseRef.current = "turn_bootstrap";
 
     const nextTurnNumber = gameState.currentTurn + 1;
@@ -576,6 +584,7 @@ export async function processTurn(): Promise<{
     console.info("[Turn] Completed", {
       turn: context.newTurn,
       durationMs,
+      mongoRoundTrips: totalRoundTrips(),
       characters: context.characters.length,
       warnings: warnings.length,
       fundsGenerated: context.phaseResults.fundGeneration?.totalGenerated ?? 0,

@@ -160,10 +160,12 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
     // production pays (latency per call); documents rank what singleplayer
     // pays (deserialization per document), and one aggregate returning 61k
     // documents is a single round trip.
-    if (roundTripProfilingEnabled()) {
-      const batch = replyBatch(event.reply);
-      recordDocumentsReturned(collection, batch.length, batchBytes(batch));
-    }
+    const batch = replyBatch(event.reply);
+    recordDocumentsReturned(
+      collection,
+      batch.length,
+      roundTripProfilingEnabled() ? batchBytes(batch) : 0
+    );
 
     const span = pendingSpans.get(event.requestId);
     if (span) {

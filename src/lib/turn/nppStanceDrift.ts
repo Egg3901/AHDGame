@@ -106,6 +106,7 @@ export async function processNppStanceDrift(
   const partyByKey = new Map(parties.map((p) => [`${p.countryId}:${p.sequentialId}`, p]));
 
   const legislationTypes = await db
+    // full-read(legislationTypes): deriveDomainPositions derives a stance from every type
     .collection<LegislationType>("legislationTypes")
     .find({})
     .toArray();

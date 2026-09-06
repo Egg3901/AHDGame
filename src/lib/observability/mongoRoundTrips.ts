@@ -20,8 +20,12 @@
  * every frame is driver internals with no application code on it. Take the
  * phase+collection pair and grep for that collection within the phase.
  *
- * Off unless AHD_TURN_ROUNDTRIP_PROFILE=1. When off, every function here is a
- * boolean check on the hot path and nothing is allocated.
+ * Round trips and documents are ALWAYS counted: two map increments per
+ * command, which is what lets `runPhase` compare every phase against its
+ * budget (src/simulation/engine/turnPhaseBudgets.ts) on every turn, in
+ * production, with nothing switched on. Only the BSON byte accounting and
+ * the printed report sit behind AHD_TURN_ROUNDTRIP_PROFILE=1, because sizing
+ * every returned document is far too expensive for the hot path.
  */
 
 import { getAuditRequestContext } from "@/lib/observability/context";
@@ -71,11 +75,21 @@ function state(): ProfilerState {
   return globalThis._ahdRoundTripProfiler;
 }
 
-/** Read once: this is consulted on every Mongo command in the process. */
+/**
+ * Whether the expensive part (byte accounting, printed report) is on. Read
+ * once: this is consulted on every Mongo command in the process.
+ */
 export function roundTripProfilingEnabled(): boolean {
   const s = state();
   if (s.enabled === null) s.enabled = process.env.AHD_TURN_ROUNDTRIP_PROFILE === "1";
   return s.enabled;
+}
+
+/** Drop the per-phase counts. Called at the start of every turn. */
+export function resetRoundTripCounts(): void {
+  const s = state();
+  s.currentPhase = null;
+  s.counts.clear();
 }
 
 /** Test seam: re-read the env flag and drop any collected counts. */
@@ -87,7 +101,6 @@ export function resetRoundTripProfiler(): void {
 }
 
 export function beginPhaseProfiling(phase: string): void {
-  if (!roundTripProfilingEnabled()) return;
   const s = state();
   s.currentPhase = phase;
   if (!s.counts.has(phase)) {
@@ -96,7 +109,6 @@ export function beginPhaseProfiling(phase: string): void {
 }
 
 export function endPhaseProfiling(phase: string): void {
-  if (!roundTripProfilingEnabled()) return;
   // Only clear if this phase is still the open one; phases do not nest, but a
   // late async tail from a previous phase must not blank the current pointer.
   const s = state();
@@ -105,7 +117,6 @@ export function endPhaseProfiling(phase: string): void {
 
 /** Called by the driver command monitor for every non-ignored command. */
 export function recordRoundTrip(collection: string): void {
-  if (!roundTripProfilingEnabled()) return;
   const s = state();
   const entry = phaseEntry(s);
   entry.total += 1;
@@ -159,7 +170,7 @@ function collectionEntry(entry: PhaseCounts, collection: string) {
  * driver monitor with the size of each result batch.
  */
 export function recordDocumentsReturned(collection: string, count: number, bytes = 0): void {
-  if (!roundTripProfilingEnabled() || count <= 0) return;
+  if (count <= 0) return;
   const entry = phaseEntry(state());
   entry.documents += count;
   entry.bytes += bytes;
@@ -210,6 +221,11 @@ export function roundTripReport(topPhases = 20): RoundTripPhaseReport[] {
     }))
     .sort((a, b) => b.bytes - a.bytes || b.documents - a.documents || b.roundTrips - a.roundTrips)
     .slice(0, topPhases);
+}
+
+/** Round trips attributed to one phase so far this turn. */
+export function phaseRoundTrips(phase: string): number {
+  return state().counts.get(phase)?.total ?? 0;
 }
 
 export function totalRoundTrips(): number {

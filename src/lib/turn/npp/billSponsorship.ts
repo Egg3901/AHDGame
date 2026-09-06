@@ -385,10 +385,13 @@ async function loadNationalLegislationTypes(
     "policyOptions.0": { $exists: true },
   };
 
-  return db
-    .collection<LegislationType>("legislationTypes")
-    .find(query as import("mongodb").Filter<LegislationType>)
-    .toArray();
+  return (
+    db
+      // full-read(legislationTypes): bill selection scores every policy option
+      .collection<LegislationType>("legislationTypes")
+      .find(query as import("mongodb").Filter<LegislationType>)
+      .toArray()
+  );
 }
 
 // ── Per-party sponsorship attempt ────────────────────────────────────────────

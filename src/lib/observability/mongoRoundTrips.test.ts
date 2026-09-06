@@ -4,6 +4,7 @@ import {
   endPhaseProfiling,
   formatRoundTripReport,
   recordRoundTrip,
+  phaseRoundTrips,
   recordDocumentsReturned,
   totalBytesReturned,
   resetRoundTripProfiler,
@@ -29,16 +30,21 @@ afterEach(() => {
 });
 
 describe("round-trip profiler", () => {
-  it("stays completely inert unless the flag is set", () => {
+  it("counts round trips even when the flag is off, but reports nothing", () => {
     delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
     resetRoundTripProfiler();
 
     expect(roundTripProfilingEnabled()).toBe(false);
     beginPhaseProfiling("corporationTurn");
     recordRoundTrip("corporations");
+    recordRoundTrip("corporations");
     endPhaseProfiling("corporationTurn");
 
-    expect(totalRoundTrips()).toBe(0);
+    // Counting is always on: runPhase compares every phase against its
+    // round-trip budget on every turn. Only the byte accounting and the
+    // printed report need the flag.
+    expect(phaseRoundTrips("corporationTurn")).toBe(2);
+    expect(totalRoundTrips()).toBe(2);
     expect(formatRoundTripReport()).toBeNull();
   });
 
@@ -214,12 +220,13 @@ describe("document counting", () => {
     expect(totalDocumentsReturned()).toBe(0);
   });
 
-  it("records nothing when profiling is off", () => {
+  it("counts documents when profiling is off; only bytes need the flag", () => {
     delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
     resetRoundTripProfiler();
     recordDocumentsReturned("things", 100);
 
-    expect(totalDocumentsReturned()).toBe(0);
+    expect(totalDocumentsReturned()).toBe(100);
+    expect(totalBytesReturned()).toBe(0);
   });
 });
 

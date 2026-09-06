@@ -78,6 +78,45 @@ The architecture audit runs in `verify` locally and as an advisory step in CI
 (it has known pre-existing findings). New findings your change introduces are
 yours to fix; old ones are not.
 
+## Turn phase performance rules
+
+The hourly turn is the product. Every player waits on it in multiplayer and
+clicks through it in singleplayer, so a phase that quietly gets slower costs
+more than any feature it carries. Two things make a turn slow, and they are
+different on the two deployments:
+
+- **Multiplayer** talks to a remote Mongo, so turn time is round trips times
+  latency. A loop that runs one query per row (an N+1) adds seconds per turn.
+- **Singleplayer** runs Mongo locally, so turn time is CPU, and most of that
+  CPU is decoding BSON. Reading a 31 KB NPP document to use two numbers from it
+  is the cost, not the query.
+
+Rules for anything that runs inside `processTurn`:
+
+1. **Project every read of a fat collection.** `npps` (never load
+   `policies.domainPositions` unless you vote on bills), `corporateSectors`
+   (`buildQueue`, `plantsPnl` only if you advance builds or price plants),
+   `legislationTypes` (`policyOptions` only if you price laws).
+   `src/simulation/engine/turnReadProjections.test.ts` fails the build on an
+   unprojected read of these on the turn path; a full read that is genuinely
+   needed carries a `// full-read(<collection>): <reason>` comment.
+2. **No query per row.** Collect the ids, read once with `$in`, write once with
+   `bulkWrite`. Every phase has a round-trip budget in
+   `src/simulation/engine/turnPhaseBudgets.ts`; `runPhase` counts every Mongo
+   command per phase on every turn and logs a warning, and records
+   `roundTrips` / `overBudget` on the phase telemetry, when a phase exceeds it.
+   If your change legitimately needs more, raise the budget in the same PR with
+   the measurement.
+3. **Measure before and after.** On a local world:
+   `AHD_TURN_ROUNDTRIP_PROFILE=1 npx tsx scripts/perf/one-turn.ts` prints
+   bytes, documents and round trips per phase. To find which call site issues
+   a per-row query: `TRACE_COLLECTIONS=<collection> npx tsx
+scripts/perf/trace-callsites.ts`. For CPU: `--profile out.cpuprofile`.
+   Quote bytes and round trips in the PR; local wall clock is noise.
+4. **Ask whether the work means anything for one player.** Anti-abuse scans,
+   alt detection and similar have nothing to detect in singleplayer and are
+   skipped there; new cross-player subsystems should follow that pattern.
+
 ## What needs an issue before you build
 
 Balance changes (economy constants, election math, demographic weights, action
