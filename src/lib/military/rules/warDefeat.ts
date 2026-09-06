@@ -2,7 +2,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 
-/** A major strategic defeat remains politically visible for three in-game years. */
+/** A resolved defeat remains politically visible for three in-game years. */
 export const WAR_DEFEAT_WINDOW_TURNS = 3 * TURNS_PER_YEAR;
 export const WAR_DEFEAT_PENALTY = -5;
 export const WAR_DEFEAT_PENALTY_CAP = -10;
@@ -21,7 +21,8 @@ export function resolvedWarDefeatEffect(
   if (!Number.isFinite(turn) || !Number.isInteger(turn)) return 0;
   const endTurn = conflict.endTurn;
   const winner = conflict.outcome?.winner;
-  if (!Number.isFinite(endTurn) || !Number.isInteger(endTurn)) return 0;
+  if (typeof endTurn !== "number" || !Number.isFinite(endTurn) || !Number.isInteger(endTurn))
+    return 0;
   if (winner !== "A" && winner !== "B" && winner !== "stalemate") return 0;
   const side = conflict.sideA.countries.includes(countryId)
     ? "A"
