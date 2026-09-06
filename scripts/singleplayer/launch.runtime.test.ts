@@ -237,3 +237,80 @@ describe("launcher process on a silent server", () => {
     expect(output).toContain("[ahd] shutting down");
   }, 30_000);
 });
+
+/**
+ * The control channel: a host writes "shutdown" on stdin and the launcher
+ * must exit 0 after stopping what it started. Here nothing was started (the
+ * database port is "already in use" and the server is a stub), so this pins
+ * the ordering and the exit code; the packaged smoke covers the database's
+ * shutdown command against a real mongod.
+ */
+describe("launcher process shutdown over the control channel", () => {
+  it("exits 0 once readiness was announced and shutdown is requested", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "ahd-launch-stop-"));
+    const stub = path.join(dir, "answering-server.js");
+    writeFileSync(
+      stub,
+      [
+        'const http = require("node:http");',
+        "http",
+        "  .createServer((req, res) => {",
+        '    res.setHeader("content-type", "application/json");',
+        '    if (req.method === "POST") console.log(`stub got ${req.url}`);',
+        '    res.end(req.url === "/api/singleplayer/status" ? \'{"hasWorld":false}\' : \'{"status":"ok"}\');',
+        "  })",
+        "  .listen(Number(process.env.PORT), process.env.HOSTNAME);",
+      ].join("\n")
+    );
+    const mongoStandIn = createTcpServer(() => {});
+    servers.push(mongoStandIn);
+    await new Promise<void>((resolve) => mongoStandIn.listen(0, "127.0.0.1", resolve));
+    const mongoAddress = mongoStandIn.address();
+    const mongoPort = typeof mongoAddress === "object" && mongoAddress ? mongoAddress.port : 0;
+    const appPort = await new Promise<number>((resolve) => {
+      const probe = createTcpServer();
+      probe.listen(0, "127.0.0.1", () => {
+        const address = probe.address();
+        const port = typeof address === "object" && address ? address.port : 0;
+        probe.close(() => resolve(port));
+      });
+    });
+    const child = spawn(
+      process.execPath,
+      [
+        path.join(process.cwd(), "scripts/singleplayer/launch.mjs"),
+        "--home",
+        path.join(dir, "home"),
+        "--port",
+        String(appPort),
+        "--mongo-port",
+        String(mongoPort),
+        "--no-browser",
+      ],
+      {
+        env: { ...process.env, AHD_LAUNCH_LIBRARY: "", SINGLEPLAYER_SERVER_JS: stub },
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
+    let output = "";
+    const exit = new Promise<number | null>((resolve) => child.once("exit", resolve));
+    await new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`never ready:\n${output}`)), 20_000);
+      const consume = (chunk: Buffer) => {
+        output += chunk;
+        if (output.includes(`ready at http://127.0.0.1:${appPort}`)) {
+          clearTimeout(timer);
+          resolve();
+        }
+      };
+      child.stdout.on("data", consume);
+      child.stderr.on("data", consume);
+    });
+    child.stdin.write("shutdown\n");
+    const code = await exit;
+    rmSync(dir, { recursive: true, force: true });
+    expect(code).toBe(0);
+    expect(output).toContain("[ahd] shutting down");
+    expect(output).toMatch(/startup took .*account \d/);
+  }, 40_000);
+});

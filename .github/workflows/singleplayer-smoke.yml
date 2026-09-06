@@ -30,12 +30,25 @@ on:
         description: "Launcher readiness deadline per start"
         type: number
         default: 120
+      launcher:
+        description: "Launcher to run: current, or the one on development (startup only, for bisecting)"
+        type: choice
+        options: [current, original]
+        default: current
+      probe_timeout_ms:
+        description: "Per-probe timeout for the current launcher (diagnostic)"
+        type: number
+        default: 30000
+      skip_health_probe:
+        description: "Poll the status route directly, as the original launcher did (diagnostic)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: singleplayer-smoke-${{ github.ref }}-${{ inputs.preload_entries }}
+  group: singleplayer-smoke-${{ github.ref }}-${{ inputs.preload_entries }}-${{ inputs.launcher }}-${{ inputs.probe_timeout_ms }}-${{ inputs.skip_health_probe }}
   cancel-in-progress: true
 
 jobs:
@@ -63,7 +76,16 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
           NEXT_TELEMETRY_DISABLED: "1"
           SINGLEPLAYER_PRELOAD_ENTRIES: ${{ inputs.preload_entries && '1' || '0' }}
+      - name: Swap in the launcher from development (bisect only)
+        if: inputs.launcher == 'original'
+        shell: bash
+        run: |
+          git fetch --depth 1 origin development
+          git show FETCH_HEAD:scripts/singleplayer/launch.mjs > dist/singleplayer/launch.mjs
+          echo "AHD_SMOKE_STARTUP_ONLY=1" >> "$GITHUB_ENV"
       - name: Boot a world, process a turn, stop and restart it
         run: npm run singleplayer:smoke
         env:
           SINGLEPLAYER_READY_TIMEOUT_MS: ${{ inputs.ready_timeout_seconds && format('{0}000', inputs.ready_timeout_seconds) || '120000' }}
+          SINGLEPLAYER_PROBE_TIMEOUT_MS: ${{ inputs.probe_timeout_ms || '30000' }}
+          SINGLEPLAYER_SKIP_HEALTH_PROBE: ${{ inputs.skip_health_probe && '1' || '0' }}

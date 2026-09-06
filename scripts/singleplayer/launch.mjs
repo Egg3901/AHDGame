@@ -277,7 +277,12 @@ async function extractFromZipByRange(url, wanted, destDir) {
 
 const READY_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_READY_TIMEOUT_MS) || 120_000;
 const PORT_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_PORT_TIMEOUT_MS) || 120_000;
-const PROBE_TIMEOUT_MS = 30_000;
+// A probe never waits less than the deadline allows; 30s absorbs a slow first
+// module load on a cold machine. The env override is a diagnostic knob for
+// the smoke workflow, as is skipping the health probe.
+const PROBE_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_PROBE_TIMEOUT_MS) || 30_000;
+const SKIP_HEALTH_PROBE = process.env.SINGLEPLAYER_SKIP_HEALTH_PROBE === "1";
+const SHUTDOWN_TIMEOUT_MS = 15_000;
 const OUTPUT_TAIL_LINES = 40;
 
 export const PHASES = {
@@ -570,7 +575,8 @@ export async function waitForAnswer(
 export async function waitForGame(base, deadlineMs, options = {}) {
   const timings = {};
   const started = Date.now();
-  timings.code = await waitForAnswer(`${base}/api/health`, "code", deadlineMs, options);
+  if (!(options.skipHealthProbe ?? SKIP_HEALTH_PROBE))
+    timings.code = await waitForAnswer(`${base}/api/health`, "code", deadlineMs, options);
   const remaining = Math.max(Math.min(15_000, deadlineMs), deadlineMs - (Date.now() - started));
   timings.account = await waitForAnswer(
     `${base}/api/singleplayer/status`,
@@ -777,15 +783,71 @@ let app = null;
 const appTail = new OutputTail();
 const mongoTail = new OutputTail();
 
+let gameBase = null;
+let gameReady = false;
+
+/** Resolves when the child exits, or after `ms` if it does not. */
+function exited(child, ms) {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) return resolve(true);
+    const timer = setTimeout(() => resolve(false), ms);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+/**
+ * Stop cleanly, database first.
+ *
+ * Order matters. The game server is asked to run MongoDB's shutdown command,
+ * which flushes the journal and checkpoints; that is the only clean stop on
+ * Windows, where there is no signal to send. A hard stop there loses the last
+ * hundred milliseconds of acknowledged writes, and after "end turn" that is
+ * the write saying the turn finished. The command is issued first so that
+ * even a host that kills this launcher two seconds after asking for shutdown
+ * (the desktop client does) leaves a MongoDB that finishes on its own. Then we
+ * wait for MongoDB to exit before exiting ourselves, so the next start never
+ * finds the previous one still holding the data directory.
+ */
+async function stopEverything(code) {
+  const ownMongo = mongo;
+  let clean = false;
+  if (ownMongo && gameReady && gameBase) {
+    try {
+      const res = await fetch(`${gameBase}/api/singleplayer/shutdown`, {
+        method: "POST",
+        signal: AbortSignal.timeout(5_000),
+      });
+      clean = res.ok;
+      if (!res.ok) log(`the game could not stop the database cleanly (HTTP ${res.status})`);
+    } catch (error) {
+      log(`the game could not stop the database cleanly (${error?.message ?? error})`);
+    }
+  }
+  if (ownMongo) {
+    if (!clean) ownMongo.kill("SIGTERM");
+    const done = await exited(ownMongo, SHUTDOWN_TIMEOUT_MS);
+    if (!done) {
+      log("MongoDB did not stop in time; forcing it");
+      ownMongo.kill("SIGKILL");
+      await exited(ownMongo, 3_000);
+    }
+    log(clean ? "database stopped cleanly" : "database stopped");
+  }
+  app?.kill();
+  await exited(app, 3_000);
+  process.exit(code);
+}
+
 function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   log("shutting down");
-  app?.kill();
-  // SIGTERM gives WiredTiger a clean checkpoint; Windows has no signal so it
-  // is a hard stop there and the journal recovers on the next start.
-  mongo?.kill("SIGTERM");
-  setTimeout(() => process.exit(code), 1500).unref();
+  // Whatever happens above, never outlive the deadline.
+  setTimeout(() => process.exit(code), SHUTDOWN_TIMEOUT_MS + 6_000).unref();
+  void stopEverything(code).catch(() => process.exit(code));
 }
 
 function listenForControl() {
@@ -822,7 +884,9 @@ async function main() {
     await waitForPort(APP_PORT, "server", PORT_TIMEOUT_MS, { onExit: appExit(app) });
     timings.server = Date.now() - at;
     const base = `http://127.0.0.1:${APP_PORT}`;
+    gameBase = base;
     Object.assign(timings, await waitForGame(base, READY_TIMEOUT_MS));
+    gameReady = true;
     log(`startup took ${formatTimings(timings)}`);
     log(`ready at ${base}`);
     if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);

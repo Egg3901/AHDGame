@@ -136,7 +136,7 @@ async function stop(run) {
   return await Promise.race([
     new Promise((resolve) => run.child.once("exit", resolve)),
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`${run.label}: shutdown timed out\n${run.output}`)), 15_000)
+      setTimeout(() => reject(new Error(`${run.label}: shutdown timed out\n${run.output}`)), 30_000)
     ),
   ]);
 }
@@ -177,7 +177,15 @@ function fail(message, run) {
 let running;
 try {
   running = await start("first start");
-  if (!/startup took .*code .*account/.test(running.output))
+  if (process.env.AHD_SMOKE_STARTUP_ONLY === "1") {
+    // Diagnostic mode for the smoke workflow: reaching readiness is the whole
+    // test (used to bisect launcher variants against the same build).
+    console.log("[ahd-smoke] startup-only run reached readiness");
+    await stop(running).catch(() => running.child.kill());
+    running = null;
+    process.exit(0);
+  }
+  if (!/startup took .*account/.test(running.output))
     fail("launcher did not report phase timings", running);
   if (!/Next\.js|Ready in/.test(running.output))
     fail("launcher did not forward the game server's own output", running);
@@ -210,8 +218,16 @@ try {
   if (turn.completed !== 1 || turn.finalTurn !== 2)
     fail(`turn smoke failed: ${JSON.stringify(turn)}`, running);
 
+  // Prove the turn is on disk before anything stops, so a restart failure
+  // can be told apart from a turn that never persisted.
+  const afterTurn = await json(running, "/api/singleplayer/status");
+  if (afterTurn.turn !== 2 || afterTurn.turnInProgress)
+    fail(`turn did not persist before shutdown: ${JSON.stringify(afterTurn)}`, running);
+
   const exitCode = await timed("graceful shutdown", () => stop(running));
   if (exitCode !== 0) fail(`shutdown exit code was ${exitCode}, expected 0`, running);
+  if (!running.output.includes("database stopped cleanly"))
+    fail("MongoDB was not stopped through its shutdown command", running);
   const first = running;
   running = null;
 
