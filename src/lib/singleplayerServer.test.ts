@@ -19,8 +19,12 @@ describe("singleplayer data directory", () => {
   });
 
   it("keeps the CDN mirror inside the data directory", () => {
+    // Against the RESOLVED home, which is what singleplayerHomeDir returns and
+    // what the test above pins. On a POSIX box resolve("/tmp/ahd") is itself,
+    // so joining the raw string passed by coincidence; on Windows the same
+    // path resolves against the current drive and the two stop matching.
     expect(singleplayerCdnDir({ SINGLEPLAYER_HOME: "/tmp/ahd" })).toBe(
-      path.join("/tmp/ahd", "cdn")
+      path.join(path.resolve("/tmp/ahd"), "cdn")
     );
   });
 });

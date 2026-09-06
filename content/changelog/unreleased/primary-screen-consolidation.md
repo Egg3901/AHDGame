@@ -1,0 +1,46 @@
+---
+date: 2026-09-04
+title: "The presidential primary reads in one place"
+summary: >-
+  The primary screen now carries the state board, the carve-up of whichever
+  state you pick, a calendar you can click into, and the two campaign actions
+  that used to live only on the per-party page. Both screens read the same
+  assembly, so their figures cannot disagree, and a state that has already
+  voted shows what happened rather than what was forecast.
+tags: [elections, primaries, president]
+badges: [minor]
+areas: [fullstack]
+era: "Beta 2"
+---
+
+Cut from development.
+
+### Added
+
+- The primary screen has a state board, one tile per contest on your party's
+  calendar, coloured by whoever leads it. A state that has voted is drawn at
+  full strength; the rest are damped, so the colour says who leads and the
+  strength says how settled it is. Picking a tile breaks that state down by
+  candidate underneath.
+- Calendar waves expand into their states, and a state chip and a tile drive
+  the same selection, so the two can never point at different places.
+- Camping in a state and the home-state surge are on the primary screen now,
+  beside the race they act on.
+
+### Fixed
+
+- A state that had already voted showed the forecast for it rather than the
+  count. The map on the per-party page showed the real result while the
+  breakdown beside it still showed the prediction it had superseded. Both now
+  show the count once a contest has run.
+- The home-state surge advertised a boost to your state party organisation of
+  ten. It grants fifteen percent of the vote to you alone, and has since the
+  mechanic changed. The panel says what the action does.
+- States were listed by their two-letter code where their name was expected,
+  so searching the campaign picker for a state by name found nothing.
+- A wave whose contests had all voted could still read as upcoming beside a
+  board that had settled them.
+- The returns ticker was fetched once when the page opened and never again, so
+  it stood still while the race beside it moved.
+- Camping in a state left the panel showing the state you had just left until
+  you navigated away and back.

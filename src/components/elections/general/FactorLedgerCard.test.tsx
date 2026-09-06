@@ -83,8 +83,20 @@ describe("FactorLedgerCard", () => {
   it("shows the bucket-appeal breakdown for an owned candidate", () => {
     render(<FactorLedgerCard data={ledger()} candidates={CANDIDATES} />);
     expect(screen.getByText("Where the support comes from")).toBeTruthy();
-    expect(screen.getByText("race:white")).toBeTruthy();
     expect(screen.getByText(/62\.0/)).toBeTruthy();
+  });
+
+  it("names the people in each bucket rather than printing the engine's key", () => {
+    // `race:white` is an internal id. Reading it off the page asked players to
+    // learn the model's field names to find out whose support this is.
+    render(<FactorLedgerCard data={ledger()} candidates={CANDIDATES} />);
+    expect(screen.getByText("White voters")).toBeTruthy();
+    expect(screen.queryByText("race:white")).toBeNull();
+  });
+
+  it("uses the country's own naming when it has a table", () => {
+    render(<FactorLedgerCard data={ledger()} candidates={CANDIDATES} countryId="US" />);
+    expect(screen.getByText("White voters")).toBeTruthy();
   });
 
   it("offers a selector for every candidate that carries a ledger row", () => {
