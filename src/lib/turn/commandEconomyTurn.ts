@@ -474,6 +474,9 @@ export async function processCommandEconomyTurn(
           // is the whole of the bill at a zero-aggressiveness posture.
           "economicFactors.directedCreditUpkeep": Math.round(upkeepTotal),
         },
+        ...(physicalGap == null
+          ? { $unset: { "economicFactors.physicalDemandSupplyGapPct": "" } }
+          : {}),
       }
     );
     countriesUpdated += 1;

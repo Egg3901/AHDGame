@@ -26,7 +26,7 @@ type BudgetDoc = {
 
 type UpdateOneCall = {
   filter: { _id: ObjectId };
-  update: { $set: Record<string, number> };
+  update: { $set: Record<string, number>; $unset?: Record<string, string> };
 };
 
 function makeBudget(
@@ -63,7 +63,10 @@ function makeDb(
   const updateOnes: UpdateOneCall[] = [];
   const federalBudget = {
     find: () => ({ toArray: async () => budgets }),
-    updateOne: async (filter: { _id: ObjectId }, update: { $set: Record<string, number> }) => {
+    updateOne: async (
+      filter: { _id: ObjectId },
+      update: { $set: Record<string, number>; $unset?: Record<string, string> }
+    ) => {
       updateOnes.push({ filter, update });
       return { matchedCount: 1, modifiedCount: 1 };
     },
@@ -160,6 +163,9 @@ describe("processCommandEconomyTurn", () => {
     ] as const) {
       expect(Number.isFinite(set[key])).toBe(true);
     }
+    expect(cnUpdate!.update.$unset).toEqual({
+      "economicFactors.physicalDemandSupplyGapPct": "",
+    });
   });
 
   it("flag ON + US (market) budget → US is skipped", async () => {
