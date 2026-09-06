@@ -392,7 +392,7 @@ export interface InflationBreakdown {
   policy: number;
   /** Excess annualized M2 growth over real GDP growth. */
   moneySupply?: number;
-  /** Inertia smoothing: pulls toward previous inflation (negative if prev < raw, positive if prev > raw) */
+  /** Net stabilization adjustment: smoothing, mean reversion, limits and rounding. */
   inertia: number;
 }
 
@@ -520,7 +520,6 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   // Without this, an inertia-locked rate (where prev≈raw) never decays.
   const meanReversion = MEAN_REVERSION_COEFF * (targetInflationInput - smoothedRaw);
   const smoothed = smoothedRaw + meanReversion;
-  const inertia = smoothed - rawInflation;
 
   // Per-turn delta clamp: prevents a one-shot wage-growth normalization (or
   // any other large factor shift) from producing a single-turn cliff. The
@@ -538,6 +537,10 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
 
   const rate =
     Math.round(Math.max(MIN_INFLATION, Math.min(MAX_INFLATION, clampedSmoothed)) * 100) / 100;
+  // The explanation must reconcile to the settled rate even when a floor,
+  // ceiling or per-turn limit binds. Keep economic contributions unchanged;
+  // the stabilization row accounts for the complete final adjustment.
+  const inertia = rate - rawInflation;
 
   return {
     rate,
