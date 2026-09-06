@@ -844,6 +844,11 @@ async function stopEverything(code) {
       log(`the game could not stop the database cleanly (${error?.message ?? error})`);
     }
   }
+  // The game server goes as soon as the database has been told to stop. A
+  // host that kills this launcher shortly after asking for shutdown (the
+  // desktop client waits under two seconds) must not leave the server
+  // orphaned on its port while MongoDB finishes checkpointing.
+  app?.kill();
   if (ownMongo) {
     if (!clean) ownMongo.kill("SIGTERM");
     const done = await exited(ownMongo, SHUTDOWN_TIMEOUT_MS);
@@ -854,7 +859,6 @@ async function stopEverything(code) {
     }
     log(clean ? "database stopped cleanly" : "database stopped");
   }
-  app?.kill();
   await exited(app, 3_000);
   process.exit(code);
 }
