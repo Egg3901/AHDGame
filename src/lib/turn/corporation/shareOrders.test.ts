@@ -158,6 +158,18 @@ function setupOpenSellOrder(opts: {
   });
 }
 
+/**
+ * The fill loop reads every pool once up front (`find({})`) rather than one
+ * `findOne` per corporation; mock both so either read path sees the pool.
+ */
+function mockPoolRead(
+  pool: { find: ReturnType<typeof vi.fn>; findOne: ReturnType<typeof vi.fn> },
+  doc: Record<string, unknown>
+): void {
+  pool.findOne.mockResolvedValue(doc);
+  pool.find.mockReturnValue({ toArray: async () => [doc] });
+}
+
 describe("fillPendingShareOrders", () => {
   it("settles queued public-float buys into the currency pool", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
@@ -176,7 +188,7 @@ describe("fillPendingShareOrders", () => {
       charName: "Pool Buyer",
     });
     const pool = db.collection("equityMarketPools");
-    pool.findOne.mockResolvedValue({
+    mockPoolRead(pool, {
       _id: "USD",
       cashLocal: 10_000,
       targetCashLocal: 10_000,
@@ -209,7 +221,7 @@ describe("fillPendingShareOrders", () => {
       heldShares: 10,
     });
     const pool = db.collection("equityMarketPools");
-    pool.findOne.mockResolvedValue({
+    mockPoolRead(pool, {
       _id: "USD",
       cashLocal: 245,
       targetCashLocal: 245,

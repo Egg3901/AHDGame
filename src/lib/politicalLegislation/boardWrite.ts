@@ -94,3 +94,60 @@ export async function applyBoardDelta(
   await db.collection<PoliticalMetricsDoc>("politicalMetrics").bulkWrite(ops);
   return { regionsUpdated: ops.length };
 }
+
+export interface BoardDelta {
+  familyId: string;
+  scoreDelta: number;
+}
+
+/**
+ * Apply per-region VALUE deltas in one read and one write.
+ *
+ * Same arithmetic as calling `applyBoardDelta` once per delta in order (each
+ * step clamps before the next is added), but the SOE mandate loop was doing
+ * exactly that for ~650 region/family pairs a turn, which on a remote Mongo
+ * is ~1,300 serial round trips.
+ */
+export async function applyBoardValueDeltasByRegion(
+  db: Db,
+  deltasByRegion: ReadonlyMap<string, readonly BoardDelta[]>
+): Promise<BoardDeltaResult> {
+  const regionIds = [...deltasByRegion.keys()];
+  if (regionIds.length === 0) return { regionsUpdated: 0 };
+
+  const docs = await db
+    .collection<PoliticalMetricsDoc>("politicalMetrics")
+    .find({ _id: { $in: regionIds } } as Filter<PoliticalMetricsDoc>)
+    .toArray();
+  if (docs.length === 0) return { regionsUpdated: 0 };
+
+  const now = new Date();
+  const ops: AnyBulkWriteOperation<PoliticalMetricsDoc>[] = [];
+  for (const doc of docs) {
+    const deltas = deltasByRegion.get(String(doc._id));
+    if (!deltas || deltas.length === 0) continue;
+    const values = { ...doc.values };
+    let changed = false;
+    for (const { familyId, scoreDelta } of deltas) {
+      if (!Number.isFinite(scoreDelta) || scoreDelta === 0) continue;
+      const id = familyId as PoliticalMetricId;
+      const current = values[id];
+      if (typeof current !== "number" || !Number.isFinite(current)) continue;
+      const next = clampScore(current + scoreDelta);
+      if (next === current) continue;
+      values[id] = next;
+      changed = true;
+    }
+    if (!changed) continue;
+    ops.push({
+      updateOne: {
+        filter: { _id: doc._id },
+        update: { $set: { values, lastUpdated: now } },
+      },
+    });
+  }
+
+  if (ops.length === 0) return { regionsUpdated: 0 };
+  await db.collection<PoliticalMetricsDoc>("politicalMetrics").bulkWrite(ops);
+  return { regionsUpdated: ops.length };
+}
