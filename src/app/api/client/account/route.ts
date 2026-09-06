@@ -35,7 +35,9 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 401 });
   const supporter = isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null);
   const singleplayerEntitled =
-    Boolean(user.singleplayerEntitledAt) || (supporter && isPlusOrBetter(user.patreonTier ?? null));
+    auth.user.isModerator === true ||
+    Boolean(user.singleplayerEntitledAt) ||
+    (supporter && isPlusOrBetter(user.patreonTier ?? null));
 
   return NextResponse.json(
     {

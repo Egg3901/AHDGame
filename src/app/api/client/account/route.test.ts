@@ -81,6 +81,21 @@ describe("GET /api/client/account", () => {
     }
   );
 
+  it("grants singleplayer to moderators without a supporter or manual entitlement", async () => {
+    requireBasicAuth.mockResolvedValueOnce({
+      ok: true,
+      user: { userId: "507f1f77bcf86cd799439011", isModerator: true },
+    });
+    findOne.mockResolvedValueOnce({ username: "Ada", displayName: "Ada" });
+    const { GET } = await import("./route");
+
+    const body = await (await GET()).json();
+
+    expect(body.supporter).toBe(false);
+    expect(body.singleplayer.entitled).toBe(true);
+    expect(Date.parse(body.singleplayer.expiresAt)).toBeGreaterThan(Date.now());
+  });
+
   it("accepts the path-scoped compatibility cookie emitted by the link page", async () => {
     requireBasicAuth.mockResolvedValueOnce({
       ok: false,
