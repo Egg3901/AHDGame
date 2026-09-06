@@ -84,7 +84,7 @@ export function getJwtSecret(): Uint8Array {
   return new TextEncoder().encode(secret);
 }
 
-async function buildCookieOptions(maxAge: number) {
+async function buildCookieOptions(maxAge: number, path = "/") {
   const cookieDomain = await getCookieDomain();
 
   return {
@@ -92,7 +92,7 @@ async function buildCookieOptions(maxAge: number) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax" as const,
     maxAge,
-    path: "/",
+    path,
     ...(cookieDomain ? { domain: cookieDomain } : {}),
   };
 }
@@ -105,6 +105,11 @@ export async function getOAuthStateCookieOptions(maxAge: number = 300) {
 /** Shared auth cookie options - use for all `auth-token` cookie sets. */
 export async function getAuthCookieOptions() {
   return buildCookieOptions(60 * 60 * 24 * 7); // 7 days
+}
+
+/** Compatibility cookie read only by desktop clients at their account endpoint. */
+export async function getDesktopLinkCookieOptions() {
+  return buildCookieOptions(60 * 60 * 24 * 7, "/api/client/account");
 }
 
 /** Shared tracking cookie options - use for all `__ahd_track` cookie sets. */
@@ -224,19 +229,7 @@ export interface AuthUserWithCharacter extends AuthUser {
  * Returns null if token is invalid or missing
  * Note: This only validates the JWT - use getAuthUser() to also verify user exists in DB
  */
-export async function verifyAuth(): Promise<UserPayload | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
-
-  if (!token) {
-    Sentry.addBreadcrumb({
-      category: "auth.verify",
-      level: "info",
-      message: "verifyAuth: no auth-token cookie",
-    });
-    return null;
-  }
-
+export async function verifyAuthToken(token: string): Promise<UserPayload | null> {
   // `jose` throws `JOSEError` (or a subclass like `JWTExpired`,
   // `JWSSignatureVerificationFailed`) when the token itself is bad. Those
   // map to "log this user out" — return null. Anything else (env validation
@@ -273,6 +266,21 @@ export async function verifyAuth(): Promise<UserPayload | null> {
   return parsed.data;
 }
 
+export async function verifyAuth(): Promise<UserPayload | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
+
+  if (!token) {
+    Sentry.addBreadcrumb({
+      category: "auth.verify",
+      level: "info",
+      message: "verifyAuth: no auth-token cookie",
+    });
+    return null;
+  }
+  return verifyAuthToken(token);
+}
+
 /**
  * Resolve the user document for an authenticated session.
  *
@@ -290,6 +298,14 @@ async function resolveUserDoc(db: Db, userId: string): Promise<User | null> {
   const user = await users.findOne({ _id: new ObjectId(userId) });
   if (user) setCachedUser(userId, user);
   return user;
+}
+
+export async function getAuthUserFromToken(token: string): Promise<AuthUser | null> {
+  const payload = await verifyAuthToken(token);
+  if (!payload) return null;
+  const user = await resolveUserDoc(await getDb(), payload.userId);
+  if (!user || user.isBanned === true || isAuthTokenRevoked(user, payload)) return null;
+  return mapUserToAuthUser(user, payload);
 }
 
 /**

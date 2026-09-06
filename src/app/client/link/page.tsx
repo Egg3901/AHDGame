@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getAuthUser } from "@/lib/auth";
+import { DesktopLinkBridge } from "./DesktopLinkBridge";
 
 export default async function ClientLinkPage() {
   const user = await getAuthUser();
@@ -31,6 +32,7 @@ export default async function ClientLinkPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6">
+      <DesktopLinkBridge />
       <section className="w-full max-w-lg rounded-2xl border border-success/30 bg-card p-8 text-center shadow-sm">
         <div
           className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-success/15 text-2xl text-success"

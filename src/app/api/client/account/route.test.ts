@@ -1,9 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 const requireBasicAuth = vi.fn();
+const getAuthUserFromToken = vi.fn();
 const findOne = vi.fn();
+const getCookie = vi.fn();
 
 vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth }));
+vi.mock("@/lib/auth", () => ({ getAuthUserFromToken }));
+vi.mock("next/headers", () => ({ cookies: vi.fn(async () => ({ get: getCookie })) }));
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(async () => ({ collection: () => ({ findOne }) })),
 }));
@@ -47,6 +51,25 @@ describe("GET /api/client/account", () => {
       singleplayer: { entitled: false, expiresAt: null },
     });
     expect(body).not.toHaveProperty("email");
+  });
+
+  it("accepts the path-scoped compatibility cookie emitted by the link page", async () => {
+    requireBasicAuth.mockResolvedValueOnce({
+      ok: false,
+      response: new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 }),
+    });
+    getCookie.mockReturnValueOnce({ value: "bridge-jwt" });
+    getAuthUserFromToken.mockResolvedValueOnce({
+      userId: "507f1f77bcf86cd799439011",
+      username: "Ada",
+    });
+    findOne.mockResolvedValueOnce({ username: "Ada", displayName: "Ada" });
+    const { GET } = await import("./route");
+
+    const result = await GET();
+
+    expect(result.status).toBe(200);
+    expect(getAuthUserFromToken).toHaveBeenCalledWith("bridge-jwt");
   });
 
   it("returns a bounded offline entitlement window only for entitled accounts", async () => {
