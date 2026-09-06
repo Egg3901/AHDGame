@@ -1155,12 +1155,44 @@ export async function snapshotEconomicVitalSigns(
       .toArray(),
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<CommoditySourcingDoc>("commoditySourcingFlows").find({ turn }).toArray(),
-    // `buildQueue` (30%) and `plantsPnl` (15%) are most of the corporateSectors
-    // collection and nothing here reads either. See sectorTurn (writes them)
-    // and analyzeSectorProfitability (the only turn-side plantsPnl reader).
+    // This diagnostics pass needs only commodity-flow inputs, production-health
+    // readings, and the market-formation identity fields below. An exclusion
+    // projection still decoded every other scalar on ~4,500 sectors; this
+    // explicit read contract cuts the local payload from ~6.6MB to ~1.8MB.
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 1,
+            corporationId: 1,
+            countryId: 1,
+            stateId: 1,
+            sectorType: 1,
+            revenue: 1,
+            strategyId: 1,
+            transitionFromStrategyId: 1,
+            transitionStartTurn: 1,
+            capitalStock: 1,
+            producedUnits: 1,
+            mothballed: 1,
+            productionPolicyLevel: 1,
+            embargoSuspended: 1,
+            embargoExportExposure: 1,
+            militaryDivertedFraction: 1,
+            militaryDivertedTurn: 1,
+            throughputFactor: 1,
+            soldUnits: 1,
+            workersDesired: 1,
+            workers: 1,
+            lowFillTurns: 1,
+            stockpileUnsold: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        }
+      )
       .toArray(),
     db.collection<StockExchangeSnapshot>("stockExchangeSnapshots").findOne({ _id: "global" }),
     db

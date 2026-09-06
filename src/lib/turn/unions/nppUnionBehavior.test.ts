@@ -112,6 +112,9 @@ function mockDb({
     return {};
   });
   const unionsUpdateMany = vi.fn().mockResolvedValue({});
+  const sectorsFind = vi
+    .fn()
+    .mockImplementation(() => ({ toArray: () => Promise.resolve(sectors) }));
 
   const db = {
     collection: (name: string) => {
@@ -131,7 +134,7 @@ function mockDb({
       if (name === "corporateSectors") {
         return {
           aggregate: () => ({ toArray: () => Promise.resolve([]) }),
-          find: () => ({ toArray: () => Promise.resolve(sectors) }),
+          find: sectorsFind,
           bulkWrite: vi.fn().mockResolvedValue({}),
         };
       }
@@ -148,7 +151,7 @@ function mockDb({
     },
   } as unknown as Db;
 
-  return { db, unionsBulkWrite, unionsUpdateMany };
+  return { db, unionsBulkWrite, unionsUpdateMany, sectorsFind };
 }
 
 describe("processNppUnionBehavior", () => {
@@ -249,7 +252,7 @@ describe("processNppUnionBehavior", () => {
       ceoType: "character",
       ceoId: new ObjectId(),
     } as Corporation;
-    const { db } = mockDb({
+    const { db, sectorsFind } = mockDb({
       unions: [ledUnion],
       npps: [leader],
       sectors: [sector],
@@ -259,6 +262,21 @@ describe("processNppUnionBehavior", () => {
     const result = await processNppUnionBehavior(db, 10);
 
     expect(result.campaignsOpened).toBe(1);
+    expect(sectorsFind).toHaveBeenCalledWith(
+      {},
+      expect.objectContaining({
+        projection: {
+          _id: 1,
+          corporationId: 1,
+          countryId: 1,
+          sectorType: 1,
+          workers: 1,
+          unionization: 1,
+          wageLevel: 1,
+          profitMargin: 1,
+        },
+      })
+    );
     expect(openBargainingCampaignFromLiveConditions).toHaveBeenCalledWith(
       db,
       ledUnion,
