@@ -21,7 +21,13 @@ import { COUNTRY_CURRENCY_MAP, INITIAL_RATES } from "@/lib/constants/currencies"
 import { getWealthBonus, type WealthLevel } from "@/lib/constants/characterWealth";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
-import type { CountryId } from "@/lib/constants/countries";
+import { type CountryId } from "@/lib/constants/countries";
+import type { SingleplayerConfig } from "@/lib/db/types";
+import { isSingleplayer } from "@/lib/singleplayer";
+import {
+  getSingleplayerHeadOfStateOfficeType,
+  seatSingleplayerHeadOfState,
+} from "@/lib/singleplayerHeadOfState";
 import { validateStatAllocation } from "@/lib/stats/validateStatAllocation";
 import { isRpgStatsEnabled } from "@/lib/stats/featureFlag";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
@@ -109,6 +115,30 @@ export async function POST(request: Request) {
     }
 
     const db = await getDb();
+    const worldPreset = await getGameStatePresetOrDefault(db);
+
+    const singleplayerConfig = isSingleplayer()
+      ? (
+          await db
+            .collection<{ _id: string; singleplayerConfig?: SingleplayerConfig }>("gameState")
+            .findOne({ _id: "current" }, { projection: { singleplayerConfig: 1 } })
+        )?.singleplayerConfig
+      : undefined;
+    if (singleplayerConfig?.mode === "head-of-state") {
+      const countryId = requestedCountryId.toUpperCase() as CountryId;
+      if (!getSingleplayerHeadOfStateOfficeType(countryId, worldPreset)) {
+        return NextResponse.json(
+          { error: "Head of State mode requires a nation with a playable head-of-state office." },
+          { status: 400 }
+        );
+      }
+    }
+    if (singleplayerConfig?.mode === "worldsim") {
+      return NextResponse.json(
+        { error: "Worldsim mode is playerless and does not allow character creation." },
+        { status: 409 }
+      );
+    }
 
     // Verify state exists, scoped to the country the user picked at registration.
     const stateDoc = await db.collection<State>("states").findOne({
@@ -184,7 +214,6 @@ export async function POST(request: Request) {
     const isReferred = !!userDoc?.referredBy;
     // Era money: a 1953 world's economy is ~70x smaller in nominal terms, and
     // corp founding costs deflate with this, so the two stay in proportion.
-    const worldPreset = await getGameStatePresetOrDefault(db);
     const REFERRAL_PERSONAL_CAPITAL_BONUS = getEraNominalAmount(500_000, worldPreset);
 
     // Wealth background sets personal cash only; campaign funds are flat from gameConfig.
@@ -214,6 +243,7 @@ export async function POST(request: Request) {
 
     const character: Omit<Character, "_id"> = {
       userId: new ObjectId(userId),
+      ...(singleplayerConfig?.mode === "head-of-state" ? { singleplayerHeadOfState: true } : {}),
       name,
       homeState,
       countryId,
@@ -357,6 +387,15 @@ export async function POST(request: Request) {
       }
     }
     const characterId = result.insertedId;
+
+    if (singleplayerConfig?.mode === "head-of-state") {
+      await seatSingleplayerHeadOfState(db, {
+        characterId,
+        countryId,
+        now: new Date(),
+        preset: worldPreset,
+      });
+    }
 
     // Reward referrer: +10 actions, +$500k personal capital, increment referralCount
     if (isReferred && userDoc?.referredBy) {
