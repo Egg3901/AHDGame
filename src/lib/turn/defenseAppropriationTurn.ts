@@ -10,7 +10,7 @@ import {
   settleAppropriation,
   type AppropriationSettlement,
 } from "@/lib/military/appropriation";
-import { seedRosterUpkeepFor } from "@/lib/military/seedRosterUpkeep";
+import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { resolveDefenseLineFrom } from "./defenseEnvelope";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import {
@@ -88,7 +88,7 @@ export async function applyDefenseAppropriation(
     settlement = settleAppropriation(
       pot.balance,
       accrualPerTurn(line),
-      upkeepPerTurn(totalUpkeep, seedRosterUpkeepFor(preset, countryId), line),
+      upkeepPerTurn(totalUpkeep, await resolveSeedRosterUpkeep(db, preset, countryId), line),
       overdraftFloor(line)
     );
     settled = await applyAppropriationSettlementWithOverdraft(
