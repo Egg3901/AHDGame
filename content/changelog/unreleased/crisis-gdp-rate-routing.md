@@ -1,5 +1,4 @@
 ---
-version: "1.4.64"
 date: 2026-09-06
 title: Crisis GDP rate shocks now survive the metric engine
 summary: >-
