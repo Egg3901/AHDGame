@@ -57,7 +57,6 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import { seedFomcBoards } from "@/lib/centralBank/seedFomcBoard";
 import { scrutinyAfterRevocation } from "@/lib/centralBank/independence";
 import { createSystemNewsPost } from "@/lib/news";
-import { recordPolicyReaction } from "@/lib/policyReactions";
 import { validateFederalBudgetImpact } from "@/lib/budget/validation";
 import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
@@ -637,7 +636,6 @@ export async function onBillEnacted(
   }
 
   // Record policy reactions for all provisions
-  await recordPolicyReaction(db, bill, stateId, currentTurn);
 
   // Refund proposal costs to the sponsor (capped at action cap; NPI has no hard cap)
   if (bill.sponsorId && (bill.proposalNpiCost || bill.proposalActionCost)) {
@@ -807,6 +805,10 @@ async function processProvisionEnactment(
   const statePolicy: Omit<StatePolicy, "_id"> = {
     scope,
     stateId,
+    // Region ids are globally unique today, but the (stateId, legislationTypeId)
+    // key says nothing about the country; stamp it so a future seed that reuses
+    // an abbreviation, or a country merge, cannot collide two countries' rows.
+    countryId: countryId ?? inferCountryIdFromStateId(stateId) ?? undefined,
     legislationTypeId: provision.legislationTypeId,
     // Slider laws have no options ladder — keep the provision's rate-encoded
     // "rate:<value>" id so the enacted rate is readable from statePolicies.

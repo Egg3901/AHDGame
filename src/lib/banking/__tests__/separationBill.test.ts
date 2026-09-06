@@ -12,9 +12,6 @@ import { bankingSeparationLegislationTypes } from "@/lib/seeds/shared/bankingSep
 import { legislationTypes } from "@/lib/seeds/reference/legislationTypes";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/policyReactions", () => ({
-  recordPolicyReaction: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/budget/enactedLaws", () => ({
   recordEnactedLaw: vi.fn().mockResolvedValue(undefined),
 }));

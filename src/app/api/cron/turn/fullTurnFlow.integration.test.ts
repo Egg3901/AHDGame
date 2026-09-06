@@ -109,9 +109,6 @@ vi.mock("@/lib/utils/approvalSnapshotRun", () => ({
 vi.mock("@/lib/demographicEffects", () => ({
   processAllStateDemographics: vi.fn(),
 }));
-vi.mock("@/lib/policyReactions", () => ({
-  decayPolicyReactions: vi.fn(),
-}));
 vi.mock("@/lib/time/gameTime", () => ({
   invalidateGameTimeCache: vi.fn(),
   reconcileGameStateClock: vi.fn(async (gameState) => ({
@@ -280,9 +277,6 @@ describe("processTurn() — full turn flow", () => {
 
     const demographicEffects = await import("@/lib/demographicEffects");
     vi.mocked(demographicEffects.processAllStateDemographics).mockResolvedValue(undefined as never);
-
-    const policyReactions = await import("@/lib/policyReactions");
-    vi.mocked(policyReactions.decayPolicyReactions).mockResolvedValue(undefined as never);
   });
 
   it("returns success=true with incremented turn number", async () => {
