@@ -3,6 +3,9 @@ import {
   STATE_ARMS_INDUSTRY,
   stateArmsLotsPerTurn,
   stateArmsAllocation,
+  materielFloor,
+  MATERIEL_FLOOR_LOTS,
+  type DomainDemand,
 } from "./stateArmsIndustry";
 
 /**
@@ -72,5 +75,56 @@ describe("state arms allocation", () => {
     };
     expect(stateArmsAllocation(2, tied)).toEqual(stateArmsAllocation(2, tied));
     expect(stateArmsAllocation(2, tied)?.domain).toBe("air");
+  });
+});
+
+describe("materielFloor", () => {
+  const domains = (over: Record<string, Partial<DomainDemand>> = {}) => {
+    const base: Record<string, DomainDemand> = {
+      ground: { need: 10, ceiling: 40, stock: 0 },
+      naval: { need: 4, ceiling: 20, stock: 6 },
+    };
+    for (const [k, v] of Object.entries(over)) base[k] = { ...base[k], ...v };
+    return base;
+  };
+
+  it("gives a market economy one lot when a store has reached zero", () => {
+    const f = materielFloor("US", domains());
+    expect(f.lots).toBe(MATERIEL_FLOOR_LOTS);
+    expect(Object.keys(f.domains)).toEqual(["ground"]);
+  });
+
+  it("reaches only the empty domains, so it cannot fill a store", () => {
+    // The allocator fills toward a domain's CEILING. Handing it the stocked naval domain
+    // would turn one lot a turn into a second supply line, which is the thing the defence
+    // contract pipeline exists to be.
+    const f = materielFloor("US", domains());
+    expect(f.domains.naval).toBeUndefined();
+    const alloc = stateArmsAllocation(f.lots, f.domains);
+    expect(alloc).toEqual({ domain: "ground", lots: 1 });
+  });
+
+  it("switches itself off once the store is no longer empty", () => {
+    // One lot arrives, and next turn there is nothing for the floor to do. This is what
+    // makes it a floor rather than a rate.
+    const f = materielFloor("US", domains({ ground: { stock: 1 } }));
+    expect(f.lots).toBe(0);
+  });
+
+  it("does not fire for a domain that needs nothing", () => {
+    const f = materielFloor("US", domains({ ground: { stock: 0, need: 0 } }));
+    expect(f.lots).toBe(0);
+  });
+
+  it("leaves the planned economies entirely alone", () => {
+    // RU and DD have their own rate and must not also draw the floor.
+    for (const c of ["RU", "DD"]) {
+      expect(materielFloor(c, domains()).lots).toBe(0);
+      expect(stateArmsLotsPerTurn(c)).toBeGreaterThan(0);
+    }
+  });
+
+  it("is a third of the Soviet rate, so planned production keeps its advantage", () => {
+    expect(MATERIEL_FLOOR_LOTS).toBeLessThan(stateArmsLotsPerTurn("RU"));
   });
 });

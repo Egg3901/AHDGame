@@ -8,6 +8,7 @@ import { lotsRequired, lotsToFillUnit } from "@/lib/military/arsenal";
 import {
   stateArmsLotsPerTurn,
   stateArmsAllocation,
+  materielFloor,
   type DomainDemand,
 } from "@/lib/military/stateArmsIndustry";
 
@@ -32,22 +33,33 @@ export interface StateArmsResult {
  * Runs BEFORE `applyDefenceRefit` in the turn order, for the same reason delivery does:
  * materiel has to be in the store before it can be issued, or every lot idles a turn.
  *
- * Countries not on the roster return without a read beyond their own units, so this costs
- * a market economy nothing.
+ * A market economy is not on the roster and gets no rate, but it does get the emergency
+ * FLOOR (`materielFloor`): one lot into a domain whose store has reached zero, which
+ * switches itself off the moment the store is no longer empty. Without it a nation with
+ * no contract pipeline running has no route back from 0/0/0 equipment at all, which is
+ * where the United States finished the War for Germany.
+ *
+ * The arsenal is read BEFORE the roster so the floor stays cheap: a market economy whose
+ * stores all hold something cannot reach the floor, and returns on one small document
+ * without ever listing its units.
  */
 export async function applyStateArmsProduction(
   db: Db,
   countryId: string
 ): Promise<StateArmsResult> {
-  const lotsPerTurn = stateArmsLotsPerTurn(countryId);
-  if (lotsPerTurn <= 0) return { lots: 0, domain: null };
+  const planned = stateArmsLotsPerTurn(countryId);
+  const arsenal = await getNationalArsenal(db, countryId);
+
+  // Nothing to do for a market economy that is not actually out of anything. `stock` always
+  // carries all six domains (EMPTY_ARSENAL_STOCK), so this is a complete test.
+  if (planned <= 0 && Object.values(arsenal.stock).every((n) => n > 0)) {
+    return { lots: 0, domain: null };
+  }
 
   const units = (await getMilitaryUnitsCollection(db)
     .find({ countryId: countryId as CountryId })
     .toArray()) as MilitaryUnit[];
   if (units.length === 0) return { lots: 0, domain: null };
-
-  const arsenal = await getNationalArsenal(db, countryId);
 
   // What each domain still needs to top its formations up, and the size of one full
   // re-equip of that domain's roster, which is as much as the store may bank.
@@ -67,7 +79,13 @@ export async function applyStateArmsProduction(
     d.ceiling += full;
   }
 
-  const allocation = stateArmsAllocation(lotsPerTurn, domains);
+  // Planned production reaches every domain below its ceiling. The floor reaches only the
+  // empty ones, which is what stops one lot a turn becoming a second supply line.
+  const floor = planned > 0 ? null : materielFloor(countryId, domains);
+  const allocation = stateArmsAllocation(
+    planned > 0 ? planned : (floor?.lots ?? 0),
+    planned > 0 ? domains : (floor?.domains ?? {})
+  );
   if (!allocation || allocation.lots <= 0) return { lots: 0, domain: null };
 
   await depositLots(

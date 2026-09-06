@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { ConflictSide } from "@/lib/db/types/conflict";
+import { OCCUPATION } from "./config";
 import {
   sideOf,
   initialControl,
@@ -352,5 +353,49 @@ describe("progressForSide", () => {
     // Half the remaining ground taken is half the progress, wherever it started.
     expect(progressForSide("A", 50, 100)).toBeCloseTo(0.5);
     expect(progressForSide("A", 25, 50)).toBeCloseTo(0.5);
+  });
+});
+
+describe("mobilisation ramp", () => {
+  const shift = (turnsElapsed?: number) =>
+    Math.abs(
+      50 -
+        occupationShift({
+          control: 50,
+          winner: "B",
+          margin: OCCUPATION.decisiveMargin,
+          loserRetreated: false,
+          turnsElapsed,
+        })
+    );
+
+  it("moves the front at the floor rate on the turn war is declared", () => {
+    expect(shift(0)).toBeCloseTo(OCCUPATION.maxShift * OCCUPATION.mobilizationFloor, 6);
+  });
+
+  it("reaches full pace at the end of the window and stays there", () => {
+    expect(shift(OCCUPATION.mobilizationTurns)).toBeCloseTo(OCCUPATION.maxShift, 6);
+    expect(shift(OCCUPATION.mobilizationTurns * 10)).toBeCloseTo(OCCUPATION.maxShift, 6);
+  });
+
+  it("ramps monotonically rather than stepping", () => {
+    const steps = [0, 10, 25, 40, 50].map(shift);
+    for (let i = 1; i < steps.length; i++) expect(steps[i]).toBeGreaterThan(steps[i - 1]);
+  });
+
+  it("treats an undated war as full pace, so it can only ever slow a front", () => {
+    expect(shift(undefined)).toBeCloseTo(OCCUPATION.maxShift, 6);
+  });
+
+  it("treats an unusable age as undated rather than writing NaN into control", () => {
+    // `startTurn` is typed required but a document written before it existed has none,
+    // and `currentTurn - undefined` is NaN. Unguarded that reached `control` itself and
+    // every comparison against the front position silently went false.
+    expect(shift(NaN)).toBeCloseTo(OCCUPATION.maxShift, 6);
+    expect(Number.isFinite(shift(Infinity))).toBe(true);
+  });
+
+  it("reads a negative age as the opening turn, not as a reversal", () => {
+    expect(shift(-5)).toBeCloseTo(shift(0), 6);
   });
 });
