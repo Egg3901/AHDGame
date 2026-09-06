@@ -655,10 +655,11 @@ export async function runNppCorporateAttacks(
   // All corporateSectors, once — grouped by owning corp (own-market lookup)
   // and by (stateId, sectorType) bucket (rival lookup), replacing the two
   // per-attacker queries above.
-  // `plantsPnl` is ~15% of the collection and attack targeting never reads it.
+  // `buildQueue` and `plantsPnl` are ~45% of the collection and attack
+  // targeting never reads either.
   const allSectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({}, { projection: { plantsPnl: 0 } })
+    .find({}, { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } })
     .toArray();
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   const sectorsByMarket = new Map<string, CorporateSector[]>();
