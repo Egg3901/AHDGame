@@ -10,6 +10,7 @@ import {
   computeApprovalBaseFromAverages,
   buildFlatMetrics,
   BASE_APPROVAL,
+  PUBLIC_EXPECTATIONS_MODIFIER,
 } from "@/lib/utils/governmentApproval";
 import {
   isPoliticalApprovalCountry,
@@ -87,7 +88,10 @@ export async function loadNationalMetrics(
   const allStates = await db.collection<State>("states").find({ countryId }).toArray();
   const stateIds = allStates.map((s) => s._id);
   // SP5: merged two-store view.
-  const allMetrics = await findMergedRegionMetricsMany(db, { _id: { $in: stateIds } });
+  const allMetrics = await findMergedRegionMetricsMany(db, {
+    _id: { $in: stateIds },
+    countryId,
+  });
 
   if (allMetrics.length === 0) {
     return null;
@@ -297,20 +301,27 @@ export async function loadNationalMetrics(
     year,
     nationalBaseOverride
   );
+  response.governmentApproval = Math.max(
+    0,
+    response.governmentApproval + PUBLIC_EXPECTATIONS_MODIFIER.effect
+  );
   response.governmentApprovalBase =
     nationalBaseOverride ??
     computeApprovalBaseFromAverages(nationalAverages, globalAverages, preset, countryId, year);
   // preset was previously omitted here (same gap as nationalApproval) — the
   // national conditions list skipped era-1991 patches under the 1991 preset.
-  response.governmentApprovalModifiers = evaluateModifiers(nationalAverages, {
-    countryId,
-    preset,
-    year,
-  }).map((m) => ({
-    ...m,
-    marginEffect:
-      m.marginEffect ?? (m.source === "address" ? 0 : marginEffectForModifier(m.effect, m.id)),
-  }));
+  response.governmentApprovalModifiers = [
+    PUBLIC_EXPECTATIONS_MODIFIER,
+    ...evaluateModifiers(nationalAverages, {
+      countryId,
+      preset,
+      year,
+    }).map((m) => ({
+      ...m,
+      marginEffect:
+        m.marginEffect ?? (m.source === "address" ? 0 : marginEffectForModifier(m.effect, m.id)),
+    })),
+  ];
 
   response.stateApprovals = stateApprovalsList.map(
     ({ stateId, stateName, approval, baseApproval, modifiers }) => ({

@@ -27,6 +27,11 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import { JUSTICE_NI_BONUS_PER_TURN } from "@/lib/constants/justiceActions";
 import { logger } from "../observability/logger";
+import {
+  governmentApprovalFavorabilityDrain,
+  loadGovernmentApprovalByCountry,
+  loadRulingExecutiveParties,
+} from "./governmentApprovalFavorability";
 const MIN_BASE_ACTIONS_PER_TURN = 4;
 /*
  * Fallback if `gameConfig.chairActionBonus` is missing on legacy configs.
@@ -58,6 +63,10 @@ export async function processActionRefresh(
   now: Date
 ): Promise<void> {
   const db = await getDb();
+  const [rulingPartyByCountry, approvalByCountry] = await Promise.all([
+    loadRulingExecutiveParties(db),
+    loadGovernmentApprovalByCountry(db),
+  ]);
   const baseActionsPerTurn = Math.max(config?.baseActionsPerTurn ?? 0, MIN_BASE_ACTIONS_PER_TURN);
   const chairActionBonus = config?.chairActionBonus ?? DEFAULT_CHAIR_ACTION_BONUS;
 
@@ -279,6 +288,11 @@ export async function processActionRefresh(
 
     const currentFavorability = character.favorability ?? 50;
     const favPenalty = calculateFavorabilityAboveThresholdPenalty(currentFavorability);
+    const rulingParty = rulingPartyByCountry.get(character.countryId);
+    const governmentDrain =
+      rulingParty != null && character.party != null && rulingParty === character.party
+        ? governmentApprovalFavorabilityDrain(approvalByCountry.get(character.countryId) ?? 50)
+        : 0;
     /*
      * Infamy drain — the advertised "(infamy − 20) × 0.05 favorability per
      * turn" from the profile pages and stats wiki, now actually applied.
@@ -289,7 +303,7 @@ export async function processActionRefresh(
     const infamyDrain = calculateInfamyFavorabilityDrain(currentInfamy);
     const newFavorability = Math.min(
       100,
-      Math.max(0, currentFavorability - favPenalty - infamyDrain)
+      Math.max(0, currentFavorability - favPenalty - infamyDrain - governmentDrain)
     );
 
     const setFields: Record<string, unknown> = {
@@ -354,12 +368,18 @@ export async function processActionRefresh(
   }
 
   // NPP stat decay mirrors player decay and keeps both stats in the 0-100 range.
-  const nppCursor = db
-    .collection<NPP>("npps")
-    .find(
-      { retiredAt: null, $or: [{ politicalInfluence: { $gt: 0 } }, { favorability: { $gt: 30 } }] },
-      { projection: { _id: 1, politicalInfluence: 1, favorability: 1 } }
-    );
+  const nppCursor = db.collection<NPP>("npps").find(
+    { retiredAt: null },
+    {
+      projection: {
+        _id: 1,
+        countryId: 1,
+        party: 1,
+        politicalInfluence: 1,
+        favorability: 1,
+      },
+    }
+  );
 
   const nppOps: {
     updateOne: { filter: { _id: ObjectId }; update: { $set: Record<string, number> } };
@@ -376,7 +396,17 @@ export async function processActionRefresh(
 
     const currentFavorability = npp.favorability ?? 50;
     const favPenalty = calculateFavorabilityAboveThresholdPenalty(currentFavorability);
-    const newFavorability = Math.min(100, Math.max(0, currentFavorability - favPenalty));
+    const rulingParty = rulingPartyByCountry.get(npp.countryId as CountryId);
+    const governmentDrain =
+      rulingParty != null && npp.party != null && rulingParty === npp.party
+        ? governmentApprovalFavorabilityDrain(
+            approvalByCountry.get(npp.countryId as CountryId) ?? 50
+          )
+        : 0;
+    const newFavorability = Math.min(
+      100,
+      Math.max(0, currentFavorability - favPenalty - governmentDrain)
+    );
 
     nppOps.push({
       updateOne: {

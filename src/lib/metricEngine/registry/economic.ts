@@ -21,7 +21,7 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { fundingResponse } from "../spendingChannel";
 import { SOCIAL_SPEND_HALF_SAT } from "./social";
-import { advanceOutputGap } from "../outputGap";
+import { advanceOutputGap, GDP_GROWTH_BOUND } from "../outputGap";
 import { tfpBasket } from "../potentialGrowth";
 import type { FiscalTradeInputs } from "../providers";
 import type { RegistryNode } from "../types";
@@ -180,7 +180,7 @@ export const gdpGrowthNode: RegistryNode = {
   metricId: "gdpGrowth",
   kind: "derived",
   inputs: ["economic.sectorGrowth"],
-  bounds: [-15, 15],
+  bounds: [...GDP_GROWTH_BOUND],
   inertia: 0,
   maxPolicyDelta: 0,
   decimals: 3,
