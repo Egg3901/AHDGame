@@ -10,6 +10,7 @@ import {
   sumStockValueByCharacter,
   type BondWealthSlice,
   type CorpWealthSlice,
+  sumFundValueByCharacter,
 } from "./computeCharacterWealth";
 
 const charId = new ObjectId();
@@ -156,5 +157,49 @@ describe("computeCharacterWealth", () => {
     const w = computeCharacterWealth(character, new Map(), new Map(), false, undefined);
     expect(w.portfolioValue).toBe(0);
     expect(w.totalWealth).toBe(500);
+  });
+});
+
+describe("index fund positions in wealth", () => {
+  it("values a fund position at units x quoted NAV and counts it in portfolio and total wealth", () => {
+    const charId = new ObjectId();
+    const fundId = new ObjectId();
+    const fundValue = sumFundValueByCharacter(
+      [{ fundId, characterId: charId, units: 12.5 }],
+      new Map([[fundId.toString(), 80]]),
+      new Set([charId.toString()])
+    );
+    expect(fundValue.get(charId.toString())).toBe(1000);
+
+    const character = {
+      _id: charId,
+      funds: 0,
+    } as unknown as Character;
+    const wealth = computeCharacterWealth(
+      character,
+      new Map(),
+      new Map(),
+      false,
+      undefined,
+      fundValue
+    );
+    expect(wealth.fundValue).toBe(1000);
+    expect(wealth.portfolioValue).toBe(1000);
+    expect(wealth.totalWealth).toBe(1000);
+  });
+
+  it("ignores positions of characters outside the set and unpriced funds", () => {
+    const inSet = new ObjectId();
+    const outSet = new ObjectId();
+    const fundId = new ObjectId();
+    const fundValue = sumFundValueByCharacter(
+      [
+        { fundId, characterId: outSet, units: 5 },
+        { fundId: new ObjectId(), characterId: inSet, units: 5 },
+      ],
+      new Map([[fundId.toString(), 80]]),
+      new Set([inSet.toString()])
+    );
+    expect(fundValue.size).toBe(0);
   });
 });

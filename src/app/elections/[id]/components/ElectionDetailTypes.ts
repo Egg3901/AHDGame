@@ -176,6 +176,11 @@ export interface ElectionDetail {
   nextElectionId?: string | null;
   status: string;
   totalSeats: number | null;
+  /**
+   * FPTP winner's bonus governs this race, so the results panel must not
+   * narrate seats as bought at the Hare quota (#1276).
+   */
+  majoritarianBonusApplied?: boolean;
   startTime: string | null;
   endTime: string | null;
   primaryEndTime: string | null;

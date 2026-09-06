@@ -292,6 +292,24 @@ describe("world entity manifest", () => {
     expect(manifest.entries.every((entry) => entry.legacyAccess === "config-fallback")).toBe(true);
   });
 
+  it("provides a manifest for every supported reset era", () => {
+    for (const preset of [
+      "1953-default",
+      "1979-default",
+      "1991-default",
+      "1999-default",
+      "2007-default",
+      "2019-default",
+      "2023-default",
+    ]) {
+      expect(getWorldEntityPresetManifest(preset).presetId).toBe(preset);
+    }
+    expect(getWorldEntityOrThrow("2023-default", "UK")).toMatchObject({
+      countryId: "UK",
+      legacyAccess: "config-fallback",
+    });
+  });
+
   it("demotes ES to sphere-macro for 1953-default ONLY, leaving every later preset untouched (owner decision, 2026-07-28)", () => {
     // Franco died 1975; Spain's first democratic election was 1977, so 1979
     // onward is a genuinely competitive democracy — only the 1953 entry

@@ -18,7 +18,7 @@ import type {
   StateDemographics,
   VoteTurnSnapshot,
 } from "@/lib/db/types";
-import { ELECTORAL_VOTE_UNITS, UNIT_LEAN } from "@/lib/constants/states";
+import { UNIT_LEAN } from "@/lib/constants/states";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import {
   fetchEnrichedCandidates,
@@ -172,9 +172,12 @@ export async function initPresidentVoteTally(
     // Live (census-updated) EV units; equals the seed until a census reapportions
     // (P1d-2). Must match the unit set accumulatePresidentVoteTurn uses.
     const gsDoc = await db
-      .collection<{ _id: string; preset?: string }>("gameState")
-      .findOne({ _id: "current" });
-    const { electoralVoteUnits } = await loadApportionment(db, gsDoc?.preset);
+      .collection<{ _id: string; preset?: string; currentYear?: number }>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1, currentYear: 1 } });
+    // The live year, not just the preset: the DC (1961) and ME/NE district
+    // (1972/1992) gates key on it. Without it a 1953 world at 1965 ran a
+    // 530-vote college and never gave DC its three.
+    const { electoralVoteUnits } = await loadApportionment(db, gsDoc?.preset, gsDoc?.currentYear);
     unitIds = electoralVoteUnits.map((u) => u.unitId);
   } else {
     // Non-US presidential races accumulate per region/zone keyed by the
@@ -328,11 +331,10 @@ export async function accumulatePresidentVoteTurn(
   // how a live presidency is decided.
   const ruleset = presidentialRulesetFor(election);
 
-  const uniqueStateIds = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
-
-  // Live (census-updated) EV units for per-unit accumulation; must match the unit
-  // set initPresidentVoteTally bucketed (P1d-2). The state SET above is invariant
-  // under census (no states added/removed), so it stays on the static constant.
+  // Live (census-updated, era-gated) EV units for per-unit accumulation; must
+  // match the unit set initPresidentVoteTally bucketed (P1d-2). The state set
+  // is derived from the same live list so an era without DC, or before a
+  // state's admission, does not accumulate a unit that cannot cast a vote.
   const gsDoc = await db
     .collection<{
       _id: string;
@@ -344,7 +346,8 @@ export async function accumulatePresidentVoteTurn(
       presidentialTenureByCountry?: GameState["presidentialTenureByCountry"];
     }>("gameState")
     .findOne({ _id: "current" });
-  const { electoralVoteUnits } = await loadApportionment(db, gsDoc?.preset);
+  const { electoralVoteUnits } = await loadApportionment(db, gsDoc?.preset, gsDoc?.currentYear);
+  const uniqueStateIds = [...new Set(electoralVoteUnits.map((u) => u.stateId))];
   // Granular-cell electorate engine (fail-closed): swap the archetype
   // substrate for Layer-1 cells in the per-state distribution loop below.
   // Live era clock (null while `eraSystemEnabled` is off — legacy behavior).
@@ -971,7 +974,7 @@ export async function accumulatePresidentVoteTurn(
   }
 
   const unitTurnSnapshots = { ...(tally.unitTurnSnapshots ?? {}) };
-  for (const unit of ELECTORAL_VOTE_UNITS) {
+  for (const unit of electoralVoteUnits) {
     const unitTotals = newTotalVotesByUnit[unit.unitId] ?? {};
     const existing = unitTurnSnapshots[unit.unitId] ?? [];
     unitTurnSnapshots[unit.unitId] = [

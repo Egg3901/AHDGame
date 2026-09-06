@@ -11,7 +11,6 @@ import {
   type CandidateDistributionInfo,
 } from "@/lib/utils/subdivisionResults";
 import { allocateSeats, getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
-import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
 import { getPartyHex } from "@/lib/utils/politics";
 
@@ -164,12 +163,7 @@ export async function GET(
           ranked,
           totalVotesCast,
           undefined,
-          await withCommonsOrgRanking(
-            db,
-            getMajoritarianBonus(String(election.electionType), gsForYear?.currentYear),
-            (election.countryId as string) ?? "UK",
-            regionId
-          )
+          getMajoritarianBonus(String(election.electionType), gsForYear?.currentYear)
         ).seatsEstimate;
       }
       results = assignSeatConsistentWinners(distributed, seatsByCandidate);

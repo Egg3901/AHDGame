@@ -1,9 +1,4 @@
-import type {
-  ElectionCandidate,
-  PoliticalParty,
-  PrimarySnapshot,
-  ElectionVoteTally,
-} from "@/lib/db/types";
+import type { PoliticalParty, PrimarySnapshot, ElectionVoteTally } from "@/lib/db/types";
 import {
   applyMajoritarianBonus,
   getMultiSeatMinShare,
@@ -106,9 +101,9 @@ export function computeSeatEstimates(
   const seats: Record<string, number> = {};
   for (const [cid] of allEntries) seats[cid] = 0;
 
-  // Cube-law re-split of the top-two party groups (party from the tally's
-  // candidateParties map; candidates without one stand alone). Effective
-  // weights sum to poolVotes, so the Largest Remainder step is untouched.
+  // Winner's-bonus re-weighting by tapered bloc membership (party from the
+  // tally's candidateParties map; candidates without one stand alone).
+  // Effective weights sum to poolVotes, so Largest Remainder is untouched.
   const effectiveVotes =
     majoritarianBonus && pool.length > 1
       ? applyMajoritarianBonus(
@@ -121,7 +116,7 @@ export function computeSeatEstimates(
             };
           }),
           majoritarianBonus
-        )
+        ).effective
       : undefined;
 
   const allocs = pool.map(([cid, v]) => {
@@ -149,6 +144,19 @@ export function computeSeatEstimates(
 // ---------------------------------------------------------------------------
 
 /**
+ * The minimum a candidate row needs to appear in polling. `ElectionCandidate`
+ * satisfies it structurally; so does a row rebuilt from a finished race's tally
+ * after its candidacy document was deleted, which has no `characterId` left.
+ */
+export interface PollingCandidate {
+  _id: { toString(): string };
+  characterId?: { toString(): string } | null;
+  characterName: string;
+  party: string;
+  isNPP?: boolean;
+}
+
+/**
  * Builds PollingData from tally or live primary scores.
  *
  * General phase: uses cumulative totalVotes from the tally, filtered to active
@@ -166,7 +174,15 @@ export function buildPollingData(
   electionType: string,
   countryId: string,
   inPrimary: boolean,
-  activeCandidates: ElectionCandidate[],
+  /**
+   * Structural rather than `ElectionCandidate[]` so a finished race can also
+   * pass rows REBUILT from the tally, whose candidacy document was deleted
+   * after the fact (see `appendHistoricalTallyCandidates`). Without them the
+   * polling donut rescales to a survivors-only denominator while the results
+   * panel uses the published one, and the two disagree by several points on
+   * the same race (#1276 / #1277).
+   */
+  activeCandidates: PollingCandidate[],
   parties: PoliticalParty[],
   tally: ElectionVoteTally | null,
   latestPrimarySnapshot: PrimarySnapshot | null,
@@ -182,9 +198,12 @@ export function buildPollingData(
   );
   const candidatePartyById = new Map(
     activeCandidates.map((c) => {
+      // A row rebuilt from the tally has no character to look up, so it keeps
+      // its ballot-time party — which is what an ended race wants anyway (#939).
+      const charId = c.characterId ? c.characterId.toString() : null;
       const pid =
-        !c.isNPP && charPartyMap.has(c.characterId.toString())
-          ? (charPartyMap.get(c.characterId.toString()) ?? c.party)
+        !c.isNPP && charId && charPartyMap.has(charId)
+          ? (charPartyMap.get(charId) ?? c.party)
           : c.party;
       return [c._id.toString(), pid] as const;
     })

@@ -44,6 +44,11 @@ interface NonPresidentialResultsPanelProps {
   renderEndorse?: (candidate: CandidateDetail) => React.ReactNode;
   /** Slot rendered under the count — the persuasion drivers card. */
   afterTally?: React.ReactNode;
+  /**
+   * True when the FPTP winner's bonus governs the race, so the panel must stop
+   * narrating seats as bought at the Hare quota (#1276).
+   */
+  majoritarianBonusApplied?: boolean;
 }
 
 export function NonPresidentialResultsPanel({
@@ -63,6 +68,7 @@ export function NonPresidentialResultsPanel({
   partyDisplayById,
   renderEndorse,
   afterTally,
+  majoritarianBonusApplied,
 }: NonPresidentialResultsPanelProps) {
   const byId = useMemo(() => new Map(sorted.map((c) => [c.id, c])), [sorted]);
 
@@ -93,6 +99,7 @@ export function NonPresidentialResultsPanel({
           partyId,
         electorate,
         turnCount: tally.turnSnapshots.length,
+        bonusApplied: majoritarianBonusApplied,
       }),
     [
       sorted,
@@ -104,6 +111,7 @@ export function NonPresidentialResultsPanel({
       regionName,
       electorate,
       partyDisplayById,
+      majoritarianBonusApplied,
     ]
   );
 
