@@ -9,7 +9,9 @@ import {
   loadElectorateGroups,
   weightingFor,
   BASE_APPROVAL,
+  PUBLIC_EXPECTATIONS_MODIFIER,
 } from "@/lib/utils/governmentApproval";
+import { applyModifiers } from "@/lib/utils/approvalModifiers";
 import {
   isPoliticalApprovalCountry,
   loadPoliticalApprovalBases,
@@ -112,5 +114,5 @@ export async function recomputeNationalApproval(
     ),
     population: statePopMap.get(m._id) ?? 0,
   }));
-  return calculateNationalApproval(stateApprovals);
+  return applyModifiers(calculateNationalApproval(stateApprovals), [PUBLIC_EXPECTATIONS_MODIFIER]);
 }

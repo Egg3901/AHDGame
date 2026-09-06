@@ -48,26 +48,32 @@ export async function snapshotApprovalsForTurn(db: Db, turn: number): Promise<Ap
   const activeIds = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
   const approvals = db.collection<GovernmentApproval>("governmentApprovals");
 
-  const [conflicts, documentedDocs] = await Promise.all([
-    listActiveConflicts(db),
-    // Every country that already has an approval document, not merely those with
-    // exhaustion left to heal. Two reasons, and the second is the load-bearing
-    // one. Exhaustion only moves on a turn the snapshot runs for that country, so
-    // a country dropped the moment its war ended would carry its wartime penalty
-    // frozen for good; and releasing a guest's document only happens for
-    // countries in this set, so a guest that leaves it by any route leaks its
-    // document permanently. `planApprovalSnapshot` has the full argument.
-    //
-    // Cheap: one projection over a collection with one document per country that
-    // has ever needed one, which is single digits.
-    approvals.find({}, { projection: { _id: 1 } }).toArray(),
-  ]);
+  const [conflicts, documentedDocs, seededStateCountries, seededMetricCountries] =
+    await Promise.all([
+      listActiveConflicts(db),
+      // Every country that already has an approval document, not merely those with
+      // exhaustion left to heal. Two reasons, and the second is the load-bearing
+      // one. Exhaustion only moves on a turn the snapshot runs for that country, so
+      // a country dropped the moment its war ended would carry its wartime penalty
+      // frozen for good; and releasing a guest's document only happens for
+      // countries in this set, so a guest that leaves it by any route leaks its
+      // document permanently. `planApprovalSnapshot` has the full argument.
+      //
+      // Cheap: one projection over a collection with one document per country that
+      // has ever needed one, which is single digits.
+      approvals.find({}, { projection: { _id: 1 } }).toArray(),
+      db.collection("states").distinct("countryId"),
+      db.collection("stateMetrics").distinct("countryId", { _id: { $not: /^NATIONAL_/ } }),
+    ]);
 
   const known = (id: CountryId) => id in COUNTRY_CONFIGS;
   const belligerents = belligerentsOf(conflicts).filter(known);
   const documented = documentedDocs.map((doc) => doc._id).filter(known);
+  const seeded = [...seededStateCountries, ...seededMetricCountries]
+    .map(String)
+    .filter(known) as CountryId[];
 
-  const plan = planApprovalSnapshot(activeIds, belligerents, documented);
+  const plan = planApprovalSnapshot(activeIds, belligerents, documented, seeded);
   await Promise.all(plan.ids.map((id) => snapshotApprovalHistory(db, id, turn)));
 
   return {

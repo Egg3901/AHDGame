@@ -68,11 +68,12 @@ export interface ApprovalSnapshotPlan {
 export function planApprovalSnapshot(
   activeIds: CountryId[],
   belligerents: CountryId[],
-  documented: CountryId[]
+  documented: CountryId[],
+  seededIds: CountryId[] = []
 ): ApprovalSnapshotPlan {
-  const active = new Set(activeIds);
-  const guests = unique([...belligerents, ...documented]).filter((id) => !active.has(id));
-  return { ids: [...activeIds, ...guests], guests };
+  const permanent = new Set([...activeIds, ...seededIds]);
+  const guests = unique([...belligerents, ...documented]).filter((id) => !permanent.has(id));
+  return { ids: unique([...activeIds, ...seededIds, ...guests]), guests };
 }
 
 /**
