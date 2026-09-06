@@ -608,6 +608,12 @@ const RUNTIME: CollectionEntry[] = [
       "Per-country nuclear research, stockpile, and production orders. Wiped on reset and recreated from game-scaled historical baselines without automatic production.",
   },
   {
+    name: "covertNuclearPrograms",
+    category: "runtime",
+    notes:
+      "Per-country covert nuclear programme: stage, progress, funding, suspicion, exposure count and breakout turn. Runtime — wiped on reset, rebuilt by play. Omitting it here meant `resetGameWorld` (which sweeps `getRuntimeCollectionNames()`) left every prior campaign's covert programme standing, so a fresh world could open with a country already mid-breakout.",
+  },
+  {
     name: "intelligenceAgencies",
     category: "runtime",
     notes:
