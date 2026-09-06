@@ -49,7 +49,7 @@ export async function snapshotApprovalsForTurn(db: Db, turn: number): Promise<Ap
   const activeIds = COUNTRY_ORDER.filter((id) => COUNTRY_CONFIGS[id].status === "active");
   const approvals = db.collection<GovernmentApproval>("governmentApprovals");
 
-  const [conflicts, documentedDocs] = await Promise.all([
+  const [conflicts, documentedDocs, seededStateCountries] = await Promise.all([
     getConflictsCollection(db)
       .find({
         $or: [
@@ -70,15 +70,17 @@ export async function snapshotApprovalsForTurn(db: Db, turn: number): Promise<Ap
     // document permanently. `planApprovalSnapshot` has the full argument.
     //
     // Cheap: one projection over a collection with one document per country that
-    // has ever needed one, which is single digits.
+    // has ever needed one.
     approvals.find({}, { projection: { _id: 1 } }).toArray(),
+    db.collection("states").distinct("countryId"),
   ]);
 
-  const known = (id: CountryId) => id in COUNTRY_CONFIGS;
+  const known = (id: unknown): id is CountryId => typeof id === "string" && id in COUNTRY_CONFIGS;
   const belligerents = belligerentsOf(conflicts).filter(known);
   const documented = documentedDocs.map((doc) => doc._id).filter(known);
+  const seeded = seededStateCountries.filter(known);
 
-  const plan = planApprovalSnapshot(activeIds, belligerents, documented);
+  const plan = planApprovalSnapshot(activeIds, belligerents, documented, seeded);
   await Promise.all(plan.ids.map((id) => snapshotApprovalHistory(db, id, turn)));
 
   return {
