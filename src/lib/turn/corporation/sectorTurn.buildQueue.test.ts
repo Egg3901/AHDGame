@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { IDLE_UPKEEP_BASIS_MAX } from "@/lib/corporations/physicalPnl";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import { COMMODITY_BASE_PRICES, type CommodityType } from "@/lib/constants/commodities";
@@ -443,7 +444,9 @@ describe("plants — mothball (D12)", () => {
   it("charges MOTHBALL_UPKEEP_FRACTION of full-capacity maintenance", () => {
     const { result } = cold();
     const capacity = CAPACITY * (1 - CAPITAL_DEPRECIATION_PER_TURN);
-    const unitUpkeep = (MIX_PRICE / TURNS_PER_DAY) * (1 - result.effectiveMargin / 100);
+    const unitUpkeep =
+      (MIX_PRICE / TURNS_PER_DAY) *
+      Math.min(IDLE_UPKEEP_BASIS_MAX, 1 - result.effectiveMargin / 100);
     expect(result.plantsUpkeepCost).toBeCloseTo(
       unitUpkeep * capacity * MOTHBALL_UPKEEP_FRACTION,
       4
@@ -488,7 +491,9 @@ describe("plants — idle-capacity upkeep", () => {
     const update = sectorUpdateOf(env);
     const capacity = update.capitalStock as number;
     const produced = update.producedUnits as number;
-    const unitUpkeep = (MIX_PRICE / TURNS_PER_DAY) * (1 - result.effectiveMargin / 100);
+    const unitUpkeep =
+      (MIX_PRICE / TURNS_PER_DAY) *
+      Math.min(IDLE_UPKEEP_BASIS_MAX, 1 - result.effectiveMargin / 100);
     // Every production leg is neutral here, so produced == capacity and there is
     // no idle charge; the mechanism bites when a leg throttles output.
     expect(produced).toBeCloseTo(capacity, 0);
@@ -514,7 +519,9 @@ describe("plants — idle-capacity upkeep", () => {
     const capacity = update.capitalStock as number;
     const produced = update.producedUnits as number;
     expect(produced).toBeLessThan(capacity);
-    const unitUpkeep = (MIX_PRICE / TURNS_PER_DAY) * (1 - result.effectiveMargin / 100);
+    const unitUpkeep =
+      (MIX_PRICE / TURNS_PER_DAY) *
+      Math.min(IDLE_UPKEEP_BASIS_MAX, 1 - result.effectiveMargin / 100);
     expect(result.plantsUpkeepCost).toBeCloseTo(
       unitUpkeep * (capacity - produced) * IDLE_UPKEEP_FRACTION,
       4
@@ -649,8 +656,10 @@ describe("plants — idle-capacity upkeep", () => {
 
     it("WOULD have risen without the anchor — the bug this pins", () => {
       // Same two sectors, no stamped anchor: the live basis drives the price and
-      // the collapsing sector is charged strictly more.
-      expect(priceAt(-40, undefined)).toBeGreaterThan(priceAt(20, undefined));
+      // the weaker sector is charged strictly more. Both margins sit above the
+      // IDLE_UPKEEP_BASIS_MAX cap (nominal basis 0.40 vs 0.30) so the cap is not what
+      // equalises them.
+      expect(priceAt(60, undefined)).toBeGreaterThan(priceAt(70, undefined));
     });
 
     it("stamps the anchor from the live margin, so the stamping turn is unchanged", () => {
