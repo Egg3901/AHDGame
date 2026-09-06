@@ -60,6 +60,7 @@ import { getCountryState, updateCountryState } from "@/lib/countryState";
 import { logger } from "../observability/logger";
 import { resolveGoverningPartyIdsFromDocuments } from "@/lib/government/governingPartyIds";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { isSingleplayer } from "@/lib/singleplayer";
 
 export { resolveGoverningPartyIdsFromDocuments };
 
@@ -516,6 +517,21 @@ export async function appointPrimeMinister(
   now: Date,
   preset?: string
 ): Promise<void> {
+  // A local Head of State game pins the player into the executive seat. Route
+  // every normal government-formation appointment through the same writer, but
+  // replace an election winner before any incumbent/cabinet clearing occurs.
+  const pinnedPlayer = isSingleplayer()
+    ? await db.collection<Character>("characters").findOne({
+        countryId,
+        singleplayerHeadOfState: true,
+        retiredAt: { $exists: false },
+      })
+    : null;
+  if (pinnedPlayer && (!characterId || !pinnedPlayer._id.equals(characterId))) {
+    characterId = pinnedPlayer._id;
+    nppId = null;
+    characterName = pinnedPlayer.name;
+  }
   const activePreset = preset ?? (await getGameState())?.preset;
   // Capture the outgoing head of government BEFORE any clears so we only
   // announce a genuinely new appointment. Re-appointing the sitting holder

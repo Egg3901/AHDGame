@@ -7,6 +7,7 @@ export interface NavLinkRef {
   username: string;
   isAdmin?: boolean;
   isModerator?: boolean;
+  singleplayer?: boolean;
   patreonTier?: string | null;
   isPatronActive?: boolean;
 }
