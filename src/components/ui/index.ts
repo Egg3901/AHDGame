@@ -1,5 +1,6 @@
 export { Card, CardSubLabel, type CardProps } from "./Card";
 export { Skeleton } from "./Skeleton";
+export { useDialogA11y } from "./useDialogA11y";
 export {
   CardSkeleton,
   StatGridSkeleton,

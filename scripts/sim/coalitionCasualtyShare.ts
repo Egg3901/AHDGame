@@ -84,6 +84,18 @@ function side(country: string, s: "A" | "B", n: number): BattleSide {
   };
 }
 
+/**
+ * The same contingent, but every formation explicitly assigned to the rear. This is
+ * what the Soviet air force was doing on the German front: fourteen formations at
+ * `rear`, high frontage cost, 90 readiness, all war. Needed because a side under the
+ * frontage cap has no depth at all, so a plain ally cannot test what a tail is worth.
+ */
+function rearSide(country: string, s: "A" | "B", n: number): BattleSide {
+  const b = side(country, s, n);
+  for (const u of b.units) b.positions[String(u._id)] = "rear";
+  return b;
+}
+
 const SEEDS = Array.from({ length: 400 }, (_, i) => i * 7919 + 13);
 const n = (x: number) => Math.round(x).toLocaleString("en-US");
 /** Per-battle average, so a figure here is comparable to a single battle report. */
@@ -187,4 +199,59 @@ console.log(
     `for ${overCap.d - atCap.d >= 0 ? "+" : ""}${avg(overCap.d - atCap.d)} enemy dead ` +
     `(${((overCap.a - atCap.a) / Math.max(1, overCap.d - atCap.d)).toFixed(1)} own per enemy)`
 );
+
+// ── 6. Depth bleed, isolated ───────────────────────────────────────────────────
+// Sides 4 and 5 pool a whole side, so `sustain` and depth-bleed move the same number
+// and neither reads alone. Here the split does the isolating: US-90 fills the line and
+// IT-30 is entirely overflow, so IT's own dead-per-division IS what depth costs. What
+// it should NOT be is worse per point of contribution than standing in the line, which
+// is what cas 0.15 against engage 0.10 made it.
+console.log("\n6. DEPTH BLEED: US 90 holds the line, IT 30 is pure overflow");
+{
+  const r = run([side("US", "A", 90), side("IT", "A", 30)], enemy());
+  const usPer = (r.per.get("US") ?? 0) / 90 / SEEDS.length;
+  const itPer = (r.per.get("IT") ?? 0) / 30 / SEEDS.length;
+  console.log(`   US (in the line): ${n(usPer).padStart(6)} dead/division/battle`);
+  console.log(`   IT (in depth)   : ${n(itPer).padStart(6)} dead/division/battle`);
+  console.log(
+    `   depth pays       ${(itPer / usPer).toFixed(2)}x per division for 0.10x the engagement`
+  );
+}
+
+// ── 7. Whose tail protects whom ────────────────────────────────────────────────
+// Twelve US divisions in the line. The ally brings a rear echelon and holds ALL of it
+// back, so it adds a large `rearShare` and almost no combat value. The US force is
+// identical in both runs. `sustain` was computed side-wide, so the ally's supply train
+// was stopping American bullets; it is now looked up per contingent.
+console.log("\n7. ALLY SHELTER: 12 US divisions in the line, ally holds a big rear echelon");
+{
+  const alone = run([side("US", "A", 12)], enemy());
+  const withAlly = run([side("US", "A", 12), rearSide("FR", "A", 40)], enemy());
+  const a = (alone.per.get("US") ?? 0) / SEEDS.length;
+  const b = (withAlly.per.get("US") ?? 0) / SEEDS.length;
+  console.log(`   US alone              : ${n(a).padStart(7)} US dead/battle`);
+  console.log(`   US + ally rear echelon: ${n(b).padStart(7)} US dead/battle`);
+  console.log(
+    `   ally shelter          : ${(((b - a) / a) * 100).toFixed(1)}%   (a nation's own tail only: expect no discount)`
+  );
+}
+
+// ── 8. Your own tail still works ───────────────────────────────────────────────
+// The other half of the same rule. Scoping `sustain` to a contingent must not delete
+// the mechanic: holding your OWN reserve back has to keep protecting your own line.
+console.log("\n8. OWN TAIL: the same nation holds its own rear echelon back");
+{
+  const bare = run([side("US", "A", 12)], enemy());
+  const mixed = (() => {
+    const b = side("US", "A", 52);
+    // First 12 fight, the other 40 are held back, all under one flag.
+    b.units.slice(12).forEach((u) => (b.positions[String(u._id)] = "rear"));
+    return run([b], enemy());
+  })();
+  const a = (bare.per.get("US") ?? 0) / SEEDS.length;
+  const m = (mixed.per.get("US") ?? 0) / SEEDS.length;
+  console.log(`   12 in the line, no tail : ${n(a).padStart(7)} US dead/battle`);
+  console.log(`   12 in the line + 40 rear: ${n(m).padStart(7)} US dead/battle`);
+  console.log(`   own tail is worth        ${(((m - a) / a) * 100).toFixed(1)}%`);
+}
 console.log("");

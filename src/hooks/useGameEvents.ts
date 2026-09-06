@@ -39,6 +39,9 @@ export interface TurnStatus {
   canResetProcessingLock?: boolean;
   processingLockStaleAt?: string | null;
   processingTargetTurn?: number | null;
+  processingPhase?: string | null;
+  processingPhaseLabel?: string | null;
+  processingProgress?: number | null;
 }
 
 type EventHandler = (event: GameEvent) => void;
@@ -121,6 +124,7 @@ function nextPollDelay(status: TurnStatus, now: Date): number {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
     return 300_000;
   }
+  if (status.isProcessing) return 1500;
   if (!status.nextScheduledTurn || !status.isActive) return 120_000;
   const diff = new Date(status.nextScheduledTurn).getTime() - now.getTime();
   if (diff < 120_000) return 15_000; // Align near-turn polling with the API's browser cache window

@@ -29,6 +29,8 @@ export const SINGLEPLAYER_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "auditAnomalyScan",
   /** Cross-account correlation for alt detection. */
   "suspiciousDetection",
+  /** Production-only forensic snapshot. Compact local metrics live on gameState. */
+  "gameHealthSnapshot",
 ]);
 
 /**

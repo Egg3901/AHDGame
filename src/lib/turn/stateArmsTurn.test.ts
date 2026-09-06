@@ -45,11 +45,34 @@ const unit = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("state arms production", () => {
-  it("produces nothing for a market economy", async () => {
-    const w: World = { units: [unit({ countryId: "US" })], stock: {}, deposits: [] };
+  it("produces nothing for a market economy whose store still holds something", async () => {
+    const w: World = { units: [unit({ countryId: "US" })], stock: { ground: 5 }, deposits: [] };
     const res = await applyStateArmsProduction(stubDb(w), "US");
     expect(res.lots).toBe(0);
     expect(w.deposits).toEqual([]);
+  });
+
+  it("gives a market economy one emergency lot when its store has reached zero", async () => {
+    // The floor, not a rate. A planned economy's equipment can never reach zero because
+    // its factories run every turn; a market economy's only route in is a defence
+    // contract, and the United States finished the War for Germany on 0/0/0. One lot
+    // into an empty store is the way back, and it stops as soon as the store is not
+    // empty, and the test above is that same country on the following turn.
+    const w: World = { units: [unit({ countryId: "US" })], stock: {}, deposits: [] };
+    const res = await applyStateArmsProduction(stubDb(w), "US");
+    expect(res.lots).toBe(1);
+    expect(w.deposits).toHaveLength(1);
+    expect(w.deposits[0].domain).toBe("ground");
+  });
+
+  it("keeps the floor well below planned production", async () => {
+    // Planned economies must keep their whole advantage: the floor is a third of the
+    // Soviet rate, so this is not a back door to a defence industry.
+    const market: World = { units: [unit({ countryId: "US" })], stock: {}, deposits: [] };
+    const planned: World = { units: [unit({ countryId: "RU" })], stock: {}, deposits: [] };
+    const m = await applyStateArmsProduction(stubDb(market), "US");
+    const p = await applyStateArmsProduction(stubDb(planned), "RU");
+    expect(m.lots).toBeLessThan(p.lots);
   });
 
   it("credits the store of a planned economy every turn", async () => {

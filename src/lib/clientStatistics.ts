@@ -106,6 +106,8 @@ const metricsSchema = z
     averageStability: z.number().finite().min(0).max(100).optional(),
     minStability: z.number().finite().min(0).max(100).optional(),
     maxStability: z.number().finite().min(0).max(100).optional(),
+    lastTurnDurationMs: z.number().int().finite().min(0).max(3_600_000).optional(),
+    lastTurnWarningCount: z.number().int().finite().min(0).max(100_000).optional(),
   })
   .refine(
     (metrics) =>

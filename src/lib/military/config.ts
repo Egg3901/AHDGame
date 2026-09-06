@@ -338,6 +338,30 @@ export const OCCUPATION = {
    * `occupationShift`.
    */
   deepPushDepth: 0.75,
+  /**
+   * Turns a war takes to reach full pace, and the fraction of a normal advance the
+   * front moves on turn one.
+   *
+   * The two blocs do not arrive together and cannot be made to. `classifyWarEntry`
+   * gives the HOST side collective defence, which is immediate and needs no vote,
+   * and the side attacking it an offensive coalition, which needs a national bill,
+   * ratification and mobilisation. That asymmetry is correct and deliberate: a
+   * defensive pact really does answer faster than a war of choice.
+   *
+   * What was wrong is that the front did not wait. In the War for Germany the
+   * defender's bloc was in on turn 415, the day it opened; the attacker's coalition
+   * arrived on 465, 480, and in four cases never. By the time Britain joined,
+   * control had already moved from 50 to 56.8, and by Ireland's entry to 78.9. The
+   * coalition was ratifying its way into a war that had been decided without it.
+   *
+   * A ramp rather than a cliff: the advance is worth `mobilizationFloor` on the
+   * opening turn and reaches full value at `mobilizationTurns`, which is set to the
+   * observed span between the two blocs' arrivals. A war can still be lost in the
+   * window, it just cannot be run to the pole before the other side is allowed to
+   * field an army.
+   */
+  mobilizationTurns: 50,
+  mobilizationFloor: 0.4,
   /** Supply lost at full compression / full overextension, off the side's baseline. */
   compressionPenalty: 40,
   overextensionPenalty: 15,

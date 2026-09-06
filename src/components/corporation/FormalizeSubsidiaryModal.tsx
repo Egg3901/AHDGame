@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useDialogA11y } from "@/components/ui";
 
 interface FormalizeSubsidiaryModalProps {
   /** The target corp being formalized (route param). */
@@ -26,6 +27,7 @@ export function FormalizeSubsidiaryModal({
   onClose,
   onFormalized,
 }: FormalizeSubsidiaryModalProps) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
@@ -52,9 +54,14 @@ export function FormalizeSubsidiaryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      {...dialogProps}
+    >
       <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-5 space-y-4">
-        <h2 className="text-base font-bold text-foreground">Formalize subsidiary</h2>
+        <h2 id={titleId} className="text-base font-bold text-foreground">
+          Formalize subsidiary
+        </h2>
         <p className="text-sm text-foreground">
           Formalize <span className="font-semibold">{corporationName}</span> as a managed subsidiary
           of <span className="font-semibold">{parentName}</span>?
