@@ -10,6 +10,7 @@ import type { DemographicCategory, StateDemographics } from "@/lib/db/types";
 import { calcAppeal, approvalScalar } from "@/lib/utils/demographicAppeal";
 import { normalizeNPI, normalizeNationalReachPresidentialPrimary } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
+import { partitionMajorParties } from "./majorParties";
 import { getMajorPartiesForRegion, COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { calcEffectiveFavorability } from "./voteCalculations";
 import { splitGroupPoolBySlate } from "./slateAllocation";
@@ -308,8 +309,11 @@ export function distributeVotesByGroupLevelAllocation(
       options?.countryId ?? "US",
       options?.parentRegionId
     );
-    const thirdParties = enriched.filter((ec) => !majorPartySet.has(ec.party));
-    const majorParties = enriched.filter((ec) => majorPartySet.has(ec.party));
+    const { major: majorParties, third: thirdParties } = partitionMajorParties(
+      enriched,
+      majorPartySet,
+      (ec) => votesPerCandidate[ec.candidateId] ?? 0
+    );
 
     if (thirdParties.length > 0 && majorParties.length > 0) {
       const rate = options?.spoilerRate ?? FPTP_SPOILER_RATE;
