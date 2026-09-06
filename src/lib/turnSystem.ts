@@ -633,7 +633,31 @@ export async function processTurn(): Promise<{
     // Turn cost on production is round-trip bound, so this ranks phases by
     // the thing that actually costs, not by local wall clock.
     const roundTripProfile = formatRoundTripReport();
-    if (roundTripProfile) console.log(roundTripProfile);
+    if (roundTripProfile) {
+      console.log(roundTripProfile);
+      // Singleplayer writes no turnLog, so under the profiler also print the
+      // per-phase wall clock the log would have carried, slowest first.
+      const timingRows = Object.entries(phaseStatuses)
+        .flatMap(([phase, status]) =>
+          status.startedAt && status.completedAt
+            ? [
+                {
+                  phase,
+                  ms: status.completedAt.getTime() - status.startedAt.getTime(),
+                  trips: status.roundTrips ?? 0,
+                },
+              ]
+            : []
+        )
+        .sort((a, b) => b.ms - a.ms)
+        .slice(0, 30);
+      console.log(
+        `[phase-timings] slowest phases this turn (ms, round trips):\n` +
+          timingRows
+            .map((r) => `  ${String(r.ms).padStart(7)} ${String(r.trips).padStart(6)}  ${r.phase}`)
+            .join("\n")
+      );
+    }
     console.log(
       `[Turn] #${context.newTurn} - ${context.characters.length} chars, $${context.phaseResults.fundGeneration?.totalGenerated?.toLocaleString() ?? "?"} generated, ${context.phaseResults.partyActions?.totalActionsGenerated ?? "?"} party actions generated, ${context.phaseResults.campaignTurn?.campaignsProcessed ?? "?"} campaigns ($${context.phaseResults.campaignTurn?.totalFundsGenerated?.toLocaleString() ?? "?"} funds, ${context.phaseResults.campaignTurn?.totalActionsGenerated ?? "?"} actions), ${context.phaseResults.partyElections?.stateElectionsCompleted ?? "?"} state elections completed${nppSuffix}${warningsSuffix}`
     );
