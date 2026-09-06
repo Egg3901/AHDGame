@@ -12,7 +12,7 @@
  * count belongs here, where both copies are in scope.
  */
 import React from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 
@@ -91,6 +91,14 @@ function renderView(tabbed: boolean) {
     />
   );
 }
+
+beforeEach(() => {
+  // happy-dom resolves a relative fetch against http://localhost:3000, so an
+  // unstubbed one in a component test does not fail — it reaches whatever dev
+  // server happens to be running and quietly talks to it. The suite is only
+  // hermetic if nothing here opens a socket.
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({}) }));
+});
 
 describe("folding the detail views into tabs", () => {
   it("draws the trends chart once, not once per home it has had", () => {
