@@ -66,6 +66,9 @@ describe("national approval route — canonical stored value", () => {
 
     const json = await call();
     expect(json.governmentApproval).toBe(BASE_APPROVAL + PUBLIC_EXPECTATIONS_MODIFIER.effect);
+    expect(json.modifiers).toContainEqual(
+      expect.objectContaining({ id: PUBLIC_EXPECTATIONS_MODIFIER.id, effect: -5 })
+    );
   });
 
   /**
