@@ -44,7 +44,7 @@ type EscrowSettlementOptions = {
    * many buys in one pass (the fund rebalance issues ~550). Only pool
    * EXISTENCE is decided from it; the credit itself is still an atomic $inc.
    */
-  pools?: ReadonlyMap<CurrencyCode, EquityMarketPool>;
+  pools?: Map<CurrencyCode, EquityMarketPool>;
 };
 
 /**
@@ -66,11 +66,20 @@ export async function applyFloatBuyCredit(
     countryId: corp.countryId,
     liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
   });
+  const snapshot = options?.pools?.get(currency);
   const poolExists = options?.pools
-    ? options.pools.has(currency)
+    ? snapshot !== undefined
     : Boolean(await readEquityPool(db, currency, options));
   if (options?.counterparty !== "issuer" && poolExists) {
     await creditEquityPool(db, currency, amountLocal, "purchasesIn", new Date(), options);
+    // Keep the caller's snapshot in step with the pool it just credited, so
+    // the next quote in the same pass sees the cash skew a per-buy read would.
+    if (snapshot) {
+      const credited = Math.round(amountLocal * 100) / 100;
+      if (Number.isFinite(credited) && credited > 0) {
+        snapshot.cashLocal = (snapshot.cashLocal ?? 0) + credited;
+      }
+    }
     return;
   }
   if (getShareBuybackMode(corp) === "escrow") {

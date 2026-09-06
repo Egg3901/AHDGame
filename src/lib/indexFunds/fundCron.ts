@@ -355,7 +355,8 @@ export function recomputeNav(
  * self-contained.
  */
 export interface FundShareBuyBatch {
-  pools?: ReadonlyMap<CurrencyCode, EquityMarketPool>;
+  /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
+  pools?: Map<CurrencyCode, EquityMarketPool>;
   txSink?: Omit<IndexFundTransaction, "_id">[];
 }
 

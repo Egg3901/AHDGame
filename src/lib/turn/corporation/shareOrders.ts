@@ -616,7 +616,9 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           new ObjectId(fundIdStr),
           delta,
           fillPriceAnchor,
-          { $set: { updatedAt: now } }
+          { $set: { updatedAt: now } },
+          // The cap table was loaded with the corp at the top of the fill.
+          { knownShareholders: corp.shareholders }
         );
         await upsertFundHoldingShares(
           db,
