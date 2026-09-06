@@ -574,6 +574,7 @@ export async function rebalanceFundToTarget(
     .toArray();
   const openBidCorpIds = new Set(remainingOpenBids.map((o) => o.corporationId.toString()));
 
+  const bidTxSink: Omit<IndexFundTransaction, "_id">[] = [];
   for (const leg of plan.bids) {
     const corpIdStr = leg.corporationId.toString();
     // Never stack: skip if an open bid already exists for this (fund, corp).
@@ -587,15 +588,15 @@ export async function rebalanceFundToTarget(
       const limitPriceLocal = fundBidLimitPriceLocal(executionPriceLocal);
       const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
 
-      // Re-fetch fund so cashAnchor reflects all prior writes in this pass.
-      const freshFund = (await getFundById(db, fund._id)) ?? fund;
-
+      // The order debits cashAnchor atomically against the live document, so
+      // the fund re-read this loop used to do per bid was never consulted.
       const result = await placeFundShareBuyOrder(db, {
-        fund: freshFund,
+        fund,
         corp,
         shares: leg.shares,
         limitPriceLocal,
         fxRate,
+        txSink: bidTxSink,
       });
 
       if (result.ok) {
@@ -609,6 +610,7 @@ export async function rebalanceFundToTarget(
       );
     }
   }
+  await insertFundTransactionsBulk(db, bidTxSink);
 
   return { buys, sells, bidsPlaced, bidsCancelled };
 }
