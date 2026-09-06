@@ -522,6 +522,7 @@ export async function waitForAnswer(
 ) {
   const started = Date.now();
   const label = PHASES[phase].label;
+  report(label);
   let nextProgressAt = 5;
   let lastReason = null;
   for (;;) {
@@ -817,7 +818,6 @@ async function main() {
     await waitForPort(APP_PORT, "server", PORT_TIMEOUT_MS, { onExit: appExit(app) });
     timings.server = Date.now() - at;
     const base = `http://127.0.0.1:${APP_PORT}`;
-    log(PHASES.code.label);
     Object.assign(timings, await waitForGame(base, READY_TIMEOUT_MS));
     log(`startup took ${formatTimings(timings)}`);
     log(`ready at ${base}`);

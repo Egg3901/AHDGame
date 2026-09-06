@@ -112,7 +112,7 @@ describe("waitForGame", () => {
     expect(String((error as Error).message)).toMatch(/403.*only answer on loopback/);
   });
 
-  it("keeps waiting through connection resets and progress-logs every few seconds", async () => {
+  it("announces the phase once and stays quiet between progress lines", async () => {
     const seen: string[] = [];
     const base = await fakeGame(() => "hang");
     await launcher
@@ -122,7 +122,9 @@ describe("waitForGame", () => {
         log: (line: string) => seen.push(line),
       })
       .catch(() => {});
-    expect(seen.length).toBe(0); // progress starts at 5s; under a second means no chatter
+    // The phase announces itself once; progress lines start at 5s, so a
+    // sub-second wait must not chatter.
+    expect(seen).toEqual(["loading the game's code"]);
   });
 });
 
