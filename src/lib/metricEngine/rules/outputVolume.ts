@@ -1,3 +1,4 @@
+import { REVENUE_TREND_MIN_SPAN, REVENUE_TREND_TARGET_SPAN } from "@/lib/turn/gdpGrowth";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
@@ -41,4 +42,37 @@ export function sumObservedOutput(sectors: readonly { outputVolume?: number }[])
     total += value;
   }
   return Number.isFinite(total) ? total : null;
+}
+
+/** Grow confidence in the new measurement until a full year is observed. */
+export function blendOutputGrowthSignal(
+  previousSignal: number,
+  physicalSignal: number | null,
+  historySpanTurns: number
+): number {
+  if (physicalSignal === null || !Number.isFinite(physicalSignal)) return previousSignal;
+  const weight = Number.isFinite(historySpanTurns)
+    ? Math.max(
+        0,
+        Math.min(
+          1,
+          (historySpanTurns - REVENUE_TREND_MIN_SPAN) /
+            (REVENUE_TREND_TARGET_SPAN - REVENUE_TREND_MIN_SPAN)
+        )
+      )
+    : 0;
+  return previousSignal * (1 - weight) + physicalSignal * weight;
+}
+
+/** Oldest retained observation, rather than the nearest-year trend baseline. */
+export function outputHistorySpanTurns(
+  snapshots: readonly { turn: number; value: number }[] | undefined,
+  turn: number
+): number {
+  let span = 0;
+  for (const snapshot of snapshots ?? []) {
+    if (Number.isFinite(snapshot.turn) && Number.isFinite(snapshot.value) && snapshot.value > 0)
+      span = Math.max(span, turn - snapshot.turn);
+  }
+  return Number.isFinite(span) ? span : 0;
 }

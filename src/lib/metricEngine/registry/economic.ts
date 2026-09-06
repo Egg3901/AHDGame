@@ -1,3 +1,4 @@
+import { blendOutputGrowthSignal } from "../rules/outputVolume";
 import {
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
@@ -78,6 +79,7 @@ export interface SectorRevenueTaxPayload {
    */
   /** Constant-price production trend, preferred once a baseline matures. */
   outputEmaNow?: number;
+  outputHistorySpanTurns?: number;
   outputTrendBaseline?: RevenueTrendBaseline | null;
   revenueEmaNow?: number;
   revenueTrendBaseline?: RevenueTrendBaseline | null;
@@ -137,7 +139,6 @@ export const sectorGrowthNode: RegistryNode = {
       ? computeTrailingRevenueGrowthRate(p.outputEmaNow, p.outputTrendBaseline, TURNS_PER_YEAR)
       : null;
     const plantsSignal =
-      outputSignal ??
       trailingSignal ??
       (p.plantsEnabled
         ? computeRealizedRevenueGrowthRate(
@@ -147,7 +148,11 @@ export const sectorGrowthNode: RegistryNode = {
             TURNS_PER_YEAR
           )
         : null);
-    const sector = plantsSignal ?? legacySector;
+    const sector = blendOutputGrowthSignal(
+      plantsSignal ?? legacySector,
+      outputSignal,
+      p.outputHistorySpanTurns ?? p.outputTrendBaseline?.spanTurns ?? 0
+    );
     const taxAdjusted = computeConsumptionTaxAdjustedGrowthRate(
       sector,
       p.federalSalesTax,

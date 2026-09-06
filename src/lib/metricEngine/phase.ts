@@ -1,4 +1,4 @@
-import { sumObservedOutput } from "./rules/outputVolume";
+import { sumObservedOutput, outputHistorySpanTurns } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { StateMetrics, GameConfig } from "@/lib/db/types";
 import type { State } from "@/lib/db/types/state";
@@ -544,6 +544,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       revenueTrendBaseline,
       outputEmaNow,
       outputTrendBaseline,
+      outputHistorySpanTurns: outputHistorySpanTurns(state.sectorOutputSnapshots, turn),
       unowned: sectorTax.unownedByState.get(state._id) ?? [],
       federalSalesTax:
         sectorTax.federalSalesTaxByCountry.get(countryId) ??

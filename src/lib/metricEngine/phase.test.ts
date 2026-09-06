@@ -798,7 +798,7 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
       prevOutputSnapshots: [{ turn: 1, value: output }],
     });
     const { metricOps } = captureOps();
-    await runMetricEngine(db as unknown as Db, 10);
+    await runMetricEngine(db as unknown as Db, 49);
     expect(metricOps[0].updateOne.update.$set["economic.sectorGrowth.value"]).toBe(0);
   });
 

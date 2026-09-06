@@ -1,7 +1,7 @@
 /** Issue #1470: deterministic measurement A/B, with no database or policy writes. */
 import assert from "node:assert/strict";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
-import { constantPriceOutput } from "@/lib/metricEngine/rules/outputVolume";
+import { constantPriceOutput, outputHistorySpanTurns } from "@/lib/metricEngine/rules/outputVolume";
 import {
   sectorGrowthNode,
   type SectorRevenueTaxPayload,
@@ -56,6 +56,7 @@ for (const scenario of cases) {
     const newSignal = compute({
       ...payload,
       outputEmaNow: outputEma,
+      outputHistorySpanTurns: outputHistorySpanTurns(outputSnapshots, turn),
       outputTrendBaseline: selectRevenueTrendBaseline(outputSnapshots, turn),
     });
     const oldStep = advanceOutputGap(oldGap, oldSignal, 2, TURNS_PER_YEAR);

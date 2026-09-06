@@ -1,6 +1,11 @@
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { describe, expect, it } from "vitest";
-import { constantPriceOutput, sumObservedOutput } from "./outputVolume";
+import {
+  constantPriceOutput,
+  sumObservedOutput,
+  blendOutputGrowthSignal,
+  outputHistorySpanTurns,
+} from "./outputVolume";
 
 describe("constant-price production", () => {
   it.each(CORPORATION_TYPES)("supports the canonical production basket for %s", (sectorType) => {
@@ -30,5 +35,23 @@ describe("constant-price production", () => {
     expect(sumObservedOutput([{ outputVolume: 100 }, { outputVolume: NaN }])).toBeNull();
     expect(sumObservedOutput([{ outputVolume: 100 }, { outputVolume: 0 }])).toBe(100);
     expect(sumObservedOutput([{ outputVolume: 0 }])).toBe(0);
+  });
+});
+
+describe("physical measurement transition", () => {
+  it("ends the handoff permanently despite nearest-year baseline oscillation", () => {
+    const snapshots = Array.from({ length: 7 }, (_, index) => ({ turn: index * 8, value: 100 }));
+    for (let turn = 48; turn < 56; turn++) {
+      expect(blendOutputGrowthSignal(10, 0, outputHistorySpanTurns(snapshots, turn))).toBe(0);
+    }
+  });
+
+  it("bridges both inflated and deflated prior signals without overriding output afterward", () => {
+    for (const prior of [-10, 15]) {
+      expect(blendOutputGrowthSignal(prior, 0, 8)).toBe(prior);
+      expect(blendOutputGrowthSignal(prior, 0, 28)).toBe(prior / 2);
+      expect(blendOutputGrowthSignal(prior, -5, 48)).toBe(-5);
+      expect(blendOutputGrowthSignal(prior, null, 48)).toBe(prior);
+    }
   });
 });
