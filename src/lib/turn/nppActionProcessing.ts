@@ -19,6 +19,7 @@ import {
   getNppCampaignApCost,
   getNppCampaignFundCost,
 } from "@/lib/npp/actionAi";
+import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import { buildNppSignalLookup, type NppSignalLookup } from "@/lib/npp/actionSignals";
 import { applyNppIdiosyncrasy } from "@/lib/nppAutonomy/v3/nppIdiosyncrasy";
 import { politeFloatLimit } from "@/lib/nppAutonomy/playerImpactBudget";
@@ -237,6 +238,17 @@ export async function processNppActions(
     econActive && !econGlobal ? nonPlayerCountryIds(await getAllCountryAccess(db)) : null;
   const econScopeSet = econScopeCountries ? new Set<CountryId>(econScopeCountries) : null;
 
+  // Difficulty spending discipline: funds an NPP keeps in hand rather than
+  // spending down to zero, priced off the cheapest action so the reserve is
+  // always "enough to still do something". Anchor-denominated, like
+  // NPP_FUND_COSTS and the `fundsAnchorRemaining` the loop tracks.
+  //
+  // `reserveActionMult` is 0 at normal and easy and in every hosted/multiplayer
+  // world, where this is 0 and `decideNppAction`'s affordability test is
+  // byte-identical to the shipped one. It can only ever make an NPP spend less.
+  const behaviorPolicy = await loadNppBehaviorPolicy(db);
+  const fundsReserveAnchor = behaviorPolicy.reserveActionMult * NPP_FUND_COSTS.advertise;
+
   const result = zeroResult();
 
   // Party treasury accumulator for partyDonation actions (values in LOCAL units —
@@ -408,8 +420,15 @@ export async function processNppActions(
         actionRng,
         careerModifiers,
         signals
-          ? { signals, lastAction, temperatureMult: idiosyncrasy?.temperatureMult }
-          : undefined
+          ? {
+              signals,
+              lastAction,
+              temperatureMult: idiosyncrasy?.temperatureMult,
+              fundsReserve: fundsReserveAnchor,
+            }
+          : fundsReserveAnchor > 0
+            ? { fundsReserve: fundsReserveAnchor }
+            : undefined
       );
 
       // "none" covers no-affordable-action and the save heuristic — end the cycle.
