@@ -158,6 +158,9 @@ export type FinancialSubjectType =
   | "corporation"
   | "party"
   | "government"
+  // Non-player politicians have an investment account distinct
+  // from characters, corporations, and the national treasury.
+  | "npp"
   // A8: a union pension scheme holds real assets paid in by employers, so it is
   // a counterparty in its own right rather than a destination with no account.
   | "pension_scheme";
@@ -193,7 +196,7 @@ export interface FinancialTxLogEntry {
   expiresAt: Date;
 
   subjectType: FinancialSubjectType;
-  subjectId?: ObjectId; // set for character/corporation/party; omitted for government
+  subjectId?: ObjectId; // set for character/corporation/party/NPP; omitted for government
   countryId?: string; // set when subjectType === "government"
   subjectName: string;
 
