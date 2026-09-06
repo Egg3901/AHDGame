@@ -51,8 +51,11 @@ import {
   DEFAULT_SITE_DESCRIPTION,
   SITE_BRAND,
   SITE_SUBTITLE,
+  buildSiteDescription,
   getSiteUrl,
 } from "@/lib/siteMetadata";
+import { nationKeywords } from "@/lib/marketing/marketedWorld";
+import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 import { verifyAuth } from "@/lib/auth";
 import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maintenanceStatus";
 import { resolveNavbarPageCountry } from "@/lib/navigation/resolveNavbarPageCountry";
@@ -118,37 +121,60 @@ const defaultDocumentTitle = `${SITE_BRAND} | ${SITE_SUBTITLE}`;
 const GA_MEASUREMENT_ID = "G-5GBG3BHWCZ";
 const GOOGLE_ADS_ID = "AW-18130975758";
 
-export const metadata: Metadata = {
-  title: defaultDocumentTitle,
-  // Icons are automatically picked up from icon.png and apple-icon.png in app directory
-  description: DEFAULT_SITE_DESCRIPTION,
-  manifest: "/manifest.webmanifest",
-  metadataBase: new URL(siteUrl),
-  openGraph: {
+/**
+ * Async so the description and the SEO keywords name the countries that are
+ * ACTUALLY open to players right now. Both used to be hand-written lists, and
+ * both went stale independently: the keywords tag was still selling Germany and
+ * Japan months after those closed. Source of truth is
+ * `lib/marketing/marketedWorldServer`; the read is served from a 5-minute
+ * in-process cache, so this does not add a Mongo round-trip per request.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const world = await getMarketedWorldSafe();
+  const description = buildSiteDescription(world);
+  const keywords = [
+    "political simulation game",
+    "economic simulation",
+    "multiplayer elections",
+    "congress",
+    "parliament",
+    "campaigns",
+    "corporations",
+    "forex",
+    ...nationKeywords(world.playable),
+  ].join(", ");
+
+  return {
     title: defaultDocumentTitle,
-    description: DEFAULT_SITE_DESCRIPTION,
-    type: "website",
-    siteName: SITE_BRAND,
-    url: siteUrl,
-    locale: "en_US",
-    images: [
-      {
-        url: CDN_LOGO_URL,
-        width: 256,
-        height: 256,
-        alt: SITE_BRAND,
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: defaultDocumentTitle,
-    description: DEFAULT_SITE_DESCRIPTION,
-    images: [CDN_LOGO_URL],
-  },
-  keywords:
-    "political simulation game, economic simulation, multiplayer elections, congress, parliament, campaigns, corporations, forex, US politics, UK politics, Soviet Union politics, East Germany politics",
-};
+    // Icons are automatically picked up from icon.png and apple-icon.png in app directory
+    description,
+    manifest: "/manifest.webmanifest",
+    metadataBase: new URL(siteUrl),
+    openGraph: {
+      title: defaultDocumentTitle,
+      description,
+      type: "website",
+      siteName: SITE_BRAND,
+      url: siteUrl,
+      locale: "en_US",
+      images: [
+        {
+          url: CDN_LOGO_URL,
+          width: 256,
+          height: 256,
+          alt: SITE_BRAND,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: defaultDocumentTitle,
+      description,
+      images: [CDN_LOGO_URL],
+    },
+    keywords,
+  };
+}
 
 const jsonLd = {
   "@context": "https://schema.org",

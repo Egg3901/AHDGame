@@ -1,5 +1,10 @@
 import type { Metadata } from "next";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
+import {
+  fallbackMarketedWorld,
+  formatNationList,
+  type MarketedWorld,
+} from "@/lib/marketing/marketedWorld";
 
 /**
  * Production canonical host (apex, non-www). Every other canonical reference
@@ -90,9 +95,21 @@ export function wikiPublicPageMetadata(opts: {
 export const SITE_BRAND = "A House Divided";
 export const SITE_SUBTITLE = "Political & Economic Sim Game";
 
-/** Default unfurl / search snippet (no em dash). */
-export const DEFAULT_SITE_DESCRIPTION =
-  "Real-time multiplayer political and economic simulation: run for office, pass legislation, build parties, run corporations, and trade markets in the US, UK, Soviet Union, and East Germany. The world advances every hour; progression never resets.";
+/**
+ * Default unfurl / search snippet (no em dash), with the playable countries
+ * filled in from the live registry. Never hardcode the list here: see `lib/marketing/marketedWorld`.
+ */
+export function buildSiteDescription(world: MarketedWorld): string {
+  return `Real-time multiplayer political and economic simulation: run for office, pass legislation, build parties, run corporations, and trade markets in ${formatNationList(world.playable)}. The world advances every hour; progression never resets.`;
+}
+
+/**
+ * Synchronous description for the handful of call sites that cannot await a
+ * database read (JSON-LD built at module scope, error pages). Built from the
+ * same registry, so it agrees with the async path except in the minutes after
+ * an admin opens a country.
+ */
+export const DEFAULT_SITE_DESCRIPTION = buildSiteDescription(fallbackMarketedWorld());
 
 // Served from the CDN (R2) so crawler unfurl fetches don't hit Railway egress.
 const OG_IMAGE_PATH = CDN_LOGO_URL;
