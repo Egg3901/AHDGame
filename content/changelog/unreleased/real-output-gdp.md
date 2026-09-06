@@ -1,5 +1,4 @@
 ---
-version: "1.4.60"
 date: 2026-09-06
 title: Separate production growth from sales prices
 summary: >-
