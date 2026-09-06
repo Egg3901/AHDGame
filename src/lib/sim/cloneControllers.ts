@@ -1,6 +1,11 @@
-import type { Db } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { NPP } from "@/lib/db/types/npp";
+
+// Older snapshots can carry the pre-migration player controller tag.
+type RestoredCorporation = Omit<Corporation, "ceoType"> & {
+  ceoType?: Corporation["ceoType"] | "player" | null;
+};
 
 /** Convert human-run corporations in a restored clone, unless the player rail is preserved. */
 export async function applyCloneControllerPolicy(
@@ -17,14 +22,15 @@ export async function applyCloneControllerPolicy(
     .collection<NPP>("npps")
     .find({ retiredAt: null }, { projection: { _id: 1, countryId: 1 } })
     .toArray();
-  const byCountry = new Map<string, unknown[]>();
+  const byCountry = new Map<string, ObjectId[]>();
   for (const n of nppRows) {
+    if (!n.countryId) continue;
     const pool = byCountry.get(n.countryId) ?? [];
     pool.push(n._id);
     byCountry.set(n.countryId, pool);
   }
   const rr = new Map<string, number>();
-  const cursor = db.collection<Corporation>("corporations").find({
+  const cursor = db.collection<RestoredCorporation>("corporations").find({
     ceoType: { $in: ["character", "player", null] },
     countryOwnerId: { $exists: false },
   });
