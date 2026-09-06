@@ -27,6 +27,7 @@
  */
 
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+export { countryPhysicalDemandSupplyGapPct } from "./rules";
 
 const clamp = (v: number, lo: number, hi: number): number =>
   !Number.isFinite(v) ? lo : Math.min(hi, Math.max(lo, v));

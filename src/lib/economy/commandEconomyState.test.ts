@@ -6,6 +6,7 @@ import {
   MAX_REPRESSION_LEGITIMACY_COST,
   accumulateOverhang,
   shortageIndexFrom,
+  countryPhysicalDemandSupplyGapPct,
   blackMarketPremiumFrom,
   updateSecondEconomy,
   overhangInjectionFromIssuance,
@@ -147,6 +148,34 @@ describe("shortageIndexFrom", () => {
     const c = shortageIndexFrom(20, 400);
     expect(b).toBeGreaterThan(a);
     expect(c).toBeGreaterThan(b);
+  });
+});
+
+describe("countryPhysicalDemandSupplyGapPct", () => {
+  it("weights country rows and never pools another country's shortage", () => {
+    const us = countryPhysicalDemandSupplyGapPct([
+      { basis: "country_scoped_ledger", supply: 100, demand: 200, price: 1 },
+      { basis: "country_scoped_ledger", supply: 100, demand: 100, price: 1 },
+    ]);
+    const ru = countryPhysicalDemandSupplyGapPct([
+      { basis: "country_scoped_ledger", supply: 100, demand: 100, price: 1 },
+    ]);
+    expect(us).toBeGreaterThan(0);
+    expect(ru).toBe(0);
+  });
+
+  it("returns null for absent or non-explicit ledger observations", () => {
+    expect(countryPhysicalDemandSupplyGapPct([])).toBeNull();
+    expect(
+      countryPhysicalDemandSupplyGapPct([{ supply: 100, demand: 200, price: 1, basis: "global" }])
+    ).toBeNull();
+    expect(
+      countryPhysicalDemandSupplyGapPct([
+        { supply: Number.NaN, demand: 200, price: 1, basis: "country_scoped_ledger" },
+        { supply: -1, demand: 200, price: 1, basis: "country_scoped_ledger" },
+        { supply: 100, demand: 200, basis: "country_scoped_ledger" },
+      ])
+    ).toBeNull();
   });
 });
 
