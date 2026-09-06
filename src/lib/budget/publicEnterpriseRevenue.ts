@@ -350,7 +350,10 @@ export async function calculateCountryOwnedBudgetRevenue(
   const [allSectors, fxByCurrency] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ corporationId: { $in: corporationIds } })
+      .find(
+        { corporationId: { $in: corporationIds } },
+        { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+      )
       .toArray(),
     hoistedFxByCurrency ? Promise.resolve(hoistedFxByCurrency) : loadFxRatesByCurrency(db),
   ]);

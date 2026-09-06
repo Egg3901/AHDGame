@@ -476,7 +476,10 @@ export async function processNppSupplyAgreements(
   const corpIds = nppCorps.map((c) => c._id);
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: { $in: corpIds } })
+    .find(
+      { corporationId: { $in: corpIds } },
+      { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+    )
     .toArray();
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   for (const s of sectors) {

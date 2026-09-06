@@ -427,7 +427,10 @@ export async function fetchSectorMarketSharePercent(
       .findOne({ _id: sector.stateId }, { projection: { _id: 1, gdp: 1, countryId: 1 } }),
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ stateId: sector.stateId, sectorType: sector.sectorType })
+      .find(
+        { stateId: sector.stateId, sectorType: sector.sectorType },
+        { projection: { _id: 1, revenue: 1 } }
+      )
       .toArray(),
     loadFxRatesByCurrency(db),
   ]);
@@ -583,7 +586,10 @@ export async function fetchAttackerDefenderShares(
       .findOne({ _id: targetSector.stateId }, { projection: { _id: 1, gdp: 1, countryId: 1 } }),
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ stateId: targetSector.stateId, sectorType: targetSector.sectorType })
+      .find(
+        { stateId: targetSector.stateId, sectorType: targetSector.sectorType },
+        { projection: { _id: 1, corporationId: 1, revenue: 1 } }
+      )
       .toArray(),
     loadFxRatesByCurrency(db),
   ]);
