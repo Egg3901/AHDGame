@@ -44,7 +44,7 @@ for (const scenario of cases) {
       revenueTrendBaseline: selectRevenueTrendBaseline(nominalSnapshots, turn),
     };
     const compute = (p: SectorRevenueTaxPayload) =>
-      sectorGrowthNode.compute({
+      sectorGrowthNode.compute!({
         current: {},
         prev: {},
         prevSimBaseline: {},

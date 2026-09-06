@@ -46,7 +46,7 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
       outputEmaNow: 1000,
       outputTrendBaseline: { value: 1000, spanTurns: 48 },
     });
-    expect(sectorGrowthNode.compute(ctx({ providers: { sectorRevenueTax: inputs } }))).toBe(0);
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBe(0);
   });
 
   it("retains an actual output contraction even when nominal revenue is flat", () => {
@@ -57,7 +57,7 @@ describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () =>
       outputEmaNow: 950,
       outputTrendBaseline: { value: 1000, spanTurns: 48 },
     });
-    expect(sectorGrowthNode.compute(ctx({ providers: { sectorRevenueTax: inputs } }))).toBeCloseTo(
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBeCloseTo(
       -5
     );
   });

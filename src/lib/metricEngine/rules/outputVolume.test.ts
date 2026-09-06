@@ -1,7 +1,15 @@
+import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import { describe, expect, it } from "vitest";
 import { constantPriceOutput, sumObservedOutput } from "./outputVolume";
 
 describe("constant-price production", () => {
+  it.each(CORPORATION_TYPES)("supports the canonical production basket for %s", (sectorType) => {
+    const value = constantPriceOutput({ sectorType, producedUnits: 100 }, 48);
+    expect(value).not.toBeNull();
+    expect(value).toBeGreaterThan(0);
+    expect(constantPriceOutput({ sectorType, producedUnits: 50 }, 48)).toBeCloseTo(value! / 2);
+  });
+
   it("values physical quantities without income, market prices or currency inputs", () => {
     const base = { sectorType: "manufacturing" as const, producedUnits: 100 };
     const value = constantPriceOutput(base, 48)!;
