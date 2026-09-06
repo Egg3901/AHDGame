@@ -29,6 +29,7 @@ import {
   setVietnamEscalationLevel,
 } from "@/lib/crises/vietnamEscalationInterface";
 import { getGameState } from "@/lib/gameState";
+import { resolveCrisisMetricPath } from "@/lib/crises/rules/metricPath";
 import { resolveGlobalResponse } from "@/lib/livingConflict/globalResponse";
 import { processLivingConflictsTurn } from "@/lib/livingConflict/processTurn";
 import {
@@ -440,11 +441,9 @@ async function applyMetricEffects(
     {};
   for (const effect of effects) {
     if (effect.metricCategory && effect.metricField) {
-      const path = `${effect.metricCategory}.${effect.metricField}.value`;
-      const def = getMetricDefinition(
-        effect.metricCategory as MetricCategoryId,
-        effect.metricField
-      );
+      const metricPath = resolveCrisisMetricPath(effect.metricCategory, effect.metricField);
+      const path = `${metricPath.category}.${metricPath.field}.value`;
+      const def = getMetricDefinition(metricPath.category as MetricCategoryId, metricPath.field);
       const entry = deltas[path] ?? {
         delta: 0,
         min: def?.minValue ?? 0,
