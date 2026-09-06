@@ -220,6 +220,18 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           .toArray(),
       ]);
 
+      // The listing loop below visits every public corporation. Index sectors
+      // once so it does not rescan the complete public-sector snapshot for
+      // every listing (O(corporations × sectors)). Array insertion preserves
+      // Mongo's cursor order within each corporation.
+      const sectorsByCorpId = new Map<string, CorporateSector[]>();
+      for (const sector of allSectors) {
+        const corpKey = sector.corporationId.toString();
+        const corpSectors = sectorsByCorpId.get(corpKey) ?? [];
+        corpSectors.push(sector);
+        sectorsByCorpId.set(corpKey, corpSectors);
+      }
+
       interface PriceHistoryPoint {
         turn: number;
         price: number;
@@ -469,7 +481,7 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
 
       for (const corp of corporations) {
         const corpKey = corp._id.toString();
-        const corpSectors = allSectors.filter((s) => s.corporationId.toString() === corpKey);
+        const corpSectors = sectorsByCorpId.get(corpKey) ?? [];
         const corpBonds = allBonds.filter((b) => b.corporationId?.toString() === corpKey);
 
         // The per-corp income statement below runs in the corp's home currency.
