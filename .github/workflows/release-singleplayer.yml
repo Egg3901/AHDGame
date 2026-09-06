@@ -36,6 +36,8 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
           NEXT_TELEMETRY_DISABLED: "1"
+      - name: Boot a world, process a turn and restart it
+        run: npm run singleplayer:smoke
       - name: Package versioned runtime
         shell: bash
         run: node scripts/singleplayer/release-package.mjs "${GITHUB_REF_NAME#game-v}" "${{ matrix.platform }}"

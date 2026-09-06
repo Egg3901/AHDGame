@@ -988,6 +988,12 @@ const RUNTIME: CollectionEntry[] = [
 
 const PRESERVED: CollectionEntry[] = [
   {
+    name: "clientDiagnostics",
+    category: "preserved",
+    notes:
+      "Opt-in redacted desktop failure reports expire through a 30-day TTL index, independently of world resets.",
+  },
+  {
     name: "clientSimulationStatistics",
     category: "preserved",
     notes:

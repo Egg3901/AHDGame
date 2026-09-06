@@ -46,27 +46,30 @@ export async function ensureSingleplayerUser(
 ): Promise<{ created: boolean }> {
   const users = db.collection("users");
   const _id = new ObjectId(SINGLEPLAYER_USER_ID);
-  const existing = await users.findOne({ _id }, { projection: { _id: 1 } });
-  if (existing) return { created: false };
-
   const claims = singleplayerSessionClaims();
   const now = new Date();
-  await users.insertOne({
-    _id,
-    email: claims.email,
-    username: claims.username,
-    displayName,
-    // Never a valid hash: the proxy mints the session, nobody logs in.
-    password: "!singleplayer-no-login",
-    role: claims.role,
-    isAdmin: claims.isAdmin,
-    hasCompletedSetup: false,
-    createdAt: now,
-    updatedAt: now,
-    lastLogin: now,
-    lastActivity: now,
-  });
-  return { created: true };
+  const result = await users.updateOne(
+    { _id },
+    {
+      $setOnInsert: {
+        _id,
+        email: claims.email,
+        username: claims.username,
+        displayName,
+        // Never a valid hash: the proxy mints the session, nobody logs in.
+        password: "!singleplayer-no-login",
+        role: claims.role,
+        isAdmin: claims.isAdmin,
+        hasCompletedSetup: false,
+        createdAt: now,
+        updatedAt: now,
+        lastLogin: now,
+        lastActivity: now,
+      },
+    },
+    { upsert: true }
+  );
+  return { created: result.upsertedCount === 1 };
 }
 
 export interface SingleplayerStatus {
