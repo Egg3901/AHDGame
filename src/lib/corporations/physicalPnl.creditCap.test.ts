@@ -130,3 +130,51 @@ describe("assemblePhysicalPnl residual credit cap", () => {
     expect(pnl.totalCost).toBe(billsTotal + 300);
   });
 });
+
+describe("assemblePhysicalPnl policy-credit cap and net margin", () => {
+  const base = {
+    hourlyRevenue: 100,
+    inputsCost: 5,
+    laborCost: 3,
+    upkeep: 1,
+    complianceCost: 1,
+    otherOpex: 0,
+    financialLegs: 0,
+    growthCost: 0,
+  };
+
+  it("caps policy credit at the bills it offsets so profit never exceeds revenue", () => {
+    const pnl = assemblePhysicalPnl({ ...base, policyCredit: 60 });
+    expect(pnl.policyCredit).toBe(10);
+    expect(pnl.totalCost).toBe(0);
+    expect(pnl.profit).toBe(100);
+  });
+
+  it("leaves a credit smaller than the bills alone", () => {
+    const pnl = assemblePhysicalPnl({ ...base, policyCredit: 4 });
+    expect(pnl.policyCredit).toBe(4);
+    expect(pnl.profit).toBe(94);
+  });
+
+  it("does not touch a net policy penalty", () => {
+    const pnl = assemblePhysicalPnl({ ...base, policyCredit: -7 });
+    expect(pnl.policyCredit).toBe(-7);
+    expect(pnl.profit).toBe(83);
+  });
+
+  it("reports a net margin over every cost line, which goes negative when upkeep exceeds revenue", () => {
+    const pnl = assemblePhysicalPnl({
+      hourlyRevenue: 100,
+      inputsCost: 40,
+      laborCost: 20,
+      upkeep: 90,
+      complianceCost: 0,
+      otherOpex: 0,
+      financialLegs: 0,
+      growthCost: 0,
+      policyCredit: 0,
+    });
+    expect(pnl.derivedMarginPct).toBe(40);
+    expect(pnl.netMarginPct).toBe(-50);
+  });
+});

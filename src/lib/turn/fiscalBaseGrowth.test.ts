@@ -105,6 +105,37 @@ describe("processFiscalBaseGrowth", () => {
       .$set;
     expect(factorSet["economicFactors.wageGrowth"]).toBe(3);
     expect(factorSet["economicFactors.tradeGrowth"]).toBe(2);
+    // gdpGrowth is mirrored every turn too; it used to be an annual snapshot
+    // that the budget page showed while every other surface read the live doc.
+    expect(factorSet["economicFactors.gdpGrowth"]).toBe(2.5);
+  });
+
+  it("mirrors the GDP-weighted regional growth when the country has no national doc", async () => {
+    db.collectionMocks.federalBudget!.find = vi.fn().mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: "FR", countryId: "FR", taxRates: FED_TAX_RATES, taxBases: { ...FED_BASES } },
+        ]),
+    });
+    db.collectionMocks.macroMetrics!.find = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "FR_IDF", economic: { gdpGrowth: { value: -8 } } },
+        { _id: "FR_ARA", economic: { gdpGrowth: { value: 4 } } },
+      ]),
+    });
+    db.collectionMocks.states!.find = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: "FR_IDF", countryId: "FR", gdp: 300 },
+        { _id: "FR_ARA", countryId: "FR", gdp: 100 },
+      ]),
+    });
+    const { processFiscalBaseGrowth } = await import("./fiscalBaseGrowth");
+    await processFiscalBaseGrowth(1);
+    const calls = db.collectionMocks.federalBudget!.updateOne.mock.calls;
+    const factorSet = calls.find((c) => c[1]?.$set?.["economicFactors.gdpGrowth"] != null)?.[1]
+      .$set;
+    expect(factorSet["economicFactors.gdpGrowth"]).toBeCloseTo(-5, 9);
   });
 
   it("recomputes federal revenue off the grown bases", async () => {

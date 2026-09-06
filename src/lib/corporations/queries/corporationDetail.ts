@@ -1727,6 +1727,7 @@ export async function loadCorporationDetailView(args: {
       sectorType: sector.sectorType,
       dailyProfit: sector.profit,
       effectiveProfitMargin: sector.effectiveProfitMargin,
+      fillAdjustedMarginPct: sector.fillAdjustedMarginPct ?? null,
       npv,
     };
   });

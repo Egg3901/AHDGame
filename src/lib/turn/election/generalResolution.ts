@@ -29,7 +29,6 @@ import {
   getMajoritarianBonus,
   type MajoritarianBonusConfig,
 } from "@/lib/turn/election/seatAllocation";
-import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getUkCommonsSeats } from "@/lib/constants/states";
 import { blocListQuota, blocListQuotaForGovernment } from "@/lib/constants/blocList";
@@ -319,12 +318,7 @@ export async function resolveOneGeneralElection(
     if (election.electionType === "commons" || election.electionType === "snap_commons") {
       const gsForCommons = await (await getGameStateCollection(db)).findOne({ _id: "current" });
       commonsSeats = getUkCommonsSeats(gsForCommons?.preset);
-      majoritarianBonus = await withCommonsOrgRanking(
-        db,
-        getMajoritarianBonus(election.electionType, gsForCommons?.currentYear),
-        election.countryId ?? "UK",
-        election.state
-      );
+      majoritarianBonus = getMajoritarianBonus(election.electionType, gsForCommons?.currentYear);
     }
 
     // Districted per-district resolution (US House, flag on). Returns null when the

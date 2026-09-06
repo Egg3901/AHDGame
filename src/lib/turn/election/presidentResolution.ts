@@ -284,7 +284,9 @@ export async function resolvePresidentElection(
     const presetGameState = await (await getGameStateCollection(db)).findOne({ _id: "current" });
     // Live (census-updated) EV units; equals the preset seed until a decennial
     // census reapportions (P1d-2).
-    const evUnits = (await loadApportionment(db, presetGameState?.preset)).electoralVoteUnits;
+    const evUnits = (
+      await loadApportionment(db, presetGameState?.preset, presetGameState?.currentYear)
+    ).electoralVoteUnits;
     electoralVotesByCandidate = allocateElectoralVotes(totalVotesByUnit, evUnits);
     ranked = Object.entries(electoralVotesByCandidate).sort((a, b) => b[1] - a[1]);
 

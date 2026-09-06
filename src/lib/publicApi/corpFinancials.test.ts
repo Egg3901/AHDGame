@@ -81,3 +81,57 @@ describe("corpFinancials", () => {
     expect(f).toEqual({ totalRevenue: 0, operatingIncome: 0, operatingCosts: 0 });
   });
 });
+
+describe("corpFinancials plants tier", () => {
+  it("uses the persisted plants P&L, so a loss-making sector reports negative operating income", () => {
+    const f = corpFinancials({
+      sectors: [
+        {
+          _id: "s1",
+          revenue: 500,
+          realizedRevenue: 400,
+          effectiveProfitMargin: 35,
+          plantsPnl: {
+            revenue: 400,
+            inventoryRevenue: 0,
+            inventoryCarry: 0,
+            inputs: 100,
+            labour: 60,
+            upkeep: 900,
+            compliance: 0,
+            otherOpex: 0,
+            otherOpexCreditCapped: false,
+            otherOpexUncapped: 0,
+            financialLegs: 0,
+            policyCredit: 0,
+            policyPp: 0,
+            operatingCost: 160,
+            totalCost: 1060,
+            profit: -660,
+            turn: 1,
+          },
+        },
+      ],
+      hostRateBySectorId: noFx,
+    });
+    expect(f.totalRevenue).toBe(400);
+    expect(f.operatingIncome).toBe(-660);
+    expect(f.operatingCosts).toBe(1060);
+  });
+
+  it("falls back to the margin path when the persisted P&L is incomplete", () => {
+    const f = corpFinancials({
+      sectors: [
+        {
+          _id: "s1",
+          revenue: 100,
+          realizedRevenue: 100,
+          effectiveProfitMargin: 40,
+          plantsPnl: { revenue: 100, profit: 10 } as never,
+        },
+      ],
+      hostRateBySectorId: noFx,
+    });
+    expect(f.operatingIncome).toBe(40);
+  });
+});

@@ -11,7 +11,12 @@ import { snapshotInterestRateHistory } from "./interestRateSnapshot";
  * fallback graduates as the world's clock advances.
  */
 
-function buildDbMock(params: { currentYear: number | undefined; banks: unknown[] }) {
+function buildDbMock(params: {
+  currentYear: number | undefined;
+  banks: unknown[];
+  states?: unknown[];
+  macroMetrics?: unknown[];
+}) {
   const bulkWrite = vi.fn().mockResolvedValue({});
   const db = {
     collection: vi.fn((name: string) => {
@@ -27,7 +32,20 @@ function buildDbMock(params: { currentYear: number | undefined; banks: unknown[]
             params.currentYear === undefined ? null : { currentYear: params.currentYear },
         };
       }
-      // federalBudget / stateMetrics: nothing found → all fallbacks exercised
+      if (name === "states") {
+        return { find: () => ({ toArray: async () => params.states ?? [] }) };
+      }
+      if (name === "macroMetrics") {
+        // National-doc lookup is by _id, regional lookup by countryId; the
+        // fixture rows below are regional (no national doc), so both branches
+        // of the code under test see the same list and filter it themselves.
+        return {
+          find: (filter: { _id?: unknown; countryId?: unknown }) => ({
+            toArray: async () => (filter?.countryId ? (params.macroMetrics ?? []) : []),
+          }),
+        };
+      }
+      // federalBudget: nothing found → inflation fallback exercised
       return {
         find: () => ({ toArray: async () => [] }),
       };
@@ -92,5 +110,40 @@ describe("snapshotInterestRateHistory era-aware growth fallback", () => {
     const { db, bulkWrite } = buildDbMock({ currentYear: undefined, banks: [ruBank] });
     await snapshotInterestRateHistory(db, 10);
     expect(pushedGdpRate(bulkWrite)).toBe(2.5);
+  });
+});
+
+describe("snapshotInterestRateHistory regional growth for countries without a national doc", () => {
+  it("snapshots the GDP-weighted regional mean instead of the era constant", async () => {
+    // FR has no national macroMetrics doc. Before this, its gdpGrowthHistory was
+    // the authored era trend every turn (zero variance over 240 turns on the
+    // live world) even though its regions were live; forex and legitimacy read
+    // that history.
+    const { db, bulkWrite } = buildDbMock({
+      currentYear: 1965,
+      banks: [{ _id: "FR", countryId: "FR", primeRate: 3.0 }],
+      states: [
+        { _id: "FR_IDF", countryId: "FR", gdp: 300 },
+        { _id: "FR_ARA", countryId: "FR", gdp: 100 },
+      ],
+      macroMetrics: [
+        { _id: "FR_IDF", countryId: "FR", economic: { gdpGrowth: { value: -8 } } },
+        { _id: "FR_ARA", countryId: "FR", economic: { gdpGrowth: { value: 4 } } },
+      ],
+    });
+    await snapshotInterestRateHistory(db, 650);
+    // (300 x -8 + 100 x 4) / 400 = -5
+    expect(pushedGdpRate(bulkWrite)).toBeCloseTo(-5, 9);
+  });
+
+  it("still falls back to the era trend when the country has no weightable regions", async () => {
+    const { db, bulkWrite } = buildDbMock({
+      currentYear: 1955,
+      banks: [ruBank],
+      states: [{ _id: "RU_X", countryId: "RU", gdp: 0 }],
+      macroMetrics: [{ _id: "RU_X", countryId: "RU", economic: { gdpGrowth: { value: 9 } } }],
+    });
+    await snapshotInterestRateHistory(db, 10);
+    expect(pushedGdpRate(bulkWrite)).toBe(6.0);
   });
 });

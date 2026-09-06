@@ -555,12 +555,12 @@ async function buildBriefing(args: {
       coalitionWeakness = buildCoalitionWeakness(ownerNational?.bucketAppeal);
 
       const gameState = await db
-        .collection<{ _id: string; preset?: string }>("gameState")
-        .findOne({ _id: "current" }, { projection: { preset: 1 } });
+        .collection<{ _id: string; preset?: string; currentYear?: number }>("gameState")
+        .findOne({ _id: "current" }, { projection: { preset: 1, currentYear: 1 } });
       const preset = gameState?.preset;
 
       if (isGeneralPhase) {
-        const { electoralVoteUnits } = await loadApportionment(db, preset);
+        const { electoralVoteUnits } = await loadApportionment(db, preset, gameState?.currentYear);
         const stateDocs = (await db
           .collection("states")
           .find({ countryId: election.countryId ?? "US" }, { projection: { _id: 1, name: 1 } })
