@@ -182,6 +182,7 @@ export async function processTurn(): Promise<{
 
   try {
     const db = await getDb();
+    const localSingleplayer = isSingleplayer();
     const lockAcquiredAt = new Date();
     const staleLockCutoff = new Date(lockAcquiredAt.getTime() - TURN_LOCK_STALE_MS);
 
@@ -210,7 +211,7 @@ export async function processTurn(): Promise<{
       // A singleplayer world only advances when the player asks it to, so a
       // gap of days between turns is the normal case, not a dead cron.
       const simSandbox =
-        isSingleplayer() ||
+        localSingleplayer ||
         (await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" }))?.simSandbox ===
           true;
       if (preLockState) {
@@ -228,7 +229,9 @@ export async function processTurn(): Promise<{
           };
         }
         const lastTp = new Date(preLockState.lastTurnProcessed);
-        const latestCronFire = await getLatestCompletedTurnRealTime(preLockState);
+        const latestCronFire = localSingleplayer
+          ? null
+          : await getLatestCompletedTurnRealTime(preLockState);
         const rawAnchor = latestCronFire ?? lastTp;
         // Floor the drift anchor at the most recent resume. Without this floor,
         // the first turn after a long manual pause sees drift = entire pause
@@ -455,7 +458,7 @@ export async function processTurn(): Promise<{
       // turn; their rolling windows make that lossless.
       shouldRunPhase: combinePhasePredicates(
         getSimTurnPhasePredicate(config?.simTurnPhaseMode),
-        getSingleplayerPhasePredicate(isSingleplayer()),
+        getSingleplayerPhasePredicate(localSingleplayer),
         getAnomalyScanCadencePredicate(gameState.currentTurn)
       ),
       // Audit traceId convention "turn:<n>:<phase>" (forensics plan §3.1, T2.7).
@@ -483,10 +486,19 @@ export async function processTurn(): Promise<{
     // write. Runs HERE, after every phase, because live `updatedAt` values show
     // budget writes landing well after the corporation phase that recomputes
     // them. See lib/budget/budgetInvariants.
-    await reportFederalBudgetInvariantBreaches(db, context.newTurn);
+    if (!localSingleplayer) {
+      await reportFederalBudgetInvariantBreaches(db, context.newTurn);
+    }
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
 
+    const compactPhaseTimings = Object.entries(phaseStatuses)
+      .flatMap(([phase, status]) => {
+        if (!status.startedAt || !status.completedAt) return [];
+        return [{ phase, durationMs: status.completedAt.getTime() - status.startedAt.getTime() }];
+      })
+      .sort((a, b) => b.durationMs - a.durationMs)
+      .slice(0, 5);
     await db.collection<GameState>("gameState").updateOne(
       { _id: "current" },
       {
@@ -503,6 +515,17 @@ export async function processTurn(): Promise<{
           processingPhase: null,
           processingPhaseStatuses: null,
           updatedAt: context.realNow,
+          ...(localSingleplayer
+            ? {
+                singleplayerTurnMetrics: {
+                  turn: context.newTurn,
+                  durationMs: Date.now() - startTime,
+                  success: warnings.length === 0,
+                  warningCount: warnings.length,
+                  slowestPhases: compactPhaseTimings,
+                },
+              }
+            : {}),
         },
       }
     );
@@ -524,8 +547,10 @@ export async function processTurn(): Promise<{
       phases: context.phaseResults,
       createdAt: context.realNow,
     };
-    await db.collection<TurnLog>("turnLogs").insertOne(turnLog as TurnLog);
-    turnLogWritten = true;
+    if (!localSingleplayer) {
+      await db.collection<TurnLog>("turnLogs").insertOne(turnLog as TurnLog);
+      turnLogWritten = true;
+    }
 
     emit({
       type: "turn_complete",
@@ -606,6 +631,7 @@ export async function processTurn(): Promise<{
       localTurnLockHeld = false;
 
       if (
+        !isSingleplayer() &&
         finalizedPhaseStatuses &&
         phaseResultsForFailure &&
         activeTurn > 0 &&
@@ -629,7 +655,13 @@ export async function processTurn(): Promise<{
         }
       }
 
-      if (finalizedPhaseStatuses && phaseResultsForFailure && activeTurn > 0 && !turnLogWritten) {
+      if (
+        !isSingleplayer() &&
+        finalizedPhaseStatuses &&
+        phaseResultsForFailure &&
+        activeTurn > 0 &&
+        !turnLogWritten
+      ) {
         const crashTurnLog: Omit<TurnLog, "_id"> = {
           turn: activeTurn,
           year: activeCurrentYear,

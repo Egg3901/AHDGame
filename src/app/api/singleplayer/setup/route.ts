@@ -8,6 +8,10 @@ import { resetAndBootstrapGameWorld } from "@/lib/admin/resetAndBootstrapGameWor
 import { isKnownPreset } from "@/lib/seeds/presetSelector";
 import { ensureSingleplayerUser, setSingleplayerConfig } from "@/lib/singleplayerServer";
 import type { NppAutonomyLevel, SingleplayerDifficulty, SingleplayerMode } from "@/lib/db/types";
+import {
+  noteSingleplayerSetupWork,
+  setSingleplayerSetupProgress,
+} from "@/lib/singleplayer/setupProgress";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 600;
@@ -43,6 +47,13 @@ export async function POST(request: Request) {
   if (denied) return denied;
 
   try {
+    setSingleplayerSetupProgress({
+      active: true,
+      phase: "preparing",
+      label: "Preparing your world",
+      detail: "Checking the selected era and local database",
+      progress: 2,
+    });
     const parsed = await parseJsonBody(request, bodySchema);
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
@@ -52,13 +63,31 @@ export async function POST(request: Request) {
     }
 
     const db = await getDb();
-    await ensureSingleplayerUser(db, displayName);
     const logs: string[] = [];
+    setSingleplayerSetupProgress({
+      phase: "clearing",
+      label: "Preparing a clean timeline",
+      detail: "Clearing incomplete world data",
+      progress: 5,
+    });
     const { reset } = await resetAndBootstrapGameWorld({
       db,
       preset,
       deleteProfiles: true,
-      log: (line) => logs.push(line),
+      skipDiagnostic: true,
+      log: (line) => {
+        logs.push(line);
+        if (!line.startsWith("[reset]") && !line.startsWith("World sealed")) {
+          setSingleplayerSetupProgress({ phase: "building", label: "Building the world" });
+        }
+        noteSingleplayerSetupWork(line);
+      },
+    });
+    setSingleplayerSetupProgress({
+      phase: "finalizing",
+      label: "Opening your world",
+      detail: "Saving game rules and your local profile",
+      progress: 94,
     });
     const config = await setSingleplayerConfig(db, {
       mode,
@@ -69,8 +98,22 @@ export async function POST(request: Request) {
     });
     await ensureSingleplayerUser(db, displayName);
 
+    setSingleplayerSetupProgress({
+      active: false,
+      phase: "complete",
+      label: "World ready",
+      detail: "Opening the game",
+      progress: 100,
+    });
+
     return NextResponse.json({ ok: true, preset, mode, config, reset, logs });
   } catch (error) {
+    setSingleplayerSetupProgress({
+      active: false,
+      phase: "failed",
+      label: "World setup stopped",
+      detail: error instanceof Error ? error.message : String(error),
+    });
     return handleRouteError(error);
   }
 }
