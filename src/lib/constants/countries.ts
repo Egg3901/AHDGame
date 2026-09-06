@@ -7049,18 +7049,25 @@ export function getMajorPartiesForRegion(
   countryId: CountryId,
   parentRegionId?: string
 ): Set<string> {
+  // Live candidates store `party` as the party's sequentialId string, and the
+  // enrichment pass adds `partyAbbr`. The sets below therefore carry BOTH the
+  // seed slug (fixtures, seeders) and the abbreviation (live races); match
+  // through `partitionMajorParties`, which also falls back to the two largest
+  // parties in the race when neither encoding matches (#811).
   if (countryId === "UK") {
-    // UK party IDs in the DB use the "uk_" prefix (uk_labour, uk_conservative, etc.)
-    if (parentRegionId === "SCO") return new Set(["uk_snp", "uk_labour"]);
-    if (parentRegionId === "WAL") return new Set(["uk_labour", "uk_conservative"]);
-    if (parentRegionId === "NIR") return new Set(["uk_dup", "uk_sf"]);
+    if (parentRegionId === "SCO") return new Set(["uk_snp", "uk_labour", "SNP", "LAB"]);
+    if (parentRegionId === "WAL") return new Set(["uk_labour", "uk_conservative", "LAB", "CON"]);
+    if (parentRegionId === "NIR") return new Set(["uk_dup", "uk_sf", "DUP", "SF"]);
     // England and national fallback
-    return new Set(["uk_labour", "uk_conservative"]);
+    return new Set(["uk_labour", "uk_conservative", "LAB", "CON"]);
   }
   if (countryId === "JP") {
     // Nippon Ishin dominates Kansai as the main opposition
-    if (parentRegionId === "KNS") return new Set(["ishin", "ldp"]);
-    return new Set(COUNTRY_CONFIGS[countryId].majorPartyIds);
+    if (parentRegionId === "KNS") return new Set(["ishin", "ldp", "ISHIN", "LDP"]);
+    return new Set([
+      ...COUNTRY_CONFIGS[countryId].majorPartyIds,
+      ...COUNTRY_CONFIGS[countryId].majorPartyIds.map((id) => id.toUpperCase()),
+    ]);
   }
   if (countryId === "US") {
     // Legacy tests/fixtures use slug IDs, while production US candidates store

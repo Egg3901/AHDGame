@@ -5,6 +5,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+const snapSpy = vi.fn().mockResolvedValue({ electionsSpawned: 1 });
+vi.mock("@/lib/turn/snapElection", () => ({
+  triggerSnapElection: (...a: unknown[]) => snapSpy(...a),
+}));
 
 let db: MockDb;
 beforeEach(async () => {
@@ -23,6 +27,9 @@ beforeEach(async () => {
     "noConfidenceVotes",
     "cabinetMembers",
     "ukCabinetCooldowns",
+    "governmentApprovals",
+    "ukGovernment",
+    "ukNhsState",
   ]) {
     db.collection(name);
   }
@@ -229,6 +236,101 @@ describe("updateGovernmentSeats", () => {
 // ---------------------------------------------------------------------------
 // resetGovernmentAfterElection
 // ---------------------------------------------------------------------------
+
+describe("updateGovernmentSeats per-turn gauges (ticket #858)", () => {
+  function existingGovernment() {
+    db.collectionMocks["governmentFormations"]!.findOne.mockResolvedValue({
+      _id: "UK",
+      countryId: "UK",
+      status: "formed",
+      formationType: "majority",
+      governingPartyId: "1",
+      coalitionId: null,
+      lostMajority: false,
+      totalSeatsSupporting: 340,
+      majorityThreshold: 326,
+    });
+    db.collectionMocks["electedOfficials"]!.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { party: "1", seatsHeld: 340, officeType: "commons", countryId: "UK" },
+        ]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({
+      _id: "UK",
+      approvalRating: 55,
+    });
+  }
+
+  it("ticks the confidence gauge and NHS quality on a turn where the government doc already exists", async () => {
+    // Regression: both ticks lived inside the one-time seed function, which the
+    // existing-doc branch returned before reaching, so on a live world neither
+    // collection was ever written.
+    const { updateGovernmentSeats } = await import("./ukGovernmentFormation");
+    existingGovernment();
+    await updateGovernmentSeats();
+
+    const gaugeWrite = db.collectionMocks["ukGovernment"]!.updateOne.mock.calls[0];
+    expect(gaugeWrite).toBeDefined();
+    expect((gaugeWrite![1] as { $set: Record<string, unknown> }).$set.confidenceGauge).toBeTypeOf(
+      "number"
+    );
+    expect(gaugeWrite![2]).toEqual({ upsert: true });
+
+    const nhsWrite = db.collectionMocks["ukNhsState"]!.updateOne.mock.calls[0];
+    expect(nhsWrite).toBeDefined();
+    expect((nhsWrite![1] as { $set: Record<string, unknown> }).$set.quality).toBeTypeOf("number");
+    expect(snapSpy).not.toHaveBeenCalled();
+  });
+
+  it("dissolves Parliament through the snap path when the gauge bottoms out and the flag is on", async () => {
+    const { updateGovernmentSeats } = await import("./ukGovernmentFormation");
+    existingGovernment();
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({
+      _id: "UK",
+      approvalRating: 0,
+    });
+    // Gauge already at the floor; one more erosion tick keeps it there.
+    db.collectionMocks["ukGovernment"]!.findOne.mockResolvedValue({
+      _id: "current",
+      confidenceGauge: 0,
+    });
+    const prev = process.env.UK_CONFIDENCE_GAUGE_DISSOLUTION;
+    process.env.UK_CONFIDENCE_GAUGE_DISSOLUTION = "1";
+    try {
+      await updateGovernmentSeats();
+    } finally {
+      if (prev === undefined) delete process.env.UK_CONFIDENCE_GAUGE_DISSOLUTION;
+      else process.env.UK_CONFIDENCE_GAUGE_DISSOLUTION = prev;
+    }
+    expect(snapSpy).toHaveBeenCalledTimes(1);
+    expect(snapSpy.mock.calls[0][1]).toBe("UK");
+    expect((snapSpy.mock.calls[0][3] as { reason: string; bypassLimits: boolean }).reason).toBe(
+      "auto-snap"
+    );
+  });
+
+  it("does not dissolve when the flag is off, even at the floor", async () => {
+    const { updateGovernmentSeats } = await import("./ukGovernmentFormation");
+    existingGovernment();
+    db.collectionMocks["governmentApprovals"]!.findOne.mockResolvedValue({
+      _id: "UK",
+      approvalRating: 0,
+    });
+    db.collectionMocks["ukGovernment"]!.findOne.mockResolvedValue({
+      _id: "current",
+      confidenceGauge: 0,
+    });
+    delete process.env.UK_CONFIDENCE_GAUGE_DISSOLUTION;
+    await updateGovernmentSeats();
+    expect(snapSpy).not.toHaveBeenCalled();
+  });
+});
 
 describe("resetGovernmentAfterElection", () => {
   it("resets government to pending with fresh seat data and increments cycle", async () => {

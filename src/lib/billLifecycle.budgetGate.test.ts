@@ -23,9 +23,6 @@ vi.mock("@/lib/achievements", () => ({
   resolveUserIdFromCharacter: vi.fn().mockResolvedValue(new ObjectId()),
 }));
 // billEnactment is REAL here; mock its heavy dependencies instead.
-vi.mock("@/lib/policyReactions", () => ({
-  recordPolicyReaction: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/budget/enactedLaws", () => ({
   recordEnactedLaw: vi.fn().mockResolvedValue(undefined),
 }));

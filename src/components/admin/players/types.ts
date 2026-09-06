@@ -7,6 +7,8 @@ export interface UserData {
   role: string;
   isAdmin: boolean;
   isBanned: boolean;
+  /** Optional while older admin bundles or test fixtures are in circulation. */
+  singleplayerEntitled?: boolean;
   characterId: string | null;
   characterName: string | null;
   party: string | null;

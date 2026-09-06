@@ -10,7 +10,15 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,6 +48,26 @@ cpSync(STANDALONE, OUT, { recursive: true });
 cpSync(path.join(ROOT, ".next", "static"), path.join(OUT, ".next", "static"), { recursive: true });
 cpSync(path.join(ROOT, "public"), path.join(OUT, "public"), { recursive: true });
 cpSync(path.join(ROOT, "scripts", "singleplayer", "launch.mjs"), path.join(OUT, "launch.mjs"));
+
+// Turbopack's standalone trace copies `mongodb`, but generated server chunks
+// require a content-addressed alias such as `mongodb-438b504308ffa4be`.
+// Node resolves that as a separate package and Windows dies before readiness
+// unless the alias is present. Materialize every traced package alias rather
+// than pinning one hash or one dependency.
+const chunkDir = path.join(OUT, ".next", "server", "chunks");
+const aliasPattern = /require\("([a-z0-9][a-z0-9-]+-[a-f0-9]{16})"\)/g;
+const aliases = new Set();
+for (const entry of readdirSync(chunkDir)) {
+  if (!entry.endsWith(".js")) continue;
+  const source = readFileSync(path.join(chunkDir, entry), "utf8");
+  for (const match of source.matchAll(aliasPattern)) aliases.add(match[1]);
+}
+for (const alias of aliases) {
+  const base = alias.replace(/-[a-f0-9]{16}$/, "");
+  const from = path.join(OUT, "node_modules", base);
+  const to = path.join(OUT, "node_modules", alias);
+  if (existsSync(from) && !existsSync(to)) cpSync(from, to, { recursive: true });
+}
 
 // The file trace is generous; none of these are read at runtime.
 for (const dir of [
