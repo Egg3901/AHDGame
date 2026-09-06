@@ -4,13 +4,20 @@ import { getDb } from "@/lib/mongodb";
 import type { User } from "@/lib/db/types";
 import { isPatreonActive } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
+import { cookies } from "next/headers";
+import { getAuthUserFromToken } from "@/lib/auth";
 
 const OFFLINE_ENTITLEMENT_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** The desktop client uses this same-origin response to confirm its WebView session. */
 export async function GET() {
-  const auth = await requireBasicAuth();
-  if (!auth.ok) return auth.response;
+  let auth = await requireBasicAuth();
+  if (!auth.ok) {
+    const bridgeToken = (await cookies()).get("auth-token")?.value;
+    const bridgeUser = bridgeToken ? await getAuthUserFromToken(bridgeToken) : null;
+    if (!bridgeUser) return auth.response;
+    auth = { ok: true, user: bridgeUser };
+  }
 
   const db = await getDb();
   const user = await db.collection<User>("users").findOne(
