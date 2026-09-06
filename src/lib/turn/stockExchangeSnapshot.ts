@@ -162,6 +162,25 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       const turn1Ago = Math.max(1, currentTurn - 1);
       const turn24Ago = Math.max(1, currentTurn - 24);
       const turn48Ago = Math.max(1, currentTurn - 48);
+      const historyAtOrEarliest = (targetTurn: number) => ({
+        $let: {
+          vars: {
+            atOrBefore: {
+              $filter: {
+                input: "$history",
+                as: "point",
+                cond: { $lte: ["$$point.turn", targetTurn] },
+              },
+            },
+          },
+          // The history array is sorted newest-first. If a corporation was
+          // listed after the requested window, retain the prior earliest-row
+          // fallback rather than returning no comparison price.
+          in: {
+            $ifNull: [{ $arrayElemAt: ["$$atOrBefore", 0] }, { $arrayElemAt: ["$history", -1] }],
+          },
+        },
+      });
 
       const [allSectors, historyRows] = await Promise.all([
         database
@@ -196,7 +215,9 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           .collection<CorporationHistory>("corporationHistory")
           .aggregate<{
             _id: ObjectId;
-            history: { turn: number; sharePrice: number; totalShares: number }[];
+            h1: { turn: number; sharePrice: number; totalShares: number };
+            h24: { turn: number; sharePrice: number; totalShares: number };
+            h48: { turn: number; sharePrice: number; totalShares: number };
           }>([
             {
               $match: {
@@ -214,6 +235,13 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
                     totalShares: "$totalShares",
                   },
                 },
+              },
+            },
+            {
+              $project: {
+                h1: historyAtOrEarliest(turn1Ago),
+                h24: historyAtOrEarliest(turn24Ago),
+                h48: historyAtOrEarliest(turn48Ago),
               },
             },
           ])
@@ -237,6 +265,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
         price: number;
         totalShares?: number;
       }
+      interface RawPriceHistoryPoint {
+        turn: number;
+        sharePrice: number;
+        totalShares: number;
+      }
 
       const priceHistoryByCorpId = new Map<
         string,
@@ -248,10 +281,9 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
       >();
       for (const entry of historyRows) {
         const corpId = entry._id.toString();
-        const history = entry.history;
-
-        const findAtOrBefore = (targetTurn: number): PriceHistoryPoint | null => {
-          const point = history.find((h) => h.turn <= targetTurn);
+        const toPriceHistoryPoint = (
+          point: RawPriceHistoryPoint | undefined
+        ): PriceHistoryPoint | null => {
           if (!point) return null;
           return {
             turn: point.turn,
@@ -260,38 +292,11 @@ export async function generateStockExchangeSnapshots(currentTurn: number, db?: D
           };
         };
 
-        // Find best snapshots at each timeframe, fallback to earliest if needed
-        let h1 = findAtOrBefore(turn1Ago);
-        let h24 = findAtOrBefore(turn24Ago);
-        let h48 = findAtOrBefore(turn48Ago);
-
-        // Fallback to earliest available if no snapshot at timeframe
-        if (!h1 && history.length > 0) {
-          const earliest = history[history.length - 1];
-          h1 = {
-            turn: earliest.turn,
-            price: getPublicShareQuote(earliest),
-            totalShares: earliest.totalShares,
-          };
-        }
-        if (!h24 && history.length > 0) {
-          const earliest = history[history.length - 1];
-          h24 = {
-            turn: earliest.turn,
-            price: getPublicShareQuote(earliest),
-            totalShares: earliest.totalShares,
-          };
-        }
-        if (!h48 && history.length > 0) {
-          const earliest = history[history.length - 1];
-          h48 = {
-            turn: earliest.turn,
-            price: getPublicShareQuote(earliest),
-            totalShares: earliest.totalShares,
-          };
-        }
-
-        priceHistoryByCorpId.set(corpId, { h1, h24, h48 });
+        priceHistoryByCorpId.set(corpId, {
+          h1: toPriceHistoryPoint(entry.h1),
+          h24: toPriceHistoryPoint(entry.h24),
+          h48: toPriceHistoryPoint(entry.h48),
+        });
       }
 
       // Calculate revenue, income, and growth per corp

@@ -441,7 +441,14 @@ describe("stockExchangeSnapshot", () => {
         .mockReturnValueOnce(createMockChain([createCharacter()]))
         .mockReturnValueOnce(createMockChain([]))
         .mockReturnValueOnce(
-          createMockChain([{ _id: corpId, history: [{ turn: 76, sharePrice: 100 }] }])
+          createMockChain([
+            {
+              _id: corpId,
+              h1: { turn: 99, sharePrice: 100 },
+              h24: { turn: 76, sharePrice: 100 },
+              h48: { turn: 52, sharePrice: 100 },
+            },
+          ])
         )
         .mockReturnValueOnce(createMockChain([createStateMetrics()]))
         .mockReturnValueOnce(createMockChain([createState()]))
