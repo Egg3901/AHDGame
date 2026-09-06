@@ -7,7 +7,7 @@
  */
 
 import { getDb } from "@/lib/mongodb";
-import type { Db, Filter } from "mongodb";
+import type { Db, Filter, ObjectId } from "mongodb";
 import type {
   NPP,
   Election,
@@ -161,6 +161,68 @@ export function buildActiveBillFilter(opts: {
   };
 }
 
+/**
+ * Attach `policies.domainPositions` to the NPPs that vote this turn, for the
+ * legislation types actually on the floor.
+ *
+ * Every NPP carries a stance on every legislation type, ~950 entries and 30 KB
+ * per document, and the shared context used to load all of it for every NPP
+ * on every read: 50 MB of BSON per load, twice a turn, of which bill voting
+ * read a handful of entries for a few hundred officials. The stance keys are
+ * dotted legislation ids, which a find() projection cannot address, so the
+ * subset is cut server-side with $objectToArray/$filter.
+ */
+async function hydrateDomainPositions(
+  db: Db,
+  nppMap: Map<string, NPP>,
+  nppOfficials: ElectedOfficial[],
+  bills: ReadonlyArray<Pick<Bill, "legislationTypeId" | "provisions">>
+): Promise<void> {
+  const legislationTypeIds = new Set<string>();
+  for (const bill of bills) {
+    if (bill.legislationTypeId) legislationTypeIds.add(bill.legislationTypeId);
+    for (const provision of bill.provisions ?? []) {
+      const id = (provision as { legislationTypeId?: unknown }).legislationTypeId;
+      if (typeof id === "string" && id) legislationTypeIds.add(id);
+    }
+  }
+  const voterIds = [
+    ...new Set(
+      nppOfficials.flatMap((o) => (o.nppId && nppMap.has(o.nppId.toString()) ? [o.nppId] : []))
+    ),
+  ];
+  if (legislationTypeIds.size === 0 || voterIds.length === 0) return;
+
+  const rows = await db
+    .collection<NPP>("npps")
+    .aggregate<{ _id: ObjectId; domainPositions: Record<string, number> | null }>([
+      { $match: { _id: { $in: voterIds } } },
+      {
+        $project: {
+          domainPositions: {
+            $arrayToObject: {
+              $filter: {
+                input: { $objectToArray: { $ifNull: ["$policies.domainPositions", {}] } },
+                as: "stance",
+                cond: { $in: ["$$stance.k", [...legislationTypeIds]] },
+              },
+            },
+          },
+        },
+      },
+    ])
+    .toArray();
+  for (const row of rows) {
+    const npp = nppMap.get(row._id.toString());
+    if (!npp) continue;
+    npp.policies = {
+      economic: npp.policies?.economic ?? 0,
+      social: npp.policies?.social ?? 0,
+      domainPositions: row.domainPositions ?? {},
+    };
+  }
+}
+
 export async function loadNPPContext(now: Date, options?: NPPContextOptions): Promise<NPPContext> {
   const db = await getDb();
   const {
@@ -236,7 +298,12 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
             name: 1,
             party: 1,
             personality: 1,
-            policies: 1,
+            // The ideology pair only. `policies.domainPositions` is a map of
+            // ~950 legislation stances (30 KB of a 31 KB NPP document) and
+            // only bill voting reads it, so it is hydrated below for the
+            // officials who vote, restricted to the bills on the floor.
+            "policies.economic": 1,
+            "policies.social": 1,
             retiredAt: 1,
           },
         }
@@ -298,6 +365,7 @@ export async function loadNPPContext(now: Date, options?: NPPContextOptions): Pr
   const preset = typeof gameStateDoc?.preset === "string" ? gameStateDoc.preset : undefined;
 
   const nppMap = new Map(allNPPs.map((n) => [n._id.toString(), n]));
+  await hydrateDomainPositions(db, nppMap, nppOfficials, [...activeBills, ...activeStateBills]);
   const statePartyOrgs = new Map(statePartyOrgsArr.map((o) => [o._id, o]));
   const legislationTypeMap = new Map(allLegislationTypes.map((t) => [t._id, t]));
   const stateDemographicsMap = new Map(allStateDemographics.map((s) => [s._id, s]));
