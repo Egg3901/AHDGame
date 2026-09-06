@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CORPORATION_TYPES,
   CORPORATION_TYPE_LABELS,
   type CorporationType,
   SPRAWL_SECTOR_THRESHOLD,
@@ -217,9 +218,17 @@ export default function SectorsTab({
   // that no longer exists: the rail would snap back to "All sectors" while the
   // table stayed filtered to nothing, showing an empty list with no
   // explanation. Everything downstream reads this, never the raw state.
+  // Resolved to the element OUT OF `CORPORATION_TYPES`, not cast from the
+  // control's own string. The type filter is set from a `<select>`'s
+  // `e.target.value`, and this value goes on to become the expand modal's
+  // `initialSectorType`, which the modal interpolates into a link href. Passing
+  // the raw string through carried DOM text all the way into a URL
+  // (CodeQL js/xss-through-dom); resolving through the constant means what
+  // flows onward is a compile-time string. The ownership test stays: it must
+  // also be a type this corporation actually operates.
   const dossierType =
     filterType && sectorTypes.some((t) => t.value === filterType)
-      ? (filterType as CorporationType)
+      ? (CORPORATION_TYPES.find((t) => t === filterType) ?? null)
       : null;
   // Every read of the type filter goes through this, never through the raw
   // state, so a value that has gone stale is simply inert rather than
