@@ -81,6 +81,8 @@ describe("macro player/NPP action parity fixture", () => {
         revenue: 1_000,
         realizedRevenue: 900,
         capitalStock: 100,
+        producedUnits: 25,
+        inventoryUnits: { electricity: 12 },
         capacityBookAnchor: 1_000,
       };
       const budget = {
@@ -165,9 +167,21 @@ describe("macro player/NPP action parity fixture", () => {
     const sectorOps = playerTurn.sectorWrites.flat();
     expect(sectorOps).toHaveLength(1);
     expect(sectorOps[0]).toMatchObject({
-      updateOne: { update: { $inc: { capitalStock: expect.any(Number) } } },
+      updateOne: { update: { $inc: { capitalStock: 0.05 } } },
     });
-    expect(playerTurn.sector.capitalStock).toBe(100);
+    for (const ops of [playerTurn.sectorWrites, nppTurn.sectorWrites]) {
+      for (const op of ops.flat()) {
+        const update = (op as { updateOne: { update: Record<string, Record<string, unknown>> } })
+          .updateOne.update;
+        for (const fields of Object.values(update)) {
+          expect(
+            Object.keys(fields).some((key) => /^(producedUnits|inventoryUnits)(\.|$)/.test(key))
+          ).toBe(false);
+        }
+      }
+    }
+    expect(playerTurn.sector.producedUnits).toBe(25);
+    expect(playerTurn.sector.inventoryUnits).toEqual({ electricity: 12 });
   });
 
   it("plants settlement changes capacity value without creating physical output", () => {
