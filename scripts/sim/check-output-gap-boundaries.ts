@@ -52,12 +52,18 @@ while (neutralTurns < turnsPerYear) {
   if (Math.abs(step.gdpGrowth - (2 + (step.gap - neutralGap) * turnsPerYear)) > 1e-9) {
     throw new Error("neutral identity error");
   }
+  if (step.gap < 0 || step.gap >= neutralGap) throw new Error("neutral gap failed to converge");
   neutralGap = step.gap;
   neutralRate = step.gdpGrowth;
   neutralTurns++;
 }
 
+if (neutralGap > 5) throw new Error("neutral gap failed to halve within one year");
+
 const invalid = advanceOutputGap(Number.NaN, Number.POSITIVE_INFINITY, Number.NaN, 0);
+if (invalid.gap !== 0 || invalid.gdpGrowth !== 0 || invalid.impulse !== 0) {
+  throw new Error("invalid input rebase failed");
+}
 const roundedBoundary = roundTo(advanceOutputGap(-10, 10, 2, turnsPerYear).gdpGrowth, 3);
 const report = {
   cases,
