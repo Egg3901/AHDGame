@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
 import { computeForceMetricDeltas, driftReadiness } from "./militaryForceEffects";
 import { readinessBaselineOf, ARREARS_READINESS_WEIGHT } from "@/lib/military/readinessDrift";
-import { aggregateForce } from "@/lib/constants/military";
+import { aggregateForce, getBranches } from "@/lib/constants/military";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { buildCountryRoster } from "@/lib/admin/seed/seedMilitaryUnits";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 
@@ -105,20 +107,49 @@ describe("computeForceMetricDeltas", () => {
 });
 
 describe("W1 balance pass — unified power holds the calibrated band", () => {
-  // After vet/equipment entered effPower, a seeded force's publicSafetyConfidence
-  // must stay in the calibrated ~0.02..0.06 band at the unchanged POWER_NORM=1500.
-  for (const country of ["US", "CN"]) {
+  const REGIONS = ["r1", "r2", "r3", "r4", "r5", "r6"];
+  const ERAS = ["1953", "1979", "1991", "1999", "2007", "2019", "2023"];
+
+  function seededDeltas(country: string, era: string) {
+    const roster = buildCountryRoster(
+      country,
+      REGIONS,
+      1,
+      era,
+      getStartingYearForPreset(`${era}-default`)
+    ).map((u) => ({ ...u, _id: new ObjectId() }) as MilitaryUnit);
+    if (roster.length === 0) return null;
+    const agg = aggregateForce(roster, country, "standard");
+    return computeForceMetricDeltas(agg, agg.totalUpkeep * 1.1);
+  }
+
+  // Swept over every country and era, not just two: POWER_NORM is a single linear
+  // normaliser serving forces from Ireland's four units to the 2023 US Navy, and the
+  // authored orders of battle widened that range by about 4x. If any seeded force
+  // reaches MAX_PER_METRIC_MODIFIER_PER_TURN (0.08) the metric flattens there and the
+  // player's army stops mattering, which is the failure this guards.
+  it("no seeded force in any era reaches the per-metric cap", () => {
+    const pinned: string[] = [];
+    for (const era of ERAS) {
+      const year = getStartingYearForPreset(`${era}-default`);
+      for (const country of Object.keys(COUNTRY_CONFIGS) as CountryId[]) {
+        if (getBranches(country, year).length === 0) continue;
+        const deltas = seededDeltas(country, era);
+        if (!deltas) continue;
+        if (deltas.publicSafetyConfidence >= 0.06) {
+          pinned.push(`${era}/${country} ${deltas.publicSafetyConfidence}`);
+        }
+      }
+    }
+    expect(pinned).toEqual([]);
+  });
+
+  // The other side of the same band: a superpower's army must still register.
+  for (const country of ["US", "RU", "CN"]) {
     it(`${country} seeded force lands publicSafetyConfidence in-band`, () => {
-      const roster = buildCountryRoster(
-        country,
-        ["r1", "r2", "r3", "r4", "r5", "r6"],
-        1,
-        "2019"
-      ).map((u) => ({ ...u, _id: new ObjectId() }) as MilitaryUnit);
-      const agg = aggregateForce(roster, country, "standard");
-      const deltas = computeForceMetricDeltas(agg, agg.totalUpkeep * 1.1);
-      expect(deltas.publicSafetyConfidence).toBeGreaterThan(0.02);
-      expect(deltas.publicSafetyConfidence).toBeLessThan(0.06);
+      const deltas = seededDeltas(country, "2019");
+      expect(deltas!.publicSafetyConfidence).toBeGreaterThan(0.02);
+      expect(deltas!.publicSafetyConfidence).toBeLessThan(0.06);
     });
   }
 });
