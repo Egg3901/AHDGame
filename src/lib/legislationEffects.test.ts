@@ -477,6 +477,51 @@ describe("applyLegislationEffect — board countries (step-6 cutover)", () => {
   });
 });
 
+describe("applyLegislationEffect — macro-metric effects are scoped to the enacting country", () => {
+  let db: MockDb;
+
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("macroMetrics");
+    db.collectionMocks["legislationTypes"] = {
+      ...db.collection("legislationTypes"),
+      findOne: vi.fn().mockResolvedValue({
+        _id: "us_growth_act",
+        effectTarget: { metricCategoryId: "economic", metricId: "gdpGrowth" },
+      }),
+    } as MockDb["collectionMocks"][string];
+  });
+
+  it("filters the macroMetrics write by countryId instead of hitting every region on earth", async () => {
+    await applyLegislationEffect(db as unknown as Db, {
+      _id: new ObjectId(),
+      countryId: "US",
+      stateId: "federal",
+      legislationTypeId: "us_growth_act",
+      effectDirection: 1,
+    });
+    const calls = db.collectionMocks["macroMetrics"]!.updateMany.mock.calls;
+    expect(calls).toHaveLength(1);
+    const [filter, update] = calls[0] as [
+      Record<string, unknown>,
+      { $inc: Record<string, number> },
+    ];
+    expect(filter).toEqual({ countryId: "US" });
+    expect(Object.keys(update.$inc)).toEqual(["economic.gdpGrowth.value"]);
+  });
+
+  it("drops a macro effect when the bill has no country to attribute it to", async () => {
+    await applyLegislationEffect(db as unknown as Db, {
+      _id: new ObjectId(),
+      countryId: undefined as never,
+      stateId: "federal",
+      legislationTypeId: "us_growth_act",
+      effectDirection: 1,
+    });
+    expect(db.collectionMocks["macroMetrics"]!.updateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe("applyLegislationEffect — war declarations", () => {
   let db: MockDb;
   beforeEach(() => {
