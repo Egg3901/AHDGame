@@ -118,9 +118,21 @@ describe("isPreConsolidationRelease", () => {
     }
   });
 
-  it("covers every public post on disk, so no historic release can re-announce", () => {
+  it("keeps historic public posts silent and the current release eligible", () => {
     const shipped = loadPublicPosts().map((p) => p.version);
     expect(shipped.length).toBeGreaterThan(0);
-    for (const version of shipped) expect(isPreConsolidationRelease(version)).toBe(true);
+    expect(shipped.filter(isPreConsolidationRelease)).toEqual([
+      "1.6.0",
+      "1.5.0",
+      "1.4.0",
+      "1.3.0",
+      "1.2.0",
+      "1.1.0",
+      "1.0.0",
+      "0.4.2",
+      "0.4.1",
+      "0.4.0",
+    ]);
+    expect(shipped.filter((version) => !isPreConsolidationRelease(version))).toEqual(["1.7.0"]);
   });
 });
