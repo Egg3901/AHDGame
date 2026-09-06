@@ -88,7 +88,10 @@ export async function loadNationalMetrics(
   const allStates = await db.collection<State>("states").find({ countryId }).toArray();
   const stateIds = allStates.map((s) => s._id);
   // SP5: merged two-store view.
-  const allMetrics = await findMergedRegionMetricsMany(db, { _id: { $in: stateIds } });
+  const allMetrics = await findMergedRegionMetricsMany(db, {
+    _id: { $in: stateIds },
+    countryId,
+  });
 
   if (allMetrics.length === 0) {
     return null;

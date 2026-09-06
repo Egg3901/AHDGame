@@ -92,7 +92,7 @@ export async function recomputeNationalApproval(
   // `COUNTRY_ORDER`. Gathering first cost three discarded queries per call.
   if (isPoliticalApprovalCountry(countryId)) {
     const bases = await loadPoliticalApprovalBases(db, countryId);
-    return bases?.national ?? BASE_APPROVAL;
+    return applyModifiers(bases?.national ?? BASE_APPROVAL, [PUBLIC_EXPECTATIONS_MODIFIER]);
   }
 
   const { allStates, allMetrics, nationalAverages, preset, year } =
