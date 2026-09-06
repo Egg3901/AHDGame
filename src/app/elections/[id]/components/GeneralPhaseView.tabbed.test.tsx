@@ -34,6 +34,9 @@ vi.mock("@/components/elections/general/FactorLedgerCard", () => ({
 vi.mock("@/components/elections/general/NationalMoodGauge", () => ({
   NationalMoodGauge: () => <div data-testid="mood" />,
 }));
+vi.mock("./RunningMateSelector", () => ({
+  RunningMateSelector: () => <div data-testid="running-mate" />,
+}));
 vi.mock("./GeneralElectionPanel", () => ({
   // Stands in for the tally panel, which draws its own copy of the charts
   // unless it is told not to.
@@ -119,6 +122,14 @@ describe("folding the detail views into tabs", () => {
       "State drivers",
       "Factor ledger",
     ]);
+  });
+
+  it("leaves naming a running mate to the campaign page", () => {
+    // The campaign page carries the same control against the same route, and
+    // this one sat between two analysis views that have nothing to do with
+    // managing a ticket.
+    renderView(true);
+    expect(screen.queryByTestId("running-mate")).toBeNull();
   });
 
   it("leaves the stacked layout alone when it is not asked to fold", () => {

@@ -355,7 +355,12 @@ export function GeneralPhaseView({
         />
       )}
 
-      {showRunningMateSelector &&
+      {/* Naming a running mate belongs to running a campaign, and the campaign
+          page carries the same control against the same route. On the folded
+          layout this was a second entry point to it, sitting between two
+          analysis views that have nothing to do with managing a ticket. */}
+      {!tabbedDetail &&
+        showRunningMateSelector &&
         election.electionType === "president" &&
         amInRace &&
         !localIsEnded &&
