@@ -5,6 +5,7 @@ import {
   formatRoundTripReport,
   recordRoundTrip,
   recordDocumentsReturned,
+  totalBytesReturned,
   resetRoundTripProfiler,
   roundTripProfilingEnabled,
   roundTripReport,
@@ -86,6 +87,7 @@ describe("round-trip profiler", () => {
       collection: "corporations",
       roundTrips: 300,
       documents: 0,
+      bytes: 0,
     });
   });
 
@@ -123,7 +125,7 @@ describe("round-trip profiler", () => {
     const text = formatRoundTripReport()!;
     expect(text).toContain("100 round trips");
     expect(text).toContain("heavy");
-    expect(text).toContain("corporations 0d/75t");
+    expect(text).toContain("corporations 0.0M/0d/75t");
   });
 });
 
@@ -147,6 +149,7 @@ describe("document counting", () => {
       collection: "ledgerEntries",
       roundTrips: 1,
       documents: 61398,
+      bytes: 0,
     });
   });
 
@@ -168,6 +171,37 @@ describe("document counting", () => {
     expect(roundTripReport().map((r) => r.phase)).toEqual(["heavy", "chatty"]);
     expect(totalDocumentsReturned()).toBe(61898);
     expect(totalRoundTrips()).toBe(501);
+  });
+
+  /**
+   * Documents are not equal: an NPP is 31KB and a fund position is 150 bytes.
+   * Bytes are what BSON decoding actually costs, so when they are known they
+   * outrank the document count.
+   */
+  it("ranks phases by bytes ahead of documents", () => {
+    enable();
+    beginPhaseProfiling("manySmall");
+    recordRoundTrip("indexFundPositions");
+    recordDocumentsReturned("indexFundPositions", 7000, 7000 * 150);
+    endPhaseProfiling("manySmall");
+
+    beginPhaseProfiling("fewFat");
+    recordRoundTrip("npps");
+    recordDocumentsReturned("npps", 1700, 1700 * 31_000);
+    endPhaseProfiling("fewFat");
+
+    const report = roundTripReport();
+    expect(report.map((r) => r.phase)).toEqual(["fewFat", "manySmall"]);
+    expect(report[0]!.bytes).toBe(1700 * 31_000);
+    expect(report[0]!.topCollections[0]).toMatchObject({
+      collection: "npps",
+      bytes: 1700 * 31_000,
+    });
+    expect(totalBytesReturned()).toBe(1700 * 31_000 + 7000 * 150);
+
+    const text = formatRoundTripReport()!;
+    expect(text).toContain("BSON returned this turn");
+    expect(text).toContain("npps 50.3M/1700d/1t");
   });
 
   it("ignores empty and negative batches", () => {
