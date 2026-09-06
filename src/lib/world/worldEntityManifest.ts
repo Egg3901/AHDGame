@@ -1963,6 +1963,10 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
       "2019-default",
       configFallbackEntries("2019-default")
     ),
+    "2023-default": defineWorldEntityPresetManifest(
+      "2023-default",
+      configFallbackEntries("2023-default")
+    ),
   });
 
 export function getWorldEntityPresetManifest(presetId: string): WorldEntityPresetManifest {
