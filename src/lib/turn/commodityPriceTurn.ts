@@ -132,6 +132,7 @@ import { impliedOutputUnits } from "@/lib/market/capital";
 import type { Db } from "mongodb";
 import { depletedCapacityDoc, buildDepletionInc } from "@/lib/extraction/depletion";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/latentShortage";
 
 /**
  * P3b — book this turn's extraction against each state's deposits (plants only).
@@ -777,7 +778,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     }
   }
 
-  const { global, byState } = computeRawSupplyDemand(
+  const { global, byState, demandTruncated } = computeRawSupplyDemand(
     sectorData,
     gdpGrowthData,
     stateGdpMap,
@@ -982,6 +983,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     for (const [commodity, units] of household.global) {
       const g = global.get(commodity);
       if (g) g.demand += units;
+    }
+    for (const [commodity, units] of household.truncated) {
+      demandTruncated.set(commodity, (demandTruncated.get(commodity) ?? 0) + units);
     }
     for (const [stateId, contrib] of household.byState) {
       let stateMap = byState.get(stateId);
@@ -1755,6 +1759,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         )
       : undefined;
 
+    const latentShortage = latentShortagePersistence(globalBal, demandTruncated.get(commodity));
+
     ops.push({
       updateOne: {
         filter: { commodity },
@@ -1764,6 +1770,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             globalPrice: globalMktPrice,
             globalSupply: Math.round(globalBal.supply * 100) / 100,
             globalDemand: Math.round(globalBal.demand * 100) / 100,
+            ...latentShortage.set,
             statePrices,
             stateSupply,
             stateDemand,
@@ -1784,6 +1791,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             reachablePrices,
             updatedAt: now,
           },
+          ...(Object.keys(latentShortage.unset).length > 0 ? { $unset: latentShortage.unset } : {}),
         },
         upsert: true,
       },
@@ -1806,6 +1814,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         computeMarketPrice(LEDGER_BASE_PRICES[commodity], globalBal.supply, globalBal.demand),
       globalSupply: Math.round(globalBal.supply * 100) / 100,
       globalDemand: Math.round(globalBal.demand * 100) / 100,
+      ...latentShortageFields(globalBal, demandTruncated.get(commodity)),
       statePrices: appliedStatePrices.get(commodity) ?? {},
       nationalPrices: appliedNationalPrices.get(commodity) ?? {},
       scarcityMult: scarcityMultByCommodity.get(commodity) ?? 1,

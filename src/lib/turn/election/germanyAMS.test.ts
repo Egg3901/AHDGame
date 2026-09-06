@@ -84,9 +84,17 @@ function makeFakeDb(seed: Record<string, Doc[]>): FakeDb {
   const makeCollection = (name: string) => {
     const docs = () => (collections[name] ??= []);
     return {
-      find: (query: Doc = {}, _opts?: unknown) => ({
-        toArray: async () => docs().filter((d) => matches(d, query)),
-      }),
+      find: (query: Doc = {}, _opts?: unknown) => {
+        const cursor = {
+          toArray: async () => docs().filter((d) => matches(d, query)),
+          // `buildDEPartySlugToSeqId` resolves the ticket-split rate table's
+          // slugs against the live roster with `.project()`, so the fake cursor
+          // needs it. Projection shape is irrelevant here — the resolver reads
+          // `name` and `sequentialId` off whatever comes back.
+          project: (_projection?: unknown) => cursor,
+        };
+        return cursor;
+      },
       findOne: async (query: Doc = {}) => docs().find((d) => matches(d, query)) ?? null,
       insertOne: async (doc: Doc) => {
         docs().push(doc);

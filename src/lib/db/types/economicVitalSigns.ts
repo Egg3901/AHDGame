@@ -50,6 +50,10 @@ export interface EconomicVitalSigns {
   };
   production: {
     sectorsObserved: number;
+    /** Commodities whose recorded demand the 1.5x caps cut this turn (#1460). */
+    demandTruncatedCommodities: EconomicMetric;
+    /** Worst (demand + truncated) / supply among capped commodities (#1460). */
+    maxLatentShortageMultiple: EconomicMetric;
     throughputFloorShare: EconomicMetric;
     physicalSellThrough: EconomicMetric;
     labourStaffingRate: EconomicMetric;

@@ -4,6 +4,7 @@ import createNextIntlPlugin from "next-intl/plugin";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
 import { PRIVATE_PAGE_CACHE_CONTROL } from "./src/lib/cacheHeaders";
+import { retiredChangelogRedirects } from "./src/lib/changelog/retiredSlugs";
 
 // Railway's build context no longer exposes the .git directory, so `git
 // rev-parse` fails on every deploy build (#2772). Prefer Railway's injected
@@ -78,7 +79,10 @@ const nextConfig: NextConfig = {
   // for the reasons above.
   ...(process.env.SINGLEPLAYER === "1" ? { output: "standalone" as const } : {}),
   cleanDistDir: !railwayEnv,
-  serverExternalPackages: ["mongodb"],
+  // The standalone Turbopack build gives an explicitly external MongoDB
+  // package a generated require alias. That alias is not emitted into the
+  // desktop bundle on Windows, so local worlds fail before the server starts.
+  // Keep it traced into the standalone artifact instead.
   allowedDevOrigins: ["127.0.0.1"],
   typescript: {
     tsconfigPath: isProductionBuild ? "tsconfig.build.json" : "tsconfig.json",
@@ -206,6 +210,9 @@ const nextConfig: NextConfig = {
   },
   async redirects() {
     return [
+      // Public changelog posts folded into their release by the 2026-09-06
+      // consolidation. These addresses are linked from Discord and the wiki.
+      ...retiredChangelogRedirects(),
       {
         // The in-app API reference page was retired in favor of the canonical
         // docs site (docs.lakesidegames.net, source: Egg3901/ahd-docs). Keeping

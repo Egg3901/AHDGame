@@ -151,6 +151,13 @@ describe("computeRawSupplyDemand - ledgerUnitScale (ticket #1027 phase 2)", () =
       energy.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP
     );
     expect(energy.demand).toBeCloseTo(energy.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP, 6);
+    // The truncated amount is recorded so the real gap stays visible (#1460).
+    const truncated = scaled.demandTruncated.get("energy") ?? 0;
+    expect(truncated).toBeGreaterThan(0);
+    expect(energy.demand + truncated).toBeGreaterThan(
+      energy.supply * PLANTS_LEDGER_DEMAND_SUPPLY_CAP
+    );
+    expect(unscaled.demandTruncated.get("energy") ?? 0).toBe(0);
     // State shares preserved: S2 carries 3x S1's revenue, keeps 3x the demand.
     const s1 = scaled.byState.get("S1")!.get("energy")!.demand;
     const s2 = scaled.byState.get("S2")!.get("energy")!.demand;

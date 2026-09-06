@@ -7,7 +7,6 @@
 import { processStatePolicyEffects } from "@/lib/policyEffects";
 import { processAllStateDemographics } from "@/lib/demographicEffects";
 import { processEraCheckpointsTurn } from "@/lib/turn/eraCheckpointTurn";
-import { decayPolicyReactions } from "@/lib/policyReactions";
 import { processArchetypeApprovalDecay } from "@/lib/turn/archetypeApprovalDecay";
 import { processUnownedSectorGrowth } from "@/lib/turn/unownedSectorGrowth";
 import { processMetricDecay } from "@/lib/turn/metricDecay";
@@ -146,7 +145,6 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     const [
       { crisisResult, navairResult, ministerialOrdersResult, policyResult },
       demoEffectResult,
-      ,
       archetypeDecayResult,
       unownedResult,
       ,
@@ -181,7 +179,6 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         }
         return result;
       }),
-      runtime.runPhase("policyReactionDecay", () => decayPolicyReactions(db, newTurn)),
       runtime.runPhase("archetypeApprovalDecay", () => processArchetypeApprovalDecay()),
       runtime.runPhase("unownedSectorGrowth", () => processUnownedSectorGrowth(db)),
       runtime.runPhase("metricDecay", () => processMetricDecay()),

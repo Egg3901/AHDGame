@@ -39,6 +39,55 @@ export function stateArmsLotsPerTurn(countryId: string): number {
   return STATE_ARMS_INDUSTRY[countryId as CountryId] ?? 0;
 }
 
+/**
+ * The emergency floor, for everyone who is NOT on the roster above.
+ *
+ * The asymmetry this closes: a planned economy's equipment cannot reach zero, because
+ * `STATE_ARMS_INDUSTRY` tops it up every turn whatever else is happening. A market
+ * economy's can, and did. On the live world the United States finished the War for
+ * Germany with 0/0/0 firepower, protection and support on its Armored and Infantry
+ * Divisions, because the only route into its store is a defence contract, and
+ * `applyDefenceRefit` returns immediately on an empty arsenal. Procurement was also
+ * frozen at the time, which made the gap total.
+ *
+ * This is a FLOOR, not a pipeline, and the distinction is the whole design:
+ *
+ *  - It engages only for a domain whose store is at zero. One lot arrives, the store
+ *    is no longer empty, and the floor switches itself off next turn. It cannot fill a
+ *    store, only refuse to leave one at nothing.
+ *  - It is a third of the Soviet rate and equal to East Germany's, so planned production
+ *    keeps its whole advantage: RU still re-equips a stripped 52-formation roster in
+ *    about 81 turns, and nobody else can approach that.
+ *  - It never substitutes for procurement. Contracts remain the only way to stock an
+ *    arsenal, modernise a tier, or supply a war at pace.
+ *
+ * A nation that has lost everything improvises something. It does not get a defence
+ * industry for free.
+ */
+export const MATERIEL_FLOOR_LOTS = 1;
+
+/**
+ * The floor's production for a country, and the domains it may reach.
+ *
+ * Returns 0 lots for a planned economy (which has its own rate) and for anyone whose
+ * stores are not actually empty. `onlyEmpty` is what keeps this a floor: the allocator
+ * fills toward a domain's CEILING, so handing it every domain would turn one lot a turn
+ * into a full second supply line.
+ */
+export function materielFloor(
+  countryId: string,
+  domains: Record<string, DomainDemand>
+): { lots: number; domains: Record<string, DomainDemand> } {
+  if (stateArmsLotsPerTurn(countryId) > 0) return { lots: 0, domains: {} };
+  const onlyEmpty = Object.fromEntries(
+    Object.entries(domains).filter(([, d]) => d.stock <= 0 && d.need > 0)
+  );
+  return {
+    lots: Object.keys(onlyEmpty).length > 0 ? MATERIEL_FLOOR_LOTS : 0,
+    domains: onlyEmpty,
+  };
+}
+
 /** What one domain's store needs and how much it may hold. */
 export interface DomainDemand {
   /** Lots required to bring the domain's EXISTING formations up to a full load. */

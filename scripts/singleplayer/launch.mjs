@@ -272,6 +272,7 @@ async function startMongod(bin) {
     log(`port ${MONGO_PORT} already in use; assuming a MongoDB is running there`);
     return null;
   }
+  if (shuttingDown) return null;
   const child = spawn(
     bin,
     [
@@ -287,6 +288,8 @@ async function startMongod(bin) {
     ],
     { stdio: ["ignore", "ignore", "inherit"] }
   );
+  // Track ownership before waiting for the port, including startup cancellation.
+  mongo = child;
   child.once("exit", (code) => {
     if (!shuttingDown) {
       console.error(
@@ -420,6 +423,17 @@ function watchParent() {
 }
 
 let shuttingDown = false;
+// The desktop supervisor owns stdin. Use a bounded line protocol so stopping
+// one world terminates its children before the desktop starts another world.
+let controlInput = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  controlInput = (controlInput + chunk).slice(-128);
+  const lines = controlInput.split("\n");
+  controlInput = lines.pop() ?? "";
+  if (lines.some((line) => line.trim() === "shutdown")) shutdown(0);
+});
+
 let mongo = null;
 let app = null;
 
@@ -440,7 +454,9 @@ process.on("SIGTERM", () => shutdown(0));
 try {
   mkdirSync(HOME, { recursive: true });
   const bin = await findMongod();
+  if (shuttingDown) process.exit(0);
   mongo = await startMongod(bin);
+  if (shuttingDown) process.exit(0);
   app = startApp();
   await waitForPort(APP_PORT, "app", 120_000);
   const base = `http://127.0.0.1:${APP_PORT}`;

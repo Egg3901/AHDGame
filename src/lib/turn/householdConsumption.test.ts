@@ -219,6 +219,9 @@ describe("computeHouseholdConsumption — plants unit re-anchor (ticket #1027)",
       priorGlobalSupply: new Map([["pharmaceuticals", supply] as [CommodityType, number]]),
     });
     expect(clamped.global.get("pharmaceuticals")).toBeCloseTo(supply * 1.5, 6);
+    // The cut is recorded, not lost (#1460): unclamped minus capped.
+    expect(clamped.truncated.get("pharmaceuticals")).toBeCloseTo(pharmaDemand - supply * 1.5, 6);
+    expect(unclamped.truncated.size).toBe(0);
     // State shares preserved: S2 has 3x S1's population, keeps 3x the demand
     const s1 = clamped.byState.get("S1")?.get("pharmaceuticals") ?? 0;
     const s2 = clamped.byState.get("S2")?.get("pharmaceuticals") ?? 0;

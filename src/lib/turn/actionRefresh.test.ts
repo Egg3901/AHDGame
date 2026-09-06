@@ -8,15 +8,39 @@ import type { Character, GameConfig } from "@/lib/db/types";
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
+vi.mock("@/lib/api/headOfGovernment", () => ({
+  getHeadOfGovernmentCharacterId: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("@/lib/countryState", () => ({
+  getCountryState: vi.fn(async (_db: unknown, countryId: string) => ({
+    governmentType:
+      countryId === "DD" || countryId === "RU" ? "parliamentaryRepublic" : "presidential",
+  })),
+}));
 
 describe("processActionRefresh", () => {
-  const mockBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+  const mockBulkWrite = vi.fn();
   let chairRows: { chairCharacterId: unknown }[] = [];
   let cabinetRows: { characterId: unknown; countryId: string }[] = [];
-  let electedRows: { characterId: unknown; officeType: string; countryId: string }[] = [];
-  let nppRows: { _id: unknown; politicalInfluence: number; favorability: number }[] = [];
+  let electedRows: {
+    characterId: unknown;
+    officeType: string;
+    countryId: string;
+    party?: string;
+  }[] = [];
+  let nppRows: {
+    _id: unknown;
+    countryId?: string;
+    party?: string;
+    politicalInfluence: number;
+    favorability: number;
+  }[] = [];
+  let governmentFormationRows: Record<string, unknown>[] = [];
+  let governmentApprovalRows: Record<string, unknown>[] = [];
   let seatedJusticeRows: { justiceCharacterId: unknown }[] = [];
-  const mockNppBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+  let persistFixture = false;
+  let characterRows: Character[] = [];
+  const mockNppBulkWrite = vi.fn();
 
   beforeEach(async () => {
     vi.clearAllMocks();
@@ -24,19 +48,68 @@ describe("processActionRefresh", () => {
     cabinetRows = [];
     electedRows = [];
     nppRows = [];
+    governmentFormationRows = [];
+    governmentApprovalRows = [];
     seatedJusticeRows = [];
+    persistFixture = false;
+    characterRows = [];
+    mockBulkWrite.mockImplementation(async (ops: unknown[]) => {
+      if (persistFixture) {
+        for (const op of ops as {
+          updateOne: { filter: { _id: unknown }; update: { $set: Partial<Character> } };
+        }[]) {
+          const row = characterRows.find((candidate) => candidate._id === op.updateOne.filter._id);
+          if (row) Object.assign(row, op.updateOne.update.$set);
+        }
+      }
+      return { modifiedCount: ops.length };
+    });
+    mockNppBulkWrite.mockImplementation(async (ops: unknown[]) => {
+      if (persistFixture) {
+        for (const op of ops as {
+          updateOne: { filter: { _id: unknown }; update: { $set: Record<string, unknown> } };
+        }[]) {
+          const row = nppRows.find((candidate) => candidate._id === op.updateOne.filter._id);
+          if (row) Object.assign(row, op.updateOne.update.$set);
+        }
+      }
+      return { modifiedCount: ops.length };
+    });
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue({
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "npps") {
           return {
             // Yield whatever NPP rows the test queued (empty by default).
-            find: vi.fn().mockImplementation(() =>
-              (async function* () {
+            find: vi.fn().mockImplementation(() => ({
+              toArray: vi.fn().mockResolvedValue(nppRows),
+              [Symbol.asyncIterator]: async function* () {
                 for (const npp of nppRows) yield npp;
-              })()
-            ),
+              },
+            })),
             bulkWrite: mockNppBulkWrite,
+          };
+        }
+        if (name === "governmentFormations" || name === "parliamentaryGovernments") {
+          return {
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue(governmentFormationRows),
+            }),
+            bulkWrite: mockBulkWrite,
+          };
+        }
+        if (name === "governmentApprovals") {
+          return {
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue(governmentApprovalRows),
+            }),
+            bulkWrite: mockBulkWrite,
+          };
+        }
+        if (name === "characters") {
+          return {
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(characterRows) }),
+            bulkWrite: mockBulkWrite,
           };
         }
         if (name === "centralBanks") {
@@ -81,7 +154,11 @@ describe("processActionRefresh", () => {
             }),
           };
         }
-        return { bulkWrite: mockBulkWrite };
+        return {
+          bulkWrite: mockBulkWrite,
+          findOne: vi.fn().mockResolvedValue(null),
+          insertOne: vi.fn().mockResolvedValue(undefined),
+        };
       }),
     } as never);
   });
@@ -574,6 +651,133 @@ describe("processActionRefresh", () => {
     expect(byId.nppOnFloor.politicalInfluence).toBe(10);
     expect(byId.nppAbove.politicalInfluence).toBeCloseTo(30 - 30 * 0.0075, 5);
     expect(byId.nppShell.politicalInfluence).toBe(1);
+  });
+
+  it("applies the government approval drain to an NPP head of government", async () => {
+    const { processActionRefresh } = await import("./actionRefresh");
+    const pmNppId = "nppExecutive" as never;
+    nppRows = [
+      {
+        _id: pmNppId,
+        countryId: "DD",
+        party: "sed",
+        politicalInfluence: 10,
+        favorability: 50,
+      },
+    ];
+    governmentFormationRows = [
+      { _id: "DD", countryId: "DD", status: "formed", pmCharacterId: null, pmNppId },
+    ];
+    governmentApprovalRows = [{ _id: "DD", approvalRating: 20 }];
+
+    await processActionRefresh([], null, new Date());
+
+    const update = mockNppBulkWrite.mock.calls.at(-1)![0][0].updateOne.update.$set;
+    expect(update.favorability).toBeCloseTo(49.85, 5);
+  });
+
+  it("applies accountability in an in-memory persisted fixture while excluding a ceremonial president", async () => {
+    const { processActionRefresh } = await import("./actionRefresh");
+    const config = {
+      _id: "default",
+      baseActionsPerTurn: 4,
+      officeActionBonus: {},
+      chairActionBonus: 3,
+    } as GameConfig;
+
+    const makeCharacter = (id: string, countryId: string, party: string): Character =>
+      ({
+        _id: id as never,
+        userId: `user-${id}` as never,
+        name: id,
+        countryId,
+        homeState: "NATIONAL",
+        policies: { economic: 0, social: 0 },
+        actions: 5,
+        funds: 0,
+        favorability: 50,
+        politicalInfluence: 10,
+        nationalInfluence: 0,
+        donorBaseLevel: 0,
+        infamy: 0,
+        party,
+        currentOffice: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }) as Character;
+
+    const runFixture = async (approvalRating: number) => {
+      const usMember = makeCharacter("us-member", "US", "democrat");
+      const usPartyMember = makeCharacter("us-party-member", "US", "democrat");
+      const ruPm = makeCharacter("ru-pm", "RU", "communist");
+      const ceremonialPresident = makeCharacter("ru-president", "RU", "ceremonial");
+      usMember.favorability = 49;
+      usMember.infamy = 40;
+      const nppExecutive = {
+        _id: "dd-npp-executive" as never,
+        countryId: "DD",
+        party: "sed",
+        politicalInfluence: 10,
+        favorability: 50,
+      };
+      characterRows = [usMember, usPartyMember, ruPm, ceremonialPresident];
+      nppRows = [nppExecutive];
+      electedRows = [
+        { characterId: usMember._id, officeType: "president", countryId: "US" },
+        {
+          characterId: ceremonialPresident._id,
+          officeType: "president",
+          countryId: "RU",
+          party: "ceremonial",
+        },
+      ];
+      governmentFormationRows = [
+        {
+          _id: "RU",
+          countryId: "RU",
+          status: "formed",
+          pmCharacterId: ruPm._id,
+          pmNppId: null,
+        },
+        {
+          _id: "DD",
+          countryId: "DD",
+          status: "formed",
+          pmCharacterId: null,
+          pmNppId: nppExecutive._id,
+        },
+      ];
+      governmentApprovalRows = [
+        { _id: "US", approvalRating },
+        { _id: "RU", approvalRating },
+        { _id: "DD", approvalRating },
+      ];
+      persistFixture = true;
+
+      await processActionRefresh(characterRows, config, new Date());
+      return { usMember, usPartyMember, ruPm, ceremonialPresident, nppExecutive };
+    };
+
+    const accountable = await runFixture(20);
+    const control = await runFixture(50);
+
+    // The US executive also takes the ordinary 1-point infamy drain (40 - 20) *
+    // 0.05, so the persisted fixture still exposes the exact 0.15 delta.
+    expect(accountable.usMember.favorability).toBeCloseTo(47.85, 5);
+    expect(accountable.usPartyMember.favorability).toBeCloseTo(49.85, 5);
+    expect(accountable.ruPm.favorability).toBeCloseTo(49.85, 5);
+    expect(accountable.nppExecutive.favorability).toBeCloseTo(49.85, 5);
+    expect(accountable.ceremonialPresident.favorability).toBeCloseTo(50, 5);
+    expect(control.usMember.favorability).toBeCloseTo(48, 5);
+    expect(control.usPartyMember.favorability).toBeCloseTo(50, 5);
+    expect(control.ruPm.favorability).toBeCloseTo(50, 5);
+    expect(control.nppExecutive.favorability).toBeCloseTo(50, 5);
+    expect(control.ceremonialPresident.favorability).toBeCloseTo(50, 5);
+    expect(control.usMember.favorability - accountable.usMember.favorability).toBeCloseTo(0.15, 5);
+    expect(control.nppExecutive.favorability - accountable.nppExecutive.favorability).toBeCloseTo(
+      0.15,
+      5
+    );
   });
 
   it("grants a DD Volkskammer deputy the same seat generation a US member gets (ticket #974)", async () => {

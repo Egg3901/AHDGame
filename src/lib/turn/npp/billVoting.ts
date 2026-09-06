@@ -53,6 +53,7 @@ import {
   identifyOppositionParty,
   computeOppositionVoteForce,
 } from "@/lib/nppAutonomy/oppositionBehavior";
+import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCountryState } from "@/lib/countryState";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
@@ -128,6 +129,11 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
   // governing party and the leader of the opposition. Opposition NPPs bloc-vote
   // against the governing party's bills. Gated per country, so player countries
   // and sub-v1 worlds populate nothing and behave exactly as before.
+  // Difficulty behavior policy — one read for the whole phase. Hosted and
+  // multiplayer worlds have no singleplayerConfig and resolve to `normal`, whose
+  // `oppositionCoordination` is 1, i.e. the shipped bias exactly.
+  const behaviorPolicy = await loadNppBehaviorPolicy(db);
+
   const oppositionByCountry = new Map<
     CountryId,
     { governingPartyId: string; oppositionPartyId: string }
@@ -385,6 +391,7 @@ export async function processBillVoting(ctx: NPPContext): Promise<number> {
             sponsorParty: bill.sponsorParty,
             governingPartyId: opposition.governingPartyId,
             oppositionPartyId: opposition.oppositionPartyId,
+            coordination: behaviorPolicy.oppositionCoordination,
           });
           if (oppForce !== 0) {
             forces.ideology = Math.max(-100, Math.min(100, forces.ideology + oppForce));

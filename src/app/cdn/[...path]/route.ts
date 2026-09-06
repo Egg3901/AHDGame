@@ -57,7 +57,11 @@ export async function GET(_request: Request, context: { params: Promise<{ path: 
     return new NextResponse(null, { status: 400 });
   }
 
-  const localFile = path.join(singleplayerCdnDir(), relative);
+  // The singleplayer CDN directory lives outside the application tree. If
+  // Turbopack tries to statically trace this dynamic path it includes the
+  // whole repository in the standalone bundle, adding hundreds of megabytes
+  // and slowing both packaging and first installation.
+  const localFile = path.join(/*turbopackIgnore: true*/ singleplayerCdnDir(), relative);
   const headers = {
     "Content-Type": contentTypeFor(relative),
     "Cache-Control": "public, max-age=31536000, immutable",

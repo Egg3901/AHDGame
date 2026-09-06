@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useId, type ReactNode } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -54,6 +54,8 @@ export function Modal({
   headerActions,
   bodyClassName,
 }: ModalProps) {
+  const titleId = useId();
+
   useEffect(() => {
     if (!open || !closeOnEscape) return;
     const handler = (event: KeyboardEvent) => {
@@ -74,6 +76,10 @@ export function Modal({
       className={`fixed inset-0 z-[100] flex ${layoutClass} justify-center p-4`}
       role="dialog"
       aria-modal
+      // Without a name a screen reader announces only "dialog". String titles
+      // label the dialog directly; a ReactNode header has no single element to
+      // point at, so those fall back to the close button's own label.
+      aria-labelledby={typeof title === "string" ? titleId : undefined}
     >
       <button
         type="button"
@@ -87,7 +93,9 @@ export function Modal({
       >
         <div className="flex items-start justify-between gap-3 px-5 pt-5 pb-4">
           {typeof title === "string" ? (
-            <h2 className="flex-1 min-w-0 text-lg font-semibold text-foreground">{title}</h2>
+            <h2 id={titleId} className="flex-1 min-w-0 text-lg font-semibold text-foreground">
+              {title}
+            </h2>
           ) : (
             <div className="flex-1 min-w-0">{title}</div>
           )}

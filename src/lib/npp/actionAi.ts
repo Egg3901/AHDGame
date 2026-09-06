@@ -308,6 +308,21 @@ interface ActionCandidate {
 export interface NppDecisionOptions {
   signals?: NppContextSignals;
   /**
+   * Difficulty spending discipline: funds the NPP keeps in hand after an action,
+   * expressed in the same anchor units as `NppActionContext.funds`. An action
+   * that would leave the NPP below this is not taken; if that rules everything
+   * out, the NPP falls through to the cash-poor fundraise path below rather than
+   * idling.
+   *
+   * This can only ever cause an NPP to spend LESS than it otherwise would. It is
+   * not income, not an extra action point, and not a discount — the resource
+   * side of difficulty lives entirely in `singleplayerDifficulty/rules/index.ts`
+   * and is disclosed to the player as a resource bonus. Default 0 restores the
+   * shipped behavior exactly, which is what every `normal` and multiplayer world
+   * resolves to.
+   */
+  fundsReserve?: number;
+  /**
    * The action this NPP took immediately before, within the same processing
    * cycle. Gets a weight bonus, so an NPP tends to follow through on what they
    * started rather than re-rolling from scratch four times a cycle. Costs
@@ -329,7 +344,10 @@ export interface NppDecisionOptions {
  * heuristic, then the draw), and the v3+ additions below deliberately consume
  * ZERO extra — temperature and commitment reshape the weights rather than adding
  * draws. That keeps the RNG stream aligned call-for-call with the pre-v3 path,
- * so enabling the smarter brain cannot desynchronise a replay.
+ * so enabling the smarter brain cannot desynchronise a replay. The difficulty
+ * reserve (`options.fundsReserve`) holds to the same rule: it filters the
+ * candidate set, it does not draw. Difficulty is fixed for a world at setup, so
+ * a replay of that world still reproduces exactly.
  */
 export function decideNppAction(
   context: NppActionContext,
@@ -340,6 +358,7 @@ export function decideNppAction(
   const priorities = calculateActionPriorities(context, modifiers, options?.signals);
   const { funds, actionPoints, donorBaseLevel, politicalInfluence } = context;
   const buildAtCap = donorBaseLevel >= NPP_MAX_DONOR_BASE_LEVEL;
+  const fundsReserve = Math.max(0, options?.fundsReserve ?? 0);
 
   const affordable: ActionCandidate[] = [];
   let buildCandidate: ActionCandidate | null = null;
@@ -354,7 +373,9 @@ export function decideNppAction(
     const candidate: ActionCandidate = { action, priority, apCost, fundCost };
 
     if (action === "buildDonorBase") buildCandidate = candidate;
-    if (actionPoints >= apCost && funds >= fundCost) affordable.push(candidate);
+    // Reserve discipline: `fundsReserve` defaults to 0, where this is the
+    // identical `funds >= fundCost` affordability test the shipped code ran.
+    if (actionPoints >= apCost && funds - fundCost >= fundsReserve) affordable.push(candidate);
   }
 
   // Save heuristic: occasionally skip a cheap action to accumulate AP for the next buildDonorBase.
@@ -366,7 +387,7 @@ export function decideNppAction(
     buildCandidate &&
     buildCandidate.priority > 30 &&
     actionPoints < buildCandidate.apCost &&
-    funds >= buildCandidate.fundCost &&
+    funds - buildCandidate.fundCost >= fundsReserve &&
     Math.ceil((buildCandidate.apCost - actionPoints) / NPP_AP_PER_TURN) <= SAVE_MAX_TURNS &&
     rng() < SAVE_PROBABILITY
   ) {

@@ -8,6 +8,7 @@ import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { NavbarWrapper } from "@/components/NavbarWrapper";
 import { BugReportFab } from "@/components/BugReportFab";
 import { StatusBar } from "@/components/StatusBar";
+import { TurnProgressToast } from "@/components/turn-progress/TurnProgressToast";
 import { TutorialCoachMount } from "@/components/tutorial/TutorialCoachMount";
 import { FeedbackProvider } from "@/contexts/FeedbackContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -363,6 +364,7 @@ export default async function RootLayout({
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
                           {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
                           {!isWikiSubdomain && <StatusBar />}
+                          {!isWikiSubdomain && <TurnProgressToast />}
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}
                           {!isNativeApp && <CookieConsentBanner />}

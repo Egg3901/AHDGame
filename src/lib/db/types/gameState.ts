@@ -7,7 +7,11 @@ export type NppEntryViabilityMode = "off" | "observe" | "enforce";
 export type IterationType = "Alpha" | "Beta" | "Iteration";
 
 /**
- * Smarter-NPP autonomy tier:
+ * Smarter-NPP autonomy tier. The level says WHICH activities autonomous
+ * politicians may perform — never how competently they perform them. How
+ * competently is `SingleplayerConfig.difficulty` (local worlds only), which is
+ * a separate axis and never unlocks or removes an activity.
+ *
  *   - off: no autonomy anywhere.
  *   - v0:  currently-shipped behavior (chair, stalled-PM, bill sponsorship/voting,
  *          intl-org votes) in non-player countries.
@@ -18,9 +22,17 @@ export type IterationType = "Alpha" | "Beta" | "Iteration";
  *          campaign, fundraise, run for & win office, legislate, and manage
  *          personal finance like players). Acts in player-enabled countries
  *          like v2.
+ *   - v4:  v3 applied globally (player-enabled countries included), with the
+ *          tighter player-country sponsorship throttles.
+ *   - v5:  v4 + persistent governing goals. A government keeps a bounded set of
+ *          goal records across agenda recomputes, grades each one, feeds the
+ *          verdicts into the next agenda, and holds its commitments instead of
+ *          re-deciding every cycle. Adds no new lever: every V5 intent is
+ *          executed through the same validation/execution paths v4 already
+ *          uses. Singleplayer/Worldsim beta — see featureFlagDefaults.
  * See plans/2026-06-23-npp-autonomy-v1-v2-plan.md.
  */
-export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
+export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5";
 export type NppForeignPolicyMode = "off" | "shadow" | "active";
 export type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
@@ -61,6 +73,14 @@ export interface GameState {
   _id: string;
   /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
   singleplayerConfig?: SingleplayerConfig;
+  /** Last compact local turn sample used by opt-in performance analytics. */
+  singleplayerTurnMetrics?: {
+    turn: number;
+    durationMs: number;
+    success: boolean;
+    warningCount: number;
+    slowestPhases: Array<{ phase: string; durationMs: number }>;
+  };
   /**
    * Turn on which the Cold War was resolved in-game, or null/absent while it is
    * still being fought.
@@ -219,10 +239,13 @@ export interface GameState {
    */
   crisisSpawnChanceMultiplier?: number;
   /**
-   * Smarter-NPP autonomy tier (off / v0 / v1 / v2). Replaces the legacy
-   * `nppAutonomyEnabled` boolean — a legacy `true` reads as "v0". Below v2,
-   * autonomy acts ONLY in disabled/econ-only countries; v2 comingles with
-   * player-enabled countries. Resolved per country by getNppAutonomyLevelForCountry.
+   * Smarter-NPP autonomy tier (off / v0 / v1 / v2 / v3 / v4 / v5). Replaces the
+   * legacy `nppAutonomyEnabled` boolean — a legacy `true` reads as "v0" and an
+   * absent field with no legacy boolean reads as "off", so an existing world is
+   * never silently re-tiered. Fresh worlds seed v4; setup requests that omit the
+   * level default to v4. V5 is opt-in. Below v2, autonomy acts ONLY in
+   * disabled/econ-only countries; v2 comingles with player-enabled countries.
+   * Resolved per country by getNppAutonomyLevelForCountry.
    */
   nppAutonomyLevel?: NppAutonomyLevel;
   /** @deprecated Use `nppAutonomyLevel`. Kept in sync (level !== "off") for back-compat readers. */
@@ -382,10 +405,15 @@ export interface GameState {
   lastExtractionAutoStrategyTurn?: number;
   /** Master gate for the US House districted-redistricting system. Default off. */
   /**
-   * v5 NPP corporation strategy loop. DEFAULT ON: absent means enabled, so
+   * NPP corporation strategy loop. DEFAULT ON: absent means enabled, so
    * existing worlds keep the behaviour they were promoted with. Only an
    * explicit `false` disables it, and disabling pins every corp to the `expand`
-   * levers, which are byte-identical to the pre-v5 brain.
+   * levers, which are byte-identical to the pre-strategy-loop brain.
+   *
+   * Unrelated to `NppAutonomyLevel`'s v5 tier despite the shared version digit —
+   * this flag was the fifth iteration of the CORPORATE brain and predates the
+   * autonomy ladder reaching v5. Renamed in comments/labels so the two cannot be
+   * mistaken for each other; the persisted field name is unchanged.
    */
   nppCorpStrategyEnabled?: boolean;
   nppCorpStrategyEnabledBy?: string;

@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
 import { ELECTORAL_VOTE_UNITS } from "@/lib/constants";
 import { getPartyHex } from "@/lib/utils/politics";
+import type { ElectoralVoteUnit } from "@/lib/constants/states";
 
 export interface ElectoralMapState {
   color: string;
@@ -39,7 +40,7 @@ export async function computeElectoralVotes(
   voteTally: ElectionVoteTally | null,
   candidateNameMap: Map<string, string>,
   partyMap: Map<string, PoliticalParty>,
-  units: { unitId: string; ev: number; stateId: string }[] = ELECTORAL_VOTE_UNITS
+  units: ElectoralVoteUnit[] = ELECTORAL_VOTE_UNITS
 ): Promise<ElectoralVoteResult> {
   if (!voteTally) {
     return {};

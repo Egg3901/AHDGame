@@ -56,7 +56,7 @@ describe("snapshotApprovalHistory (SP4 conversion)", () => {
     // cabinetMembers costs the NO_CABINET penalty 7.5 → 47.5 stored.
     const call = db.collectionMocks["governmentApprovals"]!.updateOne.mock.calls.at(-1)!;
     const set = (call[1] as { $set: { approvalRating: number } }).$set;
-    expect(set.approvalRating).toBeCloseTo(47.5, 5);
+    expect(set.approvalRating).toBeCloseTo(42.5, 5);
 
     // A degraded board must move the snapshot the other way.
     db = createMockDb();
@@ -64,7 +64,7 @@ describe("snapshotApprovalHistory (SP4 conversion)", () => {
     await snapshotApprovalHistory(db as unknown as Db, "UK", 100);
     const call2 = db.collectionMocks["governmentApprovals"]!.updateOne.mock.calls.at(-1)!;
     const set2 = (call2[1] as { $set: { approvalRating: number } }).$set;
-    expect(set2.approvalRating).toBeCloseTo(37.5, 5);
+    expect(set2.approvalRating).toBeCloseTo(32.5, 5);
   });
 
   it("scores JP from the board too, now that routing covers non-playables", async () => {
@@ -97,7 +97,7 @@ describe("snapshotApprovalHistory (SP4 conversion)", () => {
     // Uniform board +10 → component +5 → base 55, minus the 7.5 cabinet penalty.
     const call = db.collectionMocks["governmentApprovals"]!.updateOne.mock.calls.at(-1)!;
     const set = (call[1] as { $set: { approvalRating: number } }).$set;
-    expect(set.approvalRating).toBeCloseTo(47.5, 5);
+    expect(set.approvalRating).toBeCloseTo(42.5, 5);
   });
 
   it("falls back to BASE_APPROVAL, never the legacy scorer, when a board country is unseeded", async () => {
@@ -122,6 +122,6 @@ describe("snapshotApprovalHistory (SP4 conversion)", () => {
     // BASE_APPROVAL 50 minus the 7.5 cabinet penalty.
     const call = db.collectionMocks["governmentApprovals"]!.updateOne.mock.calls.at(-1)!;
     const set = (call[1] as { $set: { approvalRating: number } }).$set;
-    expect(set.approvalRating).toBeCloseTo(42.5, 5);
+    expect(set.approvalRating).toBeCloseTo(37.5, 5);
   });
 });

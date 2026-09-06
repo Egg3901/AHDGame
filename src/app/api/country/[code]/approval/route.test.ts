@@ -54,17 +54,24 @@ describe("national approval route — canonical stored value", () => {
 
     const json = await call();
     expect(json.governmentApproval).toBe(42.1);
+    expect(
+      json.modifiers.some((modifier: { id: string }) => modifier.id === "public_expectations")
+    ).toBe(false);
     expect(json.history.at(-1).approval).toBe(42.1);
   });
 
-  it("falls back to BASE_APPROVAL when there is neither a snapshot nor metrics", async () => {
+  it("applies public expectations to the baseline when there is neither a snapshot nor metrics", async () => {
     db.collectionMocks.governmentApprovals!.findOne.mockResolvedValue(null);
     db.collectionMocks.states!.find.mockReturnValue(cursorOf([]) as never);
     db.collectionMocks.stateMetrics!.find.mockReturnValue(cursorOf([]) as never);
-    const { BASE_APPROVAL } = await import("@/lib/utils/governmentApproval");
+    const { BASE_APPROVAL, PUBLIC_EXPECTATIONS_MODIFIER } =
+      await import("@/lib/utils/governmentApproval");
 
     const json = await call();
-    expect(json.governmentApproval).toBe(BASE_APPROVAL);
+    expect(json.governmentApproval).toBe(BASE_APPROVAL + PUBLIC_EXPECTATIONS_MODIFIER.effect);
+    expect(json.modifiers).toContainEqual(
+      expect.objectContaining({ id: PUBLIC_EXPECTATIONS_MODIFIER.id, effect: -5 })
+    );
   });
 
   /**

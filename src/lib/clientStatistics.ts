@@ -51,8 +51,10 @@ export const ALLOWED_MODES = ["normal", "head-of-state", "worldsim"] as const;
 export const ALLOWED_DIFFICULTIES = ["easy", "normal", "hard"] as const;
 
 /**
- * Autonomy allowlist. The game defines off/v0-v4 (NppAutonomyLevel); v5 is
- * accepted as forward-tolerant for newer clients.
+ * Autonomy allowlist. Mirrors `NppAutonomyLevel`, which now reaches v5. Kept in
+ * step with the client's own `ALLOWED_AUTONOMY` (apps/desktop/src/
+ * simulationStatistics.ts): a level accepted on only one side means a world at
+ * that level either fails validation before upload or is rejected on arrival.
  */
 export const ALLOWED_AUTONOMY = ["off", "v0", "v1", "v2", "v3", "v4", "v5"] as const;
 
@@ -104,6 +106,8 @@ const metricsSchema = z
     averageStability: z.number().finite().min(0).max(100).optional(),
     minStability: z.number().finite().min(0).max(100).optional(),
     maxStability: z.number().finite().min(0).max(100).optional(),
+    lastTurnDurationMs: z.number().int().finite().min(0).max(3_600_000).optional(),
+    lastTurnWarningCount: z.number().int().finite().min(0).max(100_000).optional(),
   })
   .refine(
     (metrics) =>

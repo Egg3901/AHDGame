@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useState } from "react";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
-import { Button } from "@/components/ui";
+import { Button, useDialogA11y } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
@@ -41,6 +41,7 @@ export function BondTradeModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   const { formatAmount, formatPrice, formatFull, forexRates, ratesLoading, toInternalFrom } =
     useCurrency();
   const unitsInputId = useId();
@@ -516,12 +517,17 @@ export function BondTradeModal({
     !(account === "investmentBank" && !hasInvestmentBank);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      {...dialogProps}
+    >
       <div className="w-full max-w-md rounded-2xl border border-card-border bg-card shadow-modal">
         {/* Header */}
         <div className="flex items-start justify-between border-b border-card-border px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Trade Bond</h2>
+            <h2 id={titleId} className="text-base font-semibold text-foreground">
+              Trade Bond
+            </h2>
             <p className="mt-0.5 text-sm text-muted">
               {bond.corporationName}
               <span className="mx-2 text-card-border">·</span>

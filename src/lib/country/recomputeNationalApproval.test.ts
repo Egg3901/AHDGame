@@ -3,7 +3,11 @@ import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { StateMetrics } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { BASE_APPROVAL, computeNationalAveragesFromMetrics } from "@/lib/utils/governmentApproval";
+import {
+  BASE_APPROVAL,
+  computeNationalAveragesFromMetrics,
+  PUBLIC_EXPECTATIONS_MODIFIER,
+} from "@/lib/utils/governmentApproval";
 
 const { basesMock } = vi.hoisted(() => ({ basesMock: vi.fn() }));
 
@@ -65,7 +69,8 @@ describe("recomputeNationalApproval", () => {
     // gate depends on. SP4 no-divergence rule: a board country must never reach
     // the legacy metric scorer. The metrics handed in are the same fixture the
     // unboarded cases use, which scores well ABOVE the base, so a result of 49.5
-    // can only have come from the political bases.
+    // can only have come from the political bases, with the public-expectations
+    // modifier applied once at the recompute boundary.
     basesMock.mockResolvedValue({ national: 49.5 });
     const metrics = [makeStateMetrics("rich", 90000), makeStateMetrics("poor", 30000)];
 
@@ -75,7 +80,7 @@ describe("recomputeNationalApproval", () => {
       inputs(metrics, { rich: 900, poor: 100 })
     );
 
-    expect(result).toBe(49.5);
+    expect(result).toBe(49.5 + PUBLIC_EXPECTATIONS_MODIFIER.effect);
   });
 
   it("falls back to the base rating when a board country has no political bases", async () => {
@@ -88,10 +93,10 @@ describe("recomputeNationalApproval", () => {
       inputs([makeStateMetrics("idf", 90000)], { idf: 1000 })
     );
 
-    expect(result).toBe(BASE_APPROVAL);
+    expect(result).toBe(BASE_APPROVAL + PUBLIC_EXPECTATIONS_MODIFIER.effect);
   });
 
-  it("scores an unboarded country above the base when its populous states beat the average", async () => {
+  it("preserves an unboarded country's positive state signal under the global drag", async () => {
     const metrics = [makeStateMetrics("rich", 90000), makeStateMetrics("poor", 30000)];
 
     const result = await recomputeNationalApproval(
@@ -100,7 +105,7 @@ describe("recomputeNationalApproval", () => {
       inputs(metrics, { rich: 900, poor: 100 })
     );
 
-    expect(result).toBeGreaterThan(BASE_APPROVAL);
+    expect(result).toBeGreaterThan(BASE_APPROVAL - 5);
   });
 
   it("scores an unboarded country below the base when its populous states trail the average", async () => {
@@ -130,7 +135,7 @@ describe("recomputeNationalApproval", () => {
 
     const result = await recomputeNationalApproval(db as unknown as Db, "FR");
 
-    expect(result).toBe(49.5);
+    expect(result).toBe(49.5 + PUBLIC_EXPECTATIONS_MODIFIER.effect);
     expect(db.collection("macroMetrics").find).not.toHaveBeenCalled();
     expect(db.collection("states").find).not.toHaveBeenCalled();
   });
@@ -161,6 +166,6 @@ describe("recomputeNationalApproval", () => {
 
     const result = await recomputeNationalApproval(db as unknown as Db, "FR");
 
-    expect(result).toBe(52.5);
+    expect(result).toBe(52.5 + PUBLIC_EXPECTATIONS_MODIFIER.effect);
   });
 });

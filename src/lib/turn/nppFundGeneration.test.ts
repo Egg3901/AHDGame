@@ -54,6 +54,79 @@ describe("processNppFundGeneration", () => {
   const stateMap = (id: string, countryId: string): Map<string, State> =>
     new Map([[id, { _id: id, name: id, countryId, population: 17_000_000 } as State]]);
 
+  /** Point `gameState` at a world with (or without) a persisted difficulty. */
+  function withWorld(singleplayerConfig?: { difficulty: "easy" | "normal" | "hard" }) {
+    db.collection("gameState");
+    db.collectionMocks.gameState!.findOne = vi
+      .fn()
+      .mockResolvedValue({ _id: "current", ...(singleplayerConfig ? { singleplayerConfig } : {}) });
+  }
+
+  function creditedFunds(): number {
+    const op = (db.collectionMocks.npps!.bulkWrite.mock.calls[0]?.[0] as
+      { updateOne: { update: { $inc: { funds: number } } } }[] | undefined)![0]!.updateOne;
+    return op.update.$inc.funds;
+  }
+
+  function grantedActionPoints(): number {
+    const op = (db.collectionMocks.npps!.bulkWrite.mock.calls[0]?.[0] as
+      { updateOne: { update: { $set: { actionPoints: number } } } }[] | undefined)![0]!.updateOne;
+    return op.update.$set.actionPoints;
+  }
+
+  const difficultyNpp = () => ({
+    _id: new ObjectId(),
+    countryId: "US",
+    homeState: "US-CA",
+    party: "independent",
+    donorBaseLevel: 0,
+    funds: 40_000,
+    actionPoints: 0,
+  });
+
+  /**
+   * Difficulty is a property of the WORLD, not of the process. A hosted world
+   * never persists a singleplayerConfig, so it must resolve to the live
+   * constants — this is the guard that keeps multiplayer resource behaviour
+   * unchanged now the env flag is no longer the key.
+   */
+  describe("local-world difficulty resource tuning", () => {
+    it("a world with no singleplayerConfig gets live parity", async () => {
+      vi.mocked(projectNppGeneration).mockReturnValue(20_000);
+      setup(difficultyNpp());
+      withWorld();
+      await processNppFundGeneration(db as unknown as Db, 100, stateMap("US-CA", "US"));
+      expect(creditedFunds()).toBe(20_000);
+      expect(grantedActionPoints()).toBe(2);
+    });
+
+    it("normal is byte-identical to a world with no config at all", async () => {
+      vi.mocked(projectNppGeneration).mockReturnValue(20_000);
+      setup(difficultyNpp());
+      withWorld({ difficulty: "normal" });
+      await processNppFundGeneration(db as unknown as Db, 100, stateMap("US-CA", "US"));
+      expect(creditedFunds()).toBe(20_000);
+      expect(grantedActionPoints()).toBe(2);
+    });
+
+    it("easy and hard move NPP resources in opposite directions", async () => {
+      vi.mocked(projectNppGeneration).mockReturnValue(20_000);
+      setup(difficultyNpp());
+      withWorld({ difficulty: "easy" });
+      await processNppFundGeneration(db as unknown as Db, 100, stateMap("US-CA", "US"));
+      expect(creditedFunds()).toBe(15_000);
+      expect(grantedActionPoints()).toBe(1);
+
+      vi.clearAllMocks();
+      vi.mocked(projectNppGeneration).mockReturnValue(20_000);
+      setup(difficultyNpp());
+      withWorld({ difficulty: "hard" });
+      await processNppFundGeneration(db as unknown as Db, 100, stateMap("US-CA", "US"));
+      expect(creditedFunds()).toBe(25_000);
+      expect(grantedActionPoints()).toBe(3);
+    });
+  });
+
   it("credits an independent US NPP its anchor generation at ×1.0 (unchanged)", async () => {
     vi.mocked(projectNppGeneration).mockReturnValue(20_000);
     const npp = {

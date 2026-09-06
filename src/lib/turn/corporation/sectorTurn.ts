@@ -3,8 +3,6 @@ import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import {
   CAPACITY_ANCHOR_YEAR,
   CAPACITY_BUILD_TURNS,
-  IDLE_UPKEEP_FRACTION,
-  MOTHBALL_UPKEEP_FRACTION,
   capacityPricePerUnit,
   techOutputUnitsMultiplier,
   unitYieldForSupply,
@@ -47,9 +45,7 @@ import {
   assemblePhysicalPnl,
   computeFinancialLegs,
   computeInputsCost,
-  idleUpkeepUnitPrice,
   otherOpexDriftFactor,
-  ownerIdleUnits,
   solveOtherOpexPerUnit,
 } from "@/lib/corporations/physicalPnl";
 import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
@@ -142,6 +138,8 @@ function scaleCommodityRates<T extends Partial<Record<string, number>>>(
   }
   return out as T;
 }
+
+import { computeIdleUpkeep } from "./sectorTurn/idleUpkeep";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -1290,48 +1288,22 @@ export function processSector(
   //    billed upkeep on the same 15% again.
   //
   // See `ownerIdleUnits` / `idleUpkeepUnitPrice` for the full rationale.
-  const plantsUpkeepMarginBasisLive = Math.max(0, 1 - effectiveMargin / 100);
-  const plantsUpkeepMarginBasisAnchor =
-    typeof sector.plantsUpkeepMarginBasisAnchor === "number" &&
-    Number.isFinite(sector.plantsUpkeepMarginBasisAnchor)
-      ? sector.plantsUpkeepMarginBasisAnchor
-      : null;
-  const plantsUnitUpkeepHourly = plantsEnabled
-    ? idleUpkeepUnitPrice({
-        mixPrice: plantsMixPrice,
-        turnsPerDay: TURNS_PER_DAY,
-        anchoredMarginBasis: plantsUpkeepMarginBasisAnchor,
-        liveMarginBasis: plantsUpkeepMarginBasisLive,
-      })
-    : 0;
-  // The production legs the owner did NOT choose. `policyTonnageMultiplier`
-  // (the production-policy slider) and `plantsTechOutputMultiplier` are
-  // deliberately absent: those ARE owner decisions, so capacity idled by
-  // throttling the policy slider is still billed — the case the constant was
-  // written for.
-  const plantsInvoluntaryThrottle =
-    disasterOutputFactor *
-    nationalizationTransition *
-    plantsExtractionHardMin *
-    throughputFactor *
-    labourOutputFactor;
-  const plantsOwnerIdleUnits = plantsEnabled
-    ? ownerIdleUnits({
-        capacity: plantsCapacity,
-        producedUnits,
-        involuntaryThrottle: plantsInvoluntaryThrottle,
-      })
-    : 0;
-  // Uses `plantsRampLambda` (defined once above, ~line 882) rather than a local
-  // copy: the ramp had forked into two identical expressions and the docblock
-  // there already claims one definition. The idle-upkeep branch below only runs
-  // when `plantsEnabled`, which is exactly the extra guard `plantsRampLambda`
-  // carries, so the two evaluate identically at this use site.
-  const plantsUpkeepCost = mothballed
-    ? plantsUnitUpkeepHourly * plantsCapacity * MOTHBALL_UPKEEP_FRACTION
-    : plantsEnabled
-      ? plantsUnitUpkeepHourly * plantsOwnerIdleUnits * IDLE_UPKEEP_FRACTION * plantsRampLambda
-      : 0;
+  const { plantsUpkeepCost, plantsUpkeepMarginBasisLive, plantsUpkeepMarginBasisAnchor } =
+    computeIdleUpkeep({
+      sector,
+      plantsEnabled,
+      mothballed,
+      effectiveMargin,
+      plantsMixPrice,
+      plantsCapacity,
+      producedUnits,
+      plantsRampLambda,
+      disasterOutputFactor,
+      nationalizationTransition,
+      plantsExtractionHardMin,
+      throughputFactor,
+      labourOutputFactor,
+    });
 
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
   //

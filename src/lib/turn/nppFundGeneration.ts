@@ -14,7 +14,6 @@ import type {
   State,
   GameConfig,
   Character,
-  SingleplayerDifficulty,
 } from "@/lib/db/types";
 import { projectNppGeneration, calculateTaxAmount } from "@/lib/utils/fundGeneration";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
@@ -27,12 +26,8 @@ import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import {
-  NPP_ACTIONS_PER_TURN,
-  NPP_ACTION_CAP,
-  singleplayerNppTuning,
-} from "@/lib/singleplayerDifficulty/rules";
-import { isSingleplayer } from "@/lib/singleplayer";
+import { singleplayerNppTuning } from "@/lib/singleplayerDifficulty/rules";
+import { loadSingleplayerDifficulty } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 
 /*
  * NPPs receive 2 action points per turn (vs. 3+ for player characters). The
@@ -66,15 +61,20 @@ export async function processNppFundGeneration(
   if (config?.nppEconomyEnabled === false) {
     return { nppsProcessed: 0, totalGenerated: 0, totalStateTax: 0, totalNationalTax: 0 };
   }
-  const singleplayerState = isSingleplayer()
-    ? await db
-        .collection<{
-          _id: string;
-          singleplayerConfig?: { difficulty?: SingleplayerDifficulty };
-        }>("gameState")
-        .findOne({ _id: "current" }, { projection: { singleplayerConfig: 1 } })
-    : null;
-  const tuning = singleplayerNppTuning(singleplayerState?.singleplayerConfig?.difficulty);
+  // Local-world difficulty resource tuning. Read from the PERSISTED
+  // singleplayerConfig rather than the SINGLEPLAYER env flag: hosted worlds
+  // never persist that field (see its type comment), so multiplayer resolves to
+  // undefined → `normal` → the live NPP_ACTIONS_PER_TURN / NPP_ACTION_CAP /
+  // ×1 constants, byte-identical to before. The env flag was the wrong key
+  // because the world, not the process, owns the difficulty: the headless
+  // harness and any other host that processes turns without setting
+  // SINGLEPLAYER used to silently ignore a local world's own setting.
+  //
+  // This is the resource half of difficulty and is disclosed to the player as a
+  // resource bonus. The behaviour half is
+  // `singleplayerDifficulty/rules/behavior.ts` and never touches funds or AP.
+  const difficulty = await loadSingleplayerDifficulty(db);
+  const tuning = singleplayerNppTuning(difficulty);
 
   const stateMap =
     preloadedStateMap ??
@@ -142,13 +142,12 @@ export async function processNppFundGeneration(
         nppEconomyEnabled: true,
       });
       const grossFundsLocal =
-        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US") *
-        (singleplayerState ? tuning.fundMultiplier : 1);
+        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US") * tuning.fundMultiplier;
 
       const currentActions = finite(npp.actionPoints);
       const newActions = Math.min(
-        singleplayerState ? tuning.actionPointCap : NPP_ACTION_CAP,
-        currentActions + (singleplayerState ? tuning.actionPointsPerTurn : NPP_ACTIONS_PER_TURN)
+        tuning.actionPointCap,
+        currentActions + tuning.actionPointsPerTurn
       );
 
       let stateTaxAmountLocal = 0;
