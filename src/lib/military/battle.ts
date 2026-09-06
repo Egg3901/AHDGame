@@ -817,9 +817,16 @@ function enemyFaction(ctx: BattleContext, f: Front): string {
   return label || "Hostile forces";
 }
 
-/** Per-unit casualties/readiness/xp for one side at a front, given the battle ratio
+/** Per-unit casualties/readiness/xp for one contingent at a front, given the battle ratio
  *  (own perspective) and a shared rng stream. Two draws per unit — the exact order
- *  the synthetic and PvP paths both rely on. Returns results + total casualties. */
+ *  the synthetic and PvP paths both rely on. Returns results + total casualties.
+ *
+ * `share` is the unit's fraction of the SIDE's combat value at the front, passed in
+ * as `sideRawTotal` by the PvP path. The old denominator renormalised every
+ * contingent to 1.0, so a one-unit ally's `share` read 1.0 and its (0.6 + share)
+ * concentration term charged it as though its handful of divisions were the whole
+ * army. Absent `sideRawTotal` (the synthetic forecast path, one context by
+ * construction) the contingent's own total is the denominator, exactly as before. */
 function unitOutcomes(
   units: CombatUnit[],
   positions: Record<string, string>,
@@ -830,7 +837,8 @@ function unitOutcomes(
   r: () => number,
   rearShare: number,
   reserveRes: number,
-  plan?: EngagementPlan
+  plan?: EngagementPlan,
+  sideRawTotal?: number
 ): { unitResults: UnitResult[]; loss: number } {
   const att = units.filter((u) => u.theaterId === frontId);
   const cvOf = (u: CombatUnit) => combatValue(u, natMods, generalMods(genForUnit(binding, u)));
@@ -838,13 +846,17 @@ function unitOutcomes(
     1,
     att.reduce((a, u) => a + cvOf(u), 0)
   );
+  // Side-relative denominator when the caller pooled one; the contingent's own
+  // total otherwise. `rawTotal` is already floored at 1, so the fallback path is
+  // bit-identical to before this parameter existed.
+  const shareDenom = Math.max(1, sideRawTotal ?? rawTotal);
   const sustain = 1 - 0.25 * rearShare - 0.15 * reserveRes;
   let loss = 0;
   const unitResults: UnitResult[] = att.map((u) => {
     const st = statObj(u);
     const role = plan?.roleOf.get(String(u._id)) ?? getRole(positions, u);
     const rc = roleDef(role).cas;
-    const share = cvOf(u) / rawTotal;
+    const share = cvOf(u) / shareDenom;
     const armorMit = 1 - (st.ar / 100) * 0.45;
     const moraleMit = 1 - ((st.mo - 50) / 100) * 0.3;
     const gcas = generalMods(genForUnit(binding, u)).cas;
@@ -1309,6 +1321,20 @@ export function resolvePvpBattle(
   ): { unitResults: UnitResult[]; loss: number } => {
     const unitResults: UnitResult[] = [];
     let loss = 0;
+    // One denominator for the whole side: each contingent's combat value summed
+    // under its OWN doctrine and general binding, so no nation's units are ever
+    // evaluated under another's. Same front filter as `unitOutcomes` itself.
+    const sideRawTotal = Math.max(
+      1,
+      sides.reduce(
+        (a, c) =>
+          a +
+          c.units
+            .filter((u) => u.theaterId === theaterId)
+            .reduce((x, u) => x + combatValue(u, c.natMods, generalMods(genForUnit(c, u))), 0),
+        0
+      )
+    );
     for (const c of sides) {
       const out = unitOutcomes(
         c.units,
@@ -1320,7 +1346,8 @@ export function resolvePvpBattle(
         r,
         profile.rearShare,
         profile.reserveRes,
-        plan
+        plan,
+        sideRawTotal
       );
       // Stamp attribution on the way into the shared list. This is the only point
       // that still knows which contingent produced these results — once they are
