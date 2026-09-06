@@ -3,7 +3,10 @@ import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import type { State } from "@/lib/db/types";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import { getEraContext } from "@/lib/era/context";
-import { computeNationalAveragesFromMetrics } from "@/lib/utils/governmentApproval";
+import {
+  computeNationalAveragesFromMetrics,
+  PUBLIC_EXPECTATIONS_MODIFIER,
+} from "@/lib/utils/governmentApproval";
 import { evaluateModifiers } from "@/lib/utils/approvalModifiers";
 import { recomputeNationalApproval } from "@/lib/country/recomputeNationalApproval";
 import type { CountryId } from "@/lib/constants/countries";
@@ -58,10 +61,15 @@ export async function loadNationalApproval(countryId: CountryId): Promise<Nation
   // the turn phase rather than a page render. They are stored by the snapshot
   // that produced this rating, so read them rather than recompute, and the
   // chips a reader shows are exactly the ones folded into the number above.
-  const modifiers = [
-    ...evaluateModifiers(nationalAverages, { countryId, preset, year }),
-    ...(approvalDoc?.activeNationalModifiers ?? []),
-  ];
+  const modifiers = approvalDoc
+    ? [
+        ...evaluateModifiers(nationalAverages, { countryId, preset, year }),
+        ...(approvalDoc.activeNationalModifiers ?? []),
+      ]
+    : [
+        ...evaluateModifiers(nationalAverages, { countryId, preset, year }),
+        PUBLIC_EXPECTATIONS_MODIFIER,
+      ];
 
   // Canonical approval is the value the per-turn snapshot stored in
   // governmentApprovals (includes national address/cabinet adjustments and

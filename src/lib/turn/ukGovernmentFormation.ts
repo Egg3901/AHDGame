@@ -26,6 +26,7 @@ import {
 } from "@/lib/uk/confidence/confidenceGaugeStore";
 import type { GovernmentApproval } from "@/lib/db/types/governmentApproval";
 import { tickNhsFromBudget } from "@/lib/uk/nhs/nhsStore";
+import { triggerSnapElection } from "@/lib/turn/snapElection";
 import { getGameState } from "@/lib/gameState";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { calculateFiscalYear } from "@/lib/budget/fiscalYear";
@@ -72,11 +73,59 @@ export async function updateGovernmentSeats(): Promise<void> {
   if (!existing) {
     // One-time seed from legacy collections — UK-specific
     await seedGovernmentFormation(db);
-    return;
+  } else {
+    // Delegate to shared system
+    await updateParliamentaryGovernmentSeats(db, "UK");
   }
 
-  // Delegate to shared system
-  await updateParliamentaryGovernmentSeats(db, "UK");
+  // Per-turn gauges run on EVERY turn. They used to live at the tail of the
+  // one-time seed above, which the existing-doc branch returned before
+  // reaching, so on a live world neither the confidence gauge nor NHS quality
+  // ever ticked and both collections stayed empty while the UI showed defaults.
+  await tickUkGovernmentGauges(db, new Date());
+}
+
+/**
+ * Confidence gauge and NHS quality per-turn drift (epic #856). Exported so the
+ * turn test can drive it directly. When the gauge bottoms out AND
+ * `UK_CONFIDENCE_GAUGE_DISSOLUTION=1`, Parliament is dissolved through the
+ * shared snap-election path (bypassing the PM's allowance: this is the House
+ * withdrawing confidence, not the PM spending a snap) and the gauge resets for
+ * the incoming government. Off by default; the gauge still accrues and is
+ * observable.
+ */
+export async function tickUkGovernmentGauges(db: Db, now: Date): Promise<void> {
+  const approvalDoc = await db
+    .collection<GovernmentApproval>("governmentApprovals")
+    .findOne({ _id: "UK" });
+  if (approvalDoc) {
+    const gauge = await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
+    if (gauge.dissolutionEnabled) {
+      try {
+        await triggerSnapElection(db, "UK", now, {
+          reason: "auto-snap",
+          bypassLimits: true,
+          actorName: "House of Commons",
+        });
+        await resetConfidenceGauge(db, now);
+      } catch (err) {
+        // A snap already in flight (or no sitting government) is not fatal to
+        // the turn; the gauge stays at the floor and re-tries next turn.
+        console.warn("[ukGovernmentFormation] confidence dissolution did not fire:", err);
+      }
+    }
+  }
+
+  const nhsGameState = await getGameState(db);
+  const nhsCurrentTurn = nhsGameState?.currentTurn ?? 1;
+  const nhsStartingYear = nhsGameState?.startingYear ?? STARTING_YEAR;
+  const nhsCurrentYear =
+    nhsGameState?.currentYear ??
+    nhsStartingYear + Math.floor((nhsCurrentTurn - 1) / TURNS_PER_YEAR);
+  await tickNhsFromBudget(db, {
+    fiscalYear: calculateFiscalYear(nhsCurrentYear, nhsCurrentTurn),
+    now,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -179,29 +228,8 @@ async function seedGovernmentFormation(db: Db): Promise<void> {
     );
   }
 
-  // Confidence gauge per-turn drift (epic #856): recovers when the government
-  // is popular, erodes when it isn't. The broken-promise bleed is added once
-  // manifesto-delivery evaluation is wired. Persists the value only — no
-  // consequence until UK_CONFIDENCE_GAUGE_DISSOLUTION is enabled.
-  const approvalDoc = await db
-    .collection<GovernmentApproval>("governmentApprovals")
-    .findOne({ _id: "UK" });
-  if (approvalDoc) {
-    await tickConfidenceForGov(db, { approval: approvalDoc.approvalRating, now });
-  }
-
-  // NHS quality per-turn drift (epic #856): pulled toward the target implied by
-  // the current passed Budget's healthcare share. Persists the value only.
-  const nhsGameState = await getGameState(db);
-  const nhsCurrentTurn = nhsGameState?.currentTurn ?? 1;
-  const nhsStartingYear = nhsGameState?.startingYear ?? STARTING_YEAR;
-  const nhsCurrentYear =
-    nhsGameState?.currentYear ??
-    nhsStartingYear + Math.floor((nhsCurrentTurn - 1) / TURNS_PER_YEAR);
-  await tickNhsFromBudget(db, {
-    fiscalYear: calculateFiscalYear(nhsCurrentYear, nhsCurrentTurn),
-    now,
-  });
+  // Per-turn gauges (confidence, NHS) are ticked by the caller,
+  // `updateGovernmentSeats`, on every turn including this seed turn.
 }
 
 // ---------------------------------------------------------------------------

@@ -6,9 +6,6 @@ import { deLegislationTypes } from "./deLegislationTypes";
 import type { Db } from "mongodb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/policyReactions", () => ({
-  recordPolicyReaction: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/budget/enactedLaws", () => ({
   recordEnactedLaw: vi.fn().mockResolvedValue(undefined),
 }));

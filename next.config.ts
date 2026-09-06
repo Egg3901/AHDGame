@@ -78,7 +78,10 @@ const nextConfig: NextConfig = {
   // for the reasons above.
   ...(process.env.SINGLEPLAYER === "1" ? { output: "standalone" as const } : {}),
   cleanDistDir: !railwayEnv,
-  serverExternalPackages: ["mongodb"],
+  // The standalone Turbopack build gives an explicitly external MongoDB
+  // package a generated require alias. That alias is not emitted into the
+  // desktop bundle on Windows, so local worlds fail before the server starts.
+  // Keep it traced into the standalone artifact instead.
   allowedDevOrigins: ["127.0.0.1"],
   typescript: {
     tsconfigPath: isProductionBuild ? "tsconfig.build.json" : "tsconfig.json",

@@ -40,7 +40,28 @@ describe("GET /api/client/account", () => {
 
     expect(result.status).toBe(200);
     expect(result.headers.get("cache-control")).toBe("private, no-store");
-    expect(body).toEqual({ linked: true, displayName: "Ada Lovelace", supporter: true });
+    expect(body).toMatchObject({
+      linked: true,
+      displayName: "Ada Lovelace",
+      supporter: true,
+      singleplayer: { entitled: false, expiresAt: null },
+    });
     expect(body).not.toHaveProperty("email");
+  });
+
+  it("returns a bounded offline entitlement window only for entitled accounts", async () => {
+    requireBasicAuth.mockResolvedValueOnce({
+      ok: true,
+      user: { userId: "507f1f77bcf86cd799439011" },
+    });
+    findOne.mockResolvedValueOnce({
+      username: "Ada",
+      displayName: "Ada",
+      singleplayerEntitledAt: new Date(),
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.singleplayer.entitled).toBe(true);
+    expect(Date.parse(body.singleplayer.expiresAt)).toBeGreaterThan(Date.now());
   });
 });
