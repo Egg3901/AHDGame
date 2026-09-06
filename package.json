@@ -17,6 +17,7 @@
     "prepare": "husky",
     "generate:composition": "npx tsx scripts/generate-composition-weights.ts && npx prettier --write src/lib/demographics/compositionWeights.generated.ts",
     "singleplayer:package": "node scripts/singleplayer/package.mjs",
+    "singleplayer:smoke": "node scripts/singleplayer/smoke.mjs",
     "singleplayer:new-game": "npx tsx scripts/singleplayer/new-game.ts",
     "seed": "npx tsx scripts/seed/seed.ts",
     "seed:reset": "npx tsx scripts/seed/seed.ts --reset",
