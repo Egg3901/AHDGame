@@ -19,6 +19,15 @@ import {
 } from "@/lib/db/collections/defenseAppropriation";
 import { applyReadinessDrift } from "./militaryForceEffects";
 
+export class DefenseAppropriationContentionError extends Error {
+  readonly retryable = true;
+
+  constructor(countryId: string, turn: number) {
+    super(`Defense appropriation contention for ${countryId} at turn ${turn}; retry required`);
+    this.name = "DefenseAppropriationContentionError";
+  }
+}
+
 /**
  * Per-turn defence account sweep: accrue this turn's slice of the enacted defence line,
  * fund as much of the standing force's upkeep as the balance and overdraft allow, draw any
@@ -94,9 +103,10 @@ export async function applyDefenseAppropriation(
     if (settled) break;
   }
   if (!settlement) return null;
+  if (!settled) throw new DefenseAppropriationContentionError(countryId, turn);
   // Only drift on the run that actually booked the turn. If the guarded write lost to a
   // concurrent turn pass, that pass has already drifted these units and doing it twice would
   // move readiness two steps in one turn.
   if (settled) await applyReadinessDrift(db, units, settlement.arrearsRatio, tier);
-  return settled ? settlement : null;
+  return settlement;
 }

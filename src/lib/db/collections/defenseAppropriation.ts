@@ -131,12 +131,16 @@ export async function applyAppropriationSettlementWithOverdraft(
     "defenseAppropriation.balance": Math.round(settlement.delta),
   };
   if (overdraft > 0) inc.treasuryBalance = -overdraft;
+  const treasuryGuard =
+    expectedTreasury === 0
+      ? { $or: [{ treasuryBalance: 0 }, { treasuryBalance: { $exists: false } }] }
+      : { treasuryBalance: expectedTreasury };
   const res = await budgets(db).updateOne(
     {
       countryId,
       "defenseAppropriation.accruedThroughTurn": { $lt: turn },
       "defenseAppropriation.balance": expectedAppropriation,
-      treasuryBalance: expectedTreasury,
+      ...treasuryGuard,
     },
     { $inc: inc, $set: set }
   );

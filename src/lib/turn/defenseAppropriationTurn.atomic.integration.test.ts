@@ -4,13 +4,18 @@ import type { AppropriationSettlement } from "@/lib/military/appropriation";
 import { applyAppropriationSettlementWithOverdraft } from "@/lib/db/collections/defenseAppropriation";
 
 const uri = process.env.MONGODB_URI;
-const dbName = process.env.MONGODB_DB ?? "a-house-divided-test";
-const canRun = Boolean(uri && /(?:test|sandbox)/i.test(dbName));
+const parsedUri = uri ? new URL(uri) : null;
+const canRun = Boolean(
+  parsedUri &&
+    (parsedUri.hostname === "127.0.0.1" || parsedUri.hostname === "localhost") &&
+    parsedUri.port === "27018"
+);
 const suite = canRun ? describe : describe.skip;
 
 suite("defense appropriation same-document CAS", () => {
   let client: MongoClient;
   const countryId = `CAS_${process.pid}_${Date.now()}`;
+  const dbName = `ahd_atomic_defense_${process.pid}_${Date.now()}`;
 
   beforeAll(async () => {
     client = new MongoClient(uri!);

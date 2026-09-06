@@ -103,6 +103,18 @@ describe("applyDefenseAppropriation", () => {
     expect(capture.updates).toHaveLength(0);
   });
 
+  it("accepts a legacy budget with no treasuryBalance when the normalized value is zero", async () => {
+    const capture: Capture = { updates: [], unitOps: [] };
+    const legacy = budgetWith(pot(0, 9));
+    const db = stubDb({ units: [UNIT], budget: legacy, capture });
+    await applyDefenseAppropriation(db, "US", 10, "1953-default");
+    const filter = capture.updates[0]!.filter as { $or?: unknown[] };
+    expect(filter.$or).toEqual([
+      { treasuryBalance: 0 },
+      { treasuryBalance: { $exists: false } },
+    ]);
+  });
+
   it("does not accrue for a turn already passed", async () => {
     const capture: Capture = { updates: [], unitOps: [] };
     const db = stubDb({ units: [UNIT], budget: budgetWith(pot(500, 12)), capture });
@@ -174,7 +186,10 @@ describe("applyDefenseAppropriation", () => {
       capture,
       settleFails: true,
     });
-    expect(await applyDefenseAppropriation(db, "US", 10, "1953-default")).toBeNull();
+    await expect(applyDefenseAppropriation(db, "US", 10, "1953-default")).rejects.toMatchObject({
+      name: "DefenseAppropriationContentionError",
+      retryable: true,
+    });
     expect(treasurySpends).toHaveLength(0);
   });
 });
@@ -253,7 +268,10 @@ describe("applyDefenseAppropriation — readiness drift", () => {
       capture,
       settleFails: true,
     });
-    await applyDefenseAppropriation(db, "US", 10, "1953-default");
+    await expect(applyDefenseAppropriation(db, "US", 10, "1953-default")).rejects.toMatchObject({
+      name: "DefenseAppropriationContentionError",
+      retryable: true,
+    });
     expect(capture.unitOps).toHaveLength(0);
   });
 });
