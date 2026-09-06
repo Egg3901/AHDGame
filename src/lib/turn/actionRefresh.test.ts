@@ -676,7 +676,7 @@ describe("processActionRefresh", () => {
     expect(update.favorability).toBeCloseTo(49.85, 5);
   });
 
-  it("persists accountability drain for player and NPP executives while excluding a ceremonial president", async () => {
+  it("applies accountability in an in-memory persisted fixture while excluding a ceremonial president", async () => {
     const { processActionRefresh } = await import("./actionRefresh");
     const config = {
       _id: "default",
@@ -708,8 +708,11 @@ describe("processActionRefresh", () => {
 
     const runFixture = async (approvalRating: number) => {
       const usMember = makeCharacter("us-member", "US", "democrat");
+      const usPartyMember = makeCharacter("us-party-member", "US", "democrat");
       const ruPm = makeCharacter("ru-pm", "RU", "communist");
       const ceremonialPresident = makeCharacter("ru-president", "RU", "ceremonial");
+      usMember.favorability = 49;
+      usMember.infamy = 40;
       const nppExecutive = {
         _id: "dd-npp-executive" as never,
         countryId: "DD",
@@ -717,7 +720,7 @@ describe("processActionRefresh", () => {
         politicalInfluence: 10,
         favorability: 50,
       };
-      characterRows = [usMember, ruPm, ceremonialPresident];
+      characterRows = [usMember, usPartyMember, ruPm, ceremonialPresident];
       nppRows = [nppExecutive];
       electedRows = [
         { characterId: usMember._id, officeType: "president", countryId: "US" },
@@ -752,19 +755,21 @@ describe("processActionRefresh", () => {
       persistFixture = true;
 
       await processActionRefresh(characterRows, config, new Date());
-      return { usMember, ruPm, ceremonialPresident, nppExecutive };
+      return { usMember, usPartyMember, ruPm, ceremonialPresident, nppExecutive };
     };
 
     const accountable = await runFixture(20);
     const control = await runFixture(50);
 
-    // At favorability 50 and infamy 0, ordinary favorability decay is zero.
-    // The persisted DB rows therefore expose the exact 0.15 accountability delta.
-    expect(accountable.usMember.favorability).toBeCloseTo(49.85, 5);
+    // The US executive also takes the ordinary 1-point infamy drain (40 - 20) *
+    // 0.05, so the persisted fixture still exposes the exact 0.15 delta.
+    expect(accountable.usMember.favorability).toBeCloseTo(47.85, 5);
+    expect(accountable.usPartyMember.favorability).toBeCloseTo(49.85, 5);
     expect(accountable.ruPm.favorability).toBeCloseTo(49.85, 5);
     expect(accountable.nppExecutive.favorability).toBeCloseTo(49.85, 5);
     expect(accountable.ceremonialPresident.favorability).toBeCloseTo(50, 5);
-    expect(control.usMember.favorability).toBeCloseTo(50, 5);
+    expect(control.usMember.favorability).toBeCloseTo(48, 5);
+    expect(control.usPartyMember.favorability).toBeCloseTo(50, 5);
     expect(control.ruPm.favorability).toBeCloseTo(50, 5);
     expect(control.nppExecutive.favorability).toBeCloseTo(50, 5);
     expect(control.ceremonialPresident.favorability).toBeCloseTo(50, 5);
