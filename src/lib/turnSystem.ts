@@ -44,7 +44,7 @@ import {
 } from "@/simulation/phases/singleplayerPhases";
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
-import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
+import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -480,14 +480,16 @@ export async function processTurn(): Promise<{
       await adapter.execute(context, runtime);
     }
 
-    // Diagnostic only, never throws. `federalBudget.surplus` and
-    // `debt.principal` are caches of an expression, and both drift intra-year
-    // on the live world even though every writer maintains them on its own
-    // write. Runs HERE, after every phase, because live `updatedAt` values show
-    // budget writes landing well after the corporation phase that recomputes
-    // them. See lib/budget/budgetInvariants.
+    // Reconciles, never throws. `federalBudget.surplus` and `debt.principal` are
+    // caches of an expression, and both drift intra-year on the live world even
+    // though every writer maintains them on its own write. This used to only log
+    // the drift, which was wrong: the stored `surplus` gates treasury transfers
+    // against the debt ceiling and sizes sovereign bond issuance, so a stale cache
+    // is wrong money rather than noise. Runs HERE, after every phase, because live
+    // `updatedAt` values show budget writes landing well after the corporation
+    // phase that recomputes them. See lib/budget/budgetInvariants.
     if (!localSingleplayer) {
-      await reportFederalBudgetInvariantBreaches(db, context.newTurn);
+      await reconcileFederalBudgetInvariants(db, context.newTurn);
     }
 
     healthSnapshotWritten = context.phaseResults.gameHealthSnapshot !== null;
