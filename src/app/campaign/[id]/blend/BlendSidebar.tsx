@@ -60,6 +60,90 @@ function Block({ children, first }: { children: React.ReactNode; first?: boolean
  * rail-only version meant the rally and the tour, the largest lever a candidate
  * has, could not be reached on a phone at all.
  */
+/**
+ * Who is on the ticket, and the control to name them.
+ *
+ * Exported because the sidebar it came from is `hidden lg:block`. Naming a
+ * running mate was reachable on a desktop and nowhere else, which only stopped
+ * being survivable once the election page's own copy of this control went: a
+ * player on a phone then had no way to name one at all.
+ */
+export function RunningMateBlock({
+  vm,
+  canManageTicket,
+  busy,
+  candidateId,
+  onNameRunningMate,
+}: {
+  vm: CampaignBlendVM;
+  canManageTicket: boolean;
+  busy: string | null;
+  candidateId: string;
+  onNameRunningMate: (r: PickerResult) => void;
+}) {
+  const [pickingMate, setPickingMate] = useState(false);
+  return (
+    <>
+      <Eyebrow>Ticket</Eyebrow>
+      <div
+        style={{
+          marginTop: 9,
+          display: "flex",
+          alignItems: "baseline",
+          justifyContent: "space-between",
+          gap: 10,
+        }}
+      >
+        <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600, minWidth: 0 }}>
+          {vm.ticket.runningMateName ?? "No running mate named"}
+        </span>
+        {canManageTicket ? (
+          <button
+            type="button"
+            onClick={() => setPickingMate((v) => !v)}
+            style={{
+              border: 0,
+              background: "transparent",
+              padding: 0,
+              fontFamily: FONT.mono,
+              fontSize: 10,
+              letterSpacing: ".1em",
+              textTransform: "uppercase",
+              color: BLEND.muted,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            {pickingMate ? "Cancel" : "Change"}
+          </button>
+        ) : null}
+      </div>
+      <div
+        style={{
+          marginTop: 2,
+          fontFamily: FONT.serif,
+          fontStyle: "italic",
+          fontSize: 13,
+          color: BLEND.mutedDim,
+        }}
+      >
+        Running mate
+      </div>
+      {pickingMate && canManageTicket ? (
+        <BlendCharacterPicker
+          placeholder="Search a character to name…"
+          excludeIds={[candidateId, ...vm.managers.list.map((m) => m.characterId)]}
+          disabled={busy === "runningMate"}
+          onPick={(r) => {
+            setPickingMate(false);
+            onNameRunningMate(r);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
 export function SupportBlock({
   vm,
   canAct,
@@ -240,8 +324,6 @@ export function BlendSidebar({
   presence,
   onPresenceChanged,
 }: BlendSidebarProps) {
-  const [pickingMate, setPickingMate] = useState(false);
-
   return (
     <aside
       style={{
@@ -352,61 +434,13 @@ export function BlendSidebar({
       ) : null}
 
       <Block>
-        <Eyebrow>Ticket</Eyebrow>
-        <div
-          style={{
-            marginTop: 9,
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            gap: 10,
-          }}
-        >
-          <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600 }}>
-            {vm.ticket.runningMateName ?? "No running mate named"}
-          </span>
-          {canManageTicket ? (
-            <button
-              type="button"
-              onClick={() => setPickingMate((v) => !v)}
-              style={{
-                border: 0,
-                background: "transparent",
-                padding: 0,
-                fontFamily: FONT.mono,
-                fontSize: 10,
-                letterSpacing: ".1em",
-                textTransform: "uppercase",
-                color: BLEND.muted,
-                cursor: "pointer",
-              }}
-            >
-              {pickingMate ? "Cancel" : "Change"}
-            </button>
-          ) : null}
-        </div>
-        <div
-          style={{
-            marginTop: 2,
-            fontFamily: FONT.serif,
-            fontStyle: "italic",
-            fontSize: 13,
-            color: BLEND.mutedDim,
-          }}
-        >
-          Running mate
-        </div>
-        {pickingMate && canManageTicket ? (
-          <BlendCharacterPicker
-            placeholder="Search a character to name…"
-            excludeIds={[candidateId, ...vm.managers.list.map((m) => m.characterId)]}
-            disabled={busy === "runningMate"}
-            onPick={(r) => {
-              setPickingMate(false);
-              onNameRunningMate(r);
-            }}
-          />
-        ) : null}
+        <RunningMateBlock
+          vm={vm}
+          canManageTicket={canManageTicket}
+          busy={busy}
+          candidateId={candidateId}
+          onNameRunningMate={onNameRunningMate}
+        />
 
         <div
           style={{

@@ -132,9 +132,11 @@ describe("manager view", () => {
     expect(screen.getAllByText(/RALLY · 4/)).toHaveLength(2);
   });
 
-  it("names the running mate on the ticket", () => {
+  it("names the running mate on the ticket, on both layouts", () => {
+    // One copy was the fault, not the fixture: the sidebar this sits in is
+    // `hidden lg:block`, so the phone had no ticket block at all.
     renderClient();
-    expect(screen.getByText("The Running Mate")).toBeTruthy();
+    expect(screen.getAllByText("The Running Mate")).toHaveLength(2);
   });
 
   it("offers both contribution routes to a party officer", () => {
@@ -430,5 +432,29 @@ describe("action failures", () => {
     renderClient();
     fireEvent.click(screen.getAllByRole("button", { name: /RALLY/ })[0]);
     await waitFor(() => expect(screen.getAllByText("Not enough funds for that.")).toHaveLength(2));
+  });
+});
+
+describe("naming a running mate", () => {
+  // The sidebar this control lives in is `hidden lg:block`, so it reached a
+  // desktop and nowhere else. That was survivable only while the election page
+  // carried its own copy; once that went, a player on a phone had no way to
+  // name a mate at all.
+  it("offers the control on both layouts", () => {
+    renderClient();
+    expect(screen.getAllByText("Running mate")).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Change" })).toHaveLength(2);
+  });
+
+  it("says so on both when nobody is named yet", () => {
+    renderClient({ campaign: campaignFixture({ runningMateName: null }) });
+    expect(screen.getAllByText("No running mate named")).toHaveLength(2);
+  });
+
+  it("offers no change control to somebody who cannot manage the ticket", () => {
+    renderClient({ canManage: false, canSurrogate: true });
+    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
+    // The ticket still reads, it just cannot be changed.
+    expect(screen.getAllByText("Running mate")).toHaveLength(2);
   });
 });

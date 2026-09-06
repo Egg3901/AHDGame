@@ -17,7 +17,7 @@ import {
 import { BlendOpsSection } from "./BlendOpsSection";
 import { BlendMoneySection } from "./BlendMoneySection";
 import { BlendLedger } from "./BlendLedger";
-import { BlendSidebar, SupportBlock } from "./BlendSidebar";
+import { BlendSidebar, RunningMateBlock, SupportBlock } from "./BlendSidebar";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { StatePresencePanel } from "../components/StatePresencePanel";
 import { StateOperationsSection } from "../components/StateOperationsSection";
@@ -365,6 +365,28 @@ export function CampaignBlendClient({
                 letterSpacing: ".16em",
                 textTransform: "uppercase",
                 color: BLEND.mutedDimmer,
+              }}
+            >
+              Your ticket
+            </div>
+            <RunningMateBlock
+              vm={vm}
+              canManageTicket={canManage}
+              busy={busy}
+              candidateId={campaign.candidateId}
+              onNameRunningMate={(r: PickerResult) =>
+                post("runningMate", `/api/elections/${campaign.electionId}/running-mate`, {
+                  runningMateId: r.id,
+                })
+              }
+            />
+
+            <div
+              style={{
+                marginTop: 22,
+                fontFamily: FONT.serif,
+                fontSize: 20,
+                fontWeight: 600,
               }}
             >
               National support
