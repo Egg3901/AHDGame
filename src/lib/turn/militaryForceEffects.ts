@@ -13,7 +13,7 @@ import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettin
 import { resolveMetricPath } from "@/lib/cabinet/resolveMetricPath";
 import { resolveDefenseLine } from "./defenseEnvelope";
 import { accrualPerTurn, upkeepPerTurn, upkeepBurden } from "@/lib/military/appropriation";
-import { seedRosterUpkeepFor } from "@/lib/military/seedRosterUpkeep";
+import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { isPoliticalApprovalCountry } from "@/lib/politicalLegislation/politicalApprovalProvider";
 import { forceDefenseContribution } from "@/lib/politicalMetrics/forceDefense";
 
@@ -117,7 +117,7 @@ export async function applyMilitaryForceEffects(
   // enacted defence line brings in. Computed here rather than read off the pot because the
   // pot stores the settled arrears, not the burden that produced it.
   const line = await resolveDefenseLine(db, countryId);
-  const seedRoster = seedRosterUpkeepFor(preset, countryId);
+  const seedRoster = await resolveSeedRosterUpkeep(db, preset, countryId);
   // ⚠️ The seed roster is checked HERE, not left to `upkeepPerTurn`. That function returns 0
   // for an unmeasurable seed, and a 0 upkeep against a real accrual is a burden of 0 — the
   // MAXIMAL budget balance. A country whose order of battle cannot be measured (a new nation
