@@ -73,6 +73,11 @@ describe("manifest-backed preset country enablement", () => {
     expect(getPresetEnablementTier("2019-default", "UK")).toBeNull();
   });
 
+  it("preserves config fallback country enablement for the 2023 preset", () => {
+    expect(getPresetEnablementCountries("2023-default")).toBeNull();
+    expect(getPresetEnablementTier("2023-default", "UK")).toBeNull();
+  });
+
   it("fails loudly for an unclassified preset", () => {
     expect(() => getPresetEnablementCountries("1968-default")).toThrow(/No world entity manifest/);
   });
