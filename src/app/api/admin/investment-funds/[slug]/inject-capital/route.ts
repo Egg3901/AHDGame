@@ -16,7 +16,7 @@ import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import {
   getOpenOrdersEscrowAnchor,
-  getQueuedRedemptionLiabilityAnchor,
+  getQueuedRedemptionUnits,
 } from "@/lib/indexFunds/fundValuation";
 
 const injectCapitalSchema = z.object({
@@ -51,7 +51,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
     const exchangeRates = await loadFxRatesRecord(db);
     const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
     const openOrdersEscrowAnchor = await getOpenOrdersEscrowAnchor(db, fund._id);
-    const queuedRedemptionLiabilityAnchor = await getQueuedRedemptionLiabilityAnchor(db, fund._id);
+    const queuedRedemptionUnits = await getQueuedRedemptionUnits(db, fund._id);
     const newCashAnchor = fund.cashAnchor + amount;
     const newNav =
       recomputeNav(
@@ -61,14 +61,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
           holdings: fund.holdings,
           bondAllocations: fund.bondAllocations,
         },
-        { bondPrincipalAnchor, openOrdersEscrowAnchor, queuedRedemptionLiabilityAnchor }
+        { bondPrincipalAnchor, openOrdersEscrowAnchor, queuedRedemptionUnits }
       ) ?? fund.quotedNav;
     const backing = calculateBackingRatio({
       cashAnchor: newCashAnchor,
       holdingsValueAnchor,
       bondPrincipalAnchor,
       openOrdersEscrowAnchor,
-      queuedRedemptionLiabilityAnchor,
+      queuedRedemptionUnits,
       quotedNav: newNav,
       unitSupply: fund.unitSupply,
     });

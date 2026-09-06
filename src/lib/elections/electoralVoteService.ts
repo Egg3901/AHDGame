@@ -1,6 +1,6 @@
 import type { Db } from "mongodb";
 import type { ElectionVoteTally, PoliticalParty } from "@/lib/db/types";
-import { ELECTORAL_VOTE_UNITS, TOTAL_ELECTORAL_VOTES } from "@/lib/constants";
+import { ELECTORAL_VOTE_UNITS } from "@/lib/constants";
 import { getPartyHex } from "@/lib/utils/politics";
 
 export interface ElectoralMapState {
@@ -94,10 +94,13 @@ export async function computeElectoralVotes(
         const sorted = Object.entries(voteTally.totalVotes)
           .filter(([, v]) => v > 0)
           .sort((a, b) => b[1] - a[1]);
-        let remaining = TOTAL_ELECTORAL_VOTES;
+        // Total of the LIVE units, not the modern 538: a 1953 world has 531
+        // (no DC, no Alaska or Hawaii) and the fallback must not invent votes.
+        const totalEv = units.reduce((s, u) => s + u.ev, 0);
+        let remaining = totalEv;
         for (let i = 0; i < sorted.length; i++) {
           const pct = sorted[i][1] / total;
-          const ev = i === sorted.length - 1 ? remaining : Math.round(pct * TOTAL_ELECTORAL_VOTES);
+          const ev = i === sorted.length - 1 ? remaining : Math.round(pct * totalEv);
           electoralVotesByCandidate[sorted[i][0]] = Math.max(0, ev);
           remaining -= ev;
         }

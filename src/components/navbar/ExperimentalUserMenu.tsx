@@ -243,16 +243,18 @@ export function ExperimentalUserMenu({
             );
           })()}
         <div className="my-1 h-px bg-card-border" />
-        <button
-          type="button"
-          onClick={() => {
-            closeAll();
-            handleSignOut();
-          }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-error transition-colors hover:bg-white/5"
-        >
-          {t("common.signOut")}
-        </button>
+        {!user.singleplayer && (
+          <button
+            type="button"
+            onClick={() => {
+              closeAll();
+              handleSignOut();
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-error transition-colors hover:bg-white/5"
+          >
+            {t("common.signOut")}
+          </button>
+        )}
       </div>
       <Link
         href="/changelog"

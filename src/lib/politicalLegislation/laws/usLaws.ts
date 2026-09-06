@@ -5269,4 +5269,52 @@ export const US_LAWS: PoliticalLaw[] = [
       },
     ],
   },
+  {
+    id: "us.sec.intelligenceAuthorization",
+    countryId: "US",
+    kind: "secondary",
+    targets: [
+      { metricId: "defense.institutions", weight: 0.6 },
+      { metricId: "defense.projection", weight: 0.35 },
+      { metricId: "governance.centralAuthority", weight: 0.3 },
+    ],
+    title: "Intelligence Authorization Act",
+    description:
+      "Authorizes the intelligence services and the money they may spend without itemizing it.",
+    category: "defense",
+    allowedScope: "national",
+    baselineLevel: 0,
+    budgetKeyOverride: "intelligence",
+    levels: [
+      {
+        name: "Unfunded",
+        description:
+          "No appropriation is voted. The services exist on paper and run no operations.",
+      },
+      {
+        name: "Nominal Provision",
+        description:
+          "A token line keeps a headquarters and a handful of officers. Reach or tempo, not both.",
+        gdpCostFraction: 0.0005,
+      },
+      {
+        name: "Standing Service",
+        description:
+          "A standing service works its established stations and keeps one network properly paid.",
+        gdpCostFraction: 0.0015,
+      },
+      {
+        name: "Expanded Service",
+        description:
+          "Stations multiply and the service can hold several networks at full funding at once.",
+        gdpCostFraction: 0.003,
+      },
+      {
+        name: "Unrestricted Vote",
+        description:
+          "The line is voted without itemization. The service goes wherever it decides to go.",
+        gdpCostFraction: 0.005,
+      },
+    ],
+  },
 ];

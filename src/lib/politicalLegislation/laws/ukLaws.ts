@@ -5288,4 +5288,49 @@ export const UK_LAWS: PoliticalLaw[] = [
       },
     ],
   },
+  {
+    id: "uk.sec.secretVote",
+    countryId: "UK",
+    kind: "secondary",
+    targets: [
+      { metricId: "defense.institutions", weight: 0.6 },
+      { metricId: "defense.projection", weight: 0.35 },
+      { metricId: "governance.centralAuthority", weight: 0.3 },
+    ],
+    title: "Secret Vote",
+    description: "The single unexplained line in the estimates that funds the secret services.",
+    category: "defense",
+    allowedScope: "national",
+    baselineLevel: 0,
+    budgetKeyOverride: "intelligence",
+    levels: [
+      {
+        name: "Unfunded",
+        description: "No secret vote is taken. The services keep their registry and little else.",
+      },
+      {
+        name: "Nominal Provision",
+        description: "A modest vote sustains a headquarters and a thin establishment abroad.",
+        gdpCostFraction: 0.0005,
+      },
+      {
+        name: "Standing Service",
+        description:
+          "The vote sustains the established stations and one network kept properly paid.",
+        gdpCostFraction: 0.0015,
+      },
+      {
+        name: "Expanded Service",
+        description:
+          "The vote carries several networks at full funding and the officers to run them.",
+        gdpCostFraction: 0.003,
+      },
+      {
+        name: "Unrestricted Vote",
+        description:
+          "The sum is voted without particulars and the service answers for it to almost no one.",
+        gdpCostFraction: 0.005,
+      },
+    ],
+  },
 ];

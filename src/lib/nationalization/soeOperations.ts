@@ -466,7 +466,18 @@ export async function processSoeOperations(
       plantsEnabled,
     });
     if (coveredAnchor <= 0) continue; // nothing operating-related to comp
-    await coverSoeOperatingLoss(db, corp.countryId as CountryId, coveredAnchor, fxByCurrency, now);
+    // The OWNING treasury covers the loss — the same key the remittance,
+    // the state capex grant, and both budget estimators use. A firm
+    // nationalised abroad keeps its domicile on `countryId`, so debiting
+    // that would drain a treasury for an enterprise it does not own while
+    // the owner's books show the profit estimate (ticket #1269).
+    await coverSoeOperatingLoss(
+      db,
+      (corp.countryOwnerId ?? corp.countryId) as CountryId,
+      coveredAnchor,
+      fxByCurrency,
+      now
+    );
     // Credit only what the treasury actually paid. Below plants that is the
     // whole hole (liquidCapital → 0, as before); under plants an over-built SOE
     // is left negative by the residual it spent on capacity.

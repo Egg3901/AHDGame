@@ -65,6 +65,14 @@ export async function splitOffSectorType(db: Db, params: SplitOffParams): Promis
 
   const doc = buildNationalCorporationDoc(params.countryId, {
     name,
+    // `buildNationalCorporationDoc` defaults `type` to "financial", which is
+    // right for the PRIMARY NatCorp (a sovereign issuer) and wrong for a
+    // producing split-off. `corporation.type` is the sector a corp builds into
+    // when none is named (`expandSector`, `buildCapacity`) and one of the keys
+    // `applyPriceMultipliers` reads, so leaving it at the default pointed every
+    // split-off enterprise at the financial sector regardless of what it
+    // actually operates (ticket #1271).
+    type: params.sectorType,
     isPrimaryNationalCorporation: false,
     assignedSectorTypes: [params.sectorType],
   });

@@ -607,6 +607,30 @@ const RUNTIME: CollectionEntry[] = [
     notes:
       "Per-country nuclear research, stockpile, and production orders. Wiped on reset and recreated from game-scaled historical baselines without automatic production.",
   },
+  {
+    name: "intelligenceAgencies",
+    category: "runtime",
+    notes:
+      "One intelligence agency per country: director, tradecraft, counter-intelligence posture, budget, and the lazily refreshed per-turn operation slots. Runtime — wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "intelligenceNetworks",
+    category: "runtime",
+    notes:
+      "One row per (owner, target) pair: network level, build progress, suspicion, and burn cooldown. This is an operator's ACCESS to a target country. Runtime — wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "intelligenceCoverage",
+    category: "runtime",
+    notes:
+      "One row per (owner, target, domain). Stores the reading at collection time; the live value is derived on read from lastCollectedTurn, so nothing rewrites these rows each turn. Runtime — wiped on reset, rebuilt by play.",
+  },
+  {
+    name: "intelligenceOpLog",
+    category: "runtime",
+    notes:
+      "Append-only record of resolved intelligence operations, carrying both the outcome and compromise axes plus the roll detail for audit and simulation reports. Runtime — wiped on reset, rebuilt by play.",
+  },
   { name: "sovereignCrisisDecisions", category: "runtime" },
   { name: "globalAlerts", category: "runtime" },
   { name: "wireEvents", category: "runtime" },
@@ -958,6 +982,12 @@ const RUNTIME: CollectionEntry[] = [
 // reset" mode that nukes them; that path is documented in resetGameWorld.
 
 const PRESERVED: CollectionEntry[] = [
+  {
+    name: "clientSimulationStatistics",
+    category: "preserved",
+    notes:
+      "Anonymous desktop run aggregates expire through a 30-day TTL index, independently of world resets.",
+  },
   {
     name: "users",
     category: "preserved",

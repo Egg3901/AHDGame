@@ -24,6 +24,21 @@ export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
 export type NppForeignPolicyMode = "off" | "shadow" | "active";
 export type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
+/** Local-only world mode. Hosted worlds never persist these fields. */
+export type SingleplayerMode = "normal" | "head-of-state" | "worldsim";
+export type SingleplayerDifficulty = "easy" | "normal" | "hard";
+
+export interface SingleplayerConfig {
+  mode: SingleplayerMode;
+  difficulty: SingleplayerDifficulty;
+  /** Existing NPP autonomy level remains independent from local difficulty. */
+  nppAutonomyLevel: NppAutonomyLevel;
+  featureFlags: Record<string, boolean>;
+  /** Whether the local character is locked to the head-of-state career path. */
+  permanentHeadOfState: boolean;
+  configuredAt: Date;
+}
+
 export interface GameIteration {
   type: IterationType;
   number: number;
@@ -44,6 +59,8 @@ export interface IterationStampFields {
 
 export interface GameState {
   _id: string;
+  /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
+  singleplayerConfig?: SingleplayerConfig;
   /**
    * Turn on which the Cold War was resolved in-game, or null/absent while it is
    * still being fought.
@@ -249,6 +266,29 @@ export interface GameState {
   nppOffensiveJoinEnabled?: boolean;
   nppOffensiveJoinEnabledBy?: string;
   nppOffensiveJoinEnabledAt?: string;
+  /**
+   * When true, NPP-run countries build intelligence networks and run operations
+   * of their own. Default false, which leaves them purely defensive.
+   *
+   * This gates INITIATIVE only. Counter-intelligence posture is derived for every
+   * NPP country each turn regardless of this switch, because defence needs no
+   * order: a country nobody is playing still resists being spied on.
+   */
+  /**
+   * When true, a successful military covert action actually degrades the
+   * target's front supply and formation readiness. Default false.
+   *
+   * Off because it is a BALANCE change and the balance report that CLAUDE.md
+   * requires could not be produced: the live world has no engaged front to
+   * measure against (see scripts/sim/reports/). The code ships reviewed and
+   * inert; turning it on is a deliberate act that should follow the report.
+   */
+  intelligenceMilitarySabotageEnabled?: boolean;
+  intelligenceMilitarySabotageEnabledBy?: string;
+  intelligenceMilitarySabotageEnabledAt?: string;
+  nppIntelligenceOperationsEnabled?: boolean;
+  nppIntelligenceOperationsEnabledBy?: string;
+  nppIntelligenceOperationsEnabledAt?: string;
   /** When true, crisis international-aid nodes use the slider + legislature-bill flow. */
   crisisAidBillsEnabled?: boolean;
   crisisAidBillsEnabledBy?: string;

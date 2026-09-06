@@ -153,3 +153,77 @@ describe("computeMarketFormationSnapshot", () => {
     expect(snapshot.classificationCounts.data_zero).toBe(1);
   });
 });
+
+describe("empty-cell sampling", () => {
+  /**
+   * The snapshot is persisted once per turn. The full empty-cell list reached
+   * ~1MB per document and nothing outside the producer reads it, so it is
+   * capped to a sample. These pin the properties that make the cap safe:
+   * the true total stays exact, the dropped count is reported, and the sample
+   * is deterministic rather than whatever order the scan happened to produce.
+   */
+  function manyEmptyPools(count: number): UnownedSector[] {
+    return Array.from({ length: count }, (_, i) =>
+      pool(`S${String(i).padStart(4, "0")}`, "manufacturing")
+    );
+  }
+
+  it("keeps the exact total while capping the sample, and says how many it dropped", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: manyEmptyPools(400),
+      prices: [],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.emptyCells).toBe(400);
+    expect(snapshot.emptyMarketCells.length).toBe(250);
+    expect(snapshot.emptyMarketCellsOmitted).toBe(150);
+    // The rolled-up views must still describe every cell, not just the sample.
+    const byStateCells = snapshot.emptyByState.reduce((sum, row) => sum + row.cells, 0);
+    expect(byStateCells).toBe(400);
+  });
+
+  it("omits the dropped-count field entirely when nothing was dropped", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: manyEmptyPools(3),
+      prices: [],
+      eraUnitScale: 1,
+    });
+
+    expect(snapshot.emptyMarketCells.length).toBe(3);
+    expect(snapshot.emptyMarketCellsOmitted).toBeUndefined();
+  });
+
+  it("samples deterministically, so the same world yields the same rows", () => {
+    const input = {
+      sectors: [],
+      unownedSectors: manyEmptyPools(400),
+      prices: [],
+      eraUnitScale: 1,
+    };
+    const a = computeMarketFormationSnapshot({ ...input });
+    const b = computeMarketFormationSnapshot({ ...input });
+
+    expect(a.emptyMarketCells.map((c) => `${c.stateId}:${c.sectorType}`)).toEqual(
+      b.emptyMarketCells.map((c) => `${c.stateId}:${c.sectorType}`)
+    );
+  });
+
+  it("puts facility-ready cells first, since those are the actionable ones", () => {
+    const snapshot = computeMarketFormationSnapshot({
+      sectors: [],
+      unownedSectors: manyEmptyPools(400),
+      prices: [],
+      eraUnitScale: 1,
+    });
+
+    const readyFlags = snapshot.emptyMarketCells.map((c) => c.facilityReady);
+    const firstNotReady = readyFlags.indexOf(false);
+    // Once a non-ready cell appears, no ready one may follow it.
+    if (firstNotReady !== -1) {
+      expect(readyFlags.slice(firstNotReady).some(Boolean)).toBe(false);
+    }
+  });
+});

@@ -5,6 +5,7 @@ import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalDocId, NATIONAL_SCOPE_IDS } from "@/lib/constants/nationalScope";
 import { getRegisteredCountryIdSet } from "@/lib/country/registeredCountries";
+import { resolvePipelineGdpGrowth } from "@/lib/country/nationalGdpGrowth";
 import { logWarning } from "@/lib/utils/errorLog";
 import {
   applyPerTurnGrowthToFederalBases,
@@ -88,7 +89,16 @@ export async function processFiscalBaseGrowth(
       const national = nationalDocId ? metricsById.get(nationalDocId) : undefined;
       const wageGrowth = metricRate(national, "wageGrowth", 3.0);
       const tradeGrowth = metricRate(national, "tradeGrowth", 2.0);
-      const gdpGrowth = metricRate(national, "gdpGrowth", 2.5);
+      // National doc first, then the GDP-weighted regional mean (the 17
+      // countries with no national doc were growing their bases on a flat 2.5
+      // while contracting), then 2.5. Same rule `fiscalYear` records annually.
+      const gdpGrowth = resolvePipelineGdpGrowth({
+        nationalDocGrowth: national?.economic?.gdpGrowth?.value,
+        regions: countryStates.map((s) => ({
+          growth: metricsById.get(String(s._id))?.economic?.gdpGrowth?.value,
+          gdp: s.gdp ?? 0,
+        })),
+      });
       // `??` only substitutes null/undefined, so a NaN inflation reading passed
       // straight through here while its three siblings (wageGrowth, tradeGrowth,
       // gdpGrowth) were all finiteness-checked via metricRate above. That single
@@ -111,7 +121,12 @@ export async function processFiscalBaseGrowth(
       // Always refresh the consumed factor fields (inflation.ts reads
       // economicFactors.wageGrowth; tradeGrowthMirror reads economicFactors.tradeGrowth),
       // and grow the federal bases by the per-turn slice when present.
+      // gdpGrowth is mirrored too. It used to be written only by the annual
+      // fiscal pass, so the budget page and the public nations API showed a
+      // fiscal-year-end snapshot (+3.9 at turn 650) while every other surface
+      // read the live national doc (-7.0). One number, refreshed every turn.
       const set: Record<string, unknown> = {
+        "economicFactors.gdpGrowth": gdpGrowth,
         "economicFactors.wageGrowth": wageGrowth,
         "economicFactors.tradeGrowth": tradeGrowth,
         "economicFactors.lastUpdated": factors.lastUpdated,

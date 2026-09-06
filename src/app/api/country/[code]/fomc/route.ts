@@ -9,6 +9,10 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COMMAND_CEILING, scheduledMarketizationLevel } from "@/lib/constants/commandEconomy";
+import { getNationalBudgetId } from "@/lib/bonds/sovereign";
+import type { FederalBudget } from "@/lib/db/types/budget";
+import { getGameState } from "@/lib/gameState";
 import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
 import { bankToJurisdictionState } from "@/lib/monetaryGovernance/governanceShell";
 import { allowedActionsFor } from "@/lib/monetaryGovernance/rules/allowedActions";
@@ -133,6 +137,24 @@ export async function GET(_request: Request, context: RouteContext) {
     const gameConfig = await db
       .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
       .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+    const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
+    // Per-country command gate (ticket #1270): the global flag alone blocked
+    // EVERY bank, including the US Fed. Mirror the central-bank rate POST gate:
+    // resolve this country's marketization level from the persisted value,
+    // falling back to the era schedule.
+    const gameState = await getGameState(db);
+    const rateBudget = commandEconomyEnabled
+      ? await db
+          .collection<FederalBudget>("federalBudget")
+          .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }, {
+            projection: { "economicFactors.marketizationLevel": 1 },
+          })
+      : null;
+    const persistedLevel = rateBudget?.economicFactors?.marketizationLevel;
+    const resolvedLevel =
+      typeof persistedLevel === "number" && Number.isFinite(persistedLevel)
+        ? persistedLevel
+        : scheduledMarketizationLevel(countryId, gameState?.currentYear);
     const governanceState = bankToJurisdictionState(bank, {
       jurisdiction,
       governmentControlled: await isBankGovernmentControlledLive(
@@ -145,7 +167,7 @@ export async function GET(_request: Request, context: RouteContext) {
             capitalControls: fxDoc.capitalControls === true,
           }
         : null,
-      commandEconomy: gameConfig?.commandEconomyEnabled === true,
+      commandEconomy: commandEconomyEnabled && resolvedLevel < COMMAND_CEILING,
     });
     const isAdmin = (auth as { isAdmin?: boolean }).isAdmin === true;
     const viewerRole = isAdmin

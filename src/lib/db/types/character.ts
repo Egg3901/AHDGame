@@ -149,6 +149,8 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Local singleplayer career constraint; absent on hosted characters. */
+  singleplayerHeadOfState?: boolean;
   _id: ObjectId;
   userId: ObjectId;
   countryId: CountryId;

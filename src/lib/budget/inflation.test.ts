@@ -7,6 +7,7 @@ import {
   getCostOfLivingNeutralIndex,
   getInflationTarget,
   getNeutralPrimeRate,
+  MAX_INFLATION,
   type InflationInputs,
 } from "./inflation";
 import { computeMacroTarget, applyDrift } from "../currency/rateCalculation";
@@ -26,6 +27,17 @@ const baseline: InflationInputs = {
 };
 
 describe("calculateInflation", () => {
+  it.each([
+    { ...baseline, unemployment: 15, gdpGrowth: -5, primeRate: 5, previousInflation: -2 },
+    { ...baseline, unemployment: 1, gdpGrowth: 15, commodityPressure: 0.3, previousInflation: 15 },
+    { ...baseline, primeRate: 0, surplusToGdp: -0.5, previousInflation: 2 },
+    { ...baseline, wageGrowth: 2.731 },
+  ])("reconciles the driver total after limits and rounding", (inputs) => {
+    const { rate, breakdown } = calculateInflationWithBreakdown(inputs);
+    const total = Object.values(breakdown).reduce((sum, value) => sum + value, 0);
+    expect(total).toBeCloseTo(rate, 10);
+  });
+
   it("returns ~2% at baseline (healthy economy)", () => {
     const rate = calculateInflation(baseline);
     expect(rate).toBeCloseTo(2.0, 0);
@@ -303,7 +315,7 @@ describe("calculateInflation", () => {
 
   // ── Clamping ─────────────────────────────────────────────────────────────
 
-  it("clamps to max 100%", () => {
+  it("clamps to max 100% after sustained extreme pressure", () => {
     // All drivers maxed out, starting from near the ceiling. The per-turn delta
     // clamp (1.5pp) limits single-turn movement, so reaching 100 requires
     // sustained extreme pressure over many turns. This test verifies the hard
@@ -318,9 +330,14 @@ describe("calculateInflation", () => {
       commodityPressure: 0.5,
       forexPressure: 0.25,
       savingsPressure: 1.0,
+      policyStancePressure: 200.0,
       previousInflation: 99.0,
     };
-    expect(calculateInflation(extreme)).toBeLessThanOrEqual(100.0);
+    let inflation = extreme.previousInflation;
+    for (let turn = 0; turn < 200; turn++) {
+      inflation = calculateInflation({ ...extreme, previousInflation: inflation });
+    }
+    expect(inflation).toBe(MAX_INFLATION);
   });
 
   it("clamps deflation at the -2% floor (prevents unbounded deflation spiral)", () => {

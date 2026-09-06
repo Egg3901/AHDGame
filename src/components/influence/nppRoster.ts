@@ -3,6 +3,7 @@ import type { NPPStats } from "./types";
 
 export interface RosterNpp {
   id: string;
+  sequentialId?: number | null;
   name: string;
   homeState: string;
   stats: NPPStats;

@@ -10,10 +10,12 @@ describe("US cabinet year gating", () => {
   it("active seat counts per preset year", () => {
     // Education no longer auto-enables by year (legislation-gated), so 1991/2019
     // are one seat lighter than before until a Department of Education Act passes.
-    expect(resolveCabinetRoster(us, 1953)).toHaveLength(9);
-    expect(resolveCabinetRoster(us, 1979)).toHaveLength(12);
-    expect(resolveCabinetRoster(us, 1991)).toHaveLength(13);
-    expect(resolveCabinetRoster(us, 2019)).toHaveLength(14);
+    // The Director of Central Intelligence exists from 1946, so it is active in
+    // every preset year and lifts all four counts by one.
+    expect(resolveCabinetRoster(us, 1953)).toHaveLength(10);
+    expect(resolveCabinetRoster(us, 1979)).toHaveLength(13);
+    expect(resolveCabinetRoster(us, 1991)).toHaveLength(14);
+    expect(resolveCabinetRoster(us, 2019)).toHaveLength(15);
   });
 
   it("existence gates carry the researched years", () => {
@@ -41,7 +43,7 @@ describe("US cabinet year gating", () => {
     expect(isSeatActive(education, 1954, split)).toBe(true);
     expect(isSeatActive(education, 1954)).toBe(false);
     expect(resolveSeatName(health, 1954, split)).toBe("Secretary of Health and Human Services");
-    expect(resolveCabinetRoster(us, 1954, split)).toHaveLength(10);
+    expect(resolveCabinetRoster(us, 1954, split)).toHaveLength(11);
   });
 
   it("active-set orders are unique at every preset year", () => {
@@ -56,12 +58,14 @@ describe("UK cabinet year gating", () => {
   const uk = getCabinetPositions("UK");
   const byId = Object.fromEntries(uk.map((p) => [p.id, p]));
 
-  it("18 defined seats; active counts per preset year", () => {
-    expect(uk).toHaveLength(18);
-    expect(resolveCabinetRoster(uk, 1953)).toHaveLength(14);
-    expect(resolveCabinetRoster(uk, 1979)).toHaveLength(17);
-    expect(resolveCabinetRoster(uk, 1991)).toHaveLength(17);
-    expect(resolveCabinetRoster(uk, 2019)).toHaveLength(17);
+  it("19 defined seats; active counts per preset year", () => {
+    // The Chief of the Secret Intelligence Service exists from 1909, so it is
+    // active in every preset year and lifts all four counts by one.
+    expect(uk).toHaveLength(19);
+    expect(resolveCabinetRoster(uk, 1953)).toHaveLength(15);
+    expect(resolveCabinetRoster(uk, 1979)).toHaveLength(18);
+    expect(resolveCabinetRoster(uk, 1991)).toHaveLength(18);
+    expect(resolveCabinetRoster(uk, 2019)).toHaveLength(18);
   });
 
   it("existence gates", () => {
@@ -177,9 +181,10 @@ describe("DD cabinet year gating", () => {
   const dd = getCabinetPositions("DD");
   const byId = Object.fromEntries(dd.map((p) => [p.id, p]));
 
-  it("1953 runs 14 of 16 seats; 1979 all 16", () => {
-    expect(resolveCabinetRoster(dd, 1953)).toHaveLength(14);
-    expect(resolveCabinetRoster(dd, 1979)).toHaveLength(16);
+  it("1953 runs 15 of 17 seats; 1979 all 17", () => {
+    // The Minister for State Security exists from 1950, so it is active in both.
+    expect(resolveCabinetRoster(dd, 1953)).toHaveLength(15);
+    expect(resolveCabinetRoster(dd, 1979)).toHaveLength(17);
   });
 
   it("existence gates", () => {

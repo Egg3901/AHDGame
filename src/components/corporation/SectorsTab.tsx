@@ -510,9 +510,13 @@ export default function SectorsTab({
                 const totalRev = sumSectorDisplayRevenue(sortedSectors);
                 const totalProfit = sortedSectors.reduce((sum, s) => sum + (s.profit ?? 0), 0);
                 const totalWorkers = sortedSectors.reduce((sum, s) => sum + (s.workers ?? 0), 0);
+                // Net margin where the engine provides one (plants), else the
+                // effective margin, so the average does not hide upkeep.
                 const avgMargin =
-                  sortedSectors.reduce((sum, s) => sum + s.effectiveProfitMargin, 0) /
-                  sortedSectors.length;
+                  sortedSectors.reduce(
+                    (sum, s) => sum + (s.fillAdjustedMarginPct ?? s.effectiveProfitMargin),
+                    0
+                  ) / sortedSectors.length;
                 const avgGrowth =
                   sortedSectors.reduce((sum, s) => sum + s.targetGrowthRate, 0) /
                   sortedSectors.length;

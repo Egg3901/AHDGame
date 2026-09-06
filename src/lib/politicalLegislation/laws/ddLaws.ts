@@ -5502,4 +5502,50 @@ export const DD_LAWS: PoliticalLaw[] = [
       },
     ],
   },
+  {
+    id: "dd.sec.securityApparatus",
+    countryId: "DD",
+    kind: "secondary",
+    targets: [
+      { metricId: "defense.institutions", weight: 0.6 },
+      { metricId: "defense.projection", weight: 0.35 },
+      { metricId: "governance.centralAuthority", weight: 0.3 },
+    ],
+    title: "Security Apparatus Appropriation",
+    description:
+      "The allocation carried by the security apparatus, voted without public particulars.",
+    category: "defense",
+    allowedScope: "national",
+    baselineLevel: 0,
+    budgetKeyOverride: "intelligence",
+    levels: [
+      {
+        name: "Unfunded",
+        description: "No allocation is carried. The apparatus keeps its files and mounts nothing.",
+      },
+      {
+        name: "Nominal Provision",
+        description:
+          "A minimal allocation sustains the central apparatus and a few officers abroad.",
+        gdpCostFraction: 0.0005,
+      },
+      {
+        name: "Standing Service",
+        description:
+          "The apparatus works its established posts and keeps one network properly funded.",
+        gdpCostFraction: 0.0015,
+      },
+      {
+        name: "Expanded Service",
+        description: "Posts multiply and several networks are carried at full funding together.",
+        gdpCostFraction: 0.003,
+      },
+      {
+        name: "Unrestricted Vote",
+        description:
+          "The allocation is carried without particulars and the apparatus goes where it chooses.",
+        gdpCostFraction: 0.005,
+      },
+    ],
+  },
 ];

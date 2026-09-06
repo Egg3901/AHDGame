@@ -60,6 +60,75 @@ export async function creditEquityPool(
   );
 }
 
+/**
+ * Credit many accruals to the equity market pools in one pass.
+ *
+ * Behaviourally identical to calling `creditEquityPool` per accrual, and for
+ * the same reason the index-fund dividend batch is: the write is a pure `$inc`,
+ * so it is additive and order-independent, and totals aggregate to the same
+ * balance however they are grouped. Rounding still happens PER ACCRUAL before
+ * summing, exactly as the per-call path does, so a run of sub-cent accruals
+ * still contributes nothing rather than adding up to a cent.
+ *
+ * The reason this exists: corporationTurn credited these one accrual at a
+ * time, each preceded by its own `readEquityPool` existence check, against a
+ * collection with one document per currency. That was thousands of serial
+ * round trips per turn to touch at most a couple of dozen documents, and
+ * measured as the second-heaviest collection in the heaviest phase.
+ *
+ * A currency with no pool document is skipped, not upserted: a missing pool
+ * means a pre-migration world, and creating a zero-target one halfway through
+ * a turn would silently replace the legacy sink.
+ */
+export async function creditEquityPoolsBatch(
+  db: Db,
+  accruals: readonly { currency: CurrencyCode; amountLocal: number }[],
+  kind: EquityMarketPoolFlowKind,
+  now: Date = new Date(),
+  options?: { session?: ClientSession }
+): Promise<void> {
+  const totalByCurrency = new Map<CurrencyCode, number>();
+  for (const accrual of accruals) {
+    const amount = roundCents(accrual.amountLocal);
+    if (!Number.isFinite(amount) || amount <= 0) continue;
+    totalByCurrency.set(accrual.currency, (totalByCurrency.get(accrual.currency) ?? 0) + amount);
+  }
+  if (totalByCurrency.size === 0) return;
+
+  // One read to learn which pools exist, replacing the per-accrual findOne.
+  const currencies = [...totalByCurrency.keys()];
+  const existing = await db
+    .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
+    .find(
+      { _id: { $in: currencies } },
+      { projection: { _id: 1 }, ...(options?.session ? { session: options.session } : {}) }
+    )
+    .toArray();
+  const present = new Set(existing.map((pool) => pool._id));
+
+  const ops = currencies
+    .filter((currency) => present.has(currency))
+    .map((currency) => ({
+      updateOne: {
+        filter: { _id: currency },
+        update: {
+          $inc: {
+            cashLocal: totalByCurrency.get(currency)!,
+            [`lifetime.${kind}`]: totalByCurrency.get(currency)!,
+          },
+          $set: { updatedAt: now },
+        },
+      },
+    }));
+  if (ops.length === 0) return;
+
+  await db
+    .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
+    // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing; runtime shape is valid
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .bulkWrite(ops as any[], options?.session ? { session: options.session } : undefined);
+}
+
 export async function debitEquityPoolGated(
   db: Db,
   currency: CurrencyCode,

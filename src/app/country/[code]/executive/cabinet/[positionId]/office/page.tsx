@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useCabinetOffice } from "./useCabinetOffice";
 import { useMergerReviewQueue } from "./useMergerReviewQueue";
+import IntelligenceTab from "./components/IntelligenceTab";
 import { MergerReviewQueuePanel } from "./components/MergerReviewQueuePanel";
 import { CabinetOfficeLayout } from "./components/CabinetOfficeLayout";
 import { RestrictedOfficeNotice } from "./components/RestrictedOfficeNotice";
@@ -39,6 +40,7 @@ import {
   isFinanceMinister,
   isForeignMinister,
   isDefenseMinister,
+  isIntelligenceMinister,
   isCompetitionSeat,
   type CabinetTabId,
 } from "./cabinetTabs";
@@ -202,6 +204,7 @@ export default function CabinetOfficePage() {
   const isTrade = TRADE_MINISTER_POSITION_BY_COUNTRY[countryId as CountryId] === positionId;
   const flagshipLabel = tabs.find((t) => t.id === "flagship")?.label ?? "Programs";
   const isDefense = isDefenseMinister(positionId);
+  const isIntelligence = isIntelligenceMinister(positionId);
   // The foreign PORTFOLIO, which every country with a foreign ministry has — not
   // `isForeign`, which gates the Foreign Relations tab and is capped at US/UK/JP.
   const holdsForeignPortfolio =
@@ -519,6 +522,15 @@ export default function CabinetOfficePage() {
                   data={mergerQueue}
                   canAct={canAct}
                   onDecided={refetchMergerQueue}
+                />
+              )}
+
+              {activeTab === "intelligence" && isIntelligence && conflictsEnabled && (
+                <IntelligenceTab
+                  countryId={countryId as CountryId}
+                  positionId={positionId}
+                  currencySymbol={currencySymbol}
+                  canAct={canAct}
                 />
               )}
 

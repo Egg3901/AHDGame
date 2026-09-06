@@ -27,6 +27,55 @@ function makeParty(seq: number, name: string, color: string): PoliticalParty {
   } as unknown as PoliticalParty;
 }
 
+describe("buildPollingData — rows restored from a finished tally", () => {
+  // #1276 / #1277. A contestant whose character or NPP is deleted after the
+  // election loses its candidacy document, so it is absent from the raw docs
+  // polling used to take. Left out, polling rescales to a survivors-only
+  // denominator while the results panel uses the published one, and the same
+  // race reads 37.1% on its card and 32.4% on its detail page.
+  it("counts a restored row in the denominator, so shares match the results panel", () => {
+    const wood = makeCandidate({ characterName: "Peter Wood", party: "2" });
+    const brown = makeCandidate({ characterName: "David Brown", party: "1" });
+    // No candidacy document survives for this one: structural row, no characterId.
+    const restored = {
+      _id: new ObjectId().toString(),
+      characterId: null,
+      characterName: "Tom Marshall",
+      party: "6",
+      isNPP: true,
+    };
+    const tally = {
+      totalVotes: {
+        [wood._id.toString()]: 808_931,
+        [brown._id.toString()]: 533_035,
+        [restored._id]: 320_910,
+      },
+      candidateParties: {},
+      candidateNames: {},
+    } as unknown as Parameters<typeof buildPollingData>[5];
+
+    const polling = buildPollingData(
+      "commons",
+      "UK",
+      false,
+      [wood, brown, restored],
+      [makeParty(2, "Conservative", "#35a1e3"), makeParty(1, "Labour", "#E4003B")],
+      tally,
+      null,
+      new Map()
+    );
+
+    expect(polling).not.toBeNull();
+    // 808,931 of 1,662,876 cast — not of the 1,341,966 the survivors alone hold.
+    expect(polling!.sharesPct[wood._id.toString()]).toBeCloseTo(48.65, 1);
+    expect(polling!.sharesPct[restored._id]).toBeCloseTo(19.3, 1);
+    expect(polling!.candidateNames[restored._id]).toBe("Tom Marshall");
+    // Shares still sum to 100 across the full field.
+    const sum = Object.values(polling!.sharesPct).reduce((s, v) => s + v, 0);
+    expect(sum).toBeCloseTo(100, 6);
+  });
+});
+
 describe("buildPollingData — primary phase", () => {
   it("excludes primary-snapshot entries whose candidate is no longer active", () => {
     // Active candidate that remains in the race.

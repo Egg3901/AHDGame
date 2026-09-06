@@ -33,6 +33,7 @@ import {
   computeCharacterWealth,
   sumBondValueByCharacter,
   sumStockValueByCharacter,
+  loadFundValueByCharacter,
 } from "@/lib/wealth/computeCharacterWealth";
 
 /**
@@ -307,6 +308,7 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
 
   const stockValueByCharId = sumStockValueByCharacter(corporations, characterIdSet, fxByCurrency);
   const bondValueByCharId = sumBondValueByCharacter(bonds, characterIdSet, fxByCurrency);
+  const fundValueByCharId = await loadFundValueByCharacter(database, characterIds, characterIdSet);
 
   // Build the global entry list sorted by totalWealth
   const globalEntries: WealthListEntry[] = activeCharacters
@@ -318,7 +320,8 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
           stockValueByCharId,
           bondValueByCharId,
           forexEnabled,
-          exchangeRates
+          exchangeRates,
+          fundValueByCharId
         );
       const countryId = resolveCountryId(character);
       const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;

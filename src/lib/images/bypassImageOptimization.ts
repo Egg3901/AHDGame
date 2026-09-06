@@ -1,3 +1,5 @@
+import { CDN_BASE } from "@/lib/images/cdnUrls";
+
 /**
  * When true, pass `unoptimized` to `next/image` so the browser loads the URL
  * directly instead of the Image Optimization API fetching it server-side.
@@ -34,6 +36,10 @@ export function bypassNextImageOptimization(src: string): boolean {
   if (path.startsWith("/api/uploads/")) return true;
   if (src.includes(".public.blob.vercel-storage.com/")) return true;
   if (src.includes(".r2.dev/")) return true;
+  // CDN_BASE is the production host by default and a local `/cdn` mirror in a
+  // singleplayer build; either way the art is already final-form and must not
+  // be re-encoded by /_next/image.
+  if (src.startsWith(`${CDN_BASE}/`)) return true;
   if (src.startsWith("https://cdn.ahousedividedgame.com/")) return true;
   if (src.startsWith("https://upload.wikimedia.org/")) return true;
   if (src.startsWith("https://commons.wikimedia.org/")) return true;

@@ -55,6 +55,7 @@ interface NavbarWrapperState {
     username: string;
     isAdmin?: boolean;
     isModerator?: boolean;
+    singleplayer?: boolean;
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
@@ -347,6 +348,7 @@ export function NavbarWrapper({
           username: navData.user.username,
           isAdmin: navData.user.isAdmin,
           isModerator: navData.user.isModerator,
+          singleplayer: navData.user.singleplayer === true,
           canSeeCampaignManager: navData.user.canSeeCampaignManager,
           patreonTier: navData.user.patreonTier ?? null,
           isPatronActive: navData.user.isPatronActive ?? false,
@@ -406,9 +408,13 @@ export function NavbarWrapper({
     if (useLightweightNav || isExcludedPath) return;
     if (state.isLoading) return;
     if (state.user && !state.hasCharacter) {
-      const isAllowed = ALLOWED_WITHOUT_CHARACTER.some((path) => pathname.startsWith(path));
+      const isAllowed = state.user.singleplayer
+        ? pathname === "/settings" ||
+          pathname.startsWith("/create-character") ||
+          pathname.startsWith("/singleplayer")
+        : ALLOWED_WITHOUT_CHARACTER.some((path) => pathname.startsWith(path));
       if (!isAllowed && pathname !== "/") {
-        router.push("/settings");
+        router.push(state.user.singleplayer ? "/create-character" : "/settings");
       }
     }
   }, [

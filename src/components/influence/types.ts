@@ -33,6 +33,8 @@ export interface NPPStats {
 
 export interface NPPOption {
   id: string;
+  /** Profile-URL id; falls back to `id` when an NPP predates sequential ids. */
+  sequentialId?: number | null;
   name: string;
   party: string;
   estimatedChance: number;

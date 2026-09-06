@@ -718,6 +718,8 @@ export interface BalanceSheet {
       sectorType: string;
       dailyProfit: number;
       effectiveProfitMargin: number;
+      /** Net margin over the full cost bill (plants); null below plants. */
+      fillAdjustedMarginPct: number | null;
       npv: number;
     }>;
     totalSectorNPV: number;

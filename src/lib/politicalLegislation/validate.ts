@@ -12,7 +12,10 @@ const GDP_FRACTION_MAX = 0.12;
 const GDP_FRACTION_MAX_RU_INFRA = 0.35;
 const INC_FRACTION_MAX = 0.08;
 const REV_FRACTION_MAX = 0.1;
-const SECONDARY_POOL = { min: 30, max: 40 };
+// Raised from 40 to admit the intelligence funding law (issue #1409). The bound that
+// actually protects the dynamics engine is SECONDARY_TOUCHES below, which is unchanged:
+// every metric must still be touched by 2-3 secondaries.
+const SECONDARY_POOL = { min: 30, max: 41 };
 const SECONDARY_TOUCHES = { min: 2, max: 3 };
 const SECONDARY_WEIGHT = { min: 0.25, max: 0.6 };
 const SECONDARY_TARGETS = { min: 2, max: 5 };

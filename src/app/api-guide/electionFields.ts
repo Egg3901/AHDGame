@@ -93,6 +93,36 @@ export const ELECTION_LIST_FIELDS: ApiField[] = [
   },
   { name: "elections[].candidates[].partyColor", type: "string|null", desc: "Party colour hex" },
   { name: "elections[].candidates[].isNPP", type: "boolean", desc: "Non-party member" },
+  {
+    name: "elections[].results",
+    type: "object|null",
+    desc: "Present only with results=true: vote standings, optional multi-seat estimate, and candidate stats.",
+  },
+  {
+    name: "elections[].results.seatsEstimate",
+    type: "object|null",
+    desc: "Multi-seat races only: results.candidates[].id to estimated seat count. Absent for single-seat races, and null on a multi-seat race whose split has not been computed yet.",
+  },
+  {
+    name: "elections[].results.candidates[].id",
+    type: "string",
+    desc: "Candidacy ObjectId. This is the key seatsEstimate uses. Note it is a candidacy, not a character: the same character holds a separate id for each time they entered the race.",
+  },
+  {
+    name: "elections[].results.candidates[].characterId",
+    type: "string",
+    desc: "Deprecated alias of results.candidates[].id, kept for existing callers. Despite the name it has never held a character id and does not join against elections[].candidates[].characterId. Use id.",
+  },
+  {
+    name: "elections[].results.candidates[].favorability",
+    type: "number|null",
+    desc: "Current candidate favorability from the linked character, or the linked NPP for a non-party candidacy. Null when neither record exists.",
+  },
+  {
+    name: "elections[].results.candidates[].politicalInfluence",
+    type: "number|null",
+    desc: "Current political influence from the linked character, or the linked NPP for a non-party candidacy. Null when neither record exists.",
+  },
 ];
 
 /** GET /api/public/v1/elections/[id] */
@@ -145,6 +175,16 @@ export const ELECTION_DETAIL_FIELDS: ApiField[] = [
   },
   { name: "candidates", type: "array", desc: "Candidates still standing, with details" },
   {
+    name: "candidates[].favorability",
+    type: "number|null",
+    desc: "Current candidate favorability from the linked character, or the linked NPP for a non-party candidacy. Null when neither record exists.",
+  },
+  {
+    name: "candidates[].politicalInfluence",
+    type: "number|null",
+    desc: "Current political influence from the linked character, or the linked NPP for a non-party candidacy. Null when neither record exists.",
+  },
+  {
     name: "formerCandidates",
     type: "array",
     desc: "Candidacies that ended, same shape plus withdrawnAt, most recent departure first",
@@ -153,5 +193,10 @@ export const ELECTION_DETAIL_FIELDS: ApiField[] = [
     name: "votes",
     type: "object|null",
     desc: "Vote tallies and snapshots. votes.finalized stays false until the result has been resolved, even after the closing turn has passed.",
+  },
+  {
+    name: "votes.seatsEstimate",
+    type: "object|null",
+    desc: "Multi-seat races only: candidates[].id to estimated seat count. Same key space and same multi-seat rule as the list endpoint.",
   },
 ];

@@ -25,6 +25,10 @@ import { defect as commandEconomyPrivateSectorOwnership } from "./defects/AHD-co
 import { defect as tinkyStaleVoteExcess } from "./defects/AHD-tinky-stale-vote-excess";
 import { defect as usMarineLotProgress } from "./defects/AHD-1171-us-marine-lot-progress";
 import { defect as defenceSupplierWindfall } from "./defects/AHD-defence-supplier-windfall";
+import { defect as vfBankRestitution } from "./defects/AHD-1267-vf-bank-restitution";
+import { defect as mergedStateExtraction } from "./defects/AHD-1271-merged-state-extraction";
+import { defect as poolCountryAttribution } from "./defects/AHD-1271-pool-country-attribution";
+import { defect as natCorpSplitSectorType } from "./defects/AHD-1271-natcorp-split-sector-type";
 import type { Defect } from "./types";
 
 export const DEFECTS: Defect[] = [
@@ -50,6 +54,21 @@ export const DEFECTS: Defect[] = [
   tinkyStaleVoteExcess,
   usMarineLotProgress,
   defenceSupplierWindfall,
+  // Ticket #1267: pre-fix hostile merger deleted Vermont Finance's live bank
+  // with the shell. Restitutes Hunt Oil's owner residual and the household
+  // book stranded out of the money supply.
+  vfBankRestitution,
+  // Ticket #1271: extraction is the one SOE sector gated on a per-state
+  // `country:state` capacity key, so a country merge strands every state it
+  // absorbs. Reunification left the eleven western Laender with no extraction
+  // sector and the Ruhr, the Saar and the Niedersachsen gas fields unreachable.
+  mergedStateExtraction,
+  // Same ticket, second shape: `buildCapacity` filed unowned pool rows under the
+  // corporation's country and fell through to a literal "US".
+  poolCountryAttribution,
+  // Same ticket, third shape: split-off National Corporations inherited the
+  // sovereign issuer's `type: "financial"` instead of the sector they operate.
+  natCorpSplitSectorType,
 ];
 
 export function getDefect(id: string): Defect | undefined {

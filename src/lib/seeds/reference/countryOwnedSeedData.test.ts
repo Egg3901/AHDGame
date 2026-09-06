@@ -405,6 +405,54 @@ describe("generateCountryOwnedSeedData", () => {
     });
   });
 
+  // Reunification coverage (ticket #1271): when DD absorbs the FRG, the
+  // acceded Laender arrive with live owner DD but geology still keyed under
+  // DE. The extraction SOE must cover them through the previous owner's key —
+  // otherwise the Nationalized Org owns extraction only in the east while the
+  // reconcile drains the west's unowned twin, and western mining belongs to
+  // nobody.
+  describe("absorbed-region extraction coverage (ticket #1271)", () => {
+    const ddStates = [
+      { id: "SN", population: 4_000_000, gdp: 30_000, countryId: "DD" },
+      { id: "MV", population: 2_120_000, gdp: 3_900, countryId: "DD" },
+      // Absorbed FRG Land: live owner DD, deposits keyed DE:NW.
+      { id: "NW", population: 15_000_000, gdp: 120_000, countryId: "DD" },
+      // No owner lists this region anywhere: still skipped.
+      { id: "NOWHERE", population: 1_000_000, gdp: 5_000, countryId: "DD" },
+    ];
+
+    it("covers absorbed regions through the previous owner's capacity key", () => {
+      const data = generateCountryOwnedSeedData(ddStates, "1953-default", true);
+      const extraction = data.find(
+        (e) => e.corporation.countryOwnerId === "DD" && e.corporation.soe?.sector === "extraction"
+      );
+      expect(extraction).toBeDefined();
+      const covered = new Set(extraction!.sectors.map((s) => s.stateId));
+      expect(covered.has("SN")).toBe(true);
+      expect(covered.has("MV")).toBe(true);
+      expect(covered.has("NW")).toBe(true);
+      expect(covered.has("NOWHERE")).toBe(false);
+    });
+
+    it("gives extraction the same coverage as every other SOE sector", () => {
+      // The symptom side of the bug, and the assertion that would have caught
+      // it from the outside: extraction is the ONE sector type filtered per
+      // state, so a regression in that filter shows up as sixteen sector types
+      // covering every region and the seventeenth covering fewer. Asserted over
+      // states that all carry deposits, so full parity is the correct answer.
+      const depositStates = ddStates.filter((s) => s.id !== "NOWHERE");
+      const data = generateCountryOwnedSeedData(depositStates, "1953-default", true);
+      const soes = data.filter((e) => e.corporation.countryOwnerId === "DD" && e.corporation.soe);
+      expect(soes.length).toBeGreaterThan(1);
+      for (const entry of soes) {
+        expect(
+          entry.sectors.length,
+          `${entry.corporation.soe?.sector} should cover every region`
+        ).toBe(depositStates.length);
+      }
+    });
+  });
+
   // Market-economy state enterprises (corporate-sector seed-gap fix): FR/IT/
   // SE/TR/GR/AT/FI are market democracies promoted from the abstract
   // sphere-macro tier to full-autonomous (seedEconTierRosters.ts /

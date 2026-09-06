@@ -7,7 +7,7 @@ import type {
   PoliticalParty,
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
-import { TOTAL_ELECTORAL_VOTES } from "@/lib/constants";
+import {} from "@/lib/constants";
 import { loadApportionment } from "@/lib/elections/apportionment";
 import { getGameStateCollection } from "@/lib/db/collections";
 
@@ -122,7 +122,8 @@ export async function computePresidentialMap(
   // fallback). Equals the preset seed until a decennial census reapportions
   // (P1d-2; golden gate makes this a behavior-preserving swap).
   const gameState = await (await getGameStateCollection(db)).findOne({ _id: "current" });
-  const evUnits = (await loadApportionment(db, gameState?.preset)).electoralVoteUnits;
+  const evUnits = (await loadApportionment(db, gameState?.preset, gameState?.currentYear))
+    .electoralVoteUnits;
   // State-set-driven electoral-college total: the sum of the LIVE apportionment
   // units (538 for the current 50-state set; fewer in an earlier/fewer-state era).
   // The map's Presidential panel uses this instead of a hardcoded 538/270.
@@ -217,11 +218,11 @@ export async function computePresidentialMap(
       const sorted = Object.entries(totalVotes)
         .filter(([, v]) => v > 0)
         .sort((a, b) => b[1] - a[1]);
-      let remaining = TOTAL_ELECTORAL_VOTES;
+      let remaining = totalElectoralVotes;
 
       for (let i = 0; i < sorted.length; i++) {
         const pct = sorted[i][1] / total;
-        const ev = i === sorted.length - 1 ? remaining : Math.round(pct * TOTAL_ELECTORAL_VOTES);
+        const ev = i === sorted.length - 1 ? remaining : Math.round(pct * totalElectoralVotes);
         electoralVotesByCandidate[sorted[i][0]] = Math.max(0, ev);
         remaining -= ev;
       }

@@ -29,6 +29,15 @@ describe("DC and the 23rd Amendment", () => {
     expect("DC" in ev).toBe(false);
   });
 
+  it("gives DC 3 once a 1953 world's clock passes 1961, when the caller passes the live year", () => {
+    // Every presidential caller used to pass only the preset, so the gate
+    // resolved against 1953 forever and the 1964 college ran 530 instead of 538.
+    const ev = electoralVotesFromSeats(seats1953(), { preset: "1953-default", year: 1965 });
+    expect(ev.DC).toBe(3);
+    const evAt1958 = electoralVotesFromSeats(seats1953(), { preset: "1953-default", year: 1958 });
+    expect(evAt1958.DC).toBeUndefined();
+  });
+
   it("still gives DC 3 in the modern era", () => {
     expect(electoralVotesFromSeats(seats2019(), { preset: "2019-default" }).DC).toBe(3);
   });

@@ -33,10 +33,17 @@ import {
   createInitialTurnPhaseStatuses,
   finalizeAbortedPhaseStatuses,
 } from "@/simulation/engine/phaseTelemetry";
+import { formatRoundTripReport, withPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
 import { createTurnPhaseRuntime } from "@/simulation/engine/turnPhaseRuntime";
 import { buildTurnExecutionContext } from "@/simulation/engine/turnExecutionContext";
 import { getTurnPhaseRegistry } from "@/simulation/phases/turnPhaseRegistry";
 import { getSimTurnPhasePredicate } from "@/simulation/phases/simTurnProfiles";
+import {
+  combinePhasePredicates,
+  getSingleplayerPhasePredicate,
+} from "@/simulation/phases/singleplayerPhases";
+import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
+import { isSingleplayer } from "@/lib/singleplayer";
 import { reportFederalBudgetInvariantBreaches } from "@/lib/budget/budgetInvariants";
 
 // Re-export public helpers consumed by other modules
@@ -200,9 +207,12 @@ export async function processTurn(): Promise<{
       //
       // Undefined in production (runWorld.ts is the only writer), so this is
       // inert there — the same shape as simTurnPhaseMode below.
+      // A singleplayer world only advances when the player asks it to, so a
+      // gap of days between turns is the normal case, not a dead cron.
       const simSandbox =
+        isSingleplayer() ||
         (await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" }))?.simSandbox ===
-        true;
+          true;
       if (preLockState) {
         // #2815: detect a stale lock left by a turn that crashed after phases
         // began applying writes. Recorded here; the recovery close-out runs
@@ -415,15 +425,20 @@ export async function processTurn(): Promise<{
       }
     );
 
-    const context = await buildTurnExecutionContext({
-      db,
-      gameState,
-      config,
-      warnings,
-      activeIteration,
-      phaseStatuses,
-      startTimeMs: startTime,
-    });
+    // Bracketed so its reads are attributable: turn setup runs before the
+    // first phase, and was the largest single bucket in the round-trip profile
+    // only because nothing named it.
+    const context = await withPhaseProfiling("turnSetup", () =>
+      buildTurnExecutionContext({
+        db,
+        gameState,
+        config,
+        warnings,
+        activeIteration,
+        phaseStatuses,
+        startTimeMs: startTime,
+      })
+    );
     const runtime = createTurnPhaseRuntime({
       db,
       phaseStatuses,
@@ -432,7 +447,17 @@ export async function processTurn(): Promise<{
       // SIM-ONLY: sandbox worldsim can set gameConfig.simTurnPhaseMode to skip
       // the economy phases. Undefined in prod (config?.simTurnPhaseMode absent) →
       // full turn, unchanged.
-      shouldRunPhase: getSimTurnPhasePredicate(config?.simTurnPhaseMode),
+      // Singleplayer skips the anti-abuse scans: one account with cheat
+      // commands available by design has no one to defraud, and the scans were
+      // ~18% of every document a turn deserializes. Composed with the sim
+      // profile predicate so a headless sim run keeps its own filtering.
+      // In a shared world the same scans run on a cadence instead of every
+      // turn; their rolling windows make that lossless.
+      shouldRunPhase: combinePhasePredicates(
+        getSimTurnPhasePredicate(config?.simTurnPhaseMode),
+        getSingleplayerPhasePredicate(isSingleplayer()),
+        getAnomalyScanCadencePredicate(gameState.currentTurn)
+      ),
       // Audit traceId convention "turn:<n>:<phase>" (forensics plan §3.1, T2.7).
       turn: nextTurnNumber,
     });
@@ -513,6 +538,11 @@ export async function processTurn(): Promise<{
     const nppSuffix = nppActions
       ? `, NPP actions: ${nppActions.actionsExecuted}/${nppActions.nppsProcessed} (build:${nppActions.buildDonorBase} camp:${nppActions.campaign} adv:${nppActions.advertise} donate:${nppActions.partyDonation} skip:${nppActions.skipped})`
       : "";
+    // Per-phase Mongo round-trip profile (AHD_TURN_ROUNDTRIP_PROFILE=1).
+    // Turn cost on production is round-trip bound, so this ranks phases by
+    // the thing that actually costs, not by local wall clock.
+    const roundTripProfile = formatRoundTripReport();
+    if (roundTripProfile) console.log(roundTripProfile);
     console.log(
       `[Turn] #${context.newTurn} - ${context.characters.length} chars, $${context.phaseResults.fundGeneration?.totalGenerated?.toLocaleString() ?? "?"} generated, ${context.phaseResults.partyActions?.totalActionsGenerated ?? "?"} party actions generated, ${context.phaseResults.campaignTurn?.campaignsProcessed ?? "?"} campaigns ($${context.phaseResults.campaignTurn?.totalFundsGenerated?.toLocaleString() ?? "?"} funds, ${context.phaseResults.campaignTurn?.totalActionsGenerated ?? "?"} actions), ${context.phaseResults.partyElections?.stateElectionsCompleted ?? "?"} state elections completed${nppSuffix}${warningsSuffix}`
     );

@@ -387,3 +387,23 @@ export interface FinancialFogMeta {
   /** Last known quarterly values (from history). */
   lastQuarterly: ReturnType<typeof buildQuarterlySnapshot>;
 }
+
+/**
+ * Whether a corporation's books are currently public because they were leaked.
+ *
+ * Lives here with the rest of the fog rules rather than inline in the route: it
+ * is a rule about who may read a company's financials, which is exactly what
+ * this module is for, and keeping it here makes it testable on its own.
+ *
+ * Expressed as a turn so the exposure lapses by itself and nothing has to
+ * remember to clear it. An absent or past turn means the ordinary quarterly fog
+ * applies.
+ */
+export function booksAreExposed(
+  corp: { booksExposedUntilTurn?: number | null },
+  currentTurn: number
+): boolean {
+  const until = corp.booksExposedUntilTurn;
+  if (typeof until !== "number" || !Number.isFinite(until)) return false;
+  return currentTurn <= until;
+}

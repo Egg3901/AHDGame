@@ -57,7 +57,6 @@ import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { districtedHouseResolution } from "@/lib/redistricting/districtedHouseResolution";
 import { buildPrimaryShareMap } from "@/lib/turn/election/generalResolutionHelpers";
 import { getMajoritarianBonus } from "@/lib/turn/election/seatAllocation";
-import { withCommonsOrgRanking } from "@/lib/turn/election/commonsOrgRanking";
 import { selectEndedDisplayCandidates } from "@/lib/elections/endedResultsCandidates";
 import { selectGeneralPhaseDisplayCandidates } from "@/lib/elections/generalPhaseCandidates";
 import { computeElectoralVotes } from "@/lib/elections/electoralVoteService";
@@ -89,6 +88,8 @@ import type {
   PollingData,
 } from "./electionResponseTypes";
 import { buildPollingData, computeSeatEstimates } from "./buildPollingData";
+import { resolvedSeatsEstimate } from "./resolvedSeatsEstimate";
+import { appendHistoricalTallyCandidates } from "./historicalTallyCandidates";
 import { seatEstimateForVoteTotals } from "./snapshotSeats";
 import { getPartyHex } from "@/lib/utils/politics";
 import { projectPrimaryByState } from "@/lib/primaryProjection";
@@ -415,7 +416,7 @@ export async function _enrichElection(
     electoralVotes: evByState,
     electoralVoteUnits: evUnits,
     houseSeats,
-  } = await loadApportionment(db, gameState?.preset);
+  } = await loadApportionment(db, gameState?.preset, gameState?.currentYear);
 
   // For state-level primary alignment, look up the cached lean of the seat's region.
   // Presidential races have no single regional electorate, so they skip this fetch.
@@ -580,9 +581,49 @@ export async function _enrichElection(
     });
   }
 
-  // Active candidates (for polling)
+  // A finished election is a historical record: it must render the same field
+  // forever, even after a contestant's character or NPP is deleted. The
+  // turn-651 Liberal/SDP merge removed every Liberal NPP along with their
+  // candidacy rows, and Scotland's published count silently fell from 2,498,473
+  // votes to 2,177,563 with every share recomputed on the smaller denominator.
+  // The tally still holds their name, party and votes, so the row is rebuilt
+  // from it. Gated on `isEnded` — while a race is live a missing candidacy
+  // means a genuine withdrawal and must NOT be shown.
+  if (isEnded) {
+    displayCandidates = appendHistoricalTallyCandidates(displayCandidates, tally, (partyId) => {
+      const partyObj = partyMap.get(partyId);
+      return {
+        name: partyObj?.name ?? "Unknown Party",
+        color: getPartyHex(partyId, partyObj?.color),
+        econ: partyObj?.economicPosition ?? 0,
+        social: partyObj?.socialPosition ?? 0,
+      };
+    });
+  }
+
+  // Active candidates (for polling). For an ended race this set also decides
+  // which votes survive `filterRecord` below, so the restored rows above keep
+  // the published denominator intact.
   const activeCandidateIdSet = new Set(displayCandidates.map((c) => c.id));
   const activeCandidates = candidates.filter((c) => activeCandidateIdSet.has(c._id.toString()));
+
+  // Rows restored from the tally have no candidacy document, so they are absent
+  // from `activeCandidates`. Polling must still see them or its donut rescales
+  // to a survivors-only denominator while the results panel uses the published
+  // one — the same race reading 37.1% on the election card and 32.4% on its
+  // detail page. Structural rows are enough; polling needs only these fields.
+  const pollingCandidates = [
+    ...activeCandidates,
+    ...displayCandidates
+      .filter((c) => !activeCandidates.some((a) => a._id.toString() === c.id))
+      .map((c) => ({
+        _id: c.id,
+        characterId: null,
+        characterName: c.characterName,
+        party: c.party,
+        isNPP: c.isNPP,
+      })),
+  ];
 
   // Polling data (always computed for both views).
   // Ended races: omit live character.party so polling colours stay on the
@@ -593,7 +634,7 @@ export async function _enrichElection(
     election.electionType,
     countryId,
     inPrimary,
-    activeCandidates,
+    pollingCandidates,
     parties,
     tally,
     latestPrimarySnapshot,
@@ -605,19 +646,25 @@ export async function _enrichElection(
   // FPTP winner's bonus (#3244): UK Commons in historical in-game years
   // projects with the same cube-law re-split the resolver applies; undefined
   // (proportional) once the world's clock reaches 1999.
-  const majoritarianBonus = await withCommonsOrgRanking(
-    db,
-    getMajoritarianBonus(election.electionType, gameState?.currentYear),
-    election.countryId ?? "UK",
-    election.state
-  );
-  let seatsEstimate = computeSeatEstimates(
-    election.electionType,
-    election.totalSeats,
-    tally,
-    activeCandidateIdSet,
-    majoritarianBonus
-  );
+  const majoritarianBonus = getMajoritarianBonus(election.electionType, gameState?.currentYear);
+  // #1277: a RESOLVED race must show the allocation it actually seated, never a
+  // fresh recompute. Recomputing on every load meant a finished election
+  // rendered a different result whenever an allocator input drifted underneath
+  // it — a player held 7 seats while this page showed 16. `generalResolution`
+  // already persists the authoritative allocation on the tally, so when it is
+  // there every projection path below is skipped: the persisted value wins, and
+  // the districted branch's database round-trip is spared on a settled race.
+  const seatedAllocation = resolvedSeatsEstimate(tally, null);
+
+  let seatsEstimate =
+    seatedAllocation ??
+    computeSeatEstimates(
+      election.electionType,
+      election.totalSeats,
+      tally,
+      activeCandidateIdSet,
+      majoritarianBonus
+    );
 
   // US House with redistricting on: project seats district-by-district using the
   // SAME engine that decides the final result (districtedHouseResolution on the
@@ -629,6 +676,7 @@ export async function _enrichElection(
   // sitting members from an in-progress tally, and wrote `npps` ids into
   // `holderCharacterId` because this path has no NPP id map.
   if (
+    !seatedAllocation &&
     election.electionType === "house" &&
     (countryId ?? "US") === "US" &&
     isRedistrictingEnabled(gameState) &&
@@ -669,9 +717,13 @@ export async function _enrichElection(
   // it can never be. Overriding caller-side keeps the shared helper's signature
   // and its other two call sites untouched.
   const blocCountry = countryId ?? election.countryId;
-  const configuredBlocQuota = MULTI_SEAT_TYPES.has(election.electionType)
-    ? blocListQuota(blocCountry)
-    : null;
+  // Skipped for a resolved race (#1277): the seated allocation already IS the
+  // bloc-list result the resolver produced, and short-circuiting here also
+  // spares the `getCountryState` round-trip below.
+  const configuredBlocQuota =
+    !seatedAllocation && MULTI_SEAT_TYPES.has(election.electionType)
+      ? blocListQuota(blocCountry)
+      : null;
   const blocQuota = configuredBlocQuota
     ? blocListQuotaForGovernment(
         blocCountry,
@@ -1253,6 +1305,12 @@ export async function _enrichElection(
     byParty,
     polling,
     seatsEstimate,
+    // Conservative: true whenever the bonus GOVERNS this race. The boost can
+    // still decline to fire (a two-party pool has nothing to squeeze), in which
+    // case the quota narrative would have been accurate but is suppressed
+    // anyway. Phase C makes `applyMajoritarianBonus` report whether it actually
+    // re-weighted the vote, and this should then carry that precise value.
+    majoritarianBonusApplied: majoritarianBonus !== undefined,
     incumbent: incumbentDisplay,
 
     // Full-view fields

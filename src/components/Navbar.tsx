@@ -12,6 +12,7 @@ import Image from "next/image";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import { usePathname } from "next/navigation";
 import { StateDropdown } from "./StateDropdown";
+import { SingleplayerEndTurnButton } from "@/components/singleplayer/SingleplayerEndTurnButton";
 import { StaffDropdown } from "./StaffDropdown";
 import { NationDropdown } from "./NationDropdown";
 import { MobileNationalDetails } from "./navbar/MobileNationalDetails";
@@ -68,6 +69,7 @@ interface NavbarProps {
     username: string;
     isAdmin?: boolean;
     isModerator?: boolean;
+    singleplayer?: boolean;
     canSeeCampaignManager?: boolean;
     patreonTier?: string | null;
     isPatronActive?: boolean;
@@ -568,6 +570,8 @@ export const Navbar = React.memo(function Navbar({
             />
 
             <StaffDropdown isAdmin={!!user?.isAdmin} isModerator={!!user?.isModerator} />
+
+            {user?.singleplayer && <SingleplayerEndTurnButton />}
           </div>
 
           {/* Search + icon cluster */}

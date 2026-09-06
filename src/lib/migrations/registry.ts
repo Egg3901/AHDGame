@@ -68,6 +68,8 @@ import { migration as bondFundSeed } from "./entries/2026-09-03-bond-fund-seed";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
 import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-party-org-rekey";
+import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
+import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -217,6 +219,11 @@ export const MIGRATIONS: Migration[] = [
   // field-triple readers and _id readers then disagree about who owns the org.
   // Re-derive _id from the authoritative fields and index the triple unique.
   statePartyOrgRekey,
+  // Intelligence spine: three UNIQUE guards the agency/network/coverage read
+  // paths assume rather than re-check, plus the operation-log lookups. A live
+  // world never re-seeds, so seedIndexes alone would never reach it.
+  intelligenceIndexes,
+  clientStatisticsTtlIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

@@ -5497,4 +5497,49 @@ export const RU_LAWS: PoliticalLaw[] = [
       },
     ],
   },
+  {
+    id: "ru.sec.stateSecurityOrgans",
+    countryId: "RU",
+    kind: "secondary",
+    targets: [
+      { metricId: "defense.institutions", weight: 0.6 },
+      { metricId: "defense.projection", weight: 0.35 },
+      { metricId: "governance.centralAuthority", weight: 0.3 },
+    ],
+    title: "State Security Organs Appropriation",
+    description: "The allocation carried by the security organs, voted without public particulars.",
+    category: "defense",
+    allowedScope: "national",
+    baselineLevel: 0,
+    budgetKeyOverride: "intelligence",
+    levels: [
+      {
+        name: "Unfunded",
+        description: "No allocation is carried. The organs hold their files and mount nothing.",
+      },
+      {
+        name: "Nominal Provision",
+        description: "A minimal allocation keeps the central apparatus and a few residencies.",
+        gdpCostFraction: 0.0005,
+      },
+      {
+        name: "Standing Service",
+        description:
+          "The organs work their established residencies and keep one network properly funded.",
+        gdpCostFraction: 0.0015,
+      },
+      {
+        name: "Expanded Service",
+        description:
+          "Residencies multiply and several networks are carried at full funding together.",
+        gdpCostFraction: 0.003,
+      },
+      {
+        name: "Unrestricted Vote",
+        description:
+          "The allocation is carried without particulars and the organs go where they choose.",
+        gdpCostFraction: 0.005,
+      },
+    ],
+  },
 ];

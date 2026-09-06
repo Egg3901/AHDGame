@@ -187,7 +187,12 @@ export async function buildCorporationLookups(
     worldPreset,
   ] = await Promise.all([
     db.collection<Corporation>("corporations").find({}).toArray(),
-    db.collection<CorporateSector>("corporateSectors").find({}).toArray(),
+    // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
+    // sectorTurn as a complete overwrite and never reads the prior value.
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find({}, { projection: { plantsPnl: 0 } })
+      .toArray(),
     // Legacy-shaped view so the headline maps, condition modifiers, and the
     // margin engine's stored-value reads keep their single-doc shape.
     findMergedRegionMetricsMany(db, {}),

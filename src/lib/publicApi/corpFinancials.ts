@@ -1,4 +1,6 @@
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
+import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
+import type { CorporateSector } from "@/lib/db/types";
 
 /**
  * Corporation financials on the canonical basis:
@@ -25,6 +27,7 @@ export interface CorpFinancialsInput {
     realizedRevenue?: number;
     profitMargin?: number;
     effectiveProfitMargin?: number;
+    plantsPnl?: CorporateSector["plantsPnl"];
   }>;
   /** Host-currency FX rate per sector id. A missing or non-positive entry means 1. */
   hostRateBySectorId: Map<string, number>;
@@ -51,6 +54,17 @@ export function corpFinancials(input: CorpFinancialsInput): CorpFinancials {
         revenue: sector.revenue ?? 0,
         realizedRevenue: sector.realizedRevenue,
       }) / divisor;
+
+    // Plants tier: the persisted P&L is the booked figure. The margin path
+    // below inverts a percentage capped at 100 that excludes upkeep and
+    // compliance, so it reported a loss-making sector as profitable while the
+    // corp page and the Discord bot (both on `readPlantsPnl`) said otherwise.
+    const pnl = readPlantsPnl(sector);
+    if (pnl) {
+      totalRevenue += pnl.revenue / divisor;
+      operatingIncome += pnl.profit / divisor;
+      continue;
+    }
 
     const effective = sector.effectiveProfitMargin;
     const margin =

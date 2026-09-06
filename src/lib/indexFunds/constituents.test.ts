@@ -5,6 +5,8 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   buildIndexFundTargetConstituents,
+  capSingleNameWeights,
+  INDEX_FUND_MAX_SINGLE_NAME_WEIGHT,
   convertLocalMarketCapToFundAnchor,
   isEligibleIndexFundConstituent,
   type IndexFundCandidate,
@@ -295,5 +297,38 @@ describe("committee waivers inside the basket build", () => {
       },
     });
     expect(constituents.map((c) => c.corporationId.toString())).not.toContain(tiny._id.toString());
+  });
+});
+
+describe("single-name concentration cap", () => {
+  it("caps a dominant name and hands the excess to the others pro rata", () => {
+    const w = capSingleNameWeights([0.6, 0.2, 0.1, 0.05, 0.05], 0.2);
+    expect(w[0]).toBeCloseTo(0.2, 12);
+    expect(w[1]).toBeCloseTo(0.2, 12);
+    expect(w.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 12);
+    expect(Math.max(...w)).toBeLessThanOrEqual(0.2 + 1e-12);
+  });
+
+  it("leaves weights unchanged when there are too few names to honour the cap", () => {
+    expect(capSingleNameWeights([0.9, 0.1], 0.2)).toEqual([0.9, 0.1]);
+  });
+
+  it("applies the cap to fund constituents", () => {
+    const ids = Array.from({ length: 6 }, () => new ObjectId());
+    const { constituents: result } = buildIndexFundTargetConstituents({
+      corporations: ids.map((id, i) =>
+        corp({
+          _id: id,
+          sharePrice: i === 0 ? 1000 : 10,
+          totalShares: 100,
+          liquidCurrencyCode: "USD",
+        })
+      ),
+      definition: { scope: "country", kind: "broad", countryId: "US", anchorCurrencyCode: "USD" },
+      exchangeRates: rates,
+    });
+    expect(result[0].corporationId).toEqual(ids[0]);
+    expect(result[0].targetWeight).toBeCloseTo(INDEX_FUND_MAX_SINGLE_NAME_WEIGHT, 12);
+    expect(result.reduce((sum, row) => sum + row.targetWeight, 0)).toBeCloseTo(1, 12);
   });
 });

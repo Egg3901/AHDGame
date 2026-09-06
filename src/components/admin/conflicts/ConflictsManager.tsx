@@ -1,5 +1,6 @@
 import { ConflictsGeneralToggle } from "./ConflictsGeneralToggle";
 import { NppOffensivesToggles } from "./NppOffensivesToggles";
+import { NppIntelligenceToggle } from "./NppIntelligenceToggle";
 import { CreateColdWarConflictForm } from "./CreateColdWarConflictForm";
 
 export function ConflictsManager() {
@@ -7,6 +8,7 @@ export function ConflictsManager() {
     <>
       <ConflictsGeneralToggle />
       <NppOffensivesToggles />
+      <NppIntelligenceToggle />
       <CreateColdWarConflictForm />
     </>
   );

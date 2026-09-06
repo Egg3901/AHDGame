@@ -86,6 +86,12 @@ const NPP_BOND_INVEST_FRACTION = 0.25;
 // How many of the best-yielding bonds an NPP samples between, rather than always
 // taking the single best. Small on purpose: this is meant to spread NPP demand
 // across an issue or two, not to model a bond desk.
+/**
+ * An NPP as this phase reads it: everything except the large `policies`
+ * blob, which this phase never touches.
+ */
+type NppWithoutPolicies = Omit<NPP, "policies">;
+
 const NPP_BOND_CANDIDATE_POOL = 5;
 // Current yield below which an NPP simply doesn't buy. Gives "hold cash" a place
 // in the decision instead of always allocating. In PERCENT: `couponRate` is an
@@ -302,9 +308,18 @@ export async function processNppActions(
   // Query NPPs with at least 1 action point. Technocrat NPPs (e.g.
   // autonomous central-bank chairs) are excluded via isTechnocrat: { $ne: true }
   // — they hold non-political office and don't take campaign actions.
+  // `policies` is ~30KB of the ~31KB NPP document (94%), and nothing in this
+  // phase reads it. Without the projection the turn deserializes roughly 50MB
+  // of policy positions per pass and throws them away: BSON decode plus the
+  // garbage collecting of it measured as 44% of a singleplayer turn's CPU,
+  // against under 8% for all game logic combined. Typed as the projected shape
+  // so nothing downstream can assume a field that is no longer fetched.
   const cursor = db
-    .collection<NPP>("npps")
-    .find({ retiredAt: null, actionPoints: { $gte: 1 }, isTechnocrat: { $ne: true } });
+    .collection<NppWithoutPolicies>("npps")
+    .find(
+      { retiredAt: null, actionPoints: { $gte: 1 }, isTechnocrat: { $ne: true } },
+      { projection: { policies: 0 } }
+    );
 
   const nppOps: {
     updateOne: {

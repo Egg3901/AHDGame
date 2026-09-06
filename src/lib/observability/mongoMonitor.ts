@@ -19,6 +19,7 @@
 import * as Sentry from "@sentry/nextjs";
 import type { MongoClient } from "mongodb";
 import type { Span } from "@sentry/nextjs";
+import { recordDocumentsReturned, recordRoundTrip } from "@/lib/observability/mongoRoundTrips";
 
 /** Driver chatter that carries no diagnostic value — never instrumented. */
 const IGNORED_COMMANDS = new Set([
@@ -56,9 +57,27 @@ const SPAN_STATUS_ERROR = 2 as const;
  */
 const pendingSpans = new Map<number, Span>();
 
-function collectionFromCommand(commandName: string, command: Record<string, unknown>): string {
+export function collectionFromCommand(
+  commandName: string,
+  command: Record<string, unknown>
+): string {
+  // Most commands name their collection as the command's own value
+  // (`{find: "corporations"}`). `getMore` does not: its value is the cursor
+  // id, and the collection sits in a separate field. Without this branch every
+  // paginated batch was attributed to "unknown" — and since large result sets
+  // are exactly the ones that paginate, that was most of the documents the
+  // turn deserializes.
   const target = command[commandName];
-  return typeof target === "string" ? target : "unknown";
+  if (typeof target === "string") return target;
+  const named = command.collection;
+  return typeof named === "string" ? named : "unknown";
+}
+
+/** Documents in a find/getMore/aggregate reply batch; 0 for anything else. */
+function batchSize(reply: unknown): number {
+  const cursor = (reply as { cursor?: { firstBatch?: unknown[]; nextBatch?: unknown[] } })?.cursor;
+  if (!cursor) return 0;
+  return (cursor.firstBatch ?? cursor.nextBatch ?? []).length;
 }
 
 let attached = false;
@@ -86,6 +105,9 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
       event.command as Record<string, unknown>
     );
     pendingCollections.set(event.requestId, collection);
+    // Per-phase round-trip attribution (AHD_TURN_ROUNDTRIP_PROFILE=1). A
+    // boolean check when off.
+    recordRoundTrip(collection);
 
     // Only materialize a DB span when we're already inside a RECORDING trace
     // (a sampled request/turn transaction). This is the single most important
@@ -113,6 +135,12 @@ export function attachMongoCommandMonitor(client: MongoClient): void {
     if (IGNORED_COMMANDS.has(event.commandName)) return;
     const collection = pendingCollections.get(event.requestId) ?? "unknown";
     pendingCollections.delete(event.requestId);
+
+    // Documents returned, for the round-trip profiler. Round trips rank what
+    // production pays (latency per call); documents rank what singleplayer
+    // pays (deserialization per document), and one aggregate returning 61k
+    // documents is a single round trip.
+    recordDocumentsReturned(collection, batchSize(event.reply));
 
     const span = pendingSpans.get(event.requestId);
     if (span) {

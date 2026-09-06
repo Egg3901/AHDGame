@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isSingleplayer } from "@/lib/singleplayer";
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
@@ -242,6 +243,7 @@ export async function GET() {
         user: {
           id: userId,
           username,
+          singleplayer: isSingleplayer(),
           email: user?.email ?? undefined,
           patreonTier: user?.patreonTier ?? null,
           supporterProvider: user?.supporterProvider ?? null,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyFogToSectorPhysicals,
+  booksAreExposed,
   buildQuarterlySnapshot,
   computeFillRate,
   fillRateBand,
@@ -222,5 +223,29 @@ describe("applyFogToSectorPhysicals", () => {
     expect(out.producedUnits).toBeNull();
     expect(out.constructionInProgressAnchor).toBeNull();
     expect(out.fillRateBand).toBeNull();
+  });
+});
+
+describe("booksAreExposed", () => {
+  it("is false for a corporation nobody has leaked", () => {
+    expect(booksAreExposed({}, 100)).toBe(false);
+  });
+
+  it("is true while the exposure is live", () => {
+    expect(booksAreExposed({ booksExposedUntilTurn: 120 }, 100)).toBe(true);
+  });
+
+  it("is true on the final turn of the exposure", () => {
+    expect(booksAreExposed({ booksExposedUntilTurn: 100 }, 100)).toBe(true);
+  });
+
+  it("lapses on its own once the turn passes", () => {
+    // Expressed as a turn precisely so nothing has to remember to clear it.
+    expect(booksAreExposed({ booksExposedUntilTurn: 99 }, 100)).toBe(false);
+  });
+
+  it("ignores a null or non-finite value rather than exposing the books", () => {
+    expect(booksAreExposed({ booksExposedUntilTurn: null }, 100)).toBe(false);
+    expect(booksAreExposed({ booksExposedUntilTurn: Number.NaN }, 100)).toBe(false);
   });
 });

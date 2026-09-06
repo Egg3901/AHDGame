@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maintenanceStatus";
 import { getCachedPublicViewingMode, isPublicApiReadBypassPath } from "@/lib/publicViewing";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE, isCharacterGatedPath } from "@/lib/auth/characterGate";
+import { isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
 
 // Well-known root files that must never be rewritten under /wiki on the
 // subdomain — /robots.txt would otherwise hit the wiki [slug] route and serve
@@ -100,6 +101,27 @@ function passthrough(request: NextRequest): NextResponse {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const host = request.headers.get("host") ?? "";
+  const singleplayer = isSingleplayer();
+
+  // Singleplayer: one account, on the player's machine, nobody to log in as.
+  // Mint the local player's session here rather than special-casing auth
+  // downstream, so every route reads an ordinary logged-in session. Returns
+  // early with the cookie attached; the retried request then flows through
+  // the normal path below. See @/lib/singleplayer for the guards that stop
+  // this running anywhere that serves more than one person.
+  if (singleplayer && !request.cookies.get(AUTH_COOKIE_NAME)) {
+    return await grantSingleplayerSession(request);
+  }
+
+  // The local build has no account lifecycle. Keep old bookmarks to the
+  // public auth pages inside the local launcher rather than showing a sign-in,
+  // registration, or logout screen for the fixed local session.
+  if (
+    singleplayer &&
+    (pathname === "/login" || pathname === "/register" || pathname === "/logout")
+  ) {
+    return NextResponse.redirect(new URL("/singleplayer", request.url));
+  }
 
   // Canonical host is the apex domain. www duplicates every page (splits SEO
   // signals and confuses the AdSense review), so 301 it. The raw Railway host
@@ -183,6 +205,45 @@ export async function proxy(request: NextRequest) {
   }
 
   return withRailwayNoindex(passthrough(request), host);
+}
+
+/**
+ * Issue the local player's session cookie and re-run the request with it.
+ *
+ * The cookie is set on the forwarded request headers as well as the response
+ * so the very first request already carries a session, rather than bouncing
+ * the player through an unauthenticated render.
+ */
+async function grantSingleplayerSession(request: NextRequest): Promise<NextResponse> {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret) {
+    throw new Error("SINGLEPLAYER is set but AUTH_SECRET is missing; cannot mint a local session.");
+  }
+
+  const token = await new SignJWT(singleplayerSessionClaims())
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("10y")
+    .sign(new TextEncoder().encode(secret));
+
+  const requestHeaders = new Headers(request.headers);
+  const existing = requestHeaders.get("cookie");
+  requestHeaders.set(
+    "cookie",
+    existing ? `${existing}; ${AUTH_COOKIE_NAME}=${token}` : `${AUTH_COOKIE_NAME}=${token}`
+  );
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.cookies.set(AUTH_COOKIE_NAME, token, {
+    httpOnly: true,
+    // Loopback is not a secure origin in the browser's eyes; a Secure cookie
+    // over plain http would be dropped and the player would never get a session.
+    secure: false,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365 * 10,
+  });
+  return response;
 }
 
 export const config = {

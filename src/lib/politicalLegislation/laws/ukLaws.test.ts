@@ -7,11 +7,11 @@ describe("UK catalog", () => {
     expect(validateCatalog(UK_LAWS, "UK")).toEqual([]);
   });
 
-  it("carries exactly 63 primaries + 6 tax + 40 secondaries", () => {
-    expect(UK_LAWS.length).toBe(109);
+  it("carries exactly 63 primaries + 6 tax + 41 secondaries", () => {
+    expect(UK_LAWS.length).toBe(110);
     expect(UK_LAWS.filter((l) => l.kind === "primary").length).toBe(63);
     expect(UK_LAWS.filter((l) => l.kind === "tax").length).toBe(6);
-    expect(UK_LAWS.filter((l) => l.kind === "secondary").length).toBe(40);
+    expect(UK_LAWS.filter((l) => l.kind === "secondary").length).toBe(41);
   });
 
   it("spot-check: NHS Act ladder matches the document (the §4.2 worked example)", () => {
@@ -47,5 +47,29 @@ describe("UK catalog", () => {
     const law = UK_LAWS.find((l) => l.id === "uk.infrastructure.publicHousing.primary")!;
     expect(law.budgetKeyOverride).toBe("other");
     expect(law.baselineLevel).toBe(3);
+  });
+});
+
+describe("intelligence funding law", () => {
+  const law = UK_LAWS.find((l) => l.id === "uk.sec.secretVote")!;
+
+  it("is seeded unfunded, so shipping it changes no economy", () => {
+    expect(law).toBeDefined();
+    expect(law.baselineLevel).toBe(0);
+    expect(law.budgetKeyOverride).toBe("intelligence");
+    expect(law.allowedScope).toBe("national");
+  });
+
+  it("carries no cost terms at level 0", () => {
+    // The seed writes a statePolicies row for every law but skips the enactedLaws
+    // insert at level 0, so a level-0 law contributes no spending line at all.
+    expect(law.levels![0].gdpCostFraction).toBeUndefined();
+    expect(law.levels![0].incomeCostFraction).toBeUndefined();
+    expect(law.levels![0].gdpRevenueFraction).toBeUndefined();
+  });
+
+  it("climbs monotonically to half a percent of GDP", () => {
+    const fractions = law.levels!.slice(1).map((l) => l.gdpCostFraction!);
+    expect(fractions).toEqual([0.0005, 0.0015, 0.003, 0.005]);
   });
 });
