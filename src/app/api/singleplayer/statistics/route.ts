@@ -21,6 +21,7 @@ export async function GET(request: Request) {
             preset: 1,
             currentTurn: 1,
             singleplayerConfig: 1,
+            singleplayerTurnMetrics: 1,
             nppAutonomyLevel: 1,
             ...Object.fromEntries(ALLOWED_FEATURE_FLAGS.map((key) => [key, 1])),
           },
@@ -69,6 +70,10 @@ export async function GET(request: Request) {
     nppCount,
     totalCorporationEmployment: Math.round(employment[0]?.total ?? 0),
   };
+  if (state.singleplayerTurnMetrics) {
+    metrics.lastTurnDurationMs = state.singleplayerTurnMetrics.durationMs;
+    metrics.lastTurnWarningCount = state.singleplayerTurnMetrics.warningCount;
+  }
   const offices = officeCounts[0];
   if (offices && offices.total > 0)
     metrics.nppOfficeSharePercent = (offices.npp / offices.total) * 100;

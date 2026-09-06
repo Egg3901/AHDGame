@@ -1,0 +1,60 @@
+name: singleplayer game release
+
+on:
+  push:
+    tags:
+      - "game-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            platform: linux-x86_64
+          - runner: ubuntu-22.04-arm
+            platform: linux-aarch64
+          - runner: windows-latest
+            platform: windows-x86_64
+          - runner: macos-13
+            platform: macos-x86_64
+          - runner: macos-14
+            platform: macos-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run singleplayer:package
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+          NEXT_TELEMETRY_DISABLED: "1"
+      - name: Package versioned runtime
+        shell: bash
+        run: node scripts/singleplayer/release-package.mjs "${GITHUB_REF_NAME#game-v}" "${{ matrix.platform }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: singleplayer-${{ matrix.platform }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: singleplayer-*
+          merge-multiple: true
+          path: release-assets
+      - name: Publish immutable game runtime
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release-assets/* --repo "$GITHUB_REPOSITORY" --title "A House Divided ${GITHUB_REF_NAME#game-v}" --generate-notes --verify-tag
