@@ -93,6 +93,14 @@ describe("snapshotApprovalsForTurn", () => {
     expect(result.guestsReleased).toEqual([]);
   });
 
+  it("keeps a documented seeded country stored instead of treating it as a releasable guest", async () => {
+    wire({ seeded: ["DD"], documented: ["DD"] });
+    const result = await run();
+    expect(snapshotted()).toEqual(expect.arrayContaining(["DD"]));
+    expect(result.guestsReleased).toEqual([]);
+    expect(deleted()).toEqual([]);
+  });
+
   it("pulls in a belligerent that is not a playable country", async () => {
     wire({ conflicts: [conflict()], documented: ACTIVE });
     await run();
