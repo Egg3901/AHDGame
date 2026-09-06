@@ -17,8 +17,6 @@ import {
   governmentReformismFromEconomicPosition,
   blendGovernmentReformism,
   marketizationGravity,
-  NPP_DEFAULT_CREDIT_AGGRESSIVENESS,
-  NPP_DEFAULT_BUDGET_SOFTNESS,
   NPP_DEFAULT_REFORMISM,
   NPP_DEFAULT_INTERNAL_REPRESSION,
 } from "@/lib/constants/commandEconomy";
@@ -55,6 +53,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { wageFundConstrainedGrowth } from "@/lib/economy/twoCircuitMoney";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { resolveGosbankPosture } from "@/lib/economy/commandEconomyPosture";
 
 /**
  * Command-economy macro turn phase.
@@ -237,20 +236,7 @@ export async function processCommandEconomyTurn(
     // ── Gosbank posture: P2 player directive > NPP commandStance > default ────
     const directive = factors?.gosbankDirective;
     const stance = stanceByCountry.get(countryId);
-    const creditAggressiveness = firstFinite(
-      [
-        directive?.creditAggressiveness,
-        stance?.creditAggressiveness,
-        NPP_DEFAULT_CREDIT_AGGRESSIVENESS,
-      ],
-      0,
-      1
-    );
-    const budgetSoftness = firstFinite(
-      [directive?.budgetSoftness, stance?.budgetSoftness, NPP_DEFAULT_BUDGET_SOFTNESS],
-      0,
-      1
-    );
+    const { creditAggressiveness, budgetSoftness } = resolveGosbankPosture(directive, stance);
     // Government reformism = the ruling party's CHARTERED line BLENDED with the
     // SITTING government's live command stance (not shadowed by it — see
     // `blendGovernmentReformism`). P3 gave the party position absolute

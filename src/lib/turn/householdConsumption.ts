@@ -229,6 +229,13 @@ export interface HouseholdConsumptionResult {
   global: Map<CommodityType, number>;
   /** stateId → commodity → demand units to add for that state. */
   byState: Map<string, Map<CommodityType, number>>;
+  /**
+   * commodity → household demand units removed by the PLANTS_HOUSEHOLD_SUPPLY_CAP
+   * clamp this turn. Recorded, not applied: the cap makes every recorded
+   * shortage a property of the cap, so the truncated amount is the only way
+   * to see how short the world really is (#1460).
+   */
+  truncated: Map<CommodityType, number>;
 }
 
 const BASKET_ENTRIES = Object.entries(HOUSEHOLD_CONSUMER_BASKET) as [CommodityType, number][];
@@ -273,6 +280,7 @@ export function computeHouseholdConsumption(
   const eraPerCapita = (perCapita * unitScale) / (eraUnitScale > 0 ? eraUnitScale : 1);
 
   const global = new Map<CommodityType, number>();
+  const truncated = new Map<CommodityType, number>();
   const byState = new Map<string, Map<CommodityType, number>>();
   const incomeAvgByCountry = countryIncomeAverages(states, metricsByState);
 
@@ -346,6 +354,7 @@ export function computeHouseholdConsumption(
       const cap = supply * PLANTS_HOUSEHOLD_SUPPLY_CAP;
       if (total <= cap) continue;
       const factor = cap / total;
+      truncated.set(commodity, total - cap);
       global.set(commodity, cap);
       for (const contrib of byState.values()) {
         const v = contrib.get(commodity);
@@ -354,5 +363,5 @@ export function computeHouseholdConsumption(
     }
   }
 
-  return { global, byState };
+  return { global, byState, truncated };
 }

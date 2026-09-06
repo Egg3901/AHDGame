@@ -827,6 +827,19 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     },
     production: {
       sectorsObserved: input.sectors.length,
+      // Commodities whose recorded demand was cut by the 1.5x caps this turn,
+      // and the worst latent shortage among them (#1460). Every unmet-share
+      // figure elsewhere in this report is measured AFTER those caps.
+      demandTruncatedCommodities: metric(
+        input.prices.filter((p) => (p.demandTruncatedUnits ?? 0) > 0).length,
+        input.prices.length,
+        "commodity_count"
+      ),
+      maxLatentShortageMultiple: metric(
+        input.prices.reduce((max, p) => Math.max(max, p.latentShortageMultiple ?? 0), 0),
+        input.prices.length,
+        "commodity_count"
+      ),
       throughputFloorShare: metric(
         ratio(
           throughputObserved.filter((sector) => sector.throughputFactor! <= 0.500001).length,

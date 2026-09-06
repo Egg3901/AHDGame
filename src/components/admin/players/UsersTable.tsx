@@ -27,6 +27,7 @@ interface UsersTableProps {
   onBanUser: (userId: string, username: string, currentlyBanned: boolean) => void;
   onRetireCharacter: (userId: string, username: string) => void;
   onDeleteUser: (userId: string, username: string) => void;
+  onSetSingleplayerEntitlement: (userId: string, username: string, entitled: boolean) => void;
 }
 
 export function UsersTable({
@@ -48,6 +49,7 @@ export function UsersTable({
   onBanUser,
   onRetireCharacter,
   onDeleteUser,
+  onSetSingleplayerEntitlement,
 }: UsersTableProps) {
   const columns: ResponsiveTableColumn<UserData>[] = [
     {
@@ -323,6 +325,19 @@ export function UsersTable({
                         onClick={() => {
                           setMenuUserId(null);
                           onResetDiscord(user.id, user.username, user.discordUsername);
+                        }}
+                      />
+                      <MenuItem
+                        label={
+                          user.singleplayerEntitled ? "Revoke Singleplayer" : "Grant Singleplayer"
+                        }
+                        onClick={() => {
+                          setMenuUserId(null);
+                          onSetSingleplayerEntitlement(
+                            user.id,
+                            user.username,
+                            !user.singleplayerEntitled
+                          );
                         }}
                       />
                       <MenuItem

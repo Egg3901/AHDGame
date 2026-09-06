@@ -13,8 +13,19 @@ export interface CommodityPrice {
   globalPrice: number;
   /** Global supply in units/day */
   globalSupply: number;
-  /** Global demand in units/day */
+  /** Global demand in units/day, AFTER the 1.5x demand caps. */
   globalDemand: number;
+  /**
+   * Demand units the PLANTS_LEDGER_DEMAND_SUPPLY_CAP and
+   * PLANTS_HOUSEHOLD_SUPPLY_CAP passes removed this turn (#1460). Absent when
+   * nothing was truncated. Recorded only; not an input to any price.
+   */
+  demandTruncatedUnits?: number;
+  /**
+   * (globalDemand + demandTruncatedUnits) / globalSupply: the shortage the
+   * world would report without the caps. Absent when nothing was truncated.
+   */
+  latentShortageMultiple?: number;
   /** Per-state prices: stateId -> price */
   statePrices: Record<string, number>;
   /** Per-state supply: stateId -> units/day */

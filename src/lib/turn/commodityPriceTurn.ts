@@ -777,7 +777,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     }
   }
 
-  const { global, byState } = computeRawSupplyDemand(
+  const { global, byState, demandTruncated } = computeRawSupplyDemand(
     sectorData,
     gdpGrowthData,
     stateGdpMap,
@@ -982,6 +982,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     for (const [commodity, units] of household.global) {
       const g = global.get(commodity);
       if (g) g.demand += units;
+    }
+    for (const [commodity, units] of household.truncated) {
+      demandTruncated.set(commodity, (demandTruncated.get(commodity) ?? 0) + units);
     }
     for (const [stateId, contrib] of household.byState) {
       let stateMap = byState.get(stateId);
@@ -1764,6 +1767,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             globalPrice: globalMktPrice,
             globalSupply: Math.round(globalBal.supply * 100) / 100,
             globalDemand: Math.round(globalBal.demand * 100) / 100,
+            ...latentShortageFields(globalBal, demandTruncated.get(commodity)),
             statePrices,
             stateSupply,
             stateDemand,
@@ -1806,6 +1810,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         computeMarketPrice(LEDGER_BASE_PRICES[commodity], globalBal.supply, globalBal.demand),
       globalSupply: Math.round(globalBal.supply * 100) / 100,
       globalDemand: Math.round(globalBal.demand * 100) / 100,
+      ...latentShortageFields(globalBal, demandTruncated.get(commodity)),
       statePrices: appliedStatePrices.get(commodity) ?? {},
       nationalPrices: appliedNationalPrices.get(commodity) ?? {},
       scarcityMult: scarcityMultByCommodity.get(commodity) ?? 1,
@@ -1952,4 +1957,28 @@ async function loadBlockadeClosure(db: Db): Promise<Map<string, number>> {
   if (!navalUnits.length) return new Map();
 
   return blockadeClosureByCountry(navalUnits, hostility);
+}
+
+/**
+ * Truncated demand and the latent shortage multiple for one commodity (#1460).
+ *
+ * `demandTruncatedUnits` is what the two 1.5x caps removed this turn (ledger
+ * legs plus household). `latentShortageMultiple` is the demand the world would
+ * have recorded without the caps, over supply: 1.5 for a commodity sitting on
+ * the cap with nothing truncated, higher when the cap is hiding more. Both are
+ * written to the price doc and its history; neither feeds prices, the scarcity
+ * integrator or NPP shortage scores. Omitted when nothing was truncated.
+ */
+export function latentShortageFields(
+  bal: { supply: number; demand: number },
+  truncated: number | undefined
+): { demandTruncatedUnits?: number; latentShortageMultiple?: number } {
+  if (!(typeof truncated === "number" && truncated > 0)) return {};
+  const out: { demandTruncatedUnits?: number; latentShortageMultiple?: number } = {
+    demandTruncatedUnits: Math.round(truncated * 100) / 100,
+  };
+  if (bal.supply > 0) {
+    out.latentShortageMultiple = Math.round(((bal.demand + truncated) / bal.supply) * 1000) / 1000;
+  }
+  return out;
 }

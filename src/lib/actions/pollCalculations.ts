@@ -20,6 +20,7 @@ import {
 import { normalizeNPI } from "@/lib/utils/normalizeNPI";
 import { infamyPenaltyMultiplier } from "@/lib/utils/infamy";
 import { FPTP_SPOILER_RATE } from "@/lib/electionEngine/constants";
+import { partitionMajorParties } from "@/lib/electionEngine/majorParties";
 import { getMajorPartiesForRegion } from "@/lib/constants/countries";
 
 function clampPercentStat(value: number): number {
@@ -338,8 +339,11 @@ export async function computePollData(
     // In RCV states this step is skipped entirely.
     if ((votingSystem ?? "fptp") !== "rcv") {
       const majorPartySet = getMajorPartiesForRegion(state.countryId, state.parentRegionId);
-      const thirdPartyCandidates = candidates.filter((c) => !majorPartySet.has(c.party));
-      const majorPartyCandidates = candidates.filter((c) => majorPartySet.has(c.party));
+      const { major: majorPartyCandidates, third: thirdPartyCandidates } = partitionMajorParties(
+        candidates,
+        majorPartySet,
+        (c) => votesByCandidate[c.id] ?? 0
+      );
 
       if (thirdPartyCandidates.length > 0 && majorPartyCandidates.length > 0) {
         for (const tp of thirdPartyCandidates) {
