@@ -42,7 +42,7 @@ function collection<T>(rows: T[]) {
 
 describe("loadRulingExecutiveParties", () => {
   it("uses the president party rather than a congressional formation party", async () => {
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([
         { countryId: "US", officeType: "president", characterId: "pres", party: "executive" },
       ]),
@@ -68,7 +68,7 @@ describe("loadRulingExecutiveParties", () => {
 
   it("resolves a parliamentary PM character party by country", async () => {
     const pmId = new ObjectId();
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([]),
       governmentFormations: collection([
         { _id: "UK", countryId: "UK", governingPartyId: "1", pmCharacterId: pmId, pmNppId: null },
@@ -84,7 +84,7 @@ describe("loadRulingExecutiveParties", () => {
   });
 
   it("ignores archived governments and does not infer an executive from the legislature", async () => {
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([]),
       governmentFormations: collection([
         {
@@ -113,7 +113,7 @@ describe("loadRulingExecutiveParties", () => {
 
   it("resolves an NPP executive party", async () => {
     const nppId = new ObjectId();
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([]),
       governmentFormations: collection([
         { _id: "DD", countryId: "DD", status: "formed", pmCharacterId: null, pmNppId: nppId },
@@ -131,7 +131,7 @@ describe("loadRulingExecutiveParties", () => {
   it("uses the runtime head of government and keeps NPP parties country-scoped", async () => {
     const ruPm = new ObjectId();
     const cnNpp = new ObjectId();
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([
         // RU's ceremonial president must not displace its PM.
         { countryId: "RU", officeType: "president", characterId: null, party: "ceremonial" },
@@ -157,7 +157,7 @@ describe("loadRulingExecutiveParties", () => {
   });
 
   it("does not fall through a vacant current formation to stale legacy leadership", async () => {
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([]),
       governmentFormations: collection([
         { _id: "UK", countryId: "UK", status: "pending", pmCharacterId: null, pmNppId: null },
@@ -175,7 +175,7 @@ describe("loadRulingExecutiveParties", () => {
 
   it("keeps a caretaker PM eligible even while the formation is pending", async () => {
     const caretaker = new ObjectId();
-    const rows: Record<string, ReturnType<typeof cursor>> = {
+    const rows: Record<string, ReturnType<typeof collection>> = {
       electedOfficials: collection([]),
       governmentFormations: collection([
         { _id: "DE", countryId: "DE", status: "pending", pmCharacterId: caretaker, pmNppId: null },

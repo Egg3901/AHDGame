@@ -1,5 +1,4 @@
-import type { Db, ObjectId } from "mongodb";
-import type { Character, NPP } from "@/lib/db/types";
+import type { Db, Filter, ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { getHeadOfGovernmentCharacterId } from "@/lib/api/headOfGovernment";
 import { getCountryState } from "@/lib/countryState";
@@ -59,19 +58,17 @@ export async function loadRulingExecutiveParties(db: Db): Promise<Map<CountryId,
       headCharacterByCountry.set(countryId, id);
     }
   }
-  const loadParties = async <T extends { _id: ObjectId; countryId?: CountryId; party?: string }>(
-    collectionName: string,
-    ids: ObjectId[]
-  ): Promise<T[]> => {
+  type PartyRow = { _id: ObjectId; countryId?: CountryId; party?: string };
+  const loadParties = async (collectionName: string, ids: ObjectId[]): Promise<PartyRow[]> => {
     if (ids.length === 0) return [];
     return db
-      .collection<T>(collectionName)
-      .find({ _id: { $in: ids } })
+      .collection<PartyRow>(collectionName)
+      .find({ _id: { $in: ids } } as Filter<PartyRow>)
       .toArray();
   };
   const [pmCharacters, pmNpps] = await Promise.all([
-    loadParties<Pick<Character, "_id" | "countryId" | "party">>("characters", charIds),
-    loadParties<Pick<NPP, "_id" | "countryId" | "party">>("npps", nppIds),
+    loadParties("characters", charIds),
+    loadParties("npps", nppIds),
   ]);
   const charsById = new Map(pmCharacters.map((c) => [`${c.countryId}:${c._id}`, c.party]));
   const nppsById = new Map(pmNpps.map((n) => [`${n.countryId}:${n._id}`, n.party]));
