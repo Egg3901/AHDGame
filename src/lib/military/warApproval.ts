@@ -3,11 +3,16 @@ import { navalApprovalEffect, navalApprovalLabel } from "@/lib/navair/navalAppro
 import type { NavairUnit } from "@/lib/navair/types";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import type { CountryId } from "@/lib/constants/countries";
-import { listConflictsForCountry } from "@/lib/db/collections/conflicts";
+import { getConflictsCollection, listConflictsForCountry } from "@/lib/db/collections/conflicts";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { shareOf, type Side } from "@/lib/military/occupation";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
+import {
+  resolvedWarDefeatEffect,
+  WAR_DEFEAT_PENALTY_CAP,
+  WAR_DEFEAT_WINDOW_TURNS,
+} from "./rules/warDefeat";
 
 /**
  * War-related national approval modifiers.
@@ -366,6 +371,8 @@ export interface WarModifierInput {
    * they are only damaged.
    */
   naval: { label: string; effect: number } | null;
+  /** Penalty from recently lost wars, already capped and aggregated. */
+  defeat?: number;
   phase: WarPhase;
 }
 
@@ -393,7 +400,7 @@ export interface WarModifierInput {
  * multiplies that trap rather than removing it.
  */
 export function buildWarModifiers(input: WarModifierInput): ActiveModifier[] {
-  const { exhaustion, effort, contribution, naval, phase } = input;
+  const { exhaustion, effort, contribution, naval, defeat = 0, phase } = input;
   const live = phase === "live";
   const chip = (id: string, label: string, value: number): ActiveModifier => ({
     id,
@@ -404,6 +411,10 @@ export function buildWarModifiers(input: WarModifierInput): ActiveModifier[] {
   });
 
   const modifiers: ActiveModifier[] = [];
+
+  if (phase !== "unknown" && Number.isFinite(defeat) && defeat < 0) {
+    modifiers.push(chip("war_defeat", "Recent war defeat", defeat));
+  }
 
   // Exhaustion outlives its war, so it is the one term shown outside one. While
   // the fighting is live it shows even at zero: a country at war whose terms
@@ -507,6 +518,20 @@ export async function computeWarApproval(
 
   try {
     const live = await listConflictsForCountry(db, countryId);
+    const recentResolved = await getConflictsCollection(db)
+      .find({
+        status: "resolved",
+        endTurn: { $gte: turn - (WAR_DEFEAT_WINDOW_TURNS - 1), $lte: turn },
+        $or: [{ "sideA.countries": countryId }, { "sideB.countries": countryId }],
+      })
+      .toArray();
+    const defeat = Math.max(
+      WAR_DEFEAT_PENALTY_CAP,
+      recentResolved.reduce(
+        (sum, conflict) => sum + resolvedWarDefeatEffect(conflict, countryId, turn),
+        0
+      )
+    );
     const mine = live
       // Liveness is already in the query, and is re-checked here on purpose.
       // `resolveConflict` stamps `status` and `endTurn` but never deletes the
@@ -539,6 +564,7 @@ export async function computeWarApproval(
         effort: null,
         contribution: null,
         naval: null,
+        defeat,
         phase: "peace",
         conflictId: null,
       });
@@ -600,6 +626,7 @@ export async function computeWarApproval(
       // rather than fixed in the chip builder like the other three.
       naval:
         navalEffect === 0 ? null : { label: navalApprovalLabel(navalUnits), effect: navalEffect },
+      defeat,
       phase: "live",
       conflictId: conflict._id,
     });
@@ -613,6 +640,7 @@ export async function computeWarApproval(
       effort: null,
       contribution: null,
       naval: null,
+      defeat: 0,
       phase: "unknown",
       conflictId: prevConflictId,
     });

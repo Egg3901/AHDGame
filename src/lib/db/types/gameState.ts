@@ -24,6 +24,21 @@ export type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
 export type NppForeignPolicyMode = "off" | "shadow" | "active";
 export type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 
+/** Local-only world mode. Hosted worlds never persist these fields. */
+export type SingleplayerMode = "normal" | "head-of-state" | "worldsim";
+export type SingleplayerDifficulty = "easy" | "normal" | "hard";
+
+export interface SingleplayerConfig {
+  mode: SingleplayerMode;
+  difficulty: SingleplayerDifficulty;
+  /** Existing NPP autonomy level remains independent from local difficulty. */
+  nppAutonomyLevel: NppAutonomyLevel;
+  featureFlags: Record<string, boolean>;
+  /** Whether the local character is locked to the head-of-state career path. */
+  permanentHeadOfState: boolean;
+  configuredAt: Date;
+}
+
 export interface GameIteration {
   type: IterationType;
   number: number;
@@ -44,6 +59,8 @@ export interface IterationStampFields {
 
 export interface GameState {
   _id: string;
+  /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
+  singleplayerConfig?: SingleplayerConfig;
   /**
    * Turn on which the Cold War was resolved in-game, or null/absent while it is
    * still being fought.

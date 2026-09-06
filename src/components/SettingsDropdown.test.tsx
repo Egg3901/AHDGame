@@ -44,5 +44,20 @@ describe("SettingsDropdown", () => {
     expect(screen.getByText("Profile Settings")).toBeTruthy();
     expect(screen.queryByText("Admin Panel")).toBeNull();
     expect(screen.queryByText("Mod Panel")).toBeNull();
+    expect(screen.getByText("Sign Out")).toBeTruthy();
+  });
+
+  it("does not expose account sign-out for the fixed local session", () => {
+    render(
+      <SettingsDropdown
+        user={{ ...baseUser, singleplayer: true }}
+        onSignOut={vi.fn()}
+        pageCountry="US"
+        userCountry="US"
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText("Settings"));
+    expect(screen.queryByText("Sign Out")).toBeNull();
   });
 });

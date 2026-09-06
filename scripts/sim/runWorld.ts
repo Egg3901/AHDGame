@@ -41,6 +41,7 @@ import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
   economicExperimentConfigSet,
   parseOptionalBoolean,
@@ -275,6 +276,9 @@ const dbName = arg("db") ?? `ahd_sim_${seed}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 const checkpointEvery = Number(arg("checkpoint-every") ?? "10");
 const runId = arg("run-id") ?? `${seed}-${dbName}`;
 const quiet = hasFlag("quiet");
+// In clone mode this preserves the restored world's player corporation CEOs.
+// Without it, clone mode converts all human-run corporations to NPP so the
+// sandbox can run unattended.
 const preservePlayerRail = hasFlag("preserve-player-rail");
 
 if (quiet) {
@@ -320,64 +324,6 @@ function log(msg: string) {
   if (!quiet) {
     console.log(`[sim:${runId}] ${msg}`);
   }
-}
-
-/**
- * Clone-mode transform: convert every human-run corporation into an NPP-run
- * one so the whole economy runs AI-driven. `ceoType: "npp"` is the single
- * field that gates all autonomous corp turn phases (pricing/investment/attacks/
- * R&D); `ceoId` is reassigned to a real active NPP in the same country
- * (round-robin) so personality + fund accounting resolve, matching the
- * production caretaker-CEO handover (src/lib/corporations/caretakerCeo.ts).
- * State-owned corps (countryOwnerId set) are left alone — they run their own
- * path. Sim-only; only ever touches a sandbox clone DB.
- */
-
-async function autonomizePlayerCorps(db: any, logFn: (m: string) => void): Promise<number> {
-  const npps: Array<{ _id: unknown; countryId: string }> = await db
-    .collection("npps")
-    .find({ retiredAt: null }, { projection: { _id: 1, countryId: 1 } })
-    .toArray();
-  const byCountry = new Map<string, unknown[]>();
-  for (const n of npps) {
-    if (!byCountry.has(n.countryId)) byCountry.set(n.countryId, []);
-    byCountry.get(n.countryId)!.push(n._id);
-  }
-  const rr = new Map<string, number>();
-  const cursor = db.collection("corporations").find({
-    ceoType: { $in: ["character", "player", null] },
-    countryOwnerId: { $exists: false },
-  });
-  let converted = 0;
-  let noNpp = 0;
-  for await (const corp of cursor) {
-    const pool = byCountry.get(corp.countryId) ?? [];
-    let nppId = corp.ceoId;
-    if (pool.length) {
-      const i = (rr.get(corp.countryId) ?? 0) % pool.length;
-      rr.set(corp.countryId, i + 1);
-      nppId = pool[i];
-    } else {
-      noNpp++; // no NPP in-country: still flip ceoType (acts with default "cautious" personality)
-    }
-    await db.collection("corporations").updateOne(
-      { _id: corp._id },
-      {
-        $set: {
-          ceoType: "npp",
-          ceoId: nppId,
-          ceoVacant: false,
-          ceoSalary: 0,
-          updatedAt: new Date(),
-        },
-        $unset: { pendingCeoCharacterId: "" },
-      }
-    );
-    converted++;
-  }
-  if (noNpp > 0)
-    logFn(`[clone] ${noNpp} corp(s) had no in-country NPP — kept prior ceoId, default personality`);
-  return converted;
 }
 
 async function main() {
@@ -699,11 +645,13 @@ async function main() {
   log("Shadow ledger enabled for this run (ledgerShadow=true)");
 
   if (cloneMode) {
-    // The DB is a restore of the live world. Make it AI-driven: patch the
-    // market tier, flip every human-run corp to an NPP-run one, and open the
-    // world-level autonomy gates (forceFullAutonomy). Order: market mode and
-    // corp conversion before autonomy gates, so the first turn already sees a
-    // fully autonomous economy at the requested tier.
+    // The DB is a restore of the live world. By default make it AI-driven:
+    // patch the market tier, flip every human-run corp to an NPP-run one, and
+    // open the world-level autonomy gates (forceFullAutonomy). With
+    // --preserve-player-rail, retain existing corporation controllers while
+    // still applying the world-level gates. Order: market mode and any corp
+    // conversion before autonomy gates, so the first turn sees the requested
+    // controller and economy posture.
     if (marketMode) {
       await db
         .collection<GameConfig>("gameConfig")
@@ -765,8 +713,8 @@ async function main() {
         );
       log(`set demographicsDemandEnabled=true`);
     }
-    const converted = await autonomizePlayerCorps(db, log);
-    log(`[clone] autonomized ${converted} human-run corporations → ceoType=npp`);
+    const converted = await applyCloneControllerPolicy(db, log, preservePlayerRail);
+    if (converted > 0) log(`[clone] autonomized ${converted} human-run corporations → ceoType=npp`);
     log(`[clone] forcing full NPP autonomy (world/country gates → ${AUTONOMY_LEVEL})`);
     await forceFullAutonomy(
       db,

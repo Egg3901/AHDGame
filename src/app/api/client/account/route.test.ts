@@ -1,0 +1,46 @@
+import { describe, expect, it, vi } from "vitest";
+
+const requireBasicAuth = vi.fn();
+const findOne = vi.fn();
+
+vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth }));
+vi.mock("@/lib/mongodb", () => ({
+  getDb: vi.fn(async () => ({ collection: () => ({ findOne }) })),
+}));
+vi.mock("@/lib/db/types", () => ({ isPatreonActive: vi.fn(() => true) }));
+
+describe("GET /api/client/account", () => {
+  it("rejects unauthenticated WebView requests", async () => {
+    const response = new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
+    requireBasicAuth.mockResolvedValueOnce({ ok: false, response });
+    const { GET } = await import("./route");
+
+    const result = await GET();
+
+    expect(result.status).toBe(401);
+    expect(findOne).not.toHaveBeenCalled();
+  });
+
+  it("returns only the desktop account summary", async () => {
+    requireBasicAuth.mockResolvedValueOnce({
+      ok: true,
+      user: { userId: "507f1f77bcf86cd799439011" },
+    });
+    findOne.mockResolvedValueOnce({
+      username: "Ada",
+      displayName: "Ada Lovelace",
+      patreonTier: "supporter",
+      patreonExpiresAt: null,
+      email: "private@example.com",
+    });
+    const { GET } = await import("./route");
+
+    const result = await GET();
+    const body = await result.json();
+
+    expect(result.status).toBe(200);
+    expect(result.headers.get("cache-control")).toBe("private, no-store");
+    expect(body).toEqual({ linked: true, displayName: "Ada Lovelace", supporter: true });
+    expect(body).not.toHaveProperty("email");
+  });
+});

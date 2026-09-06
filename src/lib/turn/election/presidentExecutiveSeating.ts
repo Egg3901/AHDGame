@@ -15,6 +15,11 @@ import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { incrementExecutiveTermsServedUpdate } from "@/lib/elections/executiveTermLimits";
 import { initialVpActionFields } from "@/lib/constants/vicePresidentActions";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import {
+  pinnedSingleplayerHeadOfState,
+  seatSingleplayerHeadOfState,
+} from "@/lib/singleplayerHeadOfState";
 
 export interface SeatPresidentialExecutiveParams {
   election: Election;
@@ -32,6 +37,18 @@ export async function seatPresidentialExecutive(
   const electionCountry = (election.countryId ??
     COUNTRY_CONFIGS.US.id) as typeof COUNTRY_CONFIGS.US.id;
   const resolutionCountryId = election.countryId ?? "US";
+
+  const pinned = await pinnedSingleplayerHeadOfState(db, electionCountry);
+  if (pinned) {
+    const preset = await getGameStatePresetOrDefault(db);
+    await seatSingleplayerHeadOfState(db, {
+      characterId: pinned._id,
+      countryId: electionCountry,
+      now,
+      preset,
+    });
+    return;
+  }
 
   const currentPresident = await db
     .collection<ElectedOfficial>("electedOfficials")
