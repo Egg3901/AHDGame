@@ -75,6 +75,7 @@ export async function POST(request: Request) {
       preset,
       deleteProfiles: true,
       skipDiagnostic: true,
+      recordRunLog: false,
       log: (line) => {
         logs.push(line);
         if (!line.startsWith("[reset]") && !line.startsWith("World sealed")) {

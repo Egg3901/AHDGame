@@ -26,10 +26,13 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import {
+  closeSync,
   createWriteStream,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -264,22 +267,205 @@ async function extractFromZipByRange(url, wanted, destDir) {
 }
 
 // ---------------------------------------------------------------------------
-// Processes.
+// Startup phases.
+//
+// Every phase reports what it is doing in plain words, has its own deadline,
+// and fails with the evidence a player (or the desktop client's bug report)
+// needs: which phase stalled, how long it waited, the last lines the game
+// server printed and the tail of MongoDB's log. Silence is never the answer.
 // ---------------------------------------------------------------------------
 
-function waitForPort(port, label, deadlineMs) {
+const READY_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_READY_TIMEOUT_MS) || 120_000;
+const PORT_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_PORT_TIMEOUT_MS) || 120_000;
+// A probe never waits less than the deadline allows; 30s absorbs a slow first
+// module load on a cold machine. The env override is a diagnostic knob for
+// the smoke workflow, as is skipping the health probe.
+const PROBE_TIMEOUT_MS = Number(process.env.SINGLEPLAYER_PROBE_TIMEOUT_MS) || 30_000;
+const SKIP_HEALTH_PROBE = process.env.SINGLEPLAYER_SKIP_HEALTH_PROBE === "1";
+// Two more bisect knobs for the smoke workflow, never set by players: run the
+// game server on inherited stdio instead of captured pipes, and let probes
+// follow redirects instead of reporting them.
+const APP_STDIO_INHERIT = process.env.SINGLEPLAYER_APP_STDIO === "inherit";
+const PROBE_REDIRECT = process.env.SINGLEPLAYER_PROBE_REDIRECT === "follow" ? "follow" : "manual";
+const SHUTDOWN_TIMEOUT_MS = 15_000;
+const OUTPUT_TAIL_LINES = 40;
+
+export const PHASES = {
+  database: {
+    label: "starting the local database",
+    hint: `MongoDB did not open its port. Its own log usually says why: ${path.join(HOME, "mongod.log")}`,
+  },
+  server: {
+    label: "starting the game server",
+    hint: "The game server never opened its port. The last lines it printed are above.",
+  },
+  code: {
+    label: "loading the game's code",
+    hint:
+      "The server is listening but has not answered a single request yet. " +
+      "On Windows the first start after an install is slower because antivirus " +
+      "scans every file the game loads; if this keeps happening, exclude the " +
+      "game folder from real-time scanning.",
+  },
+  account: {
+    label: "connecting to the local database and preparing your account",
+    hint:
+      "The game server answers, but the singleplayer status route does not. " +
+      "Check the error it reported above and the MongoDB log tail below.",
+  },
+};
+
+export class StartupError extends Error {
+  constructor(phase, message, details = {}) {
+    super(message);
+    this.name = "StartupError";
+    this.phase = phase;
+    this.details = details;
+  }
+}
+
+/** Keeps the last N lines a child process printed, for failure reports. */
+export class OutputTail {
+  constructor(limit = OUTPUT_TAIL_LINES) {
+    this.limit = limit;
+    this.lines = [];
+    this.partial = "";
+  }
+  push(chunk) {
+    this.partial += chunk.toString();
+    const parts = this.partial.split(/\r?\n/);
+    this.partial = parts.pop() ?? "";
+    for (const line of parts) {
+      if (!line.trim()) continue;
+      this.lines.push(line);
+      if (this.lines.length > this.limit) this.lines.shift();
+    }
+  }
+  snapshot() {
+    const all = this.partial.trim() ? [...this.lines, this.partial] : [...this.lines];
+    return all.slice(-this.limit);
+  }
+}
+
+/**
+ * Attach a child's stdout and stderr: forward every line to our own streams
+ * unchanged (the desktop client shows them to the player as they arrive) and
+ * keep a tail for the failure report. Continuous, never buffered until exit,
+ * so a stalled child can never fill its pipe and stall further.
+ */
+export function captureOutput(child, tail, { forward = true } = {}) {
+  const wire = (stream, target) => {
+    if (!stream) return;
+    stream.on("data", (chunk) => {
+      tail.push(chunk);
+      if (forward) target.write(chunk);
+    });
+  };
+  wire(child.stdout, process.stdout);
+  wire(child.stderr, process.stderr);
+}
+
+export function tailOfFile(file, lines = 15, maxBytes = 64 * 1024) {
+  try {
+    const size = statSync(file).size;
+    const fd = openSync(file, "r");
+    try {
+      const length = Math.min(size, maxBytes);
+      const buffer = Buffer.alloc(length);
+      readSync(fd, buffer, 0, length, size - length);
+      return buffer.toString("utf8").split(/\r?\n/).filter(Boolean).slice(-lines);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What a MongoDB exit code means to a player. The codes are mongod's own
+ * (src/mongo/util/exit_code.h) plus the Windows loader statuses for a binary
+ * that cannot run at all.
+ */
+export function explainMongoExit(code, { win = WIN, mongoDir = MONGO_DIR } = {}) {
+  if (code === 48) return "MongoDB could not bind its port; another program is using it.";
+  if (code === 62)
+    return (
+      "The world's database files were written by a different MongoDB version and " +
+      "this MongoDB refuses to open them. Point MONGOD_PATH at the version that " +
+      "created the world, or start a new world."
+    );
+  if (code === 100 || code === 14)
+    return "MongoDB hit an error while opening the database; its log says which.";
+  if (win && (code === 3221225781 || code === -1073741515))
+    return `MongoDB needs the Visual C++ runtime. Run ${path.join(mongoDir, "vc_redist.x64.exe")} once, then start the game again.`;
+  if (win && (code === 3221225477 || code === -1073741819 || code === 3221225501))
+    return "The MongoDB executable is damaged or blocked from running.";
+  return null;
+}
+
+/** True when the failure is the binary itself rather than the data or the port. */
+export function mongoBinaryLooksBroken(code, spawnErrorCode) {
+  if (spawnErrorCode === "ENOENT" || spawnErrorCode === "EACCES" || spawnErrorCode === "UNKNOWN")
+    return true;
+  return (
+    code === 126 ||
+    code === 127 ||
+    code === 3221225477 ||
+    code === -1073741819 ||
+    code === 3221225501
+  );
+}
+
+/**
+ * @param {unknown} error
+ * @param {{ appTail?: string[], mongoLogTail?: string[] }} [evidence]
+ */
+export function formatStartupFailure(error, { appTail = [], mongoLogTail = [] } = {}) {
+  const out = [];
+  const phase = error instanceof StartupError ? PHASES[error.phase] : null;
+  out.push(`[ahd] startup failed while ${phase?.label ?? "starting"}: ${error.message}`);
+  if (phase?.hint) out.push(`[ahd] ${phase.hint}`);
+  const reported = error instanceof StartupError ? error.details.lastResponse : null;
+  if (reported) out.push(`[ahd] last answer from the game: ${reported}`);
+  if (appTail.length) {
+    out.push(`[ahd] last ${appTail.length} lines from the game server:`);
+    for (const line of appTail) out.push(`    ${line}`);
+  }
+  if (mongoLogTail.length) {
+    out.push(`[ahd] last ${mongoLogTail.length} lines from MongoDB:`);
+    for (const line of mongoLogTail) out.push(`    ${line}`);
+  }
+  return out.join("\n");
+}
+
+export function waitForPort(port, phase, deadlineMs, { onExit } = {}) {
   const started = Date.now();
   return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = (fn, value) => {
+      if (done) return;
+      done = true;
+      fn(value);
+    };
+    onExit?.((reason) => finish(reject, reason));
     const attempt = () => {
+      if (done) return;
       const sock = connect({ host: "127.0.0.1", port });
       sock.once("connect", () => {
         sock.destroy();
-        resolve();
+        finish(resolve, Date.now() - started);
       });
       sock.once("error", () => {
         sock.destroy();
         if (Date.now() - started > deadlineMs)
-          reject(new Error(`${label} did not open port ${port} within ${deadlineMs / 1000}s`));
+          finish(
+            reject,
+            new StartupError(
+              phase,
+              `port ${port} did not open within ${Math.round(deadlineMs / 1000)}s`
+            )
+          );
         else setTimeout(attempt, 250);
       });
     };
@@ -287,7 +473,7 @@ function waitForPort(port, label, deadlineMs) {
   });
 }
 
-function portFree(port) {
+export function portFree(port) {
   return new Promise((resolve) => {
     const srv = createServer();
     srv.once("error", () => resolve(false));
@@ -295,13 +481,133 @@ function portFree(port) {
   });
 }
 
-async function startMongod(bin) {
-  mkdirSync(DATA_DIR, { recursive: true });
-  if (!(await portFree(MONGO_PORT))) {
-    log(`port ${MONGO_PORT} already in use; assuming a MongoDB is running there`);
-    return null;
+/**
+ * One HTTP probe, classified. "ready" ends the phase. "fatal" ends startup
+ * now with a reason (no amount of waiting fixes a 404 from a server that is
+ * not in singleplayer mode). "waiting" keeps polling, carrying the reason so
+ * a repeated server error is reported instead of hidden.
+ */
+export async function probe(url, { fetchImpl = fetch, timeoutMs = PROBE_TIMEOUT_MS } = {}) {
+  let res;
+  try {
+    res = await fetchImpl(url, {
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: PROBE_REDIRECT,
+    });
+  } catch (error) {
+    const name = error?.name ?? "";
+    if (name === "TimeoutError" || name === "AbortError")
+      return { state: "waiting", reason: `no answer within ${Math.round(timeoutMs / 1000)}s` };
+    return { state: "waiting", reason: error?.cause?.code ?? error?.message ?? String(error) };
   }
-  if (shuttingDown) return null;
+  if (res.ok) return { state: "ready" };
+  const body = await res.text().catch(() => "");
+  const summary = summarizeBody(body);
+  if (res.status === 404)
+    return {
+      state: "fatal",
+      reason:
+        "the server answered 404: it is not running in singleplayer mode " +
+        "(SINGLEPLAYER=1 was not honoured or a deployment marker is set)",
+    };
+  if (res.status === 403)
+    return { state: "fatal", reason: `the server refused the request (403): ${summary}` };
+  return { state: "waiting", reason: `HTTP ${res.status}${summary ? `: ${summary}` : ""}` };
+}
+
+function summarizeBody(body) {
+  if (!body) return "";
+  try {
+    const parsed = JSON.parse(body);
+    const message = parsed?.error?.message ?? parsed?.error ?? parsed?.message;
+    if (typeof message === "string") return message.slice(0, 300);
+  } catch {
+    // Not JSON.
+  }
+  return body.replace(/\s+/g, " ").slice(0, 300);
+}
+
+/**
+ * Poll one URL until it answers 200, reporting progress every few seconds and
+ * every distinct error once. Returns the elapsed milliseconds.
+ */
+export async function waitForAnswer(
+  url,
+  phase,
+  deadlineMs,
+  { fetchImpl = fetch, probeTimeoutMs = PROBE_TIMEOUT_MS, sleepMs = 1000, log: report = log } = {}
+) {
+  const started = Date.now();
+  const label = PHASES[phase].label;
+  report(label);
+  let nextProgressAt = 5;
+  let lastReason = null;
+  for (;;) {
+    // A probe never outlives the phase: a silent server must fail at the
+    // deadline, not one full probe timeout after it.
+    const remaining = deadlineMs - (Date.now() - started);
+    const timeoutMs = Math.max(250, Math.min(probeTimeoutMs, remaining));
+    const result = await probe(url, { fetchImpl, timeoutMs });
+    if (result.state === "ready") return Date.now() - started;
+    if (result.state === "fatal") throw new StartupError(phase, result.reason);
+    if (result.reason && result.reason !== lastReason) {
+      lastReason = result.reason;
+      if (
+        !/^no answer within/.test(result.reason) &&
+        !/ECONNREFUSED|ECONNRESET/.test(result.reason)
+      )
+        report(`the game reported: ${result.reason}`);
+    }
+    const elapsed = Date.now() - started;
+    if (elapsed > deadlineMs) {
+      throw new StartupError(phase, `no answer within ${Math.round(deadlineMs / 1000)}s`, {
+        lastResponse: lastReason,
+      });
+    }
+    const elapsedSeconds = Math.round(elapsed / 1000);
+    if (elapsedSeconds >= nextProgressAt) {
+      nextProgressAt = elapsedSeconds + 5;
+      report(`still ${label} (${elapsedSeconds}s)`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, sleepMs));
+  }
+}
+
+/**
+ * Two questions, in order. First: does the server answer anything at all?
+ * (/api/health is a tiny route with no database.) Once it does, the game's
+ * code is loaded and any further wait is ours, not Next's. Second: does the
+ * singleplayer status route answer? That provisions the local account, so a
+ * host that acts on the ready line never races first-run setup.
+ */
+export async function waitForGame(base, deadlineMs, options = {}) {
+  const timings = {};
+  const started = Date.now();
+  if (!(options.skipHealthProbe ?? SKIP_HEALTH_PROBE))
+    timings.code = await waitForAnswer(`${base}/api/health`, "code", deadlineMs, options);
+  const remaining = Math.max(Math.min(15_000, deadlineMs), deadlineMs - (Date.now() - started));
+  timings.account = await waitForAnswer(
+    `${base}/api/singleplayer/status`,
+    "account",
+    remaining,
+    options
+  );
+  return timings;
+}
+
+export function formatTimings(timings) {
+  return Object.entries(timings)
+    .map(([phase, ms]) => `${phase} ${(ms / 1000).toFixed(1)}s`)
+    .join(", ");
+}
+
+// ---------------------------------------------------------------------------
+// Processes.
+// ---------------------------------------------------------------------------
+
+const MONGO_LOG = path.join(HOME, "mongod.log");
+
+async function spawnMongod(bin) {
   const child = spawn(
     bin,
     [
@@ -312,28 +618,73 @@ async function startMongod(bin) {
       "--bind_ip",
       "127.0.0.1",
       "--logpath",
-      path.join(HOME, "mongod.log"),
+      MONGO_LOG,
       "--logappend",
     ],
-    { stdio: ["ignore", "ignore", "inherit"] }
+    { stdio: ["ignore", "ignore", "pipe"] }
   );
-  // Track ownership before waiting for the port, including startup cancellation.
+  captureOutput(child, mongoTail);
   mongo = child;
-  child.once("exit", (code) => {
-    if (!shuttingDown) {
-      console.error(
-        `[ahd] MongoDB exited unexpectedly (code ${code}). See ${path.join(HOME, "mongod.log")}`
+  let spawnErrorCode;
+  const earlyFailure = new Promise((resolve) => {
+    child.once("error", (error) => {
+      spawnErrorCode = error?.code ?? "UNKNOWN";
+      resolve(
+        new StartupError("database", `MongoDB could not be started: ${error.message}`, {
+          spawnErrorCode,
+        })
       );
-      if (WIN && (code === 3221225781 || code === -1073741515)) {
-        console.error(
-          `[ahd] That code means a missing Visual C++ runtime. Run ${path.join(MONGO_DIR, "vc_redist.x64.exe")} once, then start again.`
-        );
-      }
-      process.exit(1);
-    }
+    });
+    child.once("exit", (code) => {
+      const why = explainMongoExit(code);
+      resolve(
+        new StartupError(
+          "database",
+          `MongoDB exited with code ${code} before opening its port.${why ? ` ${why}` : ""}`,
+          { exitCode: code }
+        )
+      );
+    });
   });
-  await waitForPort(MONGO_PORT, "MongoDB", 60_000);
+  await waitForPort(MONGO_PORT, "database", 60_000, {
+    onExit: (fail) => earlyFailure.then(fail),
+  });
+  child.once("exit", (code) => {
+    if (shuttingDown) return;
+    const why = explainMongoExit(code);
+    console.error(
+      `[ahd] MongoDB exited unexpectedly (code ${code}).${why ? ` ${why}` : ""} See ${MONGO_LOG}`
+    );
+    process.exit(1);
+  });
   return child;
+}
+
+/**
+ * Start MongoDB, recovering from the one failure a player can do nothing
+ * about: a cached download that no longer runs is fetched again, once. Every
+ * other exit is explained (port taken, incompatible data files, missing
+ * Visual C++ runtime) rather than retried.
+ */
+async function startMongod(bin) {
+  mkdirSync(DATA_DIR, { recursive: true });
+  if (!(await portFree(MONGO_PORT))) {
+    log(`port ${MONGO_PORT} already in use; assuming a MongoDB is running there`);
+    return null;
+  }
+  if (shuttingDown) return null;
+  try {
+    return await spawnMongod(bin);
+  } catch (error) {
+    const { exitCode, spawnErrorCode } = error?.details ?? {};
+    if (bin === MONGOD && !shuttingDown && mongoBinaryLooksBroken(exitCode, spawnErrorCode)) {
+      log(`the cached MongoDB does not run (${error.message}); fetching a fresh copy once`);
+      await rm(MONGO_DIR, { recursive: true, force: true });
+      const fresh = await fetchMongod();
+      return await spawnMongod(fresh);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -351,9 +702,12 @@ function persistentSecret(name) {
 }
 
 function startApp() {
-  const server = path.join(HERE, "server.js");
+  // SINGLEPLAYER_SERVER_JS exists for the launcher's own tests, which point
+  // it at a stub. Players never set it.
+  const server = process.env.SINGLEPLAYER_SERVER_JS || path.join(HERE, "server.js");
   if (!existsSync(server))
-    throw new Error(
+    throw new StartupError(
+      "server",
       `server.js not found next to the launcher (${HERE}). Run scripts/singleplayer/package.mjs first.`
     );
   const env = {
@@ -369,7 +723,23 @@ function startApp() {
     PORT: String(APP_PORT),
     HOSTNAME: "127.0.0.1",
   };
-  const child = spawn(process.execPath, [server], { env, stdio: "inherit" });
+  // Captured pipes, never inherited handles. This is the Windows first-start
+  // fix: when the launcher itself runs under a host's pipes (the desktop
+  // client, the smoke test) and the game server inherited those same handles,
+  // the server on Windows accepted connections but answered nothing, for as
+  // long as anyone waited. Bisected on a Windows runner 2026-09-06 against
+  // one build: inherited stdio froze every time, captured pipes never did.
+  // Capturing is also what lets a failure report include the server's output.
+  //
+  // A turn allocates hundreds of MB of short-lived objects while decoding
+  // documents. V8's default young generation (16MB semi-spaces) collects that
+  // constantly; 64MB cut GC from 10% to 7% of turn CPU in profiling and shaved
+  // about 2s off a 24s turn. Costs ~150MB of memory, which a desktop has.
+  const child = spawn(process.execPath, ["--max-semi-space-size=64", server], {
+    env,
+    stdio: APP_STDIO_INHERIT ? "inherit" : ["ignore", "pipe", "pipe"],
+  });
+  if (!APP_STDIO_INHERIT) captureOutput(child, appTail);
   child.once("exit", (code) => {
     if (!shuttingDown) {
       console.error(`[ahd] app exited unexpectedly (code ${code})`);
@@ -377,6 +747,16 @@ function startApp() {
     }
   });
   return child;
+}
+
+/** Rejects when the app exits, so a port wait never outlives the process it waits on. */
+function appExit(child) {
+  return (fail) =>
+    child.once("exit", (code) =>
+      fail(
+        new StartupError("server", `the game server exited with code ${code} before it was ready`)
+      )
+    );
 }
 
 function openBrowser(url) {
@@ -392,36 +772,6 @@ function openBrowser(url) {
   child.unref();
 }
 
-/**
- * The port opens before the game is usable: on a fresh database the server
- * seeds its reference data during the first request, which can take a
- * while. "ready" means the singleplayer status route answers, nothing less,
- * so a host that acts on the ready line never races that setup.
- */
-async function waitForGame(base, deadlineMs) {
-  const started = Date.now();
-  let nextProgressAt = 0;
-  for (;;) {
-    try {
-      const res = await fetch(`${base}/api/singleplayer/status`, {
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (res.ok) return;
-    } catch {
-      // Not up yet.
-    }
-    if (Date.now() - started > deadlineMs) {
-      throw new Error(`the game did not answer within ${deadlineMs / 1000}s of its port opening`);
-    }
-    const elapsedSeconds = Math.round((Date.now() - started) / 1000);
-    if (elapsedSeconds >= nextProgressAt) {
-      nextProgressAt = elapsedSeconds + 5;
-      log(`still building the world (${elapsedSeconds}s): preparing its first turn`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-}
-
 async function warmAssets(base) {
   try {
     const status = await (await fetch(`${base}/api/singleplayer/status`)).json();
@@ -430,8 +780,6 @@ async function warmAssets(base) {
     // Purely a nicety; the /cdn route fetches on demand anyway.
   }
 }
-
-// ---------------------------------------------------------------------------
 
 /**
  * A host app that dies without warning (crash, force quit, Windows has no
@@ -453,49 +801,135 @@ function watchParent() {
 }
 
 let shuttingDown = false;
-// The desktop supervisor owns stdin. Use a bounded line protocol so stopping
-// one world terminates its children before the desktop starts another world.
-let controlInput = "";
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (chunk) => {
-  controlInput = (controlInput + chunk).slice(-128);
-  const lines = controlInput.split("\n");
-  controlInput = lines.pop() ?? "";
-  if (lines.some((line) => line.trim() === "shutdown")) shutdown(0);
-});
-
 let mongo = null;
 let app = null;
+const appTail = new OutputTail();
+const mongoTail = new OutputTail();
+
+let gameBase = null;
+let gameReady = false;
+
+/** Resolves when the child exits, or after `ms` if it does not. */
+function exited(child, ms) {
+  return new Promise((resolve) => {
+    if (!child || child.exitCode !== null || child.signalCode !== null) return resolve(true);
+    const timer = setTimeout(() => resolve(false), ms);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+}
+
+/**
+ * Stop cleanly, database first.
+ *
+ * Order matters. The game server is asked to run MongoDB's shutdown command,
+ * which flushes the journal and checkpoints; that is the only clean stop on
+ * Windows, where there is no signal to send. A hard stop there loses the last
+ * hundred milliseconds of acknowledged writes, and after "end turn" that is
+ * the write saying the turn finished. The command is issued first so that
+ * even a host that kills this launcher two seconds after asking for shutdown
+ * (the desktop client does) leaves a MongoDB that finishes on its own. Then we
+ * wait for MongoDB to exit before exiting ourselves, so the next start never
+ * finds the previous one still holding the data directory.
+ */
+async function stopEverything(code) {
+  const ownMongo = mongo;
+  let clean = false;
+  if (ownMongo && gameReady && gameBase) {
+    try {
+      const res = await fetch(`${gameBase}/api/singleplayer/shutdown`, {
+        method: "POST",
+        signal: AbortSignal.timeout(5_000),
+      });
+      clean = res.ok;
+      if (!res.ok) log(`the game could not stop the database cleanly (HTTP ${res.status})`);
+    } catch (error) {
+      log(`the game could not stop the database cleanly (${error?.message ?? error})`);
+    }
+  }
+  // The game server goes as soon as the database has been told to stop. A
+  // host that kills this launcher shortly after asking for shutdown (the
+  // desktop client waits under two seconds) must not leave the server
+  // orphaned on its port while MongoDB finishes checkpointing.
+  app?.kill();
+  if (ownMongo) {
+    if (!clean) ownMongo.kill("SIGTERM");
+    const done = await exited(ownMongo, SHUTDOWN_TIMEOUT_MS);
+    if (!done) {
+      log("MongoDB did not stop in time; forcing it");
+      ownMongo.kill("SIGKILL");
+      await exited(ownMongo, 3_000);
+    }
+    log(clean ? "database stopped cleanly" : "database stopped");
+  }
+  await exited(app, 3_000);
+  process.exit(code);
+}
 
 function shutdown(code = 0) {
   if (shuttingDown) return;
   shuttingDown = true;
   log("shutting down");
-  app?.kill();
-  // SIGTERM gives WiredTiger a clean checkpoint; Windows has no signal so it
-  // is a hard stop there and the journal recovers on the next start.
-  mongo?.kill("SIGTERM");
-  setTimeout(() => process.exit(code), 1500).unref();
+  // Whatever happens above, never outlive the deadline.
+  setTimeout(() => process.exit(code), SHUTDOWN_TIMEOUT_MS + 6_000).unref();
+  void stopEverything(code).catch(() => process.exit(code));
 }
 
-process.on("SIGINT", () => shutdown(0));
-process.on("SIGTERM", () => shutdown(0));
-
-try {
-  mkdirSync(HOME, { recursive: true });
-  const bin = await findMongod();
-  if (shuttingDown) process.exit(0);
-  mongo = await startMongod(bin);
-  if (shuttingDown) process.exit(0);
-  app = startApp();
-  await waitForPort(APP_PORT, "app", 120_000);
-  const base = `http://127.0.0.1:${APP_PORT}`;
-  await waitForGame(base, 120_000);
-  log(`ready at ${base}`);
-  if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);
-  void warmAssets(base);
-  watchParent();
-} catch (error) {
-  console.error("[ahd]", error instanceof Error ? error.message : error);
-  shutdown(1);
+function listenForControl() {
+  // The desktop supervisor owns stdin. Use a bounded line protocol so stopping
+  // one world terminates its children before the desktop starts another world.
+  let controlInput = "";
+  process.stdin.setEncoding("utf8");
+  process.stdin.on("data", (chunk) => {
+    controlInput = (controlInput + chunk).slice(-128);
+    const lines = controlInput.split("\n");
+    controlInput = lines.pop() ?? "";
+    if (lines.some((line) => line.trim() === "shutdown")) shutdown(0);
+  });
+  process.stdin.on("error", () => {});
+  process.on("SIGINT", () => shutdown(0));
+  process.on("SIGTERM", () => shutdown(0));
 }
+
+async function main() {
+  listenForControl();
+  const timings = {};
+  try {
+    mkdirSync(HOME, { recursive: true });
+    const bin = await findMongod();
+    if (shuttingDown) process.exit(0);
+    let at = Date.now();
+    log(PHASES.database.label);
+    mongo = await startMongod(bin);
+    timings.database = Date.now() - at;
+    if (shuttingDown) process.exit(0);
+    at = Date.now();
+    log(PHASES.server.label);
+    app = startApp();
+    await waitForPort(APP_PORT, "server", PORT_TIMEOUT_MS, { onExit: appExit(app) });
+    timings.server = Date.now() - at;
+    const base = `http://127.0.0.1:${APP_PORT}`;
+    gameBase = base;
+    Object.assign(timings, await waitForGame(base, READY_TIMEOUT_MS));
+    gameReady = true;
+    log(`startup took ${formatTimings(timings)}`);
+    log(`ready at ${base}`);
+    if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);
+    void warmAssets(base);
+    watchParent();
+  } catch (error) {
+    const report =
+      error instanceof StartupError
+        ? formatStartupFailure(error, {
+            appTail: appTail.snapshot(),
+            mongoLogTail: [...mongoTail.snapshot(), ...tailOfFile(MONGO_LOG)].slice(-15),
+          })
+        : `[ahd] ${error instanceof Error ? error.message : error}`;
+    console.error(report);
+    shutdown(1);
+  }
+}
+
+if (!process.env.AHD_LAUNCH_LIBRARY) await main();

@@ -47,7 +47,10 @@ export async function processSoeRemittance(db: Db, now: Date): Promise<{ remitte
   const [allSectors, fxByCurrency, plants] = await Promise.all([
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({ corporationId: { $in: corpIds } })
+      .find(
+        { corporationId: { $in: corpIds } },
+        { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+      )
       .toArray(),
     loadFxRatesByCurrency(db),
     loadPlantsBudgetContext(db),

@@ -105,7 +105,19 @@ export async function processNppFundGeneration(
 
   // Technocrat NPPs (e.g. autonomous central-bank chairs) are excluded via
   // isTechnocrat: { $ne: true } — they don't generate political campaign funds.
-  const cursor = db.collection<NPP>("npps").find({ retiredAt: null, isTechnocrat: { $ne: true } });
+  const cursor = db.collection<NPP>("npps").find(
+    { retiredAt: null, isTechnocrat: { $ne: true } },
+    {
+      projection: {
+        homeState: 1,
+        countryId: 1,
+        funds: 1,
+        donorBaseLevel: 1,
+        party: 1,
+        actionPoints: 1,
+      },
+    }
+  );
   let batch: NPP[] = [];
 
   const processBatch = async (npps: NPP[]) => {

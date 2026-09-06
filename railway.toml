@@ -35,7 +35,14 @@ builder = "NIXPACKS"
 #
 # Headroom also relieves the GC pressure that correlates with the median turn
 # duration climbing 46s -> 114s over the preceding fortnight.
-startCommand = "NODE_OPTIONS=--max-old-space-size=3072 HOSTNAME=0.0.0.0 npx next start"
+#
+# --max-semi-space-size=64 (added 2026-09-06): a turn allocates hundreds of MB
+# of short-lived objects while decoding documents, and V8's default 16 MB
+# young-generation semi-spaces collect that constantly. 64 MB cut GC from 10%
+# to 7% of turn CPU in a local profile and about 2s off a 24s turn; it costs
+# ~150 MB of the 3 GB old-space budget above. Same flag ships in the
+# singleplayer launcher (scripts/singleplayer/launch.mjs).
+startCommand = "NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" HOSTNAME=0.0.0.0 npx next start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

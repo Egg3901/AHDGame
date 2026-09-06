@@ -33,6 +33,7 @@ import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
 import {
   calculateCreditRating,
   calculateInterestRate,
@@ -373,7 +374,11 @@ export async function issueAdminSovereignBondSeries(
     const budgetId = getNationalBudgetId(countryId);
     const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
     if (!budget) return null;
-    issueAmount = calculateQuarterlyIssuanceAmount(Math.max(0, -(budget.surplus ?? 0)));
+    // Derived, not read. `surplus` is a cache of `revenue.total - spending.total`
+    // that drifts intra-turn through every writer's read-modify-write, and this runs
+    // inside the turn, before the end-of-turn reconciliation lands. Reading the cache
+    // here sized a quarter's sovereign issuance off a stale deficit.
+    issueAmount = calculateQuarterlyIssuanceAmount(Math.max(0, -federalSurplus(budget)));
   }
 
   return issueSovereignBondSeries(db, { countryId, turn, now, issueAmount, maturityTurns });

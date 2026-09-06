@@ -8,7 +8,12 @@ import type {
 } from "@/lib/db/types";
 import type { Db } from "mongodb";
 import { createTurnPhaseTelemetry } from "@/simulation/engine/phaseTelemetry";
-import { beginPhaseProfiling, endPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
+import {
+  beginPhaseProfiling,
+  endPhaseProfiling,
+  phaseRoundTrips,
+} from "@/lib/observability/mongoRoundTrips";
+import { roundTripBudgetFor } from "./turnPhaseBudgets";
 import { withSpan } from "@/lib/observability/spans";
 import type { TurnPhaseRuntime } from "@/simulation/engine/types";
 import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
@@ -109,12 +114,21 @@ export function createTurnPhaseRuntime(input: {
       reason?: TurnPhaseSkipReason;
       message?: string;
       touchHeartbeat?: boolean;
+      roundTrips?: number;
+      roundTripBudget?: number;
     } = {}
   ): Promise<void> {
     const now = new Date();
     const current = phaseStatuses[phase] ?? createTurnPhaseTelemetry(now, "pending");
     const next: TurnPhaseTelemetry = {
       ...current,
+      ...(options.roundTrips != null && options.roundTripBudget != null
+        ? {
+            roundTrips: options.roundTrips,
+            roundTripBudget: options.roundTripBudget,
+            overBudget: options.roundTrips > options.roundTripBudget,
+          }
+        : {}),
       status,
       updatedAt: now,
       startedAt:
@@ -265,7 +279,23 @@ export function createTurnPhaseRuntime(input: {
         };
         recordAudit(entry);
       }
-      void setPhaseStatus(name, "completed").catch((err) =>
+      // Round-trip budget (see turnPhaseBudgets.ts). Warn-only: a phase over
+      // budget is a perf regression to fix, not a failed turn.
+      const roundTrips = phaseRoundTrips(name);
+      const roundTripBudget = roundTripBudgetFor(name);
+      if (roundTrips > roundTripBudget) {
+        console.warn(
+          `[Turn] Phase "${name}" issued ${roundTrips} Mongo round trips, over its budget of ${roundTripBudget}. ` +
+            `Probably a per-row query; see src/simulation/engine/turnPhaseBudgets.ts.`
+        );
+        Sentry.addBreadcrumb({
+          category: "turn.phase",
+          message: `Phase "${name}" over round-trip budget`,
+          level: "warning",
+          data: { phase: name, roundTrips, roundTripBudget },
+        });
+      }
+      void setPhaseStatus(name, "completed", { roundTrips, roundTripBudget }).catch((err) =>
         console.warn(`[Turn] Failed to mark phase "${name}" completed`, err)
       );
       return result;
