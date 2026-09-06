@@ -1,3 +1,4 @@
+import type { Db, ObjectId } from "mongodb";
 import type { Bond, Character, Corporation } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
@@ -28,6 +29,8 @@ import { getPublicShareQuote } from "@/lib/corporations/marketQuote";
 export interface CharacterWealth {
   stockValue: number;
   bondValue: number;
+  /** Index fund units x quoted NAV, in ₳. */
+  fundValue: number;
   portfolioValue: number;
   cashValue: number;
   locDebtValue: number;
@@ -104,6 +107,62 @@ export function sumBondValueByCharacter(
   return byCharId;
 }
 
+export type FundPositionSlice = {
+  fundId: ObjectId;
+  characterId?: ObjectId;
+  units?: number;
+};
+
+/**
+ * Σ index fund holdings per character, in ₳. `quotedNav` and every other fund
+ * leg are already ₳, so units x NAV needs no conversion. Subscribing debits
+ * cash and creates a position; until this term existed the wealth list and its
+ * persisted snapshots never counted it, so buying a fund made a player look
+ * poorer while the Legacy leaderboard and portfolio history (which do count it)
+ * disagreed with the ranking.
+ */
+export function sumFundValueByCharacter(
+  positions: readonly FundPositionSlice[],
+  navByFundId: ReadonlyMap<string, number>,
+  characterIdSet: ReadonlySet<string>
+): Map<string, number> {
+  const byCharId = new Map<string, number>();
+  for (const position of positions) {
+    const charId = position.characterId?.toString();
+    if (!charId || !characterIdSet.has(charId)) continue;
+    const units = position.units ?? 0;
+    const nav = navByFundId.get(position.fundId.toString()) ?? 0;
+    const value = units * nav;
+    if (!(value > 0)) continue;
+    byCharId.set(charId, (byCharId.get(charId) ?? 0) + value);
+  }
+  return byCharId;
+}
+
+/** Load character fund positions and their funds' quoted NAV, then sum. */
+export async function loadFundValueByCharacter(
+  db: Db,
+  characterIds: readonly ObjectId[],
+  characterIdSet: ReadonlySet<string>
+): Promise<Map<string, number>> {
+  if (characterIds.length === 0) return new Map();
+  const positions = await db
+    .collection<FundPositionSlice & { holderKind: string }>("indexFundPositions")
+    .find(
+      { holderKind: "character", characterId: { $in: [...characterIds] }, units: { $gt: 0 } },
+      { projection: { fundId: 1, characterId: 1, units: 1 } }
+    )
+    .toArray();
+  if (positions.length === 0) return new Map();
+  const fundIds = [...new Map(positions.map((p) => [p.fundId.toString(), p.fundId])).values()];
+  const funds = await db
+    .collection<{ _id: ObjectId; quotedNav?: number }>("indexFunds")
+    .find({ _id: { $in: fundIds } }, { projection: { quotedNav: 1 } })
+    .toArray();
+  const navByFundId = new Map(funds.map((f) => [f._id.toString(), f.quotedNav ?? 0]));
+  return sumFundValueByCharacter(positions, navByFundId, characterIdSet);
+}
+
 /**
  * Assemble one character's valuation from the pre-aggregated portfolio maps.
  * `totalWealth` is clamped at zero: a character underwater on a line of credit
@@ -114,14 +173,16 @@ export function computeCharacterWealth(
   stockValueByCharId: ReadonlyMap<string, number>,
   bondValueByCharId: ReadonlyMap<string, number>,
   forexEnabled: boolean,
-  exchangeRates: Partial<Record<CurrencyCode, number>> | undefined
+  exchangeRates: Partial<Record<CurrencyCode, number>> | undefined,
+  fundValueByCharId: ReadonlyMap<string, number> = new Map()
 ): CharacterWealth {
   const charId = character._id.toString();
   const stockValue = roundCurrency(stockValueByCharId.get(charId) ?? 0);
   const bondValue = roundCurrency(bondValueByCharId.get(charId) ?? 0);
-  const portfolioValue = roundCurrency(stockValue + bondValue);
+  const fundValue = roundCurrency(fundValueByCharId.get(charId) ?? 0);
+  const portfolioValue = roundCurrency(stockValue + bondValue + fundValue);
   const cashValue = roundCurrency(getTotalPersonalWealth(character, forexEnabled, exchangeRates));
   const locDebtValue = roundCurrency(computeLocDebtInternal(character, exchangeRates ?? {}));
   const totalWealth = roundCurrency(Math.max(0, portfolioValue + cashValue - locDebtValue));
-  return { stockValue, bondValue, portfolioValue, cashValue, locDebtValue, totalWealth };
+  return { stockValue, bondValue, fundValue, portfolioValue, cashValue, locDebtValue, totalWealth };
 }

@@ -15,6 +15,7 @@ import {
   computeCharacterWealth,
   sumBondValueByCharacter,
   sumStockValueByCharacter,
+  loadFundValueByCharacter,
 } from "@/lib/wealth/computeCharacterWealth";
 
 function resolveCountryId(character: Pick<Character, "countryId">): CountryId {
@@ -181,6 +182,7 @@ async function computeWealthListFallback(
 
   const stockValueByCharId = sumStockValueByCharacter(corporations, characterIdSet, fxByCurrency);
   const bondValueByCharId = sumBondValueByCharacter(bonds, characterIdSet, fxByCurrency);
+  const fundValueByCharId = await loadFundValueByCharacter(db, characterIds, characterIdSet);
 
   // Fetch border data
   const borderMap = await fetchBordersByUserIds(
@@ -197,7 +199,8 @@ async function computeWealthListFallback(
           stockValueByCharId,
           bondValueByCharId,
           forexEnabled,
-          exchangeRates
+          exchangeRates,
+          fundValueByCharId
         );
       const countryId = resolveCountryId(character);
       const countryName = COUNTRY_CONFIGS[countryId]?.name ?? countryId;

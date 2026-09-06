@@ -663,6 +663,7 @@ describe("stockExchangeSnapshot", () => {
         .mockReturnValueOnce(createMockChain([]))
         .mockReturnValueOnce(createMockChain([])) // exchangeRates (loadValuationFxRates)
         .mockReturnValueOnce(createMockChain([])) // gameState preset (loadValuationFxRates)
+        .mockReturnValueOnce(createMockChain([])) // indexFundPositions (loadFundValueByCharacter)
         // wealthListSnapshots collection — bulkWrite at the end
         .mockReturnValueOnce({
           find: vi.fn().mockReturnThis(),

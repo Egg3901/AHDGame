@@ -533,6 +533,8 @@ export interface PhysicalPnl {
    * the cost model, not an input to it — see `assemblePhysicalPnl`.
    */
   derivedMarginPct: number;
+  /** `100 x profit / revenue`: margin over the full cost stack, uncapped. */
+  netMarginPct: number;
 }
 
 /**
@@ -618,9 +620,28 @@ export function assemblePhysicalPnl(args: {
   policyCredit: number;
 }): PhysicalPnl {
   const { hourlyRevenue, inputsCost, laborCost, upkeep, complianceCost, financialLegs } = args;
-  const { growthCost, policyCredit } = args;
+  const { growthCost } = args;
   let { otherOpex } = args;
   const otherOpexUncapped = otherOpex;
+  // Policy credit offsets bills; it cannot exceed them. Without this cap a
+  // sector whose policy stack outran its costs booked a NEGATIVE total cost and
+  // a profit above revenue (a live technology sector: revenue 3,694, credit
+  // 1,628, total cost -270, profit 3,965). The other-opex clamp below only
+  // engages when other opex itself is a credit, so this path slipped past it.
+  // `policyCredit` may itself be negative (a net penalty); only the credit
+  // side is bounded.
+  const billsForCredit =
+    inputsCost +
+    laborCost +
+    financialLegs +
+    Math.max(0, otherOpex) +
+    upkeep +
+    complianceCost +
+    growthCost;
+  const policyCredit =
+    args.policyCredit > 0
+      ? Math.min(args.policyCredit, Math.max(0, billsForCredit))
+      : args.policyCredit;
   const clampedOtherOpex = clampOtherOpexCredit({
     otherOpex,
     inputsCost,
@@ -643,6 +664,13 @@ export function assemblePhysicalPnl(args: {
     Number.isFinite(hourlyRevenue) && hourlyRevenue > 0
       ? Math.min(100, 100 * (1 - operatingCost / hourlyRevenue))
       : 0;
+  // Net margin over EVERY cost line, upkeep, compliance and growth included.
+  // `derivedMarginPct` deliberately keeps the old operating scope so existing
+  // readers see no step; this is the number that tells a player the sector is
+  // actually losing money (a healthcare plant read 30 percent operating margin
+  // against 8.1M of upkeep on 3.3M of revenue).
+  const netMarginPct =
+    Number.isFinite(hourlyRevenue) && hourlyRevenue > 0 ? (100 * profit) / hourlyRevenue : 0;
   return {
     inputsCost,
     laborCost,
@@ -656,6 +684,7 @@ export function assemblePhysicalPnl(args: {
     totalCost,
     profit,
     derivedMarginPct,
+    netMarginPct,
     otherOpexCreditCapped,
     otherOpexUncapped,
   };
