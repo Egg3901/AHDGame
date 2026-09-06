@@ -201,9 +201,15 @@ export async function loadBondPoolsByCurrency(db: Db): Promise<Map<CurrencyCode,
   return new Map(pools.map((pool) => [pool._id as CurrencyCode, pool]));
 }
 
+/** The part of a bond pool required to price and advance a pass-local quote snapshot. */
+export type BondPoolQuoteSnapshot = Pick<
+  BondMarketPool,
+  "cashLocal" | "targetCashLocal" | "appetiteByCountry"
+>;
+
 /** Mirror a credit (positive) or debit (negative) onto a preloaded pool snapshot. */
 export function advanceBondPoolSnapshot(
-  pools: Map<CurrencyCode, BondMarketPool> | undefined,
+  pools: Map<CurrencyCode, BondPoolQuoteSnapshot> | undefined,
   currency: CurrencyCode,
   deltaLocal: number
 ): void {
@@ -217,7 +223,7 @@ export function advanceBondPoolSnapshot(
 export async function loadBondQuote(
   db: Db,
   bond: Pick<Bond, "currencyCode" | "countryId" | "marketPrice" | "issuerType" | "defaulted">,
-  options?: { pools?: ReadonlyMap<CurrencyCode, BondMarketPool> }
+  options?: { pools?: ReadonlyMap<CurrencyCode, BondPoolQuoteSnapshot> }
 ): Promise<LoadedBondQuote> {
   const currency = bondPoolCurrency(bond);
   const pool = options?.pools
