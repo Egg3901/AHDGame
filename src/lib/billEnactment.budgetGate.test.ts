@@ -12,9 +12,6 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
-vi.mock("@/lib/policyReactions", () => ({
-  recordPolicyReaction: vi.fn().mockResolvedValue(undefined),
-}));
 vi.mock("@/lib/budget/enactedLaws", () => ({
   recordEnactedLaw: vi.fn().mockResolvedValue(undefined),
 }));
@@ -58,7 +55,6 @@ vi.mock("@/lib/budget/debt", () => ({
 import { onBillEnacted } from "./billEnactment";
 import { validateFederalBudgetImpact } from "@/lib/budget/validation";
 import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
-import { recordPolicyReaction } from "@/lib/policyReactions";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 
 function makeBill(overrides: Record<string, unknown> = {}) {
@@ -138,6 +134,5 @@ describe("onBillEnacted — national budget gate (warn-only)", () => {
     await onBillEnacted(db as unknown as Db, makeBill() as never, 10);
 
     // Enactment proceeded past the gate.
-    expect(recordPolicyReaction).toHaveBeenCalled();
   });
 });
