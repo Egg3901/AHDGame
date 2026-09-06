@@ -1,4 +1,6 @@
 import type { Db } from "mongodb";
+import type { ConflictDoc } from "@/lib/db/types/conflict";
+import { warDamageByCountry, type WarDamage } from "@/lib/military/warDamage";
 import type { CorporateSector, UnownedSector, Corporation } from "@/lib/db/types";
 import type { FederalBudget, StateBudget } from "@/lib/db/types/budget";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -446,3 +448,21 @@ export const FISCAL_TRADE_INPUTS_PROVIDER: ExternalAggregateProvider<
   name: "fiscalTradeInputs",
   run: fiscalTradeInputsProvider,
 };
+
+/**
+ * War damage per country, for the infrastructure nodes.
+ *
+ * One small read of the live conflicts per turn, shaped by the pure
+ * `warDamageByCountry`. Countries at peace, nearly all of them nearly always,
+ * are simply absent from the map and the consuming nodes fall through to zero.
+ */
+export async function warDamageProvider(db: Db): Promise<Map<string, WarDamage>> {
+  const conflicts = await db
+    .collection<ConflictDoc>("conflicts")
+    .find({ status: { $ne: "resolved" } })
+    .project<
+      Pick<ConflictDoc, "status" | "hostCountry" | "hostEntities" | "control" | "controlStart">
+    >({ status: 1, hostCountry: 1, hostEntities: 1, control: 1, controlStart: 1 })
+    .toArray();
+  return warDamageByCountry(conflicts);
+}
