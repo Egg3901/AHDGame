@@ -152,12 +152,17 @@ export function driftValueBase(
   currentValue: number,
   baseline: number,
   targetMultiplier: number,
-  isInDeficit: boolean
+  isInDeficit: boolean,
+  /** Turns this step covers; the phase runs every other turn (regionalBudgetCadence). */
+  turns = 1
 ): number {
   const target = baseline * targetMultiplier;
   // Deficit accelerates downward drift because reduced services erode property values
   const driftRate = isInDeficit ? 0.005 : 0.003;
-  const newValue = currentValue + (target - currentValue) * driftRate;
+  // `turns` steps of the per-turn rate compounded: identical to having drifted
+  // each turn separately toward a fixed target.
+  const stepRate = 1 - Math.pow(1 - driftRate, Math.max(1, turns));
+  const newValue = currentValue + (target - currentValue) * stepRate;
   const floor = baseline * 0.25;
   const ceiling = baseline * 3.0;
   return Math.max(floor, Math.min(ceiling, newValue));
@@ -256,7 +261,9 @@ function computeSpendingMultiplier(
  */
 export async function processRegionalBudgets(
   db: import("mongodb").Db,
-  turnNumber: number
+  turnNumber: number,
+  /** Turns since this phase last ran; scales the value-base drift. */
+  turnsElapsed = 1
 ): Promise<{ regionsProcessed: number }> {
   // 1. Fetch all UK regions
   const ukRegions = await db.collection<State>("states").find({ countryId: "UK" }).toArray();
@@ -428,13 +435,15 @@ export async function processRegionalBudgets(
       propertyValuePerCapita,
       propertyBaseline,
       targetMultiplier,
-      isOverBudget
+      isOverBudget,
+      turnsElapsed
     );
     const newCommercialValue = driftValueBase(
       commercialValuePerCapita,
       commercialBaseline,
       targetMultiplier,
-      isOverBudget
+      isOverBudget,
+      turnsElapsed
     );
 
     // g. Upsert the RegionalBudget document

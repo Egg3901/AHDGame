@@ -795,7 +795,51 @@ function legacyStateMetricTotal(
   );
 }
 
+/**
+ * Per-turn memo. The result is a pure function of the inputs, and a turn calls
+ * this once per sector (~4,000) while the inputs repeat per (state, sector
+ * type, strategy): every sector of a type in a state gets the same answer.
+ * Keyed on the identity of the `stateMetrics` document (a WeakMap, so it
+ * expires with the turn's lookups) and then on the scalar inputs. Callers
+ * treat the result as read-only.
+ */
+const MARGIN_MEMO = new WeakMap<object, Map<object | null, Map<string, StateMetricMarginResult>>>();
+
+function memoKey(input: StateMetricMarginInput): string {
+  return [
+    input.sectorType,
+    input.strategyId,
+    input.transitionFromStrategyId ?? "",
+    input.transitionProgress ?? 0,
+    input.countryId ?? "",
+    input.year ?? "",
+  ].join("|");
+}
+
 export function computeStateMetricMarginModifier(
+  input: StateMetricMarginInput
+): StateMetricMarginResult {
+  if (!input.stateMetrics) return computeStateMetricMarginModifierUncached(input);
+  let byOverlay = MARGIN_MEMO.get(input.stateMetrics);
+  if (!byOverlay) {
+    byOverlay = new Map();
+    MARGIN_MEMO.set(input.stateMetrics, byOverlay);
+  }
+  const overlayKey = input.politicalBaseModifiers ?? null;
+  let byKey = byOverlay.get(overlayKey);
+  if (!byKey) {
+    byKey = new Map();
+    byOverlay.set(overlayKey, byKey);
+  }
+  const key = memoKey(input);
+  const hit = byKey.get(key);
+  if (hit) return hit;
+  const result = computeStateMetricMarginModifierUncached(input);
+  byKey.set(key, result);
+  return result;
+}
+
+function computeStateMetricMarginModifierUncached(
   input: StateMetricMarginInput
 ): StateMetricMarginResult {
   const profile = getBlendedStrategyMetricMarginProfile(

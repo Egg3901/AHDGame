@@ -180,3 +180,56 @@ describe("sector metric margin profiles", () => {
     expect(legacy.cappedTotal).toBe(omitted.cappedTotal);
   });
 });
+
+describe("computeStateMetricMarginModifier memo", () => {
+  const stateMetrics = {
+    _id: "CA",
+    countryId: "US",
+    economic: { unemploymentRate: { value: 4 } },
+  } as unknown as import("@/lib/db/types").StateMetrics;
+
+  it("returns the same result object for the same state document and scalar inputs", () => {
+    const a = computeStateMetricMarginModifier({
+      sectorType: "manufacturing" as never,
+      strategyId: "standard",
+      stateMetrics,
+    });
+    const b = computeStateMetricMarginModifier({
+      sectorType: "manufacturing" as never,
+      strategyId: "standard",
+      stateMetrics,
+    });
+    expect(b).toBe(a);
+  });
+
+  it("recomputes for a different sector type, strategy, or state document", () => {
+    const base = computeStateMetricMarginModifier({
+      sectorType: "manufacturing" as never,
+      strategyId: "standard",
+      stateMetrics,
+    });
+    expect(
+      computeStateMetricMarginModifier({
+        sectorType: "technology" as never,
+        strategyId: "standard",
+        stateMetrics,
+      })
+    ).not.toBe(base);
+    expect(
+      computeStateMetricMarginModifier({
+        sectorType: "manufacturing" as never,
+        strategyId: "premium",
+        stateMetrics,
+      })
+    ).not.toBe(base);
+    // A fresh document (the next turn's lookups) must never hit last turn's memo.
+    const nextTurn = { ...stateMetrics };
+    const fresh = computeStateMetricMarginModifier({
+      sectorType: "manufacturing" as never,
+      strategyId: "standard",
+      stateMetrics: nextTurn,
+    });
+    expect(fresh).not.toBe(base);
+    expect(fresh).toEqual(base);
+  });
+});

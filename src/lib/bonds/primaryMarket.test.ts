@@ -153,6 +153,8 @@ describe("placeUnsoldBondUnits", () => {
       local: 14_280,
       currency: "USD",
     });
+    const quoteSnapshot = vi.mocked(loadBondQuote).mock.calls[0]?.[2]?.pools;
+    expect(quoteSnapshot?.get("USD")?.cashLocal).toBe(135_720);
   });
 
   it("does nothing when the pool has no cash", async () => {
