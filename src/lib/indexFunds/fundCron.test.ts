@@ -24,6 +24,7 @@ import { TURNS_PER_DAY } from "@/lib/constants/turnTime";
 vi.mock("@/lib/indexFunds/fundQueries", () => ({
   updateFundHoldings: vi.fn().mockResolvedValue(undefined),
   insertFundTransaction: vi.fn().mockResolvedValue(undefined),
+  insertFundTransactionsBulk: vi.fn().mockResolvedValue(undefined),
   // other exports used by the file but not by executeFundShareBuy
   getFundById: vi.fn(),
   listActiveFunds: vi.fn(),
@@ -46,6 +47,7 @@ vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
 }));
 
 vi.mock("@/lib/equities/marketPool", () => ({
+  loadEquityPoolsByCurrency: vi.fn().mockResolvedValue(new Map()),
   loadEquityQuote: vi.fn().mockImplementation((_db, corp: { sharePrice: number }) =>
     Promise.resolve({
       active: false,
