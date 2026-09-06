@@ -109,10 +109,7 @@ describe("applyDefenseAppropriation", () => {
     const db = stubDb({ units: [UNIT], budget: legacy, capture });
     await applyDefenseAppropriation(db, "US", 10, "1953-default");
     const filter = capture.updates[0]!.filter as { $or?: unknown[] };
-    expect(filter.$or).toEqual([
-      { treasuryBalance: 0 },
-      { treasuryBalance: { $exists: false } },
-    ]);
+    expect(filter.$or).toEqual([{ treasuryBalance: 0 }, { treasuryBalance: { $exists: false } }]);
   });
 
   it("does not accrue for a turn already passed", async () => {

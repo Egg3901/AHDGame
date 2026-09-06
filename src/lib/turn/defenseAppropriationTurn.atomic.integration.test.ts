@@ -7,8 +7,8 @@ const uri = process.env.MONGODB_URI;
 const parsedUri = uri ? new URL(uri) : null;
 const canRun = Boolean(
   parsedUri &&
-    (parsedUri.hostname === "127.0.0.1" || parsedUri.hostname === "localhost") &&
-    parsedUri.port === "27018"
+  (parsedUri.hostname === "127.0.0.1" || parsedUri.hostname === "localhost") &&
+  parsedUri.port === "27018"
 );
 const suite = canRun ? describe : describe.skip;
 
