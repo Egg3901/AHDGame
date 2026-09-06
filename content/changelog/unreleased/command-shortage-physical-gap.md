@@ -1,0 +1,20 @@
+---
+date: 2026-09-06
+title: Command shortage reads country physical gaps
+summary: >-
+  Command economies include observed country commodity shortages in shortage pressure.
+tags: [economy, commodities]
+badges: [patch]
+areas: [engine]
+era: "Beta 2"
+---
+
+## Changed
+
+Command-economy shortage pressure now consumes the prior turn's basis-explicit,
+country-scoped commodity ledger gap when the ledger tier is active. The value is
+kept as a diagnostic and is omitted during cold start or when no valid observation
+exists. Market economies and flag-off worlds remain unchanged.
+
+Physical scarcity contributes at most six shortage points, so restoring the
+missing signal has a mild direct effect on repression-related legitimacy loss.
