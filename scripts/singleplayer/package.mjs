@@ -26,8 +26,8 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", ".
 const OUT = path.join(ROOT, "dist", "singleplayer");
 const STANDALONE = path.join(ROOT, ".next", "standalone");
 
-const npx = process.platform === "win32" ? "npx.cmd" : "npx";
-const build = spawnSync(npx, ["next", "build"], {
+const nextCli = path.join(ROOT, "node_modules", "next", "dist", "bin", "next");
+const build = spawnSync(process.execPath, [nextCli, "build"], {
   cwd: ROOT,
   stdio: "inherit",
   env: {
