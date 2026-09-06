@@ -49,12 +49,18 @@ function arg(flag, fallback) {
 const HOME = path.resolve(
   arg("--home", process.env.SINGLEPLAYER_HOME || path.join(homedir(), ".a-house-divided"))
 );
+const RUNTIME_HOME = path.resolve(
+  arg("--runtime-home", process.env.SINGLEPLAYER_RUNTIME_HOME || HOME)
+);
 const APP_PORT = Number(arg("--port", process.env.PORT || 3111));
 const MONGO_PORT = Number(arg("--mongo-port", process.env.SINGLEPLAYER_MONGO_PORT || 27117));
 const OPEN_BROWSER = !process.argv.includes("--no-browser");
 const PARENT_PID = Number(arg("--parent-pid", 0));
 const DATA_DIR = path.join(HOME, "data");
-const MONGO_DIR = path.join(HOME, "mongodb");
+// The database belongs to a world, but the MongoDB executable does not. Native
+// clients pass one shared runtime directory so every world reuses the same
+// verified download.
+const MONGO_DIR = path.join(RUNTIME_HOME, "mongodb");
 const MONGOD = path.join(MONGO_DIR, WIN ? "mongod.exe" : "mongod");
 
 const log = (...parts) => console.log("[ahd]", ...parts);
