@@ -2004,9 +2004,17 @@ export function computeRawSupplyDemand(
 ): {
   global: Map<CommodityType, { supply: number; demand: number }>;
   byState: Map<string, Map<CommodityType, { supply: number; demand: number }>>;
+  /**
+   * commodity → demand units removed by the PLANTS_LEDGER_DEMAND_SUPPLY_CAP
+   * pass this turn (#1460). Recorded, never applied. A capped commodity reports
+   * supply/demand of exactly 2/3 no matter how short it is, so this is the
+   * only surviving signal of the real gap.
+   */
+  demandTruncated: Map<CommodityType, number>;
 } {
   const global = new Map<CommodityType, { supply: number; demand: number }>();
   const byState = new Map<string, Map<CommodityType, { supply: number; demand: number }>>();
+  const demandTruncated = new Map<CommodityType, number>();
 
   // Era ledger scale for every dollars-to-units leg (see `ledgerUnitScale` doc).
   // Garbage-tolerant like `safeUnitScale`: non-finite/non-positive means 1.
@@ -2400,6 +2408,7 @@ export function computeRawSupplyDemand(
       const target = Math.max(unscaled, cap);
       if (target >= bal.demand) continue;
       const factor = target / bal.demand;
+      demandTruncated.set(commodity, bal.demand - target);
       bal.demand = target;
       for (const stateMap of byState.values()) {
         const s = stateMap.get(commodity);
@@ -2410,5 +2419,5 @@ export function computeRawSupplyDemand(
 
   applyUnownedCommodityDrift(global, currentTurn);
 
-  return { global, byState };
+  return { global, byState, demandTruncated };
 }
