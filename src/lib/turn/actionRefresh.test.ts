@@ -8,13 +8,29 @@ import type { Character, GameConfig } from "@/lib/db/types";
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
+vi.mock("@/lib/api/headOfGovernment", () => ({
+  getHeadOfGovernmentCharacterId: vi.fn().mockResolvedValue(null),
+}));
+vi.mock("@/lib/countryState", () => ({
+  getCountryState: vi.fn(async (_db: unknown, countryId: string) => ({
+    governmentType: countryId === "DD" ? "parliamentaryRepublic" : "presidential",
+  })),
+}));
 
 describe("processActionRefresh", () => {
   const mockBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
   let chairRows: { chairCharacterId: unknown }[] = [];
   let cabinetRows: { characterId: unknown; countryId: string }[] = [];
   let electedRows: { characterId: unknown; officeType: string; countryId: string }[] = [];
-  let nppRows: { _id: unknown; politicalInfluence: number; favorability: number }[] = [];
+  let nppRows: {
+    _id: unknown;
+    countryId?: string;
+    party?: string;
+    politicalInfluence: number;
+    favorability: number;
+  }[] = [];
+  let governmentFormationRows: Record<string, unknown>[] = [];
+  let governmentApprovalRows: Record<string, unknown>[] = [];
   let seatedJusticeRows: { justiceCharacterId: unknown }[] = [];
   const mockNppBulkWrite = vi.fn().mockResolvedValue({ modifiedCount: 1 });
 
@@ -24,6 +40,8 @@ describe("processActionRefresh", () => {
     cabinetRows = [];
     electedRows = [];
     nppRows = [];
+    governmentFormationRows = [];
+    governmentApprovalRows = [];
     seatedJusticeRows = [];
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue({
@@ -31,12 +49,35 @@ describe("processActionRefresh", () => {
         if (name === "npps") {
           return {
             // Yield whatever NPP rows the test queued (empty by default).
-            find: vi.fn().mockImplementation(() =>
-              (async function* () {
+            find: vi.fn().mockImplementation(() => ({
+              toArray: vi.fn().mockResolvedValue(nppRows),
+              [Symbol.asyncIterator]: async function* () {
                 for (const npp of nppRows) yield npp;
-              })()
-            ),
+              },
+            })),
             bulkWrite: mockNppBulkWrite,
+          };
+        }
+        if (name === "governmentFormations" || name === "parliamentaryGovernments") {
+          return {
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue(governmentFormationRows),
+            }),
+            bulkWrite: mockBulkWrite,
+          };
+        }
+        if (name === "governmentApprovals") {
+          return {
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue(governmentApprovalRows),
+            }),
+            bulkWrite: mockBulkWrite,
+          };
+        }
+        if (name === "characters") {
+          return {
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+            bulkWrite: mockBulkWrite,
           };
         }
         if (name === "centralBanks") {
@@ -81,7 +122,11 @@ describe("processActionRefresh", () => {
             }),
           };
         }
-        return { bulkWrite: mockBulkWrite };
+        return {
+          bulkWrite: mockBulkWrite,
+          findOne: vi.fn().mockResolvedValue(null),
+          insertOne: vi.fn().mockResolvedValue(undefined),
+        };
       }),
     } as never);
   });
@@ -574,6 +619,29 @@ describe("processActionRefresh", () => {
     expect(byId.nppOnFloor.politicalInfluence).toBe(10);
     expect(byId.nppAbove.politicalInfluence).toBeCloseTo(30 - 30 * 0.0075, 5);
     expect(byId.nppShell.politicalInfluence).toBe(1);
+  });
+
+  it("applies the government approval drain to an NPP head of government", async () => {
+    const { processActionRefresh } = await import("./actionRefresh");
+    const pmNppId = "nppExecutive" as never;
+    nppRows = [
+      {
+        _id: pmNppId,
+        countryId: "DD",
+        party: "sed",
+        politicalInfluence: 10,
+        favorability: 50,
+      },
+    ];
+    governmentFormationRows = [
+      { _id: "DD", countryId: "DD", status: "formed", pmCharacterId: null, pmNppId },
+    ];
+    governmentApprovalRows = [{ _id: "DD", approvalRating: 20 }];
+
+    await processActionRefresh([], null, new Date());
+
+    const update = mockNppBulkWrite.mock.calls.at(-1)![0][0].updateOne.update.$set;
+    expect(update.favorability).toBeCloseTo(49.85, 5);
   });
 
   it("grants a DD Volkskammer deputy the same seat generation a US member gets (ticket #974)", async () => {

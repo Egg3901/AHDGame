@@ -196,6 +196,15 @@ const MAX_CONTRIBUTION = 2;
 /** Default approval when metrics are missing (used for elections and display). */
 export const BASE_APPROVAL = 50;
 
+/** Common below-neutral public-expectations drag, shown in every snapshot. */
+export const PUBLIC_EXPECTATIONS_MODIFIER: ActiveModifier = {
+  id: "public_expectations",
+  label: "Higher public expectations",
+  effect: -5,
+  marginEffect: 0,
+  source: "metric",
+};
+
 /**
  * P6d — strength of electorate ideology weighting. Each demographic group
  * weights a metric by `1 + k·(econLeanNorm·econAff + socialLeanNorm·socialAff)`
@@ -779,7 +788,8 @@ export async function snapshotApprovalHistory(
     ...war.modifiers,
     ...cabinetMods,
   ];
-  approval = applyModifiers(approval, nationalMods);
+  const allNationalMods = [PUBLIC_EXPECTATIONS_MODIFIER, ...nationalMods];
+  approval = applyModifiers(approval, allNationalMods);
 
   await db.collection<GovernmentApproval>("governmentApprovals").updateOne(
     { _id: countryId },
@@ -793,7 +803,7 @@ export async function snapshotApprovalHistory(
         warApprovalTotal: war.total,
         warExhaustion: war.exhaustion,
         warExhaustionConflictId: war.conflictId,
-        activeNationalModifiers: nationalMods,
+        activeNationalModifiers: allNationalMods,
         updatedAt: new Date(),
       },
       $push: {

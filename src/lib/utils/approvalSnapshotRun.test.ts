@@ -42,8 +42,9 @@ function wire(options: {
   conflicts?: ConflictDoc[];
   documented?: string[];
   exhaustion?: Record<string, number>;
+  seeded?: string[];
 }) {
-  const { conflicts = [], documented = [], exhaustion = {} } = options;
+  const { conflicts = [], documented = [], exhaustion = {}, seeded = [] } = options;
   db.collection("conflicts").find.mockReturnValue(cursorOf(conflicts));
   db.collection("governmentApprovals").find.mockImplementation(
     (filter: Record<string, unknown>) => {
@@ -53,6 +54,8 @@ function wire(options: {
       return cursorOf(ids.map((id) => ({ _id: id, warExhaustion: exhaustion[id] ?? 0 })));
     }
   );
+  db.collection("states").distinct.mockResolvedValue(seeded);
+  db.collection("stateMetrics").distinct.mockResolvedValue(seeded);
 }
 
 const ACTIVE = ["US", "UK", "JP", "DE", "IE", "CN"];
@@ -80,6 +83,22 @@ describe("snapshotApprovalsForTurn", () => {
     expect(snapshotted().sort()).toEqual([...ACTIVE].sort());
     expect(result.countriesProcessed).toBe(ACTIVE.length);
     expect(result.guestsReleased).toEqual([]);
+  });
+
+  it("keeps a peaceful seeded NPP country in the permanent snapshot roster", async () => {
+    wire({ seeded: ["DD", "ZZ"] });
+    const result = await run();
+    expect(snapshotted()).toContain("DD");
+    expect(snapshotted()).not.toContain("ZZ");
+    expect(result.guestsReleased).toEqual([]);
+  });
+
+  it("keeps a documented seeded country stored instead of treating it as a releasable guest", async () => {
+    wire({ seeded: ["DD"], documented: ["DD"] });
+    const result = await run();
+    expect(snapshotted()).toEqual(expect.arrayContaining(["DD"]));
+    expect(result.guestsReleased).toEqual([]);
+    expect(deleted()).toEqual([]);
   });
 
   it("pulls in a belligerent that is not a playable country", async () => {
