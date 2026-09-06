@@ -141,6 +141,10 @@ export interface User {
   patreonAdPreference?: PatreonAdPreference;
   patreonHighlightColor?: string;
   patreonProfileBorder?: ProfileBorderKey;
+  /** Server-side access grant for the official desktop singleplayer client. */
+  singleplayerEntitledAt?: Date;
+  /** Admin username that last granted desktop singleplayer access. */
+  singleplayerEntitledBy?: string;
   /** Moderator-approved name shown on the public supporter wall. */
   supporterWallName?: string | null;
   /** Set when the account's one-time Supporter++ NPP rename has been used. */

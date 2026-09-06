@@ -325,6 +325,35 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
     }
   };
 
+  const handleSetSingleplayerEntitlement = async (
+    userId: string,
+    username: string,
+    entitled: boolean
+  ) => {
+    if (
+      !confirm(
+        `${entitled ? "Grant" : "Revoke"} official desktop Singleplayer access for ${username}?`
+      )
+    )
+      return;
+    try {
+      const res = await fetch("/api/admin/users/singleplayer-entitlement", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, entitled }),
+      });
+      const data = await res.json();
+      if (!res.ok) return alert(`Error: ${data.error}`);
+      setUsers((previous) =>
+        previous.map((user) =>
+          user.id === userId ? { ...user, singleplayerEntitled: entitled } : user
+        )
+      );
+    } catch {
+      alert("Network error");
+    }
+  };
+
   const duplicateGroups = getDuplicateGroups(users);
   const duplicateUserIds = new Set(duplicateGroups.flatMap((g) => g.members.map((m) => m.id)));
   const duplicateCount = duplicateUserIds.size;
@@ -405,6 +434,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
           onResetPassword={handleResetPassword}
           onBanUser={handleBanUser}
           onDeleteUser={handleDeleteUser}
+          onSetSingleplayerEntitlement={handleSetSingleplayerEntitlement}
         />
       )}
 

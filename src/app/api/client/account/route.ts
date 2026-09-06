@@ -5,18 +5,26 @@ import type { User } from "@/lib/db/types";
 import { isPatreonActive } from "@/lib/db/types";
 import { ObjectId } from "mongodb";
 
+const OFFLINE_ENTITLEMENT_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** The desktop client uses this same-origin response to confirm its WebView session. */
 export async function GET() {
   const auth = await requireBasicAuth();
   if (!auth.ok) return auth.response;
 
   const db = await getDb();
-  const user = await db
-    .collection<User>("users")
-    .findOne(
-      { _id: new ObjectId(auth.user.userId) },
-      { projection: { displayName: 1, username: 1, patreonTier: 1, patreonExpiresAt: 1 } }
-    );
+  const user = await db.collection<User>("users").findOne(
+    { _id: new ObjectId(auth.user.userId) },
+    {
+      projection: {
+        displayName: 1,
+        username: 1,
+        patreonTier: 1,
+        patreonExpiresAt: 1,
+        singleplayerEntitledAt: 1,
+      },
+    }
+  );
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 401 });
 
   return NextResponse.json(
@@ -24,6 +32,14 @@ export async function GET() {
       linked: true,
       displayName: user.displayName || user.username,
       supporter: isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null),
+      singleplayer: {
+        entitled: Boolean(user.singleplayerEntitledAt),
+        // A bounded cache keeps officially entitled players working through a
+        // short outage without making revocation permanently ineffective.
+        expiresAt: user.singleplayerEntitledAt
+          ? new Date(Date.now() + OFFLINE_ENTITLEMENT_GRACE_MS).toISOString()
+          : null,
+      },
     },
     { headers: { "Cache-Control": "private, no-store" } }
   );

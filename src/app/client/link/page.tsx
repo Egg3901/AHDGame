@@ -16,7 +16,10 @@ export default async function ClientLinkPage() {
             Sign in to connect this browser session to the AHD desktop client.
           </p>
           <Link
-            href="/login?returnTo=https%3A%2F%2Fauth.ahousedividedgame.com%2Fauth%2Fahd%3Freturn%3D%252Fclient%252Flink"
+            // The account service only accepts its own explicit continuation
+            // URLs. A nested `/client/link` return is rejected there before a
+            // desktop WebView can receive the session cookie.
+            href="/login"
             className="mt-6 inline-flex rounded-xl bg-primary px-5 py-2.5 font-medium text-primary-foreground"
           >
             Sign in to continue

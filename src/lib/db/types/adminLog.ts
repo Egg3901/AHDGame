@@ -49,6 +49,8 @@ export type AdminLogAction =
   | "first_joiner_party_chair_enabled"
   | "first_joiner_party_chair_disabled"
   | "patreon_status_set"
+  | "singleplayer_entitlement_granted"
+  | "singleplayer_entitlement_revoked"
   | "moderator_assigned"
   | "moderator_removed"
   | "line_of_credit_enabled"
