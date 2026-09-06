@@ -458,6 +458,7 @@ export function GeneralPhaseView({
             electorate={blendElectorate}
             partyDisplayById={election.partyDisplayById}
             showCollegeSummary={showCollegeSummary}
+            showTrends={!tabbedDetail}
           />
         ) : (
           <GeneralElectionNoTallyPanel
