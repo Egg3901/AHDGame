@@ -73,7 +73,10 @@ export async function processNppStanceDrift(
           homeState: 1,
           countryId: 1,
           party: 1,
-          policies: 1,
+          // Only the two axes are read; domainPositions (30KB per NPP) is
+          // re-derived from them below and overwritten, never read.
+          "policies.economic": 1,
+          "policies.social": 1,
           personality: 1,
         },
       }
@@ -103,6 +106,7 @@ export async function processNppStanceDrift(
   const partyByKey = new Map(parties.map((p) => [`${p.countryId}:${p.sequentialId}`, p]));
 
   const legislationTypes = await db
+    // full-read(legislationTypes): deriveDomainPositions derives a stance from every type
     .collection<LegislationType>("legislationTypes")
     .find({})
     .toArray();

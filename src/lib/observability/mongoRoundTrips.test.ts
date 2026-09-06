@@ -4,7 +4,9 @@ import {
   endPhaseProfiling,
   formatRoundTripReport,
   recordRoundTrip,
+  phaseRoundTrips,
   recordDocumentsReturned,
+  totalBytesReturned,
   resetRoundTripProfiler,
   roundTripProfilingEnabled,
   roundTripReport,
@@ -28,16 +30,21 @@ afterEach(() => {
 });
 
 describe("round-trip profiler", () => {
-  it("stays completely inert unless the flag is set", () => {
+  it("counts round trips even when the flag is off, but reports nothing", () => {
     delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
     resetRoundTripProfiler();
 
     expect(roundTripProfilingEnabled()).toBe(false);
     beginPhaseProfiling("corporationTurn");
     recordRoundTrip("corporations");
+    recordRoundTrip("corporations");
     endPhaseProfiling("corporationTurn");
 
-    expect(totalRoundTrips()).toBe(0);
+    // Counting is always on: runPhase compares every phase against its
+    // round-trip budget on every turn. Only the byte accounting and the
+    // printed report need the flag.
+    expect(phaseRoundTrips("corporationTurn")).toBe(2);
+    expect(totalRoundTrips()).toBe(2);
     expect(formatRoundTripReport()).toBeNull();
   });
 
@@ -86,6 +93,7 @@ describe("round-trip profiler", () => {
       collection: "corporations",
       roundTrips: 300,
       documents: 0,
+      bytes: 0,
     });
   });
 
@@ -123,7 +131,7 @@ describe("round-trip profiler", () => {
     const text = formatRoundTripReport()!;
     expect(text).toContain("100 round trips");
     expect(text).toContain("heavy");
-    expect(text).toContain("corporations 0d/75t");
+    expect(text).toContain("corporations 0.0M/0d/75t");
   });
 });
 
@@ -147,6 +155,7 @@ describe("document counting", () => {
       collection: "ledgerEntries",
       roundTrips: 1,
       documents: 61398,
+      bytes: 0,
     });
   });
 
@@ -170,6 +179,37 @@ describe("document counting", () => {
     expect(totalRoundTrips()).toBe(501);
   });
 
+  /**
+   * Documents are not equal: an NPP is 31KB and a fund position is 150 bytes.
+   * Bytes are what BSON decoding actually costs, so when they are known they
+   * outrank the document count.
+   */
+  it("ranks phases by bytes ahead of documents", () => {
+    enable();
+    beginPhaseProfiling("manySmall");
+    recordRoundTrip("indexFundPositions");
+    recordDocumentsReturned("indexFundPositions", 7000, 7000 * 150);
+    endPhaseProfiling("manySmall");
+
+    beginPhaseProfiling("fewFat");
+    recordRoundTrip("npps");
+    recordDocumentsReturned("npps", 1700, 1700 * 31_000);
+    endPhaseProfiling("fewFat");
+
+    const report = roundTripReport();
+    expect(report.map((r) => r.phase)).toEqual(["fewFat", "manySmall"]);
+    expect(report[0]!.bytes).toBe(1700 * 31_000);
+    expect(report[0]!.topCollections[0]).toMatchObject({
+      collection: "npps",
+      bytes: 1700 * 31_000,
+    });
+    expect(totalBytesReturned()).toBe(1700 * 31_000 + 7000 * 150);
+
+    const text = formatRoundTripReport()!;
+    expect(text).toContain("BSON returned this turn");
+    expect(text).toContain("npps 50.3M/1700d/1t");
+  });
+
   it("ignores empty and negative batches", () => {
     enable();
     beginPhaseProfiling("p");
@@ -180,12 +220,13 @@ describe("document counting", () => {
     expect(totalDocumentsReturned()).toBe(0);
   });
 
-  it("records nothing when profiling is off", () => {
+  it("counts documents when profiling is off; only bytes need the flag", () => {
     delete process.env.AHD_TURN_ROUNDTRIP_PROFILE;
     resetRoundTripProfiler();
     recordDocumentsReturned("things", 100);
 
-    expect(totalDocumentsReturned()).toBe(0);
+    expect(totalDocumentsReturned()).toBe(100);
+    expect(totalBytesReturned()).toBe(0);
   });
 });
 

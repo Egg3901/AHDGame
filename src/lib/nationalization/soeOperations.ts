@@ -3,7 +3,7 @@
  * to state metrics and back operating losses from the treasury. Builders are
  * pure (testable without DB); `processSoeOperations` orchestrates the writes.
  */
-import type { Db, AnyBulkWriteOperation, Filter } from "mongodb";
+import type { Db, AnyBulkWriteOperation } from "mongodb";
 import type { Corporation, CorporateSector, StateMetrics } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import {
@@ -18,9 +18,8 @@ import type { MetricCategoryId } from "@/lib/db/types/stateMetrics";
 import { isStateOwned } from "./nationalCorporation";
 import { findMergedRegionMetricsMany } from "@/lib/macroMetrics/merge";
 import { isMacroMetricPath } from "@/lib/macroMetrics/paths";
-import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { boardDeltaForLegacyEffect } from "@/lib/politicalLegislation/legacyEffectBridge";
-import { applyBoardDelta } from "@/lib/politicalLegislation/boardWrite";
+import { applyBoardValueDeltasByRegion } from "@/lib/politicalLegislation/boardWrite";
 import {
   getMandateContributions,
   resolveSectorMandate,
@@ -314,7 +313,10 @@ export async function processSoeOperations(
   const corpIds = soeCorps.map((c) => c._id);
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: { $in: corpIds } })
+    .find(
+      { corporationId: { $in: corpIds } },
+      { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+    )
     .toArray();
 
   const stateIds = Array.from(new Set(sectors.map((s) => s.stateId)));
@@ -377,17 +379,7 @@ export async function processSoeOperations(
       .collection<StateMetrics>("macroMetrics")
       .bulkWrite(metricOps as AnyBulkWriteOperation<StateMetrics>[]);
   }
-  for (const [stateId, deltas] of boardDeltasByState) {
-    for (const d of deltas) {
-      await applyBoardDelta(
-        db,
-        { _id: stateId } as Filter<PoliticalMetricsDoc>,
-        d.familyId,
-        d.scoreDelta,
-        "value"
-      );
-    }
-  }
+  await applyBoardValueDeltasByRegion(db, boardDeltasByState);
 
   // Per-turn modernization (R&D): advance each SOE's decaying, scale-aware
   // momentum from its CEO-set budget (relative to its own revenue). The spend is
