@@ -18,11 +18,11 @@
 
 import type { Db, ObjectId } from "mongodb";
 import type { Bond, NPP } from "@/lib/db/types";
-import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
-import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
+import { bondPoolCurrency, creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 export type NppBondBuyResult =
   | {
@@ -60,7 +60,11 @@ export async function nppBuyBond(
     return { ok: false, reason: "NPPs only buy bonds in their home currency." };
   }
 
-  const pricePerUnit = BOND_UNIT_FACE_VALUE * bond.marketPrice;
+  // NPPs trade through the same live market quote as players. Using the mid
+  // here would silently waive the dealer ask spread and make away-agent cash
+  // diverge from an equivalent player purchase.
+  const quote = await loadBondQuote(db, bond);
+  const pricePerUnit = quote.askPerUnit;
   const cost = Math.round(units * pricePerUnit * 100) / 100;
   // Bond price is LOCAL; the economic account is ₳ — convert at the FX boundary.
   const rate = homeRate ?? (await nppHomeFxRate(db, npp.countryId));
@@ -100,6 +104,34 @@ export async function nppBuyBond(
   }
 
   await creditBondPool(db, bondPoolCurrency(bond), cost, "purchasesIn", now);
+
+  // NPP investment cash is a first-class financial subject. Keep this row
+  // separate from character/corporation activity so the shadow ledger can
+  // audit the same settlement that the player route records.
+  await emitTx(db, {
+    type: "bond_purchase",
+    turn: currentTurn,
+    createdAt: now,
+    subjectType: "npp",
+    subjectId: npp._id,
+    subjectName: `NPP ${npp._id.toString()}`,
+    // The financial transaction is denominated in the bond's home currency;
+    // the NPP wallet's authoritative balance remains anchor-denominated.
+    amount: -cost,
+    balanceAfter: (deducted.nppInvestmentCashAnchor ?? 0) * rate,
+    currencyCode: bondPoolCurrency(bond),
+    anchorAmount: -costAnchor,
+    counterpartyType: "system",
+    counterpartyName: bond.issuerName ?? "Bond market",
+    meta: {
+      bondId: bondId.toString(),
+      units,
+      pricePerUnit,
+      bondCurrency: bondPoolCurrency(bond),
+      bondAmount: -cost,
+      accountBalanceUnit: "anchor",
+    },
+  });
 
   return {
     ok: true,
