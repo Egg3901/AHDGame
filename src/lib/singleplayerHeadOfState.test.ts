@@ -29,8 +29,11 @@ describe("singleplayer head of state seating", () => {
       updateMany: vi.fn().mockResolvedValue({}),
       updateOne: vi.fn().mockResolvedValue({}),
     };
+    const npps = { updateMany: vi.fn().mockResolvedValue({}) };
     const db = {
-      collection: vi.fn((name: string) => (name === "characters" ? characters : electedOfficials)),
+      collection: vi.fn((name: string) =>
+        name === "characters" ? characters : name === "npps" ? npps : electedOfficials
+      ),
     };
 
     await expect(
@@ -45,8 +48,13 @@ describe("singleplayer head of state seating", () => {
       expect.objectContaining({ officeType: "president" }),
       expect.objectContaining({
         $set: expect.objectContaining({ characterId, characterName: "Local President" }),
+        $unset: { nppId: "" },
       }),
       { upsert: true }
+    );
+    expect(npps.updateMany).toHaveBeenCalledWith(
+      { countryId: "US", "currentOffice.type": "president" },
+      { $set: { currentOffice: null, updatedAt: expect.any(Date) } }
     );
     expect(characters.updateOne).toHaveBeenCalledWith(
       { _id: characterId },

@@ -1,5 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
-import type { Character, ElectedOfficial, OfficeType } from "@/lib/db/types";
+import type { Character, ElectedOfficial, NPP, OfficeType } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { appointPrimeMinister } from "@/lib/turn/parliamentaryGovernment";
@@ -53,11 +53,24 @@ export async function seatSingleplayerHeadOfState(
       ? getExecutiveOfficialFilter(args.countryId, "president")
       : { countryId: args.countryId, officeType };
 
+  await db.collection<ElectedOfficial>("electedOfficials").updateMany(
+    { countryId: args.countryId, officeType, characterId: { $ne: args.characterId } },
+    {
+      $set: {
+        characterId: null,
+        characterName: null,
+        party: null,
+        isNPP: false,
+        updatedAt: args.now,
+      },
+      $unset: { nppId: "" },
+    }
+  );
   await db
-    .collection<ElectedOfficial>("electedOfficials")
+    .collection<NPP>("npps")
     .updateMany(
-      { countryId: args.countryId, officeType, characterId: { $ne: args.characterId } },
-      { $set: { characterId: null, characterName: null, isNPP: false, updatedAt: args.now } }
+      { countryId: args.countryId, "currentOffice.type": officeType },
+      { $set: { currentOffice: null, updatedAt: args.now } }
     );
   await db.collection<Character>("characters").updateMany(
     {
@@ -80,6 +93,7 @@ export async function seatSingleplayerHeadOfState(
         electedAt: args.now,
         updatedAt: args.now,
       },
+      $unset: { nppId: "" },
       $setOnInsert: { createdAt: args.now },
     },
     { upsert: true }

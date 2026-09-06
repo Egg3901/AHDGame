@@ -22,7 +22,7 @@ function acceptWithinGlobalBudget(now: number): boolean {
 }
 
 /**
- * Anonymous aggregate statistics ingress for opt-in desktop telemetry.
+ * Anonymous aggregate statistics ingress for optional desktop telemetry.
  *
  * Privacy contract: no auth, no account ids, no names, no cookies are read
  * here, and the client IP is never retained. Failures return generic errors
