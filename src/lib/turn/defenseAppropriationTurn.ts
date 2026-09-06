@@ -15,10 +15,18 @@ import { resolveDefenseLineFrom } from "./defenseEnvelope";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import {
   getDefenseAppropriation,
-  applyAppropriationSettlement,
+  applyAppropriationSettlementWithOverdraft,
 } from "@/lib/db/collections/defenseAppropriation";
-import { spendFromTreasury } from "@/lib/budget/treasurySpend";
 import { applyReadinessDrift } from "./militaryForceEffects";
+
+export class DefenseAppropriationContentionError extends Error {
+  readonly retryable = true;
+
+  constructor(countryId: string, turn: number) {
+    super(`Defense appropriation contention for ${countryId} at turn ${turn}; retry required`);
+    this.name = "DefenseAppropriationContentionError";
+  }
+}
 
 /**
  * Per-turn defence account sweep: accrue this turn's slice of the enacted defence line,
@@ -50,18 +58,6 @@ export async function applyDefenseAppropriation(
     .toArray();
   if (units.length === 0) return null;
 
-  // ONE read of the budget in the common case: the pot and the defence line both come out of
-  // the same document.
-  const budget = await db.collection<FederalBudget>("federalBudget").findOne({ countryId });
-  // An unmigrated budget must be SEEDED before settling. The settlement is an atomic `$inc`
-  // guarded on `accruedThroughTurn`, and neither would match a document with no pot — an
-  // `$inc` would also create one holding just this turn's delta, losing the opening year of
-  // accrual the heal is supposed to grant.
-  const pot = budget?.defenseAppropriation ?? (await getDefenseAppropriation(db, countryId));
-  // Cheap pre-check. The authoritative guard is the `$lt: turn` filter on the write itself,
-  // which is what actually stops two overlapping turn runs double-crediting.
-  if (pot.accruedThroughTurn >= turn) return null;
-
   // The force tier scales upkeep AND the readiness baseline the drift below walks toward.
   // Countries with no defence seat have no cabinet setting and fall back to "standard",
   // which is what their force actually runs at.
@@ -71,24 +67,43 @@ export async function applyDefenseAppropriation(
     : null;
   const tier = setting?.tierSetting ?? "standard";
 
-  const line = resolveDefenseLineFrom(budget);
   const { totalUpkeep } = aggregateForce(units, countryId, tier);
-  const upkeep = upkeepPerTurn(totalUpkeep, seedRosterUpkeepFor(preset, countryId), line);
-
-  const settlement = settleAppropriation(
-    pot.balance,
-    accrualPerTurn(line),
-    upkeep,
-    overdraftFloor(line)
-  );
-
-  // The overdraft is spending BEYOND the enacted line, which no budget row accounted for —
-  // so unlike the accrual (money `processTreasuryTurn` has already deducted) it genuinely
-  // does hit the treasury, as ordinary national debt.
-  if (settlement.overdraftDrawn > 0) {
-    await spendFromTreasury(db, countryId, settlement.overdraftDrawn);
+  // Retry the complete read/calculation after a CAS miss. Reusing a settlement
+  // computed from a stale appropriation balance would silently overwrite a
+  // concurrent player debit in the accounting result.
+  let settlement: AppropriationSettlement | null = null;
+  let settled = false;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const budget = await db.collection<FederalBudget>("federalBudget").findOne({ countryId });
+    if (!budget) return null;
+    // An unmigrated budget must be seeded before settling. The seed is idempotent;
+    // reload so the CAS includes the persisted pot value.
+    if (!budget.defenseAppropriation) {
+      await getDefenseAppropriation(db, countryId);
+      continue;
+    }
+    const pot = budget.defenseAppropriation;
+    if (pot.accruedThroughTurn >= turn) return null;
+    const line = resolveDefenseLineFrom(budget);
+    settlement = settleAppropriation(
+      pot.balance,
+      accrualPerTurn(line),
+      upkeepPerTurn(totalUpkeep, seedRosterUpkeepFor(preset, countryId), line),
+      overdraftFloor(line)
+    );
+    settled = await applyAppropriationSettlementWithOverdraft(
+      db,
+      countryId,
+      turn,
+      settlement,
+      budget.treasuryBalance ?? 0,
+      pot.balance,
+      budget
+    );
+    if (settled) break;
   }
-  const settled = await applyAppropriationSettlement(db, countryId, turn, settlement);
+  if (!settlement) return null;
+  if (!settled) throw new DefenseAppropriationContentionError(countryId, turn);
   // Only drift on the run that actually booked the turn. If the guarded write lost to a
   // concurrent turn pass, that pass has already drifted these units and doing it twice would
   // move readiness two steps in one turn.
