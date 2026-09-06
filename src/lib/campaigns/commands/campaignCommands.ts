@@ -1,3 +1,4 @@
+import { loadOppositionTargets } from "@/lib/campaigns/oppositionTargets";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api/errors";
 import { assertSameCountry, isSameCountry } from "@/lib/api/sameCountry";
@@ -1003,6 +1004,27 @@ export async function retargetOppositionResearch(params: {
   assertSameCountry(user.character, target, {
     message: "You cannot research opposition targets in other countries",
   });
+
+  // Same country is not the rule; the race is. Without this, research could be
+  // bought against a private citizen or a senator who is not standing — real
+  // money and actions spent to drain somebody the buyer is not running
+  // against. The list the picker offers comes from this same function, so the
+  // two cannot disagree about who is fair game.
+  const raceElection = await db
+    .collection<Election>("elections")
+    .findOne({ _id: campaign.electionId });
+  if (!raceElection) {
+    throw notFound("Election not found");
+  }
+  const eligible = await loadOppositionTargets(
+    db,
+    raceElection,
+    campaign.candidateId,
+    await getGameTime()
+  );
+  if (!eligible.some((t) => t.id === targetOid.toString())) {
+    throw badRequest("You can only research a candidate standing against you in this race");
+  }
 
   const targetName: string = target.name;
   const OPPOSITION_RESEARCH_COOLDOWN_TURNS = 6; // 6 turns = 6h at standard cadence

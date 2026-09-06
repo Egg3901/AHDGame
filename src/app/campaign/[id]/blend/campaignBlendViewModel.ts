@@ -84,6 +84,12 @@ export interface OpsTreeVM {
   starterAffordable: boolean;
   requiresTarget: boolean;
   targetName: string | null;
+  /**
+   * The candidates this campaign may research, scoped server-side to the race
+   * and its phase. Empty when the viewer cannot retarget, or when nobody is
+   * standing against them.
+   */
+  targetOptions: { id: string; name: string; party: string | null }[];
   branches: OpsBranchVM[];
 }
 
@@ -157,9 +163,30 @@ export interface SupportVM {
   tourActive: boolean;
 }
 
+/**
+ * Campaign strength for display: two decimals, grouped.
+ *
+ * Two rather than none because a contribution can be worth a fraction of a
+ * point, so rounding to whole numbers would show a purchase moving nothing.
+ */
+function formatStrength(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 export interface StrengthVM {
-  strength: number;
+  /**
+   * The current strength, already formatted.
+   *
+   * Campaign strength is the product of a contribution curve and accumulates
+   * an irrational tail, so the stored value is a full double —
+   * `5920.075743469171`. Printed raw it read as false precision on a figure
+   * nobody can act on past the decimal, and it overflowed the panel it sits
+   * in. Every other figure in this view model arrives at the sidebar as a
+   * finished string; this one now does too.
+   */
+  strength: string;
   boostPct: string;
+  /** Kept numeric: `canContribute` tests it, and the copy formats it itself. */
   strengthAdded: number;
   costFunds: number;
   costActions: number;
@@ -326,7 +353,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   if (campaign.campaignStrength != null) {
     vitals.push({
       label: "Strength",
-      value: String(campaign.campaignStrength),
+      value: formatStrength(campaign.campaignStrength),
       sub: `+${campaignStrengthBoostPercent(campaign.campaignStrength).toFixed(1)}% vote boost`,
       color: BLEND.accent,
     });
@@ -385,6 +412,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
       starterAffordable: canAfford(t.starterCost),
       requiresTarget: t.requiresTarget,
       targetName: c.oppositionTargetName,
+      targetOptions: t.requiresTarget ? (c.oppositionTargets ?? []) : [],
       branches: t.branches.map((b) => {
         const maxed = b.level >= b.maxLevel;
         const affordable = canAfford(b.next);
@@ -492,6 +520,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     : null;
 
   // ── Campaign strength ─────────────────────────────────────────────────────
+
   const currentStrength = campaign.campaignStrength ?? 0;
   const strengthAdded =
     me.nationalInfluence != null
@@ -505,7 +534,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   const strength: StrengthVM | null =
     campaign.campaignStrength != null
       ? {
-          strength: currentStrength,
+          strength: formatStrength(currentStrength),
           boostPct: campaignStrengthBoostPercent(currentStrength).toFixed(1),
           strengthAdded,
           costFunds,

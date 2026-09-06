@@ -2,6 +2,7 @@ import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Campaign } from "@/lib/db/types";
 import type { CampaignStatePresence } from "@/lib/elections/dto/campaignStatePresence";
+import type { OppositionTarget } from "@/lib/campaigns/oppositionTargets";
 import {
   getEffectiveBranchCost,
   OPS_MAX_BRANCH_LEVEL,
@@ -96,6 +97,15 @@ export interface CampaignData {
 
   oppositionTargetId: string | null;
   oppositionTargetName: string | null;
+  /**
+   * Who this campaign may research, already scoped to the race and its phase.
+   *
+   * Sent rather than searched: the picker used to query every character in the
+   * game, so it offered targets the server would refuse and hid the rule that
+   * decides them. Only the manager or nominee can retarget, so only they get
+   * the list.
+   */
+  oppositionTargets?: OppositionTarget[];
 
   fogLastUpdated?: string;
 

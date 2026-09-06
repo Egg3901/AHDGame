@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { BlendOpsSection } from "./BlendOpsSection";
 import type { OpsRowVM, OpsTreeVM } from "./campaignBlendViewModel";
 import { blendSegments } from "@/components/blend/tokens";
@@ -32,6 +32,7 @@ function tree(over: Partial<OpsTreeVM> = {}): OpsTreeVM {
     starterAffordable: true,
     requiresTarget: false,
     targetName: null,
+    targetOptions: [],
     branches: [
       branch(),
       branch({ key: "b", label: "Bundlers" }),
@@ -255,5 +256,74 @@ describe("what a lever costs", () => {
   it("says nothing about a next tier once the lever is maxed", () => {
     renderSection({ rows: [row({ nextStep: null })] });
     expect(screen.queryByText(/NEXT /)).toBeNull();
+  });
+});
+
+describe("choosing an opposition-research target", () => {
+  // The whole target block used to be gated on already having a target, so the
+  // only control that opens the picker lived inside the panel that appeared
+  // once you had one. There was no way to choose the first, which read on the
+  // page as the field having gone missing.
+  const FIELD = [
+    { id: "t1", name: "Reginald Lindqvist", party: "Democratic Party" },
+    { id: "t2", name: "Eleanor Voss", party: "Democratic Party" },
+  ];
+  const oppoRow = (over = {}) =>
+    row({
+      expanded: true,
+      tree: tree({ requiresTarget: true, targetName: null, targetOptions: FIELD, ...over }),
+    });
+
+  it("says so when nobody is being researched yet", () => {
+    renderSection({ rows: [oppoRow()], onRetarget: noop });
+    expect(screen.getByText("No target yet")).toBeTruthy();
+    expect(screen.getByText("Nobody is being researched")).toBeTruthy();
+  });
+
+  it("offers a way to choose the first target, not only to change one", () => {
+    renderSection({ rows: [oppoRow()], onRetarget: noop });
+    expect(screen.getByRole("button", { name: "Choose" })).toBeTruthy();
+  });
+
+  it("opens a picker over the field and hands back the pick", () => {
+    const onRetarget = vi.fn();
+    renderSection({ rows: [oppoRow()], onRetarget });
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    fireEvent.click(screen.getByText("Eleanor Voss"));
+    expect(onRetarget).toHaveBeenCalledWith("t2");
+  });
+
+  it("filters the field as the reader types", () => {
+    renderSection({ rows: [oppoRow()], onRetarget: noop });
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    fireEvent.change(screen.getByLabelText("Search the field…"), { target: { value: "elea" } });
+    expect(screen.getByText("Eleanor Voss")).toBeTruthy();
+    expect(screen.queryByText("Reginald Lindqvist")).toBeNull();
+  });
+
+  it("says the levels survive a change, because they do", () => {
+    // Retargeting only sets the target and a six-turn cooldown; it never
+    // touches the levels bought. Saying so is what stops the button reading as
+    // a gamble.
+    renderSection({ rows: [oppoRow({ targetName: "Reginald Lindqvist" })], onRetarget: noop });
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    expect(screen.getByText(/keeps every level you have bought/)).toBeTruthy();
+  });
+
+  it("names the current target and offers a change once one is set", () => {
+    renderSection({ rows: [oppoRow({ targetName: "Reginald Lindqvist" })], onRetarget: noop });
+    expect(screen.getByText("Current target")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change" })).toBeTruthy();
+  });
+
+  it("says why there is nothing to pick when the field is empty", () => {
+    renderSection({ rows: [oppoRow({ targetOptions: [] })], onRetarget: noop });
+    expect(screen.getByText("Nobody is standing against you in this race yet.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Choose" })).toBeNull();
+  });
+
+  it("leaves levers that take no target alone", () => {
+    renderSection({ rows: [row({ expanded: true, tree: tree() })], onRetarget: noop });
+    expect(screen.queryByText("No target yet")).toBeNull();
   });
 });

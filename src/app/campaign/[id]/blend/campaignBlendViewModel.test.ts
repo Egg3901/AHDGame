@@ -444,6 +444,27 @@ describe("strength contribution", () => {
     expect(vm.strength?.newBoostPct).toBe(campaignStrengthBoostPercent(412 + 6).toFixed(1));
   });
 
+  it("shows the strength to two decimals, not to seventeen", () => {
+    // Campaign strength comes off a contribution curve and carries an
+    // irrational tail, so the stored value is a full double. Printed raw it
+    // read as "5920.075743469171" — false precision on a figure nobody can act
+    // on past the decimal, and wider than the panel holding it.
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign: { ...campaignFixture(), campaignStrength: 5920.075743469171 } })
+    );
+    expect(vm.strength?.strength).toBe("5,920.08");
+    expect(vm.vitals.find((v) => v.label === "Strength")?.value).toBe("5,920.08");
+  });
+
+  it("keeps two decimals rather than rounding a small contribution to nothing", () => {
+    // A contribution can be worth a fraction of a point, so whole numbers would
+    // show a purchase moving the figure not at all.
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign: { ...campaignFixture(), campaignStrength: 0.014 } })
+    );
+    expect(vm.strength?.strength).toBe("0.01");
+  });
+
   it("blocks the contribution when the viewer has no influence to spend", () => {
     const vm = buildCampaignBlendViewModel(
       input({
