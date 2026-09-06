@@ -1,5 +1,4 @@
 ---
-version: "1.4.63"
 date: "2026-09-06"
 title: Clear stale latent shortage diagnostics
 summary: >-
