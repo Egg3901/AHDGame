@@ -10,10 +10,6 @@ vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
 
-vi.mock("@/lib/policyReactions", () => ({
-  recordPolicyReaction: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock("@/lib/budget/enactedLaws", () => ({
   recordEnactedLaw: vi.fn().mockResolvedValue(undefined),
 }));
@@ -48,7 +44,6 @@ vi.mock("@/lib/budget/costs", () => ({
 }));
 
 import { getDb } from "@/lib/mongodb";
-import { recordPolicyReaction } from "@/lib/policyReactions";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { sendCountryGameEvent } from "@/lib/discordWebhooks";
@@ -125,7 +120,6 @@ describe("onBillEnacted", () => {
 
     await onBillEnacted(db as unknown as Db, bill as any, 10);
 
-    expect(recordPolicyReaction).not.toHaveBeenCalled();
     expect(recordEnactedLaw).not.toHaveBeenCalled();
   });
 
@@ -168,7 +162,6 @@ describe("onBillEnacted", () => {
         },
       }
     );
-    expect(recordPolicyReaction).not.toHaveBeenCalled();
     expect(recordEnactedLaw).not.toHaveBeenCalled();
   });
 
@@ -181,7 +174,6 @@ describe("onBillEnacted", () => {
 
     await onBillEnacted(db as unknown as Db, bill as any, 10);
 
-    expect(recordPolicyReaction).toHaveBeenCalled();
     expect(recordEnactedLaw).toHaveBeenCalled();
   });
 
@@ -200,7 +192,6 @@ describe("onBillEnacted", () => {
 
     await onBillEnacted(db as unknown as Db, bill as any, 10);
 
-    expect(recordPolicyReaction).toHaveBeenCalledTimes(1);
     expect(recordEnactedLaw).toHaveBeenCalledTimes(2);
   });
 
@@ -465,13 +456,6 @@ describe("onBillEnacted", () => {
     setupCollection("gameState", [{ _id: "current", currentYear: 2025 } as any]);
 
     await onBillEnacted(db as unknown as Db, bill as any, 10);
-
-    expect(recordPolicyReaction).toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ title: "Climate Action Act" }),
-      "federal",
-      10
-    );
   });
 
   it("records enacted law with fiscal year from game state", async () => {

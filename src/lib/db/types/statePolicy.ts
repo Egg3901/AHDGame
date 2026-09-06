@@ -23,6 +23,8 @@ export interface StatePolicy {
    */
   scope?: "national" | "state";
   stateId: string; // "CA", "TX", etc. (or "federal")
+  /** Enacting country. Stamped on new writes; absent on older rows. */
+  countryId?: string;
   legislationTypeId: string;
   policyOptionId: string;
   policyOptionIndex: number; // ladder index (0-6 legacy, maps to -3..+3; 0-4 new-generation political laws)
@@ -43,17 +45,6 @@ export interface StatePolicy {
 export interface StateMetricBaseline {
   _id: string; // stateId
   baselines: Record<string, Record<string, number>>; // category.metric -> baseline (40-60)
-}
-
-export interface PolicyReaction {
-  _id?: ObjectId;
-  stateId: string;
-  legislationTypeId: string;
-  policyOptionId: string;
-  groupReactions: Record<string, number>;
-  initialReactions: Record<string, number>;
-  enactedAt: Date;
-  enactedTurn: number;
 }
 
 export interface VoteImpact {
