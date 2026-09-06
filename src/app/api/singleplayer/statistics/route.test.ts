@@ -14,7 +14,7 @@ import { GET } from "./route";
 function database(state: Record<string, unknown> | null) {
   const collections: Record<string, Record<string, unknown>> = {
     gameState: { findOne: vi.fn().mockResolvedValue(state) },
-    parties: { countDocuments: vi.fn().mockResolvedValue(7) },
+    politicalParties: { countDocuments: vi.fn().mockResolvedValue(7) },
     corporations: { countDocuments: vi.fn().mockResolvedValue(8) },
     npps: { countDocuments: vi.fn().mockResolvedValue(9) },
     corporateSectors: {

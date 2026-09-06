@@ -26,7 +26,7 @@ export async function GET(request: Request) {
           },
         }
       ),
-      db.collection("parties").countDocuments(),
+      db.collection("politicalParties").countDocuments(),
       db.collection("corporations").countDocuments(),
       db.collection("npps").countDocuments(),
       db
