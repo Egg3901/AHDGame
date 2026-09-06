@@ -6,6 +6,7 @@ import { boardDeltaForLegacyEffect } from "@/lib/politicalLegislation/legacyEffe
 import { applyBoardDelta } from "@/lib/politicalLegislation/boardWrite";
 import type { CharacterStats, StatKey } from "@/lib/stats/statsConstants";
 import { STAT_MIN, STAT_MAX } from "@/lib/stats/statsConstants";
+import { resolveCrisisMetricPath } from "@/lib/crises/rules/metricPath";
 
 /**
  * Clamp a stat value to the legal [STAT_MIN, STAT_MAX] range.
@@ -88,7 +89,8 @@ async function applyMetricEffects(
   const inc: Record<string, number> = {};
   for (const effect of effects) {
     if (effect.metricCategory && effect.metricField) {
-      const path = `${effect.metricCategory}.${effect.metricField}.value`;
+      const metricPath = resolveCrisisMetricPath(effect.metricCategory, effect.metricField);
+      const path = `${metricPath.category}.${metricPath.field}.value`;
       inc[path] = (inc[path] ?? 0) + effect.value;
     }
   }

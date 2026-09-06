@@ -1,3 +1,10 @@
+/**
+ * The per-turn corporation ledger: why a corp lost money this turn. processSectors
+ * runs every sector's revenue, margin and costs, then charges corp-level marketing,
+ * logistics, R&D and CEO salary (capped together at 1.5x gross revenue), bond
+ * interest and dividends (up to MAX_DIVIDEND_RATE), accrues R&D score
+ * (rdMoraleFactor, computeRdDemandFactor), and converts each sector from its host currency.
+ */
 import type { AnyBulkWriteOperation, ObjectId } from "mongodb";
 import type { Bond, Corporation } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";

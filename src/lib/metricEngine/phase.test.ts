@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 import { GDP_GROWTH_SCENARIOS, captureGoldenOutput } from "./__fixtures__/gdpGrowthGolden";
 import { runMetricEngine } from "./phase";
+import { applyCrisisEffects } from "@/lib/crises/applyEffects";
 
 describe("runMetricEngine — golden-master parity with updateGdpGrowth", () => {
   let db: MockDb;
@@ -37,6 +38,81 @@ describe("runMetricEngine — phase behavior", () => {
       toArray: vi.fn().mockResolvedValue(data),
     });
   }
+
+  it("consumes a country-scoped crisis GDP rate through sectorGrowth and compounds stock", async () => {
+    const macro = [
+      {
+        _id: "CA",
+        economic: {
+          sectorGrowth: { value: 2 },
+          gdpGrowth: { value: 2 },
+        },
+      },
+    ];
+    setupCollection("states", [
+      { _id: "CA", name: "CA", countryId: "US", population: 100, gdp: 1000 },
+      { _id: "TX", name: "TX", countryId: "UK", population: 100, gdp: 1000 },
+    ]);
+    setupCollection("corporateSectors", [
+      { _id: "secCA", stateId: "CA", revenue: 1000, currentGrowthRate: 3 },
+      { _id: "secTX", stateId: "TX", revenue: 1000, currentGrowthRate: 3 },
+    ]);
+    setupCollection("unownedSectors", []);
+    setupCollection("macroMetrics", macro);
+    db.collectionMocks.stateMetrics = db.collectionMocks.macroMetrics!;
+    setupCollection("corporations", []);
+    setupCollection("exchangeRates", []);
+    setupCollection("federalBudget", [
+      { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+    ]);
+    setupCollection("stateBudgets", [{ _id: "CA", taxRates: { salesTax: 6 } }]);
+    db.collectionMocks.macroMetrics!.updateMany = vi
+      .fn()
+      .mockImplementation(async (filter, update) => {
+        for (const row of macro) {
+          if (!(filter._id.$in as string[]).includes(row._id)) continue;
+          for (const [path, delta] of Object.entries(update.$inc ?? {})) {
+            const [category, field, leaf] = path.split(".");
+            if (leaf !== "value") continue;
+            row[category as "economic"][field as "sectorGrowth" | "gdpGrowth"].value +=
+              delta as number;
+          }
+        }
+        return { modifiedCount: 1 };
+      });
+    const stateOps: unknown[] = [];
+    db.collectionMocks.states!.bulkWrite = vi.fn().mockImplementation(async (ops: unknown[]) => {
+      stateOps.push(...ops);
+      return { ok: 1 };
+    });
+
+    await applyCrisisEffects(
+      db as unknown as Db,
+      [
+        {
+          effectType: "flat",
+          targetType: "metric",
+          metricCategory: "economic",
+          metricField: "gdpGrowth",
+          sectorType: null,
+          strategyId: null,
+          value: -1,
+          label: "test growth shock",
+        },
+      ],
+      ["CA"],
+      ["US"]
+    );
+    expect(macro[0].economic.sectorGrowth.value).toBe(1);
+    expect(macro[0].economic.gdpGrowth.value).toBe(2);
+
+    await runMetricEngine(db as unknown as Db, 10);
+    expect(stateOps).toHaveLength(2);
+    const caOp = stateOps.find(
+      (op) => (op as { updateOne: { filter: { _id: string } } }).updateOne.filter._id === "CA"
+    ) as { updateOne: { update: { $set: { gdp: number } } } };
+    expect(caOp.updateOne.update.$set.gdp).toBeGreaterThan(1000);
+  });
 
   it("compounds state.gdp per turn from the region's gdpGrowth (SSOT level moves)", async () => {
     setupCollection("states", [

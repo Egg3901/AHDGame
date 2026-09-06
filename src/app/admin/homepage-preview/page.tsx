@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAuthAdmin } from "@/lib/auth";
 import { buildGovernmentTypeMap } from "@/lib/landing/governmentTypeMap";
+import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 import { HomepagePreviewClient } from "./HomepagePreviewClient";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,9 @@ export default async function HomepagePreviewPage() {
 
   // Static COUNTRY_CONFIGS defaults — preview doesn't need a live DB read.
   const governmentTypes = buildGovernmentTypeMap();
+  // The version and playable roster DO come from the live world, so the preview
+  // shows the same hero copy players see.
+  const world = await getMarketedWorldSafe();
 
-  return <HomepagePreviewClient governmentTypes={governmentTypes} />;
+  return <HomepagePreviewClient governmentTypes={governmentTypes} world={world} />;
 }

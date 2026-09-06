@@ -1,3 +1,11 @@
+/**
+ * How commodity prices move each turn. processCommodityPriceTurn sums supply and
+ * demand from owned sectors, prices each commodity as 50% global + 25% national +
+ * 25% state, scales retail demand by GDP growth, and books extraction depletion
+ * from realized output (realizedOutputFraction). A naval blockade closes a
+ * country's seaborne trade lanes for the turn (loadBlockadeClosure, built on
+ * blockadeClosureByCountry).
+ */
 import { getDb } from "@/lib/mongodb";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import type {

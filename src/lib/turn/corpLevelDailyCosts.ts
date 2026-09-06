@@ -1,4 +1,10 @@
 /**
+ * A corporation's daily fixed costs above its sectors: marketing budget, logistics
+ * budget, R&D budget and CEO salary, summed by corpLevelDailyCosts in the corp's
+ * own currency. Sector maintenance and growth costs are not here; they net out
+ * inside each sector's profit.
+ */
+/**
  * Corp-level daily operating costs used by the exchange snapshot, in the corp's
  * own currency.
  *

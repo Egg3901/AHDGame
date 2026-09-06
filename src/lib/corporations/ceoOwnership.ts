@@ -1,4 +1,11 @@
 /**
+ * How much of a corporation its CEO owns, and why that matters. ceoOwnershipFraction
+ * is the CEO's shares over total shares; when it exceeds 65%
+ * (INSIDER_CONCENTRATION_THRESHOLD) a public corp is downgraded one credit notch
+ * and its share price is discounted (insiderConcentrationPenaltyApplies).
+ * Private corps are exempt.
+ */
+/**
  * CEO stake math, shared by the credit scorer, the share-price pass and the
  * bonds API.
  *

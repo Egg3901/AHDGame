@@ -103,6 +103,15 @@ describe("applyDefenseAppropriation", () => {
     expect(capture.updates).toHaveLength(0);
   });
 
+  it("accepts a legacy budget with no treasuryBalance when the normalized value is zero", async () => {
+    const capture: Capture = { updates: [], unitOps: [] };
+    const legacy = budgetWith(pot(0, 9));
+    const db = stubDb({ units: [UNIT], budget: legacy, capture });
+    await applyDefenseAppropriation(db, "US", 10, "1953-default");
+    const filter = capture.updates[0]!.filter as { $or?: unknown[] };
+    expect(filter.$or).toEqual([{ treasuryBalance: 0 }, { treasuryBalance: { $exists: false } }]);
+  });
+
   it("does not accrue for a turn already passed", async () => {
     const capture: Capture = { updates: [], unitOps: [] };
     const db = stubDb({ units: [UNIT], budget: budgetWith(pot(500, 12)), capture });
@@ -150,8 +159,9 @@ describe("applyDefenseAppropriation", () => {
     });
     const s = await applyDefenseAppropriation(db, "US", 10, "1953-default");
     expect(s!.overdraftDrawn).toBeGreaterThan(0);
-    expect(treasurySpends).toHaveLength(1);
-    expect(treasurySpends[0]).toEqual({ countryId: "US", amount: s!.overdraftDrawn });
+    expect(treasurySpends).toHaveLength(0);
+    const treasuryInc = (capture.updates[0]!.update as { $inc: Record<string, number> }).$inc;
+    expect(treasuryInc.treasuryBalance).toBe(-Math.round(s!.overdraftDrawn));
   });
 
   it("does not touch the treasury when no overdraft is drawn", async () => {
@@ -161,6 +171,22 @@ describe("applyDefenseAppropriation", () => {
     await applyDefenseAppropriation(db, "US", 10, "1953-default");
     // The accrual is money processTreasuryTurn already deducted — charging it again here
     // would double-charge the whole defence line every turn.
+    expect(treasurySpends).toHaveLength(0);
+  });
+
+  it("does not debit treasury when the same-turn guard loses", async () => {
+    treasurySpends.length = 0;
+    const capture: Capture = { updates: [], unitOps: [] };
+    const db = stubDb({
+      units: Array.from({ length: 400 }, () => UNIT),
+      budget: budgetWith({ spending: { byCategory: { defense: 48_000 } }, ...pot(0, 0) }),
+      capture,
+      settleFails: true,
+    });
+    await expect(applyDefenseAppropriation(db, "US", 10, "1953-default")).rejects.toMatchObject({
+      name: "DefenseAppropriationContentionError",
+      retryable: true,
+    });
     expect(treasurySpends).toHaveLength(0);
   });
 });
@@ -239,7 +265,10 @@ describe("applyDefenseAppropriation — readiness drift", () => {
       capture,
       settleFails: true,
     });
-    await applyDefenseAppropriation(db, "US", 10, "1953-default");
+    await expect(applyDefenseAppropriation(db, "US", 10, "1953-default")).rejects.toMatchObject({
+      name: "DefenseAppropriationContentionError",
+      retryable: true,
+    });
     expect(capture.unitOps).toHaveLength(0);
   });
 });

@@ -1,4 +1,12 @@
 /**
+ * Plants and capacity: what a unit of production capacity costs, how long a build
+ * takes and how long it takes to pay back. capacityPricePerUnit prices capacity
+ * from commodity base prices and strategy output; CAPACITY_BUILD_TURNS runs from
+ * 12 turns (retail) to 96 (energy, extraction), where 48 turns is a game year.
+ * Cancelled builds refund 75%, idle capacity still pays 30% upkeep
+ * (IDLE_UPKEEP_FRACTION), mothballed 20%, and attacks transfer only 60% of captured capacity.
+ */
+/**
  * Capacity economy anchors — what a unit of productive capacity COSTS and how
  * many workers it TAKES (P1 of the "buildable sectors" plan).
  *
