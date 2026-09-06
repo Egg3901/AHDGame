@@ -38,6 +38,18 @@ Follow the README. `npm run bootstrap:full` creates a complete local world; `npm
 
 Code layout in one minute: `src/app/api/**` are thin route handlers (auth guard, Zod, call into lib). `src/lib/**` is the domain logic, one directory per system. The hourly turn processor is `src/lib/turnSystem.ts` with phases registered in `src/simulation/phases/`. Portable rules live in `rules.ts` / `rules/` modules beside their system. Seeds are in `scripts/seeds/` (data) and `scripts/seed/` (runners). The [engineering docs](https://docs.lakesidegames.net) go deeper.
 
+## Name the mechanic at the top of the file
+
+Files under `src/lib` that implement a game mechanic open with a short JSDoc block, before the imports, that names the mechanic in the words a player uses and states the two or three facts a player asks about (what it is, what it depends on, what it affects), citing the exported symbol that implements it. Keep it to two to five lines of plain English in the present tense, with every fact taken from the code in that file. The search index embeds file text, so this header is what makes the file findable for a player question.
+
+```ts
+/**
+ * Cloture and the filibuster (Senate). A filibustered bill only passes when
+ * at least three fifths of votes cast (For + Against + Abstain) are For:
+ * see didPassWithFilibusterCheck. Two-thirds bills ignore this rule.
+ */
+```
+
 ## UI strings and translations
 
 The UI chrome (navigation, settings, tutorial) is localized with next-intl. Game-generated content (news, mail, notifications, legislation) stays English. The locale comes from the `ahd-locale` cookie, not the URL; players pick a language under Settings > Appearance.

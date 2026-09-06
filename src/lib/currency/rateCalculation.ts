@@ -1,4 +1,12 @@
 /**
+ * Why an exchange rate (such as GBP to USD) rose or fell this turn. computeMacroTarget
+ * sets the target: a higher prime rate, faster GDP growth and trade growth
+ * strengthen a currency, inflation above its target weakens it. applyDrift closes
+ * 5% of the gap per turn (about a game year to 90%), applyVolumePressure adds
+ * player buy and sell pressure capped at +/-5%, applyNoise adds jitter, and
+ * clampRate holds the rate within +/-50% of base.
+ */
+/**
  * Pure exchange rate math — no DB access.
  *
  * Three components combine each turn to produce an updated rate:

@@ -1,4 +1,11 @@
 /**
+ * Inflation is recalculated every turn. recalculateInflationPerTurn reads each
+ * country's prime rate, unemployment, GDP growth, deficit, tariffs, wage growth,
+ * the commodity price trend over the last half game year, exchange rate moves and
+ * money supply, then stores the new inflationRate and advances the household
+ * price index.
+ */
+/**
  * Per-Turn Inflation Recalculation
  *
  * Recalculates inflation each turn so the economic trends chart reflects

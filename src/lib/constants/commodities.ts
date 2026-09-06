@@ -1,4 +1,12 @@
 /**
+ * Why a sector's production (supply) or demand reads zero, and how commodity prices
+ * form. Only OWNED sectors supply or demand anything: units = sector daily revenue
+ * x rate / base price, with per-sector rates in SECTOR_SUPPLY and SECTOR_DEMAND
+ * (a financial sector supplies financial_services at rate 0.5). Price rises with
+ * demand over supply on a log curve (COMMODITY_PRICE_LOG_SCALE), blended 50%
+ * global, 25% national, 25% state.
+ */
+/**
  * Commodity system constants.
  * Maps sector types to the commodities they supply and demand.
  * Only owned sectors create demand or supply.

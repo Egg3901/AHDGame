@@ -1,4 +1,11 @@
 /**
+ * Sector strategies a corporation can pick, and what switching costs. Each sector
+ * type has 4 to 8 strategies in SECTOR_STRATEGIES that change which commodities it
+ * consumes and produces; margin follows the commodity market, not the strategy.
+ * Switching charges 25% of daily revenue, phases in over 12 turns with a -5 point
+ * margin penalty, and locks further changes for 24 turns (getEffectiveStrategyRates).
+ */
+/**
  * Sector Operating Strategies.
  *
  * Each sector type has 4-8 strategies that change its commodity input/output

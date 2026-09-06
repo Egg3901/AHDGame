@@ -1,3 +1,10 @@
+/**
+ * How a naval blockade happens and what it does to trade. Hostile warships on a
+ * country's trade approaches add pressure by mission (Blockade 1.0, Sea Denial
+ * 0.7, Sea Control 0.55, Escort 0.15), scaled against the port's defence; the
+ * worst single approach sets closure (blockadeClosureFor). Partial closure raises
+ * the cost of trade, total closure stops it (blockadeAffinityMultiplier returns 0).
+ */
 import * as R from "./config";
 import * as M from "./map";
 import { cv, alive, clamp } from "./engineCore";
