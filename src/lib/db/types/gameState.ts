@@ -73,6 +73,14 @@ export interface GameState {
   _id: string;
   /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
   singleplayerConfig?: SingleplayerConfig;
+  /** Last compact local turn sample used by opt-in performance analytics. */
+  singleplayerTurnMetrics?: {
+    turn: number;
+    durationMs: number;
+    success: boolean;
+    warningCount: number;
+    slowestPhases: Array<{ phase: string; durationMs: number }>;
+  };
   /**
    * Turn on which the Cold War was resolved in-game, or null/absent while it is
    * still being fought.

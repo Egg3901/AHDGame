@@ -63,6 +63,9 @@ describe("POST /api/singleplayer/setup", () => {
         permanentHeadOfState: false,
       })
     );
+    expect(mocks.resetAndBootstrapGameWorld).toHaveBeenCalledWith(
+      expect.objectContaining({ skipDiagnostic: true })
+    );
   });
 
   it("forwards head-of-state mode and rejects invalid setup before reset", async () => {

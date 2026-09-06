@@ -7,6 +7,7 @@
 
 import { createHash } from "crypto";
 import { ELECTORAL_VOTE_UNITS, ELECTORAL_MAJORITY } from "@/lib/constants";
+import type { ElectoralVoteUnit } from "@/lib/constants/states";
 
 export { ELECTORAL_MAJORITY };
 
@@ -25,7 +26,7 @@ export { ELECTORAL_MAJORITY };
  */
 export function allocateElectoralVotes(
   totalVotesByUnit: Record<string, Record<string, number>>,
-  units: { unitId: string; ev: number; stateId: string }[] = ELECTORAL_VOTE_UNITS
+  units: ElectoralVoteUnit[] = ELECTORAL_VOTE_UNITS
 ): Record<string, number> {
   const electoralVotesByCandidate: Record<string, number> = {};
 

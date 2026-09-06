@@ -1,160 +1,181 @@
 /**
- * Ticket-split crossover layer: derive Zweitstimmen (second votes) from Erststimmen (first votes).
+ * Ticket-split crossover: derive Zweitstimmen (second votes) from Erststimmen.
  *
- * Models the well-documented German voting behavior where voters split their ballot:
- * - Erststimme (first vote): local candidate (often major party pragmatism)
- * - Zweitstimme (second vote): policy preference (often smaller party, tactical, or protest)
+ * German voters split their ballot — the Erststimme backs a local candidate,
+ * often on major-party pragmatism, while the Zweitstimme expresses a party
+ * preference and decides the chamber. The classic case is the Leihstimme: a
+ * CDU/CSU voter lends the FDP a second vote to keep a coalition partner over
+ * the 5% hurdle.
  *
- * Rates by demographic archetype reflect ideological distances and strategic voting patterns.
+ * ## What this replaced, and why the model changed (#810)
+ *
+ * The previous table was keyed on demographic ARCHETYPE and was placeholder
+ * data throughout: two of its five archetype ids existed nowhere else in the
+ * codebase, and every rule targeted `cdu`/`spd`/`greens`/`afd`/`linke`, none of
+ * which are party ids in any seed — the Greens, AfD and Linke are also
+ * anachronisms in a 1953 world. It was never reached in any case, because
+ * `computeZweitstimmen` has no demographic breakdown to pass: the vote tally
+ * stores `totalVotes` per candidate and nothing per bucket. So the layer
+ * always hit its default bucket, found no rules, and returned the first-vote
+ * totals unchanged in every Land.
+ *
+ * Archetypes are also a retired vocabulary; the engine moved to Layer-1 census
+ * buckets.
+ *
+ * The model is therefore PARTY-TO-PARTY, which is both what the data supports
+ * and how ticket splitting is actually measured — post-election studies report
+ * it as "x% of CDU first-vote voters gave their second vote to the FDP", not by
+ * archetype.
+ *
+ * ## Rates
+ *
+ * Era-scoped, because the behaviour genuinely changed. Ticket splitting was
+ * rare in the 1950s: the two-vote ballot only began in 1953 and voters
+ * overwhelmingly cast both votes for the same party. Deliberate splitting grew
+ * from the 1960s, and the FDP's survival on lent CDU/CSU second votes is a
+ * feature of 1961 onward, not of 1953.
+ *
+ * Rates are conservative on purpose. They shift seats, so they are set at the
+ * low end of the surveyed range rather than the headline figures.
  */
 
-export interface ArchetypeCrossoverRate {
-  fromParty: string; // e.g., "cdu"
-  toParty: string; // e.g., "greens"
-  rate: number; // 0.00–0.30: fraction of votes that switch
+/** A single directed crossover: `rate` of `fromParty`'s first votes move. */
+export interface PartyCrossoverRate {
+  /** Party slug as in `DE_PARTY_SLUG_TO_NAME`, e.g. "cdu". */
+  fromParty: string;
+  toParty: string;
+  /** Fraction of `fromParty`'s Erststimmen that switch. 0–0.3. */
+  rate: number;
 }
 
 /**
- * Default ticket-split rates by demographic archetype.
- * Maps archetype ID → list of crossover rules.
- *
- * Rates are derived from post-election surveys and historical splitting patterns.
+ * 1953 West Germany. The two-vote ballot is one election old and split-ticket
+ * voting is marginal, so only the two junior Adenauer partners draw anything,
+ * and barely. A near-zero table here is the historically honest reading, not a
+ * placeholder.
  */
-export const DEFAULT_CROSSOVER_RATES: Record<string, ArchetypeCrossoverRate[]> = {
-  // German demographic archetypes (placeholder names; actual will come from seed)
-  urban_professionals: [
-    { fromParty: "cdu", toParty: "greens", rate: 0.12 }, // Tech/edu leans Greens
-    { fromParty: "cdu", toParty: "spd", rate: 0.08 },
-    { fromParty: "spd", toParty: "greens", rate: 0.15 },
-  ],
-  working_class: [
-    { fromParty: "spd", toParty: "linke", rate: 0.1 }, // Left sympathizers
-    { fromParty: "cdu", toParty: "afd", rate: 0.08 },
-  ],
-  rural_traditional: [
-    { fromParty: "cdu", toParty: "fdp", rate: 0.06 }, // Liberal economics
-    { fromParty: "cdu", toParty: "afd", rate: 0.12 },
-  ],
-  progressive_urban: [
-    { fromParty: "spd", toParty: "greens", rate: 0.18 },
-    { fromParty: "greens", toParty: "spd", rate: 0.05 },
-  ],
-  tactical_voters: [
-    { fromParty: "spd", toParty: "greens", rate: 0.25 }, // Backs SPD locally, Greens federally
-    { fromParty: "greens", toParty: "spd", rate: 0.2 },
-  ],
-};
+export const CROSSOVER_RATES_1953: PartyCrossoverRate[] = [
+  { fromParty: "cdu", toParty: "dp", rate: 0.02 },
+  { fromParty: "cdu", toParty: "gbbhe", rate: 0.015 },
+  { fromParty: "cdu", toParty: "fdp", rate: 0.02 },
+  { fromParty: "spd", toParty: "gbbhe", rate: 0.01 },
+];
+
+/**
+ * 1991 (post-reunification). The Leihstimme is established practice by now and
+ * the PDS holds an eastern base that draws second votes from the SPD.
+ */
+export const CROSSOVER_RATES_1991: PartyCrossoverRate[] = [
+  { fromParty: "cdu", toParty: "fdp", rate: 0.06 },
+  { fromParty: "csu", toParty: "fdp", rate: 0.05 },
+  { fromParty: "spd", toParty: "grn", rate: 0.05 },
+  { fromParty: "spd", toParty: "pds", rate: 0.03 },
+];
+
+/**
+ * Modern. Splitting is at its widest: Green second votes lent by SPD voters,
+ * FDP second votes lent by CDU/CSU voters, and a Linke eastern base.
+ */
+export const CROSSOVER_RATES_MODERN: PartyCrossoverRate[] = [
+  { fromParty: "cdu", toParty: "fdp", rate: 0.07 },
+  { fromParty: "cdu", toParty: "grn", rate: 0.02 },
+  { fromParty: "csu", toParty: "fdp", rate: 0.05 },
+  { fromParty: "spd", toParty: "grn", rate: 0.07 },
+  { fromParty: "spd", toParty: "lnk", rate: 0.03 },
+  { fromParty: "grn", toParty: "spd", rate: 0.03 },
+];
+
+/** Crossover table for a seed preset. Unknown presets get the modern table. */
+export function crossoverRatesForPreset(preset: string | undefined): PartyCrossoverRate[] {
+  switch (preset) {
+    case "1953-default":
+      return CROSSOVER_RATES_1953;
+    case "1991-default":
+      return CROSSOVER_RATES_1991;
+    default:
+      return CROSSOVER_RATES_MODERN;
+  }
+}
 
 export interface ErststimmeInput {
+  /** Live party id (`sequentialId` as a string), as stored on the tally. */
   partyId: string;
   votes: number;
-  byArchetype?: Record<string, number>; // Demographics that voted for this party
 }
 
 export interface ZweitstimmeOutput {
   partyId: string;
   votes: number;
-  byArchetype?: Record<string, number>;
 }
 
 /**
- * Derives Zweitstimmen (second votes) from Erststimmen (first votes) using crossover rates.
+ * Derive Zweitstimmen from Erststimmen.
  *
- * Algorithm:
- * 1. For each party, start with its Erststimmen as the base
- * 2. For each archetype split within that base, apply crossover rules
- * 3. Redistribute votes to target parties according to crossover rates
- * 4. Accumulate into final Zweitstimmen per party
+ * `slugToPartyId` maps the rate table's slugs onto the live party ids on the
+ * tally, and is built per world by `buildDEPartySlugToSeqId` — it only contains
+ * parties that exist under the active preset, so a rule naming a party the
+ * world does not have is skipped rather than inventing votes for it.
  *
- * @param erststimmen - Array of { partyId, votes, byArchetype? }
- * @param crossoverRates - Optional override for DEFAULT_CROSSOVER_RATES
- * @returns Array of { partyId, votes, byArchetype? }
+ * Total ballots are conserved: crossover moves votes between parties and never
+ * creates or destroys them. A party receiving votes but casting none of its own
+ * still appears in the output.
  */
 export function deriveZweitstimmen(
   erststimmen: ErststimmeInput[],
-  crossoverRates: Record<string, ArchetypeCrossoverRate[]> = DEFAULT_CROSSOVER_RATES
+  rates: PartyCrossoverRate[],
+  slugToPartyId: Record<string, string>
 ): ZweitstimmeOutput[] {
-  // Accumulate Zweitstimmen by party
   const zweitstimmen: Record<string, number> = {};
-  const zweiByleadertype: Record<string, Record<string, number>> = {};
+  for (const e of erststimmen) zweitstimmen[e.partyId] = 0;
 
-  // Initialize
-  for (const e of erststimmen) {
-    zweitstimmen[e.partyId] = 0;
-    zweiByleadertype[e.partyId] = {};
+  // Resolve the slug-keyed table to live party ids once, dropping any rule
+  // whose parties are absent under this preset.
+  const resolved = rates.flatMap((rule) => {
+    const from = slugToPartyId[rule.fromParty];
+    const to = slugToPartyId[rule.toParty];
+    if (!from || !to || from === to || rule.rate <= 0) return [];
+    return [{ from, to, rate: rule.rate }];
+  });
+
+  const outgoingByParty = new Map<string, { to: string; rate: number }[]>();
+  for (const rule of resolved) {
+    const list = outgoingByParty.get(rule.from);
+    if (list) list.push(rule);
+    else outgoingByParty.set(rule.from, [rule]);
   }
 
-  // Process each party's Erststimmen
-  for (const erststimme of erststimmen) {
-    const { partyId: fromParty, votes: totalVotes, byArchetype = {} } = erststimme;
+  for (const { partyId: fromParty, votes } of erststimmen) {
+    if (votes <= 0) continue;
+    const outgoing = outgoingByParty.get(fromParty) ?? [];
 
-    // If no archetype breakdown, assume votes are distributed equally
-    const archetypeVotes =
-      Object.keys(byArchetype).length > 0 ? byArchetype : { _default: totalVotes };
+    // Clamp so a party can never lend out more than it received.
+    let totalRate = outgoing.reduce((sum, r) => sum + r.rate, 0);
+    const scale = totalRate > 1 ? 1 / totalRate : 1;
+    if (totalRate > 1) totalRate = 1;
 
-    for (const [archetypeId, archVotes] of Object.entries(archetypeVotes)) {
-      if (archVotes === 0) continue;
-
-      // Find crossover rules for this archetype
-      const archetypeRules = crossoverRates[archetypeId] ?? [];
-
-      // Rules matching this fromParty
-      const applicableRules = archetypeRules.filter((r) => r.fromParty === fromParty);
-
-      // Compute total crossover rate
-      let totalCrossover = 0;
-      const targetAllocations: Record<string, number> = {};
-
-      for (const rule of applicableRules) {
-        targetAllocations[rule.toParty] = rule.rate;
-        totalCrossover += rule.rate;
-      }
-
-      // Clamp total crossover to [0, 1]
-      if (totalCrossover > 1) {
-        const scale = 1 / totalCrossover;
-        for (const party of Object.keys(targetAllocations)) {
-          targetAllocations[party] *= scale;
-        }
-        totalCrossover = 1;
-      }
-
-      // Remaining votes stay with the original party
-      const stayRate = 1 - totalCrossover;
-
-      // Allocate
-      zweitstimmen[fromParty] += archVotes * stayRate;
-      zweiByleadertype[fromParty][archetypeId] =
-        (zweiByleadertype[fromParty][archetypeId] ?? 0) + archVotes * stayRate;
-
-      for (const [toParty, rate] of Object.entries(targetAllocations)) {
-        zweitstimmen[toParty] = (zweitstimmen[toParty] ?? 0) + archVotes * rate;
-        zweiByleadertype[toParty] = zweiByleadertype[toParty] ?? {};
-        zweiByleadertype[toParty][archetypeId] =
-          (zweiByleadertype[toParty][archetypeId] ?? 0) + archVotes * rate;
-      }
+    zweitstimmen[fromParty] += votes * (1 - totalRate);
+    for (const rule of outgoing) {
+      zweitstimmen[rule.to] = (zweitstimmen[rule.to] ?? 0) + votes * rule.rate * scale;
     }
   }
 
-  // Convert to output format
   return Object.entries(zweitstimmen).map(([partyId, votes]) => ({
     partyId,
-    votes: Math.round(votes), // Round to nearest integer
-    byArchetype: zweiByleadertype[partyId],
+    votes: Math.round(votes),
   }));
 }
 
 /**
- * Validates that Zweitstimmen sum to approximately the same total as Erststimmen.
- * Allows for rounding error (±1 vote per 100k).
+ * Zweitstimmen must sum to the Erststimmen total — crossover redistributes
+ * ballots, it does not mint them. Tolerates per-party rounding.
  */
 export function validateZweitstimmenSum(
   erststimmen: ErststimmeInput[],
   zweitstimmen: ZweitstimmeOutput[],
-  tolerance: number = 0.01 // 1% tolerance
+  tolerance: number = 0.01
 ): boolean {
   const erstsumme = erststimmen.reduce((s, e) => s + e.votes, 0);
   const zweisumme = zweitstimmen.reduce((s, z) => s + z.votes, 0);
-  const error = Math.abs(erstsumme - zweisumme) / erstsumme;
-  return error <= tolerance;
+  if (erstsumme === 0) return zweisumme === 0;
+  return Math.abs(erstsumme - zweisumme) / erstsumme <= tolerance;
 }
