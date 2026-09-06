@@ -28,4 +28,4 @@ areas: [engine]
   11,250 to 9,500 database round trips, and a singleplayer turn from 30s to
   23s.
 - Every phase now has a round-trip budget checked on every turn, and a build
-  check refuses unprojected reads of the heavy collections on the turn path. 
+  check refuses unprojected reads of the heavy collections on the turn path.
