@@ -23,17 +23,37 @@ export type WireEventType =
   | "crisis_outcome"
   | "crisis_aid_pledged"
   | "crisis_aid_passed"
-  | "crisis_aid_failed";
+  | "crisis_aid_failed"
+  // Per-race campaign wire. Unlike the economy events above, these carry an
+  // `electionId` (and usually a `campaignId`) so the ticker on a race page can
+  // ask for just that race's traffic. Headlines come from
+  // `campaignWireHeadlines.ts`.
+  //
+  // Only genuinely event-shaped moments live here. State calls are deliberately
+  // absent: `liveResults/computeResults.ts` defines "called" as a display
+  // projection with the turn engine as the sole authority on outcomes, so the
+  // general-election ticker derives its call headlines from that projection at
+  // render time instead of persisting them as events.
+  | "campaign_ops_level"
+  | "campaign_rally"
+  | "primary_tier_locked"
+  | "campaign_state_attack";
 
 export interface WireEvent {
   type: WireEventType;
   headline: string;
   timestamp: Date;
   href?: string;
+  /** Race this event belongs to. Absent on the economy-wide economy events. */
+  electionId?: string;
+  /** Campaign this event belongs to, when it is attributable to one. */
+  campaignId?: string;
 }
 
 interface LogWireEventOptions {
   href?: string;
+  electionId?: string;
+  campaignId?: string;
 }
 
 let ttlIndexEnsured = false;
@@ -288,10 +308,17 @@ export async function logWireEvent(
     const db = await getDb();
     const col = db.collection<WireEvent>("wireEvents");
 
-    // Ensure TTL index once per process lifetime
+    // Ensure indexes once per process lifetime
     if (!ttlIndexEnsured) {
       ttlIndexEnsured = true;
       col.createIndex({ timestamp: 1 }, { expireAfterSeconds: 48 * 60 * 60 }).catch(() => {});
+      // Backs the per-race feed's "this election, newest first" query.
+      col
+        .createIndex(
+          { electionId: 1, timestamp: -1 },
+          { sparse: true, name: "wire_election_recent" }
+        )
+        .catch(() => {});
     }
 
     await col.insertOne({
@@ -299,6 +326,8 @@ export async function logWireEvent(
       headline,
       timestamp: new Date(),
       ...(options?.href ? { href: options.href } : {}),
+      ...(options?.electionId ? { electionId: options.electionId } : {}),
+      ...(options?.campaignId ? { campaignId: options.campaignId } : {}),
     });
   } catch {
     // Fire-and-forget

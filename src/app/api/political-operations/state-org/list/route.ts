@@ -5,6 +5,8 @@ import { handleRouteError, forbidden } from "@/lib/api/errors";
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 import { getPartyHex } from "@/lib/utils/politics";
 import { loadRacePresence } from "@/lib/politicalOperations/racePresence";
+import { loadCampaignFxRate } from "@/lib/currency/campaignFxRate";
+import { statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 import type { CharacterStateOrg, PoliticalParty } from "@/lib/db/types";
 
 /**
@@ -27,7 +29,7 @@ export async function GET() {
     }
 
     const db = await getDb();
-    const [rows, party, { residentPoliticalIds }, racePresence] = await Promise.all([
+    const [rows, party, { residentPoliticalIds }, racePresence, fxRate] = await Promise.all([
       db
         .collection<CharacterStateOrg>("characterStateOrg")
         .find({ characterId: character._id })
@@ -48,17 +50,23 @@ export async function GET() {
       // Every candidate in the live presidential race, so the map can show the
       // contested ground and not just the viewer's own investment.
       loadRacePresence(db, character._id),
+      // Priced server-side and handed back converted, so no screen has to know
+      // that `stateOrgLevelCost` is anchor-denominated.
+      loadCampaignFxRate(db, character),
     ]);
     const byState = new Map(rows.map((r) => [r.stateId, r]));
 
     const states = [...residentPoliticalIds].sort();
     const result = states.map((stateId) => {
       const row = byState.get(stateId);
+      const level = row?.level ?? 0;
       return {
         stateId,
-        level: row?.level ?? 0,
+        level,
         totalInvested: row?.totalInvested ?? 0,
         updatedAt: row?.updatedAt ?? null,
+        /** Cost of the NEXT level here, in the campaign's own currency. */
+        nextCost: statePresenceNextCost(level, fxRate),
       };
     });
 
@@ -69,6 +77,12 @@ export async function GET() {
 
     return NextResponse.json({
       states: result,
+      /**
+       * Anchor to the viewer's own currency. Rows already carry a converted
+       * `nextCost`; this is for pricing a level the response did not enumerate,
+       * such as another candidate's, through the same helper.
+       */
+      fxRate,
       racePresence,
       homeState: character.homeState ?? null,
       partyHex,

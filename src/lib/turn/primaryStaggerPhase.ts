@@ -47,6 +47,7 @@ import {
 } from "@/lib/elections/presidentialRuleset";
 import { initPresidentVoteTally } from "@/lib/presidentialElectionEngine";
 import { fetchEnrichedCandidates } from "@/lib/electionEngine/candidateEnrichment";
+import { loadLiveStateActions } from "@/lib/elections/primaryStateActions";
 import { distributeVotesByGroupLevelAllocation } from "@/lib/electionEngine/voteDistribution";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
@@ -59,6 +60,9 @@ import {
 } from "@/lib/campaigns/shiftPrimaryElectorate";
 import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
+  homeStateSurgeMultiplier,
+  stateAttackMultiplier,
+  stateFavorabilityDeltas,
   PRIMARY_MOMENTUM_WIN_BONUS,
   PRIMARY_MOMENTUM_UPSET_BONUS,
   NPP_STAGGER_EXTRA_MULTIPLIER,
@@ -75,6 +79,7 @@ const PRIMARY_TURNOUT_FACTOR = 0.13;
 import { allocateDelegates, type AllocationMethod } from "@/lib/primaryDelegateAllocation";
 import { projectPrimaryByState } from "@/lib/primaryProjection";
 import { logger } from "../observability/logger";
+import { emitPrimaryTierWire } from "@/lib/elections/raceWireEmit";
 
 const MS_PER_HOUR = 3_600_000;
 
@@ -342,6 +347,14 @@ export async function runPrimaryStaggerWaveIfDue(
   const demographicsMap = new Map(demographics.map((d) => [d._id as string, d]));
   const turnoutMap = new Map(turnoutDocs.map((t) => [t._id as string, t]));
 
+  // Live state actions for this race, read once for the wave rather than per
+  // state. Only `voteSuppression` rows are read below; `localFavorability` is
+  // applied by campaignTurn against favourability, not here.
+  const liveStateActions = await loadLiveStateActions(db, {
+    electionId: election._id,
+    currentTurn,
+  });
+
   // Seeded snapshots for the granular substrate's legislation lean-drift fold.
   // Only fetched when the flag is on so the legacy path pays no extra read.
   const demographicDefaultsByState = granularElectorateEnabled
@@ -411,6 +424,8 @@ export async function runPrimaryStaggerWaveIfDue(
       homeState,
       primaryCampaignState: raw?.primaryCampaignState ?? null,
       primaryCampaignTicks: raw?.primaryCampaignTicks ?? 0,
+      primarySurgeUsed: raw?.primarySurgeUsed ?? false,
+      primarySurgeBoost: raw?.primarySurgeBoost,
       support: raw?.support,
     };
   });
@@ -488,6 +503,12 @@ export async function runPrimaryStaggerWaveIfDue(
       partyCandidates.some((c) => c.candidateId === m.candidateId)
     );
     const { stateWinners, byState } = projectPrimaryByState({
+      // Suppression is applied to the EXPECTED share as well as to the result.
+      // Without this the target would be punished twice: fewer votes on the
+      // night, and a momentum penalty for "missing" an expectation that never
+      // accounted for the attack. One purchase, one effect.
+      stateActions: liveStateActions,
+      currentTurn,
       candidates: partyCandidates,
       candidateMeta: metaForParty,
       stateIds: waveStates,
@@ -663,9 +684,10 @@ export async function runPrimaryStaggerWaveIfDue(
       const partyOrgForState = new Map<string, number>();
       for (const [key, po] of partyOrgByStateParty.entries()) {
         if (key.startsWith(`${stateId}_`)) {
-          // Add primarySurge bump (home-state surge action) to the org used for
-          // primary vote distribution. Permanent org is unchanged — surge is
-          // cleared at primary resolution.
+          // Any statePartyOrg.primarySurge bump on top of permanent org. The
+          // player's home-state surge does NOT arrive here: it is per-candidate
+          // and applied below, so it advantages the candidate who paid for it
+          // rather than every co-partisan in the state.
           partyOrgForState.set(po.partyId, po.organization + (po.primarySurge ?? 0));
         }
       }
@@ -699,12 +721,20 @@ export async function runPrimaryStaggerWaveIfDue(
           stateOrgByCandidate: stateOrgByStateAndCandidate.get(stateId),
           homeStateByCandidate,
           liveTurnouts,
+          // Local attacks: a state-scoped favourability penalty, read from the
+          // same helper the projection runs so the board and the night agree.
+          favorabilityDeltaByCandidate: stateFavorabilityDeltas({
+            actions: liveStateActions,
+            candidateIds: partyCandidates.map((c) => c.candidateId),
+            stateId,
+            currentTurn,
+          }),
           hasPlayerInRace: partyCandidates.some((c) => !c.isNPP),
         }
       );
 
-      // Apply primaryCampaignTicks as a multiplicative in-state bump: +3% per
-      // tick (cap +15%) for the candidate camped in this state. Sized so
+      // Apply primaryCampaignTicks as a multiplicative in-state bump: +5% per
+      // tick (cap +25%) for the candidate camped in this state. Sized so
       // sustained in-state campaigning meaningfully shifts a competitive state
       // without overriding demographic/ideology alignment.
       for (const ec of partyCandidates) {
@@ -719,6 +749,48 @@ export async function runPrimaryStaggerWaveIfDue(
             (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
           );
         }
+      }
+
+      // Home-state surge: the one-off paid boost in the candidate's own home
+      // state, in the same multiplicative shape as the tick bump above.
+      //
+      // The action wrote `primarySurgeBoost` on the candidate and nothing ever
+      // read it, so a player paid funds and actions for no change to any vote.
+      // Gated on `primarySurgeUsed` because that is the field primary
+      // resolution clears at the end of the cycle; the stored rate is left
+      // behind, so keying off the rate alone would boost for ever. The rate
+      // comes from the row rather than the constant so a surge already bought
+      // keeps the price it was bought at.
+      for (const ec of partyCandidates) {
+        const rawCandidate = candidates.find((c) => c._id.toString() === ec.candidateId);
+        const multiplier = homeStateSurgeMultiplier({
+          surgeUsed: rawCandidate?.primarySurgeUsed,
+          surgeBoostPct: rawCandidate?.primarySurgeBoost,
+          homeState: homeStateByCandidate.get(ec.candidateId),
+          stateId,
+        });
+        if (multiplier === 1) continue;
+        votesPerCandidate[ec.candidateId] = Math.round(
+          (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
+        );
+      }
+
+      // Vote suppression: rivals paying to remove a slice of this candidate's
+      // vote in this state. Same multiplicative shape as the surge above, and
+      // the same helper the projection runs, so the board and the wave cannot
+      // disagree. Exactly 1 for anyone not under attack, so this block is a
+      // strict no-op for every race with no live rows.
+      for (const ec of partyCandidates) {
+        const multiplier = stateAttackMultiplier({
+          actions: liveStateActions,
+          candidateId: ec.candidateId,
+          stateId,
+          currentTurn,
+        });
+        if (multiplier === 1) continue;
+        votesPerCandidate[ec.candidateId] = Math.round(
+          (votesPerCandidate[ec.candidateId] ?? 0) * multiplier
+        );
       }
 
       // Rally support now counts in the primary too. Previously only the
@@ -968,6 +1040,10 @@ export async function runPrimaryStaggerWaveIfDue(
   console.log(
     `[Primary Stagger] Election ${election._id} wave ${wavesRun + 1}/${schedule.waves.length} (${wave.label}) — ${wave.states.join(", ")}; delegates awarded: ${totalDelegatesAwarded}; momentum bumps: ${totalMomentumBumps}`
   );
+
+  // Per-race wire: the wave that just closed and what it awarded. Fire-and-
+  // forget after the tally write has committed, so it can never fail the wave.
+  void emitPrimaryTierWire(election._id, wavesRun + 1, totalDelegatesAwarded);
 
   return {
     electionId: election._id,

@@ -44,38 +44,28 @@ const delegateBriefing: CampaignBriefing = {
   },
   cashRunway: { funds: 500_000, netPerTurn: -25_000, turnsOfRunway: 20 },
   coalitionWeakness: [
-    { bucket: "race:black", appealShare: 0.1, demoEP: -0.3, demoSP: -0.2 },
-    { bucket: "race:white", appealShare: 0.5, demoEP: 0.1, demoSP: 0.2 },
-  ],
-  opsSaturation: [
-    { category: "fundraising", level: 2, max: 15 },
-    { category: "groundGame", level: 0, max: 15 },
-  ],
-  tradeoffs: [
-    {
-      actionId: "fundraising",
-      label: "Fundraising",
-      cost: { funds: 75_000, actions: 15 },
-      expectedEffect: "+income",
-    },
+    { bucket: "race:black", appealShare: 0.1, bucketShare: 0.12, demoEP: -0.3, demoSP: -0.2 },
+    { bucket: "race:white", appealShare: 0.5, bucketShare: 0.61, demoEP: 0.1, demoSP: 0.2 },
   ],
 };
 
 describe("CampaignRoomBriefing", () => {
-  it("renders the delegate path, runway, weakest bucket, and a tradeoff", () => {
+  it("renders the delegate path and the weakest bucket", () => {
     render(<CampaignRoomBriefing campaign={campaignWith(delegateBriefing)} />);
     expect(screen.getByText(/Campaign Room/i)).toBeTruthy();
-    expect(screen.getByText(/Path to Victory — Delegates/i)).toBeTruthy();
+    expect(screen.getByText(/Path to victory: delegates/i)).toBeTruthy();
     expect(screen.getAllByText("120").length).toBeGreaterThan(0);
     expect(screen.getByText(/80 more to clinch/i)).toBeTruthy();
     expect(screen.getByText("Rival")).toBeTruthy();
     // Weakest bucket leads the coalition card.
     expect(screen.getByText(/Black · Race/i)).toBeTruthy();
-    // Runway with a burn shows a turn count.
-    expect(screen.getByText(/of runway at the current burn/i)).toBeTruthy();
-    // Tradeoff effect string + cost render.
-    expect(screen.getByText(/\+income/i)).toBeTruthy();
-    expect(screen.getByText(/\$75,000\.00/)).toBeTruthy();
+    // The runway rides on the war-chest vital now, beside the balance and burn
+    // rate the card here was quoting back.
+    expect(screen.queryByText(/Cash runway/i)).toBeNull();
+    // The levers themselves are not repeated here: Strategic operations above
+    // renders them interactively, with the next tier's price on the row.
+    expect(screen.queryByText(/Operations saturation/i)).toBeNull();
+    expect(screen.queryByText(/Action tradeoffs/i)).toBeNull();
   });
 
   it("renders the tipping path with electoral votes and closest states", () => {
@@ -92,7 +82,7 @@ describe("CampaignRoomBriefing", () => {
       },
     };
     render(<CampaignRoomBriefing campaign={campaignWith(tipping)} />);
-    expect(screen.getByText(/Path to Victory — Electoral Votes/i)).toBeTruthy();
+    expect(screen.getByText(/Path to victory: electoral votes/i)).toBeTruthy();
     expect(screen.getByText("210")).toBeTruthy();
     expect(screen.getByText(/California/i)).toBeTruthy();
   });

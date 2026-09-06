@@ -79,6 +79,18 @@ export interface EnrichedCandidate {
 }
 
 export interface DistributeVotesOptions {
+  /**
+   * Points to add to a candidate's favourability FOR THIS STATE ONLY, keyed by
+   * candidateId. Negative for a local attack.
+   *
+   * Applied before the approval curve, so the hit lands through each group's
+   * approval rather than as a flat slice off the count. That is what separates
+   * a local attack from vote suppression: its bite depends on the state's
+   * composition, and a candidate the state already likes shrugs off more of it.
+   *
+   * Absent → no adjustment, which is every caller that has not opted in.
+   */
+  favorabilityDeltaByCandidate?: Record<string, number>;
   /** Use averaged (party + candidate) positions for appeal */
   useAveragedPositions?: boolean;
   /** Weight party over candidate: (partyWeight*party + candidate)/(partyWeight+1). 2 = 2:1 party. */

@@ -1,0 +1,77 @@
+/*
+ * Keyframes for the Blend treatment (Proposal D). Scoped to a CSS module rather
+ * than added to globals.css so they only ship with the screens that use them.
+ */
+
+/*
+ * Live-feed ticker: the track holds two copies of the headline list, so
+ * translating it by half its width loops seamlessly.
+ */
+@keyframes ahdticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ticker {
+  display: flex;
+  width: max-content;
+  animation: ahdticker 42s linear infinite;
+}
+
+.ticker:hover {
+  animation-play-state: paused;
+}
+
+.ticker > span {
+  display: flex;
+  gap: 30px;
+  padding-right: 30px;
+  white-space: nowrap;
+}
+
+@keyframes ahdpulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.pulse {
+  animation: ahdpulse 1.6s infinite;
+}
+
+/*
+ * The mobile rail scrolls horizontally; its scrollbar is suppressed the way the
+ * design does, while remaining reachable by swipe and keyboard.
+ */
+.chipRail {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.chipRail::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * Readers who ask for less motion get a static ticker and no pulse rather than
+ * an indefinitely animating strip.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ticker,
+  .pulse {
+    animation: none;
+  }
+}

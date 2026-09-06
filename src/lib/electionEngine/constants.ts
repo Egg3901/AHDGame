@@ -2,6 +2,8 @@
  * Constants for the election engine.
  */
 
+import type { PrimaryStateAction } from "@/lib/db/types";
+
 // ─── FPTP vote-splitting constants ───────────────────────────────────────────
 //
 // In First Past the Post states, the vote-splitting (spoiler) effect is modelled
@@ -128,6 +130,215 @@ export const NPP_STAGGER_EXTRA_MULTIPLIER = 0.6;
  * state adds +1 up to this cap. Changing `primaryCampaignState` resets to 0.
  */
 export const PRIMARY_CAMPAIGN_TICK_CAP = 5;
+
+/**
+ * Home-state surge: a one-off action during the presidential primary that
+ * boosts the candidate in their OWN home state.
+ *
+ * These lived twice: as literals in the primary page's JSX and as private
+ * constants in the surge route. They had already drifted — the page advertised
+ * "+10 party org" while the route granted +15% to the candidate alone. Both
+ * surfaces now read these, so the price and the effect the player is shown are
+ * the price and effect the action charges and grants.
+ */
+export const PRIMARY_HOME_SURGE_COST_FUNDS = 25_000;
+export const PRIMARY_HOME_SURGE_COST_ACTIONS = 3;
+/**
+ * Percentage vote boost in the candidate's own home state, for the remainder of
+ * the primary. Applied to this candidate only, not to the state party org, so
+ * the surge advantages the surging candidate rather than scaling every
+ * co-partisan in the state.
+ */
+export const PRIMARY_HOME_SURGE_PCT = 15;
+
+/**
+ * State attacks: acts aimed at one rival in one state during the primary.
+ *
+ * Sized against the national opposition-research drain, which is 0.5 points of
+ * favourability per turn at level 1 and hits everywhere. A local attack is
+ * deliberately weaker in absolute terms because it hits one state, so it only
+ * pays when aimed at a state that decides something. The cash cost sits between
+ * a canvass batch and a Presence level (STATE_ORG_COST_FUNDS = 250,000) so that
+ * attacking a rival genuinely competes with building for yourself.
+ *
+ * First pass. Wants a balance issue filed and a cycle of play before live.
+ */
+export const PRIMARY_STATE_ATTACK_DURATION_TURNS = 8;
+
+/**
+ * Local favourability hit: points off the target's favourability IN THAT STATE
+ * while the attack is live, before the shield.
+ *
+ * A standing penalty rather than an accruing drain. It once fed the candidate's
+ * NATIONAL favourability, so an attack bought in Iowa moved every state in the
+ * country and stacked once per state bought: the balance simulation had a
+ * single purchase flipping a tight primary and five purchases burying it.
+ * Scoped here to the state it names, which is what its price, its name and its
+ * own button copy always claimed.
+ */
+export const PRIMARY_LOCAL_ATTACK_FAV_POINTS = 6;
+export const PRIMARY_LOCAL_ATTACK_COST_FUNDS = 40_000;
+export const PRIMARY_LOCAL_ATTACK_COST_ACTIONS = 4;
+
+/**
+ * Vote suppression: points of the target's vote removed in one state while the
+ * attack is live.
+ *
+ * The only one of the attacks that touches the count directly, so it is the
+ * dearest. It shipped at 2.5 points on the theory that small was safe — enough
+ * to decide a state already inside the margin, never enough to take one
+ * outright. Simulated across 2- to 5-candidate fields, 2.5 turned out to be
+ * under the noise floor rather than merely modest: buying it in one state cost
+ * the target 0.03pp of the delegate count, and buying it in the five largest
+ * states cost 0.10pp. A player spending 70,000 and 5 actions could not see what
+ * they had bought.
+ *
+ * At 10 the same purchases cost 0.18pp / one state and 0.41pp / three states —
+ * a lever that decides close states without deciding the race, which is what
+ * the 2.5 was reaching for. PRIMARY_VOTE_SUPPRESSION_FLOOR still caps the whole
+ * field's convergence at 15% of a state's vote.
+ */
+export const PRIMARY_VOTE_SUPPRESSION_PCT = 10;
+export const PRIMARY_VOTE_SUPPRESSION_COST_FUNDS = 70_000;
+export const PRIMARY_VOTE_SUPPRESSION_COST_ACTIONS = 5;
+
+/**
+ * Floor on the combined vote multiplier. No candidate loses more than 15% of a
+ * state's vote to suppression, however many rivals converge on them.
+ *
+ * The one-live-attack-per-pair rule limits a single attacker; nothing limited
+ * the field until this did.
+ */
+export const PRIMARY_VOTE_SUPPRESSION_FLOOR = 0.85;
+
+/*
+ * Turnout suppression was the third state attack and is not shipped. It took
+ * points off one group's turnout in a state for every candidate there, the
+ * buyer included, so it only ever paid when aimed at a group a rival depended
+ * on disproportionately. Simulation says no group is that concentrated: across
+ * 2- to 5-candidate fields it moved the leader's delegate share by 0.00pp at
+ * 1.5, 4 and 8 points, and reached -0.03pp only at 15 points in a field already
+ * decided. It was a 50,000-and-4-action purchase a player could not detect.
+ *
+ * The premise is sound and the fix is not a bigger number — it is a sharper
+ * per-state demographic spread, without which the cut is symmetric by
+ * construction. Left out rather than left in doing nothing.
+ */
+
+/**
+ * Vote multiplier the live vote-suppression rows impose on one candidate in one
+ * state.
+ *
+ * Shared by the stagger phase, which decides the real result, and the
+ * projection that displays it, exactly as `homeStateSurgeMultiplier` is. They
+ * apply the same rule from the same function so the board cannot promise what
+ * the wave will not deliver.
+ *
+ * Returns exactly 1 for a candidate with no live rows against them in this
+ * state, so the vote path is byte-identical for everyone not under attack.
+ * `localFavorability` rows are ignored here on purpose: `campaignTurn` already
+ * applies those against favourability, and applying them again against votes
+ * would charge one purchase to two mechanics.
+ *
+ * The shield is the one stamped on each row at purchase, not the defender's
+ * current tree: an action already paid for keeps the terms it was bought under.
+ */
+/**
+ * Points of favourability the live local attacks take off one candidate in one
+ * state. Zero for a candidate nobody has attacked there.
+ *
+ * Read by the stagger and the projection through
+ * `favorabilityDeltaByCandidate`, so the board and the night agree, and by
+ * nothing else: this is the whole of the mechanic now that it no longer touches
+ * the national scalar.
+ */
+export function stateFavorabilityPenalty(input: {
+  actions: PrimaryStateAction[];
+  candidateId: string;
+  stateId: string;
+  currentTurn: number;
+}): number {
+  let points = 0;
+  for (const action of input.actions) {
+    if (action.kind !== "localFavorability") continue;
+    if (action.stateId !== input.stateId) continue;
+    if (action.targetCandidateId.toString() !== input.candidateId) continue;
+    if (action.expiresTurn <= input.currentTurn) continue;
+    points += action.magnitude * (1 - action.shieldApplied);
+  }
+  return points;
+}
+
+/**
+ * Every candidate's state-scoped favourability delta for one state, in the
+ * shape `distributeVotesByGroupLevelAllocation` takes. Undefined when nothing
+ * is live there, so the option is a strict no-op for an unattacked state.
+ */
+export function stateFavorabilityDeltas(input: {
+  actions: PrimaryStateAction[];
+  candidateIds: string[];
+  stateId: string;
+  currentTurn: number;
+}): Record<string, number> | undefined {
+  let any = false;
+  const out: Record<string, number> = {};
+  for (const candidateId of input.candidateIds) {
+    const points = stateFavorabilityPenalty({
+      actions: input.actions,
+      candidateId,
+      stateId: input.stateId,
+      currentTurn: input.currentTurn,
+    });
+    if (points <= 0) continue;
+    out[candidateId] = -points;
+    any = true;
+  }
+  return any ? out : undefined;
+}
+
+export function stateAttackMultiplier(input: {
+  actions: PrimaryStateAction[];
+  /** electionCandidates._id as a string, matching what both vote loops iterate. */
+  candidateId: string;
+  stateId: string;
+  currentTurn: number;
+}): number {
+  let points = 0;
+  for (const action of input.actions) {
+    if (action.kind !== "voteSuppression") continue;
+    if (action.stateId !== input.stateId) continue;
+    if (action.targetCandidateId.toString() !== input.candidateId) continue;
+    // `expiresTurn` is exclusive, matching `liveActionFilter`.
+    if (action.expiresTurn <= input.currentTurn) continue;
+    points += action.magnitude * (1 - action.shieldApplied);
+  }
+  if (points <= 0) return 1;
+  return Math.max(PRIMARY_VOTE_SUPPRESSION_FLOOR, 1 - points / 100);
+}
+
+/**
+ * Vote multiplier a live home-state surge gives a candidate in one state.
+ *
+ * Shared by the stagger phase, which decides the real result, and the
+ * projection that displays it. They apply the same multiplier from the same
+ * function so the board cannot promise a lift the wave does not deliver.
+ *
+ * Gated on `surgeUsed` rather than on the stored rate: primary resolution
+ * clears `primarySurgeUsed` at the end of the cycle and leaves
+ * `primarySurgeBoost` behind, so keying off the rate would boost for ever. The
+ * rate itself comes from the candidate row when present, so a surge already
+ * bought keeps the rate it was bought at if this constant is ever retuned.
+ */
+export function homeStateSurgeMultiplier(input: {
+  surgeUsed?: boolean;
+  surgeBoostPct?: number;
+  homeState?: string | null;
+  stateId: string;
+}): number {
+  if (!input.surgeUsed) return 1;
+  if (!input.homeState || input.homeState !== input.stateId) return 1;
+  return 1 + (input.surgeBoostPct ?? PRIMARY_HOME_SURGE_PCT) / 100;
+}
 
 /**
  * Per-tick projection bonus added to a candidate's primary score for their

@@ -20,6 +20,11 @@ interface PresidentialMapWithStateDetailProps {
   stateVotesOverTime?: Record<string, VoteTurnSnapshot[]>;
   /** candidateId → state code they are currently campaigning in */
   candidateTravelStates?: Record<string, string>;
+  /**
+   * Whether to print the "Electoral Map" heading. False where a tab above
+   * already names this pane, so the section is not titled twice.
+   */
+  showHeading?: boolean;
 }
 
 /** Returns the 5 state IDs with the smallest margin between top 2 candidates (closest races) */
@@ -54,6 +59,7 @@ export function PresidentialMapWithStateDetail({
   stateVoteData,
   stateVotesOverTime,
   candidateTravelStates = {},
+  showHeading = true,
 }: PresidentialMapWithStateDetailProps) {
   const [selectedStateId, setSelectedStateId] = useState<string | null>(null);
   const [filterCompetitive, setFilterCompetitive] = useState(false);
@@ -154,7 +160,7 @@ export function PresidentialMapWithStateDetail({
   return (
     <div>
       <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
-        <h3 className="text-sm font-semibold">Electoral Map</h3>
+        {showHeading ? <h3 className="text-sm font-semibold">Electoral Map</h3> : <span />}
         <div className="flex items-center gap-2">
           {/* EV/Popular vote toggle */}
           <div className="flex items-center rounded-lg border border-card-border bg-card">

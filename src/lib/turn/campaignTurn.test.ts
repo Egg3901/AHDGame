@@ -963,3 +963,155 @@ describe("endorsement filter", () => {
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 });
+
+// ─── Primary state attacks ──────────────────────────────────────────────────
+
+describe("primary state attacks", () => {
+  const TARGET_ROW = new ObjectId();
+  const TARGET_CHARACTER = new ObjectId();
+  const ACTOR_ROW = new ObjectId();
+
+  /**
+   * Run one campaign turn with `campaignCount` campaigns in the pass and one
+   * live attack, and return the favorability delta written for the target.
+   *
+   * The delta is read out of the clamped update pipeline
+   * `[{ $set: { favorability: { $min: [100, { $max: [0, { $add: [ifNull, amt] }] }] } } }]`.
+   */
+  async function drainForTarget(campaignCount: number): Promise<number | null> {
+    const { getDb } = await import("@/lib/mongodb");
+
+    const campaigns = Array.from({ length: campaignCount }, () => ({
+      _id: new ObjectId(),
+      electionId: "e1",
+      candidateId: new ObjectId(),
+      candidateIsNPP: false,
+      party: "democrat",
+      funds: 5_000_000,
+      actions: 10,
+      fundraisingLevel: 0,
+      oppositionResearchLevel: 0,
+      groundGameLevel: 0,
+      mediaSpendingLevel: 0,
+      oppositionTargetId: null,
+      totalFundsGenerated: 0,
+      totalActionsGenerated: 0,
+    }));
+    // The target holds no campaign, so nothing else in the pass touches their
+    // favorability and the delta below is the attack alone.
+    const characters = [
+      ...campaigns.map((c) => ({
+        _id: c.candidateId,
+        politicalInfluence: 50,
+        funds: 100_000,
+        favorability: 50,
+      })),
+      { _id: TARGET_CHARACTER, politicalInfluence: 50, funds: 100_000, favorability: 50 },
+    ];
+
+    const attack = {
+      _id: new ObjectId(),
+      electionId: "e1",
+      actorCandidateId: ACTOR_ROW,
+      targetCandidateId: TARGET_ROW,
+      targetCharacterId: TARGET_CHARACTER,
+      stateId: "IA",
+      kind: "localFavorability",
+      magnitude: 0.4,
+      shieldApplied: 0,
+      appliedTurn: 4,
+      expiresTurn: 12,
+      createdAt: new Date(),
+    };
+
+    const characterBulkWrite = vi.fn().mockResolvedValue({});
+    const cursor = (docs: unknown[]) => {
+      const c = {
+        toArray: vi.fn().mockResolvedValue(docs),
+        project: vi.fn(() => c),
+        sort: vi.fn(() => c),
+        limit: vi.fn(() => c),
+      };
+      return c;
+    };
+
+    vi.mocked(getDb).mockResolvedValue({
+      collection: vi.fn((name: string) => {
+        if (name === "elections") {
+          return {
+            find: vi.fn(() =>
+              cursor([
+                {
+                  _id: "e1",
+                  countryId: "US",
+                  electionType: "president",
+                  endTurn: 100,
+                  endTime: new Date(Date.now() + 1000 * 60 * 60 * 100),
+                },
+              ])
+            ),
+          };
+        }
+        if (name === "campaigns") {
+          return { find: vi.fn(() => cursor(campaigns)), bulkWrite: vi.fn().mockResolvedValue({}) };
+        }
+        if (name === "characters") {
+          return {
+            find: vi.fn(() => cursor(characters)),
+            findOne: vi.fn().mockResolvedValue(characters[0]),
+            bulkWrite: characterBulkWrite,
+            countDocuments: vi.fn().mockResolvedValue(0),
+          };
+        }
+        if (name === "primaryStateActions") {
+          return { find: vi.fn(() => cursor([attack])) };
+        }
+        if (name === "electionCandidates") {
+          return {
+            find: vi.fn(() =>
+              cursor([{ _id: TARGET_ROW, electionId: "e1", characterId: TARGET_CHARACTER }])
+            ),
+            bulkWrite: vi.fn().mockResolvedValue({}),
+          };
+        }
+        return {
+          find: vi.fn(() => cursor([])),
+          findOne: vi.fn().mockResolvedValue(null),
+          bulkWrite: vi.fn().mockResolvedValue({}),
+          updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+          countDocuments: vi.fn().mockResolvedValue(0),
+          aggregate: vi.fn(() => cursor([])),
+        };
+      }),
+    } as never);
+
+    await processCampaignTurn(5);
+
+    for (const call of characterBulkWrite.mock.calls) {
+      for (const op of (call[0] ?? []) as {
+        updateOne?: { filter: { _id: ObjectId }; update: unknown[] };
+      }[]) {
+        if (op.updateOne?.filter._id?.toString() !== TARGET_CHARACTER.toString()) continue;
+        const pipeline = op.updateOne.update as {
+          $set: {
+            favorability: { $min: [number, { $max: [number, { $add: [unknown, number] }] }] };
+          };
+        }[];
+        return pipeline[0].$set.favorability.$min[1].$max[1].$add[1];
+      }
+    }
+    return null;
+  }
+
+  it("does not touch national favourability, because the attack is state-scoped", async () => {
+    // The drain used to land here, on `characters.favorability`, which is one
+    // national scalar: an attack bought in Iowa moved all 51 states and stacked
+    // once per state bought. It is applied by the stagger now, inside the state
+    // it names, through the vote distribution's favourability delta.
+    expect(await drainForTarget(1)).toBeNull();
+  });
+
+  it("stays out of it however many campaigns are in the pass", async () => {
+    expect(await drainForTarget(6)).toBeNull();
+  });
+});

@@ -108,8 +108,6 @@ export interface PrimaryViewModel {
 }
 
 export function buildPrimaryViewModel(input: PrimaryViewModelInput): PrimaryViewModel {
-  const candidatesById = new Map(input.candidates.map((c) => [c.id, c]));
-
   const waves = buildCalendarWaves({
     votedStateIds: input.votedStateIds,
     currentTurn: input.currentTurn,
@@ -117,8 +115,43 @@ export function buildPrimaryViewModel(input: PrimaryViewModelInput): PrimaryView
     schedule: input.schedule,
   });
 
+  const perStateSlices = buildPerStateSlices(input.candidates, input.byState);
+
+  const stateNameById: Record<string, string> = {};
+  for (const wave of waves) {
+    for (const stateId of wave.stateIds) {
+      stateNameById[stateId] = input.stateNameById?.[stateId] ?? stateId;
+    }
+  }
+
+  const defaultSelectedStateId = pickDefaultSelectedState(waves);
+
+  return {
+    candidates: input.candidates,
+    waves,
+    perStateSlices,
+    stateNameById,
+    defaultSelectedStateId,
+  };
+}
+
+/**
+ * Per-state carve-up slices: each candidate's share of that state's votes,
+ * largest first.
+ *
+ * Extracted so the Blend primary screen and the deep dive derive their
+ * carve-ups with the same arithmetic rather than each rounding their own way.
+ * Candidates absent from the roster are dropped, which is what keeps a
+ * withdrawn candidate's stale tally row from surfacing as an "Unknown" slice.
+ */
+export function buildPerStateSlices(
+  candidates: PrimaryCandidateInfo[],
+  byState: Record<string, Record<string, number>>
+): Record<string, CarveUpSlice[]> {
+  const candidatesById = new Map(candidates.map((c) => [c.id, c]));
   const perStateSlices: Record<string, CarveUpSlice[]> = {};
-  for (const [stateId, votesByCandidate] of Object.entries(input.byState)) {
+
+  for (const [stateId, votesByCandidate] of Object.entries(byState)) {
     const total = Object.values(votesByCandidate).reduce((s, v) => s + Math.max(0, v), 0);
     if (total <= 0) {
       perStateSlices[stateId] = [];
@@ -140,23 +173,7 @@ export function buildPrimaryViewModel(input: PrimaryViewModelInput): PrimaryView
     slices.sort((a, b) => b.pct - a.pct);
     perStateSlices[stateId] = slices;
   }
-
-  const stateNameById: Record<string, string> = {};
-  for (const wave of waves) {
-    for (const stateId of wave.stateIds) {
-      stateNameById[stateId] = input.stateNameById?.[stateId] ?? stateId;
-    }
-  }
-
-  const defaultSelectedStateId = pickDefaultSelectedState(waves);
-
-  return {
-    candidates: input.candidates,
-    waves,
-    perStateSlices,
-    stateNameById,
-    defaultSelectedStateId,
-  };
+  return perStateSlices;
 }
 
 /**
