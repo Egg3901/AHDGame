@@ -2,9 +2,9 @@
 date: 2026-09-06
 title: Crisis GDP rate shocks now survive the metric engine
 summary: >-
-Crisis GDP growth effects now enter the sector growth signal consumed by the
-metric engine. The engine no longer overwrites those rate shocks while the
-separate one-time physical GDP loss remains unchanged.
+  Crisis GDP growth effects now enter the sector growth signal consumed by the
+  metric engine. The engine no longer overwrites those rate shocks while the
+  separate one-time physical GDP loss remains unchanged.
 tags: [economy, crises]
 badges: [patch]
 areas: [backend]
