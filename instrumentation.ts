@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/nextjs";
+import { shouldStartHostedBackgroundServices } from "@/lib/startupMode";
 
 /**
  * Log a heap+rss snapshot under [boot] so we can correlate boot-time
@@ -56,13 +57,13 @@ export async function register() {
     // TEMPORARY (local dev, do not commit): gate auto-seed + cron behind
     // DISABLE_DEV_BACKGROUND so a local `next dev` doesn't run a second turn
     // scheduler / seeder against the configured DB while inspecting the UI.
-    const devBackgroundDisabled = process.env.DISABLE_DEV_BACKGROUND === "1";
-    if (devBackgroundDisabled) {
-      console.log("[dev] DISABLE_DEV_BACKGROUND=1 — skipping auto-seed and cron init");
+    const hostedBackgroundEnabled = shouldStartHostedBackgroundServices(process.env);
+    if (!hostedBackgroundEnabled) {
+      console.log("[boot] local mode: skipping hosted auto-seed, migrations and cron init");
     }
 
     // Auto-seed on startup if the database is empty
-    if (!devBackgroundDisabled)
+    if (hostedBackgroundEnabled)
       try {
         const { getDb } = await import("@/lib/mongodb");
         logBootHeap("after mongodb import");
@@ -91,7 +92,7 @@ export async function register() {
     // an already-populated world returns early from runSeed, and a seed error
     // must not silently prevent a required repair. The full migration registry
     // remains an explicit operator action (`npm run migrate`).
-    if (!devBackgroundDisabled) {
+    if (hostedBackgroundEnabled) {
       try {
         const { getDb } = await import("@/lib/mongodb");
         const { runRequiredStartupMigrations } = await import("@/lib/migrations/startupMigrations");
@@ -117,22 +118,26 @@ export async function register() {
       }
     }
 
-    // Check transaction support at boot
-    try {
-      const { assertTransactionSupportAtBoot } = await import("@/lib/db/transactionSupport");
-      await assertTransactionSupportAtBoot();
-      logBootHeap("after transaction-support check");
-    } catch (err) {
-      console.warn(
-        "[db] transaction-support check failed:",
-        err instanceof Error ? err.message : err
-      );
+    // Standalone singleplayer MongoDB does not support transactions. Avoid two
+    // server-selection waits before the first status response by keeping this
+    // hosted deployment check out of local startup entirely.
+    if (hostedBackgroundEnabled) {
+      try {
+        const { assertTransactionSupportAtBoot } = await import("@/lib/db/transactionSupport");
+        await assertTransactionSupportAtBoot();
+        logBootHeap("after transaction-support check");
+      } catch (err) {
+        console.warn(
+          "[db] transaction-support check failed:",
+          err instanceof Error ? err.message : err
+        );
+      }
     }
 
     // Start in-process cron jobs (turn processing, stock exchange, fog of war).
     // Railway runs a persistent server — node-cron is the correct scheduler here.
     // Vercel crons (vercel.json) are not executed on Railway.
-    if (!devBackgroundDisabled)
+    if (hostedBackgroundEnabled)
       try {
         const { initializeCronJobs } = await import("@/lib/cron");
         logBootHeap("after cron module import");

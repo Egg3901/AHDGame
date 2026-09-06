@@ -50,6 +50,7 @@ import {
   sectorRevenueTaxProvider,
   fiscalRatiosProvider,
   fiscalTradeInputsProvider,
+  warDamageProvider,
 } from "./providers";
 import { fiscalMirrorFields, FISCAL_MIRROR_METRICS } from "./fiscalMirror";
 import { isMacroMetricPath, MACRO_CATEGORIES } from "@/lib/macroMetrics/paths";
@@ -257,6 +258,7 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     labourConfig,
     politicalInputs,
     countryGameStates,
+    warDamageByCountryId,
   ] = await Promise.all([
     db.collection<State>("states").find({}).toArray(),
     db
@@ -296,6 +298,9 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       .find({ status: "active" })
       .project<{ _id: string }>({ _id: 1 })
       .toArray(),
+    // A war is fought on somebody's ground, and that ground's roads should show it.
+    // One small read of the live conflicts; countries at peace are absent from the map.
+    warDamageProvider(db),
   ]);
 
   const labourMacroEnabled = await isLabourMacroEnabled(labourConfig ?? null);
@@ -792,6 +797,8 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
         // Dynamic fiscal-growth inputs for wageGrowth/tradeGrowth (per country;
         // the nodes' own ?? fallbacks cover a missing budget doc).
         fiscalTradeInputs: fiscalTradeInputsByCountry.get(countryId),
+        // Undefined for a country at peace; the consuming nodes read that as zero.
+        warDamage: warDamageByCountryId.get(countryId),
       },
       spending,
       policyValues,
