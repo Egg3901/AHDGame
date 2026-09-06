@@ -637,28 +637,69 @@ export const TOTAL_ELECTORAL_VOTES = 538;
 export const ELECTORAL_MAJORITY = 270;
 
 /**
+ * One electoral-vote unit: a whole state, or one leg of a ME/NE split.
+ *
+ * `electorateShare` is the fraction of the parent state's electorate this unit
+ * draws. It exists because every unit used to resolve its pool from
+ * `unit.stateId` and therefore draw the WHOLE state (#1464) — so ME contributed
+ * about 3x and NE about 4x to the national popular vote once the district split
+ * activated.
+ *
+ * The real rule is two at-large electors decided by the statewide total and one
+ * per district. Scaling the districts alone would still double count against
+ * the at-large unit, so the at-large leg carries `derivesFromDistricts` instead:
+ * it is not simulated, and its tally is summed from its districts at
+ * resolution. Districts partition the state exactly, so each ballot is counted
+ * once and the statewide winner is the one who carried the state.
+ */
+export interface ElectoralVoteUnit {
+  unitId: string;
+  ev: number;
+  stateId: string;
+  /** Fraction of the parent state's electorate. 0 for a derived at-large leg. */
+  electorateShare: number;
+  /** At-large ME/NE leg: tally is the sum of the state's districts, not simulated. */
+  derivesFromDistricts?: boolean;
+}
+
+/**
  * Electoral vote allocation units for presidential elections.
  * Most states: single unit (state ID) with full EV count.
  * ME/NE: split by statewide (2 EV) + congressional districts (1 EV each).
  */
-export const ELECTORAL_VOTE_UNITS: { unitId: string; ev: number; stateId: string }[] = (() => {
-  const units: { unitId: string; ev: number; stateId: string }[] = [];
-  for (const [stateId, ev] of Object.entries(ELECTORAL_VOTES)) {
-    if (stateId === "ME") {
-      units.push({ unitId: "ME", ev: 2, stateId: "ME" }); // at-large
-      units.push({ unitId: "ME_CD1", ev: 1, stateId: "ME" });
-      units.push({ unitId: "ME_CD2", ev: 1, stateId: "ME" });
-    } else if (stateId === "NE") {
-      units.push({ unitId: "NE", ev: 2, stateId: "NE" }); // at-large
-      units.push({ unitId: "NE_CD1", ev: 1, stateId: "NE" });
-      units.push({ unitId: "NE_CD2", ev: 1, stateId: "NE" });
-      units.push({ unitId: "NE_CD3", ev: 1, stateId: "NE" });
+function buildSplitElectoralVoteUnits(electoralVotes: Record<string, number>): ElectoralVoteUnit[] {
+  const units: ElectoralVoteUnit[] = [];
+  for (const [stateId, ev] of Object.entries(electoralVotes)) {
+    const districts = ME_NE_DISTRICT_COUNT[stateId];
+    if (districts) {
+      // At-large leg: derived from the districts, never simulated.
+      units.push({
+        unitId: stateId,
+        ev: 2,
+        stateId,
+        electorateShare: 0,
+        derivesFromDistricts: true,
+      });
+      for (let i = 1; i <= districts; i++) {
+        units.push({
+          unitId: `${stateId}_CD${i}`,
+          ev: 1,
+          stateId,
+          electorateShare: 1 / districts,
+        });
+      }
     } else {
-      units.push({ unitId: stateId, ev, stateId });
+      units.push({ unitId: stateId, ev, stateId, electorateShare: 1 });
     }
   }
   return units;
-})();
+}
+
+/** States electing by congressional district, and how many districts each has. */
+const ME_NE_DISTRICT_COUNT: Record<string, number> = { ME: 2, NE: 3 };
+
+export const ELECTORAL_VOTE_UNITS: ElectoralVoteUnit[] =
+  buildSplitElectoralVoteUnits(ELECTORAL_VOTES);
 
 /**
  * House seat counts by state — 1990 census apportionment (103rd Congress,
@@ -780,24 +821,8 @@ export const ELECTORAL_VOTES_1991: Record<string, number> = {
  * 1990-census electoral vote allocation units. Same ME/NE split structure as
  * the 2020 bundle (only the per-unit EV values differ).
  */
-export const ELECTORAL_VOTE_UNITS_1991: { unitId: string; ev: number; stateId: string }[] = (() => {
-  const units: { unitId: string; ev: number; stateId: string }[] = [];
-  for (const [stateId, ev] of Object.entries(ELECTORAL_VOTES_1991)) {
-    if (stateId === "ME") {
-      units.push({ unitId: "ME", ev: 2, stateId: "ME" }); // at-large
-      units.push({ unitId: "ME_CD1", ev: 1, stateId: "ME" });
-      units.push({ unitId: "ME_CD2", ev: 1, stateId: "ME" });
-    } else if (stateId === "NE") {
-      units.push({ unitId: "NE", ev: 2, stateId: "NE" }); // at-large
-      units.push({ unitId: "NE_CD1", ev: 1, stateId: "NE" });
-      units.push({ unitId: "NE_CD2", ev: 1, stateId: "NE" });
-      units.push({ unitId: "NE_CD3", ev: 1, stateId: "NE" });
-    } else {
-      units.push({ unitId: stateId, ev, stateId });
-    }
-  }
-  return units;
-})();
+export const ELECTORAL_VOTE_UNITS_1991: ElectoralVoteUnit[] =
+  buildSplitElectoralVoteUnits(ELECTORAL_VOTES_1991);
 
 /**
  * Electoral votes per state — 1950 census (House seats + 2 Senators). Total = 531,
@@ -814,8 +839,9 @@ export const ELECTORAL_VOTES_1953: Record<string, number> = Object.fromEntries(
  * winner-take-all (Maine did not adopt the district method until 1972, Nebraska
  * 1992), so there are no ME/NE congressional-district splits — one unit per state.
  */
-export const ELECTORAL_VOTE_UNITS_1953: { unitId: string; ev: number; stateId: string }[] =
-  Object.entries(ELECTORAL_VOTES_1953).map(([stateId, ev]) => ({ unitId: stateId, ev, stateId }));
+export const ELECTORAL_VOTE_UNITS_1953: ElectoralVoteUnit[] = Object.entries(
+  ELECTORAL_VOTES_1953
+).map(([stateId, ev]) => ({ unitId: stateId, ev, stateId, electorateShare: 1 }));
 
 /**
  * Preset-aware apportionment selectors. `1953-default` → 1950-census bundle;
