@@ -31,9 +31,13 @@ export async function getConfidenceGauge(db: Db): Promise<number> {
 }
 
 async function writeGauge(db: Db, value: number, now: Date): Promise<void> {
+  // Upsert: the legacy `ukGovernment` singleton does not exist on worlds seeded
+  // after the shared parliamentary extraction, so a plain update was a silent
+  // no-op and every event and tick was lost while the UI showed the default.
   await getUKGovernmentCollection(db).updateOne(
     { _id: "current" },
-    { $set: { confidenceGauge: value, confidenceGaugeUpdatedAt: now, updatedAt: now } }
+    { $set: { confidenceGauge: value, confidenceGaugeUpdatedAt: now, updatedAt: now } },
+    { upsert: true }
   );
 }
 
