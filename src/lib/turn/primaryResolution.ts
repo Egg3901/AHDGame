@@ -52,6 +52,7 @@ import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilte
 import { NPP_PRIMARY_SCORE_MULTIPLIER } from "@/lib/electionEngine/constants";
 import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
 import { createVoteTurnMemo } from "@/lib/electionEngine/tallyManagement";
+import { loadFundsByPartyForElections } from "@/lib/electionEngine/fundsByParty";
 import { resolveTurnWindow } from "@/lib/electionEngine/voteCalculations";
 import { eraYearContextFromGameState } from "@/lib/era/context";
 import {
@@ -1705,6 +1706,14 @@ export async function accumulateGeneralElectionVotes(
       .toArray(),
   ]);
   const tallyByElection = new Map(existingTallies.map((t) => [t.electionId.toString(), t]));
+  // Money driver inputs for every general election in one read; the per
+  // election path stays for callers without a preload.
+  if (preload) {
+    preload.fundsByPartyByElection = await loadFundsByPartyForElections(
+      generalElections.filter((e) => e.electionType !== "president").map((e) => e._id),
+      db
+    );
+  }
   const candidatesByElection = new Map<string, ElectionCandidate[]>();
   for (const c of allActiveCandidates) {
     const eid = c.electionId.toString();
@@ -1744,7 +1753,14 @@ export async function accumulateGeneralElectionVotes(
         if (!existing && activeCandidates.length > 0) {
           await initElectionVoteTally(election._id, activeCandidates, election.state as string);
         }
-        await accumulateVoteTurn(election._id, turn, now, { approvalMap, preload, election });
+        // A tally created just above is not in `existing`; let the turn read it.
+        await accumulateVoteTurn(election._id, turn, now, {
+          approvalMap,
+          preload,
+          election,
+          tally: existing ?? undefined,
+          candidates: activeCandidates,
+        });
       }
     } catch (err) {
       logger.error("Turn", `Error accumulating votes for election ${election._id}`, err);

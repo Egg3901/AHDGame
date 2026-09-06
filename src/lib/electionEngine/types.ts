@@ -454,4 +454,10 @@ export interface AccumulateVoteTurnPreload {
    * documents.
    */
   turnMemo?: import("./tallyManagement").VoteTurnMemo;
+  /**
+   * `loadFundsByPartyForElections` for every election in the sweep, so the
+   * money driver reads campaigns once per turn instead of once per election.
+   * An election absent from the map has no spending campaigns.
+   */
+  fundsByPartyByElection?: Map<string, Map<string, number>>;
 }

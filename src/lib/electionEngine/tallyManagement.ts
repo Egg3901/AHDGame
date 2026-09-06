@@ -120,17 +120,23 @@ export async function accumulateVoteTurn(
     preload?: AccumulateVoteTurnPreload;
     /** The election document, when the caller already holds it; saves a read per election. */
     election?: Election;
+    /** The election's tally, when the caller already loaded it this turn. */
+    tally?: ElectionVoteTally;
+    /** The election's active candidates, when the caller already loaded them this turn. */
+    candidates?: ElectionCandidate[];
   }
 ): Promise<void> {
   const db = await getDb();
   const memo = options?.preload?.turnMemo;
 
-  const [tally, candidates] = await Promise.all([
-    db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId }),
-    db
-      .collection<ElectionCandidate>("electionCandidates")
-      .find({ electionId, status: "active" })
-      .toArray(),
+  const [tally, candidates]: [ElectionVoteTally | null, ElectionCandidate[]] = await Promise.all([
+    options?.tally ??
+      db.collection<ElectionVoteTally>("electionVoteTallies").findOne({ electionId }),
+    options?.candidates ??
+      db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find({ electionId, status: "active" })
+        .toArray(),
   ]);
 
   if (!tally || candidates.length === 0) return;
@@ -517,7 +523,12 @@ export async function accumulateVoteTurn(
     // spend persistence, not treasury balance; the `campaignSpendReset`
     // phase folds the accumulator into the decaying stock after this
     // accumulator runs.
-    isGeneralElection ? getFundsByPartyForElection(electionId, db) : undefined,
+    isGeneralElection
+      ? options?.preload?.fundsByPartyByElection
+        ? (options.preload.fundsByPartyByElection.get(electionId.toString()) ??
+          new Map<string, number>())
+        : getFundsByPartyForElection(electionId, db)
+      : undefined,
     // Presidential coattail: the sitting President's party gets an
     // approval-driven nominal-share nudge in every down-ballot general
     // nationwide (US only). Excludes the presidential race itself. A vacant
