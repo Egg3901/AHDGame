@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 
 const version = process.argv[2];
 const platform = process.argv[3];
-if (!/^\d+\.\d+\.\d+$/.test(version ?? "") || !/^[a-z0-9-]+$/.test(platform ?? "")) {
+if (!/^\d+\.\d+\.\d+$/.test(version ?? "") || !/^[a-z0-9_-]+$/.test(platform ?? "")) {
   throw new Error("usage: release-package.mjs <version> <platform>");
 }
 const root = process.cwd();
