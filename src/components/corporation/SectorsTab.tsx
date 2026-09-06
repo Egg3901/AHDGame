@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  CORPORATION_TYPES,
   CORPORATION_TYPE_LABELS,
   type CorporationType,
   SPRAWL_SECTOR_THRESHOLD,
@@ -31,6 +32,15 @@ import {
 } from "./sectorSortUtils";
 import { CAPACITY_UNIT_LABEL, FillChip, formatUnits } from "./plantsPresentation";
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
+import { hexAlpha, sectorTypePalette } from "@/lib/constants/sectorTypeDossier";
+import {
+  buildOnePhrase,
+  capitalizeFacility,
+  facilityPlural,
+} from "@/lib/constants/facilityVocabulary";
+import { SectorTypeDossier } from "./SectorTypeDossier";
+import { SectorStrategyPanel } from "./SectorStrategyPanel";
+import type { SectorTypeMetricContext } from "./sectorTypeMetrics";
 
 const SELECT_CLASSES =
   "min-w-[11rem] max-w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground transition-colors focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
@@ -128,7 +138,17 @@ export default function SectorsTab({
   const [expandModalOpen, setExpandModalOpen] = useState(false);
   const [deepLinkType] = useState<CorporationType | undefined>(expandSectorType);
   const [deepLinkState] = useState<string | undefined>(expandStateId);
+  // Set when the expand flow is opened from a type dossier, so the modal skips
+  // the type picker and opens on the division the player was already reading.
+  const [expandTypeOverride, setExpandTypeOverride] = useState<CorporationType | undefined>(
+    undefined
+  );
   const deepLinkHandledRef = useRef(false);
+
+  const openExpandModal = (type?: CorporationType) => {
+    setExpandTypeOverride(type);
+    setExpandModalOpen(true);
+  };
 
   useEffect(() => {
     if (!expandOnMount || !isCeo || deepLinkHandledRef.current) return;
@@ -185,8 +205,60 @@ export default function SectorsTab({
     return types.map((t) => ({
       value: t,
       label: CORPORATION_TYPE_LABELS[t as CorporationType] ?? t,
+      count: sectors.filter((s) => s.sectorType === t).length,
     }));
   }, [sectors]);
+
+  // A type chip does two jobs, and they have different preconditions.
+  //
+  // Filtering the table only needs the type to be one this corporation owns.
+  // `sectorType` is a plain string on the wire, and a sector can carry a type
+  // that predates a rename — the rail already falls back to the raw value for
+  // its label, exactly like facilityVocabulary and getTypeColor do. Those
+  // chips still have to filter, or they are dead controls.
+  //
+  // Validating against what is owned also stops a stale value from surviving:
+  // abandoning the last sector of the open division would otherwise leave
+  // `filterType` naming a type that no longer exists and filter the table down
+  // to nothing with no explanation. Deliberately not healed in an effect —
+  // clearing state synchronously from one cascades a render every pass, and
+  // the derived value is already correct.
+  const activeTypeFilter =
+    filterType && sectorTypes.some((t) => t.value === filterType) ? filterType : "";
+
+  // Opening a dossier needs more: a KNOWN type, resolved to the element out of
+  // `CORPORATION_TYPES` rather than cast from the control's own string. This
+  // value becomes the expand modal's `initialSectorType`, which the modal
+  // interpolates into a link href, so passing the raw string through carried
+  // DOM text from a `<select>` all the way into a URL (CodeQL
+  // js/xss-through-dom). Resolving through the constant means what flows
+  // onward is a compile-time string. An unowned or unknown type simply gets no
+  // dossier, while the table above still filters.
+  const dossierType = activeTypeFilter
+    ? (CORPORATION_TYPES.find((t) => t === activeTypeFilter) ?? null)
+    : null;
+  const dossierSectors = useMemo(
+    () => (dossierType ? sectors.filter((s) => s.sectorType === dossierType) : []),
+    [sectors, dossierType]
+  );
+  const metricContext: SectorTypeMetricContext = {
+    plantsMode,
+    totalSectors,
+    logisticsStrength,
+    hasSecondaryType,
+  };
+  // Sectors under the current filter, dossier or not, so the header count and
+  // the heading both describe what the table is actually showing.
+  const filteredTypeSectors = useMemo(
+    () => (activeTypeFilter ? sectors.filter((s) => s.sectorType === activeTypeFilter) : sectors),
+    [sectors, activeTypeFilter]
+  );
+  const dossierPlural = activeTypeFilter ? facilityPlural(activeTypeFilter) : "";
+  // "Extraction & Mining" is the only type label that carries a second half;
+  // "Extraction mines" reads, "Extraction & Mining mines" does not.
+  const dossierHeading = activeTypeFilter
+    ? `${(CORPORATION_TYPE_LABELS[activeTypeFilter as CorporationType] ?? activeTypeFilter).split(" &")[0]} ${dossierPlural}`
+    : "Owned Sectors";
 
   const sortedSectors = useMemo(() => {
     let list = sectors;
@@ -199,9 +271,9 @@ export default function SectorsTab({
           (s.displayName ?? "").toLowerCase().includes(q)
       );
     }
-    if (filterType) list = list.filter((s) => s.sectorType === filterType);
+    if (activeTypeFilter) list = list.filter((s) => s.sectorType === activeTypeFilter);
     return sortSectors(list, sortKey, sortDir);
-  }, [sectors, filterText, filterType, sortKey, sortDir]);
+  }, [sectors, filterText, activeTypeFilter, sortKey, sortDir]);
 
   const toggleSortDir = () => setSortDir((d) => (d === "asc" ? "desc" : "asc"));
 
@@ -214,24 +286,111 @@ export default function SectorsTab({
           secondaryType={corporationSecondaryType}
           liquidCapital={liquidCapital}
           plantsMode={plantsMode}
-          initialSectorType={deepLinkType}
+          initialSectorType={expandTypeOverride ?? deepLinkType}
           initialStateId={deepLinkState}
           onClose={() => setExpandModalOpen(false)}
         />
       )}
+
+      {/* Type rail. One chip per type the corporation actually owns, so a corp
+          running mines and newsrooms can read them as the separate businesses
+          they are instead of one undifferentiated table. */}
+      {sectorTypes.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-1.5" role="tablist" aria-label="Sector type">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={!activeTypeFilter}
+            onClick={() => setFilterType("")}
+            className={`inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-2.5 text-[11px] font-semibold transition-colors ${
+              activeTypeFilter
+                ? "border-card-border text-muted hover:text-foreground"
+                : "border-muted/50 bg-card-elevated text-foreground"
+            }`}
+          >
+            All sectors
+            <span className="rounded-full bg-card-muted px-1.5 text-[10px] font-medium tabular-nums text-muted">
+              {sectors.length}
+            </span>
+          </button>
+          {sectorTypes.map((t) => {
+            const palette = sectorTypePalette(t.value);
+            const on = activeTypeFilter === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                role="tab"
+                aria-selected={on}
+                onClick={() => setFilterType(on ? "" : t.value)}
+                className="inline-flex items-center gap-1.5 rounded-full border py-1 pl-2 pr-2.5 text-[11px] font-semibold transition-colors"
+                style={{
+                  borderColor: on ? hexAlpha(palette.c500, 0.5) : "var(--card-border)",
+                  background: on ? hexAlpha(palette.c500, 0.15) : "transparent",
+                  color: on ? palette.c400 : "var(--muted)",
+                }}
+              >
+                <span
+                  className="inline-block h-2 w-2 shrink-0 rounded-full"
+                  style={{ background: palette.c500 }}
+                  aria-hidden
+                />
+                {t.label}
+                <span
+                  className="rounded-full px-1.5 text-[10px] font-medium tabular-nums"
+                  style={{
+                    background: on ? hexAlpha(palette.c500, 0.25) : "var(--card-muted)",
+                    color: on ? "var(--foreground)" : "var(--muted)",
+                  }}
+                >
+                  {t.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {dossierType && (
+        <div className="mb-8 flex flex-col gap-8">
+          <SectorTypeDossier
+            sectorType={dossierType}
+            sectors={dossierSectors}
+            allSectors={sectors}
+            isCeo={isCeo}
+            timeScale={timeScale}
+            scaleFactor={scaleFactor}
+            fmtMoney={fmtMoney}
+            metricContext={metricContext}
+            onBuild={() => openExpandModal(dossierType)}
+          />
+          <SectorStrategyPanel
+            key={dossierType}
+            sectorType={dossierType}
+            sectors={dossierSectors}
+            isCeo={isCeo}
+            corpId={corpId}
+          />
+        </div>
+      )}
+
       <div className="rounded-xl border border-card-border bg-card overflow-hidden">
         {/* Header with inline filters */}
         <div className="flex items-center justify-between p-6 pb-4 flex-wrap gap-2">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-lg font-bold text-foreground">Owned Sectors</h2>
+            <h2 className="text-lg font-bold text-foreground">{dossierHeading}</h2>
             {isCeo && (
               <button
                 type="button"
-                onClick={() => setExpandModalOpen(true)}
+                onClick={() => openExpandModal(dossierType ?? undefined)}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition-colors"
               >
                 <span>+</span>
-                {plantsMode ? "New sector" : "Expand Into New Market"}
+                {dossierType
+                  ? capitalizeFacility(buildOnePhrase(dossierType))
+                  : plantsMode
+                    ? "New sector"
+                    : "Expand Into New Market"}
               </button>
             )}
           </div>
@@ -254,18 +413,23 @@ export default function SectorsTab({
                 </button>
               ))}
             </div>
-            <select
-              className="rounded-lg border border-card-border bg-card px-2 py-1.5 text-xs text-foreground"
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-            >
-              <option value="">All types</option>
-              {sectorTypes.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
-            </select>
+            {/* The type rail above owns this choice once a division is open;
+                two controls for one filter is how they drift apart. */}
+            {!activeTypeFilter && (
+              <select
+                className="rounded-lg border border-card-border bg-card px-2 py-1.5 text-xs text-foreground"
+                value={activeTypeFilter}
+                onChange={(e) => setFilterType(e.target.value)}
+                aria-label="Filter by sector type"
+              >
+                <option value="">All types</option>
+                {sectorTypes.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <input
               type="search"
               placeholder="Filter…"
@@ -273,17 +437,17 @@ export default function SectorsTab({
               onChange={(e) => setFilterText(e.target.value)}
               className="rounded-lg border border-card-border bg-card px-2 py-1.5 text-xs text-foreground placeholder:text-muted/50 w-24"
             />
-            {(filterText || filterType) && (
+            {/* Clears the text search only. An open division is closed from the
+                All sectors chip, not from a control that looks like a filter
+                reset and would silently take the dossier with it. */}
+            {filterText && (
               <button
                 type="button"
-                onClick={() => {
-                  setFilterText("");
-                  setFilterType("");
-                }}
+                onClick={() => setFilterText("")}
                 className="rounded border border-card-border px-1.5 py-1 text-[10px] text-muted hover:text-foreground"
-                title="Clear filters"
+                title="Clear the text filter"
               >
-                ✕ {sortedSectors.length}/{sectors.length}
+                ✕ {sortedSectors.length}/{filteredTypeSectors.length}
               </button>
             )}
           </div>
