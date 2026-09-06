@@ -1,5 +1,4 @@
 ---
-version: "1.4.64"
 date: 2026-09-06
 title: Dead policy-reactions phase removed, state policies stamped with their country
 summary: >-

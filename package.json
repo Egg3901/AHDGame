@@ -52,6 +52,7 @@
     "changelog:new": "npx tsx scripts/changelog/new-entry.ts",
     "changelog:check": "npx tsx scripts/changelog/check-entries.ts",
     "changelog:release": "npx tsx scripts/changelog/release.ts",
+    "changelog:migrate": "npx tsx scripts/changelog/migrate-entry.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",

@@ -29,6 +29,18 @@ That folds every note in `content/changelog/unreleased/` into one
 `main` is what publishes it: the Release workflow tags `v<version>` and opens
 the GitHub release from the public post.
 
+## A branch cut before this
+
+If your branch carries `content/changelog/dev/<version>-<topic>.md`, the guard
+will reject it. Run:
+
+```
+npm run changelog:migrate
+```
+
+That moves the entry to `content/changelog/unreleased/<topic>.md` and strips the
+version. Commit the move; the release that carries it assigns the number.
+
 ## Why it works this way
 
 The generator used to hand out the next unused patch number per entry, which

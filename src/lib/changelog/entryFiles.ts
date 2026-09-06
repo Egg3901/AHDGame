@@ -183,7 +183,8 @@ export function checkEntryDir(dir: string, opts: { kind: EntryKind }): EntryProb
           file: name,
           problem:
             "a release entry is named for its version alone, e.g. 1.6.0.md. " +
-            "Per-change notes go in content/changelog/unreleased/.",
+            "Per-change notes go in content/changelog/unreleased/; run " +
+            "`npm run changelog:migrate` to move this one.",
         });
       } else if (version && version !== parsedVersion) {
         problems.push({
