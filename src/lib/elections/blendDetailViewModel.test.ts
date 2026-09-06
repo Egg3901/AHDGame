@@ -116,6 +116,25 @@ describe("buildBlendDetail — the seat arithmetic", () => {
     expect(m.hemiNote).toBe("10 seats · 9 on whole quotas, 1 on remainders");
   });
 
+  // Ticket #1276. `quotaSplit` clamped the displayed whole-quota count to the
+  // seats actually won but kept computing the remainder from the UNCLAMPED
+  // count, so the panel printed "192,814 votes buys 1 whole quota at 24,520
+  // each, leaving a remainder of 21,174" -- a sentence that contradicts itself,
+  // since 21,174 is what is left after SEVEN quotas, not one.
+  it("keeps votes, whole quotas and remainder consistent when a candidate is squeezed", () => {
+    // 62,000 votes at a 10,000 quota is 6.2 quotas, but the winner's bonus
+    // leaves this candidate a single seat.
+    const m = buildBlendDetail(houseInput({ seatsEstimate: { c1: 1, c2: 9 } }));
+    const quota = detailQuota(houseInput({ seatsEstimate: { c1: 1, c2: 9 } }))!;
+    for (const row of m.rows) {
+      const whole = Number(row.math.find((x) => x.key === "Whole quotas")!.value);
+      const remainder = Number(
+        row.math.find((x) => x.key === "Remainder")!.value.replace(/,/g, "")
+      );
+      expect(whole * quota + remainder).toBe(row.votes);
+    }
+  });
+
   it("quotes no quota for a method that does not use one", () => {
     const m = buildBlendDetail(senateInput());
     expect(m.rows[0].math.some((x) => x.key === "Quota")).toBe(false);
@@ -127,6 +146,54 @@ describe("buildBlendDetail — the seat arithmetic", () => {
     const m = buildBlendDetail(senateInput());
     expect(m.rows[0].mathNote).toContain("nothing is apportioned by share");
     expect(m.rows[0].seatsCell).toBe("—");
+  });
+});
+
+// Ticket #1276, second half. UK `lowerChamber` is `pr_hareQuota`, so the panel
+// printed a Hare quota and narrated seats as bought with it. But in a
+// historical in-game year the engine re-weights votes with the FPTP winner's
+// bonus BEFORE the largest-remainder step, so no seat is bought at that quota.
+// A player checking the stated arithmetic will always find it wrong.
+describe("buildBlendDetail — with the winner's bonus applied", () => {
+  const bonusInput = () => houseInput({ bonusApplied: true, seatsEstimate: { c1: 1, c2: 9 } });
+
+  it("stops quoting a quota that decided nothing", () => {
+    const m = buildBlendDetail(bonusInput());
+    expect(m.facts.some((f) => f.key === "Quota")).toBe(false);
+    expect(m.rows.every((r) => !r.math.some((x) => x.key === "Quota"))).toBe(true);
+  });
+
+  it("drops the whole-quota and largest-remainder breakdown", () => {
+    const m = buildBlendDetail(bonusInput());
+    for (const row of m.rows) {
+      expect(row.math.some((x) => x.key === "Whole quotas")).toBe(false);
+      expect(row.math.some((x) => x.key === "Remainder")).toBe(false);
+      expect(row.mathNote).not.toContain("whole quota");
+      expect(row.mathNote).not.toContain("largest remainder");
+    }
+    expect(m.standfirst).not.toContain("Hare quota");
+    expect(m.hemiNote).not.toContain("whole quotas");
+  });
+
+  it("says instead that the leading parties were boosted", () => {
+    const m = buildBlendDetail(bonusInput());
+    expect(m.standfirst).toContain("winner's bonus");
+    expect(m.hemiNote).toContain("winner's bonus");
+    expect(m.rows[0].mathNote).toMatch(/share/);
+  });
+
+  it("still keeps em and en dashes out of the generated copy", () => {
+    const m = buildBlendDetail(bonusInput());
+    expect(m.standfirst).not.toMatch(/[—–]/);
+    for (const r of m.rows) expect(r.mathNote).not.toMatch(/[—–]/);
+  });
+
+  it("leaves a race with no bonus exactly as it was", () => {
+    const withFlag = buildBlendDetail(houseInput({ bonusApplied: false }));
+    const without = buildBlendDetail(houseInput());
+    expect(withFlag.standfirst).toBe(without.standfirst);
+    expect(withFlag.hemiNote).toBe(without.hemiNote);
+    expect(withFlag.rows[0].mathNote).toBe(without.rows[0].mathNote);
   });
 });
 

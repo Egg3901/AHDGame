@@ -161,6 +161,13 @@ export interface BlendDetailInput {
   electorate?: RegionElectorate;
   /** Turn snapshot count, for the tally meta line. */
   turnCount?: number;
+  /**
+   * True when the FPTP winner's bonus re-weighted the vote before seats were
+   * apportioned (UK Commons in a historical in-game year). The quota is then
+   * not the mechanism that decided anything, so the panel must stop quoting it
+   * and stop narrating seats as bought with it. See `applyMajoritarianBonus`.
+   */
+  bonusApplied?: boolean;
 }
 
 const GOLD = "var(--gold)";
@@ -255,10 +262,17 @@ function quotaSplit(rows: Row[], quota: number | null) {
   if (!quota || quota <= 0) return null;
   const out = new Map<string, { whole: number; remainderSeats: number; remainder: number }>();
   for (const r of rows) {
-    const whole = Math.floor(r.votes / quota);
+    // A candidate can clear more quotas than they hold seats (the threshold
+    // excluded them, or the winner's bonus squeezed them), so the printed
+    // count is capped at the seats actually won. The remainder MUST then be
+    // measured against that same capped count, or the sentence contradicts
+    // itself: ticket #1276 reported "192,814 votes buys 1 whole quota at
+    // 24,520 each, leaving a remainder of 21,174", where 21,174 is what is
+    // left after seven quotas, not one. Invariant: votes = whole*quota + remainder.
+    const whole = Math.min(Math.floor(r.votes / quota), r.seats);
     out.set(r.c.id, {
-      whole: Math.min(whole, r.seats),
-      remainderSeats: Math.max(0, r.seats - Math.min(whole, r.seats)),
+      whole,
+      remainderSeats: Math.max(0, r.seats - whole),
       remainder: r.votes - whole * quota,
     });
   }
@@ -270,7 +284,11 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
   const multiSeat = isMultiSeat(input);
   const totalSeats = input.totalSeats ?? 1;
   const grand = rows.reduce((a, r) => a + r.votes, 0);
-  const quota = detailQuota(input);
+  // Under the winner's bonus the vote is re-weighted before apportionment, so
+  // no seat is bought at the Hare quota and quoting one would be a fabrication
+  // (#1276). Suppressing it here cascades: no quota fact, no whole-quota or
+  // remainder rows, and the copy below takes its bonus-aware branches.
+  const quota = input.bonusApplied ? null : detailQuota(input);
   const split = quotaSplit(rows, quota);
   const agg = byParty(rows, input.partyAbbr);
   const lead = rows[0];
@@ -292,7 +310,9 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
     : multiSeat
       ? quota
         ? `${totalSeats} seats, apportioned by share. A Hare quota of ${fmtInt(quota)} votes buys one seat; ${remSeats} of the ${totalSeats} were settled on largest remainder.`
-        : `${totalSeats} seats, apportioned by share of ${fmtInt(grand)} votes cast.`
+        : input.bonusApplied
+          ? `${totalSeats} seats, apportioned by share of ${fmtInt(grand)} votes cast, then adjusted by a winner's bonus that lifts the two leading parties and squeezes the rest.`
+          : `${totalSeats} seats, apportioned by share of ${fmtInt(grand)} votes cast.`
       : `A single seat, decided on plurality. ${lead?.c.characterName ?? "The leader"} ${input.isEnded ? "took" : "holds"} ${lead ? lead.pct.toFixed(1) : "0.0"}% against ${runnerUp ? runnerUp.pct.toFixed(1) : "0.0"}% for the nearest rival.`;
 
   const facts: BlendDetailFact[] = [];
@@ -394,7 +414,9 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
       ? `${fmtInt(r.votes)} votes, ${r.pct.toFixed(1)}% of the ${fmtInt(grand)} cast. A single seat goes to the plurality, so nothing is apportioned by share here.`
       : quota && s
         ? `${fmtInt(r.votes)} votes buys ${s.whole} whole ${s.whole === 1 ? "quota" : "quotas"} at ${fmtInt(quota)} each, leaving a remainder of ${fmtInt(s.remainder)}${s.remainderSeats > 0 ? `, which took ${s.remainderSeats} further ${s.remainderSeats === 1 ? "seat" : "seats"} on largest remainder` : ""}.`
-        : `${fmtInt(r.votes)} votes, ${r.pct.toFixed(1)}% of the ${fmtInt(grand)} cast, for ${r.seats} of ${totalSeats} seats.`;
+        : input.bonusApplied
+          ? `${fmtInt(r.votes)} votes, ${r.pct.toFixed(1)}% of the ${fmtInt(grand)} cast, for ${r.seats} of ${totalSeats} seats. Seats follow vote share once the winner's bonus has been applied, so they are not bought at a flat quota.`
+          : `${fmtInt(r.votes)} votes, ${r.pct.toFixed(1)}% of the ${fmtInt(grand)} cast, for ${r.seats} of ${totalSeats} seats.`;
 
     const won =
       input.isEnded && (multiSeat ? r.seats > 0 : rows[0]?.c.id === r.c.id && r.votes > 0);
@@ -430,7 +452,9 @@ export function buildBlendDetail(input: BlendDetailInput): BlendDetailModel {
     allocLabel: input.isEnded ? "Final seat allocation" : "Projected seat allocation",
     hemiNote: quota
       ? `${totalSeats} seats · ${floorSeats} on whole quotas, ${remSeats} on remainders`
-      : `${totalSeats} seats apportioned by vote share`,
+      : input.bonusApplied
+        ? `${totalSeats} seats by vote share, with a winner's bonus for the leading parties`
+        : `${totalSeats} seats apportioned by vote share`,
     blockRows,
     blockRuns,
     blocksSingleRow: totalSeats <= 25,

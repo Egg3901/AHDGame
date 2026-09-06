@@ -100,12 +100,18 @@ function eligibilityGroupKey(c: RankedCandidate): string {
  * The game models FPTP chambers (UK Commons) as regional multi-seat races
  * allocated by Largest Remainder — near-PR. Real FPTP rewards the regional
  * plurality party beyond its vote share (winner's bonus + wasted votes).
- * When this config is present, the seat shares of the TOP-TWO party groups in
- * a region (ranked by their best single candidate, ticket #1032) are re-split
- * by a power law — seat odds ∝ (standard-bearer vote odds)^exponent —
- * while every other eligible party keeps its exact proportional share, and
- * Largest Remainder assignment (and therefore exact seat conservation and
- * determinism) is unchanged. Issue #3244; ticket #1032 softened ^3 → ^2.
+ *
+ * When this config is present, a BLOC is lifted against the rest of the pool
+ * by a power law — bloc weight ∝ (bloc share)^exponent vs (rest share)^exponent.
+ * The region's two leading party groups BY VOTES are full members; every other
+ * group joins in proportion to how close it ran to the runner-up, tapered by
+ * `taper`. Largest Remainder assignment (and therefore exact seat conservation
+ * and determinism) is unchanged.
+ *
+ * Issue #3244; ticket #1032 softened ^3 → ^2 and guaranteed the vote leader a
+ * slot; tickets #1276 / #1277 replaced the all-or-nothing pair — whose second
+ * slot keyed on state ORGANIZATION and flipped between turns on a sub-point
+ * difference, relocating 9 to 20 seats each time — with the votes-only taper.
  */
 export interface MajoritarianBonusConfig {
   /**
@@ -115,15 +121,26 @@ export interface MajoritarianBonusConfig {
    */
   exponent: number;
   /**
-   * Party ids ranked by state ORGANIZATION, descending (ticket #1032).
-   * Decides the SECOND slot of the boosted pair — the established machine —
-   * among parties fielding candidates that are not already the region's
-   * vote leader (the vote leader always holds the first slot, so the two
-   * slots are never the same party). Load via `withCommonsOrgRanking`
-   * (statePartyOrg). Absent/empty → the second slot falls back to the
-   * runner-up by pooled votes.
+   * How fast bloc membership falls away behind the runner-up (tickets #1276 /
+   * #1277). A group polling `v` joins the boosted bloc with weight
+   * `min(1, (v / runnerUpVotes) ^ taper)`. Defaults to
+   * `UK_COMMONS_BONUS_TAPER`. Higher values squeeze third parties harder;
+   * `taper → ∞` reproduces the old all-or-nothing pair.
    */
-  orgRanking?: string[];
+  taper?: number;
+}
+
+/** What `applyMajoritarianBonus` did, so callers can report it honestly. */
+export interface MajoritarianBonusOutcome {
+  /** Effective per-candidate weights. Sums to the pool's total votes. */
+  effective: Map<string, number>;
+  /**
+   * True only when the bonus actually re-weighted the pool. False when it
+   * declined — a two-party pool with nothing to squeeze, or a minority bloc
+   * the BOOST-only guard protects. Display surfaces use this to decide whether
+   * quota copy would be a fabrication (#1276).
+   */
+  applied: boolean;
 }
 
 /**
@@ -132,6 +149,19 @@ export interface MajoritarianBonusConfig {
  * wipeouts that made ~40% look like a landslide loss (ticket #1032).
  */
 export const UK_COMMONS_FPTP_EXPONENT = 2;
+
+/**
+ * How fast the winner's bonus tapers away behind the runner-up.
+ *
+ * Calibrated in `scripts/sim/reports/ticket-1276-1277-commons-bonus-taper.md`
+ * over 48 real UK Commons races and 1,248 real vote distributions. At k=3 the
+ * discontinuity at the runner-up boundary collapses from a maximum of 18 seats
+ * across 20 of 48 races to 1 seat in 3 (largest-remainder rounding, which is
+ * irreducible), while third parties still hold only 15.0% of seats on 26.8% of
+ * the vote so the FPTP squeeze survives. k=2 flattens a real 0.4-point lead to
+ * a dead heat, which reads as the bonus having become plain PR.
+ */
+export const UK_COMMONS_BONUS_TAPER = 3;
 
 /**
  * Resolves the majoritarian winner's-bonus config for an election type at the
@@ -166,103 +196,102 @@ export function getMajoritarianBonus(
  * Applies the power-law winner's bonus to an allocation pool, returning
  * per-candidate EFFECTIVE vote weights (same total as the input votes).
  *
- * Shape (ticket #1032 rework): the two groups that BENEFIT are the region's
- * leading party by VOTES plus the best-ORGANIZED other party
- * (`config.orgRanking`), always two DIFFERENT parties, falling back to the
- * next party by pooled votes when organization cannot fill a slot. The
- * boost is the pair VERSUS the
- * rest of the pool: the duopoly's combined share is amplified by the power
- * law — pair weight ∝ (pair share)^exponent against (rest share)^exponent —
- * and every other group is scaled down to conserve the total. BETWEEN the
- * two beneficiaries the boosted weight is split in plain proportion to
- * their compared pooled scores (no amplification inside the pair), so the
- * big two settle proportionally while third parties get the classic FPTP
- * squeeze. Pre-#1032 the boost was instead a re-split INSIDE the top-two by
- * pooled votes, which let three mid-tier candidates out-pool one
- * front-runner and have that lead amplified — players correctly read that
- * as neither FPTP nor PR. Within a group, weight is distributed across the
- * group's candidates proportional to their own votes. Feeding the effective
- * weights through the existing Largest Remainder step keeps conservation,
- * threshold exclusion, and determinism exactly as before. NOTE: when the
- * eligibility gate leaves only the duopoly in the pool there is nothing to
- * squeeze and the allocation is exactly proportional.
+ * Shape (tickets #1276 / #1277). The boosted BLOC is chosen by VOTES alone:
+ * the region's leading group and the runner-up are full members, and every
+ * other group joins with weight `min(1, (v / runnerUpVotes) ^ taper)`. The
+ * boost is that bloc VERSUS the rest of the pool: bloc weight ∝
+ * (bloc share)^exponent against (rest share)^exponent, with the remainder
+ * scaled down to conserve the total. Full members all scale by the same
+ * factor, so they settle in plain proportion to their compared pooled scores;
+ * a tapered group sits between the boosted and squeezed scales in proportion
+ * to its membership, which is what removes the discontinuity at the runner-up
+ * boundary rather than relocating it.
+ *
+ * Pre-#1276 the second slot was the best-ORGANIZED other party, an invisible
+ * stat players moved several points per turn — it flipped between consecutive
+ * turns of one count and moved 9 to 20 seats each time. Pre-#1032 the boost
+ * was a re-split INSIDE the top-two by pooled votes, which let three mid-tier
+ * candidates out-pool one front-runner and have that lead amplified.
+ *
+ * Within a group, weight is distributed across the group's candidates
+ * proportional to their own votes. Feeding the effective weights through the
+ * existing Largest Remainder step keeps conservation, threshold exclusion and
+ * determinism exactly as before. NOTE: when the eligibility gate leaves only
+ * two groups in the pool every member weighs 1, the bloc IS the pool, and the
+ * allocation is exactly proportional.
  */
 export function applyMajoritarianBonus(
   pool: { id: string; votes: number; group: string }[],
   config: MajoritarianBonusConfig
-): Map<string, number> {
+): MajoritarianBonusOutcome {
   const effective = new Map<string, number>(pool.map((c) => [c.id, c.votes]));
 
   const votesByGroup = new Map<string, number>();
   for (const c of pool) {
     votesByGroup.set(c.group, (votesByGroup.get(c.group) ?? 0) + c.votes);
   }
-  if (votesByGroup.size < 2) return effective;
 
   // Groups ranked by pooled votes; ties broken by group key for determinism.
-  const voteRanked = [...votesByGroup.entries()]
+  const ranked = [...votesByGroup.entries()]
     .filter(([, v]) => v > 0)
-    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
-    .map(([k]) => k);
+    .sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  // Fewer than two contesting groups: nothing to compare, let alone squeeze.
+  if (ranked.length < 2) return { effective, applied: false };
 
-  // Which two groups get the boost (ticket #1032). The two slots are always
-  // DIFFERENT parties:
-  //
-  //  slot 1 — the region's leading party by votes. Keying both slots on
-  //    organization alone let a party win an outright majority of the region
-  //    and still be left out of the boosted pair because its machine ranked
-  //    third. It also made seat counts lurch: when NEE's org ranking flipped
-  //    between two turns on flat vote shares, the pair changed from Con+Lib
-  //    to Lab+Con and the Liberals went from 4 seats to 0. The vote leader is
-  //    now guaranteed a slot, which removes that cliff.
-  //  slot 2 — the best-ORGANIZED party that is not the leader, so FPTP still
-  //    rewards the established machine for the second slot.
-  //
-  // Groups with no votes are skipped; a slot that organization cannot fill
-  // falls back to the next party by pooled votes.
-  const pair: string[] = [];
-  if (voteRanked.length > 0) pair.push(voteRanked[0]);
-  if (config.orgRanking) {
-    for (const partyId of config.orgRanking) {
-      if (pair.length === 2) break;
-      const k = `party:${partyId}`;
-      if ((votesByGroup.get(k) ?? 0) > 0 && !pair.includes(k)) pair.push(k);
-    }
-  }
-  for (const k of voteRanked) {
-    if (pair.length === 2) break;
-    if (!pair.includes(k)) pair.push(k);
-  }
-  if (pair.length < 2) return effective;
-
-  const pairVotes = pair.reduce((s, k) => s + (votesByGroup.get(k) ?? 0), 0);
   const total = pool.reduce((s, c) => s + c.votes, 0);
-  const restVotes = total - pairVotes;
-  // Only the duopoly in the pool — nothing to squeeze, exact proportional.
-  if (restVotes <= 0 || pairVotes <= 0) return effective;
+  const runnerUpVotes = ranked[1][1];
+  if (total <= 0 || runnerUpVotes <= 0) return { effective, applied: false };
 
-  // Power law of the pair AGAINST the rest of the pool: pair weight ∝
-  // (pair share)^exponent vs (rest share)^exponent, total conserved. Work on
-  // the normalized share for numerical stability.
-  const sPair = pairVotes / total;
-  const wPair = Math.pow(sPair, config.exponent);
-  const wRest = Math.pow(1 - sPair, config.exponent);
-  const targetPair = (total * wPair) / (wPair + wRest);
-  // BOOST only: a minority duopoly (org pair polling under half the pool)
-  // is left at its proportional share, never shrunk below it — the bonus
-  // must benefit the top-two, not punish them for a bad night.
-  if (targetPair <= pairVotes) return effective;
-
-  // Both beneficiaries scale by the SAME factor, so the boosted weight
-  // splits between them in plain proportion to their compared pooled scores.
-  // The rest scale down uniformly to conserve the total.
-  const pairSet = new Set(pair);
-  const scalePair = targetPair / pairVotes;
-  const scaleRest = (total - targetPair) / restVotes;
-  for (const c of pool) {
-    effective.set(c.id, c.votes * (pairSet.has(c.group) ? scalePair : scaleRest));
+  // Bloc membership, tapered by votes (tickets #1276 / #1277). The leader and
+  // the runner-up are full members; every other group joins in proportion to
+  // how close it ran to the runner-up, raised to `taper`.
+  //
+  // This replaces an all-or-nothing pair whose second slot was the best
+  // ORGANIZED other party. Organization is live state players move several
+  // points per turn, so slot 2 flipped between turns and relocated 9 to 20
+  // seats each time: LON's deciding gaps were 0.27 to 1.07 points, and SCO
+  // turn 647 was an exact 24.17 vs 24.17 tie broken by party id. Keying on
+  // votes makes the input legible and slow-moving; tapering removes the cliff
+  // rather than relocating it, so a near-tie for the runner-up slot now splits
+  // the boost instead of swinging it whole.
+  const taper = config.taper ?? UK_COMMONS_BONUS_TAPER;
+  const membership = new Map<string, number>();
+  for (const [group, votes] of ranked) {
+    const isPrincipal = group === ranked[0][0] || group === ranked[1][0];
+    membership.set(group, isPrincipal ? 1 : Math.min(1, Math.pow(votes / runnerUpVotes, taper)));
   }
-  return effective;
+
+  // Bloc mass. With only two contesting groups every member weighs 1, so this
+  // equals the pool and `rest` below is zero: the allocation stays exactly
+  // proportional. That is the two-party fall-through (ticket #1032's NWE
+  // shape) preserved by construction rather than by special-casing.
+  const blocVotes = ranked.reduce((s, [group, votes]) => s + membership.get(group)! * votes, 0);
+  const restVotes = total - blocVotes;
+  if (restVotes <= 0 || blocVotes <= 0) return { effective, applied: false };
+
+  // Power law of the bloc AGAINST the rest of the pool: bloc weight ∝
+  // (bloc share)^exponent vs (rest share)^exponent, total conserved. Work on
+  // the normalized share for numerical stability.
+  const sBloc = blocVotes / total;
+  const wBloc = Math.pow(sBloc, config.exponent);
+  const wRest = Math.pow(1 - sBloc, config.exponent);
+  const targetBloc = (total * wBloc) / (wBloc + wRest);
+  // BOOST only: a minority bloc polling under half the pool is left at its
+  // proportional share, never shrunk below it — the bonus must benefit the
+  // leading parties, not punish them for a bad night.
+  if (targetBloc <= blocVotes) return { effective, applied: false };
+
+  // Full members scale by `scaleBloc`, non-members by `scaleRest`, and a
+  // tapered group sits between the two in proportion to its membership. The
+  // two scales are chosen so the total is conserved exactly, which keeps
+  // largest remainder, seat conservation and determinism untouched.
+  const scaleBloc = targetBloc / blocVotes;
+  const scaleRest = (total - targetBloc) / restVotes;
+  for (const c of pool) {
+    const w = membership.get(c.group) ?? 0;
+    effective.set(c.id, c.votes * (w * scaleBloc + (1 - w) * scaleRest));
+  }
+  return { effective, applied: true };
 }
 
 export interface SeatAllocationResult {
@@ -374,11 +403,11 @@ export function allocateSeats(
         // Only give all seats to one candidate if they're truly the only option
         seatsEstimate[allocationPool[0].id] = authoritativeSeats;
       } else {
-        // FPTP winner's bonus (#3244): when configured, re-split the top-two
-        // party groups' combined share by the power-law exponent before
-        // Largest Remainder. Effective weights sum to poolVotes, so the LR
-        // step below (and its exact seat conservation) is untouched. No
-        // config → undefined → identical to the historical proportional path.
+        // FPTP winner's bonus (#3244): when configured, re-weight the pool by
+        // tapered bloc membership before Largest Remainder. Effective weights
+        // sum to poolVotes, so the LR step below (and its exact seat
+        // conservation) is untouched. No config → undefined → identical to the
+        // historical proportional path.
         const effectiveVotes = majoritarianBonus
           ? applyMajoritarianBonus(
               allocationPool.map((c) => ({
@@ -387,7 +416,7 @@ export function allocateSeats(
                 group: eligibilityGroupKey(c),
               })),
               majoritarianBonus
-            )
+            ).effective
           : undefined;
         const raw = allocationPool.map(({ id, votes }) => ({
           id,

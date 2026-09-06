@@ -14,6 +14,7 @@
 import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally } from "@/lib/db/types";
 import { computeSeatEstimates } from "@/lib/elections/buildPollingData";
+import { resolvedSeatsEstimate } from "@/lib/elections/resolvedSeatsEstimate";
 import type { MajoritarianBonusConfig } from "@/lib/turn/election/seatAllocation";
 import {
   CHAMBER_LABELS,
@@ -115,11 +116,10 @@ export async function buildNationalElectionNight(
   partyMap: Map<string, ElectionNightPartyInfo>,
   finalHourProgress: number | null,
   isEnded: boolean,
-  majoritarianBonus?: MajoritarianBonusConfig,
-  // Ticket #1032: the FPTP boost keys on each region's own party-organization
-  // ranking, so a single shared config is wrong across siblings — pass the
-  // per-region rankings (loadCommonsOrgRankings) alongside the base config.
-  orgRankingByState?: Map<string, string[]>
+  // Tickets #1276 / #1277: the boost keys on votes alone, so one shared config
+  // is now correct across every sibling region. The per-region organization
+  // rankings this used to take are gone with the org input itself.
+  majoritarianBonus?: MajoritarianBonusConfig
 ): Promise<NationalResults | null> {
   const electionType = election.electionType;
   if (!NATIONAL_AGGREGATION_TYPES.has(electionType)) return null;
@@ -169,18 +169,21 @@ export async function buildNationalElectionNight(
     const seatsByParty: Record<string, number> = {};
     if (tally) {
       const activeIds = new Set(Object.keys(tally.totalVotes ?? {}));
+      // #1277: a finalized tally's allocation is authoritative; anything
+      // earlier is a projection. `tally.seatsEstimate ?? compute(...)` was
+      // wrong in the same way the detail page was, because
+      // `accumulateVoteTurn` rewrites that field every turn of the count.
       const estimate =
-        tally.seatsEstimate ??
-        computeSeatEstimates(
-          electionType,
-          seats,
-          tally as unknown as ElectionVoteTally,
-          activeIds,
-          majoritarianBonus && orgRankingByState?.get(sibling.state)?.length
-            ? { ...majoritarianBonus, orgRanking: orgRankingByState.get(sibling.state) }
-            : majoritarianBonus
-        ) ??
-        {};
+        resolvedSeatsEstimate(
+          tally,
+          computeSeatEstimates(
+            electionType,
+            seats,
+            tally as unknown as ElectionVoteTally,
+            activeIds,
+            majoritarianBonus
+          )
+        ) ?? {};
       for (const [cid, seatCount] of Object.entries(estimate)) {
         if (seatCount <= 0) continue;
         const party = tally.candidateParties?.[cid] ?? "independent";
