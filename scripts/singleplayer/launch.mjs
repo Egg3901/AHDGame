@@ -407,6 +407,10 @@ export function mongoBinaryLooksBroken(code, spawnErrorCode) {
   );
 }
 
+/**
+ * @param {unknown} error
+ * @param {{ appTail?: string[], mongoLogTail?: string[] }} [evidence]
+ */
 export function formatStartupFailure(error, { appTail = [], mongoLogTail = [] } = {}) {
   const out = [];
   const phase = error instanceof StartupError ? PHASES[error.phase] : null;
