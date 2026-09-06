@@ -434,7 +434,6 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
           onResetPassword={handleResetPassword}
           onBanUser={handleBanUser}
           onDeleteUser={handleDeleteUser}
-          onSetSingleplayerEntitlement={handleSetSingleplayerEntitlement}
         />
       )}
 
@@ -458,6 +457,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
           onBanUser={handleBanUser}
           onRetireCharacter={handleRetireCharacter}
           onDeleteUser={handleDeleteUser}
+          onSetSingleplayerEntitlement={handleSetSingleplayerEntitlement}
         />
       )}
     </div>
