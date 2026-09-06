@@ -18,6 +18,8 @@
 export const GAP_CLOSURE = 1.5;
 /** Output gap is bounded so a mis-fed signal can't open an unbounded gap (%). */
 export const OUTPUT_GAP_BOUND: readonly [number, number] = [-15, 15];
+/** Integrated GDP growth shares the registry's published percent bounds. */
+export const GDP_GROWTH_BOUND: readonly [number, number] = [-15, 15];
 
 export interface OutputGapStep {
   /** New output-gap level (%). */
@@ -33,12 +35,14 @@ export interface OutputGapStep {
  *
  *   impulse   = sectorSignal − potential                          (annual %)
  *   rawGap    = prevGap + (impulse − GAP_CLOSURE·prevGap) / turnsPerYear
- *   gap       = clamp(rawGap, OUTPUT_GAP_BOUND)
+ *   gap       = clamp(rawGap, the feasible stock/rate intersection)
  *   gdpGrowth = potential + (gap − prevGap)·turnsPerYear          (from the REALIZED gap change)
  *
  * Steady (sector=potential, gap=0) → gdpGrowth=potential. A sustained boom opens
  * the gap to ≈ Δ/GAP_CLOSURE while gdpGrowth reverts to potential; when the boom
  * ends the positive gap drives gdpGrowth below potential (the bust) as it closes.
+ * Both returned values are bounded together so a rate clamp cannot desynchronise
+ * the persisted stock and the headline rate.
  */
 export function advanceOutputGap(
   prevGap: number,
@@ -46,14 +50,22 @@ export function advanceOutputGap(
   potential: number,
   turnsPerYear: number
 ): OutputGapStep {
-  const g0 = Number.isFinite(prevGap) ? prevGap : 0;
+  const g0Raw = Number.isFinite(prevGap) ? prevGap : 0;
+  const g0 = Math.max(OUTPUT_GAP_BOUND[0], Math.min(OUTPUT_GAP_BOUND[1], g0Raw));
   const sector = Number.isFinite(sectorSignal) ? sectorSignal : 0;
-  const pot = Number.isFinite(potential) ? potential : 0;
+  const potRaw = Number.isFinite(potential) ? potential : 0;
+  const pot = Math.max(GDP_GROWTH_BOUND[0], Math.min(GDP_GROWTH_BOUND[1], potRaw));
   const impulse = sector - pot;
-  const rawGap = g0 + (impulse - GAP_CLOSURE * g0) / turnsPerYear;
-  const gap = Math.max(OUTPUT_GAP_BOUND[0], Math.min(OUTPUT_GAP_BOUND[1], rawGap));
-  // Derive gdpGrowth from the REALIZED (clamped) gap change so a clamp can't
-  // desync the rate from the stock.
-  const gdpGrowth = pot + (gap - g0) * turnsPerYear;
+  const tpy = Number.isFinite(turnsPerYear) && turnsPerYear > 0 ? turnsPerYear : 1;
+  const rawGap = g0 + (impulse - GAP_CLOSURE * g0) / tpy;
+  // Restrict the gap to the intersection that keeps both the stock and the
+  // integrated rate inside their published bounds. This avoids clipping the
+  // rate after the stock has already been persisted.
+  const feasibleGap: [number, number] = [
+    Math.max(OUTPUT_GAP_BOUND[0], g0 + (GDP_GROWTH_BOUND[0] - pot) / tpy),
+    Math.min(OUTPUT_GAP_BOUND[1], g0 + (GDP_GROWTH_BOUND[1] - pot) / tpy),
+  ];
+  const gap = Math.max(feasibleGap[0], Math.min(feasibleGap[1], rawGap));
+  const gdpGrowth = pot + (gap - g0) * tpy;
   return { gap, gdpGrowth, impulse };
 }
