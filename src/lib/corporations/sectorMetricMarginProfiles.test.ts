@@ -232,4 +232,27 @@ describe("computeStateMetricMarginModifier memo", () => {
     expect(fresh).not.toBe(base);
     expect(fresh).toEqual(base);
   });
+
+  it("keeps state signal normalization separate for each era gate", () => {
+    const metrics = extremeMetrics();
+    (metrics.infrastructure as Record<string, { value: number }>).broadbandAccess = { value: 10 };
+
+    const preWindow = computeStateMetricMarginModifier({
+      sectorType: "technology",
+      strategyId: "software",
+      stateMetrics: metrics,
+      countryId: "US",
+      year: 1953,
+    });
+    const flagOff = computeStateMetricMarginModifier({
+      sectorType: "technology",
+      strategyId: "software",
+      stateMetrics: metrics,
+      countryId: "US",
+      year: null,
+    });
+
+    expect(preWindow.contributions.some((c) => c.metricId === "broadbandAccess")).toBe(false);
+    expect(flagOff.contributions.some((c) => c.metricId === "broadbandAccess")).toBe(true);
+  });
 });
