@@ -1,6 +1,6 @@
 {
   "name": "a-house-divided",
-  "version": "1.3.0",
+  "version": "1.6.0",
   "private": true,
   "engines": {
     "node": ">=20"
@@ -51,6 +51,8 @@
     "migrate:dry-run": "npx tsx scripts/run-migrations.ts --dry-run",
     "changelog:new": "npx tsx scripts/changelog/new-entry.ts",
     "changelog:check": "npx tsx scripts/changelog/check-entries.ts",
+    "changelog:release": "npx tsx scripts/changelog/release.ts",
+    "changelog:migrate": "npx tsx scripts/changelog/migrate-entry.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
