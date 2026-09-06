@@ -1151,7 +1151,21 @@ export async function snapshotEconomicVitalSigns(
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
       .collection<CommodityFlow>("commodityFlows")
-      .find({ turn: { $gte: windowStart, $lte: turn } })
+      // Historical fill-rate medians only need these pooled totals. In
+      // particular, do not decode each turn's large `byCountry` diagnostic
+      // object for the entire 48-turn window.
+      .find(
+        { turn: { $gte: windowStart, $lte: turn } },
+        {
+          projection: {
+            turn: 1,
+            demandUnitsLedger: 1,
+            demandUnits: 1,
+            clearedUnitsPooled: 1,
+            clearedUnits: 1,
+          },
+        }
+      )
       .toArray(),
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<CommoditySourcingDoc>("commoditySourcingFlows").find({ turn }).toArray(),
