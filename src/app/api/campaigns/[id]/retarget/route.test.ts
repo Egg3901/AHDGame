@@ -5,6 +5,10 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
+vi.mock("@/lib/time/gameTime", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  getGameTime: vi.fn().mockResolvedValue({ currentTurn: 13 }),
+}));
 
 let db: MockDb;
 
@@ -77,10 +81,30 @@ async function setupRoute(campaignOverrides: Record<string, unknown> = {}) {
   db.collection("characters");
   db.collection("npps");
   db.collection("elections");
+  db.collection("electionCandidates");
 
   db.collectionMocks["campaigns"]!.findOne.mockResolvedValue(makeMockCampaign(campaignOverrides));
   db.collectionMocks["campaigns"]!.updateOne.mockResolvedValue({ modifiedCount: 1 });
-  db.collectionMocks["elections"]!.findOne.mockResolvedValue({ countryId: "US" });
+  db.collectionMocks["elections"]!.findOne.mockResolvedValue({
+    countryId: "US",
+    status: "active",
+    startTurn: 1,
+    primaryEndTurn: 40,
+    endTurn: 89,
+  });
+  // The target has to be standing against the buyer in this race, which is the
+  // rule the route now enforces rather than merely sharing a country.
+  db.collectionMocks["electionCandidates"]!.find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([
+      { characterId: mockCharacterId, characterName: "Me", party: "1", status: "active" },
+      {
+        characterId: mockTargetId,
+        characterName: "Rival Politician",
+        party: "1",
+        status: "active",
+      },
+    ]),
+  } as never);
   db.collectionMocks["characters"]!.findOne.mockResolvedValue({
     _id: mockTargetId,
     name: "Rival Politician",
@@ -199,5 +223,52 @@ describe("POST /api/campaigns/[id]/retarget — target not found", () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.oppositionTargetName).toBe("NPC Rival");
+  });
+});
+
+describe("POST /api/campaigns/[id]/retarget — who is fair game", () => {
+  it("refuses somebody who is not standing in this race", async () => {
+    // Sharing a country was the whole check before, so research could be
+    // bought against a private citizen or a senator who was not running: real
+    // money and actions spent draining somebody the buyer is not up against.
+    await setupRoute();
+    const stranger = new ObjectId();
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: stranger,
+      name: "Uninvolved Senator",
+    });
+    const { POST } = await import("./route");
+    const params = Promise.resolve({ id: mockCampaignId.toString() });
+    const res = await POST(makeRequest({ targetId: stranger.toString() }), { params });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/standing against you/i);
+    expect(db.collectionMocks["campaigns"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses a rival in the other party's field during a primary", async () => {
+    // Both parties file in one presidential election, but a candidate in the
+    // other primary is not competing with the buyer for a delegate.
+    await setupRoute();
+    const otherParty = new ObjectId();
+    db.collectionMocks["electionCandidates"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { characterId: mockCharacterId, characterName: "Me", party: "1", status: "active" },
+        {
+          characterId: otherParty,
+          characterName: "Across The Aisle",
+          party: "2",
+          status: "active",
+        },
+      ]),
+    } as never);
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: otherParty,
+      name: "Across The Aisle",
+    });
+    const { POST } = await import("./route");
+    const params = Promise.resolve({ id: mockCampaignId.toString() });
+    const res = await POST(makeRequest({ targetId: otherParty.toString() }), { params });
+    expect(res.status).toBe(400);
+    expect(db.collectionMocks["campaigns"]!.updateOne).not.toHaveBeenCalled();
   });
 });

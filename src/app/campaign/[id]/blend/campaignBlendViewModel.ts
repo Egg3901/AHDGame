@@ -84,6 +84,12 @@ export interface OpsTreeVM {
   starterAffordable: boolean;
   requiresTarget: boolean;
   targetName: string | null;
+  /**
+   * The candidates this campaign may research, scoped server-side to the race
+   * and its phase. Empty when the viewer cannot retarget, or when nobody is
+   * standing against them.
+   */
+  targetOptions: { id: string; name: string; party: string | null }[];
   branches: OpsBranchVM[];
 }
 
@@ -406,6 +412,7 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
       starterAffordable: canAfford(t.starterCost),
       requiresTarget: t.requiresTarget,
       targetName: c.oppositionTargetName,
+      targetOptions: t.requiresTarget ? (c.oppositionTargets ?? []) : [],
       branches: t.branches.map((b) => {
         const maxed = b.level >= b.maxLevel;
         const affordable = canAfford(b.next);
