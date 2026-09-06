@@ -12,6 +12,7 @@ import { sendDiscordWebhookMultiple, type DiscordEmbed } from "@/lib/discordWebh
 import { createNotification } from "@/lib/notifications";
 import type { GameConfig } from "@/lib/db/types";
 import { loadPublicPosts } from "@/lib/changelog/posts";
+import { compareVersionsDesc } from "@/lib/changelog/postUtils";
 import type { ChangelogPost } from "@/lib/changelog/types";
 import { getCanonicalUrl, getWikiCanonicalUrl } from "@/lib/siteMetadata";
 import crypto from "crypto";
@@ -199,6 +200,32 @@ export function buildEmbedsForChangelogPost(
   }
 
   return embeds;
+}
+
+/**
+ * The last release that shipped before the changelog consolidation.
+ *
+ * On 2026-09-06 the 313 per-change entries under `content/changelog/` were
+ * folded into the ten releases that actually happened. Every public post at or
+ * below this version therefore has different content than when it was
+ * announced, and four of them (1.3.0 through 1.6.0) are version keys that
+ * `changelogSentHistory` has never seen. An unguarded run would read all of
+ * that as new: four full releases blasted to Discord, an in-game notification
+ * to every player for each, and a large delta re-posted for 1.1.0 and 1.2.0.
+ *
+ * All of it already shipped. The loop records the current hash for these and
+ * posts nothing. Releases cut after the consolidation announce normally.
+ */
+const CONSOLIDATED_THROUGH_VERSION = "1.6.0";
+
+/**
+ * Whether a public post shipped before the consolidation and must not be
+ * announced again. Exported because getting the comparison the wrong way round
+ * silences every future release instead of the historic ones, which is a
+ * failure nobody would notice until a release quietly did not announce.
+ */
+export function isPreConsolidationRelease(version: string): boolean {
+  return compareVersionsDesc(version, CONSOLIDATED_THROUGH_VERSION) >= 0;
 }
 
 function postVersionKey(version: string): string {
@@ -391,6 +418,17 @@ export async function postChangelogUpdates(webhookUrl?: string): Promise<{
     const key = postVersionKey(post.version);
     const currentItems = collectPostItems(post);
     const currentHash = hashPost(post);
+
+    // Already shipped under the old numbering; see CONSOLIDATED_THROUGH_VERSION.
+    if (isPreConsolidationRelease(post.version)) {
+      await sentCol.updateOne(
+        { _id: key },
+        { $set: { contentHash: currentHash, sentItems: currentItems, sentAt: new Date() } },
+        { upsert: true }
+      );
+      skipped.push(key);
+      continue;
+    }
 
     const existing = await sentCol.findOne({ _id: key });
 

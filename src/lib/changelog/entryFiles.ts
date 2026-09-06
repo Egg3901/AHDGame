@@ -1,54 +1,43 @@
 import fs from "fs";
 import path from "path";
 import { parseFrontmatter, asString, asStringArray } from "./frontmatter";
-import { DEV_POSTS_DIR, PUBLIC_POSTS_DIR } from "./paths";
+import { DEV_POSTS_DIR, PUBLIC_POSTS_DIR, UNRELEASED_DIR } from "./paths";
 import { AREA_VALUES, BADGE_VALUES } from "./types";
 
 /**
  * Changelog entry filenames.
  *
- * Entries used to be named for the version alone (`1.2.3.md`). The version was
- * therefore a scarce, first-come claim: every branch cut in parallel picked the
- * same "next free" number, and every one of those branches wrote the same path.
- * Git sees that as an add/add conflict, so each collision cost a conflict
- * resolution plus a fresh CI run, and an abandoned claim left a hole in the
- * numbering.
+ * An entry file used to be named for a version, and the generator handed out
+ * the next unused patch number. That made a version a per-pull-request unit:
+ * 313 entries reached 1.4.63 in six weeks, 193 of them inside one minor line,
+ * with dozens of files sharing a patch number and a topic suffix to tell them
+ * apart. Nobody could say what "1.4.38" was, because it was not anything: it
+ * was six unrelated pull requests that happened to merge on the same afternoon.
  *
- * The fix is to make the filename carry a per-entry discriminator:
+ * A version is now a release, and only the release script mints one:
  *
- *   content/changelog/dev/<version>-<suffix>.md
+ *   content/changelog/unreleased/<topic>.md   one per pull request, no version
+ *   content/changelog/dev/<version>.md        one per release, written by the release script
+ *   content/changelog/public/<version>.md     one per release, curated
  *
- * where <suffix> is the ticket, issue or branch topic the entry belongs to.
- * Two branches now write two different paths, so the merge is a clean add/add
- * of separate files no matter what version each one guessed.
- *
- * Nothing downstream reads the version out of the filename: ordering and
- * grouping come from the frontmatter `version` and `date`, and the feed keys on
- * the filename stem (the slug). Two entries may claim the same version without
- * breaking anything, which is what removes the race.
- *
- * `content/changelog/public/` keeps the bare `<version>.md` form on purpose:
- * that stem is the public URL (`/changelog/<slug>`) and it is in the sitemap,
- * so it must stay stable. Public entries are curated once per release by one
- * author, so they never race.
+ * The unreleased note carries no version field at all, so there is nothing to
+ * guess, nothing to renumber, and no add/add conflict between branches: two
+ * branches write two different topics. `npm run changelog:release` folds every
+ * note into one dev post, bumps package.json, and empties the directory.
  */
 
-/** `1.2.3` or `1.2.3-my-topic`. */
-const ENTRY_STEM_RE = /^(\d+\.\d+\.\d+)(?:-([a-z0-9]+(?:-[a-z0-9]+)*))?$/;
+/** `1.2.3`, and nothing else: a release entry's stem is its version. */
+const VERSION_STEM_RE = /^(\d+\.\d+\.\d+)$/;
 
-export interface EntryStem {
-  version: string;
-  /** Discriminator after the version, or null for the bare `<version>` form. */
-  suffix: string | null;
+/** `union-dues`, `ticket-1122`: lowercase words joined by single hyphens. */
+const TOPIC_STEM_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function parseVersionStem(stem: string): string | null {
+  const match = stem.match(VERSION_STEM_RE);
+  return match ? match[1] : null;
 }
 
-export function parseEntryStem(stem: string): EntryStem | null {
-  const match = stem.match(ENTRY_STEM_RE);
-  if (!match) return null;
-  return { version: match[1], suffix: match[2] ?? null };
-}
-
-/** Lowercase, hyphen-joined form of a free-text topic, for use as a suffix. */
+/** Lowercase, hyphen-joined form of a free-text topic, for use as a filename. */
 export function toEntrySuffix(topic: string): string {
   return topic
     .toLowerCase()
@@ -58,27 +47,13 @@ export function toEntrySuffix(topic: string): string {
     .replace(/-+$/g, "");
 }
 
-export function devEntryFileName(version: string, suffix: string): string {
-  return `${version}-${toEntrySuffix(suffix)}.md`;
+export function unreleasedFileName(topic: string): string {
+  return `${toEntrySuffix(topic)}.md`;
 }
 
-/**
- * The last day on which a bare `<version>.md` dev entry is accepted.
- *
- * Grandfathering has to survive other pull requests landing: any hardcoded list
- * of accepted stems goes stale the moment a branch that was cut before this one
- * merges, and then someone has to hand-patch the list. Deriving the set from git
- * history is not an option either, because CI checks out at depth 1, so no
- * earlier commit is present to compare against.
- *
- * The entry's own frontmatter date is the stable signal. Every entry already
- * carries one, it is committed alongside the file, and it does not move when
- * branches merge in a different order. An entry authored on or before the cutoff
- * keeps its bare name; anything dated after it must carry a topic suffix. The
- * grandfathered set therefore shrinks on its own as time passes, with nothing to
- * maintain.
- */
-export const BARE_NAME_CUTOFF_DATE = "2026-08-19";
+export function releaseEntryFileName(version: string): string {
+  return `${version}.md`;
+}
 
 /**
  * Damage a conflict-resolution script left on 1.2.4 and 1.2.8: a blank line
@@ -122,7 +97,9 @@ export interface EntryProblem {
   problem: string;
 }
 
-const REQUIRED_FIELDS = ["version", "date", "title"] as const;
+/** A release post is a published thing and needs a version; a note does not. */
+const RELEASE_REQUIRED_FIELDS = ["version", "date", "title"] as const;
+const UNRELEASED_REQUIRED_FIELDS = ["date", "title"] as const;
 const BADGES = new Set<string>(BADGE_VALUES);
 const AREAS = new Set<string>(AREA_VALUES);
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -148,70 +125,85 @@ function listMarkdown(dir: string): string[] {
   if (!fs.existsSync(dir)) return [];
   return fs
     .readdirSync(dir)
-    .filter((name) => name.endsWith(".md") && name !== "unreleased.md")
+    .filter((name) => name.endsWith(".md"))
     .sort();
 }
+
+export type EntryKind = "release" | "unreleased";
 
 /**
  * Check every entry in a directory.
  *
- * `bareVersionOnly` is the public rule: the stem must be exactly the version,
- * because it is the published URL.
+ * `release` is the published rule: the stem is the version and, for public
+ * entries, the URL. `unreleased` is the opposite rule and the one that keeps
+ * the numbering sane: a note is named for its topic and must not carry a
+ * version at all, because only a release has one.
  */
-export function checkEntryDir(dir: string, opts: { bareVersionOnly: boolean }): EntryProblem[] {
+export function checkEntryDir(dir: string, opts: { kind: EntryKind }): EntryProblem[] {
   const problems: EntryProblem[] = [];
+  const unreleased = opts.kind === "unreleased";
 
   for (const name of listMarkdown(dir)) {
     const stem = name.slice(0, -3);
-    const parsed = parseEntryStem(stem);
-    if (!parsed) {
-      problems.push({
-        file: name,
-        problem: opts.bareVersionOnly
-          ? "filename must be <version>.md, e.g. 1.2.3.md"
-          : "filename must be <version>-<topic>.md with a lowercase hyphenated topic, e.g. 1.2.3-union-dues.md",
-      });
-      continue;
-    }
     const raw = fs.readFileSync(path.join(dir, name), "utf-8");
     const { data } = parseFrontmatter(raw);
+    const version = asString(data.version);
 
-    if (opts.bareVersionOnly && parsed.suffix) {
-      problems.push({
-        file: name,
-        problem: "public entries are the published URL and must be named <version>.md",
-      });
+    if (unreleased) {
+      // Version first: `1.6.1` fails the topic pattern too, and "name it for
+      // the topic" does not tell the author the actual rule they broke.
+      if (parseVersionStem(stem)) {
+        problems.push({
+          file: name,
+          problem:
+            "an unreleased note must not be named for a version; the release script " +
+            "assigns one when the release is cut",
+        });
+      } else if (!TOPIC_STEM_RE.test(stem)) {
+        problems.push({
+          file: name,
+          problem:
+            "an unreleased note is named for its topic, lowercase and hyphenated, " +
+            'e.g. union-dues.md. Run `npm run changelog:new -- "Title"`.',
+        });
+      }
+      if (version) {
+        problems.push({
+          file: name,
+          problem:
+            `remove "version: ${version}". Only a release has a version, and ` +
+            "`npm run changelog:release` writes it. A note that picks its own number is " +
+            "how the numbering ran to 1.4.63 in six weeks.",
+        });
+      }
+    } else {
+      const parsedVersion = parseVersionStem(stem);
+      if (!parsedVersion) {
+        problems.push({
+          file: name,
+          problem:
+            "a release entry is named for its version alone, e.g. 1.6.0.md. " +
+            "Per-change notes go in content/changelog/unreleased/.",
+        });
+      } else if (version && version !== parsedVersion) {
+        problems.push({
+          file: name,
+          problem: `frontmatter version "${version}" does not match filename version "${parsedVersion}"`,
+        });
+      }
     }
+
     for (const damage of frontmatterDamage(raw)) {
       problems.push({ file: name, problem: damage });
     }
 
-    const entryDate = asString(data.date);
-    if (
-      !opts.bareVersionOnly &&
-      !parsed.suffix &&
-      !(entryDate && entryDate <= BARE_NAME_CUTOFF_DATE)
-    ) {
-      problems.push({
-        file: name,
-        problem: `a bare <version>.md name is what makes parallel branches collide; entries dated after ${BARE_NAME_CUTOFF_DATE} must be named <version>-<topic>.md, e.g. 1.2.3-union-dues.md`,
-      });
-    }
-
-    for (const field of REQUIRED_FIELDS) {
+    for (const field of unreleased ? UNRELEASED_REQUIRED_FIELDS : RELEASE_REQUIRED_FIELDS) {
       if (!asString(data[field])) {
         problems.push({ file: name, problem: `missing frontmatter field "${field}"` });
       }
     }
 
-    const version = asString(data.version);
-    if (version && version !== parsed.version) {
-      problems.push({
-        file: name,
-        problem: `frontmatter version "${version}" does not match filename version "${parsed.version}"`,
-      });
-    }
-
+    const entryDate = asString(data.date);
     if (entryDate && !DATE_RE.test(entryDate)) {
       problems.push({ file: name, problem: `date "${entryDate}" is not YYYY-MM-DD` });
     }
@@ -250,14 +242,20 @@ export function duplicateStems(dir: string): string[] {
   return dupes;
 }
 
-/** Every version already used by a dev entry, newest last. */
+/** Every version a dev release post already claims, oldest first. */
 export function usedDevVersions(): string[] {
   return listMarkdown(DEV_POSTS_DIR)
-    .map((name) => parseEntryStem(name.slice(0, -3))?.version)
+    .map((name) => parseVersionStem(name.slice(0, -3)))
     .filter((v): v is string => Boolean(v));
 }
 
-export const ENTRY_DIRS = [
-  { dir: DEV_POSTS_DIR, label: "dev", bareVersionOnly: false },
-  { dir: PUBLIC_POSTS_DIR, label: "public", bareVersionOnly: true },
+/** Notes waiting for a release, oldest filename first. */
+export function unreleasedNoteFiles(): string[] {
+  return listMarkdown(UNRELEASED_DIR);
+}
+
+export const ENTRY_DIRS: { dir: string; label: string; kind: EntryKind }[] = [
+  { dir: DEV_POSTS_DIR, label: "dev", kind: "release" },
+  { dir: PUBLIC_POSTS_DIR, label: "public", kind: "release" },
+  { dir: UNRELEASED_DIR, label: "unreleased", kind: "unreleased" },
 ];

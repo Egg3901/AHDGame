@@ -1,6 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { loadPublicPost } from "@/lib/changelog/posts";
-import { buildEmbedsForChangelogPost, formatChangelogTextForDiscord } from "@/lib/discordChangelog";
+import { loadPublicPost, loadPublicPosts } from "@/lib/changelog/posts";
+import {
+  buildEmbedsForChangelogPost,
+  formatChangelogTextForDiscord,
+  isPreConsolidationRelease,
+} from "@/lib/discordChangelog";
 import type { ChangelogPost } from "@/lib/changelog/types";
 
 function embedCharCount(embed: { title?: string; description?: string }): number {
@@ -86,5 +90,37 @@ describe("buildEmbedsForChangelogPost", () => {
     const platform = embeds.find((e) => e.title?.includes("Platform"));
     expect(platform?.description).toContain("Wire transfers");
     expect(platform?.description).not.toContain("States have real political texture");
+  });
+});
+
+// The consolidation rewrote every public post and created four version keys
+// changelogSentHistory has never seen. Announcing them would send four full
+// releases to Discord and an in-game notification to every player for each.
+describe("isPreConsolidationRelease", () => {
+  it("silences every release that shipped under the old numbering", () => {
+    for (const version of [
+      "0.4.0",
+      "1.0.0",
+      "1.1.0",
+      "1.2.0",
+      "1.3.0",
+      "1.4.0",
+      "1.5.0",
+      "1.6.0",
+    ]) {
+      expect(isPreConsolidationRelease(version)).toBe(true);
+    }
+  });
+
+  it("announces everything cut after it", () => {
+    for (const version of ["1.6.1", "1.7.0", "1.10.0", "2.0.0"]) {
+      expect(isPreConsolidationRelease(version)).toBe(false);
+    }
+  });
+
+  it("covers every public post on disk, so no historic release can re-announce", () => {
+    const shipped = loadPublicPosts().map((p) => p.version);
+    expect(shipped.length).toBeGreaterThan(0);
+    for (const version of shipped) expect(isPreConsolidationRelease(version)).toBe(true);
   });
 });
