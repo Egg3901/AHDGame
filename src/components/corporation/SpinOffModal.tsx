@@ -5,6 +5,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { CORPORATION_TYPE_LABELS, type CorporationType } from "@/lib/constants/corporations";
 import { spinOffCostAnchor } from "@/lib/corporations/subsidiaries/constants";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { useDialogA11y } from "@/components/ui";
 
 interface SpinOffModalProps {
   corporationId: string;
@@ -24,6 +25,7 @@ export function SpinOffModal({
   onClose,
   onSpunOff,
 }: SpinOffModalProps) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   const { formatAmount } = useCurrency();
 
   const [sectorType, setSectorType] = useState<string>(sectorOptions[0]?.type ?? "");
@@ -66,9 +68,14 @@ export function SpinOffModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      {...dialogProps}
+    >
       <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-5 space-y-4">
-        <h2 className="text-base font-bold text-foreground">Spin off a subsidiary</h2>
+        <h2 id={titleId} className="text-base font-bold text-foreground">
+          Spin off a subsidiary
+        </h2>
         <p className="text-xs text-muted">
           Move all sectors of one type into a new, wholly-owned private corporation run by a
           different CEO. Estimated cost: {formatAmount(estimatedCostAnchor)}

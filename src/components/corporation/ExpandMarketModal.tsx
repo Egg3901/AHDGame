@@ -17,6 +17,7 @@ import {
   facilityVocabulary,
 } from "@/lib/constants/facilityVocabulary";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
+import { useDialogA11y } from "@/components/ui";
 
 interface Competitor {
   corpId: string;
@@ -94,6 +95,7 @@ export default function ExpandMarketModal({
   initialSectorType,
   initialStateId,
 }: ExpandMarketModalProps) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   const resolveCountryName = useCountryDisplayName();
   const { formatAmount } = useCurrency();
   const router = useRouter();
@@ -311,6 +313,7 @@ export default function ExpandMarketModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/60 px-3 py-4 pb-20 backdrop-blur-sm sm:px-4 sm:py-6 sm:pb-20"
+      {...dialogProps}
       onClick={onClose}
     >
       <div
@@ -320,7 +323,7 @@ export default function ExpandMarketModal({
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-card-border px-4 py-3 sm:px-6 sm:py-4">
           <div>
-            <h2 className="text-base font-bold text-foreground">
+            <h2 id={titleId} className="text-base font-bold text-foreground">
               {plantsMode ? "Build a new sector" : "Expand Into New Market"}
             </h2>
             {step === "suggestions" && !plantsMode && (
