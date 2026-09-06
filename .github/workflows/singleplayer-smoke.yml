@@ -1,0 +1,69 @@
+name: singleplayer smoke
+
+# Boots the packaged singleplayer runtime as a player would, on Windows and
+# Linux: fresh world, first-run setup, one turn, graceful shutdown, restart.
+# Runs on pull requests that touch the local runtime, and on demand.
+#
+# `preload_entries` re-enables Next's default entry preloading, which is what
+# froze Windows first starts; dispatch with it set to measure the stall
+# against the fixed build. It is a diagnostic, not a configuration.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/singleplayer/**"
+      - "next.config.ts"
+      - "instrumentation.ts"
+      - "src/lib/singleplayer*"
+      - "src/lib/singleplayer/**"
+      - "src/app/api/singleplayer/**"
+      - "src/lib/mongodb.ts"
+      - "src/proxy.ts"
+      - ".github/workflows/singleplayer-smoke.yml"
+  workflow_dispatch:
+    inputs:
+      preload_entries:
+        description: "Re-enable Next entry preloading (diagnostic only)"
+        type: boolean
+        default: false
+      ready_timeout_seconds:
+        description: "Launcher readiness deadline per start"
+        type: number
+        default: 120
+
+permissions:
+  contents: read
+
+concurrency:
+  group: singleplayer-smoke-${{ github.ref }}-${{ inputs.preload_entries }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows-x86_64
+          - runner: ubuntu-22.04
+            platform: linux-x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Package the singleplayer runtime
+        run: npm run singleplayer:package
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+          NEXT_TELEMETRY_DISABLED: "1"
+          SINGLEPLAYER_PRELOAD_ENTRIES: ${{ inputs.preload_entries && '1' || '0' }}
+      - name: Boot a world, process a turn, stop and restart it
+        run: npm run singleplayer:smoke
+        env:
+          SINGLEPLAYER_READY_TIMEOUT_MS: ${{ inputs.ready_timeout_seconds && format('{0}000', inputs.ready_timeout_seconds) || '120000' }}
