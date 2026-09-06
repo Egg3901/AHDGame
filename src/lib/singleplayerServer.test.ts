@@ -1,7 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import path from "path";
 import os from "os";
-import { singleplayerCdnDir, singleplayerHomeDir } from "./singleplayerServer";
+import type { Db } from "mongodb";
+import {
+  ensureSingleplayerUser,
+  singleplayerCdnDir,
+  singleplayerHomeDir,
+} from "./singleplayerServer";
 
 describe("singleplayer data directory", () => {
   it("defaults to a dotfolder in the home directory", () => {
@@ -26,5 +31,17 @@ describe("singleplayer data directory", () => {
     expect(singleplayerCdnDir({ SINGLEPLAYER_HOME: "/tmp/ahd" })).toBe(
       path.join(path.resolve("/tmp/ahd"), "cdn")
     );
+  });
+});
+
+describe("singleplayer account", () => {
+  it("creates the fixed local user with one atomic upsert", async () => {
+    const updateOne = vi.fn().mockResolvedValue({ upsertedCount: 1 });
+    const db = { collection: vi.fn(() => ({ updateOne })) } as unknown as Db;
+
+    await expect(ensureSingleplayerUser(db)).resolves.toEqual({ created: true });
+    expect(updateOne).toHaveBeenCalledOnce();
+    expect(updateOne.mock.calls[0]?.[1]).toHaveProperty("$setOnInsert");
+    expect(updateOne.mock.calls[0]?.[2]).toEqual({ upsert: true });
   });
 });

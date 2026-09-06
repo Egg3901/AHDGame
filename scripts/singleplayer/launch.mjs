@@ -25,8 +25,15 @@
  */
 
 import { spawn, spawnSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { createServer, connect } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -49,13 +56,20 @@ function arg(flag, fallback) {
 const HOME = path.resolve(
   arg("--home", process.env.SINGLEPLAYER_HOME || path.join(homedir(), ".a-house-divided"))
 );
+const RUNTIME_HOME = path.resolve(
+  arg("--runtime-home", process.env.SINGLEPLAYER_RUNTIME_HOME || HOME)
+);
 const APP_PORT = Number(arg("--port", process.env.PORT || 3111));
 const MONGO_PORT = Number(arg("--mongo-port", process.env.SINGLEPLAYER_MONGO_PORT || 27117));
 const OPEN_BROWSER = !process.argv.includes("--no-browser");
 const PARENT_PID = Number(arg("--parent-pid", 0));
 const DATA_DIR = path.join(HOME, "data");
-const MONGO_DIR = path.join(HOME, "mongodb");
+// The database belongs to a world, but the MongoDB executable does not. Native
+// clients pass one shared runtime directory so every world reuses the same
+// verified download.
+const MONGO_DIR = path.join(RUNTIME_HOME, "mongodb");
 const MONGOD = path.join(MONGO_DIR, WIN ? "mongod.exe" : "mongod");
+const MONGO_COMPLETE = path.join(MONGO_DIR, `.complete-${MONGO_VERSION}`);
 
 const log = (...parts) => console.log("[ahd]", ...parts);
 
@@ -105,7 +119,10 @@ async function findMongod() {
       throw new Error(`MONGOD_PATH does not exist: ${process.env.MONGOD_PATH}`);
     return process.env.MONGOD_PATH;
   }
-  if (existsSync(MONGOD)) return MONGOD;
+  if (existsSync(MONGO_COMPLETE) && existsSync(MONGOD) && statSync(MONGOD).size > 1_000_000) {
+    log(`using cached MongoDB at ${MONGOD}`);
+    return MONGOD;
+  }
   const onPath = which(WIN ? "mongod.exe" : "mongod");
   if (onPath) {
     log(`using MongoDB already installed at ${onPath}`);
@@ -147,22 +164,34 @@ class TransformStreamCounter extends Transform {
 
 async function fetchMongod() {
   const { url, kind } = mongoArchive();
-  mkdirSync(MONGO_DIR, { recursive: true });
+  mkdirSync(RUNTIME_HOME, { recursive: true });
+  const staging = await mkdtemp(path.join(RUNTIME_HOME, "mongo-staging-"));
   log(`MongoDB ${MONGO_VERSION} is not installed; fetching it once from fastdl.mongodb.org`);
-  if (kind === "zip") {
-    await extractFromZipByRange(url, ["bin/mongod.exe", "bin/vc_redist.x64.exe"], MONGO_DIR);
-  } else {
-    const tmp = await mkdtemp(path.join(tmpdir(), "ahd-mongo-"));
-    const archive = path.join(tmp, "mongodb.tgz");
-    await download(url, archive, "MongoDB download");
-    const r = spawnSync("tar", ["-xzf", archive, "-C", tmp], { stdio: "inherit" });
-    if (r.status !== 0) throw new Error("tar failed while unpacking MongoDB");
-    const extracted = spawnSync("sh", ["-c", `ls -d ${tmp}/mongodb-*/bin/mongod`], {
-      encoding: "utf8",
-    }).stdout.trim();
-    if (!extracted) throw new Error("mongod not found inside the MongoDB archive");
-    writeFileSync(MONGOD, readFileSync(extracted), { mode: 0o755 });
-    await rm(tmp, { recursive: true, force: true });
+  try {
+    if (kind === "zip") {
+      await extractFromZipByRange(url, ["bin/mongod.exe", "bin/vc_redist.x64.exe"], staging);
+    } else {
+      const tmp = await mkdtemp(path.join(tmpdir(), "ahd-mongo-"));
+      try {
+        const archive = path.join(tmp, "mongodb.tgz");
+        await download(url, archive, "MongoDB download");
+        const r = spawnSync("tar", ["-xzf", archive, "-C", tmp], { stdio: "inherit" });
+        if (r.status !== 0) throw new Error("tar failed while unpacking MongoDB");
+        const extracted = spawnSync("sh", ["-c", `ls -d ${tmp}/mongodb-*/bin/mongod`], {
+          encoding: "utf8",
+        }).stdout.trim();
+        if (!extracted) throw new Error("mongod not found inside the MongoDB archive");
+        writeFileSync(path.join(staging, "mongod"), readFileSync(extracted), { mode: 0o755 });
+      } finally {
+        await rm(tmp, { recursive: true, force: true });
+      }
+    }
+    await writeFile(path.join(staging, `.complete-${MONGO_VERSION}`), `${MONGO_VERSION}\n`);
+    await rm(MONGO_DIR, { recursive: true, force: true });
+    await rename(staging, MONGO_DIR);
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true });
+    throw error;
   }
   log(`MongoDB ready at ${MONGOD}`);
   return MONGOD;
@@ -371,11 +400,11 @@ function openBrowser(url) {
  */
 async function waitForGame(base, deadlineMs) {
   const started = Date.now();
-  let announced = false;
+  let nextProgressAt = 0;
   for (;;) {
     try {
       const res = await fetch(`${base}/api/singleplayer/status`, {
-        signal: AbortSignal.timeout(30_000),
+        signal: AbortSignal.timeout(5_000),
       });
       if (res.ok) return;
     } catch {
@@ -384,9 +413,10 @@ async function waitForGame(base, deadlineMs) {
     if (Date.now() - started > deadlineMs) {
       throw new Error(`the game did not answer within ${deadlineMs / 1000}s of its port opening`);
     }
-    if (!announced) {
-      announced = true;
-      log("waiting for the game to finish first-run setup");
+    const elapsedSeconds = Math.round((Date.now() - started) / 1000);
+    if (elapsedSeconds >= nextProgressAt) {
+      nextProgressAt = elapsedSeconds + 5;
+      log(`still building the world (${elapsedSeconds}s): preparing its first turn`);
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -460,7 +490,7 @@ try {
   app = startApp();
   await waitForPort(APP_PORT, "app", 120_000);
   const base = `http://127.0.0.1:${APP_PORT}`;
-  await waitForGame(base, 600_000);
+  await waitForGame(base, 120_000);
   log(`ready at ${base}`);
   if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);
   void warmAssets(base);

@@ -1,4 +1,5 @@
 import { fundingResponse, maintenanceDecay } from "../spendingChannel";
+import { warRoadTargetPenalty, warRoadExtraDecay, type WarDamage } from "@/lib/military/warDamage";
 import type { EngineNodeContext, RegistryNode } from "../types";
 
 /**
@@ -148,7 +149,13 @@ export const roadConditionNode: RegistryNode = {
   // Maintenance-decay off infrastructure spend, plus the region's own freight
   // provisioning (ticket #1143) so logistics-sector build-out lifts the metric
   // the corp margin penalty reads.
-  inputs: [{ spending: "infrastructure" }, { provider: "sectorRevenueTax" }],
+  inputs: [
+    { spending: "infrastructure" },
+    { provider: "sectorRevenueTax" },
+    // A war fought across this country's ground. See `warDamage`: the host is
+    // damaged, an expeditionary belligerent is not.
+    { provider: "warDamage" },
+  ],
   bounds: [0, 100],
   inertia: 0.85,
   decimals: 2, // 2dp storage: per-turn decay steps (~0.05) stall on a 0.1 rounding grain
@@ -171,8 +178,15 @@ export const roadConditionNode: RegistryNode = {
     const freightTerm = payload
       ? freightLogisticsAdequacyTerm([...payload.owned, ...payload.unowned])
       : 0;
-    const target = supportedLevel(ctx, 35, 60) + freightTerm;
-    return maintenanceDecay(base, target, 0.06 / (1 - 0.85));
+    // War takes the roads BOTH ways: it lowers the level funding can hold, and it
+    // destroys faster than neglect does. Lowering the floor alone is far too gentle
+    // unfunded erosion is 0.06 a turn, so a war would need ~400 turns to reach a
+    // reduced floor and the War for Germany ran 130. Both terms are zero at peace,
+    // which is the overwhelmingly common case and bit-identical to before.
+    const war = ctx.providers["warDamage"] as WarDamage | undefined;
+    const target = supportedLevel(ctx, 35, 60) + freightTerm - warRoadTargetPenalty(war);
+    const decay = (0.06 + warRoadExtraDecay(war)) / (1 - 0.85);
+    return maintenanceDecay(base, target, decay);
   },
 };
 

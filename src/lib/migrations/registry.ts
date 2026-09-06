@@ -70,6 +70,7 @@ import { migration as equityMarketPools } from "./entries/2026-09-03-equity-mark
 import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-party-org-rekey";
 import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
+import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -224,6 +225,7 @@ export const MIGRATIONS: Migration[] = [
   // world never re-seeds, so seedIndexes alone would never reach it.
   intelligenceIndexes,
   clientStatisticsTtlIndex,
+  clientDiagnosticsTtlIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
