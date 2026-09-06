@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
 import { gameConfig as gameConfigDefaults } from "@/lib/seeds/reference/gameConfig";
 
-type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4";
+type NppAutonomyLevel = "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5";
 type NppForeignPolicyMode = "off" | "shadow" | "active";
 type NppForeignPolicyStage = "votes" | "proposals" | "trade" | "support" | "war";
 type NppEntryViabilityMode = "off" | "observe" | "enforce";
@@ -168,7 +168,21 @@ const NPP_LEVELS: { value: NppAutonomyLevel; label: string; blurb: string }[] = 
     blurb:
       "Same as v3, applied everywhere — player-enabled countries included. NPPs become fully autonomous economic + political actors in every market.",
   },
+  {
+    value: "v5",
+    label: "v5 (persistent goals — singleplayer / worldsim beta)",
+    blurb:
+      "Same activities as v4, pursued with follow-through: a government keeps up to five standing goals across agenda recomputes, grades each one, and lets the verdicts steer the next agenda instead of starting over. Adds no new power and no new lever. Beta: validated in singleplayer and worldsim, not yet for live multiplayer worlds.",
+  },
 ];
+
+/**
+ * The autonomy level says WHICH activities autonomous politicians may perform.
+ * How competently they perform them is the local-world difficulty setting, which
+ * does not appear here because it is not a hosted-world lever.
+ */
+const NPP_LEVEL_AXIS_NOTE =
+  "Sets which activities autonomous politicians may perform. How well they perform them is the local-world difficulty setting, not this control.";
 
 const NPP_FOREIGN_POLICY_MODES: {
   value: NppForeignPolicyMode;
@@ -527,7 +541,7 @@ export function FeatureGatesPanel() {
           </span>
         </div>
         <p className="mb-3 text-xs text-muted">
-          Fresh seeds start at <span className="font-semibold">v4</span>.{" "}
+          Fresh seeds start at <span className="font-semibold">v4</span>. {NPP_LEVEL_AXIS_NOTE}{" "}
           {NPP_LEVELS.find((l) => l.value === state.nppAutonomyLevel)?.blurb}
         </p>
         <div className="inline-flex flex-wrap gap-1 rounded-lg border border-card-border bg-card p-1">

@@ -85,12 +85,17 @@ export async function forceFullAutonomy(
    * Autonomy tier to force. Defaults to v3 (the historical behavior of this
    * helper). Pass "v4" to exercise the global tier — the harness previously
    * hardcoded v3, which meant the one thing v4 changes (autonomy running inside
-   * player-enabled countries) could not be simulated at all.
+   * player-enabled countries) could not be simulated at all. Pass "v5" for the
+   * persistent-goal tier.
    *
    * Note that at v4 the `enabledForPlayers = false` sweep below stops being the
    * mechanism that makes autonomy apply everywhere — v4 applies everywhere by
    * definition. It is still performed so a v3 and a v4 run differ only in the
    * level, which is what makes an A/B comparison meaningful.
+   *
+   * The default is deliberately NOT raised as new tiers ship: every comparison
+   * run has to name its own level, or the baseline silently moves under the
+   * comparison and the A/B stops meaning anything.
    */
   level: NppAutonomyLevel = "v3",
   foreignPolicyMode: NppForeignPolicyMode = "shadow",

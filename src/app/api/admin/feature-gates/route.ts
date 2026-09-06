@@ -77,7 +77,7 @@ const bodySchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("level"),
-    value: z.enum(["off", "v0", "v1", "v2", "v3", "v4"]),
+    value: z.enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"]),
   }),
   z.object({
     kind: z.literal("foreign-policy-mode"),

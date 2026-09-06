@@ -42,10 +42,17 @@ export const DEFAULT_GAME_STATE_FLAGS = {
   autoSectorSeedEnabled: false,
   sectorTechTreesEnabled: true,
   onboardingChecklistEnabled: true,
-  // Top of the autonomy ladder. v0 seated NPPs but left them economically
-  // passive; v4 is player-parity plus global economic behaviour, which is what
-  // makes an NPP-run country behave like a real economy — and whatever NPPs
-  // cannot do, players will find broken too.
+  // v0 seated NPPs but left them economically passive; v4 is player-parity plus
+  // global economic behaviour, which is what makes an NPP-run country behave
+  // like a real economy — and whatever NPPs cannot do, players will find broken
+  // too.
+  //
+  // NOT the top of the ladder any more: v5 adds persistent governing goals on
+  // top of v4. It stays opt-in (singleplayer / worldsim beta) rather than
+  // becoming the fresh-world seed, so hosted worlds keep the tier they have been
+  // validated at. Moving this to "v5" is the last step of the V5 rollout, not
+  // the first, and it changes NEW worlds only — an existing world's level is
+  // persisted and is never rewritten by a change here.
   nppAutonomyLevel: "v4",
   // Kept in sync with nppAutonomyLevel for legacy readers.
   nppAutonomyEnabled: true,

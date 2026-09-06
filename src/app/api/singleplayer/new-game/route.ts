@@ -29,7 +29,13 @@ const bodySchema = z.object({
     ])
     .default("normal"),
   autonomyLevel: z
-    .enum(["off", "v0", "v1", "v2", "v3", "v4"] satisfies [NppAutonomyLevel, ...NppAutonomyLevel[]])
+    .enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"] satisfies [
+      NppAutonomyLevel,
+      ...NppAutonomyLevel[],
+    ])
+    // A request that omits the level gets v4, the shipped default. V5 is opt-in
+    // until the local-world default moves, so an older client cannot land a
+    // world on a tier it has no UI for.
     .default("v4"),
   featureFlags: z.record(z.string(), z.boolean()).optional(),
 });

@@ -18,6 +18,7 @@ export const NPP_AUTONOMY_LEVEL_RANK: Record<NppAutonomyLevel, number> = {
   v2: 3,
   v3: 4,
   v4: 5,
+  v5: 6,
 };
 
 const LEVEL_RANK = NPP_AUTONOMY_LEVEL_RANK;
