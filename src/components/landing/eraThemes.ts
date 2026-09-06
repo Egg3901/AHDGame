@@ -45,6 +45,12 @@ export type EraConfig = {
    * decades before Watergate. Era colour belongs to the era config.
    */
   tileBodies?: Partial<Record<EraTileKey, string>>;
+  /**
+   * May contain `{playableCount}` where the number of open countries belongs.
+   * Every one of these strings used to spell the count out by hand, so a
+   * country opening silently made seven pieces of copy wrong at once. Resolve
+   * with `resolveEraCopy` from `lib/marketing/marketedWorld`.
+   */
   worldSectionDek: string;
   closingHeadline: string;
   closingDek: string;
@@ -98,7 +104,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
         "Set the prime rate and manage a line of credit inside a fixed-exchange-rate system.",
     },
     worldSectionDek:
-      "A handful of nations in 1953. Four are open to players. The rest run their own economies and one-party machines. Drag the globe to explore.",
+      "A handful of nations in 1953. {playableCount} are open to players. The rest run their own economies and one-party machines. Drag the globe to explore.",
     closingHeadline: "The post-war order is still being written.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
@@ -160,7 +166,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
       centralBanks: "Set the prime rate and manage a line of credit while inflation runs hot.",
     },
     worldSectionDek:
-      "Twenty-two nations in 1979. Four are open to players. The rest run their own economies and one-party machines. Drag the globe to explore.",
+      "Twenty-two nations in 1979. {playableCount} are open to players. The rest run their own economies and one-party machines. Drag the globe to explore.",
     closingHeadline: "22 nations. One timeline.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
@@ -249,7 +255,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Manage a post-Cold War economy, contest elections, and navigate a world in rapid transition.",
     worldSectionDek:
-      "Nations redrawn by history. Three are open to players. The rest run their own economies through the turbulence of transition. Drag the globe to explore.",
+      "Nations redrawn by history. {playableCount} are open to players. The rest run their own economies through the turbulence of transition. Drag the globe to explore.",
     closingHeadline: "The map just changed. What comes next is up to you.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
@@ -298,7 +304,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Manage a booming economy, navigate a tech revolution, and set policy for a new millennium.",
     worldSectionDek:
-      "Nations navigating prosperity and instability in equal measure. Three are open to players. The rest run their own economies. Drag the globe to explore.",
+      "Nations navigating prosperity and instability in equal measure. {playableCount} are open to players. The rest run their own economies. Drag the globe to explore.",
     closingHeadline: "A new century starts in twelve months.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
@@ -348,7 +354,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Manage an overleveraged economy, contest a polarized electorate, and navigate a shifting geopolitical order.",
     worldSectionDek:
-      "A multipolar world in 2007. Three nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+      "A multipolar world in 2007. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
     closingHeadline: "The crash hasn't happened yet.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
@@ -393,7 +399,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Navigate polarized electorates, manage trade policy, and govern in an era of institutional distrust.",
     worldSectionDek:
-      "A fractured international order in 2019. Three nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+      "A fractured international order in 2019. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
     closingHeadline: "Institutions are under pressure everywhere.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",
@@ -445,7 +451,7 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
     playSectionDek:
       "Govern through an era of rapid technological change, geopolitical realignment, and fiscal pressure.",
     worldSectionDek:
-      "A multipolar world in 2023. Three nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+      "A multipolar world in 2023. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
     closingHeadline: "The decade is still being written.",
     closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
     closingCta: "Get started",

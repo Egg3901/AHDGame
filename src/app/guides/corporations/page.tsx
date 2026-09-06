@@ -1,3 +1,8 @@
+/**
+ * The Corporation guide page: how to run a corporation, covering sector focus,
+ * profit margins, commodities, sprawl, shares, bonds and political strategy.
+ * Rendered by CorporationGuidePage.
+ */
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";

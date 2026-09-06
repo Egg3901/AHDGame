@@ -1,3 +1,10 @@
+/**
+ * Army logistics and battle tuning. FRONT_SUPPLY sets what formations draw from a
+ * front's supply pool (air, naval and rocket units draw 25%, units held in depth
+ * 60%, a Logistics command covers 25% of demand, fighting on home soil gives 1.25x
+ * throughput). FRONT_CAPACITY_BASE caps how much force fits in a line, ATTRITION
+ * governs when a side breaks, and OCCUPATION turns battle wins into territory.
+ */
 // Tuning + presentation config for the Military Commands suite. All balance
 // values live here — calc.ts must contain no magic numbers. Values are ported
 // verbatim from the design mockup's DCLogic.

@@ -266,9 +266,68 @@ describe("processCrisisTurn", () => {
     // SP5: the scoped economic effect lands on macroMetrics.
     expect(db.collectionMocks.macroMetrics.updateMany).toHaveBeenCalledWith(
       { _id: { $in: ["CA"] } },
-      expect.anything()
+      expect.arrayContaining([
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            "economic.sectorGrowth.value": expect.anything(),
+          }),
+        }),
+      ])
     );
     expect(db.collectionMocks.macroMetrics.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("tapers a GDP rate shock through sectorGrowth while leaving physical GDP loss separate", async () => {
+    const crisis = makeCrisis({
+      scope: "region",
+      regionIds: ["CA"],
+      startTurn: 10,
+      durationTurns: 2,
+      effects: [
+        {
+          effectType: "tick",
+          targetType: "metric",
+          metricCategory: "economic",
+          metricField: "gdpGrowth",
+          sectorType: null,
+          strategyId: null,
+          value: -1,
+          label: "GDP rate shock",
+        },
+        {
+          effectType: "flat",
+          targetType: "gdpLoss",
+          metricCategory: null,
+          metricField: null,
+          sectorType: null,
+          strategyId: null,
+          value: 0.1,
+          label: "Physical loss",
+        },
+      ],
+    });
+    db.collectionMocks.crises.find.mockReturnValue({ toArray: async () => [crisis] });
+    db.collectionMocks.states.find.mockReturnValue({
+      toArray: async () => [{ _id: "CA", countryId: "US" }],
+    });
+
+    const { processCrisisTurn } = await import("./crisisTurn");
+    await processCrisisTurn(db as unknown as Db, 10);
+    await processCrisisTurn(db as unknown as Db, 11);
+
+    const first = db.collectionMocks.macroMetrics.updateMany.mock.calls[0][1] as Array<{
+      $set: Record<string, unknown>;
+    }>;
+    const second = db.collectionMocks.macroMetrics.updateMany.mock.calls[1][1] as Array<{
+      $set: Record<string, unknown>;
+    }>;
+    expect(first[0].$set["economic.sectorGrowth.value"]).toBeDefined();
+    expect(second[0].$set["economic.sectorGrowth.value"]).toBeDefined();
+    expect(db.collectionMocks.states.updateMany).toHaveBeenCalledWith(
+      { _id: { $in: ["CA"] } },
+      { $mul: { gdp: 0.9 } }
+    );
+    expect(db.collectionMocks.states.updateMany).toHaveBeenCalledTimes(1);
   });
 
   it("tapers a tick effect toward zero over the crisis duration", async () => {

@@ -1,3 +1,8 @@
+/**
+ * The Investing guide page: how to invest in stocks, the currency exchange and
+ * sovereign bonds, and how interest rates connect a portfolio to the wider
+ * economy. Rendered by InvestingGuidePage.
+ */
 import type { Metadata } from "next";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";

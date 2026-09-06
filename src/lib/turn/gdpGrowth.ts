@@ -1,4 +1,12 @@
 /**
+ * What drives GDP growth and what corporations can do to raise it. GDP growth is
+ * the revenue-weighted average of sector growth rates in the region
+ * (computeWeightedGrowthRate), so owned sectors that grow realized revenue
+ * (computeRealizedRevenueGrowthRate) lift it while unowned sectors grow at
+ * DEFAULT_UNOWNED_GROWTH_RATE. Unemployment follows growth by Okun's law, and sales
+ * or VAT rates above a country's neutral rate cut growth (computeConsumptionTaxAdjustedGrowthRate).
+ */
+/**
  * GDP Growth — pure helpers & calibration constants.
  *
  * GDP growth is the revenue-weighted average of sector growth rates, adjusted by

@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { DefenseAppropriation, FederalBudget } from "@/lib/db/types/budget";
 import type { AppropriationSettlement } from "@/lib/military/appropriation";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
+import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 
 const EMPTY: DefenseAppropriation = { balance: 0, accruedThroughTurn: 0, arrearsRatio: 0 };
 
@@ -83,6 +84,65 @@ export async function applyAppropriationSettlement(
         "defenseAppropriation.arrearsRatio": settlement.arrearsRatio,
       },
     }
+  );
+  return res.modifiedCount > 0;
+}
+
+/**
+ * Commit the turn settlement and any upkeep overdraft against the same budget
+ * document. The treasury and appropriation guards form a compare-and-swap:
+ * callers must retry their calculation when another writer changed either
+ * balance between the read and this write.
+ */
+export async function applyAppropriationSettlementWithOverdraft(
+  db: Db,
+  countryId: string,
+  turn: number,
+  settlement: AppropriationSettlement,
+  expectedTreasury: number,
+  expectedAppropriation: number,
+  budget: FederalBudget
+): Promise<boolean> {
+  const overdraft = Math.round(settlement.overdraftDrawn);
+  const nextTreasury = Math.round(expectedTreasury - overdraft);
+  const derived =
+    overdraft > 0
+      ? deriveFiscalState({
+          treasuryBalance: nextTreasury,
+          gdp: budget.gdp ?? 0,
+          gdpSmoothed: budget.gdpSmoothed,
+          ceiling: budget.debt?.ceiling ?? 0,
+          investorConfidence: budget.investorConfidence,
+          imfBailoutActive: budget.imfSovereignBailoutActive,
+          sovereignRiskAnchor: budget.sovereignRiskAnchor,
+        })
+      : null;
+  const set: Record<string, unknown> = {
+    "defenseAppropriation.accruedThroughTurn": turn,
+    "defenseAppropriation.arrearsRatio": settlement.arrearsRatio,
+  };
+  if (derived) {
+    set["debt.principal"] = derived.principal;
+    set["debt.interestRate"] = derived.interestRate;
+    set.debtToGdpRatio = derived.debtToGdpRatio;
+    set.creditRating = derived.creditRating;
+  }
+  const inc: Record<string, number> = {
+    "defenseAppropriation.balance": Math.round(settlement.delta),
+  };
+  if (overdraft > 0) inc.treasuryBalance = -overdraft;
+  const treasuryGuard =
+    expectedTreasury === 0
+      ? { $or: [{ treasuryBalance: 0 }, { treasuryBalance: { $exists: false } }] }
+      : { treasuryBalance: expectedTreasury };
+  const res = await budgets(db).updateOne(
+    {
+      countryId,
+      "defenseAppropriation.accruedThroughTurn": { $lt: turn },
+      "defenseAppropriation.balance": expectedAppropriation,
+      ...treasuryGuard,
+    },
+    { $inc: inc, $set: set }
   );
   return res.modifiedCount > 0;
 }

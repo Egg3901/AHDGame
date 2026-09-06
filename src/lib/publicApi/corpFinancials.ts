@@ -1,3 +1,9 @@
+/**
+ * Why your corporation lost money: the revenue, operating income and operating
+ * costs shown on the public API. corpFinancials sums each sector's realized
+ * revenue (not its nameplate), applies the margin the engine actually used
+ * (effectiveProfitMargin), and converts each sector from its host currency first.
+ */
 import { sectorEconomicRevenue } from "@/lib/corporations/sectorRevenueBasis";
 import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
 import type { CorporateSector } from "@/lib/db/types";

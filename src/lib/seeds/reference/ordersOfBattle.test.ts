@@ -5,7 +5,12 @@ import {
   resolveOrderOfBattle,
   type OrderOfBattleEntry,
 } from "./ordersOfBattle";
-import { MILITARY_BRANCHES_BY_COUNTRY, UNIT_TYPES } from "@/lib/constants/military";
+import {
+  MILITARY_BRANCHES_BY_COUNTRY,
+  UNIT_TYPES,
+  getUnitTypesForYear,
+  isMilitaryEraActive,
+} from "@/lib/constants/military";
 import type { CountryId } from "@/lib/constants/countries";
 
 type Table = Partial<Record<CountryId, OrderOfBattleEntry[]>>;
@@ -43,7 +48,51 @@ describe("orders of battle", () => {
   });
 
   it("returns null for a country with no authored roster", () => {
-    expect(resolveOrderOfBattle("US", "1953")).toBeNull();
+    // SCO and WAL are the only countries left without one, and correctly so:
+    // they have no military branches in any era, so they seed nothing anyway.
+    expect(resolveOrderOfBattle("SCO", "1953")).toBeNull();
+    expect(resolveOrderOfBattle("WAL", "2019")).toBeNull();
+  });
+
+  it("authors every country that can field a force", () => {
+    const unauthored = (Object.keys(MILITARY_BRANCHES_BY_COUNTRY) as CountryId[]).filter(
+      (c) => MILITARY_BRANCHES_BY_COUNTRY[c].length > 0 && !ORDERS_OF_BATTLE[c]
+    );
+    // An unauthored branch falls back to 3-5 random units, which is how Ireland
+    // came to outgun the United States. Nothing may rejoin that path silently.
+    expect(unauthored).toEqual([]);
+  });
+
+  it("never names a branch using only archetypes that post-date the era", () => {
+    // authoredPicks empty => buildCountryRoster falls back to random generation
+    // for that branch, silently discarding the authored composition.
+    const offenders: string[] = [];
+    for (const [era, year] of [
+      ["1979", 1979],
+      ["1991", 1991],
+      ["1999", 1999],
+      ["2007", 2007],
+      ["2019", 2019],
+      ["2023", 2023],
+    ] as Array<[string, number]>) {
+      for (const [countryId, entries] of Object.entries(ORDERS_OF_BATTLE_BY_ERA[era] ?? {})) {
+        const branches = MILITARY_BRANCHES_BY_COUNTRY[countryId as CountryId] ?? [];
+        const byBranch = new Map<string, OrderOfBattleEntry[]>();
+        for (const e of entries ?? []) {
+          byBranch.set(e.branchId, [...(byBranch.get(e.branchId) ?? []), e]);
+        }
+        for (const [branchId, named] of byBranch) {
+          const branch = branches.find((b) => b.id === branchId);
+          if (!branch || !isMilitaryEraActive(branch, year)) continue;
+          const active = getUnitTypesForYear(branch.domain, year).map((a) => a.type);
+          if (active.length === 0) continue; // branch seeds nothing at all; not a fallback
+          if (!named.some((e) => active.includes(e.type))) {
+            offenders.push(`${era}/${countryId}/${branchId}`);
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 
   it("falls back to canonical when era is undefined", () => {

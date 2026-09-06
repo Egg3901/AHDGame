@@ -4,6 +4,8 @@ import { getTranslations } from "next-intl/server";
 import { getAuthUser } from "@/lib/auth";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { getCachedLandingData } from "@/lib/landing/cachedLandingData";
+import { formatNationList } from "@/lib/marketing/marketedWorld";
+import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 import { buildGovernmentTypeMap } from "@/lib/landing/governmentTypeMap";
 import { fetchDiscordInviteStats } from "@/lib/discord/inviteStats";
 import type { DiscordInviteStats } from "@/lib/discord/inviteStats";
@@ -17,10 +19,14 @@ import { singleplayerStatus } from "@/lib/singleplayerServer";
 // do not each pay 5+ fresh DB round-trips.
 export const dynamic = "force-dynamic";
 export async function generateMetadata(): Promise<Metadata> {
-  const t = await getTranslations("auth");
+  // The country list is interpolated, not written into the message, so the
+  // highest-traffic search snippet on the site cannot advertise a country that
+  // is closed to players. German stays country-free: an English-formatted list
+  // would not decline correctly there.
+  const [t, world] = await Promise.all([getTranslations("auth"), getMarketedWorldSafe()]);
   return publicPageMetadata({
     title: t("landing.metaTitle"),
-    description: t("landing.metaDescription"),
+    description: t("landing.metaDescription", { countries: formatNationList(world.playable) }),
     pathname: "/",
   });
 }
@@ -43,9 +49,10 @@ export default async function LandingPage() {
   // parallel with the cached Mongo snapshot so the community section paints
   // without a post-hydration waterfall. Failures are isolated so a DB outage
   // does not block Discord counts (and vice versa).
-  const [snapshot, discordStats] = await Promise.all([
+  const [snapshot, discordStats, world] = await Promise.all([
     getCachedLandingData().catch(() => null),
     fetchDiscordInviteStats().catch(() => null as DiscordInviteStats | null),
+    getMarketedWorldSafe(),
   ]);
 
   const seedYear = snapshot?.seedYear ?? 1979;
@@ -61,6 +68,7 @@ export default async function LandingPage() {
       playerCounts={playerCounts}
       governmentTypes={governmentTypes}
       discordStats={discordStats}
+      world={world}
     />
   );
 }

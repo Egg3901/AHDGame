@@ -136,11 +136,16 @@ describe("military branch era gating", () => {
 });
 
 /**
- * Rosters for countries with NO authored order of battle, captured before the
- * authored-OOB change. These must not move: the r() sequence is shared across
- * every per-unit field, so reordering any draw silently rewrites them.
+ * Rosters produced by the RANDOM path, captured before any order of battle was
+ * authored. These must not move: the r() sequence is shared across every
+ * per-unit field, so reordering any draw silently rewrites them.
+ *
+ * Every one of these countries is authored now, so the test below un-authors
+ * them for the duration. That is the point: the random path is still live for
+ * any branch an era table does not name, and this is the only fixture that
+ * pins it.
  */
-const UNAUTHORED_BASELINE: Record<string, string[]> = {
+const RANDOM_PATH_BASELINE: Record<string, string[]> = {
   US: [
     "army|Air Defense Battalion|4th Sentinel Air Defense Battalion|1|74|0",
     "army|Mechanized Brigade|1st Vanguard Mechanized Brigade|1|64|1",
@@ -214,6 +219,17 @@ const UNAUTHORED_BASELINE: Record<string, string[]> = {
   ],
 };
 
+/** Runs `fn` with the named countries' authored rosters removed, then restores them. */
+function withoutAuthoredRosters<T>(countryIds: string[], fn: () => T): T {
+  const saved = countryIds.map((c) => [c, ORDERS_OF_BATTLE[c as CountryId]] as const);
+  for (const [c] of saved) delete ORDERS_OF_BATTLE[c as CountryId];
+  try {
+    return fn();
+  } finally {
+    for (const [c, v] of saved) if (v) ORDERS_OF_BATTLE[c as CountryId] = v;
+  }
+}
+
 describe("authored orders of battle", () => {
   const regions = ["r1", "r2"];
 
@@ -240,22 +256,54 @@ describe("authored orders of battle", () => {
     expect(a).toEqual(b);
   });
 
-  it("keeps random generation for a country with no authored roster", () => {
-    const roster = buildCountryRoster("US", regions, 1, "1953", 1953);
+  it("keeps random generation for a branch with no authored roster", () => {
+    const roster = withoutAuthoredRosters(["US"], () =>
+      buildCountryRoster("US", regions, 1, "1953", 1953)
+    );
     // 4 era-active US branches in 1953 (no Space Force), 3-5 units each.
     expect(roster.length).toBeGreaterThanOrEqual(12);
     expect(roster.length).toBeLessThanOrEqual(20);
   });
 
+  it("seeds the authored US composition instead of a random draw", () => {
+    const roster = buildCountryRoster("US", regions, 1, "1953", 1953);
+    expect(roster.length).toBe(48);
+    // The absurdity this table exists to end: the 1953 US Navy has carriers.
+    expect(roster.filter((u) => u.type === "Carrier Strike Group").length).toBe(3);
+    expect(roster.filter((u) => u.type === "Marine Division").length).toBe(3);
+  });
+
+  it("seeds Ireland a neutral state's defence forces, not a great power's", () => {
+    const ie = buildCountryRoster("IE", regions, 1, "1953", 1953);
+    const us = buildCountryRoster("US", regions, 1, "1953", 1953);
+    expect(ie.length).toBe(4);
+    expect(ie.length).toBeLessThan(us.length);
+    // The random draw gave Ireland guided-missile destroyers and a bomber wing.
+    expect(ie.some((u) => u.type === "Guided-Missile Destroyer")).toBe(false);
+    expect(ie.some((u) => u.type === "Bomber Squadron")).toBe(false);
+  });
+
+  it("resolves Japan to the National Safety Force in 1953 and the JSDF after 1954", () => {
+    const nsf = buildCountryRoster("JP", regions, 1, "1953", 1953);
+    expect(nsf.length).toBe(7);
+    expect(nsf.every((u) => u.branchId === "nsf" || u.branchId === "csf")).toBe(true);
+    const jsdf = buildCountryRoster("JP", regions, 1, "1979", 1979);
+    expect(jsdf.some((u) => u.branchId === "jgsdf")).toBe(true);
+    expect(jsdf.some((u) => u.branchId === "nsf")).toBe(false);
+  });
+
   // Regression guard for the RNG-order hazard. Comparing two calls to the same
   // build proves nothing here — the baseline came from BEFORE the change.
-  it("leaves every unauthored country's roster byte-identical to the pre-change baseline", () => {
-    for (const [countryId, expected] of Object.entries(UNAUTHORED_BASELINE)) {
-      const got = buildCountryRoster(countryId, regions, 1, "1953", 1953).map(
-        (u) => `${u.branchId}|${u.type}|${u.name}|${u.techTier}|${u.readiness}|${u.vet}`
-      );
-      expect(got, countryId).toEqual(expected);
-    }
+  it("leaves the random path byte-identical to the pre-authoring baseline", () => {
+    const ids = Object.keys(RANDOM_PATH_BASELINE);
+    withoutAuthoredRosters(ids, () => {
+      for (const [countryId, expected] of Object.entries(RANDOM_PATH_BASELINE)) {
+        const got = buildCountryRoster(countryId, regions, 1, "1953", 1953).map(
+          (u) => `${u.branchId}|${u.type}|${u.name}|${u.techTier}|${u.readiness}|${u.vet}`
+        );
+        expect(got, countryId).toEqual(expected);
+      }
+    });
   });
 
   it("still generates units for a branch the authored table does not name", () => {
