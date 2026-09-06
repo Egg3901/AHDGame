@@ -2,11 +2,17 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { describeTurnPhase } from "./turnProgressPresentation";
 import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { isLightweightLayoutPath } from "@/lib/constants/layoutPaths";
+
+const EXCLUDED_PATHS = ["/", "/login", "/register", "/banned"];
 
 export function TurnProgressToast() {
-  const status = useGameTurnStatus();
+  const pathname = usePathname();
+  const enabled = !EXCLUDED_PATHS.includes(pathname) && !isLightweightLayoutPath(pathname);
+  const status = useGameTurnStatus(enabled);
   const [dismissedTurn, setDismissedTurn] = useState<number | null>(null);
 
   if (!status?.isProcessing || dismissedTurn === status.processingTargetTurn) return null;
