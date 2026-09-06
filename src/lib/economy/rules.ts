@@ -53,3 +53,25 @@ export function countryPhysicalDemandSupplyGapPct(
   }
   return weight > 0 && Number.isFinite(weightedGap) ? weightedGap / weight : null;
 }
+
+/** Overhang is a pressure index, not a currency amount. */
+export const OVERHANG_CAP = 100;
+
+/** Physical scarcity adds at most six shortage points to the overhang signal. */
+export const MAX_PHYSICAL_SHORTAGE_CONTRIBUTION = 6;
+
+/**
+ * Shortage index in [0, 100]. The observed demand-supply gap is expressed as
+ * a percent of supply, capped at 500. The six-point physical contribution
+ * limits added repression loss to 1.728 points/year at 60% repression.
+ * Missing/non-finite observations contribute zero; overhang is unchanged.
+ */
+export function shortageIndexFrom(overhang: number, demandSupplyGapPct = 0): number {
+  const bounded = (value: number, cap: number) =>
+    Number.isFinite(value) ? Math.max(0, Math.min(cap, value)) : 0;
+  return Math.min(
+    100,
+    0.7 * bounded(overhang, OVERHANG_CAP) +
+      (MAX_PHYSICAL_SHORTAGE_CONTRIBUTION * bounded(demandSupplyGapPct, 500)) / 500
+  );
+}
