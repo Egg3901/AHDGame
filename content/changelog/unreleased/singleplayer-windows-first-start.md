@@ -34,6 +34,12 @@ areas: [backend]
   MongoDB version, missing Visual C++ runtime on Windows.
 - First-run world setup no longer writes operator audit rows or per-query
   observability records; a local world has no operator to read them.
+- Closing the game now stops the local database through its own shutdown
+  command on every platform, and waits for it to finish before the launcher
+  exits. On Windows the database used to be cut off hard, which could lose
+  the last moment of writes; after "end turn" that was the write recording
+  that the turn had finished, so a world could reopen mid-turn. On Linux and
+  macOS a quick restart could find the previous database still closing.
 
 ## What it means at the table
 
@@ -41,3 +47,5 @@ areas: [backend]
   opening, in line with Linux and macOS.
 - If a start does fail, the message says what was being attempted and what the
   game saw, which is what to include in a bug report.
+- Quitting right after ending a turn keeps that turn. Reopening a world
+  straight after closing it works first time.
