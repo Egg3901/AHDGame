@@ -1,5 +1,4 @@
 ---
-version: "1.4.61"
 date: 2026-09-06
 title: Atomic defence appropriation settlement
 summary: >-
