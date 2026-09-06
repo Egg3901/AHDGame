@@ -3,6 +3,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { WhippedFromVoteMap } from "./legislation";
 import type { GoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedCommandStance, PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
+import type { GoverningGoalState } from "@/lib/nppAutonomy/v5/rules/governingGoals";
 
 // --- GovernmentFormation ---
 
@@ -109,6 +110,16 @@ export interface GovernmentFormation {
    * Absent/null for market countries or before the governing brain runs.
    */
   commandStance?: PersistedCommandStance | null;
+
+  /**
+   * NPP Autonomy V5: the government's persistent goal records — what it
+   * committed to, how each attempt was graded, and how many times in a row a
+   * domain has now defeated it. Bounded to `GOAL_SLOT_CAP` (5) records, always;
+   * there is no history array here and none may be added. Written only by the
+   * Tier-1 governing-brain slot at v5 and above; absent everywhere else, which
+   * is what makes a v4 world load and run unchanged.
+   */
+  governingGoals?: GoverningGoalState | null;
 }
 
 // --- PMAppointmentVote ---
