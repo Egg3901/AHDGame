@@ -530,6 +530,16 @@ export interface OwnSideProfile {
    */
   deepBuff: number;
   genEnemyMin: number;
+  /**
+   * Each unit id at this front mapped to the rear/reserve shares of ITS OWN contingent.
+   *
+   * `sustain` used to be a single side-wide number applied to every unit's casualties,
+   * so a coalition partner's rear echelon sheltered your frontline divisions. On the
+   * German front that handed side B a flat ~25% casualty reduction across its whole line
+   * because the Soviet air force was parked behind it, while side A got ~2.5% for having
+   * two airlift wings. A nation's tail now protects that nation's own troops.
+   */
+  contingentSustain: Map<string, { rearShare: number; reserveRes: number }>;
   sup: SupplyState;
   ownTf: number;
 }
@@ -671,7 +681,24 @@ function ownSideProfile(
   const seenG: Record<string, number> = {};
   let genEnemy = 1;
 
+  // Per-contingent role mass, accumulated in the SAME pass and with the same terrain and
+  // reach weighting as the side-wide totals, so a nation's own sustain is measured exactly
+  // as the side's is rather than by a parallel formula that could drift.
+  const perCtx: Array<{ roleMass: Record<string, number>; unitIds: string[] }> = [];
+
   for (const ctx of ctxs) {
+    const own = {
+      roleMass: {
+        frontline: 0,
+        support: 0,
+        reserve: 0,
+        flank: 0,
+        rear: 0,
+        deepstrike: 0,
+      } as Record<string, number>,
+      unitIds: [] as string[],
+    };
+    perCtx.push(own);
     for (const u of ctx.units.filter((x) => x.theaterId === frontId)) {
       const base = cv(ctx, u);
       const card = computeCard(u);
@@ -683,6 +710,8 @@ function ownSideProfile(
       tfTot += adj;
       const role = plan?.roleOf.get(String(u._id)) ?? getRole(ctx.positions, u);
       roleMass[role] += adj;
+      own.roleMass[role] += adj;
+      own.unitIds.push(String(u._id));
       engaged.push({ cv: adj * roleDef(role).engage, s: statObj(u), domain: u.domain });
       if (role === "deepstrike") {
         deepMass += adj;
@@ -701,6 +730,17 @@ function ownSideProfile(
   const ownTf = rawTot ? tfTot / rawTot : 1;
   const totalMass = Object.keys(roleMass).reduce((a, k) => a + roleMass[k], 0);
   const share = (rl: string) => (totalMass ? Math.min(1, (roleMass[rl] / totalMass) * 2) : 0);
+
+  const contingentSustain = new Map<string, { rearShare: number; reserveRes: number }>();
+  for (const own of perCtx) {
+    const tot = Object.keys(own.roleMass).reduce((a, k) => a + own.roleMass[k], 0);
+    const ownShare = (rl: string) => (tot ? Math.min(1, (own.roleMass[rl] / tot) * 2) : 0);
+    // One object per contingent, shared by reference across its units: the value is
+    // identical for all of them and this keeps a large front's map cheap.
+    const v = { rearShare: ownShare("rear"), reserveRes: ownShare("reserve") };
+    for (const id of own.unitIds) contingentSustain.set(id, v);
+  }
+
   return {
     engaged,
     combatMass: engaged.reduce((a, e) => a + e.cv, 0),
@@ -712,6 +752,7 @@ function ownSideProfile(
     deepShare: share("deepstrike"),
     deepBuff: deepMass ? deepWeighted / deepMass : 1,
     genEnemyMin: genEnemy,
+    contingentSustain,
     sup: supplyState(ctxs, frontId, plan, interdiction),
     ownTf,
   };
@@ -826,7 +867,13 @@ function enemyFaction(ctx: BattleContext, f: Front): string {
  * contingent to 1.0, so a one-unit ally's `share` read 1.0 and its (0.6 + share)
  * concentration term charged it as though its handful of divisions were the whole
  * army. Absent `sideRawTotal` (the synthetic forecast path, one context by
- * construction) the contingent's own total is the denominator, exactly as before. */
+ * construction) the contingent's own total is the denominator, exactly as before.
+ *
+ * `sustain` is the opposite question and takes the opposite answer: it is a property of
+ * a nation's OWN tail, looked up per unit in `contingentSustain`. Side-wide, it let an
+ * ally's rear echelon shelter your frontline. The `rearShare`/`reserveRes` scalars remain
+ * as the fallback for the synthetic path, where the side IS the contingent and the two
+ * are identical by construction. */
 function unitOutcomes(
   units: CombatUnit[],
   positions: Record<string, string>,
@@ -838,7 +885,8 @@ function unitOutcomes(
   rearShare: number,
   reserveRes: number,
   plan?: EngagementPlan,
-  sideRawTotal?: number
+  sideRawTotal?: number,
+  contingentSustain?: Map<string, { rearShare: number; reserveRes: number }>
 ): { unitResults: UnitResult[]; loss: number } {
   const att = units.filter((u) => u.theaterId === frontId);
   const cvOf = (u: CombatUnit) => combatValue(u, natMods, generalMods(genForUnit(binding, u)));
@@ -850,7 +898,10 @@ function unitOutcomes(
   // total otherwise. `rawTotal` is already floored at 1, so the fallback path is
   // bit-identical to before this parameter existed.
   const shareDenom = Math.max(1, sideRawTotal ?? rawTotal);
-  const sustain = 1 - 0.25 * rearShare - 0.15 * reserveRes;
+  const sustainOf = (u: CombatUnit) => {
+    const own = contingentSustain?.get(String(u._id));
+    return 1 - 0.25 * (own?.rearShare ?? rearShare) - 0.15 * (own?.reserveRes ?? reserveRes);
+  };
   let loss = 0;
   const unitResults: UnitResult[] = att.map((u) => {
     const st = statObj(u);
@@ -860,7 +911,8 @@ function unitOutcomes(
     const armorMit = 1 - (st.ar / 100) * 0.45;
     const moraleMit = 1 - ((st.mo - 50) / 100) * 0.3;
     const gcas = generalMods(genForUnit(binding, u)).cas;
-    const intensity = ((1 - ratio) * 0.5 + r() * 0.25) * armorMit * moraleMit * rc * sustain * gcas;
+    const intensity =
+      ((1 - ratio) * 0.5 + r() * 0.25) * armorMit * moraleMit * rc * sustainOf(u) * gcas;
     const casualties = Math.round(
       u.personnel * Math.min(0.4, Math.max(0, intensity) * CASUALTY_RATE_SCALE) * (0.6 + share)
     );
@@ -1347,7 +1399,8 @@ export function resolvePvpBattle(
         profile.rearShare,
         profile.reserveRes,
         plan,
-        sideRawTotal
+        sideRawTotal,
+        profile.contingentSustain
       );
       // Stamp attribution on the way into the shared list. This is the only point
       // that still knows which contingent produced these results — once they are
