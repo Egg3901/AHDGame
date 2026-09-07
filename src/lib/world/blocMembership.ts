@@ -92,6 +92,35 @@ export function blocOrgFor(preset: string | undefined, bloc: WorldBloc): string 
 }
 
 /**
+ * The accession-governing organisations a country may NOT hold alongside
+ * `organizationId` — the bloc alliances of every other pole in this world.
+ *
+ * You cannot be in NATO and the Warsaw Pact at once. That is not a cosmetic
+ * rule: `loadBlocMembership` above writes `out[countryId] = bloc` once per row
+ * with no precedence, so a country holding a row in both poles reads as whichever
+ * document Mongo returned last, and every military and alignment call downstream
+ * reads that map. A dual member's own bloc is a coin flip.
+ *
+ * Empty for an org that does not govern accession (joining the UN costs a country
+ * nothing it already holds), and empty where the era has only one such channel.
+ *
+ * ⚠️ Keyed on the PRESET, exactly as `blocOrgFor` above is, and for the same
+ * reason: a year-derived lookup returns no eastern channel once a 1953 game's
+ * clock passes 1991, and the exclusivity would go silently inert mid-game.
+ */
+export function rivalBlocOrgsFor(preset: string | undefined, organizationId: string): string[] {
+  const year = PRESET_YEAR[preset ?? ""] ?? PRESET_YEAR[DEFAULT_PRESET];
+  const channels = resolveAlignmentEra(year).channels.filter(
+    (channel) => channel.alignmentAccession && channel.organizationId in INTERNATIONAL_ORGANIZATIONS
+  );
+  const own = channels.find((channel) => channel.organizationId === organizationId);
+  if (!own) return [];
+  return channels
+    .filter((channel) => channel.poleId !== own.poleId)
+    .map((channel) => channel.organizationId);
+}
+
+/**
  * The display name of the alliance a bloc admits through, for player-facing copy.
  *
  * Resolved from the same preset-keyed channel list as `blocOrgFor` so a refusal names

@@ -1004,18 +1004,39 @@ describe("processAlignmentTurn", () => {
     expect(r.defections).toBe(1);
   });
 
-  it("never shows a founding member the door, whatever its standing", async () => {
-    // Nigeria founds the Commonwealth while still a colony, so it carries a
-    // colony's damped metropole alignment and sits below its own bloc's bar.
-    // You cannot be expelled from a club you founded.
+  it("shows a founding member the door once its share has collapsed", async () => {
+    // Founding a bloc is not tenure in it. Greece was seeded into NATO at turn 0
+    // and drifted to a Western share of 36 without the sweep ever stamping a
+    // clock on it, so it sat in NATO and the Warsaw Pact at once (ticket #1285).
     alignments([collapsedRow]);
     orgMemberships([wobbling({ status: "founding" })]);
     const { processAlignmentTurn } = await import("./alignmentPhase");
     const r = await processAlignmentTurn(db as unknown as Db, 100);
 
+    expect(r.defections).toBe(1);
+    expect(vi.mocked(removeOrganizationMembership)).toHaveBeenCalledWith(
+      expect.anything(),
+      "YU",
+      "NATO",
+      "NATO",
+      100,
+      expect.anything()
+    );
+  });
+
+  it("leaves a founding member of a channel-less org alone", async () => {
+    // The case the founder exemption was written for. Nigeria founds the
+    // Commonwealth while still a colony, so it carries a colony's damped
+    // metropole alignment and sits below its own bloc's bar. It is protected by
+    // the channel guard, not by its founding status: alignment has no opinion
+    // about an org it does not channel to.
+    alignments([collapsedRow]);
+    orgMemberships([wobbling({ organizationId: "UN", status: "founding" })]);
+    const { processAlignmentTurn } = await import("./alignmentPhase");
+    const r = await processAlignmentTurn(db as unknown as Db, 100);
+
     expect(r.defections).toBe(0);
     expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
-    // Not even a clock is started for one.
     expect(db.collection("organizationMemberships").updateOne).not.toHaveBeenCalled();
   });
 
