@@ -247,7 +247,7 @@ async function repriceStrategyCapacity(db: Db, ctx: MigrationContext): Promise<M
   }
 
   notes.unshift(
-    `${ctx.dryRun ? "DRY RUN — no writes. " : ""}year ${year}, eraUnitScale ${eraUnitScale}, ` +
+    `${ctx.dryRun ? "DRY RUN, no writes. " : ""}year ${year}, eraUnitScale ${eraUnitScale}, ` +
       `${sectors.length} sectors on defective pairs scanned, ${updated} re-priced, ` +
       `${unitsRemovedTotal.toFixed(0)} capacity units removed`
   );

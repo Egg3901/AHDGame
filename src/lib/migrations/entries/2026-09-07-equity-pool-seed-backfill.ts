@@ -75,7 +75,7 @@ async function backfillEquityPoolSeed(db: Db, ctx: MigrationContext): Promise<Mi
   }
 
   notes.unshift(
-    `${ctx.dryRun ? "DRY RUN — no writes. " : ""}${pools.length} pools; ` +
+    `${ctx.dryRun ? "DRY RUN, no writes. " : ""}${pools.length} pools; ` +
       `${updated} backfilled, ${alreadySeeded} already had a seed`
   );
 
