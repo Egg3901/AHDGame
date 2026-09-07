@@ -1399,6 +1399,9 @@ export function makeNppCorpDecision(
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
               units: 1,
+              // Greenfield entry: the sector does not exist yet and is founded
+              // on the sector-type default strategy.
+              strategyId: null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
@@ -1771,6 +1774,7 @@ export function makeNppCorpDecision(
             computeBuildCost({
               sectorType: sector.sectorType,
               units: 1,
+              strategyId: sector.strategyId ?? null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
@@ -1844,6 +1848,7 @@ export function makeNppCorpDecision(
       const costAnchor = computeBuildCost({
         sectorType: sector.sectorType,
         units,
+        strategyId: sector.strategyId ?? null,
         year: plants.year,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,

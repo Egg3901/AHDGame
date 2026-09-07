@@ -96,13 +96,24 @@
  *
  *     capacityPricePerUnit = cash / Δunits
  *                          = GROWTH_COST_MULTIPLIER × Δrevenue / (Δrevenue × k)
- *                          = GROWTH_COST_MULTIPLIER × RPU(type)   ◀ IDENTITY B
+ *                          = GROWTH_COST_MULTIPLIER × RPU(type, strategy)   ◀ IDENTITY B
  *
  * Again scale-free. Note both identities are ratios of the SAME cancelling
  * Δrevenue, so A and B are consistent with each other by construction:
  * capacityPricePerUnit / laborIntensity = GROWTH_COST_MULTIPLIER ×
- * REVENUE_PER_WORKER for every sector type, in every era with matching era
- * columns — a relationship the tests pin.
+ * REVENUE_PER_WORKER, in every era with matching era columns — a relationship
+ * the tests pin.
+ *
+ * ⚠️ SCOPE OF THE A↔B RELATIONSHIP. Identity B is now evaluated at the
+ * sector's ACTUAL strategy, while `laborIntensity` (identity A) is still
+ * evaluated at the TYPE's default mix. The two therefore coincide only at the
+ * default strategy, which is exactly where `capacityEconomy.test.ts` pins them.
+ * That is correct rather than an oversight: real staffing does not come from
+ * identity A at all — `calculateWorkers(revenue, workforceSkill)` derives
+ * headcount from REVENUE, which is already strategy-aware, so a strategy-aware
+ * price and a type-level labour anchor stay consistent in practice. Making A
+ * strategy-aware too would change no live staffing number and is deliberately
+ * not done here.
  *
  * The rate/dominance/acumen multipliers in `calculateDailyGrowthCost` are
  * deliberately EXCLUDED: they are situational modifiers on a transaction, not
@@ -472,22 +483,54 @@ export function capacityEraLaborIndex(year: number | null | undefined): number {
 // ─── Public anchors ─────────────────────────────────────────────────────────
 
 /**
- * IDENTITY B — ₳ to build one unit/day of capacity in `sectorType`, at the
- * world's current `year`.
+ * IDENTITY B — ₳ to build one unit/day of capacity in `sectorType` running
+ * `strategyId`, at the world's current `year`.
  *
- *     capacityPricePerUnit = GROWTH_COST_MULTIPLIER × RPU(type) × eraPriceIndex(year)
+ *     capacityPricePerUnit = GROWTH_COST_MULTIPLIER × RPU(type, strategy) × eraPriceIndex(year)
  *
  * At `year = 1953` the era index is 1.0, so this is exactly the ₳ the legacy
  * growth path charges for the same increment of capacity.
+ *
+ * ─── WHY THE PRICE IS STRATEGY-AWARE ───────────────────────────────────────
+ * This used to read `revenuePerCapacityUnit(sectorType, unitScale)` — the
+ * TYPE's default ("standard") mix — while revenue has always been computed from
+ * the sector's ACTUAL strategy (`sectorProfitBasis`'s nameplate leg). The two
+ * legs therefore priced and paid for different products.
+ *
+ * For extraction the gap is 326.9x: `rare_earth` carries a 21,000 base price
+ * but only a 0.14 rate in the diversified mix, so it contributes 0.06% of that
+ * mix's unit yield (RPU 89.23) and 100% of `rare_earth_mining`'s (RPU
+ * 29,166.67). Capacity bought at the diversified price and pointed at rare
+ * earth repaid its capex in 0.22 turns against the 72 turns
+ * (GROWTH_COST_MULTIPLIER = 3.0 days) every other build pays — measured live at
+ * turn 694, where every US sector type sat at revenue/capacityBook 0.16-0.46
+ * and rare-earth mining sat at 44.77.
+ *
+ * The invariant this restores, asserted over every (type, strategy) pair in
+ * `capacityEconomy.strategyPricing.test.ts`:
+ *
+ *     capacityPricePerUnit / revenuePerCapacityUnitForStrategy === GROWTH_COST_MULTIPLIER
+ *
+ * `strategyId` is REQUIRED but nullable so the compiler enumerates every
+ * pricing site rather than leaving silent 3-arg callers behind;
+ * `revenuePerCapacityUnitForStrategy` falls back to the default strategy for
+ * null, so `null` is byte-identical to the old behaviour.
+ *
+ * NOTE this does NOT retire the D9 retool rescale
+ * ({@link rescaleCapacityForStrategyChange}). That closes a different route:
+ * capacity already BOUGHT at the coal price and then re-pointed at rare earth.
+ * Pricing fixes new builds; D9 fixes re-aiming existing stock. Both are needed,
+ * and the payback test above fails if either is removed.
  */
 export function capacityPricePerUnit(
   sectorType: CorporationType,
   year: number,
-  unitScale: number
+  unitScale: number,
+  strategyId: string | null | undefined
 ): number {
   return (
     GROWTH_COST_MULTIPLIER *
-    revenuePerCapacityUnit(sectorType, unitScale) *
+    revenuePerCapacityUnitForStrategy(sectorType, strategyId, unitScale) *
     capacityEraPriceIndex(year)
   );
 }
@@ -756,6 +799,13 @@ export interface BuildCostInputs {
   sectorType: CorporationType;
   /** Capacity units ordered (output units/day). */
   units: number;
+  /**
+   * The production method the capacity will run. REQUIRED (pass `null` for the
+   * sector-type default) so the compiler enumerates every build-pricing site:
+   * capacity is priced at the RPU of the product it will actually make, not the
+   * type's default mix. See {@link capacityPricePerUnit} for why.
+   */
+  strategyId: string | null;
   /** World year — drives the era price column. */
   year: number;
   /**
@@ -872,6 +922,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   const {
     sectorType,
     units,
+    strategyId,
     year,
     eraUnitScale,
     marketSharePercent = 0,
@@ -883,7 +934,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     techGrowthCostMultiplier = 1,
   } = inputs;
   const safeUnits = Number.isFinite(units) && units > 0 ? units : 0;
-  const unitPriceAnchor = capacityPricePerUnit(sectorType, year, eraUnitScale);
+  const unitPriceAnchor = capacityPricePerUnit(sectorType, year, eraUnitScale, strategyId);
   // Dominance is scaled by how contested the cell is. The factor multiplies the
   // toll's EXCESS over 1.0, so a market with no rivals still pays a monopoly
   // premium, just a smaller one — and a sub-threshold sector (multiplier 1) is

@@ -234,6 +234,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       starterBuildAnchor = computeBuildCost({
         sectorType,
         units: starterUnits,
+        // A founded sector is created with no strategy, so it runs the
+        // sector-type default; quote it at the same price it will be charged.
+        strategyId: null,
         year: currentYear,
         eraUnitScale,
         // No sector here yet, so the corp holds no share of this (state, type)

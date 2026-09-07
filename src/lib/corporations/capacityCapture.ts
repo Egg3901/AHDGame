@@ -174,12 +174,15 @@ export function capacityCaptureBookTransfer(args: {
 export function capacityCaptureBookUpdates(args: {
   defender: {
     sectorType: CorporationType;
+    /** Priced at this strategy when no recorded basis exists (identity B). */
+    strategyId?: string | null;
     capitalStock?: number | null;
     capacityBookAnchor?: number | null;
   };
   /** Attacker's receiving sector; null when a brand-new sector is being created. */
   attacker: {
     sectorType: CorporationType;
+    strategyId?: string | null;
     capitalStock?: number | null;
     capacityBookAnchor?: number | null;
   } | null;
@@ -202,7 +205,13 @@ export function capacityCaptureBookUpdates(args: {
       Number.isFinite(defender.capacityBookAnchor) &&
       defender.capacityBookAnchor >= 0
         ? defender.capacityBookAnchor
-        : defenderStock * capacityPricePerUnit(defender.sectorType, year, eraUnitScale),
+        : defenderStock *
+          capacityPricePerUnit(
+            defender.sectorType,
+            year,
+            eraUnitScale,
+            defender.strategyId ?? null
+          ),
     sourceStock: defenderStock,
     unitsTaken,
     unitsReceived,
@@ -222,7 +231,15 @@ export function capacityCaptureBookUpdates(args: {
     attacker.capacityBookAnchor >= 0
       ? attacker.capacityBookAnchor
       : attackerStock *
-        capacityPricePerUnit(attacker?.sectorType ?? defender.sectorType, year, eraUnitScale);
+        capacityPricePerUnit(
+          attacker?.sectorType ?? defender.sectorType,
+          year,
+          eraUnitScale,
+          // Falls back to the defender's strategy alongside its sectorType, so
+          // the pair is always read from the same sector rather than mixing an
+          // attacker type with a defender strategy.
+          (attacker ? attacker.strategyId : defender.strategyId) ?? null
+        );
   return {
     defenderSet:
       hasDefenderBasis && transfer
@@ -287,15 +304,17 @@ export function attackCostAnchorUnderPlants(args: {
   legacyCostAnchor: number;
   unitsReceived: number;
   sectorType: CorporationType;
+  /** Strategy of the sector being seized — the floor prices the capacity it actually produces. */
+  strategyId?: string | null;
   year: number;
   eraUnitScale: number;
 }): number {
-  const { legacyCostAnchor, unitsReceived, sectorType, year, eraUnitScale } = args;
+  const { legacyCostAnchor, unitsReceived, sectorType, strategyId, year, eraUnitScale } = args;
   const legacy = Number.isFinite(legacyCostAnchor) ? Math.max(0, legacyCostAnchor) : 0;
   if (!(Number.isFinite(unitsReceived) && unitsReceived > 0)) return legacy;
   const capacityFloor =
     unitsReceived *
-    capacityPricePerUnit(sectorType, year, eraUnitScale) *
+    capacityPricePerUnit(sectorType, year, eraUnitScale, strategyId ?? null) *
     ATTACK_BUILD_PRICE_PREMIUM;
   return Math.round(Math.max(legacy, capacityFloor));
 }

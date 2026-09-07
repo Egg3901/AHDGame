@@ -111,7 +111,8 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
   const capacityUnitPriceAnchor = capacityPricePerUnit(
     sector.sectorType,
     currentYear ?? CAPACITY_ANCHOR_YEAR,
-    eraUnitScale
+    eraUnitScale,
+    sector.strategyId ?? null
   );
   // C10: the credit keys on the ACCRUED COST, not on the target slider.
   // `currentGrowthCost` is what the sector is being billed THIS turn;

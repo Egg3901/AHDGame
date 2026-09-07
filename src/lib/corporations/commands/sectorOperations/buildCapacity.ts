@@ -497,6 +497,10 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const cost = computeBuildCost({
       sectorType: sector.sectorType,
       units,
+      // Capacity is priced at the product this sector actually makes. Ordering
+      // into a sector already running a high-RPU strategy used to be charged
+      // the sector-type default price, which is the 326.9x rare-earth subsidy.
+      strategyId: sector.strategyId ?? null,
       year: currentYear,
       eraUnitScale,
       marketSharePercent: marketSharePct,

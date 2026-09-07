@@ -131,6 +131,7 @@ const EXPECTED_UNITS = Math.max(
 );
 const EXPECTED_FEE = sectorEntryFeeAnchor("2019-default");
 const EXPECTED_BUILD = computeBuildCost({
+  strategyId: null,
   eraUnitScale: 1,
   sectorType: "manufacturing",
   units: EXPECTED_UNITS,
@@ -244,6 +245,7 @@ describe("NPP expansion under plants — price parity", () => {
     const decision = decide(corp(), [sector()], [unownedPool()], plantsCtx);
     const order = decision.newSectors![0].starterOrder!;
     const playerPrice = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: "manufacturing",
       units: order.unitsOrdered,

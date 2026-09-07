@@ -53,7 +53,7 @@ describe("buildSoeCapexGrant", () => {
     // The anti-free-build invariant: units bought == units worn out.
     expect(buys[0].unitsAdded).toBeCloseTo(stock * CAPITAL_DEPRECIATION_PER_TURN, 9);
     expect(grantAnchor).toBeCloseTo(
-      stock * CAPITAL_DEPRECIATION_PER_TURN * capacityPricePerUnit("manufacturing", YEAR, 1),
+      stock * CAPITAL_DEPRECIATION_PER_TURN * capacityPricePerUnit("manufacturing", YEAR, 1, null),
       6
     );
   });

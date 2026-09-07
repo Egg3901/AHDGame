@@ -75,7 +75,13 @@ describe("attack price vs build price, per unit acquired", () => {
       });
       const attackPerUnit = attackCost / unitsReceived;
 
-      const build = computeBuildCost({ eraUnitScale: 1, sectorType, units: unitsReceived, year });
+      const build = computeBuildCost({
+        strategyId: null,
+        eraUnitScale: 1,
+        sectorType,
+        units: unitsReceived,
+        year,
+      });
       const buildPerUnit = build.totalAnchor / unitsReceived;
 
       expect(attackPerUnit).toBeGreaterThan(buildPerUnit);
@@ -97,7 +103,7 @@ describe("attack price vs build price, per unit acquired", () => {
     const { unitsReceived } = capacityCaptureUnits(capturedAnchor, sectorType, null, 1);
 
     const legacyPerUnit = (targetRevenueAnchor * ATTACK_OWNED_COST_FRACTION) / unitsReceived;
-    const buildPerUnit = capacityPricePerUnit(sectorType, year, 1);
+    const buildPerUnit = capacityPricePerUnit(sectorType, year, 1, null);
     expect(legacyPerUnit).toBeLessThan(buildPerUnit);
   });
 

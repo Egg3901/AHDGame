@@ -224,6 +224,7 @@ describe("buildCapacity — build", () => {
     expect(res.status).toBe(201);
 
     const expected = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: "manufacturing",
       units: 1_000,
