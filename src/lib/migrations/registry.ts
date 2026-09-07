@@ -228,7 +228,6 @@ export const MIGRATIONS: Migration[] = [
   intelligenceIndexes,
   clientStatisticsTtlIndex,
   clientDiagnosticsTtlIndex,
-  equityPoolSeedBackfill,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
@@ -258,7 +257,16 @@ export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 //     narrowing to an explicit list of defective (type, strategy) pairs, and a
 //     decision on the one-sided `min` guard, before it is fit to run. See the
 //     file header and the ADR.
-export const HELD_MIGRATIONS: Migration[] = [repriceStrategyCapacity];
+//
+//   2026-09-07-equity-pool-seed-backfill
+//     Records each equity pool's opening balance as `seedLocal`. Harmless in
+//     itself and idempotent, but it WRITES to live pool documents, and the
+//     standing instruction for this work is that nothing touches live without
+//     sign-off. Held for that reason alone, not because it is unsafe.
+//     TRADE-OFF: `poolConservationResidual` returns NaN without `seedLocal`, so
+//     the per-turn conservation warning is INERT until this is run. Run it as
+//     soon as the write is approved, or the monitoring half of the fix is dead.
+export const HELD_MIGRATIONS: Migration[] = [repriceStrategyCapacity, equityPoolSeedBackfill];
 
 // Deferred to follow-up (need bootstrap-marker pass on production first):
 //   - 2026-04-22-reverse-split-victim-reparations  (no marker writer in script)
