@@ -79,6 +79,17 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // A caucus has one officer, so there is no second signature to
+    // require here the way the party treasury does. Block self-payment
+    // outright rather than leave the chair able to move the whole
+    // caucus treasury into their own campaign balance unreviewed.
+    if (!isAdmin && targetCharacterOid.equals(authUser.character._id)) {
+      return NextResponse.json(
+        { error: "Caucus chairs cannot send caucus funds to themselves." },
+        { status: 403 }
+      );
+    }
+
     const memberships = await listCaucusMemberships(db, caucus._id, "character");
     const activeCharacterIds = new Set(
       memberships.map((membership) => membership.memberId.toString())
