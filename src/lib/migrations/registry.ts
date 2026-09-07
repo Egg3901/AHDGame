@@ -71,6 +71,7 @@ import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-part
 import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
+import { migration as repriceStrategyCapacity } from "./entries/2026-09-07-reprice-strategy-capacity";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -237,6 +238,25 @@ export const MIGRATIONS: Migration[] = [
 // `MIGRATIONS` alone and can never reach anything here.
 // See scripts/migrations/restoreCapitalModeFromShadow.ts.
 export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
+
+// HELD — written, tested, and deliberately OUTSIDE the auto-run chain because a
+// product decision is still open. `MIGRATIONS` is what a no-flag
+// `npm run migrate` walks, so nothing here can run on a deploy; scripts/
+// run-migrations.ts widens its candidate list to include this array only when
+// `--only` names an entry, which makes running one an explicit human act.
+//
+// Moving an entry from here into MIGRATIONS is the act of saying "this is
+// approved to run". Do not do it to make a test or a deploy quieter.
+//
+//   2026-09-07-reprice-strategy-capacity
+//     Re-prices capacity bought at the sector-type default and run on a
+//     higher-RPU strategy. The live dry run puts ~2,390 sectors in scope with
+//     cuts to -99.96% — roughly half the world's capacity — because nearly
+//     every focused strategy out-yields its sector's diversified default. Needs
+//     narrowing to an explicit list of defective (type, strategy) pairs, and a
+//     decision on the one-sided `min` guard, before it is fit to run. See the
+//     file header and the ADR.
+export const HELD_MIGRATIONS: Migration[] = [repriceStrategyCapacity];
 
 // Deferred to follow-up (need bootstrap-marker pass on production first):
 //   - 2026-04-22-reverse-split-victim-reparations  (no marker writer in script)

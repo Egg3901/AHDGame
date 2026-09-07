@@ -111,6 +111,11 @@ const REGISTRY: Record<string, { count: number; expect: Expectation; why: string
     expect: "sector",
     why: "One greenfield founding quote (null) and two growth quotes on existing sectors; see the per-call assertions below.",
   },
+  "src/lib/migrations/entries/2026-09-07-reprice-strategy-capacity.ts": {
+    count: 1,
+    expect: "sector",
+    why: "Re-prices existing capacity against the strategy the sector actually runs. HELD out of the auto-run chain pending a scope decision.",
+  },
 };
 
 /** Call sites that legitimately pass `null` even though their file is 'sector'. */
