@@ -174,15 +174,21 @@ export function capacityCaptureBookTransfer(args: {
 export function capacityCaptureBookUpdates(args: {
   defender: {
     sectorType: CorporationType;
-    /** Priced at this strategy when no recorded basis exists (identity B). */
-    strategyId?: string | null;
+    /**
+     * Priced at this strategy when no recorded basis exists (identity B).
+     * REQUIRED but nullable so the compiler enumerates every caller: capacity
+     * is priced at the RPU of the product it makes, and a caller that silently
+     * omitted this would fall back to the sector-type default and value a
+     * rare-earth plant at the diversified price.
+     */
+    strategyId: string | null;
     capitalStock?: number | null;
     capacityBookAnchor?: number | null;
   };
   /** Attacker's receiving sector; null when a brand-new sector is being created. */
   attacker: {
     sectorType: CorporationType;
-    strategyId?: string | null;
+    strategyId: string | null;
     capitalStock?: number | null;
     capacityBookAnchor?: number | null;
   } | null;
@@ -304,8 +310,13 @@ export function attackCostAnchorUnderPlants(args: {
   legacyCostAnchor: number;
   unitsReceived: number;
   sectorType: CorporationType;
-  /** Strategy of the sector being seized — the floor prices the capacity it actually produces. */
-  strategyId?: string | null;
+  /**
+   * Strategy of the sector being seized — the floor prices the capacity it
+   * actually produces. REQUIRED but nullable (pass `null` for an unowned-pool
+   * draw, which has no defender and clears on the pool's default mix) so the
+   * compiler enumerates every caller.
+   */
+  strategyId: string | null;
   year: number;
   eraUnitScale: number;
 }): number {

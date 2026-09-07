@@ -68,6 +68,7 @@ describe("attack price vs build price, per unit acquired", () => {
 
       const attackCost = attackCostAnchorUnderPlants({
         eraUnitScale: 1,
+        strategyId: null,
         legacyCostAnchor: targetRevenueAnchor * ATTACK_OWNED_COST_FRACTION,
         unitsReceived,
         sectorType,
@@ -112,6 +113,7 @@ describe("attack price vs build price, per unit acquired", () => {
     expect(
       attackCostAnchorUnderPlants({
         eraUnitScale: 1,
+        strategyId: null,
         legacyCostAnchor: legacy,
         unitsReceived: 0,
         sectorType: "retail",
