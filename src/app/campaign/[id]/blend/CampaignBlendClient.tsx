@@ -231,8 +231,12 @@ export function CampaignBlendClient({
           canAct={canAct}
           pending={busy}
           onToggle={(c) => setExpanded((v) => (v === c ? null : c))}
-          onUnlock={(c) =>
-            post(c, `/api/campaigns/${campaign.id}/upgrade`, { category: c, branch: null })
+          onUnlock={(c, targetId) =>
+            post(c, `/api/campaigns/${campaign.id}/upgrade`, {
+              category: c,
+              branch: null,
+              ...(targetId ? { targetId } : {}),
+            })
           }
           onUpgrade={(c, b) =>
             post(`${c}:${b}`, `/api/campaigns/${campaign.id}/upgrade`, {
@@ -438,8 +442,12 @@ export function CampaignBlendClient({
             pending={busy}
             variant="mobile"
             onToggle={(c) => setExpanded((v) => (v === c ? null : c))}
-            onUnlock={(c) =>
-              post(c, `/api/campaigns/${campaign.id}/upgrade`, { category: c, branch: null })
+            onUnlock={(c, targetId) =>
+              post(c, `/api/campaigns/${campaign.id}/upgrade`, {
+                category: c,
+                branch: null,
+                ...(targetId ? { targetId } : {}),
+              })
             }
             onUpgrade={(c, b) =>
               post(`${c}:${b}`, `/api/campaigns/${campaign.id}/upgrade`, { category: c, branch: b })
