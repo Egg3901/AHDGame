@@ -161,6 +161,14 @@ export async function setSingleplayerConfig(
     {
       $set: {
         singleplayerConfig: persisted,
+        // A local player owns turn pacing. Mark the world ready rather than
+        // paused, but never advertise a hosted cron deadline that cannot fire
+        // in the local runtime.
+        isActive: true,
+        pausedAt: null,
+        pauseReason: null,
+        pauseKind: null,
+        nextScheduledTurn: null,
         nppAutonomyLevel: persisted.nppAutonomyLevel,
         nppAutonomyEnabled: persisted.nppAutonomyLevel !== "off",
         ...featureFlags,
