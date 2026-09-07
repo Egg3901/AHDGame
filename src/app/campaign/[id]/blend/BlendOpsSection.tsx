@@ -1,8 +1,8 @@
 "use client";
 
+import { BlendOptionPicker } from "./BlendOptionPicker";
 import { useState } from "react";
 import { BLEND, FONT } from "@/components/blend/tokens";
-import { BlendCharacterPicker, type PickerResult } from "./BlendCharacterPicker";
 import type { OpsRowVM, OpsBranchVM, OpsTreeVM } from "./campaignBlendViewModel";
 import type { UpgradeCategory } from "@/lib/campaigns/upgradeCosts";
 
@@ -276,67 +276,115 @@ function Tree({
         )}
       </div>
 
-      {tree.requiresTarget && tree.targetName ? (
+      {/* Shown whether or not a target is set. The block used to be gated on
+          `tree.targetName`, so the only control that opens the picker lived
+          inside the panel that appeared once you already had a target — there
+          was no way to choose the first one, and every branch below describes
+          what it does "to your target". Drawn before the unlock too: picking
+          who you are researching is the first decision, not one you make after
+          spending eight actions. */}
+      {tree.requiresTarget ? (
         <div
           style={{
             marginBottom: 14,
-            display: "flex",
-            alignItems: "baseline",
-            justifyContent: "space-between",
-            gap: 12,
             padding: "10px 14px",
             border: `1px solid ${BLEND.hairlineStrong}`,
             background: BLEND.inset,
           }}
         >
-          <span
+          <div
             style={{
-              fontFamily: FONT.mono,
-              fontSize: 10,
-              letterSpacing: ".14em",
-              textTransform: "uppercase",
-              color: BLEND.mutedDim,
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 12,
             }}
           >
-            Current target
-          </span>
-          <span style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-            <span style={{ fontFamily: FONT.serif, fontSize: 15, fontWeight: 600 }}>
-              {tree.targetName}
+            <span
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 10,
+                letterSpacing: ".14em",
+                textTransform: "uppercase",
+                color: BLEND.mutedDim,
+                flexShrink: 0,
+              }}
+            >
+              {tree.targetName ? "Current target" : "No target yet"}
             </span>
-            {onRetarget ? (
-              <button
-                type="button"
-                onClick={() => setRetargeting((v) => !v)}
+            <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
+              <span
                 style={{
-                  border: 0,
-                  background: "transparent",
-                  padding: 0,
-                  fontFamily: FONT.mono,
-                  fontSize: 10,
-                  letterSpacing: ".1em",
-                  textTransform: "uppercase",
-                  color: BLEND.muted,
-                  cursor: "pointer",
+                  fontFamily: FONT.serif,
+                  fontSize: 15,
+                  fontWeight: 600,
+                  color: tree.targetName ? BLEND.ink : BLEND.muted,
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
                 }}
               >
-                {retargeting ? "Cancel" : "Change"}
-              </button>
-            ) : null}
-          </span>
-        </div>
-      ) : null}
+                {tree.targetName ?? "Nobody is being researched"}
+              </span>
+              {onRetarget && tree.targetOptions.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setRetargeting((v) => !v)}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    padding: 0,
+                    fontFamily: FONT.mono,
+                    fontSize: 10,
+                    letterSpacing: ".1em",
+                    textTransform: "uppercase",
+                    color: BLEND.muted,
+                    cursor: "pointer",
+                    flexShrink: 0,
+                  }}
+                >
+                  {retargeting ? "Cancel" : tree.targetName ? "Change" : "Choose"}
+                </button>
+              ) : null}
+            </span>
+          </div>
 
-      {tree.requiresTarget && onRetarget && retargeting ? (
-        <div style={{ marginBottom: 14 }}>
-          <BlendCharacterPicker
-            placeholder="Search an opponent to research…"
-            excludeIds={[]}
-            onPick={(r: PickerResult) => {
-              setRetargeting(false);
-              onRetarget(r.id);
-            }}
-          />
+          {onRetarget && tree.targetOptions.length === 0 ? (
+            <p
+              style={{
+                margin: "6px 0 0",
+                fontFamily: FONT.serif,
+                fontSize: 12.5,
+                color: BLEND.mutedDim,
+              }}
+            >
+              Nobody is standing against you in this race yet.
+            </p>
+          ) : null}
+
+          {onRetarget && retargeting && tree.targetOptions.length > 0 ? (
+            <div style={{ marginTop: 10 }}>
+              <BlendOptionPicker
+                placeholder="Search the field…"
+                options={tree.targetOptions}
+                onPick={(id) => {
+                  setRetargeting(false);
+                  onRetarget(id);
+                }}
+              />
+              <p
+                style={{
+                  margin: "6px 0 0",
+                  fontFamily: FONT.serif,
+                  fontSize: 12.5,
+                  color: BLEND.mutedDim,
+                }}
+              >
+                Changing target keeps every level you have bought. It puts retargeting on cooldown
+                for six turns.
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

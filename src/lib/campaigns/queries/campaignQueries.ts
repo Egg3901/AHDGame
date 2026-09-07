@@ -56,6 +56,7 @@ import type {
   PoliticalParty,
 } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
+import { loadOppositionTargets } from "@/lib/campaigns/oppositionTargets";
 
 export interface CampaignListItem {
   id: string;
@@ -248,6 +249,16 @@ export async function getCampaignDetail(
     runningMateCharacterId,
     oppositionTargetId: canSeeExact ? campaign.oppositionTargetId?.toString() || null : null,
     oppositionTargetName: canSeeExact ? campaign.oppositionTargetName : null,
+    ...(canSeeExact && election
+      ? {
+          oppositionTargets: await loadOppositionTargets(
+            db,
+            election,
+            campaign.candidateId,
+            await getGameTime()
+          ),
+        }
+      : {}),
     fogLastUpdated:
       !canSeeExact && fogData?.lastUpdated ? fogData.lastUpdated.toISOString() : undefined,
     electionInfo: election

@@ -446,4 +446,18 @@ export interface AccumulateVoteTurnPreload {
   turnoutByState: Map<string, StateDemographicTurnout>;
   /** Current national governing/coalition party IDs, resolved once per country. */
   governingPartyIdsByCountry?: Map<CountryId, Set<string>>;
+  /**
+   * Per-turn memo for lookups whose inputs repeat across the elections of a
+   * turn: the sitting president per country, the regional executive per
+   * state, the party table per country. Create with `createVoteTurnMemo()`
+   * once per phase; ~180 elections a turn were each re-reading the same few
+   * documents.
+   */
+  turnMemo?: import("./tallyManagement").VoteTurnMemo;
+  /**
+   * `loadFundsByPartyForElections` for every election in the sweep, so the
+   * money driver reads campaigns once per turn instead of once per election.
+   * An election absent from the map has no spending campaigns.
+   */
+  fundsByPartyByElection?: Map<string, Map<string, number>>;
 }

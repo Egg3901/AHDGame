@@ -1,3 +1,4 @@
+import type { FederalBudget } from "@/lib/db/types";
 import type { Db } from "mongodb";
 import type { CabinetEstate, EstateFundingLevel } from "@/lib/db/types/cabinetEstate";
 import type { CountryId } from "@/lib/constants/countries";
@@ -51,7 +52,9 @@ export async function applyEstateEffects(
   db: Db,
   countryId: string,
   positionId: string,
-  bucket: { national: Record<string, number>; regional: Record<string, Record<string, number>> }
+  bucket: { national: Record<string, number>; regional: Record<string, Record<string, number>> },
+  /** The country's federal budget, preloaded by the caller iterating every seat. */
+  budget?: FederalBudget | null
 ): Promise<void> {
   const portfolioKey = resolveEstatePortfolio(countryId, positionId);
   if (!portfolioKey) return;
@@ -80,7 +83,7 @@ export async function applyEstateEffects(
   // Envelope tilt (national budgetBalance) — total upkeep vs the portfolio envelope.
   // Envelope is absolute currency; upkeep aggregate is in millions → normalize.
   const agg = aggregateEstates(estates);
-  const envelope = await resolvePortfolioEnvelope(db, countryId, portfolioKey);
+  const envelope = await resolvePortfolioEnvelope(db, countryId, portfolioKey, budget);
   const envelopeM = envelope / ESTATE_UPKEEP_UNIT;
   if (envelopeM > 0) {
     const gap = Math.max(-1, Math.min(1, (envelopeM - agg.totalUpkeep) / envelopeM));

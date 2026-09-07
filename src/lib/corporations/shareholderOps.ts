@@ -590,16 +590,25 @@ export async function creditSharesToFund(
   shares: number,
   pricePerShare: number,
   extraUpdate?: { $inc?: Record<string, number>; $set?: Record<string, unknown> },
-  opts?: Pick<CreditSharesOpts, "guardFilter" | "session">
+  opts?: Pick<CreditSharesOpts, "guardFilter" | "session"> & {
+    /**
+     * The corp's cap table as the caller already holds it this turn, so the
+     * average-cost read below is skipped. Only the fund's own entry is read
+     * from it, and a stale entry only affects that fund's average cost.
+     */
+    knownShareholders?: Corporation["shareholders"];
+  }
 ): Promise<boolean> {
   const guardFilter = opts?.guardFilter ?? {};
-  const targetCorp = await db
-    .collection<Corporation>(CORP)
-    .findOne({ _id: targetCorpId }, { projection: { shareholders: 1 }, ...mongoOptions(opts) });
+  const shareholders =
+    opts?.knownShareholders ??
+    (
+      await db
+        .collection<Corporation>(CORP)
+        .findOne({ _id: targetCorpId }, { projection: { shareholders: 1 }, ...mongoOptions(opts) })
+    )?.shareholders;
 
-  const existing = targetCorp?.shareholders?.find(
-    (sh) => sh.fundId?.toString() === fundId.toString()
-  );
+  const existing = shareholders?.find((sh) => sh.fundId?.toString() === fundId.toString());
   const existingShares = existing?.shares ?? 0;
   const oldAvg = existing?.avgCostPerShare ?? pricePerShare;
   const newAvg =
