@@ -1,9 +1,48 @@
 import { describe, expect, it } from "vitest";
-import { computeRepricedStock } from "./2026-09-07-reprice-strategy-capacity";
-import { capacityPricePerUnit } from "@/lib/constants/capacityEconomy";
+import {
+  computeRepricedStock,
+  DEFECTIVE_PAIRS,
+  isDefectivePair,
+} from "./2026-09-07-reprice-strategy-capacity";
+import {
+  CAPACITY_ANCHOR_YEAR,
+  capacityPricePerUnit,
+  revenuePerCapacityUnitForStrategy,
+} from "@/lib/constants/capacityEconomy";
+import { GROWTH_COST_MULTIPLIER, TURNS_PER_DAY } from "@/lib/constants/corporations";
+import type { CorporationType } from "@/lib/constants/corporations";
 
 const YEAR = 1966;
 const SCALE = 70;
+
+describe("DEFECTIVE_PAIRS scope", () => {
+  it("matches on the pair, not the strategy name alone", () => {
+    expect(isDefectivePair("extraction", "rare_earth_mining")).toBe(true);
+    expect(isDefectivePair("defense", "heavy_armor")).toBe(true);
+    // Same strategy id under a sector type that is not registered.
+    expect(isDefectivePair("manufacturing", "heavy_armor")).toBe(false);
+    expect(isDefectivePair("extraction", "coal_mining")).toBe(false);
+    expect(isDefectivePair("extraction", null)).toBe(false);
+  });
+
+  it("only lists pairs whose payback is under a fifth of the intended 72 turns", () => {
+    // The threshold that produced this list. If a constant moves so that a
+    // listed pair is no longer extreme, or an unlisted one becomes extreme,
+    // this fails and the list needs re-deriving from the sim report.
+    const intended = GROWTH_COST_MULTIPLIER * TURNS_PER_DAY;
+    for (const pair of DEFECTIVE_PAIRS) {
+      const [type, strategy] = pair.split("/");
+      const rpu = revenuePerCapacityUnitForStrategy(type as CorporationType, strategy, 1);
+      // Pre-fix price: always the sector-type default mix.
+      const before = capacityPricePerUnit(type as CorporationType, CAPACITY_ANCHOR_YEAR, 1, null);
+      const paybackTurns = (before / rpu) * TURNS_PER_DAY;
+      expect(
+        paybackTurns,
+        `${pair} is no longer extreme (${paybackTurns.toFixed(2)} turns)`
+      ).toBeLessThan(intended / 5);
+    }
+  });
+});
 
 describe("computeRepricedStock", () => {
   it("re-prices corp 738's AZ rare-earth capacity down to its paid basis", () => {

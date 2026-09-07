@@ -59,6 +59,8 @@ const SUPPLY = {
   "extraction/iron_mining": { iron: 0.78 },
   "extraction/oil_gas": { oil: 0.58, natural_gas: 0.32 },
   "extraction/timber_logging": { timber: 0.64 },
+  "defense/standard": { ordnance: 0.3, vehicles: 0.1, electronics: 0.1 },
+  "defense/heavy_armor": { vehicles: 0.55, steel: 0.2 },
 };
 const eraPriceIndex = (y) =>
   y < 1971 ? 1.0 : y < 1979 ? 1.4 : y < 1991 ? 2.6 : y < 1999 ? 3.6 : 5.0;
@@ -83,7 +85,7 @@ try {
 
   const sectors = await db
     .collection("corporateSectors")
-    .find({ strategyId: { $nin: [null, "standard"] } })
+    .find({ strategyId: { $in: ["rare_earth_mining", "heavy_armor", "timber_logging"] } })
     .toArray();
   const corps = await db
     .collection("corporations")
@@ -110,6 +112,14 @@ try {
       continue;
     }
     const key = `${s.sectorType}/${s.strategyId}`;
+    if (
+      ![
+        "extraction/rare_earth_mining",
+        "defense/heavy_armor",
+        "extraction/timber_logging",
+      ].includes(key)
+    )
+      continue;
     const r = rpu(key, scale);
     if (r == null) {
       unpriceable++;

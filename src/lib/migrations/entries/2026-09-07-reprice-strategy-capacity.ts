@@ -6,47 +6,38 @@ import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
 import type { Migration, MigrationContext, MigrationResult } from "../types";
 
 /**
- * ⚠️⚠️ DO NOT RUN THIS WITHOUT A PRODUCT DECISION. IT IS NOT READY. ⚠️⚠️
+ * ⚠️ HELD OUT OF THE AUTO-RUN CHAIN. Reachable only by an explicit `--only`.
+ * See HELD_MIGRATIONS in the registry, and confirm the compensation variant
+ * below before running it for real.
  *
- * The live dry run (turn 697, `scripts/debug/sv-09-dryrun-reprice.mjs`) shows a
- * blast radius far wider than the rare-earth exploit that motivated it:
+ * ─── WHY THE SCOPE IS AN EXPLICIT LIST ──────────────────────────────────────
+ * The obvious scope — "every sector on a non-default strategy" — is wrong, and
+ * measurably so. `scripts/sim/strategyCapacityPricing2026-09-07.ts` prices all
+ * 80 (type, strategy) pairs: 27 were underpriced against their sector's default
+ * mix, 28 were OVERpriced, 25 are within 5%. Nearly every focused strategy
+ * concentrates output into a higher-value commodity than the diversified
+ * default, so "cheaper than default" is the normal condition, not evidence of a
+ * defect. Re-pricing all of them would have touched 2,390 sectors — roughly
+ * half the board — and, because capacity is only ever written DOWN, would have
+ * been one-sided against exactly the half that happened to be underpriced.
  *
- *   - 2,390 sectors run a non-default strategy and are in scope.
- *   - Of the 210 the probe could price (extraction only), cuts ran from -25% to
- *     -99.96%, hitting coal, iron, oil and timber — not just rare earth.
- *   - The remaining ~2,145 are non-extraction strategies this migration WOULD
- *     also re-price.
+ * What is a defect is a payback so far from the intended
+ * `GROWTH_COST_MULTIPLIER x TURNS_PER_DAY` = 72 turns that no design intent
+ * explains it. At a factor-of-5 threshold that is three pairs and 132 of 5,873
+ * live sectors:
  *
- * That is roughly half the world's productive capacity. The reason is that
- * almost every FOCUSED strategy concentrates output into a higher-value
- * commodity than its sector's diversified default, so almost all of them look
- * "underpriced" against the default mix. Measured across all 80 priced
- * (type, strategy) pairs: 27 cost more than the default, 28 cost LESS, 25 are
- * within 5%. Only two are extreme —
+ *     extraction/rare_earth_mining   0.22 turns   (326.9x)   23 sectors
+ *     defense/heavy_armor            3.05 turns    (23.6x)   16 sectors
+ *     extraction/timber_logging     10.28 turns     (7.0x)   93 sectors
  *
- *     extraction/rare_earth_mining  326.9x     <- the actual exploit
- *     defense/heavy_armor            23.6x     <- probably also a defect
- *     extraction/timber_logging       7.0x
- *     ...everything else is between 0.80x and 3.0x...
- *
- * Two problems follow, and both need a human answer:
- *
- *   1. SCOPE. A 1.18x edge for `energy/renewables` is plausibly the intended
- *      reward for specialising; a 326.9x edge for rare earth plainly is not.
- *      This migration cannot tell them apart and treats both as theft.
- *   2. ASYMMETRY. The `min` guard means capacity is only ever written DOWN, so
- *      the 28 strategies that OVERPAID against the default keep nothing back.
- *      Applied as-is it is one-sided against exactly half the board.
- *
- * The forward pricing fix is unaffected by all of this and is safe: it only
- * governs what NEW capacity costs. This migration is about capacity already
- * standing, and should probably be narrowed to an explicit list of defective
- * (type, strategy) pairs rather than "every non-default strategy".
+ * Everything else lands within a factor of 5 of 72 turns and is left alone as
+ * plausibly-intended specialisation reward. Adding a pair here is a balance
+ * decision, not a cleanup: it needs its own line in the sim report.
  *
  * ────────────────────────────────────────────────────────────────────────────
  *
  * Re-price capacity that was bought at the sector-type default price and then
- * pointed at a higher-RPU production method.
+ * pointed at a defectively-high-RPU production method.
  *
  * `capacityPricePerUnit` used to resolve RPU from the sector TYPE's default
  * ("standard") mix while revenue resolved it from the sector's ACTUAL strategy.
@@ -145,6 +136,28 @@ export function computeRepricedStock(input: {
 /** Rows whose stock moves by less than this fraction are treated as unchanged. */
 const MATERIAL_CHANGE_FRACTION = 1e-6;
 
+/**
+ * The (sectorType, strategyId) pairs this migration will touch.
+ *
+ * Deliberately an explicit list, not a computed threshold: which pairs count as
+ * defective is a balance judgement that belongs in review, not something a
+ * migration should decide for itself at runtime against whatever the constants
+ * happen to say on the day it runs. See the header for how these three were
+ * chosen and what it would take to add a fourth.
+ */
+export const DEFECTIVE_PAIRS: ReadonlySet<string> = new Set([
+  "extraction/rare_earth_mining",
+  "defense/heavy_armor",
+  "extraction/timber_logging",
+]);
+
+export function isDefectivePair(
+  sectorType: string,
+  strategyId: string | null | undefined
+): boolean {
+  return DEFECTIVE_PAIRS.has(`${sectorType}/${strategyId ?? "standard"}`);
+}
+
 async function repriceStrategyCapacity(db: Db, ctx: MigrationContext): Promise<MigrationResult> {
   const gameState = await db
     .collection<{ _id: string; currentYear?: number; activePreset?: string }>("gameState")
@@ -155,15 +168,14 @@ async function repriceStrategyCapacity(db: Db, ctx: MigrationContext): Promise<M
   }
   const eraUnitScale = getEraUnitScale(gameState?.activePreset);
 
-  // Only sectors running a NON-default strategy can have been mispriced: the
-  // default-strategy price is unchanged by the fix, so those rows are already
-  // correct by construction.
-  // `$nin` over a nullable optional field does not narrow against the driver's
-  // Filter type, so the predicate is expressed as a plain document.
-  const sectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find({ strategyId: { $nin: [null, "standard"] } } as Filter<CorporateSector>)
-    .toArray();
+  // Scoped to the registered defective pairs only. See DEFECTIVE_PAIRS.
+  const strategies = [...DEFECTIVE_PAIRS].map((p) => p.split("/")[1]);
+  const sectors = (
+    await db
+      .collection<CorporateSector>("corporateSectors")
+      .find({ strategyId: { $in: strategies } } as Filter<CorporateSector>)
+      .toArray()
+  ).filter((s) => isDefectivePair(s.sectorType, s.strategyId));
 
   const corpNames = new Map<string, string>();
   if (sectors.length > 0) {
@@ -231,7 +243,7 @@ async function repriceStrategyCapacity(db: Db, ctx: MigrationContext): Promise<M
 
   notes.unshift(
     `${ctx.dryRun ? "DRY RUN — no writes. " : ""}year ${year}, eraUnitScale ${eraUnitScale}, ` +
-      `${sectors.length} non-default-strategy sectors scanned, ${updated} re-priced, ` +
+      `${sectors.length} sectors on defective pairs scanned, ${updated} re-priced, ` +
       `${unitsRemovedTotal.toFixed(0)} capacity units removed`
   );
 
