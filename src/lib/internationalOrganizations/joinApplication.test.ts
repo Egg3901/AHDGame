@@ -24,10 +24,14 @@ vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
 vi.mock("@/lib/db/collections/gameState", () => ({
   getGameStatePresetOrDefault: vi.fn().mockResolvedValue("1953-default"),
 }));
+vi.mock("@/lib/internationalOrganizations/sanctions", () => ({
+  liftOrganizationSanctions: vi.fn().mockResolvedValue(undefined),
+}));
 
 const proposalsStore = new Map<string, Record<string, unknown>>();
 const billsStore = new Map<string, Record<string, unknown>>();
 const membershipsStore: Array<Record<string, unknown>> = [];
+const legislationStore: Array<Record<string, unknown>> = [];
 
 function applySet(doc: Record<string, unknown>, update: Record<string, unknown>) {
   const set = update.$set as Record<string, unknown> | undefined;
@@ -56,12 +60,32 @@ vi.mock("@/lib/db/collections", () => ({
   getOrganizationWithdrawalsCollection: vi.fn().mockResolvedValue({
     deleteOne: vi.fn().mockResolvedValue({ deletedCount: 0 }),
   }),
+  getOrganizationLegislationCollection: vi.fn().mockResolvedValue({
+    find: (q: Record<string, unknown>) => ({
+      toArray: () =>
+        Promise.resolve(
+          legislationStore.filter(
+            (r) =>
+              r.organizationId === q.organizationId &&
+              r.type === q.type &&
+              r.status === q.status &&
+              r.sanctionsTargetCountryId === q.sanctionsTargetCountryId
+          )
+        ),
+    }),
+    updateOne: (q: { _id: unknown }, u: Record<string, unknown>) => {
+      const doc = legislationStore.find((r) => r._id === q._id);
+      if (doc) applySet(doc, u);
+      return Promise.resolve({ modifiedCount: doc ? 1 : 0 });
+    },
+  }),
 }));
 
 const { resolveJoinApplication, admitMember } = await import("./joinApplication");
 const { removeOrganizationMembership } =
   await import("@/lib/internationalOrganizations/withdrawalBills");
 const { getOrganizationMembershipsCollection } = await import("@/lib/db/collections");
+const { liftOrganizationSanctions } = await import("@/lib/internationalOrganizations/sanctions");
 
 function fakeDb(): Db {
   return {
@@ -103,6 +127,7 @@ beforeEach(() => {
   proposalsStore.clear();
   billsStore.clear();
   membershipsStore.length = 0;
+  legislationStore.length = 0;
   vi.clearAllMocks();
 });
 
@@ -210,5 +235,48 @@ describe("admitMember bloc exclusivity", () => {
     await admitMember(fakeDb(), "WARSAW_PACT", "NVN", 574);
 
     expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+  });
+});
+
+describe("admitMember and the org's own sanctions", () => {
+  const sanction = (organizationId: string, target: string, status = "active") => {
+    const doc = {
+      _id: new ObjectId(),
+      organizationId,
+      type: "sanctions",
+      status,
+      sanctionsTargetCountryId: target,
+    };
+    legislationStore.push(doc);
+    return doc;
+  };
+
+  it("lifts the organisation's sanctions against a country it admits", async () => {
+    // An org cannot sanction its own member — `proposeLegislation` refuses to
+    // table one. Accession is the other door into that state, and nothing was
+    // watching it: the resolution stayed active and every other member went on
+    // embargoing a country it had just voted in (ticket #1285).
+    const doc = sanction("EU", "BR");
+    await admitMember(fakeDb(), "EU", "BR", 700);
+
+    expect(vi.mocked(liftOrganizationSanctions)).toHaveBeenCalledWith(expect.anything(), doc._id);
+    expect(doc.status).toBe("terminated");
+  });
+
+  it("leaves another organisation's sanctions against the joiner alone", async () => {
+    // Joining the EU settles the EU's quarrel, not COMECON's.
+    const other = sanction("COMECON", "BR");
+    await admitMember(fakeDb(), "EU", "BR", 700);
+
+    expect(vi.mocked(liftOrganizationSanctions)).not.toHaveBeenCalled();
+    expect(other.status).toBe("active");
+  });
+
+  it("leaves sanctions against other countries alone", async () => {
+    const other = sanction("EU", "RU");
+    await admitMember(fakeDb(), "EU", "BR", 700);
+
+    expect(vi.mocked(liftOrganizationSanctions)).not.toHaveBeenCalled();
+    expect(other.status).toBe("active");
   });
 });

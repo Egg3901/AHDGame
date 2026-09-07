@@ -4,6 +4,7 @@ import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import type { Bill } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import {
+  getOrganizationLegislationCollection,
   getOrganizationMembershipsCollection,
   getOrganizationProposalsCollection,
 } from "@/lib/db/collections";
@@ -16,6 +17,7 @@ import { removeOrganizationMembership } from "@/lib/internationalOrganizations/w
 import { clearOrganizationWithdrawal } from "@/lib/internationalOrganizations/withdrawalTombstone";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { rivalBlocOrgsFor } from "@/lib/world/blocMembership";
+import { liftOrganizationSanctions } from "@/lib/internationalOrganizations/sanctions";
 
 /**
  * Parallel-join coordination. A country is admitted only when BOTH gates pass:
@@ -54,6 +56,7 @@ export async function admitMember(
   opts?: { status?: "founding" | "active" }
 ): Promise<void> {
   await leaveRivalBlocs(db, organizationId, countryId, currentTurn);
+  await liftOwnSanctionsAgainst(db, organizationId, countryId);
   const memberships = await getOrganizationMembershipsCollection(db);
   await memberships.updateOne(
     { organizationId, countryId },
@@ -121,6 +124,50 @@ async function leaveRivalBlocs(
       rivalId,
       def?.name ?? rivalId,
       currentTurn
+    );
+  }
+}
+
+/**
+ * An organisation does not sanction its own member, so admitting one settles the
+ * quarrel: terminate any sanctions this org still holds against the joiner and
+ * lift the embargoes they fanned out.
+ *
+ * `proposeLegislation` refuses to TABLE sanctions against a member, which closes
+ * that state at one door; accession is the other one, and nothing was watching
+ * it. Left alone the resolution stays `active`, so every other member goes on
+ * embargoing a country it has just voted in, and the alignment phase goes on
+ * docking the bloc's own standing for sanctioning one of its own.
+ *
+ * ⚠️ BEFORE the insert, for the reason `leaveRivalBlocs` above is: a throw
+ * between the two steps must leave a non-member whose sanctions were lifted
+ * early — untidy, but nothing a player can see is wrong — rather than a member
+ * under its own organisation's embargo, which is the state this exists to
+ * prevent.
+ *
+ * Same teardown as `expireActiveSanctions` in the org turn phase: lift the
+ * embargoes, then mark the resolution terminated.
+ */
+async function liftOwnSanctionsAgainst(
+  db: Db,
+  organizationId: string,
+  countryId: WorldEntityId
+): Promise<void> {
+  const legislation = await getOrganizationLegislationCollection(db);
+  const standing = await legislation
+    .find({
+      organizationId,
+      type: "sanctions",
+      status: "active",
+      sanctionsTargetCountryId: countryId,
+    } as Parameters<typeof legislation.find>[0])
+    .toArray();
+  const now = new Date();
+  for (const resolution of standing) {
+    await liftOrganizationSanctions(db, resolution._id);
+    await legislation.updateOne(
+      { _id: resolution._id },
+      { $set: { status: "terminated", terminatedAt: now } }
     );
   }
 }
