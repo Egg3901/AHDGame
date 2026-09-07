@@ -144,6 +144,13 @@ function walk(dir: string, out: string[] = []): string[] {
  * comment reading "computeBuildCost({ founding: true })", which registered as a
  * second, strategy-less call site that does not exist. Replacing with spaces
  * rather than deleting keeps every index valid for `argsAt`.
+ *
+ * TEMPLATE LITERALS keep their `${...}` interpolations, and only their literal
+ * text is blanked. Blanking a template wholesale would hide a real call written
+ * inside an interpolation — a false NEGATIVE, which for a safety net is the bad
+ * direction to err in. The cost of the split handling is that a template whose
+ * literal text happens to contain "capacityPricePerUnit(" would still be
+ * skipped, which is correct: that is prose, not a call.
  */
 function stripCommentsAndStrings(src: string): string {
   const out = src.split("");
@@ -161,11 +168,36 @@ function stripCommentsAndStrings(src: string): string {
       const end = src.indexOf("*/", i + 2);
       blank(i, end === -1 ? src.length : end + 2);
       i = end === -1 ? src.length : end + 2;
-    } else if (src[i] === '"' || src[i] === "'" || src[i] === "`") {
+    } else if (src[i] === '"' || src[i] === "'") {
       const quote = src[i];
       let k = i + 1;
       while (k < src.length && src[k] !== quote) k += src[k] === "\\" ? 2 : 1;
       blank(i + 1, k);
+      i = k + 1;
+    } else if (src[i] === "`") {
+      // Walk the template, blanking literal runs and stepping OVER `${...}`.
+      let k = i + 1;
+      let runStart = k;
+      while (k < src.length && src[k] !== "`") {
+        if (src[k] === "\\") {
+          k += 2;
+          continue;
+        }
+        if (src[k] === "$" && src[k + 1] === "{") {
+          blank(runStart, k);
+          let depth = 1;
+          k += 2;
+          while (k < src.length && depth > 0) {
+            if (src[k] === "{") depth++;
+            else if (src[k] === "}") depth--;
+            k++;
+          }
+          runStart = k;
+          continue;
+        }
+        k++;
+      }
+      blank(runStart, k);
       i = k + 1;
     } else {
       i++;
