@@ -1,6 +1,9 @@
 import * as dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 import { MongoClient } from "mongodb";
-dotenv.config({ path: "E:/Program Projects/A House Divided/.env.local" });
+const __d = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.resolve(__d, "../../.env.local") });
 let uri = process.env.MONGODB_URI_LIVE;
 if (!uri.includes("directConnection"))
   uri += (uri.includes("?") ? "&" : "?") + "directConnection=true";
