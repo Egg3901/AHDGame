@@ -428,5 +428,20 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // manifestos — every read is on this exact triple: the point lookup behind
+  // save/lock (getManifesto) and the `$in` batch behind the elections page
+  // (getManifestosForElections). The collection shipped with only the _id
+  // index, so all of them were collection scans, and the elections page issues
+  // one read per contested Commons race. Not unique: the upsert filter already
+  // keys on this triple, and making it unique is a data-integrity decision
+  // rather than a performance one.
+  await ensureIndex(
+    db,
+    "manifestos",
+    { countryId: 1, electionId: 1, party: 1 },
+    { name: "manifestos_country_election_party" },
+    log
+  );
+
   log("Performance indexes ensured");
 }

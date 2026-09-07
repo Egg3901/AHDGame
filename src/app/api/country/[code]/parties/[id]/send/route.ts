@@ -15,12 +15,18 @@ import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { executeSendToMember } from "@/lib/treasury/executeSendToMember";
+import { isSelfPayment } from "@/lib/treasury/isSelfPayment";
 import {
   canProposePendingTransaction,
   createPendingTransaction,
   getProposerSlot,
   resolveTransactionApprovalMode,
 } from "@/lib/parties/pendingTreasuryTransactions";
+import {
+  isTreasurerElectionLockoutActive,
+  wouldUseVacantTreasurerFallback,
+  TREASURER_LOCKOUT_MESSAGE,
+} from "@/lib/parties/treasurerElectionLockout";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -139,12 +145,42 @@ export async function POST(request: Request, { params }: RouteParams) {
     // actions follow the party's configured mode; absent value (legacy
     // rows) is treated as "double". With no seated Treasurer, double
     // collapses to single (the Chair/VC act alone) so the action isn't
-    // permanently locked.
-    const mode = resolveTransactionApprovalMode(party);
+    // permanently locked — unless a contested Treasurer election is
+    // about to close, in which case the fallback is suppressed.
+    // The lockout can only change the outcome for a party relying on the
+    // vacant-seat fallback, so skip the lookup for everyone else.
+    let treasurerElectionLockout = false;
+    if (wouldUseVacantTreasurerFallback(party)) {
+      const { currentTurn } = await getGameTime();
+      treasurerElectionLockout = await isTreasurerElectionLockoutActive(db, party, currentTurn);
+    }
+    const mode = resolveTransactionApprovalMode(party, { treasurerElectionLockout });
+
+    // A send to the proposer themselves always goes through two-person
+    // approval, whatever the mode. Single mode otherwise executes
+    // immediately, which let a Chair drain the treasury to themselves in
+    // one unreviewed call.
+    const isSelfSend = isSelfPayment(targetCharacter, {
+      characterId: authUser.character._id,
+      userId: authUser.userId,
+    });
+
     const isPlayerAction = !isAdmin;
-    if (isPlayerAction && mode === "double") {
+    if (isPlayerAction && (mode === "double" || isSelfSend)) {
       const eligibility = canProposePendingTransaction(party);
       if (!eligibility.ok) {
+        if (treasurerElectionLockout) {
+          return NextResponse.json({ error: TREASURER_LOCKOUT_MESSAGE }, { status: 400 });
+        }
+        if (isSelfSend) {
+          return NextResponse.json(
+            {
+              error:
+                "Sending treasury funds to yourself needs a second approver. Seat a Treasurer, or use Request Funds.",
+            },
+            { status: 400 }
+          );
+        }
         return NextResponse.json({ error: eligibility.reason }, { status: 400 });
       }
       // Proposer slot is decided by role. If the caller holds none of

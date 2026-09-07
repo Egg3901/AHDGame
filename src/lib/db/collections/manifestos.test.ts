@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { ObjectId } from "mongodb";
-import { validateManifestoPledges, upsertManifestoDraft, lockManifesto } from "./manifestos";
+import {
+  validateManifestoPledges,
+  upsertManifestoDraft,
+  lockManifesto,
+  getManifestosForElections,
+} from "./manifestos";
 import type { Pledge } from "@/lib/db/types/manifesto";
 
 const VALID = new Set(["a", "b", "c", "d"]);
@@ -106,5 +111,40 @@ describe("lockManifesto", () => {
     const db = { collection: vi.fn().mockReturnValue({ findOne, updateOne: vi.fn() }) };
     const r = await lockManifesto(db as never, args);
     expect(r.ok).toBe(false);
+  });
+});
+
+describe("getManifestosForElections", () => {
+  const countryId = "UK" as const;
+
+  it("reads every election's manifesto for one party in a single query", async () => {
+    const a = new ObjectId();
+    const b = new ObjectId();
+    const c = new ObjectId();
+    const rows = [
+      { countryId, electionId: a, party: "1", pledges: [p("a")] },
+      { countryId, electionId: c, party: "1", pledges: [p("b")] },
+    ];
+    const toArray = vi.fn().mockResolvedValue(rows);
+    const find = vi.fn().mockReturnValue({ toArray });
+    const db = { collection: vi.fn().mockReturnValue({ find }) };
+
+    const result = await getManifestosForElections(db as never, countryId, [a, b, c], "1");
+
+    expect(find).toHaveBeenCalledTimes(1);
+    expect(find).toHaveBeenCalledWith({
+      countryId,
+      electionId: { $in: [a, b, c] },
+      party: "1",
+    });
+    expect(result).toEqual(rows);
+  });
+
+  it("does not hit the database for an empty election list", async () => {
+    const find = vi.fn();
+    const db = { collection: vi.fn().mockReturnValue({ find }) };
+
+    expect(await getManifestosForElections(db as never, countryId, [], "1")).toEqual([]);
+    expect(find).not.toHaveBeenCalled();
   });
 });

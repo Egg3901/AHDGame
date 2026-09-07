@@ -165,6 +165,20 @@ export async function upgradeCampaign(params: {
     assertSameCountry(user.character, target, {
       message: "You cannot research opposition targets in other countries",
     });
+    // The starter purchase is the OTHER way a target gets set, so it answers to
+    // the same rule as /retarget. Guarding only the change would leave the one
+    // path that sets the first target open to anybody in the country.
+    if (election) {
+      const eligible = await loadOppositionTargets(
+        db,
+        election,
+        campaign.candidateId,
+        await getGameTime()
+      );
+      if (!eligible.some((t) => t.id === targetOid.toString())) {
+        throw badRequest("You can only research a candidate standing against you in this race");
+      }
+    }
     targetName = target.name;
   }
 

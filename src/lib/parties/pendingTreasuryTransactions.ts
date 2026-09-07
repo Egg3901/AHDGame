@@ -153,10 +153,21 @@ export function canRequestFunds(
  * Single mode is returned unchanged (it never required a Treasurer).
  */
 export function resolveTransactionApprovalMode(
-  party: Pick<PoliticalParty, "transactionApprovalMode" | "treasurerId">
+  party: Pick<PoliticalParty, "transactionApprovalMode" | "treasurerId">,
+  options: {
+    /**
+     * True when a contested Treasurer election is about to close (see
+     * `isTreasurerElectionLockoutActive`). Suppresses the vacant-seat
+     * fallback so a lame-duck Chair can't spend unilaterally in the
+     * window before the winner is seated.
+     */
+    treasurerElectionLockout?: boolean;
+  } = {}
 ): "single" | "double" {
   const configured = party.transactionApprovalMode ?? "double";
-  if (configured === "double" && party.treasurerId == null) return "single";
+  if (configured === "double" && party.treasurerId == null) {
+    return options.treasurerElectionLockout ? "double" : "single";
+  }
   return configured;
 }
 
@@ -191,8 +202,15 @@ export function isPendingTransactionComplete(
  * eligible to fill, preferring their natural role slot. Returns null
  * when:
  *   - they hold no Treasurer/Chair/VC seat (or can't fill either empty slot)
+ *   - they are the RECIPIENT of the row (nobody signs off on a payment
+ *     to themselves)
  *   - the row is a Request Funds row AND they're the requester
  *     (self-approval forbidden per the 2026-05-23 spec)
+ *
+ * The recipient exclusion is what stops a Chair self-dealing while the
+ * Treasurer seat is vacant: proposing fills their leadership slot, and
+ * `canFillSlot` would otherwise let that same Chair fill the vacant
+ * treasurer slot as acting Treasurer, signing both halves alone.
  *
  * Picking the eligible *empty* slot (rather than the role's slot
  * unconditionally) lets a Chair / VC act as Treasurer to clear a row
@@ -206,10 +224,16 @@ export function getApproverSlotForRow(
   party: Pick<PoliticalParty, "chairId" | "viceChairId" | "treasurerId">,
   row: Pick<
     PendingTreasuryTransaction,
-    "type" | "proposedBy" | "treasurerApproval" | "leadershipApproval"
+    "type" | "proposedBy" | "targetCharacterId" | "treasurerApproval" | "leadershipApproval"
   >,
   characterId: ObjectId
 ): ApproverSlot | null {
+  // Nobody approves a payment to themselves, whoever proposed it.
+  if (row.targetCharacterId?.equals(characterId)) {
+    return null;
+  }
+  // Legacy request rows may predate `targetCharacterId`; the requester
+  // is the recipient by definition, so exclude them by proposer too.
   if (row.type === "request" && row.proposedBy.equals(characterId)) {
     return null;
   }

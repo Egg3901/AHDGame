@@ -9,54 +9,36 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { CountryManifestos } from "@/hooks/useCountryManifestos";
 
-interface CatalogEntry {
-  id: string;
-  label: string;
-  blurb?: string;
-  policyDomain: string;
-}
-
-interface ManifestoResponse {
-  catalog: CatalogEntry[];
-  pledgeCount: number;
-  isPartyLeader: boolean;
-  party: { id: string; name: string } | null;
-  manifesto: { pledges: string[]; locked: boolean; lockedAt: string | null } | null;
-}
-
+/**
+ * `data` is the whole page's manifesto batch, fetched once by
+ * `useCountryManifestos`. This bar used to fetch its own election on mount,
+ * which turned one elections page into a request per contested race (19% of
+ * all logged API traffic on live). Saving and locking still go to this
+ * election's own endpoint, because those really are per-election.
+ */
 export function ManifestoFlavorBar({
   countryCode,
   electionId,
+  data,
 }: {
   countryCode: string;
   electionId: string;
+  data: CountryManifestos | null;
 }) {
   const endpoint = `/api/country/${countryCode}/elections/${electionId}/manifesto`;
-  const [data, setData] = useState<ManifestoResponse | null>(null);
+  const manifesto = data?.manifestos[electionId] ?? null;
   const [selected, setSelected] = useState<string[]>([]);
   const [locked, setLocked] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Seed the editing state from this election's slice once the batch lands.
   useEffect(() => {
-    let alive = true;
-    fetch(endpoint)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((json: ManifestoResponse | null) => {
-        if (!alive || !json) return;
-        setData(json);
-        setSelected(json.manifesto?.pledges ?? []);
-        setLocked(Boolean(json.manifesto?.locked));
-      })
-      .catch((err) => {
-        // Non-fatal: the bar stays hidden. Capture so the failure isn't silent.
-        if (alive) setError(err instanceof Error ? err.message : "Could not load manifesto");
-      });
-    return () => {
-      alive = false;
-    };
-  }, [endpoint]);
+    setSelected(manifesto?.pledges ?? []);
+    setLocked(Boolean(manifesto?.locked));
+  }, [manifesto]);
 
   const maxPledges = data?.pledgeCount ?? 3;
 

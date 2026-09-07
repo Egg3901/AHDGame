@@ -29,9 +29,7 @@ import { LiveRefreshBanner } from "@/components/LiveRefreshBanner";
 import { MassCrashAlertBanner } from "@/components/MassCrashAlertBanner";
 import { MaintenancePartialBanner } from "@/components/MaintenancePartialBanner";
 import { PollBannerNotice } from "@/components/PollBannerNotice";
-import { Analytics } from "@vercel/analytics/next";
 import { isSingleplayer } from "@/lib/singleplayer";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AdSlot } from "@/components/AdSlot";
 import { AdSenseSlot } from "@/components/AdSenseSlot";
 import { CookieConsentBanner } from "@/components/CookieConsent";
@@ -398,9 +396,19 @@ export default async function RootLayout({
                           {!isWikiSubdomain && <LiveRefreshBanner />}
                           {!isNativeApp && <CookieConsentBanner />}
                           {/* A singleplayer build runs on the player's machine with no
-                              account and nothing to measure. None of the telemetry or
-                              ad tags below have a job there, and the Vercel ones are
-                              dead even in production. */}
+                              account and nothing to measure, so none of the telemetry
+                              or ad tags below have a job there.
+                              `@vercel/analytics` and `@vercel/speed-insights` used to
+                              sit here too. Production is Railway, so the
+                              `/_vercel/insights/script.js` and
+                              `/_vercel/speed-insights/script.js` they inject at runtime
+                              404 — and the Next 404 page they get back is ~34KB brotli,
+                              `private, no-store`, `cf-cache-status: BYPASS`. That cost
+                              every full document load two origin round-trips, two SSR
+                              404 renders and ~68KB for telemetry that never recorded
+                              anything. Removed 2026-09-06; see layout.telemetry.test.ts.
+                              Page views are already covered by SiteTrafficTracker and
+                              the self-hosted umami tag below. */}
                           {!singleplayer && (
                             <>
                               {renderConsentManagedGoogleTags ? (
@@ -431,8 +439,6 @@ export default async function RootLayout({
                                 data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
                                 strategy="afterInteractive"
                               />
-                              <Analytics />
-                              <SpeedInsights />
                             </>
                           )}
                         </CharacterStatsProvider>
