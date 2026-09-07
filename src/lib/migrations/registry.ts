@@ -72,6 +72,7 @@ import { migration as intelligenceIndexes } from "./entries/2026-08-31-intellige
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
 import { migration as repriceStrategyCapacity } from "./entries/2026-09-07-reprice-strategy-capacity";
+import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -227,6 +228,7 @@ export const MIGRATIONS: Migration[] = [
   intelligenceIndexes,
   clientStatisticsTtlIndex,
   clientDiagnosticsTtlIndex,
+  equityPoolSeedBackfill,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
