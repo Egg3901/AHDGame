@@ -572,7 +572,13 @@ export async function processTurn(): Promise<{
           currentTurn: context.newTurn,
           currentYear: context.currentYear,
           lastTurnProcessed: context.gameNow,
-          nextScheduledTurn: gameState.isActive ? context.nextTurnTime : null,
+          // Local worlds are player-paced. A browser timer may request a turn,
+          // but no server cron owns one, so never render a deceptive deadline.
+          nextScheduledTurn: localSingleplayer
+            ? null
+            : gameState.isActive
+              ? context.nextTurnTime
+              : null,
           isProcessing: false,
           processingKind: null,
           processingStartedAt: null,
