@@ -152,6 +152,19 @@ export async function proposeOrganizationLegislation(params: {
     if (!COUNTRY_CONFIGS[target]) {
       return { ok: false as const, status: 400, error: `Unknown target country: ${target}.` };
     }
+    // An organisation sanctions an OUTSIDER. Aid below is gated the other way —
+    // its recipient must be a member — and sanctions was the one resolution with
+    // no relationship test at all, so a bloc could embargo one of its own
+    // (ticket #1285). The fan-out makes that concrete: every member except the
+    // target blocks it in both directions, which is an alliance ordering itself
+    // to blockade a member it is simultaneously sworn to defend.
+    if (members.has(target)) {
+      return {
+        ok: false as const,
+        status: 400,
+        error: `${COUNTRY_CONFIGS[target].name} is a member of ${orgId}. An organisation cannot sanction its own member.`,
+      };
+    }
     const targetName = COUNTRY_CONFIGS[target].name;
     const commodityLabel = input.commodity === "all" ? "all commodities" : input.commodity;
     const title = input.title?.trim() || `${orgId} Sanctions: ${targetName} (${commodityLabel})`;

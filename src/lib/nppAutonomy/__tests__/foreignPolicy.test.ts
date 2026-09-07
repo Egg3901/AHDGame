@@ -279,6 +279,38 @@ describe("processAutonomousForeignPolicy", () => {
     expect(embargo?.reasons.join(" ")).toContain("trade dependence applies a 15 point brake");
   });
 
+  it("does not table sanctions against a country it shares the organization with", async () => {
+    // The planner drew every sanctions org from `sharedOrganizations`, so the
+    // target was a fellow member by construction. Greece spent two turns tabling
+    // Warsaw Pact sanctions against Russia and China (ticket #1285).
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      // COMECON, not NATO: sanctions are an `economic`/`bloc` power, and NATO
+      // resolves to its `security` archetype here, which cannot table them at
+      // all — the assertion would pass for the wrong reason.
+      memberships: [membership("FR", "COMECON"), membership("RU", "COMECON")],
+    });
+
+    await processAutonomousForeignPolicy(db as unknown as Db, "FR", 12, now);
+
+    expect(recordedDecision(db).alternatives).not.toContainEqual(
+      expect.objectContaining({ type: "propose_sanctions" })
+    );
+  });
+
+  it("tables sanctions through an organization the target does not sit in", async () => {
+    const db = setup({
+      alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],
+      memberships: [membership("FR", "COMECON")],
+    });
+
+    await processAutonomousForeignPolicy(db as unknown as Db, "FR", 12, now);
+
+    expect(recordedDecision(db).alternatives).toContainEqual(
+      expect.objectContaining({ type: "propose_sanctions", organizationId: "COMECON" })
+    );
+  });
+
   it("counts an embargo relationship once and only proposes powers an organization has", async () => {
     const db = setup({
       alignments: [alignment("FR", 100, 0), alignment("RU", 0, 100)],

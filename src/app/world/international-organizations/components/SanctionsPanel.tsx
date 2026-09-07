@@ -140,11 +140,17 @@ export function SanctionsPanel({ org, viewer, currentTurn, votingWindowTurns, on
                 className="mt-1 w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
               >
                 <option value="">Select…</option>
-                {COUNTRY_ORDER.filter((c) => c !== viewerFmCountry).map((c) => (
-                  <option key={c} value={c}>
-                    {entityName(c)}
-                  </option>
-                ))}
+                {/* Members excluded, not just the viewer: an organisation
+                    sanctions an outsider, and the route refuses a fellow member
+                    outright, so listing one offers a choice the server will
+                    reject. */}
+                {COUNTRY_ORDER.filter((c) => !org.members.some((m) => m.countryId === c)).map(
+                  (c) => (
+                    <option key={c} value={c}>
+                      {entityName(c)}
+                    </option>
+                  )
+                )}
               </select>
             </div>
             <div>
