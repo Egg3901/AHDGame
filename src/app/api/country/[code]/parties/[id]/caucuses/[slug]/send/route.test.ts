@@ -91,6 +91,14 @@ describe("POST /api/country/[code]/parties/[id]/caucuses/[slug]/send", () => {
   it("refuses a caucus chair sending caucus funds to themselves", async () => {
     // A caucus has a single officer, so there is no second signature to
     // fall back on the way the party treasury has.
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: caucusChairId,
+      name: "Caucus Chair",
+      party: partyId,
+      countryId: "US",
+      userId,
+    });
+
     const { POST } = await import("./route");
     const response = await POST(
       makeRequest({ characterId: caucusChairId.toString(), amount: 1_000_000 }),
@@ -103,12 +111,33 @@ describe("POST /api/country/[code]/parties/[id]/caucuses/[slug]/send", () => {
     expect(db.collectionMocks["caucuses"]!.updateOne).not.toHaveBeenCalled();
   });
 
+  it("refuses a send to a second character owned by the chair's own account", async () => {
+    // Different character id, same owning account. A character-only check
+    // would let this through.
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: memberId,
+      name: "Chair Alt",
+      party: partyId,
+      countryId: "US",
+      userId,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ characterId: memberId.toString(), amount: 1_000 }), {
+      params: Promise.resolve({ code: "us", id: partyId, slug: "test" }),
+    });
+
+    expect(response.status).toBe(403);
+    expect(db.collectionMocks["caucuses"]!.updateOne).not.toHaveBeenCalled();
+  });
+
   it("still allows the chair to send to another caucus member", async () => {
     db.collectionMocks["characters"]!.findOne.mockResolvedValue({
       _id: memberId,
       name: "Member",
       party: partyId,
       countryId: "US",
+      userId: new ObjectId(),
     });
 
     const { POST } = await import("./route");

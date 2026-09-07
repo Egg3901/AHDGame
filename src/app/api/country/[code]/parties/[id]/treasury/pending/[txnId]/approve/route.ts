@@ -19,6 +19,7 @@ import {
   wouldUseVacantTreasurerFallback,
   TREASURER_LOCKOUT_MESSAGE,
 } from "@/lib/parties/treasurerElectionLockout";
+import { isSameCountry } from "@/lib/api/sameCountry";
 import type { Character, PendingTreasuryTransaction, State } from "@/lib/db/types";
 
 interface RouteParams {
@@ -85,18 +86,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
       );
     }
 
-    // Outbound money stays frozen while a contested Treasurer election
-    // is about to close. Rows may be proposed and queued during the
-    // window; they just can't pay out until a Treasurer is seated.
-    // Without this, the lockout would be trivially bypassable by
-    // routing the payment through Request Funds.
-    if (wouldUseVacantTreasurerFallback(party)) {
-      const { currentTurn: lockoutTurn } = await getGameTime();
-      if (await isTreasurerElectionLockoutActive(db, party, lockoutTurn)) {
-        return NextResponse.json({ error: TREASURER_LOCKOUT_MESSAGE }, { status: 400 });
-      }
-    }
-
     // Resolve which slot this character would fill on this row.
     // Self-approval exclusion for Request Funds is enforced inside the
     // helper — requester returns null even if they hold a seat.
@@ -122,6 +111,53 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { error: `The ${slot === "treasurer" ? "Treasurer" : "Chair/VC"} slot is already filled.` },
         { status: 400 }
       );
+    }
+
+    // Outbound money stays frozen while a contested Treasurer election
+    // is about to close. Rows may be proposed and queued during the
+    // window; they just can't pay out until a Treasurer is seated.
+    // Without this, the lockout would be bypassable by routing the
+    // payment through Request Funds instead of Send.
+    if (wouldUseVacantTreasurerFallback(party)) {
+      const { currentTurn: lockoutTurn } = await getGameTime();
+      if (await isTreasurerElectionLockoutActive(db, party, lockoutTurn)) {
+        return NextResponse.json({ error: TREASURER_LOCKOUT_MESSAGE }, { status: 400 });
+      }
+    }
+
+    // The recipient must still be a member of this party at payout time.
+    // Membership is checked when the row is proposed, but a row can sit
+    // open for up to PENDING_TXN_EXPIRY_TURNS, and the recipient may have
+    // left in the meantime.
+    //
+    // Checked BEFORE the atomic slot claim below: a rejection after the
+    // claim would leave the row carrying an approval that never paid out,
+    // and the slot guard would then refuse every retry.
+    if (pending.type === "send" || pending.type === "request") {
+      if (!pending.targetCharacterId) {
+        return NextResponse.json(
+          { error: "Pending row missing target character" },
+          { status: 500 }
+        );
+      }
+      const recipient = await db
+        .collection<Character>("characters")
+        .findOne({ _id: pending.targetCharacterId });
+      if (!recipient) {
+        return NextResponse.json(
+          { error: "Recipient character no longer exists." },
+          { status: 404 }
+        );
+      }
+      if (
+        recipient.party !== String(party.sequentialId) ||
+        !isSameCountry(recipient, { countryId })
+      ) {
+        return NextResponse.json(
+          { error: "The recipient is no longer a member of this party." },
+          { status: 400 }
+        );
+      }
     }
 
     // ─── Fill the matching slot atomically ───────────────────────────────
