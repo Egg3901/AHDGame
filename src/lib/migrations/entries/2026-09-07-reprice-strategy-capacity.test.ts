@@ -138,6 +138,22 @@ describe("computeRepricedStock", () => {
     expect(out.skipped).toBe("no-recorded-basis");
   });
 
+  it("never wipes a sector whose recorded basis is exactly zero", () => {
+    // A world grant records no cash. Re-pricing off 0 would compute 0 correct
+    // units and destroy the sector outright, which this migration must never do.
+    const out = computeRepricedStock({
+      sectorType: "extraction",
+      strategyId: "rare_earth_mining",
+      capitalStock: 50_000,
+      capacityBookAnchor: 0,
+      year: YEAR,
+      eraUnitScale: SCALE,
+    });
+    expect(out.unitsCorrect).toBe(50_000);
+    expect(out.unitsRemoved).toBe(0);
+    expect(out.skipped).toBe("no-recorded-basis");
+  });
+
   it("leaves a zero-stock or unpriceable sector alone", () => {
     expect(
       computeRepricedStock({

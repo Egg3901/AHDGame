@@ -111,7 +111,12 @@ export function computeRepricedStock(input: {
 
   if (stock <= 0) return none("no-stock");
   const book = input.capacityBookAnchor;
-  if (typeof book !== "number" || !Number.isFinite(book) || book < 0) {
+  // A basis of exactly 0 is treated as ABSENT, not as "paid nothing". A world
+  // grant records no cash, and re-pricing off 0 would compute 0 correct units
+  // and silently destroy the whole sector — the one outcome this migration must
+  // never produce. No live row is in that state (checked at turn 698: zero
+  // sectors have book 0 with stock > 0), but the arithmetic path existed.
+  if (typeof book !== "number" || !Number.isFinite(book) || book <= 0) {
     return none("no-recorded-basis");
   }
 
