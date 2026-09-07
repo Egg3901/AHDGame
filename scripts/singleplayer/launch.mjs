@@ -714,7 +714,6 @@ function startApp() {
     ...process.env,
     NODE_ENV: "production",
     SINGLEPLAYER: "1",
-    SINGLEPLAYER_ADMIN: "1",
     SINGLEPLAYER_HOME: HOME,
     MONGODB_URI: `mongodb://127.0.0.1:${MONGO_PORT}/${DB_NAME}`,
     AUTH_SECRET: persistentSecret("auth-secret"),
