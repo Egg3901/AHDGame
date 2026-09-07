@@ -158,4 +158,26 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/send", () => {
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["adminLogs"]!.insertOne).not.toHaveBeenCalled();
   });
+
+  it("refuses an officer sending state party funds to themselves", async () => {
+    // This route has no two-person approval of its own, and the national
+    // Chair is authorized on every state party, so a self-send here would
+    // step around the national treasury's approval rules.
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: chairId,
+      name: "State Chair",
+      party: partyId,
+      homeState: stateId,
+    });
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest({ characterId: chairId.toString(), amount: 2_500 }), {
+      params: Promise.resolve({ code: "us", id: stateId, partyId }),
+    });
+
+    expect(response.status).toBe(403);
+    const body = await response.json();
+    expect(body.error).toMatch(/yourself/i);
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
+  });
 });
