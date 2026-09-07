@@ -134,6 +134,7 @@ describe("isPreConsolidationRelease", () => {
       "0.4.0",
     ]);
     expect(shipped.filter((version) => !isPreConsolidationRelease(version))).toEqual([
+      "1.8.0",
       "1.7.2",
       "1.7.1",
       "1.7.0",
