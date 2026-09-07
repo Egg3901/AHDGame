@@ -5,6 +5,10 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
+vi.mock("@/lib/time/gameTime", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  getGameTime: vi.fn().mockResolvedValue({ currentTurn: 13 }),
+}));
 
 let db: MockDb;
 
@@ -72,6 +76,7 @@ async function setupRoute() {
   db.collection("campaigns");
   db.collection("elections");
   db.collection("characters");
+  db.collection("electionCandidates");
 
   db.collectionMocks["gameState"]!.findOne.mockResolvedValue({ _id: "current", currentTurn: 10 });
   // Default: updated campaign after upgrade (first call = fetch, second = fetch updated)
@@ -171,15 +176,29 @@ describe("POST /api/campaigns/[id]/upgrade — general phase (1.5x multiplier)",
       endTurn: 40,
     });
 
-    // Mock a target character for opposition research
+    // Mock a target character for opposition research. It must also be a
+    // candidate standing against the buyer, which is what the purchase now
+    // checks before it sets the campaign's first target.
+    const targetOid = new ObjectId();
     db.collectionMocks["characters"]!.findOne.mockResolvedValue({
-      _id: new ObjectId(),
+      _id: targetOid,
       name: "Target Politician",
     });
+    db.collectionMocks["electionCandidates"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { characterId: mockCharacterId, characterName: "Me", party: "1", status: "active" },
+        {
+          characterId: targetOid,
+          characterName: "Target Politician",
+          party: "1",
+          status: "active",
+        },
+      ]),
+    } as never);
 
     const { POST } = await import("./route");
     const params = Promise.resolve({ id: mockCampaignId.toString() });
-    const targetId = new ObjectId().toString();
+    const targetId = targetOid.toString();
     const res = await POST(makeRequest({ category: "oppositionResearch", targetId }), { params });
 
     expect(res.status).toBe(200);

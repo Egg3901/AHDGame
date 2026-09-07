@@ -15,6 +15,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { toElectionDisplay, type ElectionsPageResponse } from "@/lib/elections/electionDisplay";
 import { useCountdownTimer } from "@/hooks/useCountdownTimer";
+import { useCountryManifestos } from "@/hooks/useCountryManifestos";
 import { useElectionActions } from "@/hooks/useElectionActions";
 import { useWorldFlags } from "@/hooks/useWorldFlags";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -231,6 +232,18 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
     ]
   );
 
+  // Every contested Commons race renders a manifesto bar (see `sectionFooter`).
+  // Derived from the UNFILTERED list on purpose: the bars are the same whatever
+  // the viewer has filtered to, so keying off `filtered` would refetch the whole
+  // batch on every filter click.
+  const manifestoElectionIds = useMemo(() => {
+    if (countryId !== "UK") return [];
+    return elections
+      .filter((e) => e.electionType === "commons" && e.candidates.length > 0)
+      .map((e) => e.id);
+  }, [countryId, elections]);
+  const manifestos = useCountryManifestos(code, manifestoElectionIds);
+
   const sections = useMemo(() => buildOfficeSections(countryId, filtered), [countryId, filtered]);
   const summary = useMemo(() => summarize(filtered), [filtered]);
 
@@ -276,7 +289,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
             const carveUp = buildCommonsCarveUpSlices(election);
             return (
               <div key={election.id} className="space-y-3">
-                <ManifestoFlavorBar countryCode={code} electionId={election.id} />
+                <ManifestoFlavorBar countryCode={code} electionId={election.id} data={manifestos} />
                 <CommonsCarveUpPanel
                   regionName={ELECTION_STATE_NAMES[election.state] ?? election.state}
                   regionId={election.state}
@@ -289,7 +302,7 @@ export default function ElectionsClient({ code, initialElections }: ElectionsCli
         </div>
       );
     },
-    [countryId, filtered]
+    [countryId, filtered, code, manifestos]
   );
 
   return (

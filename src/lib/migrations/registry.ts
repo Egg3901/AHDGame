@@ -71,6 +71,7 @@ import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-part
 import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
+import { migration as manifestosIndex } from "./entries/2026-09-06-manifestos-index";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -226,6 +227,9 @@ export const MIGRATIONS: Migration[] = [
   intelligenceIndexes,
   clientStatisticsTtlIndex,
   clientDiagnosticsTtlIndex,
+  // `manifestos` had only its _id index, so the elections page's per-race
+  // manifesto reads were collection scans.
+  manifestosIndex,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

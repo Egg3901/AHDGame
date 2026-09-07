@@ -138,3 +138,22 @@ export async function listManifestosForElection(
 ): Promise<Manifesto[]> {
   return getManifestosCollection(db).find({ countryId, electionId }).toArray();
 }
+
+/**
+ * One party's manifestos across many elections, in a single query.
+ *
+ * The elections page shows a manifesto bar per contested race, and calling
+ * `getManifesto` once per race is what made that page fan out into a request
+ * per election. Callers pass every election they intend to render.
+ */
+export async function getManifestosForElections(
+  db: Db,
+  countryId: CountryId,
+  electionIds: ObjectId[],
+  party: string
+): Promise<Manifesto[]> {
+  if (electionIds.length === 0) return [];
+  return getManifestosCollection(db)
+    .find({ countryId, electionId: { $in: electionIds }, party })
+    .toArray();
+}
