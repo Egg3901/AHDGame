@@ -6,7 +6,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug } from "@/lib/db/caucusLookup";
@@ -97,7 +97,7 @@ export async function POST(
     // Minimum party tenure before standing for caucus chair (leadershipTenure.ts) —
     // measured on party membership, matching national/state leadership.
     const currentTurn = await getCurrentTurn(db);
-    const tenure = getPartyTenure(auth.user.character.partyJoinedTurn, currentTurn);
+    const tenure = getLeadershipEligibility(auth.user.character, currentTurn, id);
     if (!tenure.eligible) {
       return NextResponse.json(
         {

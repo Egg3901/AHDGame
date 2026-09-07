@@ -120,6 +120,24 @@ describe("applyCharacterPartyJoin — first-joiner auto-chair", () => {
     expect(partyUpdate.$set?.chairId).toBeUndefined();
   });
 
+  it("clears a founder marker carried in from another party", async () => {
+    const db = makeDb();
+    const args = makeArgs(db);
+    // This character founded party 9 and is now joining party 3. Carrying the
+    // marker over would hand them an unearned leadership exemption if they ever
+    // returned to 9 — and the gate is party-scoped, so it must not survive.
+    (args.character as unknown as { foundedPartyId?: string }).foundedPartyId = "9";
+
+    await applyCharacterPartyJoin(args);
+
+    const charUpdate = mockCollections["characters"]!.updateOne.mock.calls[0]![1] as {
+      $set?: Record<string, unknown>;
+      $unset?: Record<string, unknown>;
+    };
+    expect(charUpdate.$set?.foundedPartyId).toBeUndefined();
+    expect(charUpdate.$unset).toMatchObject({ foundedPartyId: "" });
+  });
+
   it("still auto-chairs a chairless default party with no active chair election", async () => {
     const db = makeDb();
     setMockCollection("nationalPartyElections", {

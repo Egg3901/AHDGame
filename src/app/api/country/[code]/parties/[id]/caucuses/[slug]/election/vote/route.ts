@@ -6,7 +6,7 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { findCaucusBySlug } from "@/lib/db/caucusLookup";
@@ -121,7 +121,7 @@ export async function POST(
     // for founding elections.
     const currentTurn = await getCurrentTurn(db);
     if (!election.founding) {
-      const tenure = getPartyTenure(auth.user.character.partyJoinedTurn, currentTurn);
+      const tenure = getLeadershipEligibility(auth.user.character, currentTurn, id);
       if (!tenure.eligible) {
         return NextResponse.json(
           {
