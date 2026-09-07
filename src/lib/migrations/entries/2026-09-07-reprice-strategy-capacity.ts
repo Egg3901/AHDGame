@@ -2,7 +2,7 @@ import type { Db, Filter } from "mongodb";
 import type { CorporateSector, Corporation } from "@/lib/db/types";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { capacityPricePerUnit } from "@/lib/constants/capacityEconomy";
-import { getEraUnitScale } from "@/lib/constants/sectorSeedEra";
+import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import type { Migration, MigrationContext, MigrationResult } from "../types";
 
 /**
@@ -165,13 +165,18 @@ export function isDefectivePair(
 
 async function repriceStrategyCapacity(db: Db, ctx: MigrationContext): Promise<MigrationResult> {
   const gameState = await db
-    .collection<{ _id: string; currentYear?: number; activePreset?: string }>("gameState")
-    .findOne({ _id: "current" }, { projection: { currentYear: 1, activePreset: 1 } });
+    .collection<{ _id: string; currentYear?: number }>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentYear: 1 } });
   const year = gameState?.currentYear;
   if (typeof year !== "number" || !Number.isFinite(year)) {
     return { documentsScanned: 0, notes: ["no currentYear on gameState; refusing to re-price"] };
   }
-  const eraUnitScale = getEraUnitScale(gameState?.activePreset);
+  // Use the shared resolver, not a hand-rolled read. The preset lives on
+  // `gameState.preset` and goes through `resolvePresetIdFromGameState`; reading
+  // a guessed field name would silently yield the MODERN scale of 1 instead of
+  // ~70 for a 1953 world, making every unit price ~70x too high and cutting
+  // ~70x more capacity than the paid basis actually justifies.
+  const eraUnitScale = await loadWorldEraUnitScale(db);
 
   // Scoped to the registered defective pairs only. See DEFECTIVE_PAIRS.
   const strategies = [...DEFECTIVE_PAIRS].map((p) => p.split("/")[1]);
