@@ -73,6 +73,7 @@ import { resetVicePresidentActions } from "@/lib/turn/vicePresidentActionReset";
 import { resetRunningMateSurrogateActions } from "@/lib/turn/runningMateSurrogateActionReset";
 import { resetJusticeActions } from "@/lib/turn/justiceActionReset";
 import type { TurnPhaseAdapter } from "@/simulation/engine/types";
+import { regionalBudgetPhaseDue, resolveRegionalBudgetCadence } from "./regionalBudgetCadence";
 
 export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
   key: "stateEffectsAndNationalAggregation",
@@ -142,6 +143,19 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
         policyResult,
       };
     })();
+    // Regional budgets alternate turns (see regionalBudgetCadence.ts). A phase
+    // that is not due is marked skipped so turn logs and turndiag still list it.
+    const regionalBudgetCadence = resolveRegionalBudgetCadence();
+    const runRegionalBudgetPhase = <T>(name: string, fn: () => Promise<T>): Promise<T | null> =>
+      regionalBudgetPhaseDue(name, newTurn, regionalBudgetCadence)
+        ? runtime.runPhase(name, fn)
+        : runtime
+            .markPhaseSkipped(
+              name,
+              "conditional",
+              `skipped: regional budgets run every ${regionalBudgetCadence} turns`
+            )
+            .then(() => null);
     const [
       { crisisResult, navairResult, ministerialOrdersResult, policyResult },
       demoEffectResult,
@@ -183,14 +197,18 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       runtime.runPhase("unownedSectorGrowth", () => processUnownedSectorGrowth(db)),
       runtime.runPhase("metricDecay", () => processMetricDecay()),
       runtime.runPhase("subsidyBudget", () => processSubsidyBudget(db)),
-      runtime.runPhase("regionalBudgetProcessing", () => processRegionalBudgets(db, newTurn)),
-      runtime.runPhase("jpRegionalBudgetProcessing", () => processJPRegionalBudgets(db, newTurn)),
+      runRegionalBudgetPhase("regionalBudgetProcessing", () =>
+        processRegionalBudgets(db, newTurn, regionalBudgetCadence)
+      ),
+      runRegionalBudgetPhase("jpRegionalBudgetProcessing", () =>
+        processJPRegionalBudgets(db, newTurn)
+      ),
       // Covers every country on the Laender revenue-sharing model, not just DE.
       // DD joined when the unified Germany was left with no processor at all:
       // this step was scoped to DE, which has held zero states since the shell
       // dissolved on turn 550 (#1323). The phase key keeps its original name for
       // the same reason `cnPresidentSync` below does.
-      runtime.runPhase("deRegionalBudgetProcessing", async () => {
+      runRegionalBudgetPhase("deRegionalBudgetProcessing", async () => {
         const results = await Promise.all(
           LAENDER_MODEL_COUNTRIES.map((id) =>
             processLaenderRegionalBudgets(db, id, newTurn, gameState.preset)
@@ -205,10 +223,12 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // identifier turn logs and phase-history diagnostics are keyed by, and
       // renaming it would read as the phase disappearing and a new one
       // appearing.
-      runtime.runPhase("cnRegionalBudgetProcessing", () =>
+      runRegionalBudgetPhase("cnRegionalBudgetProcessing", () =>
         processAllOnePartyRegionalBudgets(db, newTurn, gameState.preset)
       ),
-      runtime.runPhase("ruRegionalBudgetProcessing", () => processRURegionalBudgets(db, newTurn)),
+      runRegionalBudgetPhase("ruRegionalBudgetProcessing", () =>
+        processRURegionalBudgets(db, newTurn)
+      ),
       runtime.runPhase("politicalMetricsDynamics", () =>
         processPoliticalMetricsDynamics(db, newTurn)
       ),

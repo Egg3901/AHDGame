@@ -39,6 +39,7 @@ import {
   insertFundSnapshot,
   setFundStatus,
   FUND_REDEMPTION_QUEUE_COLLECTION,
+  insertFundTransactionsBulk,
 } from "@/lib/indexFunds/fundQueries";
 import {
   INDEX_FUND_INITIAL_NAV,
@@ -101,13 +102,14 @@ import {
 } from "@/lib/indexFunds/fundBidPolicy";
 import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import type { EquityMarketPool, IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types";
 import {
   loadOpenOrdersEscrowByFundId,
   loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
-import { loadEquityQuote } from "@/lib/equities/marketPool";
+import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -346,15 +348,28 @@ export function recomputeNav(
  * `{ ok: false, sharesBought: 0, anchorSpent: 0 }` when the debit or credit
  * guard fails (e.g. insufficient cash or float already sold).
  */
+/**
+ * Shared state for a pass that executes many buys: the pool table read once,
+ * and a sink that collects fund transactions for one insertMany at the end
+ * instead of an insert per buy. Both are optional; without them a buy is
+ * self-contained.
+ */
+export interface FundShareBuyBatch {
+  /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
+  pools?: Map<CurrencyCode, EquityMarketPool>;
+  txSink?: Omit<IndexFundTransaction, "_id">[];
+}
+
 export async function executeFundShareBuy(
   db: Db,
   fund: IndexFund,
   corp: EligibleCorpRow,
   shares: number,
   referencePriceAnchor: number,
-  currentTurn: number
+  currentTurn: number,
+  batch?: FundShareBuyBatch
 ): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
-  const quote = await loadEquityQuote(db, corp);
+  const quote = await loadEquityQuote(db, corp, { pools: batch?.pools });
   const executionPrice = quote.askPriceLocal;
   // The caller already loaded the fund's anchor-currency reference price in a
   // batch. Preserve that FX conversion and apply only the market-maker spread.
@@ -396,7 +411,10 @@ export async function executeFundShareBuy(
       return false;
     }
 
-    await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, sessionOpts);
+    await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
+      ...sessionOpts,
+      pools: batch?.pools,
+    });
 
     const updatedHoldings = updateHoldingAfterPurchase(
       debitedFund.holdings ?? [],
@@ -406,19 +424,19 @@ export async function executeFundShareBuy(
     );
     await updateFundHoldings(db, fund._id, updatedHoldings, sessionOpts);
 
-    await insertFundTransaction(
-      db,
-      {
-        fundId: fund._id,
-        kind: "public_float_buy",
-        corporationId: corp._id,
-        shares,
-        navAnchor: executionPriceAnchor,
-        amountAnchor: actualCost,
-        createdAt: new Date(),
-      },
-      sessionOpts
-    );
+    const tx = {
+      fundId: fund._id,
+      kind: "public_float_buy" as const,
+      corporationId: corp._id,
+      shares,
+      navAnchor: executionPriceAnchor,
+      amountAnchor: actualCost,
+      createdAt: new Date(),
+    };
+    // The transaction row is a log, not a balance: a batching caller writes
+    // the pass's rows in one insertMany after the loop.
+    if (batch?.txSink) batch.txSink.push(tx);
+    else await insertFundTransaction(db, tx, sessionOpts);
 
     return true;
   };
@@ -478,20 +496,29 @@ export async function rebalanceFundToTarget(
 
   let buys = 0;
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
+  // One pool read and one transaction insert for the whole buy pass. The
+  // buy reads the fund's live cash and holdings from its own atomic debit, so
+  // the per-buy fund re-read this loop used to do bought nothing: on the
+  // rebalance day (every 24 turns) that was ~550 of ~5,000 round trips.
+  const buyBatch: FundShareBuyBatch = {
+    pools: plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined,
+    txSink: [],
+  };
   for (const leg of plan.buys) {
     const corp = corpMap.get(leg.corporationId.toString());
     if (!corp) continue;
-    const refreshed = (await getFundById(db, fund._id)) ?? fund;
     const res = await executeFundShareBuy(
       db,
-      refreshed,
+      fund,
       corp,
       leg.shares,
       leg.sharePriceAnchor,
-      currentTurn
+      currentTurn,
+      buyBatch
     );
     if (res.ok) buys++;
   }
+  await insertFundTransactionsBulk(db, buyBatch.txSink ?? []);
 
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
@@ -548,6 +575,7 @@ export async function rebalanceFundToTarget(
     .toArray();
   const openBidCorpIds = new Set(remainingOpenBids.map((o) => o.corporationId.toString()));
 
+  const bidTxSink: Omit<IndexFundTransaction, "_id">[] = [];
   for (const leg of plan.bids) {
     const corpIdStr = leg.corporationId.toString();
     // Never stack: skip if an open bid already exists for this (fund, corp).
@@ -561,15 +589,15 @@ export async function rebalanceFundToTarget(
       const limitPriceLocal = fundBidLimitPriceLocal(executionPriceLocal);
       const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
 
-      // Re-fetch fund so cashAnchor reflects all prior writes in this pass.
-      const freshFund = (await getFundById(db, fund._id)) ?? fund;
-
+      // The order debits cashAnchor atomically against the live document, so
+      // the fund re-read this loop used to do per bid was never consulted.
       const result = await placeFundShareBuyOrder(db, {
-        fund: freshFund,
+        fund,
         corp,
         shares: leg.shares,
         limitPriceLocal,
         fxRate,
+        txSink: bidTxSink,
       });
 
       if (result.ok) {
@@ -583,6 +611,7 @@ export async function rebalanceFundToTarget(
       );
     }
   }
+  await insertFundTransactionsBulk(db, bidTxSink);
 
   return { buys, sells, bidsPlaced, bidsCancelled };
 }

@@ -187,17 +187,53 @@ export interface LoadedBondQuote extends BondPoolQuote {
  * One read of the pool document; a missing pool quotes as empty (zero cash,
  * neutral appetite), so the depth is zero and the spread is the base spread.
  */
+/**
+ * Every bond pool keyed by currency, for a pass that quotes many bonds. The
+ * caller advances a pool's `cashLocal` as it credits or debits it (see
+ * `advanceBondPoolSnapshot`) so later quotes in the pass see the same cash
+ * skew a per-bond read would.
+ */
+export async function loadBondPoolsByCurrency(db: Db): Promise<Map<CurrencyCode, BondMarketPool>> {
+  const pools = await db
+    .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
+    .find({})
+    .toArray();
+  return new Map(pools.map((pool) => [pool._id as CurrencyCode, pool]));
+}
+
+/** The part of a bond pool required to price and advance a pass-local quote snapshot. */
+export type BondPoolQuoteSnapshot = Pick<
+  BondMarketPool,
+  "cashLocal" | "targetCashLocal" | "appetiteByCountry"
+>;
+
+/** Mirror a credit (positive) or debit (negative) onto a preloaded pool snapshot. */
+export function advanceBondPoolSnapshot(
+  pools: Map<CurrencyCode, BondPoolQuoteSnapshot> | undefined,
+  currency: CurrencyCode,
+  deltaLocal: number
+): void {
+  const pool = pools?.get(currency);
+  if (!pool) return;
+  const delta = roundCents(deltaLocal);
+  if (!Number.isFinite(delta) || delta === 0) return;
+  pool.cashLocal = (pool.cashLocal ?? 0) + delta;
+}
+
 export async function loadBondQuote(
   db: Db,
-  bond: Pick<Bond, "currencyCode" | "countryId" | "marketPrice" | "issuerType" | "defaulted">
+  bond: Pick<Bond, "currencyCode" | "countryId" | "marketPrice" | "issuerType" | "defaulted">,
+  options?: { pools?: ReadonlyMap<CurrencyCode, BondPoolQuoteSnapshot> }
 ): Promise<LoadedBondQuote> {
   const currency = bondPoolCurrency(bond);
-  const pool = await db
-    .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-    .findOne(
-      { _id: currency },
-      { projection: { cashLocal: 1, targetCashLocal: 1, appetiteByCountry: 1 } }
-    );
+  const pool = options?.pools
+    ? (options.pools.get(currency) ?? null)
+    : await db
+        .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
+        .findOne(
+          { _id: currency },
+          { projection: { cashLocal: 1, targetCashLocal: 1, appetiteByCountry: 1 } }
+        );
   const poolCashLocal =
     Number.isFinite(pool?.cashLocal) && pool!.cashLocal > 0 ? pool!.cashLocal : 0;
   const targetCashLocal =

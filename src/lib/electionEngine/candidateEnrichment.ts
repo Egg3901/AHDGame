@@ -2,7 +2,7 @@
  * Fetches and enriches candidate data for vote calculations.
  */
 
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Character, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
 import { type CountryId, type CountryConfig } from "@/lib/constants/countries";
@@ -39,9 +39,61 @@ function clampPercentStat(value: number, fallback: number): number {
  * is omitted, the caller has opted into the legacy global-collision behavior
  * (e.g. in-flight presidential elections pre-dating the 2026-04-22 fix).
  */
+/** The party fields enrichment reads; the shape `loadEnrichmentParties` returns. */
+export interface EnrichmentParty {
+  _id: unknown;
+  sequentialId: number;
+  countryId?: string;
+  abbreviation?: string;
+  economicPosition: number;
+  socialPosition: number;
+  chairId?: ObjectId | null;
+}
+
+/**
+ * The party table enrichment needs, for one country (or every party when the
+ * country is unknown, preserving the legacy behaviour documented above). A
+ * turn's vote accumulation calls enrichment once per election, so callers
+ * that loop over elections load this once per country and pass it in.
+ */
+export async function loadEnrichmentParties(
+  db: Db,
+  countryId?: CountryId
+): Promise<EnrichmentParty[]> {
+  return db
+    .collection<EnrichmentParty>("politicalParties")
+    .find(countryId ? { countryId } : {})
+    .toArray();
+}
+
+async function loadPartiesViaCache(
+  db: Db,
+  options?: { countryId?: CountryId; partiesCache?: Map<string, Promise<EnrichmentParty[]>> }
+): Promise<EnrichmentParty[]> {
+  const cache = options?.partiesCache;
+  if (!cache) return loadEnrichmentParties(db, options?.countryId);
+  const key = options?.countryId ?? "";
+  let pending = cache.get(key);
+  if (!pending) {
+    pending = loadEnrichmentParties(db, options?.countryId);
+    cache.set(key, pending);
+  }
+  return pending;
+}
+
 export async function fetchEnrichedCandidates(
   candidates: ElectionCandidate[],
-  options?: { includePartyPositions?: boolean; countryId?: CountryId }
+  options?: {
+    includePartyPositions?: boolean;
+    countryId?: CountryId;
+    /** Preloaded `loadEnrichmentParties(db, countryId)`; skips the per-call read. */
+    parties?: EnrichmentParty[];
+    /**
+     * Per-turn memo keyed by country (`""` when unscoped). A vote turn enriches
+     * ~180 elections; the party table is read once per country instead.
+     */
+    partiesCache?: Map<string, Promise<EnrichmentParty[]>>;
+  }
 ): Promise<EnrichedCandidate[]> {
   if (candidates.length === 0) {
     return [];
@@ -52,18 +104,7 @@ export async function fetchEnrichedCandidates(
   const characterIds = candidates.filter((c) => !c.isNPP).map((c) => c.characterId);
   const nppIds = candidates.filter((c) => c.isNPP && c.nppId).map((c) => c.nppId!);
 
-  const parties = await db
-    .collection<{
-      _id: unknown;
-      sequentialId: number;
-      countryId?: string;
-      abbreviation?: string;
-      economicPosition: number;
-      socialPosition: number;
-      chairId?: ObjectId | null;
-    }>("politicalParties")
-    .find(options?.countryId ? { countryId: options.countryId } : {})
-    .toArray();
+  const parties = options?.parties ?? (await loadPartiesViaCache(db, options));
 
   // Candidates store party as String(sequentialId). When scoping by countryId we
   // can safely key the map by sequentialId alone (all entries belong to the same
@@ -154,7 +195,8 @@ export async function fetchEnrichedCandidates(
     nppIds.length > 0
       ? db
           .collection<NPP>("npps")
-          .find({ _id: { $in: nppIds } })
+          // Enrichment reads the ideology pair, never the 30KB stance map.
+          .find({ _id: { $in: nppIds } }, { projection: { "policies.domainPositions": 0 } })
           .toArray()
       : Promise.resolve([] as NPP[]),
     characterIds.length > 0

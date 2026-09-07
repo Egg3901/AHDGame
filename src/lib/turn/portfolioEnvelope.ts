@@ -20,9 +20,14 @@ import {
 export async function resolvePortfolioEnvelope(
   db: Db,
   countryId: string,
-  portfolioKey: string
+  portfolioKey: string,
+  /** The country's budget when the caller already holds it (one read per turn, not per seat). */
+  preloadedBudget?: FederalBudget | null
 ): Promise<number> {
-  const budget = await db.collection<FederalBudget>("federalBudget").findOne({ countryId });
+  const budget =
+    preloadedBudget !== undefined
+      ? preloadedBudget
+      : await db.collection<FederalBudget>("federalBudget").findOne({ countryId });
   if (!budget) return 0;
   const cat = PORTFOLIO_BUDGET_CATEGORY[portfolioKey];
   let raw = 0;

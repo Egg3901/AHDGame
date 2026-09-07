@@ -23,7 +23,13 @@ mkdirSync(output, { recursive: true });
 cpSync(source, staged, { recursive: true });
 const name = `ahd-singleplayer-v${version}-${platform}.tar.gz`;
 const archive = path.join(output, name);
-const result = spawnSync("tar", ["-czf", archive, "-C", temp, "game"], { stdio: "inherit" });
+// GNU tar treats a colon in its archive argument as a remote host separator.
+// On Windows, an absolute output path begins with a drive letter, so run from
+// the output directory and give tar the relative archive filename instead.
+const result = spawnSync("tar", ["-czf", name, "-C", temp, "game"], {
+  cwd: output,
+  stdio: "inherit",
+});
 if (result.status !== 0) throw new Error("tar failed");
 const digest = createHash("sha256").update(readFileSync(archive)).digest("hex");
 writeFileSync(`${archive}.sha256`, `${digest}  ${name}\n`);

@@ -26,6 +26,8 @@ import {
   bondPoolCurrency,
   debitBondPoolGated,
   loadBondQuote,
+  advanceBondPoolSnapshot,
+  type BondPoolQuoteSnapshot,
 } from "@/lib/bonds/marketPool";
 import {
   anchorToCorpCapital,
@@ -228,10 +230,14 @@ export async function placeUnsoldBondUnits(
   if (placing.length === 0) return result;
 
   const budgetByCurrency = new Map<CurrencyCode, number>();
+  // The pool docs read for the budgets double as the quote snapshot for the
+  // pass; each placement's debit is mirrored onto them so later quotes see it.
+  const poolByCurrency = new Map<CurrencyCode, BondPoolQuoteSnapshot>();
   for (const bond of placing) {
     const currency = bondPoolCurrency(bond);
     if (!budgetByCurrency.has(currency)) {
       const pool = await readPoolForPrimary(db, currency);
+      if (pool) poolByCurrency.set(currency, pool);
       budgetByCurrency.set(
         currency,
         unsoldPlacementBudget(pool?.cashLocal ?? 0, pool?.targetCashLocal ?? 0)
@@ -240,7 +246,7 @@ export async function placeUnsoldBondUnits(
     let budget = budgetByCurrency.get(currency) ?? 0;
     if (budget <= 0) continue;
 
-    const quote = await loadBondQuote(db, bond);
+    const quote = await loadBondQuote(db, bond, { pools: poolByCurrency });
     const price = quote.askPerUnit;
     if (!(price > 0)) continue;
     const cap = unsoldPlacementCap(
@@ -252,6 +258,7 @@ export async function placeUnsoldBondUnits(
 
     const paid = await debitPoolForPrimary(db, currency, units, price, now);
     if (paid <= 0) continue;
+    advanceBondPoolSnapshot(poolByCurrency, currency, -paid);
     const face = units * BOND_UNIT_FACE_VALUE;
     const claim = await db.collection<Bond>("bonds").updateOne(
       { _id: bond._id, unsoldUnits: { $gte: units } },
@@ -268,6 +275,7 @@ export async function placeUnsoldBondUnits(
           { _id: currency },
           { $inc: { cashLocal: paid, "lifetime.issuanceOut": -paid }, $set: { updatedAt: now } }
         );
+      advanceBondPoolSnapshot(poolByCurrency, currency, paid);
       continue;
     }
     budget -= paid;

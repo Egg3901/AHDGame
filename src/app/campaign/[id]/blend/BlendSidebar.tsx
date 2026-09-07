@@ -401,7 +401,7 @@ export function BlendSidebar({
               >
                 {vm.strength.strengthAdded > 0 ? (
                   <>
-                    Contribute {vm.strength.strengthAdded.toFixed(1)} strength for{" "}
+                    Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
                     {vm.strength.costText} and reach{" "}
                     <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
                   </>

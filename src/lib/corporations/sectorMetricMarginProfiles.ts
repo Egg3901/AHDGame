@@ -64,6 +64,17 @@ interface PreparedContribution extends StateMetricMarginContribution {
   metricKey: string;
 }
 
+interface ResolvedMetricSignal {
+  metricKey: string;
+  category: MetricCategoryId;
+  metricId: string;
+  label: string;
+  rawValue: number;
+  baseModifier: number;
+  channelWeights: Array<[SectorMetricMarginChannel, number]>;
+  rationale: string;
+}
+
 const ZERO_PROFILE: Record<SectorMetricMarginChannel, number> =
   SECTOR_METRIC_MARGIN_CHANNELS.reduce(
     (acc, channel) => {
@@ -795,7 +806,135 @@ function legacyStateMetricTotal(
   );
 }
 
+/**
+ * Per-turn memo. The result is a pure function of the inputs, and a turn calls
+ * this once per sector (~4,000) while the inputs repeat per (state, sector
+ * type, strategy): every sector of a type in a state gets the same answer.
+ * Keyed on the identity of the `stateMetrics` document (a WeakMap, so it
+ * expires with the turn's lookups) and then on the scalar inputs. Callers
+ * treat the result as read-only.
+ */
+const MARGIN_MEMO = new WeakMap<object, Map<object | null, Map<string, StateMetricMarginResult>>>();
+
+// The metric value and its normalized base modifier are identical for every
+// sector in a state during one turn. Cache that state-only work separately from
+// strategy weighting and caps below. Like MARGIN_MEMO, this is scoped by the
+// deserialized state document identity and expires with the turn's lookups.
+const BASE_SIGNAL_MEMO = new WeakMap<
+  object,
+  Map<object | null, Map<string, ResolvedMetricSignal[]>>
+>();
+
+function baseSignalMemoKey(input: StateMetricMarginInput): string {
+  return [input.countryId ?? input.stateMetrics?.countryId ?? "", input.year ?? ""].join("|");
+}
+
+function resolveStateMetricSignals(input: StateMetricMarginInput): ResolvedMetricSignal[] {
+  if (!input.stateMetrics) return [];
+
+  let byOverlay = BASE_SIGNAL_MEMO.get(input.stateMetrics);
+  if (!byOverlay) {
+    byOverlay = new Map();
+    BASE_SIGNAL_MEMO.set(input.stateMetrics, byOverlay);
+  }
+  const overlayKey = input.politicalBaseModifiers ?? null;
+  let byKey = byOverlay.get(overlayKey);
+  if (!byKey) {
+    byKey = new Map();
+    byOverlay.set(overlayKey, byKey);
+  }
+  const key = baseSignalMemoKey(input);
+  const cached = byKey.get(key);
+  if (cached) return cached;
+
+  const signals: ResolvedMetricSignal[] = [];
+  for (const category of metricCategories) {
+    for (const definition of category.metrics) {
+      const signal = SIGNAL_BY_KEY.get(metricKey(category.id, definition.id));
+      if (!signal || Object.keys(signal.channels).length === 0) continue;
+      // Era existence gate: metrics outside their era window contribute no
+      // margin signal (year null = flag off = everything active).
+      if (
+        !isMetricActive(
+          definition.id,
+          input.countryId ?? input.stateMetrics.countryId ?? undefined,
+          input.year ?? null
+        )
+      ) {
+        continue;
+      }
+      const storedValue = valueForMetric(input.stateMetrics, category.id, definition.id);
+      // SP4 §4a: a playable region's demolished political signal resolves
+      // from the adapter overlay; a stored value (survivor metrics, and every
+      // non-playable region) always wins so the legacy path is untouched.
+      const key = metricKey(category.id, definition.id);
+      const overlay = storedValue == null ? input.politicalBaseModifiers?.get(key) : undefined;
+      if (storedValue == null && overlay == null) continue;
+
+      const baseModifier =
+        storedValue != null
+          ? metricBaseModifier(
+              signal,
+              storedValue,
+              definition,
+              input.countryId ?? input.stateMetrics.countryId
+            )
+          : overlay!.modifier;
+      if (baseModifier === 0) continue;
+
+      signals.push({
+        metricKey: key,
+        category: category.id,
+        metricId: definition.id,
+        label: definition.shortName ?? definition.name,
+        rawValue: storedValue ?? overlay!.rawValue,
+        baseModifier,
+        channelWeights: Object.entries(signal.channels) as Array<
+          [SectorMetricMarginChannel, number]
+        >,
+        rationale: signal.rationale,
+      });
+    }
+  }
+  byKey.set(key, signals);
+  return signals;
+}
+
+function memoKey(input: StateMetricMarginInput): string {
+  return [
+    input.sectorType,
+    input.strategyId,
+    input.transitionFromStrategyId ?? "",
+    input.transitionProgress ?? 0,
+    input.countryId ?? "",
+    input.year ?? "",
+  ].join("|");
+}
+
 export function computeStateMetricMarginModifier(
+  input: StateMetricMarginInput
+): StateMetricMarginResult {
+  if (!input.stateMetrics) return computeStateMetricMarginModifierUncached(input);
+  let byOverlay = MARGIN_MEMO.get(input.stateMetrics);
+  if (!byOverlay) {
+    byOverlay = new Map();
+    MARGIN_MEMO.set(input.stateMetrics, byOverlay);
+  }
+  const overlayKey = input.politicalBaseModifiers ?? null;
+  let byKey = byOverlay.get(overlayKey);
+  if (!byKey) {
+    byKey = new Map();
+    byOverlay.set(overlayKey, byKey);
+  }
+  const key = memoKey(input);
+  const hit = byKey.get(key);
+  if (hit) return hit;
+  const result = computeStateMetricMarginModifierUncached(input);
+  byKey.set(key, result);
+  return result;
+}
+
+function computeStateMetricMarginModifierUncached(
   input: StateMetricMarginInput
 ): StateMetricMarginResult {
   const profile = getBlendedStrategyMetricMarginProfile(
@@ -807,61 +946,20 @@ export function computeStateMetricMarginModifier(
   const prepared: PreparedContribution[] = [];
   const legacyTotal = legacyStateMetricTotal(input.sectorType, input.stateMetrics);
 
-  if (input.stateMetrics) {
-    for (const category of metricCategories) {
-      for (const definition of category.metrics) {
-        const signal = SIGNAL_BY_KEY.get(metricKey(category.id, definition.id));
-        if (!signal || Object.keys(signal.channels).length === 0) continue;
-        // Era existence gate: metrics outside their era window contribute no
-        // margin signal (year null = flag off = everything active).
-        if (
-          !isMetricActive(
-            definition.id,
-            input.countryId ?? input.stateMetrics.countryId ?? undefined,
-            input.year ?? null
-          )
-        ) {
-          continue;
-        }
-        const storedValue = valueForMetric(input.stateMetrics, category.id, definition.id);
-        // SP4 §4a: a playable region's demolished political signal resolves
-        // from the adapter overlay; a stored value (survivor metrics, and every
-        // non-playable region) always wins so the legacy path is untouched.
-        const overlay =
-          storedValue == null
-            ? input.politicalBaseModifiers?.get(metricKey(category.id, definition.id))
-            : undefined;
-        if (storedValue == null && overlay == null) continue;
-        const rawValue = storedValue ?? overlay!.rawValue;
-
-        const baseModifier =
-          storedValue != null
-            ? metricBaseModifier(
-                signal,
-                storedValue,
-                definition,
-                input.countryId ?? input.stateMetrics.countryId
-              )
-            : overlay!.modifier;
-        if (baseModifier === 0) continue;
-
-        for (const [channel, channelWeight] of Object.entries(signal.channels) as Array<
-          [SectorMetricMarginChannel, number]
-        >) {
-          const strategyWeight = profile[channel] ?? 0;
-          if (strategyWeight === 0 || channelWeight === 0) continue;
-          prepared.push({
-            metricKey: metricKey(category.id, definition.id),
-            category: category.id,
-            metricId: definition.id,
-            label: definition.shortName ?? definition.name,
-            rawValue,
-            modifier: baseModifier * channelWeight * strategyWeight,
-            channel,
-            rationale: signal.rationale,
-          });
-        }
-      }
+  for (const signal of resolveStateMetricSignals(input)) {
+    for (const [channel, channelWeight] of signal.channelWeights) {
+      const strategyWeight = profile[channel] ?? 0;
+      if (strategyWeight === 0 || channelWeight === 0) continue;
+      prepared.push({
+        metricKey: signal.metricKey,
+        category: signal.category,
+        metricId: signal.metricId,
+        label: signal.label,
+        rawValue: signal.rawValue,
+        modifier: signal.baseModifier * channelWeight * strategyWeight,
+        channel,
+        rationale: signal.rationale,
+      });
     }
   }
 
