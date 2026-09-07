@@ -116,7 +116,17 @@ export function rivalBlocOrgsFor(preset: string | undefined, organizationId: str
   const own = channels.find((channel) => channel.organizationId === organizationId);
   if (!own) return [];
   return channels
-    .filter((channel) => channel.poleId !== own.poleId)
+    .filter(
+      (channel) =>
+        // Never the organisation being joined. In the degenerate era where ONE
+        // organisation carries BOTH poles, the pole test alone would name it its
+        // own rival, and the caller would withdraw the country from the very
+        // alliance it is joining — a false departure announced to every member,
+        // its leadership vacated and a tombstone written, immediately before the
+        // insert re-adds it. `settlement/actuate.ts` guards the same case with
+        // the `skip` parameter on its own `leaveBloc`.
+        channel.organizationId !== organizationId && channel.poleId !== own.poleId
+    )
     .map((channel) => channel.organizationId);
 }
 
