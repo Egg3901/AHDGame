@@ -125,6 +125,9 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
     isFlipTurn && growthCostAnchorForFlip > 0 && capacityUnitPriceAnchor > 0
       ? {
           unitsOrdered: growthCostAnchorForFlip / capacityUnitPriceAnchor,
+          // Priced from `capacityUnitPriceAnchor` above, which reads the
+          // sector's strategy — record the same basis on the order.
+          strategyId: sector.strategyId ?? null,
           costPaidAnchor: 0,
           startTurn: currentTurn,
           onlineTurn: currentTurn + Math.ceil(CAPACITY_BUILD_TURNS(sector.sectorType) / 2),

@@ -564,6 +564,9 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
 
     const order: SectorBuildOrder = {
       unitsOrdered: units,
+      // Freeze the strategy this order was priced at. `cost` above was computed
+      // from the same value, so the two can never drift apart.
+      strategyId: sector.strategyId ?? null,
       // The FX spread is a transaction fee, not construction spend — it is not
       // refundable capital, so it stays out of the order's paid cost (and out
       // of CIP and the cancellation refund base).

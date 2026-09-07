@@ -354,6 +354,14 @@ export function capacityRescaleRatio(
 /**
  * Apply the retool rescale to a whole build queue, in place-free form.
  * `unitsOrdered` scales; everything else (paid cash, turn stamps) is untouched.
+ *
+ * `strategyId` is deliberately CARRIED THROUGH UNCHANGED by the spread. It
+ * records the strategy an order was PRICED at, not the strategy the sector now
+ * runs, and that is exactly what keeps the paid basis honest: an order bought
+ * as coal stays recorded as coal while its `unitsOrdered` is divided down so
+ * the nameplate it delivers is unchanged. Re-stamping it to the destination
+ * strategy without also re-charging the order would assert the corp had paid
+ * the rare-earth price when it had not.
  */
 export function rescaleBuildQueueForStrategyChange<T extends { unitsOrdered: number }>(
   queue: readonly T[] | null | undefined,

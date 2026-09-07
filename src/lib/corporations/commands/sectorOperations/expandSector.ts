@@ -338,6 +338,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     if (plantsEnabled) {
       const starterOrder: SectorBuildOrder = {
         unitsOrdered: starterUnits,
+        // Founded sectors carry no strategy, so this was priced at the
+        // sector-type default — record that, matching `starterBuildAnchor`.
+        strategyId: null,
         costPaidAnchor: starterBuildAnchor,
         startTurn: currentTurn,
         onlineTurn: starterOnlineTurn,

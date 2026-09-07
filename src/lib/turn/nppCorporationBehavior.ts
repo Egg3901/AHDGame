@@ -1498,6 +1498,8 @@ export function makeNppCorpDecision(
           profitMargin: 35,
           starterOrder: {
             unitsOrdered: buildUnits,
+            // Greenfield: priced at the sector-type default, same as the quote.
+            strategyId: null,
             costPaidAnchor: buildAnchor,
             startTurn: ctx.turn,
             onlineTurn: ctx.turn + buildTurns,
@@ -1885,6 +1887,7 @@ export function makeNppCorpDecision(
       const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
       const order: SectorBuildOrder = {
         unitsOrdered: units,
+        strategyId: sector.strategyId ?? null,
         costPaidAnchor: costAnchor,
         startTurn: ctx.turn,
         onlineTurn: ctx.turn + buildTurns,
