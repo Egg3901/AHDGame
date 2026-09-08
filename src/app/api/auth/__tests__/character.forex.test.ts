@@ -32,13 +32,20 @@ vi.mock("@/lib/time/gameTime", () => ({
 
 const mockUserId = new ObjectId().toString();
 
-function makeDb() {
+function makeDb(baseRate?: number) {
   const insertedId = new ObjectId();
   const insertOne = vi.fn().mockResolvedValue({ insertedId, acknowledged: true });
 
   const db = {
     insertOne,
     collection: vi.fn().mockImplementation((name: string) => {
+      if (name === "exchangeRates")
+        return {
+          find: () => ({
+            toArray: async () =>
+              baseRate == null ? [] : [{ currencyCode: "JPY", baseRate, rate: 106 }],
+          }),
+        };
       if (name === "states") {
         return {
           // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -161,6 +168,40 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     expect(inserted.autoConvertEnabled).toBe(true);
   });
 
+  it("uses the stored world base for creation grants and their preview", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    const { db, insertOne } = makeDb(360);
+    vi.mocked(getDb).mockResolvedValue(db as never);
+
+    const { POST } = await import("../character/route");
+    const req = new Request("http://localhost/api/auth/character", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Tanaka Test",
+        homeState: "jp_tokyo",
+        countryId: "JP",
+        party: "ldp",
+        policies: { economic: 1, social: 1 },
+        demographics: {
+          race: "asian",
+          gender: "male",
+          education: "college",
+          wealth: "middle",
+        },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+
+    const inserted = insertOne.mock.calls[0][0];
+    // wealthBonus = 2_500_000 ₳; INITIAL_RATES.JP = 106 → ¥900_000_000
+    expect(inserted.currencyBalances?.personal?.JPY).toBe(900_000_000);
+    expect(inserted.displayCurrencyPreference).toBe("local");
+    expect(inserted.autoConvertEnabled).toBe(true);
+  });
+
   it("converts high wealthBonus to JPY using INITIAL_RATES", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { db, insertOne } = makeDb();
@@ -199,6 +240,7 @@ describe("POST /api/auth/character — forex enabled (JP)", () => {
     const { db, insertOne } = makeDb();
     // Override states mock to return US state
     db.collection.mockImplementation((name: string) => {
+      if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
       if (name === "states") {
         return {
           // `loadUsPoliticalStateIds` reads admitted states with find().

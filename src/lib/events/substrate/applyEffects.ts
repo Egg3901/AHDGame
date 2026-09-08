@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
@@ -207,6 +208,7 @@ export async function applyDeclarativeEffects(
   }
 
   const forexEnabled = await isForexEnabled();
+  const campaignRates = await loadCampaignCurrencyRates(ctx.db);
   const homeCurrency = getHomeCurrency(character);
   const charUpdates: Record<string, number> = {};
   let favorability = character.favorability ?? 50;
@@ -244,8 +246,12 @@ export async function applyDeclarativeEffects(
         const electionId =
           electionIdRaw instanceof ObjectId ? electionIdRaw : new ObjectId(String(electionIdRaw));
         // Campaign funds are decoupled from live forex — convert at the frozen
-        // base INITIAL_RATES scale, never the live exchangeRates.
-        const localDelta = campaignAnchorToLocal(effect.deltaLocal, character.countryId);
+        // world-seeded currency basis, never the live exchangeRates.
+        const localDelta = campaignAnchorToLocal(
+          effect.deltaLocal,
+          character.countryId,
+          campaignRates
+        );
         const campaignField = forexEnabled ? "currencyBalances.campaign" : "funds";
         await ctx.db
           .collection("campaigns")

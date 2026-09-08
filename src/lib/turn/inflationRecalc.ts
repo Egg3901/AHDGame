@@ -1,3 +1,4 @@
+import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 /**
  * Inflation is recalculated every turn. recalculateInflationPerTurn reads each
  * country's prime rate, unemployment, GDP growth, deficit, tariffs, wage growth,
@@ -144,16 +145,19 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
     db
       .collection("moneySupplySnapshots")
-      .aggregate<{ _id: string; annualizedM2GrowthPct: number | null }>([
-        { $match: { turn: { $lt: turn } } },
-        { $sort: { currencyCode: 1, turn: -1 } },
-        {
-          $group: {
-            _id: "$currencyCode",
-            annualizedM2GrowthPct: { $first: "$annualizedM2GrowthPct" },
+      .aggregate<{ _id: string; accountingVersion?: number; annualizedM2GrowthPct: number | null }>(
+        [
+          { $match: { turn: { $lt: turn } } },
+          { $sort: { currencyCode: 1, turn: -1 } },
+          {
+            $group: {
+              _id: "$currencyCode",
+              annualizedM2GrowthPct: { $first: "$annualizedM2GrowthPct" },
+              accountingVersion: { $first: "$accountingVersion" },
+            },
           },
-        },
-      ])
+        ]
+      )
       .toArray(),
     // 12-turn rolling savings flows. countryId on ledger entries reflects currency jurisdiction,
     // matching nationalSavingsBalance on centralBanks (both keyed by currency, not character nationality).
@@ -183,7 +187,7 @@ export async function recalculateInflationPerTurn(db: Db, turn: number): Promise
   // monetary impulse rather than asserting the money supply is frozen.
   const moneyGrowthByCurrency = new Map<string, number | null>();
   for (const row of moneyRows) {
-    moneyGrowthByCurrency.set(row._id, row.annualizedM2GrowthPct);
+    moneyGrowthByCurrency.set(row._id, currentMoneyGrowth(row));
   }
   // The same national prices one game year back. The commodity cost-push signal
   // is the CHANGE between the two, not today's level — see the pressure block

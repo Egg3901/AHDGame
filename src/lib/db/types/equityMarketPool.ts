@@ -21,6 +21,8 @@ export interface EquityMarketPool {
   cashLocal: number;
   targetCashLocal: number;
   m2Local?: number;
+  /** Accounting method of the cached M2 observation; missing means legacy v1. */
+  poolAccountingVersion?: number;
   /**
    * Cash the pool was created with, in local currency.
    *
