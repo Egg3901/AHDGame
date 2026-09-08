@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { makeCandidate, makeCharacter, makeElection } from "@/lib/test-utils/factories";
+import { makeCandidate, makeCharacter, makeElection, makeNPP } from "@/lib/test-utils/factories";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -317,6 +317,23 @@ describe("targeted ad route and command integration", () => {
       expect(db.collection("elections").updateOne).not.toHaveBeenCalled();
     }
   );
+
+  it("does not let an NPP manager use a national non-presidential race to target other states", async () => {
+    const npp = makeNPP({ homeState: "CA" });
+    db.collection("npps").findOne.mockResolvedValue(npp);
+    db.collection("electionCandidates").findOne.mockResolvedValue({
+      ...candidate,
+      isNPP: true,
+      nppId: npp._id,
+    });
+    db.collection("elections").findOne.mockResolvedValue({
+      ...election,
+      electionType: "house",
+      state: "US",
+    });
+    expect((await POST(request({ ...purchase, stateId: "NY" }), params)).status).toBe(403);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
 
   it("rejects unauthorized viewers before reading the electorate", async () => {
     vi.mocked(isCampaignNomineeUser).mockResolvedValue(false);
