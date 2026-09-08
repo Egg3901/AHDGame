@@ -369,7 +369,7 @@ describe("plants — growth-ramp flip conversion", () => {
     const { update, doc } = run("plants", RAMPING, 1000);
     const queue = doc.buildQueue as SectorBuildOrder[];
     expect(queue.length).toBe(1);
-    const price = capacityPricePerUnit("manufacturing", CAPACITY_ANCHOR_YEAR, 1);
+    const price = capacityPricePerUnit("manufacturing", CAPACITY_ANCHOR_YEAR, 1, null);
     expect(queue[0].unitsOrdered).toBeCloseTo(60_000 / price, 6);
     // Free: the corp already paid via the growth slider. Also un-refundable,
     // which is exactly what costPaidAnchor 0 buys.

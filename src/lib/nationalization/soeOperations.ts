@@ -558,7 +558,12 @@ export function buildSoeCapexGrant(
         ? Math.max(0, sector.capitalStock)
         : 0;
     if (stock <= 0) continue;
-    const unitPrice = capacityPricePerUnit(sector.sectorType, priceYear, unitScale);
+    const unitPrice = capacityPricePerUnit(
+      sector.sectorType,
+      priceYear,
+      unitScale,
+      sector.strategyId ?? null
+    );
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) continue;
     const unitsAdded = stock * CAPITAL_DEPRECIATION_PER_TURN;
     if (!(unitsAdded > 0)) continue;

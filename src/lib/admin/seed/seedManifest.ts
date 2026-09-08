@@ -988,6 +988,12 @@ const RUNTIME: CollectionEntry[] = [
 
 const PRESERVED: CollectionEntry[] = [
   {
+    name: "nativePushDevices",
+    category: "preserved",
+    notes:
+      "Account-bound native push registrations and delivery cursors. Device credentials, never seed data. Expire after 30 days without renewal.",
+  },
+  {
     name: "clientDiagnostics",
     category: "preserved",
     notes:
