@@ -810,6 +810,19 @@ describe("plants build queue — a command racing the turn (C4)", () => {
 });
 
 describe("plants partial mothballing", () => {
+  it("scales transition revenue with the active share", () => {
+    const sector = makeSector({
+      capitalStock: 10000,
+      plantsStartTurn: 990,
+      currentGrowthRate: 0,
+      targetGrowthRate: 0,
+    });
+    const full = run("plants", sector);
+    const partial = run("plants", { ...sector, activeCapacityPercent: 25 });
+    expect(partial.result.hourlyRevenue).toBeCloseTo(full.result.hourlyRevenue * 0.25, 6);
+    expect(partial.doc.contractAchievableUnits).toBe(full.doc.contractAchievableUnits);
+  });
+
   it("reduces output and jobs while keeping physical capacity, paid basis and contractual responsibility", () => {
     const sector = makeSector({
       capitalStock: 10000,

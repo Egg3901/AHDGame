@@ -1,4 +1,7 @@
-import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
+import {
+  activeCapacityConstraintFactor,
+  activeCapacityFraction,
+} from "@/lib/corporations/investment/rules";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import {
@@ -685,6 +688,10 @@ export function processSector(
     plantsEnabled && sector.sectorType === "extraction"
       ? 1 - plantsRampLambda * (1 - Math.max(0, Math.min(1, capacityUtil.utilization)))
       : 1;
+  const activeExtractionHardMin = activeCapacityConstraintFactor(
+    plantsExtractionHardMin,
+    activeFraction
+  );
   // `baselineHourlyRevenue` is the pre-plants COUNTERFACTUAL. Under plants it is
   // the governor's clamp anchor, so it must carry the legs capital mode carried
   // (`capacityHaircut` and `capitalFactor`). Gating them off here jumps the
@@ -782,7 +789,7 @@ export function processSector(
     disasterOutputFactor *
     policyTonnageMultiplier *
     nationalizationTransition *
-    (plantsEnabled ? plantsExtractionHardMin : capacityHaircut) *
+    (plantsEnabled ? activeExtractionHardMin : capacityHaircut) *
     throughputFactor *
     // Under plants, capacity IS the production base (see plantsCapacity), so
     // folding the capacity/implied-units haircut in here as well would gate the
@@ -863,7 +870,7 @@ export function processSector(
     ? 0
     : plantsEnabled
       ? softenedMarketRealizationAmount(
-          baselineHourlyRevenue,
+          baselineHourlyRevenue * activeFraction,
           plantsDerivedHourlyRevenue,
           plantsStartTurn,
           currentTurn,

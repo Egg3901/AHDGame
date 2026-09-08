@@ -45,6 +45,14 @@ export function activeCapacityFraction(sector: {
     : 1;
 }
 
+/** Keep a fixed resource allocation when the owner parks excess capacity. */
+export function activeCapacityConstraintFactor(
+  fullCapacityFactor: number,
+  activeFraction: number
+): number {
+  return activeFraction > 0 ? Math.min(1, Math.max(0, fullCapacityFactor) / activeFraction) : 0;
+}
+
 /** Preserve active physical capacity when a partial plant is folded into another. */
 export function mergedActiveCapacityPercent(
   sectors: readonly {
