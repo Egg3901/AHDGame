@@ -1,4 +1,5 @@
 import * as cron from "node-cron";
+import { dispatchNativePush } from "@/lib/nativePush/dispatcher";
 import * as Sentry from "@sentry/nextjs";
 import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot";
 import { applyPriceMultipliers } from "@/lib/corporations/applyPriceMultipliers";
@@ -66,6 +67,8 @@ async function runTurnWithHeapDiagnostics(
   return result;
 }
 
+let nativePushCron: ReturnType<typeof cron.schedule> | null = null;
+let pushDispatchRunning = false;
 let cronJob: ReturnType<typeof cron.schedule> | null = null;
 let stockExchangeRefreshCron: ReturnType<typeof cron.schedule> | null = null;
 let fogOfWarCron: ReturnType<typeof cron.schedule> | null = null;
@@ -98,6 +101,21 @@ function getCronSchedule(fastMode?: boolean): string {
  * Runs at the top of every hour by default, or every 30 minutes if fastMode is enabled
  */
 export async function initializeCronJobs() {
+  nativePushCron?.stop();
+  nativePushCron = null;
+  if (process.env.NATIVE_PUSH_ENABLED === "true" && process.env.SINGLEPLAYER !== "1") {
+    nativePushCron = cron.schedule("* * * * *", async () => {
+      if (pushDispatchRunning) return;
+      pushDispatchRunning = true;
+      try {
+        await dispatchNativePush(await getDb());
+      } catch {
+        console.warn("[NativePush] Dispatch unavailable; retrying next sweep");
+      } finally {
+        pushDispatchRunning = false;
+      }
+    });
+  }
   // Ensure game state exists
   await initializeGameState();
 
@@ -614,6 +632,8 @@ export async function restartCronWithSchedule() {
  * Stop the cron job
  */
 export function stopCronJobs() {
+  nativePushCron?.stop();
+  nativePushCron = null;
   if (cronJob) {
     cronJob.stop();
     cronJob = null;
