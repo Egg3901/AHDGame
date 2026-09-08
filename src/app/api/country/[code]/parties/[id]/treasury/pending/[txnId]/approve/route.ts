@@ -14,11 +14,6 @@ import {
   getApproverSlotForRow,
   isPendingTransactionComplete,
 } from "@/lib/parties/pendingTreasuryTransactions";
-import {
-  isTreasurerElectionLockoutActive,
-  wouldUseVacantTreasurerFallback,
-  TREASURER_LOCKOUT_MESSAGE,
-} from "@/lib/parties/treasurerElectionLockout";
 import type { Character, PendingTreasuryTransaction, State } from "@/lib/db/types";
 
 interface RouteParams {
@@ -83,18 +78,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { error: `Transaction is ${pending.status}, not open.` },
         { status: 400 }
       );
-    }
-
-    // Outbound money stays frozen while a contested Treasurer election
-    // is about to close. Rows may be proposed and queued during the
-    // window; they just can't pay out until a Treasurer is seated.
-    // Without this, the lockout would be trivially bypassable by
-    // routing the payment through Request Funds.
-    if (wouldUseVacantTreasurerFallback(party)) {
-      const { currentTurn: lockoutTurn } = await getGameTime();
-      if (await isTreasurerElectionLockoutActive(db, party, lockoutTurn)) {
-        return NextResponse.json({ error: TREASURER_LOCKOUT_MESSAGE }, { status: 400 });
-      }
     }
 
     // Resolve which slot this character would fill on this row.

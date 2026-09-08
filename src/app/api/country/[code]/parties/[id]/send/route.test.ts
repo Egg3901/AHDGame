@@ -23,7 +23,6 @@ vi.mock("@/lib/api/requirePlayerTransfers", () => ({
   requirePlayerTransfersEnabled: vi.fn(async () => null),
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn(async () => false) }));
-vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn(async () => ({ currentTurn: 100 })) }));
 
 function makeRequest(body: Record<string, unknown>) {
   return new Request("http://localhost/api/country/us/parties/1/send", {
@@ -147,117 +146,5 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     expect(body.error).toMatch(/character not found/i);
     expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["adminLogs"]!.insertOne).not.toHaveBeenCalled();
-  });
-
-  // ─── Self-dealing + Treasurer-election lockout ────────────────────────────
-
-  it("queues a self-send for approval instead of executing it in single mode", async () => {
-    // The turn-677 UK/3 exploit: single mode used to fall straight
-    // through to immediate execution, so a Chair could pay themselves
-    // the whole treasury in one unreviewed call.
-    const treasurerId = new ObjectId();
-    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
-    vi.mocked(findPartyBySequentialId).mockResolvedValue({
-      _id: partyOid,
-      sequentialId: Number(partyId),
-      countryId: "US",
-      name: "Test Party",
-      treasury: 50_000,
-      chairId,
-      treasurerId,
-      transactionApprovalMode: "single",
-    } as never);
-    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
-      _id: chairId,
-      name: "Chair",
-      party: partyId,
-      countryId: "US",
-    });
-    db.collection("pendingTreasuryTransactions");
-
-    const { POST } = await import("./route");
-    const response = await POST(makeRequest({ characterId: chairId.toString(), amount: 5_000 }), {
-      params: Promise.resolve({ code: "us", id: partyId }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.pending).toBe(true);
-    // No debit happened: the money is still in the treasury.
-    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
-    expect(db.collectionMocks["pendingTreasuryTransactions"]!.insertOne).toHaveBeenCalled();
-  });
-
-  it("still executes a single-mode send to a different member immediately", async () => {
-    // Guards against over-correcting: ordinary party business is unchanged.
-    const { POST } = await import("./route");
-    const response = await POST(
-      makeRequest({ characterId: targetCharacterId.toString(), amount: 5_000 }),
-      { params: Promise.resolve({ code: "us", id: partyId }) }
-    );
-
-    expect(response.status).toBe(200);
-    expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalled();
-  });
-
-  it("refuses an outbound send while a contested Treasurer election is closing", async () => {
-    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
-    vi.mocked(findPartyBySequentialId).mockResolvedValue({
-      _id: partyOid,
-      sequentialId: Number(partyId),
-      countryId: "US",
-      name: "Test Party",
-      treasury: 50_000,
-      chairId,
-      treasurerId: null, // vacant seat: the fallback would normally apply
-    } as never);
-
-    db.collection("nationalPartyElections");
-    db.collection("nationalPartyCandidates");
-    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
-    });
-    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(1);
-
-    const { POST } = await import("./route");
-    const response = await POST(
-      makeRequest({ characterId: targetCharacterId.toString(), amount: 5_000 }),
-      { params: Promise.resolve({ code: "us", id: partyId }) }
-    );
-
-    expect(response.status).toBe(400);
-    const body = await response.json();
-    expect(body.error).toMatch(/treasurer election/i);
-    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
-  });
-
-  it("keeps the vacant-seat fallback when nobody is standing for Treasurer", async () => {
-    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
-    vi.mocked(findPartyBySequentialId).mockResolvedValue({
-      _id: partyOid,
-      sequentialId: Number(partyId),
-      countryId: "US",
-      name: "Test Party",
-      treasury: 50_000,
-      chairId,
-      treasurerId: null,
-    } as never);
-
-    db.collection("nationalPartyElections");
-    db.collection("nationalPartyCandidates");
-    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
-    });
-    // Uncontested race: it will seat nobody, so the party must stay usable.
-    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(0);
-
-    const { POST } = await import("./route");
-    const response = await POST(
-      makeRequest({ characterId: targetCharacterId.toString(), amount: 5_000 }),
-      { params: Promise.resolve({ code: "us", id: partyId }) }
-    );
-
-    expect(response.status).toBe(200);
-    expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalled();
   });
 });

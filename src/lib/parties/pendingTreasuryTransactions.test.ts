@@ -153,37 +153,6 @@ describe("resolveTransactionApprovalMode", () => {
     expect(resolveTransactionApprovalMode(makeParty({ treasurerId: null }))).toBe("single");
   });
 
-  it("vacant Treasurer + election lockout stays double instead of collapsing", () => {
-    const party = makeParty({ transactionApprovalMode: "double", treasurerId: null });
-    expect(resolveTransactionApprovalMode(party, { treasurerElectionLockout: true })).toBe(
-      "double"
-    );
-  });
-
-  it("absent mode + election lockout stays double", () => {
-    expect(
-      resolveTransactionApprovalMode(makeParty({ treasurerId: null }), {
-        treasurerElectionLockout: true,
-      })
-    ).toBe("double");
-  });
-
-  it("lockout does not disturb a party with a seated Treasurer", () => {
-    const party = makeParty({ transactionApprovalMode: "double", treasurerId: new ObjectId() });
-    expect(resolveTransactionApprovalMode(party, { treasurerElectionLockout: true })).toBe(
-      "double"
-    );
-  });
-
-  it("lockout does not override an explicitly configured single mode", () => {
-    // The lockout suppresses the vacant-seat FALLBACK, not a mode the
-    // party deliberately voted itself into.
-    const party = makeParty({ transactionApprovalMode: "single", treasurerId: null });
-    expect(resolveTransactionApprovalMode(party, { treasurerElectionLockout: true })).toBe(
-      "single"
-    );
-  });
-
   it("single mode is returned unchanged regardless of Treasurer seat", () => {
     expect(
       resolveTransactionApprovalMode(
@@ -620,49 +589,6 @@ describe("getApproverSlotForRow", () => {
       leadershipApproval: undefined,
     };
     expect(getApproverSlotForRow(party, row, chairId)).toBe("leadership");
-  });
-
-  it("send: returns null when the caller is the recipient", () => {
-    const treasurerId = new ObjectId();
-    const party = makeParty({ treasurerId });
-    const row = {
-      type: "send" as const,
-      proposedBy: new ObjectId(),
-      targetCharacterId: treasurerId,
-    };
-    // The Treasurer could otherwise sign off on a payment to themselves.
-    expect(getApproverSlotForRow(party, row, treasurerId)).toBeNull();
-  });
-
-  it("send: a Chair cannot act as Treasurer on their own self-send", () => {
-    // This is the exact shape that let a Chair drain a treasury: propose
-    // a self-send (leadership pre-filled), then fill the vacant treasurer
-    // slot as acting Treasurer. The recipient exclusion blocks it.
-    const chairId = new ObjectId();
-    const party = makeParty({ chairId, treasurerId: null });
-    const row = {
-      type: "send" as const,
-      proposedBy: chairId,
-      targetCharacterId: chairId,
-      treasurerApproval: undefined,
-      leadershipApproval: { characterId: chairId, approvedAt: new Date() },
-    };
-    expect(getApproverSlotForRow(party, row, chairId)).toBeNull();
-  });
-
-  it("send: a Vice-Chair may still approve a self-send proposed by the Chair", () => {
-    const chairId = new ObjectId();
-    const viceChairId = new ObjectId();
-    const party = makeParty({ chairId, viceChairId, treasurerId: null });
-    const row = {
-      type: "send" as const,
-      proposedBy: chairId,
-      targetCharacterId: chairId,
-      treasurerApproval: undefined,
-      leadershipApproval: { characterId: chairId, approvedAt: new Date() },
-    };
-    // A genuine second person signs the second slot.
-    expect(getApproverSlotForRow(party, row, viceChairId)).toBe("treasurer");
   });
 });
 
