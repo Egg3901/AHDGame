@@ -39,9 +39,9 @@ export default function InvestmentForecast({
           pnl.labourAnchor +
           pnl.complianceAnchor +
           pnl.otherOperatingAnchor +
-          pnl.growthAndBuildAnchor -
-          (pnl.policyAnchor ?? 0) +
+          pnl.growthAndBuildAnchor +
           (assumptions.freightNetCostDailyAnchor ?? 0),
+        policyCreditDailyAnchor: pnl.policyAnchor ?? 0,
         overheadDailyAnchor: assumptions.overheadDailyAnchor,
         upkeepDailyAnchor: pnl.upkeepAnchor,
         taxRatePercent: assumptions.taxRatePercent,

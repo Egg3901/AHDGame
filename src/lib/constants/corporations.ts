@@ -5,6 +5,13 @@
  * primary or secondary specialization +10 or +5; margins above 80% are soft-capped
  * by softCapEffectiveMargin. CEO salary caps at 1.25x gross revenue, overhead at 1.5x.
  */
+import { getSectorTypeMatchModifier } from "@/lib/corporations/specialization/rules";
+export {
+  getSectorTypeMatchModifier,
+  SECTOR_TYPE_MATCH_BONUS,
+  SECTOR_TYPE_SECONDARY_MATCH_BONUS,
+  SECTOR_TYPE_MISMATCH_PENALTY,
+} from "@/lib/corporations/specialization/rules";
 import type { StateMetrics } from "@/lib/db/types";
 import type {
   StateMetricMarginContribution,
@@ -1433,12 +1440,6 @@ export function getDeficitToGdpMarginModifier(
 
 /* ─── Shared margin modifier result type ──────────────────────────────────── */
 
-/** Sector type matches corp type: +5% bonus. Mismatch: -15% penalty. */
-export const SECTOR_TYPE_MATCH_BONUS = 5;
-/** Half bonus when sector matches secondary type instead of primary */
-export const SECTOR_TYPE_SECONDARY_MATCH_BONUS = 2.5;
-export const SECTOR_TYPE_MISMATCH_PENALTY = -15;
-
 // ─── Corporation Type Switching ─────────────────────────────────────────────
 
 /** Margin penalty (percentage points) applied to ALL sectors for 24 turns after switching primary/secondary type */
@@ -1612,22 +1613,6 @@ export const RD_CAPACITY_BOOST_MIN_PCT = 0.01;
 
 /** Maximum per-resource capacity boost for extraction innovations (15% of current capacity) */
 export const RD_CAPACITY_BOOST_MAX_PCT = 0.15;
-
-/**
- * Sector type match/mismatch modifier.
- * +5% if sector type matches the parent corporation's primary type.
- * +2.5% if sector type matches the secondary type.
- * -15% if neither matches.
- */
-export function getSectorTypeMatchModifier(
-  sectorType: CorporationType,
-  corporationType: CorporationType,
-  secondaryType?: CorporationType | null
-): number {
-  if (sectorType === corporationType) return SECTOR_TYPE_MATCH_BONUS;
-  if (secondaryType && sectorType === secondaryType) return SECTOR_TYPE_SECONDARY_MATCH_BONUS;
-  return SECTOR_TYPE_MISMATCH_PENALTY;
-}
 
 /**
  * Logistical sprawl penalty: -0.5% for every 2 sectors over 15.
