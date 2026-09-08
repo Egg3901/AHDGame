@@ -10,10 +10,14 @@
  * the second approval; rows past `PENDING_TXN_EXPIRY_TURNS` are
  * swept to `"expired"` (no execution).
  *
- * Approver 1 = Treasurer (required as one of the two).
- * Approver 2 = Chair OR Vice-Chair (the slot accepts both
- *             interchangeably — VC fills it whether seated as chair or
- *             acting in the chair's absence).
+ * Either approver may be the Chair, Vice-Chair or Treasurer. The slots
+ * are not role-typed: what makes the approval two-person is that one
+ * character cannot occupy both, and that the recipient of a payment can
+ * never approve it.
+ *
+ * The exception is a party with a single player member. It has nobody to
+ * countersign, so it runs in single mode and may self-fund rather than
+ * being locked out of its own treasury. See `soloPlayerParty.ts`.
  *
  * See `docs/plans/archive/2026-05/2026-05-22-treasury-two-person-approval.md`.
  */
@@ -26,31 +30,54 @@ import { PENDING_TXN_EXPIRY_TURNS } from "./proposalConstants";
 // ─── Slot model ──────────────────────────────────────────────────────────────
 
 /**
- * The two approval slots on a pending row. `treasurer` corresponds to
- * `PendingTreasuryTransaction.treasurerApproval`; `leadership` is the
- * Chair-or-VC slot stored in `leadershipApproval`.
+ * The two approval slots on a pending row.
+ *
+ * The names are historical and match the stored field names
+ * (`treasurerApproval` / `leadershipApproval`) so no migration is
+ * needed, but the slots are NOT role-typed any more: either slot
+ * accepts any of the Chair, Vice-Chair or Treasurer. Read them as
+ * "approver 1" and "approver 2".
+ *
+ * What makes the approval two-person is that the same character can
+ * never occupy both slots, not that the slots demand different offices.
  */
 export type ApproverSlot = "treasurer" | "leadership";
 
+/** True when the character holds any of the three officer seats. */
+export function isPartyOfficer(
+  party: Pick<PoliticalParty, "chairId" | "viceChairId" | "treasurerId">,
+  characterId: ObjectId
+): boolean {
+  return (
+    !!party.treasurerId?.equals(characterId) ||
+    !!party.chairId?.equals(characterId) ||
+    !!party.viceChairId?.equals(characterId)
+  );
+}
+
+/** The distinct characters holding an officer seat, as hex ids. */
+export function seatedOfficerIds(
+  party: Pick<PoliticalParty, "chairId" | "viceChairId" | "treasurerId">
+): Set<string> {
+  return new Set(
+    [party.chairId, party.viceChairId, party.treasurerId]
+      .filter((id): id is ObjectId => id != null)
+      .map((id) => id.toString())
+  );
+}
+
 /**
- * Returns the slot the given character would fill on a propose. Returns
- * `null` if the character isn't a Treasurer, Chair, or Vice-Chair on
- * this party. (Admins bypass the lifecycle entirely — handled at the
- * route layer, not here.)
- *
- * Note: when a character holds BOTH Treasurer AND Chair/VC (data
- * anomaly), Treasurer wins — they fill the Treasurer slot, and the
- * Chair/VC slot remains open. This is intentional: a single character
- * cannot satisfy both halves of a two-person approval.
+ * Returns the slot the given character fills on a propose. Both slots
+ * are empty at that point, so any officer takes the first one; the
+ * second is left for someone else. Returns `null` if the character
+ * holds no officer seat. (Admins bypass the lifecycle entirely —
+ * handled at the route layer, not here.)
  */
 export function getProposerSlot(
   party: Pick<PoliticalParty, "chairId" | "viceChairId" | "treasurerId">,
   characterId: ObjectId
 ): ApproverSlot | null {
-  if (party.treasurerId?.equals(characterId)) return "treasurer";
-  if (party.chairId?.equals(characterId)) return "leadership";
-  if (party.viceChairId?.equals(characterId)) return "leadership";
-  return null;
+  return isPartyOfficer(party, characterId) ? "treasurer" : null;
 }
 
 /**
@@ -66,48 +93,48 @@ export function getMissingSlot(
 }
 
 /**
- * True when the given character is eligible to fill `slot` on this
- * party. `treasurer` slot accepts the seated Treasurer; when the
- * Treasurer seat is VACANT, the Chair or Vice-Chair may act as
- * Treasurer and fill it (mirrors the VC-acts-as-Chair precedent — a
- * vacant seat must not permanently lock treasury actions).
- * `leadership` slot accepts the seated Chair OR Vice-Chair — VC
- * qualifies whether or not the chair seat is currently vacant (slot
- * symmetry, not authority inheritance).
+ * True when the given character may fill `slot` on this party.
+ *
+ * Either slot accepts any officer, so this is simply "holds a seat".
+ * The slot argument is kept for call-site readability. Preventing one
+ * character from taking both slots is the caller's job — see
+ * `getApproverSlotForRow`, which refuses a character already recorded
+ * in the other slot.
  */
 export function canFillSlot(
   party: Pick<PoliticalParty, "chairId" | "viceChairId" | "treasurerId">,
   characterId: ObjectId,
-  slot: ApproverSlot
+  _slot: ApproverSlot
 ): boolean {
-  if (slot === "treasurer") {
-    if (party.treasurerId != null) return party.treasurerId.equals(characterId);
-    // Vacant Treasurer seat: Chair / VC act as Treasurer.
-    return !!party.chairId?.equals(characterId) || !!party.viceChairId?.equals(characterId);
-  }
-  // leadership
-  if (party.chairId?.equals(characterId)) return true;
-  if (party.viceChairId?.equals(characterId)) return true;
-  return false;
+  return isPartyOfficer(party, characterId);
 }
 
 /**
- * Validates the party has the seats required to legitimately run the
- * two-person workflow at all. Per the scope doc, if EITHER the
- * Treasurer slot OR both Chair AND VC slots are vacant, the propose-
- * action is rejected — falling back to single-approver would break
- * the "two people must sign" guarantee.
+ * Validates the party can run the two-person workflow at all.
+ *
+ * Needs two DISTINCT seated officers, in any combination: Chair plus
+ * Vice-Chair is as valid as Treasurer plus Chair. One person holding
+ * two seats still counts once, because they cannot sign twice.
+ *
+ * A party with fewer than two officers but more than one player member
+ * is expected to appoint someone; a party with only one player member
+ * never reaches here, because it resolves to single mode.
  */
 export function canProposePendingTransaction(
   party: Pick<PoliticalParty, "chairId" | "viceChairId" | "treasurerId">
 ): { ok: true } | { ok: false; reason: string } {
-  if (!party.treasurerId) {
-    return { ok: false, reason: "Treasury actions require a seated Treasurer." };
-  }
-  if (!party.chairId && !party.viceChairId) {
+  const officers = seatedOfficerIds(party);
+  if (officers.size === 0) {
     return {
       ok: false,
-      reason: "Treasury actions require a seated Chair or Vice-Chair.",
+      reason: "Treasury actions require a seated Chair, Vice-Chair or Treasurer.",
+    };
+  }
+  if (officers.size < 2) {
+    return {
+      ok: false,
+      reason:
+        "Treasury actions need two different officers to sign. Appoint a second Chair, Vice-Chair or Treasurer.",
     };
   }
   return { ok: true };
@@ -115,8 +142,8 @@ export function canProposePendingTransaction(
 
 /**
  * Validates the party has the seats required to legitimately run a
- * Request Funds workflow. Single mode needs ≥ 1 officer seated (the
- * single approver). Double mode is stricter: Treasurer + (Chair OR VC),
+ * Request Funds workflow. Single mode needs >= 1 officer seated (the
+ * single approver). Double mode is stricter: two distinct officers,
  * same as send/transfer.
  *
  * Request Funds (per the 2026-05-23 spec) is open to any party member;
@@ -131,7 +158,7 @@ export function canRequestFunds(
     return canProposePendingTransaction(party);
   }
   // Single mode: any one officer seated is enough.
-  if (!party.treasurerId && !party.chairId && !party.viceChairId) {
+  if (seatedOfficerIds(party).size === 0) {
     return {
       ok: false,
       reason:
@@ -144,30 +171,34 @@ export function canRequestFunds(
 /**
  * Resolves the approval mode a party's treasury actions actually run
  * under right now. The configured mode is `transactionApprovalMode`
- * (default "double"), but the two-person guarantee can only hold while a
- * Treasurer is seated — there must be a distinct Treasurer signature.
- * When the Treasurer seat is VACANT, double mode collapses to "single"
- * so the Chair / VC (acting Treasurer) can complete treasury actions
- * alone rather than being permanently locked out.
+ * (default "double").
  *
- * Single mode is returned unchanged (it never required a Treasurer).
+ * The one override is a party with a single player member. Two-person
+ * approval needs two people, and NPP members cannot approve anything,
+ * so a solo player would otherwise be permanently unable to move their
+ * own party's money. Such a party runs in single mode and may self-fund.
+ *
+ * A vacant Treasurer seat is NOT an override: either slot accepts any
+ * officer, so a Chair plus Vice-Chair can sign without a Treasurer. A
+ * party with several players but only one officer is expected to
+ * appoint a second one.
+ *
+ * Single mode configured deliberately is returned unchanged.
  */
 export function resolveTransactionApprovalMode(
-  party: Pick<PoliticalParty, "transactionApprovalMode" | "treasurerId">,
+  party: Pick<PoliticalParty, "transactionApprovalMode">,
   options: {
     /**
-     * True when a contested Treasurer election is about to close (see
-     * `isTreasurerElectionLockoutActive`). Suppresses the vacant-seat
-     * fallback so a lame-duck Chair can't spend unilaterally in the
-     * window before the winner is seated.
+     * True when the party has at most one PLAYER member (NPP members do
+     * not count — they cannot click Approve). Two-person approval is
+     * impossible for such a party, so it falls back to single mode
+     * rather than being permanently unable to spend.
      */
-    treasurerElectionLockout?: boolean;
+    soloPlayerParty?: boolean;
   } = {}
 ): "single" | "double" {
   const configured = party.transactionApprovalMode ?? "double";
-  if (configured === "double" && party.treasurerId == null) {
-    return options.treasurerElectionLockout ? "double" : "single";
-  }
+  if (configured === "double" && options.soloPlayerParty) return "single";
   return configured;
 }
 
@@ -198,24 +229,15 @@ export function isPendingTransactionComplete(
 
 /**
  * Returns the slot the given character would fill if they clicked
- * Approve on the row — specifically the still-empty slot they are
- * eligible to fill, preferring their natural role slot. Returns null
- * when:
- *   - they hold no Treasurer/Chair/VC seat (or can't fill either empty slot)
+ * Approve on the row — the first still-empty slot, since either slot
+ * accepts any officer. Returns null when:
+ *   - they hold no Chair/Vice-Chair/Treasurer seat
+ *   - they ALREADY occupy the other slot (this is what makes the
+ *     approval two-person now that the slots are not role-typed)
  *   - they are the RECIPIENT of the row (nobody signs off on a payment
  *     to themselves)
  *   - the row is a Request Funds row AND they're the requester
  *     (self-approval forbidden per the 2026-05-23 spec)
- *
- * The recipient exclusion is what stops a Chair self-dealing while the
- * Treasurer seat is vacant: proposing fills their leadership slot, and
- * `canFillSlot` would otherwise let that same Chair fill the vacant
- * treasurer slot as acting Treasurer, signing both halves alone.
- *
- * Picking the eligible *empty* slot (rather than the role's slot
- * unconditionally) lets a Chair / VC act as Treasurer to clear a row
- * left stuck after the Treasurer vacated — `canFillSlot` grants the
- * treasurer slot to Chair/VC only while the seat is empty.
  *
  * The approve route still does the atomic claim with
  * `[slotField]: { $exists: false }`, so a stale read here is harmless.
@@ -237,14 +259,19 @@ export function getApproverSlotForRow(
   if (row.type === "request" && row.proposedBy.equals(characterId)) {
     return null;
   }
-  // Prefer the caller's natural role slot, then fall back to acting-Treasurer.
-  const natural = getProposerSlot(party, characterId);
-  const order: ApproverSlot[] =
-    natural === "treasurer" ? ["treasurer", "leadership"] : ["leadership", "treasurer"];
-  for (const slot of order) {
-    const filled = slot === "treasurer" ? !!row.treasurerApproval : !!row.leadershipApproval;
-    if (!filled && canFillSlot(party, characterId, slot)) return slot;
+  if (!isPartyOfficer(party, characterId)) {
+    return null;
   }
+  // One person cannot sign both halves. With role-typed slots this fell
+  // out of the roles; now it has to be checked directly.
+  if (
+    row.treasurerApproval?.characterId.equals(characterId) ||
+    row.leadershipApproval?.characterId.equals(characterId)
+  ) {
+    return null;
+  }
+  if (!row.treasurerApproval) return "treasurer";
+  if (!row.leadershipApproval) return "leadership";
   return null;
 }
 

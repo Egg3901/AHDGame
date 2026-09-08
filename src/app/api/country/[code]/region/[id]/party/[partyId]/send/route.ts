@@ -22,7 +22,6 @@ import { getPartyBudgetCollection } from "@/lib/db/collections";
 import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
-import { isSelfPayment } from "@/lib/treasury/isSelfPayment";
 import { isSameCountry } from "@/lib/api/sameCountry";
 
 interface RouteParams {
@@ -124,24 +123,12 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    // No self-payment. This route has no two-person approval workflow of
-    // its own, and the national Chair is authorized on every state party,
-    // so without this guard the national treasury's self-send rules could
-    // be stepped around by transferring down to a state party first and
-    // paying out from there.
-    if (
-      !isAdmin &&
-      authUser.character &&
-      isSelfPayment(targetCharacter, {
-        characterId: authUser.character._id,
-        userId: authUser.userId,
-      })
-    ) {
-      return NextResponse.json(
-        { error: "You cannot send state party funds to yourself." },
-        { status: 403 }
-      );
-    }
+    // State parties may self-fund: an officer here can pay themselves
+    // with no second signature. That is deliberate — a state party's
+    // treasury is its own, and these organisations are often one or two
+    // people. The control sits one level up instead: moving national
+    // money into a state party the mover belongs to needs two signatures
+    // (see the national /transfer route).
 
     // Check treasury balance
     const treasury = statePartyOrg.treasury ?? 0;
