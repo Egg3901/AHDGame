@@ -17,3 +17,4 @@ areas: [fullstack, engine]
 - Build previews show cumulative cash-return scenarios after 48, 96 and 192 turns, including construction ramp, observed sales and costs, overhead, taxes, freight and replacement reserves. Unsold production still costs money.
 - Abandoning a sector refunds only the unfinished portion of its construction orders, on the same terms as cancelling them.
 - Foreign-coupon transaction records show the cash received after the existing conversion fee. Payments and trading terms stay the same.
+- Retooling keeps operating capacity, input costs and sales measurements on a consistent recipe basis while the new strategy comes online. Owned plants and paid construction keep their existing value.

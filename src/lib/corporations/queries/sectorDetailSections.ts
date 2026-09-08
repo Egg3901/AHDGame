@@ -1445,7 +1445,7 @@ export function buildSectorPlantsSection(args: {
     typeof v === "number" && Number.isFinite(v) ? v : null;
   const nonNeg = (v: number) => (v > 0 ? v : 0);
 
-  const capacityUnits = num(sector.capitalStock);
+  const capacityUnits = num(sector.operatingCapacityUnits ?? sector.capitalStock);
   const plantCount =
     Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
       ? (sector.plantCount as number)
@@ -1754,7 +1754,9 @@ export function buildSectorPlantsSection(args: {
             coldUpkeepDailyAnchor:
               upkeepUnitDailyAnchor * (capacityUnits ?? 0) * MOTHBALL_UPKEEP_FRACTION,
           },
-          ...(args.investment && sector.plantsPnl?.turn === args.currentTurn
+          ...(args.investment &&
+          !sector.transitionFromStrategyId &&
+          sector.plantsPnl?.turn === args.currentTurn
             ? {
                 investment: {
                   ...args.investment,

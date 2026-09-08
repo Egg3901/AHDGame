@@ -38,6 +38,8 @@ import { seedPlantLedger, splitWholePlantCount } from "@/lib/corporations/plantL
 export interface SectorPlantFields {
   sectorType?: CorporationType | null;
   capitalStock?: number | null;
+  operatingCapacityUnits?: number | null;
+  operatingCapacityTurn?: number | null;
   plantCount?: number | null;
   plantUnitRemainder?: number | null;
   /**
@@ -64,6 +66,8 @@ export interface SectorPlantFields {
 /** The `$set` fragment a merge/carve produces. Keys match the sector doc. */
 export interface SectorPlantFieldsUpdate {
   capitalStock: number;
+  operatingCapacityUnits?: number;
+  operatingCapacityTurn?: number | null;
   plantCount: number;
   plantUnitRemainder: number;
   capacityBookAnchor: number;
@@ -153,6 +157,15 @@ export function mergeSectorPlantFields(
     : 0;
   return {
     capitalStock: num(survivor.capitalStock) + num(incoming.capitalStock),
+    ...(survivor.operatingCapacityUnits != null || incoming.operatingCapacityUnits != null
+      ? {
+          operatingCapacityUnits:
+            num(survivor.operatingCapacityUnits ?? survivor.capitalStock) +
+            num(incoming.operatingCapacityUnits ?? incoming.capitalStock),
+          operatingCapacityTurn:
+            survivor.operatingCapacityTurn ?? incoming.operatingCapacityTurn ?? null,
+        }
+      : {}),
     plantCount: count(survivor) + count(incoming) + completedFromRemainder,
     plantUnitRemainder: sectorType
       ? mergedRemainder - completedFromRemainder * plantSizeUnits(sectorType)
@@ -190,6 +203,8 @@ export function mergeSectorPlantFields(
 export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlantFieldsUpdate {
   return {
     capitalStock: num(sector.capitalStock),
+    operatingCapacityUnits: num(sector.operatingCapacityUnits ?? sector.capitalStock),
+    operatingCapacityTurn: sector.operatingCapacityTurn ?? null,
     plantCount: count(sector),
     plantUnitRemainder: remainder(sector),
     capacityBookAnchor: num(sector.capacityBookAnchor),
@@ -231,6 +246,12 @@ export function carveSectorPlantFields(
       : Math.max(0, Math.min(count(sector), Math.floor(plantCountOverride)));
   return {
     capitalStock: num(sector.capitalStock) * f,
+    ...(sector.operatingCapacityUnits != null
+      ? {
+          operatingCapacityUnits: num(sector.operatingCapacityUnits) * f,
+          operatingCapacityTurn: sector.operatingCapacityTurn ?? null,
+        }
+      : {}),
     plantCount: carvedPlantCount,
     plantUnitRemainder: remainder(sector) * f,
     // Same fraction as the stock, so the per-unit basis is identical on both
@@ -271,6 +292,8 @@ export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorP
   return {
     sectorType: sector.sectorType,
     capitalStock: sector.capitalStock,
+    operatingCapacityUnits: sector.operatingCapacityUnits,
+    operatingCapacityTurn: sector.operatingCapacityTurn,
     plantCount: sector.plantCount,
     plantUnitRemainder: sector.plantUnitRemainder,
     capacityBookAnchor: sector.capacityBookAnchor,

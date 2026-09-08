@@ -54,6 +54,10 @@ import {
 } from "@/lib/corporations/physicalPnl";
 import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
 import {
+  retoolOperatingCapacityRatio,
+  retoolMeasurementRatio,
+} from "@/lib/corporations/retooling/rules";
+import {
   calculateDailyGrowthCost,
   TURNS_PER_DAY,
   NPV_ANNUAL_DISCOUNT_RATE,
@@ -496,7 +500,7 @@ export function processSector(
     ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
     : null;
   const plantsPrevStock = plantsBaseStock + landedBuildUnits;
-  const plantsCapacity = plantsEnabled
+  const plantsOwnedCapacity = plantsEnabled
     ? advanceCapitalStock({
         // The max() is a ONE-TIME migration, keyed off the absent ramp anchor.
         // Applying it every turn would re-lift capacity back to whatever the
@@ -550,7 +554,7 @@ export function processSector(
   // the per-unit basis. That is deliberate: free capacity has no paid basis,
   // and must not be exitable for cash it never cost.
   const plantsCapacityDepreciationFactor =
-    plantsPrevStock > 0 ? plantsCapacity / plantsPrevStock : 1;
+    plantsPrevStock > 0 ? plantsOwnedCapacity / plantsPrevStock : 1;
   const priorCapacityBookAnchor =
     typeof sector.capacityBookAnchor === "number" &&
     Number.isFinite(sector.capacityBookAnchor) &&
@@ -576,6 +580,35 @@ export function processSector(
     ? unitYieldForSupply(strategyRates.supply ?? {}, lookups.eraUnitScale)
     : 0;
   const plantsMixPrice = plantsMixPriceYield > 0 ? 1 / plantsMixPriceYield : 0;
+  const storedOtherOpexAnchor =
+    typeof sector.otherOpexPerUnitAnchor === "number" &&
+    Number.isFinite(sector.otherOpexPerUnitAnchor)
+      ? sector.otherOpexPerUnitAnchor
+      : null;
+  // In-flight auto-retools historically rescaled capitalStock but left this
+  // per-unit residual on the old unit basis. Heal on the next sector-turn
+  // write while transitionFromStrategyId evidence remains; no mongo script.
+  const healedOpex = healAutoRetoolOpexAnchor({
+    plantsEnabled: plantsEnabled && !embargoLegacyMothball,
+    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    strategyId: sector.strategyId,
+    sectorType: sector.sectorType as CorporationType,
+    retoolRescaleApplied: sector.retoolRescaleApplied,
+    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
+  });
+  const retoolBasis = {
+    sectorType: sector.sectorType,
+    strategyId: sector.strategyId,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    transitionStartTurn: sector.transitionStartTurn,
+    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
+    operatingCapacityTurn: sector.operatingCapacityTurn,
+    currentTurn,
+  };
+  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
+  const plantsCapacity = plantsOwnedCapacity * retoolCapacityRatio;
+  const priorProductionUnitRatio = plantsEnabled ? retoolMeasurementRatio(retoolBasis) : 1;
   // The nameplate plants writes back to `sector.revenue`: what the OWNED
   // capacity is worth at mix prices. This keeps `revenue` a potential/nameplate
   // figure (exactly as every other mode treats it) while making capacity — not
@@ -596,11 +629,9 @@ export function processSector(
   // capacity to price, so they hold the un-compounded anchor instead of being
   // zeroed.
   //
-  // `plantsCapacity` is used RAW here and written RAW: `revenue === capitalStock
-  // x mixPrice` must hold exactly (SOE overlay and shed/attack conservation
-  // assume it). Under plants `capitalStock` is authoritative capacity, read back
-  // as next turn's `storedCapacity`; quantising it makes the D9 retool rescale
-  // non-invertible. Below plants `newCapitalStock` keeps 2dp rounding.
+  // Owned stock stays on the destination strategy basis. Temporary operating
+  // capacity uses the blended recipe, so capacity times mix price retains the
+  // same nameplate throughout a retool. Neither basis is quantized.
   const plantsNameplateRevenue =
     plantsEnabled && plantsMixPrice > 0 ? plantsCapacity * plantsMixPrice : newRevenue;
   // Governor ramp anchor: stamped on the sector's FIRST plants turn and never
@@ -702,7 +733,10 @@ export function processSector(
   // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
   // it.
   const baselineHourlyRevenue =
-    (preFlipNameplateRevenue / TURNS_PER_DAY) *
+    ((plantsEnabled && strategyRates.isTransitioning && retoolCapacityRatio !== 1
+      ? plantsNameplateRevenue
+      : preFlipNameplateRevenue) /
+      TURNS_PER_DAY) *
     revenueMultiplier *
     nationalizationTransition *
     capacityHaircut *
@@ -822,8 +856,12 @@ export function processSector(
       throughputFactor *
       plantsTechOutputMultiplier *
       labourOutputFactor,
-    priorSoldUnits: sector.soldUnits,
-    priorProducedUnits: sector.producedUnits,
+    priorSoldUnits:
+      sector.soldUnits == null ? sector.soldUnits : sector.soldUnits * priorProductionUnitRatio,
+    priorProducedUnits:
+      sector.producedUnits == null
+        ? sector.producedUnits
+        : sector.producedUnits * priorProductionUnitRatio,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1
@@ -1418,23 +1456,6 @@ export function processSector(
   // divide by), so calibration is DEFERRED: the residual is charged directly for
   // that turn, which is exact anyway, and the anchor is stamped on the first
   // turn the plant actually runs.
-  const storedOtherOpexAnchor =
-    typeof sector.otherOpexPerUnitAnchor === "number" &&
-    Number.isFinite(sector.otherOpexPerUnitAnchor)
-      ? sector.otherOpexPerUnitAnchor
-      : null;
-  // In-flight auto-retools historically rescaled capitalStock but left this
-  // per-unit residual on the old unit basis. Heal on the next sector-turn
-  // write while transitionFromStrategyId evidence remains; no mongo script.
-  const healedOpex = healAutoRetoolOpexAnchor({
-    plantsEnabled: plantsPhysicalEnabled,
-    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    strategyId: sector.strategyId,
-    sectorType: sector.sectorType as CorporationType,
-    retoolRescaleApplied: sector.retoolRescaleApplied,
-    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
-  });
   const otherOpexAnchorForPnl = healedOpex?.otherOpexPerUnitAnchor ?? storedOtherOpexAnchor;
   const otherOpexCalibrated = plantsPhysicalEnabled && storedOtherOpexAnchor == null;
   // Calibration solves against the policy-NEUTRAL margin cost: `maintenance`
@@ -1451,7 +1472,7 @@ export function processSector(
         laborCost: sectorLaborCost,
         inputsCost,
         financialLegs,
-        producedUnits,
+        producedUnits: producedUnits / retoolCapacityRatio,
       })
     : null;
   const otherOpex = !plantsPhysicalEnabled
@@ -1461,7 +1482,7 @@ export function processSector(
         // solved this turn.
         maintenance + plantsPolicyCredit - sectorLaborCost - inputsCost - financialLegs
       : (otherOpexAnchorForPnl ?? 0) *
-        producedUnits *
+        (producedUnits / retoolCapacityRatio) *
         // One-time rebase of legacy anchors onto the neutral basis; 1 for
         // anchors stamped after the policyCredit change. See the docblock on
         // `otherOpexDriftFactor` for why this stopped tracking the live stack.
@@ -1615,11 +1636,10 @@ export function processSector(
     // `capitalUtilization` reports how hard those plants ran (produced ÷
     // capacity, i.e. the production legs) rather than a capacity haircut.
     // Plants capacity is persisted RAW — it is authoritative state, and rounding
-    // it breaks both the `revenue === capitalStock × mixPrice` stored-pair
-    // identity and the invertibility of the D9 retool rescale. Capital mode's
+    // it breaks the invertibility of the retool unit conversion. Capital mode's
     // derived stock keeps its 2dp rounding exactly as before.
     sectorUpdate.capitalStock = plantsEnabled
-      ? plantsCapacity
+      ? plantsOwnedCapacity
       : Math.round(newCapitalStock * 100) / 100;
     sectorUpdate.capitalUtilization =
       Math.round(
@@ -1636,6 +1656,8 @@ export function processSector(
     // from. Written RAW for the same reason `capitalStock` is — the two are a
     // ratio (per-unit basis) that has to survive round-tripping.
     if (plantsEnabled) {
+      sectorUpdate.operatingCapacityUnits = plantsCapacity;
+      sectorUpdate.operatingCapacityTurn = currentTurn;
       sectorUpdate.capacityBookAnchor = capacityBookAnchor;
       sectorUpdate.plantCount = plantLedger?.plantCount ?? 0;
       sectorUpdate.plantUnitRemainder = plantLedger?.plantUnitRemainder ?? 0;

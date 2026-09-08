@@ -13,6 +13,7 @@ import {
   getEffectiveStrategyRates,
   plannedEconomyMediaSupplyFactor,
 } from "@/lib/constants/sectorStrategies";
+import { retoolOperatingCapacityRatio } from "@/lib/corporations/retooling/rules";
 import { isPlannedEconomy } from "@/lib/constants/commandEconomy";
 
 /**
@@ -25,6 +26,7 @@ export type SupplyAgreementCapacitySector = {
   strategyId?: string | null;
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
+  retoolRescaleApplied?: boolean;
   mothballed?: boolean | null;
   activeCapacityPercent?: number;
   productionPolicyLevel?: number | null;
@@ -86,6 +88,7 @@ export function computeSupplierCommodityCapacityUnits(args: {
     if (s.mothballed === true) continue;
     const capacity =
       (typeof s.capitalStock === "number" ? s.capitalStock : 0) *
+      retoolOperatingCapacityRatio({ ...s, currentTurn: args.turn }) *
       activeCapacityFraction({ activeCapacityPercent: s.activeCapacityPercent });
     if (!(capacity > 0)) continue;
     const rates = getEffectiveStrategyRates(

@@ -21,7 +21,7 @@ export function assertInvestmentTurnComplete(
 export async function snapshotSectorInvestment(db: Db, directory: string, turn: number) {
   const fields: Record<string, string> = {
     corporateSectors:
-      "_id corporationId countryId stateId sectorType capitalStock capacityBookAnchor constructionInProgressAnchor buildQueue plantsPnl producedUnits soldUnits soldFraction throughputFactor deliveryLimitedFraction workers workersDesired labourStaffingFactor mothballed activeCapacityPercent revenue realizedRevenue plantsUpkeepMarginBasisAnchor",
+      "_id corporationId countryId stateId sectorType strategyId transitionFromStrategyId transitionStartTurn transitionCooldownUntilTurn retoolRescaleApplied otherOpexPerUnitAnchor otherOpexAnchorMarginBasis plantsStartTurn capitalStock operatingCapacityUnits operatingCapacityTurn capacityBookAnchor constructionInProgressAnchor buildQueue plantsPnl producedUnits soldUnits soldFraction throughputFactor deliveryLimitedFraction workers workersDesired labourStaffingFactor mothballed activeCapacityPercent revenue realizedRevenue plantsUpkeepMarginBasisAnchor",
     corporations:
       "_id countryId type ceoId ceoType ceoVacant countryOwnerId isNationalized liquidCapital liquidCurrencyCode marketingBudget logisticsBudget rdBudget ceoSalary",
     corporationHistory:

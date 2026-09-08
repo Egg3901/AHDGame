@@ -952,6 +952,9 @@ export interface CorporateSector {
    * output-gating factor (telemetry).
    */
   capitalStock?: number;
+  /** Last turn's physical capacity in its blended recipe units during retooling. */
+  operatingCapacityUnits?: number;
+  operatingCapacityTurn?: number | null;
   capitalUtilization?: number;
   /**
    * First-class whole facilities owned by this sector. Unlike capitalStock,

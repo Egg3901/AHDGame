@@ -300,20 +300,11 @@ export function revenuePerCapacityUnitForStrategy(
  * transition margin penalty, and the retool fee — all of which already exist.
  * Retooling is a re-aim, not a capital grant.
  *
- * TRANSITION WINDOW (deliberate, documented simplification): the engine blends
- * the two strategies' rates linearly over `STRATEGY_TRANSITION_TURNS` (12) via
- * `getEffectiveStrategyRates`, so mid-transition the sector's effective mixPrice
- * sits between RPU_old and RPU_new while its stock has ALREADY been rescaled to
- * the destination. The nameplate therefore misprices during the blend. We accept
- * that, and rescale ONCE at commit using the FINAL rates, because:
- *   - the error is bounded by the RPU ratio and decays linearly to exactly 0 at
- *     the end of the window (12 turns = half a financial day);
- *   - the alternative (re-scaling every turn against the blended rates) makes
- *     `capitalStock` a derived quantity that moves under the sector's feet every
- *     turn of the window, which would fight depreciation, the build queue and
- *     the flip migration, all of which treat the stock as owned state;
- *   - a one-shot rescale at a player-initiated boundary is auditable; a
- *     per-turn one is not.
+ * TRANSITION WINDOW: owned stock and paid orders use the destination basis.
+ * The turn converts that stock into the blended recipe's physical units for
+ * production, and converts produced units back before charging the held opex
+ * anchor. Nameplate value stays constant through the blend; depreciation and
+ * new construction still move owned stock in the usual way.
  *
  * Returns `capitalStock` unchanged when there is nothing meaningful to do (no
  * stock, a strategy with no priced output on either side, a non-finite input) —

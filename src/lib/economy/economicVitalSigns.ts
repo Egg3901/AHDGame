@@ -1175,6 +1175,7 @@ export async function snapshotEconomicVitalSigns(
             transitionFromStrategyId: 1,
             transitionStartTurn: 1,
             capitalStock: 1,
+            operatingCapacityUnits: 1,
             producedUnits: 1,
             mothballed: 1,
             productionPolicyLevel: 1,
@@ -1242,7 +1243,7 @@ export async function snapshotEconomicVitalSigns(
       {
         ...sector,
         revenueAnchor: fxRate > 0 ? sector.revenue / fxRate : sector.revenue,
-        capacityUnits: sector.capitalStock,
+        capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
       },
       turn,
       { plantsEnabled: true }

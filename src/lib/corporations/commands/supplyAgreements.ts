@@ -143,6 +143,7 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
               capitalStock: 1,
               strategyId: 1,
               transitionFromStrategyId: 1,
+              retoolRescaleApplied: 1,
               transitionStartTurn: 1,
               mothballed: 1,
               activeCapacityPercent: 1,

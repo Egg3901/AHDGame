@@ -236,6 +236,8 @@ describe("identitySectorPlantFields", () => {
     const survivor = midBuild({ mothballed: true, legacyRevenueShadow: 750_000 });
     expect(identitySectorPlantFields(survivor)).toEqual({
       capitalStock: 500,
+      operatingCapacityUnits: 500,
+      operatingCapacityTurn: null,
       plantCount: 0,
       plantUnitRemainder: 0,
       capacityBookAnchor: 0,
