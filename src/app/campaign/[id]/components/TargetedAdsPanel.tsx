@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { useTranslations } from "next-intl";
 
 interface Target {
@@ -36,6 +37,7 @@ export function TargetedAdsPanel({
   campaignId: string;
   onResourcesSpent: () => void;
 }) {
+  const { formatFull } = useCurrency();
   const t = useTranslations("elections.campaignTargeting");
   const [region, setRegion] = useState("");
   const [targetKey, setTargetKey] = useState("");
@@ -182,7 +184,7 @@ export function TargetedAdsPanel({
               </p>
               <p>
                 {t("cost", {
-                  funds: (target.cost * turns).toLocaleString(),
+                  funds: formatFull(target.cost * turns),
                   actions: quote.actionCost * turns,
                 })}
               </p>

@@ -37,6 +37,8 @@ export async function GET(request: NextRequest, { params }: Params) {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
+    const previewRate = checkRateLimit(`targeted-ads-preview:${auth.user.userId}`, 30, 60_000);
+    if (!previewRate.ok) return rateLimitResponse(previewRate.retryAfter);
     const { id } = await params;
     const state = key
       .optional()

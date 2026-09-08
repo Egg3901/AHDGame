@@ -1,4 +1,4 @@
-import { CAMPAIGN_RULES_VERSION } from "@/lib/campaignTargeting/rules";
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import type { Election, GameState } from "@/lib/db/types";
 import { DE_WAHLKREIS_SEATS } from "@/lib/constants";
 import { getUkCommonsSeats } from "@/lib/constants/states";
@@ -146,7 +146,7 @@ export async function spawnHouseElection(db: Db, fromElection: Election, now: Da
 
   const inserted = await db
     .collection<Election>("elections")
-    .insertOne({ ...newElection, campaignRulesVersion: CAMPAIGN_RULES_VERSION } as Election);
+    .insertOne(withCampaignRules(newElection) as Election);
   console.log(
     `[Turn] House election spawned for ${fromElection.state} cycle ${spawn.cycle} status=${status} — id ${inserted.insertedId}`
   );
@@ -236,7 +236,7 @@ export async function spawnCommonsElection(
 
   const inserted = await db
     .collection<Election>("elections")
-    .insertOne({ ...newElection, campaignRulesVersion: CAMPAIGN_RULES_VERSION } as Election);
+    .insertOne(withCampaignRules(newElection) as Election);
   console.log(
     `[Turn] Commons election spawned for ${fromElection.state} cycle ${spawn.cycle} status=${status} — id ${inserted.insertedId}`
   );
@@ -308,7 +308,7 @@ export async function spawnBundestagElection(
 
   const inserted = await db
     .collection<Election>("elections")
-    .insertOne({ ...newElection, campaignRulesVersion: CAMPAIGN_RULES_VERSION } as Election);
+    .insertOne(withCampaignRules(newElection) as Election);
   console.log(
     `[Turn] Bundestag election spawned for ${fromElection.state} cycle ${spawn.cycle} status=${newElection.status} - id ${inserted.insertedId}`
   );

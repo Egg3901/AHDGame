@@ -533,8 +533,11 @@ export async function _enrichElection(
     usesCampaignRules(election) &&
     candidates.some((candidate) => candidate.targetedAds?.length)
   ) {
-    const audience = await loadCampaignAudience(db, election.countryId, election.state);
-    if (audience) {
+    const cells =
+      deps.campaignCells !== undefined
+        ? deps.campaignCells
+        : (await loadCampaignAudience(db, election.countryId, election.state))?.cells;
+    if (cells?.length) {
       const rawById = new Map(candidates.map((candidate) => [candidate._id.toString(), candidate]));
       const ownerPositionById = new Map([
         ...characters.map((character) => [character._id.toString(), character.policies] as const),
@@ -548,9 +551,9 @@ export async function _enrichElection(
         if (!raw?.targetedAds?.length || !position || candidate.primaryScore == null)
           return candidate;
         const bonus = meanAdBonus(
-          audience.cells,
+          cells,
           targetedAdBonuses(
-            audience.cells,
+            cells,
             { economicLean: position.economic, socialLean: position.social },
             raw.targetedAds,
             election.state,

@@ -13,6 +13,7 @@ const COST_FUNDS = 100;
 const COST_ACTIONS = 1;
 
 interface CanvassingPanelProps {
+  electionId?: string;
   countryId?: string;
   characterActions?: number;
   characterFunds?: number;
@@ -54,6 +55,7 @@ function calculateMaxCanvasses(actions: number, funds: number, cost = COST_FUNDS
 }
 
 export function CanvassingPanel({
+  electionId,
   countryId,
   characterActions,
   characterFunds,
@@ -78,24 +80,27 @@ export function CanvassingPanel({
   // Country-aware demographic categories (SSOT). US returns multiple categories
   // (race/age/…); voter-group countries (UK/JP/DE/IE/CN/BR) return a single category.
   const originalCategories = getDemographicCategoriesForCountry(countryId);
-  const categories = nativeTargets.length
-    ? [...new Set(nativeTargets.map((target) => target.dimension))].map((dimension) => ({
-        key: dimension,
-        label:
-          originalCategories.find((category) => category.key === dimension)?.label ??
-          dimension.replaceAll("_", " "),
-        groups: nativeTargets
-          .filter((target) => target.dimension === dimension)
-          .map((target) => ({
-            id: target.bucket,
-            name:
-              originalCategories
-                .find((category) => category.key === dimension)
-                ?.groups.find((group) => group.id === target.bucket)?.name ??
-              target.bucket.replaceAll("_", " "),
-          })),
-      }))
-    : originalCategories;
+  const categories: Array<{
+    key: string;
+    label: string;
+    groups: Array<{ id: string; name: string }>;
+  }> = originalCategories.map((category) => ({
+    ...category,
+    groups: [...category.groups],
+  }));
+  for (const target of nativeTargets) {
+    let category = categories.find((item) => item.key === target.dimension);
+    if (!category) {
+      category = {
+        key: target.dimension,
+        label: target.dimension.replaceAll("_", " "),
+        groups: [],
+      };
+      categories.push(category);
+    }
+    if (!category.groups.some((group) => group.id === target.bucket))
+      category.groups.push({ id: target.bucket, name: target.bucket.replaceAll("_", " ") });
+  }
   const isSingleCategory = categories.length === 1;
 
   const [selectedCategory, setSelectedCategory] = useState<string>(
@@ -151,6 +156,7 @@ export function CanvassingPanel({
       category: selectedCategory,
       group: selectedGroup,
       count: String(count),
+      ...(electionId ? { electionId } : {}),
     });
     setPreview(null);
     setPreviewError("");
@@ -161,16 +167,6 @@ export function CanvassingPanel({
         if (controller.signal.aborted || data.stateId !== eligibleStateId) return;
         setNativeTargets(data.targets ?? []);
         if (typeof data.fundsCost === "number") setFundsCost(data.fundsCost);
-        if (
-          data.targets?.length &&
-          selectedCategory &&
-          !data.targets.some(
-            (target: { dimension: string }) => target.dimension === selectedCategory
-          )
-        ) {
-          setSelectedCategory("");
-          setSelectedGroup("");
-        }
         setPreview(data.preview ?? null);
       })
       .catch((error) => {
@@ -179,7 +175,7 @@ export function CanvassingPanel({
         setPreviewError(t("failed"));
       });
     return () => controller.abort();
-  }, [eligibleStateId, selectedCategory, selectedGroup, count, previewRevision, t]);
+  }, [eligibleStateId, electionId, selectedCategory, selectedGroup, count, previewRevision, t]);
 
   const activeCategory = categories.find((c) => c.key === selectedCategory) ?? null;
 
@@ -205,6 +201,7 @@ export function CanvassingPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          electionId,
           stateId: eligibility.stateId,
           category: selectedCategory,
           group: selectedGroup,

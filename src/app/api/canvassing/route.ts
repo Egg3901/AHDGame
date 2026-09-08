@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canUseNativeCanvassTargets } from "@/lib/canvassing/campaignContext";
 import { parseJsonBody } from "@/lib/api/validate";
 import {
   addTurnoutBoost,
@@ -34,7 +35,12 @@ const COST_FUNDS = 100;
 const COST_ACTIONS = 1;
 
 const MAX_CANVASS_BATCH = 50;
+const electionIdSchema = z
+  .string()
+  .regex(/^[a-fA-F0-9]{24}$/)
+  .optional();
 const canvassSchema = z.object({
+  electionId: electionIdSchema,
   stateId: z.string().min(1).max(100),
   category: z
     .string()
@@ -53,6 +59,8 @@ export async function GET(req: NextRequest) {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
+    const previewRate = checkRateLimit(`canvassing-preview:${auth.user.userId}`, 30, 60_000);
+    if (!previewRate.ok) return rateLimitResponse(previewRate.retryAfter);
     const db = await getDb();
     const mate = await resolveRunningMateCanvassState(db, auth.user.character);
     const eligibility = mate.ok ? mate : await resolveCanvassState(db, auth.user.character);
@@ -62,6 +70,17 @@ export async function GET(req: NextRequest) {
         { status: 403 }
       );
     const stateId = eligibility.stateId;
+    const electionId = electionIdSchema.safeParse(
+      req.nextUrl.searchParams.get("electionId") ?? undefined
+    );
+    if (!electionId.success)
+      return NextResponse.json({ error: "Invalid election" }, { status: 400 });
+    const nativeAllowed = await canUseNativeCanvassTargets(
+      db,
+      auth.user.character.countryId ?? "US",
+      stateId,
+      electionId.data ?? (mate.ok ? mate.electionId.toString() : undefined)
+    );
     const turnoutData = await (
       await getStateDemographicTurnoutCollection()
     ).findOne({ _id: stateId });
@@ -76,7 +95,8 @@ export async function GET(req: NextRequest) {
     const targets = new Map<string, { dimension: string; bucket: string }>();
     for (const cell of audience?.cells ?? [])
       for (const [dimension, bucket] of Object.entries(cell.buckets))
-        targets.set(`${dimension}:${bucket}`, { dimension, bucket });
+        if (nativeAllowed || resolveCanvassGroup(auth.user.character.countryId, dimension, bucket))
+          targets.set(`${dimension}:${bucket}`, { dimension, bucket });
     const target = {
       dimension: req.nextUrl.searchParams.get("category") ?? "",
       bucket: req.nextUrl.searchParams.get("group") ?? "",
@@ -91,7 +111,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Invalid canvassing count" }, { status: 400 });
     const info = audience ? targetAudience(audience.cells, target) : null;
     let preview = null;
-    if (audience && info) {
+    if (nativeAllowed && audience && info) {
       const closing = await checkActiveCampaignSeason(stateId, auth.user.character.countryId);
       const campaignModifiers = structuredClone(
         turnoutData.campaignModifiers ?? turnoutData.modifiers
@@ -142,7 +162,7 @@ export async function POST(req: NextRequest) {
     const parsed = await parseJsonBody(req, canvassSchema);
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
-    const { stateId, category, group, count } = parsed.data;
+    const { stateId, category, group, count, electionId } = parsed.data;
     const resolved = resolveCanvassGroup(user.character.countryId, category, group);
     const modifierCategoryKey = resolved?.categoryKey ?? category;
 
@@ -188,6 +208,22 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
+    const nativeAllowed = await canUseNativeCanvassTargets(
+      db,
+      user.character.countryId ?? "US",
+      stateId,
+      electionId ??
+        (usingSurrogate && mateEligibility.ok ? mateEligibility.electionId.toString() : undefined)
+    );
+    if (!resolved && !nativeAllowed)
+      return NextResponse.json(
+        {
+          error:
+            "This race uses legacy canvassing groups. Choose one of its original demographic groups.",
+        },
+        { status: 400 }
+      );
 
     const totalFundsCost = COST_FUNDS * count;
     const totalActionsCost = COST_ACTIONS * count;
@@ -253,9 +289,10 @@ export async function POST(req: NextRequest) {
       count
     );
     const afterAudience = audience?.build({ ...turnoutData, campaignModifiers });
-    const turnoutBefore = targetInfo && audience ? audienceTurnout(audience.cells, target) : null;
+    const turnoutBefore =
+      nativeAllowed && targetInfo && audience ? audienceTurnout(audience.cells, target) : null;
     const turnoutAfter =
-      targetInfo && afterAudience?.campaignCells
+      nativeAllowed && targetInfo && afterAudience?.campaignCells
         ? audienceTurnout(afterAudience.campaignCells, target)
         : null;
 
@@ -387,11 +424,11 @@ export async function POST(req: NextRequest) {
           : `Canvassing ${group} voters in ${stateId}`,
       count,
       effect: {
-        boost: (modernCategory[group] - beforeModifier).toFixed(3),
-        newModifier: modernCategory[group].toFixed(2),
+        boost: (nativeAllowed ? modernCategory[group] - beforeModifier : totalBoost).toFixed(3),
+        newModifier: (nativeAllowed ? modernCategory[group] : currentModifier).toFixed(2),
         legacyBoost: totalBoost.toFixed(3),
         legacyModifier: currentModifier.toFixed(2),
-        campaignRulesVersion: CAMPAIGN_RULES_VERSION,
+        campaignRulesVersion: nativeAllowed ? CAMPAIGN_RULES_VERSION : 0,
         turnoutBefore,
         turnoutAfter,
         campaignSeasonActive: isActiveCampaign,

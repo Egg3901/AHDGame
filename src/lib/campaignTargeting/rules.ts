@@ -82,15 +82,19 @@ export function addTurnoutBoost(current: number, boost: number, count = 1): numb
 
 export function decayTurnout(modifiers: TurnoutModifiers): TurnoutModifiers {
   return Object.fromEntries(
-    Object.entries(modifiers).map(([dimension, buckets]) => [
-      dimension,
-      Object.fromEntries(
-        Object.entries(buckets).map(([bucket, value]) => {
-          const decayed = value * 2 ** (-1 / TURNOUT_HALF_LIFE);
-          return [bucket, Math.abs(decayed) < 0.01 ? 0 : decayed];
-        })
-      ),
-    ])
+    Object.entries(modifiers)
+      .filter(([, buckets]) => buckets && typeof buckets === "object" && !Array.isArray(buckets))
+      .map(([dimension, buckets]) => [
+        dimension,
+        Object.fromEntries(
+          Object.entries(buckets)
+            .filter(([, value]) => typeof value === "number" && Number.isFinite(value))
+            .map(([bucket, value]) => {
+              const decayed = value * 2 ** (-1 / TURNOUT_HALF_LIFE);
+              return [bucket, Math.abs(decayed) < 0.01 ? 0 : decayed];
+            })
+        ),
+      ])
   );
 }
 

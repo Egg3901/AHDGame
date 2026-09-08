@@ -12,6 +12,9 @@
  *   _enrichElection()   - low-level enrichment on pre-fetched data
  */
 
+import { usesCampaignRules } from "@/lib/campaignTargeting/rules";
+import { loadRegionalCampaignCells } from "@/lib/campaignTargeting/audience";
+import { isPrimaryEnded } from "@/lib/elections/phases";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { ObjectId } from "mongodb";
 import type {
@@ -27,6 +30,7 @@ import type {
   Campaign,
   StatePartyOrg,
   ElectionVoteTally,
+  State,
 } from "@/lib/db/types";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isHexObjectIdString } from "@/lib/utils/objectIdHex";
@@ -483,6 +487,32 @@ export async function resolveElections(
   // list pages, refactor _enrichElection() to accept an optional myCharId
   // parameter and pre-fetch it once here.
 
+  const advertisedRegions = [
+    ...new Set(
+      elections
+        .filter(
+          (election) =>
+            election.status === "active" &&
+            election.electionType !== "president" &&
+            usesCampaignRules(election) &&
+            !isPrimaryEnded(election, gameTime.currentTurn, gameTime) &&
+            candidatesByElection
+              .get(election._id.toString())
+              ?.some((candidate) => candidate.targetedAds?.length)
+        )
+        .map((election) => election.state)
+    ),
+  ];
+  const campaignCellsByRegion = advertisedRegions.length
+    ? await loadRegionalCampaignCells(
+        db,
+        await db
+          .collection<State>("states")
+          .find({ _id: { $in: advertisedRegions }, countryId: { $in: uniqueCountryIds } })
+          .toArray()
+      )
+    : new Map();
+
   const results: ElectionResponse[] = await Promise.all(
     elections.map((election) => {
       const eid = election._id.toString();
@@ -510,6 +540,7 @@ export async function resolveElections(
       const snapsLimited = isFull ? snapsForElection.slice(-72) : [];
 
       const deps: ElectionDeps = {
+        campaignCells: campaignCellsByRegion.get(`${electionCountryId}:${election.state}`) ?? null,
         candidates,
         characters: electionChars,
         npps: electionNpps,

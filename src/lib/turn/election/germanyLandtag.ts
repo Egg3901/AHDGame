@@ -14,7 +14,7 @@
  *     to be resolved (replaces the FPTP path for this electionType).
  */
 
-import { CAMPAIGN_RULES_VERSION } from "@/lib/campaignTargeting/rules";
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
@@ -166,12 +166,9 @@ export async function ensureDELandtagElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(
-      toActuallyInsert.map((election) => ({
-        ...election,
-        campaignRulesVersion: CAMPAIGN_RULES_VERSION,
-      })) as Election[]
-    );
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureDELandtagElections: spawned ${toActuallyInsert.length} missing Landtag election(s)`
     );
@@ -352,12 +349,9 @@ export async function ensureDEMinisterPresidentElections(now: Date): Promise<voi
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(
-      toActuallyInsert.map((election) => ({
-        ...election,
-        campaignRulesVersion: CAMPAIGN_RULES_VERSION,
-      })) as Election[]
-    );
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureDEMinisterPresidentElections: spawned ${toActuallyInsert.length} missing MP election(s)`
     );

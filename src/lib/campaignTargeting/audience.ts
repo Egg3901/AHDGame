@@ -61,6 +61,7 @@ export async function loadCampaignAudience(
     const selected = turnoutForElection(doc, context);
     return buildGranularElectorateSubstrate({
       ...context,
+      cache: "bypass",
       turnoutDoc: selected,
       liveTurnouts: resolveTurnout(
         context.statePopulation,

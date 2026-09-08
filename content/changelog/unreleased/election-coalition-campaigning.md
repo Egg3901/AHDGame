@@ -17,3 +17,4 @@ areas: [fullstack, engine]
 - Prepaid flights run for up to twelve turns. Audience size sets the campaign-fund cost, and all buyers share the same candidate's pacing limit. Overlapping targets share a 15% competitive-weight cap.
 - Campaign controls show turnout after blending, ad reach, costs, and expected bonuses. Campaign effects feed election counting and new poll projections.
 - Races that were already open keep their original campaigning rules until they finish.
+- Presidential primary forecasts and counting apply ads consistently. Campaign controls preserve each country's existing canvassing groups.

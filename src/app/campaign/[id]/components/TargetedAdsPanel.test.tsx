@@ -5,6 +5,10 @@ import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../messages/en/elections.json";
 import { TargetedAdsPanel } from "./TargetedAdsPanel";
 
+vi.mock("@/contexts/CurrencyContext", () => ({
+  useCurrency: () => ({ formatFull: (value: number) => `₳${value.toLocaleString("en-US")}` }),
+}));
+
 const quote = {
   enabled: true,
   stateId: "PA",
@@ -56,7 +60,7 @@ describe("targeted ad campaign controls", () => {
     mount();
     fireEvent.change(await screen.findByLabelText("Audience"), { target: { value: "race:white" } });
     fireEvent.change(screen.getByLabelText("Prepaid flight"), { target: { value: "3" } });
-    expect(screen.getByText(/Personal cost: 600 campaign funds and 15 actions/)).toBeDefined();
+    expect(screen.getByText(/Personal cost: ₳600 campaign funds and 15 actions/)).toBeDefined();
     fetchMock.mockResolvedValueOnce(response({ scheduledThrough: 12 }));
     fireEvent.click(screen.getByRole("button", { name: "Buy ad flight" }));
     await waitFor(() => expect(onSpent).toHaveBeenCalledOnce());

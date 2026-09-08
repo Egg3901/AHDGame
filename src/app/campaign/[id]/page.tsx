@@ -398,6 +398,7 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
           )}
           {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
             <CanvassingPanel
+              electionId={campaign.electionId}
               countryId={myCountryId ?? undefined}
               characterActions={myActions ?? undefined}
               characterFunds={myFunds ?? undefined}

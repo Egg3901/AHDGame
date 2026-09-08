@@ -60,6 +60,16 @@ export async function getElectionOpponents(
     const gameTime = await getGameTime();
     const { currentTurn } = gameTime;
 
+    // Prefer local races, then the next closing race. Keep national primaries
+    // available for candidates with no local contest, including unopposed ones.
+    elections.sort(
+      (a, b) =>
+        Number(b.state === character.homeState) - Number(a.state === character.homeState) ||
+        (a.endTurn ?? Infinity) - (b.endTurn ?? Infinity) ||
+        (a.endTime ? new Date(a.endTime).getTime() : Infinity) -
+          (b.endTime ? new Date(b.endTime).getTime() : Infinity) ||
+        a._id.toString().localeCompare(b._id.toString())
+    );
     for (const election of elections) {
       // Must be past primary phase (general election)
       if (!isPrimaryEnded(election, currentTurn, gameTime) && !usesCampaignRules(election))

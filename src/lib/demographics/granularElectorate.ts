@@ -200,6 +200,8 @@ export interface GranularElectorateUnit {
 }
 
 export interface GranularSubstrateInput {
+  /** What-if previews must not evict the turn processor's electorate cache. */
+  cache?: "shared" | "bypass";
   campaignRulesVersion?: number;
   currentTurn?: number;
   countryId: CountryId | string;
@@ -633,15 +635,18 @@ export function deriveGranularElectorateUnits(
    * era clock would advance while the electorate silently did not.
    */
   yearCtx?: EraYearContext,
-  retainCampaignCells = false
+  retainCampaignCells = false,
+  cache: "shared" | "bypass" = "shared"
 ): { units: GranularElectorateUnit[]; modifiersNative: boolean } | null {
   const modifiersSig = turnoutDoc?.modifiers ? JSON.stringify(turnoutDoc.modifiers) : "";
   const overlaySig = positionOverlay ? JSON.stringify(positionOverlay) : "";
   const turnoutOverlaySig = turnoutOverlay ? JSON.stringify(turnoutOverlay) : "";
   const yearSig = yearCtx?.year != null ? `${yearCtx.year}:${yearCtx.startingYear ?? ""}` : "";
   const cacheKey = `${countryId}|${stateId}|${preset ?? ""}|${modifiersSig}|${overlaySig}|${turnoutOverlaySig}|${yearSig}|${retainCampaignCells}`;
-  if (UNIT_CACHE.has(cacheKey)) {
+  if (cache === "shared" && UNIT_CACHE.has(cacheKey)) {
     const cached = UNIT_CACHE.get(cacheKey) ?? null;
+    UNIT_CACHE.delete(cacheKey);
+    UNIT_CACHE.set(cacheKey, cached);
     if (cached === null) return null;
     // eslint-disable-next-line local/no-country-literals -- cache stores the derivation output; nativeness is structural
     return { units: cached, modifiersNative: countryId === "US" };
@@ -662,14 +667,17 @@ export function deriveGranularElectorateUnits(
     derived = null;
   }
 
-  if (UNIT_CACHE.size >= UNIT_CACHE_MAX) UNIT_CACHE.clear();
-  if (!derived) {
-    UNIT_CACHE.set(cacheKey, null);
-    return null;
+  const units = derived
+    ? coalesceCells(derived.cells, retainCampaignCells ? derived.positions : undefined)
+    : null;
+  if (cache === "shared") {
+    if (UNIT_CACHE.size >= UNIT_CACHE_MAX) {
+      const oldest = UNIT_CACHE.keys().next().value;
+      if (oldest !== undefined) UNIT_CACHE.delete(oldest);
+    }
+    UNIT_CACHE.set(cacheKey, units);
   }
-  const units = coalesceCells(derived.cells, retainCampaignCells ? derived.positions : undefined);
-  UNIT_CACHE.set(cacheKey, units);
-  return { units, modifiersNative: derived.modifiersNative };
+  return derived && units ? { units, modifiersNative: derived.modifiersNative } : null;
 }
 
 // ─── Archetype-keyed → unit-keyed remapping ─────────────────────────────────
@@ -797,7 +805,8 @@ export function buildGranularElectorateSubstrate(
     // shift, and legacy `resolveTurnout` ignores stored turnout drift anyway).
     input.demographicDefaults?.layer1TurnoutOverrides,
     { year: input.year ?? null, startingYear: input.startingYear ?? null },
-    usesCampaignRules(input)
+    usesCampaignRules(input),
+    input.cache
   );
   if (!derived || derived.units.length === 0) return null;
   const { units, modifiersNative } = derived;

@@ -117,7 +117,7 @@ export async function applyDecayToAllStates(
           update: {
             $set: {
               modifiers: state.modifiers,
-              campaignModifiers: state.campaignModifiers,
+              ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
               lastDecayApplied: state.lastDecayApplied,
               lastUpdated: state.lastUpdated,
             },
@@ -1099,7 +1099,7 @@ export async function processPartyGOTV(
           update: {
             $set: {
               modifiers: state.modifiers,
-              campaignModifiers: state.campaignModifiers,
+              ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
               lastUpdated: state.lastUpdated,
             },
           },
@@ -1268,7 +1268,7 @@ export async function processPlayerCanvassing(
           update: {
             $set: {
               modifiers: state.modifiers,
-              campaignModifiers: state.campaignModifiers,
+              ...(state.campaignModifiers ? { campaignModifiers: state.campaignModifiers } : {}),
               lastUpdated: state.lastUpdated,
             },
           },

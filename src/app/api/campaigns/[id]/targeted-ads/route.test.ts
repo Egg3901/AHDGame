@@ -10,6 +10,7 @@ import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/ac
 import { loadCampaignAudience } from "@/lib/campaignTargeting/audience";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { GET, POST } from "./route";
+import * as awaitRateLimit from "@/lib/api/rateLimit";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
@@ -21,7 +22,7 @@ vi.mock("@/lib/campaigns/access", () => ({
 vi.mock("@/lib/campaignTargeting/audience", () => ({ loadCampaignAudience: vi.fn() }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn() }));
 vi.mock("@/lib/api/rateLimit", () => ({
-  checkRateLimit: () => ({ ok: true }),
+  checkRateLimit: vi.fn(() => ({ ok: true })),
   rateLimitResponse: vi.fn(),
 }));
 vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
@@ -54,8 +55,27 @@ describe("targeted ad route and command integration", () => {
   const election = makeElection({ campaignRulesVersion: 1, startTurn: 1, endTurn: 30 });
   const candidate = makeCandidate({ electionId: election._id, characterId: character._id });
 
+  it("rate-limits previews before loading or calculating an audience", async () => {
+    vi.mocked(awaitRateLimit.checkRateLimit).mockReturnValue({
+      ok: false,
+      retryAfter: 30,
+    } as never);
+    vi.mocked(awaitRateLimit.rateLimitResponse).mockReturnValue(
+      NextResponse.json({}, { status: 429 })
+    );
+    const result = await GET(
+      new NextRequest(`http://localhost/api/campaigns/${campaignId}/targeted-ads`),
+      params
+    );
+    expect(result.status).toBe(429);
+    expect(getDb).not.toHaveBeenCalled();
+    expect(loadCampaignAudience).not.toHaveBeenCalled();
+  });
+
   beforeEach(() => {
     vi.resetAllMocks();
+    const { checkRateLimit } = awaitRateLimit;
+    vi.mocked(checkRateLimit).mockReturnValue({ ok: true } as never);
     db = createMockDb();
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({

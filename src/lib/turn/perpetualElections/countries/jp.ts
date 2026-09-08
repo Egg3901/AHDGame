@@ -1,4 +1,4 @@
-import { CAMPAIGN_RULES_VERSION } from "@/lib/campaignTargeting/rules";
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import { JP_SHUGIIN_SEATS, JP_SANGIIN_SEATS } from "@/lib/constants/states";
@@ -141,12 +141,9 @@ export async function ensureJPElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(
-      toActuallyInsert.map((election) => ({
-        ...election,
-        campaignRulesVersion: CAMPAIGN_RULES_VERSION,
-      })) as Election[]
-    );
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureJPElections: spawned ${toActuallyInsert.length} missing Shugiin election(s)`
     );
@@ -305,12 +302,9 @@ export async function ensureJPCouncillorElections(now: Date, classOverride?: 1 |
     const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
     if (toActuallyInsert.length > 0) {
-      await db.collection<Election>("elections").insertMany(
-        toActuallyInsert.map((election) => ({
-          ...election,
-          campaignRulesVersion: CAMPAIGN_RULES_VERSION,
-        })) as Election[]
-      );
+      await db
+        .collection<Election>("elections")
+        .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
       console.log(
         `[Turn] ensureJPCouncillorElections: spawned ${toActuallyInsert.length} Sangiin election(s) (Class ${chamberClass})`
       );
@@ -491,12 +485,9 @@ export async function ensureJPRegionalCouncilElections(now: Date): Promise<void>
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(
-      toActuallyInsert.map((election) => ({
-        ...election,
-        campaignRulesVersion: CAMPAIGN_RULES_VERSION,
-      })) as Election[]
-    );
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureJPRegionalCouncilElections: spawned ${toActuallyInsert.length} missing Regional Council election(s)`
     );

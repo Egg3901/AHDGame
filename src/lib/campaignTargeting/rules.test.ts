@@ -70,6 +70,14 @@ describe("coalition canvassing", () => {
     expect(addTurnoutBoost(0, -4, 1000)).toBeGreaterThanOrEqual(-20);
   });
 
+  it("skips malformed categories and values while decaying valid siblings", () => {
+    const input = JSON.parse(
+      '{"race":null,"age":12,"wealth":[],"education":{"college":10,"bad":null,"text":"4"}}'
+    );
+    expect(decayTurnout(input)).toEqual({ education: { college: 10 * 2 ** (-1 / 6) } });
+    expect(input.race).toBeNull();
+  });
+
   it("halves both positive and negative input deviations in six turns", () => {
     let modifiers: Record<string, Record<string, number>> = { race: { white: 10, other: -10 } };
     for (let turn = 0; turn < 6; turn++) modifiers = decayTurnout(modifiers);
