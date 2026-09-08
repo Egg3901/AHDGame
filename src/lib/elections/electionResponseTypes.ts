@@ -1,3 +1,4 @@
+import type { CampaignCell } from "@/lib/campaignTargeting/rules";
 import type {
   ElectionCandidate,
   Character,
@@ -363,7 +364,7 @@ export interface ResolveElectionOptions {
 /** Full dependency set used by _enrichElection() for both views. */
 export interface ElectionDeps {
   /** Batch list audiences. Null means loaded with no cells; undefined allows a detail load. */
-  campaignCells?: import("@/lib/campaignTargeting/rules").CampaignCell[] | null;
+  campaignCells?: CampaignCell[] | null;
   candidates: ElectionCandidate[];
   characters: Character[];
   npps: NPP[];
