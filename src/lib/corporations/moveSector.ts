@@ -101,6 +101,7 @@ export async function moveSectorToCorp(
           buildQueue: existing.buildQueue,
           constructionInProgressAnchor: existing.constructionInProgressAnchor,
           mothballed: existing.mothballed,
+          activeCapacityPercent: existing.activeCapacityPercent,
           plantsStartTurn: existing.plantsStartTurn,
           legacyRevenueShadow: existing.legacyRevenueShadow,
         },
@@ -109,6 +110,7 @@ export async function moveSectorToCorp(
           buildQueue: donorQueue,
           constructionInProgressAnchor: sector.constructionInProgressAnchor,
           mothballed: sector.mothballed,
+          activeCapacityPercent: sector.activeCapacityPercent,
           plantsStartTurn: sector.plantsStartTurn,
           legacyRevenueShadow: sector.legacyRevenueShadow,
         }

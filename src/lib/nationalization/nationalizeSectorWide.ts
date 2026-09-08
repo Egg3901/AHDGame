@@ -142,6 +142,9 @@ export async function nationalizeSectorWide(
     buildQueue: [],
     constructionInProgressAnchor: 0,
     mothballed: survivor ? identitySectorPlantFields(survivor).mothballed : false,
+    ...(survivor?.activeCapacityPercent == null
+      ? {}
+      : { activeCapacityPercent: survivor.activeCapacityPercent }),
     plantsStartTurn: null,
     legacyRevenueShadow: null,
   });

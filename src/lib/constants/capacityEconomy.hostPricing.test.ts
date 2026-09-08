@@ -152,7 +152,8 @@ describe("tech / acumen remap onto the build price", () => {
         cost.acumenMultiplier *
         cost.techMultiplier *
         cost.hostPriceMultiplier *
-        cost.foundingMultiplier,
+        cost.foundingMultiplier *
+        cost.expansionMultiplier,
       6
     );
   });

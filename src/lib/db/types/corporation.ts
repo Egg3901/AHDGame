@@ -952,6 +952,9 @@ export interface CorporateSector {
    * output-gating factor (telemetry).
    */
   capitalStock?: number;
+  /** Last turn's physical capacity in its blended recipe units during retooling. */
+  operatingCapacityUnits?: number;
+  operatingCapacityTurn?: number | null;
   capitalUtilization?: number;
   /**
    * First-class whole facilities owned by this sector. Unlike capitalStock,
@@ -1134,6 +1137,9 @@ export interface CorporateSector {
    * Reactivation is free and has no cooldown in v1.
    */
   mothballed?: boolean;
+  /** Plants kept active, 1..100. Absent means 100. The remainder pays cold upkeep.
+   * Owned capacity and paid basis are unchanged. Only capacity commands write this field. */
+  activeCapacityPercent?: number;
   /**
    * ROLLBACK SAFETY: capital-mode restore point. Remove after the rollback
    * drill passes. (Plants tier, D13.)

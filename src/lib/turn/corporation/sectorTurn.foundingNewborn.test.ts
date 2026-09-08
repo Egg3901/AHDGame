@@ -27,7 +27,7 @@ const SECTOR_ID = new ObjectId();
 const STATE_ID = "US-CA";
 const COUNTRY_ID = "US";
 const FOUNDED_TURN = 1000;
-const BUILD_TURNS = Math.ceil(CAPACITY_BUILD_TURNS("manufacturing") / 2);
+const BUILD_TURNS = CAPACITY_BUILD_TURNS("manufacturing", true);
 
 function makeCorp(): Corporation {
   return {

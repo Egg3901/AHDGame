@@ -25,7 +25,8 @@ export type EconomicActionType =
   | "buildCapacity"
   | "cancelCapacityBuild"
   | "mothballSector"
-  | "reactivateSector";
+  | "reactivateSector"
+  | "resizeSectorCapacity";
 
 export interface EconomicActionLogParams {
   /** ObjectId or its hex string — conversion + validation happen inside. */

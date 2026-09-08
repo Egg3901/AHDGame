@@ -97,3 +97,75 @@ describe("POST /api/corporations/[id]/sectors/[sectorId]/abandon", () => {
     });
   });
 });
+
+describe("abandon construction settlement", () => {
+  it("refunds only the unfinished half of a smooth build, and cannot refund a second abandon", async () => {
+    const corpId = new ObjectId();
+    const sectorId = new ObjectId();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as import("mongodb").Db);
+    const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireBasicAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: "user-1" },
+    } as never);
+    const { checkRateLimit } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValue({ ok: true } as never);
+    const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        _id: corpId,
+        countryId: "US",
+        liquidCurrencyCode: "USD",
+        name: "Fixture Corporation",
+      },
+    } as never);
+    vi.mocked(requireCeo).mockReturnValue(null);
+    db.collection("gameState");
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentTurn: 148 });
+    db.collectionMocks.corporateSectors.findOneAndDelete
+      .mockResolvedValueOnce({
+        _id: sectorId,
+        corporationId: corpId,
+        stateId: "US-MN",
+        countryId: "US",
+        sectorType: "energy",
+        revenue: 10000,
+        capitalStock: 500,
+        capacityBookAnchor: 200000,
+        buildQueue: [
+          {
+            unitsOrdered: 1000,
+            costPaidAnchor: 400000,
+            startTurn: 100,
+            onlineTurn: 196,
+            smooth: true,
+          },
+        ],
+      })
+      .mockResolvedValueOnce(null);
+    db.collectionMocks.corporations.find.mockReturnValue({
+      project: () => ({
+        toArray: async () => [{ _id: corpId, countryId: "US", liquidCurrencyCode: "USD" }],
+      }),
+    });
+    db.collectionMocks.states.findOne.mockResolvedValue({ _id: "US-MN", name: "Minnesota" });
+    const { POST } = await import("./route");
+    const routeParams = {
+      params: Promise.resolve({ id: corpId.toString(), sectorId: sectorId.toString() }),
+    };
+    expect((await POST(new Request("http://localhost/abandon"), routeParams)).status).toBe(200);
+    const refunds = db.collectionMocks.corporations.updateOne.mock.calls.filter(
+      ([, update]) => update.$inc?.liquidCapital
+    );
+    expect(refunds).toHaveLength(1);
+    expect(refunds[0][1].$inc.liquidCapital).toBe(150000);
+    expect((await POST(new Request("http://localhost/abandon"), routeParams)).status).toBe(404);
+    expect(
+      db.collectionMocks.corporations.updateOne.mock.calls.filter(
+        ([, update]) => update.$inc?.liquidCapital
+      )
+    ).toHaveLength(1);
+  });
+});
