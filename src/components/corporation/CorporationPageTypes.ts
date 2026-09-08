@@ -373,6 +373,8 @@ export interface CorpHistoryPoint {
   turn: number;
   sharePrice: number;
   marketCap: number;
+  /** Live market-cap quote currency; null means anchor, absent means snapshot basis. */
+  marketCapCurrencyCode?: CurrencyCode | null;
   liquidCapital: number;
   revenue: number;
   totalCosts: number;
