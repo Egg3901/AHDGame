@@ -1,3 +1,11 @@
+/**
+ * Sector operations turn owned capacity into sales, jobs and operating profit.
+ * processSector prices production, upkeep and policy effects while preserving payroll.
+ */
+import {
+  specializationMaintenance,
+  specializationPayrollModifier,
+} from "@/lib/corporations/specialization/rules";
 import {
   activeCapacityConstraintFactor,
   activeCapacityFraction,
@@ -1029,7 +1037,7 @@ export function processSector(
     lookups.stateSectorSpecializationByState.get(sector.stateId),
     sector.sectorType as CorporationType
   );
-  // Sector type match: +5% primary, +2.5% secondary, -15% mismatch. SOEs are
+  // Sector type match: +10pp primary, +5pp secondary, -15pp mismatch. SOEs are
   // exempt - a NatCorp is a diversified state holding company, not a
   // specialized private firm (Bug #0775).
   const sectorTypeMatchMod = isStateOwned(corp)
@@ -1222,9 +1230,22 @@ export function processSector(
     wageLevel: labour.wagesEnabled ? sector.wageLevel : 1,
   });
 
-  const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
+  const payrollSpecializationMod = isStateOwned(corp)
+    ? 0
+    : specializationPayrollModifier(sector.sectorType, corp.type, corp.secondaryType);
+  const { payrollBasis, operatingSaving } = specializationMaintenance({
+    revenue: hourlyRevenue,
+    operatingMargin: effectiveMargin,
+    payrollMargin: softCapEffectiveMargin(
+      sector.profitMargin +
+        totalMarginMod +
+        nationalizedMarginPenalty -
+        sectorTypeMatchMod +
+        payrollSpecializationMod
+    ),
+  });
   const {
-    maintenance,
+    maintenance: maintenanceBeforeSpecialization,
     sectorLaborCost,
     wagePerWorker,
     newUnionization,
@@ -1238,7 +1259,7 @@ export function processSector(
     currentTurn,
     currentYear,
     hourlyRevenue,
-    grossMaintenance,
+    grossMaintenance: payrollBasis,
     computedWorkers,
     techLaborCostMultiplier: techEffects.laborCostMultiplier,
     costOfLivingIndex: sectorMetrics?.economic?.costOfLiving?.value,
@@ -1247,6 +1268,8 @@ export function processSector(
     automationIndexByState,
     pendingStrikeEvents,
   });
+  // Apply operating savings after payroll has been priced at its existing basis.
+  const maintenance = maintenanceBeforeSpecialization - operatingSaving;
   // Growth cost must be charged on the revenue the sector ACTUALLY realises, not
   // on its nominal book revenue.
   //

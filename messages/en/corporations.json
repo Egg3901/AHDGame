@@ -36,7 +36,7 @@
       "rampHelp": "Capacity arrives gradually from next turn until the build completes. Existing paid orders keep their original schedule.",
       "rampSubtitle": "{sector} · capacity arrives gradually over {turns} turns",
       "forecastTitle": "Cash return from this expansion",
-      "noForecast": "A cash-return scenario needs this sector's completed operating figures from the latest turn. It is unavailable during retooling or while those figures are missing or stale.",
+      "noForecast": "A cash-return scenario needs current operating figures after temporary market support has ended. It is unavailable during market support, retooling, or while those figures are missing or stale.",
       "horizon": "After {turns} turns",
       "cashReturn": "of the build cost returned as cash",
       "cashAvailable": "Cash after costs and reserves",

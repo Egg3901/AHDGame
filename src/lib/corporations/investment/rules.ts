@@ -6,6 +6,26 @@
 
 export const COLD_CAPACITY_UPKEEP_FRACTION = 0.05;
 
+/** Both revenue governors must have expired in the observed operating turn. */
+export function hasSettledOperatingHistory(input: {
+  plantsStartTurn?: number | null;
+  clearingStartTurn?: number | null;
+  observedTurn: number;
+  rampTurns: number;
+}): boolean {
+  return (
+    Number.isFinite(input.observedTurn) &&
+    Number.isFinite(input.rampTurns) &&
+    input.rampTurns >= 0 &&
+    [input.plantsStartTurn, input.clearingStartTurn].every(
+      (start) =>
+        typeof start === "number" &&
+        Number.isFinite(start) &&
+        input.observedTurn >= start + input.rampTurns
+    )
+  );
+}
+
 export interface SectorInvestmentPolicy {
   expansionCostMultiplier: number;
   heavyBuildTimeMultiplier: number;
@@ -111,6 +131,8 @@ export interface InvestmentForecastInput {
   demandGapUnits: number;
   revenueDailyAnchor: number;
   operatingCostDailyAnchor: number;
+  /** Revenue-linked policy credits or charges, excluded from operating costs above. */
+  policyCreditDailyAnchor?: number;
   overheadDailyAnchor: number;
   upkeepDailyAnchor: number;
   taxRatePercent: number;
@@ -156,6 +178,8 @@ export function forecastSectorInvestment(
   const fill = Math.max(0, Math.min(1, input.soldUnits / input.producedUnits));
   const receiptPerSold = input.soldUnits > 0 ? input.revenueDailyAnchor / input.soldUnits : 0;
   const operatingPerProduced = input.operatingCostDailyAnchor / input.producedUnits;
+  const policyPerSold =
+    input.soldUnits > 0 ? (input.policyCreditDailyAnchor ?? 0) / input.soldUnits : 0;
   const overheadPerProduced = Math.max(0, input.overheadDailyAnchor) / input.producedUnits;
   const taxRate = Math.max(0, Math.min(100, input.taxRatePercent)) / 100;
   const depreciation = Math.max(0, Math.min(1, input.depreciationPerTurn));
@@ -174,7 +198,9 @@ export function forecastSectorInvestment(
     const produced = capacity * utilization;
     const sold = Math.min(produced * fill, Math.max(0, input.demandGapUnits));
     const operating =
-      (sold * receiptPerSold - produced * operatingPerProduced - capacity * upkeepPerCapacityUnit) /
+      (sold * (receiptPerSold + policyPerSold) -
+        produced * operatingPerProduced -
+        capacity * upkeepPerCapacityUnit) /
       input.turnsPerDay;
     const overhead = (produced * overheadPerProduced) / input.turnsPerDay;
     operatingCashAnchor += operating;
