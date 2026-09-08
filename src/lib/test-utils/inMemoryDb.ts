@@ -280,6 +280,24 @@ function applyUpdate(doc: Doc, update: Update): void {
  * every id filter miss. A test harness that quietly matches nothing is worse
  * than no harness, so this is hand-rolled.
  */
+/**
+ * Build the starting document for an upsert from its filter, the way the server
+ * does: every top-level equality condition becomes a field, and a document that
+ * named no `_id` gets one assigned, because readers that key on `_id` must see
+ * the same thing they would against a real driver.
+ *
+ * Shared by `updateOne`, `findOneAndUpdate` and `replaceOne` so the three cannot
+ * drift apart on what an upserted document starts out as.
+ */
+function seedFromFilter(filter: Doc): Doc {
+  const seed: Doc = {};
+  for (const [key, condition] of Object.entries(filter)) {
+    if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
+  }
+  if (seed._id === undefined) seed._id = new ObjectId();
+  return seed;
+}
+
 function clone<T>(value: T): T {
   if (value instanceof ObjectId) return new ObjectId(value.toHexString()) as unknown as T;
   if (value instanceof Date) return new Date(value.getTime()) as unknown as T;
@@ -314,6 +332,13 @@ class InMemoryCollection {
       skip: () => cursor,
       batchSize: () => cursor,
       toArray: async () => rows,
+      // Driver cursors are async-iterable, and seed code streams large
+      // collections with `for await (const doc of col.find(...))` rather than
+      // materialising them. Read `rows` lazily so a `.limit()` chained after
+      // this still applies.
+      async *[Symbol.asyncIterator]() {
+        for (const row of rows) yield row;
+      },
     };
     return cursor;
   }
@@ -345,13 +370,7 @@ class InMemoryCollection {
         if (Array.isArray(update)) {
           throw new Error("inMemoryDb: pipeline upserts are not supported");
         }
-        const seed: Doc = {};
-        for (const [key, condition] of Object.entries(filter)) {
-          if (!key.startsWith("$") && !isPlainObject(condition)) setPath(seed, key, condition);
-        }
-        // The server assigns an ObjectId to an upserted document that named
-        // none; readers that key on `_id` must see the same here.
-        if (seed._id === undefined) seed._id = new ObjectId();
+        const seed = seedFromFilter(filter);
         applyUpdate(seed, {
           ...update,
           ...((update.$setOnInsert as Doc)
@@ -379,13 +398,65 @@ class InMemoryCollection {
   async findOneAndUpdate(
     filter: Doc,
     update: Update,
-    options: { returnDocument?: "before" | "after" } = {}
+    options: { returnDocument?: "before" | "after"; upsert?: boolean } = {}
   ): Promise<Doc | null> {
     const target = this.docs.find((d) => matchesFilter(d, filter));
-    if (!target) return null;
+    if (!target) {
+      // Without upsert this is the ONLY path `getNextSequentialId` can take on a
+      // fresh world — it calls with `{ upsert: true }` against an empty
+      // `counters` collection, gets null back, and throws. That made a real
+      // `bootstrapGameWorld` impossible to run here.
+      if (!options.upsert) return null;
+      const seed = seedFromFilter(filter);
+      const u = update as Doc;
+      applyUpdate(seed, {
+        ...u,
+        ...((u.$setOnInsert as Doc)
+          ? { $set: { ...(u.$set as Doc), ...(u.$setOnInsert as Doc) } }
+          : {}),
+      });
+      this.docs.push(seed);
+      // Mongo returns null for `before` on an upsert: there was no prior doc.
+      return options.returnDocument === "before" ? null : clone(seed);
+    }
     const before = clone(target);
     applyUpdate(target, update);
     return options.returnDocument === "before" ? before : clone(target);
+  }
+
+  async replaceOne(
+    filter: Doc,
+    replacement: Doc,
+    options: { upsert?: boolean } = {}
+  ): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number }> {
+    const index = this.docs.findIndex((d) => matchesFilter(d, filter));
+    if (index < 0) {
+      if (!options.upsert) return { matchedCount: 0, modifiedCount: 0, upsertedCount: 0 };
+      this.docs.push({ ...seedFromFilter(filter), ...clone(replacement) });
+      return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+    }
+    // A replace keeps `_id` and discards every other previous field — unlike
+    // `$set`, which merges.
+    const id = this.docs[index]!._id;
+    this.docs[index] = { ...clone(replacement), _id: id };
+    return { matchedCount: 1, modifiedCount: 1, upsertedCount: 0 };
+  }
+
+  async distinct(field: string, filter: Doc = {}): Promise<unknown[]> {
+    const seen = new Set<unknown>();
+    for (const doc of this.docs) {
+      if (!matchesFilter(doc, filter)) continue;
+      const value = getPath(doc, field);
+      // Mongo flattens array values into the distinct set.
+      if (Array.isArray(value)) value.forEach((v) => seen.add(v));
+      else if (value !== undefined) seen.add(value);
+    }
+    return [...seen];
+  }
+
+  /** No real indexes exist here; callers only ever enumerate them. */
+  async indexes(): Promise<Doc[]> {
+    return [];
   }
 
   async deleteOne(filter: Doc): Promise<{ deletedCount: number }> {
