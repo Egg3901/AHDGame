@@ -421,4 +421,131 @@ describe("POST /api/country/[code]/central-bank/rate", () => {
     expect(res.status).toBe(200);
     expect(sendMultiCountryGameEvent).toHaveBeenCalledTimes(1);
   });
+
+  it.each(["SCO", "WAL"])(
+    "enforces the UK FX commitment through the %s viewpoint",
+    async (code) => {
+      await setup({
+        bank: makeMockBank({ _id: "UK", countryId: "UK", governmentControlled: false }),
+      });
+      db.collection("exchangeRates").findOne.mockImplementation(
+        async (filter: { countryId: string }) =>
+          filter.countryId === "UK" ? { fxRegime: "peg", capitalControls: false } : null
+      );
+      const { POST } = await import("./route");
+      const { sendMultiCountryGameEvent } = await import("@/lib/discordWebhooks");
+
+      const res = await POST(makeRequest({ rate: 2.25 }), { params: Promise.resolve({ code }) });
+
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toMatch(/pegged/);
+      expect(db.collection("centralBanks").updateOne).not.toHaveBeenCalled();
+      expect(sendMultiCountryGameEvent).not.toHaveBeenCalled();
+    }
+  );
+
+  it("enforces an anchor intervention band without an explicit FX regime", async () => {
+    await setup({
+      bank: makeMockBank({ _id: "UK", countryId: "UK", governmentControlled: false }),
+    });
+    db.collection("exchangeRates").findOne.mockImplementation(
+      async (filter: { countryId: string }) =>
+        filter.countryId === "UK" ? { interventionPolicy: { floor: 0.7, ceiling: 0.8 } } : null
+    );
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ rate: 2.25 }), {
+      params: Promise.resolve({ code: "SCO" }),
+    });
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toMatch(/intervention band/);
+    expect(db.collection("centralBanks").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("allows a shared-bank rate change when the anchor peg has capital controls", async () => {
+    await setup({
+      bank: makeMockBank({ _id: "UK", countryId: "UK", governmentControlled: false }),
+    });
+    db.collection("exchangeRates").findOne.mockImplementation(
+      async (filter: { countryId: string }) =>
+        filter.countryId === "UK"
+          ? { fxRegime: "peg", capitalControls: true }
+          : { fxRegime: "peg", capitalControls: false }
+    );
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ rate: 2.25 }), {
+      params: Promise.resolve({ code: "SCO" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(db.collection("centralBanks").updateOne).toHaveBeenCalledWith(
+      { _id: "UK" },
+      expect.objectContaining({ $set: expect.objectContaining({ primeRate: 2.25 }) })
+    );
+  });
+
+  it.each([
+    { anchorLevel: 10, memberLevel: 100, status: 409 },
+    { anchorLevel: 100, memberLevel: 10, status: 200 },
+  ])(
+    "uses the anchor marketization level $anchorLevel when the member level is $memberLevel",
+    async ({ anchorLevel, memberLevel, status }) => {
+      await setup({
+        bank: makeMockBank({ _id: "UK", countryId: "UK", governmentControlled: false }),
+      });
+      db.collection("gameConfig").findOne.mockResolvedValue({ commandEconomyEnabled: true });
+      db.collection("federalBudget").findOne.mockImplementation(
+        async (filter: { _id: string }) => ({
+          economicFactors: {
+            marketizationLevel: filter._id === "UK" ? anchorLevel : memberLevel,
+          },
+        })
+      );
+      const { POST } = await import("./route");
+
+      const res = await POST(makeRequest({ rate: 2.25 }), {
+        params: Promise.resolve({ code: "SCO" }),
+      });
+
+      expect(res.status).toBe(status);
+      if (status === 409) {
+        expect((await res.json()).error).toMatch(/command economy/);
+        expect(db.collection("centralBanks").updateOne).not.toHaveBeenCalled();
+      }
+    }
+  );
+
+  it.each([
+    { enabled: true, persistedLevel: undefined, isAdmin: false, status: 409 },
+    { enabled: true, persistedLevel: undefined, isAdmin: true, status: 409 },
+    { enabled: true, persistedLevel: 100, isAdmin: false, status: 200 },
+    { enabled: false, persistedLevel: 10, isAdmin: false, status: 200 },
+  ])(
+    "preserves command-economy behavior for $enabled/$persistedLevel/admin=$isAdmin",
+    async ({ enabled, persistedLevel, isAdmin, status }) => {
+      await setup({
+        bank: makeMockBank({ _id: "RU", countryId: "RU", governmentControlled: false }),
+        user: makeMockUser({ isAdmin }),
+      });
+      const { getGameState } = await import("@/lib/gameState");
+      vi.mocked(getGameState).mockResolvedValueOnce({
+        currentTurn: 100,
+        currentYear: 1953,
+      } as never);
+      db.collection("gameConfig").findOne.mockResolvedValue({ commandEconomyEnabled: enabled });
+      db.collection("federalBudget").findOne.mockResolvedValue({
+        economicFactors: { marketizationLevel: persistedLevel },
+      });
+      const { POST } = await import("./route");
+
+      const res = await POST(makeRequest({ rate: 2.25 }), {
+        params: Promise.resolve({ code: "RU" }),
+      });
+
+      expect(res.status).toBe(status);
+      if (status === 409) expect(db.collection("centralBanks").updateOne).not.toHaveBeenCalled();
+    }
+  );
 });

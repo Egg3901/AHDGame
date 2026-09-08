@@ -406,7 +406,10 @@ export async function loadCountryCentralBankDetail(params: {
       savingsPressure: breakdownSavingsPressure,
       previousInflation: budgetDoc?.economicFactors?.inflationRate ?? 2.5,
       policyStancePressure: bank.policyInflationPressure ?? 0,
-      moneySupplyGrowthPct: moneyForBreakdown?.annualizedM2GrowthPct ?? breakdownGdpGrowth,
+      moneySupplyGrowthPct:
+        gameConfig?.moneySupplyEnabled === true
+          ? (moneyForBreakdown?.annualizedM2GrowthPct ?? breakdownGdpGrowth)
+          : breakdownGdpGrowth,
     });
   const {
     currentInflation: displayInflation,

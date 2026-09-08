@@ -63,6 +63,7 @@ export function maxPrincipalFromIncome(input: {
 }): number {
   const dti = input.dtiFraction ?? NAMED_LOAN_DTI_MAX_FRACTION;
   const income = Math.max(0, Number.isFinite(input.incomePerTurn) ? input.incomePerTurn : 0);
+  if (input.committedPaymentPerTurn === Number.POSITIVE_INFINITY) return 0;
   const committed = Math.max(
     0,
     Number.isFinite(input.committedPaymentPerTurn) ? (input.committedPaymentPerTurn ?? 0) : 0

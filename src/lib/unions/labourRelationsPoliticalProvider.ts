@@ -1,3 +1,8 @@
+/**
+ * Labour disputes, settlements and funded union services affect worker security
+ * and civic life. loadLabourRelationsPoliticalNudgesByCountry combines their
+ * temporary effects within each political channel's existing cap.
+ */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
@@ -9,6 +14,7 @@ import type {
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { normalizeServiceIds, servicesWorkerSecurityNudge } from "./unionServices";
+import { loadFundedUnionServices, UNION_SERVICE_FUNDING_PROJECTION } from "./unionServiceFunding";
 
 /** Political attention fades unless a dispute escalates again. */
 export const LABOUR_DISPUTE_DECAY = 0.9;
@@ -173,10 +179,18 @@ export async function loadLabourRelationsPoliticalNudgesByCountry(
       .collection<Union>("unions")
       .find(
         { suspended: { $ne: true }, activeServices: { $exists: true, $not: { $size: 0 } } },
-        { projection: { countryId: 1, activeServices: 1, suspended: 1 } }
+        { projection: { countryId: 1, ...UNION_SERVICE_FUNDING_PROJECTION } }
       )
       .toArray(),
   ]);
 
-  return buildLabourRelationsPoliticalNudges(campaigns, currentTurn, unions);
+  const fundedServices = await loadFundedUnionServices(db, unions);
+  return buildLabourRelationsPoliticalNudges(
+    campaigns,
+    currentTurn,
+    unions.map((union) => ({
+      ...union,
+      activeServices: fundedServices.get(union._id.toString()) ?? [],
+    }))
+  );
 }

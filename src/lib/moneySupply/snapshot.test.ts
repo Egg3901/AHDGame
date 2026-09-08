@@ -71,6 +71,32 @@ beforeEach(() => {
 });
 
 describe("snapshotMoneySupply", () => {
+  it("counts savings held at a private bank once, alongside its separate NPC deposits", async () => {
+    db.collectionMocks.characters.find.mockReturnValue(
+      cursorWith([{ countryId: "US", currencyBalances: { savings: { USD: 700 } } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          liquidCapital: 0,
+          bankCharter: {
+            status: "active",
+            currency: "USD",
+            totalDeposits: 1000,
+            npcDeposits: 300,
+          },
+        },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const doc = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    expect(doc.householdSavings).toBe(700);
+    expect(doc.bankDeposits).toBe(300);
+    expect(doc.m2 - doc.externalBroadMoney).toBe(1000);
+  });
+
   it("writes an M2 that rises when corporate liquid capital rises", async () => {
     db.collectionMocks.corporations.find.mockReturnValue(
       cursorWith([{ countryId: "US", liquidCurrencyCode: "USD", liquidCapital: 10_000_000_000 }])
