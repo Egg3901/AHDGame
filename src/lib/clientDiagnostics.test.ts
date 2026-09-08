@@ -15,6 +15,25 @@ const valid = {
 } satisfies ClientDiagnostic;
 
 describe("client diagnostics privacy contract", () => {
+  it("accepts a manual desktop report with bounded runtime context", () => {
+    expect(
+      clientDiagnosticSchema.safeParse({
+        ...valid,
+        reason: "manual",
+        runtime: {
+          clientVersion: "2.1.1",
+          platform: "desktop",
+          screen: "launcher",
+          game: "local game stopped",
+          online: true,
+          viewport: "1920x1057 @ 1x",
+          language: "en-US",
+          userAgent: "Mozilla/5.0",
+        },
+      }).success
+    ).toBe(true);
+  });
+
   it("accepts only the bounded allowlisted shape", () => {
     expect(clientDiagnosticSchema.safeParse(valid).success).toBe(true);
     expect(clientDiagnosticSchema.safeParse({ ...valid, accountId: "secret" }).success).toBe(false);
