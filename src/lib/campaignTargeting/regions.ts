@@ -1,4 +1,4 @@
-/** Targeted ads stay at home unless the owner has a live presidential candidacy. */
+/** standingAdRegions keeps targeted ads at home unless the owner has a live presidential candidacy. */
 import type { Db } from "mongodb";
 import type { Character, Election, ElectionCandidate, State } from "@/lib/db/types";
 import { forbidden } from "@/lib/api/errors";

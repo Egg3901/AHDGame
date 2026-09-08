@@ -13,6 +13,7 @@ interface Target {
   currentBonus: number;
   afterBonus: number;
   available: boolean;
+  maxCount: number;
 }
 
 interface Quote {
@@ -73,6 +74,11 @@ export function TargetedAdsPanel({
   }, [endpoint, region, revision, count, t]);
 
   const target = quote?.targets.find((value) => `${value.dimension}:${value.bucket}` === targetKey);
+
+  const maxCount = Math.max(1, target?.maxCount ?? quote?.maxCount ?? 1);
+  useEffect(() => {
+    setCount((value) => Math.min(value, maxCount));
+  }, [maxCount]);
 
   async function buy() {
     if (!quote || !target || loading || busy) return;
@@ -138,7 +144,10 @@ export function TargetedAdsPanel({
               className="block w-full border rounded p-2 bg-background"
               value={targetKey}
               disabled={busy || loading}
-              onChange={(event) => setTargetKey(event.target.value)}
+              onChange={(event) => {
+                setTargetKey(event.target.value);
+                setCount(1);
+              }}
             >
               <option value="">{t("chooseTarget")}</option>
               {quote.targets.map((value) => (
@@ -159,7 +168,7 @@ export function TargetedAdsPanel({
               disabled={busy || loading}
               onChange={(event) => setCount(Number(event.target.value))}
             >
-              {Array.from({ length: quote.maxCount }, (_, index) => index + 1).map((value) => (
+              {Array.from({ length: maxCount }, (_, index) => index + 1).map((value) => (
                 <option key={value} value={value}>
                   {t("actions", { count: value })}
                 </option>
