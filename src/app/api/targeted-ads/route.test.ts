@@ -32,7 +32,7 @@ vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
 
 const campaignId = new ObjectId();
 const request = (body: unknown) =>
-  new NextRequest(`http://localhost/api/campaigns/${campaignId}/targeted-ads`, {
+  new NextRequest("http://localhost/api/targeted-ads", {
     method: "POST",
     body: JSON.stringify(body),
   });
@@ -40,8 +40,8 @@ const purchase = {
   stateId: "CA",
   dimension: "race",
   bucket: "white",
-  turns: 3,
-  quote: { turn: 10, cost: 6000, revision: 0 },
+  count: 3,
+  quote: { turn: 10, cost: 300, revision: 0 },
 };
 
 describe("standing targeted ad actions", () => {
@@ -148,13 +148,13 @@ describe("standing targeted ad actions", () => {
     const response = await GET(new NextRequest("http://localhost/api/targeted-ads"));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-    expect((await response.json()).maxFlightTurns).toBe(12);
+    expect((await response.json()).maxCount).toBe(50);
     const bought = await POST(request(purchase));
     expect(bought.status).toBe(200);
     expect(db.collection("characters").updateOne).toHaveBeenCalledOnce();
     expect(db.collection("characters").updateOne.mock.calls[0][1]).toMatchObject({
-      $inc: { actions: -15, funds: -6000, targetedAdsRevision: 1 },
-      $set: { targetedAds: [expect.objectContaining({ stateId: "CA", throughTurn: 12 })] },
+      $inc: { actions: -3, funds: -300, targetedAdsRevision: 1 },
+      $set: { targetedAds: [expect.objectContaining({ stateId: "CA", bonus: 0.03 })] },
     });
     expect(db.collection("elections").findOne).not.toHaveBeenCalled();
     expect(db.collection("campaigns").findOne).not.toHaveBeenCalled();
@@ -167,24 +167,24 @@ describe("standing targeted ad actions", () => {
       toArray: async () => [{ currencyCode: "USD", baseRate: 2, rate: 9 }],
     });
     const response = await GET(new NextRequest("http://localhost/api/targeted-ads"));
-    expect((await response.json()).targets[0].cost).toBe(4000);
-    const bought = await POST(request({ ...purchase, quote: { ...purchase.quote, cost: 12000 } }));
+    expect((await response.json()).targets[0].cost).toBe(200);
+    const bought = await POST(request({ ...purchase, quote: { ...purchase.quote, cost: 600 } }));
     expect(bought.status).toBe(200);
     expect(db.collection("characters").updateOne.mock.calls[0][1]).toMatchObject({
-      $inc: { actions: -15, "currencyBalances.campaign": -12000, targetedAdsRevision: 1 },
+      $inc: { actions: -3, "currencyBalances.campaign": -600, targetedAdsRevision: 1 },
     });
   });
 
-  it("rejects foreign regions, stale prices and overlapping flights without spending", async () => {
-    expect((await POST(request({ ...purchase, stateId: "foreign" }))).status).toBe(400);
+  it("rejects foreign regions, stale prices and capped targets without spending", async () => {
+    expect((await POST(request({ ...purchase, stateId: "foreign" }))).status).toBe(403);
     expect(
       (await POST(request({ ...purchase, quote: { ...purchase.quote, cost: 1 } }))).status
     ).toBe(409);
     db.collection("characters").findOne.mockResolvedValue({
       ...character,
-      targetedAds: [{ ...purchase, lastPurchaseTurn: 10, throughTurn: 12, exposure: 1 }],
+      targetedAds: [{ ...purchase, lastPurchaseTurn: 10, bonus: 0.25 }],
     });
-    expect((await POST(request(purchase))).status).toBe(409);
+    expect((await POST(request(purchase))).status).toBe(400);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
@@ -206,9 +206,85 @@ describe("standing targeted ad actions", () => {
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("rejects malformed flights before a write", async () => {
-    for (const turns of [0, 13, 1.5, "2"])
-      expect((await POST(request({ ...purchase, turns }))).status).toBe(400);
+  it("limits the regional selector and rejects other states without a presidential race", async () => {
+    db.collection("states").find.mockImplementation((filter: { _id?: unknown }) => ({
+      toArray: async () =>
+        typeof filter._id === "string"
+          ? [{ _id: filter._id, name: "Home" }]
+          : [
+              { _id: "CA", name: "Home" },
+              { _id: "NY", name: "Other" },
+            ],
+    }));
+    const quote = await GET(new NextRequest("http://localhost/api/targeted-ads"));
+    expect((await quote.json()).regions).toEqual([{ id: "CA", name: "Home" }]);
+    expect(
+      (await GET(new NextRequest("http://localhost/api/targeted-ads?stateId=NY"))).status
+    ).toBe(403);
+    expect((await POST(request({ ...purchase, stateId: "NY" }))).status).toBe(403);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("allows another state only through the owner's active presidential candidacy", async () => {
+    db.collection("electionCandidates").find.mockReturnValue({ toArray: async () => [candidate] });
+    db.collection("elections").findOne.mockResolvedValue(election);
+    db.collection("states").find.mockReturnValue({
+      toArray: async () => [
+        { _id: "CA", name: "Home" },
+        { _id: "NY", name: "Other" },
+      ],
+    });
+    expect((await POST(request({ ...purchase, stateId: "NY" }))).status).toBe(200);
+    expect(db.collection("electionCandidates").find.mock.calls[0][0]).toMatchObject({
+      characterId: character._id,
+      status: "active",
+      campaignSuspended: { $ne: true },
+    });
+    expect(db.collection("elections").findOne.mock.calls[0][0]).toMatchObject({
+      _id: { $in: [candidate.electionId] },
+      electionType: { $in: ["president", "uachtaran"] },
+      status: "active",
+      countryId: character.countryId,
+    });
+  });
+
+  it("does not unlock national targeting for a non-presidential or ended race", async () => {
+    db.collection("electionCandidates").find.mockReturnValue({ toArray: async () => [candidate] });
+    db.collection("elections").findOne.mockResolvedValue(null);
+    expect((await POST(request({ ...purchase, stateId: "NY" }))).status).toBe(403);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps the same unit price for a smaller audience", async () => {
+    const audience = await loadCampaignAudience(db as unknown as Db, "US", "CA");
+    if (!audience) throw new Error("Expected fixture audience");
+    vi.mocked(loadCampaignAudience).mockResolvedValue({
+      ...audience,
+      context: { ...audience.context, statePopulation: 100 },
+    });
+    const quote = await GET(new NextRequest("http://localhost/api/targeted-ads?count=3"));
+    expect((await quote.json()).targets[0]).toMatchObject({ cost: 100 });
+  });
+
+  it("rejects a batch beyond the remaining capacity before charging", async () => {
+    db.collection("characters").findOne.mockResolvedValue({
+      ...character,
+      targetedAds: [
+        { stateId: "CA", dimension: "race", bucket: "white", bonus: 0.24, lastPurchaseTurn: 10 },
+      ],
+    });
+    expect((await POST(request(purchase))).status).toBe(400);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects old flight payloads rather than silently buying a different action", async () => {
+    expect((await POST(request({ ...purchase, count: undefined, turns: 3 }))).status).toBe(400);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed action counts before a write", async () => {
+    for (const count of [0, 51, 1.5, "2"])
+      expect((await POST(request({ ...purchase, count }))).status).toBe(400);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 });

@@ -29,10 +29,10 @@ const quote = {
       scheduledThrough: null,
     },
   ],
-  actionCost: 5,
+  actionCost: 1,
   currentTurn: 10,
   revision: 2,
-  maxFlightTurns: 3,
+  maxCount: 3,
 };
 const response = (body: unknown, ok = true) => ({ ok, json: async () => body });
 const fetchMock = vi.fn();
@@ -56,23 +56,24 @@ afterEach(() => {
 });
 
 describe("targeted ad campaign controls", () => {
-  it("shows full prepaid costs and submits the exact displayed quote", async () => {
+  it("shows full batch costs and submits the exact displayed quote", async () => {
     mount();
     fireEvent.change(await screen.findByLabelText("Audience"), { target: { value: "race:white" } });
-    fireEvent.change(screen.getByLabelText("Prepaid flight"), { target: { value: "3" } });
-    expect(screen.getByText(/Personal cost: ₳600 campaign funds and 15 actions/)).toBeDefined();
+    fireEvent.change(screen.getByLabelText("Number of actions"), { target: { value: "3" } });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(screen.getByText(/Personal cost: ₳600 campaign funds and 3 actions/)).toBeDefined();
     fetchMock.mockResolvedValueOnce(response({ scheduledThrough: 12 }));
-    fireEvent.click(screen.getByRole("button", { name: "Buy ad flight" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run targeted ads" }));
     await waitFor(() => expect(onSpent).toHaveBeenCalledOnce());
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
     expect(JSON.parse(post![1].body)).toEqual({
       stateId: "PA",
       dimension: "race",
       bucket: "white",
-      turns: 3,
+      count: 3,
       quote: { turn: 10, cost: 600, revision: 2 },
     });
-    expect(screen.getByText("Flight booked through turn 12.")).toBeDefined();
+    expect(screen.getByText("Targeted ad bonus updated.")).toBeDefined();
   });
 
   it("keeps purchases disabled while switching audiences between regions", async () => {
@@ -81,7 +82,7 @@ describe("targeted ad campaign controls", () => {
     fireEvent.change(screen.getByLabelText("Region"), { target: { value: "CA" } });
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     expect(
-      (screen.getByRole("button", { name: "Buy ad flight" }) as HTMLButtonElement).disabled
+      (screen.getByRole("button", { name: "Run targeted ads" }) as HTMLButtonElement).disabled
     ).toBe(true);
     expect((screen.getByLabelText("Audience") as HTMLSelectElement).value).toBe("");
   });
@@ -103,7 +104,7 @@ describe("targeted ad campaign controls", () => {
     );
     mount();
     await screen.findByText("Original campaign rules apply.");
-    expect(screen.queryByRole("button", { name: "Buy ad flight" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Run targeted ads" })).toBeNull();
   });
 });
 
@@ -114,9 +115,9 @@ it("buys from the standing Actions endpoint without a campaign", async () => {
     </NextIntlClientProvider>
   );
   fireEvent.change(await screen.findByLabelText("Audience"), { target: { value: "race:white" } });
-  expect(fetchMock.mock.calls[0][0]).toBe("/api/targeted-ads");
+  expect(fetchMock.mock.calls[0][0]).toBe("/api/targeted-ads?count=1");
   fetchMock.mockResolvedValueOnce(response({ scheduledThrough: 10 }));
-  fireEvent.click(screen.getByRole("button", { name: "Buy ad flight" }));
+  fireEvent.click(screen.getByRole("button", { name: "Run targeted ads" }));
   await waitFor(() => expect(onSpent).toHaveBeenCalledOnce());
   expect(fetchMock.mock.calls.find(([, init]) => init?.method === "POST")?.[0]).toBe(
     "/api/targeted-ads"

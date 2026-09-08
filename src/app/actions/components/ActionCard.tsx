@@ -23,6 +23,7 @@ const ActionCard = memo(function ActionCard({
   flipflopAxis,
   flipflopDir,
   onExecute,
+  onOpenCampaignAction,
   onFlipflop,
   onFlipflopStepChange,
   onFlipflopAxisChange,
@@ -231,7 +232,15 @@ const ActionCard = memo(function ActionCard({
 
         {/* Actions */}
         <div className="mt-auto">
-          {card.href ? (
+          {(card.type === "canvass" || card.type === "targetedAds") && onOpenCampaignAction ? (
+            <button
+              type="button"
+              onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
+              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold hover:bg-primary/10"
+            >
+              {card.label}
+            </button>
+          ) : card.href ? (
             <Link
               href={card.href}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-card-elevated border border-card-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all"

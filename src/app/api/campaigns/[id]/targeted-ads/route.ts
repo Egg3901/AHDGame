@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { targetKey, purchaseSchema } from "@/lib/campaignTargeting/schema";
+import { targetKey, purchaseSchema, quoteCountSchema } from "@/lib/campaignTargeting/schema";
 import { parseJsonBody } from "@/lib/api/validate";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { badRequest, handleRouteError } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getDb } from "@/lib/mongodb";
-import type { State } from "@/lib/db/types";
+import type { State, Character, NPP } from "@/lib/db/types";
 import {
   loadTargetedAdContext,
   purchaseTargetedAds,
@@ -30,25 +30,42 @@ export async function GET(request: NextRequest, { params }: Params) {
     if (!ObjectId.isValid(id) || !state.success) throw badRequest("Invalid campaign or region");
     const db = await getDb();
     const context = await loadTargetedAdContext(db, new ObjectId(id), auth.user);
+    const ownerHome =
+      context.candidate.isNPP && context.candidate.nppId
+        ? (
+            await db
+              .collection<NPP>("npps")
+              .findOne({ _id: context.candidate.nppId }, { projection: { homeState: 1 } })
+          )?.homeState
+        : (
+            await db
+              .collection<Character>("characters")
+              .findOne({ _id: context.candidate.characterId }, { projection: { homeState: 1 } })
+          )?.homeState;
     const regions = await db
       .collection<State>("states")
       .find(
         {
           countryId: context.election.countryId,
-          ...(context.election.state === context.election.countryId
-            ? {}
-            : { _id: context.election.state }),
+          _id: ["president", "uachtaran"].includes(context.election.electionType)
+            ? { $ne: context.election.countryId }
+            : (ownerHome ?? context.election.state),
         },
         { projection: { _id: 1, name: 1 } }
       )
       .toArray();
-    const stateId = state.data ?? regions[0]?._id;
+    const stateId = state.data ?? ownerHome ?? regions[0]?._id;
     if (!stateId) throw badRequest("No regions available for this race");
-    const quote = await quoteTargetedAds(db, context, stateId);
+    const count = quoteCountSchema.safeParse(request.nextUrl.searchParams.get("count") ?? 1);
+    if (!count.success) throw badRequest("Invalid action count");
+    const quote = await quoteTargetedAds(db, context, stateId, count.data);
     return NextResponse.json(
       {
         ...quote,
-        regions: regions.map((region) => ({ id: region._id, name: region.name })),
+        regions:
+          "regions" in quote
+            ? quote.regions
+            : regions.map((region) => ({ id: region._id, name: region.name })),
         stateId,
       },
       { headers: { "Cache-Control": "private, no-store" } }
@@ -58,7 +75,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   }
 }
 
-// POST /api/campaigns/[id]/targeted-ads: prepay a bounded regional flight.
+// POST /api/campaigns/[id]/targeted-ads: buy an immediate regional bonus.
 // Auth: requireAuthWithCharacter; errors: 400, 401, 403, 404, 409, 429.
 export async function POST(request: NextRequest, { params }: Params) {
   try {
