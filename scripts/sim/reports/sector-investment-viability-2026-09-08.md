@@ -1,6 +1,7 @@
 # Sector investment viability
 
-Issue: #1592. Baseline: `7b4f190761ad4316c1f490573ac0c382e3cb19d2`.
+Issue: #1592. Baseline: `3e2e10f62a331b9c8c33fcaa12a5f7607d18817d`.
+Integrated candidate: `9fd0d2586933420f7a624b503692162f1ad62e50`.
 
 **Validation in progress. This report is not yet a balance merge gate.**
 
@@ -50,16 +51,18 @@ cash exit proceeds and are not added to cash-return percentages.
 A frozen 1966 world supplied current operating figures and exact build-quote
 contexts. Healthy sectors require at least 80% observed sales fill, at least
 80% throughput and positive operating income after allocated overhead.
-Calculations use actual CEO acumen, technology, local cost of living, prime
-rates, competitor count, market share, tax and currency conversion fees.
+Calculations use each sector's actual strategy, CEO acumen, technology, local
+cost of living, prime rates, competitor count, market share, tax and currency
+conversion fees. Both comparisons include development's strategy-price correction.
 Inventory sell-down receipts are removed before extrapolating recurring cash.
 
 | Sector        | Median retained annual cash yield before | With cost reduction |
 | ------------- | ---------------------------------------: | ------------------: |
-| Energy        |                                    7.42% |               9.88% |
-| Retail        |                                    7.40% |               9.86% |
-| Real estate   |                                    4.20% |               5.85% |
-| Manufacturing |                                   16.70% |              21.48% |
+| Energy        |                                    7.96% |              10.55% |
+| Retail        |                                    7.87% |              10.44% |
+| Real estate   |                                    4.93% |               6.77% |
+| Manufacturing |                                   13.13% |              17.01% |
+| Extraction    |                                    4.70% |               6.48% |
 
 This is a steady operating extrapolation against current replacement quotes,
 including overhead, taxes and replacement. It excludes the construction ramp
@@ -74,9 +77,16 @@ healthy locations have room for even a 1% production expansion. This supports
 retaining competition costs and improving recovery choices rather than
 calibrating every sector to a guaranteed positive investment return.
 
-No observed realized bond-arbitrage return series was available. Coupon income
-alone is not that benchmark. This report makes no claim that sectors universally
-outperform financial trading.
+Extraction's earlier calibration used the type's default build price. Pricing
+the actual strategy changes that comparison materially. The current sample with
+buyer room yields 5.61% median after the proposed discount, with a negative lower
+quartile. A separate half-prime-markup sensitivity raises this median to 6.79%,
+while also substantially increasing already strong sectors' returns. The sample
+does not support stacking a broad prime discount onto the candidate.
+
+Matched closed-position bond-return analysis is in progress. Coupon income alone
+is not a realized-arbitrage benchmark. This report makes no claim that sectors
+universally outperform financial trading.
 
 ## Full-engine experiment
 
@@ -86,6 +96,10 @@ controllers and decisions are preserved; autonomous corporations continue to
 act. Shadow-ledger instrumentation and sandbox clock guards are enabled in
 all arms. A seed aligns initial randomness but generated identifiers and
 subsequent decisions can cause paths to diverge.
+
+The release experiment includes current strategy-priced construction and equity
+pool accounting in every arm. Earlier runs against the preceding development
+revision are historical exploratory evidence and are excluded from release gates.
 
 - Baseline and combined: 192 consecutive turns, measured at 48, 96 and 192.
 - Cost-only and delivery-only: 48 consecutive turns for first-year component
