@@ -80,7 +80,7 @@ describe("processScotusTenureTurn", () => {
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).not.toHaveBeenCalled();
   });
 
-  it("auto-advances an Original Roster seat to the next scripted occupant on their real departure turn", async () => {
+  it("opens a playable vacancy instead of auto-seating the next historical occupant (#1289)", async () => {
     const seatId = new ObjectId();
     const seat = {
       _id: seatId,
@@ -117,15 +117,15 @@ describe("processScotusTenureTurn", () => {
     // Turn 49 = (1954 - 1953) * 48 + 1
     const result = await processScotusTenureTurn(49, db as unknown as Db);
 
-    expect(result).toEqual({ seatsAdvanced: 1, seatsVacatedByHistory: 0, seatsVacatedByHazard: 0 });
+    expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 1, seatsVacatedByHazard: 0 });
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
       { _id: seatId },
       expect.objectContaining({
         $set: expect.objectContaining({
-          historicalOccupantIndex: 1,
-          justiceName: "Justice B",
-          economicLean: -2,
-          socialLean: -2,
+          justiceMode: null,
+          justiceCharacterId: null,
+          justiceNppId: null,
+          justiceName: null,
         }),
       })
     );

@@ -3,15 +3,11 @@
  *
  * Two independent clocks, one per seat state:
  *
- *  - Original Roster seats (`isDivergent === false`): replay the authored
- *    `historicalOccupants` succession chain automatically — zero player
- *    action required — for as long as no divergence has occurred. When the
- *    current occupant's scripted departure turn is reached, the seat
- *    auto-advances to the next chain entry with no vacancy gap. Only once
- *    the chain is exhausted does the seat actually go vacant and become
- *    eligible for a live presidential nomination — which is, by
- *    construction, the Divergence Point (see `scotusNominationLifecycle.ts`
- *    `seatConfirmedJustice`).
+ *  - Original Roster seats (`isDivergent === false`): the justice seated at
+ *    the preset's start leaves on their authored historical date. That opens
+ *    a real vacancy for the in-game President and Senate. Later historical
+ *    occupants are reference data only; the game must never appoint them
+ *    automatically over the players' constitutional choice (ticket #1289).
  *
  *  - Divergent seats (`isDivergent === true`): flat per-turn hazard clock
  *    (`rollDivergentDeparture`), age-agnostic, uncapped on the high end.
@@ -154,7 +150,7 @@ export async function processScotusTenureTurn(
     .find({ countryId: "US" })
     .toArray();
 
-  let seatsAdvanced = 0;
+  const seatsAdvanced = 0;
   let seatsVacatedByHistory = 0;
   let seatsVacatedByHazard = 0;
   const now = new Date();
@@ -172,34 +168,14 @@ export async function processScotusTenureTurn(
       const departureTurn = yearToTurn(occupant.departureYear, startingYear);
       if (calTurn < departureTurn) continue;
 
-      const nextOccupant = seat.historicalOccupants[seat.historicalOccupantIndex + 1];
-      if (nextOccupant) {
-        await database.collection<SupremeCourtSeat>("supremeCourtSeats").updateOne(
-          { _id: seat._id },
-          {
-            $set: {
-              historicalOccupantIndex: seat.historicalOccupantIndex + 1,
-              justiceName: nextOccupant.name,
-              justiceParty: nextOccupant.party ?? null,
-              economicLean: nextOccupant.economicLean,
-              socialLean: nextOccupant.socialLean,
-              seatedAt: now,
-              seatedAtTurn: currentTurn,
-              updatedAt: now,
-            },
-          }
-        );
-        seatsAdvanced++;
-      } else {
-        // Original Roster chain exhausted — seat goes vacant, awaiting a
-        // live presidential nomination. NOT a divergence by itself; the
-        // Divergence Point is the confirmation, not the vacancy.
-        await database
-          .collection<SupremeCourtSeat>("supremeCourtSeats")
-          .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
-        seatsVacatedByHistory++;
-        await notifySeatVacated(database, seat, notifications, "history");
-      }
+      // Every historical departure creates a playable vacancy. The remaining
+      // authored chain is useful reference data, but it is not an appointment
+      // queue. The Divergence Point remains the eventual live confirmation.
+      await database
+        .collection<SupremeCourtSeat>("supremeCourtSeats")
+        .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
+      seatsVacatedByHistory++;
+      await notifySeatVacated(database, seat, notifications, "history");
       continue;
     }
 
