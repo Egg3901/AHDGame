@@ -1,7 +1,18 @@
 /**
- * READ-ONLY dry run of 2026-09-07-reprice-strategy-capacity against live.
- * Reimplements computeRepricedStock's arithmetic from the same constants so the
- * script needs no TS build step. Writes nothing.
+ * READ-ONLY. What GRANDFATHERING leaves standing.
+ *
+ * Existing plants were deliberately left untouched (decision 2026-09-07): the
+ * strategy-aware price governs new builds only, and nobody loses capacity they
+ * already hold. There is no re-pricing migration; this script is what measures
+ * the exposure that choice accepts.
+ *
+ * For every sector on a defective (type, strategy) pair it prints the capacity
+ * the recorded paid basis would have bought against the capacity actually held,
+ * so the standing overhang stays visible and can be re-measured at any time. A
+ * large and GROWING gap is the signal that grandfathering has stopped being
+ * cheap; a stable one means the fix is holding and the overhang is just legacy.
+ *
+ * Writes nothing, and no code path acts on its output.
  */
 import * as dotenv from "dotenv";
 import path from "path";

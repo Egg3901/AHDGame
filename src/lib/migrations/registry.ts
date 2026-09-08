@@ -71,7 +71,6 @@ import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-part
 import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
-import { migration as repriceStrategyCapacity } from "./entries/2026-09-07-reprice-strategy-capacity";
 import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
 
 export const MIGRATIONS: Migration[] = [
@@ -249,15 +248,6 @@ export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 // Moving an entry from here into MIGRATIONS is the act of saying "this is
 // approved to run". Do not do it to make a test or a deploy quieter.
 //
-//   2026-09-07-reprice-strategy-capacity
-//     Re-prices capacity bought at the sector-type default and run on a
-//     higher-RPU strategy. The live dry run puts ~2,390 sectors in scope with
-//     cuts to -99.96% — roughly half the world's capacity — because nearly
-//     every focused strategy out-yields its sector's diversified default. Needs
-//     narrowing to an explicit list of defective (type, strategy) pairs, and a
-//     decision on the one-sided `min` guard, before it is fit to run. See the
-//     file header and the ADR.
-//
 //   2026-09-07-equity-pool-seed-backfill
 //     Records each equity pool's opening balance as `seedLocal`. Harmless in
 //     itself and idempotent, but it WRITES to live pool documents, and the
@@ -266,7 +256,7 @@ export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
 //     TRADE-OFF: `poolConservationResidual` returns NaN without `seedLocal`, so
 //     the per-turn conservation warning is INERT until this is run. Run it as
 //     soon as the write is approved, or the monitoring half of the fix is dead.
-export const HELD_MIGRATIONS: Migration[] = [repriceStrategyCapacity, equityPoolSeedBackfill];
+export const HELD_MIGRATIONS: Migration[] = [equityPoolSeedBackfill];
 
 // Deferred to follow-up (need bootstrap-marker pass on production first):
 //   - 2026-04-22-reverse-split-victim-reparations  (no marker writer in script)
