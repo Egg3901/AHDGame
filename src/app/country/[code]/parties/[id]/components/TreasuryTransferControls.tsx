@@ -6,6 +6,7 @@ import { getNationalPartyTransferTargets } from "@/lib/constants/transferTargets
 import type { TreasuryAction } from "./treasuryReducer";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import { fmt } from "./helpers";
+import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 interface TreasuryTransferControlsProps {
   party: PartyData;
@@ -36,6 +37,8 @@ export function TreasuryTransferControls({
   );
 
   const regionLabel = countryConfig.regionLabel.toLowerCase();
+
+  const payoutCap = getPlayerPayoutCap(countryId as CountryId);
 
   return (
     <>
@@ -92,6 +95,9 @@ export function TreasuryTransferControls({
         <div className="mt-1 text-xs text-muted">
           Available: {fmt(party.treasury, party.countryId)} · Min. {fmt(1000, party.countryId)}
         </div>
+        <p className="mt-2 text-[11px] text-muted">
+          No party funds move in the last two turns before a leadership election closes.
+        </p>
       </div>
 
       {/* Send to Member */}
@@ -114,6 +120,11 @@ export function TreasuryTransferControls({
             Send to Member
           </div>
         </div>
+        <p className="text-[11px] text-muted mb-3">
+          A member can receive up to {fmt(payoutCap, party.countryId)} per turn from party funds.
+          That ceiling counts the national treasury, every state party and every caucus together. No
+          party funds move at all in the last two turns before a leadership election closes.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={sendForm.memberId}
