@@ -28,6 +28,7 @@ vi.mock("@/lib/api/requirePlayerTransfers", () => ({
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn(async () => false) }));
 vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn(async () => ({ currentTurn: 100 })) }));
+vi.mock("@/lib/treasury/emit", () => ({ emitTreasuryTransaction: vi.fn(async () => {}) }));
 
 function makeRequest(body: Record<string, unknown>) {
   return new Request("http://localhost/api/country/us/region/PA/party/1/send", {
@@ -166,5 +167,51 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/send", () => {
     expect(body.error).toMatch(/character not found/i);
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["adminLogs"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  // ─── Payout cap, freeze, and audit trail ──────────────────────────────────
+
+  function send(amount: number) {
+    return import("./route").then(({ POST }) =>
+      POST(makeRequest({ characterId: targetCharacterId.toString(), amount }), {
+        params: Promise.resolve({ code: "us", id: stateId, partyId }),
+      })
+    );
+  }
+
+  it("counts state party payouts against the shared per-turn cap", async () => {
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ total: 2_000_000 }]),
+    });
+
+    const response = await send(2_500);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/already received the maximum/);
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refuses state party sends during the leadership election freeze", async () => {
+    db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(1);
+
+    const response = await send(2_500);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/leadership election/i);
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("records who initiated the payout", async () => {
+    // These rows previously carried no initiator at all, so every state
+    // party payout read as system-generated and could not be traced.
+    const { emitTreasuryTransaction } = await import("@/lib/treasury/emit");
+    await send(2_500);
+
+    const call = vi
+      .mocked(emitTreasuryTransaction)
+      .mock.calls.map(([a]) => a as unknown as Record<string, unknown>)
+      .find((a) => (a.counterparty as { type?: string } | undefined)?.type === "character");
+    expect(call?.initiatedBy).toMatchObject({ type: "character", id: chairId.toString() });
+    expect(call?.turn).toBe(100);
   });
 });

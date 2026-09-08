@@ -195,6 +195,12 @@ export async function executeSendToMember(
       id: initiator._id.toString(),
       label: initiator.name,
     },
+    // Stamp the SAME turn the payout cap was checked against. Left to
+    // its fallback the emit re-reads gameState, and getGameTime is cached
+    // for 5s, so around a turn boundary the check could count turn N
+    // while the row landed in turn N+1 — handing the recipient a second
+    // full allowance.
+    turn: args.currentTurn,
     now,
   });
 

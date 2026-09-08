@@ -32,6 +32,13 @@ describe("getPlayerPayoutCap", () => {
   it("falls back to the default for an untuned country", () => {
     expect(getPlayerPayoutCap("NG")).toBe(DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN);
   });
+
+  it("normalises the country id, so a lowercase caller still gets the right cap", () => {
+    // A miss falls back silently, so "ru" would otherwise show and enforce
+    // 2,000,000 instead of 1,500,000 with no error anywhere.
+    expect(getPlayerPayoutCap("ru")).toBe(1_500_000);
+    expect(getPlayerPayoutCap("jp")).toBe(10_000_000);
+  });
 });
 
 describe("getPlayerPayoutThisTurn", () => {

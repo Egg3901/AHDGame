@@ -275,6 +275,20 @@ export async function POST(request: Request, { params }: RouteParams) {
         id: targetCharacterOid.toString(),
         label: targetCharacter.name,
       },
+      // This route previously recorded no initiator, so every state party
+      // payout in the ledger reads as system-generated and there is no
+      // way to see who moved the money. The national and caucus send
+      // routes both record it; this one should too.
+      initiatedBy: authUser.character
+        ? {
+            type: "character" as const,
+            id: authUser.character._id.toString(),
+            label: authUser.character.name,
+          }
+        : undefined,
+      // Same turn the payout cap was checked against, so the check and
+      // the record cannot land in different turn buckets.
+      turn: currentTurn,
       now,
     });
 

@@ -240,6 +240,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         id: authUser.character._id.toString(),
         label: authUser.character.name,
       },
+      // Same turn the payout cap was checked against, so the check and
+      // the record cannot land in different turn buckets.
+      turn: currentTurn,
       now,
     });
 

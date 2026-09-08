@@ -22,11 +22,14 @@ areas: [backend, frontend]
   allowance as being paid nationally, so the limit cannot be collected once per
   treasury.
 - No party funds move at all during the last two turns before a party leadership
-  election closes. That covers sends, transfers to state parties, caucus
-  payments, and approving a request that was queued earlier.
+  election closes. That covers sends, transfers to state parties and caucus
+  payments, and you cannot queue a funding request during the window or approve
+  one that was queued before it.
 - The limits are written on the Send to Member, Request Funds, state party and
   caucus panels, so you can see them before you try to spend.
 - Refusals say how much of the allowance is left rather than simply failing.
+- State party payments now record who sent them. They previously showed no
+  sender at all in the transaction log, unlike national and caucus payments.
 
 ## Why it matters
 

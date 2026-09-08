@@ -95,6 +95,9 @@ export function TreasuryTransferControls({
         <div className="mt-1 text-xs text-muted">
           Available: {fmt(party.treasury, party.countryId)} · Min. {fmt(1000, party.countryId)}
         </div>
+        <p className="mt-2 text-[11px] text-muted">
+          No party funds move in the last two turns before a leadership election closes.
+        </p>
       </div>
 
       {/* Send to Member */}

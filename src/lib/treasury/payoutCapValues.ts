@@ -26,7 +26,14 @@ export const PLAYER_PAYOUT_CAP_PER_TURN: Partial<Record<CountryId, number>> = {
 /** Applied to any country not named above. */
 export const DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN = 2_000_000;
 
-/** The per-turn payout cap in force for this country. */
-export function getPlayerPayoutCap(countryId: CountryId): number {
-  return PLAYER_PAYOUT_CAP_PER_TURN[countryId] ?? DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN;
+/**
+ * The per-turn payout cap in force for this country.
+ *
+ * The country id is normalised before lookup. A miss falls back to the
+ * default silently, so a caller passing "uk" instead of "UK" would
+ * otherwise display and enforce the wrong number with no error anywhere.
+ */
+export function getPlayerPayoutCap(countryId: CountryId | string): number {
+  const key = String(countryId).toUpperCase() as CountryId;
+  return PLAYER_PAYOUT_CAP_PER_TURN[key] ?? DEFAULT_PLAYER_PAYOUT_CAP_PER_TURN;
 }
