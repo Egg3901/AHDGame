@@ -27,6 +27,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
+import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
 
 export interface ExecuteSendToMemberArgs {
   db: Db;
@@ -42,6 +43,17 @@ export interface ExecuteSendToMemberArgs {
   initiatorUsername: string;
   /** Auth userId, for activityLog.userId. */
   initiatorUserId: string;
+  /**
+   * Current game turn, used for the recipient's per-turn payout cap.
+   * Passed in rather than read here so the cap stays testable and the
+   * executor keeps no clock dependency of its own.
+   */
+  currentTurn: number;
+  /**
+   * Skip the payout cap. Admin actions only — admins already bypass the
+   * rest of the treasury workflow.
+   */
+  skipPayoutCap?: boolean;
 }
 
 /**
@@ -56,6 +68,22 @@ export async function executeSendToMember(
 ): Promise<{ ok: boolean; response: NextResponse }> {
   const { db, countryId, party, targetCharacter, amount, reserveWarning, initiator } = args;
   const partyIdStr = String(party.sequentialId);
+
+  // Per-turn ceiling on what one player can receive from party funds.
+  // Checked here rather than in the routes so both the direct send and
+  // the Request Funds approval path are covered by one guard.
+  if (!args.skipPayoutCap) {
+    const cap = await checkPlayerPayoutCap(db, {
+      characterId: targetCharacter._id,
+      countryId,
+      currentTurn: args.currentTurn,
+      amount,
+    });
+    if (!cap.ok) {
+      return { ok: false, response: NextResponse.json({ error: cap.reason }, { status: 400 }) };
+    }
+  }
+
   const now = new Date();
   const forexEnabled = await isForexEnabled();
   // Post-Phase-6: party treasury and recipient campaign balance are

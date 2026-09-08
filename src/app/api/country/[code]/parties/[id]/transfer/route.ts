@@ -19,6 +19,10 @@ import {
   getProposerSlot,
   resolveTransactionApprovalMode,
 } from "@/lib/parties/pendingTreasuryTransactions";
+import {
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -89,6 +93,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (transferGuard) return transferGuard;
 
     // Check treasury balance (pre-check).
+    // No party money moves in the closing turns of a leadership election.
+    if (!isAdmin) {
+      const { currentTurn: freezeTurn } = await getGameTime();
+      if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
+        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+      }
+    }
+
     const treasury = party.treasury ?? 0;
     if (amount > treasury) {
       return NextResponse.json(

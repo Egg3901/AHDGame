@@ -23,6 +23,7 @@ vi.mock("@/lib/api/requirePlayerTransfers", () => ({
   requirePlayerTransfersEnabled: vi.fn(async () => null),
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn(async () => false) }));
+vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn(async () => ({ currentTurn: 100 })) }));
 
 function makeRequest(body: Record<string, unknown>) {
   return new Request("http://localhost/api/country/us/parties/1/send", {
@@ -46,8 +47,16 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     db = createMockDb();
     db.collection("politicalParties");
     db.collection("characters");
+    db.collection("treasuryTransactions");
+    db.collection("nationalPartyElections");
     db.collection("adminLogs");
     db.collection("activityLog");
+
+    // No payouts yet this turn, and no leadership election closing.
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(0);
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -146,5 +155,78 @@ describe("POST /api/country/[code]/parties/[id]/send", () => {
     expect(body.error).toMatch(/character not found/i);
     expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalledTimes(1);
     expect(db.collectionMocks["adminLogs"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  // ─── Per-turn payout cap + leadership election freeze ─────────────────────
+
+  /** Rich party, so the cap is what bites rather than the balance. */
+  async function richParty() {
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
+      countryId: "US",
+      name: "Test Party",
+      treasury: 50_000_000,
+      chairId,
+      transactionApprovalMode: "single",
+    } as never);
+  }
+
+  function send(amount: number) {
+    return import("./route").then(({ POST }) =>
+      POST(makeRequest({ characterId: targetCharacterId.toString(), amount }), {
+        params: Promise.resolve({ code: "us", id: partyId }),
+      })
+    );
+  }
+
+  it("refuses a send that would push the recipient over their per-turn cap", async () => {
+    // US cap is 2,000,000 and 1,500,000 is already spent this turn.
+    await richParty();
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ total: 1_500_000 }]),
+    });
+
+    const response = await send(600_000);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/500,000 more/);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("allows a send that lands exactly on the cap", async () => {
+    await richParty();
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ total: 1_500_000 }]),
+    });
+
+    const response = await send(500_000);
+    expect(response.status).toBe(200);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).toHaveBeenCalled();
+  });
+
+  it("counts state party and caucus payouts towards the same cap", async () => {
+    // The ledger sum is deliberately not filtered by holderType, so a
+    // player already paid from a state party cannot top up nationally.
+    await richParty();
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ total: 2_000_000 }]),
+    });
+
+    const response = await send(1_000);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/already received the maximum/);
+  });
+
+  it("refuses any send in the closing turns of a leadership election", async () => {
+    db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(1);
+
+    const response = await send(1_000);
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/leadership election/i);
+    expect(db.collectionMocks["politicalParties"]!.updateOne).not.toHaveBeenCalled();
   });
 });

@@ -7,6 +7,10 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requirePlayerTransfersEnabled } from "@/lib/api/requirePlayerTransfers";
+import {
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
 import { executeSendToMember } from "@/lib/treasury/executeSendToMember";
 import { executeTransferToStateParty } from "@/lib/treasury/executeTransferToStateParty";
@@ -78,6 +82,14 @@ export async function POST(_request: Request, { params }: RouteParams) {
         { error: `Transaction is ${pending.status}, not open.` },
         { status: 400 }
       );
+    }
+
+    // A row queued before the leadership handover window must not pay out
+    // during it. Checked before the slot claim so a refusal does not
+    // leave the row carrying an approval that never executed.
+    const { currentTurn: freezeTurn } = await getGameTime();
+    if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
+      return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
     }
 
     // Resolve which slot this character would fill on this row.
@@ -166,6 +178,10 @@ export async function POST(_request: Request, { params }: RouteParams) {
     // construction false — pass null.
     const reserveWarning: string | null = null;
 
+    // Needed both for the recipient's per-turn payout cap and for
+    // stamping the row resolved below.
+    const { currentTurn } = await getGameTime();
+
     if (ready.type === "send" || ready.type === "request") {
       // Both flows execute via the same send-to-member path — for
       // "request" the recipient is the proposer themselves.
@@ -194,6 +210,7 @@ export async function POST(_request: Request, { params }: RouteParams) {
         initiator: { _id: user.character._id, name: user.character.name },
         initiatorUsername: user.username,
         initiatorUserId: user.userId,
+        currentTurn,
       });
       if (!result.ok) return result.response;
     } else if (ready.type === "transfer") {
@@ -227,7 +244,6 @@ export async function POST(_request: Request, { params }: RouteParams) {
     }
 
     // ─── Mark the pending row approved ───────────────────────────────────
-    const { currentTurn } = await getGameTime();
     await db
       .collection<PendingTreasuryTransaction>("pendingTreasuryTransactions")
       .updateOne(

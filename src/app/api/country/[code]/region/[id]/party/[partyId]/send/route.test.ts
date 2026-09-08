@@ -27,6 +27,7 @@ vi.mock("@/lib/api/requirePlayerTransfers", () => ({
   requirePlayerTransfersEnabled: vi.fn(async () => null),
 }));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn(async () => false) }));
+vi.mock("@/lib/time/gameTime", () => ({ getGameTime: vi.fn(async () => ({ currentTurn: 100 })) }));
 
 function makeRequest(body: Record<string, unknown>) {
   return new Request("http://localhost/api/country/us/region/PA/party/1/send", {
@@ -52,8 +53,16 @@ describe("POST /api/country/[code]/region/[id]/party/[partyId]/send", () => {
     db = createMockDb();
     db.collection("statePartyOrg");
     db.collection("characters");
+    db.collection("treasuryTransactions");
+    db.collection("nationalPartyElections");
     db.collection("adminLogs");
     db.collection("activityLog");
+
+    // No payouts yet this turn, and no leadership election closing.
+    db.collectionMocks["treasuryTransactions"]!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(0);
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);

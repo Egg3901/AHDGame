@@ -21,6 +21,10 @@ import {
   getProposerSlot,
   resolveTransactionApprovalMode,
 } from "@/lib/parties/pendingTreasuryTransactions";
+import {
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -113,6 +117,16 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     // Check treasury balance (pre-check; the executor / pending row use
     // the same value at execute time via the `$gte` filter).
+    // No party money moves in the closing turns of a leadership election.
+    // Checked at propose time so a row cannot even be queued during the
+    // handover window.
+    if (!isAdmin) {
+      const { currentTurn: freezeTurn } = await getGameTime();
+      if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
+        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+      }
+    }
+
     const treasury = party.treasury ?? 0;
     if (treasury < sendAmount) {
       return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
@@ -177,6 +191,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Immediate execution path (single mode or admin bypass).
+    const { currentTurn: executeTurn } = await getGameTime();
     const result = await executeSendToMember({
       db,
       countryId,
@@ -187,6 +202,8 @@ export async function POST(request: Request, { params }: RouteParams) {
       initiator: { _id: authUser.character._id, name: authUser.character.name },
       initiatorUsername: authUser.username,
       initiatorUserId: authUser.userId,
+      currentTurn: executeTurn,
+      skipPayoutCap: !!isAdmin,
     });
     return result.response;
   } catch (error) {
