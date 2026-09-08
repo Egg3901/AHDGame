@@ -5,7 +5,7 @@ import { Tile } from "./dossier";
 import { ESTATE_UPKEEP_UNIT } from "@/lib/constants/cabinetEstates";
 import { fmtMoneyM, fmtMoneyAbs } from "./estates/estatesUi";
 
-/** Masthead stat strip for an estates seat — replaces the metric strip with portfolio aggregates. */
+/** Portfolio facilities and costs, displayed alongside the office's national outcome metrics. */
 export function CabinetEstateStrip({
   estateSummary,
   currencySymbol = "$",
