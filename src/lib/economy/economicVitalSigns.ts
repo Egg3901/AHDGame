@@ -1,3 +1,4 @@
+import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import type { Db } from "mongodb";
 import type {
   Bond,
@@ -699,9 +700,10 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     .slice(0, 10)
     .reduce((sum, value) => sum + value, 0);
 
-  const moneyGrowth = input.money.flatMap((row) =>
-    finite(row.annualizedM2GrowthPct) ? [row.annualizedM2GrowthPct] : []
-  );
+  const moneyGrowth = input.money.flatMap((row) => {
+    const growth = currentMoneyGrowth(row);
+    return growth == null ? [] : [growth];
+  });
   const inflationByCountry = new Map(
     Object.entries(input.health?.economy.byCountry ?? {}).flatMap(([countryId, row]) =>
       row && finite(row.inflation) ? [[countryId, row.inflation] as const] : []
@@ -711,8 +713,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const pairedInflation: number[] = [];
   for (const row of input.money) {
     const inflation = inflationByCountry.get(row.countryId);
-    if (!finite(row.annualizedM2GrowthPct) || !finite(inflation)) continue;
-    pairedGrowth.push(row.annualizedM2GrowthPct);
+    const growth = currentMoneyGrowth(row);
+    if (growth == null || !finite(inflation)) continue;
+    pairedGrowth.push(growth);
     pairedInflation.push(inflation);
   }
   const totalM2 = input.money.reduce((sum, row) => sum + Math.max(0, row.m2), 0);

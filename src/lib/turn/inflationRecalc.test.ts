@@ -225,10 +225,10 @@ describe("recalculateInflationPerTurn", () => {
     );
     const memory = createInMemoryDb();
     memory.seed("moneySupplySnapshots", [
-      { currencyCode: "USD", turn: 98, annualizedM2GrowthPct: 20 },
-      { currencyCode: "USD", turn: 99, annualizedM2GrowthPct: 4 },
-      { currencyCode: "USD", turn: 100, annualizedM2GrowthPct: 80 },
-      { currencyCode: "GBP", turn: 99, annualizedM2GrowthPct: 7 },
+      { accountingVersion: 2, currencyCode: "USD", turn: 98, annualizedM2GrowthPct: 20 },
+      { accountingVersion: 2, currencyCode: "USD", turn: 99, annualizedM2GrowthPct: 4 },
+      { accountingVersion: 2, currencyCode: "USD", turn: 100, annualizedM2GrowthPct: 80 },
+      { accountingVersion: 2, currencyCode: "GBP", turn: 99, annualizedM2GrowthPct: 7 },
     ]);
     db.collection("moneySupplySnapshots");
     db.collectionMocks.moneySupplySnapshots.aggregate.mockImplementation((pipeline) =>
@@ -238,6 +238,30 @@ describe("recalculateInflationPerTurn", () => {
     await recalculateInflationPerTurn(db as unknown as Db, 100);
     expect(mockCalculateCountryInflation.mock.calls.find((call) => call[1] === "US")?.[7]).toBe(4);
     expect(mockCalculateCountryInflation.mock.calls.find((call) => call[1] === "UK")?.[7]).toBe(7);
+    expect(db.collectionMocks.moneySupplySnapshots.find).not.toHaveBeenCalled();
+  });
+
+  it("ignores legacy and warming-up money observations", async () => {
+    setupBanks(db, [makeCentralBank("US"), makeCentralBank("UK")]);
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockImplementation(async (filter: { _id: string }) =>
+      makeBudget(filter._id)
+    );
+    const memory = createInMemoryDb();
+    memory.seed("moneySupplySnapshots", [
+      { currencyCode: "USD", turn: 98, annualizedM2GrowthPct: 20 },
+      { currencyCode: "USD", turn: 99, annualizedM2GrowthPct: 4 },
+      { currencyCode: "USD", turn: 100, annualizedM2GrowthPct: 80 },
+      { accountingVersion: 2, currencyCode: "GBP", turn: 99, annualizedM2GrowthPct: null },
+    ]);
+    db.collection("moneySupplySnapshots");
+    db.collectionMocks.moneySupplySnapshots.aggregate.mockImplementation((pipeline) =>
+      memory.collection("moneySupplySnapshots").aggregate(pipeline)
+    );
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    await recalculateInflationPerTurn(db as unknown as Db, 100);
+    expect(mockCalculateCountryInflation.mock.calls.find((call) => call[1] === "US")?.[7]).toBe(2);
+    expect(mockCalculateCountryInflation.mock.calls.find((call) => call[1] === "UK")?.[7]).toBe(2);
     expect(db.collectionMocks.moneySupplySnapshots.find).not.toHaveBeenCalled();
   });
 

@@ -56,19 +56,36 @@ interface DbExtras {
   executives?: Array<{ userId: ObjectId; characterName: string }>;
   /** Active FOMC nominations before the Senate for the bank. */
   activeNominations?: Array<{ _id: ObjectId }>;
+  fx?: { countryId: string; fxRegime: "peg" | "float" | "band"; capitalControls: boolean };
+  commandEconomyEnabled?: boolean;
+  marketizationLevel?: number;
 }
 
 function makeDb(bank: Partial<CentralBank> & { _id: string }, extras: DbExtras = {}) {
   const bankUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
   const collections: Record<string, unknown> = {
-    gameConfig: { findOne: vi.fn().mockResolvedValue({ commandEconomyEnabled: false }) },
+    gameConfig: {
+      findOne: vi
+        .fn()
+        .mockResolvedValue({ commandEconomyEnabled: extras.commandEconomyEnabled ?? false }),
+    },
     centralBanks: {
       find: () => ({ toArray: vi.fn().mockResolvedValue([bank]) }),
       findOne: vi.fn().mockResolvedValue(bank),
       updateOne: bankUpdateOne,
       bulkWrite: vi.fn().mockResolvedValue({}),
     },
+    exchangeRates: {
+      find: () => ({ toArray: vi.fn().mockResolvedValue(extras.fx ? [extras.fx] : []) }),
+    },
     federalBudget: {
+      find: () => ({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([
+            { _id: "federal", economicFactors: { marketizationLevel: extras.marketizationLevel } },
+          ]),
+      }),
       findOne: vi.fn().mockResolvedValue({ economicFactors: { inflationRate: 3 } }),
     },
     macroMetrics: {
@@ -785,4 +802,78 @@ describe("castFomcBallot — live player votes", () => {
     expect($set.fomcMeetingHistory).toBeUndefined();
     expect($set.primeRate).toBeUndefined();
   });
+});
+
+describe("current policy at committee execution", () => {
+  it.each(["ballot", "turn"])(
+    "%s preserves the vote but blocks a newly pegged currency",
+    async (path) => {
+      const db = makeDb(
+        {
+          _id: "US",
+          countryId: "US",
+          primeRate: 5,
+          fomcTermStartedAtTurn: 100,
+          lastFomcMeetingTurn: 108,
+          activeFomcMeeting: nppMajorityMeeting(108),
+          fomcBoard: usBoard(),
+        },
+        { fx: { countryId: "US", fxRegime: "peg", capitalControls: false } }
+      );
+      if (path === "ballot") {
+        const result = await castFomcBallot(
+          db as unknown as Db,
+          "US",
+          PLAYER_ID,
+          "hike",
+          109,
+          new Date(),
+          1960
+        );
+        expect(result).toMatchObject({ ok: true, resolved: true, moved: false });
+      } else {
+        const result = await processFomcMeetings(db as unknown as Db, 132, 1960, new Date());
+        expect(result).toMatchObject({ meetingsResolved: 1, ratesChanged: 0 });
+      }
+      const set = setOf(db);
+      expect(set.primeRate).toBeUndefined();
+      expect(set.rateHistory).toBeUndefined();
+      expect(set.fomcMeetingHistory).toEqual([
+        expect.objectContaining({
+          result: "passed",
+          executionOutcome: "blocked",
+          executionBlockedReason: "fx-committed",
+        }),
+      ]);
+    }
+  );
+
+  it.each(["ballot", "turn"])(
+    "%s respects persisted command economy instead of the country schedule",
+    async (path) => {
+      const db = makeDb(
+        {
+          _id: "US",
+          countryId: "US",
+          primeRate: 5,
+          fomcTermStartedAtTurn: 100,
+          lastFomcMeetingTurn: 108,
+          activeFomcMeeting: nppMajorityMeeting(108),
+          fomcBoard: usBoard(),
+        },
+        { commandEconomyEnabled: true, marketizationLevel: 0 }
+      );
+      if (path === "ballot")
+        await castFomcBallot(db as unknown as Db, "US", PLAYER_ID, "hike", 109, new Date(), 1960);
+      else await processFomcMeetings(db as unknown as Db, 132, 1960, new Date());
+      expect(setOf(db).primeRate).toBeUndefined();
+      expect(setOf(db).fomcMeetingHistory).toEqual([
+        expect.objectContaining({
+          result: "passed",
+          executionOutcome: "blocked",
+          executionBlockedReason: "command-economy",
+        }),
+      ]);
+    }
+  );
 });

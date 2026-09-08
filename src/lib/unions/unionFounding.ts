@@ -9,6 +9,7 @@
  * personal wealth. That also stops a rich character from buying up an industry's
  * labour movement out of pocket while a well-organized poorer one cannot.
  */
+import type { CampaignCurrencyRates } from "@/lib/campaigns/rules/currency";
 import type { CountryId } from "@/lib/constants/countries";
 import { getFoundingFxRate } from "@/lib/corporations/foundingCosts";
 
@@ -56,7 +57,8 @@ export function unionFoundingCostLocal(params: {
   preset?: string | undefined;
   countryId: CountryId;
   forexEnabled: boolean;
+  campaignRates?: CampaignCurrencyRates;
 }): number {
-  const rate = getFoundingFxRate(params.countryId, params.forexEnabled);
+  const rate = getFoundingFxRate(params.countryId, params.forexEnabled, params.campaignRates);
   return Math.round(UNION_FOUNDING_COST_CAMPAIGN_FUNDS * rate);
 }

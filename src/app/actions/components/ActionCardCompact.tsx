@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react";
 import Link from "next/link";
+import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { calculateConvertCashInfamy } from "@/lib/actions";
@@ -43,7 +44,9 @@ const ActionCardCompact = memo(function ActionCardCompact({
   onConvertCashAmountChange,
   onConvertCashExecute,
 }: ActionCardProps) {
-  const { formatAmount, convert, forexRates } = useCurrency();
+  const { formatAmount, baseRates } = useCurrency();
+  const politicalLocal = (amount: number) =>
+    forexEnabled ? campaignAnchorToLocal(amount, character.countryId ?? "US", baseRates) : amount;
   // Self-funding confirm step: acknowledge the Infamy cost before submitting.
   const [convertConfirming, setConvertConfirming] = useState(false);
   const isCampaign = card.type === "campaign";
@@ -68,9 +71,21 @@ const ActionCardCompact = memo(function ActionCardCompact({
   else effectiveFundCost = card.fundCost(character);
 
   let effectiveFundLabel: string;
-  if (isCampaign) effectiveFundLabel = formatAmount(campaignFundCost);
-  else if (isAdvertise) effectiveFundLabel = formatAmount(advertiseFundCost);
-  else if (isBuildDonorBase) effectiveFundLabel = formatAmount(buildDonorBaseFundCost);
+  if (isCampaign)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(campaignFundCost),
+      campaignCurrency
+    );
+  else if (isAdvertise)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(advertiseFundCost),
+      campaignCurrency
+    );
+  else if (isBuildDonorBase)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(buildDonorBaseFundCost),
+      campaignCurrency
+    );
   else if (isFundraise)
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
@@ -81,8 +96,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
   const noDonor = card.requiresDonorBase && (character.donorBaseLevel ?? 0) === 0;
   const noCash = isConvertCash && displayPersonalWealth <= 0;
   const fundNeeded = effectiveFundCost;
-  const fundNeededConverted =
-    fundNeeded !== null && forexEnabled && forexRates ? convert(fundNeeded) : fundNeeded;
+  const fundNeededConverted = fundNeeded !== null ? politicalLocal(fundNeeded) : fundNeeded;
   const cantAffordFunds =
     fundNeededConverted !== null && displayCampaignFunds < fundNeededConverted;
   const cantAffordActions = character.actions < effectiveActionCost;

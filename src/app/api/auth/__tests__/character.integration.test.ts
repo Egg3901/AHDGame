@@ -88,6 +88,7 @@ describe("POST /api/auth/character - Character Creation", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "states") {
           return {
             // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -247,6 +248,7 @@ describe("POST /api/auth/character - Character Creation", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "states") {
           return {
             // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -377,6 +379,7 @@ describe("POST /api/auth/character - Character Creation", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "states") {
           return {
             // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -477,6 +480,7 @@ describe("POST /api/auth/character - Character Creation", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "states") {
           return {
             // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -610,6 +614,7 @@ describe("POST /api/auth/character - Character Creation", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "states") {
           return {
             // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -730,6 +735,7 @@ describe("POST /api/auth/character - Character Creation", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "states") {
           return {
             // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -848,6 +854,7 @@ describe("POST /api/auth/character - Character Creation", () => {
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue({
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "users") {
           return {
             findOne: vi.fn().mockResolvedValue({
@@ -946,6 +953,7 @@ describe("GET /api/auth/character - Active character resolution", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "users") return { findOne: vi.fn().mockResolvedValue(mockUser) };
         if (name === "characters") return { findOne: charactersFindOne };
         return { findOne: vi.fn().mockResolvedValue(null) };
@@ -974,6 +982,7 @@ describe("GET /api/auth/character - Active character resolution", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "users") return { findOne: vi.fn().mockResolvedValue(mockUser) };
         if (name === "characters") {
           return { findOne: vi.fn().mockResolvedValue(onlyChar) };
@@ -995,6 +1004,7 @@ describe("GET /api/auth/character - Active character resolution", () => {
 
     const mockDb = {
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "users")
           return { findOne: vi.fn().mockResolvedValue({ _id: new ObjectId(mockUserId) }) };
         if (name === "characters") return { findOne: vi.fn().mockResolvedValue(null) };
@@ -1031,6 +1041,7 @@ describe("GET /api/auth/character - Active character resolution", () => {
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue({
       collection: vi.fn().mockImplementation((name: string) => {
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
         if (name === "users") {
           return {
             findOne: vi.fn().mockResolvedValue({

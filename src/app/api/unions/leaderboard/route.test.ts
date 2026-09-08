@@ -2,6 +2,10 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { ObjectId } from "mongodb";
 
+vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
+vi.mock("@/lib/campaigns/campaignCurrency", () => ({
+  loadCampaignCurrencyRates: vi.fn().mockResolvedValue({ GBP: 2 }),
+}));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/labour/featureFlag", () => ({ isLabourFullMode: vi.fn().mockResolvedValue(true) }));
 
@@ -104,4 +108,11 @@ describe("GET /api/unions/leaderboard NPP presidents", () => {
     const body = await res.json();
     expect(body.unions[0].leaderName).toBe("Klaus Weber");
   });
+});
+
+it("quotes the same world-calibrated campaign cost as union founding", async () => {
+  const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+  vi.mocked(isForexEnabled).mockResolvedValueOnce(true);
+  const response = await get("http://localhost/api/unions/leaderboard?country=UK");
+  expect((await response.json()).founding.costLocal).toBe(1000000);
 });

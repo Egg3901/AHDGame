@@ -47,6 +47,10 @@ export interface BondMarketPool {
   targetCashLocal: number;
   /** Latest broad money for the currency, copied from the money supply snapshot each turn. */
   m2Local?: number;
+  /** Accounting method of the cached M2 observation; missing means legacy v1. */
+  poolAccountingVersion?: number;
+  /** Calibrated secondary liquidity, excluding temporary sovereign rollover needs. */
+  liquidityTargetLocal?: number;
   lastTurn?: number;
   /**
    * Sovereign demand ratio per issuer country whose paper trades in this
