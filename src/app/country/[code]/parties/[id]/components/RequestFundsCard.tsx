@@ -8,6 +8,8 @@ import { partyApiUrl } from "@/lib/urls";
 import { getMessageStyle } from "@/lib/utils/formatters";
 import { contrastTextColor } from "@/lib/utils/colorContrast";
 import type { PartyData } from "./types";
+import type { CountryId } from "@/lib/constants/countries";
+import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 /**
  * Member-initiated Request Funds card. Any party member can request
@@ -93,7 +95,10 @@ export function RequestFundsCard({
         <p className="text-[11px] text-muted/60 mb-3">
           Request campaign funds from the party treasury. Your request goes to Pending Transactions
           and waits for officer approval — Treasurer, Chair, or Vice-Chair. You can&apos;t approve
-          your own request.
+          your own request. You can receive up to {partySymbol}
+          {getPlayerPayoutCap(party.countryId as CountryId).toLocaleString()} per turn from party
+          funds in total, counting the national treasury, state parties and caucuses together, and
+          nothing at all in the last two turns before a leadership election closes.
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <Input
