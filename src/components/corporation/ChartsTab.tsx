@@ -215,7 +215,7 @@ export default function ChartsTab({
   // snapshot's own `currencyCode` (Task 10). Normalize every plotted value
   // to ₳ so a shared Y-axis works across legacy (no code) and post-migration
   // (code stamped) snapshots. Formatting then honors wallet preference via
-  // the representative currency (latest snapshot's code = corp's current).
+  // the representative currency for the selected metric.
   //
   // Use the rate that was ACTUALLY in effect when this row was written
   // (`fxRateAtWrite`), not the live/current rate — FX floats every turn, so
@@ -228,7 +228,12 @@ export default function ChartsTab({
     if (typeof fxRateAtWrite === "number" && fxRateAtWrite > 0) return val / fxRateAtWrite;
     return toInternalFrom(val, code as CurrencyCode);
   };
-  const representativeCode = history[history.length - 1]?.currencyCode as CurrencyCode | undefined;
+  const latestPoint = history[history.length - 1];
+  const representativeCode = (
+    activeMetric === "marketCap" && latestPoint?.marketCapCurrencyCode !== undefined
+      ? (latestPoint.marketCapCurrencyCode ?? undefined)
+      : latestPoint?.currencyCode
+  ) as CurrencyCode | undefined;
   const fmtMoney = (v: number) => formatAmount(v, representativeCode);
   const fmtSharePrice = (v: number) => fmtPrice(v, representativeCode);
 
@@ -251,7 +256,11 @@ export default function ChartsTab({
         };
       case "marketCap":
         return {
-          values: history.map((p) => toAnchor(p.marketCap, p.currencyCode, p.fxRateAtWrite)),
+          values: history.map((p) =>
+            p.marketCapCurrencyCode !== undefined
+              ? toAnchor(p.marketCap, p.marketCapCurrencyCode ?? undefined)
+              : toAnchor(p.marketCap, p.currencyCode, p.fxRateAtWrite)
+          ),
           label: "Market Cap",
           format: fmtMoney,
           isCurrency: true,
