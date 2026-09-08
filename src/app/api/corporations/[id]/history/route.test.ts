@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
+vi.mock("@/lib/auth", () => ({ getAuthUser: vi.fn() }));
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn(),
@@ -16,6 +17,8 @@ beforeEach(async () => {
   db = createMockDb();
   vi.clearAllMocks();
   db.collection("corporationHistory");
+  const { getAuthUser } = await import("@/lib/auth");
+  vi.mocked(getAuthUser).mockResolvedValue(null);
 
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as any);
@@ -25,6 +28,66 @@ beforeEach(async () => {
 });
 
 describe("GET /api/corporations/[id]/history", () => {
+  it.each([
+    { viewer: "anonymous", allowed: false, override: false },
+    { viewer: "owner", allowed: true, override: false },
+    { viewer: "admin", allowed: true, override: false },
+    { viewer: "moderator", allowed: false, override: false },
+    { viewer: "moderator", allowed: true, override: true },
+  ])(
+    "keeps private history viewer-specific for $viewer (override $override)",
+    async ({ viewer, allowed, override }) => {
+      const ownerId = new ObjectId();
+      const { getAuthUser } = await import("@/lib/auth");
+      if (viewer !== "anonymous") {
+        vi.mocked(getAuthUser).mockResolvedValue({
+          userId: viewer === "owner" ? ownerId.toHexString() : new ObjectId().toHexString(),
+          username: "fixture",
+          email: "fixture@example.invalid",
+          role: viewer,
+          isAdmin: viewer === "admin",
+          isModerator: viewer === "moderator",
+        });
+      }
+      const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+      vi.mocked(resolveCorporation).mockResolvedValue({
+        ok: true,
+        corporation: {
+          _id: new ObjectId(),
+          userId: ownerId,
+          isPrivate: true,
+          sharePrice: 10,
+          totalShares: 100,
+        } as any,
+      } as any);
+      db.collectionMocks.corporationHistory.aggregate.mockReturnValue({
+        toArray: vi
+          .fn()
+          .mockResolvedValue([{ turn: 1, marketCap: 900, currencyCode: "EUR", fxRateAtWrite: 2 }]),
+      });
+      const { GET } = await import("./route");
+      const res = await GET(
+        new Request(`http://localhost/api/corporations/16/history${override ? "?modView=1" : ""}`),
+        {
+          params: Promise.resolve({ id: "16" }),
+        }
+      );
+      expect(res.headers.get("Cache-Control")).toBe("private, no-store, no-transform");
+      const json = await res.json();
+      expect(json.history).toHaveLength(allowed ? 1 : 0);
+      if (allowed) {
+        expect(json.history[0]).toMatchObject({
+          currencyCode: "EUR",
+          fxRateAtWrite: 2,
+          marketCapCurrencyCode: null,
+        });
+      } else {
+        expect(json.isPrivate).toBe(true);
+        expect(db.collectionMocks.corporationHistory.aggregate).not.toHaveBeenCalled();
+      }
+    }
+  );
+
   it("queries the newest 500 unique turns in chronological order", async () => {
     const corpId = new ObjectId();
     const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
@@ -52,6 +115,9 @@ describe("GET /api/corporations/[id]/history", () => {
     });
 
     expect(res.status).toBe(200);
+    expect(res.headers.get("Cache-Control")).toBe(
+      "public, s-maxage=120, stale-while-revalidate=300, no-transform"
+    );
     expect(db.collectionMocks.corporationHistory.aggregate).toHaveBeenCalledTimes(1);
 
     const [pipeline] = db.collectionMocks.corporationHistory.aggregate.mock.calls[0] as [
@@ -185,7 +251,8 @@ describe("GET /api/corporations/[id]/history", () => {
           income: 150,
           marketingStrength: 30,
           dividendRate: 5,
-          currencyCode: "USD",
+          currencyCode: "EUR",
+          fxRateAtWrite: 2,
           totalShares: 1_000,
           createdAt: new Date("2026-04-30T14:00:00Z"),
         },
@@ -199,7 +266,8 @@ describe("GET /api/corporations/[id]/history", () => {
           income: 159,
           marketingStrength: 31,
           dividendRate: 5,
-          currencyCode: "USD",
+          currencyCode: "EUR",
+          fxRateAtWrite: 2,
           totalShares: 1_000,
           createdAt: new Date("2026-04-30T15:00:00Z"),
         },
@@ -226,12 +294,13 @@ describe("GET /api/corporations/[id]/history", () => {
       liquidCapital: 41_000,
       marketingStrength: 31,
       dividendRate: 5,
-      currencyCode: "USD",
+      currencyCode: "EUR",
+      marketCapCurrencyCode: "USD",
       revenue: 510,
       totalCosts: 351,
       income: 159,
     });
-    expect(json.history[1].fxRateAtWrite).toBeUndefined();
+    expect(json.history[1].fxRateAtWrite).toBe(2);
     expect(json.history[1].totalShares).toBeUndefined();
     expect(json.history[1].createdAt).toBeUndefined();
     expect(json.history[0]).toMatchObject({ turn: 468, marketCap: 99_000 });
