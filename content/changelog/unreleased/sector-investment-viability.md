@@ -16,3 +16,4 @@ areas: [fullstack, engine]
 - Choose how much capacity remains active. Parked capacity keeps its paid value, pays 5% of full maintenance, and can reopen for free. Production and staffing adjust next turn; existing supply commitments still apply.
 - Build previews show cumulative cash-return scenarios after 48, 96 and 192 turns, including construction ramp, observed sales and costs, overhead, taxes, freight and replacement reserves. Unsold production still costs money.
 - Abandoning a sector refunds only the unfinished portion of its construction orders, on the same terms as cancelling them.
+- Foreign-coupon transaction records show the cash received after the existing conversion fee. Payments and trading terms stay the same.
