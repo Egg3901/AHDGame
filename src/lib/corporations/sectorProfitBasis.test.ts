@@ -175,8 +175,8 @@ describe("sectorBookValueAnchor (D11)", () => {
     );
     const modern = sectorBookValueAnchor({ sectorType: "energy", capitalStock: CAPACITY }, 2019, 1);
     expect(modern / anchor).toBeCloseTo(
-      capacityPricePerUnit("energy", 2019, 1) /
-        capacityPricePerUnit("energy", CAPACITY_ANCHOR_YEAR, 1),
+      capacityPricePerUnit("energy", 2019, 1, null) /
+        capacityPricePerUnit("energy", CAPACITY_ANCHOR_YEAR, 1, null),
       8
     );
   });
@@ -198,7 +198,7 @@ describe("sectorBookValueAnchor (D11)", () => {
     // Build-then-dissolve must always be a loss. Exercised across every era
     // index so an era-priced build cannot be salvaged at a richer era's price.
     for (const year of [CAPACITY_ANCHOR_YEAR, 1979, 2019]) {
-      const buildCost = CAPACITY * capacityPricePerUnit("manufacturing", year, 1);
+      const buildCost = CAPACITY * capacityPricePerUnit("manufacturing", year, 1, null);
       const book = sectorBookValueAnchor(
         { sectorType: "manufacturing", capitalStock: CAPACITY },
         year,

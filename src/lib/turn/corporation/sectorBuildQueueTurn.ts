@@ -111,7 +111,8 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
   const capacityUnitPriceAnchor = capacityPricePerUnit(
     sector.sectorType,
     currentYear ?? CAPACITY_ANCHOR_YEAR,
-    eraUnitScale
+    eraUnitScale,
+    sector.strategyId ?? null
   );
   // C10: the credit keys on the ACCRUED COST, not on the target slider.
   // `currentGrowthCost` is what the sector is being billed THIS turn;
@@ -124,6 +125,9 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
     isFlipTurn && growthCostAnchorForFlip > 0 && capacityUnitPriceAnchor > 0
       ? {
           unitsOrdered: growthCostAnchorForFlip / capacityUnitPriceAnchor,
+          // Priced from `capacityUnitPriceAnchor` above, which reads the
+          // sector's strategy — record the same basis on the order.
+          strategyId: sector.strategyId ?? null,
           costPaidAnchor: 0,
           startTurn: currentTurn,
           onlineTurn: currentTurn + Math.ceil(CAPACITY_BUILD_TURNS(sector.sectorType) / 2),

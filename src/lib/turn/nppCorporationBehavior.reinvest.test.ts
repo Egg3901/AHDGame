@@ -398,6 +398,7 @@ describe("NPP capacity reinvestment — conservation and pricing", () => {
     const units = order.unitsOrdered;
     const bucketTotal = (s.capitalStock ?? 0) + POOL_UNITS;
     const expectedAnchor = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: "manufacturing",
       units,
