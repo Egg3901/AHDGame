@@ -72,6 +72,9 @@ function world(type: BankCharterType = "retail", overrides: Partial<BankCharter>
   memory.seed("characters", [
     { _id: new ObjectId(), userId: BORROWER_OWNER, name: "Owner", sequentialId: 9 },
   ]);
+  memory.seed("corporationHistory", [
+    { _id: new ObjectId(), corporationId: BORROWER, turn: TURN, income: 100_000 },
+  ]);
   memory.seed("bankLoans", [
     {
       _id: LOAN,
@@ -125,6 +128,61 @@ describe("acceptLoan", () => {
     expect(again).toEqual({ ok: false, error: "Loan is not pending" });
     expect(corp(memory, BANK).bankCharter.cashReserves).toBe(700_000);
     expect(corp(memory, BORROWER).liquidCapital).toBe(400_000);
+  });
+
+  it("starts the repayment term when the pending loan is funded", async () => {
+    loan(memory).originatedTurn = TURN - 100;
+    loan(memory).requestedTurn = TURN - 100;
+    const result = await acceptLoan(memory as unknown as Db, BANK, LOAN);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.loan.originatedTurn).toBe(TURN);
+    expect(loan(memory).originatedTurn).toBe(TURN);
+    expect(loan(memory).requestedTurn).toBe(TURN - 100);
+  });
+
+  it("does not fund pending exposure after the bank becomes impaired", async () => {
+    corp(memory, BANK).bankCharter.warningBand = "red";
+    const result = await acceptLoan(memory as unknown as Db, BANK, LOAN);
+    expect(result.ok).toBe(false);
+    expect(loan(memory).status).toBe("pending");
+    expect(corp(memory, BANK).bankCharter.cashReserves).toBe(1_000_000);
+  });
+
+  it("rechecks current income before funding a queued application", async () => {
+    memory.collection("corporationHistory").docs[0].income = 1;
+    const result = await acceptLoan(memory as unknown as Db, BANK, LOAN);
+    expect(result.ok).toBe(false);
+    expect(loan(memory).status).toBe("pending");
+    expect(corp(memory, BORROWER).liquidCapital).toBe(100_000);
+  });
+
+  it("includes debt taken on while the application waited", async () => {
+    memory.collection("bankLoans").docs.push({
+      _id: new ObjectId(),
+      bankCorporationId: new ObjectId(),
+      currency: "USD",
+      borrowerType: "corporation",
+      borrowerId: BORROWER,
+      principal: 2_000_000,
+      outstanding: 2_000_000,
+      originatedTurn: TURN,
+      termTurns: 48,
+      ratePercent: 5,
+      status: "current",
+    });
+    const result = await acceptLoan(memory as unknown as Db, BANK, LOAN);
+    expect(result.ok).toBe(false);
+    expect(loan(memory).status).toBe("pending");
+    expect(corp(memory, BANK).bankCharter.cashReserves).toBe(1_000_000);
+  });
+
+  it("rechecks treasury currency before funding a queued application", async () => {
+    memory.collection("corporations").docs[1].liquidCurrencyCode = "JPY";
+    const result = await acceptLoan(memory as unknown as Db, BANK, LOAN);
+    expect(result.ok).toBe(false);
+    expect(loan(memory).status).toBe("pending");
+    expect(corp(memory, BORROWER).liquidCapital).toBe(100_000);
   });
 
   it("re-checks headroom at decision time", async () => {

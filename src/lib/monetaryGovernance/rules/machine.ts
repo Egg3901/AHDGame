@@ -114,12 +114,18 @@ function checkMembership(
   return null;
 }
 
-/** Committee (open / ballot / resolve) actions exist only on committee banks. */
+/** Committee actions require an independent bank with a committee. */
 function checkCommitteeBank(state: JurisdictionState): GovernanceDecision | null {
   if (!state.committeeBank) {
     return refuse(
       "no-committee",
       "This central bank has no rate-setting committee: the rate is set directly."
+    );
+  }
+  if (state.governmentControlled) {
+    return refuse(
+      "government-controlled",
+      "The committee is dormant while the government sets the rate."
     );
   }
   return null;
@@ -520,12 +526,6 @@ function handleOpenMeeting(
   if (membership) return membership;
   const committee = checkCommitteeBank(state);
   if (committee) return committee;
-  if (state.governmentControlled) {
-    return refuse(
-      "government-controlled",
-      "The committee is dormant while the government sets the rate."
-    );
-  }
   if (state.activeMeeting && state.activeMeeting.status === "voting") {
     return refuse("already-open", "A meeting is already taking votes.");
   }

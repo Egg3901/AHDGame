@@ -14,6 +14,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { createInMemoryDb } from "@/lib/test-utils/inMemoryDb";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -173,15 +174,33 @@ beforeEach(() => {
 describe("recalculateInflationPerTurn", () => {
   // ── Early exit ─────────────────────────────────────────────────────────────
 
-  it("returns 0 immediately when no central banks exist", async () => {
+  it("returns 0 when neither central banks nor country budgets exist", async () => {
     setupBanks(db, []);
 
     const { recalculateInflationPerTurn } = await import("./inflationRecalc");
     const result = await recalculateInflationPerTurn(db as unknown as Db, 100);
 
     expect(result).toBe(0);
-    // No budget or update queries should fire
-    expect(db.collectionMocks["federalBudget"]).toBeUndefined();
+    expect(mockCalculateCountryInflation).not.toHaveBeenCalled();
+  });
+
+  it("still settles inflation and household prices in a world without central banks", async () => {
+    setupBanks(db, []);
+    const budget = makeBudget("UK");
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.find.mockReturnValue({ toArray: async () => [budget] });
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    expect(await recalculateInflationPerTurn(db as unknown as Db, 100)).toBe(1);
+    expect(mockCalculateCountryInflation).toHaveBeenCalledWith(db, "UK", budget);
+    expect(db.collectionMocks.federalBudget.updateOne).toHaveBeenCalledWith(
+      { _id: "UK" },
+      {
+        $set: expect.objectContaining({
+          "economicFactors.inflationRate": 3.5,
+          "economicFactors.householdPriceIndex": expect.any(Number),
+        }),
+      }
+    );
   });
 
   it("forwards the bank's policyInflationPressure into calculateCountryInflation", async () => {
@@ -196,6 +215,30 @@ describe("recalculateInflationPerTurn", () => {
     const call = mockCalculateCountryInflation.mock.calls[0]!;
     // Signature: (db, countryId, budget, commodity, forex, savings, policyStancePressure)
     expect(call[6]).toBeCloseTo(-0.4, 10);
+  });
+
+  it("uses only the latest completed money observation for each currency", async () => {
+    setupBanks(db, [makeCentralBank("US"), makeCentralBank("UK")]);
+    db.collection("federalBudget");
+    db.collectionMocks.federalBudget.findOne.mockImplementation(async (filter: { _id: string }) =>
+      makeBudget(filter._id)
+    );
+    const memory = createInMemoryDb();
+    memory.seed("moneySupplySnapshots", [
+      { currencyCode: "USD", turn: 98, annualizedM2GrowthPct: 20 },
+      { currencyCode: "USD", turn: 99, annualizedM2GrowthPct: 4 },
+      { currencyCode: "USD", turn: 100, annualizedM2GrowthPct: 80 },
+      { currencyCode: "GBP", turn: 99, annualizedM2GrowthPct: 7 },
+    ]);
+    db.collection("moneySupplySnapshots");
+    db.collectionMocks.moneySupplySnapshots.aggregate.mockImplementation((pipeline) =>
+      memory.collection("moneySupplySnapshots").aggregate(pipeline)
+    );
+    const { recalculateInflationPerTurn } = await import("./inflationRecalc");
+    await recalculateInflationPerTurn(db as unknown as Db, 100);
+    expect(mockCalculateCountryInflation.mock.calls.find((call) => call[1] === "US")?.[7]).toBe(4);
+    expect(mockCalculateCountryInflation.mock.calls.find((call) => call[1] === "UK")?.[7]).toBe(7);
+    expect(db.collectionMocks.moneySupplySnapshots.find).not.toHaveBeenCalled();
   });
 
   // ── Budget ID resolution ──────────────────────────────────────────────────

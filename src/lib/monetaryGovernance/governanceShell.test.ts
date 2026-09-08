@@ -28,6 +28,7 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 import { createNotifications } from "@/lib/notifications";
 import { processFomcMeetings, castFomcBallot } from "@/lib/turn/fomcMeetingTurn";
 import { updatePrimeRate } from "@/lib/monetaryPolicy/commands/updatePrimeRate";
+import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 
 const CHAIR_ID = new ObjectId();
 const PLAYER_ID = new ObjectId();
@@ -148,6 +149,47 @@ describe("turn shell", () => {
 });
 
 describe("ballot shell", () => {
+  it("does not resolve a pending committee vote after independence is revoked", async () => {
+    const bank = bankFixture({
+      governmentControlled: true,
+      fomcBoard: [
+        seat("seat-1", { isChair: true, occupantType: "player", characterId: CHAIR_ID }),
+        seat("seat-2"),
+        seat("seat-3"),
+      ],
+      activeFomcMeeting: {
+        meetingId: "US-m100",
+        openedAtTurn: 100,
+        openedAt: new Date(),
+        motion: "hike",
+        proposedDelta: 0.5,
+        status: "voting",
+        ballots: ["seat-2", "seat-3"].map((seatId) => ({
+          seatId,
+          vote: "hike",
+          auto: true,
+          castAt: new Date(),
+        })),
+        resolvesOnTurn: 124,
+        playerVoteDeadline: new Date(Date.now() + 86400000),
+      },
+    });
+    setupTurnDb(bank);
+    vi.mocked(isBankGovernmentControlledLive).mockResolvedValueOnce(true);
+
+    const result = await castFomcBallot(
+      db as unknown as Db,
+      "US",
+      CHAIR_ID,
+      "hike",
+      108,
+      new Date()
+    );
+
+    expect(result.ok).toBe(false);
+    expect(db.collection("centralBanks").updateOne).not.toHaveBeenCalled();
+  });
+
   function votingBank() {
     return bankFixture({
       lastFomcMeetingTurn: 108,

@@ -44,6 +44,7 @@ import { transmissionMultiplier } from "@/lib/centralBank/credibility";
 import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { isMoneySupplyEnabledFromConfig } from "@/lib/moneySupply/featureFlag";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 
@@ -654,7 +655,7 @@ export async function calculateCountryInflation(
   forexPressure = 0.0,
   savingsPressure = 0.0,
   policyStancePressure = 0.0,
-  moneySupplyGrowthPct = 0.0
+  moneySupplyGrowthPct?: number
 ): Promise<number> {
   // `typeof NaN === "number"`, so `?? fallback` does not catch NaN that slipped
   // into a persisted field. Any NaN reaching the inflation math recurses every
@@ -676,7 +677,10 @@ export async function calculateCountryInflation(
     // Command-economy CPI is administered (held at the era target), not market-driven.
     db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+      .findOne(
+        { _id: "default" },
+        { projection: { commandEconomyEnabled: 1, moneySupplyEnabled: 1 } }
+      ),
   ]);
   const currentYear = gameState?.currentYear;
   const commandEconomyEnabled = gc?.commandEconomyEnabled === true;
@@ -781,7 +785,11 @@ export async function calculateCountryInflation(
     forexPressure: finiteOr(forexPressure, 0),
     savingsPressure: finiteOr(savingsPressure, 0),
     policyStancePressure: finiteOr(policyStancePressure, 0),
-    moneySupplyGrowthPct: finiteOr(moneySupplyGrowthPct, 0),
+    // A missing observation means no signal. Zero is a real observation of
+    // frozen M2 and would spuriously subtract GDP growth on annual callers.
+    moneySupplyGrowthPct: isMoneySupplyEnabledFromConfig(gc)
+      ? finiteOr(moneySupplyGrowthPct, gdpGrowth)
+      : gdpGrowth,
     centralBankScrutiny,
     housingCostPressure,
     previousInflation,
