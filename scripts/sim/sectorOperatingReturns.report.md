@@ -93,3 +93,24 @@ Read cost was measured in separate production-mode local profiles of the first t
 The rules add no database reads. Autonomous decisions account for differences in downstream operations. No read-budget increase is required. Earlier test-mode stress telemetry is not used for read-cost claims because that mode disables Mongo command monitoring.
 
 Subsequent upstream election, military interface and access changes were reviewed separately; they do not change these corporation or market rules.
+
+## Integration with monetary-accounting changes
+
+A second pair starts from the same turn-718 capture on control `54b4766d721b4d66505322a6c77bcd1966fbfef8` and candidate `855aedbc9a8c0caa5eb73f2e4b06675fdd116678`. Both include the separately merged monetary-accounting and union-funding update, which affects downstream economic inputs. Both complete turns 719 through 722 with every phase completed or skipped and zero turn warnings. Means over these four matched turns:
+
+| Original player-cohort outcome              | Candidate versus control |
+| ------------------------------------------- | -----------------------: |
+| Sector revenue                              |                  -0.035% |
+| Sector operating profit                     |                  +7.889% |
+| Losing sites                                |                 -11.022% |
+| Jobs                                        |                  +0.000% |
+| Labour cost                                 |                  -0.078% |
+| Corporation operating profit after overhead |                  +8.847% |
+| Corporation income                          |                  +9.090% |
+| Government annual revenue                   |                  +0.035% |
+
+Revenue and aggregate wages decline slightly in this integration path. Those declines are retained in the result; the candidate does not create additional demand. The fixed-input comparison establishes equal payroll at each player site, while the full-engine paths allow market conditions and autonomous decisions to change. Employment remains identical across the matched integration means.
+
+Production-mode first-turn monitoring records corporation round trips of 1,747 / 1,715 and BSON bytes of 82,938,542 / 82,892,912 (control / candidate). Whole-turn round trips are 21,317 / 21,345 and BSON bytes 307,936,599 / 307,906,523. No read-budget increase is required.
+
+An earlier integration attempt was interrupted by the local simulation database restarting under host memory pressure. It is excluded; both accepted arms start from fresh copies. Neither short stress establishes long-run equilibrium or an active bond-arbitrage return.
