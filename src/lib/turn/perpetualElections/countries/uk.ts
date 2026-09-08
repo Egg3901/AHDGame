@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { type AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
@@ -181,7 +182,9 @@ export async function ensureUKElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureUKElections: spawned ${toActuallyInsert.length} missing Commons election(s)`
     );
@@ -314,7 +317,9 @@ export async function ensureUKRegionalCouncilElections(now: Date): Promise<void>
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureUKRegionalCouncilElections: spawned ${toActuallyInsert.length} missing Regional Council election(s)`
     );

@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { ObjectId, type Db } from "mongodb";
 import type {
   State,
@@ -587,7 +588,7 @@ export async function seedUKRegionalCouncil(db: Db, reset: boolean, log: (msg: s
       updatedAt: now,
     };
 
-    await db.collection<Election>("elections").insertOne(rcElection);
+    await db.collection<Election>("elections").insertOne(withCampaignRules(rcElection));
     electionsCreated++;
   }
   log(`Created ${electionsCreated} Regional Council transition elections (synced to Commons)`);

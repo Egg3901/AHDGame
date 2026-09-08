@@ -1,3 +1,28 @@
+/**
+ * Low-level enrichment function that accepts pre-fetched dependencies.
+ * Exported with underscore prefix to signal that it is an internal helper
+ * intended for use by resolveElection() and resolveElections().
+ *
+ * @param election   - The election document
+ * @param deps       - All pre-fetched dependency data
+ * @param options    - View mode and user context
+ * @param gameTime   - Pre-fetched game time context
+ * @param gameState  - Pre-fetched game state document (may be null)
+ * @param db         - Database connection (needed for full-view tally operations)
+ * @param adjacentElections - For nav; pass null/undefined in summary mode
+ */
+
+import { PRIMARY_SHARE_SOFTMAX_TEMPERATURE } from "@/lib/primaryScore";
+import {
+  usesCampaignRules,
+  meanAdBonus,
+  targetedAdBonuses,
+  campaignPrimaryScore,
+} from "@/lib/campaignTargeting/rules";
+import {
+  loadCampaignProjectionContext,
+  loadCampaignAudience,
+} from "@/lib/campaignTargeting/audience";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { blocListQuota, blocListQuotaForGovernment } from "@/lib/constants/blocList";
 import { getCountryState } from "@/lib/countryState";
@@ -127,7 +152,8 @@ async function applyPresidentialPrimaryDisplay(
   polling: PollingData | null,
   preloadedStatePartyOrgs: StatePartyOrg[],
   schedule: PrimaryWaveSchedule,
-  preset?: string
+  preset?: string,
+  campaignRulesVersion?: number
 ): Promise<{
   byParty: PartyGroup[];
   polling: PollingData | null;
@@ -138,6 +164,9 @@ async function applyPresidentialPrimaryDisplay(
   // this display path stays coherent with the race's actual calendar even if a
   // future schedule ever changes membership.
   const staggerStateIds = getAllStaggerStates(schedule);
+  const campaignContext = usesCampaignRules({ campaignRulesVersion })
+    ? await loadCampaignProjectionContext(db, staggerStateIds)
+    : undefined;
   const [categories, states, demographics, resolvedStatePartyOrgs, engineEnriched] =
     await Promise.all([
       loadDemographicCategories(db),
@@ -281,6 +310,7 @@ async function applyPresidentialPrimaryDisplay(
     }
 
     const projection = projectPrimaryByState({
+      campaignContext,
       candidates: projectionCandidates,
       candidateMeta,
       stateIds: staggerStateIds,
@@ -368,19 +398,6 @@ async function applyPresidentialPrimaryDisplay(
 // Core enrichment (accepts pre-fetched deps — used by both single and batch)
 // ---------------------------------------------------------------------------
 
-/**
- * Low-level enrichment function that accepts pre-fetched dependencies.
- * Exported with underscore prefix to signal that it is an internal helper
- * intended for use by resolveElection() and resolveElections().
- *
- * @param election   - The election document
- * @param deps       - All pre-fetched dependency data
- * @param options    - View mode and user context
- * @param gameTime   - Pre-fetched game time context
- * @param gameState  - Pre-fetched game state document (may be null)
- * @param db         - Database connection (needed for full-view tally operations)
- * @param adjacentElections - For nav; pass null/undefined in summary mode
- */
 export async function _enrichElection(
   election: Election,
   deps: ElectionDeps,
@@ -509,7 +526,52 @@ export async function _enrichElection(
   // Group by the currently displayed party label; presidential primary display
   // may remap this later to the raw candidacy-party buckets for synchronization.
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
-  let byParty = groupCandidatesByParty(enrichedWithYou, partyMap);
+  let primaryCandidates = enrichedWithYou;
+  if (
+    inPrimary &&
+    !isPresident &&
+    usesCampaignRules(election) &&
+    candidates.some((candidate) => candidate.targetedAds?.length)
+  ) {
+    const cells =
+      deps.campaignCells !== undefined
+        ? deps.campaignCells
+        : (await loadCampaignAudience(db, election.countryId, election.state))?.cells;
+    if (cells?.length) {
+      const rawById = new Map(candidates.map((candidate) => [candidate._id.toString(), candidate]));
+      const ownerPositionById = new Map([
+        ...characters.map((character) => [character._id.toString(), character.policies] as const),
+        ...npps.map((npp) => [npp._id.toString(), npp.policies] as const),
+      ]);
+      primaryCandidates = enrichedWithYou.map((candidate) => {
+        const raw = rawById.get(candidate.id);
+        const position = raw
+          ? ownerPositionById.get((raw.nppId ?? raw.characterId).toString())
+          : undefined;
+        if (!raw?.targetedAds?.length || !position || candidate.primaryScore == null)
+          return candidate;
+        const bonus = meanAdBonus(
+          cells,
+          targetedAdBonuses(
+            cells,
+            { economicLean: position.economic, socialLean: position.social },
+            raw.targetedAds,
+            election.state,
+            gameTime.currentTurn
+          )
+        );
+        return {
+          ...candidate,
+          primaryScore: campaignPrimaryScore(
+            candidate.primaryScore,
+            bonus,
+            PRIMARY_SHARE_SOFTMAX_TEMPERATURE
+          ),
+        };
+      });
+    }
+  }
+  let byParty = groupCandidatesByParty(primaryCandidates, partyMap);
 
   // Ballot-consistent primary standings: where the primary has accrued real
   // ballots (see recordPrimarySnapshots), the live page shows CUMULATIVE
@@ -544,7 +606,7 @@ export async function _enrichElection(
   // primary-resolution turn — and for multi-advance races that intentionally
   // leave several same-party nominees active through the general (#1043).
   // Always include the current user's candidate even if they lost the primary.
-  let displayCandidates: EnrichedCandidate[] = enrichedWithYou;
+  let displayCandidates: EnrichedCandidate[] = primaryCandidates;
   if (!inPrimary && !isEnded) {
     displayCandidates = selectGeneralPhaseDisplayCandidates(enrichedWithYou, primaryAdvanceCount);
   } else if (isEnded) {
@@ -772,7 +834,8 @@ export async function _enrichElection(
       polling,
       statePartyOrgs,
       getPrimaryWaveSchedule(presidentialRulesetFor(election)),
-      gameState?.preset
+      gameState?.preset,
+      election.campaignRulesVersion
     );
     byParty = projectedDisplay.byParty;
     polling = projectedDisplay.polling;
@@ -1316,7 +1379,7 @@ export async function _enrichElection(
     // Full-view fields
     prevElectionId: isFull ? prevElectionId : null,
     nextElectionId: isFull ? nextElectionId : null,
-    allCandidates: isFull ? enrichedWithYou : null,
+    allCandidates: isFull ? primaryCandidates : null,
     snapshotHistory: isFull ? snapshotHistory : null,
     generalVotes: isFull ? generalVotes : null,
     myCharId: isFull ? myCharId : null,

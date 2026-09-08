@@ -24,6 +24,8 @@ export type UKElectionType =
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
 export interface Election {
+  /** Missing means legacy campaigning for this entire race. */
+  campaignRulesVersion?: number;
   _id: ObjectId;
   countryId: CountryId;
   /**
@@ -88,6 +90,9 @@ export interface Election {
 export type CandidateStatus = "active" | "withdrawn";
 
 export interface ElectionCandidate {
+  /** Candidate-owned regional ad flights; effects expire by game turn. */
+  targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
+  targetedAdsRevision?: number;
   _id: ObjectId;
   electionId: ObjectId;
   /** Denormalized from Election.countryId so party IDs are not ambiguous across countries. */

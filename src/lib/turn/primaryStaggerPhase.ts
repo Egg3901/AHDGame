@@ -14,6 +14,8 @@
  * Called from `primaryResolution.ts` before the existing primary-end check.
  */
 
+import { turnoutForElection, usesCampaignRules } from "@/lib/campaignTargeting/rules";
+
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -226,9 +228,9 @@ export async function runPrimaryStaggerWaveIfDue(
   const delegatePreset = gsForDelegates?.preset;
   // Live era clock (null while `eraSystemEnabled` is off — legacy behavior).
   const eraYear = eraYearContextFromGameState(gsForDelegates);
-  // Granular-cell electorate engine (fail-closed): swap the archetype
-  // substrate for Layer-1 cells in the per-state primary distribution below.
-  const granularElectorateEnabled = gsForDelegates?.granularElectorateEnabled === true;
+  // Campaign rules require cells for paid ads. Older races retain the admin gate.
+  const granularElectorateEnabled =
+    usesCampaignRules(election) || gsForDelegates?.granularElectorateEnabled === true;
 
   // Bootstrapping the tally at stagger start is load-bearing: wave history,
   // per-state primary votes, and delegates all persist on electionVoteTallies.
@@ -507,6 +509,17 @@ export async function runPrimaryStaggerWaveIfDue(
       // Without this the target would be punished twice: fewer votes on the
       // night, and a momentum penalty for "missing" an expectation that never
       // accounted for the attack. One purchase, one effect.
+      // Paid ad advantages belong in expectations too, so they are not upsets.
+      campaignContext: usesCampaignRules(election)
+        ? {
+            campaignRulesVersion: election.campaignRulesVersion!,
+            currentTurn,
+            preset: delegatePreset,
+            ...eraYear,
+            turnoutByState: turnoutMap,
+            defaultsByState: demographicDefaultsByState ?? new Map(),
+          }
+        : undefined,
       stateActions: liveStateActions,
       currentTurn,
       candidates: partyCandidates,
@@ -624,7 +637,7 @@ export async function runPrimaryStaggerWaveIfDue(
         state.population,
         rawDemographicsDoc,
         categories,
-        turnoutMap.get(stateId),
+        turnoutForElection(turnoutMap.get(stateId), election),
         { preset: delegatePreset, year: eraYear.year, startingYear: eraYear.startingYear }
       );
 
@@ -640,12 +653,14 @@ export async function runPrimaryStaggerWaveIfDue(
       let effPartyCandidates = partyCandidates;
       if (granularElectorateEnabled) {
         const substrate = buildGranularElectorateSubstrate({
+          campaignRulesVersion: election.campaignRulesVersion,
+          currentTurn: currentTurn,
           countryId: (election.countryId ?? "US") as CountryId,
           stateId,
           preset: delegatePreset,
           year: eraYear.year,
           startingYear: eraYear.startingYear,
-          turnoutDoc: turnoutMap.get(stateId),
+          turnoutDoc: turnoutForElection(turnoutMap.get(stateId), election),
           statePopulation: state.population,
           demographics: rawDemographicsDoc,
           categories,
