@@ -214,7 +214,12 @@ function registeredBase(docs: CountryGameState[]): CountryId[] {
   // downstream — the player list, the economy list, the simulated list — is
   // derived from this, so one filter retires it everywhere at once.
   const dissolved = new Set(docs.filter((d) => d.dissolvedTurn != null).map((d) => String(d._id)));
-  return [...COUNTRY_ORDER, ...activeExtra].filter((id) => !dissolved.has(id));
+  // Era absence is a SEPARATE exclusion from dissolution, deliberately kept in
+  // its own clause: a country absent from this era was never absorbed, and
+  // conflating the two would break merge idempotency (see CountryGameState).
+  // Undefined reads as registered, so rows predating the field are unaffected.
+  const absent = new Set(docs.filter((d) => d.absentInEra === true).map((d) => String(d._id)));
+  return [...COUNTRY_ORDER, ...activeExtra].filter((id) => !dissolved.has(id) && !absent.has(id));
 }
 
 /**
