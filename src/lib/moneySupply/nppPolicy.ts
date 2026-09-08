@@ -1,3 +1,10 @@
+/**
+ * Autonomous monetary policy weighs inflation, growth and comparable money
+ * observations. processNppMonetaryOperations excludes legacy accounting and
+ * incomplete observation windows from the money-growth signal.
+ */
+import { currentMoneyGrowth } from "./rules/growthSignal";
+import { MONEY_ACCOUNTING_VERSION } from "./calculate";
 import type { Db } from "mongodb";
 import type {
   Bond,
@@ -24,7 +31,7 @@ interface NppMonetaryConditions {
   inflation: number;
   targetInflation: number;
   gdpGrowth: number;
-  annualizedM2GrowthPct: number;
+  annualizedM2GrowthPct: number | null;
   moneyGrowthReliable: boolean;
   publicFloat: number;
   holdings: number;
@@ -40,9 +47,10 @@ export type NppMonetaryDecision =
 
 export function chooseNppMonetaryOperation(input: NppMonetaryConditions): NppMonetaryDecision {
   const inflationGap = input.inflation - input.targetInflation;
-  const excessMoneyGrowth = input.moneyGrowthReliable
-    ? input.annualizedM2GrowthPct - input.gdpGrowth
-    : 0;
+  const excessMoneyGrowth =
+    input.moneyGrowthReliable && input.annualizedM2GrowthPct != null
+      ? input.annualizedM2GrowthPct - input.gdpGrowth
+      : 0;
 
   if (
     inflationGap <= -3 &&
@@ -158,19 +166,23 @@ export async function processNppMonetaryOperations(
         .next(),
       db
         .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
-        .findOne({ currencyCode }, { sort: { turn: -1 } }),
+        .findOne(
+          { currencyCode, turn: { $lte: turn } },
+          { sort: { turn: -1 }, projection: { accountingVersion: 1, annualizedM2GrowthPct: 1 } }
+        ),
     ]);
     if (!budget) continue;
     const inflation =
       budget.economicFactors?.inflationRate ?? getInflationTarget(countryId, currentYear);
     const targetInflation = getInflationTarget(countryId, currentYear);
     const gdpGrowth = budget.economicFactors?.gdpGrowth ?? 2;
+    const moneyGrowth = currentMoneyGrowth(moneySupply);
     const decision = chooseNppMonetaryOperation({
       inflation,
       targetInflation,
       gdpGrowth,
-      annualizedM2GrowthPct: moneySupply?.annualizedM2GrowthPct ?? gdpGrowth,
-      moneyGrowthReliable: (moneySupply?.turn ?? 0) >= 12,
+      annualizedM2GrowthPct: moneyGrowth,
+      moneyGrowthReliable: moneyGrowth != null,
       publicFloat: bond?.publicFloat ?? 0,
       holdings: bond?.centralBankHoldings ?? 0,
       bankReserves: bank.reserveBalance ?? 0,
@@ -178,14 +190,15 @@ export async function processNppMonetaryOperations(
       treasuryBalance: budget.treasuryBalance ?? -(budget.debt?.principal ?? 0),
     });
     const evaluation: MonetaryPolicyEvaluation = {
+      accountingVersion: MONEY_ACCOUNTING_VERSION,
       turn,
       decision: decision.type as MonetaryPolicyDecision,
       rationale: decision.rationale,
       inflation,
       targetInflation,
       gdpGrowth,
-      annualizedM2GrowthPct: moneySupply?.annualizedM2GrowthPct ?? gdpGrowth,
-      moneyGrowthReliable: (moneySupply?.turn ?? 0) >= 12,
+      annualizedM2GrowthPct: moneyGrowth,
+      moneyGrowthReliable: moneyGrowth != null,
       bankReserves: bank.reserveBalance ?? 0,
       gdp: budget.gdp ?? 0,
       createdAt: new Date(),

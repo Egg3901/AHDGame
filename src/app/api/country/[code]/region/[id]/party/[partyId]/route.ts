@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
@@ -214,10 +215,11 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     const stateGdp = state.gdp;
 
-    // Campaign-fund estimate is LOCAL at the frozen base INITIAL_RATES scale
+    // Campaign-fund estimate is LOCAL at the frozen world-seeded currency basis
     // (mirrors the turn processors) — never live forex. This region is single-country.
-    const campaignRate = campaignLocalRate(countryId);
-    const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, countryId);
+    const campaignRates = await loadCampaignCurrencyRates(db);
+    const campaignRate = campaignLocalRate(countryId, campaignRates);
+    const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, countryId, campaignRates);
 
     // 1. Calculate for players
     for (const character of characters) {

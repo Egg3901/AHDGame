@@ -15,6 +15,7 @@
  * Runs at the top of the bond turn, before any coupon or trade.
  */
 
+import { calibratedPoolTarget, poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import type { Db } from "mongodb";
 import type { BondMarketPool } from "@/lib/db/types";
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
@@ -107,10 +108,12 @@ export async function processBondMarketPoolTurn(
   for (const pool of pools) {
     const currency = pool._id;
     const latest = await db
-      .collection<{ currencyCode: string; m2?: number; turn: number }>("moneySupplySnapshots")
+      .collection<{ currencyCode: string; m2?: number; turn: number; accountingVersion?: number }>(
+        "moneySupplySnapshots"
+      )
       .find(
         { currencyCode: currency },
-        { projection: { m2: 1, turn: 1 }, sort: { turn: -1 }, limit: 1 }
+        { projection: { m2: 1, turn: 1, accountingVersion: 1 }, sort: { turn: -1 }, limit: 1 }
       )
       .toArray();
     const m2 = latest[0]?.m2;
@@ -118,8 +121,20 @@ export async function processBondMarketPoolTurn(
     // maturing series pays it back, so it must hold one quarter of maturing
     // sovereign face on top of its secondary-liquidity share of M2.
     const rolloverLocal = await sovereignFaceMaturingSoon(db, currency, turn);
-    const liquidityTarget =
-      Number.isFinite(m2) && m2! > 0 ? m2! * BOND_POOL_M2_SHARE : pool.targetCashLocal;
+    const calibration = calibratedPoolTarget({
+      previousLiquidityTarget: poolLiquidityAllocation({
+        calibratedTarget: pool.liquidityTargetLocal,
+        m2Local: pool.m2Local,
+        share: BOND_POOL_M2_SHARE,
+        fallback: pool.targetCashLocal,
+      }),
+      previousM2: pool.m2Local,
+      previousVersion: pool.poolAccountingVersion,
+      latestM2: m2,
+      latestVersion: latest[0]?.accountingVersion,
+      share: BOND_POOL_M2_SHARE,
+    });
+    const liquidityTarget = calibration.liquidityTargetLocal;
     const targetCashLocal = Math.round(Math.max(liquidityTarget, rolloverLocal) * 100) / 100;
 
     const moves = planPoolCashMoves({ cashLocal: pool.cashLocal, targetCashLocal });
@@ -147,10 +162,16 @@ export async function processBondMarketPoolTurn(
       {
         $set: {
           targetCashLocal,
+          liquidityTargetLocal: liquidityTarget,
           appetiteByCountry,
           lastTurn: turn,
           updatedAt: now,
-          ...(Number.isFinite(m2) && m2! > 0 ? { m2Local: m2 } : {}),
+          ...(calibration.m2Local !== undefined
+            ? {
+                m2Local: calibration.m2Local,
+                poolAccountingVersion: calibration.poolAccountingVersion,
+              }
+            : {}),
         },
       }
     );

@@ -215,7 +215,8 @@ describe("settleTransition under injected crashes", () => {
     expect(bank(memory).bankCharter.cashReserves).toBe(600_000);
     expect(bank(memory).liquidCapital).toBe(200_000);
     expect(bank(memory).bankCharter.postedCapital).toBe(100_000);
-    expect(await listUnfinishedProjections(memory as unknown as Db)).toHaveLength(0);
+    // Delivered cash with an unfinished projection must remain discoverable.
+    expect(await listUnfinishedProjections(memory as unknown as Db)).toHaveLength(1);
 
     const retry = await settleTransition(memory as unknown as Db, injection());
     expect(retry.status).toBe("replayed");

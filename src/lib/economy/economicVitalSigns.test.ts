@@ -333,6 +333,7 @@ describe("computeEconomicVitalSigns", () => {
           centralBankBondHoldings: 0,
           bondPoolCash: 0,
           annualizedM2GrowthPct: 5,
+          accountingVersion: 2,
           netMoneyCreatedLifetime: 0,
           createdAt: new Date(),
         },
@@ -644,4 +645,40 @@ describe("summarizeLedgerTurnover", () => {
   it("returns nothing for an empty ledger", () => {
     expect(summarizeLedgerTurnover([])).toEqual([]);
   });
+});
+
+it("does not mix legacy money growth into the current median", () => {
+  const money = {
+    _id: "money",
+    turn: 100,
+    countryId: "US" as const,
+    bankId: "US",
+    currencyCode: "USD" as const,
+    m1: 50,
+    m2: 100,
+    householdLiquid: 50,
+    campaignLiquid: 0,
+    nppLiquid: 0,
+    corporateLiquid: 0,
+    partyLiquid: 0,
+    governmentLiquid: 0,
+    fundLiquid: 0,
+    organizationLiquid: 0,
+    householdSavings: 0,
+    externalBroadMoney: 50,
+    bankDeposits: 0,
+    bankReserves: 0,
+    creditOutstanding: 0,
+    sovereignBondsOutstanding: 0,
+    centralBankBondHoldings: 0,
+    bondPoolCash: 0,
+    annualizedM2GrowthPct: 500,
+    netMoneyCreatedLifetime: 0,
+    createdAt: new Date(),
+  };
+  const snapshot = computeEconomicVitalSigns({
+    ...emptyInput,
+    money: [money, { ...money, _id: "new", accountingVersion: 2, annualizedM2GrowthPct: 4 }],
+  });
+  expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
 });

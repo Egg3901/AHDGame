@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { z } from "zod";
 import { canUseNativeCanvassTargets } from "@/lib/canvassing/campaignContext";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -137,7 +138,9 @@ export async function GET(req: NextRequest) {
       };
     }
     const forex = await isForexEnabled();
-    const fundsCost = COST_FUNDS * (forex ? campaignLocalRate(auth.user.character.countryId) : 1);
+    const campaignRates = await loadCampaignCurrencyRates(db);
+    const fundsCost =
+      COST_FUNDS * (forex ? campaignLocalRate(auth.user.character.countryId, campaignRates) : 1);
     return NextResponse.json(
       { stateId, targets: [...targets.values()], preview, fundsCost },
       { headers: { "Cache-Control": "private, no-store" } }
@@ -230,9 +233,12 @@ export async function POST(req: NextRequest) {
 
     const forexEnabled = await isForexEnabled();
     // COST_FUNDS is an ANCHOR-denominated constant. Campaign funds are decoupled
-    // from live forex: convert to LOCAL at the frozen base INITIAL_RATES scale so
+    // from live forex: convert to LOCAL at the frozen world-seeded currency basis so
     // the gate and the $inc both operate on local-unit balances.
-    const campaignRate = forexEnabled ? campaignLocalRate(user.character.countryId ?? "US") : 1;
+    const campaignRates = await loadCampaignCurrencyRates(db);
+    const campaignRate = forexEnabled
+      ? campaignLocalRate(user.character.countryId ?? "US", campaignRates)
+      : 1;
     const totalFundsCostLocal = forexEnabled ? totalFundsCost * campaignRate : totalFundsCost;
     const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
     const balanceLocal = localCampaignBalance(user.character, forexEnabled);

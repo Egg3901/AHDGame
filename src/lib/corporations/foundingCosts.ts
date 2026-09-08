@@ -1,6 +1,6 @@
 import { CORPORATION_FOUNDING_COST, CORPORATION_STARTING_CAPITAL } from "../constants/corporations";
 import { getEraNominalAmount } from "../constants/sectorSeedEra";
-import { COUNTRY_CURRENCY_MAP, INITIAL_RATES } from "../constants/currencies";
+import { campaignLocalRate, type CampaignCurrencyRates } from "@/lib/campaigns/rules/currency";
 import type { CountryId } from "../constants/countries";
 import {
   INVESTOR_CONFIDENCE_BASELINE,
@@ -26,20 +26,19 @@ export function getFoundingConfidenceMultiplier(
  *
  * Single source of truth shared by the founding API route and the
  * FoundCorporationModal so the fee/treasury figures the player sees can never
- * disagree with what the server charges. Uses INITIAL_RATES (not the live DB
- * rate) to match migration.ts calibration — corps founded at different exchange
- * levels must start equally.
+ * disagree with what the server charges. Uses the world's frozen base rate,
+ * matching starting wealth without changing with market exchange rates.
  *
  * Returns 1 (no conversion) when forex is off, the country is USD, or the
  * country is unknown / not yet loaded on the client.
  */
 export function getFoundingFxRate(
   countryId: CountryId | null | undefined,
-  forexEnabled: boolean
+  forexEnabled: boolean,
+  rates?: CampaignCurrencyRates | null
 ): number {
   if (!forexEnabled || !countryId) return 1;
-  if (COUNTRY_CURRENCY_MAP[countryId] === "USD") return 1;
-  return INITIAL_RATES[countryId] ?? 1;
+  return campaignLocalRate(countryId, rates);
 }
 
 export interface FoundingCostInput {

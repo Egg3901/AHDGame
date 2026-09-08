@@ -1,7 +1,7 @@
 /**
- * Union services run while a leader can fund them for represented members.
- * fundedUnionServices includes current dues income and uses the same service
- * bill as the union turn to decide which selected programmes take effect.
+ * Union services are prepaid during settlement for the following turn.
+ * fundedUnionServices prices the selected slate, while paidUnionServices
+ * reads the entitlement that all service effects consume for one turn.
  */
 import {
   averageAnnualWage,
@@ -34,4 +34,32 @@ export function fundedUnionServices(
   );
   const available = union.treasury + duesIncomePerTurn(members, duesRate);
   return servicesCostPerTurn(members, annualWage, services) <= available ? services : [];
+}
+
+/** Paid services remain fixed throughout their turn, regardless of later treasury changes. */
+export function paidUnionServices(
+  union: {
+    ownerId: string | null;
+    suspended?: boolean;
+    serviceReceipts?: readonly { turn: number; services: readonly string[] }[];
+  },
+  currentTurn: number
+): UnionServiceId[] {
+  if (!union.ownerId || union.suspended) return [];
+  return normalizeServiceIds(
+    union.serviceReceipts?.find((receipt) => receipt.turn === currentTurn)?.services
+  );
+}
+
+/** Keep only this turn's purchase and the following turn's entitlement. */
+export function purchaseUnionServices(
+  receipts: readonly { turn: number; services: readonly string[] }[] | undefined,
+  currentTurn: number,
+  services: readonly UnionServiceId[]
+): { turn: number; services: UnionServiceId[] }[] {
+  const current = receipts?.find((receipt) => receipt.turn === currentTurn);
+  return [
+    ...(current ? [{ turn: currentTurn, services: normalizeServiceIds(current.services) }] : []),
+    { turn: currentTurn + 1, services: [...services] },
+  ];
 }
