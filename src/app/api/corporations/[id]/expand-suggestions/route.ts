@@ -452,6 +452,10 @@ export async function GET(request: Request, { params }: RouteParams) {
             computeBuildCost({
               sectorType,
               units: starterUnits,
+              // A suggestion for a sector that does not exist yet, so there is
+              // no chosen production method: quote the sector-type default,
+              // which is what `expandSector` founds the sector on.
+              strategyId: null,
               year: currentYear,
               eraUnitScale,
               // Entering a market this corp does not occupy: dominance is 1 by

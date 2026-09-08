@@ -1541,6 +1541,9 @@ export function buildSectorPlantsSection(args: {
   const oneUnit = computeBuildCost({
     sectorType,
     units: 1,
+    // Must match what `buildCapacity` charges, or the quote a player sees is
+    // 326.9x off the invoice for a rare-earth sector.
+    strategyId: sector.strategyId ?? null,
     year: currentYear,
     eraUnitScale,
     marketSharePercent,

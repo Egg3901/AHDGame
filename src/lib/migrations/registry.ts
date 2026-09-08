@@ -72,6 +72,7 @@ import { migration as intelligenceIndexes } from "./entries/2026-08-31-intellige
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
 import { migration as manifestosIndex } from "./entries/2026-09-06-manifestos-index";
+import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -241,6 +242,25 @@ export const MIGRATIONS: Migration[] = [
 // `MIGRATIONS` alone and can never reach anything here.
 // See scripts/migrations/restoreCapitalModeFromShadow.ts.
 export const ROLLBACK_MIGRATIONS: Migration[] = [restoreCapitalModeFromShadow];
+
+// HELD — written, tested, and deliberately OUTSIDE the auto-run chain because a
+// product decision is still open. `MIGRATIONS` is what a no-flag
+// `npm run migrate` walks, so nothing here can run on a deploy; scripts/
+// run-migrations.ts widens its candidate list to include this array only when
+// `--only` names an entry, which makes running one an explicit human act.
+//
+// Moving an entry from here into MIGRATIONS is the act of saying "this is
+// approved to run". Do not do it to make a test or a deploy quieter.
+//
+//   2026-09-07-equity-pool-seed-backfill
+//     Records each equity pool's opening balance as `seedLocal`. Harmless in
+//     itself and idempotent, but it WRITES to live pool documents, and the
+//     standing instruction for this work is that nothing touches live without
+//     sign-off. Held for that reason alone, not because it is unsafe.
+//     TRADE-OFF: `poolConservationResidual` returns NaN without `seedLocal`, so
+//     the per-turn conservation warning is INERT until this is run. Run it as
+//     soon as the write is approved, or the monitoring half of the fix is dead.
+export const HELD_MIGRATIONS: Migration[] = [equityPoolSeedBackfill];
 
 // Deferred to follow-up (need bootstrap-marker pass on production first):
 //   - 2026-04-22-reverse-split-victim-reparations  (no marker writer in script)

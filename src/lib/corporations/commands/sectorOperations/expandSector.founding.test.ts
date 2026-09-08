@@ -148,7 +148,7 @@ const STARTER_UNITS = foundingStarterUnits("manufacturing");
 const ENTRY_FEE_ANCHOR = sectorEntryFeeAnchor("2019-default");
 const STARTER_BUILD_ANCHOR =
   STARTER_UNITS *
-  capacityPricePerUnit("manufacturing", CAPACITY_ANCHOR_YEAR, 1) *
+  capacityPricePerUnit("manufacturing", CAPACITY_ANCHOR_YEAR, 1, null) *
   CAPACITY_FOUNDING_DISCOUNT;
 
 beforeEach(() => {
