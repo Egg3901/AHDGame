@@ -110,6 +110,9 @@ describe("targeted ad route and command integration", () => {
     db.collection("elections").findOne.mockResolvedValue(election);
     db.collection("electionCandidates").findOne.mockResolvedValue(candidate);
     db.collection("characters").findOne.mockResolvedValue(character);
+    db.collection("states").findOne.mockImplementation(async (filter: { _id: string }) =>
+      filter._id === "CA" ? { _id: "CA", countryId: "US" } : null
+    );
     db.collection("states").find.mockReturnValue({
       toArray: async () => [{ _id: "CA", name: "California" }],
     });
@@ -168,7 +171,7 @@ describe("targeted ad route and command integration", () => {
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("precharges every turn and writes one candidate-owned flight", async () => {
+  it("precharges every turn atomically with character-owned exposure", async () => {
     const response = await POST(request(purchase), params);
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ cost: 6000, actions: 15, scheduledThrough: 12 });
@@ -176,11 +179,13 @@ describe("targeted ad route and command integration", () => {
       actions: { $gte: 15 },
       funds: { $gte: 6000 },
     });
-    expect(db.collection("characters").updateOne.mock.calls[0][1]).toEqual({
-      $inc: { actions: -15, funds: -6000 },
+    expect(db.collection("characters").updateOne.mock.calls[0][1].$inc).toEqual({
+      actions: -15,
+      funds: -6000,
+      targetedAdsRevision: 1,
     });
     expect(
-      db.collection("electionCandidates").updateOne.mock.calls[0][1].$set.targetedAds[0]
+      db.collection("characters").updateOne.mock.calls[0][1].$set.targetedAds[0]
     ).toMatchObject({
       stateId: "CA",
       dimension: "race",
@@ -216,20 +221,43 @@ describe("targeted ad route and command integration", () => {
   });
 
   it("blocks overlapping buys from any manager without charging", async () => {
-    db.collection("electionCandidates").findOne.mockResolvedValue({
-      ...candidate,
+    db.collection("characters").findOne.mockResolvedValue({
+      ...character,
       targetedAds: [{ ...purchase, exposure: 1, lastPurchaseTurn: 10, throughTurn: 12 }],
     });
     expect((await POST(request(purchase), params)).status).toBe(409);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("refunds resources if the candidate revision changed after the quote", async () => {
-    db.collection("electionCandidates").updateOne.mockResolvedValue({ modifiedCount: 0 });
+  it("atomically rejects a revision conflict without a separate debit", async () => {
+    db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 0 });
     expect((await POST(request(purchase), params)).status).toBe(409);
-    expect(db.collection("characters").updateOne.mock.calls[1][1]).toEqual({
-      $inc: { actions: 15, funds: 6000 },
+    expect(db.collection("characters").updateOne).toHaveBeenCalledOnce();
+    expect(db.collection("characters").updateOne.mock.calls[0][0]).toMatchObject({
+      targetedAdsRevision: { $exists: false },
     });
+    expect(db.collection("electionCandidates").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("refunds a manager when the owner's revision changes after their debit", async () => {
+    const auth = await requireAuthWithCharacter();
+    if (!auth.ok) throw new Error("Expected fixture user");
+    const manager = makeCharacter();
+    vi.mocked(isCampaignManagerUser).mockReturnValue(true);
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ...auth,
+      user: { ...auth.user, userId: manager.userId.toString(), character: manager },
+    });
+    db.collection("characters")
+      .updateOne.mockResolvedValueOnce({ modifiedCount: 1 })
+      .mockResolvedValueOnce({ modifiedCount: 0 })
+      .mockResolvedValueOnce({ modifiedCount: 1 });
+    expect((await POST(request(purchase), params)).status).toBe(409);
+    const calls = db.collection("characters").updateOne.mock.calls;
+    expect(calls[0][0]._id).toEqual(manager._id);
+    expect(calls[1][0]._id).toEqual(character._id);
+    expect(calls[2][0]._id).toEqual(manager._id);
+    expect(calls[2][1]).toEqual({ $inc: { actions: 15, funds: 6000 } });
   });
 
   it("rejects an expired quote or a changed price before spending", async () => {
@@ -266,43 +294,29 @@ describe("targeted ad route and command integration", () => {
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("rejects foreign regions, wrong identities, and flights beyond election day", async () => {
-    expect((await POST(request({ ...purchase, stateId: "TX" }), params)).status).toBe(403);
+  it("rejects foreign regions and unknown identities before spending", async () => {
+    expect((await POST(request({ ...purchase, stateId: "outside" }), params)).status).toBe(400);
     expect((await POST(request({ ...purchase, bucket: "unknown" }), params)).status).toBe(400);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("lets standing exposure outlast this campaign", async () => {
     db.collection("elections").findOne.mockResolvedValue({ ...election, endTurn: 11 });
-    expect((await POST(request(purchase), params)).status).toBe(400);
-    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+    expect((await POST(request(purchase), params)).status).toBe(200);
   });
 
-  it("does not sell ads to a presidential engine without demographic allocation", async () => {
-    const auth = await requireAuthWithCharacter();
-    if (!auth.ok) throw new Error("fixture requires authentication");
-    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
-      ...auth,
-      user: { ...auth.user, character: { ...character, countryId: "NG" } },
-    });
-    db.collection("elections").findOne.mockResolvedValue({
-      ...election,
-      countryId: "NG",
-      state: "NG",
-      electionType: "president",
-    });
-    const result = await POST(request(purchase), {
-      params: Promise.resolve({ id: campaignId.toString() }),
-    });
-    expect(result.status).toBe(400);
-    expect((await result.json()).error).toContain("Targeted ads are unavailable");
-    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
-  });
-
-  it("keeps old races closed to new ad purchases", async () => {
-    db.collection("elections").findOne.mockResolvedValue({
-      ...election,
-      campaignRulesVersion: undefined,
-    });
-    expect((await POST(request(purchase), params)).status).toBe(400);
-    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
-  });
+  it.each(["president", "house", "senate", "governor"])(
+    "allows purchases for an existing %s race",
+    async (electionType) => {
+      db.collection("elections").findOne.mockResolvedValue({
+        ...election,
+        electionType,
+        campaignRulesVersion: undefined,
+      });
+      expect((await POST(request(purchase), params)).status).toBe(200);
+      expect(db.collection("elections").updateOne).not.toHaveBeenCalled();
+    }
+  );
 
   it("rejects unauthorized viewers before reading the electorate", async () => {
     vi.mocked(isCampaignNomineeUser).mockResolvedValue(false);

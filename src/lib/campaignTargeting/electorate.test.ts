@@ -72,7 +72,7 @@ describe("campaign effects reach both election distribution paths", () => {
       );
       expect(run({ ...withAds, currentTurn: 82 }, general).share).toBeLessThan(active.share);
       expect(run({ ...withAds, campaignRulesVersion: undefined }, general).share).toBeCloseTo(
-        base.share,
+        active.share,
         6
       );
     }

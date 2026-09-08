@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
-import { z } from "zod";
+import { targetKey, purchaseSchema } from "@/lib/campaignTargeting/schema";
 import { parseJsonBody } from "@/lib/api/validate";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { badRequest, handleRouteError } from "@/lib/api/errors";
@@ -13,22 +13,6 @@ import {
   quoteTargetedAds,
 } from "@/lib/campaignTargeting/commands";
 
-const key = z
-  .string()
-  .min(1)
-  .max(100)
-  .regex(/^[a-zA-Z0-9_-]+$/);
-const purchaseSchema = z.object({
-  stateId: key,
-  dimension: key,
-  bucket: key,
-  turns: z.number().int().min(1).max(12).default(1),
-  quote: z.object({
-    turn: z.number().int().nonnegative(),
-    cost: z.number().finite().nonnegative(),
-    revision: z.number().int().nonnegative(),
-  }),
-});
 type Params = { params: Promise<{ id: string }> };
 
 // GET /api/campaigns/[id]/targeted-ads: private regional ad quote for managers/nominee.
@@ -40,7 +24,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     const previewRate = checkRateLimit(`targeted-ads-preview:${auth.user.userId}`, 30, 60_000);
     if (!previewRate.ok) return rateLimitResponse(previewRate.retryAfter);
     const { id } = await params;
-    const state = key
+    const state = targetKey
       .optional()
       .safeParse(request.nextUrl.searchParams.get("stateId") ?? undefined);
     if (!ObjectId.isValid(id) || !state.success) throw badRequest("Invalid campaign or region");

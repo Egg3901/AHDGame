@@ -149,6 +149,9 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Regional ad exposure follows this character across candidacies. */
+  targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
+  targetedAdsRevision?: number;
   /** Local singleplayer career constraint; absent on hosted characters. */
   singleplayerHeadOfState?: boolean;
   _id: ObjectId;
