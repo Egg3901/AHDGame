@@ -51,6 +51,7 @@ export type AdminLogAction =
   | "patreon_status_set"
   | "singleplayer_entitlement_granted"
   | "singleplayer_entitlement_revoked"
+  | "client_access_granted"
   | "moderator_assigned"
   | "moderator_removed"
   | "line_of_credit_enabled"
