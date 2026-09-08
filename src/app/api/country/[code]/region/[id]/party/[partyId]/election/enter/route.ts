@@ -13,6 +13,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameTime } from "@/lib/time/gameTime";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
 import {
+  getLeadershipEligibility,
   getPartyTenure,
   STATE_LEADERSHIP_RELOCATION_DELAY_TURNS,
 } from "@/lib/parties/leadershipTenure";
@@ -90,7 +91,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
 
       // Minimum party tenure before standing for state leadership (leadershipTenure.ts).
-      const tenure = getPartyTenure(character.partyJoinedTurn, gameTime.currentTurn);
+      // Canonical `partyId` from the validator, not `routePartyId` — the raw
+      // path segment may be "07" where the stored party id is "7".
+      const tenure = getLeadershipEligibility(character, gameTime.currentTurn, partyId);
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
         return NextResponse.json(
