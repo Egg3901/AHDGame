@@ -497,6 +497,10 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const cost = computeBuildCost({
       sectorType: sector.sectorType,
       units,
+      // Capacity is priced at the product this sector actually makes. Ordering
+      // into a sector already running a high-RPU strategy used to be charged
+      // the sector-type default price, which is the 326.9x rare-earth subsidy.
+      strategyId: sector.strategyId ?? null,
       year: currentYear,
       eraUnitScale,
       marketSharePercent: marketSharePct,
@@ -560,6 +564,9 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
 
     const order: SectorBuildOrder = {
       unitsOrdered: units,
+      // Freeze the strategy this order was priced at. `cost` above was computed
+      // from the same value, so the two can never drift apart.
+      strategyId: sector.strategyId ?? null,
       // The FX spread is a transaction fee, not construction spend — it is not
       // refundable capital, so it stays out of the order's paid cost (and out
       // of CIP and the cancellation refund base).

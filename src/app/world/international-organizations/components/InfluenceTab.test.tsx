@@ -190,7 +190,7 @@ describe("InfluenceTab", () => {
               share: 70,
               wantsOut: false,
               turnsBelowGate: null,
-              exempt: false,
+
               hasVote: false,
             },
           ],
@@ -223,7 +223,7 @@ describe("InfluenceTab", () => {
               share: 70,
               wantsOut: false,
               turnsBelowGate: null,
-              exempt: false,
+
               hasVote: false,
             },
           ],
@@ -289,7 +289,7 @@ describe("InfluenceTab", () => {
               share: 95,
               wantsOut: false,
               turnsBelowGate: null,
-              exempt: false,
+
               hasVote: true,
             },
             {
@@ -299,7 +299,7 @@ describe("InfluenceTab", () => {
               share: 8,
               wantsOut: true,
               turnsBelowGate: 11,
-              exempt: false,
+
               hasVote: true,
             },
           ],
@@ -330,7 +330,7 @@ describe("InfluenceTab", () => {
               share: 8,
               wantsOut: true,
               turnsBelowGate: 3,
-              exempt: false,
+
               hasVote: true,
             },
           ],

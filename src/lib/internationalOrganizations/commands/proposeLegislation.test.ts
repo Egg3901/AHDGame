@@ -60,6 +60,29 @@ describe("proposeOrganizationLegislation — sanctions + category gate", () => {
     });
   });
 
+  it("refuses to sanction a fellow member", async () => {
+    // An organisation sanctions an outsider. Greece tabled Warsaw Pact sanctions
+    // against Russia and China, its own allies, twice (ticket #1285) — and the
+    // embargo fan-out would have had every other member block one of its own.
+    vi.mocked(loadOrganizationDefWithPowers).mockResolvedValue({
+      shortName: "EU",
+      category: "economic",
+    } as never);
+    vi.mocked(getMembers).mockResolvedValue(["DE", "IE", "BR"]);
+    const { db, inserted } = dbCapturingLegislation();
+
+    const res = await proposeOrganizationLegislation({
+      db,
+      countryId: "DE",
+      orgId: "EU",
+      actor,
+      input: { type: "sanctions", targetCountryId: "BR", commodity: "steel" },
+    });
+
+    expect(res.ok).toBe(false);
+    expect(inserted).toHaveLength(0);
+  });
+
   it("a political org cannot table sanctions (not in its category powers)", async () => {
     vi.mocked(loadOrganizationDefWithPowers).mockResolvedValue({
       shortName: "UN",

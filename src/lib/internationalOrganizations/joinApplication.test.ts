@@ -3,11 +3,35 @@ import { ObjectId, type Db } from "mongodb";
 
 vi.mock("@/lib/internationalOrganizations/service", () => ({
   recordOrgHistoryEvent: vi.fn().mockResolvedValue(undefined),
+  isMember: vi.fn((_db: unknown, organizationId: string, countryId: string) =>
+    Promise.resolve(
+      membershipsStore.some((m) => m.organizationId === organizationId && m.countryId === countryId)
+    )
+  ),
+  loadOrganizationDef: vi.fn((_db: unknown, organizationId: string) =>
+    Promise.resolve({ id: organizationId, name: `${organizationId} (long name)` })
+  ),
+}));
+vi.mock("@/lib/internationalOrganizations/withdrawalBills", () => ({
+  removeOrganizationMembership: vi.fn((_db: unknown, countryId: string, organizationId: string) => {
+    const i = membershipsStore.findIndex(
+      (m) => m.organizationId === organizationId && m.countryId === countryId
+    );
+    if (i >= 0) membershipsStore.splice(i, 1);
+    return Promise.resolve(undefined);
+  }),
+}));
+vi.mock("@/lib/db/collections/gameState", () => ({
+  getGameStatePresetOrDefault: vi.fn().mockResolvedValue("1953-default"),
+}));
+vi.mock("@/lib/internationalOrganizations/sanctions", () => ({
+  liftOrganizationSanctions: vi.fn().mockResolvedValue(undefined),
 }));
 
 const proposalsStore = new Map<string, Record<string, unknown>>();
 const billsStore = new Map<string, Record<string, unknown>>();
 const membershipsStore: Array<Record<string, unknown>> = [];
+const legislationStore: Array<Record<string, unknown>> = [];
 
 function applySet(doc: Record<string, unknown>, update: Record<string, unknown>) {
   const set = update.$set as Record<string, unknown> | undefined;
@@ -36,9 +60,32 @@ vi.mock("@/lib/db/collections", () => ({
   getOrganizationWithdrawalsCollection: vi.fn().mockResolvedValue({
     deleteOne: vi.fn().mockResolvedValue({ deletedCount: 0 }),
   }),
+  getOrganizationLegislationCollection: vi.fn().mockResolvedValue({
+    find: (q: Record<string, unknown>) => ({
+      toArray: () =>
+        Promise.resolve(
+          legislationStore.filter(
+            (r) =>
+              r.organizationId === q.organizationId &&
+              r.type === q.type &&
+              r.status === q.status &&
+              r.sanctionsTargetCountryId === q.sanctionsTargetCountryId
+          )
+        ),
+    }),
+    updateOne: (q: { _id: unknown }, u: Record<string, unknown>) => {
+      const doc = legislationStore.find((r) => r._id === q._id);
+      if (doc) applySet(doc, u);
+      return Promise.resolve({ modifiedCount: doc ? 1 : 0 });
+    },
+  }),
 }));
 
-const { resolveJoinApplication } = await import("./joinApplication");
+const { resolveJoinApplication, admitMember } = await import("./joinApplication");
+const { removeOrganizationMembership } =
+  await import("@/lib/internationalOrganizations/withdrawalBills");
+const { getOrganizationMembershipsCollection } = await import("@/lib/db/collections");
+const { liftOrganizationSanctions } = await import("@/lib/internationalOrganizations/sanctions");
 
 function fakeDb(): Db {
   return {
@@ -80,6 +127,7 @@ beforeEach(() => {
   proposalsStore.clear();
   billsStore.clear();
   membershipsStore.length = 0;
+  legislationStore.length = 0;
   vi.clearAllMocks();
 });
 
@@ -120,5 +168,115 @@ describe("resolveJoinApplication", () => {
     await resolveJoinApplication(fakeDb(), proposalId, 200);
     expect(membershipsStore).toHaveLength(0);
     expect(proposalsStore.get(proposalId.toString())?.status).toBe("pending");
+  });
+});
+
+describe("admitMember bloc exclusivity", () => {
+  const member = (organizationId: string, countryId: string, status = "founding") => {
+    membershipsStore.push({ organizationId, countryId, status });
+  };
+
+  it("withdraws a country from the rival alliance when it joins the other one", async () => {
+    // Greece sat in NATO from turn 0 and was admitted to the Warsaw Pact on turn
+    // 657, holding both for 36 turns (ticket #1285).
+    member("NATO", "GR");
+    await admitMember(fakeDb(), "WARSAW_PACT", "GR", 657);
+
+    expect(membershipsStore.map((m) => m.organizationId)).toEqual(["WARSAW_PACT"]);
+    expect(vi.mocked(removeOrganizationMembership)).toHaveBeenCalledWith(
+      expect.anything(),
+      "GR",
+      "NATO",
+      "NATO (long name)",
+      657
+    );
+  });
+
+  it("withdraws from the Warsaw Pact when a country joins NATO", async () => {
+    member("WARSAW_PACT", "YU", "active");
+    await admitMember(fakeDb(), "NATO", "YU", 700);
+
+    expect(membershipsStore.map((m) => m.organizationId)).toEqual(["NATO"]);
+  });
+
+  it("gives up the rival row before taking the new one", async () => {
+    // Order is load-bearing. `loadBlocMembership` writes one bloc per row with no
+    // precedence, so a country holding both reads as whichever document Mongo
+    // returned last. Failing between the two steps must leave it in NEITHER pole
+    // (wrong, but deterministic and visible), never in BOTH.
+    member("NATO", "GR");
+    await admitMember(fakeDb(), "WARSAW_PACT", "GR", 657);
+
+    const removedAt = vi.mocked(removeOrganizationMembership).mock.invocationCallOrder[0]!;
+    const addedAt = vi.mocked(getOrganizationMembershipsCollection).mock.invocationCallOrder[0]!;
+    expect(removedAt).toBeLessThan(addedAt);
+  });
+
+  it("touches nothing when the org does not govern accession", async () => {
+    member("NATO", "GR");
+    await admitMember(fakeDb(), "UN", "GR", 700);
+
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+    expect(membershipsStore.map((m) => m.organizationId).sort()).toEqual(["NATO", "UN"]);
+  });
+
+  it("does not tombstone a rival alliance the country was never in", async () => {
+    // `removeOrganizationMembership` writes a withdrawal tombstone and a history
+    // line for every remaining member, so calling it for a non-member would
+    // announce a departure that never happened and block a later accession.
+    await admitMember(fakeDb(), "NATO", "SE", 700);
+
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+  });
+
+  it("leaves a world entity alone, having no country to withdraw", async () => {
+    // A proxy war's hosts are world entities, not countries: North Vietnam is not
+    // a playable id and holds no alliance rows to give up.
+    await admitMember(fakeDb(), "WARSAW_PACT", "NVN", 574);
+
+    expect(vi.mocked(removeOrganizationMembership)).not.toHaveBeenCalled();
+  });
+});
+
+describe("admitMember and the org's own sanctions", () => {
+  const sanction = (organizationId: string, target: string, status = "active") => {
+    const doc = {
+      _id: new ObjectId(),
+      organizationId,
+      type: "sanctions",
+      status,
+      sanctionsTargetCountryId: target,
+    };
+    legislationStore.push(doc);
+    return doc;
+  };
+
+  it("lifts the organisation's sanctions against a country it admits", async () => {
+    // An org cannot sanction its own member — `proposeLegislation` refuses to
+    // table one. Accession is the other door into that state, and nothing was
+    // watching it: the resolution stayed active and every other member went on
+    // embargoing a country it had just voted in (ticket #1285).
+    const doc = sanction("EU", "BR");
+    await admitMember(fakeDb(), "EU", "BR", 700);
+
+    expect(vi.mocked(liftOrganizationSanctions)).toHaveBeenCalledWith(expect.anything(), doc._id);
+    expect(doc.status).toBe("terminated");
+  });
+
+  it("leaves another organisation's sanctions against the joiner alone", async () => {
+    // Joining the EU settles the EU's quarrel, not COMECON's.
+    const other = sanction("COMECON", "BR");
+    await admitMember(fakeDb(), "EU", "BR", 700);
+
+    expect(vi.mocked(liftOrganizationSanctions)).not.toHaveBeenCalled();
+    expect(other.status).toBe("active");
+  });
+
+  it("leaves sanctions against other countries alone", async () => {
+    const other = sanction("EU", "RU");
+    await admitMember(fakeDb(), "EU", "BR", 700);
+
+    expect(vi.mocked(liftOrganizationSanctions)).not.toHaveBeenCalled();
+    expect(other.status).toBe("active");
   });
 });

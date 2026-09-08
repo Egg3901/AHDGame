@@ -116,9 +116,9 @@ describe("real-terms invariance of the unit basis", () => {
     // 1953 money. Total cost of a fixed REAL capacity (s× more units, each 1/s
     // the price) is the same share of the (1/s-sized) economy.
     for (const type of CORPORATION_TYPES) {
-      const modern = capacityPricePerUnit(type, 1953, 1);
+      const modern = capacityPricePerUnit(type, 1953, 1, null);
       if (!(modern > 0)) continue;
-      const era = capacityPricePerUnit(type, 1953, SCALE_1953);
+      const era = capacityPricePerUnit(type, 1953, SCALE_1953, null);
       expect(era).toBeCloseTo(modern * nominal1953, 8);
     }
   });

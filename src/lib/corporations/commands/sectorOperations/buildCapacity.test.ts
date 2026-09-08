@@ -224,6 +224,7 @@ describe("buildCapacity — build", () => {
     expect(res.status).toBe(201);
 
     const expected = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: "manufacturing",
       units: 1_000,
@@ -247,6 +248,36 @@ describe("buildCapacity — build", () => {
       $inc: { liquidCapital: number };
     };
     expect(inc.$inc.liquidCapital).toBeCloseTo(-expected.totalAnchor, 6);
+  });
+
+  it("stamps the priced strategy on the order it queues", async () => {
+    await wireMocks(sectorDoc({ sectorType: "extraction", strategyId: "rare_earth_mining" }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
+    expect(res.status).toBe(201);
+
+    const queue = sectorSet().buildQueue as Array<Record<string, unknown>>;
+    expect(queue[0].strategyId).toBe("rare_earth_mining");
+  });
+
+  it("charges a rare-earth build at the rare-earth price, not the diversified one", async () => {
+    await wireMocks(sectorDoc({ sectorType: "extraction", strategyId: "rare_earth_mining" }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
+    const rareBody = (await res.json()) as Record<string, number>;
+
+    const diversified = computeBuildCost({
+      strategyId: "standard",
+      eraUnitScale: 1,
+      sectorType: "extraction",
+      units: 1,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: 0,
+      primeRate: 0,
+    });
+    // The whole defect in one assertion: this used to be charged at the
+    // diversified price, a 326.9x subsidy on the capacity it actually buys.
+    expect(rareBody.costAnchor / diversified.totalAnchor).toBeGreaterThan(300);
   });
 
   it("previews without charging or queueing", async () => {

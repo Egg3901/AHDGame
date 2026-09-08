@@ -260,7 +260,11 @@ export async function nationalizeSectorWide(
             capacityPricePerUnit(
               params.sectorType,
               sweepCurrentYear ?? CAPACITY_ANCHOR_YEAR,
-              sweepEraUnitScale
+              sweepEraUnitScale,
+              // `null` deliberately, matching the `null` strategy the units were
+              // derived at on the line above: both legs must read the same mix
+              // or the units and the price they are multiplied by disagree.
+              null
             ),
         };
       }

@@ -650,9 +650,20 @@ function bilateralCandidates(
       "free_trade_agreement"
     );
     const aidOrganization = organizationThatCanTable(context, sharedOrganizations, "aid_package");
+    // NOT `sharedOrganizations`. An organisation sanctions an OUTSIDER, so the
+    // one instrument here whose venue must EXCLUDE the target is this one —
+    // sharing the roll is what makes an FTA, aid or an endorsement possible, and
+    // it is exactly what makes sanctions incoherent. Drawn from the shared list
+    // the target was a fellow member by construction, and Greece spent two turns
+    // tabling Warsaw Pact sanctions against its own allies (ticket #1285).
+    // `proposeLegislation` refuses these outright, so a planner still choosing
+    // them would burn the country's one strategic action on a certain refusal.
+    const organizationsWithoutTarget = Array.from(sourceOrganizations).filter(
+      (orgId) => !targetOrganizations.has(orgId)
+    );
     const sanctionsOrganization = organizationThatCanTable(
       context,
-      sharedOrganizations,
+      organizationsWithoutTarget,
       "sanctions"
     );
     const statementOrganization = organizationThatCanTable(
@@ -770,7 +781,7 @@ function bilateralCandidates(
           candidate(
             "propose_sanctions",
             8 + hostile * 0.55 + ambition * 8,
-            [`A shared organization can coordinate sanctions.`, ...reasons],
+            [`An organization the target does not sit in can coordinate sanctions.`, ...reasons],
             { targetCountryId: target, organizationId: sanctionsOrganization }
           )
         );

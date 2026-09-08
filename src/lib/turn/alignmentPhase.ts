@@ -565,12 +565,17 @@ export async function processAlignmentTurn(
     const shares = sharedAfterDrift.get(membership.countryId);
     if (!shares) continue;
 
-    // A founding member is never shown the door: you cannot be expelled from a
-    // club you founded. This also protects the cases where a founder's seeded
-    // alignment legitimately sits below its own bloc's bar — Nigeria is a
-    // Commonwealth founder while still a colony, with a colony's damped
-    // metropole alignment.
-    if (membership.status === "founding") continue;
+    // Founding status is NOT tenure. This used to skip founders outright, on the
+    // reasoning that a founder's seeded alignment can legitimately sit below its
+    // own bloc's bar — Nigeria founds the Commonwealth while still a colony, with
+    // a colony's damped metropole alignment. But that case is already covered two
+    // guards below: the Commonwealth carries no channel in either era, so
+    // `standingFor` returns null and alignment has no opinion about it at all.
+    //
+    // The only orgs alignment does govern are the bloc alliances, and there the
+    // skip meant a seed founder could never be shown the door however far it
+    // drifted — no clock was even stamped on it. Greece rode that all the way into
+    // holding NATO and Warsaw Pact rows at once (ticket #1285).
 
     const standing = standingFor({
       shares,

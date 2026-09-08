@@ -1399,6 +1399,9 @@ export function makeNppCorpDecision(
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
               units: 1,
+              // Greenfield entry: the sector does not exist yet and is founded
+              // on the sector-type default strategy.
+              strategyId: null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
@@ -1495,6 +1498,8 @@ export function makeNppCorpDecision(
           profitMargin: 35,
           starterOrder: {
             unitsOrdered: buildUnits,
+            // Greenfield: priced at the sector-type default, same as the quote.
+            strategyId: null,
             costPaidAnchor: buildAnchor,
             startTurn: ctx.turn,
             onlineTurn: ctx.turn + buildTurns,
@@ -1771,6 +1776,7 @@ export function makeNppCorpDecision(
             computeBuildCost({
               sectorType: sector.sectorType,
               units: 1,
+              strategyId: sector.strategyId ?? null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
@@ -1844,6 +1850,7 @@ export function makeNppCorpDecision(
       const costAnchor = computeBuildCost({
         sectorType: sector.sectorType,
         units,
+        strategyId: sector.strategyId ?? null,
         year: plants.year,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
@@ -1880,6 +1887,7 @@ export function makeNppCorpDecision(
       const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
       const order: SectorBuildOrder = {
         unitsOrdered: units,
+        strategyId: sector.strategyId ?? null,
         costPaidAnchor: costAnchor,
         startTurn: ctx.turn,
         onlineTurn: ctx.turn + buildTurns,
