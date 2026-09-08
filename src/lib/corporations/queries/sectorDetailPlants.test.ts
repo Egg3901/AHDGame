@@ -378,6 +378,8 @@ describe("sector investment quote context", () => {
       eraUnitScale: 1,
       sector: sectorFixture({
         plantsUpkeepMarginBasisAnchor: 100,
+        plantsStartTurn: 1,
+        clearingStartTurn: 1,
         activeCapacityPercent: 25,
         plantsPnl: { turn: BASE_ARGS.currentTurn } as NonNullable<CorporateSector["plantsPnl"]>,
       }),
@@ -393,6 +395,24 @@ describe("sector investment quote context", () => {
       freightNetCostDailyAnchor: 4,
     });
     expect(result.buildQuote.expansionMultiplier).toBe(0.8);
+  });
+  it.each([
+    { plantsStartTurn: 80, clearingStartTurn: 1 },
+    { plantsStartTurn: 1, clearingStartTurn: 80 },
+    { plantsStartTurn: undefined, clearingStartTurn: 1 },
+  ])("withholds recurring returns while market support is unsettled: %j", (starts) => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      money: { ...BASE_ARGS.money, nameplateRevenueAnchor: 1000 },
+      sector: sectorFixture({
+        ...starts,
+        plantsUpkeepMarginBasisAnchor: 0.5,
+        plantsPnl: { turn: BASE_ARGS.currentTurn } as NonNullable<CorporateSector["plantsPnl"]>,
+      }),
+      investment: { overheadDailyAnchor: 10, taxRatePercent: 25 },
+    });
+    expect(result.investment).toBeUndefined();
   });
   it("withholds investment estimates when the operating figures are stale", () => {
     const result = buildSectorPlantsSection({

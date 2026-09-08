@@ -106,6 +106,17 @@ describe("partial mothballing", () => {
 });
 
 describe("investment cash scenarios", () => {
+  it("earns policy credits only on sold output, including when buyers constrain expansion", () => {
+    const withCredit = { ...forecastInput, policyCreditDailyAnchor: 1000 };
+    const full = forecastSectorInvestment(withCredit)!;
+    const capped = forecastSectorInvestment({ ...withCredit, demandGapUnits: 25 })!;
+    const noBuyers = forecastSectorInvestment({ ...withCredit, demandGapUnits: 0 })!;
+    const noCredit = forecastSectorInvestment({ ...forecastInput, demandGapUnits: 0 })!;
+    expect(full[0].availableCashAnchor).toBeCloseTo(1400, 8);
+    expect(capped[0].availableCashAnchor).toBeCloseTo(300, 8);
+    expect(noBuyers).toEqual(noCredit);
+  });
+
   it("uses realized receipts once, without applying the 50% sales fill a second time", () => {
     const result = forecastSectorInvestment(forecastInput)!;
     expect(result[0].availableCashAnchor).toBeCloseTo(1200, 8);

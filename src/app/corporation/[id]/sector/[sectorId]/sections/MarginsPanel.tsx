@@ -408,7 +408,7 @@ export default function MarginsPanel({
                 modifier={margins.sectorTypeMatchModifier}
                 rawValue={null}
                 rawUnit=""
-                tooltip="Sectors matching your primary type get +5%. Secondary type match: +2.5%. Mismatched: -15% penalty."
+                tooltip="Sectors matching your primary type get +10%. Secondary type match: +5%. Mismatched: -15% penalty."
                 icon={Layers}
               />
             )}
