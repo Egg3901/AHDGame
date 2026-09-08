@@ -22,7 +22,6 @@ import { getPartyBudgetCollection } from "@/lib/db/collections";
 import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
-import { isSelfPayment } from "@/lib/treasury/isSelfPayment";
 import { isSameCountry } from "@/lib/api/sameCountry";
 
 interface RouteParams {
@@ -104,6 +103,18 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
+    // No self-payment. This route has no two-person approval workflow of
+    // its own, and the national Chair is authorized on every state party,
+    // so without this guard the national treasury's self-send rules could
+    // be stepped around by transferring down to a state party first and
+    // paying out from there.
+    if (!isAdmin && authUser.character && targetCharacterOid.equals(authUser.character._id)) {
+      return NextResponse.json(
+        { error: "You cannot send state party funds to yourself." },
+        { status: 403 }
+      );
+    }
+
     // Verify target character exists and is a member of this state party
     const targetCharacter = await db.collection<Character>("characters").findOne({
       _id: targetCharacterOid,
@@ -121,25 +132,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json(
         { error: "Character is not a member of this state party" },
         { status: 400 }
-      );
-    }
-
-    // No self-payment. This route has no two-person approval workflow of
-    // its own, and the national Chair is authorized on every state party,
-    // so without this guard the national treasury's self-send rules could
-    // be stepped around by transferring down to a state party first and
-    // paying out from there.
-    if (
-      !isAdmin &&
-      authUser.character &&
-      isSelfPayment(targetCharacter, {
-        characterId: authUser.character._id,
-        userId: authUser.userId,
-      })
-    ) {
-      return NextResponse.json(
-        { error: "You cannot send state party funds to yourself." },
-        { status: 403 }
       );
     }
 

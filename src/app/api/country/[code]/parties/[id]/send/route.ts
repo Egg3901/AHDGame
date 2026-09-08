@@ -15,7 +15,6 @@ import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { executeSendToMember } from "@/lib/treasury/executeSendToMember";
-import { isSelfPayment } from "@/lib/treasury/isSelfPayment";
 import {
   canProposePendingTransaction,
   createPendingTransaction,
@@ -156,14 +155,11 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const mode = resolveTransactionApprovalMode(party, { treasurerElectionLockout });
 
-    // A send to the proposer themselves always goes through two-person
-    // approval, whatever the mode. Single mode otherwise executes
-    // immediately, which let a Chair drain the treasury to themselves in
-    // one unreviewed call.
-    const isSelfSend = isSelfPayment(targetCharacter, {
-      characterId: authUser.character._id,
-      userId: authUser.userId,
-    });
+    // A send to the proposer's own character always goes through
+    // two-person approval, whatever the mode. Single mode otherwise
+    // executes immediately, which let a Chair drain the treasury to
+    // themselves in one unreviewed call.
+    const isSelfSend = targetCharacterOid.equals(authUser.character._id);
 
     const isPlayerAction = !isAdmin;
     if (isPlayerAction && (mode === "double" || isSelfSend)) {

@@ -33,12 +33,6 @@ areas: [backend]
   longer send state party funds to themselves either. That route had no approval
   step at all, and the national Chair is authorised on every state party, so it
   was the widest version of the same problem.
-- A pending payment now checks that the recipient is still a member of the party
-  at the moment it is approved, not only when it was proposed. A payment could
-  previously be queued, the recipient could leave, and the payment would still go
-  through days later.
-- All of the above treat a payment to any character on your own account as a
-  payment to yourself.
 
 ## Why it matters
 

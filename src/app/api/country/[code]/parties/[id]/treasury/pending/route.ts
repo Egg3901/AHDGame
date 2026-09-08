@@ -11,11 +11,6 @@ import {
   isPendingTransactionComplete,
   listOpenPendingTransactions,
 } from "@/lib/parties/pendingTreasuryTransactions";
-import {
-  isTreasurerElectionLockoutActive,
-  wouldUseVacantTreasurerFallback,
-} from "@/lib/parties/treasurerElectionLockout";
-import { getGameTime } from "@/lib/time/gameTime";
 import type { Character, State } from "@/lib/db/types";
 
 interface RouteParams {
@@ -81,15 +76,6 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const myCharOid = authResult.user.character._id;
     const myChar = myCharOid.toString();
 
-    // The approve route refuses every payout while a contested Treasurer
-    // election is closing. Mirror that here so the UI doesn't offer an
-    // Approve button that the API will reject.
-    let treasurerElectionLockout = false;
-    if (wouldUseVacantTreasurerFallback(party)) {
-      const { currentTurn } = await getGameTime();
-      treasurerElectionLockout = await isTreasurerElectionLockoutActive(db, party, currentTurn);
-    }
-
     const items = rows.map((r) => {
       // The viewer's slot for THIS row — null if they can't approve at
       // all (not an officer, or a Request Funds row they themselves
@@ -102,8 +88,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
             ? !!r.leadershipApproval
             : true;
       const rowComplete = isPendingTransactionComplete(r);
-      const canApprove =
-        viewerSlot != null && !slotAlreadyFilled && !rowComplete && !treasurerElectionLockout;
+      const canApprove = viewerSlot != null && !slotAlreadyFilled && !rowComplete;
       const canCancel = r.proposedBy.toString() === myChar;
 
       const mode = r.approvalModeAtPropose ?? "double";
