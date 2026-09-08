@@ -118,6 +118,19 @@ describe("caucus chair election enter route — tenure gate", () => {
     expect(response.status).not.toBe(403);
   });
 
+  it("exempts the founder even when the URL uses a non-canonical party id", async () => {
+    // findPartyBySequentialId parseInts the segment, so "07" resolves to party
+    // 7 — but the stored marker is "7". Comparing against the raw segment would
+    // wrongly block the founder. See getPartyIdString in lib/db/partyLookup.
+    await setup(30, 30, "7");
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "07", slug: "left" }),
+    });
+
+    expect(response.status).not.toBe(403);
+  });
+
   it("still blocks a founder of a different party", async () => {
     await setup(20, 30, "9"); // founded 9, running in 7
     const { POST } = await import("./route");

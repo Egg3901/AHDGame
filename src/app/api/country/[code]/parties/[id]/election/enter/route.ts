@@ -148,7 +148,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // standing for leadership (see leadershipTenure.ts). Independent of the
     // 24h new-character cooldown above; likewise waived for founding elections.
     if (!election.founding) {
-      const tenure = getLeadershipEligibility(authUser.character, gameTime.currentTurn, partyId);
+      // Canonical id from the resolved party, not the raw path segment
+      // ("07" vs "7"); see getPartyIdString in lib/db/partyLookup.
+      const tenure = getLeadershipEligibility(
+        authUser.character,
+        gameTime.currentTurn,
+        String(party.sequentialId)
+      );
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
         return NextResponse.json(

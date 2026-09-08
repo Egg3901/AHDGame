@@ -91,7 +91,9 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
 
       // Minimum party tenure before standing for state leadership (leadershipTenure.ts).
-      const tenure = getLeadershipEligibility(character, gameTime.currentTurn, routePartyId);
+      // Canonical `partyId` from the validator, not `routePartyId` — the raw
+      // path segment may be "07" where the stored party id is "7".
+      const tenure = getLeadershipEligibility(character, gameTime.currentTurn, partyId);
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
         return NextResponse.json(

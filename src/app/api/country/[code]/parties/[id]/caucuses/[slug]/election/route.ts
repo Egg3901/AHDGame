@@ -149,7 +149,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       // Turn-based party-tenure gate (leadershipTenure.ts) — pre-disable run/vote
       // for under-tenured members; the enter/vote routes enforce it server-side.
       const currentTurn = await getCurrentTurn(db);
-      if (!getLeadershipEligibility(authUser.character, currentTurn, id).eligible) {
+      // Canonical `partyId`, not the raw `id` path segment ("07" vs "7").
+      if (!getLeadershipEligibility(authUser.character, currentTurn, partyId).eligible) {
         canParticipate = false;
       }
     }

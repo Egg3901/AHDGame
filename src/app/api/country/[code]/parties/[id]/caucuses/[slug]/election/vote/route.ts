@@ -121,7 +121,8 @@ export async function POST(
     // for founding elections.
     const currentTurn = await getCurrentTurn(db);
     if (!election.founding) {
-      const tenure = getLeadershipEligibility(auth.user.character, currentTurn, id);
+      // Canonical `partyId`, not the raw `id` path segment ("07" vs "7").
+      const tenure = getLeadershipEligibility(auth.user.character, currentTurn, partyId);
       if (!tenure.eligible) {
         return NextResponse.json(
           {

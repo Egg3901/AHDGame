@@ -97,7 +97,9 @@ export async function POST(
     // Minimum party tenure before standing for caucus chair (leadershipTenure.ts) —
     // measured on party membership, matching national/state leadership.
     const currentTurn = await getCurrentTurn(db);
-    const tenure = getLeadershipEligibility(auth.user.character, currentTurn, id);
+    // `partyId` (canonical String(party.sequentialId)), not the raw `id` path
+    // segment — "07" and "7" resolve to the same party but compare unequal.
+    const tenure = getLeadershipEligibility(auth.user.character, currentTurn, partyId);
     if (!tenure.eligible) {
       return NextResponse.json(
         {
