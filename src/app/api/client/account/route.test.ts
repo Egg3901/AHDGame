@@ -130,4 +130,39 @@ describe("GET /api/client/account", () => {
     expect(body.singleplayer.entitled).toBe(true);
     expect(Date.parse(body.singleplayer.expiresAt)).toBeGreaterThan(Date.now());
   });
+
+  it("grants singleplayer while a temporary client-access cutoff is still in the future", async () => {
+    const remainingMs = 2 * 24 * 60 * 60 * 1000;
+    const cutoff = new Date(Date.now() + remainingMs);
+    requireBasicAuth.mockResolvedValueOnce({
+      ok: true,
+      user: { userId: "507f1f77bcf86cd799439011" },
+    });
+    findOne.mockResolvedValueOnce({
+      username: "Ada",
+      displayName: "Ada",
+      clientAccessExpiresAt: cutoff,
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.singleplayer.entitled).toBe(true);
+    const expiresAt = Date.parse(body.singleplayer.expiresAt);
+    expect(expiresAt).toBeGreaterThan(Date.now());
+    expect(expiresAt).toBeLessThanOrEqual(cutoff.getTime());
+  });
+
+  it("does not treat an expired temporary grant as entitled", async () => {
+    requireBasicAuth.mockResolvedValueOnce({
+      ok: true,
+      user: { userId: "507f1f77bcf86cd799439011" },
+    });
+    findOne.mockResolvedValueOnce({
+      username: "Ada",
+      displayName: "Ada",
+      clientAccessExpiresAt: new Date(Date.now() - 60_000),
+    });
+    const { GET } = await import("./route");
+    const body = await (await GET()).json();
+    expect(body.singleplayer).toEqual({ entitled: false, expiresAt: null });
+  });
 });
