@@ -34,9 +34,10 @@ export function TargetedAdsPanel({
   campaignId,
   onResourcesSpent,
 }: {
-  campaignId: string;
+  campaignId?: string;
   onResourcesSpent: () => void;
 }) {
+  const endpoint = campaignId ? `/api/campaigns/${campaignId}/targeted-ads` : "/api/targeted-ads";
   const { formatFull } = useCurrency();
   const t = useTranslations("elections.campaignTargeting");
   const [region, setRegion] = useState("");
@@ -51,10 +52,10 @@ export function TargetedAdsPanel({
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    fetch(
-      `/api/campaigns/${campaignId}/targeted-ads${region ? `?stateId=${encodeURIComponent(region)}` : ""}`,
-      { signal: controller.signal, cache: "no-store" }
-    )
+    fetch(`${endpoint}${region ? `?stateId=${encodeURIComponent(region)}` : ""}`, {
+      signal: controller.signal,
+      cache: "no-store",
+    })
       .then(async (response) => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error ?? t("failed"));
@@ -70,7 +71,7 @@ export function TargetedAdsPanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [campaignId, region, revision, t]);
+  }, [endpoint, region, revision, t]);
 
   const target = quote?.targets.find((value) => `${value.dimension}:${value.bucket}` === targetKey);
 
@@ -79,7 +80,7 @@ export function TargetedAdsPanel({
     setBusy(true);
     setMessage("");
     try {
-      const response = await fetch(`/api/campaigns/${campaignId}/targeted-ads`, {
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -15,7 +15,8 @@ export async function loadCampaignAudience(
   db: Db,
   countryId: CountryId,
   stateId: string,
-  turnout?: StateDemographicTurnout | null
+  turnout?: StateDemographicTurnout | null,
+  turnoutRulesVersion = CAMPAIGN_RULES_VERSION
 ) {
   const [state, demographics, defaults, gameState, categories, turnoutData] = await Promise.all([
     db.collection<State>("states").findOne({ _id: stateId, countryId }),
@@ -58,7 +59,7 @@ export async function loadCampaignAudience(
     enriched: [],
   };
   const build = (doc: StateDemographicTurnout | null = turnoutData) => {
-    const selected = turnoutForElection(doc, context);
+    const selected = turnoutForElection(doc, { campaignRulesVersion: turnoutRulesVersion });
     return buildGranularElectorateSubstrate({
       ...context,
       cache: "bypass",
@@ -116,7 +117,11 @@ export async function loadCampaignProjectionContext(db: Db, regionIds: string[])
 export type CampaignProjectionContext = Awaited<ReturnType<typeof loadCampaignProjectionContext>>;
 
 /** Resolution fallback loads all advertised regions together, then scores in memory. */
-export async function loadRegionalCampaignCells(db: Db, states: State[]) {
+export async function loadRegionalCampaignCells(
+  db: Db,
+  states: State[],
+  legacyRegions: ReadonlySet<string> = new Set()
+) {
   const ids = states.map((state) => state._id);
   const [context, demographics, categories] = await Promise.all([
     loadCampaignProjectionContext(db, ids),
@@ -131,23 +136,70 @@ export async function loadRegionalCampaignCells(db: Db, states: State[]) {
   for (const state of states) {
     const demographics = demographicMap.get(state._id);
     if (!demographics || demographics.countryId !== state.countryId) continue;
-    const turnoutDoc = turnoutForElection(context.turnoutByState.get(state._id), context);
-    const population = state.votingEligiblePopulation ?? state.population;
-    const substrate = buildGranularElectorateSubstrate({
-      ...context,
-      countryId: state.countryId,
-      stateId: state._id,
-      statePopulation: population,
-      demographics,
-      categories,
-      turnoutDoc,
-      enriched: [],
-      liveTurnouts: resolveTurnout(population, demographics, categories, turnoutDoc, context)
-        .byGroup,
-      demographicDefaults: context.defaultsByState.get(state._id),
-    });
-    if (substrate?.campaignCells)
-      result.set(`${state.countryId}:${state._id}`, substrate.campaignCells);
+    const regionKey = `${state.countryId}:${state._id}`;
+    for (const version of legacyRegions.has(regionKey) ||
+    legacyRegions.has(`${state.countryId}:${state.countryId}`)
+      ? [1, 0]
+      : [1]) {
+      const turnoutDoc = turnoutForElection(context.turnoutByState.get(state._id), {
+        campaignRulesVersion: version,
+      });
+      const population = state.votingEligiblePopulation ?? state.population;
+      const substrate = buildGranularElectorateSubstrate({
+        ...context,
+        countryId: state.countryId,
+        stateId: state._id,
+        statePopulation: population,
+        demographics,
+        categories,
+        turnoutDoc,
+        enriched: [],
+        liveTurnouts: resolveTurnout(population, demographics, categories, turnoutDoc, context)
+          .byGroup,
+        demographicDefaults: context.defaultsByState.get(state._id),
+      });
+      if (substrate?.campaignCells)
+        result.set(`${regionKey}${version === 0 ? ":0" : ""}`, substrate.campaignCells);
+    }
+  }
+  for (const countryId of new Set(states.map((state) => state.countryId))) {
+    const regions = states.filter(
+      (state) => state.countryId === countryId && state._id !== countryId
+    );
+    const population = regions.reduce(
+      (sum, state) => sum + (state.votingEligiblePopulation ?? state.population),
+      0
+    );
+    if (!(population > 0)) continue;
+    for (const suffix of ["", ":0"]) {
+      const cells = regions.flatMap((state) =>
+        (result.get(`${countryId}:${state._id}${suffix}`) ?? []).map((cell) => ({
+          ...cell,
+          id: `${state._id}:${cell.id}`,
+          stateId: state._id,
+          share: (cell.share * (state.votingEligiblePopulation ?? state.population)) / population,
+        }))
+      );
+      if (cells.length) result.set(`${countryId}:${countryId}${suffix}`, cells);
+    }
   }
   return result;
+}
+
+/** Detail-view fallback; list and turn callers load countries in batches. */
+export async function loadNationalCampaignCells(
+  db: Db,
+  countryId: CountryId,
+  version = CAMPAIGN_RULES_VERSION
+) {
+  const regions = await db
+    .collection<State>("states")
+    .find({ countryId, _id: { $ne: countryId } })
+    .toArray();
+  const cells = await loadRegionalCampaignCells(
+    db,
+    regions,
+    version ? new Set() : new Set([`${countryId}:${countryId}`])
+  );
+  return cells.get(`${countryId}:${countryId}${version ? "" : ":0"}`);
 }

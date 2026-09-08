@@ -1,7 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
-
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Character, State } from "@/lib/db/types";
@@ -42,6 +42,7 @@ import { getActionImage } from "@/lib/images/actionImages";
 const CATEGORIES = ["all", "influence", "money", "research"];
 
 export default function ActionsPage() {
+  const adText = useTranslations("elections.campaignTargeting");
   const { baseRates: campaignRates } = useCurrency();
   const { showToast } = useToast();
   const router = useRouter();
@@ -609,7 +610,19 @@ export default function ActionsPage() {
             return (
               <CardComponent
                 key={card.type}
-                card={card}
+                card={
+                  card.type === "targetedAds"
+                    ? {
+                        ...card,
+                        label: adText("title"),
+                        tagline: adText("actionTagline"),
+                        flavor: adText("actionFlavor"),
+                        fundLabel: () => adText("actionCost"),
+                        effect: adText("actionEffect"),
+                        imageAlt: adText("actionImageAlt"),
+                      }
+                    : card
+                }
                 imageUrl={cardImages[card.type]}
                 index={index}
                 viewMode={viewMode}

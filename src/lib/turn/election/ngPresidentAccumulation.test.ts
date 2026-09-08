@@ -5,6 +5,8 @@ import { createMockDb } from "@/lib/test-utils/mockDb";
 import { accumulateNGPresidentVoteTurn } from "./ngPresidentAccumulation";
 import { NG_ZONES } from "@/lib/nigeriaPresidentialElectionEngine";
 
+vi.mock("@/lib/campaignTargeting/audience", () => ({ loadRegionalCampaignCells: vi.fn() }));
+
 const NOW = new Date("1991-06-01T00:00:00Z");
 
 describe("accumulateNGPresidentVoteTurn", () => {
@@ -101,4 +103,69 @@ describe("accumulateNGPresidentVoteTurn", () => {
     await accumulateNGPresidentVoteTurn(db as unknown as Db, electionId, NOW);
     expect(tallies.updateOne).not.toHaveBeenCalled();
   });
+});
+
+it("applies standing ads only in the purchased zone without changing the ballot pool", async () => {
+  const { loadRegionalCampaignCells } = await import("@/lib/campaignTargeting/audience");
+  const db = createMockDb();
+  const electionId = new ObjectId();
+  const a = new ObjectId();
+  const b = new ObjectId();
+  const owner = new ObjectId();
+  db.collection("electionVoteTallies").findOne.mockResolvedValue({
+    electionId,
+    candidateParties: { [a.toString()]: "a", [b.toString()]: "b" },
+    totalVotes: {},
+    totalVotesByUnit: {},
+  });
+  db.collection("states").find.mockReturnValue({
+    toArray: async () =>
+      NG_ZONES.map((zone) => ({ _id: zone, countryId: "NG", population: 1_000_000 })),
+  });
+  db.collection("electionCandidates").find.mockReturnValue({
+    toArray: async () => [{ _id: a, characterId: owner }],
+  });
+  db.collection("characters").find.mockReturnValue({
+    toArray: async () => [
+      {
+        _id: owner,
+        policies: { economic: 0, social: 0 },
+        targetedAds: [
+          {
+            stateId: "NORTH_WEST",
+            dimension: "ethnicity",
+            bucket: "group_a",
+            exposure: 1,
+            lastPurchaseTurn: 10,
+            throughTurn: 10,
+          },
+        ],
+      },
+    ],
+  });
+  vi.mocked(loadRegionalCampaignCells).mockResolvedValue(
+    new Map(
+      NG_ZONES.map((zone) => [
+        `NG:${zone}`,
+        [
+          {
+            id: "cell",
+            share: 1,
+            turnout: 50,
+            economicLean: 0,
+            socialLean: 0,
+            buckets: { ethnicity: "group_a" },
+            identities: { ethnicity: { economicLean: 0, socialLean: 0 } },
+          },
+        ],
+      ])
+    )
+  );
+  await accumulateNGPresidentVoteTurn(db as unknown as Db, electionId, NOW, 10);
+  const votes =
+    db.collection("electionVoteTallies").updateOne.mock.calls[0][1].$set.totalVotesByUnit;
+  expect(votes.NORTH_WEST[a.toString()]).toBeGreaterThan(votes.NORTH_WEST[b.toString()]);
+  expect(votes.SOUTH_EAST[a.toString()]).toBe(votes.SOUTH_EAST[b.toString()]);
+  for (const zone of NG_ZONES)
+    expect(votes[zone][a.toString()] + votes[zone][b.toString()]).toBe(32000);
 });

@@ -1,6 +1,7 @@
 /**
  * Fetches and enriches candidate data for vote calculations.
  */
+import { combinedAds } from "@/lib/campaignTargeting/rules";
 
 import { ObjectId, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -307,9 +308,10 @@ export async function fetchEnrichedCandidates(
         ? (partyChairMaps.stateChairStatesByCharacterId.get(charIdStr) ?? [])
         : undefined;
 
+    const standingAds = c.isNPP ? undefined : charMap.get(c.characterId.toString())?.targetedAds;
     return {
       candidateId: c._id.toString(),
-      targetedAds: c.targetedAds,
+      targetedAds: standingAds?.length ? combinedAds(c.targetedAds, standingAds) : c.targetedAds,
       characterId: charIdStr,
       characterName: c.characterName,
       party: c.party,

@@ -57,7 +57,7 @@ it.each(["summary", "full"] as const)(
     ]);
     vi.mocked(loadRegionalCampaignCells).mockResolvedValue(cells);
     await resolveElections(db as unknown as Db, elections, { view, userId: null });
-    expect(loadRegionalCampaignCells).toHaveBeenCalledExactlyOnceWith(db, states);
+    expect(loadRegionalCampaignCells).toHaveBeenCalledExactlyOnceWith(db, states, new Set());
     expect(db.collection("states").find).toHaveBeenCalledOnce();
     expect(_enrichElection).toHaveBeenCalledTimes(3);
     for (const [election, deps] of vi.mocked(_enrichElection).mock.calls)

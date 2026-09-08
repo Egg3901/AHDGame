@@ -2,6 +2,7 @@
  * Election vote tally accumulation and initialization.
  */
 
+import { applyNationalAds } from "@/lib/campaignTargeting/nationalAds";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 
 import { getDb } from "@/lib/mongodb";
@@ -381,6 +382,16 @@ export async function accumulateVoteTurn(
       effEnriched = substrate.enriched;
       effPartyGroupFavorabilityByKey =
         substrate.partyGroupFavorabilityByKey ?? partyGroupFavorabilityByKey;
+    } else if (stateId === electionCountryId) {
+      effEnriched = await applyNationalAds(
+        db,
+        electionCountryId,
+        turnNumber,
+        enriched,
+        Object.keys(demographics.groups),
+        options?.preload?.stateMap,
+        election.campaignRulesVersion ?? 0
+      );
     }
   }
   // ── Physical electorate ceiling ────────────────────────────────────────────
