@@ -116,7 +116,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
         bankCharter?: {
           status?: string;
           currency?: string;
-          totalDeposits?: number;
+          npcDeposits?: number;
           totalLoans?: number;
         };
       }>("corporations")
@@ -125,7 +125,7 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
         {
           projection: {
             "bankCharter.currency": 1,
-            "bankCharter.totalDeposits": 1,
+            "bankCharter.npcDeposits": 1,
             "bankCharter.totalLoans": 1,
           },
         }
@@ -221,7 +221,9 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     const charter = bank.bankCharter;
     if (!charter?.currency) continue;
     const currency = charter.currency as CurrencyCode;
-    addComponent(byCurrency, currency, "bankDeposits", charter.totalDeposits ?? 0);
+    // Player/NPP savings are already counted from their balances above.
+    // totalDeposits includes those same balances as well as the NPC book.
+    addComponent(byCurrency, currency, "bankDeposits", charter.npcDeposits ?? 0);
     addComponent(byCurrency, currency, "creditOutstanding", charter.totalLoans ?? 0);
   }
 

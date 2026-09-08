@@ -78,7 +78,7 @@ export function buildFreightBillingBySector(args: {
             ...sector,
             revenueAnchor: readCorpEconomicAnchor(sector.revenue, hostCode, hostRate),
             producedUnits: sector.producedUnits,
-            capacityUnits: sector.capitalStock,
+            capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
           },
           currentTurn,
           {

@@ -254,8 +254,8 @@ export async function setSectorStrategy(request: Request, { params }: RouteParam
     // stock, in-flight queue, and the calibrated physical-opex anchor so
     // nameplate and `anchor × units` both stay put. Plants-gated: below that
     // tier the stock is production-gating state, not an RPU capacity.
-    // Rescaled ONCE, here, against the FINAL rates. The 12-turn blend window
-    // misprices slightly and decays to exact; see the helper's docs.
+    // Owned units rescale once against the final recipe. The turn converts
+    // them to the blended production basis without changing paid capacity.
     const marketMode = await getMarketSystemModeForDb(db);
     const plantsEnabled = marketAtLeast(marketMode, "plants");
     const rescale = retoolRescaleFields({

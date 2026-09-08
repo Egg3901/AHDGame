@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { BargainingCampaign, Character, Union } from "@/lib/db/types";
-import { actOnBargainingCampaignAsUnion } from "./bargaining";
+import { actOnBargainingCampaignAsUnion, persistBargainingCounter } from "./bargaining";
 import {
   castRatificationBallot,
   closeDueRatificationVotes,
@@ -174,7 +174,23 @@ function fakeDb(state: FakeState): Db {
                 state.campaign.ratification?.status === "open" ? [state.campaign] : []
               ),
           }),
-          updateOne: vi.fn().mockImplementation((_filter, update) => {
+          updateOne: vi.fn().mockImplementation((filter, update) => {
+            const matches = Object.entries(filter).every(([path, expected]) => {
+              const actual = path
+                .split(".")
+                .reduce<unknown>(
+                  (value, key) =>
+                    value == null ? undefined : (value as Record<string, unknown>)[key],
+                  state.campaign
+                );
+              if (expected instanceof ObjectId) return expected.equals(actual as ObjectId);
+              if (expected && typeof expected === "object") {
+                if ("$ne" in expected) return actual !== expected.$ne;
+                if ("$exists" in expected) return (actual !== undefined) === expected.$exists;
+              }
+              return actual === expected;
+            });
+            if (!matches) return Promise.resolve({ modifiedCount: 0 });
             const set = (update.$set ?? {}) as Record<string, unknown>;
             state.campaignUpdates.push(set);
             applySet(state.campaign as unknown as Record<string, unknown>, set);
@@ -424,5 +440,84 @@ describe("settlement ratification", () => {
     expect(late).toMatchObject({ ok: false, status: 409 });
     // The late ballot closed the vote rather than leaving it hanging.
     expect(state.campaign.ratification?.status).not.toBe("open");
+  });
+
+  it("voids the old ballot when either party replaces the offer", async () => {
+    const state = baseState();
+    const db = fakeDb(state);
+    await actOnBargainingCampaignAsUnion(
+      db,
+      character(leaderId),
+      state.union._id.toString(),
+      state.campaign._id.toString(),
+      "accept",
+      104
+    );
+
+    const counter = await persistBargainingCounter(
+      db,
+      state.campaign,
+      "union",
+      {
+        wageLevel: 1.2,
+        agreementDurationTurns: 48,
+        noStrikeTurns: 24,
+      },
+      105
+    );
+
+    expect(counter.ok).toBe(true);
+    expect(state.campaign.currentOffer.revision).toBe(3);
+    expect(state.campaign.ratification).toMatchObject({ status: "void", closedAtTurn: 105 });
+    expect(state.agreements).toHaveLength(0);
+  });
+
+  it("never settles a replacement employer offer using an older ballot", async () => {
+    const state = baseState();
+    const db = fakeDb(state);
+    await actOnBargainingCampaignAsUnion(
+      db,
+      character(leaderId),
+      state.union._id.toString(),
+      state.campaign._id.toString(),
+      "accept",
+      104
+    );
+    // Legacy campaigns can retain a ballot after two counteroffers. The turn
+    // sweep must not apply those votes to terms the members never accepted.
+    state.campaign.currentOffer = { ...state.campaign.currentOffer, revision: 4, wageLevel: 0.8 };
+
+    const closed = await closeRatificationVote(db, state.campaign, 107);
+
+    expect(closed).toMatchObject({ outcome: "void", campaignStatus: "negotiating" });
+    expect(state.agreements).toHaveLength(0);
+    expect(state.campaign.ratification?.status).toBe("void");
+  });
+
+  it("a stale closing attempt cannot close a newer ballot", async () => {
+    const state = baseState();
+    const db = fakeDb(state);
+    await actOnBargainingCampaignAsUnion(
+      db,
+      character(leaderId),
+      state.union._id.toString(),
+      state.campaign._id.toString(),
+      "accept",
+      104
+    );
+    const stale = { ...state.campaign, ratification: { ...state.campaign.ratification! } };
+    state.campaign.currentOffer = { ...state.campaign.currentOffer, revision: 4 };
+    state.campaign.ratification = {
+      ...state.campaign.ratification!,
+      offerRevision: 4,
+      openedAtTurn: 106,
+      closesAtTurn: 109,
+    };
+
+    const closed = await closeRatificationVote(db, stale, 107);
+
+    expect(closed.outcome).toBeNull();
+    expect(state.campaign.ratification).toMatchObject({ status: "open", offerRevision: 4 });
+    expect(state.agreements).toHaveLength(0);
   });
 });

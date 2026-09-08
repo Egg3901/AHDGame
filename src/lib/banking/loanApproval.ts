@@ -1,13 +1,17 @@
+/**
+ * Bank CEOs approve or reject queued loans. acceptLoan rechecks the bank and
+ * borrower before funding the loan, and starts its repayment term at approval;
+ * rejectLoan leaves the bank's and borrower's cash unchanged.
+ */
 import type { Db, ObjectId } from "mongodb";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { Character } from "@/lib/db/types/character";
-import { buildFundConstituentResolver } from "@/lib/banking/lending";
+import { loadBorrowerSnapshot } from "@/lib/banking/lending";
 import { loadBankingSnapshot } from "@/lib/banking/snapshot";
 import { decideBankCommand } from "@/lib/banking/rules/decide";
 import { settleTransition } from "@/lib/banking/settlementJournal";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import { isBlockedBorrower } from "@/lib/banking/blacklist";
 import { isNamedLendingCharter } from "@/lib/banking/charterKinds";
 import { getCurrentTurn } from "@/lib/currentTurn";
 import { sendSystemMail } from "@/lib/mail/systemMail";
@@ -139,25 +143,30 @@ async function acceptLoanInner(
     return { ok: false, error: "Bank no longer has an active lending charter" };
   }
 
-  // Re-check the blacklist at decision time; headroom is re-checked by the
-  // rules against the snapshot.
-  const resolveFunds = await buildFundConstituentResolver(db, charter.blacklist?.indexFundIds);
-  const blocked =
-    loan.borrowerType === "character"
-      ? isBlockedBorrower(charter, { characterId: loan.borrowerId.toString() }, resolveFunds)
-      : isBlockedBorrower(charter, { corporationId: loan.borrowerId.toString() }, resolveFunds);
+  if (loan.currency !== snapshot.currency) {
+    return { ok: false, error: "Loan currency no longer matches the bank charter" };
+  }
+  if (loan.borrowerType !== "character" && loan.borrowerType !== "corporation") {
+    return { ok: false, error: "Loan has no named borrower" };
+  }
+  const borrower = await loadBorrowerSnapshot(
+    db,
+    charter,
+    loan.currency,
+    { type: loan.borrowerType, id: loan.borrowerId },
+    snapshot.turn
+  );
+  if ("error" in borrower) return { ok: false, error: borrower.error };
 
   const decision = decideBankCommand(
     snapshot,
     {
       type: "disburse_pending_loan",
       loanId: loanId.toHexString(),
-      borrower: {
-        type: loan.borrowerType === "character" ? "character" : "corporation",
-        id: loan.borrowerId.toString(),
-        blocked,
-      },
+      borrower: borrower.snapshot,
       principal: loan.outstanding,
+      ratePercent: loan.ratePercent,
+      termTurns: loan.termTurns,
     },
     { commandId: loanId.toHexString() }
   );
@@ -228,7 +237,10 @@ async function acceptLoanInner(
     `Your loan request for ${loan.principal.toLocaleString()} ${loan.currency} has been approved and the funds have been disbursed at ${loan.ratePercent}% over ${loan.termTurns} turns.`
   );
 
-  return { ok: true, loan: { ...loan, status: "current", decisionTurn } };
+  return {
+    ok: true,
+    loan: { ...loan, status: "current", originatedTurn: decisionTurn, decisionTurn },
+  };
 }
 
 /**

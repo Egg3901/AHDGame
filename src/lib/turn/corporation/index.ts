@@ -205,6 +205,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       ?.canonicalFreightBillingEnabled === true;
   const lookups = await buildCorporationLookups(db, {
     plantsEnabled: plantsEnabledForMarketShare,
+    productionTurn: turn,
     freightSettlementActive,
     moneyWiringEnabled: interstateMoneyWiringEnabled,
     canonicalFreightBillingEnabled,
@@ -483,7 +484,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             transitionStartTurn: sector.transitionStartTurn,
             productionPolicyLevel: sector.productionPolicyLevel,
             producedUnits: sector.producedUnits,
-            capacityUnits: sector.capitalStock,
+            capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
             mothballed: sector.mothballed,
             isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
             ...(sector.stateId ? { stateId: sector.stateId } : {}),

@@ -97,7 +97,7 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
   // slider), so without compensation that spend is simply confiscated. Convert
   // the accrued daily growth spend into capacity at the standing build price
   // and deliver it as a FREE queue order (costPaidAnchor 0 — the corp already
-  // paid, and it must not be refundable via cancel), at half the normal build
+  // paid, and it must not be refundable via cancel), at half the authored base build
   // time since the legacy build was already partly under way.
   const growthCostAnchorForFlip = readCorpEconomicAnchor(
     Number.isFinite(sector.currentGrowthCost) ? (sector.currentGrowthCost ?? 0) : 0,
@@ -130,7 +130,7 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
           strategyId: sector.strategyId ?? null,
           costPaidAnchor: 0,
           startTurn: currentTurn,
-          onlineTurn: currentTurn + Math.ceil(CAPACITY_BUILD_TURNS(sector.sectorType) / 2),
+          onlineTurn: currentTurn + CAPACITY_BUILD_TURNS(sector.sectorType, true),
           smooth: true,
         }
       : null;

@@ -301,6 +301,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             producedUnits: 1,
             soldUnits: 1,
             capitalStock: 1,
+            operatingCapacityUnits: 1,
             mothballed: 1,
             embargoSuspended: 1,
             embargoExportExposure: 1,
@@ -587,7 +588,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // known; the ledger itself only multiplies.
       militaryDivertedFraction: freshMilitaryDiversion(s, turn),
       soldUnits: typeof s.soldUnits === "number" ? s.soldUnits : null,
-      capacityUnits: typeof s.capitalStock === "number" ? s.capitalStock : null,
+      capacityUnits: s.operatingCapacityUnits ?? s.capitalStock ?? null,
       mothballed: s.mothballed === true,
       embargoSupplyFactor,
       // Filled in after the extraction block below (plants only). Declared here
