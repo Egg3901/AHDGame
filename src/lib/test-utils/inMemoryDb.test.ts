@@ -107,3 +107,89 @@ describe("inMemoryDb — driver surface used by bootstrapGameWorld", () => {
     expect(seen).toHaveLength(2);
   });
 });
+
+describe("inMemoryDb — query and update operators", () => {
+  it("$regex matches strings, honouring $options: 'i'", async () => {
+    const db = createInMemoryDb();
+    db.seed("parties", [
+      { _id: 1, name: "Labour" },
+      { _id: 2, name: "Conservative" },
+    ]);
+
+    expect(await db.collection("parties").findOne({ name: { $regex: "^Lab" } })).toMatchObject({
+      _id: 1,
+    });
+    expect(
+      await db.collection("parties").findOne({ name: { $regex: "^lab", $options: "i" } })
+    ).toMatchObject({ _id: 1 });
+    expect(await db.collection("parties").findOne({ name: { $regex: "^zz" } })).toBeNull();
+  });
+
+  it("$not inverts a nested operator expression", async () => {
+    const db = createInMemoryDb();
+    db.seed("states", [
+      { _id: "CA", houseDistricts: 52 },
+      { _id: "WY", houseDistricts: 1 },
+    ]);
+
+    const rows = await db
+      .collection("states")
+      .find({ houseDistricts: { $not: { $gt: 10 } } })
+      .toArray();
+
+    expect(rows.map((r) => r._id)).toEqual(["WY"]);
+  });
+
+  it("$type matches BSON-ish aliases", async () => {
+    const db = createInMemoryDb();
+    db.seed("states", [{ _id: "CA", gdp: 3 }, { _id: "TX", gdp: "3" }, { _id: "NY" }]);
+
+    const nums = await db
+      .collection("states")
+      .find({ gdp: { $type: "number" } })
+      .toArray();
+    const strs = await db
+      .collection("states")
+      .find({ gdp: { $type: "string" } })
+      .toArray();
+
+    expect(nums.map((r) => r._id)).toEqual(["CA"]);
+    expect(strs.map((r) => r._id)).toEqual(["TX"]);
+  });
+
+  it("$mul multiplies, treating a missing field as 0", async () => {
+    const db = createInMemoryDb();
+    db.seed("states", [{ _id: "CA", gdp: 10 }, { _id: "NY" }]);
+
+    await db.collection("states").updateMany({}, { $mul: { gdp: 2 } });
+
+    expect(await db.collection("states").findOne({ _id: "CA" })).toMatchObject({ gdp: 20 });
+    expect(await db.collection("states").findOne({ _id: "NY" })).toMatchObject({ gdp: 0 });
+  });
+
+  it("bulkWrite accepts replaceOne alongside updateOne and insertOne", async () => {
+    const db = createInMemoryDb();
+    db.seed("laws", [{ _id: 1, title: "old" }]);
+
+    await db
+      .collection("laws")
+      .bulkWrite([
+        { replaceOne: { filter: { _id: 1 }, replacement: { title: "new" } } },
+        { insertOne: { document: { _id: 2, title: "second" } } },
+      ]);
+
+    expect(await db.collection("laws").findOne({ _id: 1 })).toEqual({ _id: 1, title: "new" });
+    expect(await db.collection("laws").countDocuments()).toBe(2);
+  });
+
+  it("still throws on a genuinely unknown operator", async () => {
+    // The file's contract: throw on the unrecognised rather than silently match
+    // nothing, which is what would let a conservation test pass while lying.
+    const db = createInMemoryDb();
+    db.seed("x", [{ _id: 1, a: 1 }]);
+
+    await expect(db.collection("x").findOne({ a: { $bogus: 1 } })).rejects.toThrow(
+      /unsupported operator/
+    );
+  });
+});

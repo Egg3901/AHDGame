@@ -168,6 +168,51 @@ function matchesCondition(value: unknown, condition: unknown): boolean {
             return !(operand as unknown[]).some((o) => equalsAny(value, o));
           case "$exists":
             return (value !== undefined) === Boolean(operand);
+          case "$regex": {
+            if (typeof value !== "string") return false;
+            const flags = typeof condition["$options"] === "string" ? condition["$options"] : "";
+            const source = operand instanceof RegExp ? operand.source : String(operand);
+            return new RegExp(source, flags).test(value);
+          }
+          // A modifier consumed by $regex above, never a test in its own right.
+          // Returning true here is correct rather than permissive: `every` still
+          // requires the sibling $regex to match.
+          case "$options":
+            return true;
+          case "$not":
+            return !matchesCondition(value, operand);
+          case "$type": {
+            const aliases = Array.isArray(operand) ? operand : [operand];
+            return aliases.some((alias) => {
+              switch (alias) {
+                case "number":
+                case 1:
+                case 16:
+                case 18:
+                  return typeof value === "number";
+                case "string":
+                case 2:
+                  return typeof value === "string";
+                case "bool":
+                case 8:
+                  return typeof value === "boolean";
+                case "array":
+                case 4:
+                  return Array.isArray(value);
+                case "date":
+                case 9:
+                  return value instanceof Date;
+                case "null":
+                case 10:
+                  return value === null;
+                case "object":
+                case 3:
+                  return isPlainObject(value);
+                default:
+                  throw new Error(`inMemoryDb: unsupported $type alias ${String(alias)}`);
+              }
+            });
+          }
           default:
             throw new Error(`inMemoryDb: unsupported operator ${op}`);
         }
@@ -247,6 +292,12 @@ function applyUpdate(doc: Doc, update: Update): void {
       for (const [path, value] of Object.entries(fields as Doc)) {
         const current = getPath(doc, path);
         setPath(doc, path, (typeof current === "number" ? current : 0) + (value as number));
+      }
+    } else if (op === "$mul") {
+      for (const [path, value] of Object.entries(fields as Doc)) {
+        const current = getPath(doc, path);
+        // Mongo treats a missing field as 0 for $mul, not as 1.
+        setPath(doc, path, (typeof current === "number" ? current : 0) * (value as number));
       }
     } else if (op === "$unset") {
       for (const path of Object.keys(fields as Doc)) unsetPath(doc, path);
@@ -489,6 +540,14 @@ class InMemoryCollection {
         modified += res.modifiedCount;
       } else if (op.insertOne) {
         await this.insertOne((op.insertOne as { document: Doc }).document);
+      } else if (op.replaceOne) {
+        const { filter, replacement, upsert } = op.replaceOne as {
+          filter: Doc;
+          replacement: Doc;
+          upsert?: boolean;
+        };
+        const res = await this.replaceOne(filter, replacement, { upsert });
+        modified += res.modifiedCount;
       } else {
         throw new Error("inMemoryDb: unsupported bulk op");
       }
