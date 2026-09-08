@@ -77,12 +77,22 @@ export function retoolProductionMeasurements(
   contractAchievableUnits: number;
 }> {
   const ratio = retoolMeasurementRatio(args);
-  if (ratio === 1) return {};
+  const initializeCapacity =
+    args.operatingCapacityUnits == null &&
+    args.capitalStock != null &&
+    retoolOperatingCapacityRatio(args) !== 1;
+  if (ratio === 1 && !initializeCapacity) return {};
   const converted: ReturnType<typeof retoolProductionMeasurements> = {
     operatingCapacityTurn: args.currentTurn,
   };
-  const capacity = args.operatingCapacityUnits ?? args.capitalStock;
-  if (capacity != null) converted.operatingCapacityUnits = capacity * ratio;
+  if (args.operatingCapacityUnits != null) {
+    converted.operatingCapacityUnits = args.operatingCapacityUnits * ratio;
+  } else if (args.capitalStock != null) {
+    // On the first retool turn, old sales already use the source recipe, but
+    // owned stock has converted to destination units. Capacity needs its own
+    // conversion even when the sales measurement ratio is one.
+    converted.operatingCapacityUnits = args.capitalStock * retoolOperatingCapacityRatio(args);
+  }
   for (const key of ["producedUnits", "soldUnits", "contractAchievableUnits"] as const) {
     if (args[key] != null) converted[key] = args[key] * ratio;
   }

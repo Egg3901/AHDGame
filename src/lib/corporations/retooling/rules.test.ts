@@ -32,6 +32,21 @@ describe("retool production basis", () => {
     ).toEqual({});
   });
 
+  it("initializes legacy capacity on the first retool turn without rescaling old sales", () => {
+    const stockRatio = capacityRescaleRatio("extraction", "rare_earth_mining", "coal_mining");
+    const converted = retoolProductionMeasurements({
+      ...transition,
+      currentTurn: 100,
+      capitalStock: 100 * stockRatio,
+      producedUnits: 50,
+      soldUnits: 30,
+    });
+    expect(converted.operatingCapacityUnits).toBeCloseTo(100, 12);
+    expect(converted.producedUnits).toBe(50);
+    expect(converted.soldUnits).toBe(30);
+    expect(converted.operatingCapacityTurn).toBe(100);
+  });
+
   it("converts lagged sales once and preserves utilization and fill", () => {
     const input = {
       ...transition,
