@@ -7,6 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { RATE_CHANGES_PER_TERM } from "@/lib/db/types/centralBank";
 import { decideGovernance, normalizedRateChoices } from "./machine";
 import { allowedActionsFor } from "./allowedActions";
 import type {
@@ -418,6 +419,27 @@ describe("authority", () => {
     expect(decision.next.activeMeeting).toBeNull();
   });
 
+  it.each(["cast_ballot", "resolve_meeting", "meeting_deadline"] as const)(
+    "refuses %s on an existing meeting after independence is revoked",
+    (type) => {
+      const state = baseState({
+        governmentControlled: true,
+        activeMeeting: nppMajorityMeeting(100),
+      });
+      const command =
+        type === "cast_ballot"
+          ? { type, seatId: "seat-1", vote: "hike" as const, countryId: "US" }
+          : type === "resolve_meeting"
+            ? { type, force: true, countryId: "US" }
+            : { type, turn: 124, now: NOW + DAY, countryId: "US" };
+
+      const decision = decideGovernance(state, command, CHAIR, clock(108));
+
+      expect(decision).toMatchObject({ allowed: false, reason: "government-controlled" });
+      expect(state.primeRate).toBe(5);
+    }
+  );
+
   it("lets an admin override a seated committee, spending a term move", () => {
     const decision = decideGovernance(
       baseState({ rateChangesThisTerm: 3 }),
@@ -625,6 +647,40 @@ describe("replay and grid", () => {
 });
 
 describe("allowedActionsFor", () => {
+  it.each([
+    { lastRateChangeTurn: 107 },
+    { rateChangesThisTerm: RATE_CHANGES_PER_TERM },
+    { commandEconomy: true },
+    { fxCommitment: { regime: "peg" as const, capitalControls: false } },
+  ])("applies rate restrictions to the government: %j", (restriction) => {
+    const state = baseState({
+      institutionId: "UK",
+      memberCountryIds: ["UK"],
+      anchorCountryId: "UK",
+      governmentControlled: true,
+      ...restriction,
+    });
+    const view = allowedActionsFor(state, GOVERNMENT, clock(108));
+    expect(view.actions.find((action) => action.action === "set_rate")?.allowed).toBe(false);
+    expect(
+      decideGovernance(state, { type: "set_rate", rate: 5.25 }, GOVERNMENT, clock(108)).allowed
+    ).toBe(false);
+  });
+
+  it("hides ballot and resolution actions when an existing committee becomes dormant", () => {
+    const view = allowedActionsFor(
+      baseState({ governmentControlled: true, activeMeeting: nppMajorityMeeting(100) }),
+      { ...CHAIR, seatId: "seat-1" },
+      clock(108)
+    );
+    for (const action of ["open_meeting", "cast_ballot", "resolve_meeting"]) {
+      expect(view.actions.find((item) => item.action === action)).toMatchObject({
+        allowed: false,
+        reason: expect.stringMatching(/government/),
+      });
+    }
+  });
+
   it("lists every action with reasons, the next deadline and rate choices", () => {
     const state = baseState({ activeMeeting: nppMajorityMeeting(108), lastMeetingTurn: 108 });
     const view = allowedActionsFor(

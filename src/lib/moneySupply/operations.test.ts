@@ -144,10 +144,10 @@ describe("non-QE monetary operations", () => {
       ops.map((o: never) => (o as { updateOne: { filter: { _id: string } } }).updateOne.filter._id)
     ).toEqual(["bankA", "bankB"]);
     expect(ops[0].updateOne.update.$inc).toEqual({
-      liquidCapital: 300,
+      "bankCharter.cashReserves": 300,
       "bankCharter.cbMarginDebt": 300,
     });
-    expect(ops[1].updateOne.update.$inc.liquidCapital).toBe(100);
+    expect(ops[1].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(100);
     expect(result).toEqual(
       expect.objectContaining({ moneySupplyDelta: 400, reserveDelta: 0, banksCredited: 2 })
     );
@@ -169,8 +169,8 @@ describe("non-QE monetary operations", () => {
     });
 
     const ops = db.collectionMocks.corporations.bulkWrite.mock.calls[0][0];
-    expect(ops[0].updateOne.update.$inc.liquidCapital).toBe(150);
-    expect(ops[1].updateOne.update.$inc.liquidCapital).toBe(150);
+    expect(ops[0].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(150);
+    expect(ops[1].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(150);
   });
 
   it("falls back to the central bank's own reserve pool when no bank can take it", async () => {

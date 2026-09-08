@@ -1,3 +1,8 @@
+/**
+ * Members ratify a settlement using their organizing strength when voting opens.
+ * closeRatificationVote binds the decision to that offer revision and settles
+ * a majority or deadline result only while the same ballot remains open.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type {
   BargainingCampaign,
@@ -194,6 +199,10 @@ export async function castRatificationBallot(
   if (campaign.status !== "negotiating" && campaign.status !== "dispute") {
     return { ok: false, status: 409, error: "This campaign is no longer open." };
   }
+  if (ratification.offerRevision !== campaign.currentOffer.revision) {
+    await closeRatificationVote(db, campaign, currentTurn);
+    return { ok: false, status: 409, error: "The offer changed. This ratification vote is void." };
+  }
   if (!isRatificationOpen(campaign, currentTurn)) {
     // The deadline passed and the turn pass has not swept yet. Close it now
     // rather than accepting a late ballot into a vote that is already over.
@@ -234,11 +243,13 @@ export async function castRatificationBallot(
 
   const ballots = await loadBallots(db, campaign._id);
   const tally = tallyRatificationBallots(ratification, ballots);
-  const outcome = resolveRatification(ratification, tally, currentTurn);
+  let outcome = resolveRatification(ratification, tally, currentTurn);
   let campaignStatus: BargainingCampaign["status"] = campaign.status;
   if (outcome) {
     const closed = await closeRatificationVote(db, campaign, currentTurn, { ballots });
     campaignStatus = closed.campaignStatus;
+    outcome = closed.outcome === "void" ? null : closed.outcome;
+    if (closed.error) return { ok: false, status: 409, error: closed.error };
   }
   return { ok: true, status: 200, vote, weight, tally, outcome, campaignStatus };
 }
@@ -274,23 +285,31 @@ export async function closeRatificationVote(
 
   const campaigns = db.collection<BargainingCampaign>("bargainingCampaigns");
   const now = new Date();
+  const ballotFilter = {
+    _id: campaign._id,
+    "ratification.status": "open",
+    "ratification.offerRevision": ratification.offerRevision,
+    "ratification.openedAtTurn": ratification.openedAtTurn,
+  };
   const voidVote = async (campaignStatus: BargainingCampaign["status"]) => {
-    await campaigns.updateOne(
-      { _id: campaign._id, "ratification.status": "open" },
-      {
-        $set: {
-          "ratification.status": "void",
-          "ratification.closedAtTurn": currentTurn,
-          "ratification.updatedAt": now,
-          updatedAt: now,
-        },
-      }
-    );
+    await campaigns.updateOne(ballotFilter, {
+      $set: {
+        "ratification.status": "void",
+        "ratification.closedAtTurn": currentTurn,
+        "ratification.updatedAt": now,
+        updatedAt: now,
+      },
+    });
     return { outcome: "void" as const, campaignStatus };
   };
 
   // The campaign died under the vote: withdrawn by the president, or lapsed.
   if (campaign.status !== "negotiating" && campaign.status !== "dispute") {
+    return voidVote(campaign.status);
+  }
+  // Legacy ballots can outlive a counteroffer. Only the revision members saw
+  // can bind them, even when the replacement is another employer offer.
+  if (ratification.offerRevision !== campaign.currentOffer.revision) {
     return voidVote(campaign.status);
   }
   // A settlement needs a counterparty. A dissolved employer cannot be bound by
@@ -324,7 +343,11 @@ export async function closeRatificationVote(
   if (!outcome) return { outcome: null, campaignStatus: campaign.status };
 
   const claimed = await campaigns.updateOne(
-    { _id: campaign._id, "ratification.status": "open" },
+    {
+      ...ballotFilter,
+      status: campaign.status,
+      "currentOffer.revision": ratification.offerRevision,
+    },
     {
       $set: {
         "ratification.status": outcome,
@@ -357,7 +380,10 @@ export async function closeRatificationVote(
     // ratification back to void rather than reporting a settlement that is not
     // there; the president can put the new offer to the members.
     await campaigns.updateOne(
-      { _id: campaign._id, "ratification.status": "ratified" },
+      {
+        ...ballotFilter,
+        "ratification.status": "ratified",
+      },
       {
         $set: {
           "ratification.status": "void",
