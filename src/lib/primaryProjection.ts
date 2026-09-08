@@ -23,6 +23,11 @@
  * detail page for candidates who haven't voted yet.
  */
 
+import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
+import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
+import type { CampaignProjectionContext } from "@/lib/campaignTargeting/audience";
+
 import type {
   DemographicCategory,
   PrimaryStateAction,
@@ -41,7 +46,10 @@ import {
   NPP_STAGGER_EXTRA_MULTIPLIER,
 } from "@/lib/electionEngine/constants";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
-import { shiftDemographicsForPrimary } from "@/lib/campaigns/shiftPrimaryElectorate";
+import {
+  shiftDemographicsForPrimary,
+  applyPrimaryTurnoutRetention,
+} from "@/lib/campaigns/shiftPrimaryElectorate";
 
 /**
  * Primary turnout as a fraction of general-election turnout. Real-world Dem/GOP
@@ -64,6 +72,7 @@ export interface ProjectionResult {
 }
 
 export interface ProjectPrimaryInput {
+  campaignContext?: CampaignProjectionContext;
   /** Intra-party candidates (already enriched: policies, fav, NPI, etc.) */
   candidates: EnrichedCandidate[];
   /** Raw ElectionCandidate data for primaryCampaignState / primaryCampaignTicks / home state */
@@ -192,7 +201,44 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
 
     // Shift the electorate toward the party's ideological position — primary
     // voters are more ideologically extreme than the general electorate.
-    const demographics = shiftDemographicsForPrimary(rawDemographics, partyPosition);
+    let baseDemographics = rawDemographics;
+    let effectiveCategories = categories;
+    let effectiveCandidates = candidates;
+    let liveTurnouts = input.liveTurnouts?.[stateId];
+    if (input.campaignContext) {
+      const context = input.campaignContext;
+      const turnoutDoc = turnoutForElection(context.turnoutByState.get(stateId), context);
+      const generalTurnouts = resolveTurnout(
+        state.population,
+        rawDemographics,
+        categories,
+        turnoutDoc,
+        context
+      ).byGroup;
+      const substrate = buildGranularElectorateSubstrate({
+        ...context,
+        countryId,
+        stateId,
+        turnoutDoc,
+        statePopulation: state.population,
+        demographics: rawDemographics,
+        categories,
+        liveTurnouts: generalTurnouts,
+        enriched: candidates,
+        demographicDefaults: context.defaultsByState.get(stateId),
+      });
+      if (substrate) {
+        baseDemographics = substrate.demographics;
+        effectiveCategories = substrate.categories;
+        effectiveCandidates = substrate.enriched;
+        liveTurnouts = applyPrimaryTurnoutRetention(
+          substrate.liveTurnouts,
+          substrate.demographics,
+          partyPosition
+        );
+      }
+    }
+    const demographics = shiftDemographicsForPrimary(baseDemographics, partyPosition);
 
     // Party-org map for this state — all intra-party candidates see the same
     // value for their party (mobilization scalar, not a differentiator).
@@ -209,12 +255,12 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
     const effectivePool = totalPool;
 
     const { votesPerCandidate } = distributeVotesByGroupLevelAllocation(
-      candidates,
+      effectiveCandidates,
       effectivePool,
       totalPool,
       state.population,
       demographics,
-      categories,
+      effectiveCategories,
       partyOrgForState,
       {
         // Intra-party primary: every candidate is in the same party so the
@@ -240,7 +286,7 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         // projection stays in sync with the live stagger.
         currentStateId: stateId,
         countryId,
-        liveTurnouts: input.liveTurnouts?.[stateId],
+        liveTurnouts,
         // Local attacks: a state-scoped favourability penalty, applied through
         // the approval curve inside distribution rather than as a flat slice
         // off the count. Undefined for a state nobody is being attacked in.

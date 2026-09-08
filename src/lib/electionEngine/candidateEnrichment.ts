@@ -309,6 +309,7 @@ export async function fetchEnrichedCandidates(
 
     return {
       candidateId: c._id.toString(),
+      targetedAds: c.targetedAds,
       characterId: charIdStr,
       characterName: c.characterName,
       party: c.party,

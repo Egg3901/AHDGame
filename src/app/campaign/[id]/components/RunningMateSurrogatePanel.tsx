@@ -157,6 +157,7 @@ export function RunningMateSurrogatePanel({
           ticket's travel state, so this canvass draws from the shared pool. */}
       <div style={{ marginTop: 14 }}>
         <CanvassingPanel
+          electionId={electionId}
           variant="blend"
           countryId={countryId}
           characterActions={characterActions}
