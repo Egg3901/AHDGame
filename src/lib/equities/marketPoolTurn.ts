@@ -1,5 +1,6 @@
 /** Per-turn sizing and savings flow for finite equity market pools. */
 
+import { calibratedPoolTarget } from "@/lib/moneySupply/rules/poolTarget";
 import type { Db } from "mongodb";
 import type { EquityMarketPool } from "@/lib/db/types";
 import { EQUITY_MARKET_POOLS_COLLECTION } from "@/lib/db/types/equityMarketPool";
@@ -65,14 +66,24 @@ export async function processEquityMarketPoolTurn(
   };
   for (const pool of pools) {
     const latest = await db
-      .collection<{ currencyCode: string; m2?: number; turn: number }>("moneySupplySnapshots")
-      .find({ currencyCode: pool._id }, { projection: { m2: 1 }, sort: { turn: -1 }, limit: 1 })
+      .collection<{ currencyCode: string; m2?: number; turn: number; accountingVersion?: number }>(
+        "moneySupplySnapshots"
+      )
+      .find(
+        { currencyCode: pool._id },
+        { projection: { m2: 1, accountingVersion: 1 }, sort: { turn: -1 }, limit: 1 }
+      )
       .toArray();
     const m2 = latest[0]?.m2;
-    const targetCashLocal =
-      Number.isFinite(m2) && m2! > 0
-        ? Math.round(m2! * EQUITY_POOL_M2_SHARE * 100) / 100
-        : Math.max(0, pool.targetCashLocal ?? 0);
+    const calibration = calibratedPoolTarget({
+      previousLiquidityTarget: pool.targetCashLocal,
+      previousM2: pool.m2Local,
+      previousVersion: pool.poolAccountingVersion,
+      latestM2: m2,
+      latestVersion: latest[0]?.accountingVersion,
+      share: EQUITY_POOL_M2_SHARE,
+    });
+    const targetCashLocal = calibration.liquidityTargetLocal;
     const move = planEquityPoolCashMove({ cashLocal: pool.cashLocal, targetCashLocal });
     if (move.sweep > 0) {
       const debit = await debitEquityPoolGated(db, pool._id, move.sweep, "sweepOut", now);
@@ -98,7 +109,12 @@ export async function processEquityMarketPoolTurn(
           targetCashLocal,
           lastTurn: turn,
           updatedAt: now,
-          ...(Number.isFinite(m2) && m2! > 0 ? { m2Local: m2 } : {}),
+          ...(calibration.m2Local !== undefined
+            ? {
+                m2Local: calibration.m2Local,
+                poolAccountingVersion: calibration.poolAccountingVersion,
+              }
+            : {}),
         },
       }
     );

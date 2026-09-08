@@ -3,6 +3,8 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { MoneyAggregates } from "@/lib/moneySupply/calculate";
 
 export interface MoneySupplySnapshot extends MoneyAggregates {
+  /** Absent on legacy demographic/weighted observations. */
+  accountingVersion?: number;
   _id: string;
   turn: number;
   countryId: CountryId;
@@ -38,13 +40,14 @@ export interface MonetaryOperationRecord {
 export type MonetaryPolicyDecision = MonetaryOperationType | "hold";
 
 export interface MonetaryPolicyEvaluation {
+  accountingVersion?: number;
   turn: number;
   decision: MonetaryPolicyDecision;
   rationale: string;
   inflation: number;
   targetInflation: number;
   gdpGrowth: number;
-  annualizedM2GrowthPct: number;
+  annualizedM2GrowthPct: number | null;
   moneyGrowthReliable: boolean;
   bankReserves: number;
   gdp: number;

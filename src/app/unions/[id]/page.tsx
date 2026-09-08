@@ -55,6 +55,7 @@ interface UnionDetail {
   duesPerWorkerAnnual: number;
   /** Service programmes currently switched on. */
   activeServices: UnionServiceId[];
+  paidServices?: UnionServiceId[];
   /**
    * Share of remaining per-turn budget sent to organizers as political
    * contributions, 0-0.5. Absent reads as none.
@@ -658,6 +659,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
           treasury={union.treasury}
           duesPerWorkerAnnual={duesPerWorkerAnnual}
           activeServices={activeServices}
+          paidServices={union.paidServices ?? []}
           approval={union.approval}
           politicalContributionPct={politicalContributionPct}
           isHead={isLeader}

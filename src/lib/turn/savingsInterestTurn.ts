@@ -25,24 +25,9 @@ import { loadBankingPolicy } from "@/lib/banking/policy";
 const DEFAULT_PRIME = 2.5;
 
 /**
- * Interest on savings held at the CENTRAL bank had no payer.
- *
- * Every quarter the pass credited each account and nothing was debited
- * anywhere, so the money supply grew by an amount that appeared in no ledger,
- * no operation record and no telemetry. On a subsystem whose whole disease is
- * quantities with no cash behind them, an uncounted mint is the disease itself.
- *
- * The payer is the central bank, which is who actually pays it: these accounts
- * are liabilities of the CB, and interest on them is currency creation. That is
- * already a modelled thing here, so this books it the same way an open-market
- * operation is booked, against `externalBroadMoney` and
- * `netMoneyCreatedLifetime`. Nothing about the player's credit changes; what
- * changes is that the money now comes from somewhere, shows up in the money
- * supply, and therefore feeds the inflation signal that prices it.
- *
- * Deposits held at a PRIVATE bank are not on this path at all: `bankingTurn`
- * pays those out of the bank's own `cashReserves`, and the accrual loop below
- * skips any account whose `savingsHolder` is a bank.
+ * The credited savings balance is the monetary destination. Record issuance
+ * for diagnostics without also minting a second balance in the external pool.
+ * Private-bank interest is paid from bank reserves on the banking turn path.
  */
 async function bookCentralBankInterestCreation(
   db: Db,
@@ -65,7 +50,6 @@ async function bookCentralBankInterestCreation(
         filter: { _id: bankId },
         update: {
           $inc: {
-            externalBroadMoney: Math.round(amount * 100) / 100,
             netMoneyCreatedLifetime: Math.round(amount * 100) / 100,
             savingsInterestPaidLifetime: Math.round(amount * 100) / 100,
           },

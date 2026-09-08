@@ -718,3 +718,106 @@ describe("allowedActionsFor", () => {
     expect(choices.every((r) => Math.abs(r - 4.25) <= 1.75 + 1e-9)).toBe(true);
   });
 });
+
+describe("policy constraints at committee execution", () => {
+  it.each([
+    ["fx-committed", { fxCommitment: { regime: "peg", capitalControls: false } }],
+    ["command-economy", { commandEconomy: true }],
+    ["term-cap", { rateChangesThisTerm: RATE_CHANGES_PER_TERM }],
+    ["cooldown", { lastRateChangeTurn: 123 }],
+  ] as const)(
+    "records a carried motion blocked by %s without changing the rate",
+    (reason, policy) => {
+      const meeting = nppMajorityMeeting(100);
+      const state = baseState({ ...policy, activeMeeting: meeting });
+      const decision = decideGovernance(
+        state,
+        { type: "resolve_meeting", force: true },
+        SYSTEM,
+        clock(124)
+      );
+      expect(decision.allowed).toBe(true);
+      if (!decision.allowed) return;
+      expect(decision.next.primeRate).toBe(5);
+      expect(decision.transition.set.rateHistoryAppend).toBeUndefined();
+      expect(decision.transition.set.meetingHistoryAppend).toMatchObject({
+        result: "passed",
+        executionOutcome: "blocked",
+        executionBlockedReason: reason,
+        ballots: meeting.ballots,
+      });
+      expect(decision.next.activeMeeting).toBeNull();
+    }
+  );
+});
+
+it("normalizes a carried move from an off-grid stored rate", () => {
+  const decision = decideGovernance(
+    baseState({
+      primeRate: 4.1,
+      activeMeeting: { ...nppMajorityMeeting(100), proposedDelta: 0.25 },
+    }),
+    { type: "resolve_meeting", force: true },
+    SYSTEM,
+    clock(124)
+  );
+  expect(decision.allowed).toBe(true);
+  if (decision.allowed) expect(decision.next.primeRate).toBe(4.25);
+});
+
+it("uses the reset term budget when a meeting resolves on term rollover", () => {
+  const decision = turnStart(
+    baseState({
+      termStartedAtTurn: 0,
+      rateChangesThisTerm: RATE_CHANGES_PER_TERM,
+      activeMeeting: nppMajorityMeeting(100),
+    }),
+    600
+  );
+  expect(decision.allowed).toBe(true);
+  if (!decision.allowed) return;
+  expect(decision.next.rateChangesThisTerm).toBe(1);
+  expect(decision.next.primeRate).toBe(5.5);
+});
+
+it("allows a carried hold under an exchange-rate commitment", () => {
+  const meeting = nppMajorityMeeting(100);
+  meeting.motion = "hold";
+  meeting.proposedDelta = 0;
+  meeting.ballots = meeting.ballots.map((ballot) => ({ ...ballot, vote: "hold" }));
+  const decision = decideGovernance(
+    baseState({ activeMeeting: meeting, fxCommitment: { regime: "peg", capitalControls: false } }),
+    { type: "resolve_meeting", force: true },
+    SYSTEM,
+    clock(124)
+  );
+  expect(decision.allowed).toBe(true);
+  if (!decision.allowed) return;
+  expect(decision.transition.set.meetingHistoryAppend).toMatchObject({
+    result: "passed",
+    executionOutcome: "not-required",
+  });
+  expect(decision.next.primeRate).toBe(5);
+});
+
+it.each([
+  ["out-of-range", 25, 0.5],
+  ["delta-hike", 5, 1],
+  ["delta-cut", 5, -3],
+] as const)("blocks a carried proposal violating %s", (reason, primeRate, proposedDelta) => {
+  const meeting = nppMajorityMeeting(100);
+  meeting.proposedDelta = proposedDelta;
+  const decision = decideGovernance(
+    baseState({ primeRate, activeMeeting: meeting }),
+    { type: "resolve_meeting", force: true },
+    SYSTEM,
+    clock(124)
+  );
+  expect(decision.allowed).toBe(true);
+  if (!decision.allowed) return;
+  expect(decision.next.primeRate).toBe(primeRate);
+  expect(decision.transition.set.meetingHistoryAppend).toMatchObject({
+    executionOutcome: "blocked",
+    executionBlockedReason: reason,
+  });
+});

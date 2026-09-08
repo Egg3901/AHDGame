@@ -30,6 +30,7 @@ describe("nppActionProcessing", () => {
   let mockFindOne: ReturnType<typeof vi.fn>;
   let mockNppFind: ReturnType<typeof vi.fn>;
   let mockPartyFind: ReturnType<typeof vi.fn>;
+  let mockFxRows: Record<string, unknown>[] = [];
 
   function createAsyncCursor(items: any[]) {
     // Chainable so callers using .sort()/.limit()/.toArray() (e.g. the
@@ -73,6 +74,7 @@ describe("nppActionProcessing", () => {
         if (name === "gameConfig") {
           return { findOne: mockFindOne };
         }
+        if (name === "exchangeRates") return { find: () => ({ toArray: async () => mockFxRows }) };
         if (name === "npps") {
           return {
             find: mockNppFind,
@@ -94,6 +96,7 @@ describe("nppActionProcessing", () => {
     } as unknown as Db;
 
     vi.clearAllMocks();
+    mockFxRows = [];
 
     // Defaults so every test gets a usable cursor without opting in. The
     // politicalParties load is unconditional now (it feeds both the treasury
@@ -127,6 +130,35 @@ describe("nppActionProcessing", () => {
       countryId,
       name: "Test Party",
       treasury: 0,
+    });
+
+    it("uses the same 1953 currency basis for NPP action affordability and donation settlement", async () => {
+      mockFxRows = [{ currencyCode: "NGN", baseRate: 0.357, rate: 9999 }];
+      const partyId = new ObjectId();
+      mockFindOne.mockResolvedValue({ nppEconomyEnabled: true });
+      mockNppFind.mockReturnValue(
+        createAsyncCursor([
+          createNpp({ countryId: "NG", party: "1", funds: 3570, actionPoints: 100 }),
+        ])
+      );
+      mockPartyFind.mockReturnValue(
+        createAsyncCursor([{ _id: partyId, sequentialId: 1, countryId: "NG", treasury: 0 }])
+      );
+      vi.mocked(decideNppAction)
+        .mockReturnValueOnce({ action: "partyDonation", reason: "test" })
+        .mockReturnValue({ action: "none", reason: "done" });
+      const result = await processNppActions(mockDb, 4);
+      expect(result.partyDonation).toBe(1);
+      expect(mockBulkWrite).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({
+            updateOne: expect.objectContaining({
+              filter: { _id: partyId },
+              update: { $inc: { treasury: 1785 } },
+            }),
+          }),
+        ])
+      );
     });
 
     it("returns zero result when turn is not divisible by 4", async () => {
