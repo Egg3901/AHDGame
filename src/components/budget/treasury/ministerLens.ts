@@ -110,12 +110,37 @@ export interface MinisterProjection {
 }
 
 /**
+ * Demographic drift added to inflation when projecting spending (percentage
+ * points). Exported so the projection card can state the assumption it uses.
+ */
+export const MINISTER_SPENDING_DRIFT_PP = 1.4;
+
+/**
+ * One-line statement of the assumptions behind the next-FY projection, so the
+ * card answers "why" instead of just "what" (ticket #1272: a minister running
+ * a small surplus could not tell why the card showed a 1B deficit and a 21pp
+ * debt-ratio jump during a 9% GDP contraction).
+ */
+export function describeProjectionAssumptions(i: {
+  gdpGrowth: number;
+  inflationRate: number;
+}): string {
+  const growth = `${i.gdpGrowth >= 0 ? "+" : "-"}${Math.abs(i.gdpGrowth).toFixed(1)}%`;
+  const spendingRate = i.inflationRate + MINISTER_SPENDING_DRIFT_PP;
+  const spending = `${spendingRate >= 0 ? "+" : "-"}${Math.abs(spendingRate).toFixed(1)}%`;
+  return (
+    `Assumes ${growth} real GDP growth, ${i.inflationRate.toFixed(1)}% inflation; ` +
+    `spending ${spending} (inflation + ${MINISTER_SPENDING_DRIFT_PP.toFixed(1)}pp demographics).`
+  );
+}
+
+/**
  * Illustrative next-FY projection: revenue tracks GDP growth, spending tracks
  * inflation + a ~1.4pp demographic drift; a projected deficit adds to debt.
  */
 export function deriveMinisterProjection(i: MinisterInputs): MinisterProjection {
   const projRevenue = i.revenueTotal * (1 + i.gdpGrowth / 100);
-  const projSpending = i.spendingTotal * (1 + (i.inflationRate + 1.4) / 100);
+  const projSpending = i.spendingTotal * (1 + (i.inflationRate + MINISTER_SPENDING_DRIFT_PP) / 100);
   const projSurplus = projRevenue - projSpending;
   const projDebt = i.debtPrincipal + Math.max(0, -projSurplus);
   const projGdp = i.gdp * (1 + i.gdpGrowth / 100);

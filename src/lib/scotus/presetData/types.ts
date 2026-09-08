@@ -17,9 +17,8 @@ export interface ScotusPresetSeatSeed {
   /**
    * The real historical succession chain for this seat, chronological,
    * starting from whoever was seated at the preset's start year. `seedScotus`
-   * seats `historicalOccupants[0]` immediately; `scotusTenureTurn` auto-advances
-   * through the rest as each departure date is reached, for as long as the
-   * seat has not diverged.
+   * seats only `historicalOccupants[0]`. Later entries are reference data and
+   * are never auto-appointed; the first occupant's departure opens a vacancy.
    */
   historicalOccupants: HistoricalJusticeOccupant[];
 }
