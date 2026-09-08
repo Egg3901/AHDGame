@@ -327,3 +327,83 @@ describe("choosing an opposition-research target", () => {
     expect(screen.queryByText("No target yet")).toBeNull();
   });
 });
+
+describe("targeting a lever that has not been bought yet", () => {
+  // The two routes guard each other: /retarget refuses until the operation is
+  // purchased, and the starter purchase refuses without a target. Sending the
+  // first pick to retarget deadlocks them — "must be purchased before
+  // retargeting" one way, "target required" the other, with no order that
+  // satisfies both. The purchase is what sets the first target, so the pick is
+  // held and travels with the unlock.
+  const FIELD = [
+    { id: "t1", name: "Reginald Lindqvist", party: "Democratic Party" },
+    { id: "t2", name: "Eleanor Voss", party: "Democratic Party" },
+  ];
+  const lockedRow = () =>
+    row({
+      key: "oppositionResearch",
+      expanded: true,
+      tree: tree({
+        unlocked: false,
+        requiresTarget: true,
+        targetName: null,
+        targetOptions: FIELD,
+      }),
+    });
+
+  it("will not let the operation be bought until somebody is named", () => {
+    renderSection({ rows: [lockedRow()], onRetarget: noop });
+    expect(screen.getByRole("button", { name: "Choose a target first" })).toBeTruthy();
+  });
+
+  it("does not send the first pick to the retarget route, which would refuse it", () => {
+    const onRetarget = vi.fn();
+    renderSection({ rows: [lockedRow()], onRetarget });
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    fireEvent.click(screen.getByText("Eleanor Voss"));
+    expect(onRetarget).not.toHaveBeenCalled();
+  });
+
+  it("names the held target and offers the unlock once one is picked", () => {
+    renderSection({ rows: [lockedRow()], onRetarget: noop });
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    fireEvent.click(screen.getByText("Eleanor Voss"));
+    expect(screen.getByText("Target")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeTruthy();
+  });
+
+  it("carries the held target into the purchase that sets it", () => {
+    const onUnlock = vi.fn();
+    renderSection({ rows: [lockedRow()], onRetarget: noop, onUnlock });
+    fireEvent.click(screen.getByRole("button", { name: "Choose" }));
+    fireEvent.click(screen.getByText("Eleanor Voss"));
+    fireEvent.click(screen.getByRole("button", { name: "Unlock" }));
+    expect(onUnlock).toHaveBeenCalledWith("oppositionResearch", "t2");
+  });
+
+  it("still sends a change to the retarget route once the lever is bought", () => {
+    const onRetarget = vi.fn();
+    renderSection({
+      rows: [
+        row({
+          expanded: true,
+          tree: tree({
+            unlocked: true,
+            requiresTarget: true,
+            targetName: "Reginald Lindqvist",
+            targetOptions: FIELD,
+          }),
+        }),
+      ],
+      onRetarget,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByText("Eleanor Voss"));
+    expect(onRetarget).toHaveBeenCalledWith("t2");
+  });
+
+  it("leaves the unlock alone for a lever that needs no target", () => {
+    renderSection({ rows: [row({ expanded: true, tree: tree({ unlocked: false }) })] });
+    expect(screen.getByRole("button", { name: "Unlock" })).toBeTruthy();
+  });
+});

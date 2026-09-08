@@ -170,10 +170,9 @@ export function InfluenceTab({
                     </span>
                   )}
                 </span>
-                {!m.wantsOut || m.exempt ? (
+                {!m.wantsOut ? (
                   <span className="font-mono text-body-xs tabular-nums text-muted">
                     {formatShare(m.share)} of {channel.poleLabel}
-                    {m.exempt && m.wantsOut && " · founder"}
                   </span>
                 ) : (
                   <span className="font-mono text-body-xs tabular-nums text-warning">

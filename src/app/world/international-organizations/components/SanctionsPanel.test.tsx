@@ -120,6 +120,29 @@ describe("SanctionsPanel", () => {
     expect(screen.getByText("Target country")).toBeTruthy();
     expect(screen.getByText("Commodity")).toBeTruthy();
   });
+  it("does not offer a fellow member as a sanctions target", () => {
+    // The route refuses these outright (an organisation sanctions an outsider),
+    // so offering Ireland in the EU's own picker promises something the server
+    // will reject. Ticket #1285.
+    render(
+      <SanctionsPanel
+        org={org}
+        viewer={viewer}
+        currentTurn={200}
+        votingWindowTurns={24}
+        onChange={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByText("Table sanctions"));
+    const options = Array.from(
+      (screen.getByLabelText("Target country") as HTMLSelectElement).options
+    ).map((o) => o.value);
+
+    expect(options).not.toContain("IE");
+    expect(options).not.toContain("DE");
+    expect(options).toContain("BR");
+  });
+
   it("refuses the vote buttons to a member that holds no ballot", () => {
     // The route enforces isVotingMember, so offering an enabled button to a
     // member without a vote promises something the server will refuse.

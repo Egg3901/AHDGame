@@ -15,7 +15,7 @@ export interface BlendOpsSectionProps {
   /** Which lever's purchase is currently in flight, as "category" or "category:branch". */
   pending: string | null;
   onToggle: (category: UpgradeCategory) => void;
-  onUnlock: (category: UpgradeCategory) => void;
+  onUnlock: (category: UpgradeCategory, targetId?: string) => void;
   onUpgrade: (category: UpgradeCategory, branch: "a" | "b" | "c") => void;
   /** Change the opposition-research target. Omitted for viewers who may not. */
   onRetarget?: (targetId: string) => void;
@@ -172,14 +172,30 @@ function Tree({
   canAct: boolean;
   category: UpgradeCategory;
   pending: string | null;
-  onUnlock: () => void;
+  onUnlock: (targetId?: string) => void;
   onUpgrade: (branch: "a" | "b" | "c") => void;
   onRetarget?: (targetId: string) => void;
   variant: "desktop" | "mobile";
 }) {
   const [retargeting, setRetargeting] = useState(false);
+  /**
+   * The target chosen for a lever that has not been unlocked yet.
+   *
+   * The starter purchase is what SETS the first target — the route resolves
+   * `targetId ?? campaign.oppositionTargetId` and refuses without one — while
+   * `/retarget` exists to CHANGE an existing target and refuses until the
+   * operation is bought. Sending the first pick to retarget therefore deadlocks
+   * the two against each other: "must be purchased before retargeting" from one
+   * and "target required" from the other, with no order that satisfies both.
+   * Before the unlock the pick is held here and travels with it.
+   */
+  const [pendingTarget, setPendingTarget] = useState<{ id: string; name: string } | null>(null);
   const unlockPending = pending === category;
-  const unlockEnabled = canAct && tree.starterAffordable && !unlockPending;
+  const chosenTargetName = tree.targetName ?? pendingTarget?.name ?? null;
+  // A lever that needs a target cannot be bought without one, so the button
+  // says why instead of failing at the route.
+  const targetSatisfied = !tree.requiresTarget || chosenTargetName != null;
+  const unlockEnabled = canAct && tree.starterAffordable && targetSatisfied && !unlockPending;
 
   return (
     <div
@@ -262,14 +278,16 @@ function Tree({
               <button
                 type="button"
                 disabled={!unlockEnabled}
-                onClick={onUnlock}
+                onClick={() => onUnlock(pendingTarget?.id)}
                 style={actionButtonStyle(unlockEnabled)}
               >
                 {unlockPending
                   ? "Working"
-                  : tree.starterAffordable
-                    ? "Unlock"
-                    : "Insufficient Resources"}
+                  : !tree.starterAffordable
+                    ? "Insufficient Resources"
+                    : !targetSatisfied
+                      ? "Choose a target first"
+                      : "Unlock"}
               </button>
             ) : null}
           </>
@@ -310,7 +328,7 @@ function Tree({
                 flexShrink: 0,
               }}
             >
-              {tree.targetName ? "Current target" : "No target yet"}
+              {chosenTargetName ? (tree.unlocked ? "Current target" : "Target") : "No target yet"}
             </span>
             <span style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
               <span
@@ -318,15 +336,15 @@ function Tree({
                   fontFamily: FONT.serif,
                   fontSize: 15,
                   fontWeight: 600,
-                  color: tree.targetName ? BLEND.ink : BLEND.muted,
+                  color: chosenTargetName ? BLEND.ink : BLEND.muted,
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                   whiteSpace: "nowrap",
                 }}
               >
-                {tree.targetName ?? "Nobody is being researched"}
+                {chosenTargetName ?? "Nobody is being researched"}
               </span>
-              {onRetarget && tree.targetOptions.length > 0 ? (
+              {tree.targetOptions.length > 0 && (onRetarget || !tree.unlocked) ? (
                 <button
                   type="button"
                   onClick={() => setRetargeting((v) => !v)}
@@ -343,13 +361,13 @@ function Tree({
                     flexShrink: 0,
                   }}
                 >
-                  {retargeting ? "Cancel" : tree.targetName ? "Change" : "Choose"}
+                  {retargeting ? "Cancel" : chosenTargetName ? "Change" : "Choose"}
                 </button>
               ) : null}
             </span>
           </div>
 
-          {onRetarget && tree.targetOptions.length === 0 ? (
+          {tree.targetOptions.length === 0 ? (
             <p
               style={{
                 margin: "6px 0 0",
@@ -362,14 +380,23 @@ function Tree({
             </p>
           ) : null}
 
-          {onRetarget && retargeting && tree.targetOptions.length > 0 ? (
+          {retargeting && tree.targetOptions.length > 0 ? (
             <div style={{ marginTop: 10 }}>
               <BlendOptionPicker
                 placeholder="Search the field…"
                 options={tree.targetOptions}
                 onPick={(id) => {
                   setRetargeting(false);
-                  onRetarget(id);
+                  const picked = tree.targetOptions.find((o) => o.id === id);
+                  if (tree.unlocked && onRetarget) {
+                    // Bought already: this is a change, and the route that
+                    // handles changes is the one that charges a cooldown.
+                    onRetarget(id);
+                  } else {
+                    // Not bought yet: hold it for the unlock, which is what
+                    // sets the first target.
+                    setPendingTarget(picked ? { id, name: picked.name } : null);
+                  }
                 }}
               />
               <p
@@ -380,8 +407,9 @@ function Tree({
                   color: BLEND.mutedDim,
                 }}
               >
-                Changing target keeps every level you have bought. It puts retargeting on cooldown
-                for six turns.
+                {tree.unlocked
+                  ? "Changing target keeps every level you have bought. It puts retargeting on cooldown for six turns."
+                  : "Unlocking the operation opens it on whoever is named here."}
               </p>
             </div>
           ) : null}
@@ -636,7 +664,7 @@ export function BlendOpsSection({
               canAct={canAct}
               category={row.key}
               pending={pending}
-              onUnlock={() => onUnlock(row.key)}
+              onUnlock={(targetId) => onUnlock(row.key, targetId)}
               onUpgrade={(b) => onUpgrade(row.key, b)}
               onRetarget={onRetarget}
               variant={variant}
