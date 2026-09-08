@@ -587,8 +587,17 @@ export interface PlantsData {
    */
   demandGapUnits?: number;
   currentTurn: number;
+  activeCapacityPercent?: number;
+  capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
+  investment?: {
+    overheadDailyAnchor: number;
+    taxRatePercent: number;
+    freightNetCostDailyAnchor?: number;
+    inventoryRevenueDailyAnchor?: number;
+  };
   buildQuote: {
     unitPriceAnchor: number;
+    expansionMultiplier?: number;
     dominanceMultiplier: number;
     rateMultiplier: number;
     acumenMultiplier: number;

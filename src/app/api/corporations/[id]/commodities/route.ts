@@ -42,6 +42,7 @@ type CommoditySector = Pick<
   | "transitionStartTurn"
   | "producedUnits"
   | "capitalStock"
+  | "operatingCapacityUnits"
   | "mothballed"
   | "productionPolicyLevel"
   | "embargoSuspended"
@@ -109,6 +110,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         // and the nameplate legs below need the policy/embargo/diversion chain.
         producedUnits: 1,
         capitalStock: 1,
+        operatingCapacityUnits: 1,
         mothballed: 1,
         productionPolicyLevel: 1,
         embargoSuspended: 1,
@@ -332,7 +334,7 @@ export async function GET(request: Request, { params }: RouteParams) {
         resolveSectorHostCurrencyCode(sector, corporation),
         fxRateForSectorHostFromMap(sector, corporation, fxByCurrency)
       ),
-      capacityUnits: sector.capitalStock ?? null,
+      capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock ?? null,
     }));
     const stateResourcesByState = new Map(
       stateResourceCapacityDocs.map((doc) => [doc.stateId, doc.resources])

@@ -131,6 +131,7 @@ const EXPECTED_UNITS = Math.max(
 );
 const EXPECTED_FEE = sectorEntryFeeAnchor("2019-default");
 const EXPECTED_BUILD = computeBuildCost({
+  strategyId: null,
   eraUnitScale: 1,
   sectorType: "manufacturing",
   units: EXPECTED_UNITS,
@@ -209,7 +210,7 @@ describe("NPP expansion under plants — price parity", () => {
     expect(order.unitsOrdered).toBeCloseTo(EXPECTED_UNITS, 6);
     expect(order.costPaidAnchor).toBeCloseTo(EXPECTED_BUILD, 2);
     expect(order.startTurn).toBe(TURN);
-    expect(order.onlineTurn).toBe(TURN + Math.ceil(CAPACITY_BUILD_TURNS("manufacturing") / 2));
+    expect(order.onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("manufacturing", true));
   });
 
   it("draws the founded capacity out of the unowned pool", () => {
@@ -244,6 +245,7 @@ describe("NPP expansion under plants — price parity", () => {
     const decision = decide(corp(), [sector()], [unownedPool()], plantsCtx);
     const order = decision.newSectors![0].starterOrder!;
     const playerPrice = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: "manufacturing",
       units: order.unitsOrdered,

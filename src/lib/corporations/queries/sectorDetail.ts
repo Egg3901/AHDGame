@@ -792,7 +792,21 @@ export async function getCorporationSectorDetail(request: Request, { params }: R
         ),
         demandGapUnits,
         workers: sector.workers ?? calculateWorkers(sectorRevenueAnchor, metrics.workforceSkill),
+        investment: {
+          overheadDailyAnchor:
+            corpLiquidCapitalToAnchor(
+              corpLevelCosts + (corporation.rdBudget ?? 0),
+              corporation,
+              corporationFxRate
+            ) * thisRevenueShare,
+          taxRatePercent: sectorFederalRate + sectorStateRate,
+          inventoryRevenueDailyAnchor: sectorAmountAnchor(enginePnl?.inventoryRevenue ?? 0),
+          freightNetCostDailyAnchor: sectorAmountAnchor(
+            (sector.freightBillingCharge ?? 0) - (sector.freightBillingCredit ?? 0)
+          ),
+        },
         money: {
+          nameplateRevenueAnchor: sectorAmountAnchor(sector.revenue),
           realizedRevenueAnchor: sectorAmountAnchor(sectorEconomicRevenue(sector)),
           maintenanceNetAnchor: sectorAmountAnchor(maintenanceNet),
           labourAnchor: sectorAmountAnchor(sectorLaborCost),

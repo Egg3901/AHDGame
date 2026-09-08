@@ -5,18 +5,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
-import { conflict, handleRouteError, notFound } from "@/lib/api/errors";
+import { handleRouteError, notFound } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { COMMAND_CEILING, scheduledMarketizationLevel } from "@/lib/constants/commandEconomy";
-import { getNationalBudgetId } from "@/lib/bonds/sovereign";
-import type { FederalBudget } from "@/lib/db/types/budget";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { sendMultiCountryGameEvent } from "@/lib/discordWebhooks";
 import { buildPrimeRateChangeEmbed } from "@/lib/centralBankWebhook";
 import { getBankId, getConfiguredSharedBankMemberCountries } from "@/lib/centralBank/helpers";
 import { getGameState } from "@/lib/gameState";
 import { getDb } from "@/lib/mongodb";
-import type { GameConfig } from "@/lib/db/types";
 import { updatePrimeRate } from "@/lib/monetaryPolicy/commands/updatePrimeRate";
 import { PRIME_RATE_STEP } from "@/lib/db/types/centralBank";
 
@@ -54,37 +50,6 @@ export async function POST(request: Request, context: RouteContext) {
 
     const db = await getDb();
     const gameState = await getGameState();
-    // Passive monobank: command economies do not set an independent policy rate.
-    // Fail-safe — flag off → unchanged. Intorg rate POSTs delegate here too.
-    const gameConfig = await db
-      .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
-    const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
-    // P1 read-path seam: the stored-marketization registry is process-local (only
-    // the turn engine hydrates it), so this API process must resolve the level
-    // from the PERSISTED economicFactors.marketizationLevel — otherwise an
-    // endogenously-marketized country would be judged by the stale era schedule.
-    const rateBudget = commandEconomyEnabled
-      ? await db
-          .collection<FederalBudget>("federalBudget")
-          .findOne({ _id: getNationalBudgetId(countryId) } as { _id: "federal" }, {
-            projection: { "economicFactors.marketizationLevel": 1 },
-          })
-      : null;
-    const persistedLevel = rateBudget?.economicFactors?.marketizationLevel;
-    const resolvedLevel =
-      typeof persistedLevel === "number" && Number.isFinite(persistedLevel)
-        ? persistedLevel
-        : scheduledMarketizationLevel(countryId, gameState?.currentYear);
-    if (commandEconomyEnabled && resolvedLevel < COMMAND_CEILING) {
-      return NextResponse.json(
-        conflict(
-          "This country runs a command economy; the central bank does not set an independent policy rate."
-        ).toJson(),
-        { status: 409 }
-      );
-    }
-
     const result = await updatePrimeRate({
       db,
       countryId,
@@ -97,6 +62,7 @@ export async function POST(request: Request, context: RouteContext) {
       rate: parsed.data.rate,
       reason: parsed.data.reason,
       currentTurn: gameState?.currentTurn ?? 0,
+      currentYear: gameState?.currentYear,
     });
 
     if (!result.ok) {

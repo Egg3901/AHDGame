@@ -285,6 +285,9 @@ export async function executeNppSectorAttack(
         legacyCostAnchor: calculateAttackCostAnchor(targetRevenueAnchor),
         unitsReceived: unitsReceivedAtDefenderMix,
         sectorType: targetSector.sectorType as CorporationType,
+        // The units received are at the DEFENDER's mix, so the floor must price
+        // them at the defender's strategy too.
+        strategyId: targetSector.strategyId ?? null,
         year: resolveWorldYear(year, currentTurn),
         eraUnitScale,
       })
@@ -320,12 +323,14 @@ export async function executeNppSectorAttack(
     ? capacityCaptureBookUpdates({
         defender: {
           sectorType: targetSector.sectorType as CorporationType,
+          strategyId: targetSector.strategyId ?? null,
           capitalStock: targetSector.capitalStock,
           capacityBookAnchor: targetSector.capacityBookAnchor,
         },
         attacker: existing
           ? {
               sectorType: existing.sectorType,
+              strategyId: existing.strategyId ?? null,
               capitalStock: existing.capitalStock,
               capacityBookAnchor: existing.capacityBookAnchor,
             }

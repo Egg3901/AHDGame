@@ -142,6 +142,9 @@ export async function nationalizeSectorWide(
     buildQueue: [],
     constructionInProgressAnchor: 0,
     mothballed: survivor ? identitySectorPlantFields(survivor).mothballed : false,
+    ...(survivor?.activeCapacityPercent == null
+      ? {}
+      : { activeCapacityPercent: survivor.activeCapacityPercent }),
     plantsStartTurn: null,
     legacyRevenueShadow: null,
   });
@@ -260,7 +263,11 @@ export async function nationalizeSectorWide(
             capacityPricePerUnit(
               params.sectorType,
               sweepCurrentYear ?? CAPACITY_ANCHOR_YEAR,
-              sweepEraUnitScale
+              sweepEraUnitScale,
+              // `null` deliberately, matching the `null` strategy the units were
+              // derived at on the line above: both legs must read the same mix
+              // or the units and the price they are multiplied by disagree.
+              null
             ),
         };
       }

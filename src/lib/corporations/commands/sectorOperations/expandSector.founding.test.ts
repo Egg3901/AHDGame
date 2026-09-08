@@ -148,7 +148,7 @@ const STARTER_UNITS = foundingStarterUnits("manufacturing");
 const ENTRY_FEE_ANCHOR = sectorEntryFeeAnchor("2019-default");
 const STARTER_BUILD_ANCHOR =
   STARTER_UNITS *
-  capacityPricePerUnit("manufacturing", CAPACITY_ANCHOR_YEAR, 1) *
+  capacityPricePerUnit("manufacturing", CAPACITY_ANCHOR_YEAR, 1, null) *
   CAPACITY_FOUNDING_DISCOUNT;
 
 beforeEach(() => {
@@ -282,16 +282,14 @@ describe("expandSector — founding build (plants)", () => {
     expect(queue[0].startTurn).toBe(CURRENT_TURN);
   });
 
-  it("delivers the founding build in HALF the standing build time", async () => {
+  it("preserves the original 36-turn manufacturing founding schedule", async () => {
     await wireMocks(true);
     const { expandSector } = await import("./expandSector");
     await expandSector(request(), { params });
 
     const queue = insertedSector().buildQueue as Array<Record<string, number>>;
-    expect(queue[0].onlineTurn).toBe(
-      CURRENT_TURN + Math.ceil(CAPACITY_BUILD_TURNS("manufacturing") / 2)
-    );
-    expect(queue[0].onlineTurn - CURRENT_TURN).toBeLessThan(CAPACITY_BUILD_TURNS("manufacturing"));
+    expect(queue[0].onlineTurn).toBe(CURRENT_TURN + CAPACITY_BUILD_TURNS("manufacturing", true));
+    expect(queue[0].onlineTurn - CURRENT_TURN).toBe(36);
   });
 
   it("draws the starter capacity DOWN from the unowned pool", async () => {

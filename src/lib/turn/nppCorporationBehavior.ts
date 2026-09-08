@@ -1399,6 +1399,9 @@ export function makeNppCorpDecision(
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
               units: 1,
+              // Greenfield entry: the sector does not exist yet and is founded
+              // on the sector-type default strategy.
+              strategyId: null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
@@ -1470,7 +1473,7 @@ export function makeNppCorpDecision(
       ) {
         const buildTurns = Math.max(
           1,
-          Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
+          CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
         );
         // Legacy nameplate: demand-side sectors take the built share of the
         // pool; extraction has no pool, so it prices the nameplate off the units
@@ -1495,6 +1498,8 @@ export function makeNppCorpDecision(
           profitMargin: 35,
           starterOrder: {
             unitsOrdered: buildUnits,
+            // Greenfield: priced at the sector-type default, same as the quote.
+            strategyId: null,
             costPaidAnchor: buildAnchor,
             startTurn: ctx.turn,
             onlineTurn: ctx.turn + buildTurns,
@@ -1694,7 +1699,12 @@ export function makeNppCorpDecision(
       // share back every turn in perpetuity; replacing the RUN capacity lets it
       // depreciate away and the plant converges on the size it can actually
       // sell.
-      const runUnits = Math.max(0, Math.min(capitalStock, sector.producedUnits ?? 0));
+      const productionCapacity = sector.operatingCapacityUnits ?? capitalStock;
+      const utilizationOfOwnedCapacity =
+        productionCapacity > 0
+          ? Math.max(0, Math.min(1, (sector.producedUnits ?? 0) / productionCapacity))
+          : 0;
+      const runUnits = capitalStock * utilizationOfOwnedCapacity;
       // ACCRUAL, not a per-turn slice. A build lands `CAPACITY_BUILD_TURNS`
       // turns after it is placed, and the queue ceiling can stop the corp
       // ordering for a stretch; sizing each order off the depreciation that has
@@ -1771,6 +1781,7 @@ export function makeNppCorpDecision(
             computeBuildCost({
               sectorType: sector.sectorType,
               units: 1,
+              strategyId: sector.strategyId ?? null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
@@ -1844,6 +1855,7 @@ export function makeNppCorpDecision(
       const costAnchor = computeBuildCost({
         sectorType: sector.sectorType,
         units,
+        strategyId: sector.strategyId ?? null,
         year: plants.year,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
@@ -1880,6 +1892,7 @@ export function makeNppCorpDecision(
       const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
       const order: SectorBuildOrder = {
         unitsOrdered: units,
+        strategyId: sector.strategyId ?? null,
         costPaidAnchor: costAnchor,
         startTurn: ctx.turn,
         onlineTurn: ctx.turn + buildTurns,

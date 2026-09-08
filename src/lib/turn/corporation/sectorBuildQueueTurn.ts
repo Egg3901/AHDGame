@@ -97,7 +97,7 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
   // slider), so without compensation that spend is simply confiscated. Convert
   // the accrued daily growth spend into capacity at the standing build price
   // and deliver it as a FREE queue order (costPaidAnchor 0 — the corp already
-  // paid, and it must not be refundable via cancel), at half the normal build
+  // paid, and it must not be refundable via cancel), at half the authored base build
   // time since the legacy build was already partly under way.
   const growthCostAnchorForFlip = readCorpEconomicAnchor(
     Number.isFinite(sector.currentGrowthCost) ? (sector.currentGrowthCost ?? 0) : 0,
@@ -111,7 +111,8 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
   const capacityUnitPriceAnchor = capacityPricePerUnit(
     sector.sectorType,
     currentYear ?? CAPACITY_ANCHOR_YEAR,
-    eraUnitScale
+    eraUnitScale,
+    sector.strategyId ?? null
   );
   // C10: the credit keys on the ACCRUED COST, not on the target slider.
   // `currentGrowthCost` is what the sector is being billed THIS turn;
@@ -124,9 +125,12 @@ export function resolveBuildQueueTurn(args: BuildQueueTurnArgs): BuildQueueTurn 
     isFlipTurn && growthCostAnchorForFlip > 0 && capacityUnitPriceAnchor > 0
       ? {
           unitsOrdered: growthCostAnchorForFlip / capacityUnitPriceAnchor,
+          // Priced from `capacityUnitPriceAnchor` above, which reads the
+          // sector's strategy — record the same basis on the order.
+          strategyId: sector.strategyId ?? null,
           costPaidAnchor: 0,
           startTurn: currentTurn,
-          onlineTurn: currentTurn + Math.ceil(CAPACITY_BUILD_TURNS(sector.sectorType) / 2),
+          onlineTurn: currentTurn + CAPACITY_BUILD_TURNS(sector.sectorType, true),
           smooth: true,
         }
       : null;

@@ -11,6 +11,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import type { CorporateSector, GameState, SectorBuildOrder, State } from "@/lib/db/types";
 import type { Corporation } from "@/lib/db/types";
+import { queueUndeliveredCost, undeliveredUnits } from "@/lib/corporations/buildDelivery";
 import { CAPACITY_BUILD_CANCEL_REFUND } from "@/lib/constants/capacityEconomy";
 import {
   anchorToCorpLiquidCapital,
@@ -96,15 +97,8 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
     if (queue.length > 0) {
       const gameState = await db.collection<GameState>("gameState").findOne({ _id: "current" });
       const currentTurn = gameState?.currentTurn ?? 0;
-      const refundableAnchor = queue
-        .filter((order) => order.onlineTurn > currentTurn)
-        .reduce(
-          (sum, order) =>
-            sum +
-            (Number.isFinite(order.costPaidAnchor) ? Math.max(0, order.costPaidAnchor) : 0) *
-              CAPACITY_BUILD_CANCEL_REFUND,
-          0
-        );
+      const refundableAnchor =
+        queueUndeliveredCost(queue, currentTurn) * CAPACITY_BUILD_CANCEL_REFUND;
       if (refundableAnchor > 0) {
         const corpFxRate = await getCorpFxRate(db, corporation);
         const refundLocal = Math.round(
@@ -133,7 +127,7 @@ export async function abandonSector(_request: Request, { params }: RouteParams) 
           createdAt: now,
           sectorId: sector._id,
           sectorType: sector.sectorType,
-          units: queue.reduce((sum, o) => sum + (o.unitsOrdered ?? 0), 0),
+          units: queue.reduce((sum, o) => sum + undeliveredUnits(o, currentTurn), 0),
           meta: { reason: "abandonSector" },
         }).catch(() => {});
       }

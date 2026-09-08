@@ -1,7 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getEligibleVoterSet } from "@/lib/parties/proposals";
 import {
@@ -95,7 +95,7 @@ export async function getNationalPartyElectionState(
       // disabled from both running and voting (the enter/vote routes enforce
       // this server-side too). Pre-disabling avoids a click-then-403.
       const currentTurn = await getCurrentTurn(db);
-      if (!getPartyTenure(authUser.character.partyJoinedTurn, currentTurn).eligible) {
+      if (!getLeadershipEligibility(authUser.character, currentTurn, partyId).eligible) {
         canRun = false;
         canVote = false;
       }

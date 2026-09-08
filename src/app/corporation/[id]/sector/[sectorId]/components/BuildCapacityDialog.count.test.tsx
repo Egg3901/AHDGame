@@ -1,7 +1,10 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../messages/en/corporations.json";
+import { cleanup, fireEvent, render as renderView, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import BuildCapacityDialog from "./BuildCapacityDialog";
 import type { PlantsData } from "../types";
@@ -162,3 +165,11 @@ describe("BuildCapacityDialog count control", () => {
     expect(input.value).toBe("11");
   });
 });
+
+function render(ui: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}

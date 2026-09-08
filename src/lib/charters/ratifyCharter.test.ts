@@ -303,6 +303,33 @@ describe("ratifyCharter", () => {
     expect(memberCountUpdate).toBeTruthy();
   });
 
+  it("marks all three founders as founders of the new party (leadership tenure exemption)", async () => {
+    const charter = makeCharter();
+    const founderChars = charter.foundersCharacterIds.map((cid) => ({
+      _id: cid,
+      userId: new ObjectId(),
+      party: "independent",
+      homeState: "US-CA",
+    }));
+    const { db, updatedCharacters } = makeDb({
+      charter,
+      states: [{ _id: "US-CA" }],
+      founderCharacters: founderChars,
+    });
+
+    await ratifyCharter(charter._id, db);
+
+    // Ratification stamps partyJoinedTurn, which would otherwise lock the
+    // founders out of their own party's leadership races for 24 turns. The
+    // founder marker is what exempts them; see leadershipTenure.ts.
+    expect(updatedCharacters).toHaveLength(3);
+    for (const { update } of updatedCharacters as Array<{
+      update: { $set: Record<string, unknown> };
+    }>) {
+      expect(update.$set.foundedPartyId).toBe("77");
+    }
+  });
+
   it("seats the anchor founder as first chair, vice-chair/treasurer vacant (#289)", async () => {
     const charter = makeCharter();
     const founderChars = charter.foundersCharacterIds.map((cid) => ({
