@@ -27,7 +27,7 @@
       "activeUnits": "Active capacity: {units, number} units/day",
       "coldCost": "Parked capacity upkeep: {amount}/turn",
       "applyCapacity": "Apply capacity setting",
-      "mothballHelp": "Mothball all capacity or park just a share below. Cold capacity pays {percent}% of full maintenance and produces nothing.",
+      "mothballHelp": "Mothball all capacity or park just a share below. Cold capacity pays {percent}% of its anchored maintenance basis and produces nothing. Normal depreciation continues.",
       "cancelHelp": "Cancellation returns 75% of the cost of the capacity still under construction. Delivered capacity is kept.",
       "strandedOptions": "Options: park surplus capacity in the Plant panel, change to a strategy with stronger demand, stockpile storable goods during a temporary glut, or sell the sector. Growing capacity will help only where buyers can absorb it.",
       "expansionDiscount": "Expansion cost adjustment",

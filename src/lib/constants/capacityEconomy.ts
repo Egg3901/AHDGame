@@ -637,12 +637,9 @@ export const CAPACITY_SECTOR_TYPES: ReadonlyArray<CorporationType> = CORPORATION
 export const CAPACITY_BUILD_CANCEL_REFUND = 0.75;
 
 /**
- * Upkeep a MOTHBALLED sector pays, as a fraction of the maintenance its full
- * capacity would cost while running (D12). A mothballed plant produces nothing
- * and offers nothing, but it is not free: the site is still held, maintained
- * against corrosion and staffed by a care-and-maintenance crew. 0.2 makes
- * mothballing a large saving (80%) without making it strictly better than
- * running a marginal plant.
+ * Upkeep on parked capacity, as a fraction of its anchored maintenance basis.
+ * A mothballed plant produces and offers nothing. Its owned capacity and paid
+ * basis remain, with normal depreciation and reduced maintenance costs.
  */
 export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
 
