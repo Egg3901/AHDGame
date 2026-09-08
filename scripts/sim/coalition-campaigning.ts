@@ -183,31 +183,31 @@ const upkeep = Array.from({ length: 24 }, (_, i) => {
     targetTurnout: round(audienceTurnout(electorate(sustained), target)),
   };
 });
-const flight = planAdPurchase([], { ...target, stateId: "region" }, 1, 12)!;
+const adActions = planAdPurchase([], { ...target, stateId: "region" }, 1, 12)!;
 const advertising = [1, 3, 6, 12, 18, 24, 36].map((turn) => {
-  const bonuses = targetedAdBonuses(base, right, flight, "region", turn);
+  const bonuses = targetedAdBonuses(base, right, adActions, "region", turn);
   const matching = base.filter((cell) => cell.buckets.race === "white");
   const values = matching.map((cell) => bonuses[cell.id]);
   assert(
     base.filter((cell) => cell.buckets.race !== "white").every((cell) => bonuses[cell.id] === 0)
   );
-  const result = shares(base, flight, turn);
+  const result = shares(base, adActions, turn);
   return {
     turn,
-    exposure: round(adExposure(flight[0], turn)),
+    exposure: round(adExposure(adActions[0], turn)),
     minMatchingBonusPct: round(Math.min(...values) * 100),
     maxMatchingBonusPct: round(Math.max(...values) * 100),
     rightShare: round(result.rightShare),
     shareGain: round(result.rightShare - baseline.rightShare),
   };
 });
-assert(advertising[3].shareGain > advertising[0].shareGain);
+assert(advertising[3].shareGain < advertising[0].shareGain);
 assert(advertising[6].shareGain < advertising[3].shareGain);
-const combined = shares(electorate(addTurnoutBoost(0, 2, 10)), flight, 12);
+const combined = shares(electorate(addTurnoutBoost(0, 2, 10)), adActions, 12);
 assert(combined.rightShare > advertising[3].rightShare);
 
 const closeBefore = shares(electorate(0, true), [], 12, [], 52);
-const closeAfter = shares(electorate(addTurnoutBoost(0, 2, 10), true), flight, 12, [], 52);
+const closeAfter = shares(electorate(addTurnoutBoost(0, 2, 10), true), adActions, 12, [], 52);
 assert(
   closeBefore.rightShare < 50 && closeAfter.rightShare > 50,
   "a close race must be contestable through campaigning"
@@ -231,7 +231,7 @@ console.log(
         "ballot conservation",
         "turnout boost survives four-way blend",
         "no ads outside selected identity",
-        "flight builds then decays",
+        "ad action bonus decays from purchase",
         "canvassing and ads combine",
       ],
     },

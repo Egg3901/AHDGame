@@ -1,5 +1,6 @@
 "use client";
 
+import { CampaignActionModal } from "./components/CampaignActionModal";
 import { useTranslations } from "next-intl";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
@@ -42,6 +43,7 @@ import { getActionImage } from "@/lib/images/actionImages";
 const CATEGORIES = ["all", "influence", "money", "research"];
 
 export default function ActionsPage() {
+  const [campaignAction, setCampaignAction] = useState<"canvass" | "targetedAds" | null>(null);
   const adText = useTranslations("elections.campaignTargeting");
   const { baseRates: campaignRates } = useCurrency();
   const { showToast } = useToast();
@@ -633,6 +635,7 @@ export default function ActionsPage() {
                 flipflopStep={flipflopStep}
                 flipflopAxis={flipflopAxis}
                 flipflopDir={flipflopDir}
+                onOpenCampaignAction={setCampaignAction}
                 onExecute={execute}
                 onFlipflop={executeFlipflop}
                 onFlipflopStepChange={setFlipflopStep}
@@ -669,6 +672,12 @@ export default function ActionsPage() {
           donorUpgradeCost={actionCosts.donorUpgradeCost}
         />
       </main>
+      <CampaignActionModal
+        action={campaignAction}
+        character={character}
+        onClose={() => setCampaignAction(null)}
+        onResourcesSpent={fetchCharacter}
+      />
     </div>
   );
 }

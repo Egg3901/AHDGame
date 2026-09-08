@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { buildGranularElectorateSubstrate } from "../../src/lib/demographics/granularElectorate";
 import { distributeVotesByGroupLevelAllocation } from "../../src/lib/electionEngine/voteDistribution";
 import { distributeVotesBySwingFlow } from "../../src/lib/electionEngine/voteDistributionSwingFlow";
-import { planAdPurchase } from "../../src/lib/campaignTargeting/rules";
+import {
+  planAdPurchase,
+  adExposure,
+  targetedAdBonuses,
+  adPurchaseCost,
+} from "../../src/lib/campaignTargeting/rules";
 import type { EnrichedCandidate } from "../../src/lib/electionEngine/types";
 
 const ads = planAdPurchase([], { stateId: "PA", dimension: "race", bucket: "white" }, 10, 3)!;
@@ -24,10 +29,17 @@ function project(
   turn: number,
   general: boolean,
   advertised: boolean,
-  region = "PA"
+  region = "PA",
+  count = 3
 ) {
   const a = candidate("a");
-  if (advertised) a.targetedAds = ads;
+  if (advertised)
+    a.targetedAds = planAdPurchase(
+      [],
+      { stateId: "PA", dimension: "race", bucket: "white" },
+      10,
+      count
+    )!;
   const substrate = buildGranularElectorateSubstrate({
     countryId: "US",
     stateId: region,
@@ -83,12 +95,39 @@ const scenarios = [0, 1].flatMap((version) =>
     };
   })
 );
+const perfect = {
+  id: "perfect",
+  share: 1,
+  turnout: 50,
+  economicLean: 3,
+  socialLean: 3,
+  buckets: { race: "white" },
+  identities: { race: { economicLean: 3, socialLean: 3 } },
+};
+const saturated = planAdPurchase(
+  [],
+  { stateId: "PA", dimension: "race", bucket: "white" },
+  10,
+  25
+)!;
+assert.equal(targetedAdBonuses([perfect], perfect, saturated, "PA", 10).perfect, 0.25);
+assert(adExposure(ads[0], 11) < adExposure(ads[0], 10));
+assert.equal(adExposure(ads[0], 34), adExposure(ads[0], 10) / 2);
 console.log(
   JSON.stringify(
     {
       fixture:
-        "One prepaid three-turn flight bought before candidacy; same exposure in separate current and future races",
+        "Immediate three-action bonus bought before candidacy; same decaying modifier in current and future races",
       scenarios,
+      batches: [1, 5, 10, 25].map((count) => ({
+        count,
+        cost: adPurchaseCost(count),
+        nominalBonus: count / 100,
+        share: project(1, 10, true, true, "PA", count).share,
+      })),
+      immediateBonus: adExposure(ads[0], 10),
+      nextTurnBonus: adExposure(ads[0], 11),
+      after24Turns: adExposure(ads[0], 34),
       checks: [
         "legacy and modern races receive ads",
         "same exposure carries across races",

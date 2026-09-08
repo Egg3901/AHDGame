@@ -8,13 +8,12 @@ export const CAMPAIGN_RULES_VERSION = 1;
 export const CANVASS_BASE_BOOST = 2;
 export const TURNOUT_CAP = 20;
 export const TURNOUT_HALF_LIFE = 6;
-export const AD_HALF_LIFE = 12;
-export const AD_BONUS_CAP = 0.15;
-/** Prevent long prepaid flights from banking effectively permanent saturation. */
-export const AD_EXPOSURE_CAP = 3;
-export const AD_ACTION_COST = 5;
-/** Anchor campaign currency per thousand eligible people reached. */
-export const AD_COST_PER_THOUSAND = 2;
+export const AD_HALF_LIFE = 24;
+export const AD_BONUS_CAP = 0.25;
+export const AD_ACTION_COST = 1;
+export const AD_FUNDS_PER_ACTION = 100;
+export const AD_BOOST_PER_ACTION = 0.01;
+export const AD_MAX_ACTIONS = 50;
 
 export interface Position {
   economicLean: number;
@@ -38,11 +37,13 @@ export interface CampaignTarget {
 
 export interface TargetedAd extends CampaignTarget {
   stateId: string;
+  /** Immediate nominal bonus; absent on historical prepaid records. */
+  bonus?: number;
   /** Exposure on lastPurchaseTurn. Later scheduled buys arrive once per turn. */
-  exposure: number;
+  exposure?: number;
   lastPurchaseTurn: number;
   /** Inclusive last turn of the prepaid flight. */
-  throughTurn: number;
+  throughTurn?: number;
 }
 
 export type TurnoutModifiers = Record<string, Record<string, number>>;
@@ -180,15 +181,18 @@ export function campaignResponse(
   );
 }
 
-/** Evaluate prepaid flights from turn numbers; no per-turn writes or queue needed. */
+/** Bonuses only revert toward zero. Old prepaid records credit their paid actions upfront. */
 export function adExposure(ad: TargetedAd, turn: number): number {
   if (turn < ad.lastPurchaseTurn) return 0;
-  const elapsed = turn - ad.lastPurchaseTurn;
-  const scheduled = Math.max(0, Math.min(turn, ad.throughTurn) - ad.lastPurchaseTurn);
-  const retention = 2 ** (-1 / AD_HALF_LIFE);
-  const flight = scheduled === 0 ? 0 : (1 - retention ** scheduled) / (1 - retention);
-  const atLastBuy = Math.min(AD_EXPOSURE_CAP, ad.exposure * retention ** scheduled + flight);
-  return atLastBuy * retention ** (elapsed - scheduled);
+  // A historical flight bought five action points per scheduled purchase.
+  // Credit that effort immediately; never schedule another automatic purchase.
+  const initial =
+    ad.bonus ??
+    (Math.max(0, ad.exposure ?? 0) +
+      Math.max(0, (ad.throughTurn ?? ad.lastPurchaseTurn) - ad.lastPurchaseTurn)) *
+      5 *
+      AD_BOOST_PER_ACTION;
+  return clamp(initial, 0, AD_BONUS_CAP) * 2 ** (-(turn - ad.lastPurchaseTurn) / AD_HALF_LIFE);
 }
 
 export function targetedAdBonuses(
@@ -207,7 +211,7 @@ export function targetedAdBonuses(
         regions.size ? cells.filter((cell) => cell.stateId === ad.stateId) : cells,
         ad
       ),
-      coverage: 1 - Math.exp(-adExposure(ad, turn)),
+      coverage: adExposure(ad, turn) / AD_BONUS_CAP,
     }));
   return Object.fromEntries(
     cells.map((cell) => {
@@ -221,40 +225,49 @@ export function targetedAdBonuses(
   );
 }
 
+/** Nominal target modifier before alignment; used for cap and purchase capacity. */
+export function currentAdBonus(
+  ads: TargetedAd[],
+  target: CampaignTarget & { stateId: string },
+  turn: number
+): number {
+  const previous = ads.find(
+    (ad) =>
+      ad.stateId === target.stateId &&
+      ad.dimension === target.dimension &&
+      ad.bucket === target.bucket
+  );
+  return previous ? adExposure(previous, turn) : 0;
+}
+
 export function planAdPurchase(
   ads: TargetedAd[],
   target: CampaignTarget & { stateId: string },
   turn: number,
-  turns: number
+  count: number
 ): TargetedAd[] | null {
   const same = (ad: TargetedAd) =>
     ad.stateId === target.stateId &&
     ad.dimension === target.dimension &&
     ad.bucket === target.bucket;
-  const previous = ads.find(same);
-  if (previous && previous.throughTurn >= turn) return null;
+  if (!Number.isInteger(count) || count < 1 || count > AD_MAX_ACTIONS) return null;
+  const current = currentAdBonus(ads, target, turn);
+  if (current >= AD_BONUS_CAP - 1e-10) return null;
   return [
-    ...ads.filter((ad) => !same(ad) && (ad.throughTurn >= turn || adExposure(ad, turn) >= 0.001)),
+    ...ads.filter((ad) => !same(ad) && adExposure(ad, turn) >= 0.00001),
     {
       stateId: target.stateId,
       dimension: target.dimension,
       bucket: target.bucket,
-      exposure: Math.min(AD_EXPOSURE_CAP, (previous ? adExposure(previous, turn) : 0) + 1),
+      bonus: Math.min(AD_BONUS_CAP, current + AD_BOOST_PER_ACTION * count),
       lastPurchaseTurn: turn,
-      throughTurn: turn + turns - 1,
     },
   ];
 }
 
-export function adPurchaseCost(
-  eligiblePopulation: number,
-  targetShare: number,
-  turns: number
-): number {
-  return (
-    Math.max(1, Math.ceil(((eligiblePopulation * targetShare) / 1000) * AD_COST_PER_THOUSAND)) *
-    turns
-  );
+/** Fixed anchor campaign funds per action; population does not set the price. */
+export function adPurchaseCost(count: number): number {
+  return AD_FUNDS_PER_ACTION * count;
 }
 
 export function audienceTurnout(cells: CampaignCell[], target: CampaignTarget): number {

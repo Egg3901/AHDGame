@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
-import { makeCandidate, makeCharacter, makeElection } from "@/lib/test-utils/factories";
+import { makeCandidate, makeCharacter, makeElection, makeNPP } from "@/lib/test-utils/factories";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -41,8 +41,8 @@ const purchase = {
   stateId: "CA",
   dimension: "race",
   bucket: "white",
-  turns: 3,
-  quote: { turn: 10, cost: 6000, revision: 0 },
+  count: 3,
+  quote: { turn: 10, cost: 300, revision: 0 },
 };
 
 describe("targeted ad route and command integration", () => {
@@ -158,7 +158,7 @@ describe("targeted ad route and command integration", () => {
     });
   });
 
-  it("returns a private quote without spending resources", async () => {
+  it("recount a private quote without spending resources", async () => {
     const response = await GET(
       new NextRequest(`http://localhost/api/campaigns/${campaignId}/targeted-ads`),
       params
@@ -166,22 +166,22 @@ describe("targeted ad route and command integration", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("no-store");
     const quote = await response.json();
-    expect(quote.targets[0]).toMatchObject({ cost: 2000, available: true });
-    expect(quote.targets[0].afterBonus).toBeGreaterThan(0.09);
+    expect(quote.targets[0]).toMatchObject({ cost: 100, available: true });
+    expect(quote.targets[0].afterBonus).toBeGreaterThan(0.009);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
-  it("precharges every turn atomically with character-owned exposure", async () => {
+  it("charges a selected action batch atomically with an immediate character bonus", async () => {
     const response = await POST(request(purchase), params);
     expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({ cost: 6000, actions: 15, scheduledThrough: 12 });
+    expect(await response.json()).toMatchObject({ cost: 300, actions: 3, bonus: 0.03 });
     expect(db.collection("characters").updateOne.mock.calls[0][0]).toMatchObject({
-      actions: { $gte: 15 },
-      funds: { $gte: 6000 },
+      actions: { $gte: 3 },
+      funds: { $gte: 300 },
     });
     expect(db.collection("characters").updateOne.mock.calls[0][1].$inc).toEqual({
-      actions: -15,
-      funds: -6000,
+      actions: -3,
+      funds: -300,
       targetedAdsRevision: 1,
     });
     expect(
@@ -190,9 +190,9 @@ describe("targeted ad route and command integration", () => {
       stateId: "CA",
       dimension: "race",
       bucket: "white",
-      exposure: 1,
+
       lastPurchaseTurn: 10,
-      throughTurn: 12,
+      bonus: 0.03,
     });
   });
 
@@ -217,15 +217,15 @@ describe("targeted ad route and command integration", () => {
       new NextRequest(`http://localhost/api/campaigns/${campaignId}/targeted-ads`),
       params
     );
-    expect((await response.json()).targets[0].afterBonus).toBeGreaterThan(0.09);
+    expect((await response.json()).targets[0].afterBonus).toBeGreaterThan(0.009);
   });
 
-  it("blocks overlapping buys from any manager without charging", async () => {
+  it("blocks capped targets from any manager without charging", async () => {
     db.collection("characters").findOne.mockResolvedValue({
       ...character,
-      targetedAds: [{ ...purchase, exposure: 1, lastPurchaseTurn: 10, throughTurn: 12 }],
+      targetedAds: [{ ...purchase, lastPurchaseTurn: 10, bonus: 0.25 }],
     });
-    expect((await POST(request(purchase), params)).status).toBe(409);
+    expect((await POST(request(purchase), params)).status).toBe(400);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
@@ -257,7 +257,7 @@ describe("targeted ad route and command integration", () => {
     expect(calls[0][0]._id).toEqual(manager._id);
     expect(calls[1][0]._id).toEqual(character._id);
     expect(calls[2][0]._id).toEqual(manager._id);
-    expect(calls[2][1]).toEqual({ $inc: { actions: 15, funds: 6000 } });
+    expect(calls[2][1]).toEqual({ $inc: { actions: 3, funds: 300 } });
   });
 
   it("rejects an expired quote or a changed price before spending", async () => {
@@ -289,13 +289,13 @@ describe("targeted ad route and command integration", () => {
     expect(db.collection("electionCandidates").updateOne).not.toHaveBeenCalled();
   });
 
-  it.each([0, -1, 1.5, 13, "3", null])("rejects malformed flight length %s", async (turns) => {
-    expect((await POST(request({ ...purchase, turns }), params)).status).toBe(400);
+  it.each([0, -1, 1.5, 51, "3", null])("rejects malformed action count %s", async (count) => {
+    expect((await POST(request({ ...purchase, count }), params)).status).toBe(400);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
 
   it("rejects foreign regions and unknown identities before spending", async () => {
-    expect((await POST(request({ ...purchase, stateId: "outside" }), params)).status).toBe(400);
+    expect((await POST(request({ ...purchase, stateId: "outside" }), params)).status).toBe(403);
     expect((await POST(request({ ...purchase, bucket: "unknown" }), params)).status).toBe(400);
     expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
   });
@@ -317,6 +317,23 @@ describe("targeted ad route and command integration", () => {
       expect(db.collection("elections").updateOne).not.toHaveBeenCalled();
     }
   );
+
+  it("does not let an NPP manager use a national non-presidential race to target other states", async () => {
+    const npp = makeNPP({ homeState: "CA" });
+    db.collection("npps").findOne.mockResolvedValue(npp);
+    db.collection("electionCandidates").findOne.mockResolvedValue({
+      ...candidate,
+      isNPP: true,
+      nppId: npp._id,
+    });
+    db.collection("elections").findOne.mockResolvedValue({
+      ...election,
+      electionType: "house",
+      state: "US",
+    });
+    expect((await POST(request({ ...purchase, stateId: "NY" }), params)).status).toBe(403);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
 
   it("rejects unauthorized viewers before reading the electorate", async () => {
     vi.mocked(isCampaignNomineeUser).mockResolvedValue(false);
