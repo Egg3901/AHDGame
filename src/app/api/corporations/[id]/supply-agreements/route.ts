@@ -96,6 +96,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
                 transitionFromStrategyId: 1,
                 transitionStartTurn: 1,
                 mothballed: 1,
+                activeCapacityPercent: 1,
                 productionPolicyLevel: 1,
                 embargoSuspended: 1,
                 embargoExportExposure: 1,

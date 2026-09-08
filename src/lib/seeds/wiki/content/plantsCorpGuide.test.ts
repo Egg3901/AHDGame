@@ -32,7 +32,7 @@ describe("plants-corp-guide wiki content", () => {
       `${Math.round(IDLE_UPKEEP_FRACTION * 100)}% of the maintenance`
     );
     expect(plantsCorpGuideContent).toContain(
-      `${Math.round(MOTHBALL_UPKEEP_FRACTION * 100)}% of full running maintenance`
+      `${Math.round(MOTHBALL_UPKEEP_FRACTION * 100)}% of its anchored maintenance basis`
     );
     expect(plantsCorpGuideContent).toContain(
       `refunds ${Math.round(CAPACITY_BUILD_CANCEL_REFUND * 100)}%`

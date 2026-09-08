@@ -1473,7 +1473,7 @@ export function makeNppCorpDecision(
       ) {
         const buildTurns = Math.max(
           1,
-          Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
+          CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
         );
         // Legacy nameplate: demand-side sectors take the built share of the
         // pool; extraction has no pool, so it prices the nameplate off the units
@@ -1699,7 +1699,12 @@ export function makeNppCorpDecision(
       // share back every turn in perpetuity; replacing the RUN capacity lets it
       // depreciate away and the plant converges on the size it can actually
       // sell.
-      const runUnits = Math.max(0, Math.min(capitalStock, sector.producedUnits ?? 0));
+      const productionCapacity = sector.operatingCapacityUnits ?? capitalStock;
+      const utilizationOfOwnedCapacity =
+        productionCapacity > 0
+          ? Math.max(0, Math.min(1, (sector.producedUnits ?? 0) / productionCapacity))
+          : 0;
+      const runUnits = capitalStock * utilizationOfOwnedCapacity;
       // ACCRUAL, not a per-turn slice. A build lands `CAPACITY_BUILD_TURNS`
       // turns after it is placed, and the queue ceiling can stop the corp
       // ordering for a stretch; sizing each order off the depreciation that has

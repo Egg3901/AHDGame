@@ -38,6 +38,7 @@ import type {
   NppForeignPolicyStage,
 } from "@/lib/db/types/gameState";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import type { TurnLog } from "@/lib/db/types/turnLog";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -77,6 +78,7 @@ interface SimRunDoc {
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
   preservePlayerRail?: boolean;
+  preserveLiveConfig?: boolean;
   /** Autonomy tier and local-world difficulty the run was configured with. */
   autonomyLevel?: string;
   difficulty?: string;
@@ -209,6 +211,10 @@ const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
 // AI-driven. Used to soak-test a market tier against today's actual price
 // state rather than a fresh preset bootstrap.
 const cloneMode = hasFlag("clone-mode");
+const preserveLiveConfig = hasFlag("preserve-live-config");
+if (preserveLiveConfig && !cloneMode)
+  throw new Error("--preserve-live-config requires --clone-mode");
+const investmentSnapshots = arg("sector-investment-snapshots");
 // Scarcity drift A/B (week-1 clearing balance pass): seeds
 // commodityScarcityDriftEnabled on the sandbox gameConfig so the run
 // exercises the persistent-imbalance price integrator.
@@ -302,7 +308,18 @@ const quiet = hasFlag("quiet");
 // In clone mode this preserves the restored world's player corporation CEOs.
 // Without it, clone mode converts all human-run corporations to NPP so the
 // sandbox can run unattended.
-const preservePlayerRail = hasFlag("preserve-player-rail");
+const preservePlayerRail = preserveLiveConfig || hasFlag("preserve-player-rail");
+
+if (
+  preserveLiveConfig &&
+  process.argv.some((value) =>
+    /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
+      value
+    )
+  )
+) {
+  throw new Error("--preserve-live-config cannot be combined with gameplay overrides");
+}
 
 if (quiet) {
   console.log = () => {};
@@ -699,7 +716,7 @@ async function main() {
     .updateOne({ _id: "default" }, { $set: { ledgerShadow: true } }, { upsert: true });
   log("Shadow ledger enabled for this run (ledgerShadow=true)");
 
-  if (cloneMode) {
+  if (cloneMode && !preserveLiveConfig) {
     // The DB is a restore of the live world. By default make it AI-driven:
     // patch the market tier, flip every human-run corp to an NPP-run one, and
     // open the world-level autonomy gates (forceFullAutonomy). With
@@ -855,6 +872,7 @@ async function main() {
         nppForeignPolicyMode: foreignPolicyMode,
         nppForeignPolicyStage: foreignPolicyStage,
         preservePlayerRail,
+        preserveLiveConfig,
       },
     }
   );
@@ -887,6 +905,9 @@ async function main() {
 
   const gameStateBefore = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const startTurn = (gameStateBefore?.currentTurn as number | undefined) ?? 0;
+  const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
+    await import("./sectorInvestmentSnapshot");
+  if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
   const targetTurn = startTurn + turns;
   log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
 
@@ -937,6 +958,22 @@ async function main() {
       }
       skippedSinceMs = null;
       lastTurn = result.turn;
+      if (investmentSnapshots) {
+        if (isCrashRecovery) throw new Error("Crashed turn invalidates the balance comparison");
+        const [checkedState, completedLog] = await Promise.all([
+          db
+            .collection<GameState>("gameState")
+            .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+          db
+            .collection<TurnLog>("turnLogs")
+            .findOne(
+              { turn: lastTurn },
+              { projection: { turn: 1, phaseStatuses: 1 }, sort: { _id: -1 } }
+            ),
+        ]);
+        assertInvestmentTurnComplete(lastTurn, checkedState?.currentTurn, completedLog);
+        await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+      }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the
       // experiments report — deliberately NOT wired into the live
@@ -992,7 +1029,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "[--mode=full|elections-only|economy-only|macro-only] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
-      "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--quiet]"
+      "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--preserve-live-config] [--sector-investment-snapshots=<directory>] [--quiet]"
   );
   process.exit(0);
 }

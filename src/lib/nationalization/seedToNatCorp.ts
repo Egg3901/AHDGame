@@ -223,6 +223,7 @@ export async function absorbOwnedSectorIntoNatCorp(
             buildQueue: 1,
             constructionInProgressAnchor: 1,
             mothballed: 1,
+            activeCapacityPercent: 1,
             plantsStartTurn: 1,
             legacyRevenueShadow: 1,
           },

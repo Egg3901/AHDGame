@@ -44,7 +44,7 @@ describe("computeBuildCost", () => {
     expect(cost.dominanceMultiplier).toBeCloseTo(1, 10);
     expect(cost.unitPriceAnchor).toBeCloseTo(GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING, 8);
     expect(cost.totalAnchor).toBeCloseTo(
-      units * GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING * 1.5,
+      units * GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING * 1.5 * 0.8,
       6
     );
   });
@@ -179,6 +179,9 @@ describe("founding calibration gate — one facility", () => {
       founding: true,
     });
     expect(standing.totalAnchor).toBeGreaterThan(founding.totalAnchor);
-    expect(founding.totalAnchor).toBeCloseTo(standing.totalAnchor * CAPACITY_FOUNDING_DISCOUNT, 2);
+    expect(founding.totalAnchor).toBeCloseTo(
+      (standing.totalAnchor / standing.expansionMultiplier) * CAPACITY_FOUNDING_DISCOUNT,
+      2
+    );
   });
 });

@@ -2,9 +2,9 @@
  * Plants and capacity: what a unit of production capacity costs, how long a build
  * takes and how long it takes to pay back. capacityPricePerUnit prices capacity
  * from commodity base prices and strategy output; CAPACITY_BUILD_TURNS runs from
- * 12 turns (retail) to 96 (energy, extraction), where 48 turns is a game year.
+ * 12 turns (retail) to 60 (telecommunications, real estate), where 48 turns is a game year.
  * Cancelled builds refund 75%, idle capacity still pays 30% upkeep
- * (IDLE_UPKEEP_FRACTION), mothballed 20%, and attacks transfer only 60% of captured capacity.
+ * (IDLE_UPKEEP_FRACTION), mothballed 5%, and attacks transfer only 60% of captured capacity.
  */
 /**
  * Capacity economy anchors — what a unit of productive capacity COSTS and how
@@ -134,6 +134,11 @@
  * and will be re-tuned by worldsim.
  */
 
+import {
+  COLD_CAPACITY_UPKEEP_FRACTION,
+  expansionCostMultiplier,
+  investmentBuildTurns,
+} from "@/lib/corporations/investment/rules";
 import {
   CORPORATION_TYPES,
   GROWTH_COST_MULTIPLIER,
@@ -295,20 +300,11 @@ export function revenuePerCapacityUnitForStrategy(
  * transition margin penalty, and the retool fee — all of which already exist.
  * Retooling is a re-aim, not a capital grant.
  *
- * TRANSITION WINDOW (deliberate, documented simplification): the engine blends
- * the two strategies' rates linearly over `STRATEGY_TRANSITION_TURNS` (12) via
- * `getEffectiveStrategyRates`, so mid-transition the sector's effective mixPrice
- * sits between RPU_old and RPU_new while its stock has ALREADY been rescaled to
- * the destination. The nameplate therefore misprices during the blend. We accept
- * that, and rescale ONCE at commit using the FINAL rates, because:
- *   - the error is bounded by the RPU ratio and decays linearly to exactly 0 at
- *     the end of the window (12 turns = half a financial day);
- *   - the alternative (re-scaling every turn against the blended rates) makes
- *     `capitalStock` a derived quantity that moves under the sector's feet every
- *     turn of the window, which would fight depreciation, the build queue and
- *     the flip migration, all of which treat the stock as owned state;
- *   - a one-shot rescale at a player-initiated boundary is auditable; a
- *     per-turn one is not.
+ * TRANSITION WINDOW: owned stock and paid orders use the destination basis.
+ * The turn converts that stock into the blended recipe's physical units for
+ * production, and converts produced units back before charging the held opex
+ * anchor. Nameplate value stays constant through the blend; depreciation and
+ * new construction still move owned stock in the usual way.
  *
  * Returns `capitalStock` unchanged when there is nothing meaningful to do (no
  * stock, a strategy with no priced output on either side, a non-finite input) —
@@ -569,7 +565,8 @@ export function laborIntensity(
 // ─── Construction time ──────────────────────────────────────────────────────
 
 /**
- * PROVISIONAL construction times, in TURNS, to deliver a capacity build.
+ * Authored base construction times, in turns. investmentBuildTurns applies
+ * the ordinary heavy-build reduction while preserving founding durations.
  *
  * There is no observed quantity to calibrate against — the legacy growth path
  * delivers capacity continuously with no build lag at all — so unlike the two
@@ -606,9 +603,12 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
 /** Fallback for an unrecognized sector type (mid-table). */
 export const CAPACITY_BUILD_TURNS_DEFAULT = 48;
 
-/** PROVISIONAL — turns to complete a capacity build in `sectorType`. */
-export function CAPACITY_BUILD_TURNS(sectorType: CorporationType): number {
-  return CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT;
+/** Turns to complete a new build. Existing orders keep their stored window. */
+export function CAPACITY_BUILD_TURNS(sectorType: CorporationType, founding = false): number {
+  return investmentBuildTurns(
+    CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT,
+    founding
+  );
 }
 
 /** Every sector type, for exhaustive iteration in tests and tooling. */
@@ -628,14 +628,11 @@ export const CAPACITY_SECTOR_TYPES: ReadonlyArray<CorporationType> = CORPORATION
 export const CAPACITY_BUILD_CANCEL_REFUND = 0.75;
 
 /**
- * Upkeep a MOTHBALLED sector pays, as a fraction of the maintenance its full
- * capacity would cost while running (D12). A mothballed plant produces nothing
- * and offers nothing, but it is not free: the site is still held, maintained
- * against corrosion and staffed by a care-and-maintenance crew. 0.2 makes
- * mothballing a large saving (80%) without making it strictly better than
- * running a marginal plant.
+ * Upkeep on parked capacity, as a fraction of its anchored maintenance basis.
+ * A mothballed plant produces and offers nothing. Its owned capacity and paid
+ * basis remain, with normal depreciation and reduced maintenance costs.
  */
-export const MOTHBALL_UPKEEP_FRACTION = 0.2;
+export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
 
 /**
  * Share of the pro-rata maintenance cost that IDLE (built but unused) capacity
@@ -868,6 +865,8 @@ export interface BuildCostBreakdown {
   hostPriceMultiplier: number;
   /** Founding discount multiplier (1 for an ordinary build). */
   foundingMultiplier: number;
+  /** Discount for ordinary expansion; founder pricing is unchanged. */
+  expansionMultiplier: number;
   /** Total ₳ charged for the order. */
   totalAnchor: number;
 }
@@ -882,7 +881,7 @@ export interface BuildCostBreakdown {
  *                   × acumenMult(acumen)
  *                   × techMult(growthCostMultiplier)
  *                   × hostPriceMult(costOfLiving)
- *                   × foundingMult
+ *                   × foundingMult × expansionMult
  *
  * The situational multipliers are deliberately the SAME ones the legacy growth
  * path charges (`calculateDailyGrowthCost`): dominance
@@ -973,6 +972,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       : 1;
   const hostPriceMultiplier = hostBuildPriceIndex(hostCostOfLivingIndex);
   const foundingMultiplier = founding ? CAPACITY_FOUNDING_DISCOUNT : 1;
+  const expansionMultiplier = expansionCostMultiplier(founding);
   return {
     unitPriceAnchor,
     dominanceMultiplier,
@@ -981,6 +981,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     techMultiplier,
     hostPriceMultiplier,
     foundingMultiplier,
+    expansionMultiplier,
     totalAnchor:
       safeUnits *
       unitPriceAnchor *
@@ -989,6 +990,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       acumenMultiplier *
       techMultiplier *
       hostPriceMultiplier *
-      foundingMultiplier,
+      foundingMultiplier *
+      expansionMultiplier,
   };
 }

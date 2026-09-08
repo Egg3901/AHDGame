@@ -4,6 +4,8 @@
  * growth-cost reduction, and the strategy panel. Extracted verbatim from
  * sectorDetail.ts (pure code motion; no behavior change).
  */
+import { idleUpkeepUnitPrice } from "@/lib/corporations/physicalPnl";
+import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import type { Db } from "mongodb";
 import type {
   CommodityPrice,
@@ -1167,9 +1169,18 @@ export interface SectorPlantsSection {
    * stepper update instantly instead of round-tripping the preview endpoint on
    * every keystroke — and it is the same `computeBuildCost` the command charges.
    */
+  activeCapacityPercent?: number;
+  capacityRecovery?: { coldUpkeepFraction: number; coldUpkeepDailyAnchor: number };
+  investment?: {
+    overheadDailyAnchor: number;
+    taxRatePercent: number;
+    freightNetCostDailyAnchor?: number;
+    inventoryRevenueDailyAnchor?: number;
+  };
   buildQuote: {
     /** Base ₳ per unit at this era, before the multipliers below. */
     unitPriceAnchor: number;
+    expansionMultiplier?: number;
     dominanceMultiplier: number;
     rateMultiplier: number;
     acumenMultiplier: number;
@@ -1355,6 +1366,7 @@ export function buildSectorPlantsSection(args: {
   /** ₳/day, all on the same basis as `sector.revenue` normalized to ₳. */
   money: {
     realizedRevenueAnchor: number;
+    nameplateRevenueAnchor?: number;
     /** Operating cost NET of labour, as the engine bills it. */
     maintenanceNetAnchor: number;
     labourAnchor: number;
@@ -1403,6 +1415,7 @@ export function buildSectorPlantsSection(args: {
    * passed in so this builder stays pure.
    */
   fxSpreadRate: number;
+  investment?: SectorPlantsSection["investment"];
 }): SectorPlantsSection {
   const {
     sector,
@@ -1432,7 +1445,7 @@ export function buildSectorPlantsSection(args: {
     typeof v === "number" && Number.isFinite(v) ? v : null;
   const nonNeg = (v: number) => (v > 0 ? v : 0);
 
-  const capacityUnits = num(sector.capitalStock);
+  const capacityUnits = num(sector.operatingCapacityUnits ?? sector.capitalStock);
   const plantCount =
     Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
       ? (sector.plantCount as number)
@@ -1455,11 +1468,14 @@ export function buildSectorPlantsSection(args: {
   // 1 − factor. The named weights are scaled to fit inside the ACTUAL idle
   // share and any remainder becomes "other", so the meter reconciles exactly
   // rather than asserting a decomposition the engine did not produce.
+  const activeFraction = activeCapacityFraction(sector);
   const idleCauses: PlantIdleCause[] = [];
   if (mothballed && capacityUnits != null && capacityUnits > 0) {
     idleCauses.push({ cause: "mothballed", units: capacityUnits });
   } else if (idleUnits != null && idleUnits > 0 && capacityUnits && capacityUnits > 0) {
-    const idleShare = idleUnits / capacityUnits;
+    const coldUnits = Math.min(idleUnits, capacityUnits * (1 - activeFraction));
+    if (coldUnits > 0) idleCauses.push({ cause: "mothballed", units: coldUnits });
+    const idleShare = (idleUnits - coldUnits) / capacityUnits;
     const weights: { cause: PlantIdleCause["cause"]; w: number }[] = [];
     const throughput = num(sector.throughputFactor);
     if (throughput != null && throughput < 1) {
@@ -1484,7 +1500,7 @@ export function buildSectorPlantsSection(args: {
     }
     const sumW = weights.reduce((s, x) => s + x.w, 0);
     const scale = sumW > 0 ? Math.min(1, idleShare / sumW) : 0;
-    let attributed = 0;
+    let attributed = coldUnits;
     for (const { cause, w } of weights) {
       const units = w * scale * capacityUnits;
       if (units <= 0) continue;
@@ -1546,6 +1562,20 @@ export function buildSectorPlantsSection(args: {
     Number.isFinite(args.fxSpreadRate) && args.fxSpreadRate > 0 ? args.fxSpreadRate : 0;
   const perUnitChargedAnchor = perUnitAnchor * (1 + safeFxSpreadRate);
 
+  const upkeepBasis = sector.plantsUpkeepMarginBasisAnchor;
+  const upkeepUnitDailyAnchor =
+    capacityUnits != null &&
+    capacityUnits > 0 &&
+    typeof upkeepBasis === "number" &&
+    Number.isFinite(upkeepBasis) &&
+    typeof money.nameplateRevenueAnchor === "number"
+      ? idleUpkeepUnitPrice({
+          mixPrice: money.nameplateRevenueAnchor / capacityUnits,
+          turnsPerDay: 1,
+          anchoredMarginBasis: upkeepBasis,
+          liveMarginBasis: upkeepBasis,
+        })
+      : null;
   // ─── Physical P&L ─────────────────────────────────────────────────────────
   // The engine bills ONE operating number (`maintenanceNet` + labour). These
   // lines split that same number, so the panel can never disagree with the
@@ -1716,6 +1746,25 @@ export function buildSectorPlantsSection(args: {
     fillRate,
     idleCauses,
     mothballed,
+    activeCapacityPercent: activeFraction * 100,
+    ...(upkeepUnitDailyAnchor != null
+      ? {
+          capacityRecovery: {
+            coldUpkeepFraction: MOTHBALL_UPKEEP_FRACTION,
+            coldUpkeepDailyAnchor:
+              upkeepUnitDailyAnchor * (capacityUnits ?? 0) * MOTHBALL_UPKEEP_FRACTION,
+          },
+          ...(args.investment &&
+          !sector.transitionFromStrategyId &&
+          sector.plantsPnl?.turn === args.currentTurn
+            ? {
+                investment: {
+                  ...args.investment,
+                },
+              }
+            : {}),
+        }
+      : {}),
     buildQueue,
     constructionInProgressAnchor: num(sector.constructionInProgressAnchor) ?? 0,
     depreciationPerTurn: CAPITAL_DEPRECIATION_PER_TURN,
@@ -1737,6 +1786,7 @@ export function buildSectorPlantsSection(args: {
     currentTurn,
     buildQuote: {
       unitPriceAnchor: oneUnit.unitPriceAnchor,
+      expansionMultiplier: oneUnit.expansionMultiplier,
       dominanceMultiplier: oneUnit.dominanceMultiplier,
       rateMultiplier: oneUnit.rateMultiplier,
       acumenMultiplier: oneUnit.acumenMultiplier,
