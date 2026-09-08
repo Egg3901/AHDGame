@@ -5,7 +5,10 @@
  * sectorDetail.ts (pure code motion; no behavior change).
  */
 import { idleUpkeepUnitPrice } from "@/lib/corporations/physicalPnl";
-import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
+import {
+  activeCapacityFraction,
+  hasSettledOperatingHistory,
+} from "@/lib/corporations/investment/rules";
 import type { Db } from "mongodb";
 import type {
   CommodityPrice,
@@ -1756,7 +1759,13 @@ export function buildSectorPlantsSection(args: {
           },
           ...(args.investment &&
           !sector.transitionFromStrategyId &&
-          sector.plantsPnl?.turn === args.currentTurn
+          sector.plantsPnl?.turn === args.currentTurn &&
+          hasSettledOperatingHistory({
+            plantsStartTurn: sector.plantsStartTurn,
+            clearingStartTurn: sector.clearingStartTurn,
+            observedTurn: sector.plantsPnl.turn,
+            rampTurns: governorRampTurns,
+          })
             ? {
                 investment: {
                   ...args.investment,
