@@ -124,7 +124,7 @@ export interface InvestmentHorizon {
 
 /**
  * Fixed-price, fixed-demand scenario, not a prediction of future clearing.
- * Revenue already includes observed unsold output. Never apply fill twice.
+ * Observed receipts price each sold unit. Apply sales fill once, then cap demand.
  * Replacement is a cash reserve, not a second purchase or saleable asset.
  */
 export function forecastSectorInvestment(
@@ -146,7 +146,7 @@ export function forecastSectorInvestment(
   const utilization = input.producedUnits / input.capacityUnits;
   const upkeepPerCapacityUnit = Math.max(0, input.upkeepDailyAnchor) / input.capacityUnits;
   const fill = Math.max(0, Math.min(1, input.soldUnits / input.producedUnits));
-  const receiptPerProduced = input.revenueDailyAnchor / input.producedUnits;
+  const receiptPerSold = input.soldUnits > 0 ? input.revenueDailyAnchor / input.soldUnits : 0;
   const operatingPerProduced = input.operatingCostDailyAnchor / input.producedUnits;
   const overheadPerProduced = Math.max(0, input.overheadDailyAnchor) / input.producedUnits;
   const taxRate = Math.max(0, Math.min(100, input.taxRatePercent)) / 100;
@@ -164,11 +164,9 @@ export function forecastSectorInvestment(
     // Keep the observed production pace and bill all of it, including unsold
     // output. Extra buyers cap receipts, never make unwanted output free.
     const produced = capacity * utilization;
-    const saleableProduction = Math.min(produced, Math.max(0, input.demandGapUnits));
+    const sold = Math.min(produced * fill, Math.max(0, input.demandGapUnits));
     const operating =
-      (saleableProduction * receiptPerProduced -
-        produced * operatingPerProduced -
-        capacity * upkeepPerCapacityUnit) /
+      (sold * receiptPerSold - produced * operatingPerProduced - capacity * upkeepPerCapacityUnit) /
       input.turnsPerDay;
     const overhead = (produced * overheadPerProduced) / input.turnsPerDay;
     operatingCashAnchor += operating;
@@ -181,7 +179,7 @@ export function forecastSectorInvestment(
       horizons.push({
         turns: turn,
         deliveredUnits: capacity,
-        soldUnitsDaily: saleableProduction * fill,
+        soldUnitsDaily: sold,
         operatingCashAnchor,
         overheadAnchor,
         taxAnchor,

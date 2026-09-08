@@ -107,6 +107,12 @@ describe("investment cash scenarios", () => {
     expect(result.map((point) => point.turns)).toEqual([48, 96, 192]);
   });
 
+  it("caps expected sales at available buyer demand", () => {
+    const result = forecastSectorInvestment({ ...forecastInput, demandGapUnits: 40 })!;
+    expect(result[0].soldUnitsDaily).toBe(40);
+    expect(result[0].availableCashAnchor).toBeCloseTo(800, 8);
+  });
+
   it("deducts overhead before tax and never gives loss-making expansion a tax refund", () => {
     const result = forecastSectorInvestment({
       ...forecastInput,
