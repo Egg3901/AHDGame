@@ -692,3 +692,33 @@ describe("fetchEnrichedCandidates — regime multiplier", () => {
     expect(enriched.regimeMult).toBe(1.0);
   });
 });
+
+it("shares standing exposure across current and future candidacies without copying database records", async () => {
+  const { fetchEnrichedCandidates } = await import("./candidateEnrichment");
+  const characterId = new ObjectId();
+  const ad = {
+    stateId: "CA",
+    dimension: "race",
+    bucket: "white",
+    exposure: 1,
+    lastPurchaseTurn: 10,
+    throughTurn: 12,
+  };
+  setupCharacters(db, [
+    {
+      _id: characterId,
+      policies: { economic: 2, social: 2 },
+      favorability: 50,
+      politicalInfluence: 50,
+      targetedAds: [ad],
+    },
+  ]);
+  setupParties(db, []);
+  const races = [makePlayerCandidate({ characterId }), makePlayerCandidate({ characterId })];
+  const enriched = await fetchEnrichedCandidates(races);
+  expect(enriched.map((candidate) => candidate.targetedAds)).toEqual([[ad], [ad]]);
+  const later = await fetchEnrichedCandidates([makePlayerCandidate({ characterId })]);
+  expect(later[0].targetedAds).toEqual([ad]);
+  expect(races.every((candidate) => candidate.targetedAds === undefined)).toBe(true);
+  expect(db.collection("electionCandidates").updateOne).not.toHaveBeenCalled();
+});

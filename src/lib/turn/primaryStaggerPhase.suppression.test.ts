@@ -86,7 +86,8 @@ function suppressionRow(over: Record<string, unknown> = {}) {
  */
 async function runIowaWave(
   primaryStateActions: Record<string, unknown>[],
-  campaignAds = false
+  campaignAds = false,
+  campaignRulesVersion = 1
 ): Promise<Record<string, number>> {
   invalidateDemographicCategoryCache();
 
@@ -203,7 +204,7 @@ async function runIowaWave(
     campaignAds
       ? {
           ...ELECTION,
-          campaignRulesVersion: 1,
+          campaignRulesVersion,
           rulesetVersion: 3,
           primaryEndTurn: CURRENT_TURN + 40,
         }
@@ -226,32 +227,38 @@ beforeEach(() => {
 });
 
 describe("vote suppression in the primary wave", () => {
-  it("counts paid ads once in both expectations and live votes, even with the old admin gate absent", async () => {
-    const projection = vi.spyOn(primaryProjection, "projectPrimaryByState");
-    try {
-      const votes = await runIowaWave([], true);
-      expect(projection).toHaveBeenCalledWith(
-        expect.objectContaining({
-          campaignContext: expect.objectContaining({
-            campaignRulesVersion: 1,
-            currentTurn: CURRENT_TURN,
-          }),
-        })
-      );
-      const expected = projection.mock.results[0].value.byState.IA;
-      const share = (values: Record<string, number>) =>
-        values[TARGET_ROW.toString()] / Object.values(values).reduce((a, b) => a + b, 0);
-      expect(share(votes)).toBeCloseTo(share(expected), 5);
-      const input = projection.mock.calls[0][0];
-      const noAds = primaryProjection.projectPrimaryByState({
-        ...input,
-        candidates: input.candidates.map((candidate) => ({ ...candidate, targetedAds: undefined })),
-      });
-      expect(share(votes)).toBeGreaterThan(share(noAds.byState.IA));
-    } finally {
-      projection.mockRestore();
+  it.each([0, 1])(
+    "counts paid ads once in expectations and votes with rules version %s and the admin gate absent",
+    async (campaignRulesVersion) => {
+      const projection = vi.spyOn(primaryProjection, "projectPrimaryByState");
+      try {
+        const votes = await runIowaWave([], true, campaignRulesVersion);
+        expect(projection).toHaveBeenCalledWith(
+          expect.objectContaining({
+            campaignContext: expect.objectContaining({
+              campaignRulesVersion,
+              currentTurn: CURRENT_TURN,
+            }),
+          })
+        );
+        const expected = projection.mock.results[0].value.byState.IA;
+        const share = (values: Record<string, number>) =>
+          values[TARGET_ROW.toString()] / Object.values(values).reduce((a, b) => a + b, 0);
+        expect(share(votes)).toBeCloseTo(share(expected), 5);
+        const input = projection.mock.calls[0][0];
+        const noAds = primaryProjection.projectPrimaryByState({
+          ...input,
+          candidates: input.candidates.map((candidate) => ({
+            ...candidate,
+            targetedAds: undefined,
+          })),
+        });
+        expect(share(votes)).toBeGreaterThan(share(noAds.byState.IA));
+      } finally {
+        projection.mockRestore();
+      }
     }
-  });
+  );
 
   it("removes the suppressed candidate's slice of the state", async () => {
     const clean = await runIowaWave([]);

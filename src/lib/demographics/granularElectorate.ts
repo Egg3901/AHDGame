@@ -123,7 +123,7 @@
 
 import {
   targetedAdBonuses,
-  usesCampaignRules,
+  usesCampaignAds,
   type CampaignCell,
   type Position,
 } from "@/lib/campaignTargeting/rules";
@@ -805,7 +805,7 @@ export function buildGranularElectorateSubstrate(
     // shift, and legacy `resolveTurnout` ignores stored turnout drift anyway).
     input.demographicDefaults?.layer1TurnoutOverrides,
     { year: input.year ?? null, startingYear: input.startingYear ?? null },
-    usesCampaignRules(input),
+    usesCampaignAds(input, input.enriched),
     input.cache
   );
   if (!derived || derived.units.length === 0) return null;
@@ -948,7 +948,11 @@ export function buildGranularElectorateSubstrate(
       ec.archetypeApprovals && Object.keys(ec.archetypeApprovals).length > 0
         ? remapArchetypeValuesToUnits(ec.archetypeApprovals, units, input.countryId)
         : ec.archetypeApprovals;
-    if (!usesCampaignRules(input) || input.currentTurn == null || !ec.targetedAds?.length) {
+    if (
+      !usesCampaignAds(input, input.enriched) ||
+      input.currentTurn == null ||
+      !ec.targetedAds?.length
+    ) {
       return approvals === ec.archetypeApprovals ? ec : { ...ec, archetypeApprovals: approvals };
     }
     const bonuses = targetedAdBonuses(
@@ -1003,6 +1007,6 @@ export function buildGranularElectorateSubstrate(
     enriched,
     partyGroupFavorabilityByKey,
     units,
-    ...(usesCampaignRules(input) ? { campaignCells } : {}),
+    ...(usesCampaignAds(input, input.enriched) ? { campaignCells } : {}),
   };
 }

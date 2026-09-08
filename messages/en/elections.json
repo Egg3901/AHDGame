@@ -193,7 +193,15 @@
       "canvassResult": "Turnout input: +{boost} points (modifier {modifier}). Estimated target turnout: {before}% to {after}%.",
       "canvassLegacy": "Original-rule races receive +{boost} turnout-input points.",
       "refresh": "Refresh preview",
-      "canvassInput": "Turnout input: +{boost} points (modifier {modifier})."
+      "canvassInput": "Turnout input: +{boost} points (modifier {modifier}).",
+      "standingDescription": "Buy regional ads at any time, including between elections. Exposure follows you across your races and fades over time.",
+      "backToActions": "Back to Actions",
+      "loadCharacterFailed": "Could not load your character. Refresh to try again.",
+      "actionTagline": "Reach your coalition",
+      "actionFlavor": "Build support with voter groups in any region of your country, even between elections. Exposure follows you into your races and fades over time.",
+      "actionCost": "Varies by audience",
+      "actionEffect": "Aligned, cohesive groups respond more strongly",
+      "actionImageAlt": "Street advertising and campaign hoardings"
     }
   }
 }

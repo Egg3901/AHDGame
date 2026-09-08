@@ -1,7 +1,7 @@
 /**
- * Targeted ads belong to an election candidate. Managers and nominees buy
- * regional flights with personal campaign funds and actions; every buyer shares
- * the same candidate's per-target pacing limit in purchaseTargetedAds.
+ * Campaign managers buy standing ads for a player or campaign-bound ads for an
+ * NPP. Player purchases share the character revision with the Actions page,
+ * and authorized managers spend their own personal resources.
  */
 import { ObjectId, type Db, type ClientSession } from "mongodb";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
@@ -9,21 +9,11 @@ import type { AuthUserWithCharacter } from "@/lib/auth";
 import type { Campaign, Character, Election, ElectionCandidate, NPP } from "@/lib/db/types";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
-import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameTime } from "@/lib/time/gameTime";
-import { loadCampaignAudience } from "./audience";
-import {
-  AD_ACTION_COST,
-  adPurchaseCost,
-  adExposure,
-  planAdPurchase,
-  targetAudience,
-  targetedAdBonuses,
-  usesCampaignRules,
-  type CampaignTarget,
-} from "./rules";
+import { quoteAdAudience } from "./adQuote";
+import { quoteStandingAds, purchaseStandingAds } from "./standingCommands";
+import { AD_ACTION_COST, planAdPurchase, usesCampaignRules, type CampaignTarget } from "./rules";
 
 type Actor = AuthUserWithCharacter & { hasCharacter: true; character: Character };
 
@@ -64,6 +54,14 @@ export async function quoteTargetedAds(
   stateId: string
 ) {
   const { election, candidate, time } = context;
+  if (!candidate.isNPP) {
+    const owner = await db
+      .collection<Character>("characters")
+      .findOne({ _id: candidate.characterId });
+    if (!owner) throw notFound("Candidate not found");
+    return quoteStandingAds(db, owner, stateId);
+  }
+
   if (!usesCampaignRules(election))
     return {
       enabled: false as const,
@@ -82,8 +80,6 @@ export async function quoteTargetedAds(
     };
   if (election.state !== stateId && election.state !== election.countryId)
     throw forbidden("That region is outside this election");
-  const audience = await loadCampaignAudience(db, election.countryId, stateId);
-  if (!audience) throw badRequest("This region has no targetable electorate");
   const owner =
     candidate.isNPP && candidate.nppId
       ? await db
@@ -96,65 +92,16 @@ export async function quoteTargetedAds(
           .collection<Character>("characters")
           .findOne({ _id: candidate.characterId }, { projection: { policies: 1 } });
   if (!owner) throw notFound("Candidate not found");
-  const position = { economicLean: owner.policies.economic, socialLean: owner.policies.social };
-  const forex = await isForexEnabled();
-  const rate = forex ? campaignLocalRate(election.countryId) : 1;
-  const ads = candidate.targetedAds ?? [];
-  const unique = new Map<string, CampaignTarget>();
-  for (const cell of audience.cells)
-    for (const [dimension, bucket] of Object.entries(cell.buckets))
-      unique.set(`${dimension}:${bucket}`, { dimension, bucket });
-  const current = targetedAdBonuses(audience.cells, position, ads, stateId, time.currentTurn);
-  const targets = [...unique.values()].map((target) => {
-    const info = targetAudience(audience.cells, target)!;
-    const planned = planAdPurchase(ads, { ...target, stateId }, time.currentTurn, 1);
-    const after = targetedAdBonuses(
-      audience.cells,
-      position,
-      planned ?? ads,
-      stateId,
-      time.currentTurn
-    );
-    const mean = (bonuses: Record<string, number>) =>
-      audience.cells.reduce(
-        (sum, cell) =>
-          sum +
-          (cell.buckets[target.dimension] === target.bucket
-            ? (cell.share * (bonuses[cell.id] ?? 0)) / info.share
-            : 0),
-        0
-      );
-    const active = ads.find(
-      (ad) =>
-        ad.stateId === stateId && ad.dimension === target.dimension && ad.bucket === target.bucket
-    );
-    return {
-      ...target,
-      audienceShare: info.share,
-      eligibleAudience: Math.round(audience.context.statePopulation * info.share),
-      cohesion: info.cohesion,
-      cost: adPurchaseCost(audience.context.statePopulation, info.share, 1) * rate,
-      currentBonus: mean(current),
-      afterBonus: mean(after),
-      exposure: active ? adExposure(active, time.currentTurn) : 0,
-      scheduledThrough: active?.throughTurn ?? null,
-      available: planned !== null,
-    };
-  });
-  return {
-    enabled: true as const,
-    targets,
-    actionCost: AD_ACTION_COST,
-    currentTurn: time.currentTurn,
-    revision: candidate.targetedAdsRevision ?? 0,
-    maxFlightTurns: Math.max(
-      0,
-      Math.min(12, (election.endTurn ?? time.currentTurn + 1) - time.currentTurn)
-    ),
+  return quoteAdAudience(
+    db,
+    election.countryId,
     stateId,
-    forex,
-    rate,
-  };
+    owner.policies,
+    candidate.targetedAds ?? [],
+    candidate.targetedAdsRevision ?? 0,
+    time.currentTurn,
+    Math.max(0, Math.min(12, (election.endTurn ?? time.currentTurn + 1) - time.currentTurn))
+  );
 }
 
 export async function purchaseTargetedAds(
@@ -168,6 +115,14 @@ export async function purchaseTargetedAds(
   }
 ) {
   const context = await loadTargetedAdContext(db, campaignId, user);
+  if (!context.candidate.isNPP) {
+    const owner = await db
+      .collection<Character>("characters")
+      .findOne({ _id: context.candidate.characterId });
+    if (!owner) throw notFound("Candidate not found");
+    return purchaseStandingAds(db, owner, user.character, request);
+  }
+
   const quote = await quoteTargetedAds(db, context, request.stateId);
   if (!quote.enabled) throw badRequest(quote.message);
   const target = quote.targets.find(

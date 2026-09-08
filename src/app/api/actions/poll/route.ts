@@ -1,4 +1,4 @@
-import { turnoutForElection, usesCampaignRules } from "@/lib/campaignTargeting/rules";
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
 import { NextResponse } from "next/server";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
@@ -325,17 +325,16 @@ export async function POST(request: NextRequest) {
 
     let pollSnapshot: Record<string, unknown> | null = null;
     const electionContext = await getElectionOpponents(character);
-    const campaignProjection =
-      electionContext && usesCampaignRules(electionContext)
-        ? await projectCampaignPoll(
-            db,
-            electionContext.electionId,
-            character,
-            turnoutDoc,
-            statePartyOrgs,
-            electionContext.inPrimary
-          )
-        : null;
+    const campaignProjection = electionContext
+      ? await projectCampaignPoll(
+          db,
+          electionContext.electionId,
+          character,
+          turnoutDoc,
+          statePartyOrgs,
+          electionContext.inPrimary
+        )
+      : null;
     {
       const opponentsForShare: OpponentForShare[] | undefined = electionContext?.opponents?.map(
         (o) => ({
