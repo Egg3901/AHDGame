@@ -14,7 +14,7 @@
  * Called from `primaryResolution.ts` before the existing primary-end check.
  */
 
-import { turnoutForElection, usesCampaignRules } from "@/lib/campaignTargeting/rules";
+import { turnoutForElection, usesCampaignAds } from "@/lib/campaignTargeting/rules";
 
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
@@ -229,8 +229,6 @@ export async function runPrimaryStaggerWaveIfDue(
   // Live era clock (null while `eraSystemEnabled` is off — legacy behavior).
   const eraYear = eraYearContextFromGameState(gsForDelegates);
   // Campaign rules require cells for paid ads. Older races retain the admin gate.
-  const granularElectorateEnabled =
-    usesCampaignRules(election) || gsForDelegates?.granularElectorateEnabled === true;
 
   // Bootstrapping the tally at stagger start is load-bearing: wave history,
   // per-state primary votes, and delegates all persist on electionVoteTallies.
@@ -357,6 +355,15 @@ export async function runPrimaryStaggerWaveIfDue(
     currentTurn,
   });
 
+  // Scope the party lookup by countryId so sequentialId collisions across
+  // countries cannot invert candidate party positions.
+  const enriched = await fetchEnrichedCandidates(candidates, {
+    includePartyPositions: true,
+    countryId: (election.countryId ?? "US") as CountryId,
+  });
+  const granularElectorateEnabled =
+    usesCampaignAds(election, enriched) || gsForDelegates?.granularElectorateEnabled === true;
+
   // Seeded snapshots for the granular substrate's legislation lean-drift fold.
   // Only fetched when the flag is on so the legacy path pays no extra read.
   const demographicDefaultsByState = granularElectorateEnabled
@@ -373,13 +380,6 @@ export async function runPrimaryStaggerWaveIfDue(
   for (const po of partyOrgs) {
     partyOrgByStateParty.set(`${po.stateId}_${po.partyId}`, po);
   }
-
-  // Scope the party lookup by countryId so sequentialId collisions across
-  // countries cannot invert candidate party positions.
-  const enriched = await fetchEnrichedCandidates(candidates, {
-    includePartyPositions: true,
-    countryId: (election.countryId ?? "US") as CountryId,
-  });
 
   // Primary vote accumulation uses national NPI through the presidential-primary
   // diminishing reach curve (`presidentialPrimaryNationalReach`). Party influence
@@ -510,9 +510,9 @@ export async function runPrimaryStaggerWaveIfDue(
       // night, and a momentum penalty for "missing" an expectation that never
       // accounted for the attack. One purchase, one effect.
       // Paid ad advantages belong in expectations too, so they are not upsets.
-      campaignContext: usesCampaignRules(election)
+      campaignContext: usesCampaignAds(election, enriched)
         ? {
-            campaignRulesVersion: election.campaignRulesVersion!,
+            campaignRulesVersion: election.campaignRulesVersion ?? 0,
             currentTurn,
             preset: delegatePreset,
             ...eraYear,

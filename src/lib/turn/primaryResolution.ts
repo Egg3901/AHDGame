@@ -1,11 +1,13 @@
 /**
  * Primaries count party ballots over time and advance the leading candidates.
- * recordPrimarySnapshots includes coalition turnout and ads for new races;
+ * recordPrimarySnapshots includes versioned turnout and standing character ads;
  * resolvePrimariesIfNeeded preserves counted ballots when selecting nominees.
  */
+import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
 import {
   usesCampaignRules,
+  usesCampaignAds,
   turnoutForElection,
   targetedAdBonuses,
   meanAdBonus,
@@ -154,7 +156,7 @@ export async function resolvePrimariesIfNeeded(
 
   // Region IDs needed for state-level primary alignment (skip presidential — national race).
   const regionLookups = pastPrimary
-    .filter((e) => e.electionType !== "president" && (e.seatId || usesCampaignRules(e)))
+    .filter((e) => e.electionType !== "president")
     .map((e) => ({
       regionId: e.seatId ? parseSeatId(e.seatId).localRegionId : e.state,
       countryId: (e.countryId ?? "US") as CountryId,
@@ -185,7 +187,9 @@ export async function resolvePrimariesIfNeeded(
             .find({
               $or: [...uniqueRegionKeys].map((key) => {
                 const [countryId, regionId] = key.split(":");
-                return { _id: regionId, countryId: countryId as CountryId };
+                return countryId === regionId
+                  ? { countryId: countryId as CountryId }
+                  : { _id: regionId, countryId: countryId as CountryId };
               }),
             })
             .toArray()
@@ -269,6 +273,7 @@ export async function resolvePrimariesIfNeeded(
           .toArray()
       : [];
   const charMap: Map<string, Character> = new Map(chars.map((c) => [c._id.toString(), c]));
+  applyStandingAds(allResolvingCandidates, charMap);
 
   // Active preset for delegate-majority thresholds (convention path). Fetched
   // once for the whole resolution pass; only presidential races consume it.
@@ -284,7 +289,7 @@ export async function resolvePrimariesIfNeeded(
     resolvingElections
       .filter(
         ({ election, candidates }) =>
-          usesCampaignRules(election) &&
+          usesCampaignAds(election, candidates) &&
           election.electionType !== "president" &&
           candidates.some((candidate) => candidate.targetedAds?.length)
       )
@@ -293,7 +298,16 @@ export async function resolvePrimariesIfNeeded(
   const campaignCellsByRegion = advertisedRegions.size
     ? await loadRegionalCampaignCells(
         db,
-        stateDocs.filter((state) => advertisedRegions.has(`${state.countryId}:${state._id}`))
+        stateDocs.filter(
+          (state) =>
+            advertisedRegions.has(`${state.countryId}:${state._id}`) ||
+            advertisedRegions.has(`${state.countryId}:${state.countryId}`)
+        ),
+        new Set(
+          resolvingElections
+            .filter(({ election }) => !usesCampaignRules(election))
+            .map(({ election }) => `${election.countryId}:${election.state}`)
+        )
       )
     : new Map<string, import("@/lib/campaignTargeting/rules").CampaignCell[]>();
 
@@ -546,9 +560,9 @@ export async function resolvePrimariesIfNeeded(
              */
             if (c.isNPP && hasPlayerInParty) score *= NPP_PRIMARY_SCORE_MULTIPLIER;
             const campaignCells = campaignCellsByRegion.get(
-              `${election.countryId}:${election.state}`
+              `${election.countryId}:${election.state}${usesCampaignRules(election) ? "" : ":0"}`
             );
-            if (usesCampaignRules(election) && campaignCells && c.targetedAds?.length) {
+            if (campaignCells && c.targetedAds?.length) {
               const bonus = meanAdBonus(
                 campaignCells,
                 targetedAdBonuses(
@@ -888,7 +902,7 @@ export async function recordPrimarySnapshots(
 
   // Region IDs for state-level alignment lookups (skip presidential).
   const snapshotRegionLookups = activeElections
-    .filter((e) => e.electionType !== "president" && (e.seatId || usesCampaignRules(e)))
+    .filter((e) => e.electionType !== "president")
     .map((e) => ({
       regionId: e.seatId ? parseSeatId(e.seatId).localRegionId : e.state,
       countryId: (e.countryId ?? "US") as CountryId,
@@ -933,7 +947,9 @@ export async function recordPrimarySnapshots(
           .find({
             $or: [...uniqueSnapshotRegionKeys].map((key) => {
               const [countryId, regionId] = key.split(":");
-              return { _id: regionId, countryId: countryId as CountryId };
+              return countryId === regionId
+                ? { countryId: countryId as CountryId }
+                : { _id: regionId, countryId: countryId as CountryId };
             }),
           })
           .toArray()
@@ -954,7 +970,7 @@ export async function recordPrimarySnapshots(
           .find({ _id: { $in: snapshotRegionIds } })
           .toArray()
       : Promise.resolve([] as StateDemographicTurnout[]),
-    snapshotRegionIds.length > 0 && activeElections.some(usesCampaignRules)
+    snapshotRegionIds.length > 0
       ? db
           .collection<StateDemographics>("demographicDefaults")
           .find({ _id: { $in: snapshotRegionIds } })
@@ -1035,6 +1051,7 @@ export async function recordPrimarySnapshots(
       : Promise.resolve([] as NPP[]),
   ]);
   const charMap = new Map(characters.map((c) => [c._id.toString(), c]));
+  applyStandingAds(allCandidates, charMap);
   const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));
 
   // Presidential-only: compute per-state projections FIRST (also writes the
@@ -1088,9 +1105,12 @@ export async function recordPrimarySnapshots(
   }
   const modernRegionKeys = new Set(
     activeElections
-      .filter(usesCampaignRules)
+      .filter((e) => usesCampaignAds(e, candidatesByElection.get(e._id.toString()) ?? []))
       .filter((e) => e.electionType !== "president")
-      .map((e) => `${e.countryId}:${e.seatId ? parseSeatId(e.seatId).localRegionId : e.state}`)
+      .map(
+        (e) =>
+          `${e.countryId}:${e.seatId ? parseSeatId(e.seatId).localRegionId : e.state}:${usesCampaignRules(e) ? 1 : 0}`
+      )
   );
   const defaultsByRegion = new Map(regionDefaultsDocs.map((doc) => [doc._id, doc]));
   const campaignSubstrates = new Map<
@@ -1098,12 +1118,12 @@ export async function recordPrimarySnapshots(
     NonNullable<ReturnType<typeof buildGranularElectorateSubstrate>>
   >();
   for (const key of modernRegionKeys) {
-    const [country, regionId] = key.split(":");
-    const state = stateMap.get(key);
+    const [country, regionId, version] = key.split(":");
+    const state = stateMap.get(`${country}:${regionId}`);
     const demographics = demographicsByRegion.get(regionId);
     if (!state || !demographics) continue;
     const turnoutDoc = turnoutForElection(turnoutDocByRegion.get(regionId), {
-      campaignRulesVersion: CAMPAIGN_RULES_VERSION,
+      campaignRulesVersion: Number(version),
     });
     const electorate = state.votingEligiblePopulation ?? state.population;
     const liveTurnouts = resolveTurnout(
@@ -1130,6 +1150,29 @@ export async function recordPrimarySnapshots(
     });
     if (substrate) campaignSubstrates.set(key, substrate);
   }
+  const advertisedCountries = new Set(
+    activeElections
+      .filter(
+        (e) =>
+          e.electionType !== "president" &&
+          e.state === e.countryId &&
+          candidatesByElection
+            .get(e._id.toString())
+            ?.some((candidate) => candidate.targetedAds?.length)
+      )
+      .map((e) => e.countryId)
+  );
+  const nationalCampaignCells = advertisedCountries.size
+    ? await loadRegionalCampaignCells(
+        db,
+        stateDocs.filter((state) => advertisedCountries.has(state.countryId)),
+        new Set(
+          activeElections
+            .filter((e) => !usesCampaignRules(e))
+            .map((e) => `${e.countryId}:${e.state}`)
+        )
+      )
+    : new Map();
   const primaryVotesByElection = new Map<string, Record<string, number>>();
   for (const t of existingPrimaryTallies) {
     if (t.primaryVotes) primaryVotesByElection.set(t.electionId.toString(), t.primaryVotes);
@@ -1184,8 +1227,10 @@ export async function recordPrimarySnapshots(
     const regionIdForAds = election.seatId
       ? parseSeatId(election.seatId).localRegionId
       : election.state;
-    const campaignSubstrate = usesCampaignRules(election)
-      ? campaignSubstrates.get(`${election.countryId}:${regionIdForAds}`)
+    const campaignSubstrate = usesCampaignAds(election, candidates)
+      ? campaignSubstrates.get(
+          `${election.countryId}:${regionIdForAds}:${usesCampaignRules(election) ? 1 : 0}`
+        )
       : undefined;
     const regionalAdBonuses: Record<string, number> = {};
     const byParty: Record<string, PrimarySnapshotEntry[]> = {};
@@ -1276,8 +1321,13 @@ export async function recordPrimarySnapshots(
         }
       }
 
-      if (!isPresident && campaignSubstrate?.campaignCells && c.targetedAds?.length) {
-        const cells = campaignSubstrate.campaignCells;
+      const adCells =
+        campaignSubstrate?.campaignCells ??
+        nationalCampaignCells.get(
+          `${election.countryId}:${election.state}${usesCampaignRules(election) ? "" : ":0"}`
+        );
+      if (!isPresident && adCells && c.targetedAds?.length) {
+        const cells = adCells;
         regionalAdBonuses[c._id.toString()] = meanAdBonus(
           cells,
           targetedAdBonuses(
@@ -1385,7 +1435,7 @@ export async function recordPrimarySnapshots(
       const regionKey = `${election.countryId ?? "US"}:${accrualRegionId}`;
       const totalPool = accrualRegionId
         ? ((usesCampaignRules(election)
-            ? campaignSubstrates.get(regionKey)?.totalPool
+            ? campaignSubstrates.get(`${regionKey}:1`)?.totalPool
             : undefined) ?? turnoutPoolByRegionKey.get(regionKey))
         : undefined;
       const registration = accrualRegionId ? registrationByRegion.get(accrualRegionId) : undefined;
@@ -1514,7 +1564,9 @@ async function recordPresidentialStatePollingSnapshots(
   const { loadRegionalBonusMaps } = await import("@/lib/primaryRegionalBonusLoader");
   const { ELECTORAL_VOTE_UNITS } = await import("@/lib/constants/states");
   const stateIds = [...new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId))];
-  const campaignContext = presElections.some(usesCampaignRules)
+  const campaignContext = presElections.some((e) =>
+    usesCampaignAds(e, candidatesByElection.get(e._id.toString()) ?? [])
+  )
     ? await loadCampaignProjectionContext(db, stateIds)
     : undefined;
 
@@ -1592,7 +1644,10 @@ async function recordPresidentialStatePollingSnapshots(
         };
       });
       const { byState } = projectPrimaryByState({
-        campaignContext: usesCampaignRules(election) ? campaignContext : undefined,
+        campaignContext:
+          usesCampaignAds(election, enriched) && campaignContext
+            ? { ...campaignContext, campaignRulesVersion: election.campaignRulesVersion ?? 0 }
+            : undefined,
         candidates: enriched,
         candidateMeta,
         stateIds,

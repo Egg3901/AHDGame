@@ -32,9 +32,11 @@ import { loadCampaignAudience } from "./audience";
 import {
   targetedAdBonuses,
   turnoutForElection,
-  usesCampaignRules,
+  usesCampaignAds,
   campaignPrimaryScore,
   meanAdBonus,
+  organizationAdWeight,
+  NG_CAMPAIGN_TURNOUT_RATE,
 } from "./rules";
 
 export async function projectCampaignPoll(
@@ -48,12 +50,7 @@ export async function projectCampaignPoll(
   const election = await db
     .collection<Election>("elections")
     .findOne({ _id: new ObjectId(electionId), countryId: character.countryId });
-  if (!election || !usesCampaignRules(election)) return null;
-  if (
-    election.electionType === "president" &&
-    COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId)
-  )
-    return null;
+  if (!election) return null;
   const candidates = await db
     .collection<ElectionCandidate>("electionCandidates")
     .find({
@@ -71,9 +68,10 @@ export async function projectCampaignPoll(
       countryId: character.countryId,
     }),
   ]);
-  if (!audience) return null;
+  if (!audience || !usesCampaignAds(election, enriched)) return null;
   const substrate = buildGranularElectorateSubstrate({
     ...audience.context,
+    campaignRulesVersion: election.campaignRulesVersion ?? 0,
     turnoutDoc: turnoutForElection(turnoutDoc, election),
     liveTurnouts: resolveTurnout(
       audience.context.statePopulation,
@@ -105,6 +103,31 @@ export async function projectCampaignPoll(
     cells,
     bonusesByCandidate,
   };
+  if (presidential && COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS.has(election.countryId)) {
+    if (election.countryId !== "NG" || inPrimary) return null;
+    const weights = enriched.map((candidate) => {
+      const org =
+        partyOrgs.find(
+          (row) => row.stateId === character.homeState && row.partyId === candidate.party
+        )?.organization ?? 0;
+      return organizationAdWeight(
+        org,
+        meanAdBonus(cells, bonusesByCandidate[candidate.candidateId])
+      );
+    });
+    const sum = weights.reduce((total, weight) => total + weight, 0);
+    const pool = audience.context.statePopulation * NG_CAMPAIGN_TURNOUT_RATE;
+    return {
+      ...base,
+      totalPool: pool,
+      votes: Object.fromEntries(
+        enriched.map((candidate, index) => [
+          candidate.candidateId,
+          sum > 0 ? (pool * weights[index]) / sum : 0,
+        ])
+      ),
+    };
+  }
   if (inPrimary && !presidential) {
     const scores = enriched.map(
       (candidate) =>

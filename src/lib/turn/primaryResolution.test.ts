@@ -970,72 +970,169 @@ describe("recordPrimarySnapshots", () => {
     expect(inserted[0].byParty.DEM[0].characterName).toBe("Alice");
   });
 
-  it("scores ads in a newly versioned regional primary without a seat id", async () => {
-    const electionId = new ObjectId();
-    const characterId = new ObjectId();
-    const candidateId = new ObjectId();
-    db.collection("elections").find.mockReturnValue(
-      makeCursor([
-        {
-          _id: electionId,
-          countryId: "US",
-          state: "CA",
-          electionType: "senate",
-          status: "active",
-          campaignRulesVersion: 1,
-          primaryEndTime: new Date(NOW.getTime() + 100000),
+  it.each([0, 1])(
+    "scores standing ads in a regional primary without a seat id at version %s",
+    async (campaignRulesVersion) => {
+      const electionId = new ObjectId();
+      const characterId = new ObjectId();
+      const candidateId = new ObjectId();
+      db.collection("elections").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: electionId,
+            countryId: "US",
+            state: "CA",
+            electionType: "senate",
+            status: "active",
+            campaignRulesVersion,
+            primaryEndTime: new Date(NOW.getTime() + 100000),
+          },
+        ])
+      );
+      db.collection("electionCandidates").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: candidateId,
+            electionId,
+            characterId,
+            party: "DEM",
+            characterName: "Synthetic",
+            isNPP: false,
+            status: "active",
+          },
+        ])
+      );
+      db.collection("characters").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: characterId,
+            targetedAds: [
+              {
+                stateId: "CA",
+                dimension: "race",
+                bucket: "white",
+                exposure: 1,
+                lastPurchaseTurn: 100,
+                throughTurn: 100,
+              },
+            ],
+            policies: { economic: 0, social: 0 },
+            favorability: 50,
+            politicalInfluence: 50,
+          },
+        ])
+      );
+      db.collection("states").find.mockReturnValue(
+        makeCursor([{ _id: "CA", countryId: "US", population: 1_000_000 }])
+      );
+      db.collection("stateDemographics").find.mockReturnValue(
+        makeCursor([
+          { _id: "CA", countryId: "US", categoryWeights: {}, groups: {}, lastUpdated: new Date(0) },
+        ])
+      );
+      const { calcPrimaryScore } = await import("@/lib/primaryScore");
+      vi.mocked(calcPrimaryScore).mockReturnValue(50);
+      const { recordPrimarySnapshots } = await import("./primaryResolution");
+      expect(await recordPrimarySnapshots(NOW, 100)).toBe(1);
+      const inserted = db.collection("primarySnapshots").insertMany.mock.calls[0][0];
+      expect(inserted[0].byParty.DEM[0].primaryScore).toBeGreaterThan(50);
+      expect(db.collection("demographicDefaults").find).toHaveBeenCalledTimes(1);
+    }
+  );
+  it.each([0, 1])(
+    "scores regional standing ads in a nationwide Irish primary at version %s",
+    async (campaignRulesVersion) => {
+      const { buildGranularElectorateSubstrate } =
+        await import("@/lib/demographics/granularElectorate");
+      const cells = buildGranularElectorateSubstrate({
+        countryId: "IE",
+        stateId: "DUB",
+        campaignRulesVersion: 1,
+        currentTurn: 100,
+        statePopulation: 1_000_000,
+        demographics: {
+          _id: "DUB",
+          countryId: "IE",
+          categoryWeights: {},
+          groups: {},
+          lastUpdated: new Date(0),
         },
-      ])
-    );
-    db.collection("electionCandidates").find.mockReturnValue(
-      makeCursor([
-        {
-          _id: candidateId,
-          electionId,
-          characterId,
-          party: "DEM",
-          characterName: "Synthetic",
-          isNPP: false,
-          status: "active",
-          targetedAds: [
-            {
-              stateId: "CA",
-              dimension: "race",
-              bucket: "white",
-              exposure: 1,
-              lastPurchaseTurn: 100,
-              throughTurn: 100,
-            },
-          ],
-        },
-      ])
-    );
-    db.collection("characters").find.mockReturnValue(
-      makeCursor([
-        {
-          _id: characterId,
-          policies: { economic: 0, social: 0 },
-          favorability: 50,
-          politicalInfluence: 50,
-        },
-      ])
-    );
-    db.collection("states").find.mockReturnValue(
-      makeCursor([{ _id: "CA", countryId: "US", population: 1_000_000 }])
-    );
-    db.collection("stateDemographics").find.mockReturnValue(
-      makeCursor([
-        { _id: "CA", countryId: "US", categoryWeights: {}, groups: {}, lastUpdated: new Date(0) },
-      ])
-    );
-    const { calcPrimaryScore } = await import("@/lib/primaryScore");
-    vi.mocked(calcPrimaryScore).mockReturnValue(50);
-    const { recordPrimarySnapshots } = await import("./primaryResolution");
-    expect(await recordPrimarySnapshots(NOW, 100)).toBe(1);
-    const inserted = db.collection("primarySnapshots").insertMany.mock.calls[0][0];
-    expect(inserted[0].byParty.DEM[0].primaryScore).toBeGreaterThan(50);
-    expect(db.collection("demographicDefaults").find).toHaveBeenCalledTimes(1);
-  });
+        categories: [],
+        enriched: [],
+      })!.campaignCells!;
+      const [dimension, bucket] = Object.entries(cells[0].buckets)[0];
+      const electionId = new ObjectId();
+      const characterId = new ObjectId();
+      const candidateId = new ObjectId();
+      db.collection("elections").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: electionId,
+            countryId: "IE",
+            state: "IE",
+            electionType: "uachtaran",
+            status: "active",
+            campaignRulesVersion,
+            primaryEndTime: new Date(NOW.getTime() + 100000),
+          },
+        ])
+      );
+      db.collection("electionCandidates").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: candidateId,
+            electionId,
+            characterId,
+            party: "DEM",
+            characterName: "Synthetic",
+            isNPP: false,
+            status: "active",
+          },
+        ])
+      );
+      db.collection("characters").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: characterId,
+            targetedAds: [
+              {
+                stateId: "DUB",
+                dimension,
+                bucket,
+                exposure: 1,
+                lastPurchaseTurn: 100,
+                throughTurn: 100,
+              },
+            ],
+            policies: { economic: 0, social: 0 },
+            favorability: 50,
+            politicalInfluence: 50,
+          },
+        ])
+      );
+      db.collection("states").find.mockReturnValue(
+        makeCursor([{ _id: "DUB", countryId: "IE", population: 1_000_000 }])
+      );
+      db.collection("stateDemographics").find.mockReturnValue(
+        makeCursor([
+          {
+            _id: "DUB",
+            countryId: "IE",
+            categoryWeights: {},
+            groups: {},
+            lastUpdated: new Date(0),
+          },
+        ])
+      );
+      const { calcPrimaryScore } = await import("@/lib/primaryScore");
+      vi.mocked(calcPrimaryScore).mockReturnValue(50);
+      const { recordPrimarySnapshots } = await import("./primaryResolution");
+      expect(await recordPrimarySnapshots(NOW, 100)).toBe(1);
+      const inserted = db.collection("primarySnapshots").insertMany.mock.calls[0][0];
+      expect(inserted[0].byParty.DEM[0].primaryScore).toBeGreaterThan(50);
+      expect(db.collection("demographicDefaults").find).toHaveBeenCalledTimes(2);
+    }
+  );
 });
 
 describe("accumulateGeneralElectionVotes", () => {

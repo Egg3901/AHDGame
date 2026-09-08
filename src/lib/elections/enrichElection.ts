@@ -11,10 +11,11 @@
  * @param db         - Database connection (needed for full-view tally operations)
  * @param adjacentElections - For nav; pass null/undefined in summary mode
  */
+import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
 
 import { PRIMARY_SHARE_SOFTMAX_TEMPERATURE } from "@/lib/primaryScore";
 import {
-  usesCampaignRules,
+  usesCampaignAds,
   meanAdBonus,
   targetedAdBonuses,
   campaignPrimaryScore,
@@ -22,6 +23,7 @@ import {
 import {
   loadCampaignProjectionContext,
   loadCampaignAudience,
+  loadNationalCampaignCells,
 } from "@/lib/campaignTargeting/audience";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
 import { blocListQuota, blocListQuotaForGovernment } from "@/lib/constants/blocList";
@@ -164,8 +166,11 @@ async function applyPresidentialPrimaryDisplay(
   // this display path stays coherent with the race's actual calendar even if a
   // future schedule ever changes membership.
   const staggerStateIds = getAllStaggerStates(schedule);
-  const campaignContext = usesCampaignRules({ campaignRulesVersion })
-    ? await loadCampaignProjectionContext(db, staggerStateIds)
+  const campaignContext = usesCampaignAds({ campaignRulesVersion }, candidates)
+    ? {
+        ...(await loadCampaignProjectionContext(db, staggerStateIds)),
+        campaignRulesVersion: campaignRulesVersion ?? 0,
+      }
     : undefined;
   const [categories, states, demographics, resolvedStatePartyOrgs, engineEnriched] =
     await Promise.all([
@@ -422,6 +427,10 @@ export async function _enrichElection(
     tally,
     latestPrimarySnapshot,
   } = deps;
+  applyStandingAds(
+    candidates,
+    new Map(characters.map((character) => [character._id.toString(), character]))
+  );
 
   const electionOid = election._id;
   const countryId = election.countryId ?? "US";
@@ -527,16 +536,25 @@ export async function _enrichElection(
   // may remap this later to the raw candidacy-party buckets for synchronization.
   const partyMap = new Map(parties.map((p) => [String(p.sequentialId), p]));
   let primaryCandidates = enrichedWithYou;
-  if (
-    inPrimary &&
-    !isPresident &&
-    usesCampaignRules(election) &&
-    candidates.some((candidate) => candidate.targetedAds?.length)
-  ) {
+  if (inPrimary && !isPresident && candidates.some((candidate) => candidate.targetedAds?.length)) {
     const cells =
       deps.campaignCells !== undefined
         ? deps.campaignCells
-        : (await loadCampaignAudience(db, election.countryId, election.state))?.cells;
+        : election.state === election.countryId
+          ? await loadNationalCampaignCells(
+              db,
+              election.countryId,
+              election.campaignRulesVersion ?? 0
+            )
+          : (
+              await loadCampaignAudience(
+                db,
+                election.countryId,
+                election.state,
+                undefined,
+                election.campaignRulesVersion ?? 0
+              )
+            )?.cells;
     if (cells?.length) {
       const rawById = new Map(candidates.map((candidate) => [candidate._id.toString(), candidate]));
       const ownerPositionById = new Map([

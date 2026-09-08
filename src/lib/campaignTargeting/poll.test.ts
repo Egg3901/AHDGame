@@ -100,7 +100,7 @@ describe("campaign poll election parity", () => {
     const f = fixture("senate", false);
     delete f.election.campaignRulesVersion;
     expect(await f.run()).toBeNull();
-    expect(fetchEnrichedCandidates).not.toHaveBeenCalled();
+    expect(fetchEnrichedCandidates).toHaveBeenCalled();
   });
 
   it("scopes regional primary candidates to the polling character's party", async () => {

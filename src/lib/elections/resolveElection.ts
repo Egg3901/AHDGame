@@ -11,8 +11,9 @@
  *   resolveElections()  - batch (one round of queries, then _enrichElection)
  *   _enrichElection()   - low-level enrichment on pre-fetched data
  */
-
 import { usesCampaignRules } from "@/lib/campaignTargeting/rules";
+import { applyStandingAds } from "@/lib/campaignTargeting/standingAds";
+
 import { loadRegionalCampaignCells } from "@/lib/campaignTargeting/audience";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import type { Db, ObjectId as MongoObjectId } from "mongodb";
@@ -294,6 +295,9 @@ export async function resolveElections(
       : Promise.resolve([] as NPP[]),
   ]);
 
+  const adOwners = new Map(characters.map((character) => [character._id.toString(), character]));
+  for (const candidates of candidatesByElection.values()) applyStandingAds(candidates, adOwners);
+
   const tallyByElection = new Map<string, ElectionVoteTally>(
     talliesRaw.map((t) => [t.electionId.toString(), t])
   );
@@ -494,7 +498,6 @@ export async function resolveElections(
           (election) =>
             election.status === "active" &&
             election.electionType !== "president" &&
-            usesCampaignRules(election) &&
             !isPrimaryEnded(election, gameTime.currentTurn, gameTime) &&
             candidatesByElection
               .get(election._id.toString())
@@ -508,8 +511,23 @@ export async function resolveElections(
         db,
         await db
           .collection<State>("states")
-          .find({ _id: { $in: advertisedRegions }, countryId: { $in: uniqueCountryIds } })
-          .toArray()
+          .find({
+            countryId: { $in: uniqueCountryIds },
+            $or: [
+              { _id: { $in: advertisedRegions } },
+              {
+                countryId: {
+                  $in: elections
+                    .filter((e) => e.state === e.countryId && advertisedRegions.includes(e.state))
+                    .map((e) => e.countryId),
+                },
+              },
+            ],
+          })
+          .toArray(),
+        new Set(
+          elections.filter((e) => !usesCampaignRules(e)).map((e) => `${e.countryId}:${e.state}`)
+        )
       )
     : new Map();
 
@@ -540,7 +558,10 @@ export async function resolveElections(
       const snapsLimited = isFull ? snapsForElection.slice(-72) : [];
 
       const deps: ElectionDeps = {
-        campaignCells: campaignCellsByRegion.get(`${electionCountryId}:${election.state}`) ?? null,
+        campaignCells:
+          campaignCellsByRegion.get(
+            `${electionCountryId}:${election.state}${usesCampaignRules(election) ? "" : ":0"}`
+          ) ?? null,
         candidates,
         characters: electionChars,
         npps: electionNpps,

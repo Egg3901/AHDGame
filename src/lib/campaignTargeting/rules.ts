@@ -22,6 +22,8 @@ export interface Position {
 }
 
 export interface CampaignCell extends Position {
+  /** Present when combining regional cells into a nationwide electorate. */
+  stateId?: string;
   id: string;
   share: number;
   turnout: number;
@@ -49,6 +51,24 @@ const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n
 
 export function usesCampaignRules(election: { campaignRulesVersion?: number }): boolean {
   return (election.campaignRulesVersion ?? 0) >= CAMPAIGN_RULES_VERSION;
+}
+
+/** Ads can be bought outside a race, independently of its turnout rules version. */
+export function usesCampaignAds(
+  election: { campaignRulesVersion?: number },
+  candidates: ReadonlyArray<{ targetedAds?: TargetedAd[] }>
+): boolean {
+  return (
+    usesCampaignRules(election) ||
+    candidates.some((candidate) => Boolean(candidate.targetedAds?.length))
+  );
+}
+
+/** Preserve old candidate flights while sharing standing exposure across races. */
+export function combinedAds(...sources: (TargetedAd[] | undefined)[]): TargetedAd[] {
+  return [
+    ...new Map(sources.flatMap((ads) => ads ?? []).map((ad) => [JSON.stringify(ad), ad])).values(),
+  ];
 }
 
 /** Stamp only newly inserted races; never retrofit a race already in progress. */
@@ -178,17 +198,22 @@ export function targetedAdBonuses(
   stateId: string,
   turn: number
 ): Record<string, number> {
+  const regions = new Set(cells.map((cell) => cell.stateId).filter(Boolean));
   const active = ads
-    .filter((ad) => ad.stateId === stateId)
+    .filter((ad) => ad.stateId === stateId || regions.has(ad.stateId))
     .map((ad) => ({
       ad,
-      audience: targetAudience(cells, ad),
+      audience: targetAudience(
+        regions.size ? cells.filter((cell) => cell.stateId === ad.stateId) : cells,
+        ad
+      ),
       coverage: 1 - Math.exp(-adExposure(ad, turn)),
     }));
   return Object.fromEntries(
     cells.map((cell) => {
       let remaining = 1;
       for (const { ad, audience, coverage } of active) {
+        if (cell.stateId && cell.stateId !== ad.stateId) continue;
         if (audience) remaining *= 1 - coverage * campaignResponse(candidate, cell, ad, audience);
       }
       return [cell.id, AD_BONUS_CAP * (1 - remaining)];
@@ -250,4 +275,10 @@ export function meanAdBonus(cells: CampaignCell[], bonuses: Record<string, numbe
 /** Express a weight bonus in a score-softmax system without changing its base weights. */
 export function campaignPrimaryScore(score: number, bonus: number, temperature: number): number {
   return score + temperature * Math.log1p(Math.max(0, Math.min(AD_BONUS_CAP, bonus)));
+}
+
+/** Nigeria's organization-based presidential lane uses the same bounded ad bonus. */
+export const NG_CAMPAIGN_TURNOUT_RATE = 0.32;
+export function organizationAdWeight(organization: number, bonus: number): number {
+  return Math.max(5, organization) * (1 + clamp(bonus, 0, AD_BONUS_CAP));
 }
