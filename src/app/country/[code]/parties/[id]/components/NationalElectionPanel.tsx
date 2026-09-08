@@ -217,6 +217,15 @@ export function NationalElectionPanel({
           </div>
         )}
 
+        {/* Under the committee method a member may stand but not vote. Say so,
+            rather than silently rendering no Vote buttons (ticket #1291). */}
+        {isVoting && canRun && !canVote && electionMethod === "committee" && (
+          <div className="rounded-lg border border-card-border bg-card-elevated p-3 text-xs text-muted">
+            This party elects its leadership by committee vote. You can stand for a seat, but only
+            committee members and national leadership cast ballots in this race.
+          </div>
+        )}
+
         <div>
           <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted flex items-center gap-2">
             Candidates
