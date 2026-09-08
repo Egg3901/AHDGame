@@ -7,6 +7,8 @@
  * already running in the turn loop, just scoped to caucus membership.
  */
 
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+
 import { getDb } from "@/lib/mongodb";
 import type { Caucus, CaucusMembership, Character, GameConfig, NPP, State } from "@/lib/db/types";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -37,6 +39,7 @@ export async function processCaucusTax(
   turnNumber: number
 ): Promise<CaucusTaxResult> {
   const db = await getDb();
+  const campaignRates = await loadCampaignCurrencyRates(db);
 
   const taxedCaucuses = await db
     .collection<Caucus>("caucuses")
@@ -110,9 +113,9 @@ export async function processCaucusTax(
           : 0;
         // Generation constants are anchor (₳); campaign funds are stored LOCAL
         // and decoupled from live forex. Denominate income to local at the
-        // frozen base INITIAL_RATES scale (US ×1.0), then tax it — the tax and
+        // frozen world-seeded currency basis (US ×1.0), then tax it ; the tax and
         // the debit are both LOCAL home-currency amounts.
-        const income = campaignAnchorToLocal(incomeAnchor, c.countryId ?? "US");
+        const income = campaignAnchorToLocal(incomeAnchor, c.countryId ?? "US", campaignRates);
         if (income <= 0) continue;
         const tax = Math.floor((income * caucus.taxRate) / 100);
         if (tax <= 0) continue;
@@ -177,7 +180,7 @@ export async function processCaucusTax(
         const funds = n.funds ?? 0;
         const state = stateMap.get(n.homeState);
         if (!state || funds <= 0) continue;
-        const localRate = campaignLocalRate(n.countryId ?? "US");
+        const localRate = campaignLocalRate(n.countryId ?? "US", campaignRates);
         const currentFundsAnchor = localRate > 0 ? funds / localRate : funds;
         const incomeAnchor = projectNppGeneration({
           population: state.population,
@@ -185,7 +188,7 @@ export async function processCaucusTax(
           currentFundsLocal: currentFundsAnchor,
           nppEconomyEnabled: config?.nppEconomyEnabled !== false,
         });
-        const incomeLocal = campaignAnchorToLocal(incomeAnchor, n.countryId ?? "US");
+        const incomeLocal = campaignAnchorToLocal(incomeAnchor, n.countryId ?? "US", campaignRates);
         const tax = Math.floor((incomeLocal * caucus.taxRate) / 100);
         if (tax <= 0) continue;
         nppDebits.push({ npp: n, tax });

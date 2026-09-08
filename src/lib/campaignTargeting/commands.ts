@@ -3,6 +3,8 @@
  * regional flights with personal campaign funds and actions; every buyer shares
  * the same candidate's per-target pacing limit in purchaseTargetedAds.
  */
+
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { ObjectId, type Db, type ClientSession } from "mongodb";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import type { AuthUserWithCharacter } from "@/lib/auth";
@@ -98,7 +100,8 @@ export async function quoteTargetedAds(
   if (!owner) throw notFound("Candidate not found");
   const position = { economicLean: owner.policies.economic, socialLean: owner.policies.social };
   const forex = await isForexEnabled();
-  const rate = forex ? campaignLocalRate(election.countryId) : 1;
+  const campaignRates = await loadCampaignCurrencyRates(db);
+  const rate = forex ? campaignLocalRate(election.countryId, campaignRates) : 1;
   const ads = candidate.targetedAds ?? [];
   const unique = new Map<string, CampaignTarget>();
   for (const cell of audience.cells)

@@ -279,7 +279,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // same turn (via unionizationDriftTarget), sequencing after keeps the
         // read using last turn's persisted value, consistent with the rest of
         // the labour system's one-turn lag.
-        await runtime.runPhase("unionsTurn", () => processUnionsTurn(context.db));
+        await runtime.runPhase("unionsTurn", () => processUnionsTurn(context.db, newTurn));
 
         // NPP industrial-relations parity. This elects NPP union leaders and
         // opens employer-scoped campaigns for them, and lets autonomous unions

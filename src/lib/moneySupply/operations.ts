@@ -17,6 +17,7 @@ import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 import { accountId } from "@/lib/ledger/accounts";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
+import { treasuryAdvanceMoneyDelta } from "./rules/assemble";
 import { planOpenMarketOperation } from "./quantitativeEasing";
 import { bondPoolCurrency, creditBondPool, debitBondPoolGated } from "@/lib/bonds/marketPool";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
@@ -65,8 +66,6 @@ export async function executeMonetaryOperation(
       marketPrice: bond.marketPrice,
     });
     if (plan.units <= 0) throw new Error("No bond units available for this operation");
-    if (input.type === "qt" && plan.consideration > (bank.externalBroadMoney ?? 0))
-      throw new Error("QT would retire more external deposits than remain");
     const supportDelta = plan.qeSupportRatio - (bond.qeSupportRatio ?? 0);
     const marketPrice = Math.min(2, Math.max(0.05, bond.marketPrice * (1 + supportDelta * 0.5)));
     // The float is the bond market pool's inventory. QE buys it from the pool,
@@ -105,7 +104,6 @@ export async function executeMonetaryOperation(
       createdAt: now,
     };
     await persistBankOperation(db, bankId, record, {
-      externalBroadMoney: plan.moneySupplyDelta,
       netMoneyCreatedLifetime: plan.moneySupplyDelta,
     });
     return record;
@@ -151,7 +149,7 @@ export async function executeMonetaryOperation(
       type: input.type,
       turn: input.turn,
       amount,
-      moneySupplyDelta: amount,
+      moneySupplyDelta: treasuryAdvanceMoneyDelta(before, amount),
       reserveDelta: 0,
       actorName: input.actorName,
       reason: input.reason,
@@ -172,7 +170,7 @@ export async function executeMonetaryOperation(
       type: input.type,
       turn: input.turn,
       amount: advance.distributed,
-      moneySupplyDelta: advance.distributed,
+      moneySupplyDelta: 0,
       reserveDelta: 0,
       actorName: input.actorName,
       reason: input.reason,

@@ -173,18 +173,18 @@ export async function loadLabourRelationsPoliticalNudgesByCountry(
         }
       )
       .toArray(),
-    // Union dues v1: only unions actually running something can produce a
-    // nudge, skips the (common) idle-slate union at the query level.
+    // Only unions with a recorded payment can produce service nudges.
+    // The selected slate can differ from the already purchased entitlement.
     db
       .collection<Union>("unions")
       .find(
-        { suspended: { $ne: true }, activeServices: { $exists: true, $not: { $size: 0 } } },
+        { suspended: { $ne: true }, serviceReceipts: { $exists: true } },
         { projection: { countryId: 1, ...UNION_SERVICE_FUNDING_PROJECTION } }
       )
       .toArray(),
   ]);
 
-  const fundedServices = await loadFundedUnionServices(db, unions);
+  const fundedServices = loadFundedUnionServices(unions, currentTurn);
   return buildLabourRelationsPoliticalNudges(
     campaigns,
     currentTurn,

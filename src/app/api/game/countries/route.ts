@@ -8,6 +8,7 @@
 import { NextResponse } from "next/server";
 import { getEnabledCountryIds } from "@/lib/countryAccess";
 import { handleRouteError } from "@/lib/api/errors";
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { getDb } from "@/lib/mongodb";
 import { getGameState } from "@/lib/gameState";
 import { COUNTRY_CONFIGS, getCountryDisplayName } from "@/lib/constants/countries";
@@ -76,6 +77,7 @@ export async function GET() {
   try {
     const [db, enabledIds] = await Promise.all([getDb(), getEnabledCountryIds()]);
 
+    const baseRates = await loadCampaignCurrencyRates(db);
     const enabledSet = new Set(enabledIds.map((id) => id.toUpperCase()));
 
     // Get active player count per country (characters tied to non-retired users)
@@ -132,6 +134,7 @@ export async function GET() {
     return NextResponse.json(
       {
         countries,
+        baseRates,
         gameDate: currentDateText,
         startDate: startDateText,
         flavorText,

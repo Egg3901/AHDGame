@@ -106,7 +106,8 @@ describe("snapshotMoneySupply", () => {
     const first = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
     expect(first.corporateLiquid).toBe(10_000_000_000);
     expect(first.governmentLiquid).toBe(0); // indebted treasury is not money
-    expect(first.householdLiquid).toBeGreaterThan(0);
+    expect(first.estimatedHouseholdLiquid).toBeGreaterThan(0);
+    expect(first.householdLiquid).toBe(0);
     expect(first.m2).toBeGreaterThan(first.externalBroadMoney);
 
     db.collectionMocks.corporations.find.mockReturnValue(
@@ -163,7 +164,9 @@ describe("snapshotMoneySupply", () => {
     expect(plRow.netMoneyCreatedLifetime).toBe(0);
     // The point of the fix — PL's household money (derived from its own
     // population/income, independent of any central bank) actually landed.
-    expect(plRow.householdLiquid).toBeGreaterThan(0);
+    expect(plRow.estimatedHouseholdLiquid).toBeGreaterThan(0);
+    expect(plRow.householdLiquid).toBe(0);
+    expect(plRow.m2).toBe(500_000_000);
     expect(rows.length).toBe(2);
     expect(written).toBe(2);
   });

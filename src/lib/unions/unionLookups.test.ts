@@ -13,6 +13,7 @@ function world(overrides: Partial<Union> = {}, workers = 100) {
     treasury: 1000,
     duesPerWorkerAnnual: 0,
     activeServices: ["healthFund"],
+    serviceReceipts: [{ turn: 100, services: ["healthFund"] }],
     ...overrides,
   };
   const db = {
@@ -39,14 +40,14 @@ function world(overrides: Partial<Union> = {}, workers = 100) {
 
 describe("union service effects match funded operations", () => {
   it.each([
-    ["unfunded", { treasury: 0 }],
+    ["unfunded", { serviceReceipts: [] }],
     ["vacant", { ownerId: null }],
     ["suspended", { suspended: true }],
-  ] as const)(
+  ] satisfies [string, Partial<Union>][])(
     "a %s union keeps approval but supplies no service effects",
     async (_label, overrides) => {
       const { union, db } = world(overrides);
-      const effects = await buildUnionEffectsById(db);
+      const effects = await buildUnionEffectsById(db, 100);
       expect(effects.get(union._id.toString())).toEqual({ approval: 75, activeServices: [] });
       const politics = await loadLabourRelationsPoliticalNudgesByCountry(db, 100);
       expect(politics.get("US")?.get("economy.workerSecurity") ?? 0).toBe(0);
@@ -54,16 +55,18 @@ describe("union service effects match funded operations", () => {
   );
 
   it("a union with no members supplies no service effects", async () => {
-    const { union, db } = world({}, 0);
-    expect((await buildUnionEffectsById(db)).get(union._id.toString())?.activeServices).toEqual([]);
+    const { union, db } = world({ serviceReceipts: [] }, 0);
+    expect(
+      (await buildUnionEffectsById(db, 100)).get(union._id.toString())?.activeServices
+    ).toEqual([]);
     expect((await loadLabourRelationsPoliticalNudgesByCountry(db, 100)).size).toBe(0);
   });
 
   it("funded services still soften strikes and improve worker security", async () => {
     const { union, db } = world();
-    expect((await buildUnionEffectsById(db)).get(union._id.toString())?.activeServices).toEqual([
-      "healthFund",
-    ]);
+    expect(
+      (await buildUnionEffectsById(db, 100)).get(union._id.toString())?.activeServices
+    ).toEqual(["healthFund"]);
     expect(
       (await loadLabourRelationsPoliticalNudgesByCountry(db, 100))
         .get("US")
@@ -71,10 +74,14 @@ describe("union service effects match funded operations", () => {
     ).toBe(1.2);
   });
 
-  it("includes this turn's dues when deciding whether services are funded", async () => {
-    const { union, db } = world({ treasury: 0, duesPerWorkerAnnual: 10 });
-    expect((await buildUnionEffectsById(db)).get(union._id.toString())?.activeServices).toEqual([
-      "healthFund",
-    ]);
+  it("does not grant services from legacy cash or expected dues without a receipt", async () => {
+    const { union, db } = world({
+      treasury: 1000,
+      duesPerWorkerAnnual: 10,
+      serviceReceipts: undefined,
+    });
+    expect(
+      (await buildUnionEffectsById(db, 100)).get(union._id.toString())?.activeServices
+    ).toEqual([]);
   });
 });

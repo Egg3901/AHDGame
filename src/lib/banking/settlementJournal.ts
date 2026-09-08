@@ -301,7 +301,7 @@ export async function settleTransition(
         _id: transition.key,
         kind: transition.kind,
         turn: transition.turn,
-        status: "applied",
+        status: records.length > 0 ? "partial" : "applied",
         legs: [],
         createdAt: new Date(),
         completedAt: new Date(),
@@ -319,10 +319,16 @@ export async function settleTransition(
     }
   }
 
-  return finishProjections(db, transition, {
-    ...result,
-    status: move.status === "replayed" ? "replayed" : "applied",
-  });
+  return finishProjections(
+    db,
+    transition,
+    {
+      ...result,
+      status: move.status === "replayed" ? "replayed" : "applied",
+    },
+    {},
+    move.status === "applied" ? records : undefined
+  );
 }
 
 /**
@@ -345,7 +351,8 @@ async function finishProjections(
   db: Db,
   transition: BankingTransition,
   result: SettlementResult,
-  options: FinishOptions = {}
+  options: FinishOptions = {},
+  ownedRecords?: JournalProjectionRecord[]
 ): Promise<SettlementResult> {
   const journal = db.collection<{ _id: string } & JournalExtension>(MONEY_MOVE_COLLECTION);
 
@@ -355,9 +362,12 @@ async function finishProjections(
   // different shortfall); the projections that were claimed with the key are
   // the ones that finish, never the recomputed ones. Records without a
   // projection list (written by the primitive alone) fall back to the caller.
-  const existing = await journal.findOne({ _id: transition.key });
-  let records: JournalProjectionRecord[] = existing?.projections ?? [];
-  if (records.length === 0) {
+  // Only the successful claimant may use its own immutable insert payload.
+  // Replays and recovery always load the original durable quote.
+  const existing =
+    ownedRecords === undefined ? await journal.findOne({ _id: transition.key }) : null;
+  let records = ownedRecords ?? existing?.projections;
+  if (records === undefined) {
     records = transition.projections.map((projection) => ({
       collection: projection.collection,
       note: projection.note,
@@ -380,6 +390,23 @@ async function finishProjections(
 
   if (records.length === 0) return result;
 
+  // The first claimant can reserve every projection in one atomic write.
+  // Effects still land in order and each target keeps its independent stamp.
+  // A racing replay that claimed any projection makes this CAS fail, so the
+  // ordinary per-projection path remains authoritative for that case.
+  let ownsAllProjections = false;
+  if (ownedRecords && records.length > 1) {
+    const claimedAt = new Date();
+    const claim = await journal.updateOne(
+      {
+        _id: transition.key,
+        ...Object.fromEntries(records.map((_, i) => [`projections.${i}.claimedAt`, null])),
+      },
+      { $set: Object.fromEntries(records.map((_, i) => [`projections.${i}.claimedAt`, claimedAt])) }
+    );
+    ownsAllProjections = claim.matchedCount === 1;
+  }
+
   let stuck: string | undefined;
   for (let i = 0; i < records.length; i += 1) {
     const record = records[i];
@@ -395,12 +422,14 @@ async function finishProjections(
 
     // Claim first. On a fresh record the claim is a plain set; on a retry of
     // a claimed insert it is a no-op that still matches.
-    const claim = await journal.updateOne(
-      record?.claimedAt
-        ? { _id: transition.key }
-        : { _id: transition.key, [`projections.${i}.claimedAt`]: null },
-      { $set: { [`projections.${i}.claimedAt`]: new Date() } }
-    );
+    const claim = ownsAllProjections
+      ? { matchedCount: 1 }
+      : await journal.updateOne(
+          record?.claimedAt
+            ? { _id: transition.key }
+            : { _id: transition.key, [`projections.${i}.claimedAt`]: null },
+          { $set: { [`projections.${i}.claimedAt`]: new Date() } }
+        );
     if (claim.matchedCount !== 1) {
       // Somebody else claimed it between our read and our write. They will
       // apply it (or leave it for recovery); this attempt must not.
@@ -462,6 +491,20 @@ async function finishProjections(
  * Journal records whose legs landed but whose projections did not all land.
  * The recovery worker's queue.
  */
+export function unfinishedSettlementFilter(): Record<string, unknown> {
+  return {
+    $or: [
+      { status: "partial" },
+      // Older records prematurely marked cash delivery as fully applied.
+      {
+        status: "applied",
+        "projections.0": { $exists: true },
+        projectionsCompletedAt: { $exists: false },
+      },
+    ],
+  };
+}
+
 export async function listUnfinishedProjections(
   db: Db,
   limit = 100
@@ -470,7 +513,7 @@ export async function listUnfinishedProjections(
     .collection<{ _id: string; kind: string; turn?: number } & JournalExtension>(
       MONEY_MOVE_COLLECTION
     )
-    .find({ status: "partial", projections: { $exists: true } })
+    .find({ ...unfinishedSettlementFilter(), projections: { $exists: true } })
     .sort({ createdAt: 1 })
     .limit(Math.max(1, limit))
     .toArray();

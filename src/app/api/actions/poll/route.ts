@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { turnoutForElection, usesCampaignRules } from "@/lib/campaignTargeting/rules";
 import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
 import { NextResponse } from "next/server";
@@ -58,6 +59,7 @@ export async function GET(request: NextRequest) {
     const pollType = request.nextUrl.searchParams.get("type") === "large" ? "large" : "small";
 
     const db = await getDb();
+    const campaignRates = await loadCampaignCurrencyRates(db);
 
     // Resolve active character (admin accounts may have multiple characters)
     const userDoc = await db.collection<User>("users").findOne({ _id: new ObjectId(user.userId) });
@@ -186,8 +188,10 @@ export async function GET(request: NextRequest) {
     );
 
     // Campaign funds are decoupled from live forex — poll costs (anchor
-    // constants) convert to local at the frozen base INITIAL_RATES scale.
-    const campaignRate = forexEnabled ? campaignLocalRate(character.countryId ?? "US") : 1;
+    // constants) convert to local at the frozen world-seeded currency basis.
+    const campaignRate = forexEnabled
+      ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+      : 1;
 
     const base = {
       pollType,
@@ -254,6 +258,7 @@ export async function POST(request: NextRequest) {
     const fundCost = pollType === "large" ? LARGE_POLL_COST : SMALL_POLL_COST;
 
     const db = await getDb();
+    const campaignRates = await loadCampaignCurrencyRates(db);
 
     // Resolve active character (admin accounts may have multiple characters)
     const userDoc = await db.collection<User>("users").findOne({ _id: new ObjectId(user.userId) });
@@ -270,8 +275,10 @@ export async function POST(request: NextRequest) {
 
     const gameState = await getGameState();
     // Campaign funds are decoupled from live forex — poll costs convert at the
-    // frozen base INITIAL_RATES scale, never the live exchangeRates.
-    const campaignRate = forexEnabled ? campaignLocalRate(character.countryId ?? "US") : 1;
+    // frozen world-seeded currency basis, never the live exchangeRates.
+    const campaignRate = forexEnabled
+      ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+      : 1;
 
     const validation = canPerformAction(character, actionKey, undefined, {
       forexEnabled,

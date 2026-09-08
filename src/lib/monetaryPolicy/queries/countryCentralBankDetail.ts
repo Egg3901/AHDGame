@@ -1,3 +1,4 @@
+import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
@@ -408,7 +409,7 @@ export async function loadCountryCentralBankDetail(params: {
       policyStancePressure: bank.policyInflationPressure ?? 0,
       moneySupplyGrowthPct:
         gameConfig?.moneySupplyEnabled === true
-          ? (moneyForBreakdown?.annualizedM2GrowthPct ?? breakdownGdpGrowth)
+          ? (currentMoneyGrowth(moneyForBreakdown) ?? breakdownGdpGrowth)
           : breakdownGdpGrowth,
     });
   const {
@@ -704,9 +705,18 @@ export async function loadCountryCentralBankDetail(params: {
         gameConfig?.moneySupplyEnabled === true && moneySupply
           ? {
               ...moneySupply,
+              annualizedM2GrowthPct: currentMoneyGrowth(moneySupply),
               operations: bank.monetaryOperations ?? [],
               lastOperationTurn: bank.lastMonetaryOperationTurn ?? null,
-              lastPolicyEvaluation: bank.lastMonetaryPolicyEvaluation ?? null,
+              lastPolicyEvaluation: bank.lastMonetaryPolicyEvaluation
+                ? {
+                    ...bank.lastMonetaryPolicyEvaluation,
+                    annualizedM2GrowthPct: currentMoneyGrowth(bank.lastMonetaryPolicyEvaluation),
+                    moneyGrowthReliable:
+                      currentMoneyGrowth(bank.lastMonetaryPolicyEvaluation) != null &&
+                      bank.lastMonetaryPolicyEvaluation.moneyGrowthReliable,
+                  }
+                : null,
               eligibleBonds: eligibleQeBonds.map((bond) => ({
                 ...bond,
                 _id: bond._id.toString(),

@@ -1,7 +1,7 @@
 /**
  * Represented workers respond to their union's approval and funded services.
  * buildUnionEffectsById preserves approval during a vacancy or suspension,
- * while services require a leader and enough money to cover their members.
+ * while services require a leader and a receipt paid for the requested turn.
  */
 import type { Db } from "mongodb";
 import type { Union } from "@/lib/db/types";
@@ -33,13 +33,14 @@ export interface RepresentingUnionEffects {
  * programme at an owned, operating union, matching the union turn's charges.
  */
 export async function buildUnionEffectsById(
-  db: Db
+  db: Db,
+  currentTurn: number
 ): Promise<Map<string, RepresentingUnionEffects>> {
   const unions = await db
     .collection<Union>("unions")
     .find({}, { projection: { _id: 1, approval: 1, ...UNION_SERVICE_FUNDING_PROJECTION } })
     .toArray();
-  const fundedServices = await loadFundedUnionServices(db, unions);
+  const fundedServices = loadFundedUnionServices(unions, currentTurn);
   const out = new Map<string, RepresentingUnionEffects>();
   for (const u of unions) {
     out.set(u._id.toString(), {
