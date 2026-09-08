@@ -1,3 +1,7 @@
+/**
+ * Sector operations turn owned capacity into sales, jobs and operating profit.
+ * processSector prices production, upkeep and policy effects while preserving payroll.
+ */
 import {
   specializationMaintenance,
   specializationPayrollModifier,
