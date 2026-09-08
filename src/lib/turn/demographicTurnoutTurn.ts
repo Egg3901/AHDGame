@@ -15,6 +15,7 @@ import type {
   GameConfig,
 } from "@/lib/db/types";
 import { POOL_SENTINEL_PARTY_ID } from "@/lib/db/types";
+import { decayTurnout, canvassingBoost } from "@/lib/campaignTargeting/rules";
 import { applyDecay } from "@/lib/utils/turnoutDecay";
 import {
   calculateAlignmentMultiplier,
@@ -86,6 +87,7 @@ export async function applyDecayToAllStates(
   const results: StateDemographicTurnout[] = [];
 
   for (const state of turnoutData) {
+    state.campaignModifiers = decayTurnout(state.campaignModifiers ?? state.modifiers);
     const modifiers = state.modifiers;
 
     // Apply decay to all categories.
@@ -115,6 +117,7 @@ export async function applyDecayToAllStates(
           update: {
             $set: {
               modifiers: state.modifiers,
+              campaignModifiers: state.campaignModifiers,
               lastDecayApplied: state.lastDecayApplied,
               lastUpdated: state.lastUpdated,
             },
@@ -1093,7 +1096,13 @@ export async function processPartyGOTV(
       const ops = stateTurnout.map((state) => ({
         updateOne: {
           filter: { _id: state._id },
-          update: { $set: { modifiers: state.modifiers, lastUpdated: state.lastUpdated } },
+          update: {
+            $set: {
+              modifiers: state.modifiers,
+              campaignModifiers: state.campaignModifiers,
+              lastUpdated: state.lastUpdated,
+            },
+          },
         },
       }));
       await turnoutCollection.bulkWrite(ops);
@@ -1234,7 +1243,19 @@ export async function processPlayerCanvassing(
     );
 
     // Apply with diminishing returns
-    applyBoost(state, action.demographic, boost);
+    applyBoost(
+      state,
+      action.demographic,
+      boost,
+      canvassingBoost(
+        {
+          economicLean: action.characterPosition.economic,
+          socialLean: action.characterPosition.social,
+        },
+        { economicLean: demoLean.economic, socialLean: demoLean.social },
+        action.isActiveCampaignSeason
+      )
+    );
     state.lastUpdated = new Date();
   }
 
@@ -1244,7 +1265,13 @@ export async function processPlayerCanvassing(
       const ops = stateTurnout.map((state) => ({
         updateOne: {
           filter: { _id: state._id },
-          update: { $set: { modifiers: state.modifiers, lastUpdated: state.lastUpdated } },
+          update: {
+            $set: {
+              modifiers: state.modifiers,
+              campaignModifiers: state.campaignModifiers,
+              lastUpdated: state.lastUpdated,
+            },
+          },
         },
       }));
       await turnoutCollection.bulkWrite(ops);

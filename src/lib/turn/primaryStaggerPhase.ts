@@ -14,6 +14,8 @@
  * Called from `primaryResolution.ts` before the existing primary-end check.
  */
 
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
+
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -624,7 +626,7 @@ export async function runPrimaryStaggerWaveIfDue(
         state.population,
         rawDemographicsDoc,
         categories,
-        turnoutMap.get(stateId),
+        turnoutForElection(turnoutMap.get(stateId), election),
         { preset: delegatePreset, year: eraYear.year, startingYear: eraYear.startingYear }
       );
 
@@ -640,12 +642,14 @@ export async function runPrimaryStaggerWaveIfDue(
       let effPartyCandidates = partyCandidates;
       if (granularElectorateEnabled) {
         const substrate = buildGranularElectorateSubstrate({
+          campaignRulesVersion: election.campaignRulesVersion,
+          currentTurn: currentTurn,
           countryId: (election.countryId ?? "US") as CountryId,
           stateId,
           preset: delegatePreset,
           year: eraYear.year,
           startingYear: eraYear.startingYear,
-          turnoutDoc: turnoutMap.get(stateId),
+          turnoutDoc: turnoutForElection(turnoutMap.get(stateId), election),
           statePopulation: state.population,
           demographics: rawDemographicsDoc,
           categories,

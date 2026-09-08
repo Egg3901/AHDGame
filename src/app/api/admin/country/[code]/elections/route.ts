@@ -4,6 +4,9 @@
  * PATCH  /api/admin/country/[code]/elections — modify election timers
  * DELETE /api/admin/country/[code]/elections — delete all elections for a cycle
  */
+
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -206,7 +209,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       }
     }
 
-    const result = await db.collection("elections").insertMany(electionsToInsert);
+    const result = await db
+      .collection("elections")
+      .insertMany(electionsToInsert.map(withCampaignRules));
 
     const senateCount = electionsToInsert.filter((e) => e.electionType === "senate").length;
     const houseCount = electionsToInsert.filter((e) => e.electionType === "house").length;
