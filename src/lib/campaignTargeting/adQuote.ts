@@ -7,6 +7,10 @@ import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/ca
 import { loadCampaignAudience } from "./audience";
 import {
   AD_ACTION_COST,
+  AD_MAX_ACTIONS,
+  AD_BONUS_CAP,
+  AD_BOOST_PER_ACTION,
+  currentAdBonus,
   adPurchaseCost,
   adExposure,
   planAdPurchase,
@@ -24,7 +28,7 @@ export async function quoteAdAudience(
   ads: TargetedAd[],
   revision: number,
   currentTurn: number,
-  maxFlightTurns = 12
+  count = 1
 ) {
   const audience = await loadCampaignAudience(db, countryId, stateId);
   if (!audience) throw badRequest("This region has no targetable electorate");
@@ -38,7 +42,16 @@ export async function quoteAdAudience(
   const current = targetedAdBonuses(audience.cells, position, ads, stateId, currentTurn);
   const targets = [...unique.values()].map((target) => {
     const info = targetAudience(audience.cells, target)!;
-    const planned = planAdPurchase(ads, { ...target, stateId }, currentTurn, 1);
+    const maxCount = Math.min(
+      AD_MAX_ACTIONS,
+      Math.ceil(
+        Math.max(
+          0,
+          AD_BONUS_CAP - currentAdBonus(ads, { ...target, stateId }, currentTurn) - 1e-10
+        ) / AD_BOOST_PER_ACTION
+      )
+    );
+    const planned = planAdPurchase(ads, { ...target, stateId }, currentTurn, count);
     const after = targetedAdBonuses(audience.cells, position, planned ?? ads, stateId, currentTurn);
     const mean = (bonuses: Record<string, number>) =>
       audience.cells.reduce(
@@ -58,12 +71,12 @@ export async function quoteAdAudience(
       audienceShare: info.share,
       eligibleAudience: Math.round(audience.context.statePopulation * info.share),
       cohesion: info.cohesion,
-      cost: adPurchaseCost(audience.context.statePopulation, info.share, 1) * rate,
+      cost: adPurchaseCost(1) * rate,
       currentBonus: mean(current),
       afterBonus: mean(after),
       exposure: active ? adExposure(active, currentTurn) : 0,
-      scheduledThrough: active?.throughTurn ?? null,
-      available: planned !== null,
+      maxCount,
+      available: planned !== null && count <= maxCount,
     };
   });
   return {
@@ -72,7 +85,8 @@ export async function quoteAdAudience(
     actionCost: AD_ACTION_COST,
     currentTurn: currentTurn,
     revision,
-    maxFlightTurns,
+    maxCount: AD_MAX_ACTIONS,
+    count,
     stateId,
     forex,
     rate,

@@ -20,6 +20,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
   flipflopAxis,
   flipflopDir,
   onExecute,
+  onOpenCampaignAction,
   onFlipflop,
   onFlipflopStepChange,
   onFlipflopAxisChange,
@@ -179,7 +180,15 @@ const ActionCardCompact = memo(function ActionCardCompact({
 
         {/* Right column: button row — always right aligned */}
         <div className="flex items-center justify-start sm:justify-end">
-          {card.href ? (
+          {(card.type === "canvass" || card.type === "targetedAds") && onOpenCampaignAction ? (
+            <button
+              type="button"
+              onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
+              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold hover:bg-primary/10"
+            >
+              {card.label}
+            </button>
+          ) : card.href ? (
             <Link
               href={card.href}
               className="inline-flex items-center justify-center gap-1 w-full sm:w-auto rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20 hover:border-white/30 transition-all backdrop-blur-sm"

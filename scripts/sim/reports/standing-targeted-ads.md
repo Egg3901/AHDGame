@@ -1,9 +1,18 @@
-# Standing targeted ads
+# Immediate targeted ad actions
 
-Reproduce with `npx tsx scripts/sim/standing-targeted-ads.ts`. The adjacent JSON records synthetic results through the production electorate and both vote allocators.
+Reproduce with `npx tsx scripts/sim/standing-targeted-ads.ts`. This synthetic fixture uses the production electorate and both primary and general vote allocators.
 
-A three-turn regional flight bought at turn 10 raises a symmetric candidate from 50% to 52.03% at turn 12. The same exposure raises a later race's share to 51.65% at turn 24 and decays to 50.10% at turn 84. These results agree for original and version-1 races, and for primary and general allocation. Turnout totals remain unchanged. Another region receives zero benefit.
+Each action costs 1 action point and 100 anchor campaign funds. A purchase immediately adds one percentage point of nominal target strength, capped at 25%. Alignment and cohesion determine the resulting voter-group bonus. Strength halves over 24 turns and never receives scheduled future top-ups.
 
-Exposure belongs to the character, so no active race or candidacy is required at purchase. Each race reads the same exposure and the existing 15% bonus cap. The action does not copy or multiply exposure when a player enters another race, change turnout rules versions, or rewrite counted ballots. This synthetic example establishes composition and timing, not an estimate of live election outcomes.
+| Actions | Funds | Initial strength | Synthetic candidate share |
+| ------- | ----- | ---------------- | ------------------------- |
+| 1       | 100   | 1%               | 50.150%                   |
+| 5       | 500   | 5%               | 50.741%                   |
+| 10      | 1000  | 10%              | 51.457%                   |
+| 25      | 2500  | 25%              | 53.467%                   |
 
-Two copies of a 22,975-document synthetic world both completed turn 3. Primary snapshots remained at 29 database round trips and 1.3 MiB returned. Whole-turn totals were 6,248 before and 6,251 after, with 50.9 MiB returned in each run. Stochastic world activity makes the whole-turn difference descriptive; local wall time is not a performance claim. Both runs hit the same existing party-action generation budget warning.
+The symmetric no-ad candidate starts at 50%. A three-action purchase has strength 3.00% immediately, 2.9146% next turn and 1.50% after 24 turns. A perfectly aligned homogeneous target reaches exactly 25% competitive bonus at saturation. These are synthetic examples, not live election forecasts.
+
+Original and version-1 elections both consume the same bonus. Primary and general allocation conserve the voter pool. Ads in another region give zero benefit. Regional eligibility is enforced separately by HTTP regression tests: home state normally, other states only for an active presidential candidacy.
+
+No new turn-phase database reads are introduced by this correction. Region eligibility adds bounded reads to preview and purchase requests. Existing historical flight records are read as their paid action effort credited upfront, then decay; they never schedule future purchases.

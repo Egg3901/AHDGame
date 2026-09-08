@@ -1,37 +1,39 @@
 /**
  * Standing targeted ads spend personal campaign resources on regional exposure.
  * Purchases need no candidacy; one character revision serializes all buyers and
- * their flights persist across races while decaying through the shared rules.
+ * their bonuses persist across races while decaying through the shared rules.
  */
 import type { Db, ClientSession } from "mongodb";
-import type { Character, State } from "@/lib/db/types";
+import type { Character } from "@/lib/db/types";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getGameTime } from "@/lib/time/gameTime";
+import { assertStandingAdRegion } from "./regions";
 import { quoteAdAudience } from "./adQuote";
 import { AD_ACTION_COST, planAdPurchase, type CampaignTarget } from "./rules";
 
 export type StandingAdRequest = CampaignTarget & {
   stateId: string;
-  turns: number;
+  count: number;
   quote: { turn: number; cost: number; revision: number };
 };
 
-export async function quoteStandingAds(db: Db, character: Character, stateId: string) {
-  const region = await db
-    .collection<State>("states")
-    .findOne({ _id: stateId, countryId: character.countryId }, { projection: { _id: 1 } });
-  if (!region) throw badRequest("Choose a region in your country");
+export async function quoteStandingAds(db: Db, character: Character, stateId: string, count = 1) {
+  const regions = await assertStandingAdRegion(db, character, stateId);
   const time = await getGameTime();
-  return quoteAdAudience(
-    db,
-    character.countryId,
-    stateId,
-    character.policies,
-    character.targetedAds ?? [],
-    character.targetedAdsRevision ?? 0,
-    time.currentTurn
-  );
+  return {
+    ...(await quoteAdAudience(
+      db,
+      character.countryId,
+      stateId,
+      character.policies,
+      character.targetedAds ?? [],
+      character.targetedAdsRevision ?? 0,
+      time.currentTurn,
+      count
+    )),
+    regions: regions.map((region) => ({ id: region._id, name: region.name })),
+  };
 }
 
 export async function purchaseStandingAds(
@@ -44,22 +46,27 @@ export async function purchaseStandingAds(
   if (!current) throw notFound("Character not found");
   if (current.countryId !== payer.countryId)
     throw forbidden("Advertiser and payer must be in the same country");
-  const quote = await quoteStandingAds(db, current, request.stateId);
+  const quote = await quoteStandingAds(db, current, request.stateId, request.count);
   const target = quote.targets.find(
     (target) => target.dimension === request.dimension && target.bucket === request.bucket
   );
-  if (!target || request.turns < 1 || request.turns > quote.maxFlightTurns)
-    throw badRequest("Invalid target or flight length");
-  const ads = planAdPurchase(current.targetedAds ?? [], request, quote.currentTurn, request.turns);
-  if (!ads) throw conflict("This target already has an ad buy scheduled for this turn");
-  const funds = target.cost * request.turns;
+  if (
+    !target ||
+    request.count > target.maxCount ||
+    request.count < 1 ||
+    request.count > quote.maxCount
+  )
+    throw badRequest("Invalid target or action count");
+  const ads = planAdPurchase(current.targetedAds ?? [], request, quote.currentTurn, request.count);
+  if (!ads) throw conflict("This target is already at the ad bonus cap");
+  const funds = target.cost * request.count;
   if (
     request.quote.turn !== quote.currentTurn ||
     request.quote.cost !== funds ||
     request.quote.revision !== quote.revision
   )
     throw conflict("The ad quote changed. Refresh before buying.");
-  const actions = AD_ACTION_COST * request.turns;
+  const actions = AD_ACTION_COST * request.count;
   const fundsField = quote.forex ? "currencyBalances.campaign" : "funds";
   const ownerFilter = {
     _id: current._id,
@@ -115,6 +122,11 @@ export async function purchaseStandingAds(
     success: true,
     cost: funds,
     actions,
-    scheduledThrough: quote.currentTurn + request.turns - 1,
+    bonus: ads.find(
+      (ad) =>
+        ad.stateId === request.stateId &&
+        ad.dimension === request.dimension &&
+        ad.bucket === request.bucket
+    )?.bonus,
   };
 }

@@ -101,7 +101,7 @@ describe("score-based primary integration", () => {
     const share = Math.exp((adjusted - 70) / 8) / (1 + Math.exp((adjusted - 70) / 8));
     expect(share).toBeCloseTo(1.1 / 2.1, 12);
     expect(campaignPrimaryScore(70, 0, 8)).toBe(70);
-    expect(campaignPrimaryScore(70, 100, 8)).toBe(campaignPrimaryScore(70, 0.15, 8));
+    expect(campaignPrimaryScore(70, 100, 8)).toBe(campaignPrimaryScore(70, AD_BONUS_CAP, 8));
   });
 });
 
@@ -157,21 +157,43 @@ describe("targeted ads", () => {
     expect(Object.values(targetedAdBonuses(cells, right, ads, "A", 9))).toEqual([0, 0, 0]);
   });
 
-  it("makes prepaid flights equivalent to one manual buy each turn", () => {
-    const flight = planAdPurchase([], { ...target, stateId: "A" }, 10, 6)!;
+  it("batches equal repeated same-turn actions and then halves over 24 turns", () => {
+    const batch = planAdPurchase([], { ...target, stateId: "A" }, 10, 6)!;
     let manual: TargetedAd[] = [];
-    for (let turn = 10; turn < 16; turn++) {
-      manual = planAdPurchase(manual, { ...target, stateId: "A" }, turn, 1)!;
-      expect(adExposure(flight[0], turn)).toBeCloseTo(adExposure(manual[0], turn), 10);
-      expect(planAdPurchase(flight, { ...target, stateId: "A" }, turn, 1)).toBeNull();
-    }
-    expect(adExposure(flight[0], 27)).toBeCloseTo(adExposure(flight[0], 15) / 2, 10);
-    expect(planAdPurchase(flight, { ...target, stateId: "A" }, 16, 1)).not.toBeNull();
+    for (let count = 0; count < 6; count++)
+      manual = planAdPurchase(manual, { ...target, stateId: "A" }, 10, 1)!;
+    expect(adExposure(batch[0], 10)).toBeCloseTo(adExposure(manual[0], 10), 12);
+    expect(adExposure(batch[0], 34)).toBeCloseTo(adExposure(batch[0], 10) / 2, 12);
+    expect(batch[0].throughTurn).toBeUndefined();
+    const capped = planAdPurchase(batch, { ...target, stateId: "A" }, 10, 50)!;
+    expect(capped[0].bonus).toBe(0.25);
+    expect(planAdPurchase(capped, { ...target, stateId: "A" }, 10, 1)).toBeNull();
   });
+});
 
-  it("prices reach and the entire prepaid flight, independent of candidate alignment", () => {
-    expect(adPurchaseCost(1_000_000, 0.5, 1)).toBe(1000);
-    expect(adPurchaseCost(2_000_000, 0.5, 1)).toBe(2000);
-    expect(adPurchaseCost(1_000_000, 0.5, 6)).toBe(6000);
+describe("immediate targeted ad actions", () => {
+  it("caps the competitive bonus at 25 percent", () => {
+    expect(AD_BONUS_CAP).toBe(0.25);
+  });
+  it("applies a batch immediately and only decays thereafter", () => {
+    const ads = planAdPurchase([], { ...target, stateId: "CA" }, 10, 3)!;
+    expect(adExposure(ads[0], 11)).toBeLessThan(adExposure(ads[0], 10));
+    expect(planAdPurchase(ads, { ...target, stateId: "CA" }, 10, 1)).not.toBeNull();
+  });
+  it("credits historical paid flights upfront without any later automatic growth", () => {
+    const historical = {
+      ...target,
+      stateId: "CA",
+      exposure: 1,
+      lastPurchaseTurn: 10,
+      throughTurn: 12,
+    };
+    expect(adExposure(historical, 10)).toBeCloseTo(0.15, 12);
+    expect(adExposure(historical, 11)).toBeLessThan(adExposure(historical, 10));
+    expect(adExposure(historical, 12)).toBeLessThan(adExposure(historical, 11));
+  });
+  it("has a fixed per-action price independent of audience population", () => {
+    expect(adPurchaseCost(1)).toBe(100);
+    expect(adPurchaseCost(3)).toBe(3 * adPurchaseCost(1));
   });
 });

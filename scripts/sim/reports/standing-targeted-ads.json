@@ -1,43 +1,72 @@
 {
-  "fixture": "One prepaid three-turn flight bought before candidacy; same exposure in separate current and future races",
+  "fixture": "Immediate three-action bonus bought before candidacy; same decaying modifier in current and future races",
   "scenarios": [
     {
       "version": 0,
       "general": false,
       "baseline": 0.5,
-      "current": 0.5202926370788313,
-      "laterRace": 0.5164867919752196,
-      "decayed": 0.5009784658128021,
-      "totalVoters": 596906.7663318273
+      "current": 0.5042305523035434,
+      "laterRace": 0.5030001800110603,
+      "decayed": 0.5005334565434851,
+      "totalVoters": 596906.7663318275
     },
     {
       "version": 0,
       "general": true,
       "baseline": 0.5,
-      "current": 0.5202926370788313,
-      "laterRace": 0.5164867919752196,
-      "decayed": 0.5009784658128021,
-      "totalVoters": 596906.7663318273
+      "current": 0.5042305523035434,
+      "laterRace": 0.5030001800110603,
+      "decayed": 0.5005334565434851,
+      "totalVoters": 596906.7663318275
     },
     {
       "version": 1,
       "general": false,
       "baseline": 0.5,
-      "current": 0.5202926370788313,
-      "laterRace": 0.5164867919752196,
-      "decayed": 0.5009784658128021,
-      "totalVoters": 596906.7663318273
+      "current": 0.5042305523035434,
+      "laterRace": 0.5030001800110603,
+      "decayed": 0.5005334565434851,
+      "totalVoters": 596906.7663318275
     },
     {
       "version": 1,
       "general": true,
       "baseline": 0.5,
-      "current": 0.5202926370788313,
-      "laterRace": 0.5164867919752196,
-      "decayed": 0.5009784658128021,
-      "totalVoters": 596906.7663318273
+      "current": 0.5042305523035434,
+      "laterRace": 0.5030001800110603,
+      "decayed": 0.5005334565434851,
+      "totalVoters": 596906.7663318275
     }
   ],
+  "batches": [
+    {
+      "count": 1,
+      "cost": 100,
+      "nominalBonus": 0.01,
+      "share": 0.5015037004859656
+    },
+    {
+      "count": 5,
+      "cost": 500,
+      "nominalBonus": 0.05,
+      "share": 0.507413831942407
+    },
+    {
+      "count": 10,
+      "cost": 1000,
+      "nominalBonus": 0.1,
+      "share": 0.5145744400145917
+    },
+    {
+      "count": 25,
+      "cost": 2500,
+      "nominalBonus": 0.25,
+      "share": 0.5346659638632903
+    }
+  ],
+  "immediateBonus": 0.03,
+  "nextTurnBonus": 0.029145958234608176,
+  "after24Turns": 0.015,
   "checks": [
     "legacy and modern races receive ads",
     "same exposure carries across races",

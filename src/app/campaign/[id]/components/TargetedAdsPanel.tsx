@@ -13,7 +13,7 @@ interface Target {
   currentBonus: number;
   afterBonus: number;
   available: boolean;
-  scheduledThrough: number | null;
+  maxCount: number;
 }
 
 interface Quote {
@@ -25,7 +25,7 @@ interface Quote {
   actionCost: number;
   currentTurn: number;
   revision: number;
-  maxFlightTurns: number;
+  maxCount: number;
 }
 
 const label = (value: string) => value.replaceAll("_", " ");
@@ -42,7 +42,7 @@ export function TargetedAdsPanel({
   const t = useTranslations("elections.campaignTargeting");
   const [region, setRegion] = useState("");
   const [targetKey, setTargetKey] = useState("");
-  const [turns, setTurns] = useState(1);
+  const [count, setCount] = useState(1);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [revision, setRevision] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ export function TargetedAdsPanel({
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    fetch(`${endpoint}${region ? `?stateId=${encodeURIComponent(region)}` : ""}`, {
+    fetch(`${endpoint}?count=${count}${region ? `&stateId=${encodeURIComponent(region)}` : ""}`, {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -71,9 +71,14 @@ export function TargetedAdsPanel({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [endpoint, region, revision, t]);
+  }, [endpoint, region, revision, count, t]);
 
   const target = quote?.targets.find((value) => `${value.dimension}:${value.bucket}` === targetKey);
+
+  const maxCount = Math.max(1, target?.maxCount ?? quote?.maxCount ?? 1);
+  useEffect(() => {
+    setCount((value) => Math.min(value, maxCount));
+  }, [maxCount]);
 
   async function buy() {
     if (!quote || !target || loading || busy) return;
@@ -87,8 +92,8 @@ export function TargetedAdsPanel({
           stateId: quote.stateId,
           dimension: target.dimension,
           bucket: target.bucket,
-          turns,
-          quote: { turn: quote.currentTurn, cost: target.cost * turns, revision: quote.revision },
+          count,
+          quote: { turn: quote.currentTurn, cost: target.cost * count, revision: quote.revision },
         }),
       });
       const data = await response.json();
@@ -96,7 +101,7 @@ export function TargetedAdsPanel({
         setRevision((value) => value + 1);
         throw new Error(data.error ?? t("failed"));
       }
-      setMessage(t("success", { turn: data.scheduledThrough }));
+      setMessage(t("success"));
       onResourcesSpent();
       setRevision((value) => value + 1);
     } catch (error) {
@@ -139,7 +144,10 @@ export function TargetedAdsPanel({
               className="block w-full border rounded p-2 bg-background"
               value={targetKey}
               disabled={busy || loading}
-              onChange={(event) => setTargetKey(event.target.value)}
+              onChange={(event) => {
+                setTargetKey(event.target.value);
+                setCount(1);
+              }}
             >
               <option value="">{t("chooseTarget")}</option>
               {quote.targets.map((value) => (
@@ -153,20 +161,18 @@ export function TargetedAdsPanel({
             </select>
           </label>
           <label className="block">
-            {t("flight")}
+            {t("quantity")}
             <select
               className="block w-full border rounded p-2 bg-background"
-              value={turns}
+              value={count}
               disabled={busy || loading}
-              onChange={(event) => setTurns(Number(event.target.value))}
+              onChange={(event) => setCount(Number(event.target.value))}
             >
-              {Array.from({ length: quote.maxFlightTurns }, (_, index) => index + 1).map(
-                (value) => (
-                  <option key={value} value={value}>
-                    {t("turns", { count: value })}
-                  </option>
-                )
-              )}
+              {Array.from({ length: maxCount }, (_, index) => index + 1).map((value) => (
+                <option key={value} value={value}>
+                  {t("actions", { count: value })}
+                </option>
+              ))}
             </select>
           </label>
           {target && (
@@ -185,18 +191,18 @@ export function TargetedAdsPanel({
               </p>
               <p>
                 {t("cost", {
-                  funds: formatFull(target.cost * turns),
-                  actions: quote.actionCost * turns,
+                  funds: formatFull(target.cost * count),
+                  actions: quote.actionCost * count,
                 })}
               </p>
-              {!target.available && <p>{t("scheduled", { turn: target.scheduledThrough ?? 0 })}</p>}
+              {!target.available && <p>{t("atCap")}</p>}
             </div>
           )}
           <p className="text-sm text-muted">{t("decay")}</p>
           <button
             type="button"
             className="rounded bg-primary text-white px-4 py-2 disabled:opacity-50"
-            disabled={busy || loading || !target?.available || turns > quote.maxFlightTurns}
+            disabled={busy || loading || !target?.available || count > quote.maxCount}
             onClick={buy}
           >
             {t(busy ? "buying" : "buy")}
