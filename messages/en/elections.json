@@ -11,7 +11,7 @@
     },
     "map": {
       "noPollingData": "No polling data",
-      "competitive": "⚡ Competitive (≤15 pt margin)",
+      "competitive": "\u26a1 Competitive (\u226415 pt margin)",
       "uncontested": "Uncontested",
       "stateSenateShort": "State Sen"
     },
@@ -34,7 +34,7 @@
       "incumbent": "Incumbent:",
       "popularVote": "Popular Vote",
       "liveVoteTally": "Live Vote Tally",
-      "votesTurns": "{votes} votes · {turnCount, plural, one {# turn} other {# turns}}",
+      "votesTurns": "{votes} votes \u00b7 {turnCount, plural, one {# turn} other {# turns}}",
       "candidateHeader": "Candidate",
       "partyHeader": "Party",
       "votesHeader": "Votes",
@@ -44,13 +44,13 @@
       "polling": "Polling",
       "candidates": "Candidates",
       "noRegisteredCandidates": "No registered candidates",
-      "processing": "Processing…",
+      "processing": "Processing\u2026",
       "withdraw": "Withdraw",
       "filingClosed": "Filing closed",
       "filingClosedTitle": "Filing closed for this race.",
-      "joining": "Joining…",
+      "joining": "Joining\u2026",
       "enterRace": "Enter Race",
-      "liveResults": "Live Results →",
+      "liveResults": "Live Results \u2192",
       "unknownCandidate": "Unknown",
       "partyPrimary": "{party} Primary"
     },
@@ -89,7 +89,7 @@
       "title": "Persuasion Drivers",
       "focus": "Focus",
       "opponent": "Opponent",
-      "explanation": "Why <state></state> voters lean toward <focus></focus> over <opponent></opponent>. Each driver is signed: <b>+</b> = lift, <b>−</b> = drag. Drivers are relative within this list and only move the persuadable slice of each party's vote, so their real effect is small. Coattail rows are direct share tilts in %. A raw vote lead does not equal the sum of these bars.",
+      "explanation": "Why <state></state> voters lean toward <focus></focus> over <opponent></opponent>. Each driver is signed: <b>+</b> = lift, <b>\u2212</b> = drag. Drivers are relative within this list and only move the persuadable slice of each party's vote, so their real effect is small. Coattail rows are direct share tilts in %. A raw vote lead does not equal the sum of these bars.",
       "empty": "No persuasion drivers computed for {state} yet. Drivers populate once vote data and enrichment data are loaded.",
       "driversGroup": "Persuasion drivers (pts of the persuadable slice)",
       "coattailsGroup": "Coattail tilts (direct % of vote share)",
@@ -140,9 +140,9 @@
       "movableNote": "The movable figure is the share of each party's own vote that campaigning can shift in one cycle. A large lean means a large starting base and a small movable slice."
     },
     "carveUp": {
-      "title": "{state} · Carve-up",
-      "viewDetails": "View state details →",
-      "explanation": "Each candidate's slice = registered voters × archetype × demographic affinity. Position alignment + influence drive appeal; favorability scales votes at resolution.",
+      "title": "{state} \u00b7 Carve-up",
+      "viewDetails": "View state details \u2192",
+      "explanation": "Each candidate's slice = registered voters \u00d7 archetype \u00d7 demographic affinity. Position alignment + influence drive appeal; favorability scales votes at resolution.",
       "empty": "No projected slices for {state} yet. The carve-up populates once candidates have filed for this primary.",
       "regBase": "Reg base",
       "topDemographics": "Top demographics: "
@@ -150,7 +150,7 @@
     "embeddedResults": {
       "electionNight": "Election Night",
       "retry": "Retry",
-      "fullElectionNight": "Full election night →"
+      "fullElectionNight": "Full election night \u2192"
     },
     "primaryCalendar": {
       "title": "Primary Calendar",
@@ -172,36 +172,37 @@
     },
     "campaignTargeting": {
       "title": "Targeted ads",
-      "description": "Reach every matching voter in a region. Candidate alignment, shared ideology, and conflicting identities determine the bonus.",
+      "description": "Raise a bonus with matching voter groups. Alignment and cohesion determine how strongly each group responds.",
       "region": "Region",
       "target": "Audience",
       "chooseTarget": "Choose an audience",
-      "flight": "Prepaid flight",
-      "turns": "{count, plural, one {# turn} other {# turns}}",
       "reach": "{count} eligible voters; cohesion {cohesion}%",
       "bonus": "Average competitive bonus: {before}% to {after}% after the first buy.",
       "cost": "Personal cost: {funds} campaign funds and {actions} actions. The full flight is paid now.",
-      "decay": "Ads lose half their exposure every 12 turns. Overlapping targets share a 15% bonus cap. This changes competitive weight, not vote-share points.",
-      "buy": "Buy ad flight",
-      "buying": "Buying...",
+      "decay": "The bonus applies immediately and slowly returns toward zero. Combined bonuses cannot exceed 25%. There is no fixed duration.",
+      "buy": "Run targeted ads",
+      "buying": "Applying ads...",
       "loading": "Loading campaign audiences...",
       "failed": "Unable to load campaign audiences. Try again.",
-      "success": "Flight booked through turn {turn}.",
-      "scheduled": "This audience already has a flight scheduled through turn {turn}.",
+      "success": "Targeted ad bonus updated.",
       "canvassPreview": "Turnout input: +{boost} points. Estimated target turnout after blending: {before}% to {after}%.",
       "canvassRules": "Closely aligned groups respond more strongly. Turnout boosts halve every 6 turns under the new rules. Races already open retain their original rules. Mobilized voters can support any candidate.",
       "canvassResult": "Turnout input: +{boost} points (modifier {modifier}). Estimated target turnout: {before}% to {after}%.",
       "canvassLegacy": "Original-rule races receive +{boost} turnout-input points.",
       "refresh": "Refresh preview",
       "canvassInput": "Turnout input: +{boost} points (modifier {modifier}).",
-      "standingDescription": "Buy regional ads at any time, including between elections. Exposure follows you across your races and fades over time.",
+      "standingDescription": "Use targeted ads at any time. Target your home state, or choose another state while running for president.",
       "backToActions": "Back to Actions",
       "loadCharacterFailed": "Could not load your character. Refresh to try again.",
       "actionTagline": "Reach your coalition",
-      "actionFlavor": "Build support with voter groups in any region of your country, even between elections. Exposure follows you into your races and fades over time.",
-      "actionCost": "Varies by audience",
-      "actionEffect": "Aligned, cohesive groups respond more strongly",
-      "actionImageAlt": "Street advertising and campaign hoardings"
+      "actionFlavor": "Build a temporary bonus with aligned voter groups in your home state. Presidential candidates can target other states.",
+      "actionCost": "Fixed cost per action",
+      "actionEffect": "Immediate group bonus, capped at 25%",
+      "actionImageAlt": "Street advertising and campaign hoardings",
+      "quantity": "Number of actions",
+      "actions": "{count, plural, one {# action} other {# actions}}",
+      "atCap": "This purchase would exceed the bonus cap. Choose fewer actions or let the bonus decay.",
+      "canvassTitle": "Canvass voters"
     }
   }
 }

@@ -52,7 +52,8 @@ export async function loadTargetedAdContext(db: Db, campaignId: ObjectId, user: 
 export async function quoteTargetedAds(
   db: Db,
   context: Awaited<ReturnType<typeof loadTargetedAdContext>>,
-  stateId: string
+  stateId: string,
+  count = 1
 ) {
   const { election, candidate, time } = context;
   if (!candidate.isNPP) {
@@ -60,7 +61,7 @@ export async function quoteTargetedAds(
       .collection<Character>("characters")
       .findOne({ _id: candidate.characterId });
     if (!owner) throw notFound("Candidate not found");
-    return quoteStandingAds(db, owner, stateId);
+    return quoteStandingAds(db, owner, stateId, count);
   }
 
   if (!usesCampaignRules(election))
@@ -101,7 +102,7 @@ export async function quoteTargetedAds(
     candidate.targetedAds ?? [],
     candidate.targetedAdsRevision ?? 0,
     time.currentTurn,
-    Math.max(0, Math.min(12, (election.endTurn ?? time.currentTurn + 1) - time.currentTurn))
+    count
   );
 }
 
@@ -111,7 +112,7 @@ export async function purchaseTargetedAds(
   user: Actor,
   request: CampaignTarget & {
     stateId: string;
-    turns: number;
+    count: number;
     quote: { turn: number; cost: number; revision: number };
   }
 ) {
@@ -124,28 +125,28 @@ export async function purchaseTargetedAds(
     return purchaseStandingAds(db, owner, user.character, request);
   }
 
-  const quote = await quoteTargetedAds(db, context, request.stateId);
+  const quote = await quoteTargetedAds(db, context, request.stateId, request.count);
   if (!quote.enabled) throw badRequest(quote.message);
   const target = quote.targets.find(
     (t) => t.dimension === request.dimension && t.bucket === request.bucket
   );
-  if (!target || request.turns > quote.maxFlightTurns)
-    throw badRequest("Invalid target or flight length");
+  if (!target || request.count > target.maxCount || request.count > quote.maxCount)
+    throw badRequest("Invalid target or action count");
   const ads = planAdPurchase(
     context.candidate.targetedAds ?? [],
     request,
     context.time.currentTurn,
-    request.turns
+    request.count
   );
-  if (!ads) throw conflict("This target already has an ad buy scheduled for this turn");
-  const funds = target.cost * request.turns;
+  if (!ads) throw conflict("This target is already at the ad bonus cap");
+  const funds = target.cost * request.count;
   if (
     request.quote.turn !== quote.currentTurn ||
     request.quote.cost !== funds ||
     request.quote.revision !== quote.revision
   )
     throw conflict("The ad quote changed. Refresh before buying.");
-  const actions = AD_ACTION_COST * request.turns;
+  const actions = AD_ACTION_COST * request.count;
   const fundsField = quote.forex ? "currencyBalances.campaign" : "funds";
   const candidateFilter = {
     _id: context.candidate._id,
@@ -194,6 +195,11 @@ export async function purchaseTargetedAds(
     success: true,
     cost: funds,
     actions,
-    scheduledThrough: context.time.currentTurn + request.turns - 1,
+    bonus: ads.find(
+      (ad) =>
+        ad.stateId === request.stateId &&
+        ad.dimension === request.dimension &&
+        ad.bucket === request.bucket
+    )?.bonus,
   };
 }
