@@ -19,7 +19,11 @@ import {
   getProposerSlot,
   resolveTransactionApprovalMode,
 } from "@/lib/parties/pendingTreasuryTransactions";
-import { isSoloPlayerParty } from "@/lib/parties/soloPlayerParty";
+import {
+  isTreasurerElectionLockoutActive,
+  wouldUseVacantTreasurerFallback,
+  TREASURER_LOCKOUT_MESSAGE,
+} from "@/lib/parties/treasurerElectionLockout";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -112,32 +116,22 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? "Emergency override: transfer pierced the Treasurer reserve target."
         : null;
 
-    // 2026-05-22 treasury-two-person-approval branch. A party with a
-    // single player member has nobody to countersign, so it runs in
-    // single mode rather than being stuck.
-    const soloPlayerParty = await isSoloPlayerParty(db, party);
-    const mode = resolveTransactionApprovalMode(party, { soloPlayerParty });
-
-    // Moving national money into a state party the proposer belongs to
-    // always takes two signatures, whatever the mode. State parties may
-    // self-fund freely, so without this a lone officer could route the
-    // national treasury down to their own state party and draw it out
-    // from there unreviewed. The solo-player party is exempt, as always.
-    const isMemberOfTargetStateParty =
-      !soloPlayerParty &&
-      authUser.character.homeState === upperStateId &&
-      authUser.character.party === partyIdStr;
-
+    // 2026-05-22 treasury-two-person-approval branch. With no seated
+    // Treasurer, double collapses to single so the Chair/VC act alone —
+    // unless a contested Treasurer election is about to close, in which
+    // case the fallback is suppressed and outbound transfers pause.
+    let treasurerElectionLockout = false;
+    if (wouldUseVacantTreasurerFallback(party)) {
+      const { currentTurn } = await getGameTime();
+      treasurerElectionLockout = await isTreasurerElectionLockoutActive(db, party, currentTurn);
+    }
+    const mode = resolveTransactionApprovalMode(party, { treasurerElectionLockout });
     const isPlayerAction = !isAdmin;
-    if (isPlayerAction && (mode === "double" || isMemberOfTargetStateParty)) {
+    if (isPlayerAction && mode === "double") {
       const eligibility = canProposePendingTransaction(party);
       if (!eligibility.ok) {
         return NextResponse.json(
-          {
-            error: isMemberOfTargetStateParty
-              ? "Transferring to a state party you belong to needs a second officer to approve it. Appoint a second Chair, Vice-Chair or Treasurer."
-              : eligibility.reason,
-          },
+          { error: treasurerElectionLockout ? TREASURER_LOCKOUT_MESSAGE : eligibility.reason },
           { status: 400 }
         );
       }

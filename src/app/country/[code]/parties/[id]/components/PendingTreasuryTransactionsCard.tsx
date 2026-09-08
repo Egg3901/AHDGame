@@ -8,11 +8,9 @@ import { Skeleton } from "@/components/ui";
  *
  * Shows in-flight two-person-approval rows for Send-to-Member and
  * Transfer-to-State-Party actions. The proposer's slot is pre-filled
- * (✅) at propose-time. The other slot shows an explicit Approve button,
- * visible to any other officer who is eligible to sign it — either slot
- * accepts a Chair, Vice-Chair or Treasurer, so long as it is not the
- * same person twice and not the recipient. Proposer also sees a Cancel
- * button while the row is open.
+ * (✅) at propose-time. The other slot shows an explicit Approve
+ * button visible only to the eligible role-holder. Proposer also sees
+ * a Cancel button while the row is open.
  *
  * Empty state: "No pending transactions."
  *
@@ -149,14 +147,6 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
         </button>
       </div>
 
-      <p className="text-[11px] leading-relaxed text-muted">
-        Either approver may be the Chair, Vice-Chair or Treasurer, but the same person cannot fill
-        both, and nobody can approve a payment to themselves. Two rules follow from that: moving
-        national funds to a state party you belong to always needs a second officer, and a party
-        whose only member is one player approves its own spending on its own. State party treasuries
-        are separate and can be self-funded without a second signature.
-      </p>
-
       {error && <p className="text-xs text-red-400">{error}</p>}
 
       {loading && items.length === 0 ? (
@@ -189,8 +179,8 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                 <th className="text-left py-2 pr-3">Type</th>
                 <th className="text-right py-2 pr-3">Amount</th>
                 <th className="text-left py-2 pr-3">Recipient</th>
-                <th className="text-left py-2 pr-3">Approver 1</th>
-                <th className="text-left py-2 pr-3">Approver 2</th>
+                <th className="text-left py-2 pr-3">Approver 1 (Treasurer)</th>
+                <th className="text-left py-2 pr-3">Approver 2 (Chair/VC)</th>
                 <th className="text-right py-2">Actions</th>
               </tr>
             </thead>
@@ -242,7 +232,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                       ) : singleApproval ? (
                         <span className="text-muted">⏳ Awaiting any one officer</span>
                       ) : (
-                        <span className="text-muted">⏳ Awaiting any officer</span>
+                        <span className="text-muted">⏳ Awaiting Treasurer</span>
                       )}
                     </td>
                     <td className="py-2 pr-3">
@@ -256,7 +246,7 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                       ) : singleApproval ? (
                         <span className="text-muted">Not required</span>
                       ) : (
-                        <span className="text-muted">⏳ Awaiting a second officer</span>
+                        <span className="text-muted">⏳ Awaiting Chair/VC</span>
                       )}
                     </td>
                     <td className="py-2 text-right space-x-2">

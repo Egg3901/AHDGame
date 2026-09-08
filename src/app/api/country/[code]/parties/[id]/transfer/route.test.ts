@@ -64,7 +64,6 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
     vi.clearAllMocks();
     db = createMockDb();
     db.collection("states");
-    db.collection("characters");
     db.collection("politicalParties");
     db.collection("pendingTreasuryTransactions");
     db.collection("nationalPartyElections");
@@ -80,7 +79,7 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
         userId: userId.toString(),
         username: "chair",
         isAdmin: false,
-        character: { _id: chairId, name: "Chair", homeState: "NY", party: partyId },
+        character: { _id: chairId, name: "Chair" },
       },
     } as never);
 
@@ -89,12 +88,40 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
       countryId: "US",
       name: "Pennsylvania",
     });
-    // Two player members: no solo-player fallback unless a test says so.
-    db.collectionMocks["characters"]!.countDocuments.mockResolvedValue(2);
     await setParty();
   });
 
-  it("queues for approval in double mode", async () => {
+  it("refuses the transfer while a contested Treasurer election is closing", async () => {
+    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
+    });
+    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(1);
+
+    const response = await call();
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/treasurer election/i);
+
+    const { executeTransferToStateParty } =
+      await import("@/lib/treasury/executeTransferToStateParty");
+    expect(executeTransferToStateParty).not.toHaveBeenCalled();
+  });
+
+  it("keeps the vacant-seat fallback when nobody is standing for Treasurer", async () => {
+    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
+    });
+    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(0);
+
+    const response = await call();
+    expect(response.status).toBe(200);
+
+    const { executeTransferToStateParty } =
+      await import("@/lib/treasury/executeTransferToStateParty");
+    expect(executeTransferToStateParty).toHaveBeenCalled();
+  });
+
+  it("queues for approval when a Treasurer is seated (double mode)", async () => {
     await setParty({ treasurerId: new ObjectId() });
 
     const response = await call();
@@ -102,64 +129,5 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
     const body = await response.json();
     expect(body.pending).toBe(true);
     expect(db.collectionMocks["pendingTreasuryTransactions"]!.insertOne).toHaveBeenCalled();
-  });
-
-  it("executes immediately in single mode when the proposer is not a member of the target state", async () => {
-    // Actor's homeState is NY; the transfer targets PA.
-    await setParty({ treasurerId: new ObjectId(), transactionApprovalMode: "single" });
-
-    const response = await call();
-    expect(response.status).toBe(200);
-
-    const { executeTransferToStateParty } =
-      await import("@/lib/treasury/executeTransferToStateParty");
-    expect(executeTransferToStateParty).toHaveBeenCalled();
-  });
-
-  it("queues even in single mode when the proposer belongs to the target state party", async () => {
-    // State parties can self-fund freely, so routing national money into
-    // your own state party has to take two signatures on the way down.
-    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
-    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
-      ok: true,
-      user: {
-        userId: userId.toString(),
-        username: "chair",
-        isAdmin: false,
-        character: { _id: chairId, name: "Chair", homeState: "PA", party: partyId },
-      },
-    } as never);
-    await setParty({ treasurerId: new ObjectId(), transactionApprovalMode: "single" });
-
-    const response = await call();
-    expect(response.status).toBe(200);
-    expect((await response.json()).pending).toBe(true);
-
-    const { executeTransferToStateParty } =
-      await import("@/lib/treasury/executeTransferToStateParty");
-    expect(executeTransferToStateParty).not.toHaveBeenCalled();
-  });
-
-  it("lets a solo-player party transfer to its own state party immediately", async () => {
-    // Nobody to countersign, so the member rule would freeze them.
-    db.collectionMocks["characters"]!.countDocuments.mockResolvedValue(1);
-    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
-    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
-      ok: true,
-      user: {
-        userId: userId.toString(),
-        username: "chair",
-        isAdmin: false,
-        character: { _id: chairId, name: "Chair", homeState: "PA", party: partyId },
-      },
-    } as never);
-    await setParty({ treasurerId: new ObjectId() });
-
-    const response = await call();
-    expect(response.status).toBe(200);
-
-    const { executeTransferToStateParty } =
-      await import("@/lib/treasury/executeTransferToStateParty");
-    expect(executeTransferToStateParty).toHaveBeenCalled();
   });
 });

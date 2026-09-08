@@ -163,4 +163,38 @@ describe("POST /api/country/[code]/parties/[id]/treasury/pending/[txnId]/approve
     // Rejected before the slot claim, so the row is not left half-approved.
     expect(db.collectionMocks["pendingTreasuryTransactions"]!.updateOne).not.toHaveBeenCalled();
   });
+
+  it("refuses payout while a contested Treasurer election is closing", async () => {
+    // Vacant Treasurer seat, so the Chair is the one who can still reach
+    // an empty slot. Row targets an ordinary member, not the approver.
+    const memberId = new ObjectId();
+    await authAs(chairId);
+    await setParty({ treasurerId: null });
+    db.collectionMocks["pendingTreasuryTransactions"]!.findOne.mockResolvedValue(
+      selfSendRow({
+        targetCharacterId: memberId,
+        proposedBy: memberId,
+        type: "request",
+        approvalModeAtPropose: "single",
+        leadershipApproval: undefined,
+      })
+    );
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: memberId,
+      name: "Member",
+      party: partyId,
+      countryId: "US",
+      userId: new ObjectId(),
+    });
+    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
+    });
+    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(1);
+
+    const response = await call();
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/treasurer election/i);
+    expect(db.collectionMocks["pendingTreasuryTransactions"]!.updateOne).not.toHaveBeenCalled();
+  });
 });

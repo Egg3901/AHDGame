@@ -22,7 +22,11 @@ import {
   getProposerSlot,
   resolveTransactionApprovalMode,
 } from "@/lib/parties/pendingTreasuryTransactions";
-import { isSoloPlayerParty } from "@/lib/parties/soloPlayerParty";
+import {
+  isTreasurerElectionLockoutActive,
+  wouldUseVacantTreasurerFallback,
+  TREASURER_LOCKOUT_MESSAGE,
+} from "@/lib/parties/treasurerElectionLockout";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -139,34 +143,40 @@ export async function POST(request: Request, { params }: RouteParams) {
     // approval mode. Admin actions ALWAYS bypass the pending workflow
     // (admin already has bypass on most party actions). Non-admin
     // actions follow the party's configured mode; absent value (legacy
-    // rows) is treated as "double".
-    //
-    // A party with a single player member has nobody to countersign, so
-    // it runs in single mode and may self-fund rather than being stuck.
-    const soloPlayerParty = await isSoloPlayerParty(db, party);
-    const mode = resolveTransactionApprovalMode(party, { soloPlayerParty });
+    // rows) is treated as "double". With no seated Treasurer, double
+    // collapses to single (the Chair/VC act alone) so the action isn't
+    // permanently locked — unless a contested Treasurer election is
+    // about to close, in which case the fallback is suppressed.
+    // The lockout can only change the outcome for a party relying on the
+    // vacant-seat fallback, so skip the lookup for everyone else.
+    let treasurerElectionLockout = false;
+    if (wouldUseVacantTreasurerFallback(party)) {
+      const { currentTurn } = await getGameTime();
+      treasurerElectionLockout = await isTreasurerElectionLockoutActive(db, party, currentTurn);
+    }
+    const mode = resolveTransactionApprovalMode(party, { treasurerElectionLockout });
 
     // A send to the proposer themselves always goes through two-person
     // approval, whatever the mode. Single mode otherwise executes
     // immediately, which let a Chair drain the treasury to themselves in
-    // one unreviewed call. The solo-player party is the exception: there
-    // is no second person, so requiring one would freeze their treasury.
-    const isSelfSend =
-      !soloPlayerParty &&
-      isSelfPayment(targetCharacter, {
-        characterId: authUser.character._id,
-        userId: authUser.userId,
-      });
+    // one unreviewed call.
+    const isSelfSend = isSelfPayment(targetCharacter, {
+      characterId: authUser.character._id,
+      userId: authUser.userId,
+    });
 
     const isPlayerAction = !isAdmin;
     if (isPlayerAction && (mode === "double" || isSelfSend)) {
       const eligibility = canProposePendingTransaction(party);
       if (!eligibility.ok) {
+        if (treasurerElectionLockout) {
+          return NextResponse.json({ error: TREASURER_LOCKOUT_MESSAGE }, { status: 400 });
+        }
         if (isSelfSend) {
           return NextResponse.json(
             {
               error:
-                "Sending treasury funds to yourself needs a second officer to approve it. Appoint a second Chair, Vice-Chair or Treasurer, or use Request Funds.",
+                "Sending treasury funds to yourself needs a second approver. Seat a Treasurer, or use Request Funds.",
             },
             { status: 400 }
           );

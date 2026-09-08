@@ -14,6 +14,11 @@ import {
   getApproverSlotForRow,
   isPendingTransactionComplete,
 } from "@/lib/parties/pendingTreasuryTransactions";
+import {
+  isTreasurerElectionLockoutActive,
+  wouldUseVacantTreasurerFallback,
+  TREASURER_LOCKOUT_MESSAGE,
+} from "@/lib/parties/treasurerElectionLockout";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import type { Character, PendingTreasuryTransaction, State } from "@/lib/db/types";
 
@@ -25,11 +30,11 @@ interface RouteParams {
 // Fills the missing approval slot on a pending treasury transaction
 // and executes the underlying transfer in one flow.
 //
-// Auth: must hold a Chair / Vice-Chair / Treasurer seat and not already
-// occupy the other slot — either slot accepts any officer, so what makes
-// it two-person is that one character cannot fill both. The atomic
-// update guards on `status: "open"` AND on the slot being empty, so
-// double-clicks and races are no-ops, not double-executes.
+// Auth: must be the missing-slot's eligible role (Treasurer if
+// treasurerApproval is unfilled; Chair OR Vice-Chair if leadership
+// is unfilled). The atomic update guards on `status: "open"` AND on
+// the slot being empty, so double-clicks and races are no-ops, not
+// double-executes.
 export async function POST(_request: Request, { params }: RouteParams) {
   try {
     const { code, id: partyId, txnId } = await params;
@@ -81,26 +86,18 @@ export async function POST(_request: Request, { params }: RouteParams) {
       );
     }
 
-    // Resolve which slot this character would fill on this row. The
-    // helper excludes the recipient, the requester on a Request Funds
-    // row, and anyone already occupying the other slot.
+    // Resolve which slot this character would fill on this row.
+    // Self-approval exclusion for Request Funds is enforced inside the
+    // helper — requester returns null even if they hold a seat.
     const characterId = user.character._id;
     const slot = getApproverSlotForRow(party, pending, characterId);
     if (slot == null) {
       const isSelfRequest = pending.type === "request" && pending.proposedBy.equals(characterId);
-      const isRecipient = !!pending.targetCharacterId?.equals(characterId);
-      const alreadySigned =
-        !!pending.treasurerApproval?.characterId.equals(characterId) ||
-        !!pending.leadershipApproval?.characterId.equals(characterId);
       return NextResponse.json(
         {
           error: isSelfRequest
             ? "You can't approve your own Request Funds."
-            : isRecipient
-              ? "You can't approve a payment to yourself."
-              : alreadySigned
-                ? "You have already signed this transaction. It needs a second officer."
-                : "Only an officer (Chair / Vice-Chair / Treasurer) can approve treasury transactions.",
+            : "Only an officer (Treasurer / Chair / Vice-Chair) can approve treasury transactions.",
         },
         { status: 403 }
       );
@@ -111,9 +108,21 @@ export async function POST(_request: Request, { params }: RouteParams) {
       slot === "treasurer" ? !!pending.treasurerApproval : !!pending.leadershipApproval;
     if (alreadyFilled) {
       return NextResponse.json(
-        { error: `Approver ${slot === "treasurer" ? "1" : "2"} has already signed.` },
+        { error: `The ${slot === "treasurer" ? "Treasurer" : "Chair/VC"} slot is already filled.` },
         { status: 400 }
       );
+    }
+
+    // Outbound money stays frozen while a contested Treasurer election
+    // is about to close. Rows may be proposed and queued during the
+    // window; they just can't pay out until a Treasurer is seated.
+    // Without this, the lockout would be bypassable by routing the
+    // payment through Request Funds instead of Send.
+    if (wouldUseVacantTreasurerFallback(party)) {
+      const { currentTurn: lockoutTurn } = await getGameTime();
+      if (await isTreasurerElectionLockoutActive(db, party, lockoutTurn)) {
+        return NextResponse.json({ error: TREASURER_LOCKOUT_MESSAGE }, { status: 400 });
+      }
     }
 
     // The recipient must still be a member of this party at payout time.
