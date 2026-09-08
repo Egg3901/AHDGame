@@ -13,6 +13,8 @@ import type { StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
 export interface EnrichedCandidate {
+  targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
+  targetedAdBonuses?: Record<string, number>;
   candidateId: string; // ElectionCandidate._id
   characterId: string;
   characterName: string;

@@ -169,6 +169,31 @@
       "house": "House",
       "governor": "Governor",
       "stateSenate": "State Senate"
+    },
+    "campaignTargeting": {
+      "title": "Targeted ads",
+      "description": "Reach every matching voter in a region. Candidate alignment, shared ideology, and conflicting identities determine the bonus.",
+      "region": "Region",
+      "target": "Audience",
+      "chooseTarget": "Choose an audience",
+      "flight": "Prepaid flight",
+      "turns": "{count, plural, one {# turn} other {# turns}}",
+      "reach": "{count} eligible voters; cohesion {cohesion}%",
+      "bonus": "Average competitive bonus: {before}% to {after}% after the first buy.",
+      "cost": "Personal cost: {funds} campaign funds and {actions} actions. The full flight is paid now.",
+      "decay": "Ads lose half their exposure every 12 turns. Overlapping targets share a 15% bonus cap. This changes competitive weight, not vote-share points.",
+      "buy": "Buy ad flight",
+      "buying": "Buying...",
+      "loading": "Loading campaign audiences...",
+      "failed": "Unable to load campaign audiences. Try again.",
+      "success": "Flight booked through turn {turn}.",
+      "scheduled": "This audience already has a flight scheduled through turn {turn}.",
+      "canvassPreview": "Turnout input: +{boost} points. Estimated target turnout after blending: {before}% to {after}%.",
+      "canvassRules": "Closely aligned groups respond more strongly. Turnout boosts halve every 6 turns under the new rules. Races already open retain their original rules. Mobilized voters can support any candidate.",
+      "canvassResult": "Turnout input: +{boost} points (modifier {modifier}). Estimated target turnout: {before}% to {after}%.",
+      "canvassLegacy": "Original-rule races receive +{boost} turnout-input points.",
+      "refresh": "Refresh preview",
+      "canvassInput": "Turnout input: +{boost} points (modifier {modifier})."
     }
   }
 }

@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb } from "@/lib/countryAccess";
@@ -245,7 +246,9 @@ export async function ensureRegionalDelegateElections(
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureRegionalDelegateElections(${spec.countryId}/${spec.electionType}): spawned ${toActuallyInsert.length} missing ${spec.label} election(s)`
     );
@@ -506,7 +509,9 @@ export async function ensureBetaParliamentElections(
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureBetaParliamentElections(${countryId}): spawned ${toActuallyInsert.length} ${electionType} election(s)`
     );
@@ -664,7 +669,9 @@ export async function ensureBetaSenateElections(
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureBetaSenateElections(${countryId}): spawned ${toActuallyInsert.length} ${electionType} election(s)`
     );
@@ -771,7 +778,9 @@ export async function ensureSecededChamberElections(
   const existingStates = new Set(existing.map((e) => e.state));
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureSecededChamberElections(${countryId}): spawned ${toActuallyInsert.length} ${electionType} election(s)`
     );
@@ -952,7 +961,9 @@ export async function ensureRegionalGovernorElections(
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureRegionalGovernorElections(${countryId}): spawned ${toActuallyInsert.length} missing governor election(s)`
     );

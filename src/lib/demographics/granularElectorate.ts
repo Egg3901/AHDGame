@@ -121,6 +121,13 @@
  * the type doc on `Layer1TurnoutOverlay` (`src/lib/db/types/demographics.ts`).
  */
 
+import {
+  targetedAdBonuses,
+  usesCampaignRules,
+  type CampaignCell,
+  type Position,
+} from "@/lib/campaignTargeting/rules";
+
 import type {
   DemographicCategory,
   Layer1PositionOverlay,
@@ -178,6 +185,8 @@ export const GRANULAR_CATEGORY_ID = "granularCells";
 
 /** A coalesced group of granular cells sharing quantized lean/turnout. */
 export interface GranularElectorateUnit {
+  /** Exact identity intersections retained for nonlinear campaign response. */
+  campaignCells?: CampaignCell[];
   id: string;
   /** Electorate share (0..1) of the merged cells. */
   share: number;
@@ -191,6 +200,10 @@ export interface GranularElectorateUnit {
 }
 
 export interface GranularSubstrateInput {
+  /** What-if previews must not evict the turn processor's electorate cache. */
+  cache?: "shared" | "bypass";
+  campaignRulesVersion?: number;
+  currentTurn?: number;
   countryId: CountryId | string;
   stateId: string;
   preset?: string;
@@ -231,6 +244,7 @@ export interface GranularSubstrateInput {
 
 /** Drop-in replacements for the legacy engine inputs. */
 export interface GranularSubstrate {
+  campaignCells?: CampaignCell[];
   demographics: StateDemographics;
   categories: DemographicCategory[];
   liveTurnouts: Record<string, number>;
@@ -399,7 +413,11 @@ function deriveCellsForState(
   positionOverlay?: Layer1PositionOverlay | null,
   turnoutOverlay?: Layer1TurnoutOverlay | null,
   yearCtx?: EraYearContext
-): { cells: GenericGranularCell[]; modifiersNative: boolean } | null {
+): {
+  cells: GenericGranularCell[];
+  modifiersNative: boolean;
+  positions: Record<string, Record<string, Position>>;
+} | null {
   const era: EraId = eraForPreset(preset ?? DEFAULT_SEED_PRESET);
   const year = yearCtx?.year ?? null;
 
@@ -459,7 +477,7 @@ function deriveCellsForState(
       socialLean: cell.socialLean,
       turnout: cell.turnout,
     }));
-    return { cells, modifiersNative: true };
+    return { cells, modifiersNative: true, positions };
   }
 
   // Same shape as the US branch: year-driven when the clock is live, legacy
@@ -512,12 +530,16 @@ function deriveCellsForState(
   if (cells.length === 0) return null;
   // Non-US archetype-keyed GOTV modifiers have no bucket mapping — the caller-
   // supplied aggregate ratio handles them (modifiersNative: false).
-  return { cells, modifiersNative: false };
+  return { cells, modifiersNative: false, positions: mergedPositions };
 }
 
 /** Coalesce pruned cells into quantized-lean units (see module header). */
-function coalesceCells(cells: GenericGranularCell[]): GranularElectorateUnit[] {
+function coalesceCells(
+  cells: GenericGranularCell[],
+  positions?: Record<string, Record<string, Position>>
+): GranularElectorateUnit[] {
   interface Acc {
+    campaignCells?: CampaignCell[];
     share: number;
     ep: number;
     sp: number;
@@ -535,6 +557,17 @@ function coalesceCells(cells: GenericGranularCell[]): GranularElectorateUnit[] {
     if (!acc) {
       acc = { share: 0, ep: 0, sp: 0, turnout: 0, bucketWeights: {} };
       byKey.set(key, acc);
+    }
+    if (positions) {
+      (acc.campaignCells ??= []).push({
+        ...cell,
+        identities: Object.fromEntries(
+          Object.entries(cell.buckets).map(([dim, bucket]) => [
+            dim,
+            positions[dim]?.[bucket] ?? cell,
+          ])
+        ),
+      });
     }
     acc.share += cell.share;
     acc.ep += cell.share * cell.economicLean;
@@ -555,6 +588,7 @@ function coalesceCells(cells: GenericGranularCell[]): GranularElectorateUnit[] {
     }
     units.push({
       id: `gcell_${i++}`,
+      ...(acc.campaignCells ? { campaignCells: acc.campaignCells } : {}),
       share: acc.share,
       economicLean: acc.ep / acc.share,
       socialLean: acc.sp / acc.share,
@@ -600,21 +634,25 @@ export function deriveGranularElectorateUnits(
    * would stay frozen at whatever year happened to be asked for first — the
    * era clock would advance while the electorate silently did not.
    */
-  yearCtx?: EraYearContext
+  yearCtx?: EraYearContext,
+  retainCampaignCells = false,
+  cache: "shared" | "bypass" = "shared"
 ): { units: GranularElectorateUnit[]; modifiersNative: boolean } | null {
   const modifiersSig = turnoutDoc?.modifiers ? JSON.stringify(turnoutDoc.modifiers) : "";
   const overlaySig = positionOverlay ? JSON.stringify(positionOverlay) : "";
   const turnoutOverlaySig = turnoutOverlay ? JSON.stringify(turnoutOverlay) : "";
   const yearSig = yearCtx?.year != null ? `${yearCtx.year}:${yearCtx.startingYear ?? ""}` : "";
-  const cacheKey = `${countryId}|${stateId}|${preset ?? ""}|${modifiersSig}|${overlaySig}|${turnoutOverlaySig}|${yearSig}`;
-  if (UNIT_CACHE.has(cacheKey)) {
+  const cacheKey = `${countryId}|${stateId}|${preset ?? ""}|${modifiersSig}|${overlaySig}|${turnoutOverlaySig}|${yearSig}|${retainCampaignCells}`;
+  if (cache === "shared" && UNIT_CACHE.has(cacheKey)) {
     const cached = UNIT_CACHE.get(cacheKey) ?? null;
+    UNIT_CACHE.delete(cacheKey);
+    UNIT_CACHE.set(cacheKey, cached);
     if (cached === null) return null;
     // eslint-disable-next-line local/no-country-literals -- cache stores the derivation output; nativeness is structural
     return { units: cached, modifiersNative: countryId === "US" };
   }
 
-  let derived: { cells: GenericGranularCell[]; modifiersNative: boolean } | null = null;
+  let derived: ReturnType<typeof deriveCellsForState> = null;
   try {
     derived = deriveCellsForState(
       countryId,
@@ -629,14 +667,17 @@ export function deriveGranularElectorateUnits(
     derived = null;
   }
 
-  if (UNIT_CACHE.size >= UNIT_CACHE_MAX) UNIT_CACHE.clear();
-  if (!derived) {
-    UNIT_CACHE.set(cacheKey, null);
-    return null;
+  const units = derived
+    ? coalesceCells(derived.cells, retainCampaignCells ? derived.positions : undefined)
+    : null;
+  if (cache === "shared") {
+    if (UNIT_CACHE.size >= UNIT_CACHE_MAX) {
+      const oldest = UNIT_CACHE.keys().next().value;
+      if (oldest !== undefined) UNIT_CACHE.delete(oldest);
+    }
+    UNIT_CACHE.set(cacheKey, units);
   }
-  const units = coalesceCells(derived.cells);
-  UNIT_CACHE.set(cacheKey, units);
-  return { units, modifiersNative: derived.modifiersNative };
+  return derived && units ? { units, modifiersNative: derived.modifiersNative } : null;
 }
 
 // ─── Archetype-keyed → unit-keyed remapping ─────────────────────────────────
@@ -763,7 +804,9 @@ export function buildGranularElectorateSubstrate(
     // lean-delta fold below (that fold is deliberately zero-sum for a durable
     // shift, and legacy `resolveTurnout` ignores stored turnout drift anyway).
     input.demographicDefaults?.layer1TurnoutOverrides,
-    { year: input.year ?? null, startingYear: input.startingYear ?? null }
+    { year: input.year ?? null, startingYear: input.startingYear ?? null },
+    usesCampaignRules(input),
+    input.cache
   );
   if (!derived || derived.units.length === 0) return null;
   const { units, modifiersNative } = derived;
@@ -863,17 +906,70 @@ export function buildGranularElectorateSubstrate(
     groups,
   };
 
-  // Candidate archetype approvals → unit approvals.
+  // Preserve identities until after the nonlinear response, then average within
+  // the same units the election already uses. Buying an ad cannot regroup voters.
+  const campaignCells = units
+    .flatMap((unit) =>
+      (unit.campaignCells ?? []).map((cell) => ({
+        ...cell,
+        // Match the counted unit's live turnout, including aggregate GOTV and
+        // temporary turnout drift, while preserving its internal turnout mix.
+        turnout:
+          unit.turnout > 0
+            ? (cell.turnout * liveTurnouts[unit.id]) / unit.turnout
+            : liveTurnouts[unit.id],
+      }))
+    )
+    .map((cell) => {
+      const bucketWeights = Object.fromEntries(
+        Object.entries(cell.buckets).map(([dim, bucket]) => [`${dim}:${bucket}`, 1])
+      );
+      const cellUnit = { ...cell, bucketWeights };
+      return {
+        ...cell,
+        economicLean: foldLean(cell.economicLean, cellUnit, econDeltaKeys, econBucketDeltas),
+        socialLean: foldLean(cell.socialLean, cellUnit, socDeltaKeys, socBucketDeltas),
+        identities: Object.fromEntries(
+          Object.entries(cell.identities).map(([dim, position]) => {
+            const key = `${dim}:${cell.buckets[dim]}`;
+            return [
+              dim,
+              {
+                economicLean: clamp(position.economicLean + (econBucketDeltas[key] ?? 0), -5, 5),
+                socialLean: clamp(position.socialLean + (socBucketDeltas[key] ?? 0), -5, 5),
+              },
+            ];
+          })
+        ),
+      };
+    });
   const enriched = input.enriched.map((ec) => {
-    if (!ec.archetypeApprovals || Object.keys(ec.archetypeApprovals).length === 0) return ec;
-    return {
-      ...ec,
-      archetypeApprovals: remapArchetypeValuesToUnits(
-        ec.archetypeApprovals,
-        units,
-        input.countryId
-      ),
-    };
+    const approvals =
+      ec.archetypeApprovals && Object.keys(ec.archetypeApprovals).length > 0
+        ? remapArchetypeValuesToUnits(ec.archetypeApprovals, units, input.countryId)
+        : ec.archetypeApprovals;
+    if (!usesCampaignRules(input) || input.currentTurn == null || !ec.targetedAds?.length) {
+      return approvals === ec.archetypeApprovals ? ec : { ...ec, archetypeApprovals: approvals };
+    }
+    const bonuses = targetedAdBonuses(
+      campaignCells,
+      { economicLean: ec.charEP, socialLean: ec.charSP },
+      ec.targetedAds,
+      input.stateId,
+      input.currentTurn
+    );
+    const byUnit = Object.fromEntries(
+      units.map((unit) => {
+        const members = unit.campaignCells ?? [];
+        const weight = members.reduce((sum, cell) => sum + cell.share * cell.turnout, 0);
+        const bonus = members.reduce(
+          (sum, cell) => sum + cell.share * cell.turnout * (bonuses[cell.id] ?? 0),
+          0
+        );
+        return [unit.id, weight > 0 ? bonus / weight : 0];
+      })
+    );
+    return { ...ec, archetypeApprovals: approvals, targetedAdBonuses: byUnit };
   });
 
   // Address-driven `${party}:${archetype}` favorability deltas → `${party}:${unit}`.
@@ -907,5 +1003,6 @@ export function buildGranularElectorateSubstrate(
     enriched,
     partyGroupFavorabilityByKey,
     units,
+    ...(usesCampaignRules(input) ? { campaignCells } : {}),
   };
 }

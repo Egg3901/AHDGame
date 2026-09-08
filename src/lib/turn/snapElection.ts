@@ -23,6 +23,9 @@
  * an active `noConfidenceVotes` doc exists for the country — a PM cannot
  * preempt a pending VONC by calling snap.
  */
+
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+
 import type { Db } from "mongodb";
 import {
   COUNTRY_CONFIGS,
@@ -248,7 +251,9 @@ export async function triggerSnapElection(
   });
 
   if (snapElections.length > 0) {
-    await db.collection<Election>("elections").insertMany(snapElections as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(snapElections.map(withCampaignRules) as Election[]);
   }
 
   // 4. Increment counters. Auto-snap still increments so operators can see

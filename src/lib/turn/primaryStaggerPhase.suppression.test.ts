@@ -11,6 +11,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
+import * as primaryProjection from "@/lib/primaryProjection";
 import { runPrimaryStaggerWaveIfDue } from "./primaryStaggerPhase";
 import { invalidateDemographicCategoryCache } from "@/lib/demographics/categoryCatalog";
 import type { Election } from "@/lib/db/types";
@@ -84,7 +85,8 @@ function suppressionRow(over: Record<string, unknown> = {}) {
  * Run one Iowa wave and return the per-candidate votes the stagger persisted.
  */
 async function runIowaWave(
-  primaryStateActions: Record<string, unknown>[]
+  primaryStateActions: Record<string, unknown>[],
+  campaignAds = false
 ): Promise<Record<string, number>> {
   invalidateDemographicCategoryCache();
 
@@ -103,7 +105,23 @@ async function runIowaWave(
 
   const rows: Record<string, unknown[]> = {
     electionCandidates: [
-      candidateRow(TARGET_ROW, TARGET_CHAR, "Target"),
+      {
+        ...candidateRow(TARGET_ROW, TARGET_CHAR, "Target"),
+        ...(campaignAds
+          ? {
+              targetedAds: [
+                {
+                  stateId: "IA",
+                  dimension: "race",
+                  bucket: "white",
+                  exposure: 3,
+                  lastPurchaseTurn: CURRENT_TURN,
+                  throughTurn: CURRENT_TURN + 2,
+                },
+              ],
+            }
+          : {}),
+      },
       candidateRow(RIVAL_ROW, RIVAL_CHAR, "Rival"),
     ],
     politicalParties: [
@@ -180,7 +198,19 @@ async function runIowaWave(
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db);
 
-  const result = await runPrimaryStaggerWaveIfDue(db, ELECTION, new Date(), CURRENT_TURN);
+  const result = await runPrimaryStaggerWaveIfDue(
+    db,
+    campaignAds
+      ? {
+          ...ELECTION,
+          campaignRulesVersion: 1,
+          rulesetVersion: 3,
+          primaryEndTurn: CURRENT_TURN + 40,
+        }
+      : ELECTION,
+    new Date(),
+    CURRENT_TURN
+  );
   expect(result).not.toBeNull();
   expect(result?.statesProcessed).toContain("IA");
 
@@ -196,6 +226,33 @@ beforeEach(() => {
 });
 
 describe("vote suppression in the primary wave", () => {
+  it("counts paid ads once in both expectations and live votes, even with the old admin gate absent", async () => {
+    const projection = vi.spyOn(primaryProjection, "projectPrimaryByState");
+    try {
+      const votes = await runIowaWave([], true);
+      expect(projection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          campaignContext: expect.objectContaining({
+            campaignRulesVersion: 1,
+            currentTurn: CURRENT_TURN,
+          }),
+        })
+      );
+      const expected = projection.mock.results[0].value.byState.IA;
+      const share = (values: Record<string, number>) =>
+        values[TARGET_ROW.toString()] / Object.values(values).reduce((a, b) => a + b, 0);
+      expect(share(votes)).toBeCloseTo(share(expected), 5);
+      const input = projection.mock.calls[0][0];
+      const noAds = primaryProjection.projectPrimaryByState({
+        ...input,
+        candidates: input.candidates.map((candidate) => ({ ...candidate, targetedAds: undefined })),
+      });
+      expect(share(votes)).toBeGreaterThan(share(noAds.byState.IA));
+    } finally {
+      projection.mockRestore();
+    }
+  });
+
   it("removes the suppressed candidate's slice of the state", async () => {
     const clean = await runIowaWave([]);
     const hit = await runIowaWave([suppressionRow()]);
