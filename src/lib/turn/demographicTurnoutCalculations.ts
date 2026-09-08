@@ -1,3 +1,4 @@
+import { addTurnoutBoost } from "@/lib/campaignTargeting/rules";
 import { LAYER1_DEMOGRAPHICS } from "@/lib/utils/demographicAlignment";
 import { applyDiminishingReturns } from "@/lib/utils/diminishingReturns";
 import type { StateDemographicTurnout } from "@/lib/db/types";
@@ -123,13 +124,17 @@ export function calculateStateGOTVBoost(
 export function applyBoost(
   state: StateDemographicTurnout,
   demo: { category: string; group: string },
-  boost: number
+  boost: number,
+  campaignBoost = boost
 ): void {
   // DemographicModifiers is Record<string, Record<string, number>> — generic lookup works
   // for both legacy US documents (race/age/...) and new country-specific categories.
   const categoryModifiers = state.modifiers[demo.category];
   if (!categoryModifiers) return;
 
+  state.campaignModifiers ??= structuredClone(state.modifiers);
+  const modern = (state.campaignModifiers[demo.category] ??= {});
+  modern[demo.group] = addTurnoutBoost(modern[demo.group] ?? 0, campaignBoost);
   const currentModifier = categoryModifiers[demo.group] ?? 0;
   const adjustedBoost = applyDiminishingReturns(currentModifier, boost);
 

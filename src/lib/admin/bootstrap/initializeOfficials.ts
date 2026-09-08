@@ -4,6 +4,9 @@
  * plus cycle-1 elections. All operations are idempotent — skips if
  * officials already exist.
  */
+
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+
 import type { Db } from "mongodb";
 import type { State, ElectedOfficial, SenateClass, Election, GameState } from "@/lib/db/types";
 import { SENATE_CLASSES } from "@/lib/constants";
@@ -197,7 +200,7 @@ export async function initializeOfficials(db: Db): Promise<{
     }
 
     if (electionsToInsert.length > 0) {
-      await db.collection("elections").insertMany(electionsToInsert);
+      await db.collection("elections").insertMany(electionsToInsert.map(withCampaignRules));
       electionsCreated = electionsToInsert.length;
     }
   }

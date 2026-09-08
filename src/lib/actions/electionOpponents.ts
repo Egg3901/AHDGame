@@ -1,10 +1,10 @@
+import { usesCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { ObjectId } from "mongodb";
 import type {
   Character,
   State,
-  DemographicCategory,
   StateDemographics,
   StatePartyOrg,
   Election,
@@ -21,6 +21,7 @@ import { getGameTime } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 
 export interface ElectionOpponents {
+  campaignRulesVersion?: number;
   electionId: string;
   electionType: string;
   state: string;
@@ -45,7 +46,11 @@ export async function getElectionOpponents(
     // Find elections in their home state that are active and in general phase
     const elections = await db
       .collection<Election>("elections")
-      .find({ state: character.homeState, status: "active" })
+      .find({
+        countryId: character.countryId,
+        state: { $in: [character.homeState, character.countryId] },
+        status: "active",
+      })
       .toArray();
 
     if (elections.length === 0) return null;
@@ -55,9 +60,20 @@ export async function getElectionOpponents(
     const gameTime = await getGameTime();
     const { currentTurn } = gameTime;
 
+    // Prefer local races, then the next closing race. Keep national primaries
+    // available for candidates with no local contest, including unopposed ones.
+    elections.sort(
+      (a, b) =>
+        Number(b.state === character.homeState) - Number(a.state === character.homeState) ||
+        (a.endTurn ?? Infinity) - (b.endTurn ?? Infinity) ||
+        (a.endTime ? new Date(a.endTime).getTime() : Infinity) -
+          (b.endTime ? new Date(b.endTime).getTime() : Infinity) ||
+        a._id.toString().localeCompare(b._id.toString())
+    );
     for (const election of elections) {
       // Must be past primary phase (general election)
-      if (!isPrimaryEnded(election, currentTurn, gameTime)) continue;
+      if (!isPrimaryEnded(election, currentTurn, gameTime) && !usesCampaignRules(election))
+        continue;
 
       // Check if our character is a candidate
       const myEntry = await db.collection<ElectionCandidate>("electionCandidates").findOne({
@@ -68,13 +84,18 @@ export async function getElectionOpponents(
       });
       if (!myEntry) continue;
 
-      // Fetch all other active candidates
+      const inPrimary = !isPrimaryEnded(election, currentTurn, gameTime);
+
+      // Fetch active rivals in the same contest and primary party.
       const otherCandidates = await db
         .collection<ElectionCandidate>("electionCandidates")
-        .find({ electionId: election._id, status: "active", _id: { $ne: myEntry._id } })
+        .find({
+          electionId: election._id,
+          status: "active",
+          _id: { $ne: myEntry._id },
+          ...(inPrimary ? { party: myEntry.party } : {}),
+        })
         .toArray();
-
-      if (otherCandidates.length === 0) return null;
 
       const [state, demographics, categories, statePartyOrgs] = await Promise.all([
         db
@@ -189,9 +210,10 @@ export async function getElectionOpponents(
 
       const lastElection = await getLastElectionPartyShares(db, election);
 
-      const inPrimary = !isPrimaryEnded(election, currentTurn, gameTime);
-
       return {
+        ...(usesCampaignRules(election)
+          ? { campaignRulesVersion: election.campaignRulesVersion }
+          : {}),
         electionId: election._id.toString(),
         electionType: election.electionType,
         state: election.state,

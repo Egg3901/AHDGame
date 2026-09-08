@@ -6,6 +6,7 @@ import Link from "next/link";
 import { resolveElectionYear } from "@/lib/utils/formatters";
 import { Modal, Skeleton } from "@/components/ui";
 import type { CampaignData } from "@/lib/campaigns/dto/campaignView";
+import { TargetedAdsPanel } from "./components/TargetedAdsPanel";
 import { CanvassingPanel } from "./components/CanvassingPanel";
 import { SuspendEndorsePanel } from "./components/SuspendEndorsePanel";
 import { RunningMateSurrogatePanel } from "./components/RunningMateSurrogatePanel";
@@ -393,7 +394,11 @@ export default function CampaignDetailPage({ params }: { params: Promise<{ id: s
               here because it needs the room, and it names the state it is
               acting on, so it still reads on its own. */}
           {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
+            <TargetedAdsPanel campaignId={campaign.id} onResourcesSpent={fetchMe} />
+          )}
+          {canManage && campaign.electionInfo && !campaign.electionInfo.isEnded && (
             <CanvassingPanel
+              electionId={campaign.electionId}
               countryId={myCountryId ?? undefined}
               characterActions={myActions ?? undefined}
               characterFunds={myFunds ?? undefined}

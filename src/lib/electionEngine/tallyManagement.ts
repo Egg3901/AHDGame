@@ -2,6 +2,8 @@
  * Election vote tally accumulation and initialization.
  */
 
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
+
 import { getDb } from "@/lib/mongodb";
 import type {
   Election,
@@ -283,6 +285,7 @@ export async function accumulateVoteTurn(
   // SHARES are invariant to this basis (the F-4 guarantee), only magnitude differs.
   const electorate = state.votingEligiblePopulation ?? state.population;
 
+  turnoutDoc = turnoutForElection(turnoutDoc, election) ?? null;
   // GOTV/canvassing/suppression from turnoutDoc overlay the static demographic turnouts.
   const { totalPool: resolvedTotalPool, byGroup: liveTurnouts } = resolveTurnout(
     electorate,
@@ -352,6 +355,8 @@ export async function accumulateVoteTurn(
             .collection<StateDemographics>("demographicDefaults")
             .findOne({ _id: stateId, countryId: election.countryId }));
     const substrate = buildGranularElectorateSubstrate({
+      campaignRulesVersion: election.campaignRulesVersion,
+      currentTurn: turnNumber,
       countryId: electionCountryId,
       stateId,
       preset,

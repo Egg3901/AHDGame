@@ -1,3 +1,5 @@
+import { turnoutForElection, usesCampaignRules } from "@/lib/campaignTargeting/rules";
+import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
 import { NextResponse } from "next/server";
 import { loadDemographicCategories } from "@/lib/demographics/categoryCatalog";
 import { NextRequest } from "next/server";
@@ -180,7 +182,7 @@ export async function GET(request: NextRequest) {
       // population, matching the real tally; falls back to total on unseeded worlds.
       state.votingEligiblePopulation ?? state.population,
       "2019",
-      turnoutDoc?.modifiers
+      turnoutForElection(turnoutDoc, electionContext ?? {})?.modifiers
     );
 
     // Campaign funds are decoupled from live forex — poll costs (anchor
@@ -323,6 +325,17 @@ export async function POST(request: NextRequest) {
 
     let pollSnapshot: Record<string, unknown> | null = null;
     const electionContext = await getElectionOpponents(character);
+    const campaignProjection =
+      electionContext && usesCampaignRules(electionContext)
+        ? await projectCampaignPoll(
+            db,
+            electionContext.electionId,
+            character,
+            turnoutDoc,
+            statePartyOrgs,
+            electionContext.inPrimary
+          )
+        : null;
     {
       const opponentsForShare: OpponentForShare[] | undefined = electionContext?.opponents?.map(
         (o) => ({
@@ -340,9 +353,14 @@ export async function POST(request: NextRequest) {
 
       // Use shared turnout resolver (same as elections) for consistent GOTV/canvassing effects
       const gsPreset = gameState?.preset;
-      let liveTurnouts = buildLiveTurnouts(demographics, categories, turnoutDoc, {
-        preset: gsPreset,
-      });
+      let liveTurnouts = buildLiveTurnouts(
+        demographics,
+        categories,
+        turnoutForElection(turnoutDoc, electionContext ?? {}),
+        {
+          preset: gsPreset,
+        }
+      );
 
       // Primary-phase polls see a shifted electorate — Dem primary voters are
       // more liberal than the general Dem-leaning electorate, GOP primary voters
@@ -382,6 +400,17 @@ export async function POST(request: NextRequest) {
         liveTurnouts,
         state.votingSystem ?? "fptp"
       );
+      if (campaignProjection) {
+        pd.totalEstimatedVoters = campaignProjection.totalPool;
+        pd.inRaceVoteShare = {
+          myVotes: campaignProjection.votes[campaignProjection.myCandidateId] ?? 0,
+          opponentVotes: Object.fromEntries(
+            Object.entries(campaignProjection.votes).filter(
+              ([id]) => id !== campaignProjection.myCandidateId
+            )
+          ),
+        };
+      }
       pollSnapshot = {
         takenAt: new Date(),
         overallAppeal: pd.overallAppeal,
@@ -409,6 +438,7 @@ export async function POST(request: NextRequest) {
         // eslint-disable-next-line local/no-country-literals -- US Layer-1 model lives outside getCountryLayer1Model
         if (model || countryId === "US") {
           const granularPayload = buildGranularPollPayloadForState({
+            campaign: campaignProjection ?? undefined,
             countryId,
             stateId: state._id as string,
             preset,
