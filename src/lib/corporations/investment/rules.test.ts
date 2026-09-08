@@ -35,7 +35,14 @@ const forecastInput: InvestmentForecastInput = {
 describe("sector investment terms", () => {
   it("keeps founding prices independent of the ordinary expansion discount for every industry", () => {
     for (const sectorType of CAPACITY_SECTOR_TYPES) {
-      const args = { sectorType, units: 100, year: 1966, eraUnitScale: 1, primeRate: 5 };
+      const args = {
+        sectorType,
+        strategyId: null,
+        units: 100,
+        year: 1966,
+        eraUnitScale: 1,
+        primeRate: 5,
+      };
       const ordinary = computeBuildCost(args);
       const founding = computeBuildCost({ ...args, founding: true });
       expect(ordinary.expansionMultiplier).toBe(0.8);

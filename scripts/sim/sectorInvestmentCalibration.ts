@@ -20,7 +20,14 @@ const profiles = {
 const sectorType = "energy";
 const baseBuildTurns = 96;
 const budgetAnchor = 100000;
-const quote = computeBuildCost({ sectorType, units: 1, year: 1966, eraUnitScale: 1, primeRate: 5 });
+const quote = computeBuildCost({
+  sectorType,
+  strategyId: null,
+  units: 1,
+  year: 1966,
+  eraUnitScale: 1,
+  primeRate: 5,
+});
 const undiscountedUnit = quote.totalAnchor / quote.expansionMultiplier;
 const receiptPerUnit = revenuePerCapacityUnit(sectorType, 1);
 const results = Object.entries(profiles).map(([profile, policy]) => {
