@@ -187,10 +187,6 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
             <tbody>
               {items.map((row) => {
                 const isBusy = busyId === row.id;
-                // A single-mode Request completes on ONE approval, so the
-                // two slot columns are not two required signatures. Saying
-                // "Awaiting" in both reads as though both are needed.
-                const singleApproval = row.type === "request" && row.approvalMode === "single";
                 return (
                   <tr key={row.id} className="border-t border-card-border align-top">
                     <td className="py-2 pr-3">
@@ -229,8 +225,6 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                             <span className="text-muted"> (auto)</span>
                           )}
                         </span>
-                      ) : singleApproval ? (
-                        <span className="text-muted">⏳ Awaiting any one officer</span>
                       ) : (
                         <span className="text-muted">⏳ Awaiting Treasurer</span>
                       )}
@@ -243,8 +237,6 @@ export function PendingTreasuryTransactionsCard({ countryCode, partyId, onActed 
                             <span className="text-muted"> (auto)</span>
                           )}
                         </span>
-                      ) : singleApproval ? (
-                        <span className="text-muted">Not required</span>
                       ) : (
                         <span className="text-muted">⏳ Awaiting Chair/VC</span>
                       )}
