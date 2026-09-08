@@ -233,7 +233,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   const [unionsById, collectiveAgreementEffects, industrialActionOutputFactorBySectorId] =
     fullEnabled
       ? await Promise.all([
-          buildUnionEffectsById(db),
+          buildUnionEffectsById(db, turn ?? gameState?.currentTurn ?? 0),
           loadCollectiveAgreementEffects(db, turn ?? gameState?.currentTurn ?? 0),
           loadIndustrialActionOutputFactors(db),
         ])

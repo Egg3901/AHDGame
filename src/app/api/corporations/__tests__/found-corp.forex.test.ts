@@ -19,7 +19,7 @@ vi.mock("@/lib/wireEvent", () => ({
   wireHeadlineCorpFounded: vi.fn().mockReturnValue("headline"),
 }));
 
-function makeDb(countryId: string) {
+function makeDb(countryId: string, baseRate?: number) {
   const corpInsertedId = new ObjectId();
   const corpInsertOne = vi.fn().mockResolvedValue({ insertedId: corpInsertedId });
 
@@ -31,6 +31,13 @@ function makeDb(countryId: string) {
   const db = {
     corpInsertOne,
     collection: vi.fn().mockImplementation((name: string) => {
+      if (name === "exchangeRates")
+        return {
+          find: () => ({
+            toArray: async () =>
+              baseRate == null ? [] : [{ currencyCode: "JPY", baseRate, rate: 106 }],
+          }),
+        };
       if (name === "corporations") {
         return {
           findOne: vi.fn().mockResolvedValue(null),
@@ -114,8 +121,39 @@ describe("POST /api/corporations — forex enabled", () => {
 
     const inserted = corpInsertOne.mock.calls[0][0];
     expect(inserted.liquidCurrencyCode).toBe("JPY");
-    // INITIAL_RATES.JP = 106 — exact assertion, not sanity check
+    // INITIAL_RATES.JP = 106 ; exact assertion, not sanity check
     expect(inserted.liquidCapital).toBe(CORPORATION_STARTING_CAPITAL * 106);
+  });
+
+  it("uses the world base rate for both founding charge and corporate capital", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    const { requireAuth } = await import("@/lib/api/requireAuth");
+    const { db, corpInsertOne, character } = makeDb("JP", 360);
+
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: new ObjectId().toString(),
+        hasCharacter: true,
+        character: character as never,
+      },
+    } as never);
+
+    const { POST } = await import("../route");
+    const req = new Request("http://localhost/api/corporations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Nippon Corp", tickerSymbol: "NIPN", type: "manufacturing" }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(201);
+
+    const inserted = corpInsertOne.mock.calls[0][0];
+    expect(inserted.liquidCurrencyCode).toBe("JPY");
+    // Stored base is 360; the live quote of 106 must not price founding.
+    expect(inserted.liquidCapital).toBe(CORPORATION_STARTING_CAPITAL * 360);
   });
 
   it("US corp: liquidCurrencyCode=USD and starting capital unchanged (rate=1.0)", async () => {
@@ -158,6 +196,7 @@ describe("POST /api/corporations — forex enabled", () => {
     // makeDb only funds USD/JPY; UK founder needs GBP cash for the debit.
     character.currencyBalances = { personal: { GBP: 2_000_000 } };
     db.collection = vi.fn().mockImplementation((name: string) => {
+      if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
       if (name === "corporations") {
         return {
           findOne: vi.fn().mockResolvedValue(null),

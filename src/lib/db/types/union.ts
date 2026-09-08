@@ -36,6 +36,12 @@ import type { UnionServiceId } from "@/lib/unions/unionServices";
  * `ownerId` is the source of truth for who leads this union, see the
  * denormalized `Character.unionLeaderOf` cache in `src/lib/db/types/character.ts`.
  */
+/** A service slate purchased during settlement for a specific following turn. */
+export interface UnionServiceReceipt {
+  turn: number;
+  services: UnionServiceId[];
+}
+
 export interface Union {
   _id: ObjectId;
   countryId: CountryId;
@@ -100,6 +106,8 @@ export interface Union {
    * stale document cannot widen the effect.
    */
   activeServices?: UnionServiceId[];
+  /** Paid current/next-turn slates. Missing legacy receipts grant no service effects. */
+  serviceReceipts?: UnionServiceReceipt[];
   /**
    * Share of this turn's remaining budget (dues income minus the service bill
    * that ran) sent to organizers as political contributions, in [0, 0.5].

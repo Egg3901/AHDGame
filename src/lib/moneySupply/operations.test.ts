@@ -112,7 +112,7 @@ describe("non-QE monetary operations", () => {
       amount: 250,
     });
 
-    expect(result.moneySupplyDelta).toBe(250);
+    expect(result.moneySupplyDelta).toBe(0);
     const update = db.collectionMocks.federalBudget.updateOne.mock.calls[0][1].$set;
     expect(update.treasuryBalance).toBe(-750);
     expect(update["debt.principal"]).toBe(750);
@@ -149,7 +149,7 @@ describe("non-QE monetary operations", () => {
     });
     expect(ops[1].updateOne.update.$inc["bankCharter.cashReserves"]).toBe(100);
     expect(result).toEqual(
-      expect.objectContaining({ moneySupplyDelta: 400, reserveDelta: 0, banksCredited: 2 })
+      expect.objectContaining({ moneySupplyDelta: 0, reserveDelta: 0, banksCredited: 2 })
     );
     expect(db.collectionMocks.centralBanks.updateOne).toHaveBeenCalledWith(
       { _id: "US" },

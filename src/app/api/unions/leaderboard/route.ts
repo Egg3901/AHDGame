@@ -19,6 +19,7 @@ import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import { genericUnionName } from "@/lib/unions/unionNames";
 import { resolveUnionOwners } from "@/lib/unions/unionOwnerDisplay";
 import { unionApproval, unionMembers } from "@/lib/unions/unionDues";
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { UNION_FOUNDING_ACTION_COST, unionFoundingCostLocal } from "@/lib/unions/unionFounding";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -134,12 +135,13 @@ export async function GET(req: NextRequest) {
       );
 
     // What founding costs, resolved server-side so the modal quotes the same
-    // era-scaled and FX-scaled figure the command will actually charge. Scoped
+    // fixed campaign-currency figure the command will actually charge. Scoped
     // to the requested country when there is one, since the fee is per country.
     const [forexEnabled, preset] = await Promise.all([
       isForexEnabled(),
       getGameStatePresetOrDefault(db),
     ]);
+    const campaignRates = forexEnabled ? await loadCampaignCurrencyRates(db) : undefined;
     const founding = {
       actionCost: UNION_FOUNDING_ACTION_COST,
       costLocal: unionFoundingCostLocal({
@@ -147,6 +149,7 @@ export async function GET(req: NextRequest) {
         countryId:
           countryParam && countryParam in COUNTRY_CONFIGS ? (countryParam as CountryId) : "US",
         forexEnabled,
+        campaignRates,
       }),
     };
 

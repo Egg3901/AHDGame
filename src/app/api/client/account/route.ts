@@ -29,15 +29,27 @@ export async function GET() {
         patreonTier: 1,
         patreonExpiresAt: 1,
         singleplayerEntitledAt: 1,
+        clientAccessExpiresAt: 1,
       },
     }
   );
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 401 });
+  const nowMs = Date.now();
   const supporter = isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null);
+  const plusActive = supporter && isPlusOrBetter(user.patreonTier ?? null);
+  const tempExpiresMs = user.clientAccessExpiresAt
+    ? new Date(user.clientAccessExpiresAt).getTime()
+    : 0;
+  const tempActive = tempExpiresMs > nowMs;
   const singleplayerEntitled =
     auth.user.isModerator === true ||
     Boolean(user.singleplayerEntitledAt) ||
-    (supporter && isPlusOrBetter(user.patreonTier ?? null));
+    plusActive ||
+    tempActive;
+
+  const graceEnd = nowMs + OFFLINE_ENTITLEMENT_GRACE_MS;
+  const tempOnly =
+    tempActive && auth.user.isModerator !== true && !user.singleplayerEntitledAt && !plusActive;
 
   return NextResponse.json(
     {
@@ -48,8 +60,9 @@ export async function GET() {
         entitled: singleplayerEntitled,
         // A bounded cache keeps officially entitled players working through a
         // short outage without making revocation permanently ineffective.
+        // Temp-only grants cannot be extended past the real cutoff.
         expiresAt: singleplayerEntitled
-          ? new Date(Date.now() + OFFLINE_ENTITLEMENT_GRACE_MS).toISOString()
+          ? new Date(tempOnly ? Math.min(graceEnd, tempExpiresMs) : graceEnd).toISOString()
           : null,
       },
     },

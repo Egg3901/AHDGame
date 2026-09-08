@@ -68,3 +68,28 @@ describe("loadCampaignFxRate", () => {
     expect(r.currencyCode).toBe("USD");
   });
 });
+
+describe("world-specific fixed currency basis", () => {
+  it("uses seeded base rates rather than current forex, without leaking between worlds", async () => {
+    const { loadCampaignCurrencyRates } = await import("./campaignCurrency");
+    const first = createMockDb();
+    first.collection("exchangeRates");
+    first.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [{ currencyCode: "NGN", baseRate: 0.357, rate: 0.1 }],
+    } as never);
+    const second = createMockDb();
+    second.collection("exchangeRates");
+    second.collectionMocks.exchangeRates.find.mockReturnValue({
+      toArray: async () => [{ currencyCode: "NGN", baseRate: 1550, rate: 1200 }],
+    } as never);
+    const historical = await loadCampaignCurrencyRates(first as unknown as Db);
+    const lateActivated = await loadCampaignCurrencyRates(second as unknown as Db);
+    expect(campaignAnchorToLocal(10000, "NG", historical)).toBe(3570);
+    expect(campaignAnchorToLocal(10000, "NG", lateActivated)).toBe(15_500_000);
+    expect(campaignLocalRate("NG", historical)).toBe(0.357);
+    expect(first.collectionMocks.exchangeRates.find).toHaveBeenCalledWith(
+      {},
+      { projection: { currencyCode: 1, baseRate: 1 } }
+    );
+  });
+});

@@ -283,3 +283,41 @@ describe("DELETE /api/country/[code]/central-bank/intervention", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("intervention bands use the world's base rate", () => {
+  it.each(["POST", "PATCH"] as const)(
+    "%s accepts a band around a seeded 1953 rate",
+    async (method) => {
+      await setup({
+        bank: makeBank({ _id: "JP", countryId: "JP" }),
+        user: makeUser({
+          isAdmin: true,
+          character: { _id: chairId, name: "Chair", countryId: "JP" },
+        }),
+        rate: makeRate({
+          _id: "JP",
+          countryId: "JP",
+          currencyCode: "JPY",
+          baseRate: 360,
+          rate: 360,
+          ...(method === "PATCH"
+            ? {
+                interventionPolicy: {
+                  floor: 350,
+                  ceiling: 370,
+                  setAtTurn: 0,
+                  lastAdjustedAtTurn: 0,
+                  recentInterventions: [],
+                },
+              }
+            : {}),
+        }),
+      });
+      const route = await import("./route");
+      const response = await route[method](makeRequest({ floor: 340, ceiling: 380 }, method), {
+        params: Promise.resolve({ code: "JP" }),
+      });
+      expect(response.status).toBe(200);
+    }
+  );
+});

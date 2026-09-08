@@ -1,5 +1,7 @@
 "use client";
 
+import { useCurrency } from "@/contexts/CurrencyContext";
+
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui";
@@ -102,6 +104,7 @@ export function GeneralElectionPanel({
   showTrends?: boolean;
 }) {
   const router = useRouter();
+  const { baseRates: campaignRates } = useCurrency();
   const { showToast } = useToast();
   const [endorsedCandidateId, setEndorsedCandidateId] = useState<string | null>(
     initialEndorsedId ?? null
@@ -185,7 +188,7 @@ export function GeneralElectionPanel({
       campaignStrengthOverrides[supportingCampaignId] ?? target?.campaignStrength ?? 0;
     const strengthPerClick =
       contributor.nationalInfluence * CAMPAIGN_STRENGTH_CONTRIBUTION_NPI_MULTIPLIER;
-    const fundsRate = campaignLocalRate(countryId);
+    const fundsRate = campaignLocalRate(countryId, campaignRates);
     return {
       currentCS,
       strengthPerClick,
@@ -199,7 +202,14 @@ export function GeneralElectionPanel({
         fundsRate,
       }),
     };
-  }, [supportingCampaignId, contributor, candidates, campaignStrengthOverrides, countryId]);
+  }, [
+    supportingCampaignId,
+    contributor,
+    candidates,
+    campaignStrengthOverrides,
+    countryId,
+    campaignRates,
+  ]);
 
   /** Cost of `clicks` contributions, or null when the player can't afford them. */
   const quoteSupport = useCallback(

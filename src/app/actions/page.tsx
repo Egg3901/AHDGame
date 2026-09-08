@@ -1,6 +1,7 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { Character, State } from "@/lib/db/types";
@@ -42,6 +43,7 @@ const CATEGORIES = ["all", "influence", "money", "research"];
 
 export default function ActionsPage() {
   const adText = useTranslations("elections.campaignTargeting");
+  const { baseRates: campaignRates } = useCurrency();
   const { showToast } = useToast();
   const router = useRouter();
   const worldFlags = useWorldFlags();
@@ -400,7 +402,11 @@ export default function ActionsPage() {
     // Face value in the campaign treasury's own currency, computed by the same
     // helper the server credits with (ticket 1107). Never pass this through the
     // live-forex formatter: campaign funds convert at the frozen base rate.
-    const fundraiseAmount = fundraiseYieldLocal(character, !!character.currencyBalances);
+    const fundraiseAmount = fundraiseYieldLocal(
+      character,
+      !!character.currencyBalances,
+      campaignRates
+    );
     const countryId = character.countryId ?? "US";
     const buildDonorBaseFundCost = homeState
       ? getBuildDonorBaseFundCost(
@@ -452,7 +458,7 @@ export default function ActionsPage() {
       buildDonorBaseActionCost,
       buildDonorBaseFundCost,
     };
-  }, [character, influence, homeState]);
+  }, [character, influence, homeState, campaignRates]);
 
   const forexEnabled = !!character?.currencyBalances;
   // LOCAL home-currency balance — canonical source of truth.

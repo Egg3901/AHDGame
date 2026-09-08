@@ -161,6 +161,20 @@ describe("standing targeted ad actions", () => {
     expect(db.collection("electionCandidates").findOne).not.toHaveBeenCalled();
   });
 
+  it("prices and debits ads using the world's stored campaign currency basis", async () => {
+    vi.mocked(isForexEnabled).mockResolvedValue(true);
+    db.collection("exchangeRates").find.mockReturnValue({
+      toArray: async () => [{ currencyCode: "USD", baseRate: 2, rate: 9 }],
+    });
+    const response = await GET(new NextRequest("http://localhost/api/targeted-ads"));
+    expect((await response.json()).targets[0].cost).toBe(4000);
+    const bought = await POST(request({ ...purchase, quote: { ...purchase.quote, cost: 12000 } }));
+    expect(bought.status).toBe(200);
+    expect(db.collection("characters").updateOne.mock.calls[0][1]).toMatchObject({
+      $inc: { actions: -15, "currencyBalances.campaign": -12000, targetedAdsRevision: 1 },
+    });
+  });
+
   it("rejects foreign regions, stale prices and overlapping flights without spending", async () => {
     expect((await POST(request({ ...purchase, stateId: "foreign" }))).status).toBe(400);
     expect(

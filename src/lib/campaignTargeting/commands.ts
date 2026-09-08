@@ -3,6 +3,7 @@
  * NPP. Player purchases share the character revision with the Actions page,
  * and authorized managers spend their own personal resources.
  */
+
 import { ObjectId, type Db, type ClientSession } from "mongodb";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import type { AuthUserWithCharacter } from "@/lib/auth";

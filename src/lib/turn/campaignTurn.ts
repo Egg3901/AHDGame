@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
@@ -47,6 +48,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
     { name: "turn.campaignTurn", op: "turn.phase", attributes: { turn: turnNumber } },
     async () => {
       const db = await getDb();
+      const campaignRates = await loadCampaignCurrencyRates(db);
 
       let campaignsProcessed = 0;
       let totalFundsGenerated = 0;
@@ -72,7 +74,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
         // Campaign treasuries are stored in each campaign's local currency, but the
         // income / maintenance constants are anchor. Campaign funds are DECOUPLED
-        // from live forex — conversion uses the frozen, preset-aware INITIAL_RATES
+        // from live forex ; conversion uses the frozen world currency basis
         // scale (campaignLocalRate / campaignAnchorToLocal), never the live
         // exchangeRates. This keeps income/cost ratios stable as markets drift.
 
@@ -472,7 +474,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             const income = calculateCampaignIncome(campaign, electionTypeForScalar);
             const campaignCountryId = electionData?.countryId ?? "US";
             // Frozen base local rate — never the live exchangeRates.
-            const campaignRate = campaignLocalRate(campaignCountryId);
+            const campaignRate = campaignLocalRate(campaignCountryId, campaignRates);
             const fundsAnchorForCalc =
               campaignRate !== 1 ? campaign.funds / campaignRate : campaign.funds;
 
@@ -539,8 +541,12 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               downgrade.downgrades.length > 0 ? downgrade.newMaintenance : preDowngradeMaintenance;
             // Convert anchor income / maintenance to the campaign's local currency
             // for the treasury write (funds is stored local).
-            const incomeLocal = campaignAnchorToLocal(income, campaignCountryId);
-            const maintenanceLocal = campaignAnchorToLocal(effectiveMaintenance, campaignCountryId);
+            const incomeLocal = campaignAnchorToLocal(income, campaignCountryId, campaignRates);
+            const maintenanceLocal = campaignAnchorToLocal(
+              effectiveMaintenance,
+              campaignCountryId,
+              campaignRates
+            );
 
             const campaignSet: Record<string, unknown> = { updatedAt: now };
             if (downgrade.downgrades.length > 0) {

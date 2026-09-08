@@ -21,6 +21,18 @@ import {
 } from "./primaryMarket";
 
 describe("planCorporateUnderwriting", () => {
+  it("uses calibrated secondary liquidity after reclassification", () => {
+    expect(
+      planCorporateUnderwriting({
+        requestedUnits: 20,
+        poolCashLocal: 100000,
+        poolM2Local: 2000,
+        poolLiquidityTargetLocal: 50000,
+        rating: "BBB",
+        pricePerUnitLocal: 1000,
+      }).placedUnits
+    ).toBe(7);
+  });
   it("writes a slice of the liquidity cash scaled by credit tier", () => {
     // Liquidity cash = min(pool cash 100k, 5% of M2 1M = 50k) = 50k; 20% commit = 10k;
     // BBB factor 0.75 -> 7.5k -> 7 units at 1,000.

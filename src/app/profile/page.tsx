@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { redirect } from "next/navigation";
 import { getLocale, getTranslations } from "next-intl/server";
 import { ObjectId, type Filter } from "mongodb";
@@ -385,6 +386,7 @@ export default async function ProfilePage() {
     getFinancialData(data.character._id),
     unionContributionIncomePerTurn(db, data.character._id),
   ]);
+  const campaignRates = await loadCampaignCurrencyRates(await getDb());
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const {
@@ -747,7 +749,7 @@ export default async function ProfilePage() {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled),
+                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled, campaignRates),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}

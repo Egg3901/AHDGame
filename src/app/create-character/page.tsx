@@ -41,6 +41,7 @@ import { generateUniqueNPPNameAndGender } from "@/lib/npp/nameGenerator";
 const JP_REGION_ID_SET = new Set(JP_REGIONS.map((r) => r.id));
 
 interface GameCreationInfo {
+  baseRates?: import("@/lib/campaigns/rules/currency").CampaignCurrencyRates;
   gameDate: string;
   startDate: string;
   flavorText: string;
@@ -466,14 +467,18 @@ export default function CreateCharacterPage() {
       ? { economic: selectedParty.economicPosition, social: selectedParty.socialPosition }
       : null;
 
-  const { currencyCode } = resolveStartingCurrency(country);
+  const { currencyCode } = resolveStartingCurrency(country, creationInfo?.baseRates);
   // Same function the API route applies, so preview == grant.
   const worldPreset = creationInfo?.preset;
   const wealthOptions = WEALTH_LEVELS.map(({ value, label }) => ({
     value,
     label,
     note: formatLocalAmountFull(
-      convertStartingAnchorToLocal(getWealthBonus(value, worldPreset), country),
+      convertStartingAnchorToLocal(
+        getWealthBonus(value, worldPreset),
+        country,
+        creationInfo?.baseRates
+      ),
       currencyCode
     ),
   }));
@@ -482,7 +487,8 @@ export default function CreateCharacterPage() {
     ? formatLocalAmountFull(
         convertStartingAnchorToLocal(
           getWealthBonus(formData.demographics.wealth as WealthLevel, worldPreset),
-          country
+          country,
+          creationInfo?.baseRates
         ),
         currencyCode
       )

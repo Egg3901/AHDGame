@@ -156,7 +156,10 @@ export async function POST(request: Request, context: RouteContext) {
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
-    const baseRate = INITIAL_RATES[countryId];
+    const baseRate =
+      Number.isFinite(guard.rate.baseRate) && guard.rate.baseRate > 0
+        ? guard.rate.baseRate
+        : INITIAL_RATES[countryId];
     if (baseRate == null) throw badRequest("Forex is not active for this country");
 
     const shapeError = assertBandShape(parsed.data, baseRate);
@@ -202,7 +205,10 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
 
-    const baseRate = INITIAL_RATES[countryId];
+    const baseRate =
+      Number.isFinite(guard.rate.baseRate) && guard.rate.baseRate > 0
+        ? guard.rate.baseRate
+        : INITIAL_RATES[countryId];
     if (baseRate == null) throw badRequest("Forex is not active for this country");
     const shapeError = assertBandShape(parsed.data, baseRate);
     if (shapeError) throw badRequest(shapeError);

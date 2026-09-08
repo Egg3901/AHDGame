@@ -54,6 +54,20 @@ function makeParams(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
+/** All fixture worlds use the same fixed USD basis, independently of live FX. */
+function campaignDb(collections: Record<string, Record<string, unknown>>) {
+  return {
+    collection: vi.fn((name: string) =>
+      name === "exchangeRates"
+        ? {
+            ...collections[name],
+            find: vi.fn(() => ({ toArray: async () => [{ currencyCode: "USD", baseRate: 1 }] })),
+          }
+        : collections[name]
+    ),
+  };
+}
+
 /** Standard presidential-contribution mock world, parameterised by the bits each test varies. */
 function batchWorld(opts: {
   charId: ObjectId;
@@ -138,6 +152,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
     } as any);
     mockGetDb.mockResolvedValueOnce({
       collection: vi.fn().mockReturnValue({
+        find: vi.fn(() => ({ toArray: async () => [] })),
         findOne: vi.fn().mockResolvedValue(null),
       }),
     } as any);
@@ -187,7 +202,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
           .mockResolvedValue({ characterName: "Candidate One", party: "1", status: "active" }),
       },
     };
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
@@ -238,7 +253,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
         }),
       },
     };
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
@@ -291,7 +306,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
         }),
       },
     };
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
@@ -362,7 +377,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
       gameState: { findOne: vi.fn().mockResolvedValue({ currentTurn: 42 }) },
       activityLog: { insertOne: activityInsertOne },
     };
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
@@ -467,7 +482,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
         findOne: vi.fn().mockResolvedValue({ rate: 1 }),
       },
     };
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
@@ -553,7 +568,7 @@ describe("POST /api/campaigns/[id]/campaign-strength", () => {
         findOne: vi.fn().mockResolvedValue({ rate: liveRate }),
       },
     };
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
@@ -608,7 +623,7 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
       funds: 5_000_000,
       currentCS,
     });
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(
@@ -657,7 +672,7 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
       funds: 500_000_000,
       currentCS: 0,
     });
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(
@@ -696,7 +711,7 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
       funds: 5_000_000,
       currentCS: 0,
     });
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(
@@ -757,7 +772,7 @@ describe("POST /api/campaigns/[id]/campaign-strength - batched clicks", () => {
       funds: 5_000_000,
       currentCS: 0,
     });
-    mockGetDb.mockResolvedValueOnce({ collection: vi.fn((name) => collections[name]) } as any);
+    mockGetDb.mockResolvedValueOnce(campaignDb(collections) as any);
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest(campaignOid.toString()), makeParams(campaignOid.toString()));
