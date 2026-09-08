@@ -202,7 +202,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     //
     // The capacity ARRIVES rather than existing: the new sector starts at
     // capitalStock 0 with the starter order in its `buildQueue`. Founding is
-    // deliberately FASTER than an ordinary build — half CAPACITY_BUILD_TURNS —
+    // preserved at half the authored base construction duration,
     // because a greenfield first plant is scoped to the site from day one.
     let starterUnits = 0;
     let starterBuildAnchor = 0;
@@ -248,8 +248,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         founding: true,
       }).totalAnchor;
 
-      starterOnlineTurn =
-        currentTurn + Math.max(1, Math.ceil(CAPACITY_BUILD_TURNS(sectorType) / 2));
+      starterOnlineTurn = currentTurn + Math.max(1, CAPACITY_BUILD_TURNS(sectorType, true));
     }
 
     // Cross-border expansion (target state in a different-currency country) pays

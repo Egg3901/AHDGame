@@ -28,6 +28,7 @@
  * CIP through an FX conversion on a JPY→USD transfer would restate the same
  * money by ~87×. Nothing in this module touches an FX rate.
  */
+import { mergedActiveCapacityPercent } from "@/lib/corporations/investment/rules";
 import type { CorporateSector, SectorBuildOrder } from "@/lib/db/types/corporation";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { plantSizeUnits } from "@/lib/constants/facilityQuantum";
@@ -49,6 +50,7 @@ export interface SectorPlantFields {
   buildQueue?: SectorBuildOrder[] | null;
   constructionInProgressAnchor?: number | null;
   mothballed?: boolean | null;
+  activeCapacityPercent?: number | null;
   plantsStartTurn?: number | null;
   /**
    * D13 capital-mode restore point. Carried by every transfer for the same
@@ -68,6 +70,7 @@ export interface SectorPlantFieldsUpdate {
   buildQueue: SectorBuildOrder[];
   constructionInProgressAnchor: number;
   mothballed: boolean;
+  activeCapacityPercent?: number;
   plantsStartTurn: number | null;
   legacyRevenueShadow: number | null;
 }
@@ -135,6 +138,7 @@ export function mergeSectorPlantFields(
   survivor: SectorPlantFields,
   incoming: SectorPlantFields
 ): SectorPlantFieldsUpdate {
+  const activePercent = mergedActiveCapacityPercent([survivor, incoming]);
   const mergedQueue = [...queue(survivor), ...queue(incoming)].sort(
     (a, b) => a.onlineTurn - b.onlineTurn
   );
@@ -162,6 +166,7 @@ export function mergeSectorPlantFields(
     constructionInProgressAnchor:
       num(survivor.constructionInProgressAnchor) + num(incoming.constructionInProgressAnchor),
     mothballed: survivor.mothballed === true && incoming.mothballed === true,
+    ...(activePercent == null ? {} : { activeCapacityPercent: activePercent }),
     plantsStartTurn: starts.length > 0 ? Math.min(...starts) : null,
     // Summed, on the same reasoning as `capitalStock`: the merged row is both
     // sectors, so the nameplate a rollback should restore it to is both
@@ -191,6 +196,8 @@ export function identitySectorPlantFields(sector: SectorPlantFields): SectorPlan
     buildQueue: queue(sector),
     constructionInProgressAnchor: num(sector.constructionInProgressAnchor),
     mothballed: sector.mothballed === true,
+    // Explicit default restores a legacy survivor after a failed partial merge.
+    activeCapacityPercent: sector.activeCapacityPercent ?? 100,
     plantsStartTurn: typeof sector.plantsStartTurn === "number" ? sector.plantsStartTurn : null,
     legacyRevenueShadow: shadow(sector),
   };
@@ -236,6 +243,9 @@ export function carveSectorPlantFields(
     })),
     constructionInProgressAnchor: num(sector.constructionInProgressAnchor) * f,
     mothballed: sector.mothballed === true,
+    ...(sector.activeCapacityPercent == null
+      ? {}
+      : { activeCapacityPercent: sector.activeCapacityPercent }),
     plantsStartTurn: typeof sector.plantsStartTurn === "number" ? sector.plantsStartTurn : null,
     // Split like revenue: the restore point is a nameplate, and the two halves
     // must still sum to the original one.
@@ -251,6 +261,7 @@ export function hasPlantState(sector: SectorPlantFields): boolean {
     num(sector.constructionInProgressAnchor) > 0 ||
     queue(sector).length > 0 ||
     sector.mothballed === true ||
+    sector.activeCapacityPercent != null ||
     typeof sector.plantsStartTurn === "number"
   );
 }
@@ -266,6 +277,7 @@ export function readSectorPlantFields(sector: Partial<CorporateSector>): SectorP
     buildQueue: sector.buildQueue,
     constructionInProgressAnchor: sector.constructionInProgressAnchor,
     mothballed: sector.mothballed,
+    activeCapacityPercent: sector.activeCapacityPercent,
     plantsStartTurn: sector.plantsStartTurn,
     legacyRevenueShadow: sector.legacyRevenueShadow,
   };

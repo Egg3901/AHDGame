@@ -1,8 +1,11 @@
 /**
  * @vitest-environment happy-dom
  */
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../messages/en/corporations.json";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as renderView, screen } from "@testing-library/react";
 import PlantPanel from "./PlantPanel";
 import type { PlantsData } from "../types";
 
@@ -111,3 +114,11 @@ describe("PlantPanel workforce", () => {
     ).toBeTruthy();
   });
 });
+
+function render(ui: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}

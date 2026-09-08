@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import InvestmentForecast from "./InvestmentForecast";
 import { useMemo, useState } from "react";
 import { Modal, Button } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -75,6 +77,7 @@ export default function BuildCapacityDialog({
   errorMessage,
   onSubmit,
 }: BuildCapacityDialogProps) {
+  const t = useTranslations("corporations.sectorInvestment");
   const { formatAmount } = useCurrency();
   const workersDesired = plants.workersDesired ?? plants.workers;
   const labourStaffingFactor =
@@ -120,18 +123,6 @@ export default function BuildCapacityDialog({
     const transferFee = construction * (q.fxSpreadRate ?? 0);
     const total = construction + transferFee;
     const workersNeeded = plants.laborIntensity * safeUnits;
-    // Payback: a unit's daily profit does not depend on how many you order, so
-    // the payback period is the same at any order size. Priced at TODAY's
-    // per-unit profit and today's fill rate, which is the honest estimate a
-    // player can act on.
-    const fill = plants.fillRate ?? 1;
-    const perUnitDailyProfit = (plants.pnl.profitPerUnitAnchor ?? 0) * fill;
-    // Payback is measured against what the player actually pays, fee included.
-    const paybackDays = perUnitDailyProfit > 0 ? q.perUnitChargedAnchor / perUnitDailyProfit : null;
-    // Buyers' room is the BINDING constraint: unmet demand for this sector's
-    // outputs (demandGapUnits), never the unowned pool alone — the pool is
-    // claimable market share and reads huge even in a glut where extra units
-    // simply go unsold (ticket #1027 follow-up).
     const overHeadroom = safeUnits > Math.min(plants.headroomUnits, plants.demandGapUnits ?? 0);
     return {
       safeCount,
@@ -140,8 +131,6 @@ export default function BuildCapacityDialog({
       transferFee,
       total,
       workersNeeded,
-      paybackDays,
-      perUnitDailyProfit,
       overHeadroom,
       affordable: total <= q.corpCapitalAnchor,
     };
@@ -172,7 +161,7 @@ export default function BuildCapacityDialog({
             {vocab.buildVerb === "open" ? "Open more capacity" : "Build capacity"}
           </p>
           <p className="mt-0.5 text-body-sm font-normal text-muted">
-            {sectorLabel} · comes online in {plants.buildTurns} turns
+            {t("rampSubtitle", { sector: sectorLabel, turns: plants.buildTurns })}
           </p>
         </div>
       }
@@ -326,6 +315,13 @@ export default function BuildCapacityDialog({
               help="Unlocked technology lowers what you pay to build."
               muted={q.techMultiplier === 1}
             />
+            {(q.expansionMultiplier ?? 1) !== 1 && (
+              <CostLeg
+                label={t("expansionDiscount")}
+                value={fmtMult(q.expansionMultiplier ?? 1)}
+                help={t("expansionDiscountHelp")}
+              />
+            )}
             <div className="flex items-center justify-between border-t border-card-border pt-2">
               <dt className="text-body-sm text-muted">Price per {site}</dt>
               <dd className="text-body-sm font-semibold tabular-nums text-foreground">
@@ -368,12 +364,12 @@ export default function BuildCapacityDialog({
         </div>
 
         {/* 3. WHAT IT GIVES YOU ────────────────────────────────────────────── */}
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <Tile
-            label="Ready in"
+            label={t("rampTitle")}
             value={`${plants.buildTurns}`}
             unit="turns"
-            help="Turns until this capacity starts making things. You pay today."
+            help={t("rampHelp")}
           />
           <Tile
             label="Staff needed"
@@ -381,24 +377,9 @@ export default function BuildCapacityDialog({
             unit="workers"
             help="Extra workers this capacity needs once it is running. Their wages become part of your daily cost."
           />
-          <Tile
-            label="Pays back in"
-            value={preview.paybackDays == null ? "—" : preview.paybackDays.toFixed(0)}
-            unit="fin. days"
-            tone={
-              preview.paybackDays == null
-                ? "muted"
-                : preview.paybackDays <= 60
-                  ? "success"
-                  : "warning"
-            }
-            help={
-              preview.paybackDays == null
-                ? `This sector is not making a profit per unit today, so a new ${site} would not pay for itself yet.`
-                : "How long this build takes to earn back its price, at today's profit per unit and today's share that sells. One game year is 2 financial days."
-            }
-          />
         </div>
+
+        <InvestmentForecast plants={plants} units={preview.safeUnits} />
 
         {workersDesired > 0 && plants.workers < workersDesired && (
           <p className="flex gap-2 rounded-md border border-warning/30 bg-warning/10 p-2 text-body-sm text-foreground">

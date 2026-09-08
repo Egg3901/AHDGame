@@ -302,7 +302,7 @@ export function assessPlantsFlipForSector(
   const creditApplies = willMigrate && growthCostAnchor > 0 && unitPriceAnchor > 0;
   const buildCreditUnits = creditApplies ? growthCostAnchor / unitPriceAnchor : 0;
   const buildCreditLandsOnTurn = creditApplies
-    ? ctx.currentTurn + Math.ceil(CAPACITY_BUILD_TURNS(sector.sectorType) / 2)
+    ? ctx.currentTurn + CAPACITY_BUILD_TURNS(sector.sectorType, true)
     : null;
 
   const queue = (sector.buildQueue ?? []).filter(

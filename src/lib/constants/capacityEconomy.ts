@@ -2,9 +2,9 @@
  * Plants and capacity: what a unit of production capacity costs, how long a build
  * takes and how long it takes to pay back. capacityPricePerUnit prices capacity
  * from commodity base prices and strategy output; CAPACITY_BUILD_TURNS runs from
- * 12 turns (retail) to 96 (energy, extraction), where 48 turns is a game year.
+ * 12 turns (retail) to 60 (telecommunications, real estate), where 48 turns is a game year.
  * Cancelled builds refund 75%, idle capacity still pays 30% upkeep
- * (IDLE_UPKEEP_FRACTION), mothballed 20%, and attacks transfer only 60% of captured capacity.
+ * (IDLE_UPKEEP_FRACTION), mothballed 5%, and attacks transfer only 60% of captured capacity.
  */
 /**
  * Capacity economy anchors — what a unit of productive capacity COSTS and how
@@ -123,6 +123,11 @@
  * and will be re-tuned by worldsim.
  */
 
+import {
+  COLD_CAPACITY_UPKEEP_FRACTION,
+  expansionCostMultiplier,
+  investmentBuildTurns,
+} from "@/lib/corporations/investment/rules";
 import {
   CORPORATION_TYPES,
   GROWTH_COST_MULTIPLIER,
@@ -518,7 +523,8 @@ export function laborIntensity(
 // ─── Construction time ──────────────────────────────────────────────────────
 
 /**
- * PROVISIONAL construction times, in TURNS, to deliver a capacity build.
+ * Authored base construction times, in turns. investmentBuildTurns applies
+ * the ordinary heavy-build reduction while preserving founding durations.
  *
  * There is no observed quantity to calibrate against — the legacy growth path
  * delivers capacity continuously with no build lag at all — so unlike the two
@@ -555,9 +561,12 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
 /** Fallback for an unrecognized sector type (mid-table). */
 export const CAPACITY_BUILD_TURNS_DEFAULT = 48;
 
-/** PROVISIONAL — turns to complete a capacity build in `sectorType`. */
-export function CAPACITY_BUILD_TURNS(sectorType: CorporationType): number {
-  return CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT;
+/** Turns to complete a new build. Existing orders keep their stored window. */
+export function CAPACITY_BUILD_TURNS(sectorType: CorporationType, founding = false): number {
+  return investmentBuildTurns(
+    CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT,
+    founding
+  );
 }
 
 /** Every sector type, for exhaustive iteration in tests and tooling. */
@@ -584,7 +593,7 @@ export const CAPACITY_BUILD_CANCEL_REFUND = 0.75;
  * mothballing a large saving (80%) without making it strictly better than
  * running a marginal plant.
  */
-export const MOTHBALL_UPKEEP_FRACTION = 0.2;
+export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
 
 /**
  * Share of the pro-rata maintenance cost that IDLE (built but unused) capacity
@@ -810,6 +819,8 @@ export interface BuildCostBreakdown {
   hostPriceMultiplier: number;
   /** Founding discount multiplier (1 for an ordinary build). */
   foundingMultiplier: number;
+  /** Discount for ordinary expansion; founder pricing is unchanged. */
+  expansionMultiplier: number;
   /** Total ₳ charged for the order. */
   totalAnchor: number;
 }
@@ -824,7 +835,7 @@ export interface BuildCostBreakdown {
  *                   × acumenMult(acumen)
  *                   × techMult(growthCostMultiplier)
  *                   × hostPriceMult(costOfLiving)
- *                   × foundingMult
+ *                   × foundingMult × expansionMult
  *
  * The situational multipliers are deliberately the SAME ones the legacy growth
  * path charges (`calculateDailyGrowthCost`): dominance
@@ -914,6 +925,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       : 1;
   const hostPriceMultiplier = hostBuildPriceIndex(hostCostOfLivingIndex);
   const foundingMultiplier = founding ? CAPACITY_FOUNDING_DISCOUNT : 1;
+  const expansionMultiplier = expansionCostMultiplier(founding);
   return {
     unitPriceAnchor,
     dominanceMultiplier,
@@ -922,6 +934,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     techMultiplier,
     hostPriceMultiplier,
     foundingMultiplier,
+    expansionMultiplier,
     totalAnchor:
       safeUnits *
       unitPriceAnchor *
@@ -930,6 +943,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       acumenMultiplier *
       techMultiplier *
       hostPriceMultiplier *
-      foundingMultiplier,
+      foundingMultiplier *
+      expansionMultiplier,
   };
 }

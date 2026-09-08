@@ -1,3 +1,4 @@
+import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import {
@@ -471,6 +472,7 @@ export function processSector(
   // as its offer under plants, so 0 produced ⇒ 0 offered, automatically), and
   // pay only MOTHBALL_UPKEEP_FRACTION of running maintenance.
   const mothballed = plantsEnabled && sector.mothballed === true;
+  const activeFraction = plantsEnabled ? activeCapacityFraction(sector) : 1;
   // The capacity the advance starts from, hoisted out of the `advanceCapitalStock`
   // call below so the P5 book basis can be scaled by exactly the same
   // depreciation factor the stock takes. See the long comment inside the call.
@@ -799,7 +801,7 @@ export function processSector(
   const productionNameplateUnits = plantsEnabled
     ? mothballed
       ? 0
-      : plantsCapacity * bankingCommodityScale
+      : plantsCapacity * bankingCommodityScale * activeFraction
     : nameplateUnits * bankingCommodityScale;
   const { producedUnits, soldUnits, contractAchievableUnits } = computeContractProduction({
     plantsEnabled,
@@ -1165,7 +1167,7 @@ export function processSector(
   );
   // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
-    revenue: plantsEnabled ? plantsNameplateRevenue : newRevenue,
+    revenue: plantsEnabled ? plantsNameplateRevenue * activeFraction : newRevenue,
     stateId: sector.stateId,
     rawWorkforceSkillByState: lookups.rawWorkforceSkillByState,
     politicalBoard,

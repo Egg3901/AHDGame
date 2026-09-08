@@ -20,6 +20,32 @@
         "maximumContract": "Maximum legal commitment",
         "penaltyWarning": "This is a per-turn commitment. Production below the damage ceiling incurs shortfall damages equal to {penaltyPercent}% of the market value of each missing unit."
       }
+    },
+    "sectorInvestment": {
+      "activeCapacity": "Keep {percent}% of capacity active",
+      "recoveryExplanation": "Park surplus capacity while keeping a smaller operation running. Parked plants pay reduced upkeep. You keep the plants and can reopen them for free. Production, staffing and upkeep adjust next turn; supply commitments still apply.",
+      "activeUnits": "Active capacity: {units, number} units/day",
+      "coldCost": "Parked capacity upkeep: {amount}/turn",
+      "applyCapacity": "Apply capacity setting",
+      "mothballHelp": "Mothball all capacity or park just a share below. Cold capacity pays {percent}% of full maintenance and produces nothing.",
+      "cancelHelp": "Cancellation returns 75% of the cost of the capacity still under construction. Delivered capacity is kept.",
+      "strandedOptions": "Options: park surplus capacity in the Plant panel, change to a strategy with stronger demand, stockpile storable goods during a temporary glut, or sell the sector. Growing capacity will help only where buyers can absorb it.",
+      "expansionDiscount": "Expansion cost adjustment",
+      "expansionDiscountHelp": "New ordinary expansion receives this build-cost reduction. Founder pricing is separate.",
+      "rampTitle": "Fully built in",
+      "rampHelp": "Capacity arrives gradually from next turn until the build completes. Existing paid orders keep their original schedule.",
+      "rampSubtitle": "{sector} · capacity arrives gradually over {turns} turns",
+      "forecastTitle": "Cash return from this expansion",
+      "noForecast": "A cash-return scenario needs this sector's completed operating figures from the latest turn. It is unavailable while those figures are missing or stale.",
+      "horizon": "After {turns} turns",
+      "cashReturn": "of the build cost returned as cash",
+      "cashAvailable": "Cash after costs and reserves",
+      "salesDaily": "Additional units sold/day",
+      "paidBasis": "Remaining plant and construction value",
+      "forecastAssumptions": "Assumptions and deductions",
+      "assumptions": "Holds last turn's prices, production pace, sales share and costs constant. Additional sales are capped by measured unmet demand; unwanted output still incurs production costs. Includes the construction ramp, physical depreciation, idle upkeep and freight. Excludes receipts from selling previously stored inventory. Allocates today's corporation overhead, including R&D, proportionally; taxes positive income at {tax}%. Reserves cash for replacement. Prices, demand, policies, staffing and competitors can change. Remaining value is depreciated construction spend, excludes transfer fees and is not a cash sale quote. Returns are cumulative, not annualized.",
+      "deductions96": "Over 96 turns: overhead {overhead}, tax {tax}, replacement reserve {replacement}.",
+      "noDemand": "There is no measured unmet demand for this output mix. This scenario gives new capacity no additional sales. A new strategy, better delivery or winning customers could change that."
     }
   }
 }

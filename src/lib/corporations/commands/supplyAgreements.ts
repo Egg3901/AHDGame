@@ -145,6 +145,7 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
               transitionFromStrategyId: 1,
               transitionStartTurn: 1,
               mothballed: 1,
+              activeCapacityPercent: 1,
               productionPolicyLevel: 1,
               embargoSuspended: 1,
               embargoExportExposure: 1,

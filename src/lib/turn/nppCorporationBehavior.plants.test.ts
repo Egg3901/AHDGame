@@ -209,7 +209,7 @@ describe("NPP expansion under plants — price parity", () => {
     expect(order.unitsOrdered).toBeCloseTo(EXPECTED_UNITS, 6);
     expect(order.costPaidAnchor).toBeCloseTo(EXPECTED_BUILD, 2);
     expect(order.startTurn).toBe(TURN);
-    expect(order.onlineTurn).toBe(TURN + Math.ceil(CAPACITY_BUILD_TURNS("manufacturing") / 2));
+    expect(order.onlineTurn).toBe(TURN + CAPACITY_BUILD_TURNS("manufacturing", true));
   });
 
   it("draws the founded capacity out of the unowned pool", () => {

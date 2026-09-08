@@ -1,3 +1,4 @@
+import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
 import type { CorporationType } from "@/lib/constants/corporations";
 import {
   COMMODITY_BASE_PRICES,
@@ -25,6 +26,7 @@ export type SupplyAgreementCapacitySector = {
   transitionFromStrategyId?: string | null;
   transitionStartTurn?: number | null;
   mothballed?: boolean | null;
+  activeCapacityPercent?: number;
   productionPolicyLevel?: number | null;
   embargoSuspended?: boolean | null;
   embargoExportExposure?: number | null;
@@ -82,7 +84,9 @@ export function computeSupplierCommodityCapacityUnits(args: {
   let capacityUnits = 0;
   for (const s of supplyAgreementSectorsInScope(args.sectors, args.stateId)) {
     if (s.mothballed === true) continue;
-    const capacity = typeof s.capitalStock === "number" ? s.capitalStock : 0;
+    const capacity =
+      (typeof s.capitalStock === "number" ? s.capitalStock : 0) *
+      activeCapacityFraction({ activeCapacityPercent: s.activeCapacityPercent });
     if (!(capacity > 0)) continue;
     const rates = getEffectiveStrategyRates(
       s.sectorType,

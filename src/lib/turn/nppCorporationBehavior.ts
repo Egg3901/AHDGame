@@ -1470,7 +1470,7 @@ export function makeNppCorpDecision(
       ) {
         const buildTurns = Math.max(
           1,
-          Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
+          CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
         );
         // Legacy nameplate: demand-side sectors take the built share of the
         // pool; extraction has no pool, so it prices the nameplate off the units

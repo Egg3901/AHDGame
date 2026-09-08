@@ -111,7 +111,7 @@ Three practical rules fall out of this:
 - **Price is your share weapon.** In an oversupplied market, lowering your price wins sales from rivals. It does not create new demand.
 - **Watch the unowned pool.** Much of many markets is served by no player corporation at all. That revenue is claimable, but only up to what buyers actually spend.
 
-After ${STRANDED_WARN_TURNS} consecutive turns below half sold, the sector page shows a stranded-plant warning. The warning does not close or change a player-owned plant. It explains the condition and points the CEO to growth, mothball, sale, and abandonment controls.
+After ${STRANDED_WARN_TURNS} consecutive turns below half sold, the sector page shows a stranded-plant warning. The warning does not close or change a player-owned plant. It explains the condition and points the CEO to partial mothballing, strategy, inventory and sale controls.
 
 ## Keeping unsold goods as inventory
 
@@ -139,18 +139,21 @@ ${buildTurnsTable}
 What you should know about orders:
 
 - **Delivery is gradual.** Capacity arrives in equal slices every turn across the build window, and the build queue shows units delivered so far, the slice arriving per turn, and the finish turn. Revenue from the new capacity starts as soon as slices land, not at the end.
-- **Cancelling costs you.** Cancelling an unfinished order refunds ${pct(CAPACITY_BUILD_CANCEL_REFUND)} of what you paid. The rest is gone, siting and engineering work you cannot unspend.
+- **Cancelling costs you.** Cancelling an unfinished order refunds ${pct(CAPACITY_BUILD_CANCEL_REFUND)} of the paid cost of capacity still under construction. Delivered capacity remains yours.
+- **Plan against cash return.** The build dialog shows 48-, 96- and 192-turn scenarios using observed sales and costs, construction ramp, corporation overhead, tax, freight and a replacement reserve. Unwanted output still costs money to produce. Remaining paid plant value is shown separately from cash. These are scenarios, not promises of future demand.
+- **New expansion is cheaper.** Ordinary build prices receive a 20% reduction. Heavy builds whose original schedules were 72 to 96 turns now take half as long. Founder prices and durations, and existing paid build schedules, are unchanged.
 - **Price varies by place and situation.** The same plant costs more in an expensive state and less in a cheap one, more when your central bank's prime rate is high, less with a business savvy CEO and with cost reducing technology. The dialog itemizes every multiplier so you can see why an order costs what it does.
 
 ## Managing costs: idle plants and mothballing
 
 Capacity you own but do not use is not free. An idle plant still carries about ${pct(IDLE_UPKEEP_FRACTION)} of the maintenance a running one costs: the site, upkeep against decay, a skeleton crew. The sector page's "Upkeep on idle plants" cost line shows exactly what this is costing you.
 
-When a sector's market has collapsed you have three options, in rising order of severity:
+When a sector's market has collapsed you have four options:
 
 1. **Run lean.** Keep producing at whatever share sells. Right when the market is merely soft and you expect it back.
-2. **Mothball.** A mothballed sector produces nothing, offers nothing, and pays only ${pct(MOTHBALL_UPKEEP_FRACTION)} of full running maintenance, a large saving over holding plants idle but ready. Right when the glut is deep and you want to keep the capacity for later without bleeding cash every turn. Reactivate when the market recovers.
-3. **Sell or abandon.** If the market is never coming back, capacity tied up there is dead capital. Selling the sector recovers some value; abandoning it stops the bleeding.
+2. **Park surplus capacity.** Set the active-capacity share in the Plant panel to keep a smaller operation running. Parked plants keep their owned capacity and paid value, produce nothing, and pay reduced cold upkeep. Jobs and output adjust next turn. Existing supply commitments still apply. Reopen capacity for free when demand returns.
+3. **Mothball the whole sector.** A mothballed sector produces nothing, offers nothing, and pays only ${pct(MOTHBALL_UPKEEP_FRACTION)} of full running maintenance, a large saving over holding plants idle but ready. Right when the glut is deep and you want to keep the capacity for later without bleeding cash every turn. Reactivate when the market recovers.
+4. **Sell or abandon.** If the market is never coming back, capacity tied up there is dead capital. Selling the sector recovers some value; abandoning it stops the bleeding.
 
 Mothballing beats idling on cost by design. If your selling share is very low and you are not willing to fight for share on price, mothball.
 

@@ -108,6 +108,7 @@ const buildCapacitySchema = z.discriminatedUnion("action", [
     /** Index into the sector's outstanding `buildQueue`. */
     orderIndex: z.number().int().min(0).max(1000),
   }),
+  z.object({ action: z.literal("resize"), activePercent: z.number().int().min(1).max(100) }),
   z.object({ action: z.literal("mothball") }),
   z.object({ action: z.literal("reactivate") }),
 ]);
@@ -297,41 +298,56 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       sectorType: sector.sectorType,
     };
 
-    // ─── mothball / reactivate (D12) ─────────────────────────────────────────
-    if (body.action === "mothball" || body.action === "reactivate") {
+    // Capacity settings are command-owned. The turn reads them but never
+    // writes them back, so a concurrent turn cannot undo a player's choice.
+    if (body.action === "mothball" || body.action === "reactivate" || body.action === "resize") {
       const mothballed = body.action === "mothball";
-      if ((sector.mothballed === true) === mothballed) {
+      const activeCapacityPercent = body.action === "resize" ? body.activePercent : 100;
+      if (
+        (sector.mothballed === true) === mothballed &&
+        (sector.activeCapacityPercent ?? 100) === activeCapacityPercent
+      ) {
         return NextResponse.json(
-          { error: mothballed ? "Sector is already mothballed" : "Sector is already active" },
+          { error: "Sector already has these capacity settings." },
           { status: 400 }
         );
       }
-      await db
+      const changed = await db
         .collection<CorporateSector>("corporateSectors")
-        .updateOne({ _id: sector._id }, { $set: { mothballed, updatedAt: now } });
-
+        .updateOne(
+          { _id: sector._id, corporationId: corporation._id, forSale: null },
+          { $set: { mothballed, activeCapacityPercent, updatedAt: now } }
+        );
+      if (changed.matchedCount === 0) {
+        return NextResponse.json(
+          { error: "Sector ownership or listing changed. Refresh and try again." },
+          { status: 409 }
+        );
+      }
       void logEconomicAction(db, {
         characterId: corporation.ceoId,
         userId: auth.user.userId,
-        actionType: mothballed ? "mothballSector" : "reactivateSector",
+        actionType:
+          body.action === "resize"
+            ? "resizeSectorCapacity"
+            : mothballed
+              ? "mothballSector"
+              : "reactivateSector",
         targetState: sector.stateId,
         turn: currentTurn,
         characterName: corporation.name,
         countryId,
-        // No cash moves: mothballing only changes how the turn processor bills
-        // the sector's upkeep, so there is nothing correct to log as a cost.
         result: {
           success: true,
-          message: `${mothballed ? "Mothballed" : "Reactivated"} ${sector.sectorType} in ${sector.stateId}`,
+          message: `${sector.sectorType} in ${sector.stateId}: ${mothballed ? 0 : activeCapacityPercent}% capacity active`,
         },
       }).catch(() => {});
-
       return NextResponse.json({
         success: true,
         mothballed,
-        message: mothballed
-          ? "Plants mothballed. They produce nothing and pay reduced upkeep."
-          : "Plants reactivated. They resume production next turn.",
+        activeCapacityPercent,
+        message:
+          "Capacity settings saved. Production and upkeep adjust next turn. Owned plants and construction orders are unchanged.",
       });
     }
 
