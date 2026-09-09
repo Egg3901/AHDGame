@@ -311,3 +311,24 @@ describe("player-open gate", () => {
     expect(result.report.hardBlockers.length).toBeGreaterThan(0);
   });
 });
+
+/**
+ * The probes used to answer from a country-keyed lookup that never read the
+ * preset, so 19 countries reported another era's data as their own.
+ */
+describe("probes read the preset, not just the country", () => {
+  const rosterOf = (countryId: "RU", presetId: string) =>
+    assessCountryReadiness(countryId, presetId).capabilities.find(
+      (c) => c.capabilityId === "partiesAuthored"
+    )!;
+
+  it("does not credit Russia with the CPSU in a modern world", () => {
+    expect(rosterOf("RU", "1979-default").evidence).toContain("CPSU");
+    expect(rosterOf("RU", "2019-default").evidence).not.toContain("CPSU");
+  });
+
+  it("reports partiesAuthored as absent where the era seeds no party", () => {
+    expect(rosterOf("RU", "1979-default").present).toBe(true);
+    expect(rosterOf("RU", "2019-default").present).toBe(false);
+  });
+});

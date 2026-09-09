@@ -18,7 +18,7 @@ import {
   type CountryId,
   type GovernmentType,
 } from "@/lib/constants/countries";
-import { COUNTRY_READINESS_EXPECTATIONS } from "@/lib/constants/countryReadinessExpectations";
+import { getReadinessExpectations } from "@/lib/constants/readinessExpectations";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { FOREX_ACTIVE_COUNTRIES } from "@/lib/constants/currencies";
 import { MARKETIZATION_SCHEDULE } from "@/lib/constants/commandEconomy";
@@ -516,12 +516,12 @@ function probeInstitutions(countryId: CountryId): CapabilityEvidence {
   };
 }
 
-function probeRegions(countryId: CountryId): CapabilityEvidence {
-  const expect = COUNTRY_READINESS_EXPECTATIONS[countryId];
+function probeRegions(countryId: CountryId, presetId: string): CapabilityEvidence {
+  const expect = getReadinessExpectations(countryId, presetId);
   if (expect && expect.regionCount > 0) {
     return {
       present: true,
-      evidence: `Readiness expectations require ${expect.regionCount} regions.`,
+      evidence: `Readiness expectations require ${expect.regionCount} regions in ${presetId}.`,
     };
   }
   // Config-only countries without an expectations entry still need regions
@@ -532,34 +532,34 @@ function probeRegions(countryId: CountryId): CapabilityEvidence {
   return {
     present,
     evidence: present
-      ? `Country config present; no region-count expectation registered.`
+      ? `Country config present; no region-count expectation registered for ${presetId}.`
       : `No country config.`,
   };
 }
 
+/**
+ * Parties authored for THIS preset.
+ *
+ * The previous implementation short-circuited on
+ * `COUNTRY_READINESS_EXPECTATIONS[countryId]` and never read `presetId` on that
+ * branch, so the 19 countries holding an entry passed on any preset by
+ * asserting a roster from another era: `probeParties("RU", "2019-default")`
+ * returned present with evidence "Expected parties: CPSU", while
+ * `partySeedsForPreset` returned nothing because `ruParties` is gated to 1953
+ * and 1979. It reads the seed modules directly now. The registry covers every
+ * registered country, so there is nothing left for the short-circuit to cover.
+ */
 function probeParties(countryId: CountryId, presetId: string): CapabilityEvidence {
-  const expect = COUNTRY_READINESS_EXPECTATIONS[countryId];
-  if (expect) {
-    const present = expect.partyMin > 0 || expect.partyRoster.length > 0;
-    return {
-      present,
-      evidence: present
-        ? `Expected parties: ${expect.partyRoster} (min ${expect.partyMin}).`
-        : `Party roster empty in readiness expectations.`,
-    };
-  }
-  // Economy-preview Tier-1 countries (FR/IT/ES/SE/TR) author parties in seed
-  // modules without a COUNTRY_READINESS_EXPECTATIONS entry yet.
   const seeded = partySeedsForPreset(countryId, presetId);
   if (seeded.length > 0) {
     return {
       present: true,
-      evidence: `Authored party seed module for ${presetId}: ${partyRosterLabel(seeded)} (${seeded.length}).`,
+      evidence: `Authored party seeds for ${presetId}: ${partyRosterLabel(seeded)} (${seeded.length}).`,
     };
   }
   return {
     present: false,
-    evidence: `No party roster in COUNTRY_READINESS_EXPECTATIONS and no authored party seed module.`,
+    evidence: `No party seed valid for ${presetId} in the party seed registry.`,
   };
 }
 
@@ -672,12 +672,22 @@ function probePlannedControls(countryId: CountryId): CapabilityEvidence {
   };
 }
 
-function probeAdminDiagnostics(countryId: CountryId): CapabilityEvidence {
-  const present = Boolean(COUNTRY_READINESS_EXPECTATIONS[countryId]);
+/**
+ * Whether an admin readiness diagnostic exists for this country.
+ *
+ * Still effectively country-keyed, and deliberately so: `getReadinessExpectations`
+ * returns null only when nothing is authored for the country at all, which is
+ * the right question for a capability that asks "is there a diagnostic", not "do
+ * its numbers pass". What the preset buys here is that the derived expectations
+ * the admin panel then reads are the era's, and that the evidence string says
+ * which era answered.
+ */
+function probeAdminDiagnostics(countryId: CountryId, presetId: string): CapabilityEvidence {
+  const present = getReadinessExpectations(countryId, presetId) !== null;
   return {
     present,
     evidence: present
-      ? `COUNTRY_READINESS_EXPECTATIONS entry present.`
+      ? `Readiness expectations resolve for ${presetId}.`
       : `No COUNTRY_READINESS_EXPECTATIONS entry.`,
   };
 }
@@ -708,7 +718,7 @@ export function collectCapabilityEvidence(
   const probes: CapabilityEvidenceMap = {
     fullAutonomousTier: probeFullAutonomousTier(countryId, presetId),
     institutionsConfigured: probeInstitutions(countryId),
-    regionsAuthored: probeRegions(countryId),
+    regionsAuthored: probeRegions(countryId, presetId),
     partiesAuthored: probeParties(countryId, presetId),
     economyModel: probeEconomyModel(countryId, planned),
     budgetsAuthored: probeBudgets(countryId, presetId),
@@ -717,7 +727,7 @@ export function collectCapabilityEvidence(
     billLifecycle: probeBillLifecycle(countryId),
     onePartyMood: probeOnePartyMood(countryId),
     plannedEconomyControls: probePlannedControls(countryId),
-    adminDiagnostics: probeAdminDiagnostics(countryId),
+    adminDiagnostics: probeAdminDiagnostics(countryId, presetId),
     bespokeEvents: defaultFlavorEvidence("bespokeEvents"),
     artAssets: defaultFlavorEvidence("artAssets"),
     wikiMaterial: defaultFlavorEvidence("wikiMaterial"),
