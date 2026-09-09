@@ -334,6 +334,19 @@ function buildBasePolicies(
   return out;
 }
 
+/**
+ * The 2019 policy set, un-vacuumed and preset-blind.
+ *
+ * Consumed by `scripts/seed/seed-policies.ts` (through the `scripts/seeds`
+ * re-export), a manual upsert with no preset argument. It builds from
+ * `COUNTRY_POLICY_CONFIGS_2019`, so it covers sixteen countries rather than the
+ * legacy union's twenty-seven: running it no longer writes Warsaw-Pact or Soviet
+ * policy rows into a world that has none.
+ *
+ * ⚠️ Preset-aware callers must use `getBasePolicies(preset)` instead. This export
+ * skips the era vacuum, so it still emits types whose window opens after 2019
+ * (`cn_common_prosperity`, 2021). That is unchanged and pre-existing.
+ */
 export const basePolicies = buildBasePolicies(COUNTRY_POLICY_CONFIGS_2019);
 export default basePolicies;
 
