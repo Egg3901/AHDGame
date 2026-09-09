@@ -123,7 +123,7 @@ describe("processScotusTenureTurn", () => {
 
     expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 1, seatsVacatedByHazard: 0 });
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
-      { _id: seatId },
+      { _id: seatId, justiceMode: "historical" },
       expect.objectContaining({
         $set: expect.objectContaining({
           justiceMode: null,
@@ -166,7 +166,7 @@ describe("processScotusTenureTurn", () => {
 
     expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 1, seatsVacatedByHazard: 0 });
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
-      { _id: seatId },
+      { _id: seatId, justiceMode: "historical" },
       expect.objectContaining({
         $set: expect.objectContaining({
           justiceMode: null,
@@ -231,6 +231,96 @@ describe("processScotusTenureTurn", () => {
     expect(createNotifications).toHaveBeenCalledWith([]);
   });
 
+  it("leaves a malformed non-divergent seat carrying a live justiceMode to the confirmation flow", async () => {
+    // An Original Roster seat's only legitimate occupant is a scripted one. A
+    // non-divergent seat claiming "character" is malformed, so the historical
+    // clock must not vacate it out from under whoever actually holds it.
+    const seatId = new ObjectId();
+    const seat = {
+      _id: seatId,
+      countryId: "US",
+      seatNumber: 5,
+      isDivergent: false,
+      justiceMode: "character",
+      justiceCharacterId: null,
+      justiceNppId: null,
+      justiceName: "Somehow Seated",
+      historicalOccupantIndex: 0,
+      historicalOccupants: [
+        {
+          key: "a",
+          name: "Justice A",
+          economicLean: 2,
+          socialLean: 2,
+          seatedYear: 1953,
+          departureYear: 1954,
+          departureReason: "retirement",
+        },
+      ],
+    };
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([seat]),
+    });
+
+    const { processScotusTenureTurn } = await import("./scotusTenureTurn");
+    const { generateScotusVacancyNews } = await import("@/lib/scotus/scotusNews");
+    const result = await processScotusTenureTurn(500, db as unknown as Db);
+
+    expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 0, seatsVacatedByHazard: 0 });
+    expect(db.collectionMocks.supremeCourtSeats!.updateOne).not.toHaveBeenCalled();
+    expect(generateScotusVacancyNews).not.toHaveBeenCalled();
+  });
+
+  it("stays silent when a concurrent turn processor won the vacate race", async () => {
+    // Overlapping turn runs during a rolling deploy both read the seat before
+    // either writes. The compare-and-set on justiceMode decides the winner; the
+    // loser matches nothing and must not post a second vacancy wire.
+    const seatId = new ObjectId();
+    const seat = {
+      _id: seatId,
+      countryId: "US",
+      seatNumber: 8,
+      isDivergent: false,
+      justiceMode: "historical",
+      justiceCharacterId: null,
+      justiceNppId: null,
+      justiceName: "Tom C. Clark",
+      historicalOccupantIndex: 0,
+      historicalOccupants: [
+        {
+          key: "clark",
+          name: "Tom C. Clark",
+          economicLean: 1,
+          socialLean: 1,
+          seatedYear: 1953,
+          departureYear: 1954,
+          departureReason: "retirement",
+        },
+      ],
+    };
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([seat]),
+    });
+    // The other processor got there first.
+    db.collectionMocks.supremeCourtSeats!.updateOne.mockResolvedValue({
+      modifiedCount: 0,
+      matchedCount: 0,
+    });
+
+    const { processScotusTenureTurn } = await import("./scotusTenureTurn");
+    const { generateScotusVacancyNews } = await import("@/lib/scotus/scotusNews");
+    const { createNotifications } = await import("@/lib/notifications");
+    const result = await processScotusTenureTurn(49, db as unknown as Db);
+
+    expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
+      { _id: seatId, justiceMode: "historical" },
+      expect.anything()
+    );
+    expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 0, seatsVacatedByHazard: 0 });
+    expect(generateScotusVacancyNews).not.toHaveBeenCalled();
+    expect(createNotifications).toHaveBeenCalledWith([]);
+  });
+
   it("never departs a divergent justice before the tenure floor, regardless of the random draw", async () => {
     vi.spyOn(Math, "random").mockReturnValue(0.0001); // would depart if the hazard were live
     const seatId = new ObjectId();
@@ -264,6 +354,7 @@ describe("processScotusTenureTurn", () => {
       seatNumber: 4,
       isDivergent: true,
       historicalOccupants: [],
+      justiceMode: "npp",
       justiceCharacterId: null,
       justiceNppId: new ObjectId(),
       justiceName: "NPP Scholar",
@@ -282,7 +373,7 @@ describe("processScotusTenureTurn", () => {
 
     expect(result.seatsVacatedByHazard).toBe(1);
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
-      { _id: seatId },
+      { _id: seatId, justiceMode: "npp" },
       expect.objectContaining({
         $set: expect.objectContaining({ justiceCharacterId: null, justiceMode: null }),
       })
@@ -300,6 +391,7 @@ describe("processScotusTenureTurn", () => {
       seatNumber: 1,
       isDivergent: true,
       historicalOccupants: [],
+      justiceMode: "character",
       justiceCharacterId: occupantCharId,
       justiceNppId: null,
       justiceName: "Lyndon B. Johnson",
@@ -324,7 +416,7 @@ describe("processScotusTenureTurn", () => {
 
     expect(result.seatsVacatedByHazard).toBe(1);
     expect(db.collectionMocks.supremeCourtSeats!.updateOne).toHaveBeenCalledWith(
-      { _id: seatId },
+      { _id: seatId, justiceMode: "character" },
       expect.objectContaining({
         $set: expect.objectContaining({ justiceCharacterId: null, justiceMode: null }),
       })
@@ -397,6 +489,7 @@ describe("processScotusTenureTurn", () => {
       seatNumber: 6,
       isDivergent: true,
       historicalOccupants: [],
+      justiceMode: "npp",
       justiceCharacterId: null,
       justiceNppId: new ObjectId(),
       justiceName: "NPP Scholar",

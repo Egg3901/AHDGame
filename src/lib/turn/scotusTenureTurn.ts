@@ -55,6 +55,31 @@ function vacatedOccupantFields(now: Date) {
   };
 }
 
+/**
+ * Vacate a seat only if it is still occupied the way we read it, reporting
+ * whether this call is the one that made the transition.
+ *
+ * Two turn processors can overlap during a rolling deploy — each `find()`s the
+ * seats before either writes — so an unconditional `$set` would let both post
+ * the vacancy wire for the same departure. Matching on `justiceMode` makes the
+ * transition its own referee: the winner's `$set` nulls it, so the loser matches
+ * nothing and stays quiet. `updatedAt` always changes, so a matched seat is
+ * always a modified one.
+ */
+async function vacateSeatIfStillOccupied(
+  db: Db,
+  seat: SupremeCourtSeat,
+  now: Date
+): Promise<boolean> {
+  const result = await db
+    .collection<SupremeCourtSeat>("supremeCourtSeats")
+    .updateOne(
+      { _id: seat._id, justiceMode: seat.justiceMode },
+      { $set: vacatedOccupantFields(now) }
+    );
+  return (result?.modifiedCount ?? 0) > 0;
+}
+
 async function notifySeatVacated(
   db: Db,
   seat: SupremeCourtSeat,
@@ -168,7 +193,14 @@ export async function processScotusTenureTurn(
       // pointing at the departed occupant, whose departure year is in the past
       // for good, so without this the same departure re-vacates the seat and
       // re-wires the vacancy post every turn, forever.
-      if (seat.justiceMode == null) continue;
+      //
+      // Tested for "historical" rather than non-null to match the occupancy
+      // predicate the rest of the module uses (`nominateJustice`, `queries`,
+      // `scotusDocketTurn`, `scotusSurpriseCaseTurn`): an Original Roster seat's
+      // only legitimate occupant is a scripted one, so a non-divergent seat
+      // carrying a character/npp mode is malformed and must not be handed to the
+      // historical clock.
+      if (seat.justiceMode !== "historical") continue;
 
       const occupant = seat.historicalOccupants[seat.historicalOccupantIndex];
       if (!occupant || occupant.departureYear == null) continue; // still serving to "present"
@@ -179,11 +211,10 @@ export async function processScotusTenureTurn(
       // Every historical departure creates a playable vacancy. The remaining
       // authored chain is useful reference data, but it is not an appointment
       // queue. The Divergence Point remains the eventual live confirmation.
-      await database
-        .collection<SupremeCourtSeat>("supremeCourtSeats")
-        .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
-      seatsVacatedByHistory++;
-      await notifySeatVacated(database, seat, notifications, "history");
+      if (await vacateSeatIfStillOccupied(database, seat, now)) {
+        seatsVacatedByHistory++;
+        await notifySeatVacated(database, seat, notifications, "history");
+      }
       continue;
     }
 
@@ -199,11 +230,10 @@ export async function processScotusTenureTurn(
     );
     if (!departs) continue;
 
-    await database
-      .collection<SupremeCourtSeat>("supremeCourtSeats")
-      .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
-    seatsVacatedByHazard++;
-    await notifySeatVacated(database, seat, notifications, "death");
+    if (await vacateSeatIfStillOccupied(database, seat, now)) {
+      seatsVacatedByHazard++;
+      await notifySeatVacated(database, seat, notifications, "death");
+    }
   }
 
   await createNotifications(notifications);

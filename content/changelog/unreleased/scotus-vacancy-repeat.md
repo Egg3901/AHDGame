@@ -1,5 +1,5 @@
 ---
-date: 2026-09-08
+date: 2026-09-09
 title: Stop repeating the Supreme Court vacancy announcement
 summary: >-
   A Supreme Court seat left open by a historical justice announced itself once
