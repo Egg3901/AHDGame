@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { COUNTRY_ORDER } from "@/lib/constants/countries";
+import { SHIPPING_PRESETS, tierFor } from "@/lib/world/eraRoster";
 import {
   getPresetEnablementCountries,
   getPresetEnablementTier,
@@ -206,5 +207,51 @@ describe("roster-driven enablement", () => {
     await expect(seedCountryGameStates(db as unknown as Db, "1968-default", 1968)).rejects.toThrow(
       /No world entity roster/
     );
+  });
+});
+
+/**
+ * The enablement accessors answer "what does this preset contain?", and callers
+ * such as `seededCountryIdsForPreset` treat the answer as "what a reset
+ * produces". A country the era does not contain belongs in neither.
+ *
+ * The pre-roster implementation got this for free: it read world-entity
+ * manifest entries, and an absent country has none. Deriving from COUNTRY_ORDER
+ * lost that, silently.
+ */
+describe("enablement accessors exclude countries the era does not contain", () => {
+  it("omits East Germany from 1991 and later", () => {
+    for (const preset of [
+      "1991-default",
+      "1999-default",
+      "2007-default",
+      "2019-default",
+    ] as const) {
+      expect(getPresetEnablementCountries(preset), preset).not.toContain("DD");
+      expect(getPresetEnablementTier(preset, "DD"), preset).toBeNull();
+    }
+  });
+
+  it("keeps East Germany in the Cold-War presets", () => {
+    for (const preset of ["1953-default", "1979-default"] as const) {
+      expect(getPresetEnablementCountries(preset), preset).toContain("DD");
+      expect(getPresetEnablementTier(preset, "DD"), preset).not.toBeNull();
+    }
+  });
+
+  it("omits Czechoslovakia and Yugoslavia once they have dissolved", () => {
+    expect(getPresetEnablementCountries("2019-default")).not.toContain("CS");
+    expect(getPresetEnablementCountries("2019-default")).not.toContain("YU");
+    // Yugoslavia as Serbia and Montenegro survives to 2006, so 1999 keeps it.
+    expect(getPresetEnablementCountries("1999-default")).toContain("YU");
+  });
+
+  it("returns exactly the non-absent registered countries", () => {
+    for (const preset of SHIPPING_PRESETS) {
+      const expected = COUNTRY_ORDER.filter(
+        (id) => id !== "US" && tierFor(preset, id) !== "absent"
+      );
+      expect(getPresetEnablementCountries(preset), preset).toEqual(expected);
+    }
   });
 });

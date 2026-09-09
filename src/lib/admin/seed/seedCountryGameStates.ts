@@ -70,22 +70,44 @@ function assertRecognisedPreset(preset: string): void {
 }
 
 /**
- * Countries the roster writes an enablement row for in this preset: every
- * registered country except the US, which runs off the global `GameState`.
- * Null for the special presets that deliberately seed no era.
+ * Countries this preset contains: every registered country the roster does not
+ * mark `absent`, minus the US, which runs off the global `GameState`. Null for
+ * the special presets that deliberately seed no era.
+ *
+ * Not the same set as the rows `seedCountryGameStates` writes — that writes one
+ * for every registered country, absent ones included, carrying
+ * `absentInEra: true`. Callers of this function ask what a reset *produces*
+ * (`seededCountryIdsForPreset` turns it into the seed diagnostic's expected
+ * country set), so an absent country here makes the diagnostic demand budgets
+ * and regions for a country the seeders correctly skip.
  */
 export function getPresetEnablementCountries(preset: string): CountryId[] | null {
   assertRecognisedPreset(preset);
   if (!isShippingPreset(preset)) return null;
-  return COUNTRY_ORDER.filter((id) => id !== GLOBAL_GAME_STATE_COUNTRY_ID);
+  return COUNTRY_ORDER.filter(
+    (id) => id !== GLOBAL_GAME_STATE_COUNTRY_ID && tierFor(preset, id) !== "absent"
+  );
 }
 
-/** Per-country access tier for a preset, or null when the roster does not ship it. */
+/**
+ * Per-country access tier for a preset, or null when this era does not contain
+ * the country.
+ *
+ * `absent` returns null rather than the NPP row `seedCountryGameStates` writes.
+ * The two paths answer different questions: the seeder needs a row for every
+ * registered country so a world moving 2019 -> 1953 brings East Germany back,
+ * while this accessor answers "is this country enabled here", and a country the
+ * era does not contain is not enabled at any tier. The pre-roster
+ * implementation drew the same line by reading manifest entries, which an
+ * absent country does not have.
+ */
 export function getPresetEnablementTier(preset: string, countryId: CountryId): Tier | null {
   assertRecognisedPreset(preset);
   if (countryId === GLOBAL_GAME_STATE_COUNTRY_ID) return null;
   if (!isShippingPreset(preset)) return null;
-  const row = TIER_ROWS[tierFor(preset, countryId)];
+  const tierId = tierFor(preset, countryId);
+  if (tierId === "absent") return null;
+  const row = TIER_ROWS[tierId];
   if (!row) return null;
   const { absentInEra: _absentInEra, ...tier } = row;
   void _absentInEra;
