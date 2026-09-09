@@ -75,6 +75,12 @@ export interface EraRosterSpec {
    * is indistinguishable from a roster somebody truncated. Declaring the gap is
    * what lets S4 assert `seated + vacant == chamber size` and still fail when a
    * roster is genuinely short.
+   *
+   * ⚠️ This does NOT drive gameplay. The running game derives vacancy itself as
+   * `chamber size - filled seats` (see the congress and legislature members
+   * routes), so the five empty House seats reach players without anything
+   * reading this field. It exists so a CHECK can tell a deliberate vacancy from
+   * a short roster, which is a question the runtime never has to ask.
    */
   vacantSeats?: Partial<Record<`${CountryId}.${string}`, number>>;
 }
