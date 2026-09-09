@@ -162,6 +162,14 @@ export async function processScotusTenureTurn(
       // somehow occupies a still-historical seat.
       if (playerHoldsSeat(seat)) continue;
 
+      // A scripted departure fires exactly once, and `justiceMode` is what says
+      // whether it already has: `vacatedOccupantFields` nulls it, and only the
+      // preset seed and the confirmation flow ever set it. The seat keeps
+      // pointing at the departed occupant, whose departure year is in the past
+      // for good, so without this the same departure re-vacates the seat and
+      // re-wires the vacancy post every turn, forever.
+      if (seat.justiceMode == null) continue;
+
       const occupant = seat.historicalOccupants[seat.historicalOccupantIndex];
       if (!occupant || occupant.departureYear == null) continue; // still serving to "present"
 

@@ -48,6 +48,8 @@ describe("processScotusTenureTurn", () => {
           countryId: "US",
           seatNumber: 1,
           isDivergent: false,
+          justiceMode: "historical",
+          justiceName: "Justice A",
           historicalOccupantIndex: 0,
           historicalOccupants: [
             {
@@ -87,6 +89,8 @@ describe("processScotusTenureTurn", () => {
       countryId: "US",
       seatNumber: 1,
       isDivergent: false,
+      justiceMode: "historical",
+      justiceName: "Justice A",
       historicalOccupantIndex: 0,
       historicalOccupants: [
         {
@@ -138,6 +142,8 @@ describe("processScotusTenureTurn", () => {
       countryId: "US",
       seatNumber: 2,
       isDivergent: false,
+      justiceMode: "historical",
+      justiceName: "Justice Solo",
       historicalOccupantIndex: 0,
       historicalOccupants: [
         {
@@ -169,6 +175,60 @@ describe("processScotusTenureTurn", () => {
         }),
       })
     );
+  });
+
+  it("does not re-fire a scripted departure on an already-vacated Original Roster seat", async () => {
+    // #1627 opened the vacancy but left nothing marking the departure as spent:
+    // the seat still points at the departed occupant, whose departure year stays
+    // in the past forever, so every later turn re-vacated it and re-posted the
+    // wire. Live seat #8 wired the same "SCOTUS Seat #8 Vacant" post every hour.
+    const seatId = new ObjectId();
+    const seat = {
+      _id: seatId,
+      countryId: "US",
+      seatNumber: 8,
+      isDivergent: false,
+      justiceMode: null,
+      justiceCharacterId: null,
+      justiceNppId: null,
+      justiceName: null,
+      seatedAtTurn: null,
+      historicalOccupantIndex: 0,
+      historicalOccupants: [
+        {
+          key: "clark",
+          name: "Tom C. Clark",
+          economicLean: 1,
+          socialLean: 1,
+          seatedYear: 1953,
+          departureYear: 1954,
+          departureReason: "retirement",
+        },
+        {
+          key: "marshall",
+          name: "Thurgood Marshall",
+          economicLean: -3,
+          socialLean: -3,
+          seatedYear: 1954,
+          departureYear: null,
+          departureReason: null,
+        },
+      ],
+    };
+    db.collectionMocks.supremeCourtSeats!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([seat]),
+    });
+
+    const { processScotusTenureTurn } = await import("./scotusTenureTurn");
+    const { generateScotusVacancyNews } = await import("@/lib/scotus/scotusNews");
+    const { createNotifications } = await import("@/lib/notifications");
+    // Well past the 1954 departure, the way the live world is decades past 1967.
+    const result = await processScotusTenureTurn(500, db as unknown as Db);
+
+    expect(result).toEqual({ seatsAdvanced: 0, seatsVacatedByHistory: 0, seatsVacatedByHazard: 0 });
+    expect(db.collectionMocks.supremeCourtSeats!.updateOne).not.toHaveBeenCalled();
+    expect(generateScotusVacancyNews).not.toHaveBeenCalled();
+    expect(createNotifications).toHaveBeenCalledWith([]);
   });
 
   it("never departs a divergent justice before the tenure floor, regardless of the random draw", async () => {
