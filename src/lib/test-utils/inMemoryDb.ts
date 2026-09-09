@@ -548,8 +548,21 @@ class InMemoryCollection {
         };
         const res = await this.replaceOne(filter, replacement, { upsert });
         modified += res.modifiedCount;
+      } else if (op.updateMany) {
+        const { filter, update } = op.updateMany as { filter: Doc; update: Update };
+        const res = await this.updateMany(filter, update);
+        modified += res.modifiedCount;
+      } else if (op.deleteMany) {
+        const { filter } = op.deleteMany as { filter: Doc };
+        await this.deleteMany(filter);
+      } else if (op.deleteOne) {
+        const { filter } = op.deleteOne as { filter: Doc };
+        const [target] = this.docs.filter((d) => matchesFilter(d, filter));
+        if (target) this.docs = this.docs.filter((d) => d !== target);
       } else {
-        throw new Error("inMemoryDb: unsupported bulk op");
+        // Still throws on anything it does not understand. Returning silently
+        // would make a seeder that writes nothing look like one that worked.
+        throw new Error(`inMemoryDb: unsupported bulk op ${Object.keys(op).join(",")}`);
       }
     }
     return { modifiedCount: modified };

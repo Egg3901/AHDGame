@@ -193,3 +193,51 @@ describe("inMemoryDb — query and update operators", () => {
     );
   });
 });
+
+describe("bulkWrite update/delete many", () => {
+  it("applies updateMany within a bulk batch", async () => {
+    // seedUnions assigns representing unions with a bulk updateMany; without
+    // this the whole bootstrap died there.
+    const db = createInMemoryDb();
+    const coll = db.collection("corporateSectors");
+    await coll.insertOne({ countryId: "US", sectorType: "steel", representingUnionId: null });
+    await coll.insertOne({ countryId: "US", sectorType: "steel", representingUnionId: null });
+    await coll.insertOne({ countryId: "UK", sectorType: "steel", representingUnionId: null });
+
+    const res = await coll.bulkWrite([
+      {
+        updateMany: {
+          filter: { countryId: "US", sectorType: "steel", representingUnionId: null },
+          update: { $set: { representingUnionId: "u1" } },
+        },
+      },
+    ]);
+
+    expect(res.modifiedCount).toBe(2);
+    expect(await coll.countDocuments({ representingUnionId: "u1" })).toBe(2);
+    expect(await coll.countDocuments({ representingUnionId: null })).toBe(1);
+  });
+
+  it("applies deleteMany and deleteOne within a bulk batch", async () => {
+    const db = createInMemoryDb();
+    const coll = db.collection("things");
+    await coll.insertOne({ tag: "a" });
+    await coll.insertOne({ tag: "a" });
+    await coll.insertOne({ tag: "b" });
+    await coll.insertOne({ tag: "b" });
+
+    await coll.bulkWrite([{ deleteMany: { filter: { tag: "a" } } }]);
+    expect(await coll.countDocuments({})).toBe(2);
+
+    await coll.bulkWrite([{ deleteOne: { filter: { tag: "b" } } }]);
+    expect(await coll.countDocuments({ tag: "b" })).toBe(1);
+  });
+
+  it("still refuses an operation it does not model", async () => {
+    // The file's invariant: throw rather than silently match nothing.
+    const db = createInMemoryDb();
+    await expect(
+      db.collection("things").bulkWrite([{ replaceMany: { filter: {}, replacement: {} } } as never])
+    ).rejects.toThrow(/unsupported bulk op/);
+  });
+});
