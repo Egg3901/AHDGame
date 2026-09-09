@@ -197,58 +197,99 @@ export function SingleplayerAdmin({
 
         {status.setup ? (
           <section className="mt-6 rounded border border-card-border bg-card p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">World rules</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+              World rules
+            </h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-2 text-sm">Difficulty
-                <select value={difficulty} onChange={(event) => setDifficulty(event.target.value as typeof difficulty)}
-                  className="rounded border border-card-border bg-background p-2">
-                  <option value="easy">Easy</option><option value="normal">Normal</option><option value="hard">Hard</option>
+              <label className="grid gap-2 text-sm">
+                Difficulty
+                <select
+                  value={difficulty}
+                  onChange={(event) => setDifficulty(event.target.value as typeof difficulty)}
+                  className="rounded border border-card-border bg-background p-2"
+                >
+                  <option value="easy">Easy</option>
+                  <option value="normal">Normal</option>
+                  <option value="hard">Hard</option>
                 </select>
               </label>
-              <label className="grid gap-2 text-sm">Autonomous politicians
-                <select value={autonomy} onChange={(event) => setAutonomy(event.target.value as typeof autonomy)}
-                  className="rounded border border-card-border bg-background p-2">
-                  <option value="off">Off</option><option value="v0">Basic</option><option value="v1">V1</option>
-                  <option value="v2">V2</option><option value="v3">V3</option><option value="v4">V4</option><option value="v5">V5</option>
+              <label className="grid gap-2 text-sm">
+                Autonomous politicians
+                <select
+                  value={autonomy}
+                  onChange={(event) => setAutonomy(event.target.value as typeof autonomy)}
+                  className="rounded border border-card-border bg-background p-2"
+                >
+                  <option value="off">Off</option>
+                  <option value="v0">Basic</option>
+                  <option value="v1">V1</option>
+                  <option value="v2">V2</option>
+                  <option value="v3">V3</option>
+                  <option value="v4">V4</option>
+                  <option value="v5">V5</option>
                 </select>
               </label>
             </div>
-            <button disabled={busy} onClick={() => void saveRules()}
-              className="mt-4 rounded border border-card-border px-4 py-2 text-sm font-semibold disabled:opacity-50">
+            <button
+              disabled={busy}
+              onClick={() => void saveRules()}
+              className="mt-4 rounded border border-card-border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+            >
               Save world rules
             </button>
           </section>
         ) : null}
 
         <section className="mt-6 rounded border border-card-border bg-card p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Turn briefing</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+            Turn briefing
+          </h2>
           {briefing.length ? (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {briefing.map((item) => (
                 <li key={`${item.category}-${item.label}`}>
-                  <a href={item.href} className="block rounded border border-card-border p-3 hover:bg-card-muted">
-                    <span className="block text-xs uppercase tracking-wide text-muted">{item.category}</span>
+                  <a
+                    href={item.href}
+                    className="block rounded border border-card-border p-3 hover:bg-card-muted"
+                  >
+                    <span className="block text-xs uppercase tracking-wide text-muted">
+                      {item.category}
+                    </span>
                     <span className="font-medium">{item.label}</span>{" "}
                     <span className={item.delta >= 0 ? "text-green-400" : "text-red-400"}>
-                      {item.delta >= 0 ? "+" : ""}{item.delta.toFixed(1)}
+                      {item.delta >= 0 ? "+" : ""}
+                      {item.delta.toFixed(1)}
                     </span>
                   </a>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="mt-2 text-sm text-muted">Advance a turn to see its recorded market, corporation and election changes.</p>
+            <p className="mt-2 text-sm text-muted">
+              Advance a turn to see its recorded market, corporation and election changes.
+            </p>
           )}
         </section>
 
         <section className="mt-6 rounded border border-card-border bg-card p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Local diagnostics</h2>
-          <p className="mt-2 text-sm text-muted">Counts and engine health only. No names, messages, credentials or save documents.</p>
-          <button disabled={busy} onClick={() => void loadDiagnostics()}
-            className="mt-3 rounded border border-card-border px-4 py-2 text-sm font-semibold disabled:opacity-50">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">
+            Local diagnostics
+          </h2>
+          <p className="mt-2 text-sm text-muted">
+            Counts and engine health only. No names, messages, credentials or save documents.
+          </p>
+          <button
+            disabled={busy}
+            onClick={() => void loadDiagnostics()}
+            className="mt-3 rounded border border-card-border px-4 py-2 text-sm font-semibold disabled:opacity-50"
+          >
             Generate diagnostics
           </button>
-          {diagnostics ? <pre className="mt-3 overflow-auto rounded bg-background p-3 text-xs">{diagnostics}</pre> : null}
+          {diagnostics ? (
+            <pre className="mt-3 overflow-auto rounded bg-background p-3 text-xs">
+              {diagnostics}
+            </pre>
+          ) : null}
         </section>
       </div>
     </main>

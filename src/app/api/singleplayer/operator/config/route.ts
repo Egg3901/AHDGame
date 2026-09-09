@@ -7,10 +7,13 @@ import { getDb } from "@/lib/mongodb";
 import { canOperateSingleplayerWorld } from "@/lib/singleplayerOperator";
 import { getSingleplayerConfig, setSingleplayerConfig } from "@/lib/singleplayerServer";
 
-const schema = z.object({
-  difficulty: z.enum(["easy", "normal", "hard"]).optional(),
-  autonomyLevel: z.enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"]).optional(),
-}).strict().refine((value) => value.difficulty != null || value.autonomyLevel != null);
+const schema = z
+  .object({
+    difficulty: z.enum(["easy", "normal", "hard"]).optional(),
+    autonomyLevel: z.enum(["off", "v0", "v1", "v2", "v3", "v4", "v5"]).optional(),
+  })
+  .strict()
+  .refine((value) => value.difficulty != null || value.autonomyLevel != null);
 
 export async function PATCH(request: Request) {
   const denied = requireSingleplayer(request);
@@ -19,7 +22,8 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Singleplayer operator is unavailable" }, { status: 403 });
   try {
     const parsed = await parseJsonBody(request, schema);
-    if (!parsed.success) return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    if (!parsed.success)
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     const db = await getDb();
     const current = await getSingleplayerConfig(db);
     if (!current) return NextResponse.json({ error: "No configured local world" }, { status: 409 });
