@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
 import { getPresetSeats, RESET_PRESETS } from "@/lib/constants/historicalSeats";
 import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
+import { getBasePolicies } from "@/lib/seeds/reference/basePolicies";
 import { partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 import { ERA_CONFIGS, type EraId } from "@/components/landing/eraThemes";
 import { countriesByTier, SHIPPING_PRESETS, tierFor, type ShippingPreset } from "./eraRoster";
@@ -345,6 +346,69 @@ describe("S3a — absent countries carry no era data", () => {
           expect(offices.has(chamber), `${preset}/${country}/${chamber}`).toBe(false);
         }
       }
+    }
+  });
+});
+
+/**
+ * S3b — no preset carries a policy block for a country it does not contain.
+ *
+ * MECHANISM: `getBasePolicies(preset)` against `tierFor`. It rests on every era
+ * having its own policy file, which is true only since `basePolicies2019.ts` was
+ * written.
+ *
+ * ⚠️ SCOPE, stated precisely, because the name invites overclaiming. The eleven
+ * blocks leaking into 2019 split two ways, and this check sees only one of them:
+ *
+ *   - `su dd cs yu bal` fail on EXISTENCE. They are polities that did not exist
+ *     in 2019, so `tierFor` reports them absent and this assertion catches them.
+ *
+ *   - `pl hu ro bg blr ukr` fail on CONTENT ONLY. Poland plainly existed in
+ *     2019 and is `npp` in the roster, so it is live and this assertion passes
+ *     over it. What was wrong was never the country, it was that its block came
+ *     from `easternBlocPolicyConfig` and set the Leading Role Statute.
+ *
+ * The content half has no check here by design: it is made structurally
+ * impossible by 2019 owning a policy file rather than inheriting the catch-all
+ * map. The regression lock for it lives with the thing it locks, in
+ * `basePolicies/legislationVacuum.test.ts` ("seeds no other era's policy block
+ * in a 2019 world"), which asserts all eleven prefixes are absent from the 2019
+ * output. Checking era-provenance in general needs a recorder that can express
+ * older-data-reaching-a-newer-preset, and none exists.
+ *
+ * ⚠️ NOT `getPresetFallbacks()` either. `selectPresetBundle` has one fallback
+ * target (`bundles["2019-default"]`) and records only when
+ * `eraForPreset(preset) !== "2019"`, so it can structurally record only
+ * 2019-data-reaching-an-older-preset. Poland's case is the reverse. The leaking
+ * lane never touched the selector at all: `getBasePolicies` is a plain if/else
+ * chain, and 2019 was its fall-through.
+ */
+describe("S3b — no preset carries a policy block for a country it lacks", () => {
+  /**
+   * Legislation ids are `<countryScope>_<topic>`, except for the legacy types
+   * that carry no `countryScope` at all. `buildBasePolicies` attributes those to
+   * the US, so their ids keep their original prefixes rather than gaining `us_`.
+   */
+  const US_LEGACY_PREFIXES = new Set(["resource", "senate"]);
+
+  /** The USSR's policy blocks are keyed `su`; the world entity is `RU`. */
+  const PREFIX_TO_COUNTRY: Record<string, CountryId> = { su: "RU" };
+
+  it.each([...SHIPPING_PRESETS])("%s seeds only countries it contains", async (preset) => {
+    const records = await getBasePolicies(preset);
+    const prefixes = [...new Set(records.map((r) => r.legislationTypeId.split("_")[0]))];
+
+    for (const prefix of prefixes) {
+      if (US_LEGACY_PREFIXES.has(prefix)) continue;
+      const countryId = PREFIX_TO_COUNTRY[prefix] ?? (prefix.toUpperCase() as CountryId);
+
+      // A prefix that is not a CountryId at all can never be live, which is
+      // exactly how `su` leaked into 2019 unnoticed for as long as it did.
+      expect(
+        COUNTRY_CONFIGS[countryId],
+        `${preset}: policy prefix "${prefix}" is not a known country`
+      ).toBeDefined();
+      expect(tierFor(preset, countryId), `${preset}/${countryId}`).not.toBe("absent");
     }
   });
 });
