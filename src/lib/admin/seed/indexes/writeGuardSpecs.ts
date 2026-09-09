@@ -73,6 +73,33 @@ export const ELECTION_WRITE_GUARD_INDEXES: IndexSpecTuple[] = [
       partialFilterExpression: { isActive: true },
     },
   ],
+  [
+    "nationalPartyElections",
+    { countryId: 1, partyId: 1, position: 1 },
+    {
+      name: "unique_voting_national_party_election_per_seat",
+      unique: true,
+      partialFilterExpression: { status: "voting" },
+    },
+  ],
+  [
+    "nationalCommitteeElections",
+    { countryId: 1, partyId: 1 },
+    {
+      name: "unique_voting_national_committee_election_per_party",
+      unique: true,
+      partialFilterExpression: { status: "voting" },
+    },
+  ],
+  [
+    "statePartyElections",
+    { countryId: 1, stateId: 1, partyId: 1, position: 1 },
+    {
+      name: "unique_voting_state_party_election_per_seat",
+      unique: true,
+      partialFilterExpression: { status: "voting" },
+    },
+  ],
 ];
 
 /** Governance ballot, cabinet and corporate-vote guards. */

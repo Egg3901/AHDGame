@@ -15,6 +15,7 @@ import type {
 import { DEFAULT_LEGACY_COUNTRY_ID, type CountryId } from "@/lib/constants/countries";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
 import { createTurnBackedWindow } from "@/lib/time/turnBackedWindow";
+import { insertManyIgnoringDuplicateKey } from "@/lib/elections/duplicateKey";
 
 export const COMMITTEE_ELECTION_DURATION_TURNS = 168; // 168 turns = 1 week
 export const COMMITTEE_SIZE = 6; // Maximum committee members
@@ -184,9 +185,11 @@ export async function createMissingCommitteeElections(
     }
   );
 
-  await db
-    .collection<NationalCommitteeElection>("nationalCommitteeElections")
-    .insertMany(elections as NationalCommitteeElection[]);
+  const inserted = await insertManyIgnoringDuplicateKey(
+    db.collection<NationalCommitteeElection>("nationalCommitteeElections"),
+    elections as NationalCommitteeElection[]
+  );
+  if (inserted === 0) return 0;
   await Promise.all(
     toCreate.map(({ partyId, countryId }) => notifyCommitteeElectionOpened(partyId, countryId))
   );
