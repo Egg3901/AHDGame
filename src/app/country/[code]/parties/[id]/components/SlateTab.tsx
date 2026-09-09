@@ -11,6 +11,7 @@ import { ElectionPhaseStatusStrip } from "@/components/elections/ElectionPhaseSt
 import { SlateElectionResults } from "@/components/elections/SlateElectionResults";
 import type { StateMapData } from "@/components/USAMapPaths";
 import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
+import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssignmentCap";
 
 const MapFallback = () => (
   <div className="h-full w-full animate-pulse rounded-md bg-card-elevated" />
@@ -128,6 +129,11 @@ interface SlateDetailResponse {
     archivedAt: string | null;
   };
   candidates: SlateCandidateRow[];
+  /**
+   * How many of the race's candidate slots this party holds. Optional because
+   * a rolling deploy can still serve a payload written before the cap existed.
+   */
+  assignment?: SlateAssignmentUsage;
   election: {
     id: string;
     electionType: string;
@@ -813,6 +819,7 @@ function RaceSlatePanel({
           electionId={item.electionId}
           state={item.state}
           partyMembers={partyMembers}
+          assignment={detail.assignment}
           assignedCandidateIds={detail.stateAssignedCandidateIds}
           onDone={async () => {
             setPickerOpen(false);
@@ -928,6 +935,16 @@ function RaceSlatePanel({
         </ul>
       )}
 
+      {detail?.assignment && (
+        <p
+          className={`text-[11px] ${
+            detail.assignment.remaining === 0 ? "text-amber-300" : "text-muted"
+          }`}
+        >
+          {formatSlateCapNote(detail.assignment)}
+        </p>
+      )}
+
       {detail && detail.candidates.some((c) => c.candidateType === "npp") && (
         <p className="text-[11px] text-muted">
           Compliant NPPs (loyal, not overly stubborn) file automatically on the next turn; others
@@ -951,6 +968,7 @@ function AssignmentPicker({
   electionId,
   state,
   partyMembers,
+  assignment,
   assignedCandidateIds,
   onDone,
 }: {
@@ -960,6 +978,12 @@ function AssignmentPicker({
   electionId: string;
   state: string;
   partyMembers: PartyRosterMember[];
+  /**
+   * Absent only when the slate payload predates the cap, which a rolling
+   * deploy can still serve to a freshly loaded tab. Assigning stays open in
+   * that window and the route enforces the cap regardless.
+   */
+  assignment?: SlateAssignmentUsage;
   assignedCandidateIds: string[];
   onDone: () => void | Promise<void>;
 }) {
@@ -1002,7 +1026,10 @@ function AssignmentPicker({
       ? `All same-party NPPs based in ${regionLabel} are already slated to a race in this region. Withdraw an existing assignment to free one up.`
       : `No same-party NPPs live in ${regionLabel}. Only candidates whose home is ${regionLabel} can be slated to this race.`;
 
+  const isFull = assignment ? assignment.remaining <= 0 : false;
+
   async function assign(candidateType: "character" | "npp", candidateId: string) {
+    if (isFull) return;
     const pending = `${candidateType}:${candidateId}`;
     setPendingKey(pending);
     setError(null);
@@ -1041,6 +1068,11 @@ function AssignmentPicker({
         onChange={(e) => setNote(e.target.value)}
         className="w-full rounded-md border border-card-border bg-card px-2 py-1 text-xs"
       />
+      {assignment && (
+        <p className={`text-[11px] ${isFull ? "text-amber-300" : "text-muted"}`}>
+          {formatSlateCapNote(assignment)}
+        </p>
+      )}
       <div className="grid gap-3 md:grid-cols-2">
         <CandidateAssignmentList
           title="Players"
@@ -1054,6 +1086,7 @@ function AssignmentPicker({
             officeLabel: member.currentOffice?.type ?? null,
           }))}
           onAssign={assign}
+          disabled={isFull}
         />
         <CandidateAssignmentList
           title="NPPs"
@@ -1067,6 +1100,7 @@ function AssignmentPicker({
             officeLabel: member.currentOffice?.type ?? null,
           }))}
           onAssign={assign}
+          disabled={isFull}
         />
       </div>
     </div>
@@ -1079,6 +1113,7 @@ function CandidateAssignmentList({
   rows,
   pendingKey,
   onAssign,
+  disabled = false,
 }: {
   title: string;
   emptyLabel: string;
@@ -1091,6 +1126,8 @@ function CandidateAssignmentList({
   }>;
   pendingKey: string | null;
   onAssign: (candidateType: "character" | "npp", candidateId: string) => Promise<void>;
+  /** True when the race already holds every candidate it may. */
+  disabled?: boolean;
 }) {
   return (
     <div className="rounded-lg border border-card-border bg-card p-2">
@@ -1111,7 +1148,7 @@ function CandidateAssignmentList({
               </div>
               <button
                 type="button"
-                disabled={pendingKey === row.key}
+                disabled={disabled || pendingKey === row.key}
                 onClick={() => void onAssign(row.type, row.id)}
                 className="rounded-md border border-card-border bg-background px-2 py-1 text-[11px] text-muted hover:text-foreground disabled:opacity-50"
               >

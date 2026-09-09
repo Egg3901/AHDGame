@@ -77,6 +77,25 @@ export function isLiveSlateStatus(status: SlateCandidateStatus): boolean {
 }
 
 /**
+ * The line the Slate tab shows a chair on each race, telling them how many
+ * candidates may stand there and how much of that is spent.
+ *
+ * Kept beside the accounting so the wording and the figures cannot drift
+ * apart, and so the one place the rule is explained to a player is the same
+ * place the rule is defined.
+ */
+export function formatSlateCapNote(usage: SlateAssignmentUsage): string {
+  const { used, cap } = usage;
+  if (used > cap) {
+    return `This race holds ${used} candidates, above the limit of ${cap}. The next turn will withdraw the extra.`;
+  }
+  if (used === cap) {
+    return `This race is full at ${cap} candidates, players and NPPs sharing the same ${cap} slots. Withdraw one to assign someone else.`;
+  }
+  return `Up to ${cap} candidates may be assigned to this race, players and NPPs sharing the same ${cap} slots. ${used} of ${cap} used.`;
+}
+
+/**
  * Count the slots one party holds on one race.
  *
  * Both arguments must already be scoped to a single (election, party) pair;

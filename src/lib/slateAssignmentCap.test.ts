@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SLATE_ASSIGNMENT_CAP,
   countSlateAssignmentUsage,
+  formatSlateCapNote,
   type SlateUsageCandidacy,
   type SlateUsageRow,
 } from "./slateAssignmentCap";
@@ -94,5 +95,38 @@ describe("countSlateAssignmentUsage", () => {
     );
     expect(usage.used).toBe(4);
     expect(usage.remaining).toBe(0);
+  });
+});
+
+describe("formatSlateCapNote", () => {
+  it("says how many may be assigned and how many are left", () => {
+    const note = formatSlateCapNote({ used: 1, cap: 3, remaining: 2 });
+    expect(note).toBe(
+      "Up to 3 candidates may be assigned to this race, players and NPPs sharing the same 3 slots. 1 of 3 used."
+    );
+  });
+
+  it("tells the chair what to do when the race is full", () => {
+    const note = formatSlateCapNote({ used: 3, cap: 3, remaining: 0 });
+    expect(note).toBe(
+      "This race is full at 3 candidates, players and NPPs sharing the same 3 slots. Withdraw one to assign someone else."
+    );
+  });
+
+  it("flags a race left above the limit by an older board", () => {
+    const note = formatSlateCapNote({ used: 5, cap: 3, remaining: 0 });
+    expect(note).toBe(
+      "This race holds 5 candidates, above the limit of 3. The next turn will withdraw the extra."
+    );
+  });
+
+  it("uses no dash characters anywhere in the copy", () => {
+    for (const usage of [
+      { used: 0, cap: 3, remaining: 3 },
+      { used: 3, cap: 3, remaining: 0 },
+      { used: 4, cap: 3, remaining: 0 },
+    ]) {
+      expect(formatSlateCapNote(usage)).not.toMatch(/[–—]/);
+    }
   });
 });
