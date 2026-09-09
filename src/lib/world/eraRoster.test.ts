@@ -127,3 +127,60 @@ describe("S1 — era roster totality", () => {
     }
   });
 });
+
+/**
+ * The roster is replacing the world-entity manifest as the source of era
+ * standing, so before anything derives from it, it has to be a FAITHFUL
+ * replacement: identical to the manifest everywhere except where this
+ * sub-project deliberately changes the answer.
+ *
+ * This caught three real defects when it was first written — the 1953 Warsaw
+ * Pact six demoted from economy-preview to npp (which would have silently
+ * no-opped every one of their election spawners, all gated on
+ * `status in {beta, active}`), Spain promoted out of its 1953 sphere-macro
+ * demotion, and eight European countries demoted across 1999/2007. All three
+ * came from hand-writing tiers instead of deriving them.
+ */
+describe("roster is a faithful replacement for the manifest", () => {
+  /** Divergences this sub-project intends. Anything else is a defect. */
+  const INTENDED = new Set<string>([
+    // Japan is promoted to player in every modern preset (spec §2.1(1)).
+    "1991-default/JP",
+    "1999-default/JP",
+    "2007-default/JP",
+  ]);
+
+  it("matches the manifest except where a change is declared", async () => {
+    const { getWorldEntityPresetManifest } = await import("./worldEntityManifest");
+    const divergences: string[] = [];
+
+    for (const preset of SHIPPING_PRESETS) {
+      const manifest = getWorldEntityPresetManifest(preset);
+      // 2019/2023 manifests are entirely `config-fallback` — era-blind, and the
+      // defect this sub-project exists to fix. Nothing to compare against.
+      if (manifest.entries.every((e) => e.legacyAccess === "config-fallback")) continue;
+
+      for (const country of COUNTRY_ORDER) {
+        const entry = manifest.entries.find((e) => e.countryId === country);
+        // A country the manifest omits entirely is one of the gaps being
+        // closed; the roster classifying it is the point.
+        if (!entry) continue;
+
+        const tier = tierFor(preset, country);
+        const expected =
+          tier === "player"
+            ? "player"
+            : tier === "econ"
+              ? "economy-preview"
+              : tier === "npp"
+                ? "hidden"
+                : null;
+        if (expected !== entry.legacyAccess && !INTENDED.has(`${preset}/${country}`)) {
+          divergences.push(`${preset}/${country}: roster=${tier} manifest=${entry.legacyAccess}`);
+        }
+      }
+    }
+
+    expect(divergences).toEqual([]);
+  });
+});

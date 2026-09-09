@@ -71,8 +71,35 @@ export const ERA_ROSTER = {
   "1953-default": {
     default: "absent",
     player: ["US", "UK", "RU", "DD"],
-    econ: ["FR", "IT", "ES", "SE", "TR", "DE", "JP", "CN", "BR", "NG", "IE", "AT", "FI", "GR"],
-    npp: ["PL", "CS", "HU", "RO", "BG", "YU"],
+    // The Warsaw Pact six are economy-preview here, NOT npp. Every spawner
+    // behind them (ensureEasternBlocAssemblyElections, BLOC_CHAMBERS_1953) is
+    // gated on countryGameStates.status in {beta, active}; demoting them to
+    // coming-soon makes all of it silently no-op, which is the pre-#3747
+    // production bug. ES is absent from this list on purpose: the 1953 manifest
+    // demotes Franco's Spain to a US-sphere macro entity (outside the UN until
+    // 1955), so it is npp here and econ only from 1979.
+    econ: [
+      "FR",
+      "IT",
+      "SE",
+      "TR",
+      "DE",
+      "JP",
+      "CN",
+      "BR",
+      "NG",
+      "IE",
+      "AT",
+      "FI",
+      "GR",
+      "PL",
+      "CS",
+      "HU",
+      "RO",
+      "BG",
+      "YU",
+    ],
+    npp: ["ES"],
     // Seeded by the Warsaw-Pact pack (bootstrapGameWorld, behind the
     // isEasternBlocEra gate) but held out of COUNTRY_ORDER on purpose.
     latent: ["UKR", "BLR", "BAL"],
@@ -128,14 +155,14 @@ export const ERA_ROSTER = {
   "1999-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
-    econ: ["DE", "IE", "CN", "BR", "NG"],
-    npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG", "YU"],
+    econ: ["DE", "IE", "CN", "BR", "NG", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR"],
+    npp: ["RU", "PL", "HU", "RO", "BG", "YU"],
   },
   "2007-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
-    econ: ["DE", "IE", "CN", "BR", "NG"],
-    npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
+    econ: ["DE", "IE", "CN", "BR", "NG", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR"],
+    npp: ["RU", "PL", "HU", "RO", "BG"],
   },
   "2019-default": {
     default: "absent",
