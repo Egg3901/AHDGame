@@ -558,15 +558,18 @@ describe("S4 — player chambers agree with their era config", () => {
    * Tasks C3, C4 and C5 empty these; whatever survives is recorded debt.
    */
   const S4_KNOWN_GAPS: Partial<Record<ShippingPreset, string[]>> = {
-    // 48 states in 1953: the roster is right and the config is era-blind.
-    "1953-default": ["US.senate: seeded 96 + vacant 0 != config 100"],
-    // The 1992 Commons genuinely had 651 seats and the 1990/1989 Diet 512/206.
-    // Again the roster is right; these want era config overrides.
-    "1991-default": [
-      "UK.commons: seeded 651 + vacant 0 != config 650",
-      "JP.shugiin: seeded 512 + vacant 0 != config 465",
-      "JP.sangiin: seeded 206 + vacant 0 != config 248",
-    ],
+    // 1953 US, 1991 UK and the 1991 Shugiin are FIXED by era config overrides
+    // (Task C3): the seeded rosters were right and the base config was
+    // era-blind, so the config moved to meet them.
+    //
+    // The 1991 Sangiin is the one case where BOTH sides were wrong. The real
+    // House of Councillors held 252 seats in 1991; the base config carried the
+    // modern 248 and the seeded roster totals 206 across its two classes. The
+    // override sets the historically correct 252, which leaves the roster 46
+    // short - a genuine authoring gap (the 1989 half-election results per
+    // prefecture), recorded rather than papered over by bending the config down
+    // to match an incomplete roster.
+    "1991-default": ["JP.sangiin: seeded 206 + vacant 0 != config 252"],
     // Here the config is right and the ROSTER is short: the 2019 Commons had
     // 650 and the February 2020 House had 435 including five vacancies.
     "1999-default": [

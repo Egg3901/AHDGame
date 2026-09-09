@@ -5510,7 +5510,101 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
   string,
   Partial<Record<CountryId, EraCountryConfigOverride>>
 > = {
+  // First non-1953 era to use this table. The lookup was always generic; nothing
+  // had exercised it.
+  "1991-default": {
+    UK: {
+      // The 1992 Parliament seated 651 MPs, up from 650 in 1987. The seeded
+      // roster is right; the base config carries the modern 650.
+      legislature: {
+        name: "Parliament",
+        path: "/country/uk/legislature",
+        bicameral: false,
+        upperChamber: {
+          key: "lords",
+          name: "House of Lords",
+          shortName: "Lords",
+          seats: 784,
+          description: "Appointed and hereditary peers. Revises and scrutinises legislation.",
+        },
+        lowerChamber: {
+          key: "commons",
+          name: "House of Commons",
+          shortName: "Commons",
+          seats: 651,
+          description:
+            "651 elected MPs from single-member constituencies. The primary legislative chamber.",
+        },
+      },
+    },
+    JP: {
+      // Shugiin: 512 seats at the February 1990 general election, matching the
+      // seeded roster exactly.
+      //
+      // Sangiin: 252. NOTE this is neither the seeded figure nor the modern one.
+      // The House of Councillors held 252 seats from Okinawa's reversion until
+      // the 2001 reduction, so 252 is the era-correct size; the base config's
+      // 248 is modern, and the seeded roster totals only 206 (104 + 102 across
+      // the two classes), leaving it 46 short. Setting the config to the real
+      // number rather than to the roster's is deliberate: an era override exists
+      // to make the config historically right, and bending it to match an
+      // incomplete roster would enshrine a wrong chamber size in a country the
+      // next reset opens to players. The shortfall is recorded in S4 instead.
+      legislature: {
+        name: "Kokkai",
+        path: "/country/jp/legislature",
+        bicameral: true,
+        upperChamber: {
+          key: "sangiin",
+          name: "Sangiin",
+          shortName: "Sangiin",
+          seats: 252,
+          description:
+            "252 councillors elected on staggered 6-year terms. Half are contested every 3 years. Cannot be dissolved.",
+          elected: true,
+        },
+        lowerChamber: {
+          key: "shugiin",
+          name: "Shūgiin",
+          shortName: "Shūgiin",
+          seats: 512,
+          description:
+            "512 members elected from multi-member constituencies under the pre-1994 system.",
+        },
+      },
+    },
+  },
   "1953-default": {
+    US: {
+      // 48 states in 1953: Alaska and Hawaii were still territories, so the
+      // Senate seated 96, not 100. The seeded 83rd Congress roster is right and
+      // the base config is the era-blind modern number.
+      //
+      // ⚠️ getCountryConfig is a SHALLOW merge (`{ ...base, ...override }`), so
+      // this must restate the WHOLE legislature object. Dropping a field here
+      // silently removes it from the 1953 world.
+      legislature: {
+        name: "Congress",
+        path: "/country/us/legislature",
+        bicameral: true,
+        upperChamber: {
+          key: "senate",
+          name: "Senate",
+          shortName: "Senate",
+          seats: 96,
+          description: "96 senators from 48 states, six-year staggered terms.",
+          elected: true,
+          regionElectedClasses: true,
+        },
+        lowerChamber: {
+          key: "house",
+          name: "House of Representatives",
+          shortName: "House",
+          seats: 435,
+          description: "435 representatives, two-year terms. All revenue bills originate here.",
+        },
+      },
+    },
     TR: {
       // 2.8 TRL/USD, 1953 par (INITIAL_RATES_1953.TR).
       usdExchangeRate: 1 / 2.8,
