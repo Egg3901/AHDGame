@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  COUNTRY_ORDER,
+  getCountryConfig,
+  isPresidentialGovernmentType,
+  type CountryId,
+} from "@/lib/constants/countries";
 import { getPresetSeats, RESET_PRESETS } from "@/lib/constants/historicalSeats";
+import { seatsForCountry } from "@/lib/constants/presetSeatGroups";
 import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
 import { getBasePolicies } from "@/lib/seeds/reference/basePolicies";
 import { partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
@@ -410,5 +417,78 @@ describe("S3b — no preset carries a policy block for a country it lacks", () =
       ).toBeDefined();
       expect(tierFor(preset, countryId), `${preset}/${countryId}`).not.toBe("absent");
     }
+  });
+});
+
+/**
+ * S5 — a presidential country open to players starts with a head of state.
+ *
+ * MECHANISM: `seatsForCountry(preset, countryId)`. Pure, preset-local, and it
+ * needs the country dimension: `officeType === "president"` alone would count
+ * Brazil's president as the United States'.
+ *
+ * No threshold and no tolerance constant. Seeding the executive and running the
+ * election engine are independent - US_EXECUTIVE_1953 records that "the
+ * perpetual race spawns from canonical anchors regardless of the officeholder"
+ * - so there is no reason to permit any vacancy, and a duration bound would
+ * have been a magic number justifying a compromise nothing requires.
+ *
+ * The gap this closes, at 1 turn = 1 real hour and TURNS_PER_YEAR = 48: a 1991
+ * world waited ~48 turns for the 1992 election, and a 2019 world waited ~240
+ * turns - about ten real days - for 2024.
+ */
+describe("S5 — presidential player countries seed an executive", () => {
+  /**
+   * 1979 is a recorded exception, and it is NOT the same gap.
+   *
+   * That preset seats no US anything - its per-state 1978 results are a separate
+   * historical-data task - and, decisively, the `democrat` slug has no
+   * SLUG_TO_NAME entry there, so a seeded Democratic president would fold to
+   * "independent" via resolvePartyId. A fake independent president is worse than
+   * an empty chair, so the vacancy stands until the 1979 US party roster exists.
+   */
+  const AUTHORED_VACANT_EXECUTIVE = new Set(["1979-default/US"]);
+
+  it("every presidential player country has a president in every era", () => {
+    const missing: string[] = [];
+    for (const preset of SHIPPING_PRESETS) {
+      for (const country of COUNTRY_ORDER) {
+        if (tierFor(preset, country) !== "player") continue;
+        if (!isPresidentialGovernmentType(getCountryConfig(country, preset).governmentType)) {
+          continue;
+        }
+        const seats = seatsForCountry(preset, country);
+        if (!seats.some((seat) => seat.officeType === "president")) {
+          missing.push(`${preset}/${country}`);
+        }
+      }
+    }
+    expect(missing.filter((m) => !AUTHORED_VACANT_EXECUTIVE.has(m))).toEqual([]);
+    // The exception must stay real: seed 1979 and this line fails until deleted.
+    expect(missing).toEqual([...AUTHORED_VACANT_EXECUTIVE]);
+  });
+
+  it("pairs every seeded president with a vice president where the office exists", () => {
+    // A president with no VP leaves the succession line empty.
+    //
+    // Brazil 1953 is a recorded exception, not an oversight: its own comment
+    // explains that "the 1951-54 VP sat with PSP, which is not in the 1953 BR
+    // party roster". Seeding one would mean inventing a party affiliation, so
+    // the gap is named here instead of being papered over.
+    const AUTHORED_WITHOUT_VP = new Set(["1953-default/BR"]);
+    const missing: string[] = [];
+    for (const preset of SHIPPING_PRESETS) {
+      for (const country of COUNTRY_ORDER) {
+        const seats = seatsForCountry(preset, country);
+        if (!seats.some((s) => s.officeType === "president")) continue;
+        const offices = getCountryConfig(country, preset).officeTypes ?? [];
+        if (!offices.some((o) => o.key === "vicePresident")) continue;
+        if (seats.some((s) => s.officeType === "vicePresident")) continue;
+        missing.push(`${preset}/${country}`);
+      }
+    }
+    expect(missing.filter((m) => !AUTHORED_WITHOUT_VP.has(m))).toEqual([]);
+    // The exception must stay real: if BR ever gains a VP row, delete the entry.
+    expect(missing).toEqual([...AUTHORED_WITHOUT_VP]);
   });
 });

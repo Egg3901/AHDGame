@@ -44,6 +44,8 @@ import {
   UK_REGIONAL_COUNCIL_1992,
   UK_REGIONAL_COUNCIL_2020,
   US_EXECUTIVE_1953,
+  US_EXECUTIVE_1992,
+  US_EXECUTIVE_2020,
   US_GOVERNOR_1953,
   US_GOVERNORS_1992,
   US_GOVERNORS_2020,
@@ -63,6 +65,7 @@ const ALL_PRESETS = [...SHIPPING_PRESETS, "empty", "2019-no-parties", "1968-defa
 // Row counts recomputed from the source arrays themselves, independently of the
 // grouping under test. These are the arrays the pre-grouping switch spread.
 const SOURCE_2020 =
+  US_EXECUTIVE_2020.length +
   US_HOUSE_2020.length +
   US_SENATE_2020.length +
   US_STATE_SENATE_2020.length +
@@ -84,6 +87,7 @@ const SOURCE_2020 =
   IE_SEANAD_2020.length;
 
 const SOURCE_1992 =
+  US_EXECUTIVE_1992.length +
   US_HOUSE_1992.length +
   US_SENATE_1992.length +
   US_STATE_SENATE_1990.length +

@@ -3311,6 +3311,38 @@ export const US_EXECUTIVE_1953: HistoricalSeat[] = [
   { state: "US", officeType: "vicePresident", party: "republican" },
 ];
 
+// ─── US executives, 1992 and 2020 worlds ─────────────────────────────────────
+// Same unnamed-officeholder pattern as US_EXECUTIVE_1953: national offices use
+// the bare country code as `state`, and the holder is a generic NPP with a
+// generated fictional name on the historically correct governing ticket. Per
+// CLAUDE.md, named real officeholders are out of scope - the party affiliation
+// carries the history, the person does not exist.
+//
+// Without these the presidency opens VACANT and stays that way until the first
+// scheduled race: ~48 turns (~2 real days) in 1991, and ~240 turns (~10 real
+// days) in 2019, at 1 turn = 1 hour and TURNS_PER_YEAR = 48.
+//
+// Seeding an executive does not suppress the election cycle. US_EXECUTIVE_1953
+// records why: "the perpetual race spawns from canonical anchors regardless of
+// the officeholder". The appointment gate in appointNppPresident governs
+// APPOINTMENT, not seeding.
+
+// Republican ticket, from the 1988 election, sitting through the 1992 world.
+export const US_EXECUTIVE_1992: HistoricalSeat[] = [
+  { state: "US", officeType: "president", party: "republican" },
+  { state: "US", officeType: "vicePresident", party: "republican" },
+];
+
+// Republican ticket, from the 2016 election, sitting through the 2020 world.
+// Shared by the 1999/2007/2023 presets, which reuse the 2020 groups wholesale:
+// a 1999 world seating a 2020-era executive is wrong, but it is consistent with
+// those presets already reusing the entire 2020 legislature, and strictly
+// better than opening with no head of state at all.
+export const US_EXECUTIVE_2020: HistoricalSeat[] = [
+  { state: "US", officeType: "president", party: "republican" },
+  { state: "US", officeType: "vicePresident", party: "republican" },
+];
+
 // BR executive 1953 — the PTB ticket won the Oct 1950 presidential election;
 // that Second Republic president (inaugurated Jan 1951) is still sitting in
 // 1953. Seed a generic NPP on the historically-correct PTB affiliation (same
@@ -3968,7 +4000,13 @@ function mergeGroups(...parts: SeatGroups[]): SeatGroups {
 }
 
 const SEAT_GROUPS_2020: SeatGroups = {
-  US: [...US_HOUSE_2020, ...US_SENATE_2020, ...US_STATE_SENATE_2020, ...US_GOVERNORS_2020],
+  US: [
+    ...US_EXECUTIVE_2020,
+    ...US_HOUSE_2020,
+    ...US_SENATE_2020,
+    ...US_STATE_SENATE_2020,
+    ...US_GOVERNORS_2020,
+  ],
   UK: [...UK_COMMONS_2020, ...UK_REGIONAL_COUNCIL_2020, ...UK_FIRST_MINISTERS_2020],
   JP: [...JP_SHUGIIN_2020, ...JP_SANGIIN_2020, ...JP_GOVERNORS_2020, ...JP_REGIONAL_COUNCIL_2020],
   DE: [...DE_BUNDESTAG_2021, ...DE_LANDTAG_2020, ...DE_MINISTERPRAESIDENTEN_2020],
@@ -3981,7 +4019,13 @@ const SEAT_GROUPS_2020: SeatGroups = {
 };
 
 const SEAT_GROUPS_1992: SeatGroups = {
-  US: [...US_HOUSE_1992, ...US_SENATE_1992, ...US_STATE_SENATE_1990, ...US_GOVERNORS_1992],
+  US: [
+    ...US_EXECUTIVE_1992,
+    ...US_HOUSE_1992,
+    ...US_SENATE_1992,
+    ...US_STATE_SENATE_1990,
+    ...US_GOVERNORS_1992,
+  ],
   UK: [...UK_COMMONS_1992, ...UK_REGIONAL_COUNCIL_1992, ...UK_FIRST_MINISTERS_1992],
   JP: [...JP_SHUGIIN_1990, ...JP_SANGIIN_1989, ...JP_GOVERNORS_1991, ...JP_REGIONAL_COUNCIL_1991],
   DE: [...DE_BUNDESTAG_1990, ...DE_LANDTAG_1990, ...DE_MINISTERPRAESIDENTEN_1992],
