@@ -23,8 +23,10 @@ Cut from development.
 - The House of Commons is complete. A 2019 world seated 641 of its 650 members,
   and the regions electing them added up to a different number again, which
   would have misallocated a general election.
-- The 1992 Commons, the 1990 Japanese Diet and the 1953 Senate now start at the
-  size they really were, rather than at their modern size.
+- The 1992 Commons, the 1990 House of Representatives in Japan and the 1953
+  Senate now start at the size they really were, rather than at their modern
+  size. The 1953 Senate seats 96 for the 48 states of the day, and the 1992
+  Commons 651.
 - The United States House now matches the chamber it is modelling: the right
   members in the right states, with the five seats that stood empty at the time
   left empty rather than quietly filled or quietly missing.
@@ -33,6 +35,12 @@ Cut from development.
 - Resetting a world to another era no longer leaves the previous era's parties
   behind. East German parties no longer survive into a world set after
   reunification, and Reform UK no longer turns up in a 1953 Britain.
+
+## Known gaps
+
+- Japan's House of Councillors is the right size for 1991 at last, but only 206
+  of its 252 seats have members in them. The rest sit empty until the 1989
+  results are written up region by region.
 
 ## Changed
 
