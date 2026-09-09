@@ -65,6 +65,18 @@ export interface EraRosterSpec {
    * wrote — the same ambiguity as `absent` versus unauthored, one level down.
    */
   vacantChambers?: readonly `${CountryId}.${string}`[];
+  /**
+   * Seats a seated chamber deliberately leaves unfilled, as `{ "US.house": 5 }`.
+   *
+   * `vacantChambers` says "nobody is seated here yet"; this says "this many
+   * seats inside a seated chamber are genuinely empty". The February 2020 US
+   * House had five vacancies pending special elections, so a roster seating 435
+   * would be inventing five members, while one seating 430 with nothing declared
+   * is indistinguishable from a roster somebody truncated. Declaring the gap is
+   * what lets S4 assert `seated + vacant == chamber size` and still fail when a
+   * roster is genuinely short.
+   */
+  vacantSeats?: Partial<Record<`${CountryId}.${string}`, number>>;
 }
 
 const ERA_ROSTER_LITERAL = {
@@ -226,6 +238,15 @@ export function countriesByTier(preset: ShippingPreset, tier: CountryEraTier): C
 /** True when the roster says this country is registered in this preset. */
 export function isRegisteredTier(tier: CountryEraTier): boolean {
   return tier === "player" || tier === "econ" || tier === "npp";
+}
+
+/** Seats this preset deliberately leaves unfilled inside a seated chamber. */
+export function vacantSeatsFor(
+  preset: ShippingPreset,
+  countryId: CountryId,
+  chamberKey: string
+): number {
+  return ERA_ROSTER[preset].vacantSeats?.[`${countryId}.${chamberKey}`] ?? 0;
 }
 
 /** True when this preset deliberately leaves the chamber unseated. */

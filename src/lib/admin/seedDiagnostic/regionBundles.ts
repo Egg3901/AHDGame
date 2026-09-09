@@ -143,6 +143,21 @@ export const FULL_ERA_REGION_BUNDLES: Partial<
  * Era-authored region count for a country, or null when no dedicated region
  * bundle is registered (caller should use a presence/sanity check).
  */
+/**
+ * The era region bundle a country seeds for a preset, or null when it has none.
+ *
+ * Exposed so callers that need the region ROWS (S4 sums `houseDistricts`, the
+ * third authority on chamber size) do not have to re-import all seven era
+ * modules and re-derive the preset mapping.
+ */
+export function regionBundleFor(countryId: CountryId, preset: string): State[] | null {
+  const maps = FULL_ERA_REGION_BUNDLES[countryId];
+  if (!maps) return null;
+  const resolvedPreset =
+    preset === "empty" || preset === "2019-no-parties" ? "2019-default" : preset;
+  return maps[resolvedPreset as ResetPresetId] ?? maps["2019-default"] ?? null;
+}
+
 export function expectedRegionCount(countryId: CountryId, preset: string): number | null {
   if (countryId === DEFAULT_LEGACY_COUNTRY_ID) {
     const bundle = selectStatesBundleForPreset(preset);

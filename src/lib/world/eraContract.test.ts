@@ -7,12 +7,20 @@ import {
   type CountryId,
 } from "@/lib/constants/countries";
 import { getPresetSeats, RESET_PRESETS } from "@/lib/constants/historicalSeats";
-import { seatsForCountry } from "@/lib/constants/presetSeatGroups";
+import { seatCountFor, seatsForCountry } from "@/lib/constants/presetSeatGroups";
 import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
+import { regionBundleFor } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { getBasePolicies } from "@/lib/seeds/reference/basePolicies";
 import { partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 import { ERA_CONFIGS, type EraId } from "@/components/landing/eraThemes";
-import { countriesByTier, SHIPPING_PRESETS, tierFor, type ShippingPreset } from "./eraRoster";
+import {
+  countriesByTier,
+  isVacantChamber,
+  SHIPPING_PRESETS,
+  tierFor,
+  vacantSeatsFor,
+  type ShippingPreset,
+} from "./eraRoster";
 import { assessCountryReadiness } from "./countryReadinessContract";
 import { getWorldEntityPresetManifest } from "./worldEntityManifest";
 
@@ -490,5 +498,122 @@ describe("S5 — presidential player countries seed an executive", () => {
     expect(missing.filter((m) => !AUTHORED_WITHOUT_VP.has(m))).toEqual([]);
     // The exception must stay real: if BR ever gains a VP row, delete the entry.
     expect(missing).toEqual([...AUTHORED_WITHOUT_VP]);
+  });
+});
+
+/**
+ * S4 — a player country's chambers agree across all three authorities.
+ *
+ * MECHANISM: `seatCountFor` (which needs C0's country dimension: filtering
+ * `getPresetSeats` on `officeType === "senate"` counts Brazil's senators as
+ * American ones) against `getCountryConfig(id, preset)`, plus the region
+ * bundles for the UK.
+ *
+ * Reads `getCountryConfig`, NOT base `COUNTRY_CONFIGS`. That decides whether the
+ * assertion is satisfiable at all: an era override can only settle a mismatch if
+ * the check consults it, and three of Plan C's fixes are overrides.
+ *
+ * A chamber marked vacant-by-design is asserted to seat EXACTLY zero, so the
+ * exemption is itself checked rather than being a hole to hide in.
+ */
+describe("S4 — player chambers agree with their era config", () => {
+  const CHAMBERS: Partial<Record<CountryId, readonly string[]>> = {
+    US: ["house", "senate"],
+    UK: ["commons"],
+    JP: ["shugiin", "sangiin"],
+  };
+
+  function s4Failures(preset: ShippingPreset): string[] {
+    const out: string[] = [];
+    for (const country of COUNTRY_ORDER) {
+      if (tierFor(preset, country) !== "player") continue;
+      for (const chamber of CHAMBERS[country] ?? []) {
+        const seeded = seatCountFor(preset, country, chamber);
+        if (isVacantChamber(preset, country, chamber)) {
+          if (seeded !== 0) out.push(`${country}.${chamber}: vacant by design but seats ${seeded}`);
+          continue;
+        }
+        const legislature = getCountryConfig(country, preset).legislature;
+        const size =
+          legislature?.lowerChamber?.key === chamber
+            ? legislature.lowerChamber.seats
+            : legislature?.upperChamber?.key === chamber
+              ? legislature.upperChamber.seats
+              : null;
+        if (size == null) {
+          out.push(`${country}.${chamber}: no chamber of that key in the config`);
+          continue;
+        }
+        const vacant = vacantSeatsFor(preset, country, chamber);
+        if (seeded + vacant !== size) {
+          out.push(`${country}.${chamber}: seeded ${seeded} + vacant ${vacant} != config ${size}`);
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Starting state, exact-match so a FIXED gap fails too and the list cannot rot.
+   * Tasks C3, C4 and C5 empty these; whatever survives is recorded debt.
+   */
+  const S4_KNOWN_GAPS: Partial<Record<ShippingPreset, string[]>> = {
+    // 48 states in 1953: the roster is right and the config is era-blind.
+    "1953-default": ["US.senate: seeded 96 + vacant 0 != config 100"],
+    // The 1992 Commons genuinely had 651 seats and the 1990/1989 Diet 512/206.
+    // Again the roster is right; these want era config overrides.
+    "1991-default": [
+      "UK.commons: seeded 651 + vacant 0 != config 650",
+      "JP.shugiin: seeded 512 + vacant 0 != config 465",
+      "JP.sangiin: seeded 206 + vacant 0 != config 248",
+    ],
+    // Here the config is right and the ROSTER is short: the 2019 Commons had
+    // 650 and the February 2020 House had 435 including five vacancies.
+    "1999-default": [
+      "US.house: seeded 433 + vacant 0 != config 435",
+      "UK.commons: seeded 641 + vacant 0 != config 650",
+    ],
+    "2007-default": [
+      "US.house: seeded 433 + vacant 0 != config 435",
+      "UK.commons: seeded 641 + vacant 0 != config 650",
+    ],
+    "2019-default": [
+      "US.house: seeded 433 + vacant 0 != config 435",
+      "UK.commons: seeded 641 + vacant 0 != config 650",
+    ],
+    "2023-default": [
+      "US.house: seeded 433 + vacant 0 != config 435",
+      "UK.commons: seeded 641 + vacant 0 != config 650",
+    ],
+  };
+
+  it.each([...SHIPPING_PRESETS])("%s", (preset) => {
+    expect(s4Failures(preset)).toEqual(S4_KNOWN_GAPS[preset] ?? []);
+  });
+
+  /**
+   * The third leg, and the one with real consequences in play: seats can agree
+   * with the config while the regions that ELECT them sum to something else, and
+   * that is what misallocates a general election.
+   *
+   * Pinned per era rather than asserted equal to the chamber size, because most
+   * eras currently disagree. Task C5 reconciles 1991 (665 against a 651-seat
+   * Commons); the rest are recorded so they cannot drift unnoticed.
+   */
+  const UK_DISTRICT_SUMS: Record<ShippingPreset, number> = {
+    "1953-default": 625,
+    "1979-default": 635,
+    "1991-default": 665,
+    "1999-default": 659,
+    "2007-default": 646,
+    "2019-default": 652,
+    "2023-default": 650,
+  };
+
+  it.each([...SHIPPING_PRESETS])("%s UK region districts", (preset) => {
+    const bundle = regionBundleFor("UK", preset);
+    expect(bundle, preset).not.toBeNull();
+    const sum = bundle!.reduce((total, region) => total + (region.houseDistricts ?? 0), 0);
+    expect(sum, preset).toBe(UK_DISTRICT_SUMS[preset]);
   });
 });
