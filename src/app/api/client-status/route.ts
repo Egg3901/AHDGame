@@ -102,6 +102,8 @@ export async function GET(request: Request) {
                   _id: 1,
                   sequentialId: 1,
                   name: 1,
+                  logoUrl: 1,
+                  tickerSymbol: 1,
                   sharePrice: 1,
                   liquidCapital: 1,
                   liquidCurrencyCode: 1,
@@ -211,6 +213,8 @@ export async function GET(request: Request) {
       let corpNav: {
         sequentialId: number;
         name: string;
+        logoUrl?: string;
+        tickerSymbol?: string;
         sharePrice: number;
         priceChange1h: number;
         liquidCapital: number;
@@ -260,6 +264,8 @@ export async function GET(request: Request) {
         corpNav = {
           sequentialId: ceoCorp.sequentialId,
           name: ceoCorp.name,
+          logoUrl: ceoCorp.logoUrl,
+          tickerSymbol: ceoCorp.tickerSymbol,
           sharePrice: ceoCorp.sharePrice,
           priceChange1h,
           liquidCapital: ceoCorp.liquidCapital,
@@ -273,6 +279,7 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           name: imperial.name,
+          avatarUrl: imperial.avatarUrl,
           actions: 0,
           funds: 0,
           campaignFundsStored: 0,
@@ -355,6 +362,8 @@ export async function GET(request: Request) {
                 _id: 1,
                 sequentialId: 1,
                 name: 1,
+                logoUrl: 1,
+                tickerSymbol: 1,
                 sharePrice: 1,
                 liquidCapital: 1,
                 liquidCurrencyCode: 1,
@@ -495,6 +504,8 @@ export async function GET(request: Request) {
     let corpNav: {
       sequentialId: number;
       name: string;
+      logoUrl?: string;
+      tickerSymbol?: string;
       sharePrice: number;
       priceChange1h: number;
       liquidCapital: number;
@@ -544,6 +555,8 @@ export async function GET(request: Request) {
       corpNav = {
         sequentialId: ceoCorp.sequentialId,
         name: ceoCorp.name,
+        logoUrl: ceoCorp.logoUrl,
+        tickerSymbol: ceoCorp.tickerSymbol,
         sharePrice: ceoCorp.sharePrice,
         priceChange1h,
         liquidCapital: ceoCorp.liquidCapital,
@@ -729,6 +742,7 @@ export async function GET(request: Request) {
 
     const statusPayload = {
       name: character.name,
+      avatarUrl: character.avatarUrl,
       actions: character.actions,
       actionCap,
       hoardThreshold,
