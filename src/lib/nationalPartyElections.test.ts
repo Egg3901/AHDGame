@@ -1343,6 +1343,25 @@ describe("createMissingNationalElections", () => {
     expect(positions.sort()).toEqual(["chair", "treasurer", "viceChair"]);
   });
 
+  it("does not throw when a unique voting-election index rejects the insert", async () => {
+    const insertMany = vi
+      .fn()
+      .mockRejectedValue(
+        Object.assign(new Error("E11000 duplicate key"), { code: 11000, insertedCount: 0 })
+      );
+    setMockCollection("nationalPartyElections", {
+      find: electionFind([], []),
+      insertMany,
+    });
+    setMockCollection("politicalParties", {
+      find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([party]) }),
+    });
+
+    const { createMissingNationalElections } = await import("./nationalPartyElections");
+    await expect(createMissingNationalElections(269, 96, new Date(), undefined)).resolves.toBe(0);
+    expect(insertMany).toHaveBeenCalledOnce();
+  });
+
   it("aligns a new party's elections to the modal endTurn of active default-duration elections", async () => {
     // Existing default party (seq 1) is mid-cycle: elections end at turn 150.
     // New party (seq 2) has none. At turn 120 its elections must join the

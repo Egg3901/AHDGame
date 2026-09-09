@@ -27,6 +27,7 @@ import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
 import { isActiveNationalPartyCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
 import { isSameCountry } from "@/lib/api/sameCountry";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -95,7 +96,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Filter by countryId to avoid cross-country sequential ID collisions
     const election = await db
       .collection<NationalPartyElection>("nationalPartyElections")
-      .findOne({ partyId, countryId: partyCountryId, position, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, position, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
 
     if (!election) {
       logRequest("POST", path, 400, Date.now() - start);
@@ -237,7 +241,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const openCommitteeElection = await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
-      .findOne({ partyId, countryId: partyCountryId, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
     if (
       openCommitteeElection &&
       !hasTurnBackedWindowClosed(openCommitteeElection, gameTime.currentTurn, gameTime.effectiveNow)

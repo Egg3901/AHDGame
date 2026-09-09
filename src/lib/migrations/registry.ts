@@ -71,6 +71,7 @@ import { migration as statePartyOrgRekey } from "./entries/2026-09-02-state-part
 import { migration as intelligenceIndexes } from "./entries/2026-08-31-intelligence-indexes";
 import { migration as clientStatisticsTtlIndex } from "./entries/2026-09-06-client-statistics-ttl-index";
 import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-client-diagnostics-ttl-index";
+import { migration as uniqueVotingPartyElections } from "./entries/2026-09-09-unique-voting-party-elections";
 import { migration as manifestosIndex } from "./entries/2026-09-06-manifestos-index";
 import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
 
@@ -231,6 +232,9 @@ export const MIGRATIONS: Migration[] = [
   // `manifestos` had only its _id index, so the elections page's per-race
   // manifesto reads were collection scans.
   manifestosIndex,
+  // Ticket #1295: one voting leadership/committee race per seat. Seed indexes
+  // cover a fresh bootstrap; this reaches worlds that are already running.
+  uniqueVotingPartyElections,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

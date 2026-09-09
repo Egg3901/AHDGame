@@ -23,6 +23,7 @@ import {
 } from "@/lib/elections/defaultCycleAnchor";
 import { isUserActive } from "@/lib/players/playerActivity";
 import { LEADERSHIP_INACTIVE_TURN_THRESHOLD } from "@/lib/statePartyElections";
+import { insertManyIgnoringDuplicateKey } from "@/lib/elections/duplicateKey";
 
 export const NATIONAL_ELECTION_DURATION_TURNS = 72;
 export const NATIONAL_ELECTION_MIN_DURATION_TURNS = 168;
@@ -259,9 +260,11 @@ export async function createMissingNationalElections(
     }
   );
 
-  await db
-    .collection<NationalPartyElection>("nationalPartyElections")
-    .insertMany(elections as NationalPartyElection[]);
+  const inserted = await insertManyIgnoringDuplicateKey(
+    db.collection<NationalPartyElection>("nationalPartyElections"),
+    elections as NationalPartyElection[]
+  );
+  if (inserted === 0) return 0;
   // Group positions by party so members get one consolidated notification.
   // All of a party's positions share the same window, so the entry carries
   // the effective duration for the message.
@@ -374,9 +377,11 @@ async function createMissingFoundingLeadershipElections(
     updatedAt: now,
   }));
 
-  await db
-    .collection<NationalPartyElection>("nationalPartyElections")
-    .insertMany(elections as NationalPartyElection[]);
+  const inserted = await insertManyIgnoringDuplicateKey(
+    db.collection<NationalPartyElection>("nationalPartyElections"),
+    elections as NationalPartyElection[]
+  );
+  if (inserted === 0) return 0;
 
   // One notification per party listing every position that just opened.
   const byParty = new Map<

@@ -21,6 +21,7 @@ import { isSameCountry } from "@/lib/api/sameCountry";
 import { getGameTime } from "@/lib/time/gameTime";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
 import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -105,7 +106,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Filter by countryId to avoid cross-country sequential ID collisions
     const election = await db
       .collection<NationalPartyElection>("nationalPartyElections")
-      .findOne({ partyId, countryId: partyCountryId, position, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, position, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
 
     if (!election) {
       logRequest("POST", path, 400, Date.now() - start);
