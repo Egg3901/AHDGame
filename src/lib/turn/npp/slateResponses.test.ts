@@ -19,7 +19,7 @@ import type {
   SlateCandidate,
 } from "@/lib/db/types";
 import type { NPPContext } from "./context";
-import { fileAcceptedSlateRows, processSlateResponses } from "./slateResponses";
+import { fileAcceptedSlateRows, processSlateResponses, trimOverCapSlates } from "./slateResponses";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -1458,5 +1458,262 @@ describe("fileAcceptedSlateRows assignment cap", () => {
     // Two NPPs plus the chair's player pick fill the race.
     expect(summary.filed).toBe(0);
     expect(pendingRow.refusalReason).toBe("slate_full");
+  });
+});
+
+describe("trimOverCapSlates", () => {
+  const electionId = new ObjectId();
+
+  function trimElection(): Election {
+    return {
+      _id: electionId,
+      electionType: "commons",
+      state: "NEE",
+      countryId: "UK",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+  }
+
+  function trimNpp(name: string): NPP {
+    return makeNPP({ name, homeState: "NEE", countryId: "UK", party: "1" });
+  }
+
+  function trimRow(
+    candidateId: ObjectId,
+    name: string,
+    invitedAt: Date,
+    candidateType: "npp" | "character" = "npp"
+  ): SlateCandidate {
+    return {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "UK",
+      candidateType,
+      candidateId,
+      candidateName: name,
+      homeState: "NEE",
+      status: "filed",
+      fitScore: 80,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt,
+      respondedAt: new Date(),
+      filedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as SlateCandidate;
+  }
+
+  function trimCandidacy(
+    id: ObjectId,
+    name: string,
+    isNPP = true,
+    enteredAt = new Date(Date.UTC(2026, 0, 1))
+  ): ElectionCandidate {
+    return {
+      _id: new ObjectId(),
+      electionId,
+      characterId: id,
+      characterName: name,
+      party: "1",
+      status: "active",
+      isNPP,
+      ...(isNPP ? { nppId: id } : {}),
+      enteredAt,
+    } as ElectionCandidate;
+  }
+
+  function day(n: number): Date {
+    return new Date(Date.UTC(2026, 0, n));
+  }
+
+  it("leaves a race inside the cap untouched", async () => {
+    const npps = [trimNpp("One"), trimNpp("Two"), trimNpp("Three")];
+    const candidacies = npps.map((n) => trimCandidacy(n._id, n.name));
+    const rows = npps.map((n, i) => trimRow(n._id, n.name, day(i + 1)));
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: rows,
+      nppRelationships: [],
+      elections: [trimElection()],
+      electionCandidates: [...candidacies],
+    });
+
+    const summary = await trimOverCapSlates(
+      makeCtx(db, npps, {
+        openPrimaries: [trimElection()],
+        candidatesByElection: new Map([[electionId.toString(), candidacies]]),
+      })
+    );
+
+    expect(summary.withdrawn).toBe(0);
+    expect(summary.partiesTrimmed).toBe(0);
+    expect(candidacies.every((c) => c.status === "active")).toBe(true);
+  });
+
+  it("withdraws the lowest-ranked holder on a race that is over the cap", async () => {
+    const npps = [trimNpp("One"), trimNpp("Two"), trimNpp("Three"), trimNpp("Four")];
+    const candidacies = npps.map((n, i) => trimCandidacy(n._id, n.name, true, day(i + 1)));
+    const rows = npps.map((n, i) => trimRow(n._id, n.name, day(i + 1)));
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: rows,
+      nppRelationships: [],
+      elections: [trimElection()],
+      electionCandidates: [...candidacies],
+    });
+
+    const summary = await trimOverCapSlates(
+      makeCtx(db, npps, {
+        openPrimaries: [trimElection()],
+        candidatesByElection: new Map([[electionId.toString(), candidacies]]),
+        nppCandidacies: new Set(npps.map((n) => n._id.toString())),
+      })
+    );
+
+    expect(summary.partiesTrimmed).toBe(1);
+    expect(summary.withdrawn).toBe(1);
+    // Newest invitation is the one that goes.
+    expect(candidacies[3]!.status).toBe("withdrawn");
+    expect(rows[3]!.status).toBe("withdrawn");
+    expect(rows[3]!.refusalReason).toBe("slate_full");
+    expect(candidacies.slice(0, 3).every((c) => c.status === "active")).toBe(true);
+  });
+
+  it("keeps a defending incumbent and trims a later holder instead", async () => {
+    const incumbent = trimNpp("Sitting Member");
+    const others = [trimNpp("One"), trimNpp("Two"), trimNpp("Three")];
+    // The incumbent was invited last, so only office-holding can save them.
+    const rows = [
+      ...others.map((n, i) => trimRow(n._id, n.name, day(i + 1))),
+      trimRow(incumbent._id, incumbent.name, day(9)),
+    ];
+    const candidacies = [
+      ...others.map((n, i) => trimCandidacy(n._id, n.name, true, day(i + 1))),
+      trimCandidacy(incumbent._id, incumbent.name, true, day(9)),
+    ];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: rows,
+      nppRelationships: [],
+      elections: [trimElection()],
+      electionCandidates: [...candidacies],
+    });
+
+    const summary = await trimOverCapSlates(
+      makeCtx(db, [...others, incumbent], {
+        openPrimaries: [trimElection()],
+        candidatesByElection: new Map([[electionId.toString(), candidacies]]),
+        officialsByNPP: new Map([
+          [incumbent._id.toString(), [{ officeType: "commons", state: "NEE" }]],
+        ]) as never,
+      })
+    );
+
+    expect(summary.withdrawn).toBe(1);
+    expect(candidacies[3]!.status).toBe("active"); // the incumbent
+    expect(candidacies[2]!.status).toBe("withdrawn"); // last non-incumbent
+  });
+
+  it("leaves a race alone once its primary has closed", async () => {
+    // The general ballot is settled. Withdrawing someone from it to satisfy a
+    // cap would change a contest already under way.
+    const npps = [trimNpp("One"), trimNpp("Two"), trimNpp("Three"), trimNpp("Four")];
+    const candidacies = npps.map((n, i) => trimCandidacy(n._id, n.name, true, day(i + 1)));
+    const rows = npps.map((n, i) => trimRow(n._id, n.name, day(i + 1)));
+    const generalPhase = { ...trimElection(), primaryEndTurn: 5 } as Election;
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: rows,
+      nppRelationships: [],
+      elections: [generalPhase],
+      electionCandidates: [...candidacies],
+    });
+
+    const summary = await trimOverCapSlates(
+      makeCtx(db, npps, {
+        currentTurn: 9,
+        openPrimaries: [generalPhase],
+        candidatesByElection: new Map([[electionId.toString(), candidacies]]),
+      })
+    );
+
+    expect(summary.partiesTrimmed).toBe(0);
+    expect(summary.withdrawn).toBe(0);
+    expect(candidacies.every((c) => c.status === "active")).toBe(true);
+  });
+
+  it("tombstones an over-cap row that never reached the ballot", async () => {
+    const seated = [trimNpp("One"), trimNpp("Two"), trimNpp("Three")];
+    const waiting = trimNpp("Never Filed");
+    const candidacies = seated.map((n, i) => trimCandidacy(n._id, n.name, true, day(i + 1)));
+    const rows = [
+      ...seated.map((n, i) => trimRow(n._id, n.name, day(i + 1))),
+      { ...trimRow(waiting._id, waiting.name, day(9)), status: "accepted", filedAt: null },
+    ] as SlateCandidate[];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: rows,
+      nppRelationships: [],
+      elections: [trimElection()],
+      electionCandidates: [...candidacies],
+    });
+
+    const summary = await trimOverCapSlates(
+      makeCtx(db, [...seated, waiting], {
+        openPrimaries: [trimElection()],
+        candidatesByElection: new Map([[electionId.toString(), candidacies]]),
+      })
+    );
+
+    // Nothing to withdraw, since the row never became a candidacy.
+    expect(summary.withdrawn).toBe(0);
+    expect(summary.tombstoned).toBe(1);
+    expect(rows[3]!.status).toBe("withdrawn");
+    expect(rows[3]!.refusalReason).toBe("slate_full");
+    expect(candidacies.every((c) => c.status === "active")).toBe(true);
+  });
+
+  it("never withdraws a player's own candidacy, trimming an NPP instead", async () => {
+    const playerId = new ObjectId();
+    const npps = [trimNpp("One"), trimNpp("Two"), trimNpp("Three")];
+    const rows = [
+      ...npps.map((n, i) => trimRow(n._id, n.name, day(i + 1))),
+      trimRow(playerId, "Player Candidate", day(9), "character"),
+    ];
+    const candidacies = [
+      ...npps.map((n, i) => trimCandidacy(n._id, n.name, true, day(i + 1))),
+      trimCandidacy(playerId, "Player Candidate", false, day(9)),
+    ];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: rows,
+      nppRelationships: [],
+      elections: [trimElection()],
+      electionCandidates: [...candidacies],
+    });
+
+    const summary = await trimOverCapSlates(
+      makeCtx(db, npps, {
+        openPrimaries: [trimElection()],
+        candidatesByElection: new Map([[electionId.toString(), candidacies]]),
+      })
+    );
+
+    expect(summary.withdrawn).toBe(1);
+    // The player keeps their place; the last NPP holder gives way.
+    expect(candidacies[3]!.status).toBe("active");
+    expect(candidacies[2]!.status).toBe("withdrawn");
   });
 });
