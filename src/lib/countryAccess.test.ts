@@ -478,3 +478,39 @@ describe("registeredBase() — absentInEra", () => {
     expect(access.CS).toBeUndefined();
   });
 });
+
+describe("getCountryAccessFromDb() — absentInEra matches the list paths", () => {
+  it("reports an era-absent country as unregistered, not econ-only", async () => {
+    // The single-country path must agree with registeredBase(). Without this,
+    // /country/dd renders econ-only in a 1991 world while every list path has
+    // already dropped it — the exact divergence the dissolvedTurn branch exists
+    // to prevent.
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
+      _id: "DD",
+      absentInEra: true,
+    });
+
+    const { getCountryAccessFromDb } = await import("./countryAccess");
+    const access = await getCountryAccessFromDb(db as unknown as Db, "DD");
+
+    expect(access.registered).toBe(false);
+    expect(access.econOnly).toBe(false);
+    expect(access.enabledForPlayers).toBe(false);
+    expect(access.nppGoverned).toBe(false);
+  });
+
+  it("leaves a country registered when the flag is cleared", async () => {
+    await setupDb();
+    db.collectionMocks["countryGameStates"]!.findOne.mockResolvedValue({
+      _id: "DD",
+      absentInEra: false,
+      status: "coming-soon",
+    });
+
+    const { getCountryAccessFromDb } = await import("./countryAccess");
+    const access = await getCountryAccessFromDb(db as unknown as Db, "DD");
+
+    expect(access.registered).toBe(true);
+  });
+});
