@@ -28,6 +28,7 @@ import {
   getStatePartyOrgDocumentId,
 } from "@/lib/db/partyLookup";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { pickCanonicalVotingElectionPerKey } from "@/lib/elections/canonicalVotingElection";
 
 /** Get position labels appropriate for the country (UK uses "Regional Chair") */
 function getPositionLabels(countryId: CountryId): Record<StatePartyElectionPosition, string> {
@@ -219,8 +220,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
 
     const electionByPosition = new Map<StatePartyElectionPosition, StatePartyElection>();
-    for (const e of [...activeElections, ...completedElections]) {
+    for (const e of pickCanonicalVotingElectionPerKey(activeElections, (row) => row.position)) {
       electionByPosition.set(e.position, e);
+    }
+    for (const e of completedElections) {
+      if (!electionByPosition.has(e.position)) {
+        electionByPosition.set(e.position, e);
+      }
     }
 
     const electionIds = [...electionByPosition.values()].map((e) => e._id);

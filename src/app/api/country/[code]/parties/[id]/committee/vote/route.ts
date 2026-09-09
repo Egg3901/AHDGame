@@ -19,6 +19,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getGameTime } from "@/lib/time/gameTime";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
 import { isSameCountry } from "@/lib/api/sameCountry";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -98,7 +99,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Find active election for this party in this country
     const election = await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
-      .findOne({ partyId, countryId: partyCountryId, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
 
     if (!election) {
       return NextResponse.json({ error: "No active committee election" }, { status: 400 });

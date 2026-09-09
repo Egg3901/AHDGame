@@ -18,6 +18,7 @@ import {
   STATE_LEADERSHIP_RELOCATION_DELAY_TURNS,
 } from "@/lib/parties/leadershipTenure";
 import { isActiveStatePartyCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -154,7 +155,10 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (otherPos === position) continue;
       const otherElection = await db
         .collection<StatePartyElection>("statePartyElections")
-        .findOne({ stateId, partyId, position: otherPos, status: "voting" });
+        .findOne(
+          { stateId, partyId, position: otherPos, status: "voting" },
+          { sort: CANONICAL_VOTING_ELECTION_SORT }
+        );
       if (
         otherElection &&
         !hasTurnBackedWindowClosed(otherElection, gameTime.currentTurn, gameTime.effectiveNow)

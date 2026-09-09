@@ -10,6 +10,10 @@ import {
 } from "@/lib/nationalCommitteeElections";
 import { NATIONAL_ALL_POSITIONS } from "@/lib/nationalPartyElections";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import {
+  CANONICAL_VOTING_ELECTION_SORT,
+  pickCanonicalVotingElectionPerKey,
+} from "@/lib/elections/canonicalVotingElection";
 import { getBannedCharacterIds } from "@/lib/utils/bannedCharacters";
 import type {
   Character,
@@ -121,7 +125,11 @@ export async function getNationalPartyElectionState(
     treasurer: party.treasurerId?.toString() ?? null,
   };
 
-  const activePositions = new Set(activeElections.map((election) => election.position));
+  const canonicalActiveElections = pickCanonicalVotingElectionPerKey(
+    activeElections,
+    (election) => election.position
+  );
+  const activePositions = new Set(canonicalActiveElections.map((election) => election.position));
   const missingPositions = NATIONAL_ALL_POSITIONS.filter(
     (position) => !activePositions.has(position)
   );
@@ -147,8 +155,13 @@ export async function getNationalPartyElectionState(
           .toArray();
 
   const electionByPosition = new Map<NationalPartyElectionPosition, NationalPartyElection>();
-  for (const election of [...activeElections, ...completedElections]) {
+  for (const election of canonicalActiveElections) {
     electionByPosition.set(election.position, election);
+  }
+  for (const election of completedElections) {
+    if (!electionByPosition.has(election.position)) {
+      electionByPosition.set(election.position, election);
+    }
   }
 
   const electionIds = [...electionByPosition.values()].map((election) => election._id);
@@ -165,7 +178,7 @@ export async function getNationalPartyElectionState(
     };
   }
 
-  const activeElectionIds = activeElections.map((election) => election._id);
+  const activeElectionIds = canonicalActiveElections.map((election) => election._id);
   const bannedCharacterIds = await getBannedCharacterIds(db);
   const voteMatch: Record<string, unknown> = { electionId: { $in: electionIds } };
   const bannedVoterObjectIds = [...bannedCharacterIds].map((id) => new ObjectId(id));
@@ -409,7 +422,10 @@ export async function getNationalCommitteeState(
   const election =
     (await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
-      .findOne({ partyId, countryId: partyCountryId, status: "voting" })) ??
+      .findOne(
+        { partyId, countryId: partyCountryId, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      )) ??
     (await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
       .findOne(
