@@ -11,6 +11,9 @@ import { ElectionPhaseStatusStrip } from "@/components/elections/ElectionPhaseSt
 import { SlateElectionResults } from "@/components/elections/SlateElectionResults";
 import type { StateMapData } from "@/components/USAMapPaths";
 import { SLATE_REFUSAL_LABEL, isSlateFilingFailure } from "@/lib/slateRefusalReasons";
+import { formatSlateCapNote, type SlateAssignmentUsage } from "@/lib/slateAssignmentCap";
+import { AssignmentPicker } from "./SlateAssignmentPicker";
+import { formatSlateLabel } from "./slateFormatting";
 
 const MapFallback = () => (
   <div className="h-full w-full animate-pulse rounded-md bg-card-elevated" />
@@ -128,6 +131,11 @@ interface SlateDetailResponse {
     archivedAt: string | null;
   };
   candidates: SlateCandidateRow[];
+  /**
+   * How many of the race's candidate slots this party holds. Optional because
+   * a rolling deploy can still serve a payload written before the cap existed.
+   */
+  assignment?: SlateAssignmentUsage;
   election: {
     id: string;
     electionType: string;
@@ -235,14 +243,6 @@ function getAcceptanceChip(
     label: "Likely to Accept",
     className: ACCEPTANCE_LIKELIHOOD_STYLES.likely,
   };
-}
-
-function formatSlateLabel(value: string | null | undefined): string {
-  if (!value) return "-";
-  return value
-    .replace(/_/g, " ")
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function formatSlateRaceTitle(
@@ -813,6 +813,7 @@ function RaceSlatePanel({
           electionId={item.electionId}
           state={item.state}
           partyMembers={partyMembers}
+          assignment={detail.assignment}
           assignedCandidateIds={detail.stateAssignedCandidateIds}
           onDone={async () => {
             setPickerOpen(false);
@@ -928,6 +929,16 @@ function RaceSlatePanel({
         </ul>
       )}
 
+      {detail?.assignment && (
+        <p
+          className={`text-[11px] ${
+            detail.assignment.remaining === 0 ? "text-amber-300" : "text-muted"
+          }`}
+        >
+          {formatSlateCapNote(detail.assignment)}
+        </p>
+      )}
+
       {detail && detail.candidates.some((c) => c.candidateType === "npp") && (
         <p className="text-[11px] text-muted">
           Compliant NPPs (loyal, not overly stubborn) file automatically on the next turn; others
@@ -940,187 +951,6 @@ function RaceSlatePanel({
       )}
 
       {detail?.electionDisplay && <SlateElectionResults election={detail.electionDisplay} />}
-    </div>
-  );
-}
-
-function AssignmentPicker({
-  countryCode,
-  countryId,
-  partyId,
-  electionId,
-  state,
-  partyMembers,
-  assignedCandidateIds,
-  onDone,
-}: {
-  countryCode: string;
-  countryId: string;
-  partyId: string;
-  electionId: string;
-  state: string;
-  partyMembers: PartyRosterMember[];
-  assignedCandidateIds: string[];
-  onDone: () => void | Promise<void>;
-}) {
-  const [error, setError] = useState<string | null>(null);
-  const [pendingKey, setPendingKey] = useState<string | null>(null);
-  const [note, setNote] = useState("");
-  const assignedCandidateIdSet = useMemo(
-    () => new Set(assignedCandidateIds),
-    [assignedCandidateIds]
-  );
-  const sameStateNpps = useMemo(
-    () => partyMembers.filter((member) => member.isNPP && member.homeState === state),
-    [partyMembers, state]
-  );
-  const sameStatePlayers = useMemo(
-    () => partyMembers.filter((member) => !member.isNPP && member.homeState === state),
-    [partyMembers, state]
-  );
-  const eligiblePlayers = useMemo(
-    () =>
-      sameStatePlayers
-        .filter((member) => !assignedCandidateIdSet.has(member.id))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [assignedCandidateIdSet, sameStatePlayers]
-  );
-  const eligibleNpps = useMemo(
-    () =>
-      sameStateNpps
-        .filter((member) => !assignedCandidateIdSet.has(member.id))
-        .sort((a, b) => a.name.localeCompare(b.name)),
-    [assignedCandidateIdSet, sameStateNpps]
-  );
-  const regionLabel = getStateMap(countryId)?.[state]?.name ?? state.replace(/^.+_/, "");
-  const playersEmptyLabel =
-    sameStatePlayers.length > 0
-      ? `All same-party players based in ${regionLabel} are already slated to a race in this region. Withdraw an existing assignment to free one up.`
-      : `No same-party players live in ${regionLabel}. Only candidates whose home is ${regionLabel} can be slated to this race.`;
-  const nppsEmptyLabel =
-    sameStateNpps.length > 0
-      ? `All same-party NPPs based in ${regionLabel} are already slated to a race in this region. Withdraw an existing assignment to free one up.`
-      : `No same-party NPPs live in ${regionLabel}. Only candidates whose home is ${regionLabel} can be slated to this race.`;
-
-  async function assign(candidateType: "character" | "npp", candidateId: string) {
-    const pending = `${candidateType}:${candidateId}`;
-    setPendingKey(pending);
-    setError(null);
-    try {
-      const res = await fetch(
-        `/api/country/${countryCode}/parties/${partyId}/slate/${electionId}/invitations`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            candidateType,
-            candidateId,
-            invitationNote: note.trim() || undefined,
-          }),
-        }
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(body.error ?? `Assignment failed (${res.status})`);
-      }
-      await onDone();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Assignment failed");
-    } finally {
-      setPendingKey(null);
-    }
-  }
-
-  return (
-    <div className="rounded-lg border border-card-border bg-background p-3 space-y-2">
-      {error && <p className="text-xs text-error">{error}</p>}
-      <textarea
-        rows={2}
-        placeholder="Optional note shown on the slate row"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        className="w-full rounded-md border border-card-border bg-card px-2 py-1 text-xs"
-      />
-      <div className="grid gap-3 md:grid-cols-2">
-        <CandidateAssignmentList
-          title="Players"
-          emptyLabel={playersEmptyLabel}
-          pendingKey={pendingKey}
-          rows={eligiblePlayers.map((member) => ({
-            key: `character:${member.id}`,
-            id: member.id,
-            type: "character" as const,
-            name: member.name,
-            officeLabel: member.currentOffice?.type ?? null,
-          }))}
-          onAssign={assign}
-        />
-        <CandidateAssignmentList
-          title="NPPs"
-          emptyLabel={nppsEmptyLabel}
-          pendingKey={pendingKey}
-          rows={eligibleNpps.map((member) => ({
-            key: `npp:${member.id}`,
-            id: member.id,
-            type: "npp" as const,
-            name: member.name,
-            officeLabel: member.currentOffice?.type ?? null,
-          }))}
-          onAssign={assign}
-        />
-      </div>
-    </div>
-  );
-}
-
-function CandidateAssignmentList({
-  title,
-  emptyLabel,
-  rows,
-  pendingKey,
-  onAssign,
-}: {
-  title: string;
-  emptyLabel: string;
-  rows: Array<{
-    key: string;
-    id: string;
-    type: "character" | "npp";
-    name: string;
-    officeLabel: string | null;
-  }>;
-  pendingKey: string | null;
-  onAssign: (candidateType: "character" | "npp", candidateId: string) => Promise<void>;
-}) {
-  return (
-    <div className="rounded-lg border border-card-border bg-card p-2">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted">
-        {title}
-      </div>
-      {rows.length === 0 ? (
-        <p className="text-xs text-muted">{emptyLabel}</p>
-      ) : (
-        <ul className="max-h-64 overflow-y-auto divide-y divide-card-border/40">
-          {rows.map((row) => (
-            <li key={row.key} className="flex items-center justify-between gap-2 py-1.5">
-              <div className="min-w-0">
-                <div className="truncate text-xs">{row.name}</div>
-                {row.officeLabel && (
-                  <div className="text-[10px] text-muted">{formatSlateLabel(row.officeLabel)}</div>
-                )}
-              </div>
-              <button
-                type="button"
-                disabled={pendingKey === row.key}
-                onClick={() => void onAssign(row.type, row.id)}
-                className="rounded-md border border-card-border bg-background px-2 py-1 text-[11px] text-muted hover:text-foreground disabled:opacity-50"
-              >
-                {pendingKey === row.key ? "..." : "Assign"}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
