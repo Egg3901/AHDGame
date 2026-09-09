@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
+import { COUNTRY_ORDER } from "@/lib/constants/countries";
 import {
   getPresetEnablementCountries,
   getPresetEnablementTier,
@@ -68,18 +69,32 @@ describe("manifest-backed preset country enablement", () => {
     expect(getPresetEnablementCountries("1953-default")).not.toContain("US");
   });
 
-  it("preserves the 2019 config/admin fallback", () => {
-    expect(getPresetEnablementCountries("2019-default")).toBeNull();
-    expect(getPresetEnablementTier("2019-default", "UK")).toBeNull();
+  /**
+   * DELIBERATE REVERSAL. 2019 and 2023 used to return null so admin-managed
+   * rows survived a reset. That is how 2019 drifted into six player countries
+   * instead of three, so the roster now answers for every shipping preset.
+   */
+  it("no longer defers 2019 and 2023 to the config/admin fallback", () => {
+    for (const preset of ["2019-default", "2023-default"] as const) {
+      expect(getPresetEnablementCountries(preset), preset).not.toBeNull();
+      expect(getPresetEnablementTier(preset, "UK"), preset).toEqual({
+        enabledForPlayers: true,
+        economyPreview: false,
+        status: "active",
+      });
+    }
   });
 
-  it("preserves config fallback country enablement for the 2023 preset", () => {
-    expect(getPresetEnablementCountries("2023-default")).toBeNull();
-    expect(getPresetEnablementTier("2023-default", "UK")).toBeNull();
+  it("still writes no rows for the presets that seed no era", () => {
+    for (const preset of ["empty", "2019-no-parties"] as const) {
+      expect(getPresetEnablementCountries(preset), preset).toBeNull();
+      expect(getPresetEnablementTier(preset, "UK"), preset).toBeNull();
+    }
   });
 
   it("fails loudly for an unclassified preset", () => {
-    expect(() => getPresetEnablementCountries("1968-default")).toThrow(/No world entity manifest/);
+    // A typo must not become a silent no-op reset.
+    expect(() => getPresetEnablementCountries("1968-default")).toThrow(/No world entity roster/);
   });
 
   it("seeds 1953 player countries when the readiness contract passes", async () => {
@@ -96,5 +111,100 @@ describe("manifest-backed preset country enablement", () => {
       (call) => call[1].$set.enabledForPlayers === true
     );
     expect(playerWrites.map((call) => call[0]._id).sort()).toEqual(["DD", "RU", "UK"]);
+  });
+});
+
+describe("roster-driven enablement", () => {
+  function collectWrites() {
+    const db = createMockDb();
+    db.collection("countryGameStates");
+    db.collectionMocks.countryGameStates!.updateOne.mockResolvedValue({
+      matchedCount: 0,
+      modifiedCount: 0,
+      upsertedCount: 1,
+    });
+    const writes = () =>
+      db.collectionMocks.countryGameStates!.updateOne.mock.calls.map((call) => ({
+        id: String(call[0]._id),
+        set: call[1].$set as Record<string, unknown>,
+      }));
+    return { db, writes };
+  }
+
+  it("writes a row for every registered country except the US", async () => {
+    const { db, writes } = collectWrites();
+    await seedCountryGameStates(db as unknown as Db, "2019-default", 2019);
+    expect(
+      writes()
+        .map((w) => w.id)
+        .sort()
+    ).toEqual(
+      COUNTRY_ORDER.filter((c) => c !== "US")
+        .map(String)
+        .sort()
+    );
+  });
+
+  it("marks DD absentInEra in 2019 and clears it in 1953", async () => {
+    const a = collectWrites();
+    await seedCountryGameStates(a.db as unknown as Db, "2019-default", 2019);
+    expect(a.writes().find((w) => w.id === "DD")!.set).toMatchObject({
+      absentInEra: true,
+      enabledForPlayers: false,
+      economyPreview: false,
+    });
+
+    const b = collectWrites();
+    await seedCountryGameStates(b.db as unknown as Db, "1953-default", 1953);
+    expect(b.writes().find((w) => w.id === "DD")!.set).toMatchObject({
+      absentInEra: false,
+      enabledForPlayers: true,
+    });
+  });
+
+  it("opens JP to players in 1991 and 2019", async () => {
+    for (const preset of ["1991-default", "2019-default"] as const) {
+      const { db, writes } = collectWrites();
+      await seedCountryGameStates(db as unknown as Db, preset, 2019);
+      expect(writes().find((w) => w.id === "JP")!.set, preset).toMatchObject({
+        enabledForPlayers: true,
+        status: "active",
+      });
+    }
+  });
+
+  it("keeps the Warsaw Pact six at beta in 1953 so their spawners still fire", async () => {
+    // Regression lock, same as the manifest-era test above: every spawner behind
+    // these is gated on status in {beta, active}.
+    const { db, writes } = collectWrites();
+    await seedCountryGameStates(db as unknown as Db, "1953-default", 1953);
+    for (const id of ["PL", "CS", "HU", "RO", "BG", "YU"]) {
+      expect(writes().find((w) => w.id === id)!.set, id).toMatchObject({
+        enabledForPlayers: false,
+        economyPreview: true,
+        status: "beta",
+      });
+    }
+  });
+
+  it("never writes a US row", async () => {
+    const { db, writes } = collectWrites();
+    await seedCountryGameStates(db as unknown as Db, "1991-default", 1991);
+    expect(writes().find((w) => w.id === "US")).toBeUndefined();
+  });
+
+  it("writes nothing for the presets that seed no era", async () => {
+    for (const preset of ["empty", "2019-no-parties"] as const) {
+      const { db, writes } = collectWrites();
+      await seedCountryGameStates(db as unknown as Db, preset, 2019);
+      expect(writes(), preset).toEqual([]);
+    }
+  });
+
+  it("refuses an unrecognised preset rather than silently seeding nothing", async () => {
+    const { db } = collectWrites();
+    await expect(seedCountryGameStates(db as unknown as Db, "1968-default", 1968)).rejects.toThrow(
+      /No world entity roster/
+    );
   });
 });

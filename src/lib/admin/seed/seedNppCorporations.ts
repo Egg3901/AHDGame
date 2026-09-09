@@ -52,12 +52,35 @@ export interface NppCorpCountryPlan {
 }
 
 /**
+ * Presets that spawn NPP market corporations.
+ *
+ * ⚠️ This list exists because the gate below used to be implicit. It read
+ * `getPresetEnablementCountries(preset) === null` as "this preset is
+ * admin-managed, leave it alone", which happened to exclude 2019 and 2023
+ * because those had no manifest map. The era roster gives every preset a map,
+ * so that guard silently stopped firing — and a 2019 reset would have begun
+ * spawning NPP corps for eight countries that previously got none.
+ *
+ * That is an economy change, not a config one, so it is now an explicit list
+ * rather than a side effect. It reproduces the previous behaviour exactly.
+ * Adding "2019-default"/"2023-default" is a deliberate product decision and
+ * wants a simulation report per CLAUDE.md, not a quiet edit.
+ */
+const NPP_CORP_SPAWN_PRESETS = new Set<string>([
+  "1953-default",
+  "1979-default",
+  "1991-default",
+  "1999-default",
+  "2007-default",
+]);
+
+/**
  * The per-country NPP market-corp spawn policy for a preset. Pure — no DB
  * access — so the seed step and the `spawn-npp-all` admin route share one
- * source of truth. Returns `[]` for presets with no enablement map (e.g.
- * 2019-default, which is admin-managed) to preserve their status quo.
+ * source of truth. Returns `[]` for presets that do not spawn NPP corps.
  */
 export function nppCorpSpawnPlan(preset: string, startingYear: number): NppCorpCountryPlan[] {
+  if (!NPP_CORP_SPAWN_PRESETS.has(preset)) return [];
   const mapped = getPresetEnablementCountries(preset);
   if (!mapped) return [];
 
