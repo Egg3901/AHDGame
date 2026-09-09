@@ -46,7 +46,7 @@ import {
   canFieldLegislativeCandidate,
 } from "@/lib/turn/onePartyConstraints";
 import type { NPPContext } from "./context";
-import { fileAcceptedSlateRows } from "./slateResponses";
+import { fileAcceptedSlateRows, trimOverCapSlates } from "./slateResponses";
 import {
   buildSlateOverrideMaps,
   reconcileSlateMoves,
@@ -330,6 +330,23 @@ export async function processElectionEntry(ctx: NPPContext): Promise<number> {
     if (await enterPrimary(npp, primary, { incumbentDefense: true })) {
       entered++;
     }
+  }
+
+  // Phase 1a-pre: bring races that are already over the per-race cap back
+  // inside it, before any filing runs, so a freed slot is available to a row
+  // that has been waiting for one. Isolated for the same reason as the filing
+  // pass below: a trim fault must not abort election entry.
+  try {
+    const trim = await trimOverCapSlates(ctx);
+    if (trim.partiesTrimmed > 0) {
+      logger.info(
+        "Turn",
+        `Slate cap: trimmed ${trim.partiesTrimmed} party board(s), ` +
+          `${trim.withdrawn} candidacy(ies) withdrawn, ${trim.tombstoned} row(s) tombstoned`
+      );
+    }
+  } catch (error) {
+    logger.error("Turn", "trimOverCapSlates failed; continuing election entry", error);
   }
 
   // Phase 1a: file accepted slate rows after incumbents so chair-managed
