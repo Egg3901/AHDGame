@@ -25,6 +25,12 @@ import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
  * argument - `isLayer1PositionsEnabled` is one - so the caller's
  * `vi.mock("@/lib/mongodb")` factory reads this to hand back the same in-memory
  * instance. Without it those calls escape to whatever `MONGODB_URI` names.
+ *
+ * Module-level, so it is shared by every probe in one test FILE and by none
+ * across files (vitest gives each file its own module registry). Probes within a
+ * file must therefore run sequentially - `presetBootstrap.integration.test.ts`
+ * builds its worlds one at a time in `beforeAll` for exactly this reason. Two
+ * concurrent probes in one file would write into each other's database.
  */
 let probeDb: Db | null = null;
 
