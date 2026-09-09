@@ -20,6 +20,7 @@ import type {
   WorldEntityRegion,
   WorldEntityRelationship,
   WorldEntityUnRecord,
+  WorldExceptionalStatus,
 } from "../worldEntityManifest";
 
 /**

@@ -67,7 +67,7 @@ export interface EraRosterSpec {
   vacantChambers?: readonly `${CountryId}.${string}`[];
 }
 
-export const ERA_ROSTER = {
+const ERA_ROSTER_LITERAL = {
   "1953-default": {
     default: "absent",
     player: ["US", "UK", "RU", "DD"],
@@ -177,6 +177,18 @@ export const ERA_ROSTER = {
     npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
   },
 } satisfies Record<ShippingPreset, EraRosterSpec>;
+
+/**
+ * The roster, widened for access.
+ *
+ * `satisfies` above is what makes the table exhaustive over `SHIPPING_PRESETS`
+ * and rejects a country id that is not a `CountryId` — but it also narrows every
+ * entry to its own literal type, so indexing by a *union* preset yields an
+ * intersection where `latent` may not exist and the arrays accept only the
+ * literals that happen to appear in every preset. Re-exporting through the wide
+ * type keeps the compile-time exhaustiveness and gives callers a usable shape.
+ */
+export const ERA_ROSTER: Record<ShippingPreset, EraRosterSpec> = ERA_ROSTER_LITERAL;
 
 export function isShippingPreset(value: string): value is ShippingPreset {
   return (SHIPPING_PRESETS as readonly string[]).includes(value);
