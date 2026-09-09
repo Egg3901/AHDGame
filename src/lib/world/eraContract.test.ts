@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
-import { RESET_PRESETS } from "@/lib/constants/historicalSeats";
+import { COUNTRY_CONFIGS, COUNTRY_ORDER, type CountryId } from "@/lib/constants/countries";
+import { getPresetSeats, RESET_PRESETS } from "@/lib/constants/historicalSeats";
+import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
+import { partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 import { ERA_CONFIGS, type EraId } from "@/components/landing/eraThemes";
-import { isRegisteredTier, SHIPPING_PRESETS, tierFor, type ShippingPreset } from "./eraRoster";
+import { countriesByTier, SHIPPING_PRESETS, tierFor, type ShippingPreset } from "./eraRoster";
 import { assessCountryReadiness } from "./countryReadinessContract";
 import { getWorldEntityPresetManifest } from "./worldEntityManifest";
 
@@ -290,6 +292,58 @@ describe("S2b — roster tier and simulation tier agree", () => {
         if (tierFor(preset, country) !== "npp") continue;
         const entry = manifest.entries.find((e) => e.countryId === country);
         expect(entry?.simulationTier, `${preset}/${country}`).not.toBe("full-autonomous");
+      }
+    }
+  });
+});
+
+/**
+ * S3a — a country the era does not contain has no authored data in it.
+ *
+ * MECHANISM: `countriesByTier(preset, "absent")` against the authored bundles.
+ * Pure; no DB.
+ *
+ * Absence is the assertion nothing else makes. Every other check asks whether
+ * data is PRESENT; `Partial<Record<CountryId, X>>` cannot express "must be empty
+ * here", which is why East German parties were still being created in worlds set
+ * after reunification.
+ */
+describe("S3a — absent countries carry no era data", () => {
+  it("seeds no party for a country the era does not contain", () => {
+    for (const preset of SHIPPING_PRESETS) {
+      for (const country of countriesByTier(preset, "absent")) {
+        expect(partySeedsForPreset(country, preset), `${preset}/${country}`).toEqual([]);
+      }
+    }
+  });
+
+  it("seeds no national budget for a country the era does not contain", () => {
+    for (const preset of SHIPPING_PRESETS) {
+      // Widened to string: the budget configs are keyed by a narrower
+      // SupportedBudgetCountryId, and the whole point here is to ask about
+      // countries outside it.
+      const budgeted = new Set<string>(
+        getNationalBudgetSeedConfigsForPreset(preset).map((c) => String(c.countryId))
+      );
+      for (const country of countriesByTier(preset, "absent")) {
+        expect(budgeted.has(country), `${preset}/${country}`).toBe(false);
+      }
+    }
+  });
+
+  it("seats no chamber for a country the era does not contain", () => {
+    // Seats key on officeType rather than countryId, so match through the
+    // country's own configured chamber keys.
+    for (const preset of SHIPPING_PRESETS) {
+      const offices = new Set(getPresetSeats(preset).map((s) => String(s.officeType)));
+      for (const country of countriesByTier(preset, "absent")) {
+        const legislature = COUNTRY_CONFIGS[country]?.legislature;
+        const chambers = [legislature?.lowerChamber?.key, legislature?.upperChamber?.key].filter(
+          (k): k is string => Boolean(k)
+        );
+        for (const chamber of chambers) {
+          expect(offices.has(chamber), `${preset}/${country}/${chamber}`).toBe(false);
+        }
       }
     }
   });
