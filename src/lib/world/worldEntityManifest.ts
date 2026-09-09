@@ -14,6 +14,7 @@ import {
   type TierReclassificationRecord,
 } from "@/lib/world/tier1Readiness1953Data";
 import { build1953Tier3Registry } from "./registry/assemble";
+import { isShippingPreset, tierFor } from "./eraRoster";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -277,13 +278,23 @@ const SPHERE_SPONSOR_ELIGIBILITY: Readonly<Partial<Record<string, ReadonlySet<Co
     "1999-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2007-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2019-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    // 2023 had NO entry, so isManifestSphereSponsor returned false for every
+    // country in that preset and nothing could sponsor a sphere there.
+    "2023-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
   });
 
 /** True when the preset matrix lists this entity as a sphere sponsor. */
 export function isManifestSphereSponsor(presetId: string, entityId: WorldEntityId): boolean {
   const eligible = SPHERE_SPONSOR_ELIGIBILITY[presetId];
-  if (!eligible) return false;
-  return eligible.has(entityId as CountryId);
+  if (!eligible || !eligible.has(entityId as CountryId)) return false;
+  // A country that does not exist in this era cannot sponsor a sphere. Today
+  // this is future-proofing (the sets only hold US/UK/RU/FR/CN/DE/JP, none of
+  // which is absent anywhere), but it stops the pairing breaking silently if
+  // either side changes.
+  if (isShippingPreset(presetId) && tierFor(presetId, entityId as CountryId) === "absent") {
+    return false;
+  }
+  return true;
 }
 
 function buildCountryEntry(
@@ -1919,9 +1930,97 @@ function apply1953Tier1MatrixAdjustments(
   return [...byId.values()];
 }
 
+/**
+ * Overlay the era roster's answer onto the CountryConfig-backed entries.
+ *
+ * SCOPED TO `COUNTRY_ORDER` ON PURPOSE. The roster classifies the *registered*
+ * world; unregistered entities keep whatever classification the manifest already
+ * gives them, and there are two kinds that must not be touched:
+ *
+ * - **Latent countries.** UKR/BLR/BAL are `economy-preview` + full-autonomous in
+ *   1953 but `hidden` + historical-presence in 1979. The roster's single
+ *   `latent` tier cannot express that split, and does not need to — they are
+ *   unregistered either way, which is the only thing the roster decides.
+ * - **Sphere-macro, decolonization and historical-presence entities.** These
+ *   are not `CountryId`s at all and carry sphere relationships this must
+ *   preserve.
+ *
+ * So this mutates `legacyAccess`/`legacyStatus` in place rather than rebuilding
+ * entries: rebuilding would discard Spain's 1953 Pact-of-Madrid relationship and
+ * every tier-reclassification record.
+ */
+function applyRosterAccess(
+  presetId: string,
+  entries: readonly WorldEntityManifestEntry[]
+): WorldEntityManifestEntry[] {
+  if (!isShippingPreset(presetId)) return [...entries];
+  const out: WorldEntityManifestEntry[] = [];
+  for (const entry of entries) {
+    const countryId = entry.countryId;
+    if (!countryId || !COUNTRY_ORDER.includes(countryId)) {
+      out.push(entry);
+      continue;
+    }
+    const tier = tierFor(presetId, countryId);
+    // A country absent from this era is not a world entity in it at all.
+    if (tier === "absent") continue;
+    // `latent` cannot occur here: latent countries are unregistered by
+    // definition, and `eraRoster.test.ts` asserts they stay out of COUNTRY_ORDER.
+    const legacyAccess: LegacyCountryAccess =
+      tier === "player" ? "player" : tier === "econ" ? "economy-preview" : "hidden";
+    // ONLY `legacyAccess`/`legacyStatus`. Rebuilding `simulationTier` or
+    // `readiness` here destroys Spain's 1953 sphere-macro demotion, Japan's
+    // recorded 1953 player blocker, and every tierReclassification record — all
+    // of which are authored decisions the roster has no opinion about. The two
+    // stay consistent anyway: `player` and `economy-preview` both map to
+    // full-autonomous, and `hidden` to historical-presence, which is what the
+    // existing entries already carry.
+    out.push({
+      ...entry,
+      legacyAccess,
+      legacyStatus:
+        legacyAccess === "player"
+          ? "active"
+          : legacyAccess === "economy-preview"
+            ? "beta"
+            : "coming-soon",
+    });
+  }
+
+  // Fill the gaps. The hand-written maps simply omitted several registered
+  // countries — the 1991 manifest was `accessMap(POST_COLD_WAR_PLAYER,
+  // POST_COLD_WAR_ECONOMY)`, which names neither Russia nor the Warsaw Pact
+  // successors — so `getWorldEntityOrThrow` threw for exactly the countries
+  // most likely to be misconfigured, and the readiness contract could not
+  // evaluate them at all. A roster tier is a classification; every registered
+  // country now has one.
+  const present = new Set(out.map((entry) => entry.countryId).filter(Boolean));
+  for (const countryId of COUNTRY_ORDER) {
+    if (present.has(countryId)) continue;
+    const tier = tierFor(presetId, countryId);
+    if (tier === "absent" || tier === "latent") continue;
+    out.push(
+      buildCountryEntry(
+        presetId,
+        countryId,
+        tier === "player" ? "player" : tier === "econ" ? "economy-preview" : "hidden"
+      )
+    );
+  }
+  return out;
+}
+
+/** Build a preset manifest with the roster overlaid onto its registered countries. */
+function defineRosterManifest(
+  presetId: string,
+  entries: readonly WorldEntityManifestEntry[]
+): WorldEntityPresetManifest {
+  return defineWorldEntityPresetManifest(presetId, applyRosterAccess(presetId, entries));
+}
+
 export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetManifest>> =
   Object.freeze({
-    "1953-default": defineWorldEntityPresetManifest(
+    "1953-default": defineRosterManifest(
       "1953-default",
       apply1953Tier1MatrixAdjustments([
         ...entriesFromAccess("1953-default", accessMap(COLD_WAR_PLAYER, COLD_WAR_ECONOMY)),
@@ -1932,7 +2031,7 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ...historicalPresenceEntries("1953-default"),
       ])
     ),
-    "1979-default": defineWorldEntityPresetManifest(
+    "1979-default": defineRosterManifest(
       "1979-default",
       entriesFromAccess(
         "1979-default",
@@ -1947,26 +2046,20 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         )
       )
     ),
-    "1991-default": defineWorldEntityPresetManifest(
+    "1991-default": defineRosterManifest(
       "1991-default",
       entriesFromAccess("1991-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
     ),
-    "1999-default": defineWorldEntityPresetManifest(
+    "1999-default": defineRosterManifest(
       "1999-default",
       entriesFromAccess("1999-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
     ),
-    "2007-default": defineWorldEntityPresetManifest(
+    "2007-default": defineRosterManifest(
       "2007-default",
       entriesFromAccess("2007-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
     ),
-    "2019-default": defineWorldEntityPresetManifest(
-      "2019-default",
-      configFallbackEntries("2019-default")
-    ),
-    "2023-default": defineWorldEntityPresetManifest(
-      "2023-default",
-      configFallbackEntries("2023-default")
-    ),
+    "2019-default": defineRosterManifest("2019-default", configFallbackEntries("2019-default")),
+    "2023-default": defineRosterManifest("2023-default", configFallbackEntries("2023-default")),
   });
 
 export function getWorldEntityPresetManifest(presetId: string): WorldEntityPresetManifest {

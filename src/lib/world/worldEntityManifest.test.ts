@@ -286,10 +286,32 @@ describe("world entity manifest", () => {
     expect(ghana.countryId).toBeUndefined();
   });
 
-  it("preserves the admin/config fallback seam for 2019", () => {
+  it("no longer defers 2019 to the admin/config fallback seam", () => {
+    // DELIBERATE REVERSAL. 2019 used to be entirely `config-fallback`, which
+    // resolved access from the era-NEUTRAL CountryConfig status and meant
+    // `seedCountryGameStates` wrote no rows at all — so a reset inherited
+    // whatever the previous world's admin toggles had left behind. That is how
+    // 2019 came to open six player countries instead of three. The era roster
+    // now answers for every shipping preset.
     const manifest = getWorldEntityPresetManifest("2019-default");
     expect(manifest.entries.length).toBeGreaterThan(0);
-    expect(manifest.entries.every((entry) => entry.legacyAccess === "config-fallback")).toBe(true);
+    expect(manifest.entries.some((entry) => entry.legacyAccess === "config-fallback")).toBe(false);
+    expect(getWorldEntityOrThrow("2019-default", "JP").legacyAccess).toBe("player");
+    expect(getWorldEntityOrThrow("2019-default", "DE").legacyAccess).toBe("economy-preview");
+  });
+
+  it("drops countries the roster marks absent from the era entirely", () => {
+    // East Germany does not exist after 1990, so it is not a world entity in a
+    // modern preset — not merely a disabled one.
+    for (const preset of ["1991-default", "2019-default"] as const) {
+      expect(
+        getWorldEntityPresetManifest(preset).entries.some((e) => e.countryId === "DD"),
+        preset
+      ).toBe(false);
+    }
+    expect(
+      getWorldEntityPresetManifest("1953-default").entries.some((e) => e.countryId === "DD")
+    ).toBe(true);
   });
 
   it("provides a manifest for every supported reset era", () => {
@@ -306,7 +328,7 @@ describe("world entity manifest", () => {
     }
     expect(getWorldEntityOrThrow("2023-default", "UK")).toMatchObject({
       countryId: "UK",
-      legacyAccess: "config-fallback",
+      legacyAccess: "player",
     });
   });
 
@@ -328,14 +350,15 @@ describe("world entity manifest", () => {
         legacyAccess: "economy-preview",
       });
     }
-    // 2019-default runs off the admin/config fallback seam (every entry is
-    // "config-fallback"), which resolves ES's tier from its CountryConfig
-    // status rather than a hand-authored manifest entry — this asserts the
-    // preserved shape rather than a specific status.
+    // 2019-default is now roster-driven rather than config-fallback. Spain is
+    // `npp` there — not because of the 1953 sphere demotion, but because it has
+    // no authored modern data — so it reads `hidden`. The 1953-only demotion
+    // this test guards is unaffected: that is the `simulationTier` assertion
+    // above, which the roster deliberately does not touch.
     expect(getWorldEntityOrThrow("2019-default", "ES")).toMatchObject({
       countryId: "ES",
       simulationTier: "historical-presence",
-      legacyAccess: "config-fallback",
+      legacyAccess: "hidden",
     });
   });
 

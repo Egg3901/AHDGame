@@ -80,7 +80,6 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "300", // GR
     "372", // IE
     "380", // IT
-    "392", // JP
     "566", // NG
     "724", // ES
     "752", // SE
@@ -96,7 +95,6 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "300", // GR
     "372", // IE
     "380", // IT
-    "392", // JP
     "566", // NG
     "724", // ES
     "752", // SE
@@ -112,20 +110,23 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "300", // GR
     "372", // IE
     "380", // IT
-    "392", // JP
     "566", // NG
     "724", // ES
     "752", // SE
     "792", // TR
   ],
-  "2023-default": ["156", "276", "372", "392", "826", "840"],
+  // US/UK/JP left this roster when the era roster made them player countries in
+  // every modern preset: this list is full-autonomous entities that are NOT
+  // player-run, and they now are.
+  "2023-default": [
+    "156", // CN
+    "276", // DE
+    "372", // IE
+  ],
   "2019-default": [
     "156", // CN
     "276", // DE
     "372", // IE
-    "392", // JP
-    "826", // UK
-    "840", // US
   ],
 };
 

@@ -14,6 +14,8 @@
 
 import type { CountryId } from "./countries";
 import { recordPresetFallback } from "@/lib/seeds/presetSelector";
+import { tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
+import { COUNTRY_ORDER } from "./countries";
 
 export interface HistoricalSeat {
   state: string;
@@ -3149,6 +3151,23 @@ export interface ResetPreset {
 }
 
 /**
+ * Countries a preset actually contains, straight from the era roster.
+ *
+ * This list is declarative — nothing reads it to drive seeding — but it is the
+ * admin-facing manifest of what a reset produces, served verbatim by
+ * `/api/admin/reset/presets`. Hand-maintained, it drifted: 1991-default listed
+ * seven countries while the world it produced had sixteen. Deriving it means the
+ * picker cannot disagree with the reset any more.
+ *
+ * Latent countries (UKR/BLR/BAL, SCO/WAL) are excluded by construction: they are
+ * outside `COUNTRY_ORDER`, so a preset never advertises a country it will not
+ * register.
+ */
+function presetCountries(preset: ShippingPreset): CountryId[] {
+  return COUNTRY_ORDER.filter((id) => tierFor(preset, id) !== "absent");
+}
+
+/**
  * Available reset presets.
  * Each preset defines a specific starting condition for game resets.
  */
@@ -3844,79 +3863,35 @@ export const RESET_PRESETS: ResetPreset[] = [
     name: "1953 Start Date - Early Cold War",
     description:
       "The Early Cold War world: US/UK and the USSR are player-enabled (Stalin died March 1953; Khrushchev consolidating). France/Italy/Spain/Sweden/Turkey + Japan/China/West Germany(FRG)/Brazil/Ireland are economy-enabled. East Germany (June 17 uprising 1953!) and the Stalinist bloc (Poland/Romania/Yugoslavia/Hungary/Czechoslovakia/Bulgaria) are NPP-run one-party states; Byelorussia and the Baltics are Soviet union republics inside the USSR, not separate states. Nigeria is a British colony (coming-soon). Real ~1953 demographics, metrics and budgets per country. One-party legislatures start seated; democracies start vacant.",
-    countries: [
-      "US",
-      "UK",
-      "RU",
-      "FR",
-      "IT",
-      "ES",
-      "SE",
-      "TR",
-      "DE",
-      "JP",
-      "CN",
-      "NG",
-      "BR",
-      "IE",
-      "DD",
-      "PL",
-      "RO",
-      "YU",
-      "HU",
-      "CS",
-      "BG",
-    ],
+    countries: presetCountries("1953-default"),
   },
   {
     id: "2023-default",
     name: "2023 Start Date - Default Parties",
     description:
       "US 118th Congress (Jan 2023, post-2022 midterms) — Biden presidency, divided government (Republican House / Democratic Senate). Real 2023 Census/BEA/BLS state data + FY2023 budget. Non-US countries fall back to their 2019 bundles.",
-    countries: ["US", "UK", "JP", "DE", "CN", "IE"],
+    countries: presetCountries("2023-default"),
   },
   {
     id: "2019-default",
     name: "2019 Start Date - Default Parties",
     description:
       "US 116th Congress (Feb 2020) + UK post-2019 election + JP National Diet (Jan 2020) + DE 19th Bundestag scaled + 2019 Ministerpräsidenten + CN 13th NPC + IE 33rd Dáil (2020).",
-    countries: ["US", "UK", "JP", "DE", "CN", "IE"],
+    countries: presetCountries("2019-default"),
   },
   {
     id: "1991-default",
     name: "1991 Start Date - Default Parties",
     description:
       "US 102nd Congress (1991-93) + UK post-1992 election + JP post-1990 election + DE 12th Bundestag + CN 7th NPC + BR 49th Congress + IE 27th Dáil. Reg/Org seeded from 1988-92 election baselines.",
-    countries: ["US", "UK", "JP", "DE", "CN", "BR", "IE"],
+    countries: presetCountries("1991-default"),
   },
   {
     id: "1979-default",
     name: "1979 Start Date - Cold War",
     description:
       "The Cold War world: US/UK and the USSR are player-enabled; France/Italy/Spain/Sweden/Turkey + China/Japan/Germany(FRG)/Brazil/Nigeria are economy-enabled; East Germany and the Warsaw-Pact bloc (Poland/Romania/Yugoslavia/Hungary/Czechoslovakia/Bulgaria) are NPP-run one-party states; Byelorussia and the Baltics are Soviet union republics inside the USSR, not separate states. Real ~1979 demographics, metrics and budgets per country. Legislatures start vacant (historical seat maps are a follow-up).",
-    countries: [
-      "US",
-      "UK",
-      "RU",
-      "FR",
-      "IT",
-      "ES",
-      "SE",
-      "TR",
-      "DE",
-      "JP",
-      "CN",
-      "NG",
-      "BR",
-      "IE",
-      "DD",
-      "PL",
-      "RO",
-      "YU",
-      "HU",
-      "CS",
-      "BG",
-    ],
+    countries: presetCountries("1979-default"),
   },
   {
     id: "empty",
