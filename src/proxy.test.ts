@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 
 // proxy() consults the DB for maintenance / public-viewing state. Stub those to
 // safe defaults so we can exercise the pure routing behaviors (redirects,
@@ -27,6 +27,8 @@ import { NextRequest } from "next/server";
 import { proxy, config } from "./proxy";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE } from "@/lib/auth/characterGate";
+
+afterEach(() => vi.unstubAllEnvs());
 
 function makeRequest(
   urlStr: string,
@@ -156,6 +158,34 @@ describe("proxy() — tri-state maintenance gating", () => {
     const res = await proxy(
       makeRequest("https://ahousedividedgame.com/dashboard", {
         host: "ahousedividedgame.com",
+      })
+    );
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("routes a sealed local player to the limited singleplayer controls", async () => {
+    vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
+    mockMaintenanceStatus.mockResolvedValueOnce({ mode: "full", enabled: true });
+    const res = await proxy(
+      makeRequest("http://127.0.0.1:3111/profile", {
+        host: "127.0.0.1:3111",
+        cookies: { [AUTH_COOKIE_NAME]: "local-player-token" },
+      })
+    );
+    expect(res.headers.get("location")).toContain("/singleplayer/admin");
+  });
+
+  it("keeps the limited singleplayer controls reachable while sealed", async () => {
+    vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
+    mockMaintenanceStatus.mockResolvedValueOnce({ mode: "full", enabled: true });
+    const res = await proxy(
+      makeRequest("http://127.0.0.1:3111/singleplayer/admin", {
+        host: "127.0.0.1:3111",
+        cookies: { [AUTH_COOKIE_NAME]: "local-player-token" },
       })
     );
     expect(res.headers.get("location")).toBeNull();

@@ -258,7 +258,11 @@ export default async function RootLayout({
         console.warn("[layout] verifyAuth threw during maintenance check", err);
       }
       if (authPayload?.isAdmin !== true) {
-        redirect("/maintenance");
+        if (isSingleplayer()) {
+          if (pathname !== "/singleplayer/admin") redirect("/singleplayer/admin");
+        } else {
+          redirect("/maintenance");
+        }
       }
     }
   }
