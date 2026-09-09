@@ -891,7 +891,7 @@ describe("fileAcceptedSlateRows", () => {
     expect(candidatesByElection.get(electionId.toString())).toHaveLength(2);
   });
 
-  it("displaces an auto-picked same-party challenger so the chair's pick files (#1181)", async () => {
+  it("files the chair's pick beside an auto-picked challenger while the race has room", async () => {
     const electionId = new ObjectId();
     const election: Election = {
       _id: electionId,
@@ -958,96 +958,18 @@ describe("fileAcceptedSlateRows", () => {
     });
     const summary = await fileAcceptedSlateRows(ctx);
 
-    // The occupant holds no slate row of their own, so it is a generic
-    // party-pool auto-pick and yields to the chair's instruction.
+    // Two candidates is inside the cap, so nobody has to give way: the chair's
+    // pick joins the auto-pick and the primary decides between them. The
+    // chair-outranks-autopilot rule only bites once the race is full, which
+    // the assignment-cap suite covers.
     expect(summary.filed).toBe(1);
     expect(summary.skipped).toBe(0);
-    expect(summary.displaced).toBe(1);
-    expect(candidateRow.status).toBe("filed");
-    expect(challengerCandidate.status).toBe("withdrawn");
-    expect(ctx.nppCandidacies.has(activeChallenger._id.toString())).toBe(false);
-    expect(inserted.filter((c) => c.status === "active")).toHaveLength(1);
-    expect(inserted.find((c) => c.status === "active")?.characterId).toEqual(anotherChallenger._id);
-  });
-
-  it("yields to a same-party challenger the chair already slated, recording slot_taken", async () => {
-    const electionId = new ObjectId();
-    const election: Election = {
-      _id: electionId,
-      electionType: "house",
-      state: "US_CA",
-      countryId: "US",
-      cycle: 1,
-      status: "active",
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    } as Election;
-
-    const firstPick = makeNPP({ name: "Chair First Pick" });
-    const secondPick = makeNPP({ name: "Chair Second Pick" });
-
-    const makeRow = (npp: NPP, status: SlateCandidate["status"]): SlateCandidate => ({
-      _id: new ObjectId(),
-      slateId: new ObjectId(),
-      electionId,
-      partyId: "1",
-      countryId: "US",
-      candidateType: "npp",
-      candidateId: npp._id,
-      candidateName: npp.name,
-      homeState: npp.homeState,
-      status,
-      fitScore: 90,
-      refusalReason: null,
-      autoFilled: false,
-      invitedAt: new Date(),
-      respondedAt: new Date(),
-      filedAt: status === "filed" ? new Date() : null,
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    });
-
-    const filedRow = makeRow(firstPick, "filed");
-    const pendingRow = makeRow(secondPick, "accepted");
-
-    const filedCandidate: ElectionCandidate = {
-      _id: new ObjectId(),
-      electionId,
-      characterId: firstPick._id,
-      characterName: firstPick.name,
-      party: "1",
-      status: "active",
-      isNPP: true,
-      nppId: firstPick._id,
-      enteredAt: new Date(),
-    };
-
-    const inserted: ElectionCandidate[] = [filedCandidate];
-    const db = buildDb({
-      recruitmentSlates: [],
-      slateCandidates: [filedRow, pendingRow],
-      nppRelationships: [],
-      elections: [election],
-      electionCandidates: inserted,
-    });
-
-    const candidatesByElection = new Map<string, ElectionCandidate[]>([
-      [electionId.toString(), [filedCandidate]],
-    ]);
-    const summary = await fileAcceptedSlateRows(
-      makeCtx(db, [firstPick, secondPick], {
-        candidatesByElection,
-        nppCandidacies: new Set([firstPick._id.toString()]),
-      })
-    );
-
-    expect(summary.filed).toBe(0);
-    expect(summary.skipped).toBe(1);
     expect(summary.displaced).toBe(0);
-    expect(inserted).toHaveLength(1);
-    expect(filedCandidate.status).toBe("active");
-    expect(pendingRow.status).toBe("withdrawn");
-    expect(pendingRow.refusalReason).toBe("slot_taken");
+    expect(candidateRow.status).toBe("filed");
+    expect(challengerCandidate.status).toBe("active");
+    expect(ctx.nppCandidacies.has(activeChallenger._id.toString())).toBe(true);
+    expect(inserted.filter((c) => c.status === "active")).toHaveLength(2);
+    expect(inserted.map((c) => c.characterId)).toContainEqual(anotherChallenger._id);
   });
 
   it("marks the row filed when the NPP already holds a candidacy in the slated race", async () => {
@@ -1261,5 +1183,280 @@ describe("fileAcceptedSlateRows", () => {
     expect(goodRow.status).toBe("filed");
     expect(poisonRow.status).toBe("accepted"); // left for retry, not crashed
     expect(inserted.map((c) => c.characterName)).toContain("Files Fine");
+  });
+});
+
+describe("fileAcceptedSlateRows assignment cap", () => {
+  const electionId = new ObjectId();
+
+  function capElection(): Election {
+    return {
+      _id: electionId,
+      electionType: "commons",
+      state: "NEE",
+      countryId: "UK",
+      cycle: 1,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+  }
+
+  function capRow(
+    npp: NPP,
+    status: SlateCandidate["status"],
+    autoFilled = false,
+    invitedAt = new Date("2026-04-01T00:00:00Z")
+  ): SlateCandidate {
+    return {
+      _id: new ObjectId(),
+      slateId: new ObjectId(),
+      electionId,
+      partyId: "1",
+      countryId: "UK",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      status,
+      fitScore: 90,
+      refusalReason: null,
+      autoFilled,
+      invitedAt,
+      respondedAt: new Date(),
+      filedAt: status === "filed" ? new Date() : null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as SlateCandidate;
+  }
+
+  function capCandidacy(npp: NPP): ElectionCandidate {
+    return {
+      _id: new ObjectId(),
+      electionId,
+      characterId: npp._id,
+      characterName: npp.name,
+      party: "1",
+      status: "active",
+      isNPP: true,
+      nppId: npp._id,
+      enteredAt: new Date(),
+    } as ElectionCandidate;
+  }
+
+  function ukNpp(name: string): NPP {
+    return makeNPP({ name, homeState: "NEE", countryId: "UK", party: "1" });
+  }
+
+  it("files a second chair pick beside the first while the race has room", async () => {
+    const first = ukNpp("Chair First Pick");
+    const second = ukNpp("Chair Second Pick");
+    const filedRow = capRow(first, "filed");
+    const pendingRow = capRow(second, "accepted");
+    const filedCandidate = capCandidacy(first);
+    const inserted: ElectionCandidate[] = [filedCandidate];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [filedRow, pendingRow],
+      nppRelationships: [],
+      elections: [capElection()],
+      electionCandidates: inserted,
+    });
+
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [first, second], {
+        candidatesByElection: new Map([[electionId.toString(), [filedCandidate]]]),
+        nppCandidacies: new Set([first._id.toString()]),
+      })
+    );
+
+    expect(summary.filed).toBe(1);
+    expect(summary.skipped).toBe(0);
+    expect(pendingRow.status).toBe("filed");
+    expect(filedCandidate.status).toBe("active");
+    expect(inserted.filter((c) => c.status === "active")).toHaveLength(2);
+  });
+
+  it("refuses a fourth candidate on the race and says the slate is full", async () => {
+    const held = [ukNpp("Held One"), ukNpp("Held Two"), ukNpp("Held Three")];
+    const fourth = ukNpp("One Too Many");
+    const heldRows = held.map((npp) => capRow(npp, "filed"));
+    const pendingRow = capRow(fourth, "accepted");
+    const heldCandidacies = held.map(capCandidacy);
+    const inserted: ElectionCandidate[] = [...heldCandidacies];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [...heldRows, pendingRow],
+      nppRelationships: [],
+      elections: [capElection()],
+      electionCandidates: inserted,
+    });
+
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [...held, fourth], {
+        candidatesByElection: new Map([[electionId.toString(), heldCandidacies]]),
+        nppCandidacies: new Set(held.map((n) => n._id.toString())),
+      })
+    );
+
+    expect(summary.filed).toBe(0);
+    expect(summary.skipped).toBe(1);
+    expect(pendingRow.status).toBe("withdrawn");
+    expect(pendingRow.refusalReason).toBe("slate_full");
+    expect(inserted.filter((c) => c.status === "active")).toHaveLength(3);
+  });
+
+  it("counts an autopilot pick against the cap even though it has no slate row", async () => {
+    const chairPicks = [ukNpp("Chair One"), ukNpp("Chair Two")];
+    const autoPick = ukNpp("Autopilot Pick");
+    const fourth = ukNpp("One Too Many");
+    const chairRows = chairPicks.map((npp) => capRow(npp, "filed"));
+    const pendingRow = capRow(fourth, "accepted");
+    // The autopilot pick holds a candidacy and no slate row, and is an
+    // incumbent, so the chair's row cannot displace it either.
+    const autoCandidacy = capCandidacy(autoPick);
+    const held = [...chairPicks.map(capCandidacy), autoCandidacy];
+    const inserted: ElectionCandidate[] = [...held];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [...chairRows, pendingRow],
+      nppRelationships: [],
+      elections: [capElection()],
+      electionCandidates: inserted,
+    });
+
+    const officialsByNPP = new Map([
+      [autoPick._id.toString(), [{ officeType: "commons", state: "NEE" }]],
+    ]);
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [...chairPicks, autoPick, fourth], {
+        candidatesByElection: new Map([[electionId.toString(), held]]),
+        nppCandidacies: new Set(held.map((c) => c.characterId.toString())),
+        officialsByNPP: officialsByNPP as never,
+      })
+    );
+
+    expect(summary.filed).toBe(0);
+    expect(pendingRow.refusalReason).toBe("slate_full");
+  });
+
+  it("displaces an autopilot pick when the race is full so the chair's pick still files", async () => {
+    const chairPicks = [ukNpp("Chair One"), ukNpp("Chair Two")];
+    const autoPick = ukNpp("Autopilot Pick");
+    const wanted = ukNpp("Chair Three");
+    const chairRows = chairPicks.map((npp) => capRow(npp, "filed"));
+    const pendingRow = capRow(wanted, "accepted");
+    const autoCandidacy = capCandidacy(autoPick);
+    const held = [...chairPicks.map(capCandidacy), autoCandidacy];
+    const inserted: ElectionCandidate[] = [...held];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [...chairRows, pendingRow],
+      nppRelationships: [],
+      elections: [capElection()],
+      electionCandidates: inserted,
+    });
+
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [...chairPicks, autoPick, wanted], {
+        candidatesByElection: new Map([[electionId.toString(), held]]),
+        nppCandidacies: new Set(held.map((c) => c.characterId.toString())),
+      })
+    );
+
+    // The autopilot pick is not an incumbent and holds no chair-issued row, so
+    // it yields the last slot rather than the chair's instruction being lost.
+    expect(summary.filed).toBe(1);
+    expect(summary.displaced).toBe(1);
+    expect(pendingRow.status).toBe("filed");
+    expect(autoCandidacy.status).toBe("withdrawn");
+    expect(inserted.filter((c) => c.status === "active")).toHaveLength(3);
+  });
+
+  it("gives a slot released earlier in the same pass to the next row", async () => {
+    const seated = [ukNpp("Seated One"), ukNpp("Seated Two")];
+    const retired = makeNPP({
+      name: "Retired Pick",
+      homeState: "NEE",
+      countryId: "UK",
+      party: "1",
+      retiredAt: new Date("2026-02-01T00:00:00Z"),
+    });
+    const wanted = ukNpp("Should Still File");
+
+    const seatedRows = seated.map((npp) => capRow(npp, "filed"));
+    // Processed first (latest updatedAt) and invited first, so without the
+    // release it would keep holding the third slot after being tombstoned.
+    const retiredRow = {
+      ...capRow(retired, "accepted", false, new Date("2026-03-01T00:00:00Z")),
+      updatedAt: new Date("2026-04-10T00:00:00Z"),
+    } as SlateCandidate;
+    const wantedRow = {
+      ...capRow(wanted, "accepted", false, new Date("2026-03-02T00:00:00Z")),
+      updatedAt: new Date("2026-04-09T00:00:00Z"),
+    } as SlateCandidate;
+
+    const seatedCandidacies = seated.map(capCandidacy);
+    const inserted: ElectionCandidate[] = [...seatedCandidacies];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [...seatedRows, retiredRow, wantedRow],
+      nppRelationships: [],
+      elections: [capElection()],
+      electionCandidates: inserted,
+    });
+
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [...seated, retired, wanted], {
+        candidatesByElection: new Map([[electionId.toString(), seatedCandidacies]]),
+        nppCandidacies: new Set(seated.map((n) => n._id.toString())),
+      })
+    );
+
+    expect(retiredRow.refusalReason).toBe("npp_unavailable");
+    expect(summary.filed).toBe(1);
+    expect(wantedRow.status).toBe("filed");
+    expect(wantedRow.refusalReason).toBeNull();
+  });
+
+  it("counts a chair-assigned player against the same pool as NPPs", async () => {
+    const chairNpps = [ukNpp("Chair One"), ukNpp("Chair Two")];
+    const fourth = ukNpp("One Too Many");
+    const playerId = new ObjectId();
+    const playerRow: SlateCandidate = {
+      ...capRow(chairNpps[0]!, "accepted"),
+      _id: new ObjectId(),
+      candidateType: "character",
+      candidateId: playerId,
+      candidateName: "Player Candidate",
+    };
+    const chairRows = chairNpps.map((npp) => capRow(npp, "filed"));
+    const pendingRow = capRow(fourth, "accepted");
+    const heldCandidacies = chairNpps.map(capCandidacy);
+    const inserted: ElectionCandidate[] = [...heldCandidacies];
+
+    const db = buildDb({
+      recruitmentSlates: [],
+      slateCandidates: [...chairRows, playerRow, pendingRow],
+      nppRelationships: [],
+      elections: [capElection()],
+      electionCandidates: inserted,
+    });
+
+    const summary = await fileAcceptedSlateRows(
+      makeCtx(db, [...chairNpps, fourth], {
+        candidatesByElection: new Map([[electionId.toString(), heldCandidacies]]),
+        nppCandidacies: new Set(chairNpps.map((n) => n._id.toString())),
+      })
+    );
+
+    // Two NPPs plus the chair's player pick fill the race.
+    expect(summary.filed).toBe(0);
+    expect(pendingRow.refusalReason).toBe("slate_full");
   });
 });

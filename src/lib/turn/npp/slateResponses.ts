@@ -36,6 +36,7 @@ import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive"
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { SLATE_ASSIGNMENT_CAP, isLiveSlateStatus } from "@/lib/slateAssignmentCap";
 import {
   canFieldExecutiveCandidate,
   canFieldLegislativeCandidate,
@@ -363,32 +364,96 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
     else activeCandidaciesByCandidateId.set(key, [candidacy]);
   }
 
+  // Every slate row on the races this pass touches, serving two questions:
+  // which candidates hold a chair-issued row (as opposed to turn-loop
+  // carry-forward), and what each party already holds against the cap.
+  const slateRowsForElections = await db
+    .collection<SlateCandidate>("slateCandidates")
+    .find({ electionId: { $in: electionIds } })
+    .toArray();
+
   // Which (election, NPP) pairs hold a chair-issued slate row? Used below to
   // tell a chair's candidate apart from one the generic fallback auto-picked.
   // `autoFilled` rows are turn-loop carry-forward, not a chair decision, so
   // they do not confer precedence.
-  const chairSlatedRows = await db
-    .collection<SlateCandidate>("slateCandidates")
-    .find({
-      electionId: { $in: electionIds },
-      candidateType: "npp",
-      status: { $in: ["accepted", "filed"] },
-      autoFilled: { $ne: true },
-    })
-    .toArray();
   const chairSlatedKeys = new Set(
-    chairSlatedRows.map((r) => `${r.electionId.toString()}:${r.candidateId.toString()}`)
+    slateRowsForElections
+      .filter(
+        (r) =>
+          r.candidateType === "npp" &&
+          (r.status === "accepted" || r.status === "filed") &&
+          r.autoFilled !== true
+      )
+      .map((r) => `${r.electionId.toString()}:${r.candidateId.toString()}`)
   );
+
+  // Live rows per (election, party), the slot-holding half of the cap.
+  const liveRowsByRace = new Map<string, SlateCandidate[]>();
+  for (const r of slateRowsForElections) {
+    if (!isLiveSlateStatus(r.status)) continue;
+    const key = `${r.electionId.toString()}_${r.partyId}`;
+    const list = liveRowsByRace.get(key);
+    if (list) list.push(r);
+    else liveRowsByRace.set(key, [r]);
+  }
+
+  /**
+   * The candidates entitled to one of the party's slots on this race.
+   *
+   * A party may hold at most SLATE_ASSIGNMENT_CAP slots, so when more
+   * candidates hold one than the cap allows, the order decides who keeps
+   * theirs: a defending incumbent first, then whoever is already on the
+   * ballot, then live slate rows oldest invitation first. Ties break on row id
+   * so a race resolves the same way on every pass.
+   */
+  const entitledHolders = (election: Election, partyId: string): Set<string> => {
+    const raceKey = `${election._id.toString()}_${partyId}`;
+    const incumbentIds: string[] = [];
+    const seatedIds: string[] = [];
+    for (const candidate of candidatesByElection.get(election._id.toString()) ?? []) {
+      if (candidate.party !== partyId || candidate.status !== "active") continue;
+      // A player who filed their own candidacy spends no party slot; a chair's
+      // player pick spends one through its slate row instead.
+      if (candidate.isNPP !== true && candidate.nppId == null) continue;
+      const holderId = candidate.characterId.toString();
+      if (candidate.nppId && isIncumbentForElection(ctx, candidate.nppId.toString(), election)) {
+        incumbentIds.push(holderId);
+      } else {
+        seatedIds.push(holderId);
+      }
+    }
+    const rowIds = [...(liveRowsByRace.get(raceKey) ?? [])]
+      .sort(
+        (a, b) =>
+          a.invitedAt.getTime() - b.invitedAt.getTime() ||
+          a._id.toString().localeCompare(b._id.toString())
+      )
+      .map((r) => r.candidateId.toString());
+
+    const ordered: string[] = [];
+    for (const holderId of [...incumbentIds, ...seatedIds, ...rowIds]) {
+      if (!ordered.includes(holderId)) ordered.push(holderId);
+    }
+    return new Set(ordered.slice(0, SLATE_ASSIGNMENT_CAP));
+  };
 
   let filed = 0;
   let skipped = 0;
   let displaced = 0;
   const processedCandidateIds = new Set<string>();
-  const processedPartyElectionKeys = new Set<string>();
   const skippedRows: { rowId: ObjectId; reason: SlateRefusalReason }[] = [];
   const queueSkipped = (row: SlateCandidate, reason: SlateRefusalReason) => {
     skippedRows.push({ rowId: row._id, reason });
     skipped += 1;
+    // Every skip tombstones the row, which releases its slot. Drop it from the
+    // live set now so a row considered later in this same pass can take the
+    // place it just vacated, rather than being refused for a slot nobody holds.
+    const raceKey = `${row.electionId.toString()}_${row.partyId}`;
+    const live = liveRowsByRace.get(raceKey);
+    if (live) {
+      const index = live.findIndex((candidate) => candidate._id.equals(row._id));
+      if (index >= 0) live.splice(index, 1);
+    }
   };
   for (const row of accepted) {
     try {
@@ -455,12 +520,6 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         continue;
       }
 
-      const partyElectionKey = `${row.electionId.toString()}_${row.partyId}`;
-      if (processedPartyElectionKeys.has(partyElectionKey)) {
-        queueSkipped(row, "slot_taken");
-        continue;
-      }
-
       const candidacies = activeCandidaciesByCandidateId.get(candidateKey) ?? [];
       const activeCandidacy =
         candidacies.find(
@@ -515,24 +574,31 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         (candidate) => !activeIncumbents.includes(candidate)
       );
 
-      // Slate may create one same-party challenger alongside a defending
-      // incumbent, but should not keep stacking extra same-party Slate NPPs once
-      // that challenger slot is already occupied.
+      // Race capacity. A party may field at most SLATE_ASSIGNMENT_CAP
+      // candidates here, players and NPPs drawing on one pool, so a chair can
+      // build a slate several deep rather than one pick at a time.
       //
-      // #1181: WHO occupies it decides the outcome. A challenger the generic
-      // party-pool fallback auto-picked yields to the chair — the chair's
-      // instruction is the later, deliberate one, and silently discarding it
-      // was the whole bug. A challenger holding their own chair-issued slate
-      // row is the chair's earlier decision, so that one stands and this row
-      // is tombstoned with a reason the chair can actually read.
-      const chairBackedChallengers = activeChallengers.filter((candidate) =>
-        candidate.nppId
-          ? chairSlatedKeys.has(`${election._id.toString()}:${candidate.nppId.toString()}`)
-          : false
-      );
-      if (chairBackedChallengers.length > 0) {
-        queueSkipped(row, "slot_taken");
-        continue;
+      // #1181 survives as the tie-break for a race that is genuinely full: a
+      // slot held by an NPP the generic party-pool fallback picked, who is
+      // neither defending a seat nor holding a chair-issued row, yields so the
+      // chair's instruction is not silently discarded. Below the cap nobody has
+      // to give way and both simply stand, which is what the primary is for.
+      const pendingDisplacements: ElectionCandidate[] = [];
+      if (!entitledHolders(election, row.partyId).has(candidateKey)) {
+        const displaceable = activeChallengers.filter((candidate) =>
+          candidate.nppId
+            ? !chairSlatedKeys.has(`${election._id.toString()}:${candidate.nppId.toString()}`)
+            : false
+        );
+        if (displaceable.length === 0) {
+          queueSkipped(row, "slate_full");
+          continue;
+        }
+        // Freeing one slot is enough, and the withdrawal is deferred until the
+        // insert below has actually landed. Every candidate that could yield is
+        // carried, not just the first: a withdrawal can find no live row to act
+        // on, and stopping there would leave the race one over its cap.
+        pendingDisplacements.push(...displaceable);
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
@@ -561,14 +627,16 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         _id: new ObjectId(),
       } as ElectionCandidate);
       ctx.nppCandidacies.add(npp._id.toString());
-      processedPartyElectionKeys.add(partyElectionKey);
 
       // Only now that the chair's candidate is actually on the ballot do the
       // auto-picks it displaces come off it. Withdrawing first would leave the
       // party with no candidate at all if the insert above threw (the active
       // candidacy index can reject it), and the retry is a whole turn away.
-      for (const autoPick of activeChallengers) {
-        if (await withdrawAutoPickedCandidacy(ctx, election, autoPick)) displaced += 1;
+      for (const autoPick of pendingDisplacements) {
+        if (await withdrawAutoPickedCandidacy(ctx, election, autoPick)) {
+          displaced += 1;
+          break; // One slot freed is one slot taken; the rest keep their places.
+        }
       }
 
       await db
