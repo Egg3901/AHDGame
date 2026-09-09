@@ -75,6 +75,26 @@ export interface CapabilityEvidence {
 
 export type CapabilityEvidenceMap = Partial<Record<CapabilityId, CapabilityEvidence>>;
 
+/**
+ * An authored override for a capability a probe cannot prove.
+ *
+ * Absence must justify itself. A bare `present: false` with a free-text string
+ * cannot distinguish "this will never apply here" from "nobody has written it
+ * yet" — the same conflation the era roster exists to remove, one level down.
+ *
+ * `not-applicable` is permanent and needs only a reason. `deferred` is work
+ * nobody has done, and carries an issue once one is filed. `issue: null` is
+ * deliberate rather than lazy: issues are filed by hand on a public repository,
+ * and a waiver that could not be recorded until a number existed would be
+ * recorded nowhere at all. Every deferred waiver is reported as debt whether or
+ * not it has a number; what must never happen is a deferred gap dressed up as
+ * `not-applicable`.
+ */
+export type CapabilityOverride =
+  | { present: true; evidence: string }
+  | { present: false; kind: "not-applicable"; reason: string }
+  | { present: false; kind: "deferred"; reason: string; issue: string | null };
+
 export interface FailedCapability {
   capabilityId: CapabilityId;
   label: string;
@@ -443,32 +463,42 @@ export function evaluateCountryReadiness(input: {
  * registered country. The partial copy that used to live here covered 14 of
  * them, which is why the probes needed a country-keyed fallback.
  */
-const CAPABILITY_INVENTORY: Readonly<Record<string, CapabilityEvidence | undefined>> =
+export const CAPABILITY_INVENTORY: Readonly<Record<string, CapabilityOverride | undefined>> =
   Object.freeze({
     // Japan 1953 is the reference autonomous-ok / player-blocked case: Diet and
     // economy wiring exist for NPP autonomy, but player-parity validation and
     // flavor content are incomplete.
     "1953-default:JP:adminDiagnostics": {
       present: false,
-      evidence:
-        "Japan 1953 lacks established-player-country parity validation for its Diet/cabinet surface.",
+      kind: "deferred",
+      reason:
+        "Japan 1953 lacks established-player-country parity validation for its Diet and cabinet surface.",
+      issue: null,
     },
     "1953-default:JP:bespokeEvents": {
       present: false,
-      evidence: "No Japan-1953 bespoke event pack authored yet.",
+      kind: "deferred",
+      reason: "No Japan-1953 bespoke event pack authored yet.",
+      issue: null,
     },
     "1953-default:JP:artAssets": {
       present: false,
-      evidence: "Japan 1953 uses shared modern art placeholders.",
+      kind: "deferred",
+      reason: "Japan 1953 uses shared modern art placeholders rather than era art.",
+      issue: null,
     },
     "1953-default:JP:wikiMaterial": {
       present: false,
-      evidence: "Japan 1953 wiki material is incomplete.",
+      kind: "deferred",
+      reason: "Japan 1953 wiki material is incomplete; the Diet loop is undocumented.",
+      issue: null,
     },
     // Established player countries in Cold-War presets: flavor still tracked.
     "1953-default:UK:bespokeEvents": {
       present: false,
-      evidence: "UK 1953 bespoke event coverage is partial.",
+      kind: "deferred",
+      reason: "UK 1953 bespoke event coverage is partial; the Suez arc is unwritten.",
+      issue: null,
     },
     "1953-default:UK:wikiMaterial": {
       present: true,
@@ -701,6 +731,17 @@ function defaultFlavorEvidence(capabilityId: CapabilityId): CapabilityEvidence {
 }
 
 /**
+ * Render an absence waiver for the readiness report, so the reason a capability
+ * is waived travels with it instead of being swallowed.
+ */
+function describeWaiver(override: Extract<CapabilityOverride, { present: false }>): string {
+  if (override.kind === "not-applicable") return override.reason;
+  return override.issue
+    ? `${override.reason} (deferred, ${override.issue})`
+    : `${override.reason} (deferred, no issue filed)`;
+}
+
+/**
  * Collect capability evidence from static registries and the authored
  * inventory. Deterministic — no DB I/O.
  */
@@ -733,9 +774,16 @@ export function collectCapabilityEvidence(
     wikiMaterial: defaultFlavorEvidence("wikiMaterial"),
   };
 
+  // Overrides must be MAPPED, not spread. The absence branches name the field
+  // `reason`, while `CapabilityEvidence` (and `FailedCapability.evidence`
+  // downstream) reads `evidence`; assigning straight through type-checks at the
+  // inventory and then surfaces as undefined evidence in every report.
   for (const capabilityId of CAPABILITY_IDS) {
     const override = CAPABILITY_INVENTORY[inventoryKey(presetId, countryId, capabilityId)];
-    if (override) probes[capabilityId] = override;
+    if (!override) continue;
+    probes[capabilityId] = override.present
+      ? { present: true, evidence: override.evidence }
+      : { present: false, evidence: describeWaiver(override) };
   }
 
   return probes;
