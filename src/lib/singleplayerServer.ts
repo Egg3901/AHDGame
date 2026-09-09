@@ -4,8 +4,10 @@ import { ObjectId, type Db } from "mongodb";
 import { SINGLEPLAYER_USER_ID, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { CDN_GEO } from "@/lib/images/cdnUrls";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
+import { invalidateMaintenanceCache } from "@/lib/maintenanceStatus";
 import type {
   GameState,
+  GameConfig,
   NppAutonomyLevel,
   SingleplayerConfig,
   SingleplayerDifficulty,
@@ -96,6 +98,22 @@ export interface SingleplayerStatus {
   warmAssets: string[];
 }
 
+async function clearSingleplayerMaintenance(db: Db): Promise<void> {
+  const result = await db.collection<GameConfig>("gameConfig").updateOne(
+    { _id: "default", maintenanceMode: { $ne: "off" } },
+    {
+      $set: { maintenanceMode: "off" },
+      $unset: {
+        maintenanceReason: "",
+        maintenanceExpectedEnd: "",
+        maintenanceEnabledBy: "",
+        maintenanceEnabledAt: "",
+      },
+    }
+  );
+  if (result.modifiedCount > 0) invalidateMaintenanceCache();
+}
+
 /**
  * What the launcher and the /singleplayer screen need to choose between
  * "new game" and "continue". Provisions the local account on first contact,
@@ -103,6 +121,7 @@ export interface SingleplayerStatus {
  */
 export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
   const account = await ensureSingleplayerUser(db);
+  await clearSingleplayerMaintenance(db);
   const userId = new ObjectId(SINGLEPLAYER_USER_ID);
   const [gameState, character, characterCount] = await Promise.all([
     db
@@ -176,6 +195,7 @@ export async function setSingleplayerConfig(
       },
     }
   );
+  await clearSingleplayerMaintenance(db);
   return persisted;
 }
 

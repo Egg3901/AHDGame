@@ -21,6 +21,18 @@ export interface EquityMarketPool {
   cashLocal: number;
   targetCashLocal: number;
   m2Local?: number;
+  /** Accounting method of the cached M2 observation; missing means legacy v1. */
+  poolAccountingVersion?: number;
+  /**
+   * Cash the pool was created with, in local currency.
+   *
+   * Pools were originally inserted at `m2 x EQUITY_POOL_M2_SHARE` with no ledger
+   * counter, so without this the conservation identity cannot be evaluated at
+   * all: there is no way to tell an opening balance from created money.
+   * Backfilled by 2026-09-07-equity-pool-seed-backfill; absent on a pool that
+   * predates it, which `poolConservationResidual` reports as NaN.
+   */
+  seedLocal?: number;
   lastTurn?: number;
   lifetime: Partial<Record<EquityMarketPoolFlowKind, number>>;
   createdAt: Date;

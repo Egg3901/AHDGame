@@ -444,6 +444,105 @@ describe("materializeSlateAssignmentsFromTemplate", () => {
   });
 });
 
+describe("materializeSlateAssignmentsFromTemplate assignment cap", () => {
+  it("carries no more than the cap forward, keeping the earliest invitations", async () => {
+    const currentElectionId = new ObjectId();
+    const previousElectionId = new ObjectId();
+    const previousSlate: RecruitmentSlate = {
+      _id: new ObjectId(),
+      countryId: "US",
+      partyId: "1",
+      electionId: previousElectionId,
+      state: "US_CA",
+      electionType: "house",
+      priority: "none",
+      archivedAt: new Date(),
+      createdBy: new ObjectId(),
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-02T00:00:00Z"),
+    };
+
+    // Five carried candidates for one race: a board that grew past the cap
+    // before the cap existed, which is exactly the state the carry-forward
+    // used to let compound one cycle at a time.
+    const npps = [1, 2, 3, 4, 5].map((n) => makeNpp({ name: `Carried ${n}` }));
+    const previousRows: SlateCandidate[] = npps.map((npp, index) => ({
+      _id: new ObjectId(),
+      slateId: previousSlate._id,
+      electionId: previousElectionId,
+      partyId: "1",
+      countryId: "US",
+      candidateType: "npp",
+      candidateId: npp._id,
+      candidateName: npp.name,
+      homeState: npp.homeState,
+      assignedByCharacterId: null,
+      assignedByCharacterName: null,
+      assignedByRole: "national_chair",
+      status: "filed",
+      fitScore: 80,
+      invitationNote: undefined,
+      refusalReason: null,
+      autoFilled: false,
+      invitedAt: new Date(Date.UTC(2026, 0, index + 1)),
+      respondedAt: new Date(),
+      filedAt: new Date(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })) as SlateCandidate[];
+
+    const currentElection = {
+      _id: currentElectionId,
+      countryId: "US",
+      electionType: "house",
+      state: "US_CA",
+      cycle: 2,
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    } as Election;
+
+    const db = buildDb({
+      recruitmentSlates: [previousSlate],
+      slateCandidates: [...previousRows],
+      elections: [
+        {
+          _id: previousElectionId,
+          countryId: "US",
+          electionType: "house",
+          state: "US_CA",
+          cycle: 1,
+          status: "resolved",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        } as Election,
+        currentElection,
+      ],
+      npps,
+      characters: [],
+    });
+
+    await materializeSlateAssignmentsFromTemplate({
+      db,
+      countryId: "US",
+      partyId: "1",
+      election: currentElection,
+      now: new Date("2026-04-27T12:00:00Z"),
+    });
+
+    const clonedRows = (await (db.collection("slateCandidates") as ReturnType<Db["collection"]>)
+      .find({ electionId: currentElectionId })
+      .toArray()) as SlateCandidate[];
+
+    expect(clonedRows).toHaveLength(3);
+    expect(clonedRows.map((row) => row.candidateName)).toEqual([
+      "Carried 1",
+      "Carried 2",
+      "Carried 3",
+    ]);
+  });
+});
+
 describe("listStateAssignedCandidateIds", () => {
   it("ignores candidates from slates whose election has resolved (bug #0573)", async () => {
     const liveElectionId = new ObjectId();

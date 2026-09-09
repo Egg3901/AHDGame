@@ -1,3 +1,8 @@
+/**
+ * Labour disputes, settlements and funded union services affect worker security
+ * and civic life. loadLabourRelationsPoliticalNudgesByCountry combines their
+ * temporary effects within each political channel's existing cap.
+ */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type {
@@ -9,6 +14,7 @@ import type {
 import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import { normalizeServiceIds, servicesWorkerSecurityNudge } from "./unionServices";
+import { loadFundedUnionServices, UNION_SERVICE_FUNDING_PROJECTION } from "./unionServiceFunding";
 
 /** Political attention fades unless a dispute escalates again. */
 export const LABOUR_DISPUTE_DECAY = 0.9;
@@ -167,16 +173,24 @@ export async function loadLabourRelationsPoliticalNudgesByCountry(
         }
       )
       .toArray(),
-    // Union dues v1: only unions actually running something can produce a
-    // nudge, skips the (common) idle-slate union at the query level.
+    // Only unions with a recorded payment can produce service nudges.
+    // The selected slate can differ from the already purchased entitlement.
     db
       .collection<Union>("unions")
       .find(
-        { suspended: { $ne: true }, activeServices: { $exists: true, $not: { $size: 0 } } },
-        { projection: { countryId: 1, activeServices: 1, suspended: 1 } }
+        { suspended: { $ne: true }, serviceReceipts: { $exists: true } },
+        { projection: { countryId: 1, ...UNION_SERVICE_FUNDING_PROJECTION } }
       )
       .toArray(),
   ]);
 
-  return buildLabourRelationsPoliticalNudges(campaigns, currentTurn, unions);
+  const fundedServices = loadFundedUnionServices(unions, currentTurn);
+  return buildLabourRelationsPoliticalNudges(
+    campaigns,
+    currentTurn,
+    unions.map((union) => ({
+      ...union,
+      activeServices: fundedServices.get(union._id.toString()) ?? [],
+    }))
+  );
 }

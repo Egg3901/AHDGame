@@ -1,3 +1,8 @@
+/**
+ * Employer bargaining moves union demands through counteroffers, industrial
+ * action and settlement. persistBargainingCounter voids votes on replaced
+ * offers; settlement writes a temporary collective agreement.
+ */
 import { ObjectId, type ClientSession, type Db } from "mongodb";
 import type {
   BargainingCampaign,
@@ -294,12 +299,20 @@ export async function persistBargainingCounter(
       _id: campaign._id,
       status: campaign.status,
       "currentOffer.revision": campaign.currentOffer.revision,
+      "ratification.status": campaign.ratification?.status ?? { $exists: false },
     },
     {
       $set: {
         currentOffer: next.currentOffer,
         lastActionTurn: next.lastActionTurn,
         updatedAt: next.updatedAt,
+        // A member ballot authorizes exactly one offer revision. Replacing
+        // the package ends that ballot in the same write as the new terms.
+        ...(campaign.ratification?.status === "open" && {
+          "ratification.status": "void" as const,
+          "ratification.closedAtTurn": currentTurn,
+          "ratification.updatedAt": next.updatedAt,
+        }),
       },
       $push: { offers: next.currentOffer },
     }

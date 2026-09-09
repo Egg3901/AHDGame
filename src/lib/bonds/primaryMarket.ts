@@ -35,6 +35,7 @@ import {
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { applySovereignDebtAdjustment, getNationalBudgetId } from "@/lib/bonds/sovereign";
+import { poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import { ObjectId as MongoObjectId } from "mongodb";
 
 /** Share of the pool's cash one corporate issue may take at issuance. */
@@ -99,15 +100,19 @@ export function planCorporateUnderwriting(input: {
   requestedUnits: number;
   poolCashLocal: number;
   poolM2Local: number | undefined;
+  poolLiquidityTargetLocal?: number;
   rating: CreditRating;
   pricePerUnitLocal: number;
 }): UnderwritingPlan {
   const requested = wholeUnits(input.requestedUnits);
   const liquidityCash = Math.min(
     Math.max(0, input.poolCashLocal),
-    input.poolM2Local && input.poolM2Local > 0
-      ? input.poolM2Local * BOND_POOL_M2_SHARE
-      : Math.max(0, input.poolCashLocal)
+    poolLiquidityAllocation({
+      calibratedTarget: input.poolLiquidityTargetLocal,
+      m2Local: input.poolM2Local,
+      share: BOND_POOL_M2_SHARE,
+      fallback: input.poolCashLocal,
+    })
   );
   const factor =
     CORPORATE_PRIMARY_RATING_FACTOR[input.rating] ?? CORPORATE_PRIMARY_RATING_FACTOR.CCC;
@@ -167,14 +172,20 @@ export async function readPoolForPrimary(
   currency: CurrencyCode
 ): Promise<Pick<
   BondMarketPool,
-  "cashLocal" | "targetCashLocal" | "m2Local" | "appetiteByCountry"
+  "cashLocal" | "targetCashLocal" | "m2Local" | "appetiteByCountry" | "liquidityTargetLocal"
 > | null> {
-  const pool = await db
-    .collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION)
-    .findOne(
-      { _id: currency },
-      { projection: { cashLocal: 1, targetCashLocal: 1, m2Local: 1, appetiteByCountry: 1 } }
-    );
+  const pool = await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).findOne(
+    { _id: currency },
+    {
+      projection: {
+        cashLocal: 1,
+        targetCashLocal: 1,
+        m2Local: 1,
+        appetiteByCountry: 1,
+        liquidityTargetLocal: 1,
+      },
+    }
+  );
   return pool ?? null;
 }
 

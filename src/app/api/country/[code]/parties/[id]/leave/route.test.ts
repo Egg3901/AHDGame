@@ -105,7 +105,13 @@ describe("POST /api/country/[code]/parties/[id]/leave", () => {
 
     // It still flips the character to independent and clears the tenure anchors.
     expect(update.$set).toMatchObject({ party: "independent" });
-    expect(update.$unset).toMatchObject({ partyJoinedAt: "", partyJoinedTurn: "" });
+    expect(update.$unset).toMatchObject({
+      partyJoinedAt: "",
+      partyJoinedTurn: "",
+      // A founder who walks out loses the leadership tenure exemption too,
+      // otherwise rejoining later would revive it (leadershipTenure.ts).
+      foundedPartyId: "",
+    });
   });
 
   it("clears state-party leadership seats the leaver held, not just national ones (ticket #0860)", async () => {

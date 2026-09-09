@@ -85,6 +85,13 @@ describe("stripPartyMembershipForBannedUser", () => {
           party: "independent",
           partyInfluence: 0,
         }),
+        // Stripping membership clears the founder marker along with the tenure
+        // anchors, so a rejoin can't revive the exemption (leadershipTenure.ts).
+        $unset: expect.objectContaining({
+          partyJoinedAt: "",
+          partyJoinedTurn: "",
+          foundedPartyId: "",
+        }),
       })
     );
     expect(db.collection("politicalParties").updateOne).toHaveBeenCalledWith(

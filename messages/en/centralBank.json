@@ -1,0 +1,30 @@
+{
+  "centralBank": {
+    "execution": {
+      "blocked": "Passed, execution blocked",
+      "reason": {
+        "fx-committed": "The exchange-rate commitment currently prevents an independent rate change.",
+        "command-economy": "The economy currently uses command allocation instead of an independent policy rate.",
+        "term-cap": "The rate-change budget for this term is exhausted.",
+        "cooldown": "Another rate change occurred too recently.",
+        "delta-hike": "The proposed hike exceeds the current adjustment limit.",
+        "delta-cut": "The proposed cut exceeds the current adjustment limit.",
+        "out-of-range": "The proposed rate is outside the permitted range.",
+        "invalid-rate": "The proposed rate is invalid.",
+        "unknown": "Current monetary policy prevents this rate change."
+      }
+    },
+    "money": {
+      "collecting": "Collecting 12 turns of comparable data",
+      "transition": "The accounting method changed. Growth resumes after 12 turns measured with the same method; older observations remain historical and are not comparable.",
+      "legacy": "Legacy accounting observation. This stock uses the previous method and is excluded from current money-growth decisions.",
+      "npcDeposits": "NPC bank deposits",
+      "bondCash": "Bond market cash",
+      "equityCash": "Equity market cash",
+      "estimatedCash": "Estimated household cash (outside M1/M2)",
+      "estimatedSavings": "Estimated household savings (outside M1/M2)",
+      "stockExplanation": "M1 counts spendable account balances. M2 adds savings, NPC bank deposits, external deposits and market pool cash. Demographic household estimates are shown separately and do not enter either total.",
+      "unavailable": "Unavailable"
+    }
+  }
+}

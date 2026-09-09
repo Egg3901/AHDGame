@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import {
@@ -104,7 +105,9 @@ export async function ensureIEElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureIEElections: spawned ${toActuallyInsert.length} missing Dáil election(s)`
     );
@@ -174,7 +177,7 @@ export async function ensureIEUachtaranElections(now: Date): Promise<void> {
   });
   if (existing) return;
 
-  await db.collection<Election>("elections").insertOne(doc as Election);
+  await db.collection<Election>("elections").insertOne(withCampaignRules(doc) as Election);
   console.log(`[Turn] ensureIEUachtaranElections: spawned 1 Uachtarán election`);
   sendBatchedElectionAnnouncements([doc], now);
 }
@@ -272,7 +275,9 @@ export async function ensureIELocalCouncilElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureIELocalCouncilElections: spawned ${toActuallyInsert.length} missing Local Council election(s)`
     );

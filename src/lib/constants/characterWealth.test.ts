@@ -78,3 +78,12 @@ describe("buildWealthOptions", () => {
     ]);
   });
 });
+
+describe("world currency basis", () => {
+  it("uses stored 1953 rates for endowments and previews", () => {
+    const rates = { NGN: 0.357, JPY: 360 };
+    expect(convertStartingAnchorToLocal(1000, "NG", rates)).toBe(357);
+    expect(convertStartingAnchorToLocal(1000, "jp", rates)).toBe(360000);
+    expect(buildWealthOptions("NG", rates)[0].label).toContain("357,000");
+  });
+});

@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { ObjectId, type Db } from "mongodb";
 import { getPartyBudgetCollection } from "@/lib/db/collections";
 import type { Character, GameConfig, NPP, PoliticalParty, State, User } from "@/lib/db/types";
@@ -147,11 +148,12 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
   // processNppFundGeneration); otherwise they contribute $0 to revenue.
   const nppEconomyEnabled = gameConfig?.nppEconomyEnabled !== false;
 
-  // Campaign-fund estimate is LOCAL at the frozen base INITIAL_RATES scale
+  // Campaign-fund estimate is LOCAL at the frozen world-seeded currency basis
   // (mirrors the turn processors) — never live forex. A party is country-scoped,
   // so one rate applies to every member/NPP.
-  const campaignRate = campaignLocalRate(partyCountry);
-  const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, partyCountry);
+  const campaignRates = await loadCampaignCurrencyRates(db);
+  const campaignRate = campaignLocalRate(partyCountry, campaignRates);
+  const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, partyCountry, campaignRates);
 
   const nationalTaxRate = party.nationalTaxRate ?? 0;
   let expectedHourlyIncome = 0;

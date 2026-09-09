@@ -145,6 +145,12 @@ export interface User {
   singleplayerEntitledAt?: Date;
   /** Admin username that last granted desktop singleplayer access. */
   singleplayerEntitledBy?: string;
+  /** Temporary singleplayer cutoff (Discord `/temp-sp-access`, later keys/referrals). */
+  clientAccessExpiresAt?: Date;
+  /** What wrote `clientAccessExpiresAt`. `bot` is the Discord grant. */
+  clientAccessSource?: "bot" | "key" | "referral";
+  /** Discord tag or admin name that last granted temporary access. */
+  clientAccessGrantedBy?: string;
   /** Moderator-approved name shown on the public supporter wall. */
   supporterWallName?: string | null;
   /** Set when the account's one-time Supporter++ NPP rename has been used. */

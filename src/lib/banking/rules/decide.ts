@@ -696,6 +696,8 @@ export function decideBankCommand(
         command.borrower.type === "character" ? "namedCharacterLending" : "namedCorporationLending";
       const denied = requireCapability(snapshot, charter, capability);
       if (denied) return denied;
+      const staged = requireStage(charter, "originate");
+      if (staged) return staged;
       const principal = positiveAmount(command.principal);
       if (principal === null) {
         return refuse({ code: "invalid_amount" }, "Principal must be a positive number");
@@ -704,6 +706,15 @@ export function decideBankCommand(
         return refuse(
           { code: "state", detail: "blacklisted" },
           "Borrower is on the bank's blacklist"
+        );
+      }
+      if (command.borrower.type === "corporation" && command.borrower.id === snapshot.bankId) {
+        return refuse({ code: "state", detail: "self" }, "A bank cannot lend to itself");
+      }
+      if (!command.borrower.currencyMatches) {
+        return refuse(
+          { code: "state", detail: "currency" },
+          `Loan currency ${snapshot.currency} does not match the borrower's treasury currency`
         );
       }
       const headroom = namedLoanHeadroom(active!, snapshot.reserveRatio, sheetOptions(snapshot));
@@ -717,6 +728,18 @@ export function decideBankCommand(
         return refuse(
           { code: "cap", cap: "cashReserves", max: getCashReserves(active!) },
           "Insufficient cash reserves to fund this loan now"
+        );
+      }
+      const incomeCap = maxPrincipalFromIncome({
+        incomePerTurn: command.borrower.incomePerTurn,
+        committedPaymentPerTurn: command.borrower.committedPaymentPerTurn,
+        ratePercent: command.ratePercent,
+        termTurns: command.termTurns,
+      });
+      if (principal > incomeCap) {
+        return refuse(
+          { code: "cap", cap: "income", max: incomeCap },
+          `Principal exceeds borrower income limit (max ${Math.floor(incomeCap)})`
         );
       }
       const proceeds: TransitionLeg =
@@ -751,7 +774,13 @@ export function decideBankCommand(
             {
               collection: "bankLoans",
               filter: { _id: oid(command.loanId), status: "pending" },
-              update: { $set: { status: "current", decisionTurn: snapshot.turn } },
+              update: {
+                $set: {
+                  status: "current",
+                  originatedTurn: snapshot.turn,
+                  decisionTurn: snapshot.turn,
+                },
+              },
               note: "pending loan becomes current",
             },
             {

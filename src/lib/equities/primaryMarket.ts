@@ -1,5 +1,6 @@
 /** Primary equity underwriting and paced placement of approved unsold shares. */
 
+import { poolLiquidityAllocation } from "@/lib/moneySupply/rules/poolTarget";
 import type { Db } from "mongodb";
 import type { Corporation, EquityMarketPool } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -34,13 +35,19 @@ export function planEquityUnderwriting(input: {
   requestedShares: number;
   poolCashLocal: number;
   poolM2Local?: number;
+  poolLiquidityTargetLocal?: number;
   pricePerShareLocal: number;
 }): { placedShares: number; unsoldShares: number; capacityLocal: number; fillRatio: number } {
   const requested = wholeShares(input.requestedShares);
   const cash = Math.max(0, input.poolCashLocal);
   const liquidityCash = Math.min(
     cash,
-    input.poolM2Local && input.poolM2Local > 0 ? input.poolM2Local * EQUITY_POOL_M2_SHARE : cash
+    poolLiquidityAllocation({
+      calibratedTarget: input.poolLiquidityTargetLocal,
+      m2Local: input.poolM2Local,
+      share: EQUITY_POOL_M2_SHARE,
+      fallback: cash,
+    })
   );
   const capacityLocal = liquidityCash * EQUITY_PRIMARY_COMMIT_SHARE;
   const capacityShares =
@@ -96,6 +103,10 @@ export async function prepareEquityPrimaryPlacement(
     requestedShares: requested,
     poolCashLocal: pool.cashLocal,
     poolM2Local: pool.m2Local,
+    poolLiquidityTargetLocal:
+      pool.poolAccountingVersion !== undefined && pool.poolAccountingVersion > 1
+        ? pool.targetCashLocal
+        : undefined,
     pricePerShareLocal,
   });
   if (plan.placedShares <= 0) {
@@ -274,8 +285,14 @@ export async function placePendingShareIssuances(
 export async function readEquityPrimaryPool(
   db: Db,
   currency: CurrencyCode
-): Promise<Pick<EquityMarketPool, "cashLocal" | "targetCashLocal" | "m2Local"> | null> {
+): Promise<Pick<
+  EquityMarketPool,
+  "cashLocal" | "targetCashLocal" | "m2Local" | "poolAccountingVersion"
+> | null> {
   return db
     .collection<EquityMarketPool>(EQUITY_MARKET_POOLS_COLLECTION)
-    .findOne({ _id: currency }, { projection: { cashLocal: 1, targetCashLocal: 1, m2Local: 1 } });
+    .findOne(
+      { _id: currency },
+      { projection: { cashLocal: 1, targetCashLocal: 1, m2Local: 1, poolAccountingVersion: 1 } }
+    );
 }

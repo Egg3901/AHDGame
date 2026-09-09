@@ -12,9 +12,12 @@ import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
 import {
   listUnfinishedProjections,
   recoverProjections,
+  resumeSettlement,
   reviveObjectIds,
   settleTransition,
 } from "@/lib/banking/settlementJournal";
+import { recoverBankingSettlements } from "@/lib/banking/recovery";
+import { withInjectedCrash, InjectedCrash } from "@/lib/test-utils/faultyDb";
 import { oid, type BankingTransition } from "@/lib/banking/rules/boundary";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -238,4 +241,66 @@ describe("settleTransition", () => {
     expect(corp(db, BANK).bankCharter.cashReserves).toBe(900_000);
     expect(await listUnfinishedProjections(db as unknown as Db)).toEqual([]);
   });
+});
+
+describe("fresh settlement journal reads", () => {
+  it("does not reload records it has just exclusively claimed", async () => {
+    const db = world();
+    const journalReads = vi.spyOn(db.collection(MONEY_MOVE_COLLECTION), "findOne");
+    const journalWrites = vi.spyOn(db.collection(MONEY_MOVE_COLLECTION), "updateOne");
+    const result = await settleTransition(db as unknown as Db, loanTransition());
+    expect(result.status).toBe("applied");
+    expect(journalReads).not.toHaveBeenCalled();
+    const projectionClaims = journalWrites.mock.calls.filter(
+      ([, update]) =>
+        !Array.isArray(update) &&
+        Object.keys(update.$set ?? {}).some((field) => field.endsWith(".claimedAt"))
+    );
+    expect(projectionClaims).toHaveLength(1);
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
+      cashReserves: 900_000,
+      totalLoans: 100_000,
+    });
+    // Replay still reads the durable record and cannot use the caller's new quote.
+    await settleTransition(db as unknown as Db, loanTransition(200_000));
+    expect(journalReads).toHaveBeenCalled();
+    expect(db.collection("corporations").docs[0].bankCharter).toMatchObject({
+      cashReserves: 900_000,
+      totalLoans: 100_000,
+    });
+  });
+});
+
+describe("batched projection claim recovery", () => {
+  it.each([false, true])(
+    "recovers a crash around the combined claim, afterWrite=%s",
+    async (afterWrite) => {
+      const memory = world();
+      // Two leg stamps and move completion precede the combined claim.
+      const faulty = withInjectedCrash(memory, {
+        collection: MONEY_MOVE_COLLECTION,
+        op: "updateOne",
+        onCall: 4,
+        afterWrite,
+      });
+      const transition = loanTransition();
+      await expect(settleTransition(faulty.db, transition)).rejects.toBeInstanceOf(InjectedCrash);
+      if (afterWrite) {
+        // Legacy journals marked delivered cash as applied before projections.
+        memory.collection(MONEY_MOVE_COLLECTION).docs[0].status = "applied";
+      }
+      expect(await listUnfinishedProjections(memory as unknown as Db)).toHaveLength(1);
+      const recovered = await recoverBankingSettlements(memory as unknown as Db, 51);
+      expect(recovered.resumedSettlements).toEqual([transition.key]);
+      await resumeSettlement(memory as unknown as Db, transition.key);
+      expect(corp(memory, BANK).bankCharter.cashReserves).toBe(900_000);
+      expect(corp(memory, BANK).bankCharter.totalLoans).toBe(100_000);
+      expect(memory.collection("bankLoans").docs).toHaveLength(1);
+      const record = memory.collection(MONEY_MOVE_COLLECTION).docs[0];
+      expect(record.status).toBe("applied");
+      expect(record.projections).toEqual(
+        expect.arrayContaining([expect.objectContaining({ applied: true })])
+      );
+    }
+  );
 });

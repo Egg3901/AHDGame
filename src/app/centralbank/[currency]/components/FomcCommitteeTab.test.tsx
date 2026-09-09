@@ -4,7 +4,18 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { CountryId } from "@/lib/constants/countries";
+import messages from "../../../../../messages/en/centralBank.json";
 import { FomcCommitteeTab } from "./FomcCommitteeTab";
+
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) =>
+    key
+      .split(".")
+      .reduce<unknown>(
+        (value, part) => (value as Record<string, unknown>)[part],
+        messages.centralBank
+      ),
+}));
 
 vi.mock("@/components/PlayerSelector", () => ({
   PlayerSelector: () => <div data-testid="player-selector" />,
@@ -219,4 +230,29 @@ describe("FomcCommitteeTab governance contract", () => {
     expect((screen.getByText("Raise rate") as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText("Only a seated board member can vote.")).toBeTruthy();
   });
+});
+
+it("shows a carried motion's blocked execution and policy reason", async () => {
+  mockFetch({
+    ...committeePayload(0),
+    meetingHistory: [
+      {
+        motion: "hike",
+        proposedDelta: 0.5,
+        result: "passed",
+        executionOutcome: "blocked",
+        executionBlockedReason: "fx-committed",
+        openedAtTurn: 500,
+        resolvedAtTurn: 524,
+        agree: 5,
+        disagree: 2,
+        abstain: 0,
+      },
+    ],
+  });
+  render(<FomcCommitteeTab countryId="US" />);
+  await waitFor(() => expect(screen.getByText("Passed, execution blocked")).toBeTruthy());
+  expect(
+    screen.getByText("The exchange-rate commitment currently prevents an independent rate change.")
+  ).toBeTruthy();
 });

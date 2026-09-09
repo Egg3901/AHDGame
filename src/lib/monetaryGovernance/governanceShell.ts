@@ -71,6 +71,10 @@ export function meetingToState(meeting: FomcMeeting): MeetingState {
     resolvesOnTurn: meeting.resolvesOnTurn,
     playerVoteDeadlineMs: meeting.playerVoteDeadline.getTime(),
     ...(meeting.result ? { result: meeting.result } : {}),
+    ...(meeting.executionOutcome ? { executionOutcome: meeting.executionOutcome } : {}),
+    ...(meeting.executionBlockedReason
+      ? { executionBlockedReason: meeting.executionBlockedReason }
+      : {}),
     ...(typeof meeting.resolvedAtTurn === "number"
       ? { resolvedAtTurn: meeting.resolvedAtTurn }
       : {}),
@@ -145,6 +149,10 @@ export function stateToMeeting(meeting: MeetingState, now: Date): FomcMeeting {
     playerVoteDeadline: new Date(meeting.playerVoteDeadlineMs),
     resolvesOnTurn: meeting.resolvesOnTurn,
     ...(meeting.result ? { result: meeting.result } : {}),
+    ...(meeting.executionOutcome ? { executionOutcome: meeting.executionOutcome } : {}),
+    ...(meeting.executionBlockedReason
+      ? { executionBlockedReason: meeting.executionBlockedReason }
+      : {}),
     ...(meeting.resolvedAtMs != null ? { resolvedAt: new Date(meeting.resolvedAtMs) } : {}),
     ...(typeof meeting.resolvedAtTurn === "number"
       ? { resolvedAtTurn: meeting.resolvedAtTurn }

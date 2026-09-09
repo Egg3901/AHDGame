@@ -31,6 +31,7 @@ describe("computeBuildCost", () => {
     const cost = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units,
       year: CAPACITY_ANCHOR_YEAR,
       marketSharePercent: 0,
@@ -43,7 +44,7 @@ describe("computeBuildCost", () => {
     expect(cost.dominanceMultiplier).toBeCloseTo(1, 10);
     expect(cost.unitPriceAnchor).toBeCloseTo(GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING, 8);
     expect(cost.totalAnchor).toBeCloseTo(
-      units * GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING * 1.5,
+      units * GROWTH_COST_MULTIPLIER * RPU_MANUFACTURING * 1.5 * 0.8,
       6
     );
   });
@@ -53,6 +54,7 @@ describe("computeBuildCost", () => {
     const cost = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units: 10,
       year: CAPACITY_ANCHOR_YEAR,
       marketSharePercent: share,
@@ -66,6 +68,7 @@ describe("computeBuildCost", () => {
     const cheap = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units: 10,
       year: CAPACITY_ANCHOR_YEAR,
       primeRate: 0,
@@ -75,6 +78,7 @@ describe("computeBuildCost", () => {
     const zero = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units: -5,
       year: CAPACITY_ANCHOR_YEAR,
     });
@@ -85,12 +89,14 @@ describe("computeBuildCost", () => {
     const anchor = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units: 1,
       year: CAPACITY_ANCHOR_YEAR,
     });
     const modern = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units: 1,
       year: 2020,
     });
@@ -139,6 +145,7 @@ describe("founding calibration gate — one facility", () => {
     ] as const) {
       const units = plantSizeUnits(type);
       const founding = computeBuildCost({
+        strategyId: null,
         eraUnitScale: eraScale,
         sectorType: type,
         units,
@@ -159,17 +166,22 @@ describe("founding calibration gate — one facility", () => {
     const standing = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units,
       year: CAPACITY_ANCHOR_YEAR,
     });
     const founding = computeBuildCost({
       eraUnitScale: 1,
       sectorType: "manufacturing",
+      strategyId: null,
       units,
       year: CAPACITY_ANCHOR_YEAR,
       founding: true,
     });
     expect(standing.totalAnchor).toBeGreaterThan(founding.totalAnchor);
-    expect(founding.totalAnchor).toBeCloseTo(standing.totalAnchor * CAPACITY_FOUNDING_DISCOUNT, 2);
+    expect(founding.totalAnchor).toBeCloseTo(
+      (standing.totalAnchor / standing.expansionMultiplier) * CAPACITY_FOUNDING_DISCOUNT,
+      2
+    );
   });
 });

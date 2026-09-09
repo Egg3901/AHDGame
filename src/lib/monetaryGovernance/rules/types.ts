@@ -54,6 +54,8 @@ export interface MeetingState {
   /** Wall-clock deadline as epoch ms (the shell materializes a Date). */
   playerVoteDeadlineMs: number;
   result?: "passed" | "failed";
+  executionOutcome?: "applied" | "blocked" | "not-required";
+  executionBlockedReason?: string;
   resolvedAtTurn?: number;
   resolvedAtMs?: number;
 }

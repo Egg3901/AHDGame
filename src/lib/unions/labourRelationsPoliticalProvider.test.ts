@@ -140,7 +140,7 @@ describe("labour relations political provider", () => {
     );
   });
 
-  it("loads only live disputes and recent settlements, and unions with a non-empty active slate", async () => {
+  it("loads only live disputes and recent settlements, and unions with recorded service payments", async () => {
     const toArray = vi.fn().mockResolvedValue([]);
     const find = vi.fn().mockReturnValue({ toArray });
     const collection = vi
@@ -168,8 +168,8 @@ describe("labour relations political provider", () => {
       expect.objectContaining({ projection: expect.objectContaining({ countryId: 1 }) })
     );
     expect(find).toHaveBeenCalledWith(
-      { suspended: { $ne: true }, activeServices: { $exists: true, $not: { $size: 0 } } },
-      expect.objectContaining({ projection: expect.objectContaining({ activeServices: 1 }) })
+      { suspended: { $ne: true }, serviceReceipts: { $exists: true } },
+      expect.objectContaining({ projection: expect.objectContaining({ serviceReceipts: 1 }) })
     );
   });
 

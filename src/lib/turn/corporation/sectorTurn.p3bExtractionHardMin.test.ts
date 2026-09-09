@@ -142,6 +142,25 @@ const IMPLIED_UNITS = impliedOutputUnits(DAILY_REVENUE, SUPPLY, COMMODITY_BASE_P
 const STOCK = IMPLIED_UNITS * CAPITAL_SEED_HEADROOM;
 
 describe("P3b extraction hard-min (plants)", () => {
+  it("preserves the geological allowance when parking excess plant capacity", () => {
+    const sector = makeSector({
+      capitalStock: STOCK,
+      capacityHaircutStartTurn: 1,
+      plantsStartTurn: 1,
+    });
+    const full = run("plants", sector);
+    const parkedSpare = run("plants", { ...sector, activeCapacityPercent: 25 });
+    const belowAllowance = run("plants", { ...sector, activeCapacityPercent: 10 });
+    expect(parkedSpare.update.producedUnits).toBe(full.update.producedUnits);
+    expect(belowAllowance.update.producedUnits as number).toBeCloseTo(
+      (full.update.producedUnits as number) / 2,
+      6
+    );
+    expect(parkedSpare.update.contractAchievableUnits).toBe(full.update.contractAchievableUnits);
+    expect(belowAllowance.update.contractAchievableUnits).toBe(full.update.contractAchievableUnits);
+    expect(parkedSpare.update.capitalStock).toBe(full.update.capitalStock);
+  });
+
   it("leaves the flip turn unchanged even with a fully-ramped legacy haircut", () => {
     // `capacityHaircutStartTurn` far in the past ⇒ the legacy haircut is fully
     // ramped and pinned at its 0.5 floor under capital mode. On the sector's

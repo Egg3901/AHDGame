@@ -119,11 +119,17 @@ export function fundraiseYieldAnchor(character: Character): number {
  * funds convert at the FROZEN base rate (`campaignAnchorToLocal`), never the
  * live forex rate. Quoting this with a live-rate formatter is what made the card
  * advertise ~1.8M in a 1953 East Germany while the credit paid ~1.0M, because
- * the live DDM rate is 4.2 and the frozen campaign rate is 2.22.
+ * the live rate differs from the world's fixed base rate.
  */
-export function fundraiseYieldLocal(character: Character, forexEnabled: boolean): number {
+export function fundraiseYieldLocal(
+  character: Character,
+  forexEnabled: boolean,
+  campaignRates?: import("@/lib/campaigns/rules/currency").CampaignCurrencyRates | null
+): number {
   const anchor = fundraiseYieldAnchor(character);
-  return forexEnabled ? campaignAnchorToLocal(anchor, character.countryId ?? "US") : anchor;
+  return forexEnabled
+    ? campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates)
+    : anchor;
 }
 
 /**

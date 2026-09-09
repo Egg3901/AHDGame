@@ -20,7 +20,7 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import { MONEY_MOVE_COLLECTION } from "@/lib/banking/moneyMove";
-import { resumeSettlement } from "@/lib/banking/settlementJournal";
+import { resumeSettlement, unfinishedSettlementFilter } from "@/lib/banking/settlementJournal";
 import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import { revokeCharter } from "@/lib/banking/charter";
 import { countBankingEvent, recordBankingStage } from "@/lib/banking/telemetry";
@@ -88,7 +88,7 @@ export async function recoverBankingSettlements(
 
   const partial = await db
     .collection<{ _id: string; kind: string; turn?: number; status: string }>(MONEY_MOVE_COLLECTION)
-    .find({ status: "partial", turn: { $lt: turn } })
+    .find({ ...unfinishedSettlementFilter(), turn: { $lt: turn } })
     .sort({ createdAt: 1 })
     .limit(MAX_RECORDS_PER_PASS)
     .toArray();

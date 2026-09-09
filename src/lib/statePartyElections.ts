@@ -23,6 +23,7 @@ import {
 import { loadUsPoliticalStateIds } from "@/lib/elections/usPoliticalHome";
 import { TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
 import { buildMajorPartyOrgsForState } from "@/lib/seeds/reference/statePartyOrg";
+import { insertManyIgnoringDuplicateKey } from "@/lib/elections/duplicateKey";
 
 export const ELECTION_DURATION_TURNS = 72; // 72 turns = 72 hours
 
@@ -354,9 +355,11 @@ export async function createMissingElections(
     }
   );
 
-  await db
-    .collection<StatePartyElection>("statePartyElections")
-    .insertMany(elections as StatePartyElection[]);
+  const inserted = await insertManyIgnoringDuplicateKey(
+    db.collection<StatePartyElection>("statePartyElections"),
+    elections as StatePartyElection[]
+  );
+  if (inserted === 0) return 0;
   // Group positions by party so members get one consolidated notification.
   // Windows are per-country (shared cycle), so the entry carries the actual
   // duration for the message.

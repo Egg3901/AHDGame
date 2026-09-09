@@ -51,7 +51,8 @@ export async function POST(request: Request, context: RouteContext) {
       auth.character._id,
       parsed.data.vote,
       currentTurn,
-      new Date()
+      new Date(),
+      gameState?.currentYear ?? null
     );
 
     if (!outcome.ok) {

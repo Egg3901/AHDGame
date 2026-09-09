@@ -38,6 +38,8 @@ export interface StateDemographicTurnout {
   countryId: CountryId;
   /** Turnout modifiers by demographic category and group */
   modifiers: DemographicModifiers;
+  /** Faster-decaying turnout inputs for races opened with coalition campaigning. */
+  campaignModifiers?: DemographicModifiers;
   /** Timestamp of last decay application (decay runs each turn) */
   lastDecayApplied: Date;
   /** Timestamp of last modifier update (GOTV or canvassing) */

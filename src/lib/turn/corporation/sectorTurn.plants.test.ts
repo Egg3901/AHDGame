@@ -14,6 +14,8 @@ import {
 } from "@/lib/market/capital";
 import { buildMarketContext } from "@/lib/market/marketContext";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { revenuePerCapacityUnitForStrategy } from "@/lib/constants/capacityEconomy";
+import { retoolRescaleFields } from "@/lib/corporations/retoolRescale";
 import { TURNS_PER_DAY, GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 import type { CorporationLookups } from "./types";
 import { processSector, type SectorTurnEnv } from "./sectorTurn";
@@ -146,6 +148,132 @@ const PRE_FLIP_NAMEPLATE = DAILY_REVENUE * (1 + GROWTH_RATE / GROWTH_RATE_TURNS_
 const IMPLIED_UNITS = impliedOutputUnits(PRE_FLIP_NAMEPLATE, SUPPLY, COMMODITY_BASE_PRICES, 1);
 /** Revenue per output unit of the mix = 1 / Σ(rate/basePrice). */
 const MIX_PRICE = PRE_FLIP_NAMEPLATE / IMPLIED_UNITS;
+
+describe("retooling preserves value through the blended production recipe", () => {
+  it("normalizes sales when healing an older automated retool", () => {
+    const rescaled = retoolRescaleFields({
+      sectorType: "extraction",
+      fromStrategyId: "coal_mining",
+      toStrategyId: "rare_earth_mining",
+      plantsEnabled: true,
+      capitalStock: 1000,
+    });
+    const { update } = run(
+      "plants",
+      makeSector({
+        sectorType: "extraction",
+        strategyId: "rare_earth_mining",
+        transitionFromStrategyId: "coal_mining",
+        transitionStartTurn: 1000,
+        autoStrategyAdoptedAtTurn: 1000,
+        plantsStartTurn: 1,
+        currentGrowthRate: 0,
+        targetGrowthRate: 0,
+        capitalStock: rescaled.capitalStock,
+        producedUnits: rescaled.capitalStock,
+        soldUnits: rescaled.capitalStock,
+        otherOpexPerUnitAnchor: 0.01,
+        otherOpexAnchorMarginBasis: 0.8,
+      }),
+      1006
+    );
+    expect(update.retoolRescaleApplied).toBe(true);
+    expect(
+      (update.producedUnits as number) / (update.operatingCapacityUnits as number)
+    ).toBeCloseTo(1, 3);
+    const pnl = update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+    expect(pnl.otherOpex / TURNS_PER_DAY).toBeCloseTo(10 * (1 - CAPITAL_DEPRECIATION_PER_TURN), 8);
+  });
+  it("delivers previously paid construction on the owned basis during the blend", () => {
+    const from = "coal_mining";
+    const to = "rare_earth_mining";
+    const originalPrice = revenuePerCapacityUnitForStrategy("extraction", from, 1);
+    const rescaled = retoolRescaleFields({
+      sectorType: "extraction",
+      fromStrategyId: from,
+      toStrategyId: to,
+      plantsEnabled: true,
+      capitalStock: 400,
+      buildQueue: [{ unitsOrdered: 40, costPaidAnchor: 900, startTurn: 990, onlineTurn: 1003 }],
+    });
+    const { update } = run(
+      "plants",
+      makeSector({
+        sectorType: "extraction",
+        strategyId: to,
+        transitionFromStrategyId: from,
+        transitionStartTurn: 1000,
+        plantsStartTurn: 1,
+        currentGrowthRate: 0,
+        targetGrowthRate: 0,
+        revenue: 400 * originalPrice,
+        capacityBookAnchor: 50_000,
+        constructionInProgressAnchor: 900,
+        ...rescaled,
+      }),
+      1003
+    );
+    expect((update.revenue as number) / (440 * originalPrice)).toBeCloseTo(
+      1 - CAPITAL_DEPRECIATION_PER_TURN,
+      12
+    );
+    expect(update.capacityBookAnchor).toBeCloseTo(50_900 * (1 - CAPITAL_DEPRECIATION_PER_TURN), 8);
+    expect(rescaled.buildQueue?.[0].costPaidAnchor).toBe(900);
+  });
+  it.each([
+    { from: "coal_mining", to: "rare_earth_mining", active: 100 },
+    { from: "rare_earth_mining", to: "coal_mining", active: 100 },
+    { from: "rare_earth_mining", to: "iron_mining", active: 100 },
+    { from: "rare_earth_mining", to: "iron_mining", active: 25 },
+  ])(
+    "keeps nameplate and residual costs on one basis: $from to $to at $active%",
+    ({ from, to, active }) => {
+      const stock = 2000;
+      const originalNameplate = stock * revenuePerCapacityUnitForStrategy("extraction", from, 1);
+      const originalResidual = stock * 0.1;
+      let sector = makeSector({
+        sectorType: "extraction",
+        strategyId: to,
+        activeCapacityPercent: active,
+        transitionFromStrategyId: from,
+        transitionStartTurn: 1000,
+        plantsStartTurn: 1,
+        revenue: originalNameplate,
+        capacityBookAnchor: 50_000,
+        otherOpexAnchorMarginBasis: 0.8,
+        currentGrowthRate: 0,
+        targetGrowthRate: 0,
+        ...retoolRescaleFields({
+          sectorType: "extraction",
+          fromStrategyId: from,
+          toStrategyId: to,
+          plantsEnabled: true,
+          capitalStock: stock,
+          otherOpexPerUnitAnchor: 0.1,
+        }),
+      });
+      const rescaledStock = sector.capitalStock!;
+      for (let elapsed = 0; elapsed <= 12; elapsed++) {
+        const { update } = run("plants", sector, 1000 + elapsed);
+        const depreciation = (1 - CAPITAL_DEPRECIATION_PER_TURN) ** (elapsed + 1);
+        expect((update.revenue as number) / originalNameplate).toBeCloseTo(depreciation, 9);
+        expect((update.capitalStock as number) / rescaledStock).toBeCloseTo(depreciation, 9);
+        expect((update.capacityBookAnchor as number) / 50_000).toBeCloseTo(depreciation, 9);
+        const pnl = update.plantsPnl as NonNullable<CorporateSector["plantsPnl"]>;
+        const physicalCapacity = update.operatingCapacityUnits as number;
+        const utilized = (update.producedUnits as number) / physicalCapacity;
+        expect(utilized).toBeCloseTo(active / 100, 3);
+        expect(pnl.otherOpex / TURNS_PER_DAY / originalResidual).toBeCloseTo(
+          (depreciation * active) / 100,
+          9
+        );
+        // A unit conversion cannot create a manyfold input bill at fixed prices.
+        expect(pnl.inputs).toBeLessThan(originalNameplate * 1.5);
+        sector = { ...sector, ...update };
+      }
+    }
+  );
+});
 
 describe("plants mode — flip identity", () => {
   it("reproduces the capital-mode result exactly on the flip turn", () => {

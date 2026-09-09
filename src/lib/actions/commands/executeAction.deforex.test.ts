@@ -32,10 +32,17 @@ import { executeCharacterAction } from "./executeAction";
 describe("executeCharacterAction — campaign-fund de-forex", () => {
   let findOneAndUpdate: ReturnType<typeof vi.fn>;
 
-  function makeDb(character: Character): Db {
+  function makeDb(character: Character, baseRate?: number): Db {
     findOneAndUpdate = vi.fn().mockResolvedValue({ ...character, actions: 90 });
     return {
       collection: vi.fn((name: string) => {
+        if (name === "exchangeRates")
+          return {
+            find: () => ({
+              toArray: async () =>
+                baseRate == null ? [] : [{ currencyCode: "NGN", baseRate, rate: 9999 }],
+            }),
+          };
         if (name === "states") {
           // Null state → advertise cost is country-independent (100,000 anchor at fav 0).
           return { findOne: vi.fn().mockResolvedValue(null) };
@@ -67,9 +74,9 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
 
   beforeEach(() => vi.clearAllMocks());
 
-  async function campaignDebit(countryId: string): Promise<number> {
+  async function campaignDebit(countryId: string, baseRate?: number): Promise<number> {
     const character = makeCharacter(countryId);
-    const db = makeDb(character);
+    const db = makeDb(character, baseRate);
     const res = await executeCharacterAction(db, {
       character,
       characterQuery: { _id: character._id },
@@ -81,6 +88,10 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
     const campaignAdd = (pipeline[0].$set["currencyBalances.campaign"] as { $add: unknown[] }).$add;
     return campaignAdd[1] as number;
   }
+
+  it("debits a 1953 NG campaign at its seeded basis without following live FX", async () => {
+    expect(await campaignDebit("NG", 0.357)).toBe(-35_700);
+  });
 
   it("debits the US campaign at the frozen rate (×1.0)", async () => {
     expect(await campaignDebit("US")).toBe(-100_000);

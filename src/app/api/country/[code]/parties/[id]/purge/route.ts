@@ -167,7 +167,14 @@ export async function POST(
       { _id: target._id },
       {
         $set: { party: "independent", partyInfluence: 0, purgeRejoinBlocks, updatedAt: now },
-        $unset: { partyJoinedAt: "", lastPartySwitchAt: "", partyJoinedTurn: "" },
+        $unset: {
+          partyJoinedAt: "",
+          lastPartySwitchAt: "",
+          partyJoinedTurn: "",
+          // A purged founder loses the leadership exemption too, so rejoining
+          // later cannot revive it (leadershipTenure.ts).
+          foundedPartyId: "",
+        },
       }
     );
 

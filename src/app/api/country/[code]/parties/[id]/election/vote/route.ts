@@ -20,7 +20,8 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { getGameTime } from "@/lib/time/gameTime";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -105,7 +106,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Filter by countryId to avoid cross-country sequential ID collisions
     const election = await db
       .collection<NationalPartyElection>("nationalPartyElections")
-      .findOne({ partyId, countryId: partyCountryId, position, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, position, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
 
     if (!election) {
       logRequest("POST", path, 400, Date.now() - start);
@@ -154,7 +158,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // voting in leadership (see leadershipTenure.ts). Orthogonal to the 24h
     // new-character cooldown above; likewise waived for founding elections.
     if (!election.founding) {
-      const tenure = getPartyTenure(authUser.character.partyJoinedTurn, gameTime.currentTurn);
+      // Canonical id from the resolved party, not the raw path segment
+      // ("07" vs "7"); see getPartyIdString in lib/db/partyLookup.
+      const tenure = getLeadershipEligibility(
+        authUser.character,
+        gameTime.currentTurn,
+        String(party.sequentialId)
+      );
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
         return NextResponse.json(

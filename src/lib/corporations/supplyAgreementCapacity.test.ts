@@ -173,3 +173,17 @@ describe("computeSupplierCommodityAchievableUnits", () => {
     ).toBeNull();
   });
 });
+
+describe("partial mothballing and new supply commitments", () => {
+  it("quotes only the active capacity for new commitments", () => {
+    const sector = { sectorType: "manufacturing" as const, capitalStock: 10000 };
+    const args = { sectors: [sector], commodity: "steel" as const, isNatcorp: false, turn: 10 };
+    const full = computeSupplierCommodityCapacityUnits(args);
+    expect(
+      computeSupplierCommodityCapacityUnits({
+        ...args,
+        sectors: [{ ...sector, activeCapacityPercent: 25 }],
+      })
+    ).toBeCloseTo(full * 0.25, 8);
+  });
+});

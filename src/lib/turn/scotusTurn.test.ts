@@ -255,6 +255,11 @@ describe("processScotusTurn — multi-turn simulation", () => {
     await setTurn(97)();
     result = await processScotusTurn(97, new Date(0), db as unknown as Db);
     expect(result.docket).toEqual({ casesFired: 1, casesAffirmed: 0, casesDiverged: 1 });
+    // Seat 3's departure was spent back at turn 49. Its historical occupant is
+    // still the one the seat points at, and its departure year only gets further
+    // into the past, so a seat that re-vacates here is the live defect that
+    // wired "SCOTUS Seat #3 Vacant" once an hour forever.
+    expect(result.tenure.seatsVacatedByHistory).toBe(0);
 
     const decidedCase = docketCases[0];
     expect(decidedCase.status).toBe("decided");

@@ -84,6 +84,7 @@ import {
 } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { retoolProductionMeasurements } from "@/lib/corporations/retooling/rules";
 import {
   computeExtractionCapacityMultipliers,
   type ExtractionSectorInput,
@@ -117,6 +118,8 @@ export async function buildCorporationLookups(
      * keeps the legacy revenue-based share exactly.
      */
     plantsEnabled?: boolean;
+    /** Target turn for production and the blended recipe; stored turn for read-only callers. */
+    productionTurn?: number;
     /**
      * Money wiring (interstate-logistics plan step 5, phase A):
      * gameConfig.interstateMoneyWiringEnabled. When true, loads last turn's
@@ -355,6 +358,15 @@ export async function buildCorporationLookups(
     }
   }
   for (const sector of allSectors) {
+    if (options?.plantsEnabled && sector.transitionFromStrategyId) {
+      Object.assign(
+        sector,
+        retoolProductionMeasurements({
+          ...sector,
+          currentTurn: options.productionTurn ?? embargoTurn,
+        })
+      );
+    }
     if (!sector.countryId) {
       (sector as { countryId: string }).countryId = stateCountryMap.get(sector.stateId) ?? "US";
     }
@@ -936,7 +948,7 @@ export async function buildCorporationLookups(
     { utilization: number; bindingResource: ExtractableResource | null }
   >();
   if (extractionSectors.length > 0) {
-    const capacityTurn = await getCurrentTurn(db);
+    const capacityTurn = options?.productionTurn ?? (await getCurrentTurn(db));
     // Mirror the supply-ledger input exactly (commodityPriceTurn): the
     // extraction output-scale flag gates the per-resource boost, and the
     // ₳↔unit conversion runs on this world's ERA base-price table. The

@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import type { Db } from "mongodb";
 import type { ResetRunRecord } from "@/lib/admin/resetRunRecord";
 import { runSeed } from "@/lib/admin/seed";
@@ -1192,7 +1193,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     }
 
     if (sangiinToInsert.length > 0) {
-      await db.collection<Election>("elections").insertMany(sangiinToInsert as Election[]);
+      await db
+        .collection<Election>("elections")
+        .insertMany(sangiinToInsert.map(withCampaignRules) as Election[]);
       log(`Spawned ${sangiinToInsert.length} JP Sangiin elections (both classes, all regions)`);
     }
   }

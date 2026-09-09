@@ -15,6 +15,7 @@ describe("UnionServicesPanel approval forecast", () => {
         treasury={1_000_000}
         duesPerWorkerAnnual={4}
         activeServices={["healthFund", "training"]}
+        paidServices={["healthFund"]}
         approval={50}
         politicalContributionPct={0}
         isHead
@@ -23,7 +24,10 @@ describe("UnionServicesPanel approval forecast", () => {
       />
     );
 
-    expect(screen.getByText(/Approval is 50\.0 and is moving toward 54\.0/)).toBeTruthy();
+    expect(
+      screen.getByText(/Approval is 50\.0. This slate targets 54\.0 once its paid turn begins/)
+    ).toBeTruthy();
+    expect(screen.getByText(/Paid services this turn: Health and Welfare Fund/)).toBeTruthy();
     expect(screen.getByText(/Next funded turn: 51\.5 \(\+1\.5\)/)).toBeTruthy();
     expect(
       screen.getByText(

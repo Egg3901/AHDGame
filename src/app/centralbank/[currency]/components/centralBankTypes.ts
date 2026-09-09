@@ -98,9 +98,14 @@ export interface BankFinancials {
 export interface MoneySupplyView {
   turn: number;
   currencyCode: CurrencyCode;
+  accountingVersion?: number;
+  estimatedHouseholdLiquid?: number;
+  estimatedHouseholdSavings?: number;
+  bankDeposits?: number;
+  equityPoolCash?: number;
   m1: number;
   m2: number;
-  annualizedM2GrowthPct: number;
+  annualizedM2GrowthPct: number | null;
   householdLiquid: number;
   campaignLiquid: number;
   nppLiquid: number;
@@ -119,13 +124,14 @@ export interface MoneySupplyView {
   netMoneyCreatedLifetime: number;
   lastOperationTurn: number | null;
   lastPolicyEvaluation: {
+    accountingVersion?: number;
     turn: number;
     decision: "qe" | "qt" | "treasury_advance" | "liquidity_injection" | "hold";
     rationale: string;
     inflation: number;
     targetInflation: number;
     gdpGrowth: number;
-    annualizedM2GrowthPct: number;
+    annualizedM2GrowthPct: number | null;
     moneyGrowthReliable: boolean;
     bankReserves: number;
     gdp: number;

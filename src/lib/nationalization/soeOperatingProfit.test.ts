@@ -62,6 +62,14 @@ describe("soeIdleUpkeepCost", () => {
     expect(soeIdleUpkeepCost(throughputBound, true)).toBe(0);
   });
 
+  it("bills partial cold storage separately from active capacity", () => {
+    const partial = { ...RUNNING, activeCapacityPercent: 25, capitalUtilization: 0.85 * 0.25 };
+    expect(soeIdleUpkeepCost(partial, true)).toBeCloseTo(
+      3719253 * 0.75 * 0.88 * MOTHBALL_UPKEEP_FRACTION,
+      6
+    );
+  });
+
   it("is zero below plants", () => {
     expect(soeIdleUpkeepCost({ ...RUNNING, mothballed: true }, false)).toBe(0);
   });
@@ -125,7 +133,7 @@ describe("soeSectorOperatingProfit", () => {
     expect(soeSectorOperatingProfit(RUNNING, false, 12)).toBeCloseTo(3719253 * 0.12, 6);
   });
 
-  it("is monotone in operating capacity: less running is never more profit", () => {
+  it("keeps profitable production ahead while cold storage cuts the loss from unused active capacity", () => {
     const full = soeSectorOperatingProfit(RUNNING, true, 12);
     const half = soeSectorOperatingProfit(
       { ...RUNNING, realizedRevenue: 3719253 / 2, capitalUtilization: 0.425 },
@@ -138,6 +146,8 @@ describe("soeSectorOperatingProfit", () => {
       12
     );
     expect(full).toBeGreaterThan(half);
-    expect(half).toBeGreaterThan(cold);
+    expect(half).toBeLessThan(0);
+    expect(cold).toBeLessThan(0);
+    expect(cold).toBeGreaterThan(half);
   });
 });

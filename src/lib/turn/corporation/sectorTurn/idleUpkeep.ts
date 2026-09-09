@@ -1,3 +1,8 @@
+/**
+ * Idle plant upkeep bills cold capacity separately from unused active capacity.
+ * Partial mothballing reduces output without discarding plants or their paid basis.
+ */
+import { activeCapacityFraction, capacityUpkeepUnits } from "@/lib/corporations/investment/rules";
 import type { CorporateSector } from "@/lib/db/types";
 import { IDLE_UPKEEP_FRACTION, MOTHBALL_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
@@ -36,7 +41,7 @@ import { idleUpkeepUnitPrice, ownerIdleUnits } from "@/lib/corporations/physical
  * deliberate action taken after the flip, so there is no continuity to protect.
  */
 export interface IdleUpkeepInput {
-  sector: Pick<CorporateSector, "plantsUpkeepMarginBasisAnchor">;
+  sector: Pick<CorporateSector, "plantsUpkeepMarginBasisAnchor" | "activeCapacityPercent">;
   plantsEnabled: boolean;
   mothballed: boolean;
   effectiveMargin: number;
@@ -91,22 +96,26 @@ export function computeIdleUpkeep(input: IdleUpkeepInput): IdleUpkeepResult {
     input.throughputFactor *
     input.labourOutputFactor;
 
+  const activeFraction = activeCapacityFraction({ ...input.sector, mothballed: input.mothballed });
   const plantsOwnerIdleUnits = input.plantsEnabled
     ? ownerIdleUnits({
-        capacity: input.plantsCapacity,
+        capacity: input.plantsCapacity * activeFraction,
         producedUnits: input.producedUnits,
         involuntaryThrottle,
       })
     : 0;
 
-  const plantsUpkeepCost = input.mothballed
-    ? plantsUnitUpkeepHourly * input.plantsCapacity * MOTHBALL_UPKEEP_FRACTION
-    : input.plantsEnabled
-      ? plantsUnitUpkeepHourly *
-        plantsOwnerIdleUnits *
-        IDLE_UPKEEP_FRACTION *
-        input.plantsRampLambda
-      : 0;
+  const plantsUpkeepCost = input.plantsEnabled
+    ? plantsUnitUpkeepHourly *
+      capacityUpkeepUnits({
+        capacity: input.plantsCapacity,
+        activeFraction,
+        ownerIdleActiveUnits: plantsOwnerIdleUnits,
+        idleFraction: IDLE_UPKEEP_FRACTION,
+        coldFraction: MOTHBALL_UPKEEP_FRACTION,
+        ramp: input.plantsRampLambda,
+      })
+    : 0;
 
   return { plantsUpkeepCost, plantsUpkeepMarginBasisLive, plantsUpkeepMarginBasisAnchor };
 }

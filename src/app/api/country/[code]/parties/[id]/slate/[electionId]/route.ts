@@ -15,11 +15,12 @@ import {
   materializeSlateAssignmentsFromTemplate,
 } from "@/lib/db/recruitmentSlateLookup";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import type { Election, RecruitmentSlate } from "@/lib/db/types";
+import type { Election, ElectionCandidate, RecruitmentSlate } from "@/lib/db/types";
 import { buildElectionPhaseStatusSummary } from "@/lib/elections/electionPhaseStatus";
 import { resolveElection } from "@/lib/elections/resolveElection";
 import { mapElectionResponseToDisplay } from "@/lib/elections/mapElectionResponseToDisplay";
 import { getSlateAssignerRoleLabel, resolveSlateAuthority } from "@/lib/slateAuthority";
+import { countSlateAssignmentUsage } from "@/lib/slateAssignmentCap";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; electionId: string }>;
@@ -70,6 +71,24 @@ export async function GET(_request: Request, { params }: RouteParams) {
       state: election.state,
     });
 
+    // Candidacies the party already holds on this race. An NPP the turn loop
+    // filed has no slate row behind it, so the board would otherwise show a
+    // free slot the filing pass will refuse to use.
+    const activeCandidacies = (
+      await db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find(
+          { electionId: electionObjId, party: partyId, status: "active" },
+          { projection: { characterId: 1, status: 1, isNPP: 1, nppId: 1 } }
+        )
+        .toArray()
+    ).map((candidacy) => ({
+      characterId: candidacy.characterId.toString(),
+      isNPP: candidacy.isNPP,
+      nppId: candidacy.nppId,
+      status: candidacy.status,
+    }));
+
     const slate =
       (await findSlateForElection(db, countryId, partyId, electionObjId)) ??
       (await materializeSlateAssignmentsFromTemplate({
@@ -106,10 +125,19 @@ export async function GET(_request: Request, { params }: RouteParams) {
         },
         electionDisplay,
         stateAssignedCandidateIds,
+        assignment: countSlateAssignmentUsage([], activeCandidacies),
       });
     }
 
-    const candidates = (await listSlateCandidates(db, slate._id)).filter(isSlateRowVisibleToChair);
+    const slateRows = await listSlateCandidates(db, slate._id);
+    // Counted from every row, not just the ones the board shows: a withdrawn
+    // row is hidden when it carries no reason, and it holds no slot either, so
+    // the two filters agree without depending on each other.
+    const assignment = countSlateAssignmentUsage(
+      slateRows.map((row) => ({ candidateId: row.candidateId.toString(), status: row.status })),
+      activeCandidacies
+    );
+    const candidates = slateRows.filter(isSlateRowVisibleToChair);
     return NextResponse.json({
       slate: {
         id: slate._id.toString(),
@@ -152,6 +180,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
       },
       electionDisplay,
       stateAssignedCandidateIds,
+      assignment,
     });
   } catch (error) {
     return handleRouteError(error);

@@ -266,10 +266,17 @@ export default function CabinetOfficePage() {
                   currencySymbol={currencySymbol}
                 />
               ) : hasEstates && data.estateSummary ? (
-                <CabinetEstateStrip
-                  estateSummary={data.estateSummary}
-                  currencySymbol={currencySymbol}
-                />
+                <div className="divide-y divide-card-border">
+                  <CabinetStatStrip
+                    metrics={mechanics.nationalMetrics}
+                    values={data.nationalMetrics}
+                    currencySymbol={currencySymbol}
+                  />
+                  <CabinetEstateStrip
+                    estateSummary={data.estateSummary}
+                    currencySymbol={currencySymbol}
+                  />
+                </div>
               ) : hasMonetary && data.monetary ? (
                 <CabinetMonetaryStrip m={data.monetary} />
               ) : (

@@ -138,6 +138,35 @@ describe("performRelocation", () => {
     expect(setOp.partyInfluence).toBe(0);
   });
 
+  it("cross-country move: clears the tenure anchor and founder marker with the party", async () => {
+    // Emigrating drops the character to independent, which ends party
+    // membership exactly as leave/purge do — so it must clear the same two
+    // fields. Leaving `foundedPartyId` set would let an admin re-add or heal
+    // them back into the party they founded with the leadership exemption
+    // still live (leadershipTenure.ts).
+    const character = makeCharacter({ countryId: "US", party: "1" });
+    const target = makeState("LON", "UK");
+
+    await performRelocation(db as unknown as Db, character, target);
+
+    const updateCall = db.collectionMocks.characters!.updateOne.mock.calls.at(-1)!;
+    const op = updateCall[1] as { $unset?: Record<string, unknown> };
+    expect(op.$unset).toMatchObject({ partyJoinedTurn: "", foundedPartyId: "" });
+  });
+
+  it("same-country move: leaves the tenure anchor and founder marker intact", async () => {
+    // The party is unchanged, so neither field may be touched.
+    const character = makeCharacter({ countryId: "US", party: "1" });
+    const target = makeState("TX", "US");
+
+    await performRelocation(db as unknown as Db, character, target);
+
+    const updateCall = db.collectionMocks.characters!.updateOne.mock.calls.at(-1)!;
+    const op = updateCall[1] as { $unset?: Record<string, unknown> };
+    expect(op.$unset ?? {}).not.toHaveProperty("partyJoinedTurn");
+    expect(op.$unset ?? {}).not.toHaveProperty("foundedPartyId");
+  });
+
   /**
    * A saved command holds a CHARACTER id and `requireCommandingGeneral` reads
    * authority straight off it, so a commanding general who moved abroad kept

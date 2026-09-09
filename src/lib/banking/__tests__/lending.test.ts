@@ -4,6 +4,7 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
+import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import {
   CHARACTER_LOAN_SPREAD_PP,
@@ -70,6 +71,7 @@ describe("banking lending", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    resetCorpFxRateCacheForTests();
     db = createMockDb();
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -297,6 +299,36 @@ describe("banking lending", () => {
         ok: false,
         error: "Principal exceeds the bank's cash reserves (max 100000)",
       });
+    });
+
+    it("converts existing foreign-currency instalments before applying the income cap", async () => {
+      const { memory, bank } = world();
+      vi.mocked(estimatePerTurnCurrencyIncomeHomeFace).mockResolvedValue(100_000);
+      memory.seed("exchangeRates", [
+        { _id: "USD", currencyCode: "USD", rate: 1 },
+        { _id: "JPY", currencyCode: "JPY", rate: 100 },
+      ]);
+      memory.seed("bankLoans", [
+        {
+          _id: new ObjectId(),
+          bankCorporationId: new ObjectId(),
+          borrowerType: "character",
+          borrowerId: BORROWER_CHAR,
+          currency: "JPY",
+          outstanding: 3_000_000,
+          ratePercent: 0,
+          originatedTurn: 42,
+          termTurns: 48,
+          status: "current",
+        },
+      ]);
+      const result = await originate(
+        memory,
+        bank,
+        { type: "character", id: BORROWER_CHAR },
+        100_000
+      );
+      expect(result.ok).toBe(true);
     });
 
     it("rejects principal over the borrower income limit", async () => {

@@ -133,6 +133,8 @@ interface MoneyMoveRecord {
   turn?: number;
   status: MoneyMoveStatus;
   legs: MoneyMoveRecordLeg[];
+  /** Added by the settlement journal in the original claim, never a second record. */
+  projections?: { applied?: boolean; appliedAt?: Date | null }[];
   createdAt: Date;
   completedAt?: Date;
   error?: string;
@@ -229,8 +231,12 @@ export async function completeMoneyMove(
   status: MoneyMoveStatus = error ? "partial" : "applied"
 ): Promise<void> {
   const records = db.collection<MoneyMoveRecord>(MONEY_MOVE_COLLECTION);
-  const existing = await records.findOne({ _id: key });
-  if (!existing) return;
+  // Each leg's durable target stamp is the witness. Completion only marks
+  // confirmed legs; rereading and replacing the whole array can overwrite a
+  // concurrent recovery stamp and costs a round trip for every fresh move.
+  const appliedFields = Object.fromEntries(
+    appliedLegs.map((index) => [`legs.${index}.applied`, true])
+  );
   await records.updateOne(
     { _id: key },
     {
@@ -238,7 +244,7 @@ export async function completeMoneyMove(
         status,
         completedAt: new Date(),
         ...(error ? { error } : {}),
-        legs: existing.legs.map((leg, i) => ({ ...leg, applied: appliedLegs.includes(i) })),
+        ...appliedFields,
       },
     }
   );
@@ -294,7 +300,17 @@ export async function applyMoneyMove(db: Db, move: MoneyMove): Promise<MoneyMove
       ? "rejected"
       : "partial"
     : "applied";
-  await completeMoneyMove(db, move.key, applied, failure, status);
+  // Cash delivery is not settlement completion when projections remain.
+  // Keep the record in the automatic recovery queue across a crash here.
+  const hasProjections =
+    Array.isArray(move.record?.projections) && move.record.projections.length > 0;
+  await completeMoneyMove(
+    db,
+    move.key,
+    applied,
+    failure,
+    status === "applied" && hasProjections ? "partial" : status
+  );
   if (failure && move.turn !== undefined) {
     countBankingEvent(
       db,
@@ -404,8 +420,14 @@ export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveRes
   if (!record) return { status: "rejected", applied: [], error: `no money move ${key}` };
   const legs = record.legs ?? [];
   const already = legs.flatMap((leg, i) => (leg.applied ? [i] : []));
+  const completionStatus = record.projections?.some(
+    (projection) => !projection.applied && !projection.appliedAt
+  )
+    ? "partial"
+    : "applied";
   if (legs.every((leg) => leg.applied)) {
-    if (record.status !== "applied") await completeMoneyMove(db, key, already);
+    if (record.status !== completionStatus)
+      await completeMoneyMove(db, key, already, undefined, completionStatus);
     return { status: "applied", applied: already };
   }
   if (
@@ -432,7 +454,7 @@ export async function resumeMoneyMove(db: Db, key: string): Promise<MoneyMoveRes
     applied.push(i);
   }
   applied.sort((a, b) => a - b);
-  await completeMoneyMove(db, key, applied, failure);
+  await completeMoneyMove(db, key, applied, failure, failure ? "partial" : completionStatus);
   if (record.turn !== undefined) {
     countBankingEvent(db, record.turn, failure ? "partialSettlements" : "resumedSettlements");
   }

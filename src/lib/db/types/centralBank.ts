@@ -168,6 +168,9 @@ export interface FomcMeeting {
   /** Game-clock turn on which the meeting force-resolves regardless of pending ballots. */
   resolvesOnTurn: number;
   result?: "passed" | "failed";
+  /** Vote outcome remains separate from whether current policy permits execution. */
+  executionOutcome?: "applied" | "blocked" | "not-required";
+  executionBlockedReason?: string;
   resolvedAt?: Date;
   resolvedAtTurn?: number;
 }

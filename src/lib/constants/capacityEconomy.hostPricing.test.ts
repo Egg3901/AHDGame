@@ -20,6 +20,7 @@ import {
 
 const BASE = {
   sectorType: "manufacturing" as const,
+  strategyId: null,
   units: 1_000,
   year: CAPACITY_ANCHOR_YEAR,
   eraUnitScale: 1,
@@ -151,7 +152,8 @@ describe("tech / acumen remap onto the build price", () => {
         cost.acumenMultiplier *
         cost.techMultiplier *
         cost.hostPriceMultiplier *
-        cost.foundingMultiplier,
+        cost.foundingMultiplier *
+        cost.expansionMultiplier,
       6
     );
   });

@@ -16,6 +16,9 @@
  * point: the carve-up on either screen is the same carve-up.
  */
 
+import { usesCampaignAds } from "@/lib/campaignTargeting/rules";
+import { loadCampaignProjectionContext } from "@/lib/campaignTargeting/audience";
+
 import { ObjectId, type Db } from "mongodb";
 import type {
   Campaign,
@@ -294,7 +297,14 @@ export async function loadPrimaryPartyData(
     currentTurn: gameTime.currentTurn,
   });
 
+  const campaignContext = usesCampaignAds(election, enriched)
+    ? {
+        ...(await loadCampaignProjectionContext(db, TRAVEL_STATE_IDS)),
+        campaignRulesVersion: election.campaignRulesVersion ?? 0,
+      }
+    : undefined;
   const projection = projectPrimaryByState({
+    campaignContext,
     candidates: enriched,
     candidateMeta,
     stateIds: TRAVEL_STATE_IDS,

@@ -63,7 +63,7 @@ describe("caucus chair election enter route — tenure gate", () => {
     db.collectionMocks["caucusChairCandidates"]!.findOne.mockResolvedValue(null);
   });
 
-  async function setup(partyJoinedTurn: number, currentTurn: number) {
+  async function setup(partyJoinedTurn: number, currentTurn: number, foundedPartyId?: string) {
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
       ok: true,
@@ -77,6 +77,7 @@ describe("caucus chair election enter route — tenure gate", () => {
           createdAt: new Date("2026-01-01T00:00:00Z"),
           partyJoinedAt: new Date("2026-01-02T00:00:00Z"),
           partyJoinedTurn,
+          ...(foundedPartyId ? { foundedPartyId } : {}),
         },
       },
     } as never);
@@ -105,5 +106,40 @@ describe("caucus chair election enter route — tenure gate", () => {
     });
 
     expect(response.status).not.toBe(403);
+  });
+
+  it("lets a founder of this party run for caucus chair immediately", async () => {
+    await setup(30, 30, "7"); // 0 served, but founded party 7
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "7", slug: "left" }),
+    });
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it("exempts the founder even when the URL uses a non-canonical party id", async () => {
+    // findPartyBySequentialId parseInts the segment, so "07" resolves to party
+    // 7 — but the stored marker is "7". Comparing against the raw segment would
+    // wrongly block the founder. See getPartyIdString in lib/db/partyLookup.
+    await setup(30, 30, "7");
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "07", slug: "left" }),
+    });
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it("still blocks a founder of a different party", async () => {
+    await setup(20, 30, "9"); // founded 9, running in 7
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "7", slug: "left" }),
+    });
+
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.turnsRemaining).toBe(14);
   });
 });

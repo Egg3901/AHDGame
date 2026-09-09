@@ -16,7 +16,12 @@ import { requirePlayerTransfersEnabled } from "@/lib/api/requirePlayerTransfers"
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { isSameCountry } from "@/lib/api/sameCountry";
-import { isSelfPayment } from "@/lib/treasury/isSelfPayment";
+import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+import {
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
+import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; slug: string }>;
@@ -100,21 +105,23 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    // A caucus has one officer, so there is no second signature to require
-    // here the way the party treasury does. Block self-payment outright
-    // rather than leave the chair able to move the whole caucus treasury
-    // into their own campaign balance unreviewed.
-    if (
-      !isAdmin &&
-      isSelfPayment(targetCharacter, {
-        characterId: authUser.character._id,
-        userId: authUser.userId,
-      })
-    ) {
-      return NextResponse.json(
-        { error: "Caucus chairs cannot send caucus funds to themselves." },
-        { status: 403 }
-      );
+    // Caucus money is party money for the purposes of both controls,
+    // otherwise a caucus is a way around the party leadership freeze and
+    // the recipient's per-turn cap.
+    const { currentTurn } = await getGameTime();
+    if (!isAdmin) {
+      if (await isLeadershipElectionFreezeActive(db, party, currentTurn)) {
+        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+      }
+      const cap = await checkPlayerPayoutCap(db, {
+        characterId: targetCharacterOid,
+        countryId,
+        currentTurn,
+        amount: sendAmount,
+      });
+      if (!cap.ok) {
+        return NextResponse.json({ error: cap.reason }, { status: 400 });
+      }
     }
 
     const treasury = caucus.treasury ?? 0;
@@ -233,6 +240,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         id: authUser.character._id.toString(),
         label: authUser.character.name,
       },
+      // Same turn the payout cap was checked against, so the check and
+      // the record cannot land in different turn buckets.
+      turn: currentTurn,
       now,
     });
 

@@ -328,6 +328,17 @@ export async function seedPartyNppReworkIndexes(db: Db, log: (msg: string) => vo
     { name: "treasuryTransactions_holder_createdAt" },
     log
   );
+  // Backs the per-player payout cap (see lib/treasury/payoutCap.ts), which
+  // sums one character's payouts for the current turn across every holder
+  // type. Without it the query falls back to the countryId-prefixed index
+  // and examines tens of thousands of rows on every send.
+  await ensureIndex(
+    db,
+    "treasuryTransactions",
+    { countryId: 1, turn: 1, "counterparty.id": 1 },
+    { name: "treasuryTransactions_country_turn_counterparty" },
+    log
+  );
 
   log("Party / NPP rework indexes ensured");
 }

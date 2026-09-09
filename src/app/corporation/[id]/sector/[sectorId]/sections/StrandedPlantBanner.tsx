@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { STRANDED_WARN_TURNS } from "@/lib/corporations/strandedPlant";
 import { DELIVERY_LIMITED_MIN_SHARE } from "@/components/corporation/plantsPresentation";
 import {
@@ -41,6 +42,7 @@ export default function StrandedPlantBanner({
   deliveryLimitedFreightClass = null,
   isCeo,
 }: StrandedPlantBannerProps) {
+  const t = useTranslations("corporations.sectorInvestment");
   if (lowFillTurns < STRANDED_WARN_TURNS) return null;
 
   const soldPct = soldFraction != null ? Math.round(soldFraction * 100) : null;
@@ -84,7 +86,7 @@ export default function StrandedPlantBanner({
             <p className="mt-1.5 text-xs text-muted">
               {deliveryLimited
                 ? `Options: ${deliveryAction} Shrinking this plant gives up output the market is still short of.`
-                : "Options: stockpile storable goods for a temporary glut, set growth to zero and let the plant shrink, mothball it in the Plant panel, list it for sale, or abandon it in the panels below. Building capacity in a state where the goods are scarce will sell far better."}
+                : t("strandedOptions")}
             </p>
           )}
         </div>

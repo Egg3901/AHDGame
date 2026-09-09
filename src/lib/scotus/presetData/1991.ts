@@ -249,7 +249,7 @@ const seats: ScotusPresetSeatSeed[] = [
     ],
   },
   // Seat 7 — Scalia → Gorsuch (seat sat vacant Feb 2016-Apr 2017 in real
-  // history; the tenure-turn processor auto-advances with no vacancy gap
+  // history; later occupants remain reference data after the live vacancy
   // between chain entries, so that real-world gap isn't separately modeled)
   {
     seatNumber: 7,

@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import type { Election, ElectedOfficial } from "@/lib/db/types";
@@ -99,7 +100,7 @@ export async function spawnGovernorByElection(
     createdAt: now,
     updatedAt: now,
   };
-  await db.collection<Election>("elections").insertOne(doc);
+  await db.collection<Election>("elections").insertOne(withCampaignRules(doc));
   return doc._id;
 }
 

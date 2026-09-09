@@ -179,7 +179,13 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
   };
 
-  const { formatAmount, currencySymbol, forexEnabled, countryId: playerCountryId } = useCurrency();
+  const {
+    formatAmount,
+    currencySymbol,
+    forexEnabled,
+    countryId: playerCountryId,
+    baseRates,
+  } = useCurrency();
   const canFoundCorp =
     !playerCountryId ||
     !COUNTRY_CONFIGS[playerCountryId.toUpperCase() as CountryId]
@@ -762,7 +768,7 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
         currencySymbol={currencySymbol}
         // Shared with the server route (POST /api/corporations) so the fee and
         // treasury figures shown here always match what the server charges.
-        foundingRate={getFoundingFxRate(playerCountryId, forexEnabled)}
+        foundingRate={getFoundingFxRate(playerCountryId, forexEnabled, baseRates)}
         countryId={playerCountryId ?? undefined}
         foundingCooldownTurnsRemaining={foundingCooldownTurns}
         onSuccess={() => {

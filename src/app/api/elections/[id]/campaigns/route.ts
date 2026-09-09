@@ -1,3 +1,7 @@
+import {
+  loadCampaignCurrencyRates,
+  type CampaignCurrencyRates,
+} from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUserWithCharacter()
@@ -32,6 +36,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
+    const campaignRates = await loadCampaignCurrencyRates(db);
 
     const resolved = await resolveElectionRouteParam(db, electionId);
     if (!resolved.ok) {
@@ -59,7 +64,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const electionCountryId = resolved.election.countryId ?? "US";
     // Campaign treasuries are stored in local currency; the budget / upgrade-cost
     // constants are anchor. Campaign funds are decoupled from live forex — the
-    // preview localizes at the frozen base INITIAL_RATES scale (campaignAnchorToLocal,
+    // preview localizes at the frozen world-seeded currency basis (campaignAnchorToLocal,
     // inside formatCampaignForViewer) so it matches what campaignTurn and
     // upgradeCampaign actually credit/charge (never the live exchangeRates).
     const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
@@ -144,7 +149,8 @@ export async function GET(request: Request, { params }: RouteParams) {
           electionCountryId,
           campaignCurrencyCode,
           electionType,
-          isGeneralPhase
+          isGeneralPhase,
+          campaignRates
         )
       )
       .filter((c) => c !== null); // Filter out campaigns with missing candidates
@@ -164,7 +170,8 @@ function formatCampaignForViewer(
   electionCountryId: string,
   campaignCurrencyCode: string,
   electionType: string | undefined,
-  isGeneralPhase: boolean
+  isGeneralPhase: boolean,
+  campaignRates: CampaignCurrencyRates
 ): Record<string, unknown> | null {
   // Look up candidate from map with null safety
   if (!campaign.candidateId) {
@@ -266,8 +273,9 @@ function formatCampaignForViewer(
     );
 
     // Campaign funds are decoupled from live forex — localize anchor
-    // income/maintenance/upgrade costs at the frozen base INITIAL_RATES scale.
-    const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, electionCountryId);
+    // income/maintenance/upgrade costs at the frozen world-seeded currency basis.
+    const toLocal = (anchor: number) =>
+      campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
     const privilegedData = {
       ...base,
       activityHistory: campaign.activityHistory.map((a) => ({

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useEffect, useCallback } from "react";
 import { Skeleton } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -12,6 +13,7 @@ const COST_FUNDS = 100;
 const COST_ACTIONS = 1;
 
 interface CanvassingPanelProps {
+  electionId?: string;
   countryId?: string;
   characterActions?: number;
   characterFunds?: number;
@@ -46,13 +48,14 @@ const SOURCE_DESCRIPTION: Record<CanvassSource, (isRegionBased: boolean) => stri
     "Boost turnout for the ticket in the state you are campaigning in as running mate. Spends a shared surrogate action.",
 };
 
-function calculateMaxCanvasses(actions: number, funds: number): number {
+function calculateMaxCanvasses(actions: number, funds: number, cost = COST_FUNDS): number {
   const maxByActions = Math.floor(actions / COST_ACTIONS);
-  const maxByFunds = Math.floor(funds / COST_FUNDS);
+  const maxByFunds = Math.floor(funds / cost);
   return Math.min(maxByActions, maxByFunds, 50);
 }
 
 export function CanvassingPanel({
+  electionId,
   countryId,
   characterActions,
   characterFunds,
@@ -60,11 +63,44 @@ export function CanvassingPanel({
   variant = "default",
 }: CanvassingPanelProps) {
   const { formatFull } = useCurrency();
+  const t = useTranslations("elections.campaignTargeting");
+  const [fundsCost, setFundsCost] = useState(COST_FUNDS);
+  const [previewError, setPreviewError] = useState("");
+  const [previewRevision, setPreviewRevision] = useState(0);
+  const [nativeTargets, setNativeTargets] = useState<Array<{ dimension: string; bucket: string }>>(
+    []
+  );
+  const [preview, setPreview] = useState<{
+    bucketBoost: number;
+    turnoutBefore: number;
+    turnoutAfter: number;
+  } | null>(null);
   const blend = variant === "blend";
 
   // Country-aware demographic categories (SSOT). US returns multiple categories
   // (race/age/…); voter-group countries (UK/JP/DE/IE/CN/BR) return a single category.
-  const categories = getDemographicCategoriesForCountry(countryId);
+  const originalCategories = getDemographicCategoriesForCountry(countryId);
+  const categories: Array<{
+    key: string;
+    label: string;
+    groups: Array<{ id: string; name: string }>;
+  }> = originalCategories.map((category) => ({
+    ...category,
+    groups: [...category.groups],
+  }));
+  for (const target of nativeTargets) {
+    let category = categories.find((item) => item.key === target.dimension);
+    if (!category) {
+      category = {
+        key: target.dimension,
+        label: target.dimension.replaceAll("_", " "),
+        groups: [],
+      };
+      categories.push(category);
+    }
+    if (!category.groups.some((group) => group.id === target.bucket))
+      category.groups.push({ id: target.bucket, name: target.bucket.replaceAll("_", " ") });
+  }
   const isSingleCategory = categories.length === 1;
 
   const [selectedCategory, setSelectedCategory] = useState<string>(
@@ -112,12 +148,43 @@ export function CanvassingPanel({
     refreshEligibility();
   }, [refreshEligibility]);
 
+  const eligibleStateId = eligibility.status === "eligible" ? eligibility.stateId : null;
+  useEffect(() => {
+    if (!eligibleStateId) return;
+    const controller = new AbortController();
+    const query = new URLSearchParams({
+      category: selectedCategory,
+      group: selectedGroup,
+      count: String(count),
+      ...(electionId ? { electionId } : {}),
+    });
+    setPreview(null);
+    setPreviewError("");
+    fetch(`/api/canvassing?${query}`, { signal: controller.signal, cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(t("failed"));
+        const data = await response.json();
+        if (controller.signal.aborted || data.stateId !== eligibleStateId) return;
+        setNativeTargets(data.targets ?? []);
+        if (typeof data.fundsCost === "number") setFundsCost(data.fundsCost);
+        setPreview(data.preview ?? null);
+      })
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        console.error("Canvassing preview failed", error);
+        setPreviewError(t("failed"));
+      });
+    return () => controller.abort();
+  }, [eligibleStateId, electionId, selectedCategory, selectedGroup, count, previewRevision, t]);
+
   const activeCategory = categories.find((c) => c.key === selectedCategory) ?? null;
 
   const hasResources = characterActions != null && characterFunds != null;
-  const maxCanvasses = hasResources ? calculateMaxCanvasses(characterActions, characterFunds) : 50;
+  const maxCanvasses = hasResources
+    ? calculateMaxCanvasses(characterActions, characterFunds, fundsCost)
+    : 50;
 
-  const totalFundsCost = COST_FUNDS * count;
+  const totalFundsCost = fundsCost * count;
   const totalActionsCost = COST_ACTIONS * count;
   const canAfford =
     !hasResources || (characterActions >= totalActionsCost && characterFunds >= totalFundsCost);
@@ -134,6 +201,7 @@ export function CanvassingPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          electionId,
           stateId: eligibility.stateId,
           category: selectedCategory,
           group: selectedGroup,
@@ -149,7 +217,19 @@ export function CanvassingPanel({
         if (data.effect) {
           setMessage(
             (prev) =>
-              `${prev}\nTotal boost: ${data.effect.boost}% (New modifier: ${data.effect.newModifier}%)`
+              `${prev}\n${
+                data.effect.turnoutBefore != null && data.effect.turnoutAfter != null
+                  ? t("canvassResult", {
+                      boost: data.effect.boost,
+                      modifier: data.effect.newModifier,
+                      before: data.effect.turnoutBefore.toFixed(2),
+                      after: data.effect.turnoutAfter.toFixed(2),
+                    })
+                  : t("canvassInput", {
+                      boost: data.effect.boost,
+                      modifier: data.effect.newModifier,
+                    })
+              }\n${t("canvassLegacy", { boost: data.effect.legacyBoost })}`
           );
         }
         setSelectedGroup("");
@@ -175,6 +255,22 @@ export function CanvassingPanel({
   }
 
   const QUANTITY_OPTIONS = [1, 5, 10];
+  const previewCopy = previewError ? (
+    <p role="status" className="text-sm my-3">
+      {previewError}{" "}
+      <button type="button" onClick={() => setPreviewRevision((value) => value + 1)}>
+        {t("refresh")}
+      </button>
+    </p>
+  ) : preview ? (
+    <p className="text-sm my-3" aria-live="polite">
+      {t("canvassPreview", {
+        boost: preview.bucketBoost.toFixed(2),
+        before: preview.turnoutBefore.toFixed(2),
+        after: preview.turnoutAfter.toFixed(2),
+      })}
+    </p>
+  ) : null;
 
   // ── Shell + heading, per variant ──────────────────────────────────────────
   const shellStyle: React.CSSProperties | undefined = blend ? { marginBottom: 0 } : undefined;
@@ -256,6 +352,7 @@ export function CanvassingPanel({
           {description}
         </p>
 
+        {previewCopy}
         <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 460 }}>
           {!isSingleCategory && (
             <div>
@@ -399,7 +496,7 @@ export function CanvassingPanel({
               Twice as effective during active campaign season, the 4 turns before an election
             </li>
             <li>Boosts turnout for this demographic in {activeStateId}</li>
-            <li>Modifiers decay 2% per turn toward baseline</li>
+            <li>{t("canvassRules")}</li>
             <li>
               Diminishing returns apply, so each successive canvass is slightly less effective
             </li>
@@ -417,6 +514,7 @@ export function CanvassingPanel({
         {description}
       </p>
 
+      {previewCopy}
       <div className="space-y-4">
         {/* Category selector — only for multi-category countries (US). */}
         {!isSingleCategory && (
@@ -528,7 +626,7 @@ export function CanvassingPanel({
           <li>Effectiveness scales with your alignment to the demographic</li>
           <li>2x more effective during active campaign season (4 turns before election)</li>
           <li>Boosts turnout for this demographic in {activeStateId}</li>
-          <li>Modifiers decay 2% per turn toward baseline</li>
+          <li>{t("canvassRules")}</li>
           <li>Diminishing returns apply, so each successive canvass is slightly less effective</li>
         </ul>
       </div>

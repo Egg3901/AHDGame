@@ -236,14 +236,34 @@ describe("identitySectorPlantFields", () => {
     const survivor = midBuild({ mothballed: true, legacyRevenueShadow: 750_000 });
     expect(identitySectorPlantFields(survivor)).toEqual({
       capitalStock: 500,
+      operatingCapacityUnits: 500,
+      operatingCapacityTurn: null,
       plantCount: 0,
       plantUnitRemainder: 0,
       capacityBookAnchor: 0,
       buildQueue: survivor.buildQueue,
       constructionInProgressAnchor: 1_000_000,
       mothballed: true,
+      activeCapacityPercent: 100,
       plantsStartTurn: 5,
       legacyRevenueShadow: 750_000,
     });
+  });
+});
+
+describe("partial capacity ownership transfers", () => {
+  it("preserves active and cold units when merging a partial plant", () => {
+    const partial = midBuild({ capitalStock: 300, activeCapacityPercent: 25 });
+    const incoming = midBuild({ capitalStock: 100 });
+    const merged = mergeSectorPlantFields(partial, incoming);
+    expect(merged.capitalStock).toBe(400);
+    expect(merged.activeCapacityPercent).toBe(43.75);
+    expect((merged.capitalStock * merged.activeCapacityPercent!) / 100).toBe(175);
+  });
+
+  it("preserves the operating setting across a carve and rollback", () => {
+    const partial = midBuild({ activeCapacityPercent: 25 });
+    expect(carveSectorPlantFields(partial, 0.3).activeCapacityPercent).toBe(25);
+    expect(identitySectorPlantFields(partial).activeCapacityPercent).toBe(25);
   });
 });

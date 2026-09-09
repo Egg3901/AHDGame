@@ -750,6 +750,9 @@ export default function SectorDetailPage() {
                     }
                     onMothball={() => runCapacityAction({ action: "mothball" })}
                     onReactivate={() => runCapacityAction({ action: "reactivate" })}
+                    onResize={(activePercent) =>
+                      runCapacityAction({ action: "resize", activePercent })
+                    }
                   />
                   <MarketMoneyPanel
                     plants={plants}

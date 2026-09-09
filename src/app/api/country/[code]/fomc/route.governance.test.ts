@@ -183,6 +183,8 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
               playerVoteDeadline: new Date(),
               resolvesOnTurn: 405,
               result: "passed",
+              executionOutcome: "blocked",
+              executionBlockedReason: "fx-committed",
               resolvedAt: new Date(),
               resolvedAtTurn: 382,
             },
@@ -195,6 +197,11 @@ describe("GET /api/country/[code]/fomc governance contract", () => {
     });
     const body = await res.json();
     expect(body.meeting).toBeNull();
+    expect(body.meetingHistory[0]).toMatchObject({
+      result: "passed",
+      executionOutcome: "blocked",
+      executionBlockedReason: "fx-committed",
+    });
     expect(actionOf(body, "cast_ballot").allowed).toBe(false);
     expect(body.governance.nextDeadline).toEqual({ turn: 389, kind: "cadence" });
   });

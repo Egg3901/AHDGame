@@ -344,7 +344,7 @@ describe("processElectionEntry", () => {
     expect(insertedNames).toContain("Slate Challenger");
   });
 
-  it("caps same-party slate challengers at one alongside a defending incumbent", async () => {
+  it("files every slate challenger that fits the cap alongside a defending incumbent", async () => {
     const election = createTestElection();
     const incumbent = createTestNpp({ name: "Incumbent" });
     const firstChallenger = createTestNpp({ name: "First Slate Challenger" });
@@ -397,15 +397,17 @@ describe("processElectionEntry", () => {
       )
     );
 
-    expect(entered).toBe(2);
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(2);
+    // The incumbent plus both chair picks is exactly the per-race cap, so all
+    // three stand and the primary decides between them.
+    expect(entered).toBe(3);
+    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(3);
 
     const insertedNames = db.collectionMocks.electionCandidates.insertOne.mock.calls.map(
       (call) => call[0]?.characterName
     );
     expect(insertedNames).toContain("Incumbent");
+    expect(insertedNames).toContain("First Slate Challenger");
     expect(insertedNames).toContain("Second Slate Challenger");
-    expect(insertedNames).not.toContain("First Slate Challenger");
   });
 
   it("reserves an autonomous presidential candidate before regional races consume the pool", async () => {

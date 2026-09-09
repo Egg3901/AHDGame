@@ -20,10 +20,9 @@ import {
   resolveTransactionApprovalMode,
 } from "@/lib/parties/pendingTreasuryTransactions";
 import {
-  isTreasurerElectionLockoutActive,
-  wouldUseVacantTreasurerFallback,
-  TREASURER_LOCKOUT_MESSAGE,
-} from "@/lib/parties/treasurerElectionLockout";
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
 
 interface RouteParams {
@@ -94,6 +93,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     if (transferGuard) return transferGuard;
 
     // Check treasury balance (pre-check).
+    // No party money moves in the closing turns of a leadership election.
+    if (!isAdmin) {
+      const { currentTurn: freezeTurn } = await getGameTime();
+      if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
+        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+      }
+    }
+
     const treasury = party.treasury ?? 0;
     if (amount > treasury) {
       return NextResponse.json(
@@ -117,23 +124,13 @@ export async function POST(request: Request, { params }: RouteParams) {
         : null;
 
     // 2026-05-22 treasury-two-person-approval branch. With no seated
-    // Treasurer, double collapses to single so the Chair/VC act alone —
-    // unless a contested Treasurer election is about to close, in which
-    // case the fallback is suppressed and outbound transfers pause.
-    let treasurerElectionLockout = false;
-    if (wouldUseVacantTreasurerFallback(party)) {
-      const { currentTurn } = await getGameTime();
-      treasurerElectionLockout = await isTreasurerElectionLockoutActive(db, party, currentTurn);
-    }
-    const mode = resolveTransactionApprovalMode(party, { treasurerElectionLockout });
+    // Treasurer, double collapses to single so the Chair/VC act alone.
+    const mode = resolveTransactionApprovalMode(party);
     const isPlayerAction = !isAdmin;
     if (isPlayerAction && mode === "double") {
       const eligibility = canProposePendingTransaction(party);
       if (!eligibility.ok) {
-        return NextResponse.json(
-          { error: treasurerElectionLockout ? TREASURER_LOCKOUT_MESSAGE : eligibility.reason },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: eligibility.reason }, { status: 400 });
       }
       const slot = getProposerSlot(party, authUser.character._id);
       if (slot == null) {

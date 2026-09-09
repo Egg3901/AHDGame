@@ -51,6 +51,7 @@
  * `realizedRevenue` tracks `revenue`, and the margin is last turn's modifier
  * stack for every sector alike.
  */
+import { activeCapacityFraction, capacityUpkeepUnits } from "@/lib/corporations/investment/rules";
 import { IDLE_UPKEEP_FRACTION, MOTHBALL_UPKEEP_FRACTION } from "@/lib/constants/capacityEconomy";
 
 /**
@@ -69,6 +70,7 @@ export interface SoeOperatingProfitInput {
   profitMargin?: number | null;
   effectiveProfitMargin?: number | null;
   mothballed?: boolean | null;
+  activeCapacityPercent?: number | null;
   capitalUtilization?: number | null;
   throughputFactor?: number | null;
   plantsUpkeepMarginBasisAnchor?: number | null;
@@ -106,10 +108,22 @@ export function soeIdleUpkeepCost(sector: SoeOperatingProfitInput, plantsEnabled
   const basis = finite(sector.plantsUpkeepMarginBasisAnchor)
     ? Math.max(0, Math.min(1, sector.plantsUpkeepMarginBasisAnchor))
     : Math.max(0, 1 - (finite(sector.profitMargin) ? sector.profitMargin : 0) / 100);
-  if (sector.mothballed === true) {
-    return nameplate * basis * MOTHBALL_UPKEEP_FRACTION;
-  }
-  return nameplate * ownerIdleShare(sector) * basis * IDLE_UPKEEP_FRACTION;
+  const activeFraction = activeCapacityFraction({
+    mothballed: sector.mothballed ?? false,
+    activeCapacityPercent: sector.activeCapacityPercent ?? undefined,
+  });
+  return (
+    nameplate *
+    basis *
+    capacityUpkeepUnits({
+      capacity: 1,
+      activeFraction,
+      ownerIdleActiveUnits: Math.max(0, ownerIdleShare(sector) - (1 - activeFraction)),
+      idleFraction: IDLE_UPKEEP_FRACTION,
+      coldFraction: MOTHBALL_UPKEEP_FRACTION,
+      ramp: 1,
+    })
+  );
 }
 
 /**

@@ -77,14 +77,24 @@ export type SlateRefusalReason =
    * longer exists.
    */
   | "ineligible_region"
-  /** Filing: another chair-slated candidate of the same party already holds the slot. */
+  /**
+   * Filing: another chair-slated candidate of the same party already held the
+   * one slot the party was allowed. Kept for rows written before the per-race
+   * cap replaced the single-slot rule; nothing writes it now, and its
+   * successor is `slate_full`.
+   */
   | "slot_taken"
   /** Filing: the party itself may not field NPP candidates in this race. */
   | "party_restricted"
   /** Filing: the NPP retired, moved, or is no longer reachable for this race. */
   | "npp_unavailable"
   /** Filing: the chair slated this NPP into more than one race; another row won. */
-  | "already_slated_elsewhere";
+  | "already_slated_elsewhere"
+  /**
+   * Filing: the party already holds every slot on this race, so the row could
+   * not go on the ballot. See `SLATE_ASSIGNMENT_CAP` for what holds a slot.
+   */
+  | "slate_full";
 
 export type SlateCandidateStatus =
   "invited" | "considering" | "accepted" | "declined" | "withdrawn" | "filed";

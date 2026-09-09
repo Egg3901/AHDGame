@@ -3,8 +3,39 @@ interface DuplicateKeyErrorLike extends Error {
   keyPattern?: Record<string, unknown>;
 }
 
-function isDuplicateKeyError(error: unknown): error is DuplicateKeyErrorLike {
-  return error instanceof Error && "code" in error && (error as { code?: number }).code === 11000;
+export function isDuplicateKeyError(error: unknown): error is DuplicateKeyErrorLike {
+  if (typeof error !== "object" || error === null) return false;
+  const candidate = error as DuplicateKeyErrorLike & {
+    writeErrors?: { code?: number }[];
+  };
+  if (candidate.code === 11000) return true;
+  if (candidate.writeErrors?.some((writeError) => writeError.code === 11000)) return true;
+  return typeof candidate.message === "string" && candidate.message.includes("E11000");
+}
+
+/**
+ * Race-tolerant insert for create-missing election sweeps. A unique voting
+ * index is the real guard; this keeps a concurrent turn from 500'ing the
+ * phase when the read-then-insert window still overlaps.
+ */
+export async function insertManyIgnoringDuplicateKey<T>(
+  collection: {
+    insertMany: (docs: T[], options?: { ordered?: boolean }) => Promise<{ insertedCount: number }>;
+  },
+  docs: T[]
+): Promise<number> {
+  if (docs.length === 0) return 0;
+  try {
+    const result = await collection.insertMany(docs, { ordered: false });
+    return result.insertedCount;
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error;
+    const bulk = error as {
+      insertedCount?: number;
+      result?: { insertedCount?: number };
+    };
+    return bulk.insertedCount ?? bulk.result?.insertedCount ?? 0;
+  }
 }
 
 function keyPatternIncludes(error: DuplicateKeyErrorLike, field: string): boolean {

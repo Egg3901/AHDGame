@@ -400,7 +400,11 @@ export function directedCreditCapacityUnits(creditAnchor: number, unitPriceAncho
  * founding a plant from nothing is a POLICY decision, not maintenance.
  */
 export function soeCapacityReplacementCostAnchor(
-  sectors: ReadonlyArray<{ sectorType: CorporationType; capitalStock?: number | null }>,
+  sectors: ReadonlyArray<{
+    sectorType: CorporationType;
+    strategyId?: string | null;
+    capitalStock?: number | null;
+  }>,
   year: number | null | undefined,
   unitScale: number,
   depreciationPerTurn: number = CAPITAL_DEPRECIATION_PER_TURN
@@ -416,7 +420,12 @@ export function soeCapacityReplacementCostAnchor(
         ? Math.max(0, sector.capitalStock)
         : 0;
     if (stock <= 0) continue;
-    const unitPrice = capacityPricePerUnit(sector.sectorType, priceYear, unitScale);
+    const unitPrice = capacityPricePerUnit(
+      sector.sectorType,
+      priceYear,
+      unitScale,
+      sector.strategyId ?? null
+    );
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) continue;
     total += stock * delta * unitPrice;
   }

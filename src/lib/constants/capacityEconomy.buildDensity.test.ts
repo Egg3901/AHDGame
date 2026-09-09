@@ -22,6 +22,7 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 const BASE = {
   eraUnitScale: 1,
   sectorType: "manufacturing" as const,
+  strategyId: null,
   units: 1_000,
   year: CAPACITY_ANCHOR_YEAR,
   primeRate: 0,

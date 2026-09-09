@@ -1,3 +1,4 @@
+import { CAMPAIGN_RULES_VERSION } from "@/lib/campaignTargeting/rules";
 import { AsyncLocalStorage } from "async_hooks";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -481,6 +482,7 @@ export function buildCanonicalSpawn(params: {
     ...(electionType === "president"
       ? { rulesetVersion: CURRENT_PRESIDENTIAL_RULESET_VERSION }
       : {}),
+    campaignRulesVersion: CAMPAIGN_RULES_VERSION,
     createdAt: now,
     updatedAt: now,
   };

@@ -53,6 +53,7 @@ function buildMockDb(options: {
 
   const db = {
     collection: vi.fn().mockImplementation((name: string) => {
+      if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
       if (name === "states") {
         return {
           // `loadUsPoliticalStateIds` reads admitted states with find().

@@ -80,7 +80,9 @@ export async function GET(request: Request, { params }: RouteParams) {
         { history: [], isPrivate: true },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+            "Cache-Control": corporation.isPrivate
+              ? "private, no-store, no-transform"
+              : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
           },
         }
       );
@@ -187,31 +189,29 @@ export async function GET(request: Request, { params }: RouteParams) {
       ])
       .toArray();
 
-    const responseHistory = history.map(
-      ({ totalShares: _totalShares, createdAt: _createdAt, ...row }) => row
-    );
+    const responseHistory: Array<
+      Omit<CorporationHistoryChartRow, "totalShares" | "createdAt"> & {
+        marketCapCurrencyCode?: CorporationHistory["currencyCode"] | null;
+      }
+    > = history.map(({ totalShares: _totalShares, createdAt: _createdAt, ...row }) => row);
 
-    // #963: the most recent point is frozen at last turn-processing time
-    // (snapshotMarketCap writes it once per turn), so it can visibly disagree
-    // with the live Market Cap on the Overview card (getRoundedPublicMarketCap,
-    // computed from the corp document's current sharePrice/totalShares on every
-    // request). Overwrite just the latest point with that same live figure —
-    // older points stay frozen snapshots, since re-deriving them would drift
-    // (#2958's whole reason fxRateAtWrite exists). Stamp the corp's current
-    // currency and drop fxRateAtWrite so the chart's toAnchor conversion uses
-    // the live rate instead of a stale one for this one live-valued point.
+    // Keep the latest market cap aligned with the live Overview quote. Its
+    // currency basis applies only to market cap; all other amounts remain
+    // snapshots with their original currency and write-time exchange rate.
+    // Explicit null marks a live anchor-currency quote for legacy corporations.
     const latestPoint = responseHistory[responseHistory.length - 1];
     if (latestPoint) {
       latestPoint.marketCap = getRoundedPublicMarketCap(corporation, corporation.totalShares ?? 0);
-      latestPoint.currencyCode = corporation.liquidCurrencyCode;
-      delete latestPoint.fxRateAtWrite;
+      latestPoint.marketCapCurrencyCode = corporation.liquidCurrencyCode ?? null;
     }
 
     return NextResponse.json(
       { history: responseHistory },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=120, stale-while-revalidate=300, no-transform",
+          "Cache-Control": corporation.isPrivate
+            ? "private, no-store, no-transform"
+            : "public, s-maxage=120, stale-while-revalidate=300, no-transform",
         },
       }
     );

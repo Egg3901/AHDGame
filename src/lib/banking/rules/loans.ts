@@ -168,6 +168,19 @@ export function npcFlowDelta(current: number, target: number): number {
   return clamp(desired, -maxOutflow, maxInflow);
 }
 
+/** Limit household lending and repayment to the cash each payer can deliver. */
+export function fundedNpcFlowDelta(
+  current: number,
+  target: number,
+  funds: { cashReserves: number; requiredReserves: number; householdPool: number }
+): number {
+  const desired = npcFlowDelta(current, target);
+  if (desired > 0) {
+    return Math.min(desired, Math.max(0, funds.cashReserves - funds.requiredReserves));
+  }
+  return Math.max(desired, -Math.max(0, funds.householdPool));
+}
+
 export interface LoanInstalment {
   interestDue: number;
   principalDue: number;

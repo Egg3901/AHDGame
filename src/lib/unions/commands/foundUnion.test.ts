@@ -5,6 +5,9 @@ import type { Character, Union } from "@/lib/db/types";
 import { foundUnion } from "./foundUnion";
 import { UNION_FOUNDING_ACTION_COST } from "@/lib/unions/unionFounding";
 
+vi.mock("@/lib/campaigns/campaignCurrency", () => ({
+  loadCampaignCurrencyRates: vi.fn().mockResolvedValue({ GBP: 2 }),
+}));
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
 vi.mock("@/lib/db/collections/gameState", () => ({
   getGameStatePresetOrDefault: vi.fn().mockResolvedValue("modern"),
@@ -276,4 +279,18 @@ describe("foundUnion", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(403);
   });
+});
+
+it("charges the world's fixed campaign base rate rather than modern calibration", async () => {
+  const { isForexEnabled } = await import("@/lib/currency/featureFlag");
+  vi.mocked(isForexEnabled).mockResolvedValueOnce(true);
+  const { db, characterFindOneAndUpdate } = baseDb({});
+  const result = await foundUnion(db, makeCharacter({ countryId: "UK", funds: 2000000 }), {
+    countryId: "UK",
+    sectorType: "manufacturing",
+    name: "Local Workers",
+  });
+  expect(result.ok).toBe(true);
+  expect(result).toMatchObject({ campaignFundsSpent: 1000000 });
+  expect(characterFindOneAndUpdate.mock.calls[0][1].$inc.funds).toBe(-1000000);
 });

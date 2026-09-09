@@ -5,6 +5,7 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import {
+  getLeadershipEligibility,
   getPartyTenure,
   STATE_LEADERSHIP_RELOCATION_DELAY_TURNS,
 } from "@/lib/parties/leadershipTenure";
@@ -27,6 +28,7 @@ import {
   getStatePartyOrgDocumentId,
 } from "@/lib/db/partyLookup";
 import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import { pickCanonicalVotingElectionPerKey } from "@/lib/elections/canonicalVotingElection";
 
 /** Get position labels appropriate for the country (UK uses "Regional Chair") */
 function getPositionLabels(countryId: CountryId): Record<StatePartyElectionPosition, string> {
@@ -167,7 +169,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
       // Turn-based party-tenure gate (leadershipTenure.ts) — pre-disable run/vote
       // for under-tenured members; the enter/vote routes enforce it server-side.
       const currentTurn = await getCurrentTurn(db);
-      const tenure = getPartyTenure(authUser.character.partyJoinedTurn, currentTurn);
+      // `partyKey` (getPartyIdString) rather than the raw `partyId` path
+      // segment — "07" and "7" resolve alike but compare unequal.
+      const tenure = getLeadershipEligibility(authUser.character, currentTurn, partyKey);
       if (!tenure.eligible) {
         canParticipate = false;
         canVoteReason = "tenure";
@@ -216,8 +220,13 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
 
     const electionByPosition = new Map<StatePartyElectionPosition, StatePartyElection>();
-    for (const e of [...activeElections, ...completedElections]) {
+    for (const e of pickCanonicalVotingElectionPerKey(activeElections, (row) => row.position)) {
       electionByPosition.set(e.position, e);
+    }
+    for (const e of completedElections) {
+      if (!electionByPosition.has(e.position)) {
+        electionByPosition.set(e.position, e);
+      }
     }
 
     const electionIds = [...electionByPosition.values()].map((e) => e._id);

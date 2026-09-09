@@ -113,7 +113,7 @@ describe("national party election enter route", () => {
     expect(payload.error).toContain("already running for National Committee");
   });
 
-  async function authWithTenure(partyJoinedTurn: number) {
+  async function authWithTenure(partyJoinedTurn: number, foundedPartyId?: string) {
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
       ok: true,
@@ -128,6 +128,7 @@ describe("national party election enter route", () => {
           createdAt: new Date("2026-01-01T00:00:00Z"),
           partyJoinedAt: new Date("2026-01-02T00:00:00Z"),
           partyJoinedTurn,
+          ...(foundedPartyId ? { foundedPartyId } : {}),
         },
       },
     } as never);
@@ -163,5 +164,32 @@ describe("national party election enter route", () => {
     expect(response.status).not.toBe(403);
     const payload = await response.json();
     expect(payload.error).toContain("National Committee");
+  });
+
+  it("lets a founder run in the party they founded on their very first turn", async () => {
+    // Ratification stamps partyJoinedTurn to the founding turn, so without the
+    // founder exemption the three founders are locked out of their own new
+    // party for 24 turns.
+    await authWithTenure(30, "7"); // 0 turns served, but founded party 7
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "7" }),
+    });
+
+    expect(response.status).not.toBe(403);
+    const payload = await response.json();
+    expect(payload.error).toContain("National Committee");
+  });
+
+  it("still blocks a founder in a party they did not found", async () => {
+    await authWithTenure(20, "9"); // founded 9, running in 7
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "7" }),
+    });
+
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.turnsRemaining).toBe(14);
   });
 });

@@ -1,3 +1,8 @@
+/**
+ * Bank runs and depositor protection. processBankSolvencyTurn evaluates bank
+ * confidence, returns fleeing household deposits with their cash, and resolves
+ * failed banks through deposit insurance and the creditor waterfall.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter, BankLoan, InterbankLoan } from "@/lib/db/types/bank";
@@ -10,7 +15,9 @@ import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { recordBankingStage } from "@/lib/banking/telemetry";
 import { archiveCharter } from "@/lib/banking/charterHistory";
 import { getCashReserves } from "@/lib/banking/bankCash";
-import { applyMoneyMove, turnMoveKey } from "@/lib/banking/moneyMove";
+import { MONEY_MOVE_COLLECTION, turnMoveKey } from "@/lib/banking/moneyMove";
+import { settleTransition } from "@/lib/banking/settlementJournal";
+import { oid } from "@/lib/banking/rules/boundary";
 import { computeConfidence, type ConfidenceBand } from "@/lib/banking/confidence";
 import { resolveFailedBankDepositors } from "@/lib/banking/insurance";
 import {
@@ -285,7 +292,7 @@ async function evaluateOneBank(
   let cashReserves = getCashReserves(charter);
   let npcDeposits = Math.max(0, charter.npcDeposits ?? 0);
   const totalLoans = Math.max(0, charter.totalLoans ?? 0);
-  const totalDepositsBefore = Math.max(0, charter.totalDeposits ?? 0);
+  let totalDeposits = Math.max(0, charter.totalDeposits ?? 0);
   const panicTurnsBefore = Math.max(0, charter.panicTurns ?? 0);
   let forcedLiquidation = false;
 
@@ -356,67 +363,76 @@ async function evaluateOneBank(
     const priorBand = charter.warningBand;
     if (priorBand === "amber" || priorBand === "red") {
       const outflow = depositFlight({ priorBand, npcDeposits, cashReserves });
-      if (outflow > 0) {
-        const cbDocId = getBankId(getCountryIdForCurrency(currency));
-        // Fleeing depositors take their money with them. Capped at what the
-        // bank actually holds: a run cannot withdraw cash that is not there,
-        // and what it cannot pay is what the failure test is for.
-        //
-        // Both legs go through the shared money-movement primitive: the vault
-        // debit is guarded and lands before the pool credit, and the claimed
-        // key makes a crashed or re-run pass replay instead of crediting the
-        // pool a second time. The cash moves here; only the deposit AGGREGATE
-        // is written below, as a guarded $inc so it cannot clobber a
-        // concurrent move's $inc with a stale absolute.
-        const flightMove = await applyMoneyMove(db, {
-          key: turnMoveKey("solvency-deposit-flight", corp._id.toString(), turn),
-          kind: "solvency_deposit_flight",
-          turn,
-          legs: [
-            {
-              kind: "debit",
-              amount: outflow,
-              collection: "corporations",
-              filter: { _id: corp._id },
-              path: "bankCharter.cashReserves",
-              note: "fleeing depositors drain the vault",
-            },
-            {
-              kind: "credit",
-              amount: outflow,
-              collection: "centralBanks",
-              filter: { _id: cbDocId },
-              path: "externalBroadMoney",
-              note: "fled deposits return to the household pool",
-            },
-          ],
-        });
-        if (flightMove.status === "applied" || flightMove.status === "replayed") {
-          npcDeposits = Math.max(0, npcDeposits - outflow);
-          cashReserves = Math.max(0, cashReserves - outflow);
-          await db.collection<Corporation>("corporations").updateOne(
-            {
-              _id: corp._id,
-              "bankCharter.status": "active",
-              $or: [
-                { "bankCharter.lastSolvencyTurn": { $ne: turn } },
-                { "bankCharter.lastSolvencyTurn": { $exists: false } },
-              ],
-            },
-            {
-              $set: {
-                "bankCharter.npcDeposits": npcDeposits,
-                updatedAt: new Date(),
-              },
-            }
-          );
-          fled = outflow;
-        }
+      const flightKey = turnMoveKey("solvency-deposit-flight", corp._id.toString(), turn);
+      // An empty vault can be the result of an unfinished debit. Leave that
+      // bank for recovery before testing failure against half-delivered cash.
+      if (outflow === 0) {
+        const unfinished = await db
+          .collection<{ _id: string; status?: string }>(MONEY_MOVE_COLLECTION)
+          .findOne({
+            _id: flightKey,
+            status: "partial",
+          });
+        if (unfinished) return null;
       }
+      const cbDocId = getBankId(getCountryIdForCurrency(currency));
+      const flightMove = await settleTransition(db, {
+        key: flightKey,
+        kind: "solvency_deposit_flight",
+        turn,
+        currency,
+        legs:
+          outflow > 0
+            ? [
+                {
+                  kind: "debit",
+                  amount: outflow,
+                  collection: "corporations",
+                  filter: { _id: oid(corp._id.toString()) },
+                  path: "bankCharter.cashReserves",
+                  note: "fleeing depositors drain the vault",
+                },
+                {
+                  kind: "credit",
+                  amount: outflow,
+                  collection: "centralBanks",
+                  filter: { _id: cbDocId },
+                  path: "externalBroadMoney",
+                  note: "fled deposits return to the household pool",
+                },
+              ]
+            : [],
+        projections: [
+          {
+            collection: "corporations",
+            filter: { _id: oid(corp._id.toString()), "bankCharter.status": "active" },
+            update: {
+              $inc: {
+                "bankCharter.npcDeposits": -outflow,
+                "bankCharter.totalDeposits": -outflow,
+              },
+            },
+            note: "deposit liabilities leave with the withdrawn cash",
+          },
+        ],
+        event: { kind: "account.withdrawn", command: "bank.solvency.flight", amount: outflow },
+      });
+      if (flightMove.status === "partial" || flightMove.status === "rejected" || flightMove.error)
+        return null;
+      const afterFlight = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: corp._id }, { projection: { bankCharter: 1 } });
+      if (!afterFlight?.bankCharter) return null;
+      const settledCharter = afterFlight.bankCharter;
+      // Replays may have loaded the already-reduced balances at the start of
+      // this pass. Read what landed instead of subtracting a fresh quote.
+      fled = Math.max(0, npcDeposits - Math.max(0, settledCharter.npcDeposits ?? 0));
+      npcDeposits = Math.max(0, settledCharter.npcDeposits ?? 0);
+      cashReserves = getCashReserves(settledCharter);
+      totalDeposits = Math.max(0, settledCharter.totalDeposits ?? 0);
     }
   }
 
-  const totalDeposits = Math.max(0, totalDepositsBefore - fled);
   const priorBand = charter.warningBand;
   const equityBase = computePropEquityBase(cashReserves, charter);
 

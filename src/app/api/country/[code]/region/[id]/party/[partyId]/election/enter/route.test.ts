@@ -54,7 +54,7 @@ describe("state party election enter route — tenure gate", () => {
     db.collectionMocks["statePartyCandidates"]!.findOne.mockResolvedValue(null);
   });
 
-  async function mockAccess(partyJoinedTurn: number) {
+  async function mockAccess(partyJoinedTurn: number, foundedPartyId?: string) {
     const { validateStatePartyElectionAccess } =
       await import("@/lib/utils/statePartyElectionValidation");
     vi.mocked(validateStatePartyElectionAccess).mockResolvedValue({
@@ -68,6 +68,7 @@ describe("state party election enter route — tenure gate", () => {
         createdAt: new Date("2026-01-01T00:00:00Z"),
         partyJoinedAt: new Date("2026-01-02T00:00:00Z"),
         partyJoinedTurn,
+        ...(foundedPartyId ? { foundedPartyId } : {}),
       },
       election: {
         _id: new ObjectId(),
@@ -105,6 +106,28 @@ describe("state party election enter route — tenure gate", () => {
     });
 
     expect(response.status).not.toBe(403);
+  });
+
+  it("lets a founder of this party run for state leadership immediately", async () => {
+    await mockAccess(30, "7"); // 0 served, but founded party 7
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "CA", partyId: "7" }),
+    });
+
+    expect(response.status).not.toBe(403);
+  });
+
+  it("still blocks a founder of a different party from state leadership", async () => {
+    await mockAccess(20, "9"); // founded 9, running in 7
+    const { POST } = await import("./route");
+    const response = await POST(new Request("http://localhost/api"), {
+      params: Promise.resolve({ code: "us", id: "CA", partyId: "7" }),
+    });
+
+    expect(response.status).toBe(403);
+    const payload = await response.json();
+    expect(payload.turnsRemaining).toBe(14);
   });
 
   it("waives the tenure gate for founding (pre-iteration) state elections", async () => {

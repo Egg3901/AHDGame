@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 
+import type { ReactElement } from "react";
+import { NextIntlClientProvider } from "next-intl";
+import messages from "../../../../../../../messages/en/corporations.json";
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render as renderView, screen } from "@testing-library/react";
 import { STRANDED_WARN_TURNS } from "@/lib/corporations/strandedPlant";
 import StrandedPlantBanner from "./StrandedPlantBanner";
 
@@ -32,10 +35,9 @@ describe("StrandedPlantBanner", () => {
 
     const warning = screen.getByRole("status");
     expect(warning.textContent).toContain("stockpile storable goods");
-    expect(warning.textContent).toContain("set growth to zero");
-    expect(warning.textContent).toContain("mothball");
-    expect(warning.textContent).toContain("list it for sale");
-    expect(warning.textContent).toContain("abandon it");
+    expect(warning.textContent).toContain("park surplus capacity");
+    expect(warning.textContent).toContain("change to a strategy");
+    expect(warning.textContent).toContain("sell the sector");
   });
 
   it("names special freight and explains its shared capacity cost", () => {
@@ -55,3 +57,11 @@ describe("StrandedPlantBanner", () => {
     expect(warning.textContent).toContain("shared freight capacity");
   });
 });
+
+function render(ui: ReactElement) {
+  return renderView(
+    <NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+      {ui}
+    </NextIntlClientProvider>
+  );
+}

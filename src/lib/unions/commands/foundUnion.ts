@@ -9,6 +9,7 @@
  * sectors, no services, and must organize its way into the industry exactly
  * like an NPP challenger would.
  */
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Character, Union } from "@/lib/db/types";
@@ -106,11 +107,13 @@ export async function foundUnion(
 
   const forexEnabled = await isForexEnabled();
   const preset = await getGameStatePresetOrDefault(db);
+  const campaignRates = forexEnabled ? await loadCampaignCurrencyRates(db) : undefined;
   const homeCurrency = getHomeCurrency(character);
   const costLocal = unionFoundingCostLocal({
     preset,
     countryId: input.countryId,
     forexEnabled,
+    campaignRates,
   });
 
   // Campaign funds live in `currencyBalances.campaign` post-forex and on the

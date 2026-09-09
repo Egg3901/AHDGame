@@ -327,9 +327,20 @@ export async function performRelocation(
     date: now,
   };
 
-  await db
-    .collection<Character>("characters")
-    .updateOne({ _id: characterId }, { $set: update, $push: { careerHistory: relocationEvent } });
+  // A cross-country move drops the character to independent, which ends party
+  // membership just as leave/purge/ban-strip do — so it clears the same two
+  // membership anchors. Leaving `foundedPartyId` behind would let a later
+  // re-add into the founded party revive the leadership tenure exemption
+  // (see lib/parties/leadershipTenure.ts). Same-country moves keep the party,
+  // so neither field is touched.
+  await db.collection<Character>("characters").updateOne(
+    { _id: characterId },
+    {
+      $set: update,
+      $push: { careerHistory: relocationEvent },
+      ...(countryChanged ? { $unset: { partyJoinedTurn: "", foundedPartyId: "" } } : {}),
+    }
+  );
 
   // 9. Update party presence in the old and new states. Runs AFTER the
   //     character update so the headcount reflects the new homeState.

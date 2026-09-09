@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import * as Sentry from "@sentry/nextjs";
 import type { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -47,6 +48,7 @@ export async function processFundGeneration(
     },
     async () => {
       const db = await getDb();
+      const campaignRates = await loadCampaignCurrencyRates(db);
 
       const stateMap =
         preloadedStateMap ??
@@ -88,7 +90,7 @@ export async function processFundGeneration(
 
         // Generation constants are anchor (₳); campaign funds are stored LOCAL and
         // are decoupled from live forex. Denominate to local at the frozen base
-        // INITIAL_RATES scale (US ×1.0). All downstream math (taxes, characterReceives,
+        // world-seeded currency basis (US ×1.0). All downstream math (taxes, characterReceives,
         // tx amounts, treasury credits) then operates in local.
         const totalFundGenerationAnchor = projectCharacterGeneration({
           population: state.population,
@@ -100,7 +102,8 @@ export async function processFundGeneration(
         });
         const totalFundGeneration = campaignAnchorToLocal(
           totalFundGenerationAnchor,
-          character.countryId ?? "US"
+          character.countryId ?? "US",
+          campaignRates
         );
 
         if (character.party === "independent") {

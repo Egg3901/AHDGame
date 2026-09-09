@@ -1,3 +1,4 @@
+import type { CampaignPollProjection } from "@/lib/campaignTargeting/poll";
 import type { DemographicPosition } from "@/lib/seeds/demographicCategories";
 import { DEMOGRAPHIC_TURNOUT_RATES, getEraPositions } from "@/lib/seeds/demographicCategories";
 import type { Layer1Config } from "@/lib/seeds/stateDemographics";
@@ -86,6 +87,7 @@ export interface GranularPollBuilderInput {
 
 /** State-aware inputs for {@link buildGranularPollPayloadForState}. */
 export interface GranularPollForStateInput {
+  campaign?: CampaignPollProjection;
   /** Country code (e.g. "US", "DE"). */
   countryId: string;
   /** Region/state id (e.g. "CT", "BW"). */
@@ -155,31 +157,36 @@ function prettifyDimName(key: string): string {
 function computeCandidateShares(
   cells: GenericGranularCell[],
   character: GranularPollBuilderInput["character"],
-  opponents: GranularPollCandidate[]
+  opponents: GranularPollCandidate[],
+  campaign?: CampaignPollProjection
 ): Record<string, GranularCandidateShare> {
   const candidateShares: Record<string, GranularCandidateShare> = {};
 
   for (const cell of cells) {
-    const youAppeal = calcAppeal(
-      cell.economicLean,
-      cell.socialLean,
-      character.economicPosition,
-      character.socialPosition,
-      character.politicalInfluence ?? 0,
-      false
-    );
+    const youAppeal =
+      (1 + (campaign?.bonusesByCandidate[campaign.myCandidateId]?.[cell.id] ?? 0)) *
+      calcAppeal(
+        cell.economicLean,
+        cell.socialLean,
+        character.economicPosition,
+        character.socialPosition,
+        character.politicalInfluence ?? 0,
+        false
+      );
 
     const opponentEntries = opponents.map((opp) => ({
       id: opp.candidateId,
       name: opp.name,
-      appeal: calcAppeal(
-        cell.economicLean,
-        cell.socialLean,
-        opp.economicPosition,
-        opp.socialPosition,
-        opp.politicalInfluence ?? 0,
-        false
-      ),
+      appeal:
+        (1 + (campaign?.bonusesByCandidate[opp.candidateId]?.[cell.id] ?? 0)) *
+        calcAppeal(
+          cell.economicLean,
+          cell.socialLean,
+          opp.economicPosition,
+          opp.socialPosition,
+          opp.politicalInfluence ?? 0,
+          false
+        ),
     }));
 
     const bestOpponentAppeal = opponentEntries.length
@@ -261,7 +268,17 @@ export function buildGranularPollPayloadForState({
   startingYear,
   character,
   opponents,
+  campaign,
 }: GranularPollForStateInput): GranularPollPayload {
+  if (campaign) {
+    const dims = [...new Set(campaign.cells.flatMap((cell) => Object.keys(cell.buckets)))];
+    return {
+      dims,
+      dimLabels: Object.fromEntries(dims.map((dim) => [dim, prettifyDimName(dim)])),
+      cells: campaign.cells.map(({ identities: _identities, ...cell }) => cell),
+      candidateShares: computeCandidateShares(campaign.cells, character, opponents, campaign),
+    };
+  }
   const resolvedEra =
     era ?? (year != null ? eraIdForYear(year) : eraForPreset(preset ?? DEFAULT_SEED_PRESET));
 

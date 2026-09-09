@@ -1,3 +1,8 @@
+/**
+ * Private-bank loans fund character cash or corporation treasuries from the
+ * bank vault. originateLoan checks income, existing instalments in the loan
+ * currency, charter eligibility and bank lending capacity before disbursement.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type { BankLoan } from "@/lib/db/types/bank";
 import type { Character, Corporation } from "@/lib/db/types";
@@ -132,25 +137,42 @@ export async function averageCorpIncomePerTurn(
 async function committedNamedLoanPaymentPerTurn(
   db: Db,
   borrower: LoanBorrower,
-  currentTurn: number
+  currentTurn: number,
+  currency: CurrencyCode
 ): Promise<number> {
   const loans = await db
-    .collection<Pick<BankLoan, "outstanding" | "ratePercent" | "originatedTurn" | "termTurns">>(
-      "bankLoans"
-    )
+    .collection<
+      Pick<BankLoan, "outstanding" | "ratePercent" | "originatedTurn" | "termTurns" | "currency">
+    >("bankLoans")
     .find({
       borrowerType: borrower.type,
       borrowerId: borrower.id,
       status: { $in: ["current", "arrears"] },
     })
-    .project({ outstanding: 1, ratePercent: 1, originatedTurn: 1, termTurns: 1 })
+    .project({ outstanding: 1, ratePercent: 1, originatedTurn: 1, termTurns: 1, currency: 1 })
     .toArray();
+  const rates = loans.some((loan) => loan.currency !== currency)
+    ? await loadFxRatesByCurrency(db)
+    : new Map<CurrencyCode, number>();
   let sum = 0;
   for (const loan of loans) {
-    sum += namedLoanPaymentDue(
+    const payment = namedLoanPaymentDue(
       loan.outstanding,
       loan.ratePercent,
       remainingLoanTurns(loan.originatedTurn, loan.termTurns, currentTurn)
+    );
+    if (
+      loan.currency !== currency &&
+      (!((rates.get(loan.currency) ?? 0) > 0) || !((rates.get(currency) ?? 0) > 0))
+    ) {
+      return Number.POSITIVE_INFINITY;
+    }
+    sum += convertFaceBetweenCurrencies(
+      payment,
+      loan.currency,
+      currency,
+      rates.get(loan.currency) ?? 0,
+      rates.get(currency) ?? 0
     );
   }
   return sum;
@@ -180,7 +202,7 @@ export async function characterIncomeInLoanCurrency(
  * already committed, blacklist standing, currency match. Loaded once here so
  * the decision is a pure function of the snapshot and this record.
  */
-async function loadBorrowerSnapshot(
+export async function loadBorrowerSnapshot(
   db: Db,
   charter: NonNullable<Corporation["bankCharter"]>,
   currency: CurrencyCode,
@@ -197,7 +219,12 @@ async function loadBorrowerSnapshot(
         type: "character",
         id: borrower.id.toString(),
         incomePerTurn: await characterIncomeInLoanCurrency(db, character, currency),
-        committedPaymentPerTurn: await committedNamedLoanPaymentPerTurn(db, borrower, currentTurn),
+        committedPaymentPerTurn: await committedNamedLoanPaymentPerTurn(
+          db,
+          borrower,
+          currentTurn,
+          currency
+        ),
         blocked: isBlockedBorrower(charter, { characterId: borrower.id.toString() }, resolveFunds),
         currencyMatches: true,
       },
@@ -211,7 +238,12 @@ async function loadBorrowerSnapshot(
       type: "corporation",
       id: borrower.id.toString(),
       incomePerTurn: await averageCorpIncomePerTurn(db, borrower.id, currentTurn),
-      committedPaymentPerTurn: await committedNamedLoanPaymentPerTurn(db, borrower, currentTurn),
+      committedPaymentPerTurn: await committedNamedLoanPaymentPerTurn(
+        db,
+        borrower,
+        currentTurn,
+        currency
+      ),
       blocked: isBlockedBorrower(charter, { corporationId: borrower.id.toString() }, resolveFunds),
       currencyMatches: resolveCorpLiquidCurrencyCode(corp) === currency,
     },

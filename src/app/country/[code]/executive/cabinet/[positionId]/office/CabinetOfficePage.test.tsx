@@ -1,9 +1,21 @@
 /** @vitest-environment happy-dom */
-import { describe, it, expect, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import type { EstateSummaryView } from "./useCabinetOffice";
+
+const office: {
+  positionId: string;
+  canView: boolean;
+  nationalMetrics: Record<string, number>;
+  estateSummary?: EstateSummaryView;
+} = vi.hoisted(() => ({
+  positionId: "secretary_of_treasury",
+  canView: true,
+  nationalMetrics: {},
+}));
 
 vi.mock("next/navigation", () => ({
-  useParams: () => ({ code: "us", positionId: "secretary_of_treasury" }),
+  useParams: () => ({ code: "us", positionId: office.positionId }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 vi.mock("next/link", () => ({
@@ -53,6 +65,7 @@ vi.mock("./useCabinetOffice", () => ({
     error: null,
     refetch: vi.fn(),
     data: {
+      canView: office.canView,
       canAct: false,
       member: {
         characterId: "c1",
@@ -63,7 +76,8 @@ vi.mock("./useCabinetOffice", () => ({
         ministerialActions: 3,
         bannerImageUrl: null,
       },
-      nationalMetrics: {},
+      nationalMetrics: office.nationalMetrics,
+      estateSummary: office.estateSummary,
       regionData: [],
       regionalBudgets: [],
       currentSettings: null,
@@ -77,6 +91,12 @@ vi.mock("./useCabinetOffice", () => ({
 
 import CabinetOfficePage from "./page";
 
+beforeEach(() => {
+  office.positionId = "secretary_of_treasury";
+  office.canView = true;
+  office.nationalMetrics = {};
+  office.estateSummary = undefined;
+});
 afterEach(cleanup);
 
 describe("CabinetOfficePage tabs", () => {
@@ -95,5 +115,58 @@ describe("CabinetOfficePage tabs", () => {
     expect(screen.queryByText("ORDERS")).toBeNull();
     expect(screen.queryByText("FX")).toBeNull();
     expect(screen.queryByText("BOND")).toBeNull();
+  });
+});
+
+describe("estate office outcome metrics", () => {
+  beforeEach(() => {
+    office.positionId = "attorney_general";
+    office.nationalMetrics = {
+      "publicSafety.incarcerationRate": 123.4,
+      "publicSafety.recidivismRate": 32.1,
+    };
+    office.estateSummary = {
+      count: 2,
+      totalUpkeep: 5,
+      envelope: 20_000_000,
+      portfolioKey: "justice",
+      bySite: {},
+    };
+  });
+
+  it("shows national outcomes together with facilities and their costs", () => {
+    render(<CabinetOfficePage />);
+
+    expect(screen.getByText("Incarceration Rate")).toBeTruthy();
+    expect(screen.getByText("123.4")).toBeTruthy();
+    expect(screen.getByText("Recidivism Rate")).toBeTruthy();
+    expect(screen.getByText("32.1%")).toBeTruthy();
+    expect(screen.getByText("Facilities")).toBeTruthy();
+    expect(screen.getByText("Annual upkeep")).toBeTruthy();
+  });
+
+  it("keeps outcome metrics visible before a portfolio has any facilities", () => {
+    office.estateSummary = {
+      count: 0,
+      totalUpkeep: 0,
+      envelope: 20_000_000,
+      portfolioKey: "justice",
+      bySite: {},
+    };
+    render(<CabinetOfficePage />);
+
+    expect(screen.getByText("Incarceration Rate")).toBeTruthy();
+    expect(screen.getByText("Recidivism Rate")).toBeTruthy();
+    expect(screen.getByText("Facilities")).toBeTruthy();
+  });
+
+  it("withholds both outcomes and facilities from a restricted viewer", () => {
+    office.canView = false;
+    render(<CabinetOfficePage />);
+
+    expect(screen.getByText("Office records restricted")).toBeTruthy();
+    expect(screen.queryByText("Incarceration Rate")).toBeNull();
+    expect(screen.queryByText("Recidivism Rate")).toBeNull();
+    expect(screen.queryByText("Facilities")).toBeNull();
   });
 });

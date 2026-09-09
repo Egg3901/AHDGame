@@ -265,7 +265,8 @@ export function distributeVotesByGroupLevelAllocation(
             stateOrgMult *
             homeStateMult *
             partyInfluenceMult *
-            manifestoMult
+            manifestoMult *
+            (1 + (ec.targetedAdBonuses?.[group.id] ?? 0))
         );
         weights[ec.candidateId] = w;
       }

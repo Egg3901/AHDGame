@@ -8,6 +8,17 @@ import {
 } from "./primaryMarket";
 
 describe("planEquityUnderwriting", () => {
+  it("uses the calibrated liquidity target after an accounting reclassification", () => {
+    expect(
+      planEquityUnderwriting({
+        requestedShares: 20000,
+        poolCashLocal: 100000,
+        poolM2Local: 2000,
+        poolLiquidityTargetLocal: 50000,
+        pricePerShareLocal: 1,
+      }).placedShares
+    ).toBe(10000);
+  });
   it("commits twenty percent of the pool's M2-sized equity allocation", () => {
     const plan = planEquityUnderwriting({
       requestedShares: 20_000,
@@ -34,7 +45,8 @@ describe("planEquityUnderwriting", () => {
     db.collectionMocks.equityMarketPools.findOne.mockResolvedValue({
       cashLocal: 100_000,
       targetCashLocal: 50_000,
-      m2Local: 1_000_000,
+      m2Local: 2_000,
+      poolAccountingVersion: 2,
     });
     db.collectionMocks.equityMarketPools.findOneAndUpdate.mockResolvedValue({ cashLocal: 90_000 });
     const placement = await prepareEquityPrimaryPlacement(

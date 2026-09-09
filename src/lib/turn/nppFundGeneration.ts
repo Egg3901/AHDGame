@@ -16,7 +16,11 @@ import type {
   Character,
 } from "@/lib/db/types";
 import { projectNppGeneration, calculateTaxAmount } from "@/lib/utils/fundGeneration";
-import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import {
+  campaignAnchorToLocal,
+  campaignLocalRate,
+  loadCampaignCurrencyRates,
+} from "@/lib/campaigns/campaignCurrency";
 import { DEFAULT_NPP_STATE_TAX_RATE } from "@/lib/constants/partyOrg";
 import {
   emitTreasuryTransactionsBulk,
@@ -75,6 +79,7 @@ export async function processNppFundGeneration(
   // `singleplayerDifficulty/rules/behavior.ts` and never touches funds or AP.
   const difficulty = await loadSingleplayerDifficulty(db);
   const tuning = singleplayerNppTuning(difficulty);
+  const campaignRates = await loadCampaignCurrencyRates(db);
 
   const stateMap =
     preloadedStateMap ??
@@ -138,10 +143,10 @@ export async function processNppFundGeneration(
       const finite = (v: number | undefined | null) => (Number.isFinite(v) ? (v as number) : 0);
       // npp.funds is stored in LOCAL home currency. NPP funds are decoupled from
       // live forex: the anchor generation is denominated to local at the frozen
-      // base INITIAL_RATES scale (US ×1.0). To keep the diminishing-returns soft
+      // world-seeded currency basis (US ×1.0). To keep the diminishing-returns soft
       // cap triggering at the same economic scale in every country, feed the
       // curve the ANCHOR-EQUIVALENT balance (localFunds ÷ rate).
-      const rate = campaignLocalRate(npp.countryId ?? "US");
+      const rate = campaignLocalRate(npp.countryId ?? "US", campaignRates);
       const currentFundsLocal = finite(npp.funds);
       const currentFundsAnchor = rate > 0 ? currentFundsLocal / rate : currentFundsLocal;
       const donorBaseLevel = finite(npp.donorBaseLevel);
@@ -154,7 +159,8 @@ export async function processNppFundGeneration(
         nppEconomyEnabled: true,
       });
       const grossFundsLocal =
-        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US") * tuning.fundMultiplier;
+        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US", campaignRates) *
+        tuning.fundMultiplier;
 
       const currentActions = finite(npp.actionPoints);
       const newActions = Math.min(

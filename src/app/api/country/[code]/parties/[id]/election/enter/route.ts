@@ -23,10 +23,11 @@ import type {
 } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameTime } from "@/lib/time/gameTime";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
 import { isActiveNationalPartyCandidateDuplicateKey } from "@/lib/elections/duplicateKey";
 import { isSameCountry } from "@/lib/api/sameCountry";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string }>;
@@ -95,7 +96,10 @@ export async function POST(request: Request, { params }: RouteParams) {
     // Filter by countryId to avoid cross-country sequential ID collisions
     const election = await db
       .collection<NationalPartyElection>("nationalPartyElections")
-      .findOne({ partyId, countryId: partyCountryId, position, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, position, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
 
     if (!election) {
       logRequest("POST", path, 400, Date.now() - start);
@@ -148,7 +152,13 @@ export async function POST(request: Request, { params }: RouteParams) {
     // standing for leadership (see leadershipTenure.ts). Independent of the
     // 24h new-character cooldown above; likewise waived for founding elections.
     if (!election.founding) {
-      const tenure = getPartyTenure(authUser.character.partyJoinedTurn, gameTime.currentTurn);
+      // Canonical id from the resolved party, not the raw path segment
+      // ("07" vs "7"); see getPartyIdString in lib/db/partyLookup.
+      const tenure = getLeadershipEligibility(
+        authUser.character,
+        gameTime.currentTurn,
+        String(party.sequentialId)
+      );
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
         return NextResponse.json(
@@ -231,7 +241,10 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const openCommitteeElection = await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
-      .findOne({ partyId, countryId: partyCountryId, status: "voting" });
+      .findOne(
+        { partyId, countryId: partyCountryId, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      );
     if (
       openCommitteeElection &&
       !hasTurnBackedWindowClosed(openCommitteeElection, gameTime.currentTurn, gameTime.effectiveNow)

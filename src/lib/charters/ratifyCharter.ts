@@ -246,6 +246,10 @@ export async function ratifyCharter(
           party: partyIdStr,
           partyJoinedAt: now,
           partyJoinedTurn: charterCurrentTurn,
+          // Founding a party must not lock you out of leading it. The tenure
+          // stamp above starts a 24-turn clock; this marker exempts the three
+          // founders from that gate in this party alone (leadershipTenure.ts).
+          foundedPartyId: partyIdStr,
           // Founding a party is a join — stamp the durable party-switch
           // cooldown anchor too (mirrors the join route), so a founder who
           // later goes independent still carries it and can't dodge the 24h

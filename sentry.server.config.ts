@@ -3,6 +3,7 @@
 // https://docs.sentry.io/platforms/javascript/guides/nextjs/
 
 import * as Sentry from "@sentry/nextjs";
+import { scrubPushRequest } from "@/lib/nativePush/telemetry";
 
 // RAILWAY_ENVIRONMENT_NAME is injected on all Railway deployments.
 // Disabling locally prevents MongoParseError / MONGODB_URI-missing noise flooding the dashboard.
@@ -49,7 +50,10 @@ Sentry.init({
   // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#sendDefaultPii
   sendDefaultPii: false,
 
+  beforeSendTransaction: scrubPushRequest,
+
   beforeSend(event) {
+    scrubPushRequest(event);
     const value = event.exception?.values?.[0];
     const frames = value?.stacktrace?.frames ?? [];
     const hasAppFrame = frames.some((f) => f.in_app === true);

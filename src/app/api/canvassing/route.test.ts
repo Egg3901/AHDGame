@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import { NextRequest } from "next/server";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Character } from "@/lib/db/types";
+
+vi.mock("@/lib/campaignTargeting/audience", () => ({
+  loadCampaignAudience: vi.fn().mockResolvedValue(null),
+}));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/time/gameTime", async (importActual) => ({
@@ -452,5 +457,209 @@ describe("POST /api/canvassing running-mate surrogate branch", () => {
       (calls[1][1] as { $inc?: { runningMateSurrogateActionsRemaining?: number } }).$inc
         ?.runningMateSurrogateActionsRemaining
     ).toBe(3);
+  });
+});
+
+describe("canvassing campaign turnout integration", () => {
+  let db: MockDb;
+  const payload = { stateId: "GA", category: "race", group: "white", count: 5 };
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: { userId: "u1", character: authedCharacter({ countryId: "US" }) },
+    } as never);
+    const turnoutCollection = {
+      findOne: vi.fn().mockResolvedValue({
+        _id: "GA",
+        countryId: "US",
+        modifiers: { race: { white: 0 } },
+        lastUpdated: new Date(0),
+      }),
+      updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
+    };
+    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+    vi.mocked(getStateDemographicTurnoutCollection).mockResolvedValue(turnoutCollection as never);
+    db.collection("states").findOne.mockResolvedValue({
+      _id: "GA",
+      countryId: "US",
+      population: 1_000_000,
+      votingEligiblePopulation: 1_000_000,
+    });
+    db.collection("stateDemographics").findOne.mockResolvedValue({
+      _id: "GA",
+      countryId: "US",
+      categoryWeights: {},
+      groups: {},
+      lastUpdated: new Date(0),
+    });
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current", currentTurn: 100 });
+    const { loadCampaignAudience } = await import("@/lib/campaignTargeting/audience");
+    const actual = await vi.importActual<typeof import("@/lib/campaignTargeting/audience")>(
+      "@/lib/campaignTargeting/audience"
+    );
+    vi.mocked(loadCampaignAudience).mockImplementation(actual.loadCampaignAudience);
+  });
+
+  it.each(["UK", "JP", "DE", "IE", "CN", "BR", "DD"])(
+    "rejects a native-only target in a legacy %s race without spending",
+    async (countryId) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ok: true,
+        user: {
+          userId: "u1",
+          character: authedCharacter({ countryId: countryId as Character["countryId"] }),
+        },
+      } as never);
+      db.collection("elections").find.mockReturnValue({
+        toArray: async () => [{ _id: new ObjectId(), status: "active" }],
+      });
+      const { POST } = await import("./route");
+      const result = await POST(
+        new NextRequest(makeRequest({ ...payload, category: "education", group: "tertiary" }))
+      );
+      expect(result.status).toBe(400);
+      expect((await result.json()).error).toContain("legacy canvassing groups");
+      expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+      const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+      expect((await getStateDemographicTurnoutCollection()).updateOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(["UK", "JP", "DE", "IE", "CN", "BR", "DD"])(
+    "still applies original voter-group canvassing in a legacy %s race",
+    async (countryId) => {
+      const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
+      vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+        ok: true,
+        user: {
+          userId: "u1",
+          character: authedCharacter({ countryId: countryId as Character["countryId"] }),
+        },
+      } as never);
+      db.collection("elections").find.mockReturnValue({
+        toArray: async () => [{ _id: new ObjectId(), status: "active" }],
+      });
+      const { getDemographicCategoriesForCountry } =
+        await import("@/lib/demographics/countryDemographics");
+      const category = getDemographicCategoriesForCountry(countryId)[0];
+      const { POST } = await import("./route");
+      const result = await POST(
+        new NextRequest(
+          makeRequest({ ...payload, category: category.key, group: category.groups[0].id })
+        )
+      );
+      expect(result.status).toBe(200);
+      expect(Number((await result.json()).effect.legacyBoost)).toBeGreaterThan(0);
+      const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+      expect((await getStateDemographicTurnoutCollection()).updateOne).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            [`modifiers.${category.key}.${category.groups[0].id}`]: expect.any(Number),
+          }),
+        })
+      );
+    }
+  );
+
+  it("rejects a stale or foreign explicit race before spending", async () => {
+    const { POST } = await import("./route");
+    const result = await POST(
+      new NextRequest(makeRequest({ ...payload, electionId: new ObjectId().toString() }))
+    );
+    expect(result.status).toBe(400);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps legacy US ideology canvassing available and reports the legacy boost", async () => {
+    db.collection("elections").find.mockReturnValue({
+      toArray: async () => [{ campaignRulesVersion: undefined }],
+    });
+    const { getDemographicCategoriesForCountry } =
+      await import("@/lib/demographics/countryDemographics");
+    const group = getDemographicCategoriesForCountry("US").find(
+      (category) => category.key === "ideology"
+    )!.groups[0].id;
+    const { POST } = await import("./route");
+    const result = await POST(
+      new NextRequest(makeRequest({ ...payload, category: "ideology", group }))
+    );
+    expect(result.status).toBe(200);
+    const { effect } = await result.json();
+    expect(effect.campaignRulesVersion).toBe(0);
+    expect(Number(effect.boost)).toBeGreaterThan(0);
+    expect(effect.boost).toBe(effect.legacyBoost);
+  });
+
+  it("rate-limits previews before deriving any cells", async () => {
+    const { checkRateLimit, rateLimitResponse } = await import("@/lib/api/rateLimit");
+    vi.mocked(checkRateLimit).mockReturnValueOnce({ ok: false, retryAfter: 10 } as never);
+    vi.mocked(rateLimitResponse).mockReturnValueOnce(
+      new (await import("next/server")).NextResponse(null, { status: 429 })
+    );
+    const { loadCampaignAudience } = await import("@/lib/campaignTargeting/audience");
+    const { GET } = await import("./route");
+    const result = await GET(new NextRequest("http://localhost/api/canvassing"));
+    expect(result.status).toBe(429);
+    expect(loadCampaignAudience).not.toHaveBeenCalled();
+  });
+
+  it("previews the actual blended turnout and writes both election versions", async () => {
+    const { GET, POST } = await import("./route");
+    const preview = await GET(
+      new NextRequest("http://localhost/api/canvassing?category=race&group=white&count=5")
+    );
+    expect(preview.status).toBe(200);
+    expect(preview.headers.get("cache-control")).toBe("private, no-store");
+    const quote = await preview.json();
+    expect(quote.targets).toContainEqual({ dimension: "race", bucket: "white" });
+    expect(quote.preview.turnoutAfter).toBeGreaterThan(quote.preview.turnoutBefore);
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+    const result = await POST(new NextRequest(makeRequest(payload)));
+    expect(result.status).toBe(200);
+    const body = await result.json();
+    expect(body.effect.turnoutAfter).toBeCloseTo(quote.preview.turnoutAfter, 6);
+    expect(Number(body.effect.boost)).toBeGreaterThan(Number(body.effect.legacyBoost) * 10);
+    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+    const collection = await getStateDemographicTurnoutCollection();
+    expect(collection.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: "GA", lastUpdated: new Date(0) }),
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          "modifiers.race.white": expect.any(Number),
+          campaignModifiers: expect.objectContaining({ race: { white: expect.any(Number) } }),
+        }),
+      })
+    );
+  });
+
+  it.each([0, -1, 1.5, 51, "5"])(
+    "rejects malformed batch count %s before spending",
+    async (count) => {
+      const { POST } = await import("./route");
+      const response = await POST(new NextRequest(makeRequest({ ...payload, count })));
+      expect(response.status).toBe(400);
+      expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it("rejects a stale turnout write and refunds the full spend", async () => {
+    const { getStateDemographicTurnoutCollection } = await import("@/lib/db/collections");
+    const collection = await getStateDemographicTurnoutCollection();
+    vi.mocked(collection.updateOne).mockResolvedValue({ modifiedCount: 0 } as never);
+    const { POST } = await import("./route");
+    const response = await POST(new NextRequest(makeRequest(payload)));
+    expect(response.status).toBe(409);
+    const calls = db.collection("characters").updateOne.mock.calls;
+    expect(calls).toHaveLength(2);
+    expect(calls[0][1].$inc).toEqual({ actions: -5, funds: -500 });
+    expect(calls[1][1].$inc).toEqual({ actions: 5, funds: 500 });
   });
 });

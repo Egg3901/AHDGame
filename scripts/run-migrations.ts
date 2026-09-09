@@ -13,14 +13,14 @@
 // Flags:
 //   --dry-run     don't write the marker; pass dryRun=true into each migration
 //   --only=a,b,c  only run the named migrations (comma-separated; preserves registry order).
-//                 --only can ALSO name a ROLLBACK_MIGRATIONS entry, which the
-//                 automatic (no-flag) run never touches.
+//                 --only can ALSO name a ROLLBACK_MIGRATIONS or HELD_MIGRATIONS
+//                 entry, which the automatic (no-flag) run never touches.
 //   --from=id     run from this id onward
 //   --force       with --only, re-run even if marker exists (idempotent migrations only)
 
 import { connectDb, closeDb } from "./utils/db";
 import { runMigrations } from "../src/lib/migrations/runner";
-import { MIGRATIONS, ROLLBACK_MIGRATIONS } from "../src/lib/migrations/registry";
+import { MIGRATIONS, ROLLBACK_MIGRATIONS, HELD_MIGRATIONS } from "../src/lib/migrations/registry";
 
 interface ParsedArgs {
   dryRun: boolean;
@@ -74,7 +74,11 @@ async function main() {
   // this the registered entry was unreachable through the runner entirely,
   // which is worse than having no rollback at all — the escape hatch existed
   // but could not be opened.
-  const candidates = args.only ? [...MIGRATIONS, ...ROLLBACK_MIGRATIONS] : MIGRATIONS;
+  // HELD entries are out of the deploy chain for the same reason and are
+  // likewise reachable only by naming them explicitly.
+  const candidates = args.only
+    ? [...MIGRATIONS, ...ROLLBACK_MIGRATIONS, ...HELD_MIGRATIONS]
+    : MIGRATIONS;
 
   const db = await connectDb();
   try {

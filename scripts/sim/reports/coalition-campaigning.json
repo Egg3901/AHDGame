@@ -1,0 +1,250 @@
+{
+  "fixture": "Synthetic four-dimension electorate, 1,000,000 eligible voters; no player data",
+  "baseline": {
+    "rightShare": 32.4361,
+    "voters": 500000
+  },
+  "closeRace": {
+    "before": 49.6276,
+    "after": 50.3387
+  },
+  "canvassing": [
+    {
+      "actions": 1,
+      "legacyModifier": 0.05,
+      "modernModifier": 2,
+      "legacyTargetTurnout": 50,
+      "modernTargetTurnout": 50.5,
+      "rightShare": 32.5181,
+      "addedVoters": 2000
+    },
+    {
+      "actions": 5,
+      "legacyModifier": 0.2488,
+      "modernModifier": 8.1902,
+      "legacyTargetTurnout": 50.1,
+      "modernTargetTurnout": 52,
+      "rightShare": 32.7602,
+      "addedVoters": 8000
+    },
+    {
+      "actions": 10,
+      "legacyModifier": 0.4944,
+      "modernModifier": 13.0264,
+      "legacyTargetTurnout": 50.1,
+      "modernTargetTurnout": 53.1,
+      "rightShare": 32.9175,
+      "addedVoters": 13000
+    },
+    {
+      "actions": 20,
+      "legacyModifier": 0.9766,
+      "modernModifier": 17.5685,
+      "legacyTargetTurnout": 50.2,
+      "modernTargetTurnout": 54.1,
+      "rightShare": 33.0563,
+      "addedVoters": 17600
+    },
+    {
+      "actions": 50,
+      "legacyModifier": 2.3528,
+      "modernModifier": 19.8969,
+      "legacyTargetTurnout": 50.6,
+      "modernTargetTurnout": 54.6,
+      "rightShare": 33.1331,
+      "addedVoters": 19600
+    }
+  ],
+  "upkeep": [
+    {
+      "turn": 1,
+      "modifier": 2,
+      "targetTurnout": 50.5
+    },
+    {
+      "turn": 2,
+      "modifier": 3.6036,
+      "targetTurnout": 50.9
+    },
+    {
+      "turn": 3,
+      "modifier": 4.8894,
+      "targetTurnout": 51.2
+    },
+    {
+      "turn": 4,
+      "modifier": 5.9204,
+      "targetTurnout": 51.4
+    },
+    {
+      "turn": 5,
+      "modifier": 6.747,
+      "targetTurnout": 51.6
+    },
+    {
+      "turn": 6,
+      "modifier": 7.4098,
+      "targetTurnout": 51.8
+    },
+    {
+      "turn": 7,
+      "modifier": 7.9413,
+      "targetTurnout": 51.9
+    },
+    {
+      "turn": 8,
+      "modifier": 8.3674,
+      "targetTurnout": 52
+    },
+    {
+      "turn": 9,
+      "modifier": 8.709,
+      "targetTurnout": 52.1
+    },
+    {
+      "turn": 10,
+      "modifier": 8.983,
+      "targetTurnout": 52.2
+    },
+    {
+      "turn": 11,
+      "modifier": 9.2026,
+      "targetTurnout": 52.2
+    },
+    {
+      "turn": 12,
+      "modifier": 9.3787,
+      "targetTurnout": 52.3
+    },
+    {
+      "turn": 13,
+      "modifier": 9.52,
+      "targetTurnout": 52.3
+    },
+    {
+      "turn": 14,
+      "modifier": 9.6332,
+      "targetTurnout": 52.3
+    },
+    {
+      "turn": 15,
+      "modifier": 9.724,
+      "targetTurnout": 52.3
+    },
+    {
+      "turn": 16,
+      "modifier": 9.7968,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 17,
+      "modifier": 9.8551,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 18,
+      "modifier": 9.9019,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 19,
+      "modifier": 9.9395,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 20,
+      "modifier": 9.9695,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 21,
+      "modifier": 9.9937,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 22,
+      "modifier": 10.013,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 23,
+      "modifier": 10.0285,
+      "targetTurnout": 52.4
+    },
+    {
+      "turn": 24,
+      "modifier": 10.041,
+      "targetTurnout": 52.4
+    }
+  ],
+  "advertising": [
+    {
+      "turn": 1,
+      "exposure": 1,
+      "minMatchingBonusPct": 1.1059,
+      "maxMatchingBonusPct": 8.2355,
+      "rightShare": 32.5584,
+      "shareGain": 0.1223
+    },
+    {
+      "turn": 3,
+      "exposure": 2.8348,
+      "minMatchingBonusPct": 1.6468,
+      "maxMatchingBonusPct": 12.2632,
+      "rightShare": 32.617,
+      "shareGain": 0.1809
+    },
+    {
+      "turn": 6,
+      "exposure": 3,
+      "minMatchingBonusPct": 1.6624,
+      "maxMatchingBonusPct": 12.3798,
+      "rightShare": 32.6187,
+      "shareGain": 0.1825
+    },
+    {
+      "turn": 12,
+      "exposure": 3,
+      "minMatchingBonusPct": 1.6624,
+      "maxMatchingBonusPct": 12.3798,
+      "rightShare": 32.6187,
+      "shareGain": 0.1825
+    },
+    {
+      "turn": 18,
+      "exposure": 2.1213,
+      "minMatchingBonusPct": 1.5398,
+      "maxMatchingBonusPct": 11.4667,
+      "rightShare": 32.6055,
+      "shareGain": 0.1693
+    },
+    {
+      "turn": 24,
+      "exposure": 1.5,
+      "minMatchingBonusPct": 1.3592,
+      "maxMatchingBonusPct": 10.1214,
+      "rightShare": 32.586,
+      "shareGain": 0.1498
+    },
+    {
+      "turn": 36,
+      "exposure": 0.75,
+      "minMatchingBonusPct": 0.9231,
+      "maxMatchingBonusPct": 6.8742,
+      "rightShare": 32.5385,
+      "shareGain": 0.1023
+    }
+  ],
+  "combined": {
+    "rightShare": 33.1064,
+    "shareGain": 0.6703,
+    "voters": 513000
+  },
+  "checks": [
+    "ballot conservation",
+    "turnout boost survives four-way blend",
+    "no ads outside selected identity",
+    "flight builds then decays",
+    "canvassing and ads combine"
+  ]
+}

@@ -97,7 +97,7 @@ describe("dues and services controls, head-only gating", () => {
     expect(screen.queryByRole("button", { name: /set dues/i })).toBeNull();
 
     // Read-only services list, no toggle switches and no save button.
-    expect(screen.getByText("Running")).toBeTruthy();
+    expect(screen.getByText("Selected")).toBeTruthy();
     expect(screen.queryByRole("switch")).toBeNull();
     expect(screen.queryByRole("button", { name: /save services/i })).toBeNull();
     expect(screen.queryByRole("slider", { name: /percent of remaining budget/i })).toBeNull();

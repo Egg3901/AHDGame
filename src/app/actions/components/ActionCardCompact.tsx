@@ -2,6 +2,7 @@
 
 import { memo, useState } from "react";
 import Link from "next/link";
+import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { calculateConvertCashInfamy } from "@/lib/actions";
@@ -19,6 +20,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
   flipflopAxis,
   flipflopDir,
   onExecute,
+  onOpenCampaignAction,
   onFlipflop,
   onFlipflopStepChange,
   onFlipflopAxisChange,
@@ -43,7 +45,9 @@ const ActionCardCompact = memo(function ActionCardCompact({
   onConvertCashAmountChange,
   onConvertCashExecute,
 }: ActionCardProps) {
-  const { formatAmount, convert, forexRates } = useCurrency();
+  const { formatAmount, baseRates } = useCurrency();
+  const politicalLocal = (amount: number) =>
+    forexEnabled ? campaignAnchorToLocal(amount, character.countryId ?? "US", baseRates) : amount;
   // Self-funding confirm step: acknowledge the Infamy cost before submitting.
   const [convertConfirming, setConvertConfirming] = useState(false);
   const isCampaign = card.type === "campaign";
@@ -68,9 +72,21 @@ const ActionCardCompact = memo(function ActionCardCompact({
   else effectiveFundCost = card.fundCost(character);
 
   let effectiveFundLabel: string;
-  if (isCampaign) effectiveFundLabel = formatAmount(campaignFundCost);
-  else if (isAdvertise) effectiveFundLabel = formatAmount(advertiseFundCost);
-  else if (isBuildDonorBase) effectiveFundLabel = formatAmount(buildDonorBaseFundCost);
+  if (isCampaign)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(campaignFundCost),
+      campaignCurrency
+    );
+  else if (isAdvertise)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(advertiseFundCost),
+      campaignCurrency
+    );
+  else if (isBuildDonorBase)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(buildDonorBaseFundCost),
+      campaignCurrency
+    );
   else if (isFundraise)
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
@@ -81,8 +97,7 @@ const ActionCardCompact = memo(function ActionCardCompact({
   const noDonor = card.requiresDonorBase && (character.donorBaseLevel ?? 0) === 0;
   const noCash = isConvertCash && displayPersonalWealth <= 0;
   const fundNeeded = effectiveFundCost;
-  const fundNeededConverted =
-    fundNeeded !== null && forexEnabled && forexRates ? convert(fundNeeded) : fundNeeded;
+  const fundNeededConverted = fundNeeded !== null ? politicalLocal(fundNeeded) : fundNeeded;
   const cantAffordFunds =
     fundNeededConverted !== null && displayCampaignFunds < fundNeededConverted;
   const cantAffordActions = character.actions < effectiveActionCost;
@@ -165,7 +180,15 @@ const ActionCardCompact = memo(function ActionCardCompact({
 
         {/* Right column: button row — always right aligned */}
         <div className="flex items-center justify-start sm:justify-end">
-          {card.href ? (
+          {(card.type === "canvass" || card.type === "targetedAds") && onOpenCampaignAction ? (
+            <button
+              type="button"
+              onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
+              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold hover:bg-primary/10"
+            >
+              {card.label}
+            </button>
+          ) : card.href ? (
             <Link
               href={card.href}
               className="inline-flex items-center justify-center gap-1 w-full sm:w-auto rounded-md border border-white/15 bg-white/10 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-white/20 hover:border-white/30 transition-all backdrop-blur-sm"

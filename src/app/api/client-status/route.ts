@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { ObjectId } from "mongodb";
@@ -416,10 +417,11 @@ export async function GET(request: Request) {
     );
     const populationTier = getPopulationTier(statePopulation);
     // fundDistribution is anchor; campaign funds display in LOCAL at the frozen
-    // base INITIAL_RATES scale (same conversion the turn processor deposits), so
+    // world-seeded currency basis (same conversion the turn processor deposits), so
     // the tooltip matches the credited amount. Face-formatted client-side (no forex).
+    const campaignRates = await loadCampaignCurrencyRates(db);
     const toCampaignLocal = (anchor: number) =>
-      campaignAnchorToLocal(anchor, character.countryId ?? "US");
+      campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates);
     const campaignIncomeBreakdown = {
       populationTier,
       baseGen: toCampaignLocal(fundDistribution.baseGeneration),

@@ -110,13 +110,15 @@ export type BankCommand =
   | {
       /**
        * Fund a loan that was parked as pending for CEO approval. Re-checks
-       * headroom and the blacklist against the snapshot, because the queue
+       * the bank lifecycle and borrower affordability against the snapshot; the queue
        * may be stale by the time the CEO decides.
        */
       type: "disburse_pending_loan";
       loanId: string;
-      borrower: Pick<BorrowerSnapshot, "type" | "id" | "blocked">;
+      borrower: BorrowerSnapshot;
       principal: number;
+      ratePercent: number;
+      termTurns: number;
     }
   | {
       /** CEO declines a pending loan. No money moves. */

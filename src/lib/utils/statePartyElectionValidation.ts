@@ -5,6 +5,7 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { getGameTime } from "@/lib/time/gameTime";
 import { hasTurnBackedWindowClosed } from "@/lib/time/turnBackedWindow";
+import { CANONICAL_VOTING_ELECTION_SORT } from "@/lib/elections/canonicalVotingElection";
 import type {
   StatePartyElection,
   StatePartyElectionPosition,
@@ -82,12 +83,15 @@ export async function validateStatePartyElectionAccess(
     };
   }
 
-  const election = await db.collection<StatePartyElection>("statePartyElections").findOne({
-    stateId,
-    partyId: canonicalPartyId,
-    position,
-    status: "voting",
-  });
+  const election = await db.collection<StatePartyElection>("statePartyElections").findOne(
+    {
+      stateId,
+      partyId: canonicalPartyId,
+      position,
+      status: "voting",
+    },
+    { sort: CANONICAL_VOTING_ELECTION_SORT }
+  );
 
   if (!election) {
     return {

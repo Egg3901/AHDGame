@@ -114,12 +114,18 @@ function checkMembership(
   return null;
 }
 
-/** Committee (open / ballot / resolve) actions exist only on committee banks. */
+/** Committee actions require an independent bank with a committee. */
 function checkCommitteeBank(state: JurisdictionState): GovernanceDecision | null {
   if (!state.committeeBank) {
     return refuse(
       "no-committee",
       "This central bank has no rate-setting committee: the rate is set directly."
+    );
+  }
+  if (state.governmentControlled) {
+    return refuse(
+      "government-controlled",
+      "The committee is dormant while the government sets the rate."
     );
   }
   return null;
@@ -164,11 +170,18 @@ function resolveMeetingInto(
   if ((!tally.decided || awaitingPlayer) && !forceDeadline) return noChange;
 
   const passed = tally.passed;
-  const moved = passed && meeting.motion !== "hold" && Math.abs(meeting.proposedDelta) > EPSILON;
+  const requiresMove =
+    passed && meeting.motion !== "hold" && Math.abs(meeting.proposedDelta) > EPSILON;
+  const executionBlockedReason = requiresMove
+    ? committeeRateExecutionRefusal(next, meeting.proposedDelta, clock.turn)
+    : null;
+  const moved = requiresMove && executionBlockedReason == null;
   const resolved: MeetingState = {
     ...meeting,
     status: "resolved",
     result: passed ? "passed" : "failed",
+    executionOutcome: executionBlockedReason ? "blocked" : moved ? "applied" : "not-required",
+    ...(executionBlockedReason ? { executionBlockedReason } : {}),
     resolvedAtTurn: clock.turn,
     resolvedAtMs: clock.now,
   };
@@ -182,7 +195,7 @@ function resolveMeetingInto(
     const chair = chairSeat(next.board);
     next.primeRate = newRate;
     next.lastRateChangeTurn = clock.turn;
-    next.rateChangesThisTerm = state.rateChangesThisTerm + 1;
+    next.rateChangesThisTerm += 1;
     transition.set.primeRate = newRate;
     transition.set.lastRateChangeTurn = clock.turn;
     transition.set.rateChangesThisTerm = next.rateChangesThisTerm;
@@ -233,15 +246,42 @@ function resolveMeetingInto(
       disagree: tally.disagree,
       abstain: tally.abstain,
       forcedDeadline: forceDeadline,
+      executionOutcome: resolved.executionOutcome ?? null,
+      executionBlockedReason,
       moved,
     },
   });
   return { resolved: true, moved };
 }
 
+/** Current execution constraints apply even when a meeting opened under different policy. */
+export function committeeRateExecutionRefusal(
+  state: Pick<
+    JurisdictionState,
+    "commandEconomy" | "fxCommitment" | "primeRate" | "rateChangesThisTerm" | "lastRateChangeTurn"
+  >,
+  delta: number,
+  turn: number
+): string | null {
+  if (state.commandEconomy) return "command-economy";
+  if (rateChangeRefusalFor(state.fxCommitment)) return "fx-committed";
+  if (!Number.isFinite(delta) || !Number.isFinite(state.primeRate)) return "invalid-rate";
+  if (delta > MAX_RATE_CHANGE_DELTA + EPSILON) return "delta-hike";
+  if (delta < -(MAX_RATE_CUT_DELTA + EPSILON)) return "delta-cut";
+  const requested = snapToPrimeRateGrid(state.primeRate) + delta;
+  if (requested < 0 || requested > 25) return "out-of-range";
+  if (state.rateChangesThisTerm >= RATE_CHANGES_PER_TERM) return "term-cap";
+  if (
+    typeof state.lastRateChangeTurn === "number" &&
+    turn - state.lastRateChangeTurn < RATE_CHANGE_COOLDOWN_TURNS
+  )
+    return "cooldown";
+  return null;
+}
+
 /** Whether the per-term budget, cooldown and command economy allow a move now. */
 function canChangeRate(state: JurisdictionState, turn: number): boolean {
-  if (state.commandEconomy) return false;
+  if (state.commandEconomy || rateChangeRefusalFor(state.fxCommitment)) return false;
   if (state.rateChangesThisTerm >= RATE_CHANGES_PER_TERM) return false;
   const last = state.lastRateChangeTurn;
   if (typeof last === "number" && turn - last < RATE_CHANGE_COOLDOWN_TURNS) return false;
@@ -520,12 +560,6 @@ function handleOpenMeeting(
   if (membership) return membership;
   const committee = checkCommitteeBank(state);
   if (committee) return committee;
-  if (state.governmentControlled) {
-    return refuse(
-      "government-controlled",
-      "The committee is dormant while the government sets the rate."
-    );
-  }
   if (state.activeMeeting && state.activeMeeting.status === "voting") {
     return refuse("already-open", "A meeting is already taking votes.");
   }

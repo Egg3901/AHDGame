@@ -253,6 +253,7 @@ function appealWeight(
   // UK manifesto policy-popularity factor (epic #856). Off by default: absent
   // map ⇒ 1.0 (no effect). Mirrors the group-level engine so the two lanes
   // cannot drift.
+  const targetedAdMult = 1 + (ec.targetedAdBonuses?.[groupId] ?? 0);
   const manifestoMult = options?.manifestoMultipliers?.[ec.party]?.[groupId] ?? 1;
 
   // Ledger decomposition (display-only): reach and candidate-fit (appeal) are
@@ -278,7 +279,8 @@ function appealWeight(
       regBaseline *
       stateOrgMult *
       homeStateMult *
-      manifestoMult;
+      manifestoMult *
+      targetedAdMult;
   }
 
   return Math.max(
@@ -298,7 +300,8 @@ function appealWeight(
       regBaseline *
       stateOrgMult *
       homeStateMult *
-      manifestoMult
+      manifestoMult *
+      targetedAdMult
   );
 }
 

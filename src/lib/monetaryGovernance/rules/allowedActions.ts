@@ -30,21 +30,27 @@ function rateAction(
   const base: AllowedAction = { action: "set_rate", allowed: true };
   if (actor.kind === "admin") return base;
   if (state.governmentControlled) {
-    if (actor.kind === "government") return base;
-    return { ...base, allowed: false, reason: "The government sets the rate here." };
-  }
-  if (state.board.length > 0 && boardCanCarry(state.board)) {
-    return {
-      ...base,
-      allowed: false,
-      reason: "A seated committee decides: vote in the committee room.",
-    };
-  }
-  if (actor.kind !== "chair") {
-    return { ...base, allowed: false, reason: "Only the current chair can adjust the prime rate." };
-  }
-  if (state.controlsLocked) {
-    return { ...base, allowed: false, reason: "Chair controls are locked by an administrator." };
+    if (actor.kind !== "government") {
+      return { ...base, allowed: false, reason: "The government sets the rate here." };
+    }
+  } else {
+    if (state.board.length > 0 && boardCanCarry(state.board)) {
+      return {
+        ...base,
+        allowed: false,
+        reason: "A seated committee decides: vote in the committee room.",
+      };
+    }
+    if (actor.kind !== "chair") {
+      return {
+        ...base,
+        allowed: false,
+        reason: "Only the current chair can adjust the prime rate.",
+      };
+    }
+    if (state.controlsLocked) {
+      return { ...base, allowed: false, reason: "Chair controls are locked by an administrator." };
+    }
   }
   if (state.commandEconomy) {
     return {
@@ -115,6 +121,13 @@ function ballotAction(
   if (!state.committeeBank) {
     return { ...base, allowed: false, reason: "This bank has no committee." };
   }
+  if (state.governmentControlled) {
+    return {
+      ...base,
+      allowed: false,
+      reason: "The committee is dormant while the government sets the rate.",
+    };
+  }
   const meeting = state.activeMeeting;
   if (!meeting || meeting.status !== "voting") {
     return { ...base, allowed: false, reason: "No meeting is taking votes." };
@@ -138,6 +151,13 @@ function resolveAction(state: JurisdictionState, clock: GovernanceClock): Allowe
   const base: AllowedAction = { action: "resolve_meeting", allowed: true };
   if (!state.committeeBank) {
     return { ...base, allowed: false, reason: "This bank has no committee." };
+  }
+  if (state.governmentControlled) {
+    return {
+      ...base,
+      allowed: false,
+      reason: "The committee is dormant while the government sets the rate.",
+    };
   }
   const meeting = state.activeMeeting;
   if (!meeting || meeting.status !== "voting") {

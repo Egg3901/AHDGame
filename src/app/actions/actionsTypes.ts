@@ -45,6 +45,7 @@ export interface ActionCardProps {
   flipflopStep: "axis" | "direction" | null;
   flipflopAxis: "economic" | "social" | null;
   flipflopDir: -1 | 1 | null;
+  onOpenCampaignAction?: (action: "canvass" | "targetedAds") => void;
   onExecute: (type: string, count?: 1 | 5 | 10) => void;
   onFlipflop: (axis: "economic" | "social", direction: -1 | 1) => void;
   onFlipflopStepChange: (step: "axis" | "direction" | null) => void;

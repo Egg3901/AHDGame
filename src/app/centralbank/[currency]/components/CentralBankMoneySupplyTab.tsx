@@ -1,5 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
+import { MONEY_ACCOUNTING_VERSION } from "@/lib/moneySupply/calculate";
 import { useState, type FormEvent } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { Button } from "@/components/ui";
@@ -17,6 +20,9 @@ export function CentralBankMoneySupplyTab({
   canOperate: boolean;
   onChanged: () => void;
 }) {
+  const t = useTranslations("centralBank");
+  const growth = currentMoneyGrowth(data);
+  const policyGrowth = currentMoneyGrowth(data.lastPolicyEvaluation);
   const [type, setType] = useState<"qe" | "qt" | "treasury_advance" | "liquidity_injection">("qe");
   const [bondId, setBondId] = useState(data.eligibleBonds[0]?._id ?? "");
   const [value, setValue] = useState("");
@@ -68,6 +74,9 @@ export function CentralBankMoneySupplyTab({
     ["International organization cash", data.organizationLiquid],
     ["Savings deposits", data.householdSavings],
     ["Rest-of-economy deposits", data.externalBroadMoney],
+    [t("money.npcDeposits"), data.bankDeposits ?? 0],
+    [t("money.bondCash"), data.bondPoolCash ?? 0],
+    [t("money.equityCash"), data.equityPoolCash ?? 0],
   ] as const;
 
   return (
@@ -77,20 +86,30 @@ export function CentralBankMoneySupplyTab({
         <Stat label="M2 · spendable money plus savings" value={fmt(data.m2)} />
         <Stat
           label="Annualized M2 growth"
-          value={`${data.annualizedM2GrowthPct >= 0 ? "+" : ""}${data.annualizedM2GrowthPct.toFixed(2)}%`}
+          value={
+            growth == null
+              ? t("money.collecting")
+              : `${growth >= 0 ? "+" : ""}${growth.toFixed(2)}%`
+          }
         />
         <Stat label="Credit outstanding" value={fmt(data.creditOutstanding)} />
       </div>
 
+      {growth == null && (
+        <p className="rounded-xl border border-card-border bg-card p-4 text-sm text-muted">
+          {t(
+            data.accountingVersion === MONEY_ACCOUNTING_VERSION
+              ? "money.transition"
+              : "money.legacy"
+          )}
+        </p>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-xl border border-card-border bg-card p-5">
           <h2 className="text-xs font-semibold uppercase tracking-widest text-muted">
             Monetary stock · turn {data.turn}
           </h2>
-          <p className="mt-2 text-xs text-muted">
-            M1 is money that can be spent right now, across the whole economy. M2 adds savings, plus
-            an estimate of the deposits held by households and firms that players do not control.
-          </p>
+          <p className="mt-2 text-xs text-muted">{t("money.stockExplanation")}</p>
           <div className="mt-4 divide-y divide-card-border">
             {components.map(([label, amount]) => (
               <div key={label} className="flex justify-between gap-4 py-2 text-sm">
@@ -99,6 +118,18 @@ export function CentralBankMoneySupplyTab({
               </div>
             ))}
           </div>
+          {(data.estimatedHouseholdLiquid != null || data.estimatedHouseholdSavings != null) && (
+            <div className="mt-4 border-t border-card-border pt-2">
+              <Row
+                label={t("money.estimatedCash")}
+                value={fmt(data.estimatedHouseholdLiquid ?? 0)}
+              />
+              <Row
+                label={t("money.estimatedSavings")}
+                value={fmt(data.estimatedHouseholdSavings ?? 0)}
+              />
+            </div>
+          )}
         </section>
 
         <section className="rounded-xl border border-card-border bg-card p-5">
@@ -142,7 +173,11 @@ export function CentralBankMoneySupplyTab({
             />
             <Assessment
               label={`Annualized M2 growth${data.lastPolicyEvaluation.moneyGrowthReliable ? "" : " · provisional"}`}
-              value={`${data.lastPolicyEvaluation.annualizedM2GrowthPct.toFixed(2)}%`}
+              value={
+                policyGrowth == null || !data.lastPolicyEvaluation.moneyGrowthReliable
+                  ? t("money.unavailable")
+                  : `${policyGrowth.toFixed(2)}%`
+              }
             />
             <Assessment
               label="Lending reserves"

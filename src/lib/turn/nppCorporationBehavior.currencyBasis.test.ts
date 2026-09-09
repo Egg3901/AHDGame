@@ -57,6 +57,7 @@ const EXPECTED_UNITS = Math.max(
   Math.floor(POOL_UNITS * NPP_FOUNDING_HEADROOM_SHARE)
 );
 const EXPECTED_BUILD_ANCHOR = computeBuildCost({
+  strategyId: null,
   eraUnitScale: 1,
   sectorType: "manufacturing",
   units: EXPECTED_UNITS,

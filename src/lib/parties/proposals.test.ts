@@ -872,6 +872,17 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     expect(pipeline[0].$set.partyJoinedTurn).toBe(120);
   });
 
+  it("drops the founder marker from absorbed members (their party no longer exists)", async () => {
+    const db = setup({ govDoc: null });
+    await processMergeProposal(db as unknown as Db, proposal, 120);
+
+    const call = db.collectionMocks.characters!.updateMany.mock.calls[0];
+    const pipeline = call![1] as Array<Record<string, unknown>>;
+    // A founder absorbed into the surviving party keeps no leadership tenure
+    // exemption — not in the party that swallowed theirs (leadershipTenure.ts).
+    expect(pipeline).toContainEqual({ $unset: "foundedPartyId" });
+  });
+
   it("collapses the absorbed party out of its coalitions", async () => {
     const db = setup({ govDoc: null });
     const { absorbPartyIntoCoalitions } = await import("@/lib/coalitions/absorbParty");

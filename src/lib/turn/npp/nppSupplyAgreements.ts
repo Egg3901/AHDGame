@@ -66,6 +66,7 @@ export type NppAgreementParty = {
     mothballed?: boolean | null;
     strategyId?: string | null;
     transitionFromStrategyId?: string | null;
+    retoolRescaleApplied?: boolean;
     transitionStartTurn?: number | null;
     productionPolicyLevel?: number | null;
     embargoSuspended?: boolean | null;
@@ -434,6 +435,7 @@ function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgreementPar
       mothballed: s.mothballed,
       strategyId: s.strategyId,
       transitionFromStrategyId: s.transitionFromStrategyId,
+      retoolRescaleApplied: s.retoolRescaleApplied,
       transitionStartTurn: s.transitionStartTurn,
       productionPolicyLevel: s.productionPolicyLevel,
       embargoSuspended: s.embargoSuspended,

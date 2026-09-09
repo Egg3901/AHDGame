@@ -38,8 +38,8 @@ export interface HistoricalJusticeOccupant {
 
 /**
  * One of the Court's 9 seats. Persists for the life of a game; `historicalOccupants`
- * is the Original Roster succession chain for this seat (authored by content tickets),
- * consumed automatically by `scotusTenureTurn` while `isDivergent` is false.
+ * records the real succession chain for reference. Only its first entry is
+ * seated by the preset; the in-game appointment process fills every vacancy.
  */
 export interface SupremeCourtSeat extends IterationStampFields {
   _id: ObjectId;
@@ -64,10 +64,8 @@ export interface SupremeCourtSeat extends IterationStampFields {
   seatedAtTurn: number | null;
 
   /**
-   * False while the seat is still replaying the real historical succession
-   * (Original Roster). Flips true forever at the Divergence Point — the first
-   * turn the seat is filled via the in-game nomination/confirmation flow
-   * instead of the next scripted `historicalOccupants` entry.
+   * False until the Original Roster occupant leaves and a live replacement is
+   * confirmed. Flips true forever at that first in-game confirmation.
    */
   isDivergent: boolean;
   /** Index into `historicalOccupants` of the occupant currently/most-recently scripted for this seat. */

@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import { DE_WAHLKREIS_SEATS } from "@/lib/constants/states";
@@ -127,7 +128,9 @@ export async function ensureDEElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureDEElections: spawned ${toActuallyInsert.length} missing Bundestag election(s)`
     );

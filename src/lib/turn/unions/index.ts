@@ -15,6 +15,7 @@ import {
   unionApproval,
   unionMembers,
 } from "@/lib/unions/unionDues";
+import { fundedUnionServices, paidUnionServices, purchaseUnionServices } from "@/lib/unions/rules";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import {
   clampPoliticalContributionPct,
@@ -124,9 +125,9 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
  * ("conversion not reinvention").
  *
  * The service bill NEVER pushes the treasury negative: if this turn's dues
- * income can't cover it, the services LAPSE (no charge, `servicesLapsed:
- * true` into `approvalTarget` so the unfunded slate stops paying approval
- * too: an unfunded promise earns nothing).
+ * income can't cover it, next turn's services lapse without a charge or
+ * entitlement. Approval and all other service effects use this turn's prepaid
+ * receipt, not the next purchase.
  *
  * Also auto-vacates leadership for leaders inactive beyond
  * `INACTIVE_CEO_TURN_THRESHOLD` turns, reuses the exact same constant and
@@ -150,7 +151,7 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
  * per organizer payout.
  */
 
-export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
+export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTurnResult> {
   if (!(await isLabourFullMode())) {
     return {
       unionsProcessed: 0,
@@ -162,7 +163,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     };
   }
 
-  const currentTurn = await getCurrentTurn(db);
+  const currentTurn = turn ?? (await getCurrentTurn(db));
   const labourRelations = await processLabourRelationsTurn(db, currentTurn);
 
   // Safety net: at "full" the roster must be COMPLETE, one union per
@@ -243,6 +244,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
           treasury: 1,
           duesPerWorkerAnnual: 1,
           activeServices: 1,
+          serviceReceipts: 1,
           politicalContributionPct: 1,
           approval: 1,
         },
@@ -374,7 +376,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const fullServicesCost = servicesCostPerTurn(members, annualWage, activeServices);
       // The service bill never pushes the treasury negative: if this turn's
       // dues income can't cover it, the whole slate lapses for the turn (no
-      // partial charge) and earns no approval bonus.
+      // partial charge) and buys no entitlement for the following turn.
       const affordableTreasury = u.treasury + duesIncome;
       const servicesLapsed = fullServicesCost > affordableTreasury;
       const servicesCost = servicesLapsed ? 0 : fullServicesCost;
@@ -421,8 +423,11 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const target = approvalTarget({
         duesPerWorkerAnnual: duesRate,
         annualWage,
-        activeServices,
-        servicesLapsed,
+        activeServices: paidUnionServices(
+          { ...u, ownerId: u.ownerId?.toString() ?? null },
+          currentTurn
+        ),
+        servicesLapsed: false,
         politicalContributionPct: contributionPct,
       });
       const newApproval = trendApproval(unionApproval(u), target);
@@ -431,7 +436,15 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
           filter: { _id: u._id },
           update: {
             $inc: { treasury: duesIncome - servicesCost - contribution },
-            $set: { approval: newApproval, updatedAt: now },
+            $set: {
+              approval: newApproval,
+              serviceReceipts: purchaseUnionServices(
+                u.serviceReceipts,
+                currentTurn,
+                fundedUnionServices({ ...u, ownerId: u.ownerId?.toString() ?? null }, sectors)
+              ),
+              updatedAt: now,
+            },
           },
         },
       };

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { getDb } from "@/lib/mongodb";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getEraFoundingBounds, getEraFounderShares } from "@/lib/constants/sectorSeedEra";
@@ -382,11 +383,15 @@ export async function POST(request: Request) {
     // currency. Scaling only the seed (and leaving the charge in ₳) minted
     // `foundingRate`× free capital for non-USD corps — the money-laundering
     // exploit. computeFoundingCosts converts both legs with the same rate.
-    // getFoundingFxRate (INITIAL_RATES-based, not live DB rate) is shared with
+    // getFoundingFxRate (stored base rate, never live market rate) is shared with
     // the FoundCorporationModal so the player's preview always matches the
     // charge, and matches migration.ts calibration so corps founded at
     // different exchange levels start equally.
-    const foundingRate = getFoundingFxRate(corpCountryId, forexEnabled);
+    const foundingRate = getFoundingFxRate(
+      corpCountryId,
+      forexEnabled,
+      await loadCampaignCurrencyRates(db)
+    );
     // Feed-3 (spec §12.4): low investor confidence adds a founding premium. The
     // premium is captured by the country treasury (see the credit below); the
     // FoundCorporationModal computes the same multiplier so preview == charge.

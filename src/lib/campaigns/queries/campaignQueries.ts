@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { calculateCampaignActions } from "@/lib/campaigns/actions";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
@@ -133,12 +134,14 @@ export async function getCampaignDetail(
   // maintenance / upgrade-cost constants are anchor, so the rate + currency
   // localize them for display.
   // Campaign funds are decoupled from live forex — the budget/cost preview uses
-  // the frozen base INITIAL_RATES scale (via campaignAnchorToLocal) so it matches
+  // the frozen world-seeded currency basis (via campaignAnchorToLocal) so it matches
   // what campaignTurn and upgradeCampaign actually credit/charge (never the live
   // exchangeRates).
   const campaignCurrencyCode = getCampaignCurrency(electionCountryId);
-  const campaignRate = campaignLocalRate(electionCountryId); // frozen base rate, for the fxRate payload field
-  const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, electionCountryId);
+  const campaignRates = await loadCampaignCurrencyRates(db);
+  const campaignRate = campaignLocalRate(electionCountryId, campaignRates); // frozen base rate, for the fxRate payload field
+  const toLocal = (anchor: number) =>
+    campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
   const [isNominee, isRunningMate, partyTreasuryAccess] = await Promise.all([
     user
       ? isCampaignNomineeUser(db, campaign, user.userId, user.character?._id ?? null)

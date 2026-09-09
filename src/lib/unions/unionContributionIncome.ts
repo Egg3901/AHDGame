@@ -8,7 +8,8 @@
 
 import type { Db } from "mongodb";
 import type { ObjectId } from "mongodb";
-import type { CorporateSector, Union } from "@/lib/db/types";
+import type { CorporateSector, GameConfig, Union } from "@/lib/db/types";
+import { isLabourFullMode } from "@/lib/labour/featureFlag";
 import type { UnionOrganizer } from "@/lib/db/types/union";
 import {
   averageAnnualWage,
@@ -35,12 +36,18 @@ export async function unionContributionIncomePerTurn(
     .toArray();
   if (mine.length === 0) return 0;
 
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } });
+  if (!(await isLabourFullMode(config))) return 0;
+
   const unionIds = mine.map((row) => row.unionId);
   const unions = await db
     .collection<Union>("unions")
     .find(
       {
         _id: { $in: unionIds },
+        ownerId: { $ne: null },
         suspended: { $ne: true },
         politicalContributionPct: { $gt: 0 },
       },

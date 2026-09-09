@@ -206,6 +206,8 @@ export async function GET(_request: Request, context: RouteContext) {
         motion: m.motion,
         proposedDelta: m.proposedDelta,
         result: m.result,
+        executionOutcome: m.executionOutcome,
+        executionBlockedReason: m.executionBlockedReason,
         openedAtTurn: m.openedAtTurn,
         resolvedAtTurn: m.resolvedAtTurn ?? null,
         agree: t.agree,

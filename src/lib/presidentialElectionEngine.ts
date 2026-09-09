@@ -6,6 +6,9 @@
  * INDEPENDENT_VOTE_PENALTY, and the tally started by initPresidentVoteTally
  * resolves the Electoral College.
  */
+
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
+
 /**
  * Presidential election vote accumulation and tally initialization.
  * Per-state (and ME/NE district) vote accumulation; Electoral College resolution.
@@ -685,7 +688,7 @@ export async function accumulatePresidentVoteTurn(
     const stateId = getDemographicsStateId(unit);
     const state = resolveElectoralUnitState(stateMap, stateId);
     const demographics = demographicsMap.get(stateId);
-    const turnoutDoc = turnoutMap.get(stateId);
+    const turnoutDoc = turnoutForElection(turnoutMap.get(stateId), election);
     const statePartyOrgs = statePartyOrgsByState.get(stateId) ?? [];
 
     if (!state || !demographics) continue;
@@ -739,6 +742,8 @@ export async function accumulatePresidentVoteTurn(
     let effLedgerBucketWeights: Map<string, Record<string, number>> | undefined;
     {
       const substrate = buildGranularElectorateSubstrate({
+        campaignRulesVersion: election.campaignRulesVersion,
+        currentTurn: turnNumber,
         countryId: electionCountryId,
         stateId,
         preset: gsDoc?.preset,

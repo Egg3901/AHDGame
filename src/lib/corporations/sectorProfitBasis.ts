@@ -267,6 +267,12 @@ export function sumConstructionInProgressAnchor(
 /** The sector fields the book-value basis reads. */
 export interface SectorBookValueInput extends SectorCapexFields {
   sectorType: CorporationType;
+  /**
+   * Production method the capacity runs. Capacity is priced at the RPU of the
+   * product it makes, so the list-price fallback below must read the same
+   * strategy the nameplate-revenue leg does. Absent ⇒ the sector-type default.
+   */
+  strategyId?: string | null;
   capitalStock?: number | null;
   /**
    * Paid basis of the owned capacity, in ₳. See `CorporateSector.capacityBookAnchor`.
@@ -284,7 +290,7 @@ export interface SectorBookValueInput extends SectorCapexFields {
  * returns for a row that has no basis recorded.
  */
 export function sectorCapacityListValueAnchor(
-  sector: { sectorType: CorporationType; capitalStock?: number | null },
+  sector: { sectorType: CorporationType; strategyId?: string | null; capitalStock?: number | null },
   year: number | null | undefined,
   unitScale: number
 ): number {
@@ -297,7 +303,8 @@ export function sectorCapacityListValueAnchor(
   const pricePerUnit = capacityPricePerUnit(
     sector.sectorType,
     typeof year === "number" && Number.isFinite(year) ? year : Number.NaN,
-    unitScale
+    unitScale,
+    sector.strategyId ?? null
   );
   return capacity * pricePerUnit;
 }

@@ -9,6 +9,10 @@ import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { requirePlayerTransfersEnabled } from "@/lib/api/requirePlayerTransfers";
 import { isSameCountry } from "@/lib/api/sameCountry";
+import {
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   canRequestFunds,
@@ -77,6 +81,14 @@ export async function POST(request: Request, { params }: RouteParams) {
         { error: "Only members of this party can request funds." },
         { status: 403 }
       );
+    }
+
+    // Sends cannot even be queued during the leadership handover window,
+    // so requests should not be either. The approve route refuses them
+    // anyway; blocking here avoids queueing a row nobody can action.
+    const { currentTurn: freezeTurn } = await getGameTime();
+    if (await isLeadershipElectionFreezeActive(db, party, freezeTurn)) {
+      return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
     }
 
     // Pre-check treasury balance at propose time so members don't queue

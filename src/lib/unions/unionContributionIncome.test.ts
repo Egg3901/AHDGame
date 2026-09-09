@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { unionContributionIncomePerTurn } from "./unionContributionIncome";
@@ -9,9 +9,12 @@ function mockDb(opts: {
   organizers: { unionId: ObjectId; characterId: ObjectId; strength: number }[];
   unions: Record<string, unknown>[];
   sectors: Record<string, unknown>[];
+  mode?: "full" | "off";
 }): Db {
   return {
     collection: (name: string) => {
+      if (name === "gameConfig")
+        return { findOne: async () => ({ labourSystemMode: opts.mode ?? "full" }) };
       if (name === "unionOrganizers") {
         return {
           find: (filter: { characterId?: ObjectId; unionId?: { $in: ObjectId[] } }) => ({
@@ -26,7 +29,10 @@ function mockDb(opts: {
       }
       if (name === "unions") {
         return {
-          find: () => ({ toArray: async () => opts.unions }),
+          find: (filter: { ownerId?: { $ne: null } }) => ({
+            toArray: async () =>
+              opts.unions.filter((union) => !filter.ownerId || union.ownerId != null),
+          }),
         };
       }
       if (name === "corporateSectors") {
@@ -64,6 +70,7 @@ describe("unionContributionIncomePerTurn", () => {
       unions: [
         {
           _id: unionId,
+          ownerId: new ObjectId(),
           treasury: 1000,
           duesPerWorkerAnnual: withinCeiling,
           activeServices: [],
@@ -77,4 +84,29 @@ describe("unionContributionIncomePerTurn", () => {
     const pool = politicalContributionPerTurn(freeCashFlowPerTurn(duesIncome, 0), 0.4);
     expect(await unionContributionIncomePerTurn(db, me)).toBeCloseTo(pool * 0.4, 6);
   });
+
+  it.each(["vacant", "disabled"] as const)(
+    "does not project payments from a %s union system",
+    async (scenario) => {
+      const me = new ObjectId();
+      const unionId = new ObjectId();
+      const db = mockDb({
+        organizers: [{ unionId, characterId: me, strength: 10 }],
+        unions: [
+          {
+            _id: unionId,
+            ownerId: scenario === "vacant" ? null : new ObjectId(),
+            treasury: 1000,
+            duesPerWorkerAnnual: 1,
+            politicalContributionPct: 0.5,
+          },
+        ],
+        sectors: [
+          { representingUnionId: unionId, workers: 100, unionization: 100, wagePerWorker: 100 },
+        ],
+        mode: scenario === "disabled" ? "off" : "full",
+      });
+      expect(await unionContributionIncomePerTurn(db, me)).toBe(0);
+    }
+  );
 });

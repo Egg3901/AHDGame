@@ -130,7 +130,7 @@ export async function generateScotusSurpriseNews(
 }
 
 /**
- * Pure builder for a Court vacancy (Original Roster chain exhausted, or a
+ * Pure builder for a Court vacancy (Original Roster occupant departed, or a
  * Divergent Justice's hazard clock firing, player or NPP).
  */
 export function buildScotusVacancyNews(input: {

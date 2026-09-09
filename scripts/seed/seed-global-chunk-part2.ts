@@ -3,6 +3,8 @@
  * Run: npx tsx scripts/seed-global-chunk-part2.ts
  */
 
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+
 import { MongoClient } from "mongodb";
 import * as dotenv from "dotenv";
 import * as path from "path";
@@ -110,7 +112,7 @@ async function run() {
     }
 
     if (toInsert.length > 0) {
-      await db.collection("elections").insertMany(toInsert);
+      await db.collection("elections").insertMany(toInsert.map(withCampaignRules));
       log(`Created ${toInsert.length} Sangiin elections`);
     }
 

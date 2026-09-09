@@ -1,45 +1,27 @@
 import type { Db } from "mongodb";
 import type { ExchangeRate } from "@/lib/db/types";
-import { COUNTRY_CURRENCY_MAP, INITIAL_RATES, type CurrencyCode } from "@/lib/constants/currencies";
-import type { CountryId } from "@/lib/constants/countries";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 
 /**
- * Campaign treasury currency helpers.
- *
- * The campaign economy's cost / income / maintenance constants are denominated
- * in anchor (₳) so one table serves every Campaign-Manager country. The stored
- * treasury (`Campaign.funds`) and every campaign-fund balance are LOCAL currency.
- *
- * Campaign funds are deliberately DECOUPLED from live forex: they convert anchor
- * → local at the FROZEN base `INITIAL_RATES` scale, never the live `exchangeRates`
- * collection. This is the SAME base the forex system seeds each currency's
- * `baseRate` from and the SAME table starting-wealth (characterWealth.ts) uses,
- * so campaign income sits at the economy's real scale and stays stable as market
- * rates drift. It is intentionally NOT preset-aware: late-activated currencies
- * (e.g. NG) seed at the base rate regardless of the world's era, so the era
- * placeholder rate would be wildly off. Prefer `campaignAnchorToLocal` for all
- * campaign-fund flows; the live-rate `anchorToLocal` / `loadCampaignFxRate`
- * below remain only for legacy callers.
- *
- * Rate convention: `rate` is local-per-anchor, so `local = anchor × rate`.
+ * Campaign currency shell loads a world's fixed base rates once for the caller.
+ * Political income and costs share this snapshot; live forex remains reserved
+ * for market transactions. Missing legacy rate rows retain the historical fallback.
  */
+export { campaignAnchorToLocal, campaignLocalRate, getCampaignCurrency } from "./rules/currency";
+import { getCampaignCurrency, type CampaignCurrencyRates } from "./rules/currency";
+export type { CampaignCurrencyRates } from "./rules/currency";
 
-export function getCampaignCurrency(countryId: string): CurrencyCode {
-  return COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD";
-}
-
-/**
- * Frozen base local scale for the campaign-fund economy. NEVER reads the live
- * exchangeRates collection — campaign funds must not move with forex. Falls back
- * to 1.0 (US parity) for unmapped countries.
- */
-export function campaignLocalRate(countryId: string): number {
-  return INITIAL_RATES[countryId as CountryId] ?? 1.0;
-}
-
-/** Convert an anchor campaign amount to local currency at the frozen base rate. */
-export function campaignAnchorToLocal(anchor: number, countryId: string): number {
-  return Math.round(anchor * campaignLocalRate(countryId));
+export async function loadCampaignCurrencyRates(db: Db): Promise<CampaignCurrencyRates> {
+  const rows = await db
+    .collection<ExchangeRate>("exchangeRates")
+    .find({}, { projection: { currencyCode: 1, baseRate: 1 } })
+    .toArray();
+  const rates: CampaignCurrencyRates = {};
+  for (const row of rows) {
+    if (typeof row.baseRate === "number" && Number.isFinite(row.baseRate) && row.baseRate > 0)
+      rates[row.currencyCode] = row.baseRate;
+  }
+  return rates;
 }
 
 /** Convert an anchor amount to local currency, rounded to a whole unit. */

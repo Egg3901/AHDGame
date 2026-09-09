@@ -332,7 +332,7 @@ export async function snapshotMarketCap(
                 resolveSectorHostCurrencyCode(sector, sourceCorp),
                 fxRateForSectorHostFromMap(sector, sourceCorp, fxByCurrency)
               ),
-              capacityUnits: sector.capitalStock ?? null,
+              capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock ?? null,
             })),
             turn,
             { ...commodityContext, isNatcorp: !!sourceCorp?.countryOwnerId }

@@ -745,6 +745,7 @@ export async function POST(request: Request, { params }: RouteParams) {
         requestedUnits: totalUnits,
         poolCashLocal: pool.cashLocal,
         poolM2Local: pool.m2Local,
+        poolLiquidityTargetLocal: pool.liquidityTargetLocal,
         rating: creditResult.rating,
         pricePerUnitLocal: BOND_UNIT_FACE_VALUE,
       });

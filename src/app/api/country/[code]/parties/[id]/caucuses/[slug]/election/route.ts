@@ -4,7 +4,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { NATIONAL_ELECTION_DURATION_TURNS } from "@/lib/nationalPartyElections";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
@@ -149,7 +149,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       // Turn-based party-tenure gate (leadershipTenure.ts) — pre-disable run/vote
       // for under-tenured members; the enter/vote routes enforce it server-side.
       const currentTurn = await getCurrentTurn(db);
-      if (!getPartyTenure(authUser.character.partyJoinedTurn, currentTurn).eligible) {
+      // Canonical `partyId`, not the raw `id` path segment ("07" vs "7").
+      if (!getLeadershipEligibility(authUser.character, currentTurn, partyId).eligible) {
         canParticipate = false;
       }
     }

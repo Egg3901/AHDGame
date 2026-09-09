@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
@@ -257,7 +258,7 @@ export async function POST(request: Request) {
       }
 
       if (electionsToInsert.length > 0) {
-        await db.collection("elections").insertMany(electionsToInsert);
+        await db.collection("elections").insertMany(electionsToInsert.map(withCampaignRules));
       }
     }
 

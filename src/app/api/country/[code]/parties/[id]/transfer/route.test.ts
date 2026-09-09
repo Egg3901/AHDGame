@@ -37,20 +37,6 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
   const partyOid = new ObjectId();
   const partyId = "1";
 
-  async function setParty(overrides: Record<string, unknown> = {}) {
-    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
-    vi.mocked(findPartyBySequentialId).mockResolvedValue({
-      _id: partyOid,
-      sequentialId: Number(partyId),
-      countryId: "US",
-      name: "Test Party",
-      treasury: 500_000,
-      chairId,
-      treasurerId: null,
-      ...overrides,
-    } as never);
-  }
-
   function call() {
     return import("./route").then(({ POST }) =>
       POST(makeRequest({ stateId: "pa", amount: 5_000 }), {
@@ -67,7 +53,13 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
     db.collection("politicalParties");
     db.collection("pendingTreasuryTransactions");
     db.collection("nationalPartyElections");
-    db.collection("nationalPartyCandidates");
+
+    db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(0);
+    db.collectionMocks["states"]!.findOne.mockResolvedValue({
+      _id: "PA",
+      countryId: "US",
+      name: "Pennsylvania",
+    });
 
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
@@ -83,36 +75,19 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
       },
     } as never);
 
-    db.collectionMocks["states"]!.findOne.mockResolvedValue({
-      _id: "PA",
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyOid,
+      sequentialId: Number(partyId),
       countryId: "US",
-      name: "Pennsylvania",
-    });
-    await setParty();
+      name: "Test Party",
+      treasury: 500_000,
+      chairId,
+      transactionApprovalMode: "single",
+    } as never);
   });
 
-  it("refuses the transfer while a contested Treasurer election is closing", async () => {
-    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
-    });
-    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(1);
-
-    const response = await call();
-    expect(response.status).toBe(400);
-    const body = await response.json();
-    expect(body.error).toMatch(/treasurer election/i);
-
-    const { executeTransferToStateParty } =
-      await import("@/lib/treasury/executeTransferToStateParty");
-    expect(executeTransferToStateParty).not.toHaveBeenCalled();
-  });
-
-  it("keeps the vacant-seat fallback when nobody is standing for Treasurer", async () => {
-    db.collectionMocks["nationalPartyElections"]!.find.mockReturnValue({
-      toArray: vi.fn().mockResolvedValue([{ _id: new ObjectId(), endTurn: 103 }]),
-    });
-    db.collectionMocks["nationalPartyCandidates"]!.countDocuments.mockResolvedValue(0);
-
+  it("transfers to a state party when nothing blocks it", async () => {
     const response = await call();
     expect(response.status).toBe(200);
 
@@ -121,13 +96,25 @@ describe("POST /api/country/[code]/parties/[id]/transfer", () => {
     expect(executeTransferToStateParty).toHaveBeenCalled();
   });
 
-  it("queues for approval when a Treasurer is seated (double mode)", async () => {
-    await setParty({ treasurerId: new ObjectId() });
+  it("refuses a transfer during the leadership election freeze", async () => {
+    // Transfers down to a state party are party money leaving, so the
+    // handover freeze covers them too.
+    db.collectionMocks["nationalPartyElections"]!.countDocuments.mockResolvedValue(1);
 
     const response = await call();
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.pending).toBe(true);
-    expect(db.collectionMocks["pendingTreasuryTransactions"]!.insertOne).toHaveBeenCalled();
+    expect(body.error).toMatch(/leadership election/i);
+
+    const { executeTransferToStateParty } =
+      await import("@/lib/treasury/executeTransferToStateParty");
+    expect(executeTransferToStateParty).not.toHaveBeenCalled();
+  });
+
+  it("does not apply the per-player cap, since the recipient is a state party", async () => {
+    // No treasuryTransactions collection is registered on the mock; if the
+    // route tried to read the cap ledger it would throw.
+    const response = await call();
+    expect(response.status).toBe(200);
   });
 });

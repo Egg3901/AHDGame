@@ -355,7 +355,8 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         // the same FX spread players pay, skimmed before crediting.
         const couponSpreadAnchor =
           forexEnabled && bondCcy !== holderCurrency ? paymentAnchor * MARKET_MAKER_SPREAD : 0;
-        corpPayments.set(key, (corpPayments.get(key) ?? 0) + (paymentAnchor - couponSpreadAnchor));
+        const netCouponAnchor = paymentAnchor - couponSpreadAnchor;
+        corpPayments.set(key, (corpPayments.get(key) ?? 0) + netCouponAnchor);
         if (couponSpreadAnchor > 0) {
           corpCouponSpreadFees.push({
             fromCurrency: bondCcy,
@@ -365,7 +366,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         }
         const holderFxRate = fxRateForCorpFromMap(holderCorp, fxByCurrency);
         const holderLocalAmount = anchorToCorpCapital(
-          paymentAnchor,
+          netCouponAnchor,
           resolveCorpLiquidCurrencyCode(holderCorp),
           holderFxRate
         );
@@ -386,6 +387,7 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
             couponRate: bond.couponRate,
             bondCurrency: bondCcy,
             bondAmount: Math.round(localAmountForTx * 100) / 100,
+            fxSpreadAnchor: couponSpreadAnchor,
           },
         });
       } else if (holder.nppId) {

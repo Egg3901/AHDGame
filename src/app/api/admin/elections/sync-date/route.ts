@@ -32,6 +32,9 @@
  * Election-linked data cleared: elections, electionCandidates, electionVoteTallies,
  *   campaigns, primarySnapshot, nppEndorsements, playerEndorsements.
  */
+
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
+
 import { NextResponse } from "next/server";
 import type { Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -799,7 +802,9 @@ export async function POST() {
     //    admin can safely retry. Any partial inserts from a prior failed attempt will be
     //    treated as "old" elections and cleaned up by the delete step that follows.
     if (toInsert.length > 0) {
-      await db.collection<Election>("elections").insertMany(toInsert as Election[]);
+      await db
+        .collection<Election>("elections")
+        .insertMany(toInsert.map(withCampaignRules) as Election[]);
     }
 
     // 4. Delete old elections and all their linked data (candidates, tallies, etc.).

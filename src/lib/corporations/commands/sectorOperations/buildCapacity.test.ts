@@ -224,6 +224,7 @@ describe("buildCapacity — build", () => {
     expect(res.status).toBe(201);
 
     const expected = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: "manufacturing",
       units: 1_000,
@@ -247,6 +248,36 @@ describe("buildCapacity — build", () => {
       $inc: { liquidCapital: number };
     };
     expect(inc.$inc.liquidCapital).toBeCloseTo(-expected.totalAnchor, 6);
+  });
+
+  it("stamps the priced strategy on the order it queues", async () => {
+    await wireMocks(sectorDoc({ sectorType: "extraction", strategyId: "rare_earth_mining" }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
+    expect(res.status).toBe(201);
+
+    const queue = sectorSet().buildQueue as Array<Record<string, unknown>>;
+    expect(queue[0].strategyId).toBe("rare_earth_mining");
+  });
+
+  it("charges a rare-earth build at the rare-earth price, not the diversified one", async () => {
+    await wireMocks(sectorDoc({ sectorType: "extraction", strategyId: "rare_earth_mining" }));
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
+    const rareBody = (await res.json()) as Record<string, number>;
+
+    const diversified = computeBuildCost({
+      strategyId: "standard",
+      eraUnitScale: 1,
+      sectorType: "extraction",
+      units: 1,
+      year: CAPACITY_ANCHOR_YEAR,
+      marketSharePercent: 0,
+      primeRate: 0,
+    });
+    // The whole defect in one assertion: this used to be charged at the
+    // diversified price, a 326.9x subsidy on the capacity it actually buys.
+    expect(rareBody.costAnchor / diversified.totalAnchor).toBeGreaterThan(300);
   });
 
   it("previews without charging or queueing", async () => {
@@ -512,5 +543,69 @@ describe("buildCapacity — unowned pool country attribution", () => {
     await buildCapacity(request({ action: "build", units: 100 }), { params });
 
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
+  });
+});
+
+describe("capacity recovery route", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const name of [
+      "corporations",
+      "corporateSectors",
+      "characters",
+      "gameState",
+      "gameConfig",
+      "unownedSectors",
+      "states",
+    ])
+      db.collection(name);
+  });
+
+  it("parks only the requested share, retains plants and paid builds, and moves no cash", async () => {
+    await wireMocks(sectorDoc({ capitalStock: 10000, capacityBookAnchor: 500000 }));
+    const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
+    const response = await POST(request({ action: "resize", activePercent: 25 }), { params });
+    expect(response.status).toBe(200);
+    expect(sectorSet()).toMatchObject({ activeCapacityPercent: 25, mothballed: false });
+    expect(sectorSet()).not.toHaveProperty("capitalStock");
+    expect(sectorSet()).not.toHaveProperty("capacityBookAnchor");
+    expect(sectorSet()).not.toHaveProperty("buildQueue");
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne.mock.calls[0][0]).toEqual({
+      _id: SECTOR_ID,
+      corporationId: CORP_ID,
+      forSale: null,
+    });
+  });
+
+  it.each([0, -10, 101, 25.5, "25"])(
+    "rejects invalid active capacity %s",
+    async (activePercent) => {
+      await wireMocks(sectorDoc());
+      const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
+      const response = await POST(request({ action: "resize", activePercent }), { params });
+      expect(response.status).toBe(400);
+      expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it("refuses a setting after ownership or listing changed", async () => {
+    await wireMocks(sectorDoc());
+    db.collectionMocks.corporateSectors.updateOne.mockResolvedValue({
+      matchedCount: 0,
+      modifiedCount: 0,
+    });
+    const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
+    const response = await POST(request({ action: "resize", activePercent: 25 }), { params });
+    expect(response.status).toBe(409);
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("reactivation restores all parked capacity", async () => {
+    await wireMocks(sectorDoc({ activeCapacityPercent: 25 }));
+    const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
+    expect((await POST(request({ action: "reactivate" }), { params })).status).toBe(200);
+    expect(sectorSet()).toMatchObject({ activeCapacityPercent: 100, mothballed: false });
   });
 });

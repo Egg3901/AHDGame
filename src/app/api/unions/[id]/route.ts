@@ -66,6 +66,7 @@ import {
   unionApproval,
   unionMembers,
 } from "@/lib/unions/unionDues";
+import { paidUnionServices } from "@/lib/unions/rules";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import { clampPoliticalContributionPct } from "@/lib/unions/unionPoliticalContributions";
 
@@ -316,6 +317,10 @@ export async function GET(_request: Request, { params }: RouteParams) {
         maxDuesPerWorkerAnnual,
         duesIncomePerTurn: duesIncomePerTurn(members, duesPerWorkerAnnual),
         activeServices,
+        paidServices: paidUnionServices(
+          { ...union, suspended, ownerId: union.ownerId?.toString() ?? null },
+          currentTurn
+        ),
         servicesCostPerTurn: servicesCostPerTurn(members, annualWage, activeServices),
         politicalContributionPct: clampPoliticalContributionPct(union.politicalContributionPct),
         foundedByCharacterId: union.foundedByCharacterId?.toString() ?? null,

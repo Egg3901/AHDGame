@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import { getDb } from "@/lib/mongodb";
 import type { Election, ElectionStatus, State } from "@/lib/db/types";
 import { NG_REGIONAL_COUNCIL_SEATS } from "@/lib/constants/states";
@@ -104,7 +105,9 @@ export async function ensureNGElections(now: Date): Promise<void> {
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureNGElections: spawned ${toActuallyInsert.length} missing House election(s)`
     );
@@ -197,7 +200,9 @@ export async function ensureNGZoneElections(
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
 
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureNG${electionType === "senate" ? "Senate" : "Governor"}Elections: spawned ${toActuallyInsert.length} ${electionType} election(s)`
     );
@@ -284,7 +289,9 @@ export async function ensureNGRegionalCouncilElections(now: Date): Promise<void>
   const existingStates = new Set(existing.map((e) => e.state));
   const toActuallyInsert = toInsert.filter((e) => !existingStates.has(e.state));
   if (toActuallyInsert.length > 0) {
-    await db.collection<Election>("elections").insertMany(toActuallyInsert as Election[]);
+    await db
+      .collection<Election>("elections")
+      .insertMany(toActuallyInsert.map(withCampaignRules) as Election[]);
     console.log(
       `[Turn] ensureNGRegionalCouncilElections: spawned ${toActuallyInsert.length} Assembly election(s)`
     );
@@ -334,7 +341,7 @@ export async function ensureNGPresidentialElection(now: Date): Promise<void> {
   });
   if (!doc) return;
 
-  await db.collection<Election>("elections").insertOne(doc as Election);
+  await db.collection<Election>("elections").insertOne(withCampaignRules(doc) as Election);
   console.log("[Turn] ensureNGPresidentialElection: spawned NG presidential race");
   sendBatchedElectionAnnouncements([doc], now);
 }

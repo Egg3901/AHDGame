@@ -10,21 +10,32 @@
  * candidates in proportion to their party's seeded `statePartyOrg` in that zone,
  * weighted by zone population. This yields the correct per-zone vote *shares* the
  * spread rule needs; it is intentionally simpler than the US swing-flow engine.
- * Campaign-strength influence (the player lever) and demographic swing are
- * deliberate future refinements — v1 is org-driven so the resolution pipeline can
- * be exercised first.
+ * Standing targeted ads add the shared, bounded demographic audience bonus
+ * to organization weights. Without ads, the original organization weights remain.
  */
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
-import type { State, StatePartyOrg, ElectionVoteTally } from "@/lib/db/types";
+import type {
+  State,
+  StatePartyOrg,
+  ElectionVoteTally,
+  ElectionCandidate,
+  Character,
+} from "@/lib/db/types";
+import { loadRegionalCampaignCells } from "@/lib/campaignTargeting/audience";
+import {
+  combinedAds,
+  targetedAdBonuses,
+  meanAdBonus,
+  organizationAdWeight,
+  NG_CAMPAIGN_TURNOUT_RATE,
+} from "@/lib/campaignTargeting/rules";
 import { NG_ZONES } from "@/lib/nigeriaPresidentialElectionEngine";
 
 /** Approximate NG presidential turnout (share of population voting). */
-const NG_TURNOUT_RATE = 0.32;
+const NG_TURNOUT_RATE = NG_CAMPAIGN_TURNOUT_RATE;
 /** Fraction of the turnout pool that accrues each campaign turn. */
 const NG_PER_TURN_FRACTION = 0.1;
-/** Floor org so a party with no seeded org in a zone still draws some vote. */
-const MIN_ORG = 5;
 
 export async function accumulateNGPresidentVoteTurn(
   db: Db,
@@ -47,7 +58,10 @@ export async function accumulateNGPresidentVoteTurn(
 
   const states = await db
     .collection<State>("states")
-    .find({ countryId: "NG" }, { projection: { _id: 1, population: 1 } })
+    .find(
+      { countryId: "NG" },
+      { projection: { _id: 1, countryId: 1, population: 1, votingEligiblePopulation: 1 } }
+    )
     .toArray();
   const popByZone = new Map(states.map((s) => [s._id as string, s.population ?? 0]));
 
@@ -63,6 +77,33 @@ export async function accumulateNGPresidentVoteTurn(
     orgByZoneParty.set(row.stateId, m);
   }
 
+  const candidates = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .find(
+      { electionId, status: "active", isNPP: { $ne: true } },
+      { projection: { characterId: 1, targetedAds: 1 } }
+    )
+    .toArray();
+  const owners = candidates.length
+    ? await db
+        .collection<Character>("characters")
+        .find(
+          { _id: { $in: candidates.map((candidate) => candidate.characterId) } },
+          { projection: { policies: 1, targetedAds: 1 } }
+        )
+        .toArray()
+    : [];
+  const ownersById = new Map(owners.map((owner) => [owner._id.toString(), owner]));
+  const advertised = candidates.flatMap((candidate) => {
+    const owner = ownersById.get(candidate.characterId.toString());
+    const ads = combinedAds(candidate.targetedAds, owner?.targetedAds);
+    return owner && ads.length ? [{ id: candidate._id.toString(), owner, ads }] : [];
+  });
+  const cellsByZone =
+    advertised.length && turnNumber != null
+      ? await loadRegionalCampaignCells(db, states)
+      : new Map();
+
   const newByUnit: Record<string, Record<string, number>> = { ...tally.totalVotesByUnit };
   const newTotals: Record<string, number> = { ...tally.totalVotes };
 
@@ -77,9 +118,28 @@ export async function accumulateNGPresidentVoteTurn(
     let totalWeight = 0;
     for (const candidateId of candidateIds) {
       const party = candidateParties[candidateId];
-      const org = Math.max(zoneOrg?.get(party) ?? 0, MIN_ORG);
-      weights.set(candidateId, org);
-      totalWeight += org;
+      const org = zoneOrg?.get(party) ?? 0;
+      const advertiser = advertised.find((candidate) => candidate.id === candidateId);
+      const cells = cellsByZone.get(`NG:${zone}`);
+      const bonus =
+        advertiser && cells && turnNumber != null
+          ? meanAdBonus(
+              cells,
+              targetedAdBonuses(
+                cells,
+                {
+                  economicLean: advertiser.owner.policies.economic,
+                  socialLean: advertiser.owner.policies.social,
+                },
+                advertiser.ads,
+                zone,
+                turnNumber
+              )
+            )
+          : 0;
+      const weight = organizationAdWeight(org, bonus);
+      weights.set(candidateId, weight);
+      totalWeight += weight;
     }
     if (totalWeight <= 0) continue;
 

@@ -333,6 +333,10 @@ export async function POST(request: Request, { params }: RouteParams) {
           legacyCostAnchor: legacySplitCostAnchor,
           unitsReceived: actualCapture * unitsPerAnchor,
           sectorType: sectorType as CorporationType,
+          // An unowned-pool draw has no defender sector and, per the comment
+          // above, clears on the pool's DEFAULT mix — so the floor prices it at
+          // the default strategy too. Both legs must read the same mix.
+          strategyId: null,
           year: resolveWorldYear(gameState?.currentYear, gameState?.currentTurn),
           eraUnitScale,
         })

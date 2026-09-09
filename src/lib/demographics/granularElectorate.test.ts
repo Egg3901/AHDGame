@@ -961,3 +961,47 @@ describe("flag OFF — legacy engine untouched", () => {
     `);
   });
 });
+
+describe("electorate cache under preview traffic", () => {
+  it("keeps hot turn entries when cold entries reach the cache limit", () => {
+    clearGranularElectorateCache();
+    const hot = deriveGranularElectorateUnits("US", "CT", "1953-default", null)!;
+    for (let i = 0; i < 805; i++) {
+      deriveGranularElectorateUnits("US", `missing-${i}`, "1953-default", null);
+      expect(deriveGranularElectorateUnits("US", "CT", "1953-default", null)!.units).toBe(
+        hot.units
+      );
+    }
+  });
+
+  it("bypasses shared reads and writes for previews", () => {
+    clearGranularElectorateCache();
+    const hot = deriveGranularElectorateUnits("US", "CT", "1953-default", null)!;
+    const preview = deriveGranularElectorateUnits(
+      "US",
+      "CT",
+      "1953-default",
+      null,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      "bypass"
+    )!;
+    expect(preview.units).toEqual(hot.units);
+    expect(preview.units).not.toBe(hot.units);
+    for (let i = 0; i < 805; i++)
+      deriveGranularElectorateUnits(
+        "US",
+        `missing-${i}`,
+        "1953-default",
+        null,
+        undefined,
+        undefined,
+        undefined,
+        true,
+        "bypass"
+      );
+    expect(deriveGranularElectorateUnits("US", "CT", "1953-default", null)!.units).toBe(hot.units);
+  });
+});

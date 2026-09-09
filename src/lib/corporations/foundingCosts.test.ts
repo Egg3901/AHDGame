@@ -91,3 +91,16 @@ describe("getFoundingFxRate", () => {
     expect(getFoundingFxRate(undefined, true)).toBe(1);
   });
 });
+
+describe("founding uses the same world basis as starting wealth", () => {
+  it("uses stored base rates instead of the modern fallback", () => {
+    expect(getFoundingFxRate("NG", true, { NGN: 0.357 })).toBe(0.357);
+    expect(getFoundingFxRate("JP", true, { JPY: 360 })).toBe(360);
+    const cost = computeFoundingCosts({
+      startingCapitalAnchor: 24000000,
+      foundingRate: getFoundingFxRate("NG", true, { NGN: 0.357 }),
+    });
+    expect(cost.corpStartingCapital).toBe(8568000);
+    expect(cost.totalPlayerCost).toBeGreaterThanOrEqual(cost.corpStartingCapital);
+  });
+});

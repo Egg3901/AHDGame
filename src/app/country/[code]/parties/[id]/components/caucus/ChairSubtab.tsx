@@ -11,6 +11,8 @@ import type {
 } from "./caucusTypes";
 import { apiBase, relationshipBadge, recruitStatusTone, formatHoursMinutes } from "./caucusUtils";
 import { useChairSubtabState } from "./useChairSubtabState";
+import type { CountryId } from "@/lib/constants/countries";
+import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 export function ChairSubtab({
   countryCode,
@@ -498,6 +500,12 @@ export function ChairSubtab({
           </h3>
           <p className="text-sm text-muted">
             Move caucus funds directly to an active player member&apos;s campaign account.
+          </p>
+          <p className="text-[11px] text-muted">
+            Caucus funds count towards the same per-turn ceiling as party funds: $
+            {getPlayerPayoutCap(countryCode.toUpperCase() as CountryId).toLocaleString("en-US")} per
+            member per turn across the national treasury, state parties and caucuses combined.
+            Nothing moves in the last two turns before a party leadership election closes.
           </p>
           <label className="block text-[11px] uppercase tracking-widest text-muted">
             Member

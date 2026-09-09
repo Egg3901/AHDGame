@@ -196,14 +196,14 @@ export default function CorporationGuidePage() {
                   <tr>
                     <td className="px-4 py-2.5 text-foreground">Matches primary type</td>
                     <td className="px-4 py-2.5">
-                      <Tag variant="positive">+5%</Tag>
+                      <Tag variant="positive">+10%</Tag>
                     </td>
                     <td className="px-4 py-2.5 text-muted">Core competency bonus</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-2.5 text-foreground">Matches secondary type</td>
                     <td className="px-4 py-2.5">
-                      <Tag variant="positive">+2.5%</Tag>
+                      <Tag variant="positive">+5%</Tag>
                     </td>
                     <td className="px-4 py-2.5 text-muted">Half-strength diversification bonus</td>
                   </tr>
@@ -225,8 +225,8 @@ export default function CorporationGuidePage() {
             </p>
             <SubHeader>Secondary Type Trade-off</SubHeader>
             <p className="text-sm text-muted leading-relaxed">
-              A secondary type gives you +2.5% on a second sector class instead of −15%. The cost:
-              it <strong className="text-foreground">doubles the sprawl penalty</strong> once you
+              A secondary type gives you +5% on a second sector class instead of −15%. The cost: it{" "}
+              <strong className="text-foreground">doubles the sprawl penalty</strong> once you
               exceed the 15-sector threshold (see Sprawl section). Worth it if you genuinely want
               two sector classes and invest in Logistics & Operations Strength.
             </p>
@@ -323,10 +323,10 @@ Escalation drops by 1 each turn. Costs halve if you wait`}</FormulaBlock>
                   <tr>
                     <td className="px-4 py-2.5 text-foreground font-medium">Sector type match</td>
                     <td className="px-4 py-2.5">
-                      <Tag variant="positive">+5%</Tag> / <Tag variant="negative">−15%</Tag>
+                      <Tag variant="positive">+10%</Tag> / <Tag variant="negative">−15%</Tag>
                     </td>
                     <td className="px-4 py-2.5">All</td>
-                    <td className="px-4 py-2.5">Primary +5%, secondary +2.5%, other −15%</td>
+                    <td className="px-4 py-2.5">Primary +10%, secondary +5%, other −15%</td>
                   </tr>
                   <tr>
                     <td className="px-4 py-2.5 text-foreground font-medium">Home location</td>

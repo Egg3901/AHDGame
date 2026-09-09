@@ -71,7 +71,9 @@ export async function POST(
           partyInfluence: 0,
           updatedAt: now,
         },
-        $unset: { partyJoinedAt: "", partyJoinedTurn: "" },
+        // foundedPartyId goes with the tenure anchors: a founder who walks out
+        // must not keep the leadership exemption for a rejoin (leadershipTenure.ts).
+        $unset: { partyJoinedAt: "", partyJoinedTurn: "", foundedPartyId: "" },
       }
     );
 

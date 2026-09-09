@@ -10,6 +10,7 @@ import type {
 } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { computeSlateAssignmentScore, isNppSlateCompliant } from "@/lib/slateAssignments";
+import { SLATE_ASSIGNMENT_CAP } from "@/lib/slateAssignmentCap";
 import { getSlateAcceptanceStatBonus } from "@/lib/slateAuthority";
 
 /**
@@ -238,9 +239,17 @@ export async function materializeSlateAssignmentsFromTemplate({
   );
   if (!template) return existing;
 
-  const templateRows = (await listSlateCandidates(db, template._id)).filter(
-    (row) => row.status !== "withdrawn"
-  );
+  // Oldest invitation first, so a board carried past the cap keeps the chair's
+  // earliest decisions rather than an arbitrary slice. Rows that fail the
+  // per-row checks below spend no slot, so the cap counts what actually
+  // carries, not what was considered.
+  const templateRows = (await listSlateCandidates(db, template._id))
+    .filter((row) => row.status !== "withdrawn")
+    .sort(
+      (a, b) =>
+        a.invitedAt.getTime() - b.invitedAt.getTime() ||
+        a._id.toString().localeCompare(b._id.toString())
+    );
   if (templateRows.length === 0) return existing;
 
   const [npps, characters] = await Promise.all([
@@ -273,6 +282,10 @@ export async function materializeSlateAssignmentsFromTemplate({
 
   const carriedRows: SlateCandidate[] = [];
   for (const row of templateRows) {
+    // A carried board may not exceed what a chair could assign by hand. Without
+    // this the cap compounded: every cycle re-materialized the whole previous
+    // board, and anything the filing pass had added on top came with it.
+    if (carriedRows.length >= SLATE_ASSIGNMENT_CAP) break;
     if (row.candidateType === "npp") {
       const npp = nppById.get(row.candidateId.toString());
       if (!npp || npp.retiredAt) continue;

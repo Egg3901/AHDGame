@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import type { CountryId } from "@/lib/constants/countries";
 import { PlayerSelector } from "@/components/PlayerSelector";
@@ -29,6 +30,8 @@ interface ResolvedMeeting {
   motion: "hike" | "cut" | "hold";
   proposedDelta: number;
   result: "passed" | "failed" | undefined;
+  executionOutcome?: "applied" | "blocked" | "not-required";
+  executionBlockedReason?: string;
   openedAtTurn: number;
   resolvedAtTurn: number | null;
   agree: number;
@@ -115,6 +118,7 @@ function AlignmentChip({ alignment }: { alignment: "hawk" | "dove" }) {
 }
 
 export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
+  const t = useTranslations("centralBank");
   const code = countryId.toLowerCase();
   const [state, setState] = useState<CommitteeState | null>(null);
   const [loading, setLoading] = useState(true);
@@ -438,13 +442,26 @@ export function FomcCommitteeTab({ countryId }: { countryId: CountryId }) {
                 </span>
                 <span
                   className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                    m.result === "passed"
+                    m.result === "passed" && m.executionOutcome !== "blocked"
                       ? "bg-primary/10 text-primary"
                       : "bg-danger/10 text-danger"
                   }`}
                 >
-                  {m.result === "passed" ? "Passed" : m.result === "failed" ? "Failed" : "Resolved"}
+                  {m.executionOutcome === "blocked"
+                    ? t("execution.blocked")
+                    : m.result === "passed"
+                      ? "Passed"
+                      : m.result === "failed"
+                        ? "Failed"
+                        : "Resolved"}
                 </span>
+                {m.executionOutcome === "blocked" && (
+                  <span className="w-full text-xs text-muted">
+                    {t(
+                      `execution.reason.${m.executionBlockedReason && ["fx-committed", "command-economy", "term-cap", "cooldown", "delta-hike", "delta-cut", "out-of-range", "invalid-rate"].includes(m.executionBlockedReason) ? m.executionBlockedReason : "unknown"}`
+                    )}
+                  </span>
+                )}
                 <span className="ml-auto text-xs text-muted">
                   {m.agree} for / {m.disagree} against / {m.abstain} abstain
                 </span>

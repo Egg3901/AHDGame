@@ -1,5 +1,8 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+import { COLD_CAPACITY_UPKEEP_FRACTION } from "@/lib/corporations/investment/rules";
+import CapacityRecovery from "../components/CapacityRecovery";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { InfoTooltip } from "@/components/InfoTooltip";
@@ -40,6 +43,7 @@ interface PlantPanelProps {
   onCancelOrder: (orderIndex: number) => void;
   onMothball: () => void;
   onReactivate: () => void;
+  onResize?: (activePercent: number) => void;
 }
 
 /**
@@ -70,7 +74,9 @@ export default function PlantPanel({
   onCancelOrder,
   onMothball,
   onReactivate,
+  onResize,
 }: PlantPanelProps) {
+  const t = useTranslations("corporations.sectorInvestment");
   const ownedPlantCount =
     plants.plantCount ?? facilitiesFromUnits(sectorType, plants.capacityUnits ?? 0);
   const { formatAmount } = useCurrency();
@@ -337,9 +343,7 @@ export default function PlantPanel({
               );
             })}
           </ul>
-          <p className="mt-2 text-body-xs text-muted">
-            Cancel a build and you get 75% of what you paid back.
-          </p>
+          <p className="mt-2 text-body-xs text-muted">{t("cancelHelp")}</p>
         </div>
       )}
 
@@ -362,10 +366,18 @@ export default function PlantPanel({
             </Button>
           )}
           <p className="w-full text-body-xs text-muted sm:w-auto sm:flex-1">
-            Mothballing stops all output and cuts upkeep by 80%. You can turn the {sites} back on at
-            any time, for free.
+            {t("mothballHelp", { percent: COLD_CAPACITY_UPKEEP_FRACTION * 100 })}
           </p>
         </div>
+      )}
+
+      {isCeo && onResize && (
+        <CapacityRecovery
+          key={`${plants.mothballed}:${plants.activeCapacityPercent}`}
+          plants={plants}
+          busy={busy}
+          onResize={onResize}
+        />
       )}
 
       <DetailsDisclosure className="mt-4">

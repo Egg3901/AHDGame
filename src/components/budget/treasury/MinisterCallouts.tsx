@@ -4,6 +4,7 @@ import { formatFundsCompact } from "@/lib/utils/formatters";
 import {
   deriveMinisterFlags,
   deriveMinisterProjection,
+  describeProjectionAssumptions,
   type MinisterFlagTone,
   type MinisterInputs,
 } from "./ministerLens";
@@ -128,6 +129,9 @@ export function MinisterCallouts({ inputs, subtitle, fiscalYear }: MinisterCallo
           <div className="text-body-xs text-muted">
             Illustrative — revenue tracks GDP, spending tracks inflation + demographics
           </div>
+          <div className="mt-0.5 text-body-xs text-muted">
+            {describeProjectionAssumptions(inputs)}
+          </div>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <ProjTile
@@ -154,7 +158,11 @@ export function MinisterCallouts({ inputs, subtitle, fiscalYear }: MinisterCallo
             value={`${(proj.projDebtToGdp * 100).toFixed(0)}%`}
             sym={sym}
             tone={proj.projDebtToGdp > proj.currentDebtToGdp ? "down" : "up"}
-            sub={`${proj.projDebtToGdp > proj.currentDebtToGdp ? "↑" : "↓"} from ${(proj.currentDebtToGdp * 100).toFixed(0)}%`}
+            sub={
+              proj.projDebtToGdp > proj.currentDebtToGdp && inputs.gdpGrowth < 0
+                ? `↑ from ${(proj.currentDebtToGdp * 100).toFixed(0)}% · shrinking GDP lifts the ratio too, not just new borrowing`
+                : `${proj.projDebtToGdp > proj.currentDebtToGdp ? "↑" : "↓"} from ${(proj.currentDebtToGdp * 100).toFixed(0)}%`
+            }
           />
         </div>
       </div>

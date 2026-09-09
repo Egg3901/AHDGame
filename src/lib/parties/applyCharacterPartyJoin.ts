@@ -87,6 +87,10 @@ export async function applyCharacterPartyJoin(
         ),
         ...(consumeFreePartyMove ? { freePartyMoveUsedAt: now } : {}),
       },
+      // The leadership tenure exemption is scoped to the party a character
+      // founded. Joining any party clears it, so a founder who wanders off and
+      // later returns serves the full tenure again (leadershipTenure.ts).
+      $unset: { foundedPartyId: "" },
     }
   );
 

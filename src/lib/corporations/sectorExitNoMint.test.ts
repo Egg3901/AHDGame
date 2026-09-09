@@ -70,6 +70,7 @@ describe("C1 — capacity exits cannot mint", () => {
   for (const path of PATHS) {
     it(`${path.name}: every exit returns less than the cash paid in`, () => {
       const paidAnchor = computeBuildCost({
+        strategyId: null,
         eraUnitScale: 1,
         sectorType: TYPE,
         units: UNITS,
@@ -98,6 +99,7 @@ describe("C1 — capacity exits cannot mint", () => {
 
   it("the founding path was the worst case, and is no longer a mint", () => {
     const paid = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: TYPE,
       units: UNITS,
@@ -123,6 +125,7 @@ describe("C1 — capacity exits cannot mint", () => {
 
   it("a build still in flight books at its paid cost, not at list", () => {
     const paid = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: TYPE,
       units: UNITS,
@@ -145,6 +148,7 @@ describe("C1 — capacity exits cannot mint", () => {
 
   it("free capacity DILUTES the basis rather than adding to it", () => {
     const paid = computeBuildCost({
+      strategyId: null,
       eraUnitScale: 1,
       sectorType: TYPE,
       units: UNITS,
@@ -264,6 +268,7 @@ function runTurn(sector: CorporateSector, currentTurn: number) {
 
 describe("C1 — sectorTurn maintains the paid basis", () => {
   const paid = computeBuildCost({
+    strategyId: null,
     eraUnitScale: 1,
     sectorType: TYPE,
     units: UNITS,

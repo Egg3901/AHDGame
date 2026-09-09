@@ -119,4 +119,49 @@ describe("POST /api/country/[code]/parties/[id]/purge", () => {
     const { getCurrentTurn } = await import("@/lib/turn/currentTurn");
     expect(getCurrentTurn).not.toHaveBeenCalled();
   });
+
+  it("clears the purged member's founder marker along with the tenure anchors", async () => {
+    vi.doMock("@/lib/constants/partyActions", async (importActual) => ({
+      ...(await importActual<typeof import("@/lib/constants/partyActions")>()),
+      PARTY_PURGE_ENABLED: true,
+    }));
+
+    // A rank-and-file member (not on the committee) so the purge goes through.
+    const { findPartyBySequentialId } = await import("@/lib/db/partyLookup");
+    vi.mocked(findPartyBySequentialId).mockResolvedValue({
+      _id: partyObjectId,
+      sequentialId: 1,
+      countryId: "US",
+      name: "Test Party",
+      chairId,
+      viceChairId: null,
+      treasurerId: null,
+      committeeIds: [],
+    } as never);
+
+    const { getCurrentTurn } = await import("@/lib/turn/currentTurn");
+    vi.mocked(getCurrentTurn).mockResolvedValue(500);
+
+    const { POST } = await import("./route");
+    const response = await POST(makeRequest(targetId), {
+      params: Promise.resolve({ code: "us", id: "1" }),
+    });
+    expect(response.status).toBe(200);
+
+    // calls[0] is the chair's infamy/influence cost; the ejection targets the
+    // purged character, so select by filter rather than by index.
+    const charUpdate = db.collectionMocks["characters"]!.updateOne.mock.calls.find(
+      (c) => (c[0] as { _id?: ObjectId })._id?.toString() === targetId.toString()
+    )!;
+    expect(charUpdate).toBeTruthy();
+    const update = charUpdate[1] as { $unset?: Record<string, unknown> };
+    // A purged founder must lose the leadership tenure exemption; otherwise
+    // rejoining the party would revive it (leadershipTenure.ts).
+    expect(update.$unset).toMatchObject({
+      partyJoinedAt: "",
+      lastPartySwitchAt: "",
+      partyJoinedTurn: "",
+      foundedPartyId: "",
+    });
+  });
 });

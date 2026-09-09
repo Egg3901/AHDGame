@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { PARTY_LEADERSHIP_TENURE_TURNS, getPartyTenure } from "@/lib/parties/leadershipTenure";
+import {
+  PARTY_LEADERSHIP_TENURE_TURNS,
+  getLeadershipEligibility,
+  getPartyTenure,
+} from "@/lib/parties/leadershipTenure";
 
 describe("getPartyTenure", () => {
   it("exposes a 24-turn requirement", () => {
@@ -58,5 +62,54 @@ describe("getPartyTenure", () => {
       eligible: false,
       turnsRemaining: 2,
     });
+  });
+});
+
+describe("getLeadershipEligibility", () => {
+  it("exempts a founder of this party who joined this very turn", () => {
+    expect(
+      getLeadershipEligibility({ partyJoinedTurn: 100, foundedPartyId: "7" }, 100, "7")
+    ).toEqual({
+      turnsServed: Number.POSITIVE_INFINITY,
+      eligible: true,
+      turnsRemaining: 0,
+    });
+  });
+
+  it("accepts a numeric partyId, matching the stored string marker", () => {
+    expect(
+      getLeadershipEligibility({ partyJoinedTurn: 100, foundedPartyId: "7" }, 100, 7).eligible
+    ).toBe(true);
+  });
+
+  it("does not exempt a founder in a party they did not found", () => {
+    expect(
+      getLeadershipEligibility({ partyJoinedTurn: 100, foundedPartyId: "7" }, 100, "8")
+    ).toEqual({
+      turnsServed: 0,
+      eligible: false,
+      turnsRemaining: 24,
+    });
+  });
+
+  it("falls back to the tenure clock when there is no founder marker", () => {
+    expect(getLeadershipEligibility({ partyJoinedTurn: 100 }, 110, "7")).toEqual({
+      turnsServed: 10,
+      eligible: false,
+      turnsRemaining: 14,
+    });
+    expect(
+      getLeadershipEligibility({ partyJoinedTurn: 100, foundedPartyId: null }, 124, "7").eligible
+    ).toBe(true);
+  });
+
+  it("still grandfathers a missing partyJoinedTurn", () => {
+    expect(getLeadershipEligibility({}, 100, "7").eligible).toBe(true);
+  });
+
+  it("ignores an empty-string marker rather than exempting every party", () => {
+    expect(
+      getLeadershipEligibility({ partyJoinedTurn: 100, foundedPartyId: "" }, 100, "").eligible
+    ).toBe(false);
   });
 });

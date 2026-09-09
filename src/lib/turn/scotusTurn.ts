@@ -4,7 +4,7 @@
  * (one exported function per turn-phase registration).
  *
  * Runs, in order:
- *  1. Tenure turn — Original Roster auto-succession + divergent hazard clock.
+ *  1. Tenure turn: Original Roster departures plus divergent hazard clock.
  *     Must run before the docket turn so a case fired this same turn sees
  *     this turn's seat vacancies/successions, not last turn's.
  *  2. Docket turn — fires due cases, evaluates divergence, wires diverged

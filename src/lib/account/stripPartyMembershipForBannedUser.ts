@@ -53,7 +53,8 @@ export async function stripPartyMembershipForBannedUser(
           partyInfluence: 0,
           updatedAt: now,
         },
-        $unset: { partyJoinedAt: "", partyJoinedTurn: "" },
+        // Clears the founder marker with the tenure anchors (leadershipTenure.ts).
+        $unset: { partyJoinedAt: "", partyJoinedTurn: "", foundedPartyId: "" },
       }
     );
 

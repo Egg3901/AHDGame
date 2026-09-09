@@ -4,6 +4,7 @@ import { useMemo, useReducer, type Dispatch } from "react";
 import { useDebouncedSave } from "@/hooks/useDebouncedSave";
 import { militaryReducer, type MilitaryAction } from "@/lib/military/reducer";
 import { dedupeCommandIds, reconcileCommandCommanders } from "@/lib/military/commands";
+import { reconcileCommandUnits } from "@/lib/military/rules/commandUnits";
 import type { MilitaryState, MilitaryCommand } from "@/lib/military/types";
 import type { MilitaryUnit } from "@/lib/db/types/militaryUnit";
 
@@ -40,7 +41,7 @@ export function useMilitaryState(seed: MilitarySeed): {
    */
   droppedCommanders: number;
 } {
-  const [state, dispatch] = useReducer(militaryReducer, seed, (s): MilitaryState => {
+  const [draftState, dispatch] = useReducer(militaryReducer, seed, (s): MilitaryState => {
     // Heal colliding ids before anything selects or dispatches against them. Command
     // ids used to come from a counter that reset each page load, so an org built over
     // two sessions can arrive with two commands sharing an id — which highlights both
@@ -67,6 +68,12 @@ export function useMilitaryState(seed: MilitarySeed): {
     () => Object.fromEntries(seed.units.map((u) => [String(u._id), u])),
     [seed.units]
   );
+  // Reconcile on roster refresh as well as initial load, preserving local edits.
+  // Invisible references to removed units otherwise make the entire PUT fail.
+  const state = useMemo(() => {
+    const commands = reconcileCommandUnits(draftState.commands, Object.keys(unitsById));
+    return commands === draftState.commands ? draftState : { ...draftState, commands };
+  }, [draftState, unitsById]);
   const assigned = useMemo(
     () => new Set(state.commands.flatMap((c) => c.unitIds)),
     [state.commands]

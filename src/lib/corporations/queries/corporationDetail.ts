@@ -1177,13 +1177,14 @@ export async function loadCorporationDetailView(args: {
           policyPp: pp(enginePnl.policyCredit),
         };
       }
+      const measuredCapacity = sector.operatingCapacityUnits ?? sector.capitalStock;
       const util =
-        Number.isFinite(sector.capitalStock) &&
-        (sector.capitalStock as number) > 0 &&
+        Number.isFinite(measuredCapacity) &&
+        (measuredCapacity as number) > 0 &&
         Number.isFinite(sector.producedUnits)
           ? Math.max(
               0,
-              Math.min(1, (sector.producedUnits as number) / (sector.capitalStock as number))
+              Math.min(1, (sector.producedUnits as number) / (measuredCapacity as number))
             )
           : 1;
       const inputMult = getInputMultiplier(sector.productionPolicyLevel ?? 0);
@@ -1237,7 +1238,9 @@ export async function loadCorporationDetailView(args: {
     // nameplate revenue IS `capitalStock × mixPrice`). So no rescaling here —
     // rescaling is exactly how the two clocks got mixed up before.
     const capacityUnits =
-      plantsMode && Number.isFinite(sector.capitalStock) ? (sector.capitalStock as number) : null;
+      plantsMode && Number.isFinite(sector.operatingCapacityUnits ?? sector.capitalStock)
+        ? (sector.operatingCapacityUnits ?? sector.capitalStock ?? null)
+        : null;
     const plantCount =
       plantsMode && Number.isInteger(sector.plantCount) && (sector.plantCount ?? 0) >= 0
         ? (sector.plantCount as number)

@@ -202,7 +202,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     //
     // The capacity ARRIVES rather than existing: the new sector starts at
     // capitalStock 0 with the starter order in its `buildQueue`. Founding is
-    // deliberately FASTER than an ordinary build — half CAPACITY_BUILD_TURNS —
+    // preserved at half the authored base construction duration,
     // because a greenfield first plant is scoped to the site from day one.
     let starterUnits = 0;
     let starterBuildAnchor = 0;
@@ -234,6 +234,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
       starterBuildAnchor = computeBuildCost({
         sectorType,
         units: starterUnits,
+        // A founded sector is created with no strategy, so it runs the
+        // sector-type default; quote it at the same price it will be charged.
+        strategyId: null,
         year: currentYear,
         eraUnitScale,
         // No sector here yet, so the corp holds no share of this (state, type)
@@ -248,8 +251,7 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         founding: true,
       }).totalAnchor;
 
-      starterOnlineTurn =
-        currentTurn + Math.max(1, Math.ceil(CAPACITY_BUILD_TURNS(sectorType) / 2));
+      starterOnlineTurn = currentTurn + Math.max(1, CAPACITY_BUILD_TURNS(sectorType, true));
     }
 
     // Cross-border expansion (target state in a different-currency country) pays
@@ -335,6 +337,9 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     if (plantsEnabled) {
       const starterOrder: SectorBuildOrder = {
         unitsOrdered: starterUnits,
+        // Founded sectors carry no strategy, so this was priced at the
+        // sector-type default — record that, matching `starterBuildAnchor`.
+        strategyId: null,
         costPaidAnchor: starterBuildAnchor,
         startTurn: currentTurn,
         onlineTurn: starterOnlineTurn,
