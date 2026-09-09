@@ -84,7 +84,12 @@ export type SlateRefusalReason =
   /** Filing: the NPP retired, moved, or is no longer reachable for this race. */
   | "npp_unavailable"
   /** Filing: the chair slated this NPP into more than one race; another row won. */
-  | "already_slated_elsewhere";
+  | "already_slated_elsewhere"
+  /**
+   * Filing: the party already holds every slot on this race, so the row could
+   * not go on the ballot. See `SLATE_ASSIGNMENT_CAP` for what holds a slot.
+   */
+  | "slate_full";
 
 export type SlateCandidateStatus =
   "invited" | "considering" | "accepted" | "declined" | "withdrawn" | "filed";
