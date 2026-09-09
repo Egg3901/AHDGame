@@ -570,24 +570,13 @@ describe("S4 — player chambers agree with their era config", () => {
     // prefecture), recorded rather than papered over by bending the config down
     // to match an incomplete roster.
     "1991-default": ["JP.sangiin: seeded 206 + vacant 0 != config 252"],
-    // Here the config is right and the ROSTER is short: the 2019 Commons had
-    // 650 and the February 2020 House had 435 including five vacancies.
-    "1999-default": [
-      "US.house: seeded 433 + vacant 0 != config 435",
-      "UK.commons: seeded 641 + vacant 0 != config 650",
-    ],
-    "2007-default": [
-      "US.house: seeded 433 + vacant 0 != config 435",
-      "UK.commons: seeded 641 + vacant 0 != config 650",
-    ],
-    "2019-default": [
-      "US.house: seeded 433 + vacant 0 != config 435",
-      "UK.commons: seeded 641 + vacant 0 != config 650",
-    ],
-    "2023-default": [
-      "US.house: seeded 433 + vacant 0 != config 435",
-      "UK.commons: seeded 641 + vacant 0 != config 650",
-    ],
+    // The US House is FIXED (Task C4): 430 occupied plus five declared
+    // vacancies is the real February 2020 chamber. What remains is the Commons,
+    // where the config is right and the roster is nine seats short.
+    "1999-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
+    "2007-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
+    "2019-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
+    "2023-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
   };
 
   it.each([...SHIPPING_PRESETS])("%s", (preset) => {

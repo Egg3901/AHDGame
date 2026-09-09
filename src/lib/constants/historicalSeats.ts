@@ -58,7 +58,13 @@ export interface HistoricalSeat {
 }
 
 // ─── US February 2020: 116th Congress ────────────────────────────────────────
-// House: 232 Democrats, 197 Republicans, 1 Independent (MI), 5 Vacant
+// House: 232 Democrats, 197 Republicans, 1 Independent (MI), 5 Vacant = 435
+//   The five vacancies are CA-25, MD-07, NY-27, TX-04 and WI-07, and they are
+//   NOT seated: the rows below sum to the 430 OCCUPIED seats, and the roster
+//   declares `vacantSeats: { "US.house": 5 }` so S4 can check 430 + 5 == 435.
+//   Seating them would invent five members who did not exist; seating only 430
+//   without declaring the gap would be indistinguishable from a truncated
+//   roster.
 // Senate: 53 Republicans, 45 Democrats, 2 Independents (VT, ME)
 // Governors: 26 Republicans, 24 Democrats
 //
@@ -75,7 +81,8 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "AZ", officeType: "house", party: "republican", seatsHeld: 4 },
   // Arkansas: 1 GOP NPP (4 seats)
   { state: "AR", officeType: "house", party: "republican", seatsHeld: 4 },
-  // California: 1 Dem NPP (45 seats), 1 GOP NPP (7 seats)
+  // California: 1 Dem NPP (45 seats), 1 GOP NPP (7 seats). CA-25 sits VACANT in
+  // February 2020, so this is 52 of the state's 53 seats.
   { state: "CA", officeType: "house", party: "democrat", seatsHeld: 45 },
   { state: "CA", officeType: "house", party: "republican", seatsHeld: 7 },
   // Colorado: 1 Dem NPP (4 seats), 1 GOP NPP (3 seats)
@@ -101,9 +108,12 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   // Indiana: 1 GOP NPP (7 seats), 1 Dem NPP (2 seats)
   { state: "IN", officeType: "house", party: "republican", seatsHeld: 7 },
   { state: "IN", officeType: "house", party: "democrat", seatsHeld: 2 },
-  // Iowa: 1 GOP NPP (3 seats), 1 Dem NPP (1 seat)
-  { state: "IA", officeType: "house", party: "republican", seatsHeld: 3 },
-  { state: "IA", officeType: "house", party: "democrat", seatsHeld: 1 },
+  // Iowa: 1 Dem NPP (3 seats), 1 GOP NPP (1 seat). The 2018 election returned
+  // Finkenauer, Loebsack and Axne for the Democrats against one Republican in
+  // IA-04; this delegation was recorded the wrong way round, which is where the
+  // national split's two-seat error came from.
+  { state: "IA", officeType: "house", party: "democrat", seatsHeld: 3 },
+  { state: "IA", officeType: "house", party: "republican", seatsHeld: 1 },
   // Kansas: 1 GOP NPP (3 seats), 1 Dem NPP (1 seat)
   { state: "KS", officeType: "house", party: "republican", seatsHeld: 3 },
   { state: "KS", officeType: "house", party: "democrat", seatsHeld: 1 },
@@ -115,8 +125,10 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "LA", officeType: "house", party: "democrat", seatsHeld: 1 },
   // Maine: 1 Dem NPP (2 seats)
   { state: "ME", officeType: "house", party: "democrat", seatsHeld: 2 },
-  // Maryland: 1 Dem NPP (7 seats), 1 GOP NPP (1 seat)
-  { state: "MD", officeType: "house", party: "democrat", seatsHeld: 7 },
+  // Maryland: 1 Dem NPP (6 seats), 1 GOP NPP (1 seat). MD-07 sits VACANT in
+  // February 2020 - the seat fell vacant in October 2019 and was not filled
+  // until the April 2020 special election.
+  { state: "MD", officeType: "house", party: "democrat", seatsHeld: 6 },
   { state: "MD", officeType: "house", party: "republican", seatsHeld: 1 },
   // Massachusetts: 1 Dem NPP (9 seats)
   { state: "MA", officeType: "house", party: "democrat", seatsHeld: 9 },
@@ -147,11 +159,14 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "NJ", officeType: "house", party: "republican", seatsHeld: 2 },
   // New Mexico: 1 Dem NPP (3 seats)
   { state: "NM", officeType: "house", party: "democrat", seatsHeld: 3 },
-  // New York: 1 Dem NPP (21 seats), 1 GOP NPP (6 seats)
+  // New York: 1 Dem NPP (21 seats), 1 GOP NPP (5 seats). NY-27 sits VACANT in
+  // February 2020, the seat having fallen vacant in October 2019.
   { state: "NY", officeType: "house", party: "democrat", seatsHeld: 21 },
-  { state: "NY", officeType: "house", party: "republican", seatsHeld: 6 },
-  // North Carolina: 1 GOP NPP (9 seats), 1 Dem NPP (3 seats) - 1 vacancy not filled
-  { state: "NC", officeType: "house", party: "republican", seatsHeld: 9 },
+  { state: "NY", officeType: "house", party: "republican", seatsHeld: 5 },
+  // North Carolina: 1 GOP NPP (10 seats), 1 Dem NPP (3 seats) = the full 13.
+  // Both 2019 vacancies (NC-03 and NC-09) were filled at the September 2019
+  // special elections, so nothing here is vacant by February 2020.
+  { state: "NC", officeType: "house", party: "republican", seatsHeld: 10 },
   { state: "NC", officeType: "house", party: "democrat", seatsHeld: 3 },
   // North Dakota: 1 GOP NPP (1 seat)
   { state: "ND", officeType: "house", party: "republican", seatsHeld: 1 },
@@ -177,8 +192,9 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   // Tennessee: 1 GOP NPP (7 seats), 1 Dem NPP (2 seats)
   { state: "TN", officeType: "house", party: "republican", seatsHeld: 7 },
   { state: "TN", officeType: "house", party: "democrat", seatsHeld: 2 },
-  // Texas: 1 GOP NPP (23 seats), 1 Dem NPP (13 seats)
-  { state: "TX", officeType: "house", party: "republican", seatsHeld: 23 },
+  // Texas: 1 GOP NPP (22 seats), 1 Dem NPP (13 seats). TX-04 sits VACANT in
+  // February 2020, the seat having fallen vacant that January.
+  { state: "TX", officeType: "house", party: "republican", seatsHeld: 22 },
   { state: "TX", officeType: "house", party: "democrat", seatsHeld: 13 },
   // Utah: 1 GOP NPP (3 seats), 1 Dem NPP (1 seat)
   { state: "UT", officeType: "house", party: "republican", seatsHeld: 3 },
@@ -193,8 +209,9 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
   { state: "WA", officeType: "house", party: "republican", seatsHeld: 3 },
   // West Virginia: 1 GOP NPP (3 seats)
   { state: "WV", officeType: "house", party: "republican", seatsHeld: 3 },
-  // Wisconsin: 1 GOP NPP (5 seats), 1 Dem NPP (3 seats)
-  { state: "WI", officeType: "house", party: "republican", seatsHeld: 5 },
+  // Wisconsin: 1 GOP NPP (4 seats), 1 Dem NPP (3 seats). WI-07 sits VACANT in
+  // February 2020, the seat having fallen vacant in September 2019.
+  { state: "WI", officeType: "house", party: "republican", seatsHeld: 4 },
   { state: "WI", officeType: "house", party: "democrat", seatsHeld: 3 },
   // Wyoming: 1 GOP NPP (1 seat)
   { state: "WY", officeType: "house", party: "republican", seatsHeld: 1 },

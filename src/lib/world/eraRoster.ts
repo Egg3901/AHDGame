@@ -169,24 +169,40 @@ const ERA_ROSTER_LITERAL = {
     player: ["US", "UK", "JP"],
     econ: ["DE", "IE", "CN", "BR", "NG", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR"],
     npp: ["RU", "PL", "HU", "RO", "BG", "YU"],
+    // These presets reuse the 2020 seat arrays wholesale (see the fallback note
+    // on getPresetSeats), so they inherit its five February 2020 vacancies. Not
+    // a claim about this era: it follows the seat data, which is itself the
+    // 2020 roster until real rosters are authored.
+    vacantSeats: { "US.house": 5 },
   },
   "2007-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
     econ: ["DE", "IE", "CN", "BR", "NG", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR"],
     npp: ["RU", "PL", "HU", "RO", "BG"],
+    // These presets reuse the 2020 seat arrays wholesale (see the fallback note
+    // on getPresetSeats), so they inherit its five February 2020 vacancies. Not
+    // a claim about this era: it follows the seat data, which is itself the
+    // 2020 roster until real rosters are authored.
+    vacantSeats: { "US.house": 5 },
   },
   "2019-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
     econ: ["DE", "IE", "CN", "BR", "NG"],
     npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
+    // CA-25, MD-07, NY-27, TX-04 and WI-07 stood vacant in February 2020,
+    // pending special elections. The seat rows carry the 430 occupied seats.
+    vacantSeats: { "US.house": 5 },
   },
   "2023-default": {
     default: "absent",
     player: ["US", "UK", "JP"],
     econ: ["DE", "IE", "CN", "BR", "NG"],
     npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
+    // CA-25, MD-07, NY-27, TX-04 and WI-07 stood vacant in February 2020,
+    // pending special elections. The seat rows carry the 430 occupied seats.
+    vacantSeats: { "US.house": 5 },
   },
 } satisfies Record<ShippingPreset, EraRosterSpec>;
 

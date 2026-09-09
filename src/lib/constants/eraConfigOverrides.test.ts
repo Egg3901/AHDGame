@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COUNTRY_CONFIGS, getCountryConfig } from "./countries";
+import { vacantSeatsFor } from "@/lib/world/eraRoster";
+import { US_HOUSE_2020 } from "./historicalSeats";
 
 describe("era country config overrides", () => {
   it("gives the 1953 Senate 96 seats, for 48 states", () => {
@@ -52,5 +54,99 @@ describe("era country config overrides", () => {
     expect(getCountryConfig("JP", "2019-default").legislature.lowerChamber.seats).toBe(465);
     expect(getCountryConfig("JP", "2019-default").legislature.upperChamber?.seats).toBe(248);
     expect(getCountryConfig("US", "2019-default").legislature.upperChamber?.seats).toBe(100);
+  });
+});
+
+describe("US House, February 2020", () => {
+  it("matches the real chamber, with its five vacancies declared not seated", () => {
+    const byParty: Record<string, number> = {};
+    for (const row of US_HOUSE_2020) {
+      byParty[row.party] = (byParty[row.party] ?? 0) + (row.seatsHeld ?? 1);
+    }
+    // The file header's own reference composition, now actually met.
+    expect(byParty).toEqual({ democrat: 232, republican: 197, independent: 1 });
+
+    const occupied = Object.values(byParty).reduce((a, b) => a + b, 0);
+    expect(occupied).toBe(430);
+    expect(vacantSeatsFor("2019-default", "US", "house")).toBe(5);
+    expect(occupied + vacantSeatsFor("2019-default", "US", "house")).toBe(
+      getCountryConfig("US", "2019-default").legislature.lowerChamber.seats
+    );
+  });
+
+  it("gives every state its apportioned seats, less any vacancy", () => {
+    // The total is a consequence of the per-state rows, so this checks the map
+    // rather than the arithmetic: a correct national total over a wrong
+    // delegation would still misallocate House elections.
+    const VACANCY_STATES: Record<string, number> = { CA: 1, MD: 1, NY: 1, TX: 1, WI: 1 };
+    const APPORTIONMENT: Record<string, number> = {
+      AL: 7,
+      AK: 1,
+      AZ: 9,
+      AR: 4,
+      CA: 53,
+      CO: 7,
+      CT: 5,
+      DE: 1,
+      FL: 27,
+      GA: 14,
+      HI: 2,
+      ID: 2,
+      IL: 18,
+      IN: 9,
+      IA: 4,
+      KS: 4,
+      KY: 6,
+      LA: 6,
+      ME: 2,
+      MD: 8,
+      MA: 9,
+      MI: 14,
+      MN: 8,
+      MS: 4,
+      MO: 8,
+      MT: 1,
+      NE: 3,
+      NV: 4,
+      NH: 2,
+      NJ: 12,
+      NM: 3,
+      NY: 27,
+      NC: 13,
+      ND: 1,
+      OH: 16,
+      OK: 5,
+      OR: 5,
+      PA: 18,
+      RI: 2,
+      SC: 7,
+      SD: 1,
+      TN: 9,
+      TX: 36,
+      UT: 4,
+      VT: 1,
+      VA: 11,
+      WA: 10,
+      WV: 3,
+      WI: 8,
+      WY: 1,
+    };
+    const byState: Record<string, number> = {};
+    for (const row of US_HOUSE_2020) {
+      byState[row.state] = (byState[row.state] ?? 0) + (row.seatsHeld ?? 1);
+    }
+    for (const [state, apportioned] of Object.entries(APPORTIONMENT)) {
+      expect(byState[state] ?? 0, state).toBe(apportioned - (VACANCY_STATES[state] ?? 0));
+    }
+    expect(Object.values(APPORTIONMENT).reduce((a, b) => a + b, 0)).toBe(435);
+  });
+
+  it("puts Iowa the right way round", () => {
+    // Regression lock. Iowa was recorded as 3 Republicans and 1 Democrat; the
+    // 2018 election returned the reverse, and that single transposition was the
+    // whole of the national two-seat error.
+    const iowa = US_HOUSE_2020.filter((r) => r.state === "IA");
+    expect(iowa.find((r) => r.party === "democrat")?.seatsHeld).toBe(3);
+    expect(iowa.find((r) => r.party === "republican")?.seatsHeld).toBe(1);
   });
 });
