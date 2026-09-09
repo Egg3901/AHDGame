@@ -570,13 +570,8 @@ describe("S4 — player chambers agree with their era config", () => {
     // prefecture), recorded rather than papered over by bending the config down
     // to match an incomplete roster.
     "1991-default": ["JP.sangiin: seeded 206 + vacant 0 != config 252"],
-    // The US House is FIXED (Task C4): 430 occupied plus five declared
-    // vacancies is the real February 2020 chamber. What remains is the Commons,
-    // where the config is right and the roster is nine seats short.
-    "1999-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
-    "2007-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
-    "2019-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
-    "2023-default": ["UK.commons: seeded 641 + vacant 0 != config 650"],
+    // The US House (C4) and the Commons (C5) are both FIXED. Every player
+    // chamber now agrees with its era config except the one below.
   };
 
   it.each([...SHIPPING_PRESETS])("%s", (preset) => {
@@ -588,17 +583,18 @@ describe("S4 — player chambers agree with their era config", () => {
    * with the config while the regions that ELECT them sum to something else, and
    * that is what misallocates a general election.
    *
-   * Pinned per era rather than asserted equal to the chamber size, because most
-   * eras currently disagree. Task C5 reconciles 1991 (665 against a 651-seat
-   * Commons); the rest are recorded so they cannot drift unnoticed.
+   * Pinned per era. 1991 and 2019 now equal their chamber sizes exactly (651 and
+   * 650); the older eras still disagree and are recorded so they cannot drift
+   * unnoticed. 1979's 635 against a 650-seat config is the largest remaining
+   * gap, and that preset seats no Commons at all.
    */
   const UK_DISTRICT_SUMS: Record<ShippingPreset, number> = {
     "1953-default": 625,
     "1979-default": 635,
-    "1991-default": 665,
+    "1991-default": 651,
     "1999-default": 659,
     "2007-default": 646,
-    "2019-default": 652,
+    "2019-default": 650,
     "2023-default": 650,
   };
 

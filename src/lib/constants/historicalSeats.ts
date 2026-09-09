@@ -855,61 +855,72 @@ export const US_GOVERNORS_1992: HistoricalSeat[] = [
 // Each Commons entry = ONE NPP holding all that party's seats in that region
 
 export const UK_COMMONS_2020: HistoricalSeat[] = [
-  // London (75 seats): Labour stronghold
-  // 1 Labour NPP (49 seats), 1 Conservative NPP (21 seats), 1 Lib Dem NPP (4 seats), 1 Green NPP (1 seat)
+  // The December 2019 general election, all 650 seats.
+  //
+  // Con 365, Lab 202, SNP 48, LD 11, DUP 8, SF 7, PC 4, SDLP 2, Green 1,
+  // Alliance 1, Speaker 1 = 650. Region totals are the real constituency counts
+  // and match ukRegions.houseDistricts exactly, so the seats, the chamber size
+  // and the districts that elect them all agree (S4).
+  //
+  // The Speaker sits for Chorley, in the NORTH WEST - not the South East, where
+  // the previous roster placed him alongside an independent that the 2019
+  // Parliament did not return.
+
+  // London (73)
   { state: "LON", officeType: "commons", party: "uk_labour", seatsHeld: 49 },
   { state: "LON", officeType: "commons", party: "uk_conservative", seatsHeld: 21 },
-  { state: "LON", officeType: "commons", party: "uk_libdem", seatsHeld: 4 },
-  { state: "LON", officeType: "commons", party: "uk_green", seatsHeld: 1 },
+  { state: "LON", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
 
-  // South East England (91 seats): Conservative stronghold
+  // South East England (84)
   { state: "SEE", officeType: "commons", party: "uk_conservative", seatsHeld: 74 },
   { state: "SEE", officeType: "commons", party: "uk_labour", seatsHeld: 8 },
-  { state: "SEE", officeType: "commons", party: "uk_libdem", seatsHeld: 4 },
-  { state: "SEE", officeType: "commons", party: "uk_speaker", seatsHeld: 1 },
-  { state: "SEE", officeType: "commons", party: "uk_independent", seatsHeld: 1 },
+  { state: "SEE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+  { state: "SEE", officeType: "commons", party: "uk_green", seatsHeld: 1 },
 
-  // South West England (58 seats): Conservative strong
+  // South West England (55)
   { state: "SWE", officeType: "commons", party: "uk_conservative", seatsHeld: 48 },
-  { state: "SWE", officeType: "commons", party: "uk_labour", seatsHeld: 4 },
-  { state: "SWE", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
+  { state: "SWE", officeType: "commons", party: "uk_labour", seatsHeld: 6 },
+  { state: "SWE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
 
-  // East of England (61 seats): Conservative strong
+  // East of England (58)
   { state: "EAE", officeType: "commons", party: "uk_conservative", seatsHeld: 52 },
   { state: "EAE", officeType: "commons", party: "uk_labour", seatsHeld: 5 },
+  { state: "EAE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
 
-  // East Midlands (47 seats): Conservative majority
+  // East Midlands (46)
   { state: "EMI", officeType: "commons", party: "uk_conservative", seatsHeld: 38 },
   { state: "EMI", officeType: "commons", party: "uk_labour", seatsHeld: 8 },
 
-  // West Midlands (57 seats): Conservative majority
-  { state: "WMI", officeType: "commons", party: "uk_conservative", seatsHeld: 41 },
-  { state: "WMI", officeType: "commons", party: "uk_labour", seatsHeld: 16 },
+  // West Midlands (59)
+  { state: "WMI", officeType: "commons", party: "uk_conservative", seatsHeld: 44 },
+  { state: "WMI", officeType: "commons", party: "uk_labour", seatsHeld: 15 },
 
-  // Yorkshire and the Humber (54 seats): Mixed
+  // Yorkshire and the Humber (54)
   { state: "YHU", officeType: "commons", party: "uk_conservative", seatsHeld: 26 },
   { state: "YHU", officeType: "commons", party: "uk_labour", seatsHeld: 28 },
 
-  // North West England (75 seats): Labour traditional but shifting
-  { state: "NWE", officeType: "commons", party: "uk_labour", seatsHeld: 43 },
+  // North West England (75), including the Speaker's seat at Chorley
+  { state: "NWE", officeType: "commons", party: "uk_labour", seatsHeld: 41 },
   { state: "NWE", officeType: "commons", party: "uk_conservative", seatsHeld: 32 },
+  { state: "NWE", officeType: "commons", party: "uk_libdem", seatsHeld: 1 },
+  { state: "NWE", officeType: "commons", party: "uk_speaker", seatsHeld: 1 },
 
-  // North East England (27 seats): Labour heartland
+  // North East England (29)
   { state: "NEE", officeType: "commons", party: "uk_labour", seatsHeld: 19 },
-  { state: "NEE", officeType: "commons", party: "uk_conservative", seatsHeld: 8 },
+  { state: "NEE", officeType: "commons", party: "uk_conservative", seatsHeld: 10 },
 
-  // Scotland (57 seats): SNP dominance
-  { state: "SCO", officeType: "commons", party: "uk_snp", seatsHeld: 47 },
+  // Scotland (59)
+  { state: "SCO", officeType: "commons", party: "uk_snp", seatsHeld: 48 },
   { state: "SCO", officeType: "commons", party: "uk_conservative", seatsHeld: 6 },
+  { state: "SCO", officeType: "commons", party: "uk_libdem", seatsHeld: 4 },
   { state: "SCO", officeType: "commons", party: "uk_labour", seatsHeld: 1 },
-  { state: "SCO", officeType: "commons", party: "uk_libdem", seatsHeld: 3 },
 
-  // Wales (32 seats): Labour traditional
+  // Wales (40)
   { state: "WAL", officeType: "commons", party: "uk_labour", seatsHeld: 22 },
-  { state: "WAL", officeType: "commons", party: "uk_conservative", seatsHeld: 6 },
+  { state: "WAL", officeType: "commons", party: "uk_conservative", seatsHeld: 14 },
   { state: "WAL", officeType: "commons", party: "uk_plaid", seatsHeld: 4 },
 
-  // Northern Ireland (18 seats): Regional parties
+  // Northern Ireland (18)
   { state: "NIR", officeType: "commons", party: "uk_dup", seatsHeld: 8 },
   { state: "NIR", officeType: "commons", party: "uk_sf", seatsHeld: 7 },
   { state: "NIR", officeType: "commons", party: "uk_sdlp", seatsHeld: 2 },

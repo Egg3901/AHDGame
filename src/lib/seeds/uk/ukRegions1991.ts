@@ -11,6 +11,20 @@ import type { State } from "@/lib/db/types";
  * stateSenateSeats follow the modern Regional Council configuration —
  * regional councils didn't exist in 1992 (anachronistic compromise).
  */
+/**
+ * ⚠️ House districts total 651, matching the 1992 Commons exactly.
+ *
+ * They summed to 665 before, which would have elected 665 members into a
+ * 651-seat chamber. Scotland (72), Wales (38) and Northern Ireland (17) were
+ * already correct, so the entire 14-seat excess sat in England, which held 538
+ * against its real 524.
+ *
+ * ⚠️ The English total of 524 is exact; the split of it across the nine English
+ * regions is a largest-remainder apportionment of the previous figures, NOT the
+ * historical per-region constituency counts, which would need the 1983 boundary
+ * review to establish. Anyone holding that data should replace these nine
+ * numbers; the total, and the three non-English figures, are already right.
+ */
 export const ukRegions1991: State[] = [
   {
     _id: "LON",
@@ -20,7 +34,7 @@ export const ukRegions1991: State[] = [
     name: "London",
     population: 6_889_000,
     gdp: 80_000,
-    houseDistricts: 84,
+    houseDistricts: 82,
     stateSenateSeats: 32,
     region: "London",
     votingSystem: "fptp",
@@ -33,7 +47,7 @@ export const ukRegions1991: State[] = [
     name: "South East England",
     population: 7_550_000,
     gdp: 65_000,
-    houseDistricts: 91,
+    houseDistricts: 89,
     stateSenateSeats: 67,
     region: "South East",
     votingSystem: "fptp",
@@ -46,7 +60,7 @@ export const ukRegions1991: State[] = [
     name: "South West England",
     population: 4_682_000,
     gdp: 32_000,
-    houseDistricts: 51,
+    houseDistricts: 50,
     stateSenateSeats: 39,
     region: "South West",
     votingSystem: "fptp",
@@ -59,7 +73,7 @@ export const ukRegions1991: State[] = [
     name: "East of England",
     population: 5_106_000,
     gdp: 39_000,
-    houseDistricts: 54,
+    houseDistricts: 53,
     stateSenateSeats: 39,
     region: "East",
     votingSystem: "fptp",
@@ -72,7 +86,7 @@ export const ukRegions1991: State[] = [
     name: "East Midlands",
     population: 4_032_000,
     gdp: 28_000,
-    houseDistricts: 42,
+    houseDistricts: 41,
     stateSenateSeats: 39,
     region: "East Midlands",
     votingSystem: "fptp",
@@ -85,7 +99,7 @@ export const ukRegions1991: State[] = [
     name: "West Midlands",
     population: 5_265_000,
     gdp: 36_000,
-    houseDistricts: 58,
+    houseDistricts: 56,
     stateSenateSeats: 18,
     region: "West Midlands",
     votingSystem: "fptp",
@@ -98,7 +112,7 @@ export const ukRegions1991: State[] = [
     name: "Yorkshire & the Humber",
     population: 4_983_000,
     gdp: 32_000,
-    houseDistricts: 54,
+    houseDistricts: 52,
     stateSenateSeats: 21,
     region: "Yorkshire & the Humber",
     votingSystem: "fptp",
@@ -111,7 +125,7 @@ export const ukRegions1991: State[] = [
     name: "North West England",
     population: 6_834_000,
     gdp: 44_000,
-    houseDistricts: 74,
+    houseDistricts: 72,
     stateSenateSeats: 27,
     region: "North West",
     votingSystem: "fptp",
@@ -124,7 +138,7 @@ export const ukRegions1991: State[] = [
     name: "North East England",
     population: 2_603_000,
     gdp: 16_500,
-    houseDistricts: 30,
+    houseDistricts: 29,
     stateSenateSeats: 17,
     region: "North East",
     votingSystem: "fptp",
