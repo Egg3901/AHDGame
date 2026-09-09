@@ -63,7 +63,8 @@ export async function seedUKRegions(
 
 export async function seedUKParties(db: Db, log: (msg: string) => void, preset?: string) {
   const { ukParties } = await import("@/lib/seeds/uk/ukParties");
-  const { isPartyValidForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+    await import("@/lib/seeds/ensureDefaultParties");
 
   // Resolve the active preset: explicit arg wins, otherwise read from
   // gameState so admin "seed UK parties" runs respect the live game.
@@ -71,6 +72,11 @@ export async function seedUKParties(db: Db, log: (msg: string) => void, preset?:
   if (!activePreset) {
     activePreset = await getGameStatePresetOrDefault(db);
   }
+
+  // Prune BEFORE filtering. Filtering alone stops the wrong parties being
+  // written but leaves the previous preset's behind: a 2019 world reset to 1953
+  // stranded Reform UK (see partySeederPresetHygiene.test.ts).
+  await prunePresetMismatchedDefaultParties(db, ukParties, activePreset);
 
   const eligibleParties = ukParties.filter((p) => isPartyValidForPreset(p, activePreset));
   const now = new Date();
@@ -108,15 +114,16 @@ export async function seedUKParties(db: Db, log: (msg: string) => void, preset?:
 
 export async function seedNIParties(db: Db, log: (msg: string) => void) {
   const { ukParties } = await import("@/lib/seeds/uk/ukParties");
-  const { isPartyValidForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+    await import("@/lib/seeds/ensureDefaultParties");
   // Respect the live preset gate — the DUP (founded 1971) must not be
   // re-introduced into a 1953 world by an ad-hoc NI reseed.
   const activePreset = await getGameStatePresetOrDefault(db);
-  const niParties = ukParties.filter(
-    (p) =>
-      (p.abbreviation === "DUP" || p.abbreviation === "SF") &&
-      isPartyValidForPreset(p, activePreset)
-  );
+  // Scoped to the two parties this seeder owns: pruning the whole UK roster here
+  // would delete parties seedUKParties is responsible for.
+  const niRoster = ukParties.filter((p) => p.abbreviation === "DUP" || p.abbreviation === "SF");
+  await prunePresetMismatchedDefaultParties(db, niRoster, activePreset);
+  const niParties = niRoster.filter((p) => isPartyValidForPreset(p, activePreset));
   const now = new Date();
   // NI parties (DUP/SF) are Minor in the UK roster regardless of era (regional),
   // so the preset arg to resolveSeedPartyTier is immaterial here.

@@ -56,12 +56,18 @@ export async function seedITRegions(
 
 export async function seedITParties(db: Db, log: (msg: string) => void, preset?: string) {
   const { itParties } = await import("@/lib/seeds/it/itParties");
-  const { isPartyValidForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+    await import("@/lib/seeds/ensureDefaultParties");
 
   let activePreset = preset;
   if (!activePreset) {
     activePreset = await getGameStatePresetOrDefault(db);
   }
+
+  // Prune BEFORE filtering. Filtering alone stops the wrong parties being
+  // written but leaves the previous preset's behind, so a downgrade strands
+  // them (see partySeederPresetHygiene.test.ts).
+  await prunePresetMismatchedDefaultParties(db, itParties, activePreset!);
 
   const filtered = (itParties as PartySeed[]).filter((seed) =>
     isPartyValidForPreset(seed, activePreset)
