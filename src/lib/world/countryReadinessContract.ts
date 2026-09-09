@@ -29,21 +29,7 @@ import {
   type ReadinessResult,
   type WorldEconomicArchetype,
 } from "@/lib/world/worldEntityManifest";
-import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
-import { frParties } from "@/lib/seeds/fr/frParties";
-import { itParties } from "@/lib/seeds/it/itParties";
-import { esParties } from "@/lib/seeds/es/esParties";
-import { seParties } from "@/lib/seeds/se/seParties";
-import { trParties } from "@/lib/seeds/tr/trParties";
-import { plParties } from "@/lib/seeds/pl/plParties";
-import { csParties } from "@/lib/seeds/cs/csParties";
-import { huParties } from "@/lib/seeds/hu/huParties";
-import { roParties } from "@/lib/seeds/ro/roParties";
-import { bgParties } from "@/lib/seeds/bg/bgParties";
-import { uaParties } from "@/lib/seeds/ua/uaParties";
-import { blrParties } from "@/lib/seeds/blr/blrParties";
-import { balParties } from "@/lib/seeds/bal/balParties";
-import { yuParties } from "@/lib/seeds/yu/yuParties";
+import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 
 // ─── Capability catalogue ────────────────────────────────────────────────────
 
@@ -453,36 +439,10 @@ export function evaluateCountryReadiness(input: {
  * known flavor gaps). Keyed by `${presetId}:${countryId}:${capabilityId}`.
  * `undefined` means "use the probe result".
  *
- * Authored party-seed modules for countries whose readiness expectations entry
- * is incomplete or missing are listed below; probes prefer
- * {@link COUNTRY_READINESS_EXPECTATIONS} when present.
+ * Party seeds come from `@/lib/seeds/partySeedRegistry`, which covers every
+ * registered country. The partial copy that used to live here covered 14 of
+ * them, which is why the probes needed a country-keyed fallback.
  */
-const AUTHORED_PARTY_SEED_MODULES: Partial<Record<CountryId, readonly PartySeed[]>> = {
-  FR: frParties,
-  IT: itParties,
-  ES: esParties,
-  SE: seParties,
-  TR: trParties,
-  // Eastern bloc Tier-1 — also have COUNTRY_READINESS_EXPECTATIONS entries;
-  // seed modules remain registered so probes see authored material before
-  // expectations land (and for presets that filter via validForPresets).
-  PL: plParties,
-  CS: csParties,
-  HU: huParties,
-  RO: roParties,
-  BG: bgParties,
-  YU: yuParties,
-  UKR: uaParties,
-  BLR: blrParties,
-  BAL: balParties,
-};
-
-function partySeedsForPreset(countryId: CountryId, presetId: string): PartySeed[] {
-  const seeds = AUTHORED_PARTY_SEED_MODULES[countryId];
-  if (!seeds) return [];
-  return seeds.filter((seed) => !seed.validForPresets || seed.validForPresets.includes(presetId));
-}
-
 const CAPABILITY_INVENTORY: Readonly<Record<string, CapabilityEvidence | undefined>> =
   Object.freeze({
     // Japan 1953 is the reference autonomous-ok / player-blocked case: Diet and
@@ -592,10 +552,9 @@ function probeParties(countryId: CountryId, presetId: string): CapabilityEvidenc
   // modules without a COUNTRY_READINESS_EXPECTATIONS entry yet.
   const seeded = partySeedsForPreset(countryId, presetId);
   if (seeded.length > 0) {
-    const labels = seeded.map((p) => p.abbreviation || p.name).join(", ");
     return {
       present: true,
-      evidence: `Authored party seed module for ${presetId}: ${labels} (${seeded.length}).`,
+      evidence: `Authored party seed module for ${presetId}: ${partyRosterLabel(seeded)} (${seeded.length}).`,
     };
   }
   return {
