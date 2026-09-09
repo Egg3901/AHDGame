@@ -24,6 +24,7 @@ import {
   type ResetPresetId,
 } from "@/lib/seeds/presetSelector";
 import { getNationalBudgetSeedConfigsForPreset } from "@/lib/seeds/reference/budgets";
+import { countriesByTier, SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import {
   getPresetEnablementCountries,
   getPresetEnablementTier,
@@ -59,10 +60,18 @@ import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
 export { TURNS_PER_YEAR };
 
 /**
- * Latent SSR republics that appear in budget seed tables but are NOT seeded as
- * countries — they live as RU regions (BEL/BLT). Never iterate them as countries.
+ * Countries the world seeds but never registers: they appear in budget seed
+ * tables and on the map, yet are absent from `COUNTRY_ORDER`, so nothing may
+ * iterate them as countries.
+ *
+ * Derived from the era roster's `latent` tier rather than hand-listed. The hand
+ * list held BLR and BAL and omitted UKR, which is the same country-set drift the
+ * roster exists to end — inert here only because none of the three is in
+ * `COUNTRY_ORDER`, so the shipping path cannot reach them either way.
  */
-const LATENT_COUNTRY_IDS = new Set<string>(["BLR", "BAL"]);
+const LATENT_COUNTRY_IDS: ReadonlySet<string> = new Set(
+  SHIPPING_PRESETS.flatMap((preset) => countriesByTier(preset, "latent"))
+);
 
 /**
  * Countries the active preset actually seeds as countries.
