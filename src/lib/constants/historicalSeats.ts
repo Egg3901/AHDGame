@@ -3911,133 +3911,156 @@ export const RESET_PRESETS: ResetPreset[] = [
 /**
  * Get seats for a specific preset
  */
-export function getPresetSeats(presetId: string): HistoricalSeat[] {
-  switch (presetId) {
-    case "2019-default":
-      return [
-        ...US_HOUSE_2020,
-        ...US_SENATE_2020,
-        ...US_STATE_SENATE_2020,
-        ...US_GOVERNORS_2020,
-        ...UK_COMMONS_2020,
-        ...UK_REGIONAL_COUNCIL_2020,
-        ...UK_FIRST_MINISTERS_2020,
-        ...JP_SHUGIIN_2020,
-        ...JP_SANGIIN_2020,
-        ...JP_GOVERNORS_2020,
-        ...JP_REGIONAL_COUNCIL_2020,
-        ...DE_BUNDESTAG_2021,
-        ...DE_LANDTAG_2020,
-        ...DE_MINISTERPRAESIDENTEN_2020,
-        ...splitCNNPCDelegates(CN_NPC_2020),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
-        ...CN_GOVERNORS_2020,
-        ...IE_DAIL_2020,
-        ...IE_SEANAD_2020,
-      ];
-    case "1991-default":
-      return [
-        ...US_HOUSE_1992,
-        ...US_SENATE_1992,
-        ...US_STATE_SENATE_1990,
-        ...US_GOVERNORS_1992,
-        ...UK_COMMONS_1992,
-        ...UK_REGIONAL_COUNCIL_1992,
-        ...UK_FIRST_MINISTERS_1992,
-        ...JP_SHUGIIN_1990,
-        ...JP_SANGIIN_1989,
-        ...JP_GOVERNORS_1991,
-        ...JP_REGIONAL_COUNCIL_1991,
-        ...DE_BUNDESTAG_1990,
-        ...DE_LANDTAG_1990,
-        ...DE_MINISTERPRAESIDENTEN_1992,
-        ...splitCNNPCDelegates(CN_NPC_1991),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_1991),
-        ...CN_GOVERNORS_1991,
-        ...BR_CHAMBER_1991,
-        ...BR_SENATE_1991,
-        ...IE_DAIL_1991,
-        ...IE_SEANAD_1991,
-      ];
-    case "1953-default":
-      // One-party states seated (USSR/GDR/PRC/bloc). The US federal legislature
-      // is ALSO fully seated — the 83rd Congress is authored per state below.
-      // The remaining democratic legislatures (UK/FR/IT/ES/SE/TR/DE/JP/BR/IE)
-      // start vacant; NG is colonial/coming-soon.
-      // Presidential EXECUTIVES are seeded as generic NPPs on the historically
-      // correct governing ticket (US Republican from the 1952 landslide; BR PTB
-      // from the 1950 election) so presidential countries don't open vacant —
-      // there is no near-term presidential race to fill them (US cycle anchors
-      // to 1956; BR only spawns chamber races). The UK PM is intentionally NOT
-      // seeded — the PM derives from the Commons majority via government
-      // formation, and the 1953 Commons seat map is a separate historical-data
-      // task.
-      return [
-        ...US_EXECUTIVE_1953,
-        ...BR_EXECUTIVE_1953,
-        // US legislature: COMPLETE 83rd Congress — every state's real 1952
-        // delegation is authored (House 213 D / 221 R / 1 I = 435 over the
-        // 1950-census apportionment; Senate 47 D / 48 R / 1 I = 96 over 48
-        // states, AK/HI still territories). Nothing here is estimated and
-        // nothing is left for backfillMissingSeats to fill.
-        ...US_HOUSE_1953,
-        ...US_SENATE_1953,
-        ...US_GOVERNOR_1953,
-        ...SU_SUPREME_SOVIET_1953,
-        ...DD_VOLKSKAMMER_1953,
-        // PRC: the national chamber only, same as GDR/bloc. Provincial People's
-        // Congresses are NOT seated — they did not exist until 1954 either, and
-        // no other 1953 one-party state seats a sub-national chamber.
-        ...splitCNNPCDelegates(CN_NPC_1953),
-        ...BLOC_CHAMBERS_1953,
-      ];
-    case "1979-default":
-      // One-party states are seated (single-list dominance is historical fact).
-      // The multiparty players (US/UK) + economy-only democracies (FR/IT/ES/SE/TR)
-      // start vacant — their per-state/per-region 1979 results are a separate
-      // historical-data task and are deliberately not estimated.
-      return [...SU_SUPREME_SOVIET_1979, ...DD_VOLKSKAMMER_1979, ...BLOC_CHAMBERS_1979];
-    case "empty":
-      return [];
-    default:
-      // ⚠️ SILENT 2020 FALLBACK — recorded, not hidden.
-      //
-      // Any preset without a case above lands here and receives the ENTIRE 2020
-      // chamber roster. That is how 1999-default, 2007-default and 2023-default
-      // came to report 1,004 seats byte-identical to 2019-default: they are not
-      // reusing these arrays by design, they are unrecognised. Downstream that
-      // shows up as 192 jp_* and 187 de_* seats naming parties whose
-      // `validForPresets` excludes those eras, so `resolvePartyId` misses and
-      // folds them to "independent" — the failure `seedHistorical.test.ts`
-      // already guards for 1991's de_spd.
-      //
-      // Authoring real 1999/2007 rosters is a historical-data task. Until then
-      // the fallback at least announces itself, via the same mechanism
-      // `selectPresetBundle` uses, so `runSeed`'s closing "⚠ N seed lane(s) had
-      // no bundle and used 2019 data" line names it.
-      recordPresetFallback("historicalSeats:getPresetSeats", presetId);
-      return [
-        ...US_HOUSE_2020,
-        ...US_SENATE_2020,
-        ...US_STATE_SENATE_2020,
-        ...US_GOVERNORS_2020,
-        ...UK_COMMONS_2020,
-        ...UK_REGIONAL_COUNCIL_2020,
-        ...UK_FIRST_MINISTERS_2020,
-        ...JP_SHUGIIN_2020,
-        ...JP_SANGIIN_2020,
-        ...JP_GOVERNORS_2020,
-        ...JP_REGIONAL_COUNCIL_2020,
-        ...DE_BUNDESTAG_2021,
-        ...DE_LANDTAG_2020,
-        ...DE_MINISTERPRAESIDENTEN_2020,
-        ...splitCNNPCDelegates(CN_NPC_2020),
-        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
-        ...CN_GOVERNORS_2020,
-        ...IE_DAIL_2020,
-        ...IE_SEANAD_2020,
-      ];
+/**
+ * Preset seats, grouped by the country that owns them.
+ *
+ * `HistoricalSeat` carries no `countryId`, and `officeType` is NOT unique to a
+ * country: `senate` is both the US Senate and the Brazilian Senate, so counting
+ * a 1991 world by office type alone reports 181 US senators. `state` does not
+ * disambiguate either - US and Brazilian region codes share AL, PA, MT, MS, RO,
+ * SC, PR and GO - and neither does the pair, since `(PA, senate)` is both
+ * Pennsylvania and Para.
+ *
+ * The owning country is therefore recorded here, where the source arrays are
+ * still separate, rather than inferred after concatenation where the
+ * information has already been thrown away. `getPresetSeats` flattens this, so
+ * there is one source and not two.
+ *
+ * The USSR maps to `RU`, matching how the roster and the `su` policy prefix
+ * already model it.
+ */
+type SeatGroups = Partial<Record<CountryId, HistoricalSeat[]>>;
+
+/** Split a multi-country array by the country prefix on each row's party id. */
+function byPartyPrefix(rows: HistoricalSeat[], prefixes: Record<string, CountryId>): SeatGroups {
+  const out: SeatGroups = {};
+  for (const row of rows) {
+    const prefix = row.party.split("_")[0];
+    const countryId = prefixes[prefix];
+    if (!countryId) {
+      // Loud rather than silently misattributed: a row landing in the wrong
+      // country is exactly the failure this grouping exists to prevent.
+      throw new Error(`No country for bloc seat party "${row.party}" (state ${row.state}).`);
+    }
+    (out[countryId] ??= []).push(row);
   }
+  return out;
+}
+
+const BLOC_PREFIXES: Record<string, CountryId> = {
+  hu: "HU",
+  pl: "PL",
+  ro: "RO",
+  bg: "BG",
+  cs: "CS",
+  yu: "YU",
+};
+
+/** Merge groups, concatenating per country. */
+function mergeGroups(...parts: SeatGroups[]): SeatGroups {
+  const out: SeatGroups = {};
+  for (const part of parts) {
+    for (const [id, rows] of Object.entries(part) as [CountryId, HistoricalSeat[]][]) {
+      (out[id] ??= []).push(...rows);
+    }
+  }
+  return out;
+}
+
+const SEAT_GROUPS_2020: SeatGroups = {
+  US: [...US_HOUSE_2020, ...US_SENATE_2020, ...US_STATE_SENATE_2020, ...US_GOVERNORS_2020],
+  UK: [...UK_COMMONS_2020, ...UK_REGIONAL_COUNCIL_2020, ...UK_FIRST_MINISTERS_2020],
+  JP: [...JP_SHUGIIN_2020, ...JP_SANGIIN_2020, ...JP_GOVERNORS_2020, ...JP_REGIONAL_COUNCIL_2020],
+  DE: [...DE_BUNDESTAG_2021, ...DE_LANDTAG_2020, ...DE_MINISTERPRAESIDENTEN_2020],
+  CN: [
+    ...splitCNNPCDelegates(CN_NPC_2020),
+    ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
+    ...CN_GOVERNORS_2020,
+  ],
+  IE: [...IE_DAIL_2020, ...IE_SEANAD_2020],
+};
+
+const SEAT_GROUPS_1992: SeatGroups = {
+  US: [...US_HOUSE_1992, ...US_SENATE_1992, ...US_STATE_SENATE_1990, ...US_GOVERNORS_1992],
+  UK: [...UK_COMMONS_1992, ...UK_REGIONAL_COUNCIL_1992, ...UK_FIRST_MINISTERS_1992],
+  JP: [...JP_SHUGIIN_1990, ...JP_SANGIIN_1989, ...JP_GOVERNORS_1991, ...JP_REGIONAL_COUNCIL_1991],
+  DE: [...DE_BUNDESTAG_1990, ...DE_LANDTAG_1990, ...DE_MINISTERPRAESIDENTEN_1992],
+  CN: [
+    ...splitCNNPCDelegates(CN_NPC_1991),
+    ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_1991),
+    ...CN_GOVERNORS_1991,
+  ],
+  BR: [...BR_CHAMBER_1991, ...BR_SENATE_1991],
+  IE: [...IE_DAIL_1991, ...IE_SEANAD_1991],
+};
+
+const SEAT_GROUPS_1953: SeatGroups = mergeGroups(
+  {
+    US: [...US_EXECUTIVE_1953, ...US_HOUSE_1953, ...US_SENATE_1953, ...US_GOVERNOR_1953],
+    BR: [...BR_EXECUTIVE_1953],
+    RU: [...SU_SUPREME_SOVIET_1953],
+    DD: [...DD_VOLKSKAMMER_1953],
+    CN: [...splitCNNPCDelegates(CN_NPC_1953)],
+  },
+  byPartyPrefix(BLOC_CHAMBERS_1953, BLOC_PREFIXES)
+);
+
+const SEAT_GROUPS_1979: SeatGroups = mergeGroups(
+  {
+    RU: [...SU_SUPREME_SOVIET_1979],
+    DD: [...DD_VOLKSKAMMER_1979],
+  },
+  byPartyPrefix(BLOC_CHAMBERS_1979, BLOC_PREFIXES)
+);
+
+/**
+ * The seat groups for a preset.
+ *
+ * ⚠️ 1999, 2007, 2023 and any unrecognised preset receive the 2020 groups. That
+ * mirrors `getPresetSeats`'s `default:` case exactly - see the warning there -
+ * and making the reuse explicit is not an endorsement of it: a 1999 world seats
+ * the February 2020 Congress. Authoring real 1999/2007 rosters is a separate
+ * historical-data task.
+ */
+export function seatGroupsFor(presetId: string): SeatGroups {
+  switch (presetId) {
+    case "1991-default":
+      return SEAT_GROUPS_1992;
+    case "1953-default":
+      return SEAT_GROUPS_1953;
+    case "1979-default":
+      return SEAT_GROUPS_1979;
+    case "empty":
+      return {};
+    default:
+      return SEAT_GROUPS_2020;
+  }
+}
+
+/**
+ * Every seat a preset seeds, in one flat array.
+ *
+ * Derived from `seatGroupsFor` so the grouping and the flat view cannot drift:
+ * the groups are the source, this is the projection. Callers that need to know
+ * WHICH country a seat belongs to must use `seatsForCountry` / `seatCountFor`
+ * in `presetSeatGroups.ts`, because `officeType` alone cannot tell them.
+ *
+ * ⚠️ SILENT 2020 FALLBACK - recorded, not hidden.
+ *
+ * Any preset without an explicit case in `seatGroupsFor` receives the ENTIRE
+ * 2020 chamber roster. That is how 1999-default, 2007-default and 2023-default
+ * came to report seat counts byte-identical to 2019-default: they are not
+ * reusing these arrays by design, they are unrecognised. Downstream that shows
+ * up as jp_* and de_* seats naming parties whose `validForPresets` excludes
+ * those eras, so `resolvePartyId` misses and folds them to "independent" - the
+ * failure `seedHistorical.test.ts` already guards for 1991's de_spd.
+ *
+ * Authoring real 1999/2007 rosters is a historical-data task, and those presets
+ * cannot currently be reset into at all (no budgets, no parties: see S2). The
+ * fallback is left in place because returning nothing would be worse.
+ */
+export function getPresetSeats(presetId: string): HistoricalSeat[] {
+  return Object.values(seatGroupsFor(presetId)).flat();
 }
 
 /**
