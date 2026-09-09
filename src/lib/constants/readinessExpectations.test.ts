@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/expectations";
+import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import type { CountryId } from "./countries";
 import { COUNTRY_READINESS_EXPECTATIONS } from "./countryReadinessExpectations";

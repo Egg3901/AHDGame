@@ -18,16 +18,19 @@
  * exists, so a country outside `FULL_ERA_REGION_BUNDLES` keeps exactly the
  * numbers it has today.
  *
- * Lives beside `countryReadinessExpectations.ts` rather than inside it: that
- * module is imported by `seedDiagnostic/expectations.ts`, which this one imports
- * for `expectedRegionCount`, and merging them would close the cycle.
+ * Lives beside `countryReadinessExpectations.ts` rather than inside it, and
+ * reads `expectedRegionCount` from `seedDiagnostic/regionBundles` rather than
+ * from `seedDiagnostic/expectations`. Both avoid the same cycle: the readiness
+ * contract imports this module, and `seedDiagnostic/expectations` reaches
+ * `seedCountryGameStates`, which imports the readiness contract straight back.
+ * `regionBundles` depends on neither side.
  */
 import type { CountryId } from "@/lib/constants/countries";
 import {
   COUNTRY_READINESS_EXPECTATIONS,
   type CountryReadinessExpectations,
 } from "@/lib/constants/countryReadinessExpectations";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/expectations";
+import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/regionBundles";
 import { partyRosterLabel, partySeedsForPreset } from "@/lib/seeds/partySeedRegistry";
 
 /**
