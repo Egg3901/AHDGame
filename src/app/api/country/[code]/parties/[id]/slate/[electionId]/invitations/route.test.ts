@@ -168,4 +168,108 @@ describe("POST .../slate/[electionId]/invitations", () => {
       expect(body.error).not.toMatch(/does not stand for election in this region/i);
     }
   });
+
+  describe("assignment cap", () => {
+    function openRace() {
+      db.collectionMocks["elections"]!.findOne.mockResolvedValue({
+        _id: new ObjectId(ELECTION_ID),
+        countryId: "US",
+        electionType: "house",
+        state: "US_AZ",
+        status: "active",
+        primaryEndTurn: 20,
+      });
+    }
+
+    function stubFind(collection: string, docs: unknown[]) {
+      db.collection(collection);
+      db.collectionMocks[collection]!.find.mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(docs),
+      });
+    }
+
+    function slateRow(candidateId: string, status: string) {
+      return { candidateId: new ObjectId(candidateId), status };
+    }
+
+    function activeNppCandidacy(characterId: string) {
+      return { characterId: new ObjectId(characterId), status: "active", isNPP: true };
+    }
+
+    const OTHER_A = "507f1f77bcf86cd799439021";
+    const OTHER_B = "507f1f77bcf86cd799439022";
+    const OTHER_C = "507f1f77bcf86cd799439023";
+
+    async function assign() {
+      const { POST } = await import("./route");
+      return POST(postRequest({ candidateType: "npp", candidateId: CANDIDATE_ID }), {
+        params: Promise.resolve({ code: "us", id: "1", electionId: ELECTION_ID }),
+      });
+    }
+
+    it("rejects a fourth assignment, counting players and NPPs in one pool", async () => {
+      openRace();
+      stubFind("slateCandidates", [
+        slateRow(OTHER_A, "invited"),
+        slateRow(OTHER_B, "accepted"),
+        slateRow(OTHER_C, "filed"),
+      ]);
+      stubFind("electionCandidates", []);
+
+      const response = await assign();
+
+      expect(response.status).toBe(409);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toMatch(/already has 3 assigned candidates/i);
+    });
+
+    it("counts an autopilot NPP candidacy that has no slate row", async () => {
+      openRace();
+      stubFind("slateCandidates", [slateRow(OTHER_A, "accepted"), slateRow(OTHER_B, "filed")]);
+      stubFind("electionCandidates", [activeNppCandidacy(OTHER_C)]);
+
+      const response = await assign();
+
+      expect(response.status).toBe(409);
+      const body = (await response.json()) as { error: string };
+      expect(body.error).toMatch(/already has 3 assigned candidates/i);
+    });
+
+    it("lets a declined row free its slot", async () => {
+      openRace();
+      stubFind("slateCandidates", [
+        slateRow(OTHER_A, "accepted"),
+        slateRow(OTHER_B, "filed"),
+        slateRow(OTHER_C, "declined"),
+      ]);
+      stubFind("electionCandidates", []);
+
+      const response = await assign();
+
+      if (response.status === 409) {
+        const body = (await response.json()) as { error: string };
+        expect(body.error).not.toMatch(/already has 3 assigned candidates/i);
+      }
+    });
+
+    it("does not charge a candidate for the slot they already hold", async () => {
+      // Re-assigning someone already on the slate must reach the specific
+      // "already on the slate" answer, not be turned away as if the race were
+      // full by their own row.
+      openRace();
+      stubFind("slateCandidates", [
+        slateRow(CANDIDATE_ID, "accepted"),
+        slateRow(OTHER_A, "filed"),
+        slateRow(OTHER_B, "filed"),
+      ]);
+      stubFind("electionCandidates", []);
+
+      const response = await assign();
+
+      if (response.status === 409) {
+        const body = (await response.json()) as { error: string };
+        expect(body.error).not.toMatch(/already has 3 assigned candidates/i);
+      }
+    });
+  });
 });
