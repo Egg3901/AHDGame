@@ -4,7 +4,7 @@ import {
   COUNTRY_READINESS_EXPECTATIONS,
   type ReadinessCheck,
 } from "@/lib/constants/countryReadinessExpectations";
-import { expectedRegionCount } from "@/lib/admin/seedDiagnostic/expectations";
+import { getReadinessExpectations } from "@/lib/constants/readinessExpectations";
 
 /** Best-effort preset lookup; null when the world has no gameState yet. */
 async function readPreset(db: Db): Promise<string | null> {
@@ -28,29 +28,30 @@ export interface CountryReadinessReport {
  * Returns null when the country has no expectations entry (caller should
  * 404). Reads only — never writes.
  *
- * `preset` makes the region-derived expectations era-aware. The entries in
- * COUNTRY_READINESS_EXPECTATIONS describe the modern world, but region counts
- * are era-dependent — 1953/1979 seed the 11 western Länder while 1991+ seed the
- * reunified 16 — so a flat expectation reports a correct historical seed as
- * incomplete. Pass it when the caller knows the preset; otherwise it is read
- * from gameState, and when neither is available the authored entry is used
- * as-is rather than assuming a modern default.
+ * `preset` makes the expectations era-aware, through
+ * `getReadinessExpectations`. The entries in COUNTRY_READINESS_EXPECTATIONS
+ * describe the modern world, but region counts are era-dependent — 1953/1979
+ * seed the 11 western Länder while 1991+ seed the reunified 16 — so a flat
+ * expectation reports a correct historical seed as incomplete. The party roster
+ * is era-dependent for the same reason, and used to name the CPSU in a 2019
+ * world. Pass the preset when the caller knows it; otherwise it is read from
+ * gameState, and when neither is available the authored entry is used as-is
+ * rather than assuming a modern default.
  */
 export async function buildCountryReadinessReport(
   db: Db,
   countryId: CountryId,
   preset?: string
 ): Promise<CountryReadinessReport | null> {
-  const expect = COUNTRY_READINESS_EXPECTATIONS[countryId];
-  if (!expect) return null;
-
   const resolvedPreset = preset ?? (await readPreset(db));
-  // null when the country has no registered era bundle — keep the static entry.
-  const eraRegions = resolvedPreset ? expectedRegionCount(countryId, resolvedPreset) : null;
+  const expect = resolvedPreset
+    ? getReadinessExpectations(countryId, resolvedPreset)
+    : COUNTRY_READINESS_EXPECTATIONS[countryId];
+  if (!expect) return null;
 
   const checks: ReadinessCheck[] = [];
 
-  const expectedRegions = eraRegions ?? expect.regionCount;
+  const expectedRegions = expect.regionCount;
   const regionCount = await db.collection("states").countDocuments({ countryId });
   checks.push({
     name: "Regions",
@@ -124,7 +125,7 @@ export async function buildCountryReadinessReport(
     detail: `Expected ≥${expect.officialMin}, found ${officialCount}`,
   });
 
-  const expectedDemographics = eraRegions ?? expect.demographicsCount;
+  const expectedDemographics = expect.demographicsCount;
   const demoCount = await db.collection("stateDemographics").countDocuments({ countryId });
   checks.push({
     name: "Demographics",
@@ -136,7 +137,7 @@ export async function buildCountryReadinessReport(
   // macroMetrics, not stateMetrics: the legacy collection stopped being written
   // in step-6 Phase 3, so counting it reported EVERY country as missing its
   // region metrics. macroMetrics is where seeded region metrics live now.
-  const expectedMetrics = eraRegions ?? expect.stateMetricsCount;
+  const expectedMetrics = expect.stateMetricsCount;
   const metricsCount = await db
     .collection<{ _id: string }>("macroMetrics")
     .countDocuments(expect.stateMetricsFilter);
