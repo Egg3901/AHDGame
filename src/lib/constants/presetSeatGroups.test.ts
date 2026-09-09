@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
+import { getPresetFallbacks, resetPresetFallbacks } from "@/lib/seeds/presetSelector";
 import {
   BLOC_CHAMBERS_1953,
   BLOC_CHAMBERS_1979,
@@ -194,5 +195,41 @@ describe("preset seat groups", () => {
     expect(seatsForCountry("1979-default", "US")).toEqual([]);
     expect(seatsForCountry("1979-default", "UK")).toEqual([]);
     expect(seatsForCountry("empty", "US")).toEqual([]);
+  });
+});
+
+describe("the silent 2020 seat fallback stays recorded", () => {
+  /**
+   * Regression lock. `getPresetSeats` used to call `recordPresetFallback` from
+   * its `default:` branch, and rewriting it to derive from the seat groups
+   * dropped that call. The whole suite still passed - nothing covered it - and
+   * only an unused-import lint warning gave it away. Without this, a 1999 or
+   * 2007 seed run silently stops reporting that its seat lane took another
+   * era's data.
+   */
+  it("records a fallback for presets with no seat groups of their own", () => {
+    resetPresetFallbacks();
+    getPresetSeats("1999-default");
+    getPresetSeats("2007-default");
+    expect(getPresetFallbacks().map((f) => f.preset)).toEqual(["1999-default", "2007-default"]);
+    expect(getPresetFallbacks()[0].label).toBe("historicalSeats:getPresetSeats");
+  });
+
+  it("records nothing for a preset that owns its seats", () => {
+    resetPresetFallbacks();
+    getPresetSeats("1953-default");
+    getPresetSeats("1979-default");
+    getPresetSeats("1991-default");
+    getPresetSeats("empty");
+    expect(getPresetFallbacks()).toEqual([]);
+  });
+
+  it("records nothing for the 2019 era itself", () => {
+    // recordPresetFallback ignores 2019-era presets: taking 2020 seats in a
+    // 2019 world is not a fallback, it is the data.
+    resetPresetFallbacks();
+    getPresetSeats("2019-default");
+    getPresetSeats("2023-default");
+    expect(getPresetFallbacks().map((f) => f.preset)).toEqual(["2023-default"]);
   });
 });

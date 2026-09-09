@@ -4094,6 +4094,9 @@ const SEAT_GROUPS_1979: SeatGroups = mergeGroups(
  * the February 2020 Congress. Authoring real 1999/2007 rosters is a separate
  * historical-data task.
  */
+/** Presets with their own seat groups; everything else takes the 2020 set. */
+const EXPLICIT_SEAT_PRESETS = new Set(["1991-default", "1953-default", "1979-default", "empty"]);
+
 export function seatGroupsFor(presetId: string): SeatGroups {
   switch (presetId) {
     case "1991-default":
@@ -4132,6 +4135,16 @@ export function seatGroupsFor(presetId: string): SeatGroups {
  * fallback is left in place because returning nothing would be worse.
  */
 export function getPresetSeats(presetId: string): HistoricalSeat[] {
+  // Recorded HERE rather than in `seatGroupsFor`, matching the pre-grouping call
+  // frequency: `seatGroupsFor` is also called per country per chamber by the
+  // contract checks, and recording there would flood the report with one entry
+  // per lookup instead of one per seed lane. `recordPresetFallback` ignores
+  // 2019-era presets itself, so this only fires for a preset genuinely taking
+  // another era's seats, and `runSeed`'s closing "N seed lane(s) had no bundle
+  // and used 2019 data" line names it.
+  if (!EXPLICIT_SEAT_PRESETS.has(presetId)) {
+    recordPresetFallback("historicalSeats:getPresetSeats", presetId);
+  }
   return Object.values(seatGroupsFor(presetId)).flat();
 }
 
