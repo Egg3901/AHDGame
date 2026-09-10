@@ -598,8 +598,10 @@ export async function GET() {
             userId: authUser.userId,
             email: authUser.email,
             username: authUser.username,
-            role: authUser.role,
-            isAdmin: authUser.isAdmin ?? false,
+            // Copy the current DB principal roles (fresh `user` read above),
+            // never the incoming token claims, then preserve the original iat.
+            role: user.role,
+            isAdmin: user.isAdmin === true || user.role === "admin",
           },
           getJwtSecret()
         );
