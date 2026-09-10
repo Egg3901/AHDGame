@@ -74,7 +74,7 @@ describe("annualDeathProbability", () => {
 describe("randomReplacementBirthYear", () => {
   it("mints a working-age adult (32-68)", () => {
     for (let i = 0; i < 200; i++) {
-      const y = randomReplacementBirthYear(2019);
+      const y = randomReplacementBirthYear(2019, Math.random);
       expect(2019 - y).toBeGreaterThanOrEqual(32);
       expect(2019 - y).toBeLessThanOrEqual(68);
     }
@@ -116,6 +116,7 @@ describe("processNppMortality", () => {
     seedNpps([dead]);
 
     const result = await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
       year: 2019,
       rng: () => 0, // certain death
       mintReplacement: mintStub,
@@ -148,6 +149,7 @@ describe("processNppMortality", () => {
     seedNpps([dead]);
 
     await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
       year: 2019,
       rng: () => 0,
       mintReplacement: mintStub,
@@ -155,14 +157,39 @@ describe("processNppMortality", () => {
 
     const formations = db.collectionMocks["governmentFormations"];
     expect(formations.updateMany).toHaveBeenCalledTimes(3);
-    for (const field of ["pmNppId", "presidentNppId", "hosNppId"]) {
+    for (const [field, nameField] of [
+      ["pmNppId", "pmName"],
+      ["presidentNppId", "presidentName"],
+      ["hosNppId", "hosName"],
+    ]) {
       expect(formations.updateMany).toHaveBeenCalledWith(
         { [field]: dead._id },
         expect.objectContaining({
-          $set: expect.objectContaining({ [field]: expect.any(ObjectId) }),
+          $set: expect.objectContaining({
+            [field]: expect.any(ObjectId),
+            [nameField]: "Replacement Person",
+          }),
         })
       );
     }
+  });
+
+  it("withdraws active election candidacies for the dead NPP", async () => {
+    vi.mocked(nppAutonomyAtLeast).mockResolvedValue(true);
+    const dead = npp({ birthYear: 1900 });
+    seedNpps([dead]);
+
+    await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
+      year: 2019,
+      rng: () => 0,
+      mintReplacement: mintStub,
+    });
+
+    expect(db.collectionMocks["electionCandidates"]!.updateMany).toHaveBeenCalledWith(
+      { nppId: dead._id, status: "active" },
+      { $set: { status: "withdrawn", withdrawnAt: expect.any(Date) } }
+    );
   });
 
   it("leaves the young alive", async () => {
@@ -170,6 +197,7 @@ describe("processNppMortality", () => {
     seedNpps([npp({ birthYear: 1980 })]);
 
     const result = await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
       year: 2019,
       rng: () => 0.9999999, // certain survival
       mintReplacement: mintStub,
@@ -187,10 +215,13 @@ describe("processNppMortality", () => {
       npp({ birthYear: 1900, countryId: "UK" }),
       npp({ birthYear: null }),
       npp({ birthYear: 1900, isTechnocrat: true }),
+      npp({ birthYear: 1900, currentOffice: null }),
     ]);
 
-    // Technocrats are filtered in the query; the other two reach the roll.
+    // Technocrats and unseated NPPs are filtered in the query; the other two
+    // reach the eligibility guard without rolling.
     const result = await processNppMortality(db as unknown as Db, {
+      now: new Date("2019-01-01T00:00:00Z"),
       year: 2019,
       rng,
       mintReplacement: mintStub,
