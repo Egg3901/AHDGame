@@ -4,6 +4,15 @@ on:
   push:
     tags:
       - "game-v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing game version tag to package, without the game-v prefix
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && format('game-v{0}', inputs.version) || github.ref_name }}
 
 permissions:
   contents: write
@@ -20,13 +29,15 @@ jobs:
             platform: linux-aarch64
           - runner: windows-latest
             platform: windows-x86_64
-          - runner: macos-13
+          - runner: macos-15-intel
             platform: macos-x86_64
           - runner: macos-14
             platform: macos-aarch64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -40,7 +51,7 @@ jobs:
         run: npm run singleplayer:smoke
       - name: Package versioned runtime
         shell: bash
-        run: node scripts/singleplayer/release-package.mjs "${GITHUB_REF_NAME#game-v}" "${{ matrix.platform }}"
+        run: node scripts/singleplayer/release-package.mjs "${RELEASE_TAG#game-v}" "${{ matrix.platform }}"
       - uses: actions/upload-artifact@v4
         with:
           name: singleplayer-${{ matrix.platform }}
@@ -59,4 +70,4 @@ jobs:
       - name: Publish immutable game runtime
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release-assets/* --repo "$GITHUB_REPOSITORY" --title "A House Divided ${GITHUB_REF_NAME#game-v}" --generate-notes --verify-tag
+        run: gh release create "$RELEASE_TAG" release-assets/* --repo "$GITHUB_REPOSITORY" --title "A House Divided ${RELEASE_TAG#game-v}" --generate-notes --verify-tag
