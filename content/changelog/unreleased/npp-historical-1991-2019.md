@@ -1,5 +1,4 @@
 ---
-version: "1.4.65"
 date: 2026-09-10
 title: 1991 and 2019 presets seat real historical NPPs with ages and V5 mortality
 summary: >-
