@@ -64,7 +64,13 @@ function tierFromEntry(entry: WorldEntityManifestEntry): Tier {
  */
 function explicitCountryEntries(preset: string): WorldEntityManifestEntry[] | null {
   const entries = getWorldEntityPresetManifest(preset).entries.filter(
-    (entry) => entry.countryId !== undefined && entry.countryId !== GLOBAL_GAME_STATE_COUNTRY_ID
+    (entry) =>
+      entry.countryId !== undefined &&
+      entry.countryId !== GLOBAL_GAME_STATE_COUNTRY_ID &&
+      // Cold War hidden entries are deliberately NPP-only sovereign simulations.
+      // Later hidden entries classify historical/dissolved entities in the world
+      // manifest, but must not create a live country with no domestic seed data.
+      (entry.legacyAccess !== "hidden" || preset === "1953-default" || preset === "1979-default")
   );
   return entries.length > 0 ? entries : null;
 }

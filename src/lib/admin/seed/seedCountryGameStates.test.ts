@@ -68,7 +68,7 @@ describe("manifest-backed preset country enablement", () => {
     expect(getPresetEnablementCountries("1953-default")).not.toContain("US");
   });
 
-  it("materializes 2019 config access and keeps coming-soon countries NPP-simulated", () => {
+  it("materializes every fully seeded 2019 country", () => {
     expect(getPresetEnablementCountries("2019-default")).not.toBeNull();
     expect(getPresetEnablementTier("2019-default", "UK")).toEqual({
       enabledForPlayers: true,
@@ -77,12 +77,13 @@ describe("manifest-backed preset country enablement", () => {
     });
     expect(getPresetEnablementTier("2019-default", "FR")).toEqual({
       enabledForPlayers: false,
-      economyPreview: false,
+      economyPreview: true,
       status: "beta",
     });
+    expect(getPresetEnablementTier("2019-default", "RU")).toBeNull();
   });
 
-  it("materializes config fallback country enablement for the 2023 preset", () => {
+  it("materializes fully seeded country enablement for the 2023 preset", () => {
     expect(getPresetEnablementCountries("2023-default")).not.toBeNull();
     expect(getPresetEnablementTier("2023-default", "UK")).toEqual({
       enabledForPlayers: true,

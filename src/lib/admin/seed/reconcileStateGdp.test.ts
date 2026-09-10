@@ -47,6 +47,14 @@ import { brRegions } from "@/lib/seeds/br/brRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
+import { frRegions } from "@/lib/seeds/fr/frRegions";
+import { itRegions } from "@/lib/seeds/it/itRegions";
+import { esRegions } from "@/lib/seeds/es/esRegions";
+import { seRegions } from "@/lib/seeds/se/seRegions";
+import { trRegions } from "@/lib/seeds/tr/trRegions";
+import { grRegions } from "@/lib/seeds/gr/grRegions";
+import { atRegions } from "@/lib/seeds/at/atRegions";
+import { fiRegions } from "@/lib/seeds/fi/fiRegions";
 
 type Row = Pick<State, "_id" | "countryId" | "gdp">;
 
@@ -91,6 +99,14 @@ function authoredRows(preset: "1953-default" | "2019-default"): Row[] {
     ...cnRegions,
     ...ieRegions,
     ...ngRegions,
+    ...frRegions,
+    ...itRegions,
+    ...esRegions,
+    ...seRegions,
+    ...trRegions,
+    ...grRegions,
+    ...atRegions,
+    ...fiRegions,
   ];
 }
 

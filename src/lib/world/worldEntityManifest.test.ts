@@ -287,10 +287,11 @@ describe("world entity manifest", () => {
     expect(ghana.countryId).toBeUndefined();
   });
 
-  it("preserves the admin/config fallback seam for 2019", () => {
+  it("classifies the fully seeded 2019 countries into explicit access tiers", () => {
     const manifest = getWorldEntityPresetManifest("2019-default");
     expect(manifest.entries.length).toBeGreaterThan(0);
-    expect(manifest.entries.every((entry) => entry.legacyAccess === "config-fallback")).toBe(true);
+    expect(getWorldEntityOrThrow("2019-default", "UK").legacyAccess).toBe("player");
+    expect(getWorldEntityOrThrow("2019-default", "FR").legacyAccess).toBe("economy-preview");
   });
 
   it("provides a manifest for every supported reset era", () => {
@@ -307,7 +308,7 @@ describe("world entity manifest", () => {
     }
     expect(getWorldEntityOrThrow("2023-default", "UK")).toMatchObject({
       countryId: "UK",
-      legacyAccess: "config-fallback",
+      legacyAccess: "player",
     });
   });
 
@@ -350,14 +351,10 @@ describe("world entity manifest", () => {
         legacyAccess: "economy-preview",
       });
     }
-    // 2019-default runs off the admin/config fallback seam (every entry is
-    // "config-fallback"), which resolves ES's tier from its CountryConfig
-    // status rather than a hand-authored manifest entry — this asserts the
-    // preserved shape rather than a specific status.
     expect(getWorldEntityOrThrow("2019-default", "ES")).toMatchObject({
       countryId: "ES",
-      simulationTier: "historical-presence",
-      legacyAccess: "config-fallback",
+      simulationTier: "full-autonomous",
+      legacyAccess: "economy-preview",
     });
   });
 
