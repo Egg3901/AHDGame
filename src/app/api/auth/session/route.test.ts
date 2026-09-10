@@ -121,6 +121,21 @@ describe("GET /api/auth/session", () => {
     expect(findOne).toHaveBeenCalledTimes(3);
   });
 
+  it("rejects the original token after reauth while the cutoff remains, and accepts a same-second fresh iat", async () => {
+    const cutoff = new Date(now * 1000 + 400);
+    findOne.mockResolvedValue({
+      _id: id,
+      username: "current-name",
+      email: "current@example.invalid",
+      authRevokedAt: cutoff,
+    });
+    expect((await GET(request(`auth-token-test=${await token({ iat: now })}`))).status).toBe(401);
+    expect(
+      (await GET(request(`auth-token-test=${await token({ iat: now + 1, exp: now + 300 })}`)))
+        .status
+    ).toBe(200);
+  });
+
   it("reports outages separately without clearing the browser cookie or exposing errors", async () => {
     findOne.mockRejectedValue(new Error("sensitive database error"));
     const response = await GET(request(`auth-token-test=${await token()}`));

@@ -124,7 +124,10 @@ export async function resolveNGPresidentElection(
 
   const candidates = await db
     .collection<ElectionCandidate>("electionCandidates")
-    .find({ _id: { $in: candidateIds.map((id) => new ObjectId(id)) } })
+    .find({
+      _id: { $in: candidateIds.map((id) => new ObjectId(id)) },
+      status: "active",
+    })
     .toArray();
   const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
 

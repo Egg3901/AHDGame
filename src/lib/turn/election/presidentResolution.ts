@@ -141,6 +141,7 @@ async function resolveVpIds(
           party: winnerCandidate.party,
           countryId: election.countryId,
           _id: { $ne: winnerCandidate.nppId },
+          retiredAt: null,
         },
         { projection: { _id: 1 } }
       )
@@ -312,7 +313,12 @@ export async function resolvePresidentElection(
 
   const candidates = await db
     .collection<ElectionCandidate>("electionCandidates")
-    .find({ _id: { $in: Object.keys(electoralVotesByCandidate).map((id) => new ObjectId(id)) } })
+    .find({
+      _id: { $in: Object.keys(electoralVotesByCandidate).map((id) => new ObjectId(id)) },
+      // A seating retry needs the rows withdrawn after tally finalization, but
+      // a fresh resolution must not seat a candidate retired by mortality.
+      ...(seatingRetryOnly ? {} : { status: "active" }),
+    })
     .toArray();
   const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
 

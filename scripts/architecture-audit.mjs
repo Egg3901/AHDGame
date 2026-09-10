@@ -178,6 +178,10 @@ const SIZE_CAP_EXEMPT = [
   "src/lib/politicalLegislation/laws/ukLaws.ts",
   "src/lib/politicalLegislation/laws/ruLaws.ts",
   "src/lib/politicalLegislation/laws/ddLaws.ts",
+  // Pure-data historical NPP rosters: one authored identity record per preset
+  // seat, validated by historicalRosters.test.ts and consumed as a lookup map.
+  "src/lib/npp/rosters/p1991-us.ts",
+  "src/lib/npp/rosters/p2019-us.ts",
   // GENERATED pure-data political boards, emitted by
   // scripts/debug/derive-nonplayable-boards.ts --emit and committed so the
   // artifact is reviewable: 4 presets x 147 regions x 63 families of plain
