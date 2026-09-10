@@ -1,3 +1,4 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { isSingleplayer } from "@/lib/singleplayer";
@@ -67,10 +68,7 @@ export const GET = withNoStore(async () => {
       await clearAuthCookie("auth_me:source_fenced");
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
-    if (
-      user.authRevokedAt &&
-      (typeof payload.iat !== "number" || user.authRevokedAt >= new Date(payload.iat * 1000))
-    ) {
+    if (isTokenRevokedByCutoff(user.authRevokedAt, payload.iat)) {
       await clearAuthCookie("auth_me:auth_revoked");
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }

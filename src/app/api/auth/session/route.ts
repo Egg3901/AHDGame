@@ -1,3 +1,4 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import { NextResponse } from "next/server";
 import { jwtVerify, errors as joseErrors } from "jose";
 import { ObjectId } from "mongodb";
@@ -58,7 +59,7 @@ export async function GET(request: Request) {
     );
     if (!user || user.isBanned || !user.username) return inactive();
     if (isAuthMigrationFenced(user)) return inactive();
-    if (user.authRevokedAt && user.authRevokedAt.getTime() >= iat * 1000) return inactive();
+    if (isTokenRevokedByCutoff(user.authRevokedAt, iat)) return inactive();
 
     // Contact email preserves legacy consumer compatibility. It does not prove
     // email ownership or grant staff permissions.

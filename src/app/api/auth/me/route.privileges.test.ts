@@ -150,6 +150,18 @@ describe("GET /api/auth/me privilege flags", () => {
     expect(body.user.isModerator).toBe(true);
     expect(body.user.role).toBe("moderator");
   });
+  it.each([0, false, "", "2026-01-01", {}, new Date(NaN)])(
+    "denies malformed revocation data without returning profile data: %j",
+    async (authRevokedAt) => {
+      const response = await getMe(
+        { userId: USER_ID, username: "player", iat: 100 },
+        { _id: new ObjectId(USER_ID), username: "player", authRevokedAt }
+      );
+      expect(response.status).toBe(401);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      expect(await response.json()).toEqual({ error: "Authentication required" });
+    }
+  );
   it.each([null, {}, "malformed", undefined])(
     "denies a present migration fence without returning profile data: %s",
     async (authMigrationFence) => {
