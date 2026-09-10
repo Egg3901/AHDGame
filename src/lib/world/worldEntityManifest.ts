@@ -1972,16 +1972,8 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ),
       })
     ),
-    "2027-default": defineWorldEntityPresetManifest(
-      "2027-default",
-      entriesFromAccess(
-        "2027-default",
-        accessMap(
-          ["US", "UK", "DE", "JP", "CN"],
-          POST_COLD_WAR_ECONOMY.filter((countryId) => !["DE", "JP", "CN"].includes(countryId))
-        )
-      )
-    ),
+    // prettier-ignore
+    "2027-default": defineWorldEntityPresetManifest("2027-default", entriesFromAccess("2027-default", accessMap(["US", "UK", "DE", "JP", "CN"], POST_COLD_WAR_ECONOMY.filter((countryId) => !["DE", "JP", "CN"].includes(countryId))))),
   });
 
 export function getWorldEntityPresetManifest(presetId: string): WorldEntityPresetManifest {
