@@ -99,7 +99,7 @@ function isDocsPath(rel) {
 
 function isPlanMarkdown(rel) {
   if (!rel.endsWith(".md")) return false;
-  if (rel.startsWith("node_modules/")) return false;
+  if (rel.startsWith("node_modules/") || rel.startsWith(".next/node_modules/")) return false;
   if (rel === "LICENSE.md") return false;
   if (rel.startsWith("content/changelog/public/")) return false;
   if (rel.startsWith("content/changelog/legacy/")) return false;
@@ -226,7 +226,7 @@ export function inspectPayload(root, { nativePlatform } = {}) {
   let docs = 0;
   let plans = 0;
   for (const rel of files) {
-    if (rel.startsWith("node_modules/")) continue;
+    if (rel.startsWith("node_modules/") || rel.startsWith(".next/node_modules/")) continue;
     if (classifyPayloadPath(rel) === "keep") kept.push(rel);
     else dropped.push(rel);
     if (isStrayTs(rel)) strayTs += 1;

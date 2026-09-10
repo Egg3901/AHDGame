@@ -42,6 +42,8 @@ function runtimeFixture(): string {
   touch(root, ".next/server/chunks/ssr.js", 'require("mongodb-438b504308ffa4be");\n');
   touch(root, "public/ahd-logo.png");
   touch(root, "node_modules/mongodb/package.json", "{}");
+  touch(root, ".next/node_modules/mongodb-traced/README.md", "Dependency documentation");
+  touch(root, ".next/node_modules/mongodb-traced/LICENSE.md", "Dependency license");
   touch(root, "node_modules/sharp/package.json", "{}");
   touch(root, "node_modules/@img/sharp-linux-x64/package.json", "{}");
   touch(root, "src/data/npp-images.json", "[]");
