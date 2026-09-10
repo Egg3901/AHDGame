@@ -2355,6 +2355,61 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_2023: NationalBudgetSeedConfig[] = [
   },
 ];
 
+// January 2027 projection. Macro totals are anchored to the February 2026 CBO
+// baseline and the state population projection in states2027.ts. Policy lanes
+// retain the latest enacted modern configuration instead of inventing future law.
+export const NATIONAL_BUDGET_SEED_CONFIGS_2027: NationalBudgetSeedConfig[] = [
+  {
+    budgetId: "federal",
+    countryId: "US",
+    fiscalYear: 2027,
+    population: 341_784_857,
+    gdp: 32_800_000_000_000,
+    currencyCode: "USD",
+    economicFactors: {
+      gdpGrowth: 2.0,
+      wageGrowth: 3.6,
+      inflationRate: 2.4,
+      tradeGrowth: 1.8,
+      lastUpdated: new Date(0),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.3537,
+      corporateProfits: 0.0796,
+      wagesAndSalaries: 0.3148,
+      importValue: 0.1852,
+      taxableSales: 0.5556,
+    },
+    otherRevenue: 300_000_000_000,
+    debt: {
+      principal: 39_000_000_000_000,
+      interestRate: 0.034,
+      ceiling: 41_000_000_000_000,
+      ceilingLastRaisedYear: 2027,
+    },
+    creditRating: "AA",
+    baselineSpendingByCategory: {
+      healthcare: 2_100_000_000_000,
+      defense: 980_000_000_000,
+      socialSecurity: 1_650_000_000_000,
+      education: 290_000_000_000,
+      infrastructure: 190_000_000_000,
+      other: 1_700_000_000_000,
+    },
+    baselineStateGrants: 1_300_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS_2023.us.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS_2023.us.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "us_federal_income_tax_rate",
+      domesticCorporateTax: "us_federal_domestic_corporate_tax_rate",
+      foreignCorporateTax: "us_federal_foreign_corporate_tax_rate",
+      payrollTax: "us_federal_payroll_tax_rate",
+      tariffs: "us_federal_tariff_rate",
+      salesTax: "us_federal_sales_tax_rate",
+    },
+  },
+];
+
 // Authored independently for FY2007 — not derived from 2019/2023/1991 configs.
 // Real FY2007 actuals: GDP ≈ $14.45T, outlays ≈ $2.73T, receipts ≈ $2.57T,
 // deficit ≈ $161B (1.1% GDP), gross federal debt ≈ $9.0T (debt/GDP ≈ 62%, of
@@ -5002,6 +5057,13 @@ export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalB
       getNationalBudgetSeedConfigsForPreset("2019-default"),
       NATIONAL_BUDGET_SEED_CONFIGS_2023,
       2023
+    );
+  }
+  if (preset === "2027-default") {
+    return overlayNationalBudgetConfigs(
+      getNationalBudgetSeedConfigsForPreset("2023-default"),
+      NATIONAL_BUDGET_SEED_CONFIGS_2027,
+      2027
     );
   }
   return NATIONAL_BUDGET_SEED_CONFIGS;

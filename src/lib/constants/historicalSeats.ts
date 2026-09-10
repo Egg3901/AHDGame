@@ -16,6 +16,12 @@ import type { CountryId } from "./countries";
 import { recordPresetFallback } from "@/lib/seeds/presetSelector";
 import { US_HOUSE_2027 } from "@/lib/seeds/reference/usHouse2027";
 import { US_SENATE_2027 } from "@/lib/seeds/reference/usSenate2027";
+import {
+  DE_BUNDESTAG_2027,
+  JP_SANGIIN_2027,
+  JP_SHUGIIN_2027,
+  UK_COMMONS_2027,
+} from "@/lib/seeds/reference/worldSeats2027";
 
 export interface HistoricalSeat {
   state: string;
@@ -3871,6 +3877,13 @@ export const RESET_PRESETS: ResetPreset[] = [
     ],
   },
   {
+    id: "2027-default",
+    name: "2027 Start Date - Five-Country Modern World",
+    description:
+      "January 2027 projection with playable United States, United Kingdom, Japan, Germany, and China. Uses projected US congressional control and the latest completed national elections elsewhere.",
+    countries: ["US", "UK", "JP", "DE", "CN"],
+  },
+  {
     id: "2023-default",
     name: "2023 Start Date - Default Parties",
     description:
@@ -3941,10 +3954,25 @@ export const RESET_PRESETS: ResetPreset[] = [
 export function getPresetSeats(presetId: string): HistoricalSeat[] {
   switch (presetId) {
     case "2027-default":
-      // Draft roster. Only the projected US federal chambers are authored so
-      // far. The preset remains outside every reset/selectable allowlist until
-      // the executive, governors, state senates, and non-US rosters are ready.
-      return [...US_HOUSE_2027, ...US_SENATE_2027];
+      return [
+        ...US_HOUSE_2027,
+        ...US_SENATE_2027,
+        ...US_STATE_SENATE_2020,
+        ...US_GOVERNORS_2020,
+        ...UK_COMMONS_2027,
+        ...UK_REGIONAL_COUNCIL_2020,
+        ...UK_FIRST_MINISTERS_2020,
+        ...JP_SHUGIIN_2027,
+        ...JP_SANGIIN_2027,
+        ...JP_GOVERNORS_2020,
+        ...JP_REGIONAL_COUNCIL_2020,
+        ...DE_BUNDESTAG_2027,
+        ...DE_LANDTAG_2020,
+        ...DE_MINISTERPRAESIDENTEN_2020,
+        ...splitCNNPCDelegates(CN_NPC_2020),
+        ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
+        ...CN_GOVERNORS_2020,
+      ];
     case "2019-default":
       return [
         ...US_HOUSE_2020,

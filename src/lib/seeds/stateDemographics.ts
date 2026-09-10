@@ -150,6 +150,7 @@ export const stateCensusDataByEra: Record<EraId, Record<string, Layer1Config>> =
   "2007": {},
   "2019": {},
   "2023": {},
+  "2027": {},
 };
 
 // Re-export the 2019 source data for backward compatibility

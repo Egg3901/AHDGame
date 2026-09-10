@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DRAFT_SEED_PRESET_IDS,
+  SEED_PRESET_IDS,
   STARTING_YEAR,
   getStartingYearForPreset,
   isDraftSeedPreset,
@@ -21,10 +22,11 @@ describe("getStartingYearForPreset", () => {
     expect(getStartingYearForPreset("2023-default")).toBe(2023);
   });
 
-  it("gives the draft 2027 preset its own calendar without publishing it", () => {
+  it("publishes the 2027 preset with its own calendar", () => {
     expect(getStartingYearForPreset("2027-default")).toBe(2027);
-    expect(DRAFT_SEED_PRESET_IDS).toContain("2027-default");
-    expect(isDraftSeedPreset("2027-default")).toBe(true);
+    expect(SEED_PRESET_IDS).toContain("2027-default");
+    expect(DRAFT_SEED_PRESET_IDS).not.toContain("2027-default");
+    expect(isDraftSeedPreset("2027-default")).toBe(false);
     expect(isDraftSeedPreset("2023-default")).toBe(false);
   });
 
@@ -53,7 +55,7 @@ describe("getStartingYearForPreset", () => {
     }
   });
 
-  it("draft 2027-default cycle anchors are positive without publishing the preset", () => {
+  it("2027-default cycle anchors are positive", () => {
     const anchors = getCycleAnchors({
       startingYear: getStartingYearForPreset("2027-default"),
       preset: "2027-default",

@@ -279,6 +279,8 @@ const SPHERE_SPONSOR_ELIGIBILITY: Readonly<Partial<Record<string, ReadonlySet<Co
     "1999-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2007-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2019-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    "2023-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    "2027-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
   });
 
 /** True when the preset matrix lists this entity as a sphere sponsor. */
@@ -1969,6 +1971,16 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
           accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
         ),
       })
+    ),
+    "2027-default": defineWorldEntityPresetManifest(
+      "2027-default",
+      entriesFromAccess(
+        "2027-default",
+        accessMap(
+          ["US", "UK", "DE", "JP", "CN"],
+          POST_COLD_WAR_ECONOMY.filter((countryId) => !["DE", "JP", "CN"].includes(countryId))
+        )
+      )
     ),
   });
 

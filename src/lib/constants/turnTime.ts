@@ -38,6 +38,7 @@ export const SEED_PRESET_IDS = [
   "2007-default",
   "2019-default",
   "2023-default",
+  "2027-default",
 ] as const;
 
 export type SeedPresetId = (typeof SEED_PRESET_IDS)[number];
@@ -52,7 +53,7 @@ export type SeedPresetId = (typeof SEED_PRESET_IDS)[number];
  * incomplete future preset there would make it look production-ready and could
  * quietly seed older data into a new world.
  */
-export const DRAFT_SEED_PRESET_IDS = ["2027-default"] as const;
+export const DRAFT_SEED_PRESET_IDS = [] as const;
 
 export type DraftSeedPresetId = (typeof DRAFT_SEED_PRESET_IDS)[number];
 

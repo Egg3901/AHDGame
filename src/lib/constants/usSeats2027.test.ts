@@ -8,9 +8,8 @@ describe("2027 projected US federal roster", () => {
 
   it("uses an explicit roster instead of the 2019 fallback", () => {
     expect(seats).not.toEqual(getPresetSeats("2019-default"));
-    expect(seats.every((seat) => seat.officeType === "house" || seat.officeType === "senate")).toBe(
-      true
-    );
+    expect(seats.some((seat) => seat.officeType === "house")).toBe(true);
+    expect(seats.some((seat) => seat.officeType === "senate")).toBe(true);
   });
 
   it("matches the projected chamber totals", () => {

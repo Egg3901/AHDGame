@@ -130,6 +130,18 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       ],
       election: "US 2024 presidential, by state",
     },
+    "2027": {
+      center: 0,
+      centerTol: 0.6,
+      minSpread: 2.5,
+      expectLeft: ["DC", "HI", "MA", "MD", "VT", "CA", "NY", "WA", "IL", "NJ", "CT", "RI"],
+      expectRight: ["WY", "WV", "ND", "ID", "OK", "AR", "AL", "KY", "SD", "TN", "MS", "MT"],
+      ordering: [
+        ["MA", "TX"],
+        ["CA", "AL"],
+      ],
+      election: "US 2024 presidential, by state",
+    },
   },
 
   // ─── The four countries enabled in the 1953 iteration ─────────────────────
@@ -263,6 +275,14 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       expectRight: ["SEE", "EAE"],
       election: "UK 2024 general (Labour landslide)",
     },
+    "2027": {
+      center: 0,
+      centerTol: 0.6,
+      minSpread: 1.8,
+      expectLeft: ["NEE", "NWE", "WAL", "LON", "YHU"],
+      expectRight: ["SEE", "EAE"],
+      election: "UK 2024 general (Labour landslide)",
+    },
   },
 
   // ─── Germany — Bundestag vote share, by Land ──────────────────────────────
@@ -316,6 +336,14 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       expectLeft: ["HH", "BRE", "BE", "BB", "MV"],
       expectRight: ["BY", "BW", "SN"],
       election: "Germany 2021 (Scholz SPD win)",
+    },
+    "2027": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.6,
+      expectLeft: ["HH", "BRE", "BE", "BB", "MV"],
+      expectRight: ["BY", "BW", "SN"],
+      election: "Germany 2025 Bundestag",
     },
   },
 
@@ -399,6 +427,19 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       expectLeft: ["KAN", "KNS"],
       expectRight: ["TOH", "SHI"],
       election: "Japan 2021 HR (low confidence)",
+      twoAxis: {
+        minEconomicSpread: 0.6,
+        minSocialSpread: 1.2,
+        economicCenterTol: 0.35,
+      },
+    },
+    "2027": {
+      center: 0,
+      centerTol: 0.7,
+      minSpread: 1.2,
+      expectLeft: ["KAN", "KNS"],
+      expectRight: ["TOH", "SHI"],
+      election: "Japan 2026 House of Representatives",
       twoAxis: {
         minEconomicSpread: 0.6,
         minSocialSpread: 1.2,

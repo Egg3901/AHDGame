@@ -1,5 +1,5 @@
 /**
- * SEED INDEPENDENCE — DO NOT DERIVE FROM ANOTHER ERA.
+ * SEED INDEPENDENCE - DO NOT DERIVE FROM ANOTHER ERA.
  * Each era seed is self-contained. This file MUST NOT import and transform
  * another era's seed data (e.g. the 2019 `states` array). All values are
  * authored for 2027 directly. Changing the 2019 (or any other) seed must never
@@ -533,7 +533,7 @@ export const states2027: State[] = [
   // The District of Columbia is not a state but holds 3 electoral votes per
   // the 23rd Amendment and votes in presidential elections. It has 0 House
   // districts (Eleanor Holmes Norton is a non-voting delegate) and 0 state
-  // senate seats (the DC Council is a 13-seat unicameral body — modeled
+  // senate seats (the DC Council is a 13-seat unicameral body - modeled
   // here as `stateSenateSeats: 0` so cross-state seat tallies stay honest).
   {
     _id: "DC",

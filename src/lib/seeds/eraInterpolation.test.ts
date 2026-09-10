@@ -23,7 +23,7 @@ describe("resolveEraBlend", () => {
 
   it("clamps outside the anchor range", () => {
     expect(resolveEraBlend(1900)).toMatchObject({ lo: "1953", hi: "1953", t: 0 });
-    expect(resolveEraBlend(2100)).toMatchObject({ lo: "2023", hi: "2023", t: 0 });
+    expect(resolveEraBlend(2100)).toMatchObject({ lo: "2027", hi: "2027", t: 0 });
   });
 
   it("brackets between adjacent anchors with linear t", () => {
@@ -49,7 +49,7 @@ describe("eraIdForYear", () => {
     expect(eraIdForYear(1979)).toBe("1979");
     expect(eraIdForYear(2005)).toBe("1999");
     expect(eraIdForYear(1900)).toBe("1953");
-    expect(eraIdForYear(2100)).toBe("2023");
+    expect(eraIdForYear(2100)).toBe("2027");
   });
 });
 
