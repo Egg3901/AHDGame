@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { PlayerSelector } from "@/components/PlayerSelector";
+import { useDialogA11y } from "@/components/ui";
 
 interface AppointSubsidiaryCeoModalProps {
   corporationId: string;
@@ -22,6 +23,7 @@ export function AppointSubsidiaryCeoModal({
   onClose,
   onAppointed,
 }: AppointSubsidiaryCeoModalProps) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   const [ceoType, setCeoType] = useState<"npp" | "character">("npp");
   const [selected, setSelected] = useState<{ id: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -52,9 +54,14 @@ export function AppointSubsidiaryCeoModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      {...dialogProps}
+    >
       <div className="w-full max-w-md rounded-xl border border-card-border bg-card p-5 space-y-4">
-        <h2 className="text-base font-bold text-foreground">Appoint CEO — {corporationName}</h2>
+        <h2 id={titleId} className="text-base font-bold text-foreground">
+          Appoint CEO — {corporationName}
+        </h2>
         <p className="text-xs text-muted">
           A subsidiary must be operated by a different player than the parent, or by an NPP
           caretaker.

@@ -25,6 +25,7 @@ interface UnionServicesPanelProps {
   treasury: number;
   duesPerWorkerAnnual: number;
   activeServices: readonly UnionServiceId[];
+  paidServices?: readonly UnionServiceId[];
   /** Current stored approval, used to show the next-turn movement. */
   approval: number;
   /** Political spending also affects the same approval target. */
@@ -53,6 +54,7 @@ export function UnionServicesPanel({
   treasury,
   duesPerWorkerAnnual,
   activeServices,
+  paidServices = [],
   approval,
   politicalContributionPct = 0,
   isHead,
@@ -125,12 +127,22 @@ export function UnionServicesPanel({
       <div className="flex items-baseline justify-between gap-3">
         <h3 className="text-sm font-semibold text-foreground">Services</h3>
         <span className="text-xs text-muted tabular-nums">
-          {activeSet.size} of {UNION_SERVICES.length} running
+          {activeSet.size} of {UNION_SERVICES.length} selected
         </span>
       </div>
       <p className="text-sm text-muted">
-        Programmes the union runs out of its treasury every turn. Each one raises approval while it
-        is funded; if the treasury can&apos;t cover the bill, it lapses and stops paying approval.
+        The selected programmes are purchased at the next union settlement for the following turn.
+        An unpaid slate earns no benefits. Changes do not cancel services already paid for.
+      </p>
+
+      <p className="text-sm text-muted">
+        Paid services this turn:{" "}
+        {suspended || paidServices.length === 0
+          ? "None"
+          : UNION_SERVICES.filter((service) => paidServices.includes(service.id))
+              .map((service) => service.name)
+              .join(", ")}
+        .
       </p>
 
       <ul className="divide-y divide-card-border rounded-lg border border-card-border">
@@ -168,7 +180,7 @@ export function UnionServicesPanel({
                     on ? "bg-primary/15 text-primary" : "text-muted"
                   }`}
                 >
-                  {on ? "Running" : "Off"}
+                  {on ? "Selected" : "Off"}
                 </span>
               )}
             </li>
@@ -193,7 +205,8 @@ export function UnionServicesPanel({
 
       <div className="rounded-lg border border-card-border bg-card-muted/30 p-3 text-sm">
         <p className="font-medium text-foreground">
-          Approval is {approval.toFixed(1)} and is moving toward {draftApprovalTarget.toFixed(1)}.
+          Approval is {approval.toFixed(1)}. This slate targets {draftApprovalTarget.toFixed(1)}{" "}
+          once its paid turn begins.
         </p>
         <p className="mt-1 text-xs text-muted">
           Next funded turn: {nextApproval.toFixed(1)} ({nextApprovalDelta >= 0 ? "+" : ""}

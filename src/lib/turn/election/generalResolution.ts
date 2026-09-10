@@ -553,7 +553,11 @@ export async function resolveOneGeneralElection(
       allCandidateNppIds.length > 0
         ? db
             .collection<NPP>("npps")
-            .find({ _id: { $in: allCandidateNppIds }, retiredAt: null })
+            // Seat resolution reads the office, never the 30KB stance map.
+            .find(
+              { _id: { $in: allCandidateNppIds }, retiredAt: null },
+              { projection: { "policies.domainPositions": 0 } }
+            )
             .toArray()
         : Promise.resolve([]),
     ]);

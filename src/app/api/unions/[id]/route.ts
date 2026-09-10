@@ -35,6 +35,14 @@ import {
   ORGANIZE_SECTOR_TREASURY_COST,
   RAID_APPROVAL_EDGE_REQUIRED,
 } from "@/lib/unions/commands/organizeSector";
+import {
+  UNDERGROUND_ACTION_COST,
+  UNDERGROUND_MASS_STRENGTH_GAIN,
+  UNDERGROUND_QUIET_STRENGTH_GAIN,
+  undergroundHeatText,
+  undergroundStatus,
+  undergroundStrength,
+} from "@/lib/unions/underground";
 import { genericUnionName } from "@/lib/unions/unionNames";
 import { getGameState } from "@/lib/gameState";
 import { unionStrikeBlockReason } from "@/lib/unions/unionEconomy";
@@ -66,6 +74,7 @@ import {
   unionApproval,
   unionMembers,
 } from "@/lib/unions/unionDues";
+import { paidUnionServices } from "@/lib/unions/rules";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import { clampPoliticalContributionPct } from "@/lib/unions/unionPoliticalContributions";
 
@@ -316,11 +325,30 @@ export async function GET(_request: Request, { params }: RouteParams) {
         maxDuesPerWorkerAnnual,
         duesIncomePerTurn: duesIncomePerTurn(members, duesPerWorkerAnnual),
         activeServices,
+        paidServices: paidUnionServices(
+          { ...union, suspended, ownerId: union.ownerId?.toString() ?? null },
+          currentTurn
+        ),
         servicesCostPerTurn: servicesCostPerTurn(members, annualWage, activeServices),
         politicalContributionPct: clampPoliticalContributionPct(union.politicalContributionPct),
         foundedByCharacterId: union.foundedByCharacterId?.toString() ?? null,
         demandedWageLevel: union.demandedWageLevel,
         suspended,
+        // Illicit unions under ban: the shadow snapshot labor organizes
+        // through. Exact heat never leaves the server; the UI renders only
+        // the vague bracket. Null while legal, so the page cannot render a
+        // dead underground panel next to the live organize loop.
+        underground: suspended
+          ? {
+              strength: undergroundStrength(union),
+              status: undergroundStatus(union, currentTurn),
+              heatText: undergroundHeatText(union),
+              exposedUntilTurn: union.exposedUntilTurn ?? null,
+              actionCost: UNDERGROUND_ACTION_COST,
+              quietGain: UNDERGROUND_QUIET_STRENGTH_GAIN,
+              massGain: UNDERGROUND_MASS_STRENGTH_GAIN,
+            }
+          : null,
         currentTurn,
       },
       sectors: sectors.map((s) => ({

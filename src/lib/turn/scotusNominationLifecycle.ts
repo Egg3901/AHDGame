@@ -129,7 +129,7 @@ async function seatConfirmedJustice(
         seatedAt: now,
         seatedAtTurn: currentTurn,
         // Filling a seat via nomination/confirmation only ever happens once the
-        // scripted Original Roster succession has run out (see scotusTenureTurn) —
+        // the Original Roster occupant has departed (see scotusTenureTurn) —
         // this is the Divergence Point by construction. Permanent once set.
         isDivergent: true,
         divergentHazardStartsTurn: currentTurn + DIVERGENT_TENURE_FLOOR_TURNS,
@@ -168,7 +168,7 @@ export async function processScotusNominationLifecycle(
   const npps = nppIds.length
     ? await database
         .collection<NPP>("npps")
-        .find({ _id: { $in: nppIds } })
+        .find({ _id: { $in: nppIds } }, { projection: { party: 1 } })
         .toArray()
     : [];
   const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));

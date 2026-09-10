@@ -17,6 +17,7 @@ import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
 import { accountId } from "@/lib/ledger/accounts";
 import { emitLedgerEntries } from "@/lib/ledger/emit";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
+import { treasuryAdvanceMoneyDelta } from "./rules/assemble";
 import { planOpenMarketOperation } from "./quantitativeEasing";
 import { bondPoolCurrency, creditBondPool, debitBondPoolGated } from "@/lib/bonds/marketPool";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
@@ -65,8 +66,6 @@ export async function executeMonetaryOperation(
       marketPrice: bond.marketPrice,
     });
     if (plan.units <= 0) throw new Error("No bond units available for this operation");
-    if (input.type === "qt" && plan.consideration > (bank.externalBroadMoney ?? 0))
-      throw new Error("QT would retire more external deposits than remain");
     const supportDelta = plan.qeSupportRatio - (bond.qeSupportRatio ?? 0);
     const marketPrice = Math.min(2, Math.max(0.05, bond.marketPrice * (1 + supportDelta * 0.5)));
     // The float is the bond market pool's inventory. QE buys it from the pool,
@@ -105,7 +104,6 @@ export async function executeMonetaryOperation(
       createdAt: now,
     };
     await persistBankOperation(db, bankId, record, {
-      externalBroadMoney: plan.moneySupplyDelta,
       netMoneyCreatedLifetime: plan.moneySupplyDelta,
     });
     return record;
@@ -151,7 +149,7 @@ export async function executeMonetaryOperation(
       type: input.type,
       turn: input.turn,
       amount,
-      moneySupplyDelta: amount,
+      moneySupplyDelta: treasuryAdvanceMoneyDelta(before, amount),
       reserveDelta: 0,
       actorName: input.actorName,
       reason: input.reason,
@@ -172,7 +170,7 @@ export async function executeMonetaryOperation(
       type: input.type,
       turn: input.turn,
       amount: advance.distributed,
-      moneySupplyDelta: advance.distributed,
+      moneySupplyDelta: 0,
       reserveDelta: 0,
       actorName: input.actorName,
       reason: input.reason,
@@ -206,7 +204,7 @@ export async function executeMonetaryOperation(
 /**
  * Lend `amount` of newly created central-bank money to the chartered banks of
  * this country's currency, pro rata by deposits (equal split when no bank holds
- * any). The cash lands in each bank's liquid capital and is booked as CB advance
+ * any). The cash lands in each bank's reserves and is booked as CB advance
  * debt on the charter, so it repays through the existing margin-repay path and
  * is never free money.
  *
@@ -220,7 +218,10 @@ async function advanceToPrivateBanks(
   now: Date,
   turn: number
 ): Promise<{ distributed: number; banksCredited: number }> {
-  if (!(await isPrivateBankingEnabled())) return { distributed: 0, banksCredited: 0 };
+  const config = await db
+    .collection<GameConfig>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { privateBankingEnabled: 1 } });
+  if (!(await isPrivateBankingEnabled(config))) return { distributed: 0, banksCredited: 0 };
 
   const currency = COUNTRY_CURRENCY_MAP[countryId];
   const banks = await db
@@ -247,7 +248,7 @@ async function advanceToPrivateBanks(
       updateOne: {
         filter: { _id: bank._id, "bankCharter.status": "active" },
         update: {
-          $inc: { liquidCapital: share, "bankCharter.cbMarginDebt": share },
+          $inc: { "bankCharter.cashReserves": share, "bankCharter.cbMarginDebt": share },
           $set: { updatedAt: now },
         },
       },
@@ -271,7 +272,7 @@ async function advanceToPrivateBanks(
       subjectType: "corporation" as const,
       subjectId: op.updateOne.filter._id,
       subjectName: nameById.get(op.updateOne.filter._id.toString()) ?? "Bank",
-      amount: op.updateOne.update.$inc.liquidCapital,
+      amount: op.updateOne.update.$inc["bankCharter.cashReserves"],
       currencyCode: currency as CurrencyCode,
       counterpartyType: "government" as const,
       counterpartyName: `${countryId} central bank`,
@@ -281,7 +282,10 @@ async function advanceToPrivateBanks(
   );
 
   return {
-    distributed: ops.reduce((sum, op) => sum + (op.updateOne.update.$inc.liquidCapital ?? 0), 0),
+    distributed: ops.reduce(
+      (sum, op) => sum + op.updateOne.update.$inc["bankCharter.cashReserves"],
+      0
+    ),
     banksCredited: ops.length,
   };
 }

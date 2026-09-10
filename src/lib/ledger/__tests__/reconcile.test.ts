@@ -66,6 +66,43 @@ describe("reconcileLedger", () => {
     expect(report.stockVsFlow.divergentCount).toBe(0);
   });
 
+  it("reconciles anchor-backed NPP cash across an FX repricing", () => {
+    const account = "npp:ru-npp:SUR";
+    const report = reconcileLedger({
+      turn: 10,
+      entries: [
+        entry({
+          txType: "bond_purchase",
+          emitSite: "nppBonds",
+          legs: [
+            {
+              account,
+              amount: -1350,
+              currencyCode: "SUR",
+              anchorAmount: -150,
+              role: "primary",
+            },
+            {
+              account: "sink:bond_principal_investment:SUR",
+              amount: 1350,
+              currencyCode: "SUR",
+              anchorAmount: 150,
+              role: "contra",
+            },
+          ],
+        }),
+      ],
+      openingBalances: { [account]: 1000 },
+      closingBalances: { [account]: 850 },
+      preForexBalances: { [account]: 850 },
+      openingAnchorRates: { SUR: 9 },
+      preForexAnchorRates: { SUR: 9 },
+      closingAnchorRates: { SUR: 20 },
+    });
+    expect(report.stockVsFlow.divergentCount).toBe(0);
+    expect(report.status).toBe("green");
+  });
+
   // --- DELIBERATE-CORRUPTION REGRESSION TEST (t841 bug class) ----------------
   it("flags an unbalanced write (credit with no debit) AND a raw-foreign-as-local write", () => {
     const victim = new ObjectId().toString();

@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { UK_REGION_POLLING_2020 } from "./ukRegionPolling2020";
+import { UK_REGION_POLLING_2024 } from "./ukRegionPolling2024";
 import { UK_REGION_POLLING_1992 } from "./ukRegionPolling1992";
 import { UK_REGION_POLLING_1951 } from "./ukRegionPolling1951";
 import type { StatePartyOrg, PoliticalParty } from "@/lib/db/types";
@@ -83,7 +84,9 @@ export async function buildUKPartySlugToSeqId(db: Db): Promise<Record<string, st
  * `UK_REGION_POLLING_1951` (Con/Lab duopoly, historic Liberals, no SNP);
  * `1991-default` and `1979-default` use `UK_REGION_POLLING_1992` (UUP dominant
  * in NIR, no Reform UK, lower SF share — for 1979 the 1992 table is the
- * closest authored election until a dedicated 1979 table exists); anything
+ * closest authored election until a dedicated 1979 table exists);
+ * `2027-default` uses `UK_REGION_POLLING_2024` (Labour landslide, Reform UK
+ * second in most English regions, SNP at 30% in Scotland); anything
  * else (including the default `2019-default`) uses `UK_REGION_POLLING_2020`.
  */
 export async function calculateUKStatePartyOrgs(
@@ -97,7 +100,9 @@ export async function calculateUKStatePartyOrgs(
       ? UK_REGION_POLLING_1951
       : preset === "1991-default" || preset === "1979-default"
         ? UK_REGION_POLLING_1992
-        : UK_REGION_POLLING_2020;
+        : preset === "2027-default"
+          ? UK_REGION_POLLING_2024
+          : UK_REGION_POLLING_2020;
 
   for (const [regionId, partyVotes] of Object.entries(polling)) {
     for (const [partySlug, voteShare] of Object.entries(partyVotes)) {

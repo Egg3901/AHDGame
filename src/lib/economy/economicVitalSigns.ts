@@ -1,3 +1,4 @@
+import { currentMoneyGrowth } from "@/lib/moneySupply/rules/growthSignal";
 import type { Db } from "mongodb";
 import type {
   Bond,
@@ -699,9 +700,10 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     .slice(0, 10)
     .reduce((sum, value) => sum + value, 0);
 
-  const moneyGrowth = input.money.flatMap((row) =>
-    finite(row.annualizedM2GrowthPct) ? [row.annualizedM2GrowthPct] : []
-  );
+  const moneyGrowth = input.money.flatMap((row) => {
+    const growth = currentMoneyGrowth(row);
+    return growth == null ? [] : [growth];
+  });
   const inflationByCountry = new Map(
     Object.entries(input.health?.economy.byCountry ?? {}).flatMap(([countryId, row]) =>
       row && finite(row.inflation) ? [[countryId, row.inflation] as const] : []
@@ -711,8 +713,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const pairedInflation: number[] = [];
   for (const row of input.money) {
     const inflation = inflationByCountry.get(row.countryId);
-    if (!finite(row.annualizedM2GrowthPct) || !finite(inflation)) continue;
-    pairedGrowth.push(row.annualizedM2GrowthPct);
+    const growth = currentMoneyGrowth(row);
+    if (growth == null || !finite(inflation)) continue;
+    pairedGrowth.push(growth);
     pairedInflation.push(inflation);
   }
   const totalM2 = input.money.reduce((sum, row) => sum + Math.max(0, row.m2), 0);
@@ -1155,12 +1158,45 @@ export async function snapshotEconomicVitalSigns(
       .toArray(),
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<CommoditySourcingDoc>("commoditySourcingFlows").find({ turn }).toArray(),
-    // `plantsPnl` is ~15% of the corporateSectors collection and nothing here
-    // reads it. See sectorTurn (writes it, complete overwrite) and
-    // analyzeSectorProfitability (the only turn-side reader, fed elsewhere).
+    // This diagnostics pass needs only commodity-flow inputs, production-health
+    // readings, and the market-formation identity fields below. An exclusion
+    // projection still decoded every other scalar on ~4,500 sectors; this
+    // explicit read contract cuts the local payload from ~6.6MB to ~1.8MB.
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { plantsPnl: 0 } })
+      .find(
+        {},
+        {
+          projection: {
+            _id: 1,
+            corporationId: 1,
+            countryId: 1,
+            stateId: 1,
+            sectorType: 1,
+            revenue: 1,
+            strategyId: 1,
+            transitionFromStrategyId: 1,
+            transitionStartTurn: 1,
+            capitalStock: 1,
+            operatingCapacityUnits: 1,
+            producedUnits: 1,
+            mothballed: 1,
+            productionPolicyLevel: 1,
+            embargoSuspended: 1,
+            embargoExportExposure: 1,
+            militaryDivertedFraction: 1,
+            militaryDivertedTurn: 1,
+            throughputFactor: 1,
+            soldUnits: 1,
+            workersDesired: 1,
+            workers: 1,
+            lowFillTurns: 1,
+            stockpileUnsold: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        }
+      )
       .toArray(),
     db.collection<StockExchangeSnapshot>("stockExchangeSnapshots").findOne({ _id: "global" }),
     db
@@ -1210,7 +1246,7 @@ export async function snapshotEconomicVitalSigns(
       {
         ...sector,
         revenueAnchor: fxRate > 0 ? sector.revenue / fxRate : sector.revenue,
-        capacityUnits: sector.capitalStock,
+        capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
       },
       turn,
       { plantsEnabled: true }

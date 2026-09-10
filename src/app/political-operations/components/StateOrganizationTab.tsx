@@ -13,11 +13,13 @@ import {
   STATE_ORG_MAX_LEVEL,
   STATE_ORG_REFERENCE_FRACTION,
   stateOrgBonusFraction,
-  stateOrgLevelCost,
 } from "@/lib/electionEngine/constants";
+import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 
 interface StateOrgRow {
   stateId: string;
+  /** Cost of the next level here, priced and converted by the list route. */
+  nextCost: number;
   level: number;
   totalInvested: number;
   updatedAt: string | null;
@@ -33,6 +35,8 @@ interface RacePresenceEntry {
 
 interface ListResponse {
   states?: StateOrgRow[];
+  /** Anchor to the viewer's currency; rows already carry a converted nextCost. */
+  fxRate?: number;
   racePresence?: RacePresenceEntry[];
   homeState?: string | null;
   partyHex?: string;
@@ -86,9 +90,15 @@ function generalBonusPct(level: number): number {
 
 export function StateOrganizationTab({
   showHubLink = false,
+  showHeading = true,
 }: {
   /** When true, link out to the dedicated Political Operations hub. */
   showHubLink?: boolean;
+  /**
+   * Whether to print the "Campaign Presence" heading. False where a tab above
+   * already names this pane, so the section is not titled twice.
+   */
+  showHeading?: boolean;
 } = {}) {
   const [rows, setRows] = useState<StateOrgRow[]>([]);
   const [homeState, setHomeState] = useState<string | null>(null);
@@ -101,6 +111,8 @@ export function StateOrganizationTab({
   const [racePresence, setRacePresence] = useState<RacePresenceEntry[]>([]);
   /** Whose presence the map is showing. null = the viewer's own. */
   const [viewingCharacterId, setViewingCharacterId] = useState<string | null>(null);
+  /** Anchor to the viewer's currency, for pricing a level with no row of its own. */
+  const [fxRate, setFxRate] = useState(1);
 
   useEffect(() => {
     fetch("/api/political-operations/state-org/list")
@@ -117,6 +129,7 @@ export function StateOrganizationTab({
         }
         const d: ListResponse = await r.json();
         setRows(d.states ?? []);
+        setFxRate(d.fxRate ?? 1);
         setRacePresence(d.racePresence ?? []);
         setHomeState(d.homeState ?? null);
         if (d.partyHex) setPartyHex(d.partyHex);
@@ -212,6 +225,12 @@ export function StateOrganizationTab({
           level: viewedCandidate.levelsByState[selectedState] ?? 0,
           totalInvested: 0,
           updatedAt: null,
+          // Another candidate's level, priced through the same helper the route
+          // uses, so the ladder reads identically whoever you are looking at.
+          nextCost: statePresenceNextCost(
+            viewedCandidate.levelsByState[selectedState] ?? 0,
+            fxRate
+          ),
         }
       : ownRow;
   const viewingOther = viewedCandidate !== null && !viewedCandidate.isSelf;
@@ -221,7 +240,7 @@ export function StateOrganizationTab({
     <div>
       <div className="mb-4 rounded-lg border border-card-border bg-card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="font-medium">Campaign Presence</h3>
+          {showHeading ? <h3 className="font-medium">Campaign Presence</h3> : <span />}
           {showHubLink && (
             <Link
               href="/political-operations"
@@ -325,9 +344,7 @@ export function StateOrganizationTab({
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted">Next level costs</dt>
-                  <dd className="font-mono">
-                    ${Math.round(stateOrgLevelCost(selectedRow.level)).toLocaleString("en-US")}
-                  </dd>
+                  <dd className="font-mono">{formatStatePresenceCost(selectedRow.nextCost)}</dd>
                 </div>
                 <div className="flex items-center justify-between">
                   <dt className="text-muted">Career investment</dt>
@@ -343,14 +360,14 @@ export function StateOrganizationTab({
                 title={
                   viewingOther
                     ? "You are viewing another candidate's presence"
-                    : `Build +1 (${STATE_ORG_COST_ACTIONS} campaign actions + $${Math.round(stateOrgLevelCost(selectedRow.level)).toLocaleString("en-US")})`
+                    : `Build +1 (${STATE_ORG_COST_ACTIONS} campaign actions + ${formatStatePresenceCost(selectedRow.nextCost)})`
                 }
               >
                 {busy === selectedState
                   ? "Building..."
                   : viewingOther
                     ? `Viewing ${viewedCandidate?.name ?? "another candidate"}`
-                    : `Build (+1) — ${STATE_ORG_COST_ACTIONS} campaign actions + $${Math.round(stateOrgLevelCost(selectedRow.level)).toLocaleString("en-US")}`}
+                    : `Build (+1) — ${STATE_ORG_COST_ACTIONS} campaign actions + ${formatStatePresenceCost(selectedRow.nextCost)}`}
               </button>
             </div>
           )}

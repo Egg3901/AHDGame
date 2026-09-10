@@ -2355,6 +2355,61 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_2023: NationalBudgetSeedConfig[] = [
   },
 ];
 
+// January 2027 projection. Macro totals are anchored to the February 2026 CBO
+// baseline and the state population projection in states2027.ts. Policy lanes
+// retain the latest enacted modern configuration instead of inventing future law.
+export const NATIONAL_BUDGET_SEED_CONFIGS_2027: NationalBudgetSeedConfig[] = [
+  {
+    budgetId: "federal",
+    countryId: "US",
+    fiscalYear: 2027,
+    population: 341_784_857,
+    gdp: 32_800_000_000_000,
+    currencyCode: "USD",
+    economicFactors: {
+      gdpGrowth: 2.0,
+      wageGrowth: 3.6,
+      inflationRate: 2.4,
+      tradeGrowth: 1.8,
+      lastUpdated: new Date(0),
+    },
+    taxBaseRatios: {
+      taxableIncome: 0.3537,
+      corporateProfits: 0.0796,
+      wagesAndSalaries: 0.3148,
+      importValue: 0.1852,
+      taxableSales: 0.5556,
+    },
+    otherRevenue: 300_000_000_000,
+    debt: {
+      principal: 39_000_000_000_000,
+      interestRate: 0.034,
+      ceiling: 41_000_000_000_000,
+      ceilingLastRaisedYear: 2027,
+    },
+    creditRating: "AA",
+    baselineSpendingByCategory: {
+      healthcare: 2_100_000_000_000,
+      defense: 980_000_000_000,
+      socialSecurity: 1_650_000_000_000,
+      education: 290_000_000_000,
+      infrastructure: 190_000_000_000,
+      other: 1_700_000_000_000,
+    },
+    baselineStateGrants: 1_300_000_000_000,
+    policyDefaults: COUNTRY_POLICY_CONFIGS_2023.us.defaults,
+    policyOptionOverrides: COUNTRY_POLICY_CONFIGS_2023.us.optionIndexes,
+    taxPolicyIds: {
+      incomeTax: "us_federal_income_tax_rate",
+      domesticCorporateTax: "us_federal_domestic_corporate_tax_rate",
+      foreignCorporateTax: "us_federal_foreign_corporate_tax_rate",
+      payrollTax: "us_federal_payroll_tax_rate",
+      tariffs: "us_federal_tariff_rate",
+      salesTax: "us_federal_sales_tax_rate",
+    },
+  },
+];
+
 // Authored independently for FY2007 — not derived from 2019/2023/1991 configs.
 // Real FY2007 actuals: GDP ≈ $14.45T, outlays ≈ $2.73T, receipts ≈ $2.57T,
 // deficit ≈ $161B (1.1% GDP), gross federal debt ≈ $9.0T (debt/GDP ≈ 62%, of
@@ -4967,11 +5022,67 @@ export const NATIONAL_BUDGET_SEED_CONFIGS_1953: NationalBudgetSeedConfig[] = [
 export function getNationalBudgetSeedConfigsForPreset(preset: string): NationalBudgetSeedConfig[] {
   if (preset === "1953-default") return NATIONAL_BUDGET_SEED_CONFIGS_1953;
   if (preset === "1979-default") return NATIONAL_BUDGET_SEED_CONFIGS_1979;
-  if (preset === "1991-default") return NATIONAL_BUDGET_SEED_CONFIGS_1991;
-  if (preset === "1999-default") return NATIONAL_BUDGET_SEED_CONFIGS_1999;
-  if (preset === "2007-default") return NATIONAL_BUDGET_SEED_CONFIGS_2007;
-  if (preset === "2023-default") return NATIONAL_BUDGET_SEED_CONFIGS_2023;
+  if (preset === "1991-default") {
+    return overlayNationalBudgetConfigs(
+      NATIONAL_BUDGET_SEED_CONFIGS_1991,
+      NATIONAL_BUDGET_SEED_CONFIGS_1979.filter((config) =>
+        (["AT", "FI", "GR"] as string[]).includes(config.countryId)
+      ).map((config) => ({ ...config, fiscalYear: 1991 })),
+      1991
+    );
+  }
+  if (preset === "1999-default") {
+    return overlayNationalBudgetConfigs(
+      getNationalBudgetSeedConfigsForPreset("1991-default"),
+      NATIONAL_BUDGET_SEED_CONFIGS_1999,
+      1999
+    );
+  }
+  if (preset === "2007-default") {
+    return overlayNationalBudgetConfigs(
+      getNationalBudgetSeedConfigsForPreset("1999-default"),
+      NATIONAL_BUDGET_SEED_CONFIGS_2007,
+      2007
+    );
+  }
+  if (preset === "2019-default") {
+    return overlayNationalBudgetConfigs(
+      getNationalBudgetSeedConfigsForPreset("2007-default"),
+      NATIONAL_BUDGET_SEED_CONFIGS,
+      2019
+    );
+  }
+  if (preset === "2023-default") {
+    return overlayNationalBudgetConfigs(
+      getNationalBudgetSeedConfigsForPreset("2019-default"),
+      NATIONAL_BUDGET_SEED_CONFIGS_2023,
+      2023
+    );
+  }
+  if (preset === "2027-default") {
+    return overlayNationalBudgetConfigs(
+      getNationalBudgetSeedConfigsForPreset("2023-default"),
+      NATIONAL_BUDGET_SEED_CONFIGS_2027,
+      2027
+    );
+  }
   return NATIONAL_BUDGET_SEED_CONFIGS;
+}
+
+/** Preserve the last complete era roster while applying newer authored rows. */
+function overlayNationalBudgetConfigs(
+  base: NationalBudgetSeedConfig[],
+  overrides: NationalBudgetSeedConfig[],
+  inheritedFiscalYear?: number
+): NationalBudgetSeedConfig[] {
+  const overrideByCountry = new Map(overrides.map((config) => [config.countryId, config]));
+  const inherited = base.map(
+    (config) =>
+      overrideByCountry.get(config.countryId) ??
+      (inheritedFiscalYear === undefined ? config : { ...config, fiscalYear: inheritedFiscalYear })
+  );
+  const baseCountries = new Set(base.map((config) => config.countryId));
+  return [...inherited, ...overrides.filter((config) => !baseCountries.has(config.countryId))];
 }
 
 /**
@@ -5007,7 +5118,7 @@ export function getInitialNationalBudgetsForPreset(preset: string): SupportedNat
 }
 
 export const initialNationalBudgets: SupportedNationalBudget[] =
-  NATIONAL_BUDGET_SEED_CONFIGS.map(buildNationalBudgetSeed);
+  getNationalBudgetSeedConfigsForPreset("2019-default").map(buildNationalBudgetSeed);
 
 export const initialFederalBudget = initialNationalBudgets.find(
   (budget) => budget.countryId === "US"
@@ -5992,6 +6103,28 @@ export function generateCountryOwnedSeedData(
       name: "Nigeria",
       headquartersState: "NORTH_CENTRAL", // FCT Abuja falls within the North-Central zone
     },
+    ...(
+      [
+        ["FR", "France", "IDF"],
+        ["IT", "Italy", "IT_CEN"],
+        ["ES", "Spain", "ES_CEN"],
+        ["SE", "Sweden", "SE_STO"],
+        ["TR", "Turkey", "TR_ANK"],
+        ["GR", "Greece", "GR_ATT"],
+        ["AT", "Austria", "AT_VIE"],
+        ["FI", "Finland", "FI_UUS"],
+      ] as const
+    ).map(([countryId, name, headquartersState], index) => ({
+      countryId,
+      // Reserved deterministic IDs keep sovereign bond references stable while
+      // avoiding a separate constants module for otherwise identical issuers.
+      oid: `00000000000000000000a${(index * 3 + 1).toString(16).padStart(3, "0")}`,
+      ceoOid: `00000000000000000000a${(index * 3 + 2).toString(16).padStart(3, "0")}`,
+      userOid: `00000000000000000000a${(index * 3 + 3).toString(16).padStart(3, "0")}`,
+      sequentialId: 900_009 + index,
+      name,
+      headquartersState,
+    })),
     // Sovereign issuer ONLY — emitted with `sectors: []`. DD is a command
     // economy and has no private corporations by design; this exists so the
     // bond seeder has a real corporation to point its tranches at.

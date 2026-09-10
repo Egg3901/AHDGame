@@ -11,7 +11,8 @@ import { createNotification } from "@/lib/notifications";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { formatElectionTypeLabel } from "@/lib/utils/electionLabels";
 import { computeSlateAssignmentScore, isNppSlateCompliant } from "@/lib/slateAssignments";
-import type { Character, Election, NPP, SlateCandidate } from "@/lib/db/types";
+import { countSlateAssignmentUsage } from "@/lib/slateAssignmentCap";
+import type { Character, Election, ElectionCandidate, NPP, SlateCandidate } from "@/lib/db/types";
 import { getSlateAcceptanceStatBonus, resolveSlateAuthority } from "@/lib/slateAuthority";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { findBlockingActiveCandidacy } from "@/lib/elections/activeCandidacy";
@@ -114,6 +115,59 @@ export async function POST(request: Request, { params }: RouteParams) {
         { status: 409 }
       );
     }
+    const candidateObjId = new ObjectId(parsed.data.candidateId);
+
+    // Race capacity. A party may hold at most SLATE_ASSIGNMENT_CAP slots on one
+    // race, players and NPPs drawing on the same pool.
+    //
+    // The candidate being assigned is excluded from the count, so someone
+    // already on the slate is never turned away by the slot they themselves
+    // hold: that case falls through to the specific "already on the slate"
+    // answer below. The question asked here is whether adding THIS candidate
+    // would exceed the cap.
+    //
+    // This gate is the courteous one, not the authoritative one. Rows carried
+    // forward from the previous cycle only exist once something has
+    // materialized them from the template — the slate GET does, and so does
+    // the turn's own pass — so an assignment POSTed against a race that has
+    // been neither viewed nor turn-processed can still undercount. The turn's
+    // filing pass counts the same way and refuses the overflow there, marking
+    // it `slate_full`, so the ballot itself never exceeds the cap.
+    const [slateRowsForRace, activeCandidaciesForRace] = await Promise.all([
+      db
+        .collection<SlateCandidate>("slateCandidates")
+        .find({ electionId: electionObjId, partyId }, { projection: { candidateId: 1, status: 1 } })
+        .toArray(),
+      db
+        .collection<ElectionCandidate>("electionCandidates")
+        .find(
+          { electionId: electionObjId, party: partyId, status: "active" },
+          { projection: { characterId: 1, status: 1, isNPP: 1, nppId: 1 } }
+        )
+        .toArray(),
+    ]);
+    const usage = countSlateAssignmentUsage(
+      slateRowsForRace
+        .filter((row) => !candidateObjId.equals(row.candidateId))
+        .map((row) => ({ candidateId: row.candidateId.toString(), status: row.status })),
+      activeCandidaciesForRace
+        .filter((candidacy) => !candidateObjId.equals(candidacy.characterId))
+        .map((candidacy) => ({
+          characterId: candidacy.characterId.toString(),
+          isNPP: candidacy.isNPP,
+          nppId: candidacy.nppId,
+          status: candidacy.status,
+        }))
+    );
+    if (usage.remaining <= 0) {
+      return NextResponse.json(
+        {
+          error: `This race already has ${usage.cap} assigned candidates. Withdraw one before assigning another.`,
+        },
+        { status: 409 }
+      );
+    }
+
     if (parsed.data.candidateType === "npp") {
       const nppControl = await getPartyNppControlStatus({
         db,
@@ -128,7 +182,6 @@ export async function POST(request: Request, { params }: RouteParams) {
       }
     }
 
-    const candidateObjId = new ObjectId(parsed.data.candidateId);
     const now = new Date();
     const slate = await ensureSlate(db, {
       countryId,

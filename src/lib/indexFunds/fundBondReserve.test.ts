@@ -170,6 +170,8 @@ describe("global sovereign demand", () => {
       bonds: { find: bondFind },
       exchangeRates: { find: exchangeFind },
       indexFunds: { findOne: indexFindOne },
+      // The pass preloads every bond pool once; none exist in this fixture.
+      bondMarketPools: { find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })) },
     };
     const db = {
       collection: vi.fn((name: keyof typeof collections) => collections[name]),

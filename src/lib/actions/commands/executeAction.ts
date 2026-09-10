@@ -16,8 +16,10 @@
  * Currency convention (unchanged from the route): `effect.fundsChange` and
  * `effect.cashOnHandChange` are ANCHOR units; campaign/personal balances are
  * stored LOCAL. Conversion happens at the `$set` boundary via `campaignRate`
- * (the frozen INITIAL_RATES scale — campaign funds never touch live forex).
+ * (the frozen world currency basis ; campaign funds never touch live forex).
  */
+
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 
 import { ObjectId, type Db, type Filter } from "mongodb";
 import {
@@ -116,12 +118,15 @@ export async function executeCharacterAction(
     return { ok: false, error: "The game is currently paused.", status: 409 };
   }
 
+  const campaignRates = await loadCampaignCurrencyRates(db);
   const homeCurrency = getHomeCurrency(character);
   // Campaign funds are DECOUPLED from live forex: costs/effects convert anchor →
-  // local at the frozen base INITIAL_RATES scale (US ×1.0), never the live
+  // local at the frozen world-seeded currency basis (US ×1.0), never the live
   // exchangeRates. Every use of this rate below is a campaign-fund conversion;
   // personal cash (cashOnHandChange) is applied in local directly.
-  const campaignRate = forexEnabled ? campaignLocalRate(character.countryId ?? "US") : 1;
+  const campaignRate = forexEnabled
+    ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+    : 1;
   // Render action result messages in the player's LOCAL home currency (campaign
   // funds are stored in local; never surface anchor/₳). effect.fundsChange is
   // anchor, so this formatter handles the anchor→local conversion.

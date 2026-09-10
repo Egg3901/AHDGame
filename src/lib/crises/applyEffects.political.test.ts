@@ -73,6 +73,24 @@ describe("applyCrisisEffects — political half", () => {
     expect(db.collectionMocks.politicalMetrics!.bulkWrite).not.toHaveBeenCalled();
   });
 
+  it("routes one-time GDP rate interactions through the engine input channel", async () => {
+    db.collection("politicalMetrics").find().toArray.mockResolvedValue([]);
+    await applyCrisisEffects(
+      db as unknown as Db,
+      [metricEffect("economic", "gdpGrowth", -0.75)],
+      ["CA"],
+      ["US"]
+    );
+
+    const call = db.collectionMocks.macroMetrics!.updateMany.mock.calls[0];
+    expect((call[1] as { $inc: Record<string, number> }).$inc).toEqual({
+      "economic.sectorGrowth.value": -0.75,
+    });
+    expect(
+      (call[1] as { $inc: Record<string, number> }).$inc["economic.gdpGrowth.value"]
+    ).toBeUndefined();
+  });
+
   it("hits every targeted region, not just the first", async () => {
     db.collection("politicalMetrics")
       .find()

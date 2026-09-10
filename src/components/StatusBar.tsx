@@ -47,7 +47,7 @@ interface OnlineStatus {
   online: number;
 }
 
-export function StatusBar() {
+export function StatusBar({ showOnlineStatus = true }: { showOnlineStatus?: boolean }) {
   const pathname = usePathname();
   const isExcludedPath = EXCLUDED_PATHS.includes(pathname) || isLightweightLayoutPath(pathname);
   const { stats, patchStats } = useCharacterStats();
@@ -115,7 +115,7 @@ export function StatusBar() {
   }, []);
 
   useEffect(() => {
-    if (isExcludedPath) return;
+    if (isExcludedPath || !showOnlineStatus) return;
     const pollOnlineStatus = () => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") {
         return;
@@ -140,7 +140,7 @@ export function StatusBar() {
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
     };
-  }, [isExcludedPath, fetchOnlineStatus]);
+  }, [isExcludedPath, showOnlineStatus, fetchOnlineStatus]);
 
   // Listen for character stats updates (e.g. after actions like fundraise)
   useEffect(() => {
@@ -412,8 +412,12 @@ export function StatusBar() {
                         d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                       />
                     </svg>
-                    {gameState.isActive && gameState.nextScheduledTurn ? (
-                      <span className="shrink-0 tabular-nums">{getTimeUntilNextTurn()}</span>
+                    {gameState.isActive ? (
+                      gameState.nextScheduledTurn ? (
+                        <span className="shrink-0 tabular-nums">{getTimeUntilNextTurn()}</span>
+                      ) : (
+                        <span className="shrink-0 text-muted">Player paced</span>
+                      )
                     ) : (
                       <span className="shrink-0 text-yellow-500">Paused</span>
                     )}

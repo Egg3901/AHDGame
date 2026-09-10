@@ -308,6 +308,7 @@ export async function processLaenderRegionalBudgets(
   const allLegTypeIds = [...new Set([...regionalLegTypeIds, ...nationalLegTypeIds])];
 
   const legTypes = await db
+    // full-read(legislationTypes): policyOptions tables price every regional law
     .collection<LegislationType>("legislationTypes")
     .find({ _id: { $in: allLegTypeIds } })
     .toArray();

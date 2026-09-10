@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation, IndexFund, ShareOrder } from "@/lib/db/types";
+import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 
@@ -58,6 +58,11 @@ export interface PlaceFundShareBuyOrderInput {
   /** FX rate (local per 1 ₳) for the target corp's home currency. */
   fxRate: number;
   liquidityQuote?: { turn: number; referencePrice: number };
+  /**
+   * When set, the escrow transaction row is pushed here instead of inserted,
+   * for a caller placing many bids that writes them in one insertMany.
+   */
+  txSink?: Omit<IndexFundTransaction, "_id">[];
 }
 
 export interface PlaceFundShareBuyOrderResult {
@@ -120,15 +125,17 @@ export async function placeFundShareBuyOrder(
       updatedAt: now,
     });
 
-    await insertFundTransaction(db, {
+    const escrowTx = {
       fundId: fund._id,
-      kind: "public_float_buy",
+      kind: "public_float_buy" as const,
       corporationId: corp._id,
       shares,
       amountAnchor: escrowAnchor,
       note: "limit_buy_order_escrow",
       createdAt: now,
-    });
+    };
+    if (input.txSink) input.txSink.push(escrowTx);
+    else await insertFundTransaction(db, escrowTx);
   } catch (err) {
     // Roll the escrow back if we couldn't persist the order.
     await refundFundCashAnchor(db, fund._id, escrowAnchor);

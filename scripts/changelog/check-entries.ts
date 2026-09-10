@@ -14,8 +14,8 @@
 import { ENTRY_DIRS, checkEntryDir } from "../../src/lib/changelog/entryFiles";
 
 function main(): void {
-  const problems = ENTRY_DIRS.flatMap(({ dir, label, bareVersionOnly }) =>
-    checkEntryDir(dir, { bareVersionOnly }).map((p) => ({ ...p, label }))
+  const problems = ENTRY_DIRS.flatMap(({ dir, label, kind }) =>
+    checkEntryDir(dir, { kind }).map((p) => ({ ...p, label }))
   );
 
   if (problems.length === 0) return;

@@ -31,12 +31,24 @@ Follow the README. `npm run bootstrap:full` creates a complete local world; `npm
 2. Run `npm run verify` for lint, format, typecheck, the architecture audit, and tests. Run `npm run verify:build` for the same Next build CI uses. The architecture audit has known pre-existing findings; new findings from your change are yours, old ones aren't.
 3. New or changed API routes need integration tests. Copy the pattern from any `route.test.ts`.
 4. New logic gets unit tests next to it.
-5. Every PR ships a changelog entry with the change. Run `npm run changelog:new -- "Title of the change"`; it writes `content/changelog/dev/<version>-<topic>.md`, named for your branch so it cannot collide with another PR in flight. The version in the frontmatter is a label, not a claim: two entries may carry the same number and both merge cleanly. Player-visible releases also get a curated `content/changelog/public/<version>.md`, which is the published URL and stays named for the version alone. The generated frontmatter lists the accepted `badges` (`major`, `minor`, `patch`, `hotfix`) and `areas` (`backend`, `frontend`, `fullstack`, `engine`) in a comment; anything else fails the pre-commit hook and CI. Descriptive words for what the change was about go in `tags`, which is free text.
+5. Every PR ships a changelog note with the change. Run `npm run changelog:new -- "Title of the change"`; it writes `content/changelog/unreleased/<topic>.md`, named for your branch so it cannot collide with another PR in flight. The note carries no version: a version belongs to a release, and `npm run changelog:release -- <version> --title "..."` folds every unreleased note into one `content/changelog/dev/<version>.md` and drafts the player-facing `content/changelog/public/<version>.md` when the release is actually cut. The generated frontmatter lists the accepted `badges` (`major`, `minor`, `patch`, `hotfix`) and `areas` (`backend`, `frontend`, `fullstack`, `engine`) in a comment; anything else fails the pre-commit hook and CI. Descriptive words for what the change was about go in `tags`, which is free text.
 6. Match the surrounding code: strict TypeScript, Zod on request bodies, and no new dependencies without discussion. Prefer `src/lib/db/collections` getters when one exists; typed direct `db.collection<T>("name")` access is also an established pattern. Do not invent a repository layer. No em or en dashes in player-facing text.
 7. System rules stay portable. Formulas, eligibility, resolution, and state transitions belong in a `rules.ts` or `rules/` module next to the system (`src/lib/pensions/rules.ts` is the model): plain data in, plain data out, rng and dates passed in, ids as strings. The turn phase or route around it does the loading, writing, and notifying. The architecture audit blocks database access, the wall clock, `Math.random()`, `process.env`, network calls, and `async` inside that zone. Existing systems aren't being retrofitted in bulk, but a formula you add or rework lands there.
 8. The PR body says why, not just what.
 
 Code layout in one minute: `src/app/api/**` are thin route handlers (auth guard, Zod, call into lib). `src/lib/**` is the domain logic, one directory per system. The hourly turn processor is `src/lib/turnSystem.ts` with phases registered in `src/simulation/phases/`. Portable rules live in `rules.ts` / `rules/` modules beside their system. Seeds are in `scripts/seeds/` (data) and `scripts/seed/` (runners). The [engineering docs](https://docs.lakesidegames.net) go deeper.
+
+## Name the mechanic at the top of the file
+
+Files under `src/lib` that implement a game mechanic open with a short JSDoc block, before the imports, that names the mechanic in the words a player uses and states the two or three facts a player asks about (what it is, what it depends on, what it affects), citing the exported symbol that implements it. Keep it to two to five lines of plain English in the present tense, with every fact taken from the code in that file. The search index embeds file text, so this header is what makes the file findable for a player question.
+
+```ts
+/**
+ * Cloture and the filibuster (Senate). A filibustered bill only passes when
+ * at least three fifths of votes cast (For + Against + Abstain) are For:
+ * see didPassWithFilibusterCheck. Two-thirds bills ignore this rule.
+ */
+```
 
 ## UI strings and translations
 

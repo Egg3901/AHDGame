@@ -14,7 +14,13 @@ import {
   NPP_SPONSOR_URGENCY_WEIGHT,
   NPP_SPONSOR_AGENDA_WEIGHT,
   NPP_SPONSOR_FISCAL_WEIGHT,
+  NPP_SPONSOR_GOAL_WEIGHT,
 } from "./constants";
+import {
+  DEFAULT_NPP_BEHAVIOR_POLICY,
+  narrowCandidateSlate,
+  type NppBehaviorPolicy,
+} from "@/lib/singleplayerDifficulty/rules/behavior";
 
 // ── Urgency signal: macro + metrics → domain urgency map ──────────────────────
 
@@ -519,15 +525,48 @@ export function selectNppBill(
    */
   currentPolicyOptionIds?: ReadonlyMap<string, string>,
   /** Legislation types this sponsor party introduced inside the repeat window. */
-  recentLegislationTypeIds?: ReadonlySet<string>
+  recentLegislationTypeIds?: ReadonlySet<string>,
+  /**
+   * V5 + difficulty inputs. Omitted entirely below v5 in a world at `normal`,
+   * where every field resolves to the shipped behavior: every candidate is
+   * evaluated, no minimum score, no goal bias.
+   */
+  options?: {
+    /**
+     * Domains the government currently holds a persistent goal on (V5). Bills in
+     * these domains earn `NPP_SPONSOR_GOAL_WEIGHT` on top of the agenda bias, so
+     * what the government legislates tracks what it committed to.
+     */
+    goalDomains?: ReadonlySet<string>;
+    /** Difficulty behavior policy: candidate breadth and the decline threshold. */
+    policy?: NppBehaviorPolicy;
+    /**
+     * Per-decision salt for the candidate slate (country + party + turn). Only
+     * read when `policy.candidateLimit` is finite; it keeps a narrowed slate
+     * deterministic per decision while still rotating between decisions.
+     */
+    slateSalt?: string;
+  }
 ): NppBillSelection | null {
   if (candidates.length === 0) return null;
+
+  const policy = options?.policy ?? DEFAULT_NPP_BEHAVIOR_POLICY;
+  const goalDomains = options?.goalDomains;
+  // Difficulty: how wide a slate this sponsor actually reads before deciding.
+  // `null` (normal/hard) returns the caller's array unchanged, so the loop below
+  // is byte-identical to the shipped path.
+  const slate = narrowCandidateSlate(
+    candidates,
+    (legType) => legType._id,
+    policy.candidateLimit,
+    options?.slateSalt ?? ""
+  );
 
   const fiscalActive = !!fiscalStance && fiscalStance.direction !== 0;
 
   let best: NppBillSelection | null = null;
 
-  for (const legType of candidates) {
+  for (const legType of slate) {
     if (recentLegislationTypeIds?.has(legType._id)) continue;
     const options = legType.policyOptions ?? [];
     // Tax-slider laws carry no options ladder — synthesize a directional
@@ -564,11 +603,16 @@ export function selectNppBill(
     // government holds a non-neutral stance.
     const isFiscalBill = FISCAL_TIGHTENING_DOMAINS.has(legType.policyDomain?.toLowerCase() ?? "");
     const fiscalScore = fiscalActive && isFiscalBill ? fiscalStance!.intensity : 0;
+    // V5 goal bias: the government prefers bills that advance a domain it is
+    // actually committed to. Zero when no goal set is supplied.
+    const goalScore =
+      goalDomains && agendaItem && goalDomains.has(agendaItem.domain) ? agendaItem.priority : 0;
     const combined =
       NPP_SPONSOR_PLATFORM_WEIGHT * platScore +
       NPP_SPONSOR_URGENCY_WEIGHT * urgScore +
       NPP_SPONSOR_AGENDA_WEIGHT * agendaScore +
-      NPP_SPONSOR_FISCAL_WEIGHT * fiscalScore;
+      NPP_SPONSOR_FISCAL_WEIGHT * fiscalScore +
+      NPP_SPONSOR_GOAL_WEIGHT * goalScore;
 
     if (
       best === null ||
@@ -621,6 +665,12 @@ export function selectNppBill(
       best = { legType, option, score: combined };
     }
   }
+
+  // Difficulty: decline a weak best. The sponsor keeps its cap slot and its
+  // cooldown for a better opportunity rather than filing whatever scored
+  // highest, however thin. `minBillScore: 0` (easy/normal) never declines, so
+  // this is a no-op outside hard.
+  if (best && best.score < policy.minBillScore) return null;
 
   return best;
 }

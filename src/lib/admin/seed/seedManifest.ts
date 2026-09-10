@@ -608,6 +608,12 @@ const RUNTIME: CollectionEntry[] = [
       "Per-country nuclear research, stockpile, and production orders. Wiped on reset and recreated from game-scaled historical baselines without automatic production.",
   },
   {
+    name: "covertNuclearPrograms",
+    category: "runtime",
+    notes:
+      "Per-country covert nuclear programme: stage, progress, funding, suspicion, exposure count and breakout turn. Runtime — wiped on reset, rebuilt by play. Omitting it here meant `resetGameWorld` (which sweeps `getRuntimeCollectionNames()`) left every prior campaign's covert programme standing, so a fresh world could open with a country already mid-breakout.",
+  },
+  {
     name: "intelligenceAgencies",
     category: "runtime",
     notes:
@@ -669,6 +675,11 @@ const RUNTIME: CollectionEntry[] = [
   { name: "actionLogs", category: "runtime" },
   { name: "activityLog", category: "runtime" },
   { name: "turnLogs", category: "runtime" },
+  {
+    name: "singleplayerRuntime",
+    category: "runtime",
+    notes: "Local pause state resets with the world.",
+  },
 
   // ── 2026-06 manifest-completeness backfill ─────────────────────────────────
   // Collections that existed in code but were never classified, so they
@@ -892,6 +903,12 @@ const RUNTIME: CollectionEntry[] = [
   // Per-country / per-state runtime + histories.
   { name: "countryLeaderStates", category: "runtime" },
   { name: "characterStateOrg", category: "runtime" },
+  {
+    name: "primaryStateActions",
+    category: "runtime",
+    notes:
+      "One row per act a presidential primary candidate has running against a rival in a state. Rows carry their own expiry, so a reset that drops them simply clears every live attack.",
+  },
   { name: "rulingPartyPurgeEvents", category: "runtime" },
   { name: "redistrictLedger", category: "runtime" },
   { name: "stateApprovalHistory", category: "runtime" },
@@ -975,6 +992,18 @@ const RUNTIME: CollectionEntry[] = [
 // reset" mode that nukes them; that path is documented in resetGameWorld.
 
 const PRESERVED: CollectionEntry[] = [
+  {
+    name: "nativePushDevices",
+    category: "preserved",
+    notes:
+      "Account-bound native push registrations and delivery cursors. Device credentials, never seed data. Expire after 30 days without renewal.",
+  },
+  {
+    name: "clientDiagnostics",
+    category: "preserved",
+    notes:
+      "Opt-in redacted desktop failure reports expire through a 30-day TTL index, independently of world resets.",
+  },
   {
     name: "clientSimulationStatistics",
     category: "preserved",

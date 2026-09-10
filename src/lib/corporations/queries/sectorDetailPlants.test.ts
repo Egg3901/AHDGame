@@ -223,7 +223,7 @@ describe("buildSectorPlantsSection", () => {
     expect(s.buildQuote.maxAffordableUnits).toBe(
       Math.floor(BASE_ARGS.corpCapitalAnchor / s.buildQuote.perUnitAnchor)
     );
-    expect(s.buildTurns).toBe(72); // manufacturing
+    expect(s.buildTurns).toBe(36); // manufacturing
   });
 
   it("turns the build queue into countdowns the panel can render", () => {
@@ -368,5 +368,81 @@ describe("buildSectorPlantsSection", () => {
       });
       expect(s.truth.breakEven).toEqual({ status: "not_at_current_fills", turns: null });
     });
+  });
+});
+
+describe("sector investment quote context", () => {
+  it("quotes cold upkeep using the same capped maintenance basis as the turn", () => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture({
+        plantsUpkeepMarginBasisAnchor: 100,
+        plantsStartTurn: 1,
+        clearingStartTurn: 1,
+        activeCapacityPercent: 25,
+        plantsPnl: { turn: BASE_ARGS.currentTurn } as NonNullable<CorporateSector["plantsPnl"]>,
+      }),
+      money: { ...BASE_ARGS.money, nameplateRevenueAnchor: 1000 },
+      investment: { overheadDailyAnchor: 10, taxRatePercent: 25, freightNetCostDailyAnchor: 4 },
+    });
+    expect(result.activeCapacityPercent).toBe(25);
+    // The maintenance anchor is capped at the default 65% cost share.
+    expect(result.capacityRecovery?.coldUpkeepDailyAnchor).toBeCloseTo(1000 * 0.65 * 0.05, 8);
+    expect(result.investment).toMatchObject({
+      overheadDailyAnchor: 10,
+      taxRatePercent: 25,
+      freightNetCostDailyAnchor: 4,
+    });
+    expect(result.buildQuote.expansionMultiplier).toBe(0.8);
+  });
+  it.each([
+    { plantsStartTurn: 80, clearingStartTurn: 1 },
+    { plantsStartTurn: 1, clearingStartTurn: 80 },
+    { plantsStartTurn: undefined, clearingStartTurn: 1 },
+  ])("withholds recurring returns while market support is unsettled: %j", (starts) => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      money: { ...BASE_ARGS.money, nameplateRevenueAnchor: 1000 },
+      sector: sectorFixture({
+        ...starts,
+        plantsUpkeepMarginBasisAnchor: 0.5,
+        plantsPnl: { turn: BASE_ARGS.currentTurn } as NonNullable<CorporateSector["plantsPnl"]>,
+      }),
+      investment: { overheadDailyAnchor: 10, taxRatePercent: 25 },
+    });
+    expect(result.investment).toBeUndefined();
+  });
+  it("withholds investment estimates when the operating figures are stale", () => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture({
+        plantsUpkeepMarginBasisAnchor: 0.5,
+        plantsPnl: { turn: BASE_ARGS.currentTurn - 1 } as NonNullable<CorporateSector["plantsPnl"]>,
+      }),
+      money: { ...BASE_ARGS.money, nameplateRevenueAnchor: 1000 },
+      investment: { overheadDailyAnchor: 10, taxRatePercent: 25 },
+    });
+    expect(result.capacityRecovery).toBeDefined();
+    expect(result.investment).toBeUndefined();
+  });
+});
+
+describe("partial mothball attribution", () => {
+  it("names parked capacity separately and never exceeds total idle units", () => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sector: sectorFixture({
+        activeCapacityPercent: 25,
+        producedUnits: 40,
+        soldUnits: 40,
+        throughputFactor: 0.8,
+      }),
+    });
+    expect(result.idleCauses.find((cause) => cause.cause === "mothballed")?.units).toBe(150);
+    expect(result.idleCauses.reduce((sum, cause) => sum + cause.units, 0)).toBeCloseTo(160, 8);
   });
 });

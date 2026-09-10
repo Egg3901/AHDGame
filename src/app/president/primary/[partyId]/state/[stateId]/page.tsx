@@ -184,6 +184,8 @@ export default async function PartyPrimaryStatePage({ params }: PageProps) {
       homeState,
       primaryCampaignState: c.primaryCampaignState ?? null,
       primaryCampaignTicks: c.primaryCampaignTicks ?? 0,
+      primarySurgeUsed: c.primarySurgeUsed ?? false,
+      primarySurgeBoost: c.primarySurgeBoost,
     };
   });
 

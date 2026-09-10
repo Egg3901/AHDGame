@@ -33,6 +33,39 @@ import type { Campaign } from "@/lib/db/types";
  * Either case is fine — the money driver returns 0 when fundsJ and
  * fundsI are both 0.
  */
+/**
+ * The same aggregate for many elections in one read, keyed by election id
+ * string. A turn's vote accumulation used to issue this per election.
+ */
+export async function loadFundsByPartyForElections(
+  electionIds: ObjectId[],
+  db: Db
+): Promise<Map<string, Map<string, number>>> {
+  const out = new Map<string, Map<string, number>>();
+  if (electionIds.length === 0) return out;
+  const campaigns = await db
+    .collection<Campaign>("campaigns")
+    .find({ electionId: { $in: electionIds } })
+    .project<{ electionId: ObjectId; party: string; spendStock?: number; spendThisTurn?: number }>({
+      electionId: 1,
+      party: 1,
+      spendStock: 1,
+      spendThisTurn: 1,
+    })
+    .toArray();
+  for (const c of campaigns) {
+    const stock = typeof c.spendStock === "number" ? c.spendStock : 0;
+    const fresh = typeof c.spendThisTurn === "number" ? c.spendThisTurn : 0;
+    const spend = stock + fresh;
+    if (spend <= 0) continue;
+    const key = c.electionId.toString();
+    const byParty = out.get(key) ?? new Map<string, number>();
+    byParty.set(c.party, (byParty.get(c.party) ?? 0) + spend);
+    out.set(key, byParty);
+  }
+  return out;
+}
+
 export async function getFundsByPartyForElection(
   electionId: ObjectId,
   db: Db

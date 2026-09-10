@@ -1,4 +1,15 @@
 /**
+ * How the presidential election is decided and who is on track to win. Votes
+ * accumulate per state (and per Maine and Nebraska district) each turn through
+ * accumulatePresidentVoteTurn using the swing-flow model; a state's partisan lean
+ * nudges candidates by at most 20% (leanVoteMultiplier), independents pay
+ * INDEPENDENT_VOTE_PENALTY, and the tally started by initPresidentVoteTally
+ * resolves the Electoral College.
+ */
+
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
+
+/**
  * Presidential election vote accumulation and tally initialization.
  * Per-state (and ME/NE district) vote accumulation; Electoral College resolution.
  */
@@ -667,10 +678,17 @@ export async function accumulatePresidentVoteTurn(
   const ledgerSink = createLedgerSink();
 
   for (const unit of electoralVoteUnits) {
+    // A ME/NE at-large leg is not simulated: it is summed from that state's
+    // districts after the loop (#1464). Simulating it as well would draw the
+    // state's electorate a second time on top of the districts that already
+    // partition it, which is what inflated ME ~3x and NE ~4x in the national
+    // popular vote once the district split activated.
+    if (unit.derivesFromDistricts) continue;
+
     const stateId = getDemographicsStateId(unit);
     const state = resolveElectoralUnitState(stateMap, stateId);
     const demographics = demographicsMap.get(stateId);
-    const turnoutDoc = turnoutMap.get(stateId);
+    const turnoutDoc = turnoutForElection(turnoutMap.get(stateId), election);
     const statePartyOrgs = statePartyOrgsByState.get(stateId) ?? [];
 
     if (!state || !demographics) continue;
@@ -693,7 +711,10 @@ export async function accumulatePresidentVoteTurn(
     // President any more than they vote for Senator. Per-state shares (and so
     // every electoral vote) are pool-magnitude-invariant; only ballot counts
     // and turnout honesty change.
-    const electorate = state.votingEligiblePopulation ?? state.population;
+    // Districts partition their state, so each draws its own share rather than
+    // the whole thing. Whole-state units carry a share of 1 and are unchanged.
+    const electorate =
+      (state.votingEligiblePopulation ?? state.population) * (unit.electorateShare ?? 1);
 
     // Use resolved turnout with GOTV/canvassing/suppression modifiers applied
     const { totalPool: resolvedTotalPool, byGroup: liveTurnouts } = resolveTurnout(
@@ -721,6 +742,8 @@ export async function accumulatePresidentVoteTurn(
     let effLedgerBucketWeights: Map<string, Record<string, number>> | undefined;
     {
       const substrate = buildGranularElectorateSubstrate({
+        campaignRulesVersion: election.campaignRulesVersion,
+        currentTurn: turnNumber,
         countryId: electionCountryId,
         stateId,
         preset: gsDoc?.preset,
@@ -971,6 +994,24 @@ export async function accumulatePresidentVoteTurn(
       newTotalVotes[ec.candidateId] = (newTotalVotes[ec.candidateId] ?? 0) + votes;
     }
     newTotalVotesByUnit[unit.unitId] = unitTotals;
+  }
+
+  // ME/NE at-large: the statewide total IS the sum of that state's districts,
+  // because the districts partition the state exactly. Derived rather than
+  // simulated, so these ballots are counted once — they are already in
+  // `newTotalVotes` from the district legs and must NOT be added again.
+  for (const unit of electoralVoteUnits) {
+    if (!unit.derivesFromDistricts) continue;
+    const districtTotals: Record<string, number> = {};
+    for (const district of electoralVoteUnits) {
+      if (district.stateId !== unit.stateId || district.derivesFromDistricts) continue;
+      for (const [candidateId, votes] of Object.entries(
+        newTotalVotesByUnit[district.unitId] ?? {}
+      )) {
+        districtTotals[candidateId] = (districtTotals[candidateId] ?? 0) + votes;
+      }
+    }
+    newTotalVotesByUnit[unit.unitId] = districtTotals;
   }
 
   const unitTurnSnapshots = { ...(tally.unitTurnSnapshots ?? {}) };

@@ -1,4 +1,10 @@
 /**
+ * Where tech unlock prices come from. Unlocking a node costs its rdScore price
+ * plus cash equal to 15% of the corp's daily gross revenue
+ * (TECH_NODE_CASH_REVENUE_FRACTION, techNodeCashCost), charged in the corp's
+ * local currency, so bigger corps pay more and zero-revenue corps pay no cash.
+ */
+/**
  * Cash-cost model for unlocking tech nodes (v2). Each unlock costs rdScore
  * (node.cost) AND cash = a fraction of the corp's daily gross revenue, so bigger
  * corps pay proportionally more. Cash is charged in the corp's local currency.

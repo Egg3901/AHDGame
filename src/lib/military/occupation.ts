@@ -147,6 +147,34 @@ export interface ShiftInput {
   margin: number;
   /** True when the LOSING side broke off rather than fighting the engagement out. */
   loserRetreated: boolean;
+  /**
+   * Turns since the war opened, for the mobilisation ramp (see
+   * `OCCUPATION.mobilizationTurns`). Omitted means no ramp: a caller that does not
+   * know the war's age must not silently damp the front, and every existing test
+   * that omits it keeps its exact previous result.
+   */
+  turnsElapsed?: number;
+}
+
+/**
+ * How much of a normal advance the front is worth this early in the war.
+ *
+ * 1 when the age is unknown, so this can only ever slow a front the caller has
+ * dated. Clamped at both ends: a negative age (clock skew, a repaired document)
+ * reads as turn zero rather than reversing the front.
+ */
+export function mobilizationFactor(turnsElapsed?: number): number {
+  // NON-FINITE IS "UNKNOWN", and the guard is not theoretical. `startTurn` is typed
+  // required on `ConflictDoc`, but a document written before it existed does not have
+  // one, and `currentTurn - undefined` is NaN. That NaN multiplied straight through
+  // `occupationShift` into `control`, so a war on a legacy record would have had its
+  // front position written as NaN and every downstream comparison against it silently
+  // gone false. Caught by battleResolution.test.ts, whose fixtures omit the field.
+  if (turnsElapsed == null || !Number.isFinite(turnsElapsed)) return 1;
+  const t = Math.max(0, turnsElapsed);
+  const { mobilizationTurns: span, mobilizationFloor: floor } = OCCUPATION;
+  if (span <= 0) return 1;
+  return Math.min(1, floor + (1 - floor) * (t / span));
 }
 
 /**
@@ -163,9 +191,16 @@ export interface ShiftInput {
  * itself survives for the winding-down status and the peace-offer threshold, which
  * read progress from the START line, not the winner's share.
  */
-export function occupationShift({ control, winner, margin, loserRetreated }: ShiftInput): number {
+export function occupationShift({
+  control,
+  winner,
+  margin,
+  loserRetreated,
+  turnsElapsed,
+}: ShiftInput): number {
   let shift = Math.min(1, Math.abs(margin) / OCCUPATION.decisiveMargin) * OCCUPATION.maxShift;
   if (loserRetreated) shift *= OCCUPATION.retreatYield;
+  shift *= mobilizationFactor(turnsElapsed);
   const next = winner === "B" ? control + shift : control - shift;
   return Math.max(0, Math.min(100, next));
 }

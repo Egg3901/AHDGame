@@ -315,6 +315,7 @@ export function LineGraph({
   gridCount = 4,
   stripeCoincidentSegments = false,
   thresholdLine,
+  tooltipValue,
 }: {
   snapshots: VoteTurnSnapshot[];
   series: LineSeries[];
@@ -328,6 +329,12 @@ export function LineGraph({
   stripeCoincidentSegments?: boolean;
   /** Optional horizontal reference line (e.g. 270-to-win threshold). */
   thresholdLine?: { value: number; label: string };
+  /**
+   * Formats a value for the hover readout. Defaults to the axis formatter,
+   * which is deliberately lossy — a y-axis says "13.0M" where a reader who has
+   * pointed at a turn to ask what happened there wants the count.
+   */
+  tooltipValue?: (v: number) => string;
 }) {
   const W = 560,
     H = 180,
@@ -351,6 +358,47 @@ export function LineGraph({
 
   const reactId = React.useId().replace(/:/g, "");
   const seriesIndex = new Map(series.map((s, i) => [s.id, i] as const));
+
+  /**
+   * The turn the reader is asking about, or null.
+   *
+   * Hover on a pointer device, tap on a touch one. The hit targets are full
+   * height bands rather than the plotted points themselves: asking someone to
+   * land on a 4px dot is asking them to fail, and on a phone there is no cursor
+   * to aim with at all.
+   */
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+  const active = activeIndex != null ? snapshots[activeIndex] : null;
+
+  /** Half the gap between neighbouring turns, so bands meet without overlapping. */
+  const bandEdges = (i: number) => {
+    if (snapshots.length < 2) return { x0: PAD.left, x1: PAD.left + innerW };
+    const here = xScale(i);
+    const prev = i > 0 ? xScale(i - 1) : here - (xScale(1) - xScale(0));
+    const next = i < snapshots.length - 1 ? xScale(i + 1) : here + (xScale(1) - xScale(0));
+    return {
+      x0: Math.max(PAD.left, (prev + here) / 2),
+      x1: Math.min(PAD.left + innerW, (here + next) / 2),
+    };
+  };
+
+  const readout =
+    active != null
+      ? series
+          .map((se) => ({ se, v: yValues(se.id, active) }))
+          .filter((r): r is { se: LineSeries; v: number } => r.v !== null)
+          .sort((a, b) => b.v - a.v)
+      : [];
+
+  const activeX = activeIndex != null ? xScale(activeIndex) : 0;
+  // Anchor to the highest point at that turn, and flip below when there is no
+  // room above it.
+  const activeTopY = readout.length > 0 ? Math.min(...readout.map((r) => yScale(r.v))) : PAD.top;
+  const xPct = (activeX / W) * 100;
+  const yPct = (activeTopY / H) * 100;
+  const flipBelow = yPct < 34;
+  const horizontal =
+    xPct > 66 ? "translateX(-100%)" : xPct < 34 ? "translateX(0)" : "translateX(-50%)";
 
   type Edge = {
     p0: { x: number; y: number };
@@ -416,218 +464,311 @@ export function LineGraph({
       : null;
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} className="overflow-visible">
-      {gridVals.map((v) => (
-        <g key={v}>
-          <line
-            x1={PAD.left}
-            y1={yScale(v)}
-            x2={PAD.left + innerW}
-            y2={yScale(v)}
-            stroke={v === 0 ? "var(--card-border)" : "var(--card-border)"}
-            strokeDasharray={v === 0 ? "0" : "4 4"}
-          />
-          <text
-            x={PAD.left - 5}
-            y={yScale(v) + 4}
-            textAnchor="end"
-            fontSize={9}
-            fill="var(--muted)"
-          >
-            {yLabel(v)}
+    <div className="relative">
+      <svg
+        width="100%"
+        viewBox={`0 0 ${W} ${H}`}
+        className="overflow-visible"
+        onPointerLeave={() => setActiveIndex(null)}
+      >
+        {gridVals.map((v) => (
+          <g key={v}>
+            <line
+              x1={PAD.left}
+              y1={yScale(v)}
+              x2={PAD.left + innerW}
+              y2={yScale(v)}
+              stroke={v === 0 ? "var(--card-border)" : "var(--card-border)"}
+              strokeDasharray={v === 0 ? "0" : "4 4"}
+            />
+            <text
+              x={PAD.left - 5}
+              y={yScale(v) + 4}
+              textAnchor="end"
+              fontSize={9}
+              fill="var(--muted)"
+            >
+              {yLabel(v)}
+            </text>
+          </g>
+        ))}
+        <line
+          x1={PAD.left}
+          y1={PAD.top}
+          x2={PAD.left}
+          y2={PAD.top + innerH}
+          stroke="var(--card-border)"
+        />
+        <line
+          x1={PAD.left}
+          y1={PAD.top + innerH}
+          x2={PAD.left + innerW}
+          y2={PAD.top + innerH}
+          stroke="var(--card-border)"
+        />
+        {xLabels.map(({ x, label }, i) => (
+          <text key={i} x={x} y={H - 4} textAnchor="middle" fontSize={9} fill="var(--muted)">
+            {label}
           </text>
-        </g>
-      ))}
-      <line
-        x1={PAD.left}
-        y1={PAD.top}
-        x2={PAD.left}
-        y2={PAD.top + innerH}
-        stroke="var(--card-border)"
-      />
-      <line
-        x1={PAD.left}
-        y1={PAD.top + innerH}
-        x2={PAD.left + innerW}
-        y2={PAD.top + innerH}
-        stroke="var(--card-border)"
-      />
-      {xLabels.map(({ x, label }, i) => (
-        <text key={i} x={x} y={H - 4} textAnchor="middle" fontSize={9} fill="var(--muted)">
-          {label}
-        </text>
-      ))}
-      {thresholdLine != null &&
-        thresholdLine.value >= yMin &&
-        thresholdLine.value <= yMax &&
-        (() => {
-          const ty = yScale(thresholdLine.value);
-          return (
-            <g>
-              <line
-                x1={PAD.left}
-                y1={ty}
-                x2={PAD.left + innerW}
-                y2={ty}
-                stroke="#f59e0b"
-                strokeWidth={1.5}
-                strokeDasharray="4 3"
-              />
-              <text
-                x={PAD.left + innerW + 3}
-                y={ty + 4}
-                fill="#f59e0b"
-                fontSize={9}
-                fontWeight={600}
-              >
-                {thresholdLine.label}
-              </text>
-            </g>
-          );
-        })()}
-      {edgeStripeData ? (
-        <>
-          <defs>
-            {edgeStripeData.tiedValid.map((t, idx) => {
-              const x2 = t.p0.x + t.ux * TIE_STRIPE_PERIOD;
-              const y2 = t.p0.y + t.uy * TIE_STRIPE_PERIOD;
-              const n = t.colors.length;
-              const stops: React.ReactNode[] = [];
-              for (let i = 0; i < n; i++) {
-                const a = (i / n) * 100;
-                const b = ((i + 1) / n) * 100;
-                stops.push(
-                  <stop key={`${i}-a`} offset={`${a}%`} stopColor={t.colors[i]} />,
-                  <stop key={`${i}-b`} offset={`${b}%`} stopColor={t.colors[i]} />
-                );
-              }
-              return (
-                <linearGradient
-                  key={idx}
-                  id={`${reactId}-tie-${idx}`}
-                  x1={t.p0.x}
-                  y1={t.p0.y}
-                  x2={x2}
-                  y2={y2}
-                  gradientUnits="userSpaceOnUse"
-                  spreadMethod="repeat"
-                >
-                  {stops}
-                </linearGradient>
-              );
-            })}
-          </defs>
-          {edgeStripeData.tiedValid.map((t, idx) => (
-            <line
-              key={`tie-line-${idx}`}
-              x1={t.p0.x}
-              y1={t.p0.y}
-              x2={t.p1.x}
-              y2={t.p1.y}
-              stroke={`url(#${reactId}-tie-${idx})`}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-          {edgeStripeData.solo.map((e, idx) => (
-            <line
-              key={`solo-${e.id}-${idx}`}
-              x1={e.p0.x}
-              y1={e.p0.y}
-              x2={e.p1.x}
-              y2={e.p1.y}
-              stroke={e.color}
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ))}
-          {Array.from(edgeStripeData.dotBuckets.entries()).map(([dk, dots]) => {
-            const [sx, sy] = dk.split(",").map(Number);
-            const r = 4;
-            if (dots.length >= 2) {
-              const ids = [...new Set(dots.map((d) => d.id))].sort(
-                (a, b) => (seriesIndex.get(a) ?? 0) - (seriesIndex.get(b) ?? 0)
-              );
-              const colorList = ids.map((sid) => series.find((s) => s.id === sid)!.color);
-              const n = colorList.length;
-              let ang = -Math.PI / 2;
-              const wedges: React.ReactNode[] = [];
-              for (let i = 0; i < n; i++) {
-                const a0 = ang;
-                const a1 = ang + (2 * Math.PI) / n;
-                const x0 = sx + r * Math.cos(a0);
-                const y0 = sy + r * Math.sin(a0);
-                const x1 = sx + r * Math.cos(a1);
-                const y1 = sy + r * Math.sin(a1);
-                wedges.push(
-                  <path
-                    key={i}
-                    d={`M ${sx} ${sy} L ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1} Z`}
-                    fill={colorList[i]}
-                  />
-                );
-                ang = a1;
-              }
-              return (
-                <g key={dk}>
-                  {wedges}
-                  <circle
-                    cx={sx}
-                    cy={sy}
-                    r={r}
-                    fill="none"
-                    stroke="var(--card)"
-                    strokeWidth={1.5}
-                  />
-                </g>
-              );
-            }
-            const d0 = dots[0];
+        ))}
+        {thresholdLine != null &&
+          thresholdLine.value >= yMin &&
+          thresholdLine.value <= yMax &&
+          (() => {
+            const ty = yScale(thresholdLine.value);
             return (
-              <circle
-                key={dk}
-                cx={sx}
-                cy={sy}
-                r={r}
-                fill={d0.color}
-                stroke="var(--card)"
-                strokeWidth={1.5}
-              />
-            );
-          })}
-        </>
-      ) : (
-        collectSeriesCoords(snapshots, series, yValues, xScale, yScale).map(
-          ({ id, color, segments, last }) => (
-            <g key={id}>
-              {segments.map((seg, si) => (
-                <polyline
-                  key={si}
-                  points={seg.map((p) => `${p.x},${p.y}`).join(" ")}
-                  fill="none"
-                  stroke={color}
-                  strokeWidth={2.5}
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
+              <g>
+                <line
+                  x1={PAD.left}
+                  y1={ty}
+                  x2={PAD.left + innerW}
+                  y2={ty}
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
                 />
-              ))}
-              {last && last.y !== null && (
+                <text
+                  x={PAD.left + innerW + 3}
+                  y={ty + 4}
+                  fill="#f59e0b"
+                  fontSize={9}
+                  fontWeight={600}
+                >
+                  {thresholdLine.label}
+                </text>
+              </g>
+            );
+          })()}
+        {edgeStripeData ? (
+          <>
+            <defs>
+              {edgeStripeData.tiedValid.map((t, idx) => {
+                const x2 = t.p0.x + t.ux * TIE_STRIPE_PERIOD;
+                const y2 = t.p0.y + t.uy * TIE_STRIPE_PERIOD;
+                const n = t.colors.length;
+                const stops: React.ReactNode[] = [];
+                for (let i = 0; i < n; i++) {
+                  const a = (i / n) * 100;
+                  const b = ((i + 1) / n) * 100;
+                  stops.push(
+                    <stop key={`${i}-a`} offset={`${a}%`} stopColor={t.colors[i]} />,
+                    <stop key={`${i}-b`} offset={`${b}%`} stopColor={t.colors[i]} />
+                  );
+                }
+                return (
+                  <linearGradient
+                    key={idx}
+                    id={`${reactId}-tie-${idx}`}
+                    x1={t.p0.x}
+                    y1={t.p0.y}
+                    x2={x2}
+                    y2={y2}
+                    gradientUnits="userSpaceOnUse"
+                    spreadMethod="repeat"
+                  >
+                    {stops}
+                  </linearGradient>
+                );
+              })}
+            </defs>
+            {edgeStripeData.tiedValid.map((t, idx) => (
+              <line
+                key={`tie-line-${idx}`}
+                x1={t.p0.x}
+                y1={t.p0.y}
+                x2={t.p1.x}
+                y2={t.p1.y}
+                stroke={`url(#${reactId}-tie-${idx})`}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            {edgeStripeData.solo.map((e, idx) => (
+              <line
+                key={`solo-${e.id}-${idx}`}
+                x1={e.p0.x}
+                y1={e.p0.y}
+                x2={e.p1.x}
+                y2={e.p1.y}
+                stroke={e.color}
+                strokeWidth={2.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ))}
+            {Array.from(edgeStripeData.dotBuckets.entries()).map(([dk, dots]) => {
+              const [sx, sy] = dk.split(",").map(Number);
+              const r = 4;
+              if (dots.length >= 2) {
+                const ids = [...new Set(dots.map((d) => d.id))].sort(
+                  (a, b) => (seriesIndex.get(a) ?? 0) - (seriesIndex.get(b) ?? 0)
+                );
+                const colorList = ids.map((sid) => series.find((s) => s.id === sid)!.color);
+                const n = colorList.length;
+                let ang = -Math.PI / 2;
+                const wedges: React.ReactNode[] = [];
+                for (let i = 0; i < n; i++) {
+                  const a0 = ang;
+                  const a1 = ang + (2 * Math.PI) / n;
+                  const x0 = sx + r * Math.cos(a0);
+                  const y0 = sy + r * Math.sin(a0);
+                  const x1 = sx + r * Math.cos(a1);
+                  const y1 = sy + r * Math.sin(a1);
+                  wedges.push(
+                    <path
+                      key={i}
+                      d={`M ${sx} ${sy} L ${x0} ${y0} A ${r} ${r} 0 0 1 ${x1} ${y1} Z`}
+                      fill={colorList[i]}
+                    />
+                  );
+                  ang = a1;
+                }
+                return (
+                  <g key={dk}>
+                    {wedges}
+                    <circle
+                      cx={sx}
+                      cy={sy}
+                      r={r}
+                      fill="none"
+                      stroke="var(--card)"
+                      strokeWidth={1.5}
+                    />
+                  </g>
+                );
+              }
+              const d0 = dots[0];
+              return (
                 <circle
-                  cx={last.x}
-                  cy={last.y}
-                  r={4}
-                  fill={color}
+                  key={dk}
+                  cx={sx}
+                  cy={sy}
+                  r={r}
+                  fill={d0.color}
                   stroke="var(--card)"
                   strokeWidth={1.5}
                 />
-              )}
-            </g>
+              );
+            })}
+          </>
+        ) : (
+          collectSeriesCoords(snapshots, series, yValues, xScale, yScale).map(
+            ({ id, color, segments, last }) => (
+              <g key={id}>
+                {segments.map((seg, si) => (
+                  <polyline
+                    key={si}
+                    points={seg.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={2.5}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                ))}
+                {last && last.y !== null && (
+                  <circle
+                    cx={last.x}
+                    cy={last.y}
+                    r={4}
+                    fill={color}
+                    stroke="var(--card)"
+                    strokeWidth={1.5}
+                  />
+                )}
+              </g>
+            )
           )
-        )
-      )}
-    </svg>
+        )}
+
+        {/* Drawn last so the guide, the markers and the hit bands sit above the
+          lines. The bands carry the interaction; everything else is inert. */}
+        {activeIndex != null && active ? (
+          <g pointerEvents="none">
+            <line
+              x1={activeX}
+              y1={PAD.top}
+              x2={activeX}
+              y2={PAD.top + innerH}
+              stroke="var(--muted)"
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              opacity={0.7}
+            />
+            {readout.map((r) => (
+              <circle
+                key={r.se.id}
+                cx={activeX}
+                cy={yScale(r.v)}
+                r={4.5}
+                fill={r.se.color}
+                stroke="var(--card)"
+                strokeWidth={1.5}
+              />
+            ))}
+          </g>
+        ) : null}
+        {snapshots.map((_, i) => {
+          const { x0, x1 } = bandEdges(i);
+          return (
+            <rect
+              key={`band-${i}`}
+              x={x0}
+              y={PAD.top}
+              width={Math.max(0, x1 - x0)}
+              height={innerH}
+              fill="transparent"
+              style={{ cursor: "pointer" }}
+              onPointerEnter={() => setActiveIndex(i)}
+              onPointerMove={() => setActiveIndex(i)}
+              // A tap has no hover to leave, so tapping the open turn closes it.
+              onPointerDown={() => setActiveIndex((cur) => (cur === i ? null : i))}
+            />
+          );
+        })}
+      </svg>
+
+      {activeIndex != null && active ? (
+        <div
+          role="tooltip"
+          // `body` is `overflow-x: clip`, so a readout wider than the screen is
+          // not merely ugly — it is cut off and unreachable. Cap it, and let a
+          // long name give way rather than push the figure out.
+          className="pointer-events-none absolute z-10 min-w-[7rem] max-w-[min(16rem,70vw)] rounded-lg border border-card-border bg-card px-2.5 py-2 shadow-panel"
+          style={{
+            left: `${xPct}%`,
+            top: `${yPct}%`,
+            transform: `${horizontal} translateY(${flipBelow ? "12px" : "calc(-100% - 12px)"})`,
+          }}
+        >
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted">
+            {xLabel(active)}
+          </div>
+          {readout.length === 0 ? (
+            <div className="text-xs text-muted italic">Nothing counted yet</div>
+          ) : (
+            readout.map((r) => (
+              <div key={r.se.id} className="flex items-baseline justify-between gap-3 text-xs">
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{ backgroundColor: r.se.color }}
+                  />
+                  <span className="truncate text-foreground">{r.se.name}</span>
+                </span>
+                <span
+                  className="shrink-0 whitespace-nowrap tabular-nums font-medium"
+                  style={{ color: r.se.color }}
+                >
+                  {(tooltipValue ?? yLabel)(r.v)}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -808,6 +949,7 @@ export function GeneralVoteCharts({
           }
           yMax={538}
           yLabel={(v) => `${v}`}
+          tooltipValue={(v) => `${Math.round(v)} EV`}
           xLabel={(snap) => `T${snap.turn}`}
           gridCount={4}
           thresholdLine={{ value: 270, label: "270 to win" }}
@@ -820,6 +962,7 @@ export function GeneralVoteCharts({
           yMin={sharePctMin}
           yMax={sharePctMax}
           yLabel={(v) => `${v}%`}
+          tooltipValue={(v) => `${v.toFixed(1)}%`}
           xLabel={(snap) => `T${snap.turn}`}
           gridCount={4}
         />
@@ -830,6 +973,7 @@ export function GeneralVoteCharts({
           yValues={(id, snap) => snap.cumulativeVotes[id] ?? null}
           yMax={roundedVoteMax}
           yLabel={fmtVoteAxis}
+          tooltipValue={(v) => `${Math.round(v).toLocaleString()} votes`}
           xLabel={(snap) => `T${snap.turn}`}
           gridCount={4}
         />
@@ -841,6 +985,7 @@ export function GeneralVoteCharts({
           yMin={0}
           yMax={seatYMax}
           yLabel={(v) => `${v}`}
+          tooltipValue={(v) => `${Math.round(v)} seats`}
           xLabel={(snap) => `T${snap.turn}`}
           gridCount={4}
           stripeCoincidentSegments

@@ -623,6 +623,20 @@ export interface SectorBuildOrder {
   /** Capacity units (output units/day) this order delivers when it lands. */
   unitsOrdered: number;
   /**
+   * The strategy this order was PRICED at, stamped when it was placed.
+   *
+   * Capacity is priced at the RPU of the product it will make, so an order
+   * bought while the sector ran a cheap strategy must not silently become
+   * capacity for an expensive one. The D9 queue rescale
+   * (`rescaleBuildQueueForStrategyChange`) already scales `unitsOrdered` on a
+   * retool so the paid basis is preserved; this field is what makes that
+   * defence auditable after the fact rather than merely assumed.
+   *
+   * Absent on orders placed before 2026-09-07, which readers treat as the
+   * sector's current strategy.
+   */
+  strategyId?: string | null;
+  /**
    * ₳ (anchor) actually charged for this order, for CIP accounting and for the
    * cancellation refund. 0 for the free growth-ramp flip-compensation order.
    */
@@ -938,6 +952,9 @@ export interface CorporateSector {
    * output-gating factor (telemetry).
    */
   capitalStock?: number;
+  /** Last turn's physical capacity in its blended recipe units during retooling. */
+  operatingCapacityUnits?: number;
+  operatingCapacityTurn?: number | null;
   capitalUtilization?: number;
   /**
    * First-class whole facilities owned by this sector. Unlike capitalStock,
@@ -1120,6 +1137,9 @@ export interface CorporateSector {
    * Reactivation is free and has no cooldown in v1.
    */
   mothballed?: boolean;
+  /** Plants kept active, 1..100. Absent means 100. The remainder pays cold upkeep.
+   * Owned capacity and paid basis are unchanged. Only capacity commands write this field. */
+  activeCapacityPercent?: number;
   /**
    * ROLLBACK SAFETY: capital-mode restore point. Remove after the rollback
    * drill passes. (Plants tier, D13.)

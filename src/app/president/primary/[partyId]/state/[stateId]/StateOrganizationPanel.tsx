@@ -7,9 +7,9 @@ import {
   MAX_STATE_ORG_BONUS_GENERAL,
   MAX_STATE_ORG_BONUS_PRIMARY,
   STATE_ORG_COST_ACTIONS,
-  STATE_ORG_COST_FUNDS,
   STATE_ORG_MAX_LEVEL,
 } from "@/lib/electionEngine/constants";
+import { formatStatePresenceCost } from "@/lib/campaigns/statePresenceCost";
 
 interface CandidateRow {
   characterId: string;
@@ -19,6 +19,10 @@ interface CandidateRow {
 
 export function StateOrganizationPanel({ stateId }: { stateId: string }) {
   const [candidates, setCandidates] = useState<CandidateRow[]>([]);
+  // Priced by the route for THIS viewer at THIS state's level. The flat base
+  // constant that used to sit here is only correct for a state at level 0, and
+  // the ladder escalates 1.35x per level.
+  const [nextCost, setNextCost] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,8 +30,9 @@ export function StateOrganizationPanel({ stateId }: { stateId: string }) {
   const reload = useCallback(() => {
     return fetch(`/api/political-operations/state-org/by-state/${stateId}`)
       .then((r) => (r.ok ? r.json() : { candidates: [] }))
-      .then((d: { candidates?: CandidateRow[] }) => {
+      .then((d: { candidates?: CandidateRow[]; viewerNextCost?: number | null }) => {
         setCandidates(d.candidates ?? []);
+        setNextCost(d.viewerNextCost ?? null);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
@@ -110,7 +115,7 @@ export function StateOrganizationPanel({ stateId }: { stateId: string }) {
       >
         {busy
           ? "Building..."
-          : `Build +1 here (${STATE_ORG_COST_ACTIONS} actions + $${STATE_ORG_COST_FUNDS.toLocaleString("en-US")})`}
+          : `Build +1 here (${STATE_ORG_COST_ACTIONS} actions${nextCost == null ? "" : ` + ${formatStatePresenceCost(nextCost)}`})`}
       </button>
     </section>
   );

@@ -3,6 +3,7 @@
 import { memo, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
@@ -22,6 +23,7 @@ const ActionCard = memo(function ActionCard({
   flipflopAxis,
   flipflopDir,
   onExecute,
+  onOpenCampaignAction,
   onFlipflop,
   onFlipflopStepChange,
   onFlipflopAxisChange,
@@ -46,7 +48,9 @@ const ActionCard = memo(function ActionCard({
   onConvertCashAmountChange,
   onConvertCashExecute,
 }: ActionCardProps) {
-  const { formatAmount, convert, toInternal, inputSymbol, forexRates } = useCurrency();
+  const { formatAmount, convert, toInternal, inputSymbol, baseRates } = useCurrency();
+  const politicalLocal = (amount: number) =>
+    forexEnabled ? campaignAnchorToLocal(amount, character.countryId ?? "US", baseRates) : amount;
   // Self-funding confirm step: the player must acknowledge the Infamy cost
   // before the donation is submitted (server behavior unchanged).
   const [convertConfirming, setConvertConfirming] = useState(false);
@@ -72,9 +76,21 @@ const ActionCard = memo(function ActionCard({
   else effectiveFundCost = card.fundCost(character);
 
   let effectiveFundLabel: string;
-  if (isCampaign) effectiveFundLabel = formatAmount(campaignFundCost);
-  else if (isAdvertise) effectiveFundLabel = formatAmount(advertiseFundCost);
-  else if (isBuildDonorBase) effectiveFundLabel = formatAmount(buildDonorBaseFundCost);
+  if (isCampaign)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(campaignFundCost),
+      campaignCurrency
+    );
+  else if (isAdvertise)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(advertiseFundCost),
+      campaignCurrency
+    );
+  else if (isBuildDonorBase)
+    effectiveFundLabel = formatCurrencyFaceAmount(
+      politicalLocal(buildDonorBaseFundCost),
+      campaignCurrency
+    );
   else if (isFundraise)
     effectiveFundLabel = `+${formatCurrencyFaceAmount(fundraiseYield, campaignCurrency)}`;
   else if (isConvertCash) {
@@ -88,8 +104,7 @@ const ActionCard = memo(function ActionCard({
   const fundNeeded = effectiveFundCost;
   // When forex rates are loaded, convert the ₳ cost to home currency so the
   // comparison uses the same units as displayCampaignFunds (stored home currency).
-  const fundNeededConverted =
-    fundNeeded !== null && forexEnabled && forexRates ? convert(fundNeeded) : fundNeeded;
+  const fundNeededConverted = fundNeeded !== null ? politicalLocal(fundNeeded) : fundNeeded;
   const cantAffordFunds =
     fundNeededConverted !== null && displayCampaignFunds < fundNeededConverted;
   const cantAffordActions = character.actions < effectiveActionCost;
@@ -217,7 +232,15 @@ const ActionCard = memo(function ActionCard({
 
         {/* Actions */}
         <div className="mt-auto">
-          {card.href ? (
+          {(card.type === "canvass" || card.type === "targetedAds") && onOpenCampaignAction ? (
+            <button
+              type="button"
+              onClick={() => onOpenCampaignAction(card.type as "canvass" | "targetedAds")}
+              className="w-full rounded-lg border border-card-border bg-card-elevated px-4 py-2 text-sm font-semibold hover:bg-primary/10"
+            >
+              {card.label}
+            </button>
+          ) : card.href ? (
             <Link
               href={card.href}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-card-elevated border border-card-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/30 transition-all"

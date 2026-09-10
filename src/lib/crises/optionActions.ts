@@ -22,8 +22,16 @@ import { getGameState } from "@/lib/gameState";
 import { yearFiringAtOrAfterTurn } from "@/lib/scotus/turnConversion";
 import { nationalizeSector } from "@/lib/nationalization/ownershipTransition";
 import { resolveCorpEligibilityBatch } from "@/lib/nationalization/targetEligibility";
-import { persistBargainingMediationAction } from "@/lib/unions/commands/bargaining";
-import { getBargainingMediationAvailability } from "@/lib/unions/bargaining";
+import {
+  persistBargainingMediationAction,
+  openBargainingCampaignFromLiveConditions,
+} from "@/lib/unions/commands/bargaining";
+import {
+  AGREEMENT_DURATION_MIN_TURNS,
+  counterBargainingOffer,
+  getBargainingMediationAvailability,
+  moveCampaignToDispute,
+} from "@/lib/unions/bargaining";
 import { clampWageLevel, WAGE_LEVEL_MAX } from "@/lib/labour/laborCost";
 import { logWireEvent } from "@/lib/wireEvent";
 import type { FederalBudget } from "@/lib/db/types/budget";
@@ -404,15 +412,125 @@ async function concessionBill(
 // ── 4. Government-brokered bargaining ──────────────────────────────────────
 
 /**
+ * The dispute a scripted sector-wide strike is actually about, opened so the
+ * government has something to broker (#127).
+ *
+ * A nationwide steel strike is authored by the crisis, not produced by a
+ * player or NPP bargaining campaign, so there was frequently no
+ * `bargainingCampaigns` row in `dispute` for the struck sector at all — and
+ * the "Bring both sides to the table" option then logged and returned while
+ * still paying out its approval effect. The most diplomatic presidential path
+ * was mechanically inert.
+ *
+ * This does not fabricate a settlement: it opens a real campaign against a
+ * real employer from live conditions (same `openBargainingCampaignFromLiveConditions`
+ * the union and NPP surfaces use, so the mandate is computed from actual
+ * locals, treasury, labour tightness and law support), records a genuine offer
+ * from each side, and moves it to `dispute`. Everything downstream — mediator
+ * odds, settlement terms, escalation — runs on the ordinary path.
+ *
+ * Returns null when the world genuinely cannot support one, in which case the
+ * caller keeps the old log-and-return behaviour.
+ */
+async function openCrisisDispute(
+  ctx: CrisisActionContext,
+  unions: readonly Union[],
+  sectorType: string
+): Promise<BargainingCampaign | null> {
+  const { db } = ctx;
+
+  // Employers already tied up in an open campaign are skipped — reopening
+  // against them would collide with the duplicate-campaign guard.
+  const busy = await db
+    .collection<BargainingCampaign>("bargainingCampaigns")
+    .find(
+      { unionId: { $in: unions.map((u) => u._id) }, status: { $in: ["negotiating", "dispute"] } },
+      { projection: { employerCorporationId: 1 } }
+    )
+    .toArray();
+  const busyEmployers = new Set(busy.map((c) => c.employerCorporationId.toString()));
+
+  for (const union of unions) {
+    // Largest local first: a national strike should be brokered with the
+    // industry's biggest employer, not whichever row sorts first.
+    const locals = await db
+      .collection<CorporateSector>("corporateSectors")
+      .find(
+        { countryId: union.countryId, sectorType: union.sectorType },
+        { projection: { corporationId: 1, workers: 1, wageLevel: 1 } }
+      )
+      .sort({ workers: -1 })
+      .toArray();
+
+    for (const local of locals) {
+      const employerId = local.corporationId;
+      if (!employerId || busyEmployers.has(employerId.toString())) continue;
+
+      // The union asks above the local's current wage; the employer answers
+      // below it. Both are real positions, so mediation has a gap to close
+      // rather than two identical packages.
+      const current = local.wageLevel ?? 1;
+      const unionAsk = clampWageLevel(current * 1.12);
+      const employerAnswer = clampWageLevel(current * 1.03);
+      if (unionAsk <= employerAnswer) continue;
+
+      const opened = await openBargainingCampaignFromLiveConditions(
+        db,
+        union,
+        employerId.toString(),
+        {
+          wageLevel: unionAsk,
+          agreementDurationTurns: AGREEMENT_DURATION_MIN_TURNS,
+          noStrikeTurns: 0,
+        },
+        ctx.currentTurn
+      );
+      if (!opened.ok || typeof opened.campaignId !== "string") continue;
+
+      // The opener returns an API result, not the document, so re-read it.
+      const fresh = await db
+        .collection<BargainingCampaign>("bargainingCampaigns")
+        .findOne({ _id: new ObjectId(opened.campaignId) });
+      if (!fresh) continue;
+
+      const now = new Date();
+      const countered = counterBargainingOffer({
+        campaign: fresh,
+        proposedBy: "employer",
+        terms: {
+          wageLevel: employerAnswer,
+          agreementDurationTurns: AGREEMENT_DURATION_MIN_TURNS,
+          noStrikeTurns: 0,
+        },
+        currentTurn: ctx.currentTurn,
+        now,
+      });
+      if ("ok" in countered) continue;
+
+      const disputed = moveCampaignToDispute(countered, ctx.currentTurn, now);
+      if ("ok" in disputed) continue;
+
+      await db
+        .collection<BargainingCampaign>("bargainingCampaigns")
+        .replaceOne({ _id: disputed._id }, disputed);
+      console.log(
+        `[crisis] openBargaining: opened a ${sectorType} dispute in ${ctx.countryId} for the government to broker`
+      );
+      return disputed;
+    }
+  }
+  return null;
+}
+
+/**
  * Open government-brokered conciliation for the struck sector. Finds the
- * union(s) for (countryId, sectorType) and, if one of their bargaining
- * campaigns is in an eligible `dispute`, requests mediation via
+ * union(s) for (countryId, sectorType) and requests mediation via
  * `persistBargainingMediationAction` (the same primitive the union/employer
- * surfaces use). Mediation carries hard preconditions (an active dispute, a
- * wage package from BOTH parties, sufficient collective-bargaining law support,
- * a timing gate, see `getBargainingMediationAvailability`); when none is met
- * there is nothing to broker, so this logs and returns rather than fabricating
- * a synthetic dispute.
+ * surfaces use).
+ *
+ * When no dispute exists to broker, one is opened first (see
+ * `openCrisisDispute`) rather than letting the option no-op while still paying
+ * its approval effect.
  */
 async function openBargaining(ctx: CrisisActionContext, sectorType: string): Promise<void> {
   const { db } = ctx;
@@ -427,17 +545,22 @@ async function openBargaining(ctx: CrisisActionContext, sectorType: string): Pro
     return;
   }
 
-  const campaign = await db
+  const existing = await db
     .collection<BargainingCampaign>("bargainingCampaigns")
     .findOne({ unionId: { $in: unions.map((u) => u._id) }, status: "dispute" });
+  const campaign = existing ?? (await openCrisisDispute(ctx, unions, sectorType));
   if (!campaign) {
     console.warn(
-      `[crisis] openBargaining: no active dispute to mediate for ${sectorType} in ${ctx.countryId}`
+      `[crisis] openBargaining: no dispute to mediate for ${sectorType} in ${ctx.countryId}, and none could be opened`
     );
     return;
   }
 
-  const availability = getBargainingMediationAvailability(campaign, ctx.currentTurn);
+  // A government intervening in a nationwide strike waives the cooling-off
+  // delay, and only that. Every other mediation precondition still applies.
+  const availability = getBargainingMediationAvailability(campaign, ctx.currentTurn, {
+    governmentIntervention: true,
+  });
   if (!availability.available) {
     console.warn(
       `[crisis] openBargaining: mediation unavailable (${availability.reason}) for campaign ${campaign._id.toString()}`

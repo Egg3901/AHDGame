@@ -63,6 +63,10 @@ describe("POST /api/singleplayer/setup", () => {
         permanentHeadOfState: false,
       })
     );
+    // A local world has no operator: no conformance audit, no adminLogs row.
+    expect(mocks.resetAndBootstrapGameWorld).toHaveBeenCalledWith(
+      expect.objectContaining({ skipDiagnostic: true, recordRunLog: false })
+    );
   });
 
   it("forwards head-of-state mode and rejects invalid setup before reset", async () => {

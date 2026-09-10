@@ -1,4 +1,12 @@
 /**
+ * What happens when a corporation defaults on its bonds. A corp can issue new bonds
+ * up to 2x its equity minus existing debt (maxNewIssuanceFaceValue); defaulted
+ * principal can be refinanced only inside that cap (canRefinanceDefaultedDebt),
+ * and a default marks the corp's credit for a penalty window
+ * (isBondDefaultCreditPenaltyActive). previewDissolveSettlement shows how a
+ * dissolution splits cash and sector value between bondholders and shareholders.
+ */
+/**
  * Corporate bond default: asset / equity helpers, settlement previews, and issuance checks.
  */
 

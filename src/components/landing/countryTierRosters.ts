@@ -118,14 +118,50 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "752", // SE
     "792", // TR
   ],
-  "2023-default": ["156", "276", "372", "392", "826", "840"],
-  "2019-default": [
-    "156", // CN
-    "276", // DE
+  "2023-default": [
+    "040",
+    "076",
+    "156",
+    "246",
+    "250",
+    "276",
+    "300",
+    "372",
+    "380",
+    "392",
+    "566",
+    "724",
+    "752",
+    "792",
+  ],
+  "2027-default": [
+    "040", // AT
+    "076", // BR
+    "246", // FI
+    "250", // FR
+    "300", // GR
     "372", // IE
+    "380", // IT
+    "566", // NG
+    "724", // ES
+    "752", // SE
+    "792", // TR
+  ],
+  "2019-default": [
+    "040", // AT
+    "076", // BR
+    "156", // CN
+    "246", // FI
+    "250", // FR
+    "276", // DE
+    "300", // GR
+    "372", // IE
+    "380", // IT
     "392", // JP
-    "826", // UK
-    "840", // US
+    "566", // NG
+    "724", // ES
+    "752", // SE
+    "792", // TR
   ],
 };
 
@@ -182,6 +218,7 @@ export const BATTLEGROUND_FEATURE_IDS_BY_PRESET: Readonly<Record<string, readonl
   "2007-default": [],
   "2019-default": [],
   "2023-default": [],
+  "2027-default": [],
 };
 
 /** Economic-Power feature ids for a landing era id (e.g. "1953"). */

@@ -158,6 +158,7 @@ export async function processEraCheckpointsTurn(
   if (stateIds.size === 0) return NO_RESULT;
 
   const [legTypes, demographicsDocs, defaultsDocs] = await Promise.all([
+    // full-read(legislationTypes): the era checkpoint re-applies every law through the policy-effects map
     db.collection<LegislationType>("legislationTypes").find({}).toArray(),
     db
       .collection<StateDemographics>("stateDemographics")

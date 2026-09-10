@@ -18,6 +18,24 @@ export interface GameConfig {
     at: Date;
     by?: string;
   };
+  /**
+   * This world's OWN seed-roster upkeep denominators, captured at bootstrap.
+   *
+   * `upkeepPerTurn` divides a live roster by the roster the world STARTED with, and
+   * that denominator used to be derived from current code, so editing
+   * `ORDERS_OF_BATTLE` re-priced every existing army with nothing touching the world.
+   * See `seedRosterUpkeepPin.ts`.
+   *
+   * ⚠️ Rewritten unconditionally on every reseed. `gameConfig` is manifest category
+   * `reference` and survives teardown, so a pin left from the previous world would
+   * otherwise hold the new one to the old world's numbers.
+   */
+  seedRosterUpkeep?: {
+    preset: string;
+    byCountry: Record<string, number>;
+    capturedAt?: Date;
+    note?: string;
+  };
   startingFunds: number;
   startingActions: number;
   startingFavorability: number;

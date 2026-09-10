@@ -48,6 +48,12 @@ import { getRegisteredCountryIds } from "@/lib/country/registeredCountries";
 import { isPlannedEconomy, plannedShare } from "@/lib/constants/commandEconomy";
 import { loadConditionsSignal } from "@/lib/turn/npp/billSponsorship";
 import { nppAutonomyAtLeast } from "./featureFlag";
+import {
+  commitGoverningGoals,
+  reviewGoverningGoals,
+  type GoverningGoalRecord,
+} from "./v5/rules/governingGoals";
+import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import { appointNppPresident } from "./appointNppPresident";
 import { computeGoverningAgenda } from "./governingAgenda";
 import { loadCrisisAgendaSignals } from "./crisisIntake";
@@ -241,13 +247,26 @@ async function computeAndPersistGoverningAgenda(
     return false;
   }
 
+  // V5: persistent governing goals. The whole increment is gated here — below
+  // v5 nothing below reads or writes `governingGoals`, so a v4 world takes the
+  // identical path it always did.
+  const v5Active = await nppAutonomyAtLeast(db, countryId, "v5");
+
+  // Domain health is read once and shared by the accountability nudge, the V5
+  // goal review, and the V5 commitment step. All three grade the government
+  // against the same numbers on purpose; a second read could disagree with the
+  // first inside one cycle.
+  const domainHealth =
+    v5Active || (existing && existing.items.length > 0 && gov.governingPartyId)
+      ? await loadDomainHealth(db, countryId)
+      : {};
+
   // Accountability (improvement): before replacing the outgoing agenda, grade
   // the government against the targets it set and nudge the governing party's
   // favorability — rewarded for meeting goals, punished for missing them. Runs
   // on the (≈weekly) recompute cadence, a periodic report card.
   const governingPartyId = gov.governingPartyId;
   if (existing && existing.items.length > 0 && governingPartyId) {
-    const domainHealth = await loadDomainHealth(db, countryId);
     const performance = computeGovernmentPerformance(existing.items, domainHealth);
     if (performance.favorabilityDelta !== 0) {
       const nudged = await applyGovernmentPerformanceNudge(
@@ -262,6 +281,22 @@ async function computeAndPersistGoverningAgenda(
       );
     }
   }
+
+  // V5 goal review — grade every standing goal BEFORE the next agenda is
+  // computed, so the verdicts can re-weight it. Difficulty enters here and
+  // nowhere else in this function: it sets how long a commitment is held and how
+  // many are tracked, never what the government is allowed to do.
+  const behaviorPolicy = v5Active ? await loadNppBehaviorPolicy(db) : null;
+  const priorGoals: GoverningGoalRecord[] = v5Active ? (gov.governingGoals?.goals ?? []) : [];
+  const review =
+    v5Active && behaviorPolicy
+      ? reviewGoverningGoals({
+          goals: priorGoals,
+          domainHealth,
+          policy: behaviorPolicy,
+          currentTurn,
+        })
+      : null;
 
   const headNpp = await db.collection<NPP>("npps").findOne({ _id: headNppId });
   if (!headNpp) return false;
@@ -295,8 +330,32 @@ async function computeAndPersistGoverningAgenda(
     crises: crisisIntake.signals,
     debtToGdpRatio:
       !planned && typeof budget?.debtToGdpRatio === "number" ? budget.debtToGdpRatio : undefined,
+    ...(review ? { goalFeedback: review.feedback } : {}),
     currentTurn,
   });
+
+  // V5 commitment — reconcile the reviewed records against the fresh scan and
+  // lead the agenda with what the government is actually committed to. From
+  // here down nothing knows goals exist: ministerial governance, sponsorship and
+  // the fiscal stance all read `agenda.items` exactly as they did at v4.
+  const commitment =
+    review && behaviorPolicy
+      ? commitGoverningGoals({
+          reviewed: review.goals,
+          agenda: agenda.items,
+          domainHealth,
+          policy: behaviorPolicy,
+          currentTurn,
+        })
+      : null;
+  if (commitment && review) {
+    agenda.items = commitment.agenda;
+    const { achieved, revised, failed, active } = review.verdicts;
+    console.log(
+      `[nppAutonomy] ${countryId}: V5 goals — ${commitment.goals.length} committed ` +
+        `(achieved ${achieved}, revised ${revised}, failed ${failed}, held ${active})`
+    );
+  }
 
   // V1.6: fiscal posture. Market countries use inflation/debt; planned countries
   // use shortage/overhang from commandEconomyTurn (same PersistedFiscalStance shape).
@@ -349,6 +408,9 @@ async function computeAndPersistGoverningAgenda(
         governingAgenda: agenda,
         fiscalStance,
         ...(commandStance ? { commandStance } : {}),
+        ...(commitment
+          ? { governingGoals: { goals: commitment.goals, updatedTurn: currentTurn } }
+          : {}),
         updatedAt: now,
       },
     }

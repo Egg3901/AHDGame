@@ -115,6 +115,21 @@ export const CARDS: ActionCard[] = [
     href: "/actions/poll",
   },
   {
+    type: "targetedAds",
+    label: "Targeted Ads",
+    tagline: "Reach your coalition",
+    flavor:
+      "Build a temporary bonus with voter groups in your home state. Presidential candidates can target other states.",
+    actionCost: 1,
+    fundCost: () => 100,
+    fundLabel: () => "$100 per action",
+    effect: "Aligned, cohesive groups respond more strongly",
+    imageSlug: "advertise",
+    imageAlt: "Street advertising and campaign hoardings",
+    category: "influence",
+    href: "/actions/targeted-ads",
+  },
+  {
     type: "canvass",
     label: "Canvass Voters",
     tagline: "Mobilize the base",

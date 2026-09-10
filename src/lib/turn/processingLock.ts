@@ -30,7 +30,8 @@ export type ProcessingLockSnapshot = Pick<
   | "processingHeartbeatAt"
   | "processingStartedAt"
   | "updatedAt"
->;
+> &
+  Partial<Pick<GameState, "processingAbandonedAt">>;
 
 export function getProcessingLockLastTouch(snapshot: ProcessingLockSnapshot): Date | null {
   return (
@@ -38,16 +39,35 @@ export function getProcessingLockLastTouch(snapshot: ProcessingLockSnapshot): Da
   );
 }
 
+/**
+ * An ABANDONED lock is stale immediately, without serving the 20-minute wait.
+ *
+ * `processingAbandonedAt` is written by the graceful shutdown handler when a deploy
+ * lands mid-turn: the process is going away, it says so on its way out, and there is
+ * nothing to wait for. Waiting the full `TURN_LOCK_STALE_MS` on a lock whose holder has
+ * already announced its own death is how a redeploy costs a second turn slot on top of
+ * the one it interrupted.
+ *
+ * The marker is deliberately NOT a release. The handler used to clear the lock outright,
+ * which also wiped `processingPhase` and `processingPhaseStatuses` and so destroyed the
+ * evidence `shouldRecoverCrashedTurn` reads. A clean shutdown therefore made the next
+ * cron re-run a turn that had already committed writes, double-applying every additive
+ * income phase, which is the exact failure the #2815 guard exists to prevent. Keeping
+ * the lock held and marking it abandoned preserves the evidence AND skips the wait.
+ */
 export function getProcessingLockState(snapshot: ProcessingLockSnapshot, now = new Date()) {
   const lastTouch = getProcessingLockLastTouch(snapshot);
   const staleAfterAt = lastTouch ? new Date(lastTouch.getTime() + TURN_LOCK_STALE_MS) : now;
-  const retryAfterMs = lastTouch ? Math.max(0, staleAfterAt.getTime() - now.getTime()) : 0;
+  const abandoned = snapshot.processingAbandonedAt != null;
+  const retryAfterMs =
+    lastTouch && !abandoned ? Math.max(0, staleAfterAt.getTime() - now.getTime()) : 0;
 
   return {
     lastTouch,
-    staleAfterAt,
+    staleAfterAt: abandoned ? (lastTouch ?? now) : staleAfterAt,
     retryAfterMs,
-    isStale: !lastTouch || retryAfterMs === 0,
+    abandoned,
+    isStale: abandoned || !lastTouch || retryAfterMs === 0,
   };
 }
 
@@ -70,6 +90,20 @@ export function isTurnProcessingNow(snapshot: ProcessingLockSnapshot, now = new 
 
 export type CrashRecoverySnapshot = ProcessingLockSnapshot &
   Pick<GameState, "processingKind" | "currentTurn">;
+
+/** The phase name a turn holds before any phase has committed anything. */
+export const TURN_BOOTSTRAP_PHASE = "turn_bootstrap";
+
+/**
+ * Has this turn progressed far enough that re-running it would double-apply?
+ *
+ * The same question `shouldRecoverCrashedTurn` asks, minus the staleness and ownership
+ * checks, so the shutdown handler can ask it about the lock IT holds and decide whether
+ * releasing is lossless.
+ */
+export function turnHasCommittedWrites(phase: string | null | undefined): boolean {
+  return !!phase && phase !== TURN_BOOTSTRAP_PHASE;
+}
 
 /**
  * Turn-atomicity guard (issue #2815). A turn's ~20 phases each commit DB writes
@@ -101,6 +135,5 @@ export function shouldRecoverCrashedTurn(
   if (snapshot.processingKind !== "turn") return false; // some other processing kind
   const target = snapshot.processingTargetTurn;
   if (typeof target !== "number" || target !== snapshot.currentTurn + 1) return false;
-  const phase = snapshot.processingPhase;
-  return !!phase && phase !== "turn_bootstrap";
+  return turnHasCommittedWrites(snapshot.processingPhase);
 }

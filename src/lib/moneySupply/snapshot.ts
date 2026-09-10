@@ -10,7 +10,7 @@ import type {
   OrganizationFund,
 } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
-import { annualizedMoneyGrowthPct } from "./calculate";
+import { annualizedMoneyGrowthPct, MONEY_ACCOUNTING_VERSION } from "./calculate";
 import { seedMoneySupplyBaselines } from "./seed";
 import { isMoneySupplyEnabledFromConfig } from "./featureFlag";
 import {
@@ -24,17 +24,11 @@ import {
   PERSONS_PER_HOUSEHOLD,
   HOUSEHOLD_LIQUID_RATIO,
   HOUSEHOLD_SAVINGS_RATIO,
-  UNMODELED_EXTERNAL_SHARE,
   type MutableComponents,
 } from "./assemble";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
-export {
-  PERSONS_PER_HOUSEHOLD,
-  HOUSEHOLD_LIQUID_RATIO,
-  HOUSEHOLD_SAVINGS_RATIO,
-  UNMODELED_EXTERNAL_SHARE,
-};
+export { PERSONS_PER_HOUSEHOLD, HOUSEHOLD_LIQUID_RATIO, HOUSEHOLD_SAVINGS_RATIO };
 
 export const MONEY_SUPPLY_SNAPSHOTS_COLLECTION = "moneySupplySnapshots";
 
@@ -64,18 +58,63 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     medianIncomeDocs,
     indexFunds,
     exchangeRateRows,
-    charteredBanks,
     bondPools,
     equityPools,
   ] = await Promise.all([
-    db.collection("characters").find({}).toArray(),
-    db.collection("npps").find({}).toArray(),
+    db
+      .collection("characters")
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            currencyBalances: 1,
+            funds: 1,
+            cashOnHand: 1,
+            savingsOnHand: 1,
+            lineOfCredit: 1,
+          },
+        }
+      )
+      .toArray(),
+    db
+      .collection("npps")
+      .find(
+        {},
+        { projection: { countryId: 1, funds: 1, currencyBalances: 1, nppInvestmentCashAnchor: 1 } }
+      )
+      .toArray(),
     // Corp-level liquidCapital is the SSOT insolvency keys on and sectorTurn
     // $inc's every turn. CorporateSector has no liquidCapital field.
-    db.collection("corporations").find({}).toArray(),
-    db.collection("politicalParties").find({}).toArray(),
-    db.collection<FederalBudget>("federalBudget").find({}).toArray(),
-    db.collection<OrganizationFund>("organizationFunds").find({}).toArray(),
+    db
+      .collection("corporations")
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            liquidCurrencyCode: 1,
+            liquidCapital: 1,
+            "bankCharter.status": 1,
+            "bankCharter.currency": 1,
+            "bankCharter.npcDeposits": 1,
+            "bankCharter.totalLoans": 1,
+          },
+        }
+      )
+      .toArray(),
+    db
+      .collection("politicalParties")
+      .find({}, { projection: { countryId: 1, treasury: 1 } })
+      .toArray(),
+    db
+      .collection<FederalBudget>("federalBudget")
+      .find({}, { projection: { countryId: 1, currencyCode: 1, treasuryBalance: 1 } })
+      .toArray(),
+    db
+      .collection<OrganizationFund>("organizationFunds")
+      .find({}, { projection: { currencyCountryId: 1, balanceLocal: 1 } })
+      .toArray(),
     db
       .collection<Bond>("bonds")
       .find({ issuerType: "sovereign", matured: false, defaulted: false })
@@ -101,29 +140,6 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     db
       .collection<{ currencyCode: string; rate: number }>("exchangeRates")
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
-      .toArray(),
-    // Chartered private banks: their deposit books and their loan books are both
-    // invisible to the aggregates otherwise.
-    db
-      .collection<{
-        _id: unknown;
-        bankCharter?: {
-          status?: string;
-          currency?: string;
-          totalDeposits?: number;
-          totalLoans?: number;
-        };
-      }>("corporations")
-      .find(
-        { "bankCharter.status": "active" },
-        {
-          projection: {
-            "bankCharter.currency": 1,
-            "bankCharter.totalDeposits": 1,
-            "bankCharter.totalLoans": 1,
-          },
-        }
-      )
       .toArray(),
     db
       .collection<{ _id: string; cashLocal?: number }>("bondMarketPools")
@@ -211,11 +227,13 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
   // credits the bank, so counting only the debit made measured M2 shrink as
   // private banking grew. Loans join the credit stock for the same reason: the
   // component was player LOC only.
-  for (const bank of charteredBanks) {
+  for (const bank of corporations.filter((corp) => corp.bankCharter?.status === "active")) {
     const charter = bank.bankCharter;
     if (!charter?.currency) continue;
     const currency = charter.currency as CurrencyCode;
-    addComponent(byCurrency, currency, "bankDeposits", charter.totalDeposits ?? 0);
+    // Player/NPP savings are already counted from their balances above.
+    // totalDeposits includes those same balances as well as the NPC book.
+    addComponent(byCurrency, currency, "bankDeposits", charter.npcDeposits ?? 0);
     addComponent(byCurrency, currency, "creditOutstanding", charter.totalLoans ?? 0);
   }
 
@@ -259,10 +277,18 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
     const aggregates = aggregatesForCurrency(byCurrency, currencyCode);
     const prior = await db
       .collection<MoneySupplySnapshot>(MONEY_SUPPLY_SNAPSHOTS_COLLECTION)
-      .findOne({ currencyCode, turn: { $lte: Math.max(0, turn - 12) } }, { sort: { turn: -1 } });
+      .findOne(
+        {
+          currencyCode,
+          accountingVersion: MONEY_ACCOUNTING_VERSION,
+          turn: { $lte: Math.max(0, turn - 12) },
+        },
+        { sort: { turn: -1 } }
+      );
     const doc: MoneySupplySnapshot = {
       _id: `${turn}:${currencyCode}`,
       turn,
+      accountingVersion: MONEY_ACCOUNTING_VERSION,
       countryId,
       bankId,
       currencyCode,

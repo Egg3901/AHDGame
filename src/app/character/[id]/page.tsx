@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
@@ -574,6 +575,7 @@ export default async function CharacterPage({ params }: PageProps) {
     gameDateAnchor,
   } = data;
 
+  const campaignRates = await loadCampaignCurrencyRates(await getDb());
   const { corporation, bondIncomePerTurn, dividendIncomePerTurn, fxRatesRecord } = financialData;
 
   const isOwnProfile = userData?.character?._id?.toString() === character._id.toString();
@@ -1006,7 +1008,7 @@ export default async function CharacterPage({ params }: PageProps) {
                   donorIncome={{
                     passivePerHour: fundDistribution.donorBaseBonus,
                     perLevelRate: DONOR_BASE_BONUS_PER_LEVEL[populationTier],
-                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled),
+                    fundraiseYield: fundraiseYieldLocal(character, forexEnabled, campaignRates),
                     populationTier,
                     influenceMultiplier: 1 + (character.politicalInfluence ?? 0) / 100,
                   }}

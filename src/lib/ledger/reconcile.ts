@@ -215,6 +215,11 @@ function rateForAccount(account: string, rates: Record<string, number> | undefin
  * pre-forex rate. After it, flows are valued at the closing rate.
  */
 function cashMovementDelta(input: ReconcileInput, account: string): number {
+  // NPP investment cash is stored directly in anchor units. Do not apply the
+  // account suffix's native-currency rate to this wallet.
+  if (accountKind(account) === "npp") {
+    return (input.closingBalances[account] ?? 0) - (input.openingBalances[account] ?? 0);
+  }
   if (
     !input.preForexBalances ||
     !input.openingAnchorRates ||

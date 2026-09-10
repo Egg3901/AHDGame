@@ -417,7 +417,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       // to found — not `corporation.type`. Off-primary founding is exactly the
       // case where quoting the wrong type's build turns misleads most.
       starterUnits = foundingStarterUnits(sectorType);
-      foundingBuildTurns = Math.max(1, Math.ceil(CAPACITY_BUILD_TURNS(sectorType) / 2));
+      foundingBuildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sectorType, true));
 
       const ceoChar = corporation.ceoId
         ? await db
@@ -452,6 +452,10 @@ export async function GET(request: Request, { params }: RouteParams) {
             computeBuildCost({
               sectorType,
               units: starterUnits,
+              // A suggestion for a sector that does not exist yet, so there is
+              // no chosen production method: quote the sector-type default,
+              // which is what `expandSector` founds the sector on.
+              strategyId: null,
               year: currentYear,
               eraUnitScale,
               // Entering a market this corp does not occupy: dominance is 1 by

@@ -12,8 +12,19 @@ export interface PrimaryProjectionSummary {
   nationalVotesByCandidate: Record<string, number>;
   /** National vote share = candidate votes / total votes. 0–100. */
   nationalVoteSharePct: Record<string, number>;
-  /** Projected/awarded delegates per candidate (from `projectPrimaryDelegateTotals`). */
+  /**
+   * Projected FINAL delegates per candidate: real awarded counts for the states
+   * that have voted, projections for the rest. This is a forecast of where the
+   * primary ends, not a running total of what has been won.
+   */
   delegatesByCandidate: Record<string, number>;
+  /**
+   * Delegates actually awarded so far, per candidate — the locked-in subset of
+   * `delegatesByCandidate`. Zero for every candidate before the first wave
+   * fires. Kept separate so a screen can say which of the two it is showing;
+   * an unlabelled forecast reads as a running total.
+   */
+  awardedDelegatesByCandidate: Record<string, number>;
   /** National delegate share = delegates / total delegates. 0–100. */
   nationalDelegateSharePct: Record<string, number>;
   /** Per-state breakdown — votes used (actual when available, else projected), winner, source. */
@@ -155,6 +166,16 @@ export function summarizePrimaryProjection({
         : 0;
   }
 
+  // Locked-in delegates: the per-state awarded rows, which are present only for
+  // states whose wave has already fired.
+  const awardedDelegatesByCandidate = Object.fromEntries(candidateIds.map((id) => [id, 0]));
+  for (const state of perState) {
+    if (!state.awardedDelegatesByCandidate) continue;
+    for (const cid of candidateIds) {
+      awardedDelegatesByCandidate[cid] += state.awardedDelegatesByCandidate[cid] ?? 0;
+    }
+  }
+
   const delegatesByCandidate = projectPrimaryDelegateTotals({
     stateIds,
     family,
@@ -171,6 +192,7 @@ export function summarizePrimaryProjection({
   }
 
   return {
+    awardedDelegatesByCandidate,
     nationalVotesByCandidate,
     nationalVoteSharePct,
     delegatesByCandidate,

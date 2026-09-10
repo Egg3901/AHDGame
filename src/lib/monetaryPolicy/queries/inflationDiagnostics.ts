@@ -1,4 +1,11 @@
 /**
+ * Inflation diagnostics: which driver is pushing a country's inflation.
+ * loadInflationDiagnostics recomputes each country's inflation from live inputs
+ * and returns the stored rate beside the fresh one with a per-driver breakdown
+ * (unemployment, GDP gap, monetary, fiscal, tariff, wage, commodity, forex,
+ * savings, housing). Read only.
+ */
+/**
  * Per-country inflation diagnostics for the admin panel.
  *
  * Replays the same input collection as `inflationRecalc.ts` and exposes both

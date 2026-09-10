@@ -149,6 +149,9 @@ export interface CareerEvent {
 }
 
 export interface Character {
+  /** Regional ad exposure follows this character across candidacies. */
+  targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
+  targetedAdsRevision?: number;
   /** Local singleplayer career constraint; absent on hosted characters. */
   singleplayerHeadOfState?: boolean;
   _id: ObjectId;
@@ -393,6 +396,15 @@ export interface Character {
    * Optional: absent on legacy docs (treated as grandfathered) until backfill.
    */
   partyJoinedTurn?: number;
+  /**
+   * Sequential id (as a string, matching `party`) of the party this character
+   * founded by charter ratification. Exempts them from the leadership tenure
+   * gate in that party only — ratification stamps `partyJoinedTurn` to the
+   * founding turn, which would otherwise lock all three founders out of their
+   * own brand-new party. Cleared on leave/purge and overwritten when joining a
+   * different party, so a stale marker can never revive the exemption.
+   */
+  foundedPartyId?: string;
   /** PREE lottery annuity drip — processed each turn until turnsRemaining hits 0. */
   preeLotteryAnnuity?: { turnsRemaining: number; piPerTurn: number };
   /**

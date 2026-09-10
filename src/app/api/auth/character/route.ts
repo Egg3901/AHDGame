@@ -1,3 +1,4 @@
+import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { handleRouteError } from "@/lib/api/errors";
@@ -17,7 +18,7 @@ import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
-import { COUNTRY_CURRENCY_MAP, INITIAL_RATES } from "@/lib/constants/currencies";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWealthBonus, type WealthLevel } from "@/lib/constants/characterWealth";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -204,7 +205,11 @@ export async function POST(request: Request) {
     // create a character while the site was sealed. Mirrors the same guard on
     // `POST /api/auth/register`, and reads `gameConfig` directly so it agrees
     // with the admin panel and `/api/maintenance`.
-    if (!isAdmin && normalizeMaintenanceMode(gameConfig.maintenanceMode) !== "off") {
+    if (
+      !isSingleplayer() &&
+      !isAdmin &&
+      normalizeMaintenanceMode(gameConfig.maintenanceMode) !== "off"
+    ) {
       return NextResponse.json(
         { error: "Character creation is disabled during maintenance. Please try again later." },
         { status: 503 }
@@ -230,6 +235,8 @@ export async function POST(request: Request) {
     const countryId = stateDoc.countryId;
 
     const forexEnabled = await isForexEnabled();
+    const campaignRates = await loadCampaignCurrencyRates(db);
+    const startingRate = campaignLocalRate(countryId, campaignRates);
     const homeCurrency =
       COUNTRY_CURRENCY_MAP[countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
 
@@ -271,19 +278,15 @@ export async function POST(request: Request) {
       // campaign balance while `funds` remains the internal/anchor mirror for
       // compatibility reads.
       //
-      // Starting endowment is in ₳ (anchor units). Multiply by INITIAL_RATES[countryId] to convert
-      // to home currency. Using INITIAL_RATES (not live DB rates) matches migration.ts semantics and
-      // prevents cohort splits where chars created at different exchange levels get unequal starts.
+      // Starting endowments and founding costs share the world's frozen base.
+      // Live market changes never create different endowments between cohorts.
       ...(forexEnabled
         ? {
             currencyBalances: {
-              campaign: Math.round(
-                gameConfig.startingFunds * (INITIAL_RATES[countryId as CountryId] ?? 1.0)
-              ),
+              campaign: Math.round(gameConfig.startingFunds * startingRate),
               personal: {
                 [homeCurrency]: Math.round(
-                  (wealthBonus + (isReferred ? REFERRAL_PERSONAL_CAPITAL_BONUS : 0)) *
-                    (INITIAL_RATES[countryId as CountryId] ?? 1.0)
+                  (wealthBonus + (isReferred ? REFERRAL_PERSONAL_CAPITAL_BONUS : 0)) * startingRate
                 ),
               },
             },

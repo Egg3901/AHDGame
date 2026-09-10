@@ -1,7 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import path from "path";
 import os from "os";
-import { singleplayerCdnDir, singleplayerHomeDir } from "./singleplayerServer";
+import type { Db } from "mongodb";
+import {
+  ensureSingleplayerUser,
+  setSingleplayerConfig,
+  singleplayerCdnDir,
+  singleplayerHomeDir,
+  singleplayerStatus,
+} from "./singleplayerServer";
+import { createMockDb } from "@/lib/test-utils/mockDb";
 
 describe("singleplayer data directory", () => {
   it("defaults to a dotfolder in the home directory", () => {
@@ -19,8 +27,66 @@ describe("singleplayer data directory", () => {
   });
 
   it("keeps the CDN mirror inside the data directory", () => {
+    // Against the RESOLVED home, which is what singleplayerHomeDir returns and
+    // what the test above pins. On a POSIX box resolve("/tmp/ahd") is itself,
+    // so joining the raw string passed by coincidence; on Windows the same
+    // path resolves against the current drive and the two stop matching.
     expect(singleplayerCdnDir({ SINGLEPLAYER_HOME: "/tmp/ahd" })).toBe(
-      path.join("/tmp/ahd", "cdn")
+      path.join(path.resolve("/tmp/ahd"), "cdn")
+    );
+  });
+});
+
+describe("singleplayer account", () => {
+  it("creates the fixed local user with one atomic upsert", async () => {
+    const updateOne = vi.fn().mockResolvedValue({ upsertedCount: 1 });
+    const db = { collection: vi.fn(() => ({ updateOne })) } as unknown as Db;
+
+    await expect(ensureSingleplayerUser(db)).resolves.toEqual({ created: true });
+    expect(updateOne).toHaveBeenCalledOnce();
+    expect(updateOne.mock.calls[0]?.[1]).toHaveProperty("$setOnInsert");
+    expect(updateOne.mock.calls[0]?.[2]).toEqual({ upsert: true });
+  });
+});
+
+describe("singleplayer maintenance recovery", () => {
+  it("clears hosted maintenance when an existing local world reports status", async () => {
+    const db = createMockDb();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 1,
+      preset: "modern",
+    });
+
+    await singleplayerStatus(db as unknown as Db);
+
+    expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
+      { _id: "default", maintenanceMode: { $ne: "off" } },
+      {
+        $set: { maintenanceMode: "off" },
+        $unset: {
+          maintenanceReason: "",
+          maintenanceExpectedEnd: "",
+          maintenanceEnabledBy: "",
+          maintenanceEnabledAt: "",
+        },
+      }
+    );
+  });
+
+  it("clears reset maintenance when a new local world is configured", async () => {
+    const db = createMockDb();
+
+    await setSingleplayerConfig(db as unknown as Db, {
+      mode: "normal",
+      difficulty: "normal",
+      nppAutonomyLevel: "v4",
+      permanentHeadOfState: false,
+    });
+
+    expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
+      { _id: "default", maintenanceMode: { $ne: "off" } },
+      expect.objectContaining({ $set: { maintenanceMode: "off" } })
     );
   });
 });

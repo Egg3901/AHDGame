@@ -32,7 +32,12 @@ import type {
   GameState,
 } from "@/lib/db/types";
 import { allocateViaSainteLague } from "./sainteLagueAllocation";
-import { deriveZweitstimmen, type ErststimmeInput } from "./ticketSplitCrossover";
+import {
+  crossoverRatesForPreset,
+  deriveZweitstimmen,
+  type ErststimmeInput,
+} from "./ticketSplitCrossover";
+import { buildDEPartySlugToSeqId } from "@/lib/seeds/de/deStatePartyOrgCalculations";
 import { getLiveLowerChamberSeats } from "@/lib/turn/lowerChamberSeats";
 
 const VOTE_THRESHOLD = 0.05;
@@ -257,13 +262,26 @@ export async function computeZweitstimmen(db: Db, cycle: number): Promise<Zweits
   }
 
   // Derive per-Land Zweitstimmen via ticket-split crossover.
+  //
+  // The rate table is slug-keyed and era-scoped, so it is resolved against the
+  // live party roster once per cycle (#810). `buildDEPartySlugToSeqId` only
+  // returns parties that exist under the active preset, so a rule naming a
+  // party this world does not have is dropped rather than inventing votes.
+  const [slugToPartyId, gameState] = await Promise.all([
+    buildDEPartySlugToSeqId(db),
+    db
+      .collection<{ _id: string; preset?: string }>("gameState")
+      .findOne({ _id: "current" }, { projection: { preset: 1 } }),
+  ]);
+  const rates = crossoverRatesForPreset(gameState?.preset);
+
   const zweiPerLand: Record<string, Record<string, number>> = {};
   for (const [landId, partyErst] of Object.entries(erstByLandByParty)) {
     const input: ErststimmeInput[] = Object.entries(partyErst).map(([partyId, votes]) => ({
       partyId,
       votes,
     }));
-    const derived = deriveZweitstimmen(input);
+    const derived = deriveZweitstimmen(input, rates, slugToPartyId);
     for (const { partyId, votes } of derived) {
       zweiPerLand[partyId] ??= {};
       zweiPerLand[partyId][landId] = (zweiPerLand[partyId][landId] ?? 0) + votes;

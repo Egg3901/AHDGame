@@ -1,3 +1,4 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { ObjectId } from "mongodb";
@@ -50,6 +51,7 @@ import type {
   User,
 } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
+import { buildTurnBriefing } from "@/lib/client/turnBriefing";
 
 // GET /api/client-status — Returns status bar enrichment data (funds, corp, election stats, income).
 // Auth: requireBasicAuth
@@ -101,6 +103,8 @@ export async function GET(request: Request) {
                   _id: 1,
                   sequentialId: 1,
                   name: 1,
+                  logoUrl: 1,
+                  tickerSymbol: 1,
                   sharePrice: 1,
                   liquidCapital: 1,
                   liquidCurrencyCode: 1,
@@ -118,6 +122,11 @@ export async function GET(request: Request) {
           })
           .project<{
             _id: ObjectId;
+            sequentialId?: number;
+            name: string;
+            logoUrl?: string;
+            tickerSymbol?: string;
+            sharePrice: number;
             dividendRate: number;
             totalShares: number;
             liquidCurrencyCode?: string;
@@ -129,6 +138,11 @@ export async function GET(request: Request) {
             }[];
           }>({
             _id: 1,
+            sequentialId: 1,
+            name: 1,
+            logoUrl: 1,
+            tickerSymbol: 1,
+            sharePrice: 1,
             dividendRate: 1,
             totalShares: 1,
             liquidCurrencyCode: 1,
@@ -206,10 +220,30 @@ export async function GET(request: Request) {
         bondIncomePerTurn +=
           bondCcy && bondFxRate && bondFxRate > 0 ? couponLocal / bondFxRate : couponLocal;
       }
+      const marketWatch = dividendCorps
+        .map((corp) => {
+          const holding = corp.shareholders.find(
+            (shareholder) => shareholder.imperialCharacterId?.toString() === imperial._id.toString()
+          );
+          return {
+            sequentialId: corp.sequentialId ?? null,
+            name: corp.name,
+            logoUrl: corp.logoUrl,
+            tickerSymbol: corp.tickerSymbol,
+            sharePrice: corp.sharePrice,
+            liquidCurrencyCode: corp.liquidCurrencyCode,
+            ownedShares: holding?.shares ?? 0,
+          };
+        })
+        .filter((corp) => corp.sequentialId != null && corp.ownedShares > 0)
+        .sort((a, b) => b.ownedShares - a.ownedShares)
+        .slice(0, 5);
 
       let corpNav: {
         sequentialId: number;
         name: string;
+        logoUrl?: string;
+        tickerSymbol?: string;
         sharePrice: number;
         priceChange1h: number;
         liquidCapital: number;
@@ -259,6 +293,8 @@ export async function GET(request: Request) {
         corpNav = {
           sequentialId: ceoCorp.sequentialId,
           name: ceoCorp.name,
+          logoUrl: ceoCorp.logoUrl,
+          tickerSymbol: ceoCorp.tickerSymbol,
           sharePrice: ceoCorp.sharePrice,
           priceChange1h,
           liquidCapital: ceoCorp.liquidCapital,
@@ -272,6 +308,7 @@ export async function GET(request: Request) {
       return NextResponse.json(
         {
           name: imperial.name,
+          avatarUrl: imperial.avatarUrl,
           actions: 0,
           funds: 0,
           campaignFundsStored: 0,
@@ -293,6 +330,8 @@ export async function GET(request: Request) {
           bondIncome: Math.round(bondIncomePerTurn),
           corpNav,
           electionStats: null,
+          turnBriefing: buildTurnBriefing(corpNav, null),
+          marketWatch,
           isImperial: true,
         },
         { headers: { "Cache-Control": "private, no-store, no-transform" } }
@@ -354,6 +393,8 @@ export async function GET(request: Request) {
                 _id: 1,
                 sequentialId: 1,
                 name: 1,
+                logoUrl: 1,
+                tickerSymbol: 1,
                 sharePrice: 1,
                 liquidCapital: 1,
                 liquidCurrencyCode: 1,
@@ -373,6 +414,11 @@ export async function GET(request: Request) {
         .find({ "shareholders.characterId": character._id })
         .project<{
           _id: ObjectId;
+          sequentialId?: number;
+          name: string;
+          logoUrl?: string;
+          tickerSymbol?: string;
+          sharePrice: number;
           dividendRate: number;
           totalShares: number;
           liquidCurrencyCode?: string;
@@ -380,6 +426,11 @@ export async function GET(request: Request) {
           shareholders: { characterId?: ObjectId; shares: number }[];
         }>({
           _id: 1,
+          sequentialId: 1,
+          name: 1,
+          logoUrl: 1,
+          tickerSymbol: 1,
+          sharePrice: 1,
           dividendRate: 1,
           totalShares: 1,
           liquidCurrencyCode: 1,
@@ -416,10 +467,11 @@ export async function GET(request: Request) {
     );
     const populationTier = getPopulationTier(statePopulation);
     // fundDistribution is anchor; campaign funds display in LOCAL at the frozen
-    // base INITIAL_RATES scale (same conversion the turn processor deposits), so
+    // world-seeded currency basis (same conversion the turn processor deposits), so
     // the tooltip matches the credited amount. Face-formatted client-side (no forex).
+    const campaignRates = await loadCampaignCurrencyRates(db);
     const toCampaignLocal = (anchor: number) =>
-      campaignAnchorToLocal(anchor, character.countryId ?? "US");
+      campaignAnchorToLocal(anchor, character.countryId ?? "US", campaignRates);
     const campaignIncomeBreakdown = {
       populationTier,
       baseGen: toCampaignLocal(fundDistribution.baseGeneration),
@@ -488,11 +540,31 @@ export async function GET(request: Request) {
       bondIncomePerTurn +=
         bondCcy && bondFxRate && bondFxRate > 0 ? couponLocal / bondFxRate : couponLocal;
     }
+    const marketWatch = dividendCorps
+      .map((corp) => {
+        const holding = corp.shareholders.find(
+          (shareholder) => shareholder.characterId?.toString() === character._id.toString()
+        );
+        return {
+          sequentialId: corp.sequentialId ?? null,
+          name: corp.name,
+          logoUrl: corp.logoUrl,
+          tickerSymbol: corp.tickerSymbol,
+          sharePrice: corp.sharePrice,
+          liquidCurrencyCode: corp.liquidCurrencyCode,
+          ownedShares: holding?.shares ?? 0,
+        };
+      })
+      .filter((corp) => corp.sequentialId != null && corp.ownedShares > 0)
+      .sort((a, b) => b.ownedShares - a.ownedShares)
+      .slice(0, 5);
 
     // Conditional: CEO corp sparkline data
     let corpNav: {
       sequentialId: number;
       name: string;
+      logoUrl?: string;
+      tickerSymbol?: string;
       sharePrice: number;
       priceChange1h: number;
       liquidCapital: number;
@@ -542,6 +614,8 @@ export async function GET(request: Request) {
       corpNav = {
         sequentialId: ceoCorp.sequentialId,
         name: ceoCorp.name,
+        logoUrl: ceoCorp.logoUrl,
+        tickerSymbol: ceoCorp.tickerSymbol,
         sharePrice: ceoCorp.sharePrice,
         priceChange1h,
         liquidCapital: ceoCorp.liquidCapital,
@@ -555,6 +629,12 @@ export async function GET(request: Request) {
     // Conditional: election stats for active candidacy
     let electionStats: {
       electionId: string;
+      electionType: string;
+      countryId: string;
+      state: string;
+      status: string;
+      electionYear: number | null;
+      endTurn: number | null;
       isMultiSeat: boolean;
       totalSeats: number | null;
       myVotePct: number;
@@ -608,6 +688,12 @@ export async function GET(request: Request) {
 
           electionStats = {
             electionId: election._id.toString(),
+            electionType: election.electionType,
+            countryId: election.countryId,
+            state: election.state,
+            status: election.status,
+            electionYear: election.electionYear ?? null,
+            endTurn: election.endTurn ?? null,
             isMultiSeat,
             totalSeats: election.totalSeats ?? null,
             myVotePct,
@@ -727,6 +813,7 @@ export async function GET(request: Request) {
 
     const statusPayload = {
       name: character.name,
+      avatarUrl: character.avatarUrl,
       actions: character.actions,
       actionCap,
       hoardThreshold,
@@ -754,6 +841,8 @@ export async function GET(request: Request) {
       bondIncome: Math.round(bondIncomePerTurn),
       corpNav,
       electionStats,
+      turnBriefing: buildTurnBriefing(corpNav, electionStats),
+      marketWatch,
     };
     // Large per-user status payload. Switch from no-store to a private ETag:
     // stays private (never shared-cached, no cross-user key), but a bodyless

@@ -4,6 +4,7 @@ import { useState, useId } from "react";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { PortfolioStockHolding, PortfolioBondHolding } from "./CorporationPageTypes";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { useDialogA11y } from "@/components/ui";
 
 type SellMode = "instant" | "limit";
 
@@ -25,6 +26,7 @@ interface BondSellProps {
 type PortfolioSellModalProps = StockSellProps | BondSellProps;
 
 export default function PortfolioSellModal(props: PortfolioSellModalProps) {
+  const { dialogProps, titleId } = useDialogA11y(props.onClose);
   const { formatAmount, formatPrice: fmtPrice, toInternalFrom } = useCurrency();
   const norm = (value: number, ccy: CurrencyCode | undefined) =>
     ccy ? toInternalFrom(value, ccy) : value;
@@ -129,10 +131,13 @@ export default function PortfolioSellModal(props: PortfolioSellModalProps) {
       : "text-muted";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      {...dialogProps}
+    >
       <div className="w-full max-w-md rounded-2xl border border-card-border bg-card shadow-2xl">
         <div className="border-b border-card-border px-6 py-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-foreground">
+          <h2 id={titleId} className="text-base font-semibold text-foreground">
             Sell {props.type === "stock" ? props.holding.corporationName : props.holding.issuerName}
           </h2>
           <button

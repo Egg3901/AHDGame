@@ -588,6 +588,9 @@ export async function processMergeProposal(
         },
       },
     },
+    // The absorbed party is gone, so its founders carry no leadership
+    // exemption into the surviving one (see leadershipTenure.ts).
+    { $unset: "foundedPartyId" },
   ]);
 
   // 2. NPP transfer is deferred to step 4c — it must run *after* the state-org

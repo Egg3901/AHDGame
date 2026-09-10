@@ -1,4 +1,12 @@
 /**
+ * What each naval vessel and air wing does. NAVAL_TYPES (Carrier Strike Group,
+ * Guided-Missile Destroyer, Attack Submarine, Frigate Squadron, Amphibious Group)
+ * and AIR_TYPES carry power and crew; ORGANIC_AA is how much of a hull fights
+ * aircraft (carriers 0.55, submarines near zero). NAVAL_MISSIONS (Blockade, Sea
+ * Control, Sea Denial, Escort, Transit, Return to Port) and AIR_MISSIONS set lane
+ * pressure, combat weight and the readiness each mission costs per turn.
+ */
+/**
  * Blue Water: tuning and taxonomy.
  *
  * Every balance number in the engine lives here, following AHD's own rule that

@@ -3,15 +3,11 @@
  *
  * Two independent clocks, one per seat state:
  *
- *  - Original Roster seats (`isDivergent === false`): replay the authored
- *    `historicalOccupants` succession chain automatically — zero player
- *    action required — for as long as no divergence has occurred. When the
- *    current occupant's scripted departure turn is reached, the seat
- *    auto-advances to the next chain entry with no vacancy gap. Only once
- *    the chain is exhausted does the seat actually go vacant and become
- *    eligible for a live presidential nomination — which is, by
- *    construction, the Divergence Point (see `scotusNominationLifecycle.ts`
- *    `seatConfirmedJustice`).
+ *  - Original Roster seats (`isDivergent === false`): the justice seated at
+ *    the preset's start leaves on their authored historical date. That opens
+ *    a real vacancy for the in-game President and Senate. Later historical
+ *    occupants are reference data only; the game must never appoint them
+ *    automatically over the players' constitutional choice (ticket #1289).
  *
  *  - Divergent seats (`isDivergent === true`): flat per-turn hazard clock
  *    (`rollDivergentDeparture`), age-agnostic, uncapped on the high end.
@@ -57,6 +53,31 @@ function vacatedOccupantFields(now: Date) {
     divergentHazardStartsTurn: null,
     updatedAt: now,
   };
+}
+
+/**
+ * Vacate a seat only if it is still occupied the way we read it, reporting
+ * whether this call is the one that made the transition.
+ *
+ * Two turn processors can overlap during a rolling deploy — each `find()`s the
+ * seats before either writes — so an unconditional `$set` would let both post
+ * the vacancy wire for the same departure. Matching on `justiceMode` makes the
+ * transition its own referee: the winner's `$set` nulls it, so the loser matches
+ * nothing and stays quiet. `updatedAt` always changes, so a matched seat is
+ * always a modified one.
+ */
+async function vacateSeatIfStillOccupied(
+  db: Db,
+  seat: SupremeCourtSeat,
+  now: Date
+): Promise<boolean> {
+  const result = await db
+    .collection<SupremeCourtSeat>("supremeCourtSeats")
+    .updateOne(
+      { _id: seat._id, justiceMode: seat.justiceMode },
+      { $set: vacatedOccupantFields(now) }
+    );
+  return (result?.modifiedCount ?? 0) > 0;
 }
 
 async function notifySeatVacated(
@@ -154,7 +175,7 @@ export async function processScotusTenureTurn(
     .find({ countryId: "US" })
     .toArray();
 
-  let seatsAdvanced = 0;
+  const seatsAdvanced = 0;
   let seatsVacatedByHistory = 0;
   let seatsVacatedByHazard = 0;
   const now = new Date();
@@ -166,37 +187,31 @@ export async function processScotusTenureTurn(
       // somehow occupies a still-historical seat.
       if (playerHoldsSeat(seat)) continue;
 
+      // A scripted departure fires exactly once, and `justiceMode` is what says
+      // whether it already has: `vacatedOccupantFields` nulls it, and only the
+      // preset seed and the confirmation flow ever set it. The seat keeps
+      // pointing at the departed occupant, whose departure year is in the past
+      // for good, so without this the same departure re-vacates the seat and
+      // re-wires the vacancy post every turn, forever.
+      //
+      // Tested for "historical" rather than non-null to match the occupancy
+      // predicate the rest of the module uses (`nominateJustice`, `queries`,
+      // `scotusDocketTurn`, `scotusSurpriseCaseTurn`): an Original Roster seat's
+      // only legitimate occupant is a scripted one, so a non-divergent seat
+      // carrying a character/npp mode is malformed and must not be handed to the
+      // historical clock.
+      if (seat.justiceMode !== "historical") continue;
+
       const occupant = seat.historicalOccupants[seat.historicalOccupantIndex];
       if (!occupant || occupant.departureYear == null) continue; // still serving to "present"
 
       const departureTurn = yearToTurn(occupant.departureYear, startingYear);
       if (calTurn < departureTurn) continue;
 
-      const nextOccupant = seat.historicalOccupants[seat.historicalOccupantIndex + 1];
-      if (nextOccupant) {
-        await database.collection<SupremeCourtSeat>("supremeCourtSeats").updateOne(
-          { _id: seat._id },
-          {
-            $set: {
-              historicalOccupantIndex: seat.historicalOccupantIndex + 1,
-              justiceName: nextOccupant.name,
-              justiceParty: nextOccupant.party ?? null,
-              economicLean: nextOccupant.economicLean,
-              socialLean: nextOccupant.socialLean,
-              seatedAt: now,
-              seatedAtTurn: currentTurn,
-              updatedAt: now,
-            },
-          }
-        );
-        seatsAdvanced++;
-      } else {
-        // Original Roster chain exhausted — seat goes vacant, awaiting a
-        // live presidential nomination. NOT a divergence by itself; the
-        // Divergence Point is the confirmation, not the vacancy.
-        await database
-          .collection<SupremeCourtSeat>("supremeCourtSeats")
-          .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
+      // Every historical departure creates a playable vacancy. The remaining
+      // authored chain is useful reference data, but it is not an appointment
+      // queue. The Divergence Point remains the eventual live confirmation.
+      if (await vacateSeatIfStillOccupied(database, seat, now)) {
         seatsVacatedByHistory++;
         await notifySeatVacated(database, seat, notifications, "history");
       }
@@ -215,11 +230,10 @@ export async function processScotusTenureTurn(
     );
     if (!departs) continue;
 
-    await database
-      .collection<SupremeCourtSeat>("supremeCourtSeats")
-      .updateOne({ _id: seat._id }, { $set: vacatedOccupantFields(now) });
-    seatsVacatedByHazard++;
-    await notifySeatVacated(database, seat, notifications, "death");
+    if (await vacateSeatIfStillOccupied(database, seat, now)) {
+      seatsVacatedByHazard++;
+      await notifySeatVacated(database, seat, notifications, "death");
+    }
   }
 
   await createNotifications(notifications);

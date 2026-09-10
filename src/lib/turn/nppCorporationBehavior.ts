@@ -1,5 +1,12 @@
 // src/lib/turn/nppCorporationBehavior.ts
 /**
+ * What NPP-run corporations do each turn. processNppCorporationDecisions has each
+ * one read sector profitability, set growth by margin band, size marketing,
+ * logistics and R&D budgets as a share of revenue, divest losing sectors, expand
+ * only when profitable (makeNppCorpDecision), set dividends from margin and keep
+ * a cash floor.
+ */
+/**
  * NPP Corporation AI Behavior
  *
  * Each turn, NPP-run corporations make autonomous decisions:
@@ -239,23 +246,27 @@ export async function processNppCorporationDecisions(
       divestedSectorIds: allDivestedSectorIds,
     };
 
-  // Fetch all sectors for these corps in one query
   const corpIds = nppCorps.map((c) => c._id);
-  const allSectors = await db
-    .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: { $in: corpIds } })
-    .toArray();
-
   // Resolve each corp's CEO NPP so its personality can shape the corp's behavior.
   // ceoId holds the NPP _id when ceoType === "npp".
   const ceoNppIds = nppCorps.filter((c) => c.ceoType === "npp" && c.ceoId).map((c) => c.ceoId);
-  const ceoNpps =
+  // All four reads depend only on the NPP cohort. Start them together rather
+  // than making the decision phase wait for each collection in sequence.
+  const [allSectors, ceoNpps, commodityPriceDocs, unownedSectors] = await Promise.all([
+    db
+      // full-read(corporateSectors): buildQueue and plantsPnl drive NPP build and divest decisions
+      .collection<CorporateSector>("corporateSectors")
+      .find({ corporationId: { $in: corpIds } })
+      .toArray(),
     ceoNppIds.length > 0
-      ? await db
+      ? db
           .collection<NPP>("npps")
           .find({ _id: { $in: ceoNppIds } }, { projection: { personality: 1 } })
           .toArray()
-      : [];
+      : Promise.resolve([]),
+    db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
+    db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
+  ]);
   const archetypeByNppId = new Map<string, CeoArchetype>();
   for (const npp of ceoNpps) {
     if (npp.personality) {
@@ -272,10 +283,6 @@ export async function processNppCorporationDecisions(
 
   // Commodity price snapshot for macro-aware production policy (SP5). One doc
   // per commodity; keep the latest turn if duplicates exist.
-  const commodityPriceDocs = await db
-    .collection<CommodityPrice>("commodityPrices")
-    .find({})
-    .toArray();
   const priceByCommodity = new Map<string, CommodityPrice>();
   for (const doc of commodityPriceDocs) {
     const existing = priceByCommodity.get(doc.commodity);
@@ -307,9 +314,6 @@ export async function processNppCorporationDecisions(
   };
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
-
-  // Fetch unowned sectors in bulk for expansion decisions
-  const unownedSectors = await db.collection<UnownedSector>("unownedSectors").find({}).toArray();
 
   // Index unowned sectors by countryId for fast lookup
   const unownedByCountry = new Map<string, UnownedSector[]>();
@@ -1395,6 +1399,9 @@ export function makeNppCorpDecision(
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
               units: 1,
+              // Greenfield entry: the sector does not exist yet and is founded
+              // on the sector-type default strategy.
+              strategyId: null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
@@ -1466,7 +1473,7 @@ export function makeNppCorpDecision(
       ) {
         const buildTurns = Math.max(
           1,
-          Math.ceil(CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType) / 2)
+          CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
         );
         // Legacy nameplate: demand-side sectors take the built share of the
         // pool; extraction has no pool, so it prices the nameplate off the units
@@ -1491,6 +1498,8 @@ export function makeNppCorpDecision(
           profitMargin: 35,
           starterOrder: {
             unitsOrdered: buildUnits,
+            // Greenfield: priced at the sector-type default, same as the quote.
+            strategyId: null,
             costPaidAnchor: buildAnchor,
             startTurn: ctx.turn,
             onlineTurn: ctx.turn + buildTurns,
@@ -1690,7 +1699,12 @@ export function makeNppCorpDecision(
       // share back every turn in perpetuity; replacing the RUN capacity lets it
       // depreciate away and the plant converges on the size it can actually
       // sell.
-      const runUnits = Math.max(0, Math.min(capitalStock, sector.producedUnits ?? 0));
+      const productionCapacity = sector.operatingCapacityUnits ?? capitalStock;
+      const utilizationOfOwnedCapacity =
+        productionCapacity > 0
+          ? Math.max(0, Math.min(1, (sector.producedUnits ?? 0) / productionCapacity))
+          : 0;
+      const runUnits = capitalStock * utilizationOfOwnedCapacity;
       // ACCRUAL, not a per-turn slice. A build lands `CAPACITY_BUILD_TURNS`
       // turns after it is placed, and the queue ceiling can stop the corp
       // ordering for a stretch; sizing each order off the depreciation that has
@@ -1767,6 +1781,7 @@ export function makeNppCorpDecision(
             computeBuildCost({
               sectorType: sector.sectorType,
               units: 1,
+              strategyId: sector.strategyId ?? null,
               year: plants.year,
               eraUnitScale: plants.eraUnitScale,
               marketSharePercent: growthShare,
@@ -1840,6 +1855,7 @@ export function makeNppCorpDecision(
       const costAnchor = computeBuildCost({
         sectorType: sector.sectorType,
         units,
+        strategyId: sector.strategyId ?? null,
         year: plants.year,
         eraUnitScale: plants.eraUnitScale,
         marketSharePercent,
@@ -1876,6 +1892,7 @@ export function makeNppCorpDecision(
       const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
       const order: SectorBuildOrder = {
         unitsOrdered: units,
+        strategyId: sector.strategyId ?? null,
         costPaidAnchor: costAnchor,
         startTurn: ctx.turn,
         onlineTurn: ctx.turn + buildTurns,

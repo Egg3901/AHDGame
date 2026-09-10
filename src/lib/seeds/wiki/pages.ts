@@ -21,14 +21,14 @@ import { iterationsPages } from "./pages/iterations";
  * Phase status (page counts from the category files concatenated below):
  *   Getting Started (12 pages)
  *   Elections (17 pages)
- *   Legislatures & Government (15 pages)
+ *   Legislatures & Government (16 pages)
  *   Parties, Coalitions, NPPs (13 pages)
  *   Country hubs (10 pages: US, UK, DE, JP, IE, BR, CN, NG, RU, DD)
  *   Economy & Finance (35 pages)
  *   Advanced + Reference + Strategy (25 pages)
  *   Resources & Contracts (4 pages)
  *   Commodities (one page per CommodityType, auto-generated)
- *   Conflicts & Military (12 pages)
+ *   Conflicts & Military (14 pages)
  *   Iterations (2 pages)
  *
  * Wiki goes public when an admin flips `wikiDisabled = false` in the admin panel.

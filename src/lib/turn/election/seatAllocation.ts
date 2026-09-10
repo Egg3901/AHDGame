@@ -294,6 +294,128 @@ export function applyMajoritarianBonus(
   return { effective, applied: true };
 }
 
+// ---------------------------------------------------------------------------
+// Shared apportionment core (#585)
+// ---------------------------------------------------------------------------
+
+/** A candidate entering apportionment: an id, its votes, and its party (if any). */
+export interface ApportionmentCandidate {
+  id: string;
+  votes: number;
+  party?: string | null;
+}
+
+export interface LargestRemainderOptions {
+  /** Minimum party-pooled vote share to enter the allocation pool. */
+  minShare: number;
+  /**
+   * Denominator for the eligibility gate. The resolver measures against all
+   * votes cast in the race; the projection measures against active-candidate
+   * votes only. Those are legitimately different numbers, so the caller owns it.
+   */
+  totalVotesForShare: number;
+  /** Optional FPTP winner's-bonus re-weighting applied before the LR step. */
+  majoritarianBonus?: MajoritarianBonusConfig;
+}
+
+export interface LargestRemainderResult {
+  /** Seats per candidate id. Every input id is present; non-pool ids are 0. */
+  seats: Record<string, number>;
+  /** Candidate ids that entered the allocation pool, in pool order. */
+  poolIds: string[];
+  /** Summed votes of the allocation pool. Zero means nothing was allocated. */
+  poolVotes: number;
+  /** True when the eligibility gate admitted nobody and ranked order was used. */
+  usedFallback: boolean;
+}
+
+/**
+ * The one implementation of the multi-seat apportionment rule: party-pooled
+ * minimum-share eligibility, the degenerate ranked-order fallback, the optional
+ * majoritarian winner's bonus, and Hamilton / Largest-Remainder assignment.
+ *
+ * This existed twice — once in `allocateSeats` (what resolves a race) and once
+ * in `computeSeatEstimates` (what players are shown before one). They must
+ * agree exactly or the projected seats differ from the seats the race resolves
+ * to, and they had already drifted twice (ticket #1032): the projection gated
+ * per candidate where resolution pooled by party, and its fallback re-admitted
+ * every candidate in ~11 of 12 Commons regions, so no threshold applied at all.
+ * Both were repaired by re-coding the copy rather than sharing it, which left
+ * the same drift available on the next eligibility or LR change.
+ *
+ * Callers keep their own surrounding concerns: the resolver's bloc-list path,
+ * 2-seat House rule, over-allocation cap and single-seat path stay in
+ * `allocateSeats`; the projection's multi-seat gate and null returns stay in
+ * `computeSeatEstimates`.
+ */
+export function largestRemainderSeats(
+  candidates: ReadonlyArray<ApportionmentCandidate>,
+  totalSeats: number,
+  opts: LargestRemainderOptions
+): LargestRemainderResult {
+  const seats: Record<string, number> = {};
+  for (const c of candidates) seats[c.id] = 0;
+  if (candidates.length === 0 || totalSeats <= 0) {
+    return { seats, poolIds: [], poolVotes: 0, usedFallback: false };
+  }
+
+  const groupKey = (c: ApportionmentCandidate) =>
+    c.party && c.party !== "independent" ? `party:${c.party}` : `cand:${c.id}`;
+
+  // Same-party candidates pool their votes against the threshold, so a party
+  // splitting 22% across two candidates clears a 20% gate while a 0.8% fringe
+  // candidate cannot.
+  const votesByGroup = new Map<string, number>();
+  for (const c of candidates) {
+    const k = groupKey(c);
+    votesByGroup.set(k, (votesByGroup.get(k) ?? 0) + c.votes);
+  }
+  const eligible =
+    opts.totalVotesForShare > 0
+      ? candidates.filter(
+          (c) => (votesByGroup.get(groupKey(c)) ?? 0) / opts.totalVotesForShare >= opts.minShare
+        )
+      : [];
+
+  // Sub-threshold candidates are never re-admitted alongside eligible ones.
+  // The fallback survives only for the degenerate case where NOBODY clears the
+  // gate: fill in ranked order.
+  const usedFallback = eligible.length === 0;
+  const pool = usedFallback
+    ? [...candidates]
+        .sort((a, b) => b.votes - a.votes)
+        .slice(0, Math.min(totalSeats, candidates.length))
+    : eligible;
+
+  const poolVotes = pool.reduce((sum, c) => sum + c.votes, 0);
+  if (pool.length === 0 || poolVotes === 0) {
+    return { seats, poolIds: pool.map((c) => c.id), poolVotes, usedFallback };
+  }
+
+  // Winner's-bonus re-weighting by tapered bloc membership. Effective weights
+  // sum to poolVotes, so the LR step and its exact seat conservation are
+  // untouched. No config → identical to the proportional path.
+  const effectiveVotes = opts.majoritarianBonus
+    ? applyMajoritarianBonus(
+        pool.map((c) => ({ id: c.id, votes: c.votes, group: groupKey(c) })),
+        opts.majoritarianBonus
+      ).effective
+    : undefined;
+
+  const assigned = pool.map((c) => {
+    const exact = ((effectiveVotes?.get(c.id) ?? c.votes) / poolVotes) * totalSeats;
+    return { id: c.id, seats: Math.floor(exact), remainder: exact % 1 };
+  });
+  const remaining = totalSeats - assigned.reduce((s, a) => s + a.seats, 0);
+  assigned.sort((a, b) => b.remainder - a.remainder);
+  // Wraps: LR guarantees `remaining < pool.length`, but wrapping keeps every
+  // seat assigned rather than silently dropping any if that ever stops holding.
+  for (let i = 0; i < remaining; i++) assigned[i % assigned.length].seats++;
+  for (const a of assigned) seats[a.id] = a.seats;
+
+  return { seats, poolIds: pool.map((c) => c.id), poolVotes, usedFallback };
+}
+
 export interface SeatAllocationResult {
   isMultiSeat: boolean;
   authoritativeSeats: number;
@@ -388,49 +510,21 @@ export function allocateSeats(
         seatsEstimate[ranked[0].id] = 2;
       }
     } else {
-      // Sub-threshold candidates are never re-admitted alongside eligible
-      // ones. The old rule (`eligible.length >= min(seats, ranked.length)`)
-      // re-admitted EVERYONE whenever there were fewer candidates than seats
-      // — with 12 candidates and 27-90 seats a 0.8% fringe candidate always
-      // got its 0.6-seat largest remainder rounded up to a real seat. The
-      // fallback survives only for the degenerate case where NO candidate
-      // clears the threshold: fill in ranked order.
-      const minPoolSize = Math.min(authoritativeSeats, ranked.length);
-      const allocationPool = eligible.length > 0 ? eligible : ranked.slice(0, minPoolSize);
-      const poolVotes = allocationPool.reduce((sum, { votes }) => sum + votes, 0);
-
-      if (allocationPool.length === 1 || poolVotes === 0) {
-        // Only give all seats to one candidate if they're truly the only option
-        seatsEstimate[allocationPool[0].id] = authoritativeSeats;
+      // Eligibility, the degenerate ranked-order fallback, the winner's bonus
+      // and Largest Remainder all live in `largestRemainderSeats` so the
+      // projection engine runs the identical rule (#585).
+      const { seats, poolIds, poolVotes } = largestRemainderSeats(ranked, authoritativeSeats, {
+        minShare,
+        totalVotesForShare: totalVotesCast,
+        majoritarianBonus,
+      });
+      if (poolIds.length === 1 || poolVotes === 0) {
+        // Only give all seats to one candidate if they're truly the only
+        // option. A zero-vote pool cannot be apportioned at all, so seat the
+        // leading candidate rather than nobody.
+        seatsEstimate[poolIds[0] ?? ranked[0].id] = authoritativeSeats;
       } else {
-        // FPTP winner's bonus (#3244): when configured, re-weight the pool by
-        // tapered bloc membership before Largest Remainder. Effective weights
-        // sum to poolVotes, so the LR step below (and its exact seat
-        // conservation) is untouched. No config → undefined → identical to the
-        // historical proportional path.
-        const effectiveVotes = majoritarianBonus
-          ? applyMajoritarianBonus(
-              allocationPool.map((c) => ({
-                id: c.id,
-                votes: c.votes,
-                group: eligibilityGroupKey(c),
-              })),
-              majoritarianBonus
-            ).effective
-          : undefined;
-        const raw = allocationPool.map(({ id, votes }) => ({
-          id,
-          exact: ((effectiveVotes?.get(id) ?? votes) / poolVotes) * authoritativeSeats,
-        }));
-        const assigned = raw.map(({ id, exact }) => ({
-          id,
-          seats: Math.floor(exact),
-          remainder: exact % 1,
-        }));
-        const remaining = authoritativeSeats - assigned.reduce((s, a) => s + a.seats, 0);
-        assigned.sort((a, b) => b.remainder - a.remainder);
-        for (let i = 0; i < remaining; i++) assigned[i % assigned.length].seats++;
-        for (const a of assigned) seatsEstimate[a.id] = a.seats;
+        for (const [id, count] of Object.entries(seats)) seatsEstimate[id] = count;
       }
     }
 

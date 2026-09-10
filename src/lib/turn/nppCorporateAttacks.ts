@@ -285,6 +285,9 @@ export async function executeNppSectorAttack(
         legacyCostAnchor: calculateAttackCostAnchor(targetRevenueAnchor),
         unitsReceived: unitsReceivedAtDefenderMix,
         sectorType: targetSector.sectorType as CorporationType,
+        // The units received are at the DEFENDER's mix, so the floor must price
+        // them at the defender's strategy too.
+        strategyId: targetSector.strategyId ?? null,
         year: resolveWorldYear(year, currentTurn),
         eraUnitScale,
       })
@@ -320,12 +323,14 @@ export async function executeNppSectorAttack(
     ? capacityCaptureBookUpdates({
         defender: {
           sectorType: targetSector.sectorType as CorporationType,
+          strategyId: targetSector.strategyId ?? null,
           capitalStock: targetSector.capitalStock,
           capacityBookAnchor: targetSector.capacityBookAnchor,
         },
         attacker: existing
           ? {
               sectorType: existing.sectorType,
+              strategyId: existing.strategyId ?? null,
               capitalStock: existing.capitalStock,
               capacityBookAnchor: existing.capacityBookAnchor,
             }
@@ -655,10 +660,28 @@ export async function runNppCorporateAttacks(
   // All corporateSectors, once — grouped by owning corp (own-market lookup)
   // and by (stateId, sectorType) bucket (rival lookup), replacing the two
   // per-attacker queries above.
-  // `plantsPnl` is ~15% of the collection and attack targeting never reads it.
+  // Attack targeting and execution use only the Pick<CorporateSector, ...>
+  // contract below: owner/market identity plus the capacity and revenue basis.
+  // Avoid decoding every plant and labor telemetry field while building the
+  // two in-memory indexes.
   const allSectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({}, { projection: { plantsPnl: 0 } })
+    .find(
+      {},
+      {
+        projection: {
+          _id: 1,
+          corporationId: 1,
+          countryId: 1,
+          stateId: 1,
+          sectorType: 1,
+          revenue: 1,
+          capitalStock: 1,
+          capacityBookAnchor: 1,
+          strategyId: 1,
+        },
+      }
+    )
     .toArray();
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   const sectorsByMarket = new Map<string, CorporateSector[]>();

@@ -12,7 +12,7 @@ import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
 import type { StatePartyCandidate, StatePartyVote } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getGameTime } from "@/lib/time/gameTime";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 
 interface RouteParams {
   params: Promise<{ code: string; id: string; partyId: string }>;
@@ -48,7 +48,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     );
     if (!validation.success) return validation.response;
 
-    const { character, election } = validation;
+    const { character, election, partyId } = validation;
 
     const limit = checkRateLimit(
       `election:${character.userId.toString()}`,
@@ -97,7 +97,9 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     if (!election.founding) {
       // Minimum party tenure before voting in state leadership (leadershipTenure.ts).
-      const tenure = getPartyTenure(character.partyJoinedTurn, gameTime.currentTurn);
+      // Canonical `partyId` from the validator, not `routePartyId` — the raw
+      // path segment may be "07" where the stored party id is "7".
+      const tenure = getLeadershipEligibility(character, gameTime.currentTurn, partyId);
       if (!tenure.eligible) {
         logRequest("POST", path, 403, Date.now() - start);
         return NextResponse.json(

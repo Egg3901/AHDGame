@@ -19,12 +19,13 @@ import {
   getNppCampaignApCost,
   getNppCampaignFundCost,
 } from "@/lib/npp/actionAi";
+import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import { buildNppSignalLookup, type NppSignalLookup } from "@/lib/npp/actionSignals";
 import { applyNppIdiosyncrasy } from "@/lib/nppAutonomy/v3/nppIdiosyncrasy";
 import { politeFloatLimit } from "@/lib/nppAutonomy/playerImpactBudget";
 import { advertiseFavorabilityGain, campaignInfluenceGain } from "@/lib/actions";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
-import { campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
@@ -237,6 +238,17 @@ export async function processNppActions(
     econActive && !econGlobal ? nonPlayerCountryIds(await getAllCountryAccess(db)) : null;
   const econScopeSet = econScopeCountries ? new Set<CountryId>(econScopeCountries) : null;
 
+  // Difficulty spending discipline: funds an NPP keeps in hand rather than
+  // spending down to zero, priced off the cheapest action so the reserve is
+  // always "enough to still do something". Anchor-denominated, like
+  // NPP_FUND_COSTS and the `fundsAnchorRemaining` the loop tracks.
+  //
+  // `reserveActionMult` is 0 at normal and easy and in every hosted/multiplayer
+  // world, where this is 0 and `decideNppAction`'s affordability test is
+  // byte-identical to the shipped one. It can only ever make an NPP spend less.
+  const behaviorPolicy = await loadNppBehaviorPolicy(db);
+  const fundsReserveAnchor = behaviorPolicy.reserveActionMult * NPP_FUND_COSTS.advertise;
+
   const result = zeroResult();
 
   // Party treasury accumulator for partyDonation actions (values in LOCAL units —
@@ -247,20 +259,10 @@ export async function processNppActions(
   // NPPs). NPP_FUND_COSTS constants are anchor for cross-country game-balance
   // parity; convert at the boundary for each NPP based on its home country rate.
   //
-  // Deliberately the FROZEN campaignLocalRate, not the live exchangeRates rate:
-  // processNppFundGeneration credits npp.funds by converting anchor generation
-  // to local at campaignLocalRate (frozen, era-blind — see its own doc comment),
-  // so this decision-time conversion has to use the identical rate to read back
-  // what was actually credited. Mixing a live/era-correct rate in here while
-  // generation stays frozen silently rescales every NPP's perceived purchasing
-  // power by (frozen rate ÷ live rate) — confirmed in a 654-turn 1953 world: AT's
-  // frozen rate (13.4, the flat 2019-era table) sat at roughly half its live/era
-  // rate (~26), so AT NPPs' spendable anchor balance read ~2x lower than what
-  // they'd actually banked, leaving whole cohorts sitting on funds worth less
-  // than the cheapest action forever. Live rates remain correct for the bond/
-  // stock/founding sweeps below — those buy real market-priced instruments and
-  // each load their own fxByCcy independently.
-  const rateForCountry = (countryId: string): number => campaignLocalRate(countryId);
+  // Income, action costs and soft caps share the same frozen world basis.
+  // Investment sweeps below continue using live FX for market-priced assets.
+  const campaignRates = await loadCampaignCurrencyRates(db);
+  const rateForCountry = (countryId: string): number => campaignLocalRate(countryId, campaignRates);
 
   // Parties, loaded ONCE up front and keyed "countryId:sequentialId". This query
   // used to run after the NPP loop purely to resolve treasury-flush targets; it
@@ -408,8 +410,15 @@ export async function processNppActions(
         actionRng,
         careerModifiers,
         signals
-          ? { signals, lastAction, temperatureMult: idiosyncrasy?.temperatureMult }
-          : undefined
+          ? {
+              signals,
+              lastAction,
+              temperatureMult: idiosyncrasy?.temperatureMult,
+              fundsReserve: fundsReserveAnchor,
+            }
+          : fundsReserveAnchor > 0
+            ? { fundsReserve: fundsReserveAnchor }
+            : undefined
       );
 
       // "none" covers no-affordable-action and the save heuristic — end the cycle.

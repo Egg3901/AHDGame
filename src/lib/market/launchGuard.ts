@@ -1,3 +1,10 @@
+/**
+ * The market launch guard: the automatic safety switch on the market system.
+ * evaluateLaunchGuard compares total market cap each turn to the value stamped
+ * when the market mode was switched on; if it drops more than 25%
+ * (DEFAULT_GUARD_DROP_PCT) after a 5 turn grace period, runLaunchGuard steps
+ * marketSystemMode down one tier (guardRevertTarget). Off unless marketGuardEnabled.
+ */
 import type { Db } from "mongodb";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { createAdminLog } from "@/lib/adminLog";

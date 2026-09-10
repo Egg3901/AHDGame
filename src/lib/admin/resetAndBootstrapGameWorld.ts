@@ -92,6 +92,15 @@ export interface ResetAndBootstrapOptions {
    * and so would pin the calendar to the era start forever.
    */
   preIteration?: boolean;
+  /** Skip the operator conformance audit for isolated local player worlds. */
+  skipDiagnostic?: boolean;
+  /**
+   * Whether to open and close the run's `adminLogs` audit row. Defaults on:
+   * the hosted game's operators read it. A singleplayer world has no operator
+   * and returns its log lines to the caller, so it passes false and keeps two
+   * database writes and a 200-line log tail off first-run setup.
+   */
+  recordRunLog?: boolean;
   log?: (msg: string) => void;
 }
 
@@ -188,7 +197,8 @@ export async function resetAndBootstrapGameWorld(
   let phaseReached = "seal";
   let aborted = false;
   let finalized: Awaited<ReturnType<typeof finalizeResetGameWorld>> | null = null;
-  await openResetRunLog(db, run, { preset, mode, adminUsername });
+  const recordRunLog = options.recordRunLog !== false;
+  if (recordRunLog) await openResetRunLog(db, run, { preset, mode, adminUsername });
 
   try {
     // 1) TEARDOWN. Wipes runtime state, retires or deletes characters, stamps the
@@ -284,44 +294,48 @@ export async function resetAndBootstrapGameWorld(
     });
     collect("Maintenance mode enabled — site sealed until admin toggles it off");
 
-    try {
-      const { runSeedDiagnostic, formatDiagnosticSummary, captureSeedBaseline } =
-        await import("@/lib/admin/seedDiagnostic");
-      const report = await runSeedDiagnostic(db, {
-        mode: "conformance",
-        trigger: "post-reset",
-        preset,
-      });
-      collect(formatDiagnosticSummary(report));
-      // A `partial` run means at least one seeder was contained, so the world is
-      // knowingly incomplete. Capturing a baseline from it would make every
-      // future drift check compare against a broken reference — the same reason a
-      // critical finding skips capture.
-      if (report.summary.critical === 0 && run.status(false) === "succeeded") {
-        await captureSeedBaseline(db);
-        collect("Seed diagnostic baseline captured");
-      } else if (run.status(false) !== "succeeded") {
-        collect(
-          `Seed diagnostic: skipped baseline capture (${run.failures.length} contained failure(s))`
-        );
-      } else {
-        collect(
-          `Seed diagnostic: skipped baseline capture (${report.summary.critical} critical check(s))`
-        );
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      collect(`Seed diagnostic failed: ${message}`);
+    if (!options.skipDiagnostic) {
       try {
-        const { diagnosticErrorReport } = await import("@/lib/admin/seedDiagnostic");
-        const errorReport = diagnosticErrorReport(message, {
-          preset,
+        const { runSeedDiagnostic, formatDiagnosticSummary, captureSeedBaseline } =
+          await import("@/lib/admin/seedDiagnostic");
+        const report = await runSeedDiagnostic(db, {
+          mode: "conformance",
           trigger: "post-reset",
+          preset,
         });
-        await db.collection("seedDiagnostics").insertOne(errorReport as never);
-      } catch {
-        // Persistence of the error report is best-effort.
+        collect(formatDiagnosticSummary(report));
+        // A `partial` run means at least one seeder was contained, so the world is
+        // knowingly incomplete. Capturing a baseline from it would make every
+        // future drift check compare against a broken reference — the same reason a
+        // critical finding skips capture.
+        if (report.summary.critical === 0 && run.status(false) === "succeeded") {
+          await captureSeedBaseline(db);
+          collect("Seed diagnostic baseline captured");
+        } else if (run.status(false) !== "succeeded") {
+          collect(
+            `Seed diagnostic: skipped baseline capture (${run.failures.length} contained failure(s))`
+          );
+        } else {
+          collect(
+            `Seed diagnostic: skipped baseline capture (${report.summary.critical} critical check(s))`
+          );
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        collect(`Seed diagnostic failed: ${message}`);
+        try {
+          const { diagnosticErrorReport } = await import("@/lib/admin/seedDiagnostic");
+          const errorReport = diagnosticErrorReport(message, {
+            preset,
+            trigger: "post-reset",
+          });
+          await db.collection("seedDiagnostics").insertOne(errorReport as never);
+        } catch {
+          // Persistence of the error report is best-effort.
+        }
       }
+    } else {
+      collect("Skipped operator seed audit for isolated singleplayer world");
     }
 
     phaseReached = "complete";
@@ -343,13 +357,14 @@ export async function resetAndBootstrapGameWorld(
     }
     // Always closed, on every path. `closeResetRunLog` is best-effort inside,
     // so a bookkeeping failure can never replace the reset's real error.
-    await closeResetRunLog(db, run, {
-      status: run.status(aborted),
-      phaseReached,
-      details: finalized?.adminDetails ?? `Reset ${run.status(aborted)} in ${phaseReached}`,
-      logs,
-      deleteProfiles,
-      adminUsername,
-    });
+    if (recordRunLog)
+      await closeResetRunLog(db, run, {
+        status: run.status(aborted),
+        phaseReached,
+        details: finalized?.adminDetails ?? `Reset ${run.status(aborted)} in ${phaseReached}`,
+        logs,
+        deleteProfiles,
+        adminUsername,
+      });
   }
 }

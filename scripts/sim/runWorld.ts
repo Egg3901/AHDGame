@@ -38,6 +38,7 @@ import type {
   NppForeignPolicyStage,
 } from "@/lib/db/types/gameState";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
+import type { TurnLog } from "@/lib/db/types/turnLog";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -77,6 +78,10 @@ interface SimRunDoc {
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
   preservePlayerRail?: boolean;
+  preserveLiveConfig?: boolean;
+  /** Autonomy tier and local-world difficulty the run was configured with. */
+  autonomyLevel?: string;
+  difficulty?: string;
 }
 
 function arg(flag: string): string | undefined {
@@ -95,10 +100,30 @@ function hasFlag(flag: string): boolean {
  * same seed at v3 and v4 is the A/B that tells you whether letting autonomy into
  * player-enabled countries changed the balance.
  */
-const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4";
-if (AUTONOMY_LEVEL !== "v3" && AUTONOMY_LEVEL !== "v4") {
-  throw new Error(`--autonomy must be v3 or v4 (got "${AUTONOMY_LEVEL}")`);
+const AUTONOMY_LEVEL = (arg("autonomy") ?? "v3") as "v3" | "v4" | "v5";
+if (!(["v3", "v4", "v5"] as const).includes(AUTONOMY_LEVEL)) {
+  throw new Error(`--autonomy must be v3, v4, or v5 (got "${AUTONOMY_LEVEL}")`);
 }
+
+/**
+ * Local-world difficulty for the run. Writes a `singleplayerConfig` onto the
+ * sandbox `gameState`, which is what both halves of difficulty key off:
+ * `singleplayerDifficulty/rules/index.ts` for NPP resources and
+ * `singleplayerDifficulty/rules/behavior.ts` for decision competence.
+ *
+ * Omitted leaves `singleplayerConfig` absent, which is exactly a hosted world —
+ * resolving to `normal` everywhere. So a run without this flag is unchanged from
+ * every run of this harness that came before it.
+ */
+const SIM_DIFFICULTIES = ["easy", "normal", "hard"] as const;
+const difficultyRaw = arg("difficulty");
+if (
+  difficultyRaw &&
+  !SIM_DIFFICULTIES.includes(difficultyRaw as (typeof SIM_DIFFICULTIES)[number])
+) {
+  throw new Error(`--difficulty must be one of ${SIM_DIFFICULTIES.join(", ")}`);
+}
+const difficulty = difficultyRaw as (typeof SIM_DIFFICULTIES)[number] | undefined;
 const foreignPolicyMode = (arg("foreign-policy") ?? "shadow") as NppForeignPolicyMode;
 if (!(["off", "shadow", "active"] as const).includes(foreignPolicyMode)) {
   throw new Error(`--foreign-policy must be off, shadow, or active (got "${foreignPolicyMode}")`);
@@ -186,6 +211,10 @@ const nppFragileMarketSupplyEnabled = parseOptionalBoolean(
 // AI-driven. Used to soak-test a market tier against today's actual price
 // state rather than a fresh preset bootstrap.
 const cloneMode = hasFlag("clone-mode");
+const preserveLiveConfig = hasFlag("preserve-live-config");
+if (preserveLiveConfig && !cloneMode)
+  throw new Error("--preserve-live-config requires --clone-mode");
+const investmentSnapshots = arg("sector-investment-snapshots");
 // Scarcity drift A/B (week-1 clearing balance pass): seeds
 // commodityScarcityDriftEnabled on the sandbox gameConfig so the run
 // exercises the persistent-imbalance price integrator.
@@ -279,7 +308,18 @@ const quiet = hasFlag("quiet");
 // In clone mode this preserves the restored world's player corporation CEOs.
 // Without it, clone mode converts all human-run corporations to NPP so the
 // sandbox can run unattended.
-const preservePlayerRail = hasFlag("preserve-player-rail");
+const preservePlayerRail = preserveLiveConfig || hasFlag("preserve-player-rail");
+
+if (
+  preserveLiveConfig &&
+  process.argv.some((value) =>
+    /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
+      value
+    )
+  )
+) {
+  throw new Error("--preserve-live-config cannot be combined with gameplay overrides");
+}
 
 if (quiet) {
   console.log = () => {};
@@ -514,6 +554,25 @@ async function main() {
       preservePlayerRail
     );
 
+    if (difficulty) {
+      log(`Setting local-world difficulty (${difficulty})`);
+      await db.collection<GameState>("gameState").updateOne(
+        { _id: "current" },
+        {
+          $set: {
+            singleplayerConfig: {
+              mode: "worldsim",
+              difficulty,
+              nppAutonomyLevel: AUTONOMY_LEVEL,
+              featureFlags: {},
+              permanentHeadOfState: false,
+              configuredAt: new Date(),
+            },
+          },
+        }
+      );
+    }
+
     // Some countries' authored historical seat data (historicalSeats.ts) falls
     // short of that country's own configured legislature size — found via this
     // harness: Nigeria's ENTIRE 1991 legislature (360 House + 109 Senate seats)
@@ -595,7 +654,14 @@ async function main() {
       { _id: runId },
       {
         $setOnInsert: { runId, preset, seed, dbName, startedAt: new Date() },
-        $set: { status: "running", currentTurn: 0, error: null, updatedAt: new Date() },
+        $set: {
+          status: "running",
+          currentTurn: 0,
+          error: null,
+          autonomyLevel: AUTONOMY_LEVEL,
+          ...(difficulty ? { difficulty } : {}),
+          updatedAt: new Date(),
+        },
       },
       { upsert: true }
     );
@@ -608,7 +674,13 @@ async function main() {
       { _id: runId },
       {
         $setOnInsert: { runId, preset, seed, dbName, startedAt: new Date() },
-        $set: { status: "running", error: null, updatedAt: new Date() },
+        $set: {
+          status: "running",
+          error: null,
+          autonomyLevel: AUTONOMY_LEVEL,
+          ...(difficulty ? { difficulty } : {}),
+          updatedAt: new Date(),
+        },
       },
       { upsert: true }
     );
@@ -644,7 +716,7 @@ async function main() {
     .updateOne({ _id: "default" }, { $set: { ledgerShadow: true } }, { upsert: true });
   log("Shadow ledger enabled for this run (ledgerShadow=true)");
 
-  if (cloneMode) {
+  if (cloneMode && !preserveLiveConfig) {
     // The DB is a restore of the live world. By default make it AI-driven:
     // patch the market tier, flip every human-run corp to an NPP-run one, and
     // open the world-level autonomy gates (forceFullAutonomy). With
@@ -800,6 +872,7 @@ async function main() {
         nppForeignPolicyMode: foreignPolicyMode,
         nppForeignPolicyStage: foreignPolicyStage,
         preservePlayerRail,
+        preserveLiveConfig,
       },
     }
   );
@@ -832,6 +905,9 @@ async function main() {
 
   const gameStateBefore = await db.collection<GameState>("gameState").findOne({ _id: "current" });
   const startTurn = (gameStateBefore?.currentTurn as number | undefined) ?? 0;
+  const { snapshotSectorInvestment, assertInvestmentTurnComplete } =
+    await import("./sectorInvestmentSnapshot");
+  if (investmentSnapshots) await snapshotSectorInvestment(db, investmentSnapshots, startTurn);
   const targetTurn = startTurn + turns;
   log(`Advancing from turn ${startTurn} to turn ${targetTurn} (${turns} turns)`);
 
@@ -882,6 +958,22 @@ async function main() {
       }
       skippedSinceMs = null;
       lastTurn = result.turn;
+      if (investmentSnapshots) {
+        if (isCrashRecovery) throw new Error("Crashed turn invalidates the balance comparison");
+        const [checkedState, completedLog] = await Promise.all([
+          db
+            .collection<GameState>("gameState")
+            .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+          db
+            .collection<TurnLog>("turnLogs")
+            .findOne(
+              { turn: lastTurn },
+              { projection: { turn: 1, phaseStatuses: 1 }, sort: { _id: -1 } }
+            ),
+        ]);
+        assertInvestmentTurnComplete(lastTurn, checkedState?.currentTurn, completedLog);
+        await snapshotSectorInvestment(db, investmentSnapshots, lastTurn);
+      }
 
       // Sim-harness-only snapshots (seats, corporations-by-country) for the
       // experiments report — deliberately NOT wired into the live
@@ -937,7 +1029,7 @@ if (hasFlag("help") || hasFlag("h")) {
       "[--mode=full|elections-only|economy-only|macro-only] " +
       "[--npp-market-coverage=true|false] " +
       "[--npp-fragile-market-supply=true|false] " +
-      "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--quiet]"
+      "[--macro-growth] [--pre-iteration|--no-pre-iteration] [--preserve-player-rail] [--preserve-live-config] [--sector-investment-snapshots=<directory>] [--quiet]"
   );
   process.exit(0);
 }

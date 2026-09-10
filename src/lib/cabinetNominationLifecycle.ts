@@ -97,7 +97,7 @@ async function castNPPCabinetVotes(
         .filter((id): id is ObjectId => id instanceof ObjectId);
       return db
         .collection<NPP>("npps")
-        .find({ _id: { $in: nppIds } })
+        .find({ _id: { $in: nppIds } }, { projection: { party: 1 } })
         .toArray()
         .then((npps) => new Map(npps.map((n) => [n._id.toString(), n])));
     })();
@@ -273,7 +273,7 @@ export async function processCabinetNominationLifecycle(
     nppIds.length > 0
       ? await db
           .collection<NPP>("npps")
-          .find({ _id: { $in: nppIds } })
+          .find({ _id: { $in: nppIds } }, { projection: { party: 1 } })
           .toArray()
       : [];
   const nppMap = new Map(npps.map((n) => [n._id.toString(), n]));

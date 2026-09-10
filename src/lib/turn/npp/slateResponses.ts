@@ -36,6 +36,7 @@ import { isElectionTypeEntryBlocked } from "@/lib/elections/nationwideExecutive"
 import { isPrimaryClosed } from "@/lib/elections/electionDeadlineFilters";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { SLATE_ASSIGNMENT_CAP, isLiveSlateStatus } from "@/lib/slateAssignmentCap";
 import {
   canFieldExecutiveCandidate,
   canFieldLegislativeCandidate,
@@ -292,6 +293,174 @@ function isIncumbentForElection(ctx: NPPContext, candidateId: string, election: 
 }
 
 /**
+ * Order the candidates holding one of a party's slots on a race, best claim
+ * first.
+ *
+ * A party may hold at most SLATE_ASSIGNMENT_CAP slots, so when more candidates
+ * hold one than the cap allows, this order decides who keeps theirs: a
+ * defending incumbent first, then whoever is already on the ballot by how long
+ * they have stood, then live slate rows oldest invitation first. Ties break on
+ * id so a race resolves the same way on every pass.
+ *
+ * A player who filed their own candidacy is deliberately absent: they reach a
+ * ballot without a chair's permission and spend no party slot. A chair's player
+ * pick does hold one, and appears here through its slate row.
+ */
+function orderPartyHolders(
+  ctx: NPPContext,
+  election: Election,
+  partyId: string,
+  liveRows: SlateCandidate[]
+): string[] {
+  const incumbents: ElectionCandidate[] = [];
+  const seated: ElectionCandidate[] = [];
+  for (const candidate of ctx.candidatesByElection.get(election._id.toString()) ?? []) {
+    if (candidate.party !== partyId || candidate.status !== "active") continue;
+    if (candidate.isNPP !== true && candidate.nppId == null) continue;
+    if (candidate.nppId && isIncumbentForElection(ctx, candidate.nppId.toString(), election)) {
+      incumbents.push(candidate);
+    } else {
+      seated.push(candidate);
+    }
+  }
+  const byTenure = (a: ElectionCandidate, b: ElectionCandidate) =>
+    (a.enteredAt?.getTime() ?? 0) - (b.enteredAt?.getTime() ?? 0) ||
+    a.characterId.toString().localeCompare(b.characterId.toString());
+  incumbents.sort(byTenure);
+  seated.sort(byTenure);
+
+  const rowIds = [...liveRows]
+    .sort(
+      (a, b) =>
+        a.invitedAt.getTime() - b.invitedAt.getTime() ||
+        a._id.toString().localeCompare(b._id.toString())
+    )
+    .map((row) => row.candidateId.toString());
+
+  const ordered: string[] = [];
+  for (const holderId of [
+    ...incumbents.map((c) => c.characterId.toString()),
+    ...seated.map((c) => c.characterId.toString()),
+    ...rowIds,
+  ]) {
+    if (!ordered.includes(holderId)) ordered.push(holderId);
+  }
+  return ordered;
+}
+
+interface SlateTrimSummary {
+  /** Distinct (race, party) boards brought back inside the cap. */
+  partiesTrimmed: number;
+  withdrawn: number;
+  tombstoned: number;
+}
+
+/**
+ * Bring races that are already over the cap back inside it.
+ *
+ * The filing pass only ever visits races with a pending row, so a board that
+ * grew past the cap before the cap existed would otherwise sit there for the
+ * rest of its cycle. This sweeps every open primary instead, withdrawing the
+ * lowest-ranked holders until the party is inside the cap and tombstoning
+ * their slate rows with a reason the chair can read.
+ *
+ * A player's own candidacy is never withdrawn. A real person's character does
+ * not lose its place on a ballot to a rule it never agreed to; the pass takes
+ * the next NPP holder instead, and leaves the race over cap rather than touch
+ * one.
+ */
+export async function trimOverCapSlates(ctx: NPPContext): Promise<SlateTrimSummary> {
+  const { db, now, openPrimaries, candidatesByElection } = ctx;
+  const summary: SlateTrimSummary = { partiesTrimmed: 0, withdrawn: 0, tombstoned: 0 };
+  const elections = openPrimaries.filter((election) => {
+    if (election.electionType === "president") return false;
+    // `openPrimaries` carries general-phase races too when the context was
+    // built with `includeGeneralPhase`. The field there is already settled, and
+    // a cap is no reason to pull someone off a ballot mid-contest, so the trim
+    // only reshapes races whose primary is still open.
+    return !isPrimaryClosed(election, ctx.currentTurn, now);
+  });
+  if (elections.length === 0) return summary;
+
+  const rows = await db
+    .collection<SlateCandidate>("slateCandidates")
+    .find({ electionId: { $in: elections.map((election) => election._id) } })
+    .toArray();
+  const liveRowsByRace = new Map<string, SlateCandidate[]>();
+  const livePartiesByElection = new Map<string, Set<string>>();
+  for (const row of rows) {
+    if (!isLiveSlateStatus(row.status)) continue;
+    const electionKey = row.electionId.toString();
+    const key = `${electionKey}_${row.partyId}`;
+    const list = liveRowsByRace.get(key);
+    if (list) list.push(row);
+    else liveRowsByRace.set(key, [row]);
+    const partiesHere = livePartiesByElection.get(electionKey);
+    if (partiesHere) partiesHere.add(row.partyId);
+    else livePartiesByElection.set(electionKey, new Set([row.partyId]));
+  }
+
+  for (const election of elections) {
+    const electionKey = election._id.toString();
+    const active = (candidatesByElection.get(electionKey) ?? []).filter(
+      (candidate) => candidate.status === "active"
+    );
+    const parties = new Set<string>(active.map((candidate) => candidate.party));
+    for (const partyId of livePartiesByElection.get(electionKey) ?? []) parties.add(partyId);
+
+    for (const partyId of parties) {
+      const raceKey = `${electionKey}_${partyId}`;
+      const liveRows = liveRowsByRace.get(raceKey) ?? [];
+      const ordered = orderPartyHolders(ctx, election, partyId, liveRows);
+      let overCap = ordered.length - SLATE_ASSIGNMENT_CAP;
+      if (overCap <= 0) continue;
+
+      let trimmedHere = 0;
+      for (let index = ordered.length - 1; index >= 0 && overCap > 0; index -= 1) {
+        const holderId = ordered[index]!;
+        const candidacy = active.find((candidate) => candidate.characterId.toString() === holderId);
+        // A player on the ballot keeps their place; take the next holder.
+        if (candidacy && candidacy.isNPP !== true && candidacy.nppId == null) continue;
+
+        if (candidacy && (await withdrawCandidacyFromRace(ctx, election, candidacy))) {
+          summary.withdrawn += 1;
+        }
+        const tombstones = liveRows.filter((row) => row.candidateId.toString() === holderId);
+        if (tombstones.length > 0) {
+          await db.collection<SlateCandidate>("slateCandidates").bulkWrite(
+            tombstones.map((row) => ({
+              updateOne: {
+                filter: { _id: row._id },
+                update: {
+                  $set: {
+                    status: "withdrawn",
+                    refusalReason: "slate_full",
+                    respondedAt: now,
+                    updatedAt: now,
+                  },
+                },
+              },
+            }))
+          );
+          summary.tombstoned += tombstones.length;
+        }
+        overCap -= 1;
+        trimmedHere += 1;
+      }
+      if (trimmedHere > 0) {
+        summary.partiesTrimmed += 1;
+        console.log(
+          `[Turn] Slate cap: trimmed ${trimmedHere} over-cap candidate(s) from party ${partyId} ` +
+            `on ${election.electionType}/${election.state}`
+        );
+      }
+    }
+  }
+
+  return summary;
+}
+
+/**
  * Insert ElectionCandidate rows for every accepted slate row that has not
  * yet been filed. Called from `processElectionEntry` after incumbent-defense
  * runs but before the generic party-pool fallback, so accepted slate rows can
@@ -363,32 +532,66 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
     else activeCandidaciesByCandidateId.set(key, [candidacy]);
   }
 
+  // Every slate row on the races this pass touches, serving two questions:
+  // which candidates hold a chair-issued row (as opposed to turn-loop
+  // carry-forward), and what each party already holds against the cap.
+  const slateRowsForElections = await db
+    .collection<SlateCandidate>("slateCandidates")
+    .find({ electionId: { $in: electionIds } })
+    .toArray();
+
   // Which (election, NPP) pairs hold a chair-issued slate row? Used below to
   // tell a chair's candidate apart from one the generic fallback auto-picked.
   // `autoFilled` rows are turn-loop carry-forward, not a chair decision, so
   // they do not confer precedence.
-  const chairSlatedRows = await db
-    .collection<SlateCandidate>("slateCandidates")
-    .find({
-      electionId: { $in: electionIds },
-      candidateType: "npp",
-      status: { $in: ["accepted", "filed"] },
-      autoFilled: { $ne: true },
-    })
-    .toArray();
   const chairSlatedKeys = new Set(
-    chairSlatedRows.map((r) => `${r.electionId.toString()}:${r.candidateId.toString()}`)
+    slateRowsForElections
+      .filter(
+        (r) =>
+          r.candidateType === "npp" &&
+          (r.status === "accepted" || r.status === "filed") &&
+          r.autoFilled !== true
+      )
+      .map((r) => `${r.electionId.toString()}:${r.candidateId.toString()}`)
   );
+
+  // Live rows per (election, party), the slot-holding half of the cap.
+  const liveRowsByRace = new Map<string, SlateCandidate[]>();
+  for (const r of slateRowsForElections) {
+    if (!isLiveSlateStatus(r.status)) continue;
+    const key = `${r.electionId.toString()}_${r.partyId}`;
+    const list = liveRowsByRace.get(key);
+    if (list) list.push(r);
+    else liveRowsByRace.set(key, [r]);
+  }
+
+  const entitledHolders = (election: Election, partyId: string): Set<string> =>
+    new Set(
+      orderPartyHolders(
+        ctx,
+        election,
+        partyId,
+        liveRowsByRace.get(`${election._id.toString()}_${partyId}`) ?? []
+      ).slice(0, SLATE_ASSIGNMENT_CAP)
+    );
 
   let filed = 0;
   let skipped = 0;
   let displaced = 0;
   const processedCandidateIds = new Set<string>();
-  const processedPartyElectionKeys = new Set<string>();
   const skippedRows: { rowId: ObjectId; reason: SlateRefusalReason }[] = [];
   const queueSkipped = (row: SlateCandidate, reason: SlateRefusalReason) => {
     skippedRows.push({ rowId: row._id, reason });
     skipped += 1;
+    // Every skip tombstones the row, which releases its slot. Drop it from the
+    // live set now so a row considered later in this same pass can take the
+    // place it just vacated, rather than being refused for a slot nobody holds.
+    const raceKey = `${row.electionId.toString()}_${row.partyId}`;
+    const live = liveRowsByRace.get(raceKey);
+    if (live) {
+      const index = live.findIndex((candidate) => candidate._id.equals(row._id));
+      if (index >= 0) live.splice(index, 1);
+    }
   };
   for (const row of accepted) {
     try {
@@ -455,12 +658,6 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         continue;
       }
 
-      const partyElectionKey = `${row.electionId.toString()}_${row.partyId}`;
-      if (processedPartyElectionKeys.has(partyElectionKey)) {
-        queueSkipped(row, "slot_taken");
-        continue;
-      }
-
       const candidacies = activeCandidaciesByCandidateId.get(candidateKey) ?? [];
       const activeCandidacy =
         candidacies.find(
@@ -515,24 +712,31 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         (candidate) => !activeIncumbents.includes(candidate)
       );
 
-      // Slate may create one same-party challenger alongside a defending
-      // incumbent, but should not keep stacking extra same-party Slate NPPs once
-      // that challenger slot is already occupied.
+      // Race capacity. A party may field at most SLATE_ASSIGNMENT_CAP
+      // candidates here, players and NPPs drawing on one pool, so a chair can
+      // build a slate several deep rather than one pick at a time.
       //
-      // #1181: WHO occupies it decides the outcome. A challenger the generic
-      // party-pool fallback auto-picked yields to the chair — the chair's
-      // instruction is the later, deliberate one, and silently discarding it
-      // was the whole bug. A challenger holding their own chair-issued slate
-      // row is the chair's earlier decision, so that one stands and this row
-      // is tombstoned with a reason the chair can actually read.
-      const chairBackedChallengers = activeChallengers.filter((candidate) =>
-        candidate.nppId
-          ? chairSlatedKeys.has(`${election._id.toString()}:${candidate.nppId.toString()}`)
-          : false
-      );
-      if (chairBackedChallengers.length > 0) {
-        queueSkipped(row, "slot_taken");
-        continue;
+      // #1181 survives as the tie-break for a race that is genuinely full: a
+      // slot held by an NPP the generic party-pool fallback picked, who is
+      // neither defending a seat nor holding a chair-issued row, yields so the
+      // chair's instruction is not silently discarded. Below the cap nobody has
+      // to give way and both simply stand, which is what the primary is for.
+      const pendingDisplacements: ElectionCandidate[] = [];
+      if (!entitledHolders(election, row.partyId).has(candidateKey)) {
+        const displaceable = activeChallengers.filter((candidate) =>
+          candidate.nppId
+            ? !chairSlatedKeys.has(`${election._id.toString()}:${candidate.nppId.toString()}`)
+            : false
+        );
+        if (displaceable.length === 0) {
+          queueSkipped(row, "slate_full");
+          continue;
+        }
+        // Freeing one slot is enough, and the withdrawal is deferred until the
+        // insert below has actually landed. Every candidate that could yield is
+        // carried, not just the first: a withdrawal can find no live row to act
+        // on, and stopping there would leave the race one over its cap.
+        pendingDisplacements.push(...displaceable);
       }
 
       const candidateDoc: Omit<ElectionCandidate, "_id"> = {
@@ -561,14 +765,16 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
         _id: new ObjectId(),
       } as ElectionCandidate);
       ctx.nppCandidacies.add(npp._id.toString());
-      processedPartyElectionKeys.add(partyElectionKey);
 
       // Only now that the chair's candidate is actually on the ballot do the
       // auto-picks it displaces come off it. Withdrawing first would leave the
       // party with no candidate at all if the insert above threw (the active
       // candidacy index can reject it), and the retry is a whole turn away.
-      for (const autoPick of activeChallengers) {
-        if (await withdrawAutoPickedCandidacy(ctx, election, autoPick)) displaced += 1;
+      for (const autoPick of pendingDisplacements) {
+        if (await withdrawCandidacyFromRace(ctx, election, autoPick)) {
+          displaced += 1;
+          break; // One slot freed is one slot taken; the rest keep their places.
+        }
       }
 
       await db
@@ -608,8 +814,11 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
 }
 
 /**
- * Withdraw an auto-picked same-party NPP so a chair's slate pick can take the
- * challenger slot (#1181). Mirrors the slate-withdraw cleanup used by
+ * Withdraw one NPP candidacy from a race and clean up after it.
+ *
+ * Two callers: the filing pass, taking a slot from an auto-picked NPP so a
+ * chair's pick can stand on a full race (#1181), and the trim pass, bringing a
+ * race that is over the cap back inside it. Mirrors the slate-withdraw cleanup used by
  * `reconcileSlateMoves` and the slate DELETE route: mark the candidacy
  * withdrawn, scrub the vote tally, archive the campaign, and drop the NPP from
  * the turn's in-memory candidacy state so nothing re-files them.
@@ -618,7 +827,7 @@ export async function fileAcceptedSlateRows(ctx: NPPContext): Promise<SlateFilin
  * `_id` (rows inserted earlier this turn), so the live row is matched on
  * (electionId, characterId, status) rather than `_id`.
  */
-async function withdrawAutoPickedCandidacy(
+async function withdrawCandidacyFromRace(
   ctx: NPPContext,
   election: Election,
   inMemoryCandidate: ElectionCandidate

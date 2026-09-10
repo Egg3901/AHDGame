@@ -187,21 +187,31 @@ describe("loadOrgInfluence", () => {
     expect(v.members).toEqual([]);
   });
 
-  it("shows a founder below the bar as exempt, with no countdown it will never honour", async () => {
-    alignments([{ entityId: "NG", shares: { WEST: 12, EAST: 4 }, nonAligned: 84 }]);
+  it("counts a founder below the bar down like any other member", async () => {
+    // Founding status stopped being an exemption when the defection sweep lost
+    // its `status === "founding"` skip (ticket #1285). The roster has to say so:
+    // hiding the countdown would tell a bloc its founder is safe on the turn it
+    // is in fact 5 turns into leaving.
+    gameState({
+      _id: "current",
+      currentYear: 1953,
+      currentTurn: 100,
+      intOrgAlignmentEnabled: true,
+    });
+    alignments([{ entityId: "TR", shares: { WEST: 12, EAST: 20 }, nonAligned: 68 }]);
     orgMembers([
       {
-        organizationId: "COMMONWEALTH",
-        countryId: "NG",
+        organizationId: "NATO",
+        countryId: "TR",
         status: "founding",
-        wantsOutSinceTurn: 5,
+        wantsOutSinceTurn: 89,
       },
     ]);
     const { loadOrgInfluence } = await import("./orgInfluence");
     const v = await loadOrgInfluence(db as unknown as Db, "NATO");
 
-    expect(v.members[0]).toMatchObject({ exempt: true, eligible: false });
-    expect(v.members[0]!.turnsBelowGate).toBeNull();
+    expect(v.members[0]).toMatchObject({ eligible: false, wantsOut: true });
+    expect(v.members[0]!.turnsBelowGate).toBe(11);
   });
   it("prices each target against its own economy", async () => {
     alignments([

@@ -1,3 +1,10 @@
+/**
+ * Army unit stats and how one formation's combat value is computed. Posture
+ * (POSTURES: Garrison, Standard, Forward-Deployed, High Alert) scales upkeep and
+ * power; veterancy (VET), tech level (TECH), equipment (EQ) and readiness feed
+ * combatValue; terrain (TERRAIN) and roles (ROLES) set frontage and capacity.
+ * effUpkeep is what a formation costs to keep each turn.
+ */
 // Combat unit model + per-unit combat math, ported verbatim from the Combat
 // Command design's DCLogic. Pure functions: doctrine + general modifiers are
 // passed in (from doctrineTree.natMods and generals.genMods) so nothing here
@@ -549,11 +556,30 @@ export const ROLES: Role[] = [
     cas: 0.8,
   },
   {
+    /**
+     * MEASURED, and the postmortem's framing did not survive it. "Nothing caps what
+     * bleeds ... past the cap every extra soldier adds full casualties and zero power"
+     * is not what this table does: a formation held in depth already bled about a
+     * twelfth of one standing in the line, against an engagement discount of a tenth.
+     * The overflow was never bleeding like frontline troops.
+     *
+     * What was real is much smaller. Bleed per point of contribution was 0.15/0.10 =
+     * 1.50 against the frontline's 1.35/1.00, so depth cost about 11% more per point of
+     * combat power than the line did. A mild inversion, not the reported catastrophe.
+     *
+     * 0.135 is exact parity: 0.135/0.10 = 1.35, the frontline's own ratio. Depth is now
+     * neither punished nor rewarded for being out of the line, and the strategic value
+     * of holding a reserve is carried by `sustain`, which is the mechanic built for it.
+     * Deliberately NOT 0.10, which was tried: that makes depth 26% CHEAPER per point of
+     * contribution than the line and, stacked on top of sustain, turns holding an army
+     * back into the dominant play. That is the Soviet air force sitting at 90 readiness
+     * behind the front for the whole war, rewarded rather than merely tolerated.
+     */
     id: "rear",
     label: "Rear Area",
     note: "Supply, command, hospitals, airbases",
     engage: 0.1,
-    cas: 0.15,
+    cas: 0.135,
   },
   {
     id: "deepstrike",

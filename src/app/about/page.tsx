@@ -3,15 +3,20 @@ import Image from "next/image";
 import Link from "next/link";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { AdSenseUnit } from "@/components/AdSenseUnit";
+import { formatNationList } from "@/lib/marketing/marketedWorld";
+import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 
-export const metadata: Metadata = publicPageMetadata({
-  title: "About | A House Divided",
-  description:
-    "Learn about A House Divided, a real-time multiplayer political and economic simulation set in the US, UK, Soviet Union, and East Germany: elections, legislation, parties, corporations, and markets on an hourly clock with no seasonal resets.",
-  pathname: "/about",
-});
+export async function generateMetadata(): Promise<Metadata> {
+  const world = await getMarketedWorldSafe();
+  return publicPageMetadata({
+    title: "About | A House Divided",
+    description: `Learn about A House Divided, a real-time multiplayer political and economic simulation set in ${formatNationList(world.playable)}: elections, legislation, parties, corporations, and markets on an hourly clock with no seasonal resets.`,
+    pathname: "/about",
+  });
+}
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const world = await getMarketedWorldSafe();
   return (
     <div className="min-h-screen bg-background pb-16">
       <div className="mx-auto max-w-4xl px-4 sm:px-6 py-10">
@@ -50,20 +55,27 @@ export default function AboutPage() {
                 based on their ideology, ensuring the simulation stays active even when human
                 players are offline.
               </p>
+              {/*
+                Playable countries come from the live registry, never from a
+                literal. This paragraph still named Japan long after Japan
+                closed to players. See lib/marketing/marketedWorld.
+              */}
               <p>
-                Currently simulated countries include the{" "}
-                <Link href="/country/us" className="text-primary hover:underline">
-                  United States
-                </Link>
-                ,{" "}
-                <Link href="/country/uk" className="text-primary hover:underline">
-                  United Kingdom
-                </Link>
-                , and{" "}
-                <Link href="/country/jp" className="text-primary hover:underline">
-                  Japan
-                </Link>
-                .
+                Countries open to players:{" "}
+                {world.playable.map((nation, i) => (
+                  <span key={nation.id}>
+                    {i > 0 && (i === world.playable.length - 1 ? ", and " : ", ")}
+                    <Link
+                      href={`/country/${nation.id.toLowerCase()}`}
+                      className="text-primary hover:underline"
+                    >
+                      {nation.name}
+                    </Link>
+                  </span>
+                ))}
+                . Another {world.registeredCountryCount - world.playable.length} nations run their
+                own economies and political machinery in the same world, and you can browse every
+                one of them.
               </p>
             </div>
           </section>

@@ -5,7 +5,13 @@ import type { Character, ElectedOfficial, Election } from "@/lib/db/types";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { runAutoReelectionEntry } from "./autoReelectionEntry";
 
-vi.mock("@/lib/elections/activeCandidacy", () => ({
+// `findBlockingActiveCandidacy` is no longer called by this phase (#574), but
+// three API routes still use it, so the module stays. Keep the REAL
+// `electionStatusBlocksFurtherEntry` — the phase now imports it to decide which
+// preloaded election statuses block entry, and a bare stub would return
+// undefined and silently unblock everything.
+vi.mock("@/lib/elections/activeCandidacy", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/elections/activeCandidacy")>()),
   findBlockingActiveCandidacy: vi.fn(),
 }));
 
@@ -88,14 +94,17 @@ describe("runAutoReelectionEntry", () => {
 
     await runAutoReelectionEntry(db as unknown as Db, now, 1);
 
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        electionId: senateClassOneId,
-        characterId,
-        characterName: "Ari Lane",
-        status: "active",
-      })
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          electionId: senateClassOneId,
+          characterId,
+          characterName: "Ari Lane",
+          status: "active",
+        }),
+      ],
+      { ordered: false }
     );
   });
 
@@ -135,13 +144,16 @@ describe("runAutoReelectionEntry", () => {
 
     await runAutoReelectionEntry(db as unknown as Db, now, 1);
 
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        electionId: snapElectionId,
-        characterId,
-        characterName: "Rowan Price",
-      })
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          electionId: snapElectionId,
+          characterId,
+          characterName: "Rowan Price",
+        }),
+      ],
+      { ordered: false }
     );
   });
 
@@ -231,13 +243,16 @@ describe("runAutoReelectionEntry", () => {
 
     await runAutoReelectionEntry(db as unknown as Db, now, 1);
 
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledTimes(1);
-    expect(db.collectionMocks.electionCandidates.insertOne).toHaveBeenCalledWith(
-      expect.objectContaining({
-        electionId: nextGovernorElectionId,
-        characterId,
-        characterName: "Jamie Brooks",
-      })
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          electionId: nextGovernorElectionId,
+          characterId,
+          characterName: "Jamie Brooks",
+        }),
+      ],
+      { ordered: false }
     );
   });
 
@@ -299,7 +314,7 @@ describe("runAutoReelectionEntry", () => {
 
     await runAutoReelectionEntry(db as unknown as Db, now, 1);
 
-    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.insertMany).not.toHaveBeenCalled();
   });
 
   it("does not auto-enter players inactive for more than 96 turns", async () => {
@@ -349,7 +364,7 @@ describe("runAutoReelectionEntry", () => {
 
     await runAutoReelectionEntry(db as unknown as Db, now, 1);
 
-    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.insertMany).not.toHaveBeenCalled();
   });
 
   it("does not auto-enter a banned-party character in an RU one-party-state race", async () => {
@@ -391,6 +406,119 @@ describe("runAutoReelectionEntry", () => {
 
     await runAutoReelectionEntry(db as unknown as Db, now, 1);
 
-    expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.electionCandidates.insertMany).not.toHaveBeenCalled();
+  });
+
+  // ── Batched-read behaviour (#574) ──────────────────────────────────────────
+  // The phase used to issue ~3 awaited round trips per eligible character.
+  // These pin the decisions that moved into memory, plus the query count.
+  describe("batched reads", () => {
+    const characterId = new ObjectId();
+    const seatElectionId = new ObjectId();
+    const otherOpenElectionId = new ObjectId();
+
+    const character = {
+      _id: characterId,
+      userId: new ObjectId(),
+      countryId: "US",
+      name: "Ari Lane",
+      homeState: "CA",
+      party: "1",
+      autoRunForReelection: true,
+    } as Character;
+
+    const heldSeat = {
+      _id: new ObjectId(),
+      characterId,
+      officeType: "governor",
+      state: "CA",
+    } as ElectedOfficial;
+
+    const seatElection = {
+      _id: seatElectionId,
+      countryId: "US",
+      electionType: "governor",
+      state: "CA",
+      status: "active",
+    } as Election;
+
+    /**
+     * `elections.find` is called twice now — once for the blocking-status
+     * preload, once for the active/upcoming set — so route by filter shape
+     * rather than returning one fixed cursor to both.
+     */
+    function wireElections(openSet: Election[], statusRows: Partial<Election>[]) {
+      db.collectionMocks.elections.find.mockImplementation((filter: Record<string, unknown>) => {
+        const byId = (filter as { _id?: { $in?: unknown[] } })._id?.$in;
+        if (byId) return makeCursor(statusRows);
+        return makeCursor(openSet);
+      });
+    }
+
+    beforeEach(() => {
+      db.collectionMocks.characters.find.mockReturnValue(makeCursor([character]));
+      db.collectionMocks.electedOfficials.find.mockReturnValue(makeCursor([heldSeat]));
+    });
+
+    it("skips a character already entered in this election", async () => {
+      db.collectionMocks.electionCandidates.find.mockReturnValue(
+        makeCursor([{ electionId: seatElectionId, characterId, status: "active" }])
+      );
+      wireElections([seatElection], [{ _id: seatElectionId, status: "active" }]);
+
+      await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+      expect(db.collectionMocks.electionCandidates.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("skips a character holding an active candidacy in another still-open race", async () => {
+      db.collectionMocks.electionCandidates.find.mockReturnValue(
+        makeCursor([{ electionId: otherOpenElectionId, characterId, status: "active" }])
+      );
+      wireElections([seatElection], [{ _id: otherOpenElectionId, status: "active" }]);
+
+      await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+      expect(db.collectionMocks.electionCandidates.insertMany).not.toHaveBeenCalled();
+    });
+
+    it("enters a character whose only other candidacy sits in a resolved race", async () => {
+      db.collectionMocks.electionCandidates.find.mockReturnValue(
+        makeCursor([{ electionId: otherOpenElectionId, characterId, status: "active" }])
+      );
+      // `resolved` is not a blocking status, so it must not gate entry.
+      wireElections([seatElection], [{ _id: otherOpenElectionId, status: "resolved" }]);
+
+      await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+      expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledTimes(1);
+    });
+
+    it("issues no per-character lookups", async () => {
+      db.collectionMocks.electionCandidates.find.mockReturnValue(makeCursor([]));
+      wireElections([seatElection], []);
+
+      await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+      expect(db.collectionMocks.electionCandidates.findOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.electionCandidates.insertOne).not.toHaveBeenCalled();
+    });
+
+    // The old code inserted one row at a time, so a second election sharing the
+    // seat key saw the first entry and skipped it. The in-memory bookkeeping
+    // has to reproduce that.
+    it("enters a character once when two open elections share the same seat", async () => {
+      const duplicateElection = { ...seatElection, _id: new ObjectId() } as Election;
+      db.collectionMocks.electionCandidates.find.mockReturnValue(makeCursor([]));
+      wireElections([seatElection, duplicateElection], []);
+
+      await runAutoReelectionEntry(db as unknown as Db, now, 1);
+
+      expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledTimes(1);
+      expect(db.collectionMocks.electionCandidates.insertMany).toHaveBeenCalledWith(
+        [expect.objectContaining({ electionId: seatElectionId, characterId })],
+        { ordered: false }
+      );
+    });
   });
 });

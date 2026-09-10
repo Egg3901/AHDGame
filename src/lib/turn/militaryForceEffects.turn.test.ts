@@ -60,7 +60,7 @@ describe("applyMilitaryForceEffects", () => {
           personnel: 1000,
           readiness: 50,
           basePower: 50,
-          upkeepBase: 10000,
+          upkeepBase: 40000,
           vet: 1,
           xp: 0,
           equipment: { firepower: 1, protection: 1, support: 1 },
@@ -83,7 +83,11 @@ describe("applyMilitaryForceEffects", () => {
     const mech = getCabinetMechanics("US", "secretary_of_defense")!;
     const metrics = [...mech.nationalMetrics, ...mech.regionalMetrics];
     const budgetPath = resolveMetricPath("governance.budgetBalance", metrics);
-    expect(bucket.national[budgetPath]).toBeLessThan(0); // upkeep (10000×2.6≈26,000M) over the floored envelope
+    // upkeepBurden = SEED_UPKEEP_TARGET_SHARE x (live / seed). The denominator is the US's
+    // own authored 1953 order of battle (~25,500), so "over budget" means outweighing a real
+    // national force, not the 4,366 the old random 13-unit roster measured. 40000 x 2.6 =
+    // 104,000 puts the burden at ~2.2.
+    expect(bucket.national[budgetPath]).toBeLessThan(0);
 
     // Drift is NOT this step's job. It moved to the appropriation sweep, which runs for
     // every country rather than only the ones holding a defence seat — see

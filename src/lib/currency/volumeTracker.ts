@@ -1,4 +1,10 @@
 /**
+ * How player currency trading moves exchange rates. computeCurrencyVolumes sums
+ * buy and sell volume per currency from the last VOLUME_LOOKBACK_TURNS turns of
+ * trade history, normalized to internal units, and feeds the net buy minus sell
+ * pressure into the rate formula.
+ */
+/**
  * Compute gross buy/sell volume per currency from trade history.
  *
  * The forex turn phase calls this once per turn to get the volume data

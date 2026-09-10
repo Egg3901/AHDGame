@@ -8,7 +8,7 @@
  * swap is behavior-preserving until a decennial census reapportions the seats.
  */
 
-import { getHouseSeats } from "@/lib/constants/states";
+import { getHouseSeats, type ElectoralVoteUnit } from "@/lib/constants/states";
 import { getStartingYearForPreset } from "@/lib/constants/turnTime";
 import { admittedStateIdsAsOf } from "./statehoodAdmission";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -81,20 +81,35 @@ export function electoralVotesFromSeats(
 export function electoralVoteUnitsFromSeats(
   seats: Record<string, number>,
   ctx: ApportionmentEraContext = {}
-): { unitId: string; ev: number; stateId: string }[] {
-  const units: { unitId: string; ev: number; stateId: string }[] = [];
+): ElectoralVoteUnit[] {
+  const units: ElectoralVoteUnit[] = [];
   const year = resolveApportionmentYear(ctx.preset, ctx.year);
   const ev = electoralVotesFromSeats(seats, ctx);
   for (const [stateId, total] of Object.entries(ev)) {
     const splitsFrom = DISTRICT_SPLIT_FROM_YEAR[stateId];
-    if (splitsFrom !== undefined && year >= splitsFrom) {
-      units.push({ unitId: stateId, ev: SENATORS_PER_STATE, stateId }); // at-large
-      const districts = seats[stateId] ?? 0;
+    const districts = seats[stateId] ?? 0;
+    if (splitsFrom !== undefined && year >= splitsFrom && districts > 0) {
+      // At-large leg: derived from this state's districts, never simulated.
+      // See `ElectoralVoteUnit` — every unit used to draw the WHOLE state's
+      // electorate from `stateId`, so a split state counted its voters once per
+      // leg (#1464).
+      units.push({
+        unitId: stateId,
+        ev: SENATORS_PER_STATE,
+        stateId,
+        electorateShare: 0,
+        derivesFromDistricts: true,
+      });
       for (let d = 1; d <= districts; d++) {
-        units.push({ unitId: `${stateId}_CD${d}`, ev: 1, stateId });
+        units.push({
+          unitId: `${stateId}_CD${d}`,
+          ev: 1,
+          stateId,
+          electorateShare: 1 / districts,
+        });
       }
     } else {
-      units.push({ unitId: stateId, ev: total, stateId });
+      units.push({ unitId: stateId, ev: total, stateId, electorateShare: 1 });
     }
   }
   return units;
@@ -106,7 +121,7 @@ export interface Apportionment {
   /** Electoral votes per state (seats + 2, + DC's 3). */
   electoralVotes: Record<string, number>;
   /** EV allocation units (ME/NE split). */
-  electoralVoteUnits: { unitId: string; ev: number; stateId: string }[];
+  electoralVoteUnits: ElectoralVoteUnit[];
 }
 
 /**

@@ -1,3 +1,5 @@
+import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import { loadOppositionTargets } from "@/lib/campaigns/oppositionTargets";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import { ApiError, badRequest, forbidden, notFound } from "@/lib/api/errors";
 import { assertSameCountry, isSameCountry } from "@/lib/api/sameCountry";
@@ -46,6 +48,7 @@ import {
   campaignStrengthBatchQuote,
   maxAffordableCampaignStrengthClicks,
 } from "@/lib/campaigns/campaignStrength";
+import { emitOpsLevelWire, emitRallyWire } from "@/lib/elections/raceWireEmit";
 
 export async function upgradeCampaign(params: {
   db: Db;
@@ -57,6 +60,7 @@ export async function upgradeCampaign(params: {
   targetId?: string;
 }) {
   const { db, campaignId, user, category, targetId } = params;
+  const campaignRates = await loadCampaignCurrencyRates(db);
   const branch = params.branch ?? null;
   const campaign = await getCampaignOrThrow(db, campaignId);
 
@@ -119,7 +123,7 @@ export async function upgradeCampaign(params: {
   // Campaign treasury is stored in the campaign's local currency; the cost
   // table is anchor. Convert at the frozen base rate (matches campaignTurn).
   const countryId = election?.countryId ?? "US";
-  const adjustedFundsLocal = campaignAnchorToLocal(adjustedFunds, countryId);
+  const adjustedFundsLocal = campaignAnchorToLocal(adjustedFunds, countryId, campaignRates);
   if (campaign.funds < adjustedFundsLocal) {
     throw badRequest("Insufficient funds");
   }
@@ -133,7 +137,7 @@ export async function upgradeCampaign(params: {
   // Bundlers (incomeLumpOnPurchase) credit a one-time cash infusion, in local $.
   const lumpFundsLocal =
     effectType === "incomeLumpOnPurchase" && cost.lumpSum
-      ? campaignAnchorToLocal(cost.lumpSum, countryId)
+      ? campaignAnchorToLocal(cost.lumpSum, countryId, campaignRates)
       : 0;
 
   // Opposition-research target resolution. Required when unlocking the oppo
@@ -163,6 +167,20 @@ export async function upgradeCampaign(params: {
     assertSameCountry(user.character, target, {
       message: "You cannot research opposition targets in other countries",
     });
+    // The starter purchase is the OTHER way a target gets set, so it answers to
+    // the same rule as /retarget. Guarding only the change would leave the one
+    // path that sets the first target open to anybody in the country.
+    if (election) {
+      const eligible = await loadOppositionTargets(
+        db,
+        election,
+        campaign.candidateId,
+        await getGameTime()
+      );
+      if (!eligible.some((t) => t.id === targetOid.toString())) {
+        throw badRequest("You can only research a candidate standing against you in this race");
+      }
+    }
     targetName = target.name;
   }
 
@@ -260,6 +278,11 @@ export async function upgradeCampaign(params: {
   }
 
   const updated = await getCampaignOrThrow(db, campaignId);
+
+  // Per-race wire. Fire-and-forget: the emitter never throws, so a wire failure
+  // cannot undo the purchase that was just committed.
+  void emitOpsLevelWire(db, updated, category);
+
   return {
     funds: updated.funds,
     actions: updated.actions,
@@ -282,6 +305,7 @@ export async function donateToCampaign(params: {
   partyId?: string;
 }) {
   const { db, campaignId, user, amount, partyId } = params;
+  const campaignRates = await loadCampaignCurrencyRates(db);
   const campaign = await getCampaignOrThrow(db, campaignId);
   const forexEnabled = await isForexEnabled();
   const turnNumber = await getCurrentTurn(db);
@@ -343,11 +367,11 @@ export async function donateToCampaign(params: {
     // currency); party and campaign share a country, so `amountPartyLocal` is
     // the correct unit for BOTH the treasury debit and the campaign credit.
     // Campaign funds are decoupled from live forex — convert at the frozen base
-    // INITIAL_RATES scale (the same scale campaign taxes fill the party treasury
+    // world base-rate scale (the same scale campaign taxes fill the party treasury
     // at). Party and campaign share a country, so this local amount is correct
     // for BOTH the treasury debit and the campaign credit.
     const amountPartyLocal = forexEnabled
-      ? campaignAnchorToLocal(amount, party.countryId ?? "US")
+      ? campaignAnchorToLocal(amount, party.countryId ?? "US", campaignRates)
       : amount;
 
     if ((party.treasury ?? 0) < amountPartyLocal) {
@@ -489,9 +513,9 @@ export async function donateToCampaign(params: {
 
   // `amount` is the user-requested donation in ANCHOR (₳) units (the UI error
   // messages say ₳ — see line 463 below). Campaign funds are decoupled from live
-  // forex — convert at the frozen base INITIAL_RATES scale.
+  // forex ; convert at the frozen world-seeded currency basis.
   const amountLocal = forexEnabled
-    ? campaignAnchorToLocal(amount, character.countryId ?? "US")
+    ? campaignAnchorToLocal(amount, character.countryId ?? "US", campaignRates)
     : amount;
   const campaignFundsField = forexEnabled ? "currencyBalances.campaign" : "funds";
   if ((character.currencyBalances?.campaign ?? character.funds ?? 0) < amountLocal) {
@@ -705,6 +729,7 @@ export async function contributeCampaignStrength(params: {
   clicks?: number | "max";
 }) {
   const { db, campaignId, user, clicks: requestedClicks = 1 } = params;
+  const campaignRates = await loadCampaignCurrencyRates(db);
   const now = new Date();
   const campaign = await getCampaignOrThrow(db, campaignId);
   const election = await db.collection<Election>("elections").findOne({ _id: campaign.electionId });
@@ -755,8 +780,10 @@ export async function contributeCampaignStrength(params: {
   // message, and the returned cost are all local (player never sees anchor).
   const homeCurrency = getHomeCurrency(character);
   // Campaign funds are decoupled from live forex — the strength cost converts at
-  // the frozen base INITIAL_RATES scale.
-  const campaignRate = forexEnabled ? campaignLocalRate(character.countryId ?? "US") : 1;
+  // the frozen world-seeded currency basis.
+  const campaignRate = forexEnabled
+    ? campaignLocalRate(character.countryId ?? "US", campaignRates)
+    : 1;
 
   const currentCS = campaign.campaignStrength ?? 0;
   const availableLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;
@@ -997,6 +1024,27 @@ export async function retargetOppositionResearch(params: {
   assertSameCountry(user.character, target, {
     message: "You cannot research opposition targets in other countries",
   });
+
+  // Same country is not the rule; the race is. Without this, research could be
+  // bought against a private citizen or a senator who is not standing — real
+  // money and actions spent to drain somebody the buyer is not running
+  // against. The list the picker offers comes from this same function, so the
+  // two cannot disagree about who is fair game.
+  const raceElection = await db
+    .collection<Election>("elections")
+    .findOne({ _id: campaign.electionId });
+  if (!raceElection) {
+    throw notFound("Election not found");
+  }
+  const eligible = await loadOppositionTargets(
+    db,
+    raceElection,
+    campaign.candidateId,
+    await getGameTime()
+  );
+  if (!eligible.some((t) => t.id === targetOid.toString())) {
+    throw badRequest("You can only research a candidate standing against you in this race");
+  }
 
   const targetName: string = target.name;
   const OPPOSITION_RESEARCH_COOLDOWN_TURNS = 6; // 6 turns = 6h at standard cadence
@@ -1354,6 +1402,9 @@ export async function fireRallyOneShot(params: {
       .updateOne({ _id: campaignId }, { $inc: { actions: actionCost } });
     throw new ApiError(409, "Rally state changed since page load. Please refresh.");
   }
+
+  // Per-race wire. Fire-and-forget, after both writes have committed.
+  void emitRallyWire(db, campaign, immediateBump);
 
   return {
     immediateBump,

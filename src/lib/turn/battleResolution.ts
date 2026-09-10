@@ -190,7 +190,13 @@ async function applyOccupation(
   loserRetreated: boolean,
   currentTurn: number
 ): Promise<{ control: number; standDown: boolean }> {
-  const control = occupationShift({ control: conflict.control, winner, margin, loserRetreated });
+  const control = occupationShift({
+    control: conflict.control,
+    winner,
+    margin,
+    loserRetreated,
+    turnsElapsed: currentTurn - conflict.startTurn,
+  });
 
   // Age out the war-approval momentum sample BEFORE the no-move early return.
   // A front that stops moving must still let its sample expire, or the next
@@ -688,6 +694,7 @@ export async function resolveBattleDeclarations(
           winner,
           margin: result.margin,
           loserRetreated,
+          turnsElapsed: currentTurn - conflict.startTurn,
         });
       }
 

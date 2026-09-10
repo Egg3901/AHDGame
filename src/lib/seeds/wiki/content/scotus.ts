@@ -6,7 +6,7 @@ The US Supreme Court is 9 seats. It is US-only. Holding a justice seat does **no
 
 Each seat has a current occupant (a player, an NPP, or a scripted historical justice) or is vacant.
 
-Until a seat's first live confirmation, it replays an **Original Roster**: historical occupants succeed each other on authored years with no vacancy gap. The first presidential nomination that confirms a new justice is the divergence point for that seat. After that, succession is in-game.
+Each preset begins with its **Original Roster**. When an original justice reaches their authored departure year, the seat becomes vacant. Historical successors are not appointed automatically: the President nominates and the Senate confirms every replacement.
 
 ## Nomination and confirmation
 
@@ -22,7 +22,7 @@ Curated historical cases resolve against the sitting Court on the calendar year 
 
 ## Tenure
 
-Scripted historical occupants leave when their authored departure is reached. After divergence, a sitting justice (player or NPP) can leave mid-term; the President and occupant are notified when a seat opens. The Court does not keep a confirmed player forever.
+Original historical occupants leave when their authored departure is reached, opening a live appointment. After that first appointment, a sitting justice (player or NPP) can leave mid-term; the President and occupant are notified when a seat opens. The Court does not keep a confirmed player forever.
 
 See also: [Bills & Legislation](/wiki/bills-legislation), [Cabinet](/wiki/cabinet), [Impeachment](/wiki/impeachment).
 `;

@@ -1,6 +1,7 @@
+import { campaignLocalRate, type CampaignCurrencyRates } from "@/lib/campaigns/rules/currency";
 // src/lib/constants/characterWealth.ts
 import type { CountryId } from "./countries";
-import { COUNTRY_CURRENCY_MAP, INITIAL_RATES, type CurrencyCode } from "./currencies";
+import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "./currencies";
 import { formatLocalAmountFull } from "@/lib/utils/formatters";
 import { getEraNominalAmount } from "./sectorSeedEra";
 
@@ -55,27 +56,31 @@ export const WEALTH_LEVELS: { value: WealthLevel; label: string }[] = [
  * so previews equal what the player actually receives. Unknown/empty codes fall
  * back to USD at parity (rate 1.0).
  */
-export function resolveStartingCurrency(countryIdRaw?: string | null): {
+export function resolveStartingCurrency(
+  countryIdRaw?: string | null,
+  rates?: CampaignCurrencyRates | null
+): {
   currencyCode: CurrencyCode;
   rate: number;
 } {
   const countryId = (countryIdRaw ?? "").toUpperCase() as CountryId;
   return {
     currencyCode: COUNTRY_CURRENCY_MAP[countryId] ?? "USD",
-    rate: INITIAL_RATES[countryId] ?? 1.0,
+    rate: campaignLocalRate(countryId, rates),
   };
 }
 
 /**
  * Convert an anchor-denominated starting amount to a country's home currency.
- * Uses INITIAL_RATES (not live DB rates) so all players created at the same
+ * Uses the world's frozen base (never live market rates) so all players created at the same
  * tier receive an identical local-currency endowment.
  */
 export function convertStartingAnchorToLocal(
   anchorAmount: number,
-  countryIdRaw?: string | null
+  countryIdRaw?: string | null,
+  rates?: CampaignCurrencyRates | null
 ): number {
-  const { rate } = resolveStartingCurrency(countryIdRaw);
+  const { rate } = resolveStartingCurrency(countryIdRaw, rates);
   return Math.round(anchorAmount * rate);
 }
 
@@ -85,9 +90,10 @@ export function convertStartingAnchorToLocal(
  * symbol. Defaults to the USD-equivalent display when no country is selected.
  */
 export function buildWealthOptions(
-  countryIdRaw?: string | null
+  countryIdRaw?: string | null,
+  rates?: CampaignCurrencyRates | null
 ): { value: WealthLevel; label: string }[] {
-  const { currencyCode, rate } = resolveStartingCurrency(countryIdRaw);
+  const { currencyCode, rate } = resolveStartingCurrency(countryIdRaw, rates);
   return WEALTH_LEVELS.map(({ value, label }) => ({
     value,
     label: `${label} - ${formatLocalAmountFull(Math.round(WEALTH_BONUS[value] * rate), currencyCode)}`,

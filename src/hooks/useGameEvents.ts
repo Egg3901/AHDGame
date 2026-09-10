@@ -39,6 +39,9 @@ export interface TurnStatus {
   canResetProcessingLock?: boolean;
   processingLockStaleAt?: string | null;
   processingTargetTurn?: number | null;
+  processingPhase?: string | null;
+  processingPhaseLabel?: string | null;
+  processingProgress?: number | null;
 }
 
 type EventHandler = (event: GameEvent) => void;
@@ -121,6 +124,7 @@ function nextPollDelay(status: TurnStatus, now: Date): number {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
     return 300_000;
   }
+  if (status.isProcessing) return 1500;
   if (!status.nextScheduledTurn || !status.isActive) return 120_000;
   const diff = new Date(status.nextScheduledTurn).getTime() - now.getTime();
   if (diff < 120_000) return 15_000; // Align near-turn polling with the API's browser cache window
@@ -136,7 +140,7 @@ function scheduleNextPoll(ms: number) {
   }, ms);
 }
 
-async function pollTurnStatus() {
+async function pollTurnStatus(force = false) {
   if (!hasSubscribers()) {
     clearScheduledPoll();
     return;
@@ -151,6 +155,7 @@ async function pollTurnStatus() {
     try {
       const res = await fetch("/api/game/turn/status", {
         signal: AbortSignal.timeout(8_000),
+        ...(force ? { cache: "no-store" as const } : {}),
       });
 
       if (res.ok) {
@@ -183,6 +188,15 @@ async function pollTurnStatus() {
   })();
 
   await pollInFlight;
+}
+
+/** A completed manual turn must update clocks and turn subscribers immediately. */
+export async function refreshGameTurnStatus(): Promise<void> {
+  clearScheduledPoll();
+  // A poll started during processing can carry the previous turn. Wait for it,
+  // then fetch the committed result instead of accepting that stale snapshot.
+  if (pollInFlight) await pollInFlight;
+  await pollTurnStatus(true);
 }
 
 function handleVisibilityChange() {

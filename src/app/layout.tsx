@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { isClientShellUserAgent, isInAppWebViewUserAgent } from "@/lib/displayMode";
 import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import Script from "next/script";
@@ -8,6 +9,7 @@ import { getLocale, getMessages, getTranslations } from "next-intl/server";
 import { NavbarWrapper } from "@/components/NavbarWrapper";
 import { BugReportFab } from "@/components/BugReportFab";
 import { StatusBar } from "@/components/StatusBar";
+import { TurnProgressToast } from "@/components/turn-progress/TurnProgressToast";
 import { TutorialCoachMount } from "@/components/tutorial/TutorialCoachMount";
 import { FeedbackProvider } from "@/contexts/FeedbackContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -27,9 +29,7 @@ import { LiveRefreshBanner } from "@/components/LiveRefreshBanner";
 import { MassCrashAlertBanner } from "@/components/MassCrashAlertBanner";
 import { MaintenancePartialBanner } from "@/components/MaintenancePartialBanner";
 import { PollBannerNotice } from "@/components/PollBannerNotice";
-import { Analytics } from "@vercel/analytics/next";
 import { isSingleplayer } from "@/lib/singleplayer";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { AdSlot } from "@/components/AdSlot";
 import { AdSenseSlot } from "@/components/AdSenseSlot";
 import { CookieConsentBanner } from "@/components/CookieConsent";
@@ -50,8 +50,11 @@ import {
   DEFAULT_SITE_DESCRIPTION,
   SITE_BRAND,
   SITE_SUBTITLE,
+  buildSiteDescription,
   getSiteUrl,
 } from "@/lib/siteMetadata";
+import { nationKeywords } from "@/lib/marketing/marketedWorld";
+import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 import { verifyAuth } from "@/lib/auth";
 import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maintenanceStatus";
 import { resolveNavbarPageCountry } from "@/lib/navigation/resolveNavbarPageCountry";
@@ -85,9 +88,13 @@ const geistMono = Geist_Mono({
   preload: false,
 });
 
+// The Blend election/campaign screens set standfirsts and rail subtitles in
+// italic Lora, so the italic face is loaded rather than left to the browser's
+// synthetic oblique.
 const lora = Lora({
   variable: "--font-lora",
   subsets: ["latin"],
+  style: ["normal", "italic"],
   display: "swap",
 });
 
@@ -98,8 +105,9 @@ const fraunces = Fraunces({
   preload: false,
 });
 
-// Only used by the 1953 CRT command theme (globals.css) — never above the fold
-// on a default load.
+// Used by the 1953 CRT command theme (globals.css) and by the Blend campaign /
+// election screens, which set every numeric and label in it. Neither is the
+// default landing surface, so it stays out of the preload set.
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
   subsets: ["latin"],
@@ -112,37 +120,60 @@ const defaultDocumentTitle = `${SITE_BRAND} | ${SITE_SUBTITLE}`;
 const GA_MEASUREMENT_ID = "G-5GBG3BHWCZ";
 const GOOGLE_ADS_ID = "AW-18130975758";
 
-export const metadata: Metadata = {
-  title: defaultDocumentTitle,
-  // Icons are automatically picked up from icon.png and apple-icon.png in app directory
-  description: DEFAULT_SITE_DESCRIPTION,
-  manifest: "/manifest.webmanifest",
-  metadataBase: new URL(siteUrl),
-  openGraph: {
+/**
+ * Async so the description and the SEO keywords name the countries that are
+ * ACTUALLY open to players right now. Both used to be hand-written lists, and
+ * both went stale independently: the keywords tag was still selling Germany and
+ * Japan months after those closed. Source of truth is
+ * `lib/marketing/marketedWorldServer`; the read is served from a 5-minute
+ * in-process cache, so this does not add a Mongo round-trip per request.
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const world = await getMarketedWorldSafe();
+  const description = buildSiteDescription(world);
+  const keywords = [
+    "political simulation game",
+    "economic simulation",
+    "multiplayer elections",
+    "congress",
+    "parliament",
+    "campaigns",
+    "corporations",
+    "forex",
+    ...nationKeywords(world.playable),
+  ].join(", ");
+
+  return {
     title: defaultDocumentTitle,
-    description: DEFAULT_SITE_DESCRIPTION,
-    type: "website",
-    siteName: SITE_BRAND,
-    url: siteUrl,
-    locale: "en_US",
-    images: [
-      {
-        url: CDN_LOGO_URL,
-        width: 256,
-        height: 256,
-        alt: SITE_BRAND,
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: defaultDocumentTitle,
-    description: DEFAULT_SITE_DESCRIPTION,
-    images: [CDN_LOGO_URL],
-  },
-  keywords:
-    "political simulation game, economic simulation, multiplayer elections, congress, parliament, campaigns, corporations, forex, US politics, UK politics, Soviet Union politics, East Germany politics",
-};
+    // Icons are automatically picked up from icon.png and apple-icon.png in app directory
+    description,
+    manifest: "/manifest.webmanifest",
+    metadataBase: new URL(siteUrl),
+    openGraph: {
+      title: defaultDocumentTitle,
+      description,
+      type: "website",
+      siteName: SITE_BRAND,
+      url: siteUrl,
+      locale: "en_US",
+      images: [
+        {
+          url: CDN_LOGO_URL,
+          width: 256,
+          height: 256,
+          alt: SITE_BRAND,
+        },
+      ],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: defaultDocumentTitle,
+      description,
+      images: [CDN_LOGO_URL],
+    },
+    keywords,
+  };
+}
 
 const jsonLd = {
   "@context": "https://schema.org",
@@ -166,7 +197,10 @@ export default async function RootLayout({
     getTranslations("layout"),
   ]);
   const userAgent = requestHeaders.get("user-agent") ?? "";
-  const isNativeApp = userAgent.includes("AHD-Android");
+  // Both the Capacitor app and the AHDClient mobile shell: no ad slots, no
+  // consent prompts, no cookie banner inside an app webview.
+  const isNativeApp = isInAppWebViewUserAgent(userAgent);
+  const isClientShell = isClientShellUserAgent(userAgent);
   const host = requestHeaders.get("host");
   const pathname = requestHeaders.get("x-pathname") ?? "/";
   const displayMode = cookieStore.get("ahd-display-mode")?.value as
@@ -201,7 +235,7 @@ export default async function RootLayout({
   } catch {
     // keep the COUNTRY_ORDER + 2019-default + no-override fallback
   }
-  if (!isMaintenanceBypassPath(pathname)) {
+  if (!isSingleplayer() && !isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws. The proxy is the primary
     // gate; this layout-level check is defense in depth, so a transient DB
     // blip here should render the page rather than 500 the whole layout.
@@ -327,6 +361,8 @@ export default async function RootLayout({
                         <CharacterStatsProvider>
                           {!isWikiSubdomain && (
                             <NavbarWrapper
+                              singleplayer={singleplayer}
+                              clientShell={isClientShell}
                               displayMode={displayMode}
                               initialPageCountry={initialPageCountry}
                             />
@@ -357,14 +393,25 @@ export default async function RootLayout({
                           {!isWikiSubdomain && !isNativeApp && <AdSlot />}
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
                           {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
-                          {!isWikiSubdomain && <StatusBar />}
+                          {!isWikiSubdomain && <StatusBar showOnlineStatus={!isClientShell} />}
+                          {!isWikiSubdomain && singleplayer && <TurnProgressToast />}
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}
                           {!isNativeApp && <CookieConsentBanner />}
                           {/* A singleplayer build runs on the player's machine with no
-                              account and nothing to measure. None of the telemetry or
-                              ad tags below have a job there, and the Vercel ones are
-                              dead even in production. */}
+                              account and nothing to measure, so none of the telemetry
+                              or ad tags below have a job there.
+                              `@vercel/analytics` and `@vercel/speed-insights` used to
+                              sit here too. Production is Railway, so the
+                              `/_vercel/insights/script.js` and
+                              `/_vercel/speed-insights/script.js` they inject at runtime
+                              404 — and the Next 404 page they get back is ~34KB brotli,
+                              `private, no-store`, `cf-cache-status: BYPASS`. That cost
+                              every full document load two origin round-trips, two SSR
+                              404 renders and ~68KB for telemetry that never recorded
+                              anything. Removed 2026-09-06; see layout.telemetry.test.ts.
+                              Page views are already covered by SiteTrafficTracker and
+                              the self-hosted umami tag below. */}
                           {!singleplayer && (
                             <>
                               {renderConsentManagedGoogleTags ? (
@@ -395,8 +442,6 @@ export default async function RootLayout({
                                 data-website-id="caa223b2-469d-4325-9ad3-63e3e87ed3d1"
                                 strategy="afterInteractive"
                               />
-                              <Analytics />
-                              <SpeedInsights />
                             </>
                           )}
                         </CharacterStatsProvider>

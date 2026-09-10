@@ -1,7 +1,7 @@
 import { ObjectId, type Db } from "mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth";
 import { isInNewCharacterCooldown } from "@/lib/auth/newCharacterCooldown";
-import { getPartyTenure } from "@/lib/parties/leadershipTenure";
+import { getLeadershipEligibility } from "@/lib/parties/leadershipTenure";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { getEligibleVoterSet } from "@/lib/parties/proposals";
 import {
@@ -10,6 +10,10 @@ import {
 } from "@/lib/nationalCommitteeElections";
 import { NATIONAL_ALL_POSITIONS } from "@/lib/nationalPartyElections";
 import { getPartyRoleLabel } from "@/lib/parties/partyRoleLabels";
+import {
+  CANONICAL_VOTING_ELECTION_SORT,
+  pickCanonicalVotingElectionPerKey,
+} from "@/lib/elections/canonicalVotingElection";
 import { getBannedCharacterIds } from "@/lib/utils/bannedCharacters";
 import type {
   Character,
@@ -59,12 +63,19 @@ export async function getNationalPartyElectionState(
   // enter/vote routes enforce the same waiver server-side.
   const hasFoundingElection = activeElections.some((election) => election.founding === true);
 
-  // `canRun` retains the membership + committee-method eligibility gate but
-  // intentionally NOT the 24h new-character cooldown — that's surfaced via
-  // `runCooldownUntil` instead, so the panel can render a disabled Run button
-  // with a countdown rather than hide it silently. `canVote` keeps the
-  // cooldown gate to preserve the existing "no votes during cooldown" UX
-  // (the vote routes enforce the cooldown server-side too).
+  // `canRun` retains the membership gate but intentionally NOT the 24h
+  // new-character cooldown — that's surfaced via `runCooldownUntil` instead, so
+  // the panel can render a disabled Run button with a countdown rather than
+  // hide it silently. `canVote` keeps the cooldown gate to preserve the
+  // existing "no votes during cooldown" UX (the vote routes enforce the
+  // cooldown server-side too).
+  //
+  // The election method decides who VOTES, never who runs (ticket #1291). Each
+  // method is described to players purely as an electorate rule — "Only
+  // committee members and national leadership vote, one vote each" — and the
+  // enter route enforces no method restriction at all, so gating `canRun` on it
+  // here disagreed with both the copy and the server. Under the committee
+  // method any member may stand; only the committee casts ballots.
   let canRun = !!isMember;
   let canVote = !!isMember;
   let runCooldownUntil: string | null = null;
@@ -72,7 +83,6 @@ export async function getNationalPartyElectionState(
     if (party.leadershipElectionMethod === "committee") {
       const eligible = getEligibleVoterSet(party);
       if (!eligible.has(authUser.character._id.toString())) {
-        canRun = false;
         canVote = false;
       }
     }
@@ -95,16 +105,16 @@ export async function getNationalPartyElectionState(
       // disabled from both running and voting (the enter/vote routes enforce
       // this server-side too). Pre-disabling avoids a click-then-403.
       const currentTurn = await getCurrentTurn(db);
-      if (!getPartyTenure(authUser.character.partyJoinedTurn, currentTurn).eligible) {
+      if (!getLeadershipEligibility(authUser.character, currentTurn, partyId).eligible) {
         canRun = false;
         canVote = false;
       }
     }
   } else if (isMember && authUser?.character && party.leadershipElectionMethod === "committee") {
-    // Committee-method restriction still applies during founding elections.
+    // Committee-method restriction still applies during founding elections —
+    // to the ballot only, same as above.
     const eligible = getEligibleVoterSet(party);
     if (!eligible.has(authUser.character._id.toString())) {
-      canRun = false;
       canVote = false;
     }
   }
@@ -115,7 +125,11 @@ export async function getNationalPartyElectionState(
     treasurer: party.treasurerId?.toString() ?? null,
   };
 
-  const activePositions = new Set(activeElections.map((election) => election.position));
+  const canonicalActiveElections = pickCanonicalVotingElectionPerKey(
+    activeElections,
+    (election) => election.position
+  );
+  const activePositions = new Set(canonicalActiveElections.map((election) => election.position));
   const missingPositions = NATIONAL_ALL_POSITIONS.filter(
     (position) => !activePositions.has(position)
   );
@@ -141,8 +155,13 @@ export async function getNationalPartyElectionState(
           .toArray();
 
   const electionByPosition = new Map<NationalPartyElectionPosition, NationalPartyElection>();
-  for (const election of [...activeElections, ...completedElections]) {
+  for (const election of canonicalActiveElections) {
     electionByPosition.set(election.position, election);
+  }
+  for (const election of completedElections) {
+    if (!electionByPosition.has(election.position)) {
+      electionByPosition.set(election.position, election);
+    }
   }
 
   const electionIds = [...electionByPosition.values()].map((election) => election._id);
@@ -159,7 +178,7 @@ export async function getNationalPartyElectionState(
     };
   }
 
-  const activeElectionIds = activeElections.map((election) => election._id);
+  const activeElectionIds = canonicalActiveElections.map((election) => election._id);
   const bannedCharacterIds = await getBannedCharacterIds(db);
   const voteMatch: Record<string, unknown> = { electionId: { $in: electionIds } };
   const bannedVoterObjectIds = [...bannedCharacterIds].map((id) => new ObjectId(id));
@@ -403,7 +422,10 @@ export async function getNationalCommitteeState(
   const election =
     (await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
-      .findOne({ partyId, countryId: partyCountryId, status: "voting" })) ??
+      .findOne(
+        { partyId, countryId: partyCountryId, status: "voting" },
+        { sort: CANONICAL_VOTING_ELECTION_SORT }
+      )) ??
     (await db
       .collection<NationalCommitteeElection>("nationalCommitteeElections")
       .findOne(

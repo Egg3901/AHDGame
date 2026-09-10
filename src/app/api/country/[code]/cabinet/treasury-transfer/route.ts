@@ -9,6 +9,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
+import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import {
   TREASURY_TRANSFER_MAX_PER_TURN_FRACTION,
@@ -120,7 +121,13 @@ export async function POST(request: Request, context: RouteContext) {
       gdp: budget.gdpSmoothed ?? budget.gdp,
       storedCeiling: budget.debt?.ceiling ?? 0,
     });
-    if (typeof debtCeiling === "number" && budget.surplus - parsed.data.amount < -debtCeiling) {
+    // Derived, not read: `surplus` is a cache that drifts between turns' writers, and
+    // this gates a player's transfer against the debt ceiling. A stale cache here either
+    // blocks a legal transfer or waves through one that breaches the ceiling.
+    if (
+      typeof debtCeiling === "number" &&
+      federalSurplus(budget) - parsed.data.amount < -debtCeiling
+    ) {
       throw badRequest("Transfer would breach the federal debt ceiling.");
     }
 

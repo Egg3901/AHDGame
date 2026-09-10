@@ -84,6 +84,7 @@ import {
 } from "@/lib/constants/commodities";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import { getEffectiveStrategyRates } from "@/lib/constants/sectorStrategies";
+import { retoolProductionMeasurements } from "@/lib/corporations/retooling/rules";
 import {
   computeExtractionCapacityMultipliers,
   type ExtractionSectorInput,
@@ -105,11 +106,20 @@ export async function buildCorporationLookups(
   db: Db,
   options?: {
     /**
+     * Skip the per-sector `buildQueue` (30% of every sector document). Only
+     * the corporation turn advances build orders; the share-price recompute
+     * reads none of it. Never set this on the corporation turn: sectorTurn
+     * rebuilds the queue from what it loaded and writes it back.
+     */
+    omitBuildQueue?: boolean;
+    /**
      * Plants tier (marketSystemMode >= "plants"): compute per-sector market
      * share on the owned-capacity basis instead of revenue. Omitted/false
      * keeps the legacy revenue-based share exactly.
      */
     plantsEnabled?: boolean;
+    /** Target turn for production and the blended recipe; stored turn for read-only callers. */
+    productionTurn?: number;
     /**
      * Money wiring (interstate-logistics plan step 5, phase A):
      * gameConfig.interstateMoneyWiringEnabled. When true, loads last turn's
@@ -189,9 +199,19 @@ export async function buildCorporationLookups(
     db.collection<Corporation>("corporations").find({}).toArray(),
     // `plantsPnl` is ~15% of the collection. corporationTurn writes it via
     // sectorTurn as a complete overwrite and never reads the prior value.
+    // `soldByCommodity` is likewise overwritten by sector telemetry.
     db
       .collection<CorporateSector>("corporateSectors")
-      .find({}, { projection: { plantsPnl: 0 } })
+      .find(
+        {},
+        {
+          projection: {
+            plantsPnl: 0,
+            soldByCommodity: 0,
+            ...(options?.omitBuildQueue ? { buildQueue: 0 } : {}),
+          },
+        }
+      )
       .toArray(),
     // Legacy-shaped view so the headline maps, condition modifiers, and the
     // margin engine's stored-value reads keep their single-doc shape.
@@ -338,6 +358,15 @@ export async function buildCorporationLookups(
     }
   }
   for (const sector of allSectors) {
+    if (options?.plantsEnabled && sector.transitionFromStrategyId) {
+      Object.assign(
+        sector,
+        retoolProductionMeasurements({
+          ...sector,
+          currentTurn: options.productionTurn ?? embargoTurn,
+        })
+      );
+    }
     if (!sector.countryId) {
       (sector as { countryId: string }).countryId = stateCountryMap.get(sector.stateId) ?? "US";
     }
@@ -919,7 +948,7 @@ export async function buildCorporationLookups(
     { utilization: number; bindingResource: ExtractableResource | null }
   >();
   if (extractionSectors.length > 0) {
-    const capacityTurn = await getCurrentTurn(db);
+    const capacityTurn = options?.productionTurn ?? (await getCurrentTurn(db));
     // Mirror the supply-ledger input exactly (commodityPriceTurn): the
     // extraction output-scale flag gates the per-resource boost, and the
     // ₳↔unit conversion runs on this world's ERA base-price table. The

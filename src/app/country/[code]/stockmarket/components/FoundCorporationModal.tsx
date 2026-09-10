@@ -413,7 +413,7 @@ export function FoundCorporationModal({
                 </div>
               </div>
               <p className="mt-1.5 text-xs text-muted">
-                Sectors matching this type earn a +5% margin bonus; mismatched sectors take a −15%
+                Sectors matching this type earn a +10% margin bonus; mismatched sectors take a −15%
                 penalty.
               </p>
             </div>
@@ -453,7 +453,7 @@ export function FoundCorporationModal({
                 </div>
               </div>
               <p className="mt-1.5 text-xs text-muted">
-                Gives matching sectors a half-strength +2.5% bonus (instead of the −15% mismatch
+                Gives matching sectors a half-strength +5% bonus (instead of the −15% mismatch
                 penalty). In exchange, the sprawl penalty doubles. Can be changed later, but that
                 triggers a 48-turn cooldown and a 24-turn −10% margin penalty on every sector.
               </p>

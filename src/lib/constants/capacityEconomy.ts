@@ -1,4 +1,12 @@
 /**
+ * Plants and capacity: what a unit of production capacity costs, how long a build
+ * takes and how long it takes to pay back. capacityPricePerUnit prices capacity
+ * from commodity base prices and strategy output; CAPACITY_BUILD_TURNS runs from
+ * 12 turns (retail) to 60 (telecommunications, real estate), where 48 turns is a game year.
+ * Cancelled builds refund 75%, idle capacity still pays 30% upkeep
+ * (IDLE_UPKEEP_FRACTION), mothballed 5%, and attacks transfer only 60% of captured capacity.
+ */
+/**
  * Capacity economy anchors — what a unit of productive capacity COSTS and how
  * many workers it TAKES (P1 of the "buildable sectors" plan).
  *
@@ -88,13 +96,24 @@
  *
  *     capacityPricePerUnit = cash / Δunits
  *                          = GROWTH_COST_MULTIPLIER × Δrevenue / (Δrevenue × k)
- *                          = GROWTH_COST_MULTIPLIER × RPU(type)   ◀ IDENTITY B
+ *                          = GROWTH_COST_MULTIPLIER × RPU(type, strategy)   ◀ IDENTITY B
  *
  * Again scale-free. Note both identities are ratios of the SAME cancelling
  * Δrevenue, so A and B are consistent with each other by construction:
  * capacityPricePerUnit / laborIntensity = GROWTH_COST_MULTIPLIER ×
- * REVENUE_PER_WORKER for every sector type, in every era with matching era
- * columns — a relationship the tests pin.
+ * REVENUE_PER_WORKER, in every era with matching era columns — a relationship
+ * the tests pin.
+ *
+ * ⚠️ SCOPE OF THE A↔B RELATIONSHIP. Identity B is now evaluated at the
+ * sector's ACTUAL strategy, while `laborIntensity` (identity A) is still
+ * evaluated at the TYPE's default mix. The two therefore coincide only at the
+ * default strategy, which is exactly where `capacityEconomy.test.ts` pins them.
+ * That is correct rather than an oversight: real staffing does not come from
+ * identity A at all — `calculateWorkers(revenue, workforceSkill)` derives
+ * headcount from REVENUE, which is already strategy-aware, so a strategy-aware
+ * price and a type-level labour anchor stay consistent in practice. Making A
+ * strategy-aware too would change no live staffing number and is deliberately
+ * not done here.
  *
  * The rate/dominance/acumen multipliers in `calculateDailyGrowthCost` are
  * deliberately EXCLUDED: they are situational modifiers on a transaction, not
@@ -115,6 +134,11 @@
  * and will be re-tuned by worldsim.
  */
 
+import {
+  COLD_CAPACITY_UPKEEP_FRACTION,
+  expansionCostMultiplier,
+  investmentBuildTurns,
+} from "@/lib/corporations/investment/rules";
 import {
   CORPORATION_TYPES,
   GROWTH_COST_MULTIPLIER,
@@ -276,20 +300,11 @@ export function revenuePerCapacityUnitForStrategy(
  * transition margin penalty, and the retool fee — all of which already exist.
  * Retooling is a re-aim, not a capital grant.
  *
- * TRANSITION WINDOW (deliberate, documented simplification): the engine blends
- * the two strategies' rates linearly over `STRATEGY_TRANSITION_TURNS` (12) via
- * `getEffectiveStrategyRates`, so mid-transition the sector's effective mixPrice
- * sits between RPU_old and RPU_new while its stock has ALREADY been rescaled to
- * the destination. The nameplate therefore misprices during the blend. We accept
- * that, and rescale ONCE at commit using the FINAL rates, because:
- *   - the error is bounded by the RPU ratio and decays linearly to exactly 0 at
- *     the end of the window (12 turns = half a financial day);
- *   - the alternative (re-scaling every turn against the blended rates) makes
- *     `capitalStock` a derived quantity that moves under the sector's feet every
- *     turn of the window, which would fight depreciation, the build queue and
- *     the flip migration, all of which treat the stock as owned state;
- *   - a one-shot rescale at a player-initiated boundary is auditable; a
- *     per-turn one is not.
+ * TRANSITION WINDOW: owned stock and paid orders use the destination basis.
+ * The turn converts that stock into the blended recipe's physical units for
+ * production, and converts produced units back before charging the held opex
+ * anchor. Nameplate value stays constant through the blend; depreciation and
+ * new construction still move owned stock in the usual way.
  *
  * Returns `capitalStock` unchanged when there is nothing meaningful to do (no
  * stock, a strategy with no priced output on either side, a non-finite input) —
@@ -335,6 +350,14 @@ export function capacityRescaleRatio(
 /**
  * Apply the retool rescale to a whole build queue, in place-free form.
  * `unitsOrdered` scales; everything else (paid cash, turn stamps) is untouched.
+ *
+ * `strategyId` is deliberately CARRIED THROUGH UNCHANGED by the spread. It
+ * records the strategy an order was PRICED at, not the strategy the sector now
+ * runs, and that is exactly what keeps the paid basis honest: an order bought
+ * as coal stays recorded as coal while its `unitsOrdered` is divided down so
+ * the nameplate it delivers is unchanged. Re-stamping it to the destination
+ * strategy without also re-charging the order would assert the corp had paid
+ * the rare-earth price when it had not.
  */
 export function rescaleBuildQueueForStrategyChange<T extends { unitsOrdered: number }>(
   queue: readonly T[] | null | undefined,
@@ -464,22 +487,54 @@ export function capacityEraLaborIndex(year: number | null | undefined): number {
 // ─── Public anchors ─────────────────────────────────────────────────────────
 
 /**
- * IDENTITY B — ₳ to build one unit/day of capacity in `sectorType`, at the
- * world's current `year`.
+ * IDENTITY B — ₳ to build one unit/day of capacity in `sectorType` running
+ * `strategyId`, at the world's current `year`.
  *
- *     capacityPricePerUnit = GROWTH_COST_MULTIPLIER × RPU(type) × eraPriceIndex(year)
+ *     capacityPricePerUnit = GROWTH_COST_MULTIPLIER × RPU(type, strategy) × eraPriceIndex(year)
  *
  * At `year = 1953` the era index is 1.0, so this is exactly the ₳ the legacy
  * growth path charges for the same increment of capacity.
+ *
+ * ─── WHY THE PRICE IS STRATEGY-AWARE ───────────────────────────────────────
+ * This used to read `revenuePerCapacityUnit(sectorType, unitScale)` — the
+ * TYPE's default ("standard") mix — while revenue has always been computed from
+ * the sector's ACTUAL strategy (`sectorProfitBasis`'s nameplate leg). The two
+ * legs therefore priced and paid for different products.
+ *
+ * For extraction the gap is 326.9x: `rare_earth` carries a 21,000 base price
+ * but only a 0.14 rate in the diversified mix, so it contributes 0.06% of that
+ * mix's unit yield (RPU 89.23) and 100% of `rare_earth_mining`'s (RPU
+ * 29,166.67). Capacity bought at the diversified price and pointed at rare
+ * earth repaid its capex in 0.22 turns against the 72 turns
+ * (GROWTH_COST_MULTIPLIER = 3.0 days) every other build pays — measured live at
+ * turn 694, where every US sector type sat at revenue/capacityBook 0.16-0.46
+ * and rare-earth mining sat at 44.77.
+ *
+ * The invariant this restores, asserted over every (type, strategy) pair in
+ * `capacityEconomy.strategyPricing.test.ts`:
+ *
+ *     capacityPricePerUnit / revenuePerCapacityUnitForStrategy === GROWTH_COST_MULTIPLIER
+ *
+ * `strategyId` is REQUIRED but nullable so the compiler enumerates every
+ * pricing site rather than leaving silent 3-arg callers behind;
+ * `revenuePerCapacityUnitForStrategy` falls back to the default strategy for
+ * null, so `null` is byte-identical to the old behaviour.
+ *
+ * NOTE this does NOT retire the D9 retool rescale
+ * ({@link rescaleCapacityForStrategyChange}). That closes a different route:
+ * capacity already BOUGHT at the coal price and then re-pointed at rare earth.
+ * Pricing fixes new builds; D9 fixes re-aiming existing stock. Both are needed,
+ * and the payback test above fails if either is removed.
  */
 export function capacityPricePerUnit(
   sectorType: CorporationType,
   year: number,
-  unitScale: number
+  unitScale: number,
+  strategyId: string | null | undefined
 ): number {
   return (
     GROWTH_COST_MULTIPLIER *
-    revenuePerCapacityUnit(sectorType, unitScale) *
+    revenuePerCapacityUnitForStrategy(sectorType, strategyId, unitScale) *
     capacityEraPriceIndex(year)
   );
 }
@@ -510,7 +565,8 @@ export function laborIntensity(
 // ─── Construction time ──────────────────────────────────────────────────────
 
 /**
- * PROVISIONAL construction times, in TURNS, to deliver a capacity build.
+ * Authored base construction times, in turns. investmentBuildTurns applies
+ * the ordinary heavy-build reduction while preserving founding durations.
  *
  * There is no observed quantity to calibrate against — the legacy growth path
  * delivers capacity continuously with no build lag at all — so unlike the two
@@ -547,9 +603,12 @@ const CAPACITY_BUILD_TURNS_TABLE: Record<CorporationType, number> = {
 /** Fallback for an unrecognized sector type (mid-table). */
 export const CAPACITY_BUILD_TURNS_DEFAULT = 48;
 
-/** PROVISIONAL — turns to complete a capacity build in `sectorType`. */
-export function CAPACITY_BUILD_TURNS(sectorType: CorporationType): number {
-  return CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT;
+/** Turns to complete a new build. Existing orders keep their stored window. */
+export function CAPACITY_BUILD_TURNS(sectorType: CorporationType, founding = false): number {
+  return investmentBuildTurns(
+    CAPACITY_BUILD_TURNS_TABLE[sectorType] ?? CAPACITY_BUILD_TURNS_DEFAULT,
+    founding
+  );
 }
 
 /** Every sector type, for exhaustive iteration in tests and tooling. */
@@ -569,14 +628,11 @@ export const CAPACITY_SECTOR_TYPES: ReadonlyArray<CorporationType> = CORPORATION
 export const CAPACITY_BUILD_CANCEL_REFUND = 0.75;
 
 /**
- * Upkeep a MOTHBALLED sector pays, as a fraction of the maintenance its full
- * capacity would cost while running (D12). A mothballed plant produces nothing
- * and offers nothing, but it is not free: the site is still held, maintained
- * against corrosion and staffed by a care-and-maintenance crew. 0.2 makes
- * mothballing a large saving (80%) without making it strictly better than
- * running a marginal plant.
+ * Upkeep on parked capacity, as a fraction of its anchored maintenance basis.
+ * A mothballed plant produces and offers nothing. Its owned capacity and paid
+ * basis remain, with normal depreciation and reduced maintenance costs.
  */
-export const MOTHBALL_UPKEEP_FRACTION = 0.2;
+export const MOTHBALL_UPKEEP_FRACTION = COLD_CAPACITY_UPKEEP_FRACTION;
 
 /**
  * Share of the pro-rata maintenance cost that IDLE (built but unused) capacity
@@ -748,6 +804,13 @@ export interface BuildCostInputs {
   sectorType: CorporationType;
   /** Capacity units ordered (output units/day). */
   units: number;
+  /**
+   * The production method the capacity will run. REQUIRED (pass `null` for the
+   * sector-type default) so the compiler enumerates every build-pricing site:
+   * capacity is priced at the RPU of the product it will actually make, not the
+   * type's default mix. See {@link capacityPricePerUnit} for why.
+   */
+  strategyId: string | null;
   /** World year — drives the era price column. */
   year: number;
   /**
@@ -802,6 +865,8 @@ export interface BuildCostBreakdown {
   hostPriceMultiplier: number;
   /** Founding discount multiplier (1 for an ordinary build). */
   foundingMultiplier: number;
+  /** Discount for ordinary expansion; founder pricing is unchanged. */
+  expansionMultiplier: number;
   /** Total ₳ charged for the order. */
   totalAnchor: number;
 }
@@ -816,7 +881,7 @@ export interface BuildCostBreakdown {
  *                   × acumenMult(acumen)
  *                   × techMult(growthCostMultiplier)
  *                   × hostPriceMult(costOfLiving)
- *                   × foundingMult
+ *                   × foundingMult × expansionMult
  *
  * The situational multipliers are deliberately the SAME ones the legacy growth
  * path charges (`calculateDailyGrowthCost`): dominance
@@ -864,6 +929,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
   const {
     sectorType,
     units,
+    strategyId,
     year,
     eraUnitScale,
     marketSharePercent = 0,
@@ -875,7 +941,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     techGrowthCostMultiplier = 1,
   } = inputs;
   const safeUnits = Number.isFinite(units) && units > 0 ? units : 0;
-  const unitPriceAnchor = capacityPricePerUnit(sectorType, year, eraUnitScale);
+  const unitPriceAnchor = capacityPricePerUnit(sectorType, year, eraUnitScale, strategyId);
   // Dominance is scaled by how contested the cell is. The factor multiplies the
   // toll's EXCESS over 1.0, so a market with no rivals still pays a monopoly
   // premium, just a smaller one — and a sub-threshold sector (multiplier 1) is
@@ -906,6 +972,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       : 1;
   const hostPriceMultiplier = hostBuildPriceIndex(hostCostOfLivingIndex);
   const foundingMultiplier = founding ? CAPACITY_FOUNDING_DISCOUNT : 1;
+  const expansionMultiplier = expansionCostMultiplier(founding);
   return {
     unitPriceAnchor,
     dominanceMultiplier,
@@ -914,6 +981,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
     techMultiplier,
     hostPriceMultiplier,
     foundingMultiplier,
+    expansionMultiplier,
     totalAnchor:
       safeUnits *
       unitPriceAnchor *
@@ -922,6 +990,7 @@ export function computeBuildCost(inputs: BuildCostInputs): BuildCostBreakdown {
       acumenMultiplier *
       techMultiplier *
       hostPriceMultiplier *
-      foundingMultiplier,
+      foundingMultiplier *
+      expansionMultiplier,
   };
 }

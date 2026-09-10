@@ -1,4 +1,11 @@
 /**
+ * US cabinet offices and what each one does. US_CABINET_MECHANICS lists all 16
+ * positions (Secretary of State, Treasury, Defense, Attorney General, Interior,
+ * Agriculture, Commerce, Labor, Health, HUD, Transportation, Energy, Education,
+ * Veterans, Homeland Security, Director of Intelligence) with the national and
+ * regional metrics each office moves, its allocation panels and its emergencies.
+ */
+/**
  * US Cabinet mechanics configuration.
  * Drives the per-position Office page: national/regional metrics, tier settings,
  * regional target mechanics, allocation panels, and emergencies.

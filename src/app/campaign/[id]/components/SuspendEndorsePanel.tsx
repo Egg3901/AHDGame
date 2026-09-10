@@ -1,6 +1,16 @@
+"use client";
+
 import { useState } from "react";
 import { Modal } from "@/components/ui";
 import { LocalTime } from "@/components/time/LocalTime";
+import { BLEND, FONT } from "@/components/blend/tokens";
+import {
+  blendButtonStyle,
+  BlendLabel,
+  BlendNote,
+  BlendProse,
+  BlendSelect,
+} from "@/components/blend/BlendControls";
 
 interface SuspendEndorsePanelProps {
   campaignId: string;
@@ -49,7 +59,8 @@ export function SuspendEndorsePanel({
       setConfirmOpen(false);
       onRefresh();
     } catch {
-      setError("Network error — please try again");
+      setError("Network error. Please try again.");
+      return;
     } finally {
       setBusy(false);
     }
@@ -57,9 +68,18 @@ export function SuspendEndorsePanel({
 
   if (campaignSuspended) {
     return (
-      <div className="mb-6 rounded-xl border border-warning/30 bg-warning/5 p-4">
-        <h2 className="text-sm font-semibold text-foreground">Campaign suspended</h2>
-        <p className="mt-2 text-sm text-muted">
+      <div style={{ marginBottom: 22 }}>
+        <h3
+          style={{
+            margin: "0 0 10px",
+            fontFamily: FONT.serif,
+            fontSize: 17,
+            fontWeight: 600,
+          }}
+        >
+          Campaign suspended
+        </h3>
+        <BlendNote tone="caution">
           You remain on the ballot, but active campaigning is paused.
           {endorsementTargetWithdrawn ? (
             <>
@@ -71,17 +91,24 @@ export function SuspendEndorsePanel({
             <>
               {" "}
               You endorsed{" "}
-              <span className="font-medium text-foreground">{endorsedCandidate.name}</span>. 25% of
-              your campaign strength transferred immediately at endorsement. 25% of your per-state
-              character org boosts their electoral vote math each turn — your org is not debited.
-              Your existing votes are preserved but you will not accumulate any more.
+              <span style={{ color: BLEND.ink, fontWeight: 600 }}>{endorsedCandidate.name}</span>.
+              25% of your campaign strength transferred immediately at endorsement. 25% of your
+              per-state character org boosts their electoral vote math each turn, and your org is
+              not debited. Your existing votes are preserved but you will not accumulate any more.
             </>
           ) : null}
-        </p>
+        </BlendNote>
         {suspendedAt && (
-          <p className="mt-1 text-xs text-muted/70">
+          <div
+            style={{
+              marginTop: 7,
+              fontFamily: FONT.mono,
+              fontSize: 10.5,
+              color: BLEND.mutedDimmer,
+            }}
+          >
             Suspended <LocalTime value={suspendedAt} />
-          </p>
+          </div>
         )}
       </div>
     );
@@ -93,25 +120,31 @@ export function SuspendEndorsePanel({
 
   return (
     <>
-      <div className="mb-6 rounded-xl border border-card-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">Suspend &amp; Endorse</h2>
-        <p className="mt-1 text-xs text-muted">
+      <div style={{ marginBottom: 22 }}>
+        <h3
+          style={{
+            margin: "0 0 8px",
+            fontFamily: FONT.serif,
+            fontSize: 17,
+            fontWeight: 600,
+          }}
+        >
+          Suspend and endorse
+        </h3>
+        <BlendProse>
           Step aside during the general election and back another nominee. You stay on the ballot,
           but campaign operations stop. 25% of your campaign strength transfers immediately to your
           endorsed candidate. 25% of your per-state character org boosts their electoral vote math
-          each turn (your org is not debited). Your existing votes are preserved but you will not
-          accumulate any more votes.
-        </p>
+          each turn, and your org is not debited. Your existing votes are preserved but you will not
+          accumulate any more.
+        </BlendProse>
 
-        <div className="mt-4 space-y-3">
-          <label className="block text-xs font-medium text-muted" htmlFor="endorse-target">
-            Endorse
-          </label>
-          <select
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 420 }}>
+          <BlendLabel htmlFor="endorse-target">Endorse</BlendLabel>
+          <BlendSelect
             id="endorse-target"
             value={selectedTargetId}
             onChange={(e) => setSelectedTargetId(e.target.value)}
-            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm text-foreground"
           >
             <option value="">Select a candidate…</option>
             {suspendEndorse.targets.map((target) => (
@@ -119,13 +152,9 @@ export function SuspendEndorsePanel({
                 {target.name} ({target.party})
               </option>
             ))}
-          </select>
+          </BlendSelect>
 
-          {error && (
-            <p className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
-              {error}
-            </p>
-          )}
+          {error && <BlendNote tone="error">{error}</BlendNote>}
 
           <button
             type="button"
@@ -134,7 +163,7 @@ export function SuspendEndorsePanel({
               setError("");
               setConfirmOpen(true);
             }}
-            className="rounded-lg bg-warning px-3 py-2 text-sm font-semibold text-background hover:brightness-110 disabled:opacity-50"
+            style={blendButtonStyle("caution", !!selectedTargetId && !busy)}
           >
             Suspend campaign and endorse
           </button>
@@ -154,14 +183,14 @@ export function SuspendEndorsePanel({
             <span className="font-semibold">{selectedTarget?.name}</span>.
           </p>
           <ul className="list-disc space-y-1 pl-5 text-muted">
-            <li>You remain on the ballot — this is not a withdrawal.</li>
+            <li>You remain on the ballot. This is not a withdrawal.</li>
             <li>Campaign upgrades, rallies, travel, and turn income stop immediately.</li>
             <li>
               25% of your campaign strength transfers immediately to their campaign (one-time).
             </li>
             <li>
-              25% of your per-state character org boosts their electoral vote math each turn — your
-              org is not debited.
+              25% of your per-state character org boosts their electoral vote math each turn, and
+              your org is not debited.
             </li>
             <li>Your existing votes are preserved but you will not accumulate any more.</li>
             <li>This cannot be undone.</li>

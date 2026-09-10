@@ -71,6 +71,32 @@ beforeEach(() => {
 });
 
 describe("snapshotMoneySupply", () => {
+  it("counts savings held at a private bank once, alongside its separate NPC deposits", async () => {
+    db.collectionMocks.characters.find.mockReturnValue(
+      cursorWith([{ countryId: "US", currencyBalances: { savings: { USD: 700 } } }])
+    );
+    db.collectionMocks.corporations.find.mockReturnValue(
+      cursorWith([
+        {
+          countryId: "US",
+          liquidCapital: 0,
+          bankCharter: {
+            status: "active",
+            currency: "USD",
+            totalDeposits: 1000,
+            npcDeposits: 300,
+          },
+        },
+      ])
+    );
+    db.collectionMocks.states.find.mockReturnValue(cursorWith([]));
+    await snapshotMoneySupply(db as unknown as Db, 12);
+    const doc = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
+    expect(doc.householdSavings).toBe(700);
+    expect(doc.bankDeposits).toBe(300);
+    expect(doc.m2 - doc.externalBroadMoney).toBe(1000);
+  });
+
   it("writes an M2 that rises when corporate liquid capital rises", async () => {
     db.collectionMocks.corporations.find.mockReturnValue(
       cursorWith([{ countryId: "US", liquidCurrencyCode: "USD", liquidCapital: 10_000_000_000 }])
@@ -80,7 +106,8 @@ describe("snapshotMoneySupply", () => {
     const first = db.collectionMocks[MONEY_SUPPLY_SNAPSHOTS_COLLECTION].replaceOne.mock.calls[0][1];
     expect(first.corporateLiquid).toBe(10_000_000_000);
     expect(first.governmentLiquid).toBe(0); // indebted treasury is not money
-    expect(first.householdLiquid).toBeGreaterThan(0);
+    expect(first.estimatedHouseholdLiquid).toBeGreaterThan(0);
+    expect(first.householdLiquid).toBe(0);
     expect(first.m2).toBeGreaterThan(first.externalBroadMoney);
 
     db.collectionMocks.corporations.find.mockReturnValue(
@@ -137,7 +164,9 @@ describe("snapshotMoneySupply", () => {
     expect(plRow.netMoneyCreatedLifetime).toBe(0);
     // The point of the fix — PL's household money (derived from its own
     // population/income, independent of any central bank) actually landed.
-    expect(plRow.householdLiquid).toBeGreaterThan(0);
+    expect(plRow.estimatedHouseholdLiquid).toBeGreaterThan(0);
+    expect(plRow.householdLiquid).toBe(0);
+    expect(plRow.m2).toBe(500_000_000);
     expect(rows.length).toBe(2);
     expect(written).toBe(2);
   });

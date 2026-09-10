@@ -1,3 +1,4 @@
+import { withCampaignRules } from "@/lib/campaignTargeting/rules";
 import type { Db } from "mongodb";
 import type { ResetRunRecord } from "@/lib/admin/resetRunRecord";
 import { runSeed } from "@/lib/admin/seed";
@@ -1192,7 +1193,9 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     }
 
     if (sangiinToInsert.length > 0) {
-      await db.collection<Election>("elections").insertMany(sangiinToInsert as Election[]);
+      await db
+        .collection<Election>("elections")
+        .insertMany(sangiinToInsert.map(withCampaignRules) as Election[]);
       log(`Spawned ${sangiinToInsert.length} JP Sangiin elections (both classes, all regions)`);
     }
   }
@@ -1219,9 +1222,16 @@ export async function bootstrapGameWorld(options: BootstrapOptions) {
     // no turns, every gameState write on this path has already happened, and
     // `spawnFoundingElections` never writes it.
     await guarded("spawnFoundingElections", () =>
-      withElectionGameStateSnapshot(db, () =>
-        spawnFoundingElections(db, now, { skipRegionalCouncil, log })
-      )
+      withElectionGameStateSnapshot(db, async () => {
+        const result = await spawnFoundingElections(db, now, { skipRegionalCouncil, log });
+        if (result.failed > 0) {
+          throw new Error(`${result.failed} founding election family/families failed to spawn`);
+        }
+        if (result.foundingRaces === 0) {
+          throw new Error("Founding election sweep produced zero cycle-0 races");
+        }
+        return result;
+      })
     );
 
     // General NPP priors population - makes the founding candidate pool

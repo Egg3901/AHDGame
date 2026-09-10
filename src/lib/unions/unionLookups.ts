@@ -1,7 +1,13 @@
+/**
+ * Represented workers respond to their union's approval and funded services.
+ * buildUnionEffectsById preserves approval during a vacancy or suspension,
+ * while services require a leader and a receipt paid for the requested turn.
+ */
 import type { Db } from "mongodb";
 import type { Union } from "@/lib/db/types";
 import { unionApproval } from "./unionDues";
-import { normalizeServiceIds, type UnionServiceId } from "./unionServices";
+import type { UnionServiceId } from "./unionServices";
+import { loadFundedUnionServices, UNION_SERVICE_FUNDING_PROJECTION } from "./unionServiceFunding";
 
 /**
  * Per-union approval + active service slate, everything `unionizationDriftTarget`
@@ -23,20 +29,23 @@ export interface RepresentingUnionEffects {
  * Every union is included regardless of ownership or suspension, an unowned or
  * suspended union still represents whatever sectors point at it, and its last
  * computed approval keeps anchoring their drift target even while its own turn
- * processing (`processUnionsTurn`) is frozen.
+ * processing (`processUnionsTurn`) is frozen. Service effects require a funded
+ * programme at an owned, operating union, matching the union turn's charges.
  */
 export async function buildUnionEffectsById(
-  db: Db
+  db: Db,
+  currentTurn: number
 ): Promise<Map<string, RepresentingUnionEffects>> {
   const unions = await db
     .collection<Union>("unions")
-    .find({}, { projection: { _id: 1, approval: 1, activeServices: 1 } })
+    .find({}, { projection: { _id: 1, approval: 1, ...UNION_SERVICE_FUNDING_PROJECTION } })
     .toArray();
+  const fundedServices = loadFundedUnionServices(unions, currentTurn);
   const out = new Map<string, RepresentingUnionEffects>();
   for (const u of unions) {
     out.set(u._id.toString(), {
       approval: unionApproval(u),
-      activeServices: normalizeServiceIds(u.activeServices),
+      activeServices: fundedServices.get(u._id.toString()) ?? [],
     });
   }
   return out;

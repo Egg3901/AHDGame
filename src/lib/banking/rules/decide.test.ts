@@ -335,7 +335,16 @@ describe("pending loan decisions", () => {
       decide({
         type: "disburse_pending_loan",
         loanId: LOAN,
-        borrower: { type: "corporation", id: OTHER, blocked: false },
+        borrower: {
+          type: "corporation",
+          id: OTHER,
+          blocked: false,
+          incomePerTurn: 200_000,
+          committedPaymentPerTurn: 0,
+          currencyMatches: true,
+        },
+        termTurns: 48,
+        ratePercent: 5,
         principal: 50_000,
       })
     );
@@ -357,7 +366,16 @@ describe("pending loan decisions", () => {
       decide({
         type: "disburse_pending_loan",
         loanId: LOAN,
-        borrower: { type: "corporation", id: OTHER, blocked: false },
+        borrower: {
+          type: "corporation",
+          id: OTHER,
+          blocked: false,
+          incomePerTurn: 200_000,
+          committedPaymentPerTurn: 0,
+          currencyMatches: true,
+        },
+        termTurns: 48,
+        ratePercent: 5,
         principal: 1_700_000,
       })
     ).toMatchObject({ allowed: false, refusal: { code: "cap", cap: "headroom" } });
@@ -365,7 +383,16 @@ describe("pending loan decisions", () => {
       decide({
         type: "disburse_pending_loan",
         loanId: LOAN,
-        borrower: { type: "corporation", id: OTHER, blocked: true },
+        borrower: {
+          type: "corporation",
+          id: OTHER,
+          blocked: true,
+          incomePerTurn: 200_000,
+          committedPaymentPerTurn: 0,
+          currencyMatches: true,
+        },
+        termTurns: 48,
+        ratePercent: 5,
         principal: 1,
       })
     ).toMatchObject({ allowed: false, refusal: { code: "state", detail: "blacklisted" } });

@@ -9,8 +9,8 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  *   CSU:      centre-right economically, traditional socially (Bavaria-only; CDU's sister)
  *   Grüne:    centre-left economically (ecological), very progressive socially
  *   FDP:      pro-market liberal economically, socially liberal
- *   Linke:    far-left economically, very progressive socially (eastern strongholds; 2019-only)
- *   AfD:      right-populist economically, very traditional socially (eastern strongholds; 2019-only)
+ *   Linke:    far-left economically, very progressive socially (eastern strongholds; modern-only)
+ *   AfD:      right-populist economically, very traditional socially (eastern strongholds; modern-only)
  *   PDS:      far-left economically, secular-progressive socially (East-only successor to SED; 1991-only)
  *   DP:       national-conservative (1953-only; Adenauer coalition partner)
  *   GB/BHE:   expellee party (1953-only; entered Bundestag 1953)
@@ -106,6 +106,7 @@ export const deParties: PartySeed[] = [
       "2007-default",
       "2019-default",
       "2023-default",
+      "2027-default",
     ],
   },
   {
@@ -174,9 +175,9 @@ export const deParties: PartySeed[] = [
     validForPresets: ["1953-default"],
   },
   {
-    // 2019-only: Die Linke was founded in 2007 from the merger of
-    // Linkspartei.PDS and WASG. For 1991 the historical equivalent is
-    // PDS (see seedOrder 8 below).
+    // Modern-only (2019/2023/2027): Die Linke was founded in 2007 from the
+    // merger of Linkspartei.PDS and WASG. For 1991 the historical
+    // equivalent is PDS (see seedOrder 8 below).
     seedOrder: 6,
     countryId: "DE",
     name: "Die Linke",
@@ -194,12 +195,12 @@ export const deParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default", "2023-default"],
+    validForPresets: ["2019-default", "2023-default", "2027-default"],
   },
   {
-    // 2019-only: AfD was founded in 2013. No meaningful 1991 analogue —
-    // the right-populist niche was occupied by REP / DVU at much smaller
-    // scale and neither held Bundestag seats in 1990.
+    // Modern-only (2019/2023/2027): AfD was founded in 2013. No meaningful
+    // 1991 analogue: the right-populist niche was occupied by REP / DVU at
+    // much smaller scale and neither held Bundestag seats in 1990.
     seedOrder: 7,
     countryId: "DE",
     name: "Alternative für Deutschland",
@@ -217,7 +218,7 @@ export const deParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default", "2023-default"],
+    validForPresets: ["2019-default", "2023-default", "2027-default"],
   },
   {
     // 1991-only: PDS (Partei des Demokratischen Sozialismus) was the

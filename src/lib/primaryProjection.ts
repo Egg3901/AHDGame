@@ -12,6 +12,7 @@
  *
  * On top of the vote distribution we apply:
  *   - In-state campaigning tick multiplier (matches stagger behavior)
+ *   - Home-state surge multiplier (matches stagger behavior)
  *   - Extra NPP penalty when a player is in the race (matches stagger)
  *
  * Home-state boost lives inside `distributeVotesByGroupLevelAllocation`
@@ -22,17 +23,33 @@
  * detail page for candidates who haven't voted yet.
  */
 
-import type { DemographicCategory, StateDemographics, State } from "@/lib/db/types";
+import { buildGranularElectorateSubstrate } from "@/lib/demographics/granularElectorate";
+import { resolveTurnout } from "@/lib/electionEngine/resolvedTurnout";
+import { turnoutForElection } from "@/lib/campaignTargeting/rules";
+import type { CampaignProjectionContext } from "@/lib/campaignTargeting/audience";
+
+import type {
+  DemographicCategory,
+  PrimaryStateAction,
+  StateDemographics,
+  State,
+} from "@/lib/db/types";
 import {
   distributeVotesByGroupLevelAllocation,
   type EnrichedCandidate,
 } from "@/lib/electionEngine";
 import {
   PRIMARY_CAMPAIGN_STAGGER_TICK_RATE,
+  homeStateSurgeMultiplier,
+  stateAttackMultiplier,
+  stateFavorabilityDeltas,
   NPP_STAGGER_EXTRA_MULTIPLIER,
 } from "@/lib/electionEngine/constants";
 import { supportMoodMultiplier } from "@/lib/electionEngine/electionFormulaFactors";
-import { shiftDemographicsForPrimary } from "@/lib/campaigns/shiftPrimaryElectorate";
+import {
+  shiftDemographicsForPrimary,
+  applyPrimaryTurnoutRetention,
+} from "@/lib/campaigns/shiftPrimaryElectorate";
 
 /**
  * Primary turnout as a fraction of general-election turnout. Real-world Dem/GOP
@@ -55,6 +72,7 @@ export interface ProjectionResult {
 }
 
 export interface ProjectPrimaryInput {
+  campaignContext?: CampaignProjectionContext;
   /** Intra-party candidates (already enriched: policies, fav, NPI, etc.) */
   candidates: EnrichedCandidate[];
   /** Raw ElectionCandidate data for primaryCampaignState / primaryCampaignTicks / home state */
@@ -66,6 +84,14 @@ export interface ProjectPrimaryInput {
     primaryCampaignTicks?: number;
     /** ElectionCandidate.support — rally mood (undefined → neutral 1.0×). */
     support?: number;
+    /**
+     * True while a home-state surge is live. Primary resolution clears this at
+     * the end of the cycle, which is what ends the boost — the stored rate
+     * below is left behind, so reading that alone would boost for ever.
+     */
+    primarySurgeUsed?: boolean;
+    /** Percentage points the surge was bought at, from the candidate row. */
+    primarySurgeBoost?: number;
   }[];
   /** Target states to project — any that have missing demographics are skipped */
   stateIds: string[];
@@ -76,6 +102,27 @@ export interface ProjectPrimaryInput {
   categories: DemographicCategory[];
   /** Per-state party-org lookup: key = `${stateId}_${partyId}` -> organization */
   statePartyOrgs: Map<string, number>;
+  /**
+   * Per-state live turnout by group id, from `resolveTurnout`.
+   *
+   * This is the channel party GOTV, player canvassing and turnout suppression
+   * all write, and the stagger has always read it. Omitted → the distribution
+   * falls back to stored and default turnout, which is exactly the behaviour
+   * every caller had before this field existed.
+   */
+  liveTurnouts?: Record<string, Record<string, number>>;
+  /**
+   * Live state-action rows for this race. The projection applies the same
+   * vote-suppression rule the stagger will, so the board does not show a lead
+   * the wave is about to remove. Omitted → no suppression at all.
+   */
+  stateActions?: PrimaryStateAction[];
+  /**
+   * The turn the suppression windows are measured against. Required alongside
+   * `stateActions`; without it the rows are ignored rather than guessed at,
+   * because guessing would make an expired attack live again.
+   */
+  currentTurn?: number;
   /** Party position — unused for intra-party math but kept for symmetry with stagger */
   partyPosition: PartyPosition;
   /**
@@ -154,7 +201,44 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
 
     // Shift the electorate toward the party's ideological position — primary
     // voters are more ideologically extreme than the general electorate.
-    const demographics = shiftDemographicsForPrimary(rawDemographics, partyPosition);
+    let baseDemographics = rawDemographics;
+    let effectiveCategories = categories;
+    let effectiveCandidates = candidates;
+    let liveTurnouts = input.liveTurnouts?.[stateId];
+    if (input.campaignContext) {
+      const context = input.campaignContext;
+      const turnoutDoc = turnoutForElection(context.turnoutByState.get(stateId), context);
+      const generalTurnouts = resolveTurnout(
+        state.population,
+        rawDemographics,
+        categories,
+        turnoutDoc,
+        context
+      ).byGroup;
+      const substrate = buildGranularElectorateSubstrate({
+        ...context,
+        countryId,
+        stateId,
+        turnoutDoc,
+        statePopulation: state.population,
+        demographics: rawDemographics,
+        categories,
+        liveTurnouts: generalTurnouts,
+        enriched: candidates,
+        demographicDefaults: context.defaultsByState.get(stateId),
+      });
+      if (substrate) {
+        baseDemographics = substrate.demographics;
+        effectiveCategories = substrate.categories;
+        effectiveCandidates = substrate.enriched;
+        liveTurnouts = applyPrimaryTurnoutRetention(
+          substrate.liveTurnouts,
+          substrate.demographics,
+          partyPosition
+        );
+      }
+    }
+    const demographics = shiftDemographicsForPrimary(baseDemographics, partyPosition);
 
     // Party-org map for this state — all intra-party candidates see the same
     // value for their party (mobilization scalar, not a differentiator).
@@ -171,12 +255,12 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
     const effectivePool = totalPool;
 
     const { votesPerCandidate } = distributeVotesByGroupLevelAllocation(
-      candidates,
+      effectiveCandidates,
       effectivePool,
       totalPool,
       state.population,
       demographics,
-      categories,
+      effectiveCategories,
       partyOrgForState,
       {
         // Intra-party primary: every candidate is in the same party so the
@@ -202,6 +286,19 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
         // projection stays in sync with the live stagger.
         currentStateId: stateId,
         countryId,
+        liveTurnouts,
+        // Local attacks: a state-scoped favourability penalty, applied through
+        // the approval curve inside distribution rather than as a flat slice
+        // off the count. Undefined for a state nobody is being attacked in.
+        favorabilityDeltaByCandidate:
+          input.stateActions?.length && input.currentTurn != null
+            ? stateFavorabilityDeltas({
+                actions: input.stateActions,
+                candidateIds: candidates.map((c) => c.candidateId),
+                stateId,
+                currentTurn: input.currentTurn,
+              })
+            : undefined,
         stateOrgByCandidate: stateOrgByStateAndCandidate?.get(stateId),
         homeStateByCandidate: resolvedHomeStateByCandidate,
         hasPlayerInRace: hasPlayerInPartyPrimary,
@@ -209,7 +306,7 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
     );
 
     // Post-distribution adjustments (same shape as the stagger):
-    //   - In-state tick multiplier (up to +15% at cap)
+    //   - In-state tick multiplier (+5% per tick, +25% at the 5-tick cap)
     //   - Extra NPP penalty when a player is in the primary (matches stagger)
     // Home-state is already applied inside distribution via homeStateByCandidate.
     const adjusted: Record<string, number> = {};
@@ -219,6 +316,29 @@ export function projectPrimaryByState(input: ProjectPrimaryInput): ProjectionRes
       if (meta?.primaryCampaignState === stateId && (meta.primaryCampaignTicks ?? 0) > 0) {
         const ticks = Math.min(meta.primaryCampaignTicks ?? 0, 5);
         votes *= 1 + ticks * PRIMARY_CAMPAIGN_STAGGER_TICK_RATE;
+      }
+      // Home-state surge: the one-off paid boost in the candidate's own home
+      // state, live until primary resolution clears the flag. Same
+      // multiplicative shape as the tick bonus above, and read from the same
+      // home-state map that drives HOME_STATE_BONUS_PRIMARY so the two can
+      // never disagree about which state is home.
+      votes *= homeStateSurgeMultiplier({
+        surgeUsed: meta?.primarySurgeUsed,
+        surgeBoostPct: meta?.primarySurgeBoost,
+        homeState: resolvedHomeStateByCandidate.get(ec.candidateId),
+        stateId,
+      });
+      // Vote suppression: rivals paying to remove a slice of this candidate's
+      // vote in this state. Same helper the stagger runs, so the board and the
+      // wave cannot disagree. Both fields must be present — a caller passing
+      // rows without a turn gets no suppression rather than a guessed window.
+      if (input.stateActions?.length && input.currentTurn != null) {
+        votes *= stateAttackMultiplier({
+          actions: input.stateActions,
+          candidateId: ec.candidateId,
+          stateId,
+          currentTurn: input.currentTurn,
+        });
       }
       // Rally support (matches stagger). Undefined → 1.0×.
       votes *= supportMoodMultiplier(meta?.support);

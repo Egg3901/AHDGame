@@ -1,12 +1,12 @@
 import type { Db, ObjectId } from "mongodb";
-import type { Bond, IndexFund } from "@/lib/db/types";
+import type { BondMarketPool, Bond, IndexFund } from "@/lib/db/types";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
-import { creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
+import { creditBondPool, loadBondQuote, advanceBondPoolSnapshot } from "@/lib/bonds/marketPool";
 
 export type PurchaseBondUnitsForFundResult =
   { ok: true; units: number; costAnchor: number; bondId: ObjectId } | { ok: false; reason: string };
@@ -52,7 +52,11 @@ export async function purchaseBondUnitsForFund(
   db: Db,
   fund: Pick<IndexFund, "_id" | "name" | "quotedNav" | "anchorCurrencyCode">,
   bond: Bond,
-  units: number
+  units: number,
+  options?: {
+    /** Preloaded bond pools for a pass of many purchases; advanced as each credits its pool. */
+    bondPools?: Map<CurrencyCode, BondMarketPool>;
+  }
 ): Promise<PurchaseBondUnitsForFundResult> {
   const wholeUnits = Math.floor(units);
   if (wholeUnits <= 0) return { ok: false, reason: "invalid_units" };
@@ -66,7 +70,7 @@ export async function purchaseBondUnitsForFund(
   const fxRates = await loadFxRatesRecord(db);
   const bondFxRate =
     fxRates[bondCurrency] && fxRates[bondCurrency]! > 0 ? fxRates[bondCurrency]! : 1;
-  const quote = await loadBondQuote(db, bond);
+  const quote = await loadBondQuote(db, bond, { pools: options?.bondPools });
   const costLocal = wholeUnits * quote.askPerUnit;
   const costAnchor =
     Math.round(corpCapitalToAnchor(costLocal, bondCurrency, bondFxRate) * 100) / 100;
@@ -92,6 +96,7 @@ export async function purchaseBondUnitsForFund(
     }
 
     await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
+    advanceBondPoolSnapshot(options?.bondPools, bondCurrency, costLocal);
 
     await insertFundTransaction(db, {
       fundId: fund._id,

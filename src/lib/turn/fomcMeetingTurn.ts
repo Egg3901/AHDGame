@@ -1,18 +1,15 @@
+/**
+ * Committee meetings collect ballots and execute carried motions only while
+ * current monetary policy permits the move. processFomcMeetings advances the
+ * deadline; castFomcBallot records a player's vote using the same rules.
+ */
 import { ObjectId, type Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
-import type {
-  CentralBank,
-  FomcSeat,
-  FomcMeeting,
-  FomcBallot,
-  FomcNomination,
-  RateChangeRecord,
-} from "@/lib/db/types/centralBank";
+import type { CentralBank, FomcSeat, FomcBallot, FomcNomination } from "@/lib/db/types/centralBank";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { StateMetrics } from "@/lib/db/types/stateMetrics";
 import type { Character } from "@/lib/db/types";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
-import { isCommandEconomy } from "@/lib/constants/commandEconomy";
 import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import { getInflationTarget } from "@/lib/budget/inflation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
@@ -20,18 +17,8 @@ import { isBankGovernmentControlledLive } from "@/lib/centralBank/governance";
 import { createNotifications, type NotificationInput } from "@/lib/notifications";
 import { createSystemNewsPost } from "@/lib/news";
 import { getNationalDocId } from "@/lib/constants/nationalScope";
-import {
-  RATE_HISTORY_MAX,
-  NPP_CHAIR_TARGET_GROWTH,
-  COC_SMOOTHING_TURNS,
-  snapToPrimeRateGrid,
-} from "@/lib/db/types/centralBank";
-import {
-  tallyMeeting,
-  playerSeats,
-  boardCanCarryMotions,
-  type FomcMacroContext,
-} from "@/lib/centralBank/fomc";
+import { NPP_CHAIR_TARGET_GROWTH, COC_SMOOTHING_TURNS } from "@/lib/db/types/centralBank";
+import { boardCanCarryMotions, type FomcMacroContext } from "@/lib/centralBank/fomc";
 import { logger } from "../observability/logger";
 import { emitBankingAuditEvent } from "@/lib/banking/auditEvents";
 import { resolveJurisdiction } from "@/lib/monetaryGovernance/jurisdiction";
@@ -40,14 +27,8 @@ import {
   materializeTransitionSet,
   stateToSeat,
 } from "@/lib/monetaryGovernance/governanceShell";
+import { loadExecutionPolicies } from "@/lib/monetaryGovernance/executionPolicy";
 import { decideGovernance } from "@/lib/monetaryGovernance/rules/machine";
-
-const FOMC_MEETING_HISTORY_MAX = 24;
-// Shared with the direct-set and autonomous-chair writers so no path truncates
-// another's records; see RATE_HISTORY_MAX in db/types/centralBank.
-
-/** System actor stamped on committee-driven rate changes. */
-const FOMC_SYSTEM_ACTOR = new ObjectId("000000000000000000000000");
 
 function finiteOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -78,11 +59,6 @@ async function loadMacroContext(
     COUNTRY_CONFIGS[countryId].centralBank.defaultPrimeRate;
 
   return { neutralRate, inflationRate, targetInflation, gdpGrowth, currentRate: bank.primeRate };
-}
-
-/** The chair seat, falling back to the first seat if none is flagged. */
-function chairSeat(board: FomcSeat[]): FomcSeat | undefined {
-  return board.find((s) => s.isChair) ?? board[0];
 }
 
 /**
@@ -158,124 +134,6 @@ async function notifyFomcVacancy(
   ).catch((err) => logger.error("FomcMeetingTurn", "vacancy news post failed", err));
 }
 
-interface ResolveOptions {
-  changesThisTerm: number;
-  /** When true, resolve even if the tally is not yet mathematically decided (no-shows abstain). */
-  forceDeadline: boolean;
-}
-
-interface ResolveOutcome {
-  resolved: boolean;
-  moved: boolean;
-  changesThisTerm: number;
-}
-
-/**
- * Shared meeting resolver used by both the turn phase and the live player-vote
- * route. Writes resolution mutations into `set` when the meeting resolves (a
- * majority is reached, a majority becomes impossible, or the deadline is hit).
- * Leaves `set` untouched and returns resolved:false while votes are still open.
- *
- * A decided tally alone never closes a meeting while a seated player can still
- * ballot: NPP seats auto-vote the moment a meeting opens, so on a board where
- * the NPP block alone holds the majority the meeting would otherwise open and
- * resolve inside the same turn phase and the player seats would never see the
- * documented 24-turn vote window. Early resolution therefore waits until every
- * player seat has cast a ballot; the deadline still force-resolves with
- * no-shows abstaining.
- */
-export function resolveMeetingInto(
-  set: Record<string, unknown>,
-  bank: Pick<CentralBank, "primeRate" | "rateHistory" | "fomcMeetingHistory"> & {
-    /** The bank's own id, for the audit trail. Optional for legacy callers. */
-    bankId?: string;
-  },
-  board: FomcSeat[],
-  meeting: FomcMeeting,
-  currentTurn: number,
-  now: Date,
-  opts: ResolveOptions
-): ResolveOutcome {
-  const tally = tallyMeeting(meeting.ballots, meeting.motion, board.length);
-  const awaitingPlayerBallot = playerSeats(board).some(
-    (s) => !meeting.ballots.some((b) => b.seatId === s.seatId)
-  );
-  if ((!tally.decided || awaitingPlayerBallot) && !opts.forceDeadline) {
-    return { resolved: false, moved: false, changesThisTerm: opts.changesThisTerm };
-  }
-
-  const passed = tally.passed;
-  const moved = passed && meeting.motion !== "hold" && Math.abs(meeting.proposedDelta) > 1e-9;
-  let changesThisTerm = opts.changesThisTerm;
-
-  const resolved: FomcMeeting = {
-    ...meeting,
-    status: "resolved",
-    result: passed ? "passed" : "failed",
-    resolvedAt: now,
-    resolvedAtTurn: currentTurn,
-  };
-
-  if (moved) {
-    const previousRate = bank.primeRate;
-    // Snap onto the quarter-point grid: a stored off-grid rate plus a motion
-    // delta stays off-grid, and the next on-grid action would never validate.
-    const newRate = snapToPrimeRateGrid(snapToPrimeRateGrid(previousRate) + meeting.proposedDelta);
-    const chair = chairSeat(board);
-    const record: RateChangeRecord = {
-      previousRate,
-      newRate,
-      changedBy: chair?.characterId ?? chair?.nppId ?? FOMC_SYSTEM_ACTOR,
-      changedByName: chair?.characterName ?? "FOMC",
-      changedAt: now,
-      reason: `FOMC ${meeting.motion} carried ${tally.agree}-${tally.disagree}`,
-    };
-    set.primeRate = newRate;
-    set.lastRateChangeTurn = currentTurn;
-    changesThisTerm += 1;
-    set.rateChangesThisTerm = changesThisTerm;
-    set.rateHistory = [...(bank.rateHistory ?? []), record].slice(-RATE_HISTORY_MAX);
-    emitBankingAuditEvent({
-      kind: "policy.rate_changed",
-      command: "monetary.meeting.resolve",
-      turn: currentTurn,
-      outcome: "ok",
-      ...(bank.bankId ? { bankId: bank.bankId } : {}),
-      subjectType: "meeting",
-      subjectId: meeting.meetingId,
-      statusBefore: String(previousRate),
-      statusAfter: String(newRate),
-      meta: { previousRate, newRate, motion: meeting.motion, changesThisTerm },
-    });
-  }
-
-  set.activeFomcMeeting = null;
-  set.fomcMeetingHistory = [...(bank.fomcMeetingHistory ?? []), resolved].slice(
-    -FOMC_MEETING_HISTORY_MAX
-  );
-  emitBankingAuditEvent({
-    kind: "meeting.transitioned",
-    command: "monetary.meeting.resolve",
-    turn: currentTurn,
-    outcome: "ok",
-    ...(bank.bankId ? { bankId: bank.bankId } : {}),
-    subjectType: "meeting",
-    subjectId: meeting.meetingId,
-    statusBefore: "voting",
-    statusAfter: "resolved",
-    meta: {
-      motion: meeting.motion,
-      result: passed ? "passed" : "failed",
-      agree: tally.agree,
-      disagree: tally.disagree,
-      abstain: tally.abstain,
-      forcedDeadline: opts.forceDeadline,
-      moved,
-    },
-  });
-  return { resolved: true, moved, changesThisTerm };
-}
-
 export type CastBallotResult =
   | { ok: false; reason: "no-meeting" | "not-seated" | "already-voted" }
   | { ok: true; resolved: boolean; motion: string; moved: boolean };
@@ -292,7 +150,8 @@ export async function castFomcBallot(
   characterId: ObjectId,
   vote: FomcBallot["vote"],
   currentTurn: number,
-  now: Date
+  now: Date,
+  currentYear: number | null = null
 ): Promise<CastBallotResult> {
   const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
   const meeting = bank?.activeFomcMeeting;
@@ -319,11 +178,19 @@ export async function castFomcBallot(
   const seat = board.find((s) => s.occupantType === "player" && s.characterId?.equals(characterId));
   const clockMs = now.getTime();
   const jurisdiction = await resolveJurisdiction(db, bank.countryId);
+  const config = await db
+    .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+    .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } });
+  const policies = await loadExecutionPolicies(
+    db,
+    [jurisdiction.anchorCountryId],
+    currentYear,
+    config?.commandEconomyEnabled === true
+  );
   const state = bankToJurisdictionState(bank, {
     jurisdiction,
     governmentControlled: await isBankGovernmentControlledLive(bank, bank.countryId),
-    fxCommitment: null,
-    commandEconomy: false,
+    ...policies.get(jurisdiction.anchorCountryId)!,
   });
   const decision = decideGovernance(
     state,
@@ -334,7 +201,7 @@ export async function castFomcBallot(
       characterId: characterId.toString(),
       countryId: bank.countryId,
     },
-    { turn: currentTurn, now: clockMs, currentYear: null }
+    { turn: currentTurn, now: clockMs, currentYear }
   );
   if (!decision.allowed) {
     // A closed window reads as no meeting; a foreign or committee-less
@@ -424,31 +291,40 @@ export async function processFomcMeetings(
     }
   }
 
-  const banks = await db
+  const candidates = await db
     .collection<CentralBank>("centralBanks")
     .find({ fomcBoard: { $exists: true, $ne: [] } })
     .toArray();
 
-  for (const bank of banks) {
-    const board = bank.fomcBoard ?? [];
-    if (board.length === 0) continue;
-    // A government-controlled bank holds no rate meetings even if a board doc
-    // survives from before independence was revoked — the Treasury sets the
-    // rate directly and the committee is dormant until independence returns.
+  const banks: CentralBank[] = [];
+  for (const bank of candidates) {
+    if ((bank.fomcBoard ?? []).length === 0) continue;
+    // Preserve dormant meetings while government control suspends the committee.
     if (await isBankGovernmentControlledLive(bank, bank.countryId as CountryId)) continue;
+    banks.push(bank);
+  }
+  const jurisdictions = await Promise.all(
+    banks.map((bank) => resolveJurisdiction(db, bank.countryId))
+  );
+  const policies = await loadExecutionPolicies(
+    db,
+    jurisdictions.map((j) => j.anchorCountryId),
+    currentYear,
+    commandEconomyEnabled
+  );
+  for (const [index, bank] of banks.entries()) {
+    const board = bank.fomcBoard ?? [];
     result.banksProcessed++;
     const countryId = bank.countryId;
-    const commandEconomy = isCommandEconomy(countryId, currentYear, commandEconomyEnabled);
 
     // Thin shell over the governance machine: load the bank into a
     // JurisdictionState, feed one turn_start deadline event, persist the
     // returned mutations with one updateOne, and emit its events.
-    const jurisdiction = await resolveJurisdiction(db, countryId);
+    const jurisdiction = jurisdictions[index];
     const state = bankToJurisdictionState(bank, {
       jurisdiction,
       governmentControlled: false,
-      fxCommitment: null,
-      commandEconomy,
+      ...policies.get(jurisdiction.anchorCountryId)!,
     });
     const macro = await loadMacroContext(db, bank, countryId, currentYear);
     let hasActiveNomination = false;

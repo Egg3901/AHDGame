@@ -1,3 +1,4 @@
+import type { CampaignCell } from "@/lib/campaignTargeting/rules";
 import type {
   ElectionCandidate,
   Character,
@@ -15,7 +16,11 @@ import type {
   ContingentElectionDisplay,
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
-import type { EnrichedCandidate, PartyGroup } from "@/lib/elections/candidateEnrichment";
+import type {
+  EnrichedCandidate,
+  PartyGroup,
+  PrimaryCalendarWave,
+} from "@/lib/elections/candidateEnrichment";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface PollingData {
@@ -145,6 +150,12 @@ export interface ElectionResponse {
    * (ticket-1041).
    */
   primaryAdvanceCount: number;
+
+  /**
+   * Presidential primaries only: the race's stagger calendar, each wave marked
+   * complete or upcoming against the waves the engine has already run.
+   */
+  primaryCalendar?: PrimaryCalendarWave[];
 
   // Core data (always present)
   candidates: EnrichedCandidate[];
@@ -352,6 +363,8 @@ export interface ResolveElectionOptions {
 
 /** Full dependency set used by _enrichElection() for both views. */
 export interface ElectionDeps {
+  /** Batch list audiences. Null means loaded with no cells; undefined allows a detail load. */
+  campaignCells?: CampaignCell[] | null;
   candidates: ElectionCandidate[];
   characters: Character[];
   npps: NPP[];

@@ -1,3 +1,11 @@
+/**
+ * When and how a governor or legislature can redraw House districts. Three state
+ * laws set the limits (computeRedistrictCaps): redistricting authority decides who
+ * may draw (only a legislature-drawn map lets players draw; an independent
+ * commission neutralizes maps), compactness caps how far a district's lean may
+ * stray from the state mean (4, 8 or 12 points), and fairness caps the efficiency
+ * gap (10%, 20% or 35%).
+ */
 import type { Db } from "mongodb";
 
 export const REDISTRICT_AUTHORITY_LAW = "us_state_redistricting_authority";

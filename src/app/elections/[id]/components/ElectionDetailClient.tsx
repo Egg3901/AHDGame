@@ -21,6 +21,12 @@ import { ElectionDetailSkeleton } from "./ElectionDetailSkeleton";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
 import type { ElectionDetail } from "./ElectionDetailTypes";
 import BackButton from "@/components/BackButton";
+import { PrimaryBlendView } from "../blend/PrimaryBlendView";
+import { GeneralBlendView } from "../blend/GeneralBlendView";
+import { ResultsBlendView } from "../blend/ResultsBlendView";
+import type { ElectionResultsResponse } from "@/lib/elections/liveResults/types";
+import { BLEND } from "@/components/blend/tokens";
+import { BlendScope } from "@/components/blend/BlendScope";
 import { buildWithdrawalConfirmMessage } from "@/lib/elections/withdrawalWarning";
 
 interface ElectionDetailClientProps {
@@ -37,6 +43,8 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   const { showToast } = useToast();
 
   const [election, setElection] = useState<ElectionDetail | null>(initialElection);
+  const [wire, setWire] = useState<string[]>([]);
+  const [results, setResults] = useState<ElectionResultsResponse | null>(null);
   const [loading, setLoading] = useState(initialElection === null);
   const [error, setError] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -106,6 +114,59 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     fetchElection();
   }, [fetchElection]);
 
+  // Per-race wire headlines for the Blend ticker. A quiet race returns an
+  // empty list and the strip renders nothing.
+  //
+  // Polled on the same cadence as the race itself (see the interval below).
+  // Fetching once would freeze the strip at page load: the delegate race and
+  // the board would move on a turn boundary while the returns beside them still
+  // showed whatever had happened before the reader opened the page.
+  const fetchWire = React.useCallback(
+    async (signal?: AbortSignal) => {
+      try {
+        const res = await fetch(`/api/elections/${id}/wire?limit=8`, { signal });
+        if (!res.ok) return;
+        const data = await res.json();
+        setWire(
+          Array.isArray(data?.items)
+            ? data.items.map((i: { headline: string }) => i.headline).filter(Boolean)
+            : []
+        );
+      } catch {
+        // non-critical: the ticker keeps whatever it last had
+      }
+    },
+    [id]
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchWire(controller.signal);
+    return () => controller.abort();
+  }, [fetchWire]);
+
+  // A concluded presidential race renders the Blend results screen, which is
+  // built over the live-results payload (it carries the called flags and the
+  // EV threshold the detail payload does not).
+  const needsResults = election?.electionType === "president" && election?.isEnded === true;
+  useEffect(() => {
+    if (!needsResults) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/elections/${id}/results`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        if (!cancelled) setResults(payload);
+      } catch {
+        // non-critical: the page falls back to the existing concluded view
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, needsResults]);
+
   useEffect(() => {
     let visibilityTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -113,13 +174,18 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
         if (visibilityTimeout) clearTimeout(visibilityTimeout);
-        visibilityTimeout = setTimeout(() => fetchElection(), 100);
+        visibilityTimeout = setTimeout(() => {
+          fetchElection();
+          void fetchWire();
+        }, 100);
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
     const t = setInterval(() => {
-      if (document.visibilityState === "visible") fetchElection();
+      if (document.visibilityState !== "visible") return;
+      fetchElection();
+      void fetchWire();
     }, 60_000);
 
     return () => {
@@ -127,7 +193,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
       if (visibilityTimeout) clearTimeout(visibilityTimeout);
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [fetchElection]);
+  }, [fetchElection, fetchWire]);
 
   const handleEnter = async () => {
     if (!election) return;
@@ -228,6 +294,187 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
   // disagree with the cap the turn resolver actually enforced. Legacy payloads
   // without the field fall back to 1.
   const advancingCount = election.primaryAdvanceCount ?? 1;
+
+  // Concluded presidential race: the same Blend results screen the live
+  // dashboard uses, chipped "Concluded". Falls through to the existing view
+  // until the results payload arrives, or if it fails to load.
+  if (election.electionType === "president" && localIsEnded && results) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        <ResultsBlendView data={results} route="concluded" />
+
+        <BlendScope title="Also on this race">
+          <GeneralPhaseView
+            election={election}
+            electionId={id}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            amInRace={amInRace}
+            onSuccess={fetchElection}
+          />
+
+          <AdminSection
+            electionId={id}
+            electionType={election.electionType}
+            isAdmin={election.isAdmin}
+            adminOpen={adminOpen}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            candidates={election.allCandidates}
+            onToggleAdmin={() => setAdminOpen((o) => !o)}
+            onSuccess={fetchElection}
+          />
+        </BlendScope>
+      </div>
+    );
+  }
+
+  // Proposal D's general screen is the presidential electoral-college view: an
+  // EV bar, a state tile board and persuasion drivers. Down-ballot races have
+  // no college, so they keep the existing view.
+  if (
+    election.electionType === "president" &&
+    isGeneralPhase &&
+    !localIsEnded &&
+    !localIsUpcoming
+  ) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        <GeneralBlendView
+          election={election}
+          electionId={id}
+          wire={wire}
+          onRefresh={fetchElection}
+        />
+
+        {/* Everything the hero above does not already say. The college bar, the
+            per-ticket tally and the deadline strip all appear up there, so the
+            blocks below are asked to leave them out rather than print the same
+            standing twice on one page. */}
+        <BlendScope
+          title="Also on this race"
+          lede="The full map, the trends, and your campaign operations."
+        >
+          <ElectionHeader
+            election={election}
+            electionYear={electionYear}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            localIsUpcoming={localIsUpcoming}
+            canEnter={canEnter}
+            canWithdraw={canWithdraw}
+            actionLoading={actionLoading}
+            onEnter={handleEnter}
+            onWithdraw={handleWithdraw}
+          />
+
+          <GeneralPhaseView
+            election={election}
+            electionId={id}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            amInRace={amInRace}
+            onSuccess={fetchElection}
+            showCollegeSummary={false}
+            showNationalMood={false}
+            tabbedDetail
+          />
+
+          <ElectionScheduleCard
+            election={election}
+            localIsUpcoming={localIsUpcoming}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            showStatusStrip={false}
+          />
+
+          <AdminSection
+            electionId={id}
+            electionType={election.electionType}
+            isAdmin={election.isAdmin}
+            adminOpen={adminOpen}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            candidates={election.allCandidates}
+            onToggleAdmin={() => setAdminOpen((o) => !o)}
+            onSuccess={fetchElection}
+          />
+
+          {/* "Your Campaign" used to follow this, repeating the funds, actions
+              and levels the list already shows against your own row, behind a
+              second link to the same page. */}
+          {election.countryId === "US" && <CampaignsListPanel electionId={id} />}
+        </BlendScope>
+      </div>
+    );
+  }
+
+  // Proposal D covers the presidential primary specifically: a delegate race
+  // across party fields. Down-ballot races have no delegate model, so they keep
+  // the existing view.
+  if (election.electionType === "president" && localInPrimary && !localIsUpcoming) {
+    return (
+      <div className="min-h-screen" style={{ background: BLEND.page, color: BLEND.ink }}>
+        <PrimaryBlendView election={election} wire={wire} />
+
+        <BlendScope
+          title="Also on this race"
+          lede="Filing, the state map, and your campaign operations."
+        >
+          <ElectionHeader
+            election={election}
+            electionYear={electionYear}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            localIsUpcoming={localIsUpcoming}
+            canEnter={canEnter}
+            canWithdraw={canWithdraw}
+            actionLoading={actionLoading}
+            onEnter={handleEnter}
+            onWithdraw={handleWithdraw}
+          />
+
+          {/* The primary masthead already reads "CLOSES IN N TURNS", so the
+              strip restated the countdown in a box of its own, exactly as it
+              did on the general screen. */}
+          <ElectionScheduleCard
+            election={election}
+            localIsUpcoming={localIsUpcoming}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            showStatusStrip={false}
+          />
+
+          <PrimaryMapPills election={election} activeParties={activeParties} />
+
+          <AdminSection
+            electionId={id}
+            electionType={election.electionType}
+            isAdmin={election.isAdmin}
+            adminOpen={adminOpen}
+            localInPrimary={localInPrimary}
+            localIsEnded={localIsEnded}
+            candidates={election.allCandidates}
+            onToggleAdmin={() => setAdminOpen((o) => !o)}
+            onSuccess={fetchElection}
+          />
+
+          {election.countryId === "US" && !!election.myCharId && (
+            <section id="state-org" className="mt-6 scroll-mt-6">
+              <StateOrganizationTab showHubLink />
+            </section>
+          )}
+
+          {election.countryId === "US" && (
+            <>
+              <CampaignsListPanel electionId={id} />
+              {!!election.myCharId && <CampaignManagerTab electionId={id} />}
+            </>
+          )}
+        </BlendScope>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

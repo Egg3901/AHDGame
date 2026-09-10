@@ -1,14 +1,20 @@
 /**
  * UK manifesto authoring (epic #856, ticket #857).
  *
- * GET  /api/country/[code]/elections/[electionId]/manifesto
- *   → { catalog, manifesto } for the caller's chaired party.
  * POST /api/country/[code]/elections/[electionId]/manifesto
  *   body { pledges: string[], action?: "save" | "lock" }
  *   → saves (or locks) the party leader's draft manifesto.
  *
  * Only the party CHAIR (leader) may author. UK only. The vote-share effect
  * stays gated by UK_MANIFESTO_VOTE_EFFECT regardless of this route.
+ *
+ * Write-only on purpose. This route used to serve GET too, and the elections
+ * page mounted one manifesto bar per contested Commons race, each fetching its
+ * own — 7,763 requests over 24 elections in 7 days on live, 19% of all logged
+ * API traffic, for a payload whose catalog/party/leader half was identical
+ * every time. Reads now come from `…/elections/manifestos`, which answers the
+ * whole page at once. Saving and locking stay here: they really are
+ * per-election.
  */
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
@@ -23,7 +29,6 @@ import type { PoliticalParty } from "@/lib/db/types";
 import type { Election } from "@/lib/db/types/election";
 import { pledgeCatalogFor } from "@/lib/uk/manifesto/pledgeCatalog";
 import {
-  getManifesto,
   upsertManifestoDraft,
   lockManifesto,
   validateManifestoPledges,
@@ -34,15 +39,6 @@ const bodySchema = z.object({
   pledges: z.array(z.string().min(1)).max(MANIFESTO_PLEDGE_COUNT),
   action: z.enum(["save", "lock"]).optional().default("save"),
 });
-
-function catalogView(countryId: CountryId) {
-  return pledgeCatalogFor(countryId).map((e) => ({
-    id: e.id,
-    label: e.label,
-    blurb: e.blurb,
-    policyDomain: e.policyDomain,
-  }));
-}
 
 async function resolveContext(request: Request, code: string, electionId: string) {
   const countryId = code.toUpperCase() as CountryId;
@@ -78,38 +74,6 @@ async function resolveContext(request: Request, code: string, electionId: string
     characterId: auth.user.character._id,
     userId: auth.user.character.userId,
   };
-}
-
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ code: string; electionId: string }> }
-) {
-  try {
-    const { code, electionId } = await params;
-    const ctx = await resolveContext(request, code, electionId);
-    if ("error" in ctx) return ctx.error;
-
-    const catalog = catalogView(ctx.countryId);
-    const manifesto = ctx.party
-      ? await getManifesto(ctx.db, ctx.countryId, ctx.election._id, String(ctx.party.sequentialId))
-      : null;
-
-    return NextResponse.json({
-      catalog,
-      pledgeCount: MANIFESTO_PLEDGE_COUNT,
-      isPartyLeader: Boolean(ctx.party),
-      party: ctx.party ? { id: String(ctx.party.sequentialId), name: ctx.party.name } : null,
-      manifesto: manifesto
-        ? {
-            pledges: manifesto.pledges.map((p) => p.catalogEntryId),
-            locked: Boolean(manifesto.lockedAt),
-            lockedAt: manifesto.lockedAt,
-          }
-        : null,
-    });
-  } catch (err) {
-    return handleRouteError(err);
-  }
 }
 
 export async function POST(

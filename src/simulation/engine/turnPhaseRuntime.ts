@@ -8,7 +8,12 @@ import type {
 } from "@/lib/db/types";
 import type { Db } from "mongodb";
 import { createTurnPhaseTelemetry } from "@/simulation/engine/phaseTelemetry";
-import { beginPhaseProfiling, endPhaseProfiling } from "@/lib/observability/mongoRoundTrips";
+import {
+  beginPhaseProfiling,
+  endPhaseProfiling,
+  phaseRoundTrips,
+} from "@/lib/observability/mongoRoundTrips";
+import { roundTripBudgetFor } from "./turnPhaseBudgets";
 import { withSpan } from "@/lib/observability/spans";
 import type { TurnPhaseRuntime } from "@/simulation/engine/types";
 import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
@@ -84,6 +89,11 @@ export function createTurnPhaseRuntime(input: {
   warnings: string[];
   currentPhaseRef: { current: string | null };
   /**
+   * Phase names a crashed previous holder already applied, for a resumed turn. Empty
+   * or absent on every normal turn. See the resume gate in `runPhase`.
+   */
+  alreadyApplied?: Set<string>;
+  /**
    * SIM-ONLY predicate. When provided and it returns false for a phase, the
    * phase is marked skipped and its fn never runs (headless worldsim
    * elections-only profile — see simTurnProfiles.ts). Omitted in prod → no
@@ -98,7 +108,7 @@ export function createTurnPhaseRuntime(input: {
    */
   turn?: number;
 }): TurnPhaseRuntime {
-  const { db, phaseStatuses, warnings, currentPhaseRef, shouldRunPhase } = input;
+  const { db, phaseStatuses, warnings, currentPhaseRef, shouldRunPhase, alreadyApplied } = input;
   const turn = input.turn ?? 0;
   let lastFlushAtMs = 0;
 
@@ -109,12 +119,21 @@ export function createTurnPhaseRuntime(input: {
       reason?: TurnPhaseSkipReason;
       message?: string;
       touchHeartbeat?: boolean;
+      roundTrips?: number;
+      roundTripBudget?: number;
     } = {}
   ): Promise<void> {
     const now = new Date();
     const current = phaseStatuses[phase] ?? createTurnPhaseTelemetry(now, "pending");
     const next: TurnPhaseTelemetry = {
       ...current,
+      ...(options.roundTrips != null && options.roundTripBudget != null
+        ? {
+            roundTrips: options.roundTrips,
+            roundTripBudget: options.roundTripBudget,
+            overBudget: options.roundTrips > options.roundTripBudget,
+          }
+        : {}),
       status,
       updatedAt: now,
       startedAt:
@@ -182,6 +201,20 @@ export function createTurnPhaseRuntime(input: {
     // phaseResult). No predicate (prod/cron) → this branch is never taken.
     if (shouldRunPhase && !shouldRunPhase(name)) {
       await markPhaseSkipped(name, "simElectionsOnly", "skipped: sim elections-only profile");
+      return null;
+    }
+    // RESUME GATE. This turn is a re-entry into a turn a previous process began and
+    // did not finish, and `alreadyApplied` names the phases that must not run again:
+    // the ones it recorded as completed, plus the single phase it was inside when it
+    // died. Running either would double-apply writes that already landed.
+    //
+    // Before this existed the whole turn was CONSUMED on recovery, so one redeploy
+    // landing mid-turn discarded every remaining phase, roughly 150 of them, including
+    // every election, metric and settlement the turn had not reached yet. Skipping the
+    // handful that already ran and continuing is strictly better: the cost of a deploy
+    // falls from a whole turn to the one phase that was interrupted.
+    if (alreadyApplied?.has(name)) {
+      await markPhaseSkipped(name, "upstreamAbort", "skipped: already applied before crash");
       return null;
     }
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -265,7 +298,23 @@ export function createTurnPhaseRuntime(input: {
         };
         recordAudit(entry);
       }
-      void setPhaseStatus(name, "completed").catch((err) =>
+      // Round-trip budget (see turnPhaseBudgets.ts). Warn-only: a phase over
+      // budget is a perf regression to fix, not a failed turn.
+      const roundTrips = phaseRoundTrips(name);
+      const roundTripBudget = roundTripBudgetFor(name);
+      if (roundTrips > roundTripBudget) {
+        console.warn(
+          `[Turn] Phase "${name}" issued ${roundTrips} Mongo round trips, over its budget of ${roundTripBudget}. ` +
+            `Probably a per-row query; see src/simulation/engine/turnPhaseBudgets.ts.`
+        );
+        Sentry.addBreadcrumb({
+          category: "turn.phase",
+          message: `Phase "${name}" over round-trip budget`,
+          level: "warning",
+          data: { phase: name, roundTrips, roundTripBudget },
+        });
+      }
+      void setPhaseStatus(name, "completed", { roundTrips, roundTripBudget }).catch((err) =>
         console.warn(`[Turn] Failed to mark phase "${name}" completed`, err)
       );
       return result;

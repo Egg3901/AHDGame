@@ -40,3 +40,36 @@ export function getPartyTenure(
   const turnsRemaining = Math.max(0, requiredTurns - turnsServed);
   return { turnsServed, eligible: turnsRemaining === 0, turnsRemaining };
 }
+
+/** The subset of a character the leadership gate reads. */
+export interface LeadershipTenureSubject {
+  partyJoinedTurn?: number | null;
+  /** Sequential id of a party this character founded by charter, if any. */
+  foundedPartyId?: string | null;
+}
+
+/**
+ * Leadership candidacy/voting eligibility for a character in a given party.
+ *
+ * A charter founder is exempt from the tenure clock in the party they founded:
+ * ratification stamps their `partyJoinedTurn` to the founding turn, which would
+ * otherwise lock all three founders out of their own brand-new party for
+ * `PARTY_LEADERSHIP_TENURE_TURNS`. The exemption is scoped to that one party, so
+ * a founder who joins someone else's party still serves the full tenure there.
+ *
+ * Everyone else falls through to `getPartyTenure`. This wraps the party-tenure
+ * gate only — the relocation-residency checks that reuse `getPartyTenure` with
+ * `STATE_LEADERSHIP_RELOCATION_DELAY_TURNS` are a different rule and must keep
+ * calling it directly.
+ */
+export function getLeadershipEligibility(
+  subject: LeadershipTenureSubject,
+  currentTurn: number,
+  partyId: string | number
+): PartyTenure {
+  const founded = subject.foundedPartyId;
+  if (founded != null && founded !== "" && founded === String(partyId)) {
+    return { turnsServed: Number.POSITIVE_INFINITY, eligible: true, turnsRemaining: 0 };
+  }
+  return getPartyTenure(subject.partyJoinedTurn, currentTurn);
+}

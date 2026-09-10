@@ -15,6 +15,7 @@ import {
   unionApproval,
   unionMembers,
 } from "@/lib/unions/unionDues";
+import { fundedUnionServices, paidUnionServices, purchaseUnionServices } from "@/lib/unions/rules";
 import { normalizeServiceIds } from "@/lib/unions/unionServices";
 import {
   clampPoliticalContributionPct,
@@ -30,6 +31,8 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { processUndergroundTurn } from "./undergroundTurn";
+import { getBannedUnionCountryIds } from "@/lib/labour/unionLaws";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { processLabourRelationsTurn } from "./labourRelationsTurn";
@@ -124,9 +127,9 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
  * ("conversion not reinvention").
  *
  * The service bill NEVER pushes the treasury negative: if this turn's dues
- * income can't cover it, the services LAPSE (no charge, `servicesLapsed:
- * true` into `approvalTarget` so the unfunded slate stops paying approval
- * too: an unfunded promise earns nothing).
+ * income can't cover it, next turn's services lapse without a charge or
+ * entitlement. Approval and all other service effects use this turn's prepaid
+ * receipt, not the next purchase.
  *
  * Also auto-vacates leadership for leaders inactive beyond
  * `INACTIVE_CEO_TURN_THRESHOLD` turns, reuses the exact same constant and
@@ -150,7 +153,7 @@ export async function adoptUnrepresentedSectors(db: Db): Promise<number> {
  * per organizer payout.
  */
 
-export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
+export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTurnResult> {
   if (!(await isLabourFullMode())) {
     return {
       unionsProcessed: 0,
@@ -162,7 +165,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
     };
   }
 
-  const currentTurn = await getCurrentTurn(db);
+  const currentTurn = turn ?? (await getCurrentTurn(db));
   const labourRelations = await processLabourRelationsTurn(db, currentTurn);
 
   // Safety net: at "full" the roster must be COMPLETE, one union per
@@ -199,9 +202,13 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
   // unowned union that nobody organizes must bleed power too, and the vote
   // weights have to decay in step with the pool they came from or the two
   // numbers drift apart. Suspended unions stay frozen, same as dues.
+  const bannedUnionCountryIds = await getBannedUnionCountryIds(db);
+  const bannedCountryList = Array.from(bannedUnionCountryIds);
+  const suspendedUnionFilter =
+    bannedCountryList.length > 0 ? { countryId: { $in: bannedCountryList } } : { suspended: true };
   const suspendedUnionIds = await db
     .collection<Union>("unions")
-    .distinct("_id", { suspended: true });
+    .distinct("_id", suspendedUnionFilter);
   const strengthDecayMultiplier = 1 - UNION_STRENGTH_DECAY_PER_TURN;
   const decayStamp = new Date();
   await Promise.all([
@@ -219,6 +226,14 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       ),
   ]);
 
+  // Illicit unions under ban: heat decay, detection rolls, and exposure
+  // windows for suspended cells. Suspended unions never reach the owned
+  // pass below, so this runs unconditionally (even with zero owned unions).
+  const underground = await processUndergroundTurn(db, currentTurn, bannedUnionCountryIds);
+  if (underground.newlyExposed > 0) {
+    console.warn(`[unionsTurn] exposed ${underground.newlyExposed} underground union(s)`);
+  }
+
   const sectorsAdopted = await adoptUnrepresentedSectors(db);
   if (sectorsAdopted > 0) {
     console.warn(
@@ -232,7 +247,11 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       // Union ban (player suggestion #93): suspended unions (country under an
       // enacted ban) are frozen, no dues, no services, no approval trend, no
       // inactivity vacancy, so a repeal restores them exactly as the ban found them.
-      { ownerId: { $ne: null }, suspended: { $ne: true } },
+      {
+        ownerId: { $ne: null },
+        suspended: { $ne: true },
+        countryId: { $nin: bannedCountryList },
+      },
       {
         projection: {
           _id: 1,
@@ -243,6 +262,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
           treasury: 1,
           duesPerWorkerAnnual: 1,
           activeServices: 1,
+          serviceReceipts: 1,
           politicalContributionPct: 1,
           approval: 1,
         },
@@ -374,7 +394,7 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const fullServicesCost = servicesCostPerTurn(members, annualWage, activeServices);
       // The service bill never pushes the treasury negative: if this turn's
       // dues income can't cover it, the whole slate lapses for the turn (no
-      // partial charge) and earns no approval bonus.
+      // partial charge) and buys no entitlement for the following turn.
       const affordableTreasury = u.treasury + duesIncome;
       const servicesLapsed = fullServicesCost > affordableTreasury;
       const servicesCost = servicesLapsed ? 0 : fullServicesCost;
@@ -421,8 +441,11 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
       const target = approvalTarget({
         duesPerWorkerAnnual: duesRate,
         annualWage,
-        activeServices,
-        servicesLapsed,
+        activeServices: paidUnionServices(
+          { ...u, ownerId: u.ownerId?.toString() ?? null },
+          currentTurn
+        ),
+        servicesLapsed: false,
         politicalContributionPct: contributionPct,
       });
       const newApproval = trendApproval(unionApproval(u), target);
@@ -431,7 +454,15 @@ export async function processUnionsTurn(db: Db): Promise<UnionsTurnResult> {
           filter: { _id: u._id },
           update: {
             $inc: { treasury: duesIncome - servicesCost - contribution },
-            $set: { approval: newApproval, updatedAt: now },
+            $set: {
+              approval: newApproval,
+              serviceReceipts: purchaseUnionServices(
+                u.serviceReceipts,
+                currentTurn,
+                fundedUnionServices({ ...u, ownerId: u.ownerId?.toString() ?? null }, sectors)
+              ),
+              updatedAt: now,
+            },
           },
         },
       };

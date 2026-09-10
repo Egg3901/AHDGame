@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
-import { applyBoardDelta } from "./boardWrite";
+import { applyBoardDelta, applyBoardValueDeltasByRegion } from "./boardWrite";
 
 const FAMILY = "governance.integrity";
 
@@ -106,5 +106,66 @@ describe("applyBoardDelta", () => {
       .toArray.mockResolvedValue([doc("KAN", 0)]);
     const r = await applyBoardDelta(db as unknown as Db, {}, FAMILY, -5, "value");
     expect(r.regionsUpdated).toBe(0);
+  });
+});
+
+describe("applyBoardValueDeltasByRegion", () => {
+  let db: MockDb;
+  beforeEach(() => {
+    db = createMockDb();
+    db.collection("politicalMetrics");
+  });
+
+  it("applies every region's deltas in one read and one write, clamping step by step", async () => {
+    db.collectionMocks.politicalMetrics!.find.mockReturnValue({
+      toArray: async () => [doc("JP-13", 98), doc("JP-27", 50), doc("JP-01", 50)],
+    });
+
+    const result = await applyBoardValueDeltasByRegion(
+      db as unknown as Db,
+      new Map([
+        // 98 + 5 clamps to 100, then -1 lands on 99: sequential clamping, not summed.
+        [
+          "JP-13",
+          [
+            { familyId: FAMILY, scoreDelta: 5 },
+            { familyId: FAMILY, scoreDelta: -1 },
+          ],
+        ],
+        ["JP-27", [{ familyId: "economy.stability", scoreDelta: 2.5 }]],
+        // A zero delta and an unknown family change nothing, so the region is skipped.
+        [
+          "JP-01",
+          [
+            { familyId: FAMILY, scoreDelta: 0 },
+            { familyId: "no.such", scoreDelta: 3 },
+          ],
+        ],
+      ])
+    );
+
+    expect(result).toEqual({ regionsUpdated: 2 });
+    expect(db.collectionMocks.politicalMetrics!.find).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.politicalMetrics!.find.mock.calls[0][0]).toEqual({
+      _id: { $in: ["JP-13", "JP-27", "JP-01"] },
+    });
+    expect(db.collectionMocks.politicalMetrics!.bulkWrite).toHaveBeenCalledTimes(1);
+    const ops = db.collectionMocks.politicalMetrics!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { filter: { _id: string }; update: { $set: { values: Record<string, number> } } };
+    }>;
+    expect(ops.map((op) => op.updateOne.filter._id)).toEqual(["JP-13", "JP-27"]);
+    expect(ops[0]!.updateOne.update.$set.values).toEqual({
+      [FAMILY]: 99,
+      "economy.stability": 50,
+    });
+    expect(ops[1]!.updateOne.update.$set.values).toEqual({
+      [FAMILY]: 50,
+      "economy.stability": 52.5,
+    });
+  });
+
+  it("does nothing for an empty map", async () => {
+    await applyBoardValueDeltasByRegion(db as unknown as Db, new Map());
+    expect(db.collectionMocks.politicalMetrics!.find).not.toHaveBeenCalled();
   });
 });

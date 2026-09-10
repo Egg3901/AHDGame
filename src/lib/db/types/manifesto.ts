@@ -116,3 +116,17 @@ export interface ManifestoDeliveryResult {
 
 /** Number of pledges a manifesto must contain once locked. */
 export const MANIFESTO_PLEDGE_COUNT = 3;
+
+/**
+ * How many elections one batch manifesto read may cover.
+ *
+ * Shared so the client's chunk size and the route's cap cannot drift apart: the
+ * route rejects a longer list, and `useCountryManifestos` splits on the same
+ * number. UK Commons races are per region (12 active on live), so a real page
+ * never approaches it; the cap exists so a malformed or hostile caller cannot
+ * turn one request into an unbounded `$in`.
+ *
+ * Lives here, with the other manifesto constants, because this module is
+ * type-only at runtime and so is safe to import from a client component.
+ */
+export const MAX_MANIFESTO_ELECTION_IDS = 100;

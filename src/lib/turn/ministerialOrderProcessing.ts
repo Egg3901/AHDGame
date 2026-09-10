@@ -1,3 +1,4 @@
+import type { FederalBudget } from "@/lib/db/types";
 // src/lib/turn/ministerialOrderProcessing.ts
 import { getDb } from "@/lib/mongodb";
 import { ObjectId, type AnyBulkWriteOperation } from "mongodb";
@@ -489,11 +490,29 @@ export async function processMinisterialOrders(currentTurn: number): Promise<{
   // 4c. Cabinet estates — per in-scope (country, seat): domestic estates tilt their
   // sited region's metrics, foreign estates tilt national soft-power, upkeep-vs-envelope
   // tilts national budget balance, and condition drifts toward the funding baseline.
+  // One budget read for every estate country instead of one per seat.
+  const estateCountryIds = Object.entries(ESTATE_PORTFOLIO_BY_COUNTRY)
+    .filter(([, seats]) => Boolean(seats))
+    .map(([cid]) => cid);
+  const estateBudgetByCountry = new Map(
+    (
+      await db
+        .collection<FederalBudget>("federalBudget")
+        .find({ countryId: { $in: estateCountryIds } })
+        .toArray()
+    ).map((budget) => [budget.countryId, budget])
+  );
   for (const [cid, seats] of Object.entries(ESTATE_PORTFOLIO_BY_COUNTRY)) {
     if (!seats) continue;
     ensureCountry(cid);
     for (const positionId of Object.keys(seats)) {
-      await applyEstateEffects(db, cid, positionId, sourceBucket(cid, "estates"));
+      await applyEstateEffects(
+        db,
+        cid,
+        positionId,
+        sourceBucket(cid, "estates"),
+        estateBudgetByCountry.get(cid) ?? null
+      );
     }
   }
 

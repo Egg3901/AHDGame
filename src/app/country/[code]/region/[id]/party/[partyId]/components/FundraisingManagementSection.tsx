@@ -14,6 +14,8 @@ import {
 import { getMessageStyle } from "@/lib/utils/formatters";
 import type { StatePartyData } from "./types";
 import { fmt } from "./helpers";
+import type { CountryId } from "@/lib/constants/countries";
+import { getPlayerPayoutCap } from "@/lib/treasury/payoutCapValues";
 
 interface FundraisingManagementSectionProps {
   stateParty: StatePartyData;
@@ -569,6 +571,12 @@ export function FundraisingManagementSection({
             Send to Member
           </div>
         </div>
+        <p className="text-[11px] text-muted mb-3">
+          State party funds count towards the same per-turn ceiling as national funds:{" "}
+          {fmt(getPlayerPayoutCap(countryId.toUpperCase() as CountryId), countryId)} per member per
+          turn across the national treasury, state parties and caucuses combined. Nothing moves in
+          the last two turns before a party leadership election closes.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <select
             value={sendMemberId}

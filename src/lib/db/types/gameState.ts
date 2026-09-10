@@ -73,6 +73,14 @@ export interface GameState {
   _id: string;
   /** Setup chosen by the local singleplayer launcher; absent on hosted worlds. */
   singleplayerConfig?: SingleplayerConfig;
+  /** Last compact local turn sample used by opt-in performance analytics. */
+  singleplayerTurnMetrics?: {
+    turn: number;
+    durationMs: number;
+    success: boolean;
+    warningCount: number;
+    slowestPhases: Array<{ phase: string; durationMs: number }>;
+  };
   /**
    * Turn on which the Cold War was resolved in-game, or null/absent while it is
    * still being fought.
@@ -367,6 +375,13 @@ export interface GameState {
   processingTargetTurn?: number | null;
   /** Updated before each phase so a future turn can tell whether the lock is stale */
   processingHeartbeatAt?: Date | null;
+  /**
+   * Set by the graceful shutdown handler when a deploy interrupts a turn that had
+   * already committed writes. The lock stays HELD so `shouldRecoverCrashedTurn` can
+   * still see how far the turn got; this marker just tells the next cron not to serve
+   * the 20-minute staleness wait first. Cleared whenever a lock is acquired.
+   */
+  processingAbandonedAt?: Date | null;
   /** Last phase name to refresh the processing heartbeat; helps debug stuck turns */
   processingPhase?: string | null;
   /** Per-phase lifecycle state for the active turn; used to debug skips, failures, and stalls */

@@ -11,6 +11,7 @@ import {
 import { calculateSpreadFee } from "@/lib/currency/spreadFees";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
 import { requestCharacterStatsRefetch } from "@/lib/characterStatsSync";
+import { useDialogA11y } from "@/components/ui";
 
 type TradeMethod = "market" | "limit";
 
@@ -48,6 +49,7 @@ export function CurrencyTradeModal({
   initialTo,
   onTradeComplete,
 }: Props) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   const available = FOREX_ACTIVE_CURRENCIES.filter((c) => rates.some((r) => r.currencyCode === c));
 
   const defaultFrom = initialFrom ?? wallet?.homeCurrency ?? available[0] ?? "USD";
@@ -162,7 +164,7 @@ export function CurrencyTradeModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" {...dialogProps}>
       <button
         type="button"
         className="absolute inset-0 bg-black/60"
@@ -172,7 +174,9 @@ export function CurrencyTradeModal({
       <div className="relative w-full max-w-md rounded-xl border border-card-border bg-card shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between px-5 pt-5 pb-4 border-b border-card-border">
-          <h2 className="text-base font-bold text-foreground">Exchange Currency</h2>
+          <h2 id={titleId} className="text-base font-bold text-foreground">
+            Exchange Currency
+          </h2>
           <button
             onClick={onClose}
             aria-label="Close"

@@ -21,7 +21,7 @@
       "openMenu": "Open menu",
       "closeMenu": "Close menu",
       "userMenu": "User menu",
-      "capturingScreenshot": "Capturing screenshot…",
+      "capturingScreenshot": "Capturing screenshot\u2026",
       "quickSuggest": "Quick suggest (screenshot)"
     },
     "menus": {
@@ -130,10 +130,10 @@
       "switchNationView": "Switch nation view",
       "switchNationViewCurrent": "Switch nation view: currently {country}",
       "selectNation": "Select Nation",
-      "homeBadge": "★ Home"
+      "homeBadge": "\u2605 Home"
     },
     "notifications": {
-      "openInbox": "Open inbox →",
+      "openInbox": "Open inbox \u2192",
       "awaitingInput": "{count, plural, one {# awaiting your input} other {# awaiting your input}}",
       "empty": "No notifications yet",
       "needsYou": "Needs you",
@@ -178,7 +178,7 @@
       "demographicsToast": "Set your character's background in Settings > Background"
     },
     "search": {
-      "placeholder": "Search characters, corporations, bills…",
+      "placeholder": "Search characters, corporations, bills\u2026",
       "ariaLabel": "Search characters, corporations, bills, elections",
       "noResults": "No results found for \"{query}\"",
       "trySearchingFor": "Try searching for",
@@ -195,6 +195,47 @@
         "bond": "Bond",
         "admin": "Admin"
       }
+    },
+    "singleplayer": {
+      "endTurn": "End turn",
+      "running": "Running turn",
+      "timer": "Timer",
+      "advanceEvery": "Advance every",
+      "minutes": "minutes",
+      "startTimer": "Start automatic turns",
+      "stopTimer": "Stop automatic turns",
+      "nextTurn": "The next turn runs after {minutes, plural, one {# minute} other {# minutes}}.",
+      "needsCharacter": "Create a character before ending a turn.",
+      "advanceHint": "Advance the world by one turn",
+      "failed": "Turn failed",
+      "failedStatus": "Turn failed ({status})",
+      "headOfState": "Head of state (Beta)",
+      "worldsim": "Worldsim (Beta)",
+      "progress": {
+        "title": "Processing turn {turn}",
+        "titleUnknown": "Processing turn",
+        "dismiss": "Dismiss",
+        "retry": "Check again",
+        "staleTitle": "Turn may be stuck",
+        "staleBody": "The world is still marked as processing. Progress has not moved.",
+        "offlineTitle": "Connection lost",
+        "offlineBody": "Turn progress could not be updated.",
+        "errorTitle": "Turn failed",
+        "activity": {
+          "elections": "Counting votes and resolving elections",
+          "economy": "Updating markets and the economy",
+          "military": "Resolving conflicts and military affairs",
+          "policy": "Advancing laws and public policy",
+          "parties": "Updating parties and public opinion",
+          "people": "Updating people and public services",
+          "preparing": "Preparing the next turn",
+          "updating": "Updating {label}"
+        }
+      },
+      "briefingTitle": "Turn {turn} briefing",
+      "briefingFunds": "Campaign funds: {delta, number, ::sign-always}",
+      "briefingActions": "Actions: {delta, number, ::sign-always}",
+      "viewCharacter": "View character"
     }
   }
 }

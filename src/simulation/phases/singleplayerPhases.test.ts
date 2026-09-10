@@ -38,12 +38,15 @@ describe("singleplayer phase filtering", () => {
     }
   });
 
-  it("skips only detection, so the list cannot silently grow into gameplay", () => {
-    // A denylist is safe only while it stays small and stays about abuse.
-    expect(SINGLEPLAYER_SKIP_PHASES.size).toBe(3);
-    for (const phase of SINGLEPLAYER_SKIP_PHASES) {
-      expect(phase, phase).toMatch(/Scan|Detection/);
-    }
+  it("skips only detection and production diagnostics", () => {
+    expect([...SINGLEPLAYER_SKIP_PHASES].sort()).toEqual(
+      [
+        "auditAnomalyScan",
+        "financialSuspectScan",
+        "gameHealthSnapshot",
+        "suspiciousDetection",
+      ].sort()
+    );
   });
 });
 

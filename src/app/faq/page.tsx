@@ -1,6 +1,13 @@
 import type { Metadata } from "next";
 import { publicPageMetadata } from "@/lib/siteMetadata";
 import { AdSenseUnit } from "@/components/AdSenseUnit";
+import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import {
+  formatNationChoices,
+  formatNationList,
+  type MarketedWorld,
+} from "@/lib/marketing/marketedWorld";
+import { getMarketedWorldSafe } from "@/lib/marketing/marketedWorldServer";
 
 export const metadata: Metadata = publicPageMetadata({
   title: "FAQ | A House Divided",
@@ -14,70 +21,81 @@ interface FAQItem {
   answer: string;
 }
 
-const FAQS: FAQItem[] = [
-  {
-    question: "What is A House Divided?",
-    answer:
-      "A House Divided is a persistent multiplayer political and economic simulation. Players create characters, run for office, draft legislation, found corporations, trade stocks and forex, and shape the simulated United States, United Kingdom, Soviet Union, and East Germany. One real hour equals one simulated political week.",
-  },
-  {
-    question: "Do I need to know real-world politics to play?",
-    answer:
-      "No. The game uses simplified mechanics inspired by real systems, but you learn as you go. The wiki and guides explain everything from filing candidacy to corporate bond issuance. Many successful players started with no political background.",
-  },
-  {
-    question: "Is the game free?",
-    answer:
-      "Yes. A House Divided is free to play. Optional cosmetic purchases (profile borders, tints) support server costs. There are no pay-to-win mechanics. Every in-game advantage is earned through strategy and time investment.",
-  },
-  {
-    question: "How do I create a character?",
-    answer:
-      "Register an account, then choose a name and country (United States, United Kingdom, Soviet Union, or East Germany). Each country has its own legislature, election cycle, and economic rules. You can create multiple characters across different countries.",
-  },
-  {
-    question: "How do elections work?",
-    answer:
-      "Players declare candidacy during a nomination window, campaign to raise Political Influence (PI), and compete in a primary followed by a general election. The vote formula rewards PI, favorability, and campaign upgrades. See the Running for Office guide for the full breakdown.",
-  },
-  {
-    question: "Can I run a business in the game?",
-    answer:
-      "Yes. You can found a corporation in any of 12 sectors, produce and trade commodities, issue shares and bonds, and compete for market share. Corporations operate independently of political careers, so you can be both a legislator and a CEO.",
-  },
-  {
-    question: "What is the hourly turn system?",
-    answer:
-      "The game advances every real hour. Each turn updates the simulation: elections progress, bills move through committees, commodity prices shift, forex rates adjust, and corporate financials update. You submit actions anytime, and they resolve on the next turn.",
-  },
-  {
-    question: "How does the stock market work?",
-    answer:
-      "Publicly traded corporations issue shares with prices driven by supply, demand, dividends, and sector performance. Players buy and sell shares through the exchange. Bond markets and forex trading are also available for advanced players.",
-  },
-  {
-    question: "What countries are available?",
-    answer:
-      "Currently the United States, United Kingdom, Soviet Union, and East Germany. Each has unique legislative structures, election timings, and economic starting conditions. Other nations such as West Germany, Japan, France, and Italy are simulated in the world economy and browsable, but are not yet open to play. More countries are planned for future releases.",
-  },
-  {
-    question: "How do I report a bug or suggest a feature?",
-    answer:
-      "Join our Discord server (linked in the footer) and use the #bugs or #suggestions channels. You can also email admin@ahousedividedgame.com. We review every report and prioritize based on impact and player votes.",
-  },
-  {
-    question: "Is there a mobile app?",
-    answer:
-      "Not yet. The web app is responsive and works well on mobile browsers. A native app is on the long-term roadmap but not currently in active development.",
-  },
-  {
-    question: "What happens to my data if I stop playing?",
-    answer:
-      "Your account and characters remain indefinitely. Inactive characters may lose eligibility for certain active roles (e.g., elected office), but your assets, shares, and history are preserved. You can resume anytime.",
-  },
-];
+/**
+ * Every answer that names a country takes it from `world`, never from a literal.
+ *
+ * This page shipped a hand-written country list for months after the playable
+ * set changed, so new players were told to pick Germany or Japan at the exact
+ * moment they were deciding whether to sign up.
+ */
+function buildFaqs(world: MarketedWorld): FAQItem[] {
+  const playable = formatNationList(world.playable);
+  const playableChoices = formatNationChoices(world.playable);
+  const economy = formatNationList(world.economy);
 
-export default function FAQPage() {
+  return [
+    {
+      question: "What is A House Divided?",
+      answer: `A House Divided is a persistent multiplayer political and economic simulation. Players create characters, run for office, draft legislation, found corporations, trade stocks and forex, and shape the simulated ${playable}. One real hour equals one simulated political week.`,
+    },
+    {
+      question: "Do I need to know real-world politics to play?",
+      answer:
+        "No. The game uses simplified mechanics inspired by real systems, but you learn as you go. The wiki and guides explain everything from filing candidacy to corporate bond issuance. Many successful players started with no political background.",
+    },
+    {
+      question: "Is the game free?",
+      answer:
+        "Yes. A House Divided is free to play. Optional cosmetic purchases (profile borders, tints) support server costs. There are no pay-to-win mechanics. Every in-game advantage is earned through strategy and time investment.",
+    },
+    {
+      question: "How do I create a character?",
+      answer: `Register an account, then choose a name and country (${playableChoices}). Each country has its own legislature, election cycle, and economic rules. You can create multiple characters across different countries.`,
+    },
+    {
+      question: "How do elections work?",
+      answer:
+        "Players declare candidacy during a nomination window, campaign to raise Political Influence (PI), and compete in a primary followed by a general election. The vote formula rewards PI, favorability, and campaign upgrades. See the Running for Office guide for the full breakdown.",
+    },
+    {
+      question: "Can I run a business in the game?",
+      answer: `Yes. You can found a corporation in any of ${CORPORATION_TYPES.length} sectors, produce and trade commodities, issue shares and bonds, and compete for market share. Corporations operate independently of political careers, so you can be both a legislator and a CEO.`,
+    },
+    {
+      question: "What is the hourly turn system?",
+      answer:
+        "The game advances every real hour. Each turn updates the simulation: elections progress, bills move through committees, commodity prices shift, forex rates adjust, and corporate financials update. You submit actions anytime, and they resolve on the next turn.",
+    },
+    {
+      question: "How does the stock market work?",
+      answer:
+        "Publicly traded corporations issue shares with prices driven by supply, demand, dividends, and sector performance. Players buy and sell shares through the exchange. Bond markets and forex trading are also available for advanced players.",
+    },
+    {
+      question: "What countries are available?",
+      answer: `Currently ${playable}. Each has unique legislative structures, election timings, and economic starting conditions. Other nations such as ${economy} are simulated in the world economy and browsable, but are not yet open to play. More countries are planned for future releases.`,
+    },
+    {
+      question: "How do I report a bug or suggest a feature?",
+      answer:
+        "Join our Discord server (linked in the footer) and use the #bugs or #suggestions channels. You can also email admin@ahousedividedgame.com. We review every report and prioritize based on impact and player votes.",
+    },
+    {
+      question: "Is there a mobile app?",
+      answer:
+        "Not yet. The web app is responsive and works well on mobile browsers. A native app is on the long-term roadmap but not currently in active development.",
+    },
+    {
+      question: "What happens to my data if I stop playing?",
+      answer:
+        "Your account and characters remain indefinitely. Inactive characters may lose eligibility for certain active roles (e.g., elected office), but your assets, shares, and history are preserved. You can resume anytime.",
+    },
+  ];
+}
+
+export default async function FAQPage() {
+  const world = await getMarketedWorldSafe();
+  const FAQS = buildFaqs(world);
   const faqSchema = {
     "@context": "https://schema.org",
     "@type": "FAQPage",

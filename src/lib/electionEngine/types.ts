@@ -13,6 +13,8 @@ import type { StatePartyOrg } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
 export interface EnrichedCandidate {
+  targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
+  targetedAdBonuses?: Record<string, number>;
   candidateId: string; // ElectionCandidate._id
   characterId: string;
   characterName: string;
@@ -79,6 +81,18 @@ export interface EnrichedCandidate {
 }
 
 export interface DistributeVotesOptions {
+  /**
+   * Points to add to a candidate's favourability FOR THIS STATE ONLY, keyed by
+   * candidateId. Negative for a local attack.
+   *
+   * Applied before the approval curve, so the hit lands through each group's
+   * approval rather than as a flat slice off the count. That is what separates
+   * a local attack from vote suppression: its bite depends on the state's
+   * composition, and a candidate the state already likes shrugs off more of it.
+   *
+   * Absent → no adjustment, which is every caller that has not opted in.
+   */
+  favorabilityDeltaByCandidate?: Record<string, number>;
   /** Use averaged (party + candidate) positions for appeal */
   useAveragedPositions?: boolean;
   /** Weight party over candidate: (partyWeight*party + candidate)/(partyWeight+1). 2 = 2:1 party. */
@@ -434,4 +448,18 @@ export interface AccumulateVoteTurnPreload {
   turnoutByState: Map<string, StateDemographicTurnout>;
   /** Current national governing/coalition party IDs, resolved once per country. */
   governingPartyIdsByCountry?: Map<CountryId, Set<string>>;
+  /**
+   * Per-turn memo for lookups whose inputs repeat across the elections of a
+   * turn: the sitting president per country, the regional executive per
+   * state, the party table per country. Create with `createVoteTurnMemo()`
+   * once per phase; ~180 elections a turn were each re-reading the same few
+   * documents.
+   */
+  turnMemo?: import("./tallyManagement").VoteTurnMemo;
+  /**
+   * `loadFundsByPartyForElections` for every election in the sweep, so the
+   * money driver reads campaigns once per turn instead of once per election.
+   * An election absent from the map has no spending campaigns.
+   */
+  fundsByPartyByElection?: Map<string, Map<string, number>>;
 }

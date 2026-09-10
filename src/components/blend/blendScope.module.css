@@ -1,0 +1,71 @@
+/*
+ * Blend scope.
+ *
+ * The election and campaign screens keep a handful of existing surfaces that
+ * Proposal D has no slot for (filing, the schedule, the admin tools, the
+ * campaign panels). Rather than fork each one behind a `variant` prop, this
+ * class re-points the theme's CSS custom properties at the Blend palette for
+ * its whole subtree, so every Tailwind `bg-card` / `border-card-border` /
+ * `text-muted` inside it resolves to Blend values.
+ *
+ * The dark theme is already close: `--foreground`, `--primary`, `--muted` and
+ * `--card-border` match the Blend tokens exactly. What differs is the card
+ * fills, the corner radii and the type, which is what the rest of this file
+ * handles.
+ *
+ * The values are set unconditionally rather than under a dark-mode guard: a
+ * Blend screen is committed to its dark ground, so a light-theme reader must
+ * still get dark surfaces here or the retained panels would sit on the page as
+ * white cards.
+ */
+
+.scope {
+  --background: #0c0c12;
+  --foreground: #e8e8ee;
+  --primary: #dc2626;
+  --primary-dark: #991b1b;
+  --muted: #8f8f9d;
+  --card: #11111a;
+  --card-border: #2a2a3d;
+  --card-default: #11111a;
+  --card-elevated: #14141c;
+  --card-muted: #101018;
+
+  color: #e8e8ee;
+}
+
+/*
+ * Blend uses hairline rules, not rounded cards. Flatten the card-scale radii
+ * only: pills, avatars and dots (`rounded-full`) keep their shape, and so does
+ * anything that sets a radius inline.
+ */
+.scope :global(.rounded),
+.scope :global(.rounded-md),
+.scope :global(.rounded-lg),
+.scope :global(.rounded-xl),
+.scope :global(.rounded-2xl) {
+  border-radius: 0;
+}
+
+/* Headings run in the serif; numerics and labels in the mono. */
+.scope :global(h1),
+.scope :global(h2),
+.scope :global(h3),
+.scope :global(h4) {
+  font-family: var(--font-lora), Lora, Georgia, serif;
+  letter-spacing: -0.01em;
+}
+
+.scope :global(.tabular-nums),
+.scope :global(.font-mono) {
+  font-family: var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace;
+}
+
+/*
+ * Section spacing: the retained panels each carry their own bottom margin, and
+ * stacked inside one Blend section they read as a run of separate cards. A
+ * hairline between them matches the rest of the screen.
+ */
+.scope > * + * {
+  margin-top: 18px;
+}

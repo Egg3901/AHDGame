@@ -105,7 +105,10 @@ export async function filterInsolventCorps(
   const ids = [...candidates].map((id) => new ObjectId(id));
   const sectors = await db
     .collection<CorporateSector>("corporateSectors")
-    .find({ corporationId: { $in: ids } })
+    .find(
+      { corporationId: { $in: ids } },
+      { projection: { buildQueue: 0, plantsPnl: 0, soldByCommodity: 0 } }
+    )
     .toArray();
   const sectorsByCorp = new Map<string, CorporateSector[]>();
   for (const s of sectors) {

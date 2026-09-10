@@ -136,7 +136,7 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
         1
       );
 
-      expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1)).toBeCloseTo(
+      expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null)).toBeCloseTo(
         legacyCash / deltaUnits,
         6
       );
@@ -145,7 +145,7 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
 
   it("equals GROWTH_COST_MULTIPLIER × RPU at the anchor year for every sector", () => {
     for (const type of CORPORATION_TYPES) {
-      expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1)).toBeCloseTo(
+      expect(capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null)).toBeCloseTo(
         GROWTH_COST_MULTIPLIER * revenuePerCapacityUnit(type, 1),
         6
       );
@@ -155,7 +155,7 @@ describe("identity B (price): ₳ per unit/day of capacity", () => {
   it("A and B stay mutually consistent: price ÷ labour = GROWTH_COST_MULTIPLIER × CAPACITY_REVENUE_PER_WORKER at the anchor", () => {
     for (const type of CORPORATION_TYPES) {
       const ratio =
-        capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1) /
+        capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null) /
         laborIntensity(type, CAPACITY_ANCHOR_YEAR, 1);
       expect(ratio).toBeCloseTo(GROWTH_COST_MULTIPLIER * CAPACITY_REVENUE_PER_WORKER, 3);
     }
@@ -213,8 +213,8 @@ describe("era lookup", () => {
   it("scales both anchors by their era column", () => {
     for (const type of ANCHOR_SECTORS) {
       for (const year of [1953, 1975, 1985, 1995, 2050]) {
-        expect(capacityPricePerUnit(type, year, 1)).toBeCloseTo(
-          capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1) * capacityEraPriceIndex(year),
+        expect(capacityPricePerUnit(type, year, 1, null)).toBeCloseTo(
+          capacityPricePerUnit(type, CAPACITY_ANCHOR_YEAR, 1, null) * capacityEraPriceIndex(year),
           6
         );
         expect(laborIntensity(type, year, 1)).toBeCloseTo(
@@ -231,7 +231,7 @@ describe("totality: every sector type, every year 1900-2100", () => {
     expect(CAPACITY_SECTOR_TYPES).toEqual(CORPORATION_TYPES);
     for (const type of CORPORATION_TYPES) {
       for (let year = 1900; year <= 2100; year++) {
-        const price = capacityPricePerUnit(type, year, 1);
+        const price = capacityPricePerUnit(type, year, 1, null);
         const labour = laborIntensity(type, year, 1);
         expect(Number.isFinite(price), `${type}@${year} price`).toBe(true);
         expect(price, `${type}@${year} price`).toBeGreaterThan(0);

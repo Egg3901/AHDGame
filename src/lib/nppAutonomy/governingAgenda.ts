@@ -106,6 +106,17 @@ export interface GoverningAgendaInputs {
    * distress driver below; every other input still behaves identically.
    */
   debtToGdpRatio?: number;
+  /**
+   * V5 goal feedback: domain → bounded mass multiplier derived from how the
+   * government's own standing goals were graded last cycle
+   * (`v5/rules/governingGoals.goalFeedback`). A domain the government keeps
+   * failing loses pull; one showing progress gains a little. Absent below v5 and
+   * for the caretaker path, where the whole driver is inert.
+   *
+   * Applied AFTER conditions / ideology / mandate / fiscal distress and BEFORE
+   * crises, so an emergency is never damped by an old failure.
+   */
+  goalFeedback?: Record<string, number>;
   currentTurn: number;
 }
 
@@ -163,6 +174,15 @@ const IDEOLOGICAL_CUT_MULT = 0.5;
  */
 const DEBT_DISTRESS_CEILING = 0.7; // CCC tier's gdpPenalty - normalizes to [0,1]
 const DISTRESS_AGENDA_WEIGHT = 2.0;
+
+/**
+ * Clamp on the V5 goal-feedback multiplier. The producing side already bounds
+ * its own output; this is the second, independent bound, because a driver that
+ * multiplies accumulated mass is the one shape in this file that could run away
+ * over repeated cycles if its input were ever wrong.
+ */
+const GOAL_FEEDBACK_MIN = 0.5;
+const GOAL_FEEDBACK_MAX = 1.5;
 
 /**
  * Domains a left-leaning (interventionist, economic < 0) government prioritises,
@@ -352,6 +372,21 @@ export function computeGoverningAgenda(inputs: GoverningAgendaInputs): Governing
         }
       }
     }
+  }
+
+  // 3.75 Goal feedback (V5) - the government's memory of its own record. Scales
+  // the mass a domain has already accumulated; it never invents a domain and
+  // never changes a direction, so a government with no goal history (every level
+  // below v5, and a freshly seated v5 government) computes byte-identically.
+  // Deliberately ahead of crises: an emergency is added fresh, unscaled, below.
+  for (const [domain, multiplier] of Object.entries(inputs.goalFeedback ?? {})) {
+    const candidate = candidates.get(domain);
+    if (!candidate || !(multiplier > 0)) continue;
+    const scale = Math.max(GOAL_FEEDBACK_MIN, Math.min(GOAL_FEEDBACK_MAX, multiplier));
+    candidate.weighted *= scale;
+    candidate.dirMass.raise *= scale;
+    candidate.dirMass.lower *= scale;
+    candidate.dirMass.hold *= scale;
   }
 
   // 4. Crises (V1.8) — active emergencies inject dominant "raise" items so the

@@ -3,7 +3,16 @@ import { ObjectId, type Db } from "mongodb";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 
 vi.mock("@/lib/bonds/bondHolderOps", () => ({ reserveBondUnitsForHolder: vi.fn() }));
+vi.mock("@/lib/bonds/marketPool", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/marketPool")>();
+  return {
+    ...actual,
+    loadBondQuote: vi.fn().mockResolvedValue({ askPerUnit: 950 }),
+  };
+});
+vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
+import { emitTx } from "@/lib/financialTxLog/emit";
 import { nppBuyBond } from "./nppBonds";
 
 describe("nppBuyBond", () => {
@@ -73,6 +82,17 @@ describe("nppBuyBond", () => {
       }),
       expect.objectContaining({ upsert: true })
     );
+    expect(emitTx).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        type: "bond_purchase",
+        subjectType: "npp",
+        subjectId: nppId,
+        amount: -EXPECTED_COST,
+        anchorAmount: -EXPECTED_COST,
+        currencyCode: "USD",
+      })
+    );
   });
 
   it("refunds funds if the float was taken before the reserve", async () => {
@@ -84,6 +104,35 @@ describe("nppBuyBond", () => {
     expect(nppUpdateOne).toHaveBeenCalledWith(
       { _id: nppId },
       expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_COST } })
+    );
+  });
+
+  it("keeps non-unit RU/SUR local and anchor amounts distinct", async () => {
+    const ruNppId = new ObjectId();
+    const ruBondId = new ObjectId();
+    bondsFindOne.mockResolvedValue({
+      _id: ruBondId,
+      marketPrice: MARKET,
+      publicFloat: 1000,
+      maturityTurn: 100,
+      currencyCode: "SUR",
+    });
+    nppFindOneAndUpdate.mockResolvedValue({ _id: ruNppId, nppInvestmentCashAnchor: 10_000 });
+    vi.mocked(reserveBondUnitsForHolder).mockResolvedValue(true);
+
+    const result = await nppBuyBond(db, { _id: ruNppId, countryId: "RU" }, ruBondId, UNITS, 4, 9);
+
+    const expectedAnchorCost = Math.round((EXPECTED_COST / 9) * 100) / 100;
+    expect(result).toMatchObject({ ok: true, cost: EXPECTED_COST, costAnchor: expectedAnchorCost });
+    expect(emitTx).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({
+        subjectType: "npp",
+        amount: -EXPECTED_COST,
+        currencyCode: "SUR",
+        anchorAmount: -expectedAnchorCost,
+        balanceAfter: 10_000 * 9,
+      })
     );
   });
 

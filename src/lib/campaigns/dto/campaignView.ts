@@ -1,6 +1,8 @@
 import { getCampaignCopyForElection } from "@/lib/campaigns/raceFamilyCopy";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { Campaign } from "@/lib/db/types";
+import type { CampaignStatePresence } from "@/lib/elections/dto/campaignStatePresence";
+import type { OppositionTarget } from "@/lib/campaigns/oppositionTargets";
 import {
   getEffectiveBranchCost,
   OPS_MAX_BRANCH_LEVEL,
@@ -85,8 +87,25 @@ export interface CampaignData {
 
   campaignStrength?: number;
 
+  /**
+   * Presidential tickets: the named running mate, resolved from the candidate's
+   * `runningMateId`. Carried here so the campaign board can show and change the
+   * ticket without pulling the whole election payload. Null when none is named.
+   */
+  runningMateName?: string | null;
+  runningMateCharacterId?: string | null;
+
   oppositionTargetId: string | null;
   oppositionTargetName: string | null;
+  /**
+   * Who this campaign may research, already scoped to the race and its phase.
+   *
+   * Sent rather than searched: the picker used to query every character in the
+   * game, so it offered targets the server would refuse and hid the rule that
+   * decides them. Only the manager or nominee can retarget, so only they get
+   * the list.
+   */
+  oppositionTargets?: OppositionTarget[];
 
   fogLastUpdated?: string;
 
@@ -99,6 +118,15 @@ export interface CampaignData {
     electionYear: number | null;
     isEnded: boolean;
   } | null;
+
+  /**
+   * Where the candidate is campaigning and what it costs to move.
+   *
+   * Present only for the candidate's own view of a live US presidential race:
+   * travelling and camping spend that character's actions, so nobody else has
+   * anything to press. Null everywhere else.
+   */
+  statePresence?: CampaignStatePresence | null;
 
   partyTreasuryAccess?: {
     partyId: number;
@@ -253,6 +281,13 @@ export interface BriefingCoalitionBucket {
   bucket: string;
   /** Share of the candidate's appeal contributed by this bucket. */
   appealShare: number;
+  /**
+   * Share of this bucket's appeal, across the whole field, that the candidate
+   * holds. This is what "weak" is ranked on: a bucket where you hold little of
+   * the group is one you are losing, whereas `appealShare` alone ranks small
+   * groups last however well you are doing in them.
+   */
+  bucketShare: number;
   /** Contribution-weighted mean economic lean of the bucket. */
   demoEP: number;
   /** Contribution-weighted mean social lean of the bucket. */
@@ -277,15 +312,6 @@ export interface CampaignBriefing {
    * non-presidential races or before the ledger is first teed.
    */
   coalitionWeakness: BriefingCoalitionBucket[];
-  /** Per-lever operations saturation: invested branch levels vs the lever max. */
-  opsSaturation: { category: string; level: number; max: number }[];
-  /** Next affordable-to-consider upgrades and what each buys, for the turn plan. */
-  tradeoffs: {
-    actionId: string;
-    label: string;
-    cost: { funds: number; actions: number };
-    expectedEffect: string;
-  }[];
 }
 
 export interface OpsBranchCostView {

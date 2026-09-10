@@ -1,4 +1,12 @@
 /**
+ * Historical realignments that shift how demographic groups vote as the eras pass
+ * (Southern realignment, Civil Rights Act, Voting Rights Act, school prayer,
+ * reapportionment, privacy, law and order). Each entry in ERA_CHECKPOINTS pulls
+ * named census buckets in named states toward a target lean from a start year,
+ * paced by Supreme Court outcomes; player legislation can push back
+ * (applyCounterPressure).
+ */
+/**
  * Era Checkpoints — historical-realignment gravity for demographic base leans.
  *
  * SURVEY CONTEXT (see the design writeup accompanying this change for the

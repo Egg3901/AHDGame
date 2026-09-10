@@ -24,6 +24,8 @@ export type UKElectionType =
 export type ElectionStatus = "upcoming" | "active" | "completed" | "resolved" | "cancelled";
 
 export interface Election {
+  /** Missing means legacy campaigning for this entire race. */
+  campaignRulesVersion?: number;
   _id: ObjectId;
   countryId: CountryId;
   /**
@@ -88,6 +90,9 @@ export interface Election {
 export type CandidateStatus = "active" | "withdrawn";
 
 export interface ElectionCandidate {
+  /** Candidate-owned regional ad flights; effects expire by game turn. */
+  targetedAds?: import("@/lib/campaignTargeting/rules").TargetedAd[];
+  targetedAdsRevision?: number;
   _id: ObjectId;
   electionId: ObjectId;
   /** Denormalized from Election.countryId so party IDs are not ambiguous across countries. */
@@ -101,11 +106,20 @@ export interface ElectionCandidate {
   nppId?: ObjectId;
   enteredAt: Date;
   /**
-   * Phase 0.5 §3.1 canonical Support store — short-term candidate mood / momentum,
-   * 0..100. Read by Phase 5a's `supportMoodMultiplier` in general-election vote
-   * distribution; written by Phase 4 primary resolution and Phase 5b campaign /
-   * polling actions. Undefined on pre-Phase-4 rows (degrades to neutral 1.0× in
-   * the formula).
+   * Phase 0.5 §3.1 canonical Support store — short-term candidate mood /
+   * momentum, 0..100. Written by Phase 4 primary resolution and Phase 5b
+   * campaign / polling actions. Undefined on pre-Phase-4 rows (degrades to
+   * neutral 1.0× in the formula).
+   *
+   * NATIONAL, not per state: one scalar for the candidate, read by
+   * `supportMoodMultiplier` and applied identically to every state's vote
+   * distribution (0.6× at 0, 1.0× at 50, 1.4× at 100). Rallies and the rally
+   * tour move this figure, so they lift the candidate everywhere at once
+   * rather than in the state they are camped in.
+   *
+   * Read by both the general-election distribution and the primary stagger
+   * phase. It was general-only until the stagger began reading it too, so a
+   * whole primary season of rallies moved no votes.
    */
   support?: number;
   withdrawnAt?: Date;

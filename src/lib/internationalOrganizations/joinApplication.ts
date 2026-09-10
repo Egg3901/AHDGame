@@ -4,11 +4,20 @@ import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import type { Bill } from "@/lib/db/types";
 import type { BillStatus } from "@/lib/db/types/legislation";
 import {
+  getOrganizationLegislationCollection,
   getOrganizationMembershipsCollection,
   getOrganizationProposalsCollection,
 } from "@/lib/db/collections";
-import { recordOrgHistoryEvent } from "@/lib/internationalOrganizations/service";
+import {
+  isMember,
+  loadOrganizationDef,
+  recordOrgHistoryEvent,
+} from "@/lib/internationalOrganizations/service";
+import { removeOrganizationMembership } from "@/lib/internationalOrganizations/withdrawalBills";
 import { clearOrganizationWithdrawal } from "@/lib/internationalOrganizations/withdrawalTombstone";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
+import { rivalBlocOrgsFor } from "@/lib/world/blocMembership";
+import { liftOrganizationSanctions } from "@/lib/internationalOrganizations/sanctions";
 
 /**
  * Parallel-join coordination. A country is admitted only when BOTH gates pass:
@@ -46,6 +55,8 @@ export async function admitMember(
   currentTurn: number,
   opts?: { status?: "founding" | "active" }
 ): Promise<void> {
+  await leaveRivalBlocs(db, organizationId, countryId, currentTurn);
+  await liftOwnSanctionsAgainst(db, organizationId, countryId);
   const memberships = await getOrganizationMembershipsCollection(db);
   await memberships.updateOne(
     { organizationId, countryId },
@@ -66,6 +77,99 @@ export async function admitMember(
   // Re-joining clears any prior withdrawal tombstone, so a future withdrawal can
   // re-tombstone and the self-heal treats this member as legitimately present.
   await clearOrganizationWithdrawal(db, organizationId, countryId);
+}
+
+/**
+ * ONE COUNTRY, ONE BLOC. Give up the rival alliance's row before taking this one.
+ *
+ * Called from `admitMember` rather than from its callers because that is the one
+ * chokepoint every accession runs through — the org turn phase, the parallel-join
+ * arbiter, a proxy war's prize and the settlement actuation all land here, and a
+ * rule enforced at four call sites is a rule that will be missed at the fifth.
+ *
+ * ⚠️ BEFORE the insert, not after. `loadBlocMembership` writes `out[countryId] =
+ * bloc` once per row with no precedence, so a country holding a row in both poles
+ * reads as whichever document Mongo happened to return last — its own bloc becomes
+ * a coin flip that resolves differently on successive reads, and every military and
+ * alignment call downstream reads that map. A throw between the two steps must
+ * therefore leave the country in NEITHER pole, which is wrong but deterministic and
+ * legible to an admin, rather than in BOTH. `settlement/actuate.ts` reached the same
+ * conclusion for reunification and orders its own withdrawal first for this reason.
+ *
+ * Silent no-op for an org that does not govern accession: joining the UN costs a
+ * country nothing it already holds.
+ */
+async function leaveRivalBlocs(
+  db: Db,
+  organizationId: string,
+  countryId: WorldEntityId,
+  currentTurn: number
+): Promise<void> {
+  // A proxy war's hosts are world entities. North Vietnam holds no alliance rows
+  // to give up and is not a `CountryId` the withdrawal path accepts.
+  if (!(countryId in COUNTRY_CONFIGS)) return;
+
+  const preset = await getGameStatePresetOrDefault(db);
+  for (const rivalId of rivalBlocOrgsFor(preset, organizationId)) {
+    // Checked, because `removeOrganizationMembership` writes a withdrawal
+    // tombstone and a history line for every remaining member. Calling it for a
+    // country that was never in the rival would announce a departure that never
+    // happened, and the tombstone would then block a legitimate accession later.
+    if (!(await isMember(db, rivalId as Parameters<typeof isMember>[1], countryId as CountryId)))
+      continue;
+    const def = await loadOrganizationDef(db, rivalId as Parameters<typeof loadOrganizationDef>[1]);
+    await removeOrganizationMembership(
+      db,
+      countryId as CountryId,
+      rivalId,
+      def?.name ?? rivalId,
+      currentTurn
+    );
+  }
+}
+
+/**
+ * An organisation does not sanction its own member, so admitting one settles the
+ * quarrel: terminate any sanctions this org still holds against the joiner and
+ * lift the embargoes they fanned out.
+ *
+ * `proposeLegislation` refuses to TABLE sanctions against a member, which closes
+ * that state at one door; accession is the other one, and nothing was watching
+ * it. Left alone the resolution stays `active`, so every other member goes on
+ * embargoing a country it has just voted in, and the alignment phase goes on
+ * docking the bloc's own standing for sanctioning one of its own.
+ *
+ * ⚠️ BEFORE the insert, for the reason `leaveRivalBlocs` above is: a throw
+ * between the two steps must leave a non-member whose sanctions were lifted
+ * early — untidy, but nothing a player can see is wrong — rather than a member
+ * under its own organisation's embargo, which is the state this exists to
+ * prevent.
+ *
+ * Same teardown as `expireActiveSanctions` in the org turn phase: lift the
+ * embargoes, then mark the resolution terminated.
+ */
+async function liftOwnSanctionsAgainst(
+  db: Db,
+  organizationId: string,
+  countryId: WorldEntityId
+): Promise<void> {
+  const legislation = await getOrganizationLegislationCollection(db);
+  const standing = await legislation
+    .find({
+      organizationId,
+      type: "sanctions",
+      status: "active",
+      sanctionsTargetCountryId: countryId,
+    } as Parameters<typeof legislation.find>[0])
+    .toArray();
+  const now = new Date();
+  for (const resolution of standing) {
+    await liftOrganizationSanctions(db, resolution._id);
+    await legislation.updateOne(
+      { _id: resolution._id },
+      { $set: { status: "terminated", terminatedAt: now } }
+    );
+  }
 }
 
 /**

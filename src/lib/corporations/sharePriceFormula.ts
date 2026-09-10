@@ -1,4 +1,12 @@
 /**
+ * Why a share price can fall while book value is high. computeSharePrices prices a
+ * corp at tangible book per share (cash + sector NPV + builds in progress + tech
+ * assets + 0.75x bonds held, minus bond debt) plus 0.4x earnings power and 0.1x a
+ * growth premium; weak earnings, living off bond coupons (bondRelianceValuationPenalty)
+ * or a CEO holding over 65% (insiderConcentrationMultiplier) all cut the price.
+ * rateLimitPrice caps the move at 35% per turn.
+ */
+/**
  * Three-component fundamental share-price formula.
  *
  * sharePrice = fundamentalValue × sentimentMultiplier × orderFlowMultiplier

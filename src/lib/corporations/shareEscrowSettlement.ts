@@ -1,4 +1,6 @@
 import type { ClientSession, Db, ObjectId } from "mongodb";
+import type { EquityMarketPool } from "@/lib/db/types";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import * as Sentry from "@sentry/nextjs";
 import { getShareBuybackMode } from "./shareBuybackMode";
 import {
@@ -37,6 +39,12 @@ type EscrowSettlementOptions = {
   session?: ClientSession;
   /** Explicit corporate buyouts remain issuer-funded, not ordinary market trades. */
   counterparty?: "market" | "issuer";
+  /**
+   * Every equity pool keyed by currency, preloaded by a caller that settles
+   * many buys in one pass (the fund rebalance issues ~550). Only pool
+   * EXISTENCE is decided from it; the credit itself is still an atomic $inc.
+   */
+  pools?: Map<CurrencyCode, EquityMarketPool>;
 };
 
 /**
@@ -58,8 +66,20 @@ export async function applyFloatBuyCredit(
     countryId: corp.countryId,
     liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
   });
-  if (options?.counterparty !== "issuer" && (await readEquityPool(db, currency, options))) {
+  const snapshot = options?.pools?.get(currency);
+  const poolExists = options?.pools
+    ? snapshot !== undefined
+    : Boolean(await readEquityPool(db, currency, options));
+  if (options?.counterparty !== "issuer" && poolExists) {
     await creditEquityPool(db, currency, amountLocal, "purchasesIn", new Date(), options);
+    // Keep the caller's snapshot in step with the pool it just credited, so
+    // the next quote in the same pass sees the cash skew a per-buy read would.
+    if (snapshot) {
+      const credited = Math.round(amountLocal * 100) / 100;
+      if (Number.isFinite(credited) && credited > 0) {
+        snapshot.cashLocal = (snapshot.cashLocal ?? 0) + credited;
+      }
+    }
     return;
   }
   if (getShareBuybackMode(corp) === "escrow") {

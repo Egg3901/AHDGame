@@ -1,10 +1,20 @@
+/**
+ * Sector operations turn owned capacity into sales, jobs and operating profit.
+ * processSector prices production, upkeep and policy effects while preserving payroll.
+ */
+import {
+  specializationMaintenance,
+  specializationPayrollModifier,
+} from "@/lib/corporations/specialization/rules";
+import {
+  activeCapacityConstraintFactor,
+  activeCapacityFraction,
+} from "@/lib/corporations/investment/rules";
 import type { Corporation, CorporateSector, SectorBuildOrder } from "@/lib/db/types";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import {
   CAPACITY_ANCHOR_YEAR,
   CAPACITY_BUILD_TURNS,
-  IDLE_UPKEEP_FRACTION,
-  MOTHBALL_UPKEEP_FRACTION,
   capacityPricePerUnit,
   techOutputUnitsMultiplier,
   unitYieldForSupply,
@@ -47,12 +57,14 @@ import {
   assemblePhysicalPnl,
   computeFinancialLegs,
   computeInputsCost,
-  idleUpkeepUnitPrice,
   otherOpexDriftFactor,
-  ownerIdleUnits,
   solveOtherOpexPerUnit,
 } from "@/lib/corporations/physicalPnl";
 import { healAutoRetoolOpexAnchor } from "@/lib/corporations/retoolRescale";
+import {
+  retoolOperatingCapacityRatio,
+  retoolMeasurementRatio,
+} from "@/lib/corporations/retooling/rules";
 import {
   calculateDailyGrowthCost,
   TURNS_PER_DAY,
@@ -142,6 +154,8 @@ function scaleCommodityRates<T extends Partial<Record<string, number>>>(
   }
   return out as T;
 }
+
+import { computeIdleUpkeep } from "./sectorTurn/idleUpkeep";
 
 /** Process one sector and append its persisted update to the turn collectors. */
 export function processSector(
@@ -473,6 +487,7 @@ export function processSector(
   // as its offer under plants, so 0 produced ⇒ 0 offered, automatically), and
   // pay only MOTHBALL_UPKEEP_FRACTION of running maintenance.
   const mothballed = plantsEnabled && sector.mothballed === true;
+  const activeFraction = plantsEnabled ? activeCapacityFraction(sector) : 1;
   // The capacity the advance starts from, hoisted out of the `advanceCapitalStock`
   // call below so the P5 book basis can be scaled by exactly the same
   // depreciation factor the stock takes. See the long comment inside the call.
@@ -493,7 +508,7 @@ export function processSector(
     ? advanceSectorPlantLedger(sector, plantsBaseStock, landedBuildUnits)
     : null;
   const plantsPrevStock = plantsBaseStock + landedBuildUnits;
-  const plantsCapacity = plantsEnabled
+  const plantsOwnedCapacity = plantsEnabled
     ? advanceCapitalStock({
         // The max() is a ONE-TIME migration, keyed off the absent ramp anchor.
         // Applying it every turn would re-lift capacity back to whatever the
@@ -547,7 +562,7 @@ export function processSector(
   // the per-unit basis. That is deliberate: free capacity has no paid basis,
   // and must not be exitable for cash it never cost.
   const plantsCapacityDepreciationFactor =
-    plantsPrevStock > 0 ? plantsCapacity / plantsPrevStock : 1;
+    plantsPrevStock > 0 ? plantsOwnedCapacity / plantsPrevStock : 1;
   const priorCapacityBookAnchor =
     typeof sector.capacityBookAnchor === "number" &&
     Number.isFinite(sector.capacityBookAnchor) &&
@@ -573,6 +588,35 @@ export function processSector(
     ? unitYieldForSupply(strategyRates.supply ?? {}, lookups.eraUnitScale)
     : 0;
   const plantsMixPrice = plantsMixPriceYield > 0 ? 1 / plantsMixPriceYield : 0;
+  const storedOtherOpexAnchor =
+    typeof sector.otherOpexPerUnitAnchor === "number" &&
+    Number.isFinite(sector.otherOpexPerUnitAnchor)
+      ? sector.otherOpexPerUnitAnchor
+      : null;
+  // In-flight auto-retools historically rescaled capitalStock but left this
+  // per-unit residual on the old unit basis. Heal on the next sector-turn
+  // write while transitionFromStrategyId evidence remains; no mongo script.
+  const healedOpex = healAutoRetoolOpexAnchor({
+    plantsEnabled: plantsEnabled && !embargoLegacyMothball,
+    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    strategyId: sector.strategyId,
+    sectorType: sector.sectorType as CorporationType,
+    retoolRescaleApplied: sector.retoolRescaleApplied,
+    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
+  });
+  const retoolBasis = {
+    sectorType: sector.sectorType,
+    strategyId: sector.strategyId,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    transitionStartTurn: sector.transitionStartTurn,
+    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
+    operatingCapacityTurn: sector.operatingCapacityTurn,
+    currentTurn,
+  };
+  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
+  const plantsCapacity = plantsOwnedCapacity * retoolCapacityRatio;
+  const priorProductionUnitRatio = plantsEnabled ? retoolMeasurementRatio(retoolBasis) : 1;
   // The nameplate plants writes back to `sector.revenue`: what the OWNED
   // capacity is worth at mix prices. This keeps `revenue` a potential/nameplate
   // figure (exactly as every other mode treats it) while making capacity — not
@@ -593,11 +637,9 @@ export function processSector(
   // capacity to price, so they hold the un-compounded anchor instead of being
   // zeroed.
   //
-  // `plantsCapacity` is used RAW here and written RAW: `revenue === capitalStock
-  // x mixPrice` must hold exactly (SOE overlay and shed/attack conservation
-  // assume it). Under plants `capitalStock` is authoritative capacity, read back
-  // as next turn's `storedCapacity`; quantising it makes the D9 retool rescale
-  // non-invertible. Below plants `newCapitalStock` keeps 2dp rounding.
+  // Owned stock stays on the destination strategy basis. Temporary operating
+  // capacity uses the blended recipe, so capacity times mix price retains the
+  // same nameplate throughout a retool. Neither basis is quantized.
   const plantsNameplateRevenue =
     plantsEnabled && plantsMixPrice > 0 ? plantsCapacity * plantsMixPrice : newRevenue;
   // Governor ramp anchor: stamped on the sector's FIRST plants turn and never
@@ -685,6 +727,10 @@ export function processSector(
     plantsEnabled && sector.sectorType === "extraction"
       ? 1 - plantsRampLambda * (1 - Math.max(0, Math.min(1, capacityUtil.utilization)))
       : 1;
+  const activeExtractionHardMin = activeCapacityConstraintFactor(
+    plantsExtractionHardMin,
+    activeFraction
+  );
   // `baselineHourlyRevenue` is the pre-plants COUNTERFACTUAL. Under plants it is
   // the governor's clamp anchor, so it must carry the legs capital mode carried
   // (`capacityHaircut` and `capitalFactor`). Gating them off here jumps the
@@ -695,7 +741,10 @@ export function processSector(
   // clamp at full ramp; after that `plantsExtractionHardMin` and capacity price
   // it.
   const baselineHourlyRevenue =
-    (preFlipNameplateRevenue / TURNS_PER_DAY) *
+    ((plantsEnabled && strategyRates.isTransitioning && retoolCapacityRatio !== 1
+      ? plantsNameplateRevenue
+      : preFlipNameplateRevenue) /
+      TURNS_PER_DAY) *
     revenueMultiplier *
     nationalizationTransition *
     capacityHaircut *
@@ -782,7 +831,7 @@ export function processSector(
     disasterOutputFactor *
     policyTonnageMultiplier *
     nationalizationTransition *
-    (plantsEnabled ? plantsExtractionHardMin : capacityHaircut) *
+    (plantsEnabled ? activeExtractionHardMin : capacityHaircut) *
     throughputFactor *
     // Under plants, capacity IS the production base (see plantsCapacity), so
     // folding the capacity/implied-units haircut in here as well would gate the
@@ -801,7 +850,7 @@ export function processSector(
   const productionNameplateUnits = plantsEnabled
     ? mothballed
       ? 0
-      : plantsCapacity * bankingCommodityScale
+      : plantsCapacity * bankingCommodityScale * activeFraction
     : nameplateUnits * bankingCommodityScale;
   const { producedUnits, soldUnits, contractAchievableUnits } = computeContractProduction({
     plantsEnabled,
@@ -815,8 +864,12 @@ export function processSector(
       throughputFactor *
       plantsTechOutputMultiplier *
       labourOutputFactor,
-    priorSoldUnits: sector.soldUnits,
-    priorProducedUnits: sector.producedUnits,
+    priorSoldUnits:
+      sector.soldUnits == null ? sector.soldUnits : sector.soldUnits * priorProductionUnitRatio,
+    priorProducedUnits:
+      sector.producedUnits == null
+        ? sector.producedUnits
+        : sector.producedUnits * priorProductionUnitRatio,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1
@@ -863,7 +916,7 @@ export function processSector(
     ? 0
     : plantsEnabled
       ? softenedMarketRealizationAmount(
-          baselineHourlyRevenue,
+          baselineHourlyRevenue * activeFraction,
           plantsDerivedHourlyRevenue,
           plantsStartTurn,
           currentTurn,
@@ -984,7 +1037,7 @@ export function processSector(
     lookups.stateSectorSpecializationByState.get(sector.stateId),
     sector.sectorType as CorporationType
   );
-  // Sector type match: +5% primary, +2.5% secondary, -15% mismatch. SOEs are
+  // Sector type match: +10pp primary, +5pp secondary, -15pp mismatch. SOEs are
   // exempt - a NatCorp is a diversified state holding company, not a
   // specialized private firm (Bug #0775).
   const sectorTypeMatchMod = isStateOwned(corp)
@@ -1167,7 +1220,7 @@ export function processSector(
   );
   // Ahead of the labor-cost split below, so labor is workers x wage-per-worker.
   const { desiredWorkers, workers: computedWorkers } = resolveSectorHeadcount({
-    revenue: plantsEnabled ? plantsNameplateRevenue : newRevenue,
+    revenue: plantsEnabled ? plantsNameplateRevenue * activeFraction : newRevenue,
     stateId: sector.stateId,
     rawWorkforceSkillByState: lookups.rawWorkforceSkillByState,
     politicalBoard,
@@ -1177,9 +1230,22 @@ export function processSector(
     wageLevel: labour.wagesEnabled ? sector.wageLevel : 1,
   });
 
-  const grossMaintenance = hourlyRevenue * (1 - effectiveMargin / 100);
+  const payrollSpecializationMod = isStateOwned(corp)
+    ? 0
+    : specializationPayrollModifier(sector.sectorType, corp.type, corp.secondaryType);
+  const { payrollBasis, operatingSaving } = specializationMaintenance({
+    revenue: hourlyRevenue,
+    operatingMargin: effectiveMargin,
+    payrollMargin: softCapEffectiveMargin(
+      sector.profitMargin +
+        totalMarginMod +
+        nationalizedMarginPenalty -
+        sectorTypeMatchMod +
+        payrollSpecializationMod
+    ),
+  });
   const {
-    maintenance,
+    maintenance: maintenanceBeforeSpecialization,
     sectorLaborCost,
     wagePerWorker,
     newUnionization,
@@ -1193,7 +1259,7 @@ export function processSector(
     currentTurn,
     currentYear,
     hourlyRevenue,
-    grossMaintenance,
+    grossMaintenance: payrollBasis,
     computedWorkers,
     techLaborCostMultiplier: techEffects.laborCostMultiplier,
     costOfLivingIndex: sectorMetrics?.economic?.costOfLiving?.value,
@@ -1202,6 +1268,8 @@ export function processSector(
     automationIndexByState,
     pendingStrikeEvents,
   });
+  // Apply operating savings after payroll has been priced at its existing basis.
+  const maintenance = maintenanceBeforeSpecialization - operatingSaving;
   // Growth cost must be charged on the revenue the sector ACTUALLY realises, not
   // on its nominal book revenue.
   //
@@ -1290,48 +1358,22 @@ export function processSector(
   //    billed upkeep on the same 15% again.
   //
   // See `ownerIdleUnits` / `idleUpkeepUnitPrice` for the full rationale.
-  const plantsUpkeepMarginBasisLive = Math.max(0, 1 - effectiveMargin / 100);
-  const plantsUpkeepMarginBasisAnchor =
-    typeof sector.plantsUpkeepMarginBasisAnchor === "number" &&
-    Number.isFinite(sector.plantsUpkeepMarginBasisAnchor)
-      ? sector.plantsUpkeepMarginBasisAnchor
-      : null;
-  const plantsUnitUpkeepHourly = plantsEnabled
-    ? idleUpkeepUnitPrice({
-        mixPrice: plantsMixPrice,
-        turnsPerDay: TURNS_PER_DAY,
-        anchoredMarginBasis: plantsUpkeepMarginBasisAnchor,
-        liveMarginBasis: plantsUpkeepMarginBasisLive,
-      })
-    : 0;
-  // The production legs the owner did NOT choose. `policyTonnageMultiplier`
-  // (the production-policy slider) and `plantsTechOutputMultiplier` are
-  // deliberately absent: those ARE owner decisions, so capacity idled by
-  // throttling the policy slider is still billed — the case the constant was
-  // written for.
-  const plantsInvoluntaryThrottle =
-    disasterOutputFactor *
-    nationalizationTransition *
-    plantsExtractionHardMin *
-    throughputFactor *
-    labourOutputFactor;
-  const plantsOwnerIdleUnits = plantsEnabled
-    ? ownerIdleUnits({
-        capacity: plantsCapacity,
-        producedUnits,
-        involuntaryThrottle: plantsInvoluntaryThrottle,
-      })
-    : 0;
-  // Uses `plantsRampLambda` (defined once above, ~line 882) rather than a local
-  // copy: the ramp had forked into two identical expressions and the docblock
-  // there already claims one definition. The idle-upkeep branch below only runs
-  // when `plantsEnabled`, which is exactly the extra guard `plantsRampLambda`
-  // carries, so the two evaluate identically at this use site.
-  const plantsUpkeepCost = mothballed
-    ? plantsUnitUpkeepHourly * plantsCapacity * MOTHBALL_UPKEEP_FRACTION
-    : plantsEnabled
-      ? plantsUnitUpkeepHourly * plantsOwnerIdleUnits * IDLE_UPKEEP_FRACTION * plantsRampLambda
-      : 0;
+  const { plantsUpkeepCost, plantsUpkeepMarginBasisLive, plantsUpkeepMarginBasisAnchor } =
+    computeIdleUpkeep({
+      sector,
+      plantsEnabled,
+      mothballed,
+      effectiveMargin,
+      plantsMixPrice,
+      plantsCapacity,
+      producedUnits,
+      plantsRampLambda,
+      disasterOutputFactor,
+      nationalizationTransition,
+      plantsExtractionHardMin,
+      throughputFactor,
+      labourOutputFactor,
+    });
 
   // ─── P3.5: physical cost decomposition (plants only) ──────────────────────
   //
@@ -1437,23 +1479,6 @@ export function processSector(
   // divide by), so calibration is DEFERRED: the residual is charged directly for
   // that turn, which is exact anyway, and the anchor is stamped on the first
   // turn the plant actually runs.
-  const storedOtherOpexAnchor =
-    typeof sector.otherOpexPerUnitAnchor === "number" &&
-    Number.isFinite(sector.otherOpexPerUnitAnchor)
-      ? sector.otherOpexPerUnitAnchor
-      : null;
-  // In-flight auto-retools historically rescaled capitalStock but left this
-  // per-unit residual on the old unit basis. Heal on the next sector-turn
-  // write while transitionFromStrategyId evidence remains; no mongo script.
-  const healedOpex = healAutoRetoolOpexAnchor({
-    plantsEnabled: plantsPhysicalEnabled,
-    isAutoRetool: corp.ceoType === "npp" || sector.autoStrategyAdoptedAtTurn != null,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    strategyId: sector.strategyId,
-    sectorType: sector.sectorType as CorporationType,
-    retoolRescaleApplied: sector.retoolRescaleApplied,
-    otherOpexPerUnitAnchor: storedOtherOpexAnchor ?? undefined,
-  });
   const otherOpexAnchorForPnl = healedOpex?.otherOpexPerUnitAnchor ?? storedOtherOpexAnchor;
   const otherOpexCalibrated = plantsPhysicalEnabled && storedOtherOpexAnchor == null;
   // Calibration solves against the policy-NEUTRAL margin cost: `maintenance`
@@ -1470,7 +1495,7 @@ export function processSector(
         laborCost: sectorLaborCost,
         inputsCost,
         financialLegs,
-        producedUnits,
+        producedUnits: producedUnits / retoolCapacityRatio,
       })
     : null;
   const otherOpex = !plantsPhysicalEnabled
@@ -1480,7 +1505,7 @@ export function processSector(
         // solved this turn.
         maintenance + plantsPolicyCredit - sectorLaborCost - inputsCost - financialLegs
       : (otherOpexAnchorForPnl ?? 0) *
-        producedUnits *
+        (producedUnits / retoolCapacityRatio) *
         // One-time rebase of legacy anchors onto the neutral basis; 1 for
         // anchors stamped after the policyCredit change. See the docblock on
         // `otherOpexDriftFactor` for why this stopped tracking the live stack.
@@ -1634,11 +1659,10 @@ export function processSector(
     // `capitalUtilization` reports how hard those plants ran (produced ÷
     // capacity, i.e. the production legs) rather than a capacity haircut.
     // Plants capacity is persisted RAW — it is authoritative state, and rounding
-    // it breaks both the `revenue === capitalStock × mixPrice` stored-pair
-    // identity and the invertibility of the D9 retool rescale. Capital mode's
+    // it breaks the invertibility of the retool unit conversion. Capital mode's
     // derived stock keeps its 2dp rounding exactly as before.
     sectorUpdate.capitalStock = plantsEnabled
-      ? plantsCapacity
+      ? plantsOwnedCapacity
       : Math.round(newCapitalStock * 100) / 100;
     sectorUpdate.capitalUtilization =
       Math.round(
@@ -1655,6 +1679,8 @@ export function processSector(
     // from. Written RAW for the same reason `capitalStock` is — the two are a
     // ratio (per-unit basis) that has to survive round-tripping.
     if (plantsEnabled) {
+      sectorUpdate.operatingCapacityUnits = plantsCapacity;
+      sectorUpdate.operatingCapacityTurn = currentTurn;
       sectorUpdate.capacityBookAnchor = capacityBookAnchor;
       sectorUpdate.plantCount = plantLedger?.plantCount ?? 0;
       sectorUpdate.plantUnitRemainder = plantLedger?.plantUnitRemainder ?? 0;

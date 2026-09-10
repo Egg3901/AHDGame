@@ -1,3 +1,9 @@
+/**
+ * A corporation's growth rate over time, as shown on its page.
+ * computeCorpRealizedGrowthRate annualizes the change in realized revenue between
+ * the newest point and a baseline at least 8 turns old (CORP_GROWTH_MIN_SPAN_TURNS),
+ * up to one game year back; it is null for corps too young to measure.
+ */
 import { GROWTH_RATE_TURNS_PER_YEAR } from "@/lib/constants/corporations";
 
 /**

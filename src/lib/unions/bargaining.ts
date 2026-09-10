@@ -513,9 +513,26 @@ export interface BargainingMediationAvailability {
 }
 
 /** One source of truth for server validation and both player surfaces. */
+export interface BargainingMediationOptions {
+  /**
+   * Government conciliation opened from a national crisis, rather than by a
+   * party to the dispute. Waives the cooling-off delay only.
+   *
+   * The delay exists so a party cannot table an offer and instantly demand a
+   * mediator; it is not a statement that a dispute is unmediatable while young.
+   * A government intervening in a nationwide strike is exactly the case the
+   * delay was not written for, and applying it there made the crisis's
+   * mediation option inert (#127). Every other gate still applies: the dispute
+   * must be real, unmediated, legally permitted, and carry an offer from both
+   * sides.
+   */
+  governmentIntervention?: boolean;
+}
+
 export function getBargainingMediationAvailability(
   campaign: BargainingCampaign,
-  currentTurn: number
+  currentTurn: number,
+  options: BargainingMediationOptions = {}
 ): BargainingMediationAvailability {
   const availableTurn =
     (campaign.disputeStartedAtTurn ?? campaign.deadlineTurn) + BARGAINING_MEDIATION_DELAY_TURNS;
@@ -544,7 +561,7 @@ export function getBargainingMediationAvailability(
         "Mediation requires a wage package from both parties. A direct rejection cannot be mediated.",
     };
   }
-  if (currentTurn < availableTurn) {
+  if (currentTurn < availableTurn && !options.governmentIntervention) {
     return {
       available: false,
       availableTurn,

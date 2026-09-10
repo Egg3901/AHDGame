@@ -213,3 +213,237 @@ describe("projectPrimaryByState — GE-style per-state simulation", () => {
     expect(result.stateWinners.XX).toBeNull();
   });
 });
+
+describe("home-state surge", () => {
+  // The surge charges funds and actions for a boost in the candidate's own
+  // home state. Nothing read the flag it set, so it moved no votes at all.
+  const stateMap = new Map([
+    ["IA", makeState("IA")],
+    ["OH", makeState("OH")],
+  ]);
+  const demographicsMap = new Map([
+    ["IA", makeDemographics("IA")],
+    ["OH", makeDemographics("OH")],
+  ]);
+
+  function project(meta: Record<string, unknown>) {
+    return projectPrimaryByState({
+      candidates: [makeCandidate("surger"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "surger", isNPP: false, homeState: "IA", ...meta },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA", "OH"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+    });
+  }
+
+  it("lifts the surging candidate in their own home state", () => {
+    const before = project({});
+    const after = project({ primarySurgeUsed: true, primarySurgeBoost: 15 });
+    expect(after.byState.IA.surger).toBeGreaterThan(before.byState.IA.surger);
+    expect(after.byState.IA.surger / before.byState.IA.surger).toBeCloseTo(1.15, 2);
+  });
+
+  it("leaves every other state alone", () => {
+    const before = project({});
+    const after = project({ primarySurgeUsed: true, primarySurgeBoost: 15 });
+    expect(after.byState.OH.surger).toBe(before.byState.OH.surger);
+    expect(after.byState.IA.rival).toBe(before.byState.IA.rival);
+  });
+
+  it("does nothing once the primary has reset the flag", () => {
+    // Primary resolution clears primarySurgeUsed but leaves the stored rate, so
+    // reading the rate alone would keep boosting a candidate for ever.
+    const before = project({});
+    const after = project({ primarySurgeUsed: false, primarySurgeBoost: 15 });
+    expect(after.byState.IA.surger).toBe(before.byState.IA.surger);
+  });
+
+  it("honours the rate the surge was bought at", () => {
+    const before = project({});
+    const after = project({ primarySurgeUsed: true, primarySurgeBoost: 30 });
+    expect(after.byState.IA.surger / before.byState.IA.surger).toBeCloseTo(1.3, 2);
+  });
+
+  it("does nothing for a candidate with no home state", () => {
+    const result = projectPrimaryByState({
+      candidates: [makeCandidate("nomad"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "nomad", isNPP: false, primarySurgeUsed: true, primarySurgeBoost: 15 },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+    });
+    const plain = projectPrimaryByState({
+      candidates: [makeCandidate("nomad"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "nomad", isNPP: false },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+    });
+    expect(result.byState.IA.nomad).toBe(plain.byState.IA.nomad);
+  });
+});
+
+describe("vote suppression", () => {
+  // Rivals paying to remove a slice of a candidate's vote in one state. The
+  // board runs the same helper the wave does, so it cannot show a lead the
+  // stagger is about to take away.
+  const stateMap = new Map([
+    ["IA", makeState("IA")],
+    ["OH", makeState("OH")],
+  ]);
+  const demographicsMap = new Map([
+    ["IA", makeDemographics("IA")],
+    ["OH", makeDemographics("OH")],
+  ]);
+
+  function suppressionRow(over: Record<string, unknown> = {}) {
+    return {
+      _id: "row1",
+      electionId: "e1",
+      actorCandidateId: "rival",
+      targetCandidateId: "target",
+      targetCharacterId: "target",
+      stateId: "IA",
+      kind: "voteSuppression",
+      magnitude: 2.5,
+      shieldApplied: 0,
+      appliedTurn: 10,
+      expiresTurn: 18,
+      createdAt: new Date(),
+      ...over,
+    } as never;
+  }
+
+  function project(extra: Record<string, unknown> = {}) {
+    return projectPrimaryByState({
+      candidates: [makeCandidate("target"), makeCandidate("rival")],
+      candidateMeta: [
+        { candidateId: "target", isNPP: false, homeState: "IA" },
+        { candidateId: "rival", isNPP: false, homeState: "OH" },
+      ],
+      stateIds: ["IA", "OH"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+      ...extra,
+    });
+  }
+
+  it("shows the hit before the wave delivers it", () => {
+    const before = project();
+    const after = project({ currentTurn: 12, stateActions: [suppressionRow()] });
+    expect(after.byState.IA.target).toBeLessThan(before.byState.IA.target);
+    expect(after.byState.IA.target / before.byState.IA.target).toBeCloseTo(0.975, 2);
+  });
+
+  it("leaves every other candidate and every other state alone", () => {
+    const before = project();
+    const after = project({ currentTurn: 12, stateActions: [suppressionRow()] });
+    expect(after.byState.IA.rival).toBe(before.byState.IA.rival);
+    expect(after.byState.OH.target).toBe(before.byState.OH.target);
+  });
+
+  it("applies a favourability attack in the state it was bought in", () => {
+    const before = project();
+    const after = project({
+      currentTurn: 12,
+      stateActions: [suppressionRow({ kind: "localFavorability", magnitude: 6 })],
+    });
+    expect(after.byState.IA.target).toBeLessThan(before.byState.IA.target);
+  });
+
+  it("leaves every other state alone, which is the whole point of the rework", () => {
+    // The drain used to feed the candidate's NATIONAL favourability, so an
+    // attack bought in Iowa moved all 51 states and stacked once per purchase.
+    const before = project();
+    const after = project({
+      currentTurn: 12,
+      stateActions: [suppressionRow({ kind: "localFavorability", magnitude: 6 })],
+    });
+    expect(after.byState.OH.target).toBe(before.byState.OH.target);
+  });
+
+  it("ignores a row that has expired", () => {
+    const before = project();
+    const after = project({
+      currentTurn: 12,
+      stateActions: [suppressionRow({ expiresTurn: 12 })],
+    });
+    expect(after.byState.IA.target).toBe(before.byState.IA.target);
+  });
+
+  it("is a strict no-op when a caller passes no rows", () => {
+    // Every existing caller omits both fields; none of them may move.
+    expect(project({ currentTurn: 12 })).toEqual(project());
+    expect(project({ stateActions: [] })).toEqual(project());
+  });
+
+  it("ignores rows when the caller gave no turn to measure them against", () => {
+    // Guessing a window would make an expired attack live again.
+    expect(project({ stateActions: [suppressionRow()] })).toEqual(project());
+  });
+});
+
+describe("turnout modifiers", () => {
+  // GOTV, canvassing and turnout suppression all reach the vote through
+  // `stateDemographicTurnout`. The stagger has always read it; the board never
+  // did, so every one of those effects moved the result and left the
+  // projection showing the old number.
+  const stateMap = new Map([["IA", makeState("IA")]]);
+  const demographicsMap = new Map([["IA", makeDemographics("IA")]]);
+
+  function project(extra: Record<string, unknown> = {}) {
+    return projectPrimaryByState({
+      candidates: [makeCandidate("a"), makeCandidate("b")],
+      candidateMeta: [
+        { candidateId: "a", isNPP: false },
+        { candidateId: "b", isNPP: false },
+      ],
+      stateIds: ["IA"],
+      stateMap,
+      demographicsMap,
+      categories,
+      statePartyOrgs: new Map(),
+      partyPosition,
+      ...extra,
+    });
+  }
+
+  it("responds when a group's turnout is pulled down", () => {
+    // The fixture has one group, so this scales the whole state's pool rather
+    // than shifting the balance between candidates. The point is that the
+    // projection reads the channel at all.
+    const base = project();
+    const damped = project({ liveTurnouts: { IA: { all: 10 } } });
+    expect(damped.byState.IA.a).toBeLessThan(base.byState.IA.a);
+  });
+
+  it("is unchanged when no turnout map is passed", () => {
+    // Every caller that has not been updated must behave exactly as before.
+    expect(project({ liveTurnouts: undefined })).toEqual(project());
+  });
+
+  it("ignores a turnout map that names no state the projection is running", () => {
+    expect(project({ liveTurnouts: { NH: { all: 10 } } })).toEqual(project());
+  });
+});

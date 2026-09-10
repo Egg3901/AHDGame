@@ -75,6 +75,15 @@ describe("deriveLedgerEntry (Phase 1 shim)", () => {
     );
     expect(entry!.legs[0].account).toBe("government:US:USD");
   });
+
+  it("maps an NPP subject to its distinct investment account", () => {
+    const nppId = new ObjectId();
+    const entry = deriveLedgerEntry(
+      tx({ subjectType: "npp", subjectId: nppId, currencyCode: "USD", anchorAmount: -500 })
+    );
+    expect(entry!.legs[0].account).toBe(`npp:${nppId.toString()}:USD`);
+    expect(isAnchorBalanced(entry!.legs)).toBe(true);
+  });
 });
 
 describe("Phase 3 coverage — semantic mint/sink reasons", () => {

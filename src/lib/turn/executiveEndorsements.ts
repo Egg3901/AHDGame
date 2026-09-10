@@ -1,7 +1,8 @@
 import type { Db } from "mongodb";
-import type { ExecutiveEndorsement, Election, ElectionCandidate } from "@/lib/db/types";
+import type { ExecutiveEndorsement } from "@/lib/db/types";
 import { isSittingLeader } from "@/lib/governorOffice/isSittingLeader";
 import { withdrawExecutiveEndorsement } from "@/lib/governorOffice/endorsements/withdrawExecutiveEndorsement";
+import { preloadEndorsementTargets } from "./endorsements/preloadEndorsementTargets";
 
 /**
  * Turn phase: auto-withdraw executive endorsements whose conditions no longer hold.
@@ -12,6 +13,11 @@ import { withdrawExecutiveEndorsement } from "@/lib/governorOffice/endorsements/
  *
  * Parallel to processGovernorEndorsements. Must run BEFORE processCampaignTurn
  * so withdrawals are observed by the endorsement-count aggregation there.
+ *
+ * Reads are batched up front (#575): elections and candidates resolve from two
+ * `$in` queries instead of one `findOne` each per endorsement. Writes stay
+ * sequential — they only run for the withdrawing subset, which is small, and
+ * `withdrawExecutiveEndorsement` owns the Support-bump reversal.
  */
 export async function processExecutiveEndorsements(
   db: Db
@@ -27,6 +33,8 @@ export async function processExecutiveEndorsements(
     withdrawn++;
   }
 
+  const { electionStatus, candidateStatus } = await preloadEndorsementTargets(db, active);
+
   // Cache the leader check per (countryId, characterId) so a leader who
   // issued many endorsements only triggers one parliamentaryGovernments /
   // electedOfficials lookup, not one per endorsement.
@@ -34,16 +42,12 @@ export async function processExecutiveEndorsements(
 
   for (const e of active) {
     if (!e._id) continue;
-    const election = await db.collection<Election>("elections").findOne({ _id: e.electionId });
-    if (!election || election.status !== "active") {
+    if (electionStatus.get(e.electionId.toString()) !== "active") {
       await withdrawExecutiveEndorsement(db, e._id, "election_ended");
       tally("election_ended");
       continue;
     }
-    const candidate = await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .findOne({ _id: e.candidateId });
-    if (!candidate || candidate.status !== "active") {
+    if (candidateStatus.get(e.candidateId.toString()) !== "active") {
       await withdrawExecutiveEndorsement(db, e._id, "candidate_inactive");
       tally("candidate_inactive");
       continue;

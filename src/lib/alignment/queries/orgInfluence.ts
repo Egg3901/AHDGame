@@ -149,8 +149,6 @@ export interface InfluenceMemberRow {
   wantsOut: boolean;
   /** Turns it has sat below the gate, or null while it stands. */
   turnsBelowGate: number | null;
-  /** Founding members cannot be shown the door, whatever their standing. */
-  exempt: boolean;
   /**
    * Whether this member votes. Player-enabled countries do; everyone else is a
    * full member that pays tribute instead of dues and casts no ballot.
@@ -508,7 +506,6 @@ export async function loadOrgInfluence(
       organizationId,
     });
     if (!standing) continue;
-    const exempt = m.status === "founding";
     members.push({
       countryId: m.countryId as CountryId,
       name:
@@ -518,13 +515,12 @@ export async function loadOrgInfluence(
       eligible: standing.eligible,
       share: standing.share,
       wantsOut: standing.wantsOut,
-      // A founder never defects, so showing it a countdown would promise
-      // something the engine will not do.
+      // Every member counts down alike. Founders used to be suppressed here
+      // because the sweep skipped them; it no longer does (ticket #1285), and a
+      // hidden countdown would tell a bloc its founder was safe on the turn it
+      // was in fact most of the way out.
       turnsBelowGate:
-        exempt || m.wantsOutSinceTurn == null
-          ? null
-          : Math.max(0, currentTurn - m.wantsOutSinceTurn),
-      exempt,
+        m.wantsOutSinceTurn == null ? null : Math.max(0, currentTurn - m.wantsOutSinceTurn),
       hasVote: access[m.countryId as CountryId]?.enabledForPlayers === true,
     });
   }
@@ -554,13 +550,9 @@ export async function loadOrgInfluence(
       )
     : null;
 
-  // Wobbling members first — they are what a bloc needs to act on.
-  // Genuinely at-risk members first — a founder below the bar is not at risk.
-  members.sort(
-    (a, b) =>
-      Number(!a.wantsOut || a.exempt) - Number(!b.wantsOut || b.exempt) ||
-      a.name.localeCompare(b.name)
-  );
+  // Wobbling members first — they are what a bloc needs to act on. A founder
+  // below the bar sorts up with the rest of them now that it can actually leave.
+  members.sort((a, b) => Number(!a.wantsOut) - Number(!b.wantsOut) || a.name.localeCompare(b.name));
 
   return {
     ...base,

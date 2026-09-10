@@ -200,16 +200,17 @@ export const electionsPages: readonly WikiSeedPage[] = [
   },
   {
     slug: "us-house-redistricting",
-    title: "US House Redistricting",
+    title: "US House Redistricting & Gerrymandering",
     description:
-      "Congressional district maps, trifecta gerrymandering, compactness and fairness caps, and per-district House elections.",
+      "Congressional district maps, the census-year redraw window, the governor plus trifecta gate, gerrymandering within compactness and fairness caps, the approval penalty for unfair maps, and per-district House elections.",
     content: usHouseRedistrictingContent,
     category: "elections",
-    extraTags: ["house", "gerrymander"],
+    extraTags: ["house", "gerrymander", "gerrymandering", "redistricting", "census", "districts"],
     featured: true,
     difficulty: "advanced",
     contentType: "guide",
     estimatedReadTime: 7,
+    lastUpdated: "2026-09-05",
   },
   {
     slug: "campaign-strategy",

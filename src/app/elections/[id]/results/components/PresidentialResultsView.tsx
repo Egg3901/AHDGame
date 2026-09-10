@@ -7,6 +7,7 @@ import { MajorityBar } from "./MajorityBar";
 import { CandidateTotalsPanel } from "./CandidateTotalsPanel";
 import { RaceResultCard } from "./RaceResultCard";
 import { ResultsTable } from "./ResultsTable";
+import { ResultsBlendView } from "../../blend/ResultsBlendView";
 
 // Browser-only (react-simple-maps) — lazy-load with a matching skeleton.
 const ElectoralResultsMap = dynamic(
@@ -26,6 +27,11 @@ const ElectoralResultsMap = dynamic(
  */
 export function PresidentialResultsView({ data }: { data: ElectionResultsResponse }) {
   const { election, candidates, units, summary } = data;
+
+  // Proposal D's results screen serves this dashboard and the concluded page
+  // alike. It needs a real electoral college to lay out, so a race without one
+  // falls through to the existing view.
+  const hasCollege = (election.totalEv ?? 0) > 0 && units.length > 0;
   const candidatesById = useMemo(() => new Map(candidates.map((c) => [c.id, c])), [candidates]);
   // The map is US-shaped. Simulated frames keep real state ids unless the
   // board was fabricated from nothing (sim-unit-*), which the map can't plot.
@@ -56,6 +62,10 @@ export function PresidentialResultsView({ data }: { data: ElectionResultsRespons
       return a.leaderMarginPct - b.leaderMarginPct;
     });
   }, [units]);
+
+  if (hasCollege) {
+    return <ResultsBlendView data={data} route="dashboard" />;
+  }
 
   return (
     <div className="space-y-4">

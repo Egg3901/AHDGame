@@ -1,4 +1,12 @@
 /**
+ * Corporate bonds: credit ratings, coupon rates and bond prices. calculateCreditScore
+ * weighs debt to equity (30%), interest coverage (25%), profitability (25%) and
+ * liquidity (20%) into AAA through CCC (CREDIT_RATING_THRESHOLDS). The coupon is
+ * prime + rating spread + 1 point + a term premium (getBondCouponRate). Issuance is
+ * capped at 2x equity with a 24 turn cooldown; a default hurts credit for 96 turns
+ * (BOND_DEFAULT_CREDIT_PENALTY_TURNS). Rising rates lower bond prices (calculateBondMarketPrice).
+ */
+/**
  * Bond system constants.
  * Credit rating calculation, coupon constraints, and market pricing.
  */

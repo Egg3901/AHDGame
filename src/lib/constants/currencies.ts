@@ -1,4 +1,12 @@
 // src/lib/constants/currencies.ts
+/**
+ * Exchange rates and what moves them (for example GBP to USD). COUNTRY_CURRENCY_MAP
+ * ties each country to its currency; INITIAL_RATES and the era tables set the
+ * starting rate per preset (getInitialRates). Each turn the rate drifts toward a
+ * macro target at DRIFT_SPEED, gets up to +/-0.4% noise (RATE_NOISE_MAX), player
+ * trade volume moves it at most 5% (VOLUME_PRESSURE_CAP), and it stays within 50%
+ * to 150% of the base rate (RATE_FLOOR_MULTIPLIER, RATE_CEILING_MULTIPLIER).
+ */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
 

@@ -753,7 +753,12 @@ async function buildCapacityFromDirectedCredit(
         Number.isFinite(sector.capitalStock) ? (sector.capitalStock as number) : 0
       );
       const share = stockTotal > 0 ? stock / stockTotal : 1 / corpSectors.length;
-      const unitPrice = capacityPricePerUnit(sector.sectorType, year, creditUnitScale);
+      const unitPrice = capacityPricePerUnit(
+        sector.sectorType,
+        year,
+        creditUnitScale,
+        sector.strategyId ?? null
+      );
       const unitsAdded = directedCreditCapacityUnits(creditAnchor * share, unitPrice);
       if (!(unitsAdded > 0)) continue;
       // P5: directed credit is REAL cash spent at the standing list price, so it

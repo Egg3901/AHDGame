@@ -53,6 +53,7 @@ function buildMockDb(options: {
 
   const db = {
     collection: vi.fn().mockImplementation((name: string) => {
+      if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
       if (name === "states") {
         return {
           // `loadUsPoliticalStateIds` reads admitted states with find().
@@ -214,4 +215,16 @@ describe("POST /api/auth/character - maintenance gating", () => {
     expect(res.status).toBe(201);
     expect(charactersInsertOne).toHaveBeenCalled();
   }, 15_000);
+  it("lets a non-admin local player create a character with inherited full maintenance", async () => {
+    vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/test");
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
+    const { getDb } = await import("@/lib/mongodb");
+    const { db, charactersInsertOne } = buildMockDb({ maintenanceMode: "full", isAdmin: false });
+    vi.mocked(getDb).mockResolvedValue(db as never);
+    const { POST } = await import("../character/route");
+    const response = await POST(creationRequest());
+    expect(response.status).toBe(201);
+    expect(charactersInsertOne).toHaveBeenCalledOnce();
+  });
 });

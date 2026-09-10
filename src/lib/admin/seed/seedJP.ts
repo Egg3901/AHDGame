@@ -33,20 +33,28 @@ export async function seedJPRegions(
   const { jpRegions1999 } = await import("@/lib/seeds/jp/jpRegions1999");
   const { jpRegions2007 } = await import("@/lib/seeds/jp/jpRegions2007");
   const { jpRegions2023 } = await import("@/lib/seeds/jp/jpRegions2023");
+  const { jpRegions2027 } = await import("@/lib/seeds/jp/jpRegions2027");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
-  const bundle = selectPresetBundle(
-    preset,
-    {
-      "1953-default": jpRegions1953,
-      "2019-default": jpRegions,
-      "1979-default": jpRegions1979,
-      "1991-default": jpRegions1991,
-      "1999-default": jpRegions1999,
-      "2007-default": jpRegions2007,
-      "2023-default": jpRegions2023,
-    },
-    "seedJP:jpRegions1953"
-  );
+  // 2027-default is wired explicitly here so this country-local seeder does
+  // not depend on shared preset registry changes. `selectPresetBundle`
+  // has no 2027 entry for JP; without this branch a 2027 world would fall
+  // back to the 1953 bundle.
+  const bundle =
+    preset === "2027-default"
+      ? jpRegions2027
+      : selectPresetBundle(
+          preset,
+          {
+            "1953-default": jpRegions1953,
+            "2019-default": jpRegions,
+            "1979-default": jpRegions1979,
+            "1991-default": jpRegions1991,
+            "1999-default": jpRegions1999,
+            "2007-default": jpRegions2007,
+            "2023-default": jpRegions2023,
+          },
+          "seedJP:jpRegions1953"
+        );
   const regionOps = bundle.map((region) => {
     const { _id, ...regionData } = region;
     return { updateOne: { filter: { _id }, update: { $set: regionData }, upsert: true } };
@@ -203,7 +211,7 @@ export async function seedJPStatePartyOrg(
  * Non-destructive variant of `seedJPStatePartyOrg`: inserts polling-derived
  * rows for (region, party) pairs that don't already exist (e.g. JSP / DSP
  * rows when switching to 1991-default from a 2019 game). Player-modified org
- * values on existing rows are preserved — never overwrites a row that's there.
+ * values on existing rows are preserved - never overwrites a row that's there.
  */
 export async function ensureMissingJPStatePartyOrgRows(
   db: Db,
@@ -276,7 +284,7 @@ export async function seedJPStateMetrics(
     const overlay = getRegionMetricPresets("JP", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
   });
-  // SP5: split write — macro slice -> macroMetrics (all countries), political
+  // SP5: split write - macro slice -> macroMetrics (all countries), political
   // remainder -> stateMetrics (non-playables). countryId stamped for routing.
   await writeSplitMetricsBulk(
     db,
@@ -294,7 +302,7 @@ export async function seedJPBaselines(
   // policyEffects.ts reads from `stateBaselines`; the legacy seeder wrote to a
   // sibling `stateMetricBaselines` collection that nothing read, so JP regions
   // were silently using global defaults at runtime. Phase 5 of the reset/seed
-  // cleanup standardised on `stateBaselines` — see KNOWN_INCONSISTENCIES in
+  // cleanup standardised on `stateBaselines` - see KNOWN_INCONSISTENCIES in
   // seedManifest.ts.
   if (reset) {
     await db.collection("stateBaselines").deleteMany({
@@ -371,11 +379,11 @@ export async function removeLegacyJPCeremonialIdentity(
  * for the 2020 preset.
  *
  * One seat per JP game-region (8 total, all LDP-aligned at game start).
- * Uses the `governor` officeType — see
+ * Uses the `governor` officeType - see
  * `docs/design/uk-jp-devolved-executives.md`. Mirrors
  * `seedDEMinisterPresidents2020`.
  *
- * NOT called from `bootstrapGameWorld` — the bootstrap path seeds these
+ * NOT called from `bootstrapGameWorld` - the bootstrap path seeds these
  * officials via the `JP_GOVERNORS_2020` historical-seat array embedded
  * in `getPresetSeats("2019-default")`. This function exists only as the
  * `/api/admin/seed` target `"jpGovernors2020"` for destructive re-seed
@@ -427,11 +435,11 @@ export async function seedJPGovernors2020(db: Db, reset: boolean, log: (msg: str
  * for the 1991-default preset.
  *
  * Same shape as the 2020 variant. All 8 regions LDP-aligned at the 1990
- * historical anchor — matches `JP_GOVERNORS_1991` in `historicalSeats.ts`
+ * historical anchor - matches `JP_GOVERNORS_1991` in `historicalSeats.ts`
  * (suffix renamed from `_1990` so it aligns with the `1991-default`
  * preset id; the underlying baseline composition is unchanged).
  *
- * NOT called from `bootstrapGameWorld` — the bootstrap path seeds these
+ * NOT called from `bootstrapGameWorld` - the bootstrap path seeds these
  * officials via the `JP_GOVERNORS_1991` historical-seat array embedded
  * in `getPresetSeats("1991-default")`. This function exists only as the
  * `/api/admin/seed` target `"jpGovernors1991"` for destructive re-seed

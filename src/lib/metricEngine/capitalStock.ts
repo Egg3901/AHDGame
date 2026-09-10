@@ -1,4 +1,11 @@
 /**
+ * Regional capital stock and how investment feeds long-run growth. Each region
+ * holds a capital stock near 3x its GDP (CAPITAL_OUTPUT_RATIO_TARGET); a share of
+ * output is invested each year (20% at the neutral prime rate, more when rates are
+ * lower: investmentRate), depreciation removes about 6.7% a year, and
+ * advanceCapitalStock reports the capital growth that potential GDP growth reads.
+ */
+/**
  * Per-region Solow capital stock K (millions — the SAME unit as `state.gdp`,
  * audit-cap-2; never mix with `stateBudget.stateGdp` full units). Substrate for
  * the P1c-1 potential-growth term (`αK · ΔK/K`). Self-damping by construction:

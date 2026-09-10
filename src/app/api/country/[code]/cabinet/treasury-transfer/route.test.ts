@@ -174,6 +174,12 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
     // Tighten revenue so the per-turn cap allows a transfer large enough to
     // cross the ceiling. Revenue 1e9 → cap 5M. Surplus starts at −9.8M; ceiling
     // 10M. Transferring 500K (under cap) pushes surplus to −10.3M < −10M.
+    //
+    // The deficit is expressed through SPENDING, not through the stored `surplus`.
+    // The gate derives `revenue.total - spending.total` rather than trusting the
+    // cache, because that cache drifts between writers and was deciding whether a
+    // player's transfer was legal. A fixture that sets only the cache is describing
+    // the drifted state, not the scenario.
     await setup({
       budget: makeBudget({
         revenue: {
@@ -185,6 +191,12 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
           salesTax: 0,
           healthcareIncome: 0,
           other: 0,
+        },
+        spending: {
+          byCategory: {},
+          stateGrants: 0,
+          debtInterest: 0,
+          total: 1_009_800_000,
         },
         surplus: -9_800_000,
         debt: { principal: 0, interestRate: 0, ceiling: 10_000_000, ceilingLastRaisedYear: 2024 },

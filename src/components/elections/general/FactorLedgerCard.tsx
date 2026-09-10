@@ -18,6 +18,7 @@
 
 import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import { bucketLabel } from "@/lib/demographics/bucketLabels";
 import type {
   FactorLedgerSnapshot,
   CandidateNationalLedger,
@@ -119,9 +120,15 @@ function FactorRow({
 export function FactorLedgerCard({
   data,
   candidates,
+  countryId,
 }: {
   data?: FactorLedgerSnapshot | null;
   candidates: FactorLedgerCandidate[];
+  /**
+   * Whose electorate this is, so the bucket names come out in the country's own
+   * language where a table exists for it.
+   */
+  countryId?: string;
 }) {
   const t = useTranslations("elections");
   const national: CandidateNationalLedger[] = useMemo(
@@ -214,9 +221,12 @@ export function FactorLedgerCard({
               <div className="text-[10px] uppercase tracking-wider text-muted">
                 {t("factorLedger.bucketsTitle")}
               </div>
+              {/* The engine's bucket ids are internal — `education:no_college`,
+                  `wealth:middle`. Printing them raw asked the reader to learn
+                  the model's field names to find out who is behind them. */}
               {bucketAppeal.map((b) => (
                 <div key={b.bucket} className="flex items-baseline justify-between text-xs">
-                  <span className="font-semibold">{b.bucket}</span>
+                  <span className="font-semibold">{bucketLabel(b.bucket, countryId)}</span>
                   <span className="tabular-nums text-muted">
                     {(b.appealShare * 100).toFixed(1)}%
                   </span>

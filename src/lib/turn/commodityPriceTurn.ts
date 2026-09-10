@@ -1,3 +1,11 @@
+/**
+ * How commodity prices move each turn. processCommodityPriceTurn sums supply and
+ * demand from owned sectors, prices each commodity as 50% global + 25% national +
+ * 25% state, scales retail demand by GDP growth, and books extraction depletion
+ * from realized output (realizedOutputFraction). A naval blockade closes a
+ * country's seaborne trade lanes for the turn (loadBlockadeClosure, built on
+ * blockadeClosureByCountry).
+ */
 import { getDb } from "@/lib/mongodb";
 import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import type {
@@ -132,6 +140,7 @@ import { impliedOutputUnits } from "@/lib/market/capital";
 import type { Db } from "mongodb";
 import { depletedCapacityDoc, buildDepletionInc } from "@/lib/extraction/depletion";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/latentShortage";
 
 /**
  * P3b — book this turn's extraction against each state's deposits (plants only).
@@ -292,6 +301,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             producedUnits: 1,
             soldUnits: 1,
             capitalStock: 1,
+            operatingCapacityUnits: 1,
             mothballed: 1,
             embargoSuspended: 1,
             embargoExportExposure: 1,
@@ -578,7 +588,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // known; the ledger itself only multiplies.
       militaryDivertedFraction: freshMilitaryDiversion(s, turn),
       soldUnits: typeof s.soldUnits === "number" ? s.soldUnits : null,
-      capacityUnits: typeof s.capitalStock === "number" ? s.capitalStock : null,
+      capacityUnits: s.operatingCapacityUnits ?? s.capitalStock ?? null,
       mothballed: s.mothballed === true,
       embargoSupplyFactor,
       // Filled in after the extraction block below (plants only). Declared here
@@ -1758,6 +1768,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         )
       : undefined;
 
+    const latentShortage = latentShortagePersistence(globalBal, demandTruncated.get(commodity));
+
     ops.push({
       updateOne: {
         filter: { commodity },
@@ -1767,7 +1779,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             globalPrice: globalMktPrice,
             globalSupply: Math.round(globalBal.supply * 100) / 100,
             globalDemand: Math.round(globalBal.demand * 100) / 100,
-            ...latentShortageFields(globalBal, demandTruncated.get(commodity)),
+            ...latentShortage.set,
             statePrices,
             stateSupply,
             stateDemand,
@@ -1788,6 +1800,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             reachablePrices,
             updatedAt: now,
           },
+          ...(Object.keys(latentShortage.unset).length > 0 ? { $unset: latentShortage.unset } : {}),
         },
         upsert: true,
       },
@@ -1957,28 +1970,4 @@ async function loadBlockadeClosure(db: Db): Promise<Map<string, number>> {
   if (!navalUnits.length) return new Map();
 
   return blockadeClosureByCountry(navalUnits, hostility);
-}
-
-/**
- * Truncated demand and the latent shortage multiple for one commodity (#1460).
- *
- * `demandTruncatedUnits` is what the two 1.5x caps removed this turn (ledger
- * legs plus household). `latentShortageMultiple` is the demand the world would
- * have recorded without the caps, over supply: 1.5 for a commodity sitting on
- * the cap with nothing truncated, higher when the cap is hiding more. Both are
- * written to the price doc and its history; neither feeds prices, the scarcity
- * integrator or NPP shortage scores. Omitted when nothing was truncated.
- */
-export function latentShortageFields(
-  bal: { supply: number; demand: number },
-  truncated: number | undefined
-): { demandTruncatedUnits?: number; latentShortageMultiple?: number } {
-  if (!(typeof truncated === "number" && truncated > 0)) return {};
-  const out: { demandTruncatedUnits?: number; latentShortageMultiple?: number } = {
-    demandTruncatedUnits: Math.round(truncated * 100) / 100,
-  };
-  if (bal.supply > 0) {
-    out.latentShortageMultiple = Math.round(((bal.demand + truncated) / bal.supply) * 1000) / 1000;
-  }
-  return out;
 }

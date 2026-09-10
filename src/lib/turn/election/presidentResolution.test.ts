@@ -507,7 +507,8 @@ describe("resolvePresidentElection", () => {
         party: "REP",
         countryId: "US",
         _id: { $ne: nppWinnerNppId },
-      })
+      }),
+      { projection: { _id: 1 } }
     );
 
     // VP should be set in electedOfficials with isNPP: true and nppId

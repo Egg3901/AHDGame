@@ -21,6 +21,7 @@ import type {
  *   fund:<id>:<currency>               index fund cash leg
  *   org:<id>:<currency>                international org funds
  *   pension_scheme:<id>:<currency>     union pension scheme assets
+ *   npp:<id>:<currency>                NPP investment cash (anchor-backed)
  *   mint:<reason>:<currency>           system money creation (see plan §1.3)
  *   sink:<reason>:<currency>           system money destruction
  *   fx:<A>/<B>:<currency>              FX translation account (see plan §1.4)
@@ -38,6 +39,7 @@ export type LedgerAccountKind =
   | "fund"
   | "org"
   | "pension_scheme"
+  | "npp"
   | "mint"
   | "sink"
   | "fx";
@@ -72,6 +74,7 @@ export const REAL_ACCOUNT_KINDS: readonly LedgerAccountKind[] = [
   "government",
   "fund",
   "org",
+  "npp",
 ] as const;
 
 export function accountId(kind: LedgerAccountKind, ref: string, currency: CurrencyCode): string {
@@ -121,6 +124,8 @@ export function subjectAccount(
       return ids.countryId ? accountId("government", ids.countryId, currency) : null;
     case "pension_scheme":
       return ids.subjectId ? accountId("pension_scheme", ids.subjectId, currency) : null;
+    case "npp":
+      return ids.subjectId ? accountId("npp", ids.subjectId, currency) : null;
     default:
       return null;
   }
@@ -148,6 +153,8 @@ export function counterpartyAccount(
       return accountId("party", counterpartyId, currency);
     case "pension_scheme":
       return accountId("pension_scheme", counterpartyId, currency);
+    case "npp":
+      return accountId("npp", counterpartyId, currency);
     // government counterparties have no countryId on the tx row — not derivable.
     default:
       return null;

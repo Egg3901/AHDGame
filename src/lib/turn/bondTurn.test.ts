@@ -1523,7 +1523,7 @@ describe("processBondTurn", () => {
     expect(maturityEntry!.meta?.units).toBe(4);
   });
 
-  it("logs corporate holder coupon receipts in holder currency with bond-side meta", async () => {
+  it("logs corporate holder coupon cash after the existing FX fee with gross bond-side meta", async () => {
     const holderCorpId = new ObjectId();
     const issuerCorpId = new ObjectId();
     const bondId = new ObjectId();
@@ -1598,14 +1598,25 @@ describe("processBondTurn", () => {
       | {
           amount: number;
           currencyCode: string;
-          meta?: { bondCurrency?: string; bondAmount?: number };
+          meta?: { bondCurrency?: string; bondAmount?: number; fxSpreadAnchor?: number };
         }
       | undefined;
     expect(couponEntry).toBeDefined();
     expect(couponEntry!.currencyCode).toBe("JPY");
-    expect(couponEntry!.amount).toBe(3750);
+    expect(couponEntry!.amount).toBe(3712.5);
     expect(couponEntry!.meta?.bondCurrency).toBe("GBP");
     expect(couponEntry!.meta?.bondAmount).toBe(30);
+    expect(couponEntry!.meta?.fxSpreadAnchor).toBe(0.375);
+    expect(db.collectionMocks["corporations"]!.bulkWrite).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          updateOne: expect.objectContaining({
+            filter: { _id: holderCorpId },
+            update: expect.objectContaining({ $inc: { liquidCapital: couponEntry!.amount } }),
+          }),
+        }),
+      ])
+    );
   });
 
   it("logs corporate holder maturity receipts in holder currency with bond-side meta", async () => {

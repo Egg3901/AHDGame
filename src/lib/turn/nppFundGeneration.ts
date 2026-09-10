@@ -14,10 +14,13 @@ import type {
   State,
   GameConfig,
   Character,
-  SingleplayerDifficulty,
 } from "@/lib/db/types";
 import { projectNppGeneration, calculateTaxAmount } from "@/lib/utils/fundGeneration";
-import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import {
+  campaignAnchorToLocal,
+  campaignLocalRate,
+  loadCampaignCurrencyRates,
+} from "@/lib/campaigns/campaignCurrency";
 import { DEFAULT_NPP_STATE_TAX_RATE } from "@/lib/constants/partyOrg";
 import {
   emitTreasuryTransactionsBulk,
@@ -27,12 +30,8 @@ import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import {
-  NPP_ACTIONS_PER_TURN,
-  NPP_ACTION_CAP,
-  singleplayerNppTuning,
-} from "@/lib/singleplayerDifficulty/rules";
-import { isSingleplayer } from "@/lib/singleplayer";
+import { singleplayerNppTuning } from "@/lib/singleplayerDifficulty/rules";
+import { loadSingleplayerDifficulty } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 
 /*
  * NPPs receive 2 action points per turn (vs. 3+ for player characters). The
@@ -66,15 +65,21 @@ export async function processNppFundGeneration(
   if (config?.nppEconomyEnabled === false) {
     return { nppsProcessed: 0, totalGenerated: 0, totalStateTax: 0, totalNationalTax: 0 };
   }
-  const singleplayerState = isSingleplayer()
-    ? await db
-        .collection<{
-          _id: string;
-          singleplayerConfig?: { difficulty?: SingleplayerDifficulty };
-        }>("gameState")
-        .findOne({ _id: "current" }, { projection: { singleplayerConfig: 1 } })
-    : null;
-  const tuning = singleplayerNppTuning(singleplayerState?.singleplayerConfig?.difficulty);
+  // Local-world difficulty resource tuning. Read from the PERSISTED
+  // singleplayerConfig rather than the SINGLEPLAYER env flag: hosted worlds
+  // never persist that field (see its type comment), so multiplayer resolves to
+  // undefined → `normal` → the live NPP_ACTIONS_PER_TURN / NPP_ACTION_CAP /
+  // ×1 constants, byte-identical to before. The env flag was the wrong key
+  // because the world, not the process, owns the difficulty: the headless
+  // harness and any other host that processes turns without setting
+  // SINGLEPLAYER used to silently ignore a local world's own setting.
+  //
+  // This is the resource half of difficulty and is disclosed to the player as a
+  // resource bonus. The behaviour half is
+  // `singleplayerDifficulty/rules/behavior.ts` and never touches funds or AP.
+  const difficulty = await loadSingleplayerDifficulty(db);
+  const tuning = singleplayerNppTuning(difficulty);
+  const campaignRates = await loadCampaignCurrencyRates(db);
 
   const stateMap =
     preloadedStateMap ??
@@ -105,7 +110,19 @@ export async function processNppFundGeneration(
 
   // Technocrat NPPs (e.g. autonomous central-bank chairs) are excluded via
   // isTechnocrat: { $ne: true } — they don't generate political campaign funds.
-  const cursor = db.collection<NPP>("npps").find({ retiredAt: null, isTechnocrat: { $ne: true } });
+  const cursor = db.collection<NPP>("npps").find(
+    { retiredAt: null, isTechnocrat: { $ne: true } },
+    {
+      projection: {
+        homeState: 1,
+        countryId: 1,
+        funds: 1,
+        donorBaseLevel: 1,
+        party: 1,
+        actionPoints: 1,
+      },
+    }
+  );
   let batch: NPP[] = [];
 
   const processBatch = async (npps: NPP[]) => {
@@ -126,10 +143,10 @@ export async function processNppFundGeneration(
       const finite = (v: number | undefined | null) => (Number.isFinite(v) ? (v as number) : 0);
       // npp.funds is stored in LOCAL home currency. NPP funds are decoupled from
       // live forex: the anchor generation is denominated to local at the frozen
-      // base INITIAL_RATES scale (US ×1.0). To keep the diminishing-returns soft
+      // world-seeded currency basis (US ×1.0). To keep the diminishing-returns soft
       // cap triggering at the same economic scale in every country, feed the
       // curve the ANCHOR-EQUIVALENT balance (localFunds ÷ rate).
-      const rate = campaignLocalRate(npp.countryId ?? "US");
+      const rate = campaignLocalRate(npp.countryId ?? "US", campaignRates);
       const currentFundsLocal = finite(npp.funds);
       const currentFundsAnchor = rate > 0 ? currentFundsLocal / rate : currentFundsLocal;
       const donorBaseLevel = finite(npp.donorBaseLevel);
@@ -142,13 +159,13 @@ export async function processNppFundGeneration(
         nppEconomyEnabled: true,
       });
       const grossFundsLocal =
-        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US") *
-        (singleplayerState ? tuning.fundMultiplier : 1);
+        campaignAnchorToLocal(grossAnchor, npp.countryId ?? "US", campaignRates) *
+        tuning.fundMultiplier;
 
       const currentActions = finite(npp.actionPoints);
       const newActions = Math.min(
-        singleplayerState ? tuning.actionPointCap : NPP_ACTION_CAP,
-        currentActions + (singleplayerState ? tuning.actionPointsPerTurn : NPP_ACTIONS_PER_TURN)
+        tuning.actionPointCap,
+        currentActions + tuning.actionPointsPerTurn
       );
 
       let stateTaxAmountLocal = 0;

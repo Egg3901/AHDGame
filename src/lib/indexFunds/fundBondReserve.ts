@@ -10,6 +10,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
+import { loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
 import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
@@ -261,6 +262,8 @@ export async function deployBondReserveFromCash(
   }
 
   const fxRates = await loadFxRatesRecord(db);
+  // One pool read for the whole pass; each purchase advances the snapshot.
+  const bondPools = await loadBondPoolsByCurrency(db);
   let deployedAnchor = 0;
   let unitsPurchased = 0;
 
@@ -281,15 +284,14 @@ export async function deployBondReserveFromCash(
     const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
     if (units <= 0) continue;
 
-    const purchase = await purchaseBondUnitsForFund(db, fund, bond, units);
+    const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, { bondPools });
     if (!purchase.ok) continue;
 
     deployedAnchor += purchase.costAnchor;
     unitsPurchased += purchase.units;
     budgetAnchor -= purchase.costAnchor;
-
-    const refreshed = await db.collection<IndexFund>("indexFunds").findOne({ _id: fund._id });
-    if (refreshed) fund = refreshed;
+    // The purchase debits fund cash atomically; nothing below reads the
+    // fund's cash, so no re-read per bond. `budgetAnchor` is the running cap.
   }
 
   return { deployedAnchor, unitsPurchased, countryId };

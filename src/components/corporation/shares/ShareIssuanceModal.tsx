@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Button, Slider } from "@/components/ui";
+import { Button, Slider, useDialogA11y } from "@/components/ui";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useLocalCurrency } from "@/hooks/useLocalCurrency";
 import type { CorporationDetail } from "../CorporationPageTypes";
@@ -39,6 +39,7 @@ export default function ShareIssuanceModal({
   onClose,
   onSuccess,
 }: ShareIssuanceModalProps) {
+  const { dialogProps, titleId } = useDialogA11y(onClose);
   // sharePrice-derived values (issuanceProceeds, dilutedPrice, ceoPricePerShare,
   // ceoTotalCost) are all in corp LOCAL currency — route through useLocalCurrency
   // so wallet-pref display matches the Hero and Market Overview.
@@ -170,12 +171,17 @@ export default function ShareIssuanceModal({
     (mode === "public" ? newSharesToIssue >= 1 : ceoShares > 0 && !ceoHasInsufficientFunds);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      {...dialogProps}
+    >
       <div className="w-full max-w-md rounded-2xl border border-card-border bg-card shadow-modal">
         {/* ─── Header ──────────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between border-b border-card-border px-6 py-4">
           <div>
-            <h2 className="text-base font-semibold text-foreground">Issue Shares</h2>
+            <h2 id={titleId} className="text-base font-semibold text-foreground">
+              Issue Shares
+            </h2>
             <p className="mt-0.5 text-sm text-muted">
               {corporation.name}
               <span className="mx-2 text-card-border">·</span>

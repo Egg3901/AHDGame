@@ -136,12 +136,15 @@ async function resolveVpIds(
   if (winnerCandidate.isNPP && winnerCandidate.nppId && !vpCharId && !vpNppId) {
     const vpNppCandidates = await db
       .collection<NPP>("npps")
-      .find({
-        party: winnerCandidate.party,
-        countryId: election.countryId,
-        _id: { $ne: winnerCandidate.nppId },
-        retiredAt: null,
-      })
+      .find(
+        {
+          party: winnerCandidate.party,
+          countryId: election.countryId,
+          _id: { $ne: winnerCandidate.nppId },
+          retiredAt: null,
+        },
+        { projection: { _id: 1 } }
+      )
       .sort({ politicalInfluence: -1 })
       .limit(1)
       .toArray();

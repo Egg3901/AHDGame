@@ -1,4 +1,11 @@
 /**
+ * Caretaker CEOs: handing your corporation to an NPP to run while you keep
+ * ownership. appointCaretakerCeo seats an eligible in-country NPP as operating CEO
+ * under the same safe limits as NPP corps; dismissCaretakerCeo restores the owner,
+ * with a 3 day cooldown before reappointing (CARETAKER_REAPPOINT_COOLDOWN_TURNS).
+ * Vacant corps get a caretaker the same way (installCaretakerForVacantCorp).
+ */
+/**
  * Caretaker CEO — NPP-autonomy V2.1.
  *
  * A player corp owner (the sitting CEO) may hand day-to-day operation of their

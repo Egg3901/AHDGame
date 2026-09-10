@@ -4,8 +4,10 @@ import { ObjectId, type Db } from "mongodb";
 import { SINGLEPLAYER_USER_ID, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { CDN_GEO } from "@/lib/images/cdnUrls";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
+import { invalidateMaintenanceCache } from "@/lib/maintenanceStatus";
 import type {
   GameState,
+  GameConfig,
   NppAutonomyLevel,
   SingleplayerConfig,
   SingleplayerDifficulty,
@@ -42,31 +44,33 @@ export function singleplayerCdnDir(env: Record<string, string | undefined> = pro
  */
 export async function ensureSingleplayerUser(
   db: Db,
-  displayName = "Player"
+  displayName = "Admin"
 ): Promise<{ created: boolean }> {
   const users = db.collection("users");
   const _id = new ObjectId(SINGLEPLAYER_USER_ID);
-  const existing = await users.findOne({ _id }, { projection: { _id: 1 } });
-  if (existing) return { created: false };
-
   const claims = singleplayerSessionClaims();
   const now = new Date();
-  await users.insertOne({
-    _id,
-    email: claims.email,
-    username: claims.username,
-    displayName,
-    // Never a valid hash: the proxy mints the session, nobody logs in.
-    password: "!singleplayer-no-login",
-    role: claims.role,
-    isAdmin: claims.isAdmin,
-    hasCompletedSetup: false,
-    createdAt: now,
-    updatedAt: now,
-    lastLogin: now,
-    lastActivity: now,
-  });
-  return { created: true };
+  const result = await users.updateOne(
+    { _id },
+    {
+      $set: { role: claims.role, isAdmin: claims.isAdmin },
+      $setOnInsert: {
+        _id,
+        email: claims.email,
+        username: claims.username,
+        displayName,
+        // Never a valid hash: the proxy mints the session, nobody logs in.
+        password: "!singleplayer-no-login",
+        hasCompletedSetup: false,
+        createdAt: now,
+        updatedAt: now,
+        lastLogin: now,
+        lastActivity: now,
+      },
+    },
+    { upsert: true }
+  );
+  return { created: result.upsertedCount === 1 };
 }
 
 export interface SingleplayerStatus {
@@ -93,6 +97,22 @@ export interface SingleplayerStatus {
   warmAssets: string[];
 }
 
+async function clearSingleplayerMaintenance(db: Db): Promise<void> {
+  const result = await db.collection<GameConfig>("gameConfig").updateOne(
+    { _id: "default", maintenanceMode: { $ne: "off" } },
+    {
+      $set: { maintenanceMode: "off" },
+      $unset: {
+        maintenanceReason: "",
+        maintenanceExpectedEnd: "",
+        maintenanceEnabledBy: "",
+        maintenanceEnabledAt: "",
+      },
+    }
+  );
+  if (result.modifiedCount > 0) invalidateMaintenanceCache();
+}
+
 /**
  * What the launcher and the /singleplayer screen need to choose between
  * "new game" and "continue". Provisions the local account on first contact,
@@ -100,6 +120,7 @@ export interface SingleplayerStatus {
  */
 export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
   const account = await ensureSingleplayerUser(db);
+  await clearSingleplayerMaintenance(db);
   const userId = new ObjectId(SINGLEPLAYER_USER_ID);
   const [gameState, character, characterCount] = await Promise.all([
     db
@@ -108,7 +129,9 @@ export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
         { _id: "current" },
         { projection: { currentTurn: 1, preset: 1, isProcessing: 1, singleplayerConfig: 1 } }
       ),
-    db.collection("characters").findOne({ userId }, { projection: { _id: 1, name: 1 } }),
+    db
+      .collection("characters")
+      .findOne({ userId, retiredAt: { $exists: false } }, { projection: { _id: 1, name: 1 } }),
     db.collection("characters").countDocuments({ retiredAt: { $exists: false } }),
   ]);
   const config = gameState?.singleplayerConfig;
@@ -158,6 +181,14 @@ export async function setSingleplayerConfig(
     {
       $set: {
         singleplayerConfig: persisted,
+        // A local player owns turn pacing. Mark the world ready rather than
+        // paused, but never advertise a hosted cron deadline that cannot fire
+        // in the local runtime.
+        isActive: true,
+        pausedAt: null,
+        pauseReason: null,
+        pauseKind: null,
+        nextScheduledTurn: null,
         nppAutonomyLevel: persisted.nppAutonomyLevel,
         nppAutonomyEnabled: persisted.nppAutonomyLevel !== "off",
         ...featureFlags,
@@ -165,6 +196,7 @@ export async function setSingleplayerConfig(
       },
     }
   );
+  await clearSingleplayerMaintenance(db);
   return persisted;
 }
 

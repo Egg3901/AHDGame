@@ -145,6 +145,27 @@ async function collectBalanceState(
     );
   }
 
+  // --- NPP investment cash (anchor-backed) -------------------------------
+  // NPP investment cash is authoritative in nppInvestmentCashAnchor rather
+  // than a local wallet. The account suffix is the NPP home currency so it
+  // matches financialTxLog subject rows; the stored balance is already in ₳.
+  // NPP is included in REAL_ACCOUNT_KINDS so uncovered investment writers
+  // surface as amber stock-vs-flow findings instead of being hidden.
+  const npps = db.collection<{
+    _id: ObjectId;
+    countryId?: string;
+    nppInvestmentCashAnchor?: number;
+  }>("npps");
+  const nppCursor = npps.find({}, { projection: { countryId: 1, nppInvestmentCashAnchor: 1 } });
+  for await (const npp of nppCursor) {
+    if (typeof npp.nppInvestmentCashAnchor !== "number") continue;
+    add(
+      balances,
+      accountId("npp", npp._id.toString(), countryCurrency(npp.countryId)),
+      npp.nppInvestmentCashAnchor
+    );
+  }
+
   return { balances, anchorRates: Object.fromEntries(rates) };
 }
 

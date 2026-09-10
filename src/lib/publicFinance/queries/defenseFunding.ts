@@ -5,7 +5,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { aggregateForce } from "@/lib/constants/military";
 import { accrualPerTurn, upkeepPerTurn } from "@/lib/military/appropriation";
-import { seedRosterUpkeepFor } from "@/lib/military/seedRosterUpkeep";
+import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
 import { getCabinetSettingsCollection } from "@/lib/db/collections/cabinetSettings";
@@ -63,7 +63,11 @@ export async function loadDefenseFunding(
   const lineAnnual = resolveDefenseLineFrom(budget);
   const { totalUpkeep } = aggregateForce(units, countryId, tier);
   const accrual = accrualPerTurn(lineAnnual);
-  const upkeep = upkeepPerTurn(totalUpkeep, seedRosterUpkeepFor(preset, countryId), lineAnnual);
+  const upkeep = upkeepPerTurn(
+    totalUpkeep,
+    await resolveSeedRosterUpkeep(db, preset, countryId),
+    lineAnnual
+  );
 
   return {
     lineAnnual,

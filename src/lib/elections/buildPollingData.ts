@@ -1,7 +1,7 @@
 import type { PoliticalParty, PrimarySnapshot, ElectionVoteTally } from "@/lib/db/types";
 import {
-  applyMajoritarianBonus,
   getMultiSeatMinShare,
+  largestRemainderSeats,
   type MajoritarianBonusConfig,
 } from "@/lib/turn/election/seatAllocation";
 import type { PartyGroup } from "./candidateEnrichment";
@@ -57,85 +57,26 @@ export function computeSeatEstimates(
   const minShare = getMultiSeatMinShare(electionType, {
     majoritarian: majoritarianBonus !== undefined,
   });
-  const allEntries = Object.entries(activeVotes);
 
-  // Eligibility must match `allocateSeats` exactly, or the projected-seats
-  // panel reports a different result than the one the race will actually
-  // resolve to (ticket #1032). Two divergences used to live here:
-  //
-  //  1. The gate was PER-CANDIDATE, while resolution pools a party's
-  //     candidates. A party splitting 30/21/8 across three candidates was
-  //     judged on each candidate alone instead of its 59% aggregate.
-  //  2. The fallback re-admitted EVERY candidate whenever fewer of them
-  //     cleared the gate than `min(totalSeats, candidates)`. Multi-seat
-  //     chambers always have more seats than candidates (UK Commons: 5-12
-  //     candidates for 18-90 seats), so that condition demanded every single
-  //     candidate clear the gate and therefore fired in 11 of 12 Commons
-  //     regions — the panel applied no threshold at all and seated parties
-  //     polling 1.7-6.6% that resolution zeroes.
-  //
-  // Now: pool by party (independents stand alone), and fall back to ranked
-  // order ONLY in the degenerate case where nobody clears the gate.
-  const groupKey = (cid: string) => {
-    const party = tally.candidateParties?.[cid];
-    return party && party !== "independent" ? `party:${party}` : `cand:${cid}`;
-  };
-  const votesByGroup = new Map<string, number>();
-  for (const [cid, v] of allEntries) {
-    const k = groupKey(cid);
-    votesByGroup.set(k, (votesByGroup.get(k) ?? 0) + v);
-  }
-  const eligible = allEntries.filter(
-    ([cid]) => (votesByGroup.get(groupKey(cid)) ?? 0) / totalActiveVotes >= minShare
+  // Eligibility, the fallback and Largest Remainder come from the resolver's
+  // own implementation (#585), so the panel cannot drift from the seats the
+  // race will actually resolve to. Two divergences used to live here and both
+  // shipped to players (ticket #1032): the gate was PER-CANDIDATE while
+  // resolution pools a party's candidates, and the fallback re-admitted every
+  // candidate whenever fewer cleared the gate than min(totalSeats, candidates)
+  // — which multi-seat chambers always satisfy, so ~11 of 12 Commons regions
+  // applied no threshold at all and seated parties resolution zeroes.
+  const { seats, poolVotes } = largestRemainderSeats(
+    Object.entries(activeVotes).map(([cid, v]) => ({
+      id: cid,
+      votes: v,
+      party: tally.candidateParties?.[cid],
+    })),
+    totalSeats,
+    { minShare, totalVotesForShare: totalActiveVotes, majoritarianBonus }
   );
-  const pool =
-    eligible.length > 0
-      ? eligible
-      : [...allEntries]
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, Math.min(totalSeats, allEntries.length));
-  const poolVotes = pool.reduce((s, [, v]) => s + v, 0);
   if (poolVotes === 0) return null;
 
-  // Initialise all active candidates to 0
-  const seats: Record<string, number> = {};
-  for (const [cid] of allEntries) seats[cid] = 0;
-
-  // Winner's-bonus re-weighting by tapered bloc membership (party from the
-  // tally's candidateParties map; candidates without one stand alone).
-  // Effective weights sum to poolVotes, so Largest Remainder is untouched.
-  const effectiveVotes =
-    majoritarianBonus && pool.length > 1
-      ? applyMajoritarianBonus(
-          pool.map(([cid, v]) => {
-            const party = tally.candidateParties?.[cid];
-            return {
-              id: cid,
-              votes: v,
-              group: party && party !== "independent" ? `party:${party}` : `cand:${cid}`,
-            };
-          }),
-          majoritarianBonus
-        ).effective
-      : undefined;
-
-  const allocs = pool.map(([cid, v]) => {
-    const exact = ((effectiveVotes?.get(cid) ?? v) / poolVotes) * totalSeats;
-    return { cid, floor: Math.floor(exact), remainder: exact - Math.floor(exact) };
-  });
-
-  let allocated = 0;
-  for (const a of allocs) {
-    seats[a.cid] = a.floor;
-    allocated += a.floor;
-  }
-  const remaining = totalSeats - allocated;
-  if (remaining > 0) {
-    const sorted = [...allocs].sort((a, b) => b.remainder - a.remainder);
-    for (let i = 0; i < remaining && i < sorted.length; i++) {
-      seats[sorted[i].cid]++;
-    }
-  }
   return seats;
 }
 

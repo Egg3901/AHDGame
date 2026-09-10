@@ -1,4 +1,12 @@
 /**
+ * Prime ministers, government formation and no-confidence votes in parliamentary
+ * countries (UK, Japan, Germany and others). Seats are tallied by party
+ * (tallySeatsByParty), the PM is seated by appointPrimeMinister after an
+ * appointment vote (resolveParliamentaryAppointmentVote), and a no-confidence
+ * motion carries only when votes For reach the chamber's majority threshold
+ * (noConfidenceMotionCarries), which vacates the PM (unformGovernmentAndVacatePM).
+ */
+/**
  * Shared Parliamentary Government Logic
  *
  * Country-parameterized functions for seat tallying, government formation,

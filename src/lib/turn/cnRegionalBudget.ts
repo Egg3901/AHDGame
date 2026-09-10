@@ -289,6 +289,7 @@ export async function processOnePartyRegionalBudgets(
   ];
 
   const legTypes = await db
+    // full-read(legislationTypes): policyOptions tables price every regional law
     .collection<LegislationType>("legislationTypes")
     .find({ _id: { $in: allLegTypeIds } })
     .toArray();

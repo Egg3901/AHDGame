@@ -1,6 +1,7 @@
 import type { WikiSeedPage } from "../types";
 import { billsLegislationContent } from "../content/billsLegislation";
 import { votingAndWhipsContent } from "../content/votingAndWhips";
+import { clotureAndFilibusterContent } from "../content/clotureAndFilibuster";
 import { policyEffectsContent } from "../content/policyEffects";
 import { congressLeadershipContent } from "../content/congressLeadership";
 import { chamberLeadershipContent } from "../content/chamberLeadership";
@@ -41,6 +42,19 @@ export const legislaturesPages: readonly WikiSeedPage[] = [
     difficulty: "intermediate",
     contentType: "guide",
     estimatedReadTime: 6,
+  },
+  {
+    slug: "cloture-and-filibuster",
+    title: "Cloture & the Filibuster",
+    description:
+      "The US Senate filibuster: who can invoke it, the 25 AP and 5 NPI cost, the 12-hour extension, the three-fifths-of-votes-cast cloture threshold, why abstentions matter, and the Senate Filibuster Rules Act.",
+    content: clotureAndFilibusterContent,
+    category: "legislatures",
+    extraTags: ["senate", "filibuster", "cloture", "bills", "us"],
+    difficulty: "intermediate",
+    contentType: "mechanics",
+    estimatedReadTime: 5,
+    lastUpdated: "2026-09-05",
   },
   {
     slug: "policy-effects",

@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useTheme, type Theme } from "@/contexts/ThemeContext";
 import { SandboxHome } from "@/app/_landing-v2/SandboxHome";
 import type { GovernmentType } from "@/lib/constants/countries";
+import type { MarketedWorld } from "@/lib/marketing/marketedWorld";
 
 const THEME_PICKER: { value: Theme; label: string }[] = [
   { value: "default", label: "Default" },
@@ -31,8 +32,10 @@ const THEME_PICKER: { value: Theme; label: string }[] = [
 
 export function HomepagePreviewClient({
   governmentTypes = {},
+  world,
 }: {
   governmentTypes?: Record<string, GovernmentType>;
+  world: MarketedWorld;
 }) {
   const { theme, setTheme } = useTheme();
   const [view, setView] = useState<"signed-out" | "signed-in">("signed-out");
@@ -87,7 +90,11 @@ export function HomepagePreviewClient({
         </div>
       </div>
 
-      <SandboxHome isSignedIn={view === "signed-in"} governmentTypes={governmentTypes} />
+      <SandboxHome
+        isSignedIn={view === "signed-in"}
+        governmentTypes={governmentTypes}
+        world={world}
+      />
     </div>
   );
 }

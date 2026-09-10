@@ -29,6 +29,7 @@ import {
   battlegroundFeatureIdsForEra,
   economicPowerFeatureIdsForEra,
 } from "@/components/landing/countryTierRosters";
+import { resolveEraCopy, type MarketedWorld } from "@/lib/marketing/marketedWorld";
 import { CookieSettingsLink } from "@/components/CookieSettingsLink";
 import { CrtCountdown, useCrtCountdown } from "./CrtCountdown";
 import { LANDING_FOOTER_SECTIONS, LANDING_TRAY_LINKS } from "./publicLinks";
@@ -313,6 +314,7 @@ export function SandboxHome({
   playerCounts = {},
   governmentTypes = {},
   discordStats = null,
+  world,
 }: {
   isSignedIn: boolean;
   era?: string | number;
@@ -322,6 +324,12 @@ export function SandboxHome({
   governmentTypes?: Record<string, GovernmentType>;
   /** Server-fetched Discord member/online counts for the community section. */
   discordStats?: DiscordInviteStats | null;
+  /**
+   * Live version and playable roster. Every number and country name in the
+   * hero copy comes from here rather than from a literal, because the promo
+   * pill advertised v1.0.0 for six releases after 1.0.0 shipped.
+   */
+  world: MarketedWorld;
 }) {
   const t = useTranslations("auth");
   const eraConfig = getEraConfig(era);
@@ -530,7 +538,9 @@ export function SandboxHome({
               <span className="rounded-full bg-primary px-2 py-0.5 font-mono text-[0.65rem] font-bold uppercase tracking-wider text-white">
                 {t("landing.newBadge")}
               </span>
-              <span className="text-muted">{t("landing.promoPill")}</span>
+              <span className="text-muted">
+                {t("landing.promoPill", { version: world.version, year: String(world.seedYear) })}
+              </span>
               <span aria-hidden="true" className="ml-auto text-primary">
                 →
               </span>
@@ -651,7 +661,7 @@ export function SandboxHome({
                   </h3>
                 </div>
                 <p className="mb-4 text-body leading-relaxed text-muted">
-                  {eraConfig.worldSectionDek}
+                  {resolveEraCopy(eraConfig.worldSectionDek, world)}
                 </p>
                 <div className="space-y-3">
                   {visibleBlocs.map((blocId) => {

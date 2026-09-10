@@ -22,6 +22,12 @@ import { getPartyBudgetCollection } from "@/lib/db/collections";
 import { findPartyBudgetForScope } from "@/lib/partyBudgetGuards";
 import { wouldTriggerTreasuryReserveOverride } from "@/lib/partyTreasuryPlan";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
+import { checkPlayerPayoutCap } from "@/lib/treasury/payoutCap";
+import {
+  isLeadershipElectionFreezeActive,
+  LEADERSHIP_FREEZE_MESSAGE,
+} from "@/lib/parties/leadershipElectionFreeze";
+import { getGameTime } from "@/lib/time/gameTime";
 import { isSameCountry } from "@/lib/api/sameCountry";
 
 interface RouteParams {
@@ -124,6 +130,25 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     // Check treasury balance
+    // Party leadership handover freeze, then the recipient's per-turn
+    // cap. State party money counts towards the same combined ceiling as
+    // national money, or the cap could be drawn once per state party.
+    const { currentTurn } = await getGameTime();
+    if (!isAdmin) {
+      if (await isLeadershipElectionFreezeActive(db, party, currentTurn)) {
+        return NextResponse.json({ error: LEADERSHIP_FREEZE_MESSAGE }, { status: 400 });
+      }
+      const cap = await checkPlayerPayoutCap(db, {
+        characterId: targetCharacterOid,
+        countryId,
+        currentTurn,
+        amount: sendAmount,
+      });
+      if (!cap.ok) {
+        return NextResponse.json({ error: cap.reason }, { status: 400 });
+      }
+    }
+
     const treasury = statePartyOrg.treasury ?? 0;
     if (treasury < sendAmount) {
       return NextResponse.json({ error: "Insufficient treasury funds" }, { status: 400 });
@@ -250,6 +275,20 @@ export async function POST(request: Request, { params }: RouteParams) {
         id: targetCharacterOid.toString(),
         label: targetCharacter.name,
       },
+      // This route previously recorded no initiator, so every state party
+      // payout in the ledger reads as system-generated and there is no
+      // way to see who moved the money. The national and caucus send
+      // routes both record it; this one should too.
+      initiatedBy: authUser.character
+        ? {
+            type: "character" as const,
+            id: authUser.character._id.toString(),
+            label: authUser.character.name,
+          }
+        : undefined,
+      // Same turn the payout cap was checked against, so the check and
+      // the record cannot land in different turn buckets.
+      turn: currentTurn,
       now,
     });
 

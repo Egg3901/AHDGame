@@ -71,7 +71,7 @@ import { militaryPriceAnchor } from "@/lib/military/procurement";
 import type { NationalArsenal } from "@/lib/db/types/nationalArsenal";
 import type { DefenceContractView } from "@/app/country/[code]/executive/cabinet/[positionId]/office/useCabinetOffice";
 import { accrualPerTurn, upkeepPerTurn } from "@/lib/military/appropriation";
-import { seedRosterUpkeepFor } from "@/lib/military/seedRosterUpkeep";
+import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { getDefenceContractAvailability } from "@/lib/db/collections/defenceProcurementAllocations";
 import {
@@ -403,7 +403,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
         appropriationAccrual: accrualPerTurn(defenceLine),
         appropriationUpkeep: upkeepPerTurn(
           forceAgg.totalUpkeep,
-          seedRosterUpkeepFor(gameState?.preset ?? DEFAULT_SEED_PRESET, countryId),
+          await resolveSeedRosterUpkeep(db, gameState?.preset ?? DEFAULT_SEED_PRESET, countryId),
           defenceLine
         ),
         arrearsRatio: appropriationPot.arrearsRatio,
