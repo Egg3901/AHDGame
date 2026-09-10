@@ -9,6 +9,7 @@ import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
 import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
 import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
 import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
+import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
 import { ukRegionCensusData } from "@/lib/seeds/uk/ukRegionCensusData";
 import { ukRegionCensusData1953 } from "@/lib/seeds/uk/ukRegionCensusData1953";
 import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
@@ -146,6 +147,7 @@ const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
     "2007-default": stateCensusData2007,
     "2019-default": stateCensusData,
     "2023-default": stateCensusData2023,
+    "2027-default": stateCensusData2027,
   },
   UK: {
     "1953-default": ukRegionCensusData1953,
