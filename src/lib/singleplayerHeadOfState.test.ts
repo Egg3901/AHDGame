@@ -2,11 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import {
   getSingleplayerHeadOfStateOfficeType,
+  mayRuleByDecree,
   seatSingleplayerHeadOfState,
 } from "./singleplayerHeadOfState";
 import type { Character } from "@/lib/db/types";
 
 describe("singleplayer head of state seating", () => {
+  it("grants decree authority only to the matching permanent local head of state", () => {
+    const ruler = { countryId: "DE", singleplayerHeadOfState: true } as Character;
+    expect(mayRuleByDecree(ruler, "DE", true)).toBe(true);
+    expect(mayRuleByDecree(ruler, "US", true)).toBe(false);
+    expect(mayRuleByDecree(ruler, "DE", false)).toBe(false);
+    expect(mayRuleByDecree({ countryId: "DE" } as Character, "DE", true)).toBe(false);
+  });
   it("uses the governing executive for UK and Germany", () => {
     expect(getSingleplayerHeadOfStateOfficeType("UK", "2023-default")).toBe("primeMinister");
     expect(getSingleplayerHeadOfStateOfficeType("DE", "2023-default")).toBe("chancellor");

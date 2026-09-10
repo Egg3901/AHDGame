@@ -6,6 +6,7 @@ import { stateMetrics1991 } from "@/lib/seeds/reference/stateMetrics1991";
 import { stateMetrics1999 } from "@/lib/seeds/reference/stateMetrics1999";
 import { stateMetrics2007 } from "@/lib/seeds/reference/stateMetrics2007";
 import { stateMetrics2023 } from "@/lib/seeds/reference/stateMetrics2023";
+import { stateMetrics2027 } from "@/lib/seeds/reference/stateMetrics2027";
 import { stateMetrics1953 } from "@/lib/seeds/reference/stateMetrics1953";
 import { selectPresetBundle } from "@/lib/seeds/presetSelector";
 import { writeSplitMetrics } from "@/lib/macroMetrics/split";
@@ -55,6 +56,7 @@ export async function seedRegionMetrics(
       "1999-default": stateMetrics1999,
       "2007-default": stateMetrics2007,
       "2023-default": stateMetrics2023,
+      "2027-default": stateMetrics2027,
     },
     "seedRegionMetrics:stateMetrics1953"
   );

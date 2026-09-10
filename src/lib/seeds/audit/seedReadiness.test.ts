@@ -64,7 +64,7 @@ import { DE_LAND_VOTE_SHARES_1953 } from "../de/deLandVoteShares1953";
 const HARD = process.env.CALIBRATION_HARD === "1";
 
 const ALL_COUNTRIES = ["US", "UK", "DE", "JP", "IE", "BR", "CN", "NG"] as const;
-const ALL_ERAS: EraId[] = ["1953", "1979", "1991", "1999", "2007", "2019", "2023"];
+const ALL_ERAS: EraId[] = ["1953", "1979", "1991", "1999", "2007", "2019", "2023", "2027"];
 const PRESET_OF: Record<EraId, string> = {
   "1953": "1953-default",
   "1979": "1979-default",
@@ -73,16 +73,17 @@ const PRESET_OF: Record<EraId, string> = {
   "2007": "2007-default",
   "2019": "2019-default",
   "2023": "2023-default",
+  "2027": "2027-default",
 };
 
 /** Production-enabled cells. Coverage is global (ALL_COUNTRIES × ALL_ERAS);
  *  gating is these — a missing artifact here is a release blocker, others warn. */
 const LIVE_CELLS: Record<string, Set<EraId>> = {
-  US: new Set<EraId>(["1979", "1991", "1999", "2007", "2019", "2023"]),
-  UK: new Set<EraId>(["1991", "2019"]),
-  DE: new Set<EraId>(["1991", "2019"]),
-  JP: new Set<EraId>(["1991", "2019"]),
-  CN: new Set<EraId>(["1991", "2019"]),
+  US: new Set<EraId>(["1979", "1991", "1999", "2007", "2019", "2023", "2027"]),
+  UK: new Set<EraId>(["1991", "2019", "2027"]),
+  DE: new Set<EraId>(["1991", "2019", "2027"]),
+  JP: new Set<EraId>(["1991", "2019", "2027"]),
+  CN: new Set<EraId>(["1991", "2019", "2027"]),
   IE: new Set<EraId>(["1991", "2019"]),
   // BR, NG: covered & reported, not gated.
 };
@@ -172,7 +173,7 @@ const COUNTRY_ARTIFACTS: Record<string, ArtifactSpec> = {
     sectorWeights: (e) => hasRef("sectorSeedWeights", e),
     basePolicies: (e) => hasRef("basePolicies", e),
     registrationLanes: (e) => hasReg("registrationLanes", e),
-    seats: () => getPresetSeats(PRESET_OF["2019"]).length > 0,
+    seats: (e) => getPresetSeats(PRESET_OF[e]).length > 0,
     budgets: (e) => budgetsMatchEra(e),
   },
   UK: {
@@ -261,6 +262,7 @@ const EXPECTED_FISCAL_YEAR: Record<EraId, number> = {
   "2007": 2007,
   "2019": 2020,
   "2023": 2023,
+  "2027": 2027,
 };
 function usFederalBudgetYear(era: EraId): number | undefined {
   const configs = getNationalBudgetSeedConfigsForPreset(PRESET_OF[era]);
@@ -660,6 +662,18 @@ const ANACHRONISMS: Anachronism[] = [
     desc: "2023 US life expectancy 70–82",
   },
   {
+    era: "2027",
+    path: "healthcare.lifeExpectancy",
+    ok: (v) => v >= 70 && v <= 85,
+    desc: "2027 US life expectancy 70 to 85",
+  },
+  {
+    era: "2027",
+    path: "infrastructure.broadbandAccess",
+    ok: (v) => v >= 70,
+    desc: "2027 broadband at least 70%",
+  },
+  {
     era: "2023",
     path: "infrastructure.broadbandAccess",
     ok: (v) => v >= 70,
@@ -730,6 +744,10 @@ const METRIC_IMPORT: Partial<
   "2023": async () => ({
     metrics: (await import("@/lib/seeds/reference/stateMetrics2023"))
       .stateMetrics2023 as unknown as Array<Record<string, unknown>>,
+  }),
+  "2027": async () => ({
+    metrics: (await import("@/lib/seeds/reference/stateMetrics2027"))
+      .stateMetrics2027 as unknown as Array<Record<string, unknown>>,
   }),
 };
 
@@ -810,6 +828,11 @@ const STATES_IMPORT: Partial<
       Record<string, unknown>
     >,
   }),
+  "2027": async () => ({
+    states: (await import("@/lib/seeds/reference/states2027")).states2027 as unknown as Array<
+      Record<string, unknown>
+    >,
+  }),
 };
 
 describe("[6] Structural invariants — chambers, budgets, demographics", () => {
@@ -866,6 +889,11 @@ describe("[6] Structural invariants — chambers, budgets, demographics", () => 
       (await import("@/lib/seeds/stateDemographics")).stateCensusData as Record<string, unknown>,
     "2023": async () =>
       (await import("@/lib/seeds/stateCensusData2023")).stateCensusData2023 as Record<
+        string,
+        unknown
+      >,
+    "2027": async () =>
+      (await import("@/lib/seeds/stateCensusData2027")).stateCensusData2027 as Record<
         string,
         unknown
       >,

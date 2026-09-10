@@ -32,6 +32,7 @@ export const COVERAGE_ERAS: readonly EraId[] = [
   "2007",
   "2019",
   "2023",
+  "2027",
 ];
 
 /**
@@ -57,6 +58,7 @@ const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThun
     "2007": () => import("@/lib/seeds/reference/states2007").then((m) => m.states2007),
     "2019": () => import("@/lib/seeds/reference/states").then((m) => m.states),
     "2023": () => import("@/lib/seeds/reference/states2023").then((m) => m.states2023),
+    "2027": () => import("@/lib/seeds/reference/states2027").then((m) => m.states2027),
   },
   UK: {
     "1953": () => import("@/lib/seeds/uk/ukRegions1953").then((m) => m.ukRegions1953),
@@ -66,6 +68,7 @@ const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThun
     "2007": () => import("@/lib/seeds/uk/ukRegions2007").then((m) => m.ukRegions2007),
     "2019": () => import("@/lib/seeds/uk/ukRegions").then((m) => m.ukRegions),
     "2023": () => import("@/lib/seeds/uk/ukRegions2023").then((m) => m.ukRegions2023),
+    "2027": () => import("@/lib/seeds/uk/ukRegions2027").then((m) => m.ukRegions2027),
   },
   DE: {
     "1953": () => import("@/lib/seeds/de/deRegions1953").then((m) => m.deRegions1953),
@@ -75,6 +78,7 @@ const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThun
     "2007": () => import("@/lib/seeds/de/deRegions2007").then((m) => m.deRegions2007),
     "2019": () => import("@/lib/seeds/de/deRegions").then((m) => m.deRegions),
     "2023": () => import("@/lib/seeds/de/deRegions2023").then((m) => m.deRegions2023),
+    "2027": () => import("@/lib/seeds/de/deRegions2027").then((m) => m.deRegions2027),
   },
   JP: {
     "1953": () => import("@/lib/seeds/jp/jpRegions1953").then((m) => m.jpRegions1953),
@@ -84,6 +88,7 @@ const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThun
     "2007": () => import("@/lib/seeds/jp/jpRegions2007").then((m) => m.jpRegions2007),
     "2019": () => import("@/lib/seeds/jp/jpRegions").then((m) => m.jpRegions),
     "2023": () => import("@/lib/seeds/jp/jpRegions2023").then((m) => m.jpRegions2023),
+    "2027": () => import("@/lib/seeds/jp/jpRegions2027").then((m) => m.jpRegions2027),
   },
   IE: {
     "1953": () => import("@/lib/seeds/ie/ieRegions1953").then((m) => m.ieRegions1953),
@@ -111,6 +116,7 @@ const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThun
     "2007": () => import("@/lib/seeds/cn/cnRegions2007").then((m) => m.cnRegions2007),
     "2019": () => import("@/lib/seeds/cn/cnRegions").then((m) => m.cnRegions),
     "2023": () => import("@/lib/seeds/cn/cnRegions2023").then((m) => m.cnRegions2023),
+    "2027": () => import("@/lib/seeds/cn/cnRegions2027").then((m) => m.cnRegions2027),
   },
   NG: {
     "1953": () => import("@/lib/seeds/ng/ngRegions1953").then((m) => m.ngRegions1953),

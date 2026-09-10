@@ -35,6 +35,7 @@ async function deRegionRosterForPreset(preset: string) {
   const { deRegions1999 } = await import("@/lib/seeds/de/deRegions1999");
   const { deRegions2007 } = await import("@/lib/seeds/de/deRegions2007");
   const { deRegions2023 } = await import("@/lib/seeds/de/deRegions2023");
+  const { deRegions2027 } = await import("@/lib/seeds/de/deRegions2027");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   return selectPresetBundle(
     preset,
@@ -46,6 +47,7 @@ async function deRegionRosterForPreset(preset: string) {
       "1999-default": deRegions1999,
       "2007-default": deRegions2007,
       "2023-default": deRegions2023,
+      "2027-default": deRegions2027,
     },
     "seedDE:deRegions1953"
   );
