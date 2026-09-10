@@ -37,6 +37,16 @@ export interface User {
    * to the trusted migration coordinator.
    */
   authMigrationFence?: unknown;
+  /**
+   * Durable account-deletion command marker. Absent means no deletion in
+   * flight. Any present value (including null or malformed) blocks new
+   * admission; only a well-formed command held by its reservation id can be
+   * advanced by the trusted server worker. Never stores credentials, tokens,
+   * or password hashes: `requestedBySessionIat` is audit metadata only and
+   * never re-authorizes. Terminal `complete` keeps the receipt on the row;
+   * row removal is a separate track, not part of this marker.
+   */
+  accountDeletion?: AccountDeletionCommand;
   /** Last time the password was set via change-password or reset-password. */
   passwordChangedAt?: Date;
   /** When the 48-hour banned shareholder/CEO grace cleanup was applied. */
@@ -189,6 +199,29 @@ export interface User {
   /** Cloudflare edge fingerprint from the most recent login/capture —
    * mirrors `lastFingerprint`. */
   lastCf?: CfFingerprint;
+}
+
+/** Durable account-deletion command states: admission receipt, cascade in flight, done. */
+export type AccountDeletionState = "reserved" | "cascading" | "complete";
+
+/**
+ * Single-document deletion command stored on the user row. `requestedAt` is
+ * frozen at admission and keys every idempotent cascade retry; `workerId` +
+ * `workerGeneration` + `leaseExpiresAt` fence concurrent server resumers.
+ */
+export interface AccountDeletionCommand {
+  state: AccountDeletionState;
+  reservationId: string;
+  requestedAt: Date;
+  /** Issue time of the authorizing session. Audit only, never re-authorizes. */
+  requestedBySessionIat: number;
+  updatedAt: Date;
+  /** Lease holder. Absent only before the first worker claim. */
+  workerId?: string;
+  /** Monotonic fencing generation, incremented on every lease reclaim. */
+  workerGeneration?: number;
+  /** Lease deadline. Absent only before the first worker claim. */
+  leaseExpiresAt?: Date;
 }
 
 /** Re-export IpDetails for consumers of this module. */
