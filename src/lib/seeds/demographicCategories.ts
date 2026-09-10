@@ -1721,6 +1721,11 @@ for (const era of ["1953", "1979", "1991", "1999", "2007", "2023"] as const) {
   }
 }
 
+// The 2027 projection carries the latest observed position calibration
+// forward. Its census and turnout substrates are authored separately above;
+// new post-2024 position estimates can replace this copy when available.
+DEMOGRAPHIC_POSITIONS["2027"] = JSON.parse(JSON.stringify(DEMOGRAPHIC_POSITIONS["2023"]));
+
 /**
  * Deep South (AL MS SC LA GA AR): one-party organization, not left ideology.
  * Whites here are New Deal beneficiaries (TVA, REA, farm parity) who sit at the
