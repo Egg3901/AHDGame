@@ -88,6 +88,7 @@ function mockDb({
   activeCharacterIds = [],
   totalUnionCount,
   seededCountryIds = ["US"],
+  bannedCountryIds = [],
 }: {
   unions: Union[];
   sectors?: CorporateSector[];
@@ -98,6 +99,8 @@ function mockDb({
   totalUnionCount?: number;
   /** Non-NATIONAL country ids `states.distinct` returns; drives the expected full-roster size (`× CORPORATION_TYPES.length`). */
   seededCountryIds?: string[];
+  /** Country ids whose FederalBudget documents have an active union ban. */
+  bannedCountryIds?: string[];
 }) {
   const now = new Date();
   const expectedFullRoster = seededCountryIds.length * CORPORATION_TYPES.length;
@@ -105,9 +108,17 @@ function mockDb({
   const unionsBulkWrite = vi.fn().mockResolvedValue({});
   const unionsUpdateMany = vi.fn().mockResolvedValue({});
   const unionsFind = vi.fn().mockReturnValue({ toArray: () => Promise.resolve(unions) });
-  const unionsDistinct = vi
-    .fn()
-    .mockImplementation(async () => unions.filter((u) => u.suspended).map((u) => u._id));
+  const unionsDistinct = vi.fn().mockImplementation(async (filter: Record<string, unknown>) => {
+    const countryIds = ((filter.countryId as { $in?: string[] } | undefined)?.$in ??
+      (filter.$or as Array<Record<string, unknown>> | undefined)?.find(
+        (clause) => clause.countryId !== undefined
+      )?.countryId) as string[] | undefined;
+    return unions.filter((u) => u.suspended || countryIds?.includes(u.countryId)).map((u) => u._id);
+  });
+  const federalBudgetFind = vi.fn().mockReturnValue({
+    toArray: () =>
+      Promise.resolve(bannedCountryIds.map((countryId) => ({ countryId, unionsBanned: true }))),
+  });
   const organizersUpdateMany = vi.fn().mockResolvedValue({});
   const organizersFind = vi.fn().mockReturnValue({ toArray: () => Promise.resolve(organizers) });
   const charactersUpdateMany = vi.fn().mockResolvedValue({});
@@ -132,6 +143,9 @@ function mockDb({
       }
       if (name === "states") {
         return { distinct: vi.fn().mockResolvedValue(seededCountryIds) };
+      }
+      if (name === "federalBudget") {
+        return { find: federalBudgetFind };
       }
       if (name === "gameState") {
         return { findOne: vi.fn().mockResolvedValue({ preset: "2019-default" }) };
@@ -182,6 +196,7 @@ function mockDb({
     organizersFind,
     organizersUpdateMany,
     charactersBulkWrite,
+    federalBudgetFind,
   };
 }
 
@@ -664,6 +679,32 @@ describe("processUnionsTurn, safety-net seeding + union-ban suspension", () => {
     );
     expect(ownedCall).toBeDefined();
     expect(ownedCall![0]).toMatchObject({ ownerId: { $ne: null }, suspended: { $ne: true } });
+  });
+
+  it("uses FederalBudget bans for cells seeded after the ban", async () => {
+    labourFullModeEnabled = true;
+    const union = makeUnion({ suspended: false });
+    const { db, unionsFind, unionsDistinct, federalBudgetFind } = mockDb({
+      unions: [union],
+      bannedCountryIds: ["US"],
+      activeCharacterIds: [union.ownerId!.toString()],
+    });
+
+    await processUnionsTurn(db);
+
+    expect(federalBudgetFind).toHaveBeenCalledWith(
+      { unionsBanned: true },
+      { projection: { countryId: 1 } }
+    );
+    expect(unionsDistinct).toHaveBeenCalledWith("_id", { countryId: { $in: ["US"] } });
+    const undergroundCall = unionsFind.mock.calls.find(
+      (call) => (call[0] as Record<string, unknown>).countryId !== undefined
+    );
+    expect(undergroundCall?.[0]).toEqual({ countryId: { $in: ["US"] } });
+    const ownedCall = unionsFind.mock.calls.find(
+      (call) => (call[0] as Record<string, unknown>).ownerId !== undefined
+    );
+    expect(ownedCall?.[0]).toMatchObject({ countryId: { $nin: ["US"] } });
   });
 });
 

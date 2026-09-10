@@ -8,7 +8,7 @@ summary: >-
   toward the union's strength at half value if the ban is ever repealed.
 tags: [unions, labor, bans]
 badges: [minor]
-areas: [gameplay]
+areas: [fullstack, engine]
 ---
 
 ## Added

@@ -175,7 +175,9 @@ describe("underground organize panel", () => {
 
     expect(await screen.findByText(/^exposed$/i)).toBeTruthy();
     expect(screen.getByText(/4 turns left/i)).toBeTruthy();
-    expect(screen.getByText(/halved while exposed/i)).toBeTruthy();
+    expect(screen.getByText(/\+2 strength · low heat · halved while exposed/i)).toBeTruthy();
+    expect(screen.getByText(/\+4\.5 strength · high heat · halved while exposed/i)).toBeTruthy();
+    expect(screen.getAllByText(/halved while exposed/i)).toHaveLength(2);
   });
 
   it("disables both drives with a reason when the action bar cannot cover the cost", async () => {

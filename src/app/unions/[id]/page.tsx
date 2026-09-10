@@ -1375,7 +1375,11 @@ function UndergroundOrganizePanel({
   onDrive: (mode: "quiet" | "mass") => void;
 }) {
   const status = UNDERGROUND_STATUS_COPY[underground.status];
+  const exposed = underground.status === "exposed";
+  const quietGain = exposed ? underground.quietGain / 2 : underground.quietGain;
+  const massGain = exposed ? underground.massGain / 2 : underground.massGain;
   const cannotAfford = myActions != null && myActions < underground.actionCost;
+  const actionsLoading = myActions == null;
   const exposedTurnsLeft =
     underground.status === "exposed" && underground.exposedUntilTurn != null
       ? Math.max(0, underground.exposedUntilTurn - currentTurn + 1)
@@ -1442,35 +1446,38 @@ function UndergroundOrganizePanel({
         <div className="flex flex-col gap-1">
           <button
             type="button"
-            disabled={actionPending || cannotAfford}
+            aria-describedby="underground-action-cost underground-quiet-effect"
+            disabled={actionPending || actionsLoading || cannotAfford}
             onClick={() => onDrive("quiet")}
             className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
           >
             Quiet cell work
           </button>
-          <span className="text-[11px] text-muted">
-            +{underground.quietGain} strength · low heat
+          <span id="underground-quiet-effect" className="text-[11px] text-muted">
+            +{quietGain} strength · low heat{exposed && " · halved while exposed"}
           </span>
         </div>
         <div className="flex flex-col gap-1">
           <button
             type="button"
-            disabled={actionPending || cannotAfford}
+            aria-describedby="underground-action-cost underground-mass-effect"
+            disabled={actionPending || actionsLoading || cannotAfford}
             onClick={() => onDrive("mass")}
             className="w-fit rounded-lg border border-card-border px-4 py-2 text-sm font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
           >
             Mass drive
           </button>
-          <span className="text-[11px] text-muted">
-            +{underground.massGain} strength · high heat
-            {underground.status === "exposed" && " · halved while exposed"}
+          <span id="underground-mass-effect" className="text-[11px] text-muted">
+            +{massGain} strength · high heat
+            {exposed && " · halved while exposed"}
           </span>
         </div>
       </div>
       <div className="flex flex-col gap-1">
-        <span className="text-[11px] text-muted">
+        <span id="underground-action-cost" className="text-[11px] text-muted">
           Costs {underground.actionCost} action points
-          {myActions != null && ` · you have ${myActions}`} · one drive per turn
+          {actionsLoading ? " · checking your action points" : ` · you have ${myActions}`} · one
+          drive per turn
         </span>
         {cannotAfford && (
           <span className="text-[11px] font-medium text-error">

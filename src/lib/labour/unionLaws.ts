@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
 import type { FederalBudget, Union } from "@/lib/db/types";
+import type { UnionOrganizer } from "@/lib/db/types/union";
 import type { UnionLawProvision } from "@/lib/db/types/legislation";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import { repealUndergroundConversion } from "@/lib/unions/underground";
@@ -42,6 +43,19 @@ export async function isUnionsBanned(db: Db, countryId: CountryId): Promise<bool
 }
 
 /**
+ * Return every country whose federal budget currently bans unions. Turn
+ * processing uses this as the authoritative source because unions seeded after
+ * a ban do not carry their own `suspended` flag.
+ */
+export async function getBannedUnionCountryIds(db: Db): Promise<Set<CountryId>> {
+  const budgets = await db
+    .collection<FederalBudget>("federalBudget")
+    .find({ unionsBanned: true }, { projection: { countryId: 1 } })
+    .toArray();
+  return new Set(budgets.map((budget) => budget.countryId as CountryId));
+}
+
+/**
  * v3 Phase 7b: apply an enacted `UnionLawProvision` to the country's
  * `FederalBudget.unionLawBias`. Modeled on `applyTariffProvision`'s
  * economy-wide sync (`src/lib/tariffs/tariffEffects.ts`) — a simple field
@@ -77,6 +91,10 @@ export async function applyUnionLawProvision(
       .updateOne({ _id: budgetId }, { $set: { unionsBanned: banned, updatedAt: now } });
     if (banned) {
       // A fresh ban starts every cell at zero heat and an empty shadow pool.
+      const countryUnionIds = await db
+        .collection<Union>("unions")
+        .find({ countryId }, { projection: { _id: 1 } })
+        .toArray();
       await db.collection<Union>("unions").updateMany(
         { countryId },
         {
@@ -89,45 +107,61 @@ export async function applyUnionLawProvision(
           },
         }
       );
+      if (countryUnionIds.length > 0) {
+        await db.collection<UnionOrganizer>("unionOrganizers").updateMany(
+          { unionId: { $in: countryUnionIds.map((union) => union._id) } },
+          {
+            $unset: { undergroundStrength: "", lastUndergroundDriveTurn: "" },
+            $set: { updatedAt: now },
+          }
+        );
+      }
       return;
     }
     // Repeal restores legal `strength` intact (the round-trip rule) plus the
     // underground pool at a haircut: ban-then-repeal leaves labor weaker
     // than never-banned but not erased. Shadow fields are cleared so a
     // later ban starts clean.
-    const suspendedUnions = await db
+    const countryUnions = await db
       .collection<Union>("unions")
-      .find({ countryId, suspended: true }, { projection: { strength: 1, undergroundStrength: 1 } })
+      .find({ countryId }, { projection: { strength: 1, undergroundStrength: 1, suspended: 1 } })
       .toArray();
-    if (suspendedUnions.length > 0) {
+    if (countryUnions.length > 0) {
       await db.collection<Union>("unions").bulkWrite(
-        suspendedUnions.map((suspended) => ({
-          updateOne: {
-            filter: { _id: suspended._id },
-            update: {
-              $set: {
-                suspended: false,
-                strength:
-                  unionStrength(suspended) +
-                  repealUndergroundConversion(suspended.undergroundStrength ?? 0),
-                updatedAt: now,
-              },
-              $unset: {
-                undergroundStrength: "",
-                heat: "",
-                exposedUntilTurn: "",
-                lastUndergroundDriveTurn: "",
+        countryUnions.map((union) => {
+          const shadowStrength = repealUndergroundConversion(union.undergroundStrength ?? 0);
+          const set: Record<string, unknown> = { suspended: false, updatedAt: now };
+          // Suspended cells and budget-only cells with a shadow pool both need
+          // the pool converted. A clean legal union only needs its flag reset.
+          if (union.suspended === true || shadowStrength > 0) {
+            set.strength = unionStrength(union) + shadowStrength;
+          }
+          return {
+            updateOne: {
+              filter: { _id: union._id },
+              update: {
+                $set: set,
+                $unset: {
+                  undergroundStrength: "",
+                  heat: "",
+                  exposedUntilTurn: "",
+                  lastUndergroundDriveTurn: "",
+                },
               },
             },
-          },
-        }))
+          };
+        })
       );
     }
-    // Unions seeded while the ban was already enacted carry no `suspended`
-    // flag of their own; clear any straggler the conversion pass missed.
-    await db
-      .collection<Union>("unions")
-      .updateMany({ countryId, suspended: true }, { $set: { suspended: false, updatedAt: now } });
+    if (countryUnions.length > 0) {
+      await db.collection<UnionOrganizer>("unionOrganizers").updateMany(
+        { unionId: { $in: countryUnions.map((union) => union._id) } },
+        {
+          $unset: { undergroundStrength: "", lastUndergroundDriveTurn: "" },
+          $set: { updatedAt: now },
+        }
+      );
+    }
     return;
   }
 

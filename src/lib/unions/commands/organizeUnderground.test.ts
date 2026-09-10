@@ -78,9 +78,9 @@ function stubDb(opts: {
 }
 
 describe("organizeUnderground (command)", () => {
-  it("refuses when the union is not under a ban", async () => {
+  it("refuses a stale suspended flag when the budget is no longer banned", async () => {
     const character = makeCharacter();
-    const union = makeUnion({ suspended: false });
+    const union = makeUnion({ suspended: true });
     const { db, characterUpdate } = stubDb({ union, banned: false });
     const result = await organizeUnderground(db, character, union, "quiet");
     expect(result.ok).toBe(false);
@@ -129,6 +129,47 @@ describe("organizeUnderground (command)", () => {
       expect(result.error).toMatch(/already ran an underground drive/i);
     }
     expect(characterUpdate).not.toHaveBeenCalled();
+  });
+
+  it("rejects a concurrent second drive without changing the union", async () => {
+    const character = makeCharacter();
+    const union = makeUnion();
+    const characterUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const unionUpdate = vi.fn().mockResolvedValue({ ...union });
+    const organizerUpdate = vi
+      .fn()
+      .mockResolvedValueOnce({ _id: new ObjectId() })
+      .mockResolvedValueOnce(null);
+    const db = {
+      collection: (name: string) => {
+        if (name === "characters") return { updateOne: characterUpdate };
+        if (name === "unions") return { findOneAndUpdate: unionUpdate };
+        if (name === "unionOrganizers") {
+          return {
+            findOne: vi.fn().mockResolvedValue(null),
+            findOneAndUpdate: organizerUpdate,
+          };
+        }
+        if (name === "federalBudget") {
+          return { findOne: vi.fn().mockResolvedValue({ unionsBanned: true }) };
+        }
+        if (name === "gameState") {
+          return { findOne: vi.fn().mockResolvedValue({ currentTurn: 42 }) };
+        }
+        throw new Error(`unexpected collection ${name}`);
+      },
+    } as unknown as Db;
+
+    const results = await Promise.all([
+      organizeUnderground(db, character, union, "quiet"),
+      organizeUnderground(db, character, union, "quiet"),
+    ]);
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)[0]).toMatchObject({ status: 409 });
+    expect(unionUpdate).toHaveBeenCalledTimes(1);
+    // Two spends and one refund for the losing request.
+    expect(characterUpdate).toHaveBeenCalledTimes(3);
   });
 
   it("a quiet drive spends actions and builds the shadow pool, never the treasury", async () => {
@@ -187,7 +228,11 @@ describe("organizeUnderground (command)", () => {
         }
         if (name === "unions") return { findOneAndUpdate: vi.fn().mockResolvedValue(null) };
         if (name === "unionOrganizers") {
-          return { findOne: vi.fn().mockResolvedValue(null) };
+          return {
+            findOne: vi.fn().mockResolvedValue(null),
+            findOneAndUpdate: vi.fn().mockResolvedValue({ _id: new ObjectId() }),
+            deleteOne: vi.fn().mockResolvedValue({ deletedCount: 1 }),
+          };
         }
         if (name === "federalBudget") {
           return { findOne: vi.fn().mockResolvedValue({ unionsBanned: true }) };

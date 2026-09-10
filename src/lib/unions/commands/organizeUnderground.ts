@@ -34,6 +34,15 @@ export function isUndergroundDriveMode(value: unknown): value is UndergroundDriv
   return value === "quiet" || value === "mass";
 }
 
+function isDuplicateKeyError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: unknown }).code === 11000
+  );
+}
+
 /**
  * Run an underground organizing drive against a suspended union. Any
  * character in the union's country may do this, led or not, mirroring the
@@ -60,9 +69,10 @@ export async function organizeUnderground(
       error: "You must be in this union's country to help organize it underground.",
     };
   }
-  // Suspended flag is the fast path; the budget flag covers unions seeded
-  // while a ban was already enacted (same dual-read as the detail route).
-  if (union.suspended !== true && !(await isUnionsBanned(db, union.countryId as CountryId))) {
+  // The budget is authoritative. Relying on the union flag alone would let a
+  // stale suspended document keep accepting drives after repeal, while relying
+  // on it as the fast path misses unions seeded during an active ban.
+  if (!(await isUnionsBanned(db, union.countryId as CountryId))) {
     return {
       ok: false,
       status: 403,
@@ -116,6 +126,51 @@ export async function organizeUnderground(
     exposed,
   });
 
+  // The unique organizer index makes this conditional upsert a single-turn
+  // claim. Two concurrent requests may both spend successfully, but only one
+  // can claim the organizer row for this turn; the loser is refunded below and
+  // never changes the union.
+  let organizer: UnionOrganizer | null;
+  try {
+    organizer = await organizers.findOneAndUpdate(
+      {
+        unionId: union._id,
+        characterId: character._id,
+        $or: [
+          { lastUndergroundDriveTurn: { $exists: false } },
+          { lastUndergroundDriveTurn: null },
+          { lastUndergroundDriveTurn: { $ne: currentTurn } },
+        ],
+      },
+      {
+        $inc: { undergroundStrength: strengthGain },
+        $setOnInsert: {
+          unionId: union._id,
+          characterId: character._id,
+          organizeCount: 0,
+          totalSpent: 0,
+          createdAt: now,
+        },
+        $set: { lastUndergroundDriveTurn: currentTurn, updatedAt: now },
+      },
+      { upsert: true, returnDocument: "after" }
+    );
+  } catch (error) {
+    if (!isDuplicateKeyError(error)) throw error;
+    organizer = null;
+  }
+
+  if (!organizer) {
+    await db
+      .collection<Character>("characters")
+      .updateOne({ _id: character._id }, { $inc: { actions: UNDERGROUND_ACTION_COST } });
+    return {
+      ok: false,
+      status: 409,
+      error: "You already ran an underground drive this turn. Lay low until the next one.",
+    };
+  }
+
   const updatedUnion = await db.collection<Union>("unions").findOneAndUpdate(
     { _id: union._id },
     {
@@ -129,24 +184,19 @@ export async function organizeUnderground(
     await db
       .collection<Character>("characters")
       .updateOne({ _id: character._id }, { $inc: { actions: UNDERGROUND_ACTION_COST } });
+    if (existing) {
+      await organizers.updateOne(
+        { _id: organizer._id, lastUndergroundDriveTurn: currentTurn },
+        {
+          $inc: { undergroundStrength: -strengthGain },
+          $set: { lastUndergroundDriveTurn: existing.lastUndergroundDriveTurn, updatedAt: now },
+        }
+      );
+    } else if (organizer._id) {
+      await organizers.deleteOne({ _id: organizer._id });
+    }
     return { ok: false, status: 404, error: "Union not found." };
   }
-
-  await organizers.findOneAndUpdate(
-    { unionId: union._id, characterId: character._id },
-    {
-      $inc: { undergroundStrength: strengthGain },
-      $setOnInsert: {
-        unionId: union._id,
-        characterId: character._id,
-        organizeCount: 0,
-        totalSpent: 0,
-        createdAt: now,
-      },
-      $set: { lastUndergroundDriveTurn: currentTurn, updatedAt: now },
-    },
-    { upsert: true }
-  );
 
   return {
     ok: true,

@@ -56,6 +56,24 @@ describe("processUndergroundTurn", () => {
     expect(bulkWrite).not.toHaveBeenCalled();
   });
 
+  it("processes a union in a budget-banned country even without its local flag", async () => {
+    const budgetOnlyCell = makeCell({
+      suspended: false,
+      heat: 10,
+      lastUndergroundDriveTurn: 40,
+    });
+    const { db, bulkWrite } = stubDb([budgetOnlyCell]);
+
+    const result = await processUndergroundTurn(db, 42, new Set(["US"]));
+
+    expect(result.unionsChecked).toBe(1);
+    expect(bulkWrite).toHaveBeenCalledTimes(1);
+    const writes = bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: { update: { $set: Record<string, unknown> } };
+    }>;
+    expect(writes[0].updateOne.update.$set.heat).toBe(8);
+  });
+
   it("decays heat on idle turns and writes nothing at zero", async () => {
     const warm = makeCell({ heat: 10, lastUndergroundDriveTurn: 40 });
     const cold = makeCell({ heat: 0 });

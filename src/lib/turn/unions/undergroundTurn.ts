@@ -1,4 +1,5 @@
 import type { Db } from "mongodb";
+import type { CountryId } from "@/lib/constants/countries";
 import type { Union } from "@/lib/db/types";
 import { seededRoll } from "@/lib/events/substrate/rng";
 import {
@@ -17,8 +18,10 @@ export interface UndergroundTurnResult {
 }
 
 /**
- * Illicit unions under ban, per-turn underground step. Runs for suspended
- * unions only (the legal pass skips them entirely):
+ * Illicit unions under ban, per-turn underground step. The turn orchestrator
+ * supplies budget-banned country ids so unions seeded during an active ban are
+ * included even when their local `suspended` mirror is absent. Direct callers
+ * that omit that set retain the suspended-only behavior:
  *
  * - Heat decays when idle (`lastUndergroundDriveTurn !== currentTurn`), so
  *   steady slow work stays dark and bursts get noticed.
@@ -33,18 +36,30 @@ export interface UndergroundTurnResult {
  */
 export async function processUndergroundTurn(
   db: Db,
-  currentTurn: number
+  currentTurn: number,
+  bannedCountryIds: ReadonlySet<CountryId> = new Set<CountryId>()
 ): Promise<UndergroundTurnResult> {
+  const bannedCountries = Array.from(bannedCountryIds);
+  const undergroundFilter =
+    bannedCountries.length > 0 ? { countryId: { $in: bannedCountries } } : { suspended: true };
   const docs = await db
     .collection<Union>("unions")
-    .find(
-      { suspended: true },
-      { projection: { suspended: 1, heat: 1, exposedUntilTurn: 1, lastUndergroundDriveTurn: 1 } }
-    )
+    .find(undergroundFilter, {
+      projection: {
+        countryId: 1,
+        suspended: 1,
+        heat: 1,
+        exposedUntilTurn: 1,
+        lastUndergroundDriveTurn: 1,
+      },
+    })
     .toArray();
   // Filter client-side too: callers that ignore the filter (tests) must not
   // widen this onto legal unions.
-  const cells = docs.filter((doc) => doc.suspended === true);
+  const cells =
+    bannedCountries.length > 0
+      ? docs.filter((doc) => bannedCountryIds.has(doc.countryId))
+      : docs.filter((doc) => doc.suspended === true);
   if (cells.length === 0) {
     return { unionsChecked: 0, newlyExposed: 0 };
   }
