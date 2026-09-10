@@ -37,6 +37,7 @@ import {
   loginDestination,
   takeOAuthReturnUrlCookie,
 } from "@/lib/auth/lakesideLoginReturn";
+import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
 
 // GET /api/auth/discord/callback — Handles the Discord OAuth callback to log in or register a user via Discord.
 // Auth: public
@@ -162,7 +163,23 @@ async function handleDiscordLogin(
       return NextResponse.redirect(new URL(`/banned?reason=${reason}`, baseUrl));
     }
 
-    // Issue JWT and log them in
+    const existingTrack = cookieStore.get("__ahd_track")?.value;
+    const trackingId = existingTrack || randomUUID();
+    const oauthDeviceKey = cookieStore.get(OAUTH_DEVICE_KEY_COOKIE)?.value;
+    cookieStore.delete(OAUTH_DEVICE_KEY_COOKIE);
+
+    const clientIp = await getClientIp();
+    const device = classifyDevice(userAgent);
+    const observedAt = new Date();
+    const issued = await resolveReauthIssuedAt(existingUser.authRevokedAt);
+    if (!issued.ok) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/discord/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
     const token = await new SignJWT({
       userId: existingUser._id.toString(),
       email: existingUser.email,
@@ -171,33 +188,17 @@ async function handleDiscordLogin(
       isAdmin: existingUser.isAdmin || false,
     })
       .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
+      .setIssuedAt(issued.iat)
       .setExpirationTime("7d")
       .sign(getJwtSecret());
 
-    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
-    await setCharacterGateCookie(
-      cookieStore,
-      needsCharacterHint({
-        role: existingUser.role,
-        isAdmin: existingUser.isAdmin === true,
-        hasCharacter: existingUser.hasCompletedSetup ?? true,
-      })
-    );
-    const existingTrack = cookieStore.get("__ahd_track")?.value;
-    const trackingId = existingTrack || randomUUID();
-    if (!existingTrack) {
-      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
-    }
-    const oauthDeviceKey = cookieStore.get(OAUTH_DEVICE_KEY_COOKIE)?.value;
-    cookieStore.delete(OAUTH_DEVICE_KEY_COOKIE);
-
-    // Update last login and Discord info
-    const clientIp = await getClientIp();
-    const device = classifyDevice(userAgent);
-    const observedAt = new Date();
-    await usersCollection.updateOne(
-      { _id: existingUser._id },
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: existingUser._id,
+        isBanned: { $ne: true },
+        discordId: discordUser.id,
+        ...issued.snapshotFilter,
+      },
       {
         $set: {
           lastLogin: observedAt,
@@ -219,9 +220,30 @@ async function handleDiscordLogin(
                 ...(existingUser.registrationCf == null ? { registrationCf: cf } : {}),
               }),
         },
-        $unset: { authRevokedAt: "" },
       }
     );
+
+    if (updateResult.matchedCount !== 1) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/discord/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
+
+    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
+    await setCharacterGateCookie(
+      cookieStore,
+      needsCharacterHint({
+        role: existingUser.role,
+        isAdmin: existingUser.isAdmin === true,
+        hasCharacter: existingUser.hasCompletedSetup ?? true,
+      })
+    );
+    if (!existingTrack) {
+      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
+    }
 
     db.collection("activityLog")
       .insertOne({
