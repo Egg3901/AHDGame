@@ -93,9 +93,13 @@ describe("refreshSessionPreservingIssuedAt", () => {
     expect(result.iat).toBe(signInIat);
     expect(result.iat).toBeLessThanOrEqual(Math.floor(lateSignAt / 1000));
     expect(await authorizeAtCutoff(result.token, logoutAt)).toBeNull();
-    // A fresh timestamp on the same session would bypass this real validator.
-    const unsafe = await sign({ iat: Math.floor(lateSignAt / 1000), exp: nowSec + 1800 });
-    expect((await authorizeAtCutoff(unsafe, logoutAt))?.userId).toBe(CLAIMS.userId);
+    // A fresh but valid timestamp on the same session would bypass this real
+    // validator. (A future iat is no longer a valid contrast: session
+    // verification rejects it before revocation is even checked.)
+    const unsafe = await sign({ iat: nowSec - 10, exp: nowSec + 1800 });
+    expect((await authorizeAtCutoff(unsafe, new Date((signInIat + 10) * 1000)))?.userId).toBe(
+      CLAIMS.userId
+    );
   });
 
   it("does not claim a later iat than the original verified sign-in", async () => {
