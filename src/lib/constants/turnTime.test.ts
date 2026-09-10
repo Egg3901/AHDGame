@@ -53,6 +53,17 @@ describe("getStartingYearForPreset", () => {
     }
   });
 
+  it("draft 2027-default cycle anchors are positive without publishing the preset", () => {
+    const anchors = getCycleAnchors({
+      startingYear: getStartingYearForPreset("2027-default"),
+      preset: "2027-default",
+    });
+    for (const [key, turn] of Object.entries(anchors)) {
+      if (turn == null) continue;
+      expect(turn, key).toBeGreaterThan(0);
+    }
+  });
+
   it("empty preset falls back to STARTING_YEAR", () => {
     expect(getStartingYearForPreset("empty")).toBe(STARTING_YEAR);
   });

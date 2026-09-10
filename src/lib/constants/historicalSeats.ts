@@ -14,6 +14,8 @@
 
 import type { CountryId } from "./countries";
 import { recordPresetFallback } from "@/lib/seeds/presetSelector";
+import { US_HOUSE_2027 } from "@/lib/seeds/reference/usHouse2027";
+import { US_SENATE_2027 } from "@/lib/seeds/reference/usSenate2027";
 
 export interface HistoricalSeat {
   state: string;
@@ -3938,6 +3940,11 @@ export const RESET_PRESETS: ResetPreset[] = [
  */
 export function getPresetSeats(presetId: string): HistoricalSeat[] {
   switch (presetId) {
+    case "2027-default":
+      // Draft roster. Only the projected US federal chambers are authored so
+      // far. The preset remains outside every reset/selectable allowlist until
+      // the executive, governors, state senates, and non-US rosters are ready.
+      return [...US_HOUSE_2027, ...US_SENATE_2027];
     case "2019-default":
       return [
         ...US_HOUSE_2020,
