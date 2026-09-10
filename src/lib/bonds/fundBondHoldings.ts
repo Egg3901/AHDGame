@@ -81,3 +81,54 @@ export async function sumFundBondHoldingsValueAnchor(
   }
   return Number.isFinite(total) ? Math.max(0, total) : 0;
 }
+
+/** Value every requested fund's bond book with one projected bond scan. */
+export async function sumFundBondHoldingsByFundId(
+  db: Db,
+  funds: Array<Pick<IndexFund, "_id" | "anchorCurrencyCode">>,
+  exchangeRates: Partial<Record<string, number>>
+): Promise<Map<string, number>> {
+  const totals = new Map(funds.map((fund) => [fund._id.toString(), 0]));
+  if (funds.length === 0) return totals;
+  const fundIds = funds.map((fund) => fund._id);
+  const wanted = new Set(fundIds.map(String));
+  const bonds = await db
+    .collection<Bond>("bonds")
+    .find(
+      {
+        matured: false,
+        defaulted: { $ne: true },
+        holders: { $elemMatch: { fundId: { $in: fundIds } } },
+      },
+      {
+        projection: {
+          countryId: 1,
+          currencyCode: 1,
+          marketPrice: 1,
+          "holders.fundId": 1,
+          "holders.units": 1,
+        },
+      }
+    )
+    .toArray();
+
+  for (const bond of bonds) {
+    const currencyCode = resolveBondCurrency(bond);
+    const rate = exchangeRates[currencyCode];
+    if (!rate || rate <= 0) {
+      throw new Error(
+        `Missing exchange rate for bond currency ${currencyCode}; cannot value bond holdings`
+      );
+    }
+    for (const holder of bond.holders) {
+      const fundId = holder.fundId?.toString();
+      if (!fundId || !wanted.has(fundId) || holder.units <= 0) continue;
+      const localValue = holder.units * BOND_UNIT_FACE_VALUE * bond.marketPrice;
+      totals.set(
+        fundId,
+        (totals.get(fundId) ?? 0) + corpCapitalToAnchor(localValue, currencyCode, rate)
+      );
+    }
+  }
+  return totals;
+}

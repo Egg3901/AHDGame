@@ -32,7 +32,11 @@ export type Tier = {
 
 const PLAYER: Tier = { enabledForPlayers: true, economyPreview: false, status: "active" };
 const ECON: Tier = { enabledForPlayers: false, economyPreview: true, status: "beta" };
-const NPP: Tier = { enabledForPlayers: false, economyPreview: false, status: "coming-soon" };
+// NPP-only countries still participate in the turn engine. `coming-soon` is a
+// presentation state that getSimulatedCountryIds deliberately excludes, so it
+// cannot represent an autonomous NPC country. `beta` keeps the country in the
+// simulation while economyPreview=false keeps it out of expanded-economy UI.
+const NPP: Tier = { enabledForPlayers: false, economyPreview: false, status: "beta" };
 const GLOBAL_GAME_STATE_COUNTRY_ID = COUNTRY_CONFIGS.US.id;
 
 function tierFromLegacyAccess(access: LegacyCountryAccess): Tier | null {
@@ -42,18 +46,31 @@ function tierFromLegacyAccess(access: LegacyCountryAccess): Tier | null {
   return null;
 }
 
+function tierFromEntry(entry: WorldEntityManifestEntry): Tier {
+  const explicit = tierFromLegacyAccess(entry.legacyAccess);
+  if (explicit) return explicit;
+  const status = COUNTRY_CONFIGS[entry.countryId!].status;
+  if (status === "active") return PLAYER;
+  if (status === "beta") return ECON;
+  return NPP;
+}
+
 /**
  * The legacy countryGameStates write set represented by the new manifest.
  * US remains excluded because it is still backed by the global GameState.
- * A manifest containing only config-fallback entries (2019) intentionally
- * returns null so admin-managed rows keep winning exactly as before.
+ * Config-fallback entries are materialized too. Otherwise a fresh 2019/2023
+ * world inherits `coming-soon` from most CountryConfigs and silently excludes
+ * those countries from turn processing.
  */
 function explicitCountryEntries(preset: string): WorldEntityManifestEntry[] | null {
   const entries = getWorldEntityPresetManifest(preset).entries.filter(
     (entry) =>
       entry.countryId !== undefined &&
       entry.countryId !== GLOBAL_GAME_STATE_COUNTRY_ID &&
-      entry.legacyAccess !== "config-fallback"
+      // Cold War hidden entries are deliberately NPP-only sovereign simulations.
+      // Later hidden entries classify historical/dissolved entities in the world
+      // manifest, but must not create a live country with no domestic seed data.
+      (entry.legacyAccess !== "hidden" || preset === "1953-default" || preset === "1979-default")
   );
   return entries.length > 0 ? entries : null;
 }
@@ -74,7 +91,7 @@ export function getPresetEnablementTier(preset: string, countryId: CountryId): T
   const entry = explicitCountryEntries(preset)?.find(
     (candidate) => candidate.countryId === countryId
   );
-  return entry ? tierFromLegacyAccess(entry.legacyAccess) : null;
+  return entry ? tierFromEntry(entry) : null;
 }
 
 export async function seedCountryGameStates(
@@ -94,12 +111,7 @@ export async function seedCountryGameStates(
   let n = 0;
   for (const entry of entries) {
     const cid = entry.countryId!;
-    const tier = tierFromLegacyAccess(entry.legacyAccess);
-    if (!tier) {
-      throw new Error(
-        `World entity ${entry.entityId} has no explicit legacy access tier for ${preset}.`
-      );
-    }
+    const tier = tierFromEntry(entry);
     if (tier.enabledForPlayers) {
       assertCanOpenCountryToPlayers(cid, preset);
     }

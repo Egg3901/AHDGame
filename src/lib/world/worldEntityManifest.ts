@@ -349,12 +349,6 @@ function entriesFromAccess(
   );
 }
 
-function configFallbackEntries(presetId: string): WorldEntityManifestEntry[] {
-  return COUNTRY_ORDER.map((countryId) =>
-    buildCountryEntry(presetId, countryId, "config-fallback")
-  );
-}
-
 const SPHERE_MACRO_BLOCKERS = [
   AUTONOMY_BLOCKER,
   PLAYER_BLOCKER,
@@ -1563,10 +1557,12 @@ function accessMap(
   economy: readonly CountryId[],
   hidden: readonly CountryId[] = []
 ): Partial<Record<CountryId, LegacyCountryAccess>> {
+  const classified = new Set<CountryId>([...player, ...economy, ...hidden]);
+  const remaining = COUNTRY_ORDER.filter((countryId) => !classified.has(countryId));
   return Object.fromEntries([
     ...player.map((countryId) => [countryId, "player"] as const),
     ...economy.map((countryId) => [countryId, "economy-preview"] as const),
-    ...hidden.map((countryId) => [countryId, "hidden"] as const),
+    ...[...hidden, ...remaining].map((countryId) => [countryId, "hidden"] as const),
   ]);
 }
 
@@ -1961,11 +1957,11 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
     ),
     "2019-default": defineWorldEntityPresetManifest(
       "2019-default",
-      configFallbackEntries("2019-default")
+      entriesFromAccess("2019-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
     ),
     "2023-default": defineWorldEntityPresetManifest(
       "2023-default",
-      configFallbackEntries("2023-default")
+      entriesFromAccess("2023-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
     ),
   });
 
