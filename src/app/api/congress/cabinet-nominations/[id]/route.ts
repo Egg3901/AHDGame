@@ -2,9 +2,10 @@
  * GET /api/congress/cabinet-nominations/[id] — Single cabinet nomination for detail page
  */
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
@@ -13,7 +14,10 @@ import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBrea
 // GET /api/congress/cabinet-nominations/[id] — Returns full detail for a single cabinet nomination including vote tallies.
 // Auth: public
 // Errors: 400, 404
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withNoStore(async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const { id } = await params;
     let nominationOid: ObjectId;
@@ -32,7 +36,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Nomination not found" }, { status: 404 });
     }
 
-    const authUser = await verifyAuth().catch(() => null);
+    const authUser = await getAuthUser();
     const myCharacter = authUser
       ? await db
           .collection<Character>("characters")
@@ -97,4 +101,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
