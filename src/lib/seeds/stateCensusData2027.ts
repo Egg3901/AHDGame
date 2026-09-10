@@ -1,3 +1,4 @@
+import { stateCensusData2023 } from "./stateCensusData2023";
 import type { Layer1Config } from "./stateDemographics";
 
 /**
@@ -730,3 +731,10 @@ export const stateCensusData2027: Record<string, Layer1Config> = {
     },
   },
 };
+
+// ACS projects the composition shares, not political positions. Preserve each
+// state's latest calibrated 2023 position surface until a newer calibration is
+// authored, so demographic change does not erase regional political character.
+for (const [stateId, config] of Object.entries(stateCensusData2027)) {
+  config.positions = stateCensusData2023[stateId]?.positions;
+}

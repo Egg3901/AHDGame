@@ -190,8 +190,17 @@ async function main(): Promise<void> {
     const [age, race, education, wealth] = dimensions;
     return `  ${state}: {\n    race: ${literal(race)},\n    education: ${literal(education)},\n    wealth: ${literal(wealth)},\n    age: ${literal(age)},\n    ideology: ${literal(ideology(state))},\n  },`;
   });
+  process.stdout.write('import { stateCensusData2023 } from "./stateCensusData2023";\n');
   process.stdout.write(
     `import type { Layer1Config } from "./stateDemographics";\n\n/**\n * Projected January 2027 US state demographic profiles.\n *\n * Race (B03002), education among adults 25+ (B15003), household income\n * (B19001), and age among adults 18+ (B01001) use ACS 1-year estimates for\n * 2022, 2023, and 2024. Each underlying share is fitted with a least-squares\n * linear trend and evaluated at 2027, clamped at zero, then largest-remainder\n * rounded so every dimension totals 100. Income is expressed in nominal ACS\n * brackets: low below $50,000, middle $50,000 to $149,999, high $150,000+.\n *\n * Ideology is not an ACS measure. Its independent, non-additive shares are a\n * game calibration anchored to each state's certified 2024 presidential margin.\n * Regenerate with scripts/seeds/generate-state-census-2027.ts.\n */\nexport const stateCensusData2027: Record<string, Layer1Config> = {\n${lines.join("\n")}\n};\n`
+  );
+  process.stdout.write(
+    "\n// ACS projects the composition shares, not political positions. Preserve each\n" +
+      "// state's latest calibrated 2023 position surface until a newer calibration is\n" +
+      "// authored, so demographic change does not erase regional political character.\n" +
+      "for (const [stateId, config] of Object.entries(stateCensusData2027)) {\n" +
+      "  config.positions = stateCensusData2023[stateId]?.positions;\n" +
+      "}\n"
   );
 }
 

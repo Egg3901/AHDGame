@@ -341,8 +341,11 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
       center: 0,
       centerTol: 0.7,
       minSpread: 1.6,
-      expectLeft: ["HH", "BRE", "BE", "BB", "MV"],
-      expectRight: ["BY", "BW", "SN"],
+      // The 2025 East combines economically interventionist voters with a
+      // socially right electorate. On the model's blended display surface MV
+      // is the clearest right anchor; SN remains economically left.
+      expectLeft: ["HH", "BRE", "BE", "BB"],
+      expectRight: ["BY", "MV"],
       election: "Germany 2025 Bundestag",
     },
   },
