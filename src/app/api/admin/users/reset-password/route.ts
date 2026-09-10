@@ -3,6 +3,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
 import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { invalidateCachedUser } from "@/lib/auth/userDocCache";
 import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
@@ -36,6 +37,13 @@ export const POST = withNoStore(async (request: Request) => {
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
+    // Fenced accounts fail closed on admin reset. Existing 409 shape.
+    if (isAuthMigrationFenced(user)) {
+      return NextResponse.json(
+        { error: "This account changed during this request. Please reload and try again." },
+        { status: 409 }
+      );
+    }
 
     // Hash the new password
     const hashedPassword = await bcrypt.hash(newPassword, 12);
@@ -54,6 +62,7 @@ export const POST = withNoStore(async (request: Request) => {
           _id: objectId,
           password: user.password ?? null,
           ...authRevocationSnapshotFilter(user.authRevokedAt),
+          ...authMigrationFenceAbsentFilter(),
         },
         {
           $set: {

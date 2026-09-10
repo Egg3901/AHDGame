@@ -77,6 +77,7 @@ describe("POST /api/admin/users/reset-password", () => {
       _id: targetId,
       password: "synthetic-old-digest",
       authRevokedAt: cutoff,
+      authMigrationFence: { $exists: false },
     });
     expect(update.$set.password).toBe("synthetic-new-digest");
     expect(update.$set.updatedAt).toBeInstanceOf(Date);
@@ -206,3 +207,20 @@ describe("POST /api/admin/users/reset-password", () => {
     expect(mocks.invalidateCachedUser).not.toHaveBeenCalled();
   });
 });
+
+it.each([null, {}, "malformed", undefined])(
+  "rejects a present migration fence before resetting credentials: %s",
+  async (fence) => {
+    mocks.usersFindOne.mockResolvedValue({
+      _id: targetId,
+      username: "synthetic-user",
+      password: "synthetic-old-digest",
+      authMigrationFence: fence,
+    });
+    const response = await POST(request());
+    expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toContain("no-store");
+    expect(mocks.hash).not.toHaveBeenCalled();
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+  }
+);

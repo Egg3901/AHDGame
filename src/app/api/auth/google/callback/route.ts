@@ -50,6 +50,7 @@ import {
   takeOAuthReturnUrlCookie,
 } from "@/lib/auth/lakesideLoginReturn";
 import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 
 // GET /api/auth/google/callback — Handles the Google OAuth callback to log in or register a user via Google.
 // Auth: public
@@ -155,6 +156,18 @@ async function handleGoogleLogin(
       const reason = encodeURIComponent(existingUser.banReason || "Violation of rules");
       return NextResponse.redirect(new URL(`/banned?reason=${reason}`, baseUrl));
     }
+    // Fenced provider accounts never log in via legacy OAuth. Same
+    // session_expired redirect as a revocation race so fenced is not an oracle.
+    // This return sits before registration so a fenced alias never falls
+    // through to duplicate creation.
+    if (isAuthMigrationFenced(existingUser)) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/google/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
 
     const existingTrack = cookieStore.get("__ahd_track")?.value;
     const trackingId = existingTrack || randomUUID();
@@ -191,6 +204,7 @@ async function handleGoogleLogin(
         isBanned: { $ne: true },
         googleId: googleUser.id,
         ...issued.snapshotFilter,
+        ...authMigrationFenceAbsentFilter(),
       },
       {
         $set: {
@@ -522,6 +536,10 @@ async function handleGoogleLink(
   const auth = await verifyAuth();
   if (!credentialSessionIsCurrent(grant.userId, account, auth)) {
     return linkRedirect(new URL("/login", baseUrl));
+  }
+  // Fenced accounts never mutate provider bindings via legacy link.
+  if (isAuthMigrationFenced(account)) {
+    return linkError("session_expired");
   }
 
   // The link flow started by one account/session must not complete for another:

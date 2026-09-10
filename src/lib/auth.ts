@@ -7,6 +7,7 @@ import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { getCharactersCollection, getUsersCollection } from "@/lib/db/collections";
 import { getCachedUser, invalidateCachedUser, setCachedUser } from "@/lib/auth/userDocCache";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import type { Character, User } from "@/lib/db/types";
 import { getValidatedEnv } from "@/lib/env";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
@@ -357,6 +358,11 @@ function isStaffCandidate(payload: UserPayload, cached: User | undefined): boole
  * record. Only a validated fresh record is cached; a null read (deleted
  * account) drops any stale entry without caching anything. DB failures
  * propagate so the caller fails closed without clearing the session cookie.
+ *
+ * The full account read includes `authMigrationFence` so fenced accounts deny
+ * even with an otherwise valid signed token. Fence denial is bounded by the
+ * 10s cache TTL for sessions cached before fencing; the future fence writer
+ * must stamp `authRevokedAt` and evict the cache entry to revoke live sessions.
  */
 async function resolveUserDoc(db: Db, userId: string, payload: UserPayload): Promise<User | null> {
   const cached = getCachedUser(userId);
@@ -381,7 +387,8 @@ export async function getAuthUserFromToken(token: string): Promise<AuthUser | nu
   const payload = await verifyAuthToken(token);
   if (!payload) return null;
   const user = await resolveUserDoc(await getDb(), payload.userId, payload);
-  if (!user || user.isBanned === true || isAuthTokenRevoked(user, payload)) return null;
+  if (!user || user.isBanned === true || isAuthMigrationFenced(user)) return null;
+  if (isAuthTokenRevoked(user, payload)) return null;
   return mapUserToAuthUser(user, payload);
 }
 
@@ -401,6 +408,7 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
 
   if (!user) return null;
   if (user.isBanned === true) return null;
+  if (isAuthMigrationFenced(user)) return null;
   if (isAuthTokenRevoked(user, payload)) return null;
 
   return mapUserToAuthUser(user, payload);
@@ -420,6 +428,7 @@ export const getAuthUserWithCharacter = cache(async (): Promise<AuthUserWithChar
 
   if (!user) return null;
   if (user.isBanned === true) return null;
+  if (isAuthMigrationFenced(user)) return null;
   if (isAuthTokenRevoked(user, payload)) return null;
 
   const authUser = mapUserToAuthUser(user, payload);

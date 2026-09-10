@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { verifyAuth } from "@/lib/auth";
 import { credentialSessionIsCurrent } from "@/lib/auth/credentialSession";
 import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter } from "@/lib/auth/sourceFence";
 import { invalidateCachedUser } from "@/lib/auth/userDocCache";
 import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
         password: user.password ?? null,
         isBanned: { $ne: true },
         ...authRevocationSnapshotFilter(user.authRevokedAt),
+        ...authMigrationFenceAbsentFilter(),
       },
       {
         $set: {

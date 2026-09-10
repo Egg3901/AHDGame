@@ -7,6 +7,7 @@ import { createAdminLog } from "@/lib/adminLog";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { cascadeCharacterDeletion } from "@/lib/account/cascadeCharacterDeletion";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { stampSubjectDeleted } from "@/lib/financialTxLog/stampDeleted";
 import { cleanupCaucusParticipationForCharacters } from "@/lib/caucus/cleanupCaucusParticipationForCharacters";
 import { logCharacterDeleted } from "@/lib/db/collections/activityLog";
@@ -43,6 +44,14 @@ export async function DELETE() {
     const user = await usersCollection.findOne({ _id: objectId });
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    // Reject accounts already fenced before starting legacy deletion.
+    // This pre-read does not serialize deletion with concurrent fence acquisition.
+    if (isAuthMigrationFenced(user)) {
+      return NextResponse.json(
+        { error: "Your account changed during this request. Please sign in and try again." },
+        { status: 409 }
+      );
     }
 
     // Find the user's character

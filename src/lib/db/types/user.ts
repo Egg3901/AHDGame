@@ -30,6 +30,13 @@ export interface User {
   bannedAt?: Date;
   /** Any auth token issued at or before this timestamp is invalid and must re-authenticate. */
   authRevokedAt?: Date;
+  /**
+   * Permanent source migration fence marker. Absent means unfenced legacy auth.
+   * Any present value (including null or malformed) denies legacy login and
+   * session grants plus credential/provider mutations. Fence creation belongs
+   * to the trusted migration coordinator.
+   */
+  authMigrationFence?: unknown;
   /** Last time the password was set via change-password or reset-password. */
   passwordChangedAt?: Date;
   /** When the 48-hour banned shareholder/CEO grace cleanup was applied. */

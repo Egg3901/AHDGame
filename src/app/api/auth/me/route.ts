@@ -1,3 +1,4 @@
+import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { randomUUID } from "crypto";
@@ -5,6 +6,7 @@ import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { clearAuthCookie, getTrackingCookieOptions, verifyAuth } from "@/lib/auth";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { needsCharacterHint } from "@/lib/auth/characterGate";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
@@ -31,7 +33,7 @@ function getPatreonAdPreference(
 // GET /api/auth/me — Returns the current user's profile, character, and unread notification counts.
 // Auth: public (manual JWT via cookie)
 // Errors: 401
-export async function GET() {
+export const GET = withNoStore(async () => {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
@@ -60,6 +62,10 @@ export async function GET() {
         { error: "banned", reason: user.banReason || "Violation of rules" },
         { status: 403 }
       );
+    }
+    if (isAuthMigrationFenced(user)) {
+      await clearAuthCookie("auth_me:source_fenced");
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
     if (
       user.authRevokedAt &&
@@ -344,4 +350,4 @@ export async function GET() {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
