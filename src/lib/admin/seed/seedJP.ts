@@ -422,7 +422,9 @@ export async function seedJPGovernors2020(db: Db, reset: boolean, log: (msg: str
 
   const { JP_GOVERNORS_2020 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, JP_GOVERNORS_2020);
+  const result = await seedFromSeats(db, JP_GOVERNORS_2020, "winners", {
+    presetId: "2019-default",
+  });
   log(
     `Seeded JP Regional Governors (2020): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );
@@ -476,7 +478,9 @@ export async function seedJPGovernors1991(db: Db, reset: boolean, log: (msg: str
 
   const { JP_GOVERNORS_1991 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, JP_GOVERNORS_1991);
+  const result = await seedFromSeats(db, JP_GOVERNORS_1991, "winners", {
+    presetId: "1991-default",
+  });
   log(
     `Seeded JP Regional Governors (1991): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );
