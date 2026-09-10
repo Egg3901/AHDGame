@@ -10,6 +10,7 @@ import { grParties } from "./gr/grParties";
 import { atParties } from "./at/atParties";
 import { fiParties } from "./fi/fiParties";
 import { ngParties } from "./ng/ngParties";
+import { brParties } from "./br/brParties";
 
 const PRESETS = [
   "1953-default",
@@ -31,6 +32,7 @@ const ROSTERS: Array<[string, PartySeed[]]> = [
   ["AT", atParties],
   ["FI", fiParties],
   ["NG", ngParties],
+  ["BR", brParties],
 ];
 
 describe("party roster seed coverage", () => {

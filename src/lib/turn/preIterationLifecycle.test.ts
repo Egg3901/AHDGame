@@ -12,12 +12,22 @@ function withState(preIteration: unknown): MockDb {
   return db;
 }
 
-function withCounts(db: MockDb, pending: number, resolved: number) {
+function withCounts(db: MockDb, pending: number, resolved: number, covered = resolved) {
   db.collectionMocks["elections"] = db.collection("elections");
-  db.collectionMocks["elections"].countDocuments = vi
-    .fn()
-    .mockResolvedValueOnce(pending) // active/upcoming
-    .mockResolvedValueOnce(resolved); // completed/resolved
+  db.collectionMocks["elections"].countDocuments = vi.fn().mockResolvedValue(pending);
+  db.collectionMocks["elections"].find = vi.fn().mockReturnValue({
+    toArray: vi
+      .fn()
+      .mockResolvedValue(
+        Array.from({ length: resolved }, (_, index) => ({ _id: `election-${index}` }))
+      ),
+  });
+  for (const name of ["electionCandidates", "electionVoteTallies"]) {
+    db.collectionMocks[name] = db.collection(name);
+    db.collectionMocks[name].aggregate = vi.fn().mockReturnValue({
+      toArray: vi.fn().mockResolvedValue(covered > 0 ? [{ count: covered }] : []),
+    });
+  }
 }
 
 describe("detectPreIterationComplete", () => {
@@ -59,5 +69,13 @@ describe("detectPreIterationComplete", () => {
     expect(set["preIteration.completedTurn"]).toBe(97);
     // Offset = completedTurn - 1 so the calendar resumes at the era start (1).
     expect(set.preIterationTurns).toBe(96);
+  });
+
+  it("keeps the founding phase active when a resolved race has no candidate or vote coverage", async () => {
+    const db = withState({ active: true, startedTurn: 1 });
+    withCounts(db, 0, 12, 11);
+    const res = await detectPreIterationComplete(db as unknown as Db, 49);
+    expect(res.completed).toBe(false);
+    expect(db.collectionMocks["gameState"]?.updateOne).not.toHaveBeenCalled();
   });
 });
