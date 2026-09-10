@@ -1,6 +1,7 @@
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { MacroCountryState, MacroSectorState } from "@/lib/world/macro/types";
 import { computeMacroContribution } from "@/lib/world/macro/kernel";
+import { macroTickBucket } from "@/lib/world/macro/schedule";
 import { GHANA_ENTITY_ID } from "./rules";
 
 /**
@@ -72,6 +73,8 @@ export function buildGhanaMacroSeed(
     _id: GHANA_ENTITY_ID,
     entityId: GHANA_ENTITY_ID,
     presetId: "1953-default",
+    simulationTier: "sphere-macro" as const,
+    tickBucket: macroTickBucket(GHANA_ENTITY_ID),
     displayName: "Ghana",
     economicSystem: "market" as const,
     population: 6_200_000,
