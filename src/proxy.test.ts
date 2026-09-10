@@ -24,6 +24,8 @@ vi.mock("@/lib/auth/characterGate", async (importOriginal) => {
 });
 
 import { NextRequest } from "next/server";
+import { SignJWT, jwtVerify } from "jose";
+import { singleplayerSessionClaims } from "@/lib/singleplayer";
 import { proxy, config } from "./proxy";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE } from "@/lib/auth/characterGate";
@@ -165,6 +167,7 @@ describe("proxy() — tri-state maintenance gating", () => {
 
   it("keeps character creation reachable despite inherited hosted maintenance", async () => {
     vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("AUTH_SECRET", "local-world-test-secret");
     vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
     mockMaintenanceStatus.mockResolvedValueOnce({ mode: "full", enabled: true });
@@ -179,6 +182,7 @@ describe("proxy() — tri-state maintenance gating", () => {
 
   it("keeps the limited singleplayer controls reachable while sealed", async () => {
     vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("AUTH_SECRET", "local-world-test-secret");
     vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
     mockMaintenanceStatus.mockResolvedValueOnce({ mode: "full", enabled: true });
@@ -218,4 +222,46 @@ describe("static region shards stay outside the maintenance gate", () => {
       expect(matches(page), `${page} must stay gated`).toBe(true);
     }
   });
+});
+
+describe("local sessions across worlds", () => {
+  it.each(["another world", "legacy admin"])(
+    "replaces a cookie from %s in the forwarded request",
+    async (kind) => {
+      vi.stubEnv("SINGLEPLAYER", "1");
+      vi.stubEnv("SINGLEPLAYER_ADMIN", "0");
+      vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
+      vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
+      vi.stubEnv("AUTH_SECRET", "local-world-test-secret");
+      const claims = singleplayerSessionClaims();
+      const old = await new SignJWT(
+        kind === "legacy admin" ? { ...claims, isAdmin: true, role: "admin" } : claims
+      )
+        .setProtectedHeader({ alg: "HS256" })
+        .setExpirationTime("1h")
+        .sign(
+          new TextEncoder().encode(
+            kind === "another world" ? "old-world-secret" : "local-world-test-secret"
+          )
+        );
+      const response = await proxy(
+        makeRequest("http://127.0.0.1:3111/create-character", {
+          cookies: { [AUTH_COOKIE_NAME]: old, preference: "kept" },
+        })
+      );
+      const forwarded = response.headers.get("x-middleware-request-cookie") ?? "";
+      const refreshed = new NextRequest("http://127.0.0.1:3111", { headers: { cookie: forwarded } })
+        .cookies;
+      expect(refreshed.get("preference")?.value).toBe("kept");
+      expect(refreshed.get(AUTH_COOKIE_NAME)?.value).not.toBe(old);
+      const { payload } = await jwtVerify(
+        refreshed.get(AUTH_COOKIE_NAME)!.value,
+        new TextEncoder().encode("local-world-test-secret")
+      );
+      expect(payload).toMatchObject({ userId: claims.userId, isAdmin: false, role: "player" });
+      expect(response.cookies.get(AUTH_COOKIE_NAME)?.value).toBe(
+        refreshed.get(AUTH_COOKIE_NAME)?.value
+      );
+    }
+  );
 });

@@ -109,8 +109,19 @@ export async function proxy(request: NextRequest) {
   // early with the cookie attached; the retried request then flows through
   // the normal path below. See @/lib/singleplayer for the guards that stop
   // this running anywhere that serves more than one person.
-  if (singleplayer && !request.cookies.get(AUTH_COOKIE_NAME)) {
-    return await grantSingleplayerSession(request);
+  if (singleplayer) {
+    const session = await verifySession(request);
+    const expected = singleplayerSessionClaims();
+    // Loopback cookies cross ports, but each world signs with its own secret.
+    // Also replace old admin claims when the current world is a player session.
+    if (
+      !session ||
+      session.userId !== expected.userId ||
+      session.role !== expected.role ||
+      session.isAdmin !== expected.isAdmin
+    ) {
+      return await grantSingleplayerSession(request);
+    }
   }
 
   // The local build has no account lifecycle. Keep old bookmarks to the
@@ -229,7 +240,10 @@ async function grantSingleplayerSession(request: NextRequest): Promise<NextRespo
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", request.nextUrl.pathname);
   requestHeaders.set("x-search", request.nextUrl.search);
-  const existing = requestHeaders.get("cookie");
+  const existing = (requestHeaders.get("cookie") ?? "")
+    .split(";")
+    .filter((part) => part.trim() && part.trim().split("=")[0] !== AUTH_COOKIE_NAME)
+    .join(";");
   requestHeaders.set(
     "cookie",
     existing ? `${existing}; ${AUTH_COOKIE_NAME}=${token}` : `${AUTH_COOKIE_NAME}=${token}`
