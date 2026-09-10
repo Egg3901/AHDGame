@@ -13,3 +13,4 @@ areas: [backend]
 
 - Added a read-only session endpoint for account integrations.
 - Session checks use the current account status and return no staff permissions.
+- Updated framework and image-processing dependencies to current security patches.
