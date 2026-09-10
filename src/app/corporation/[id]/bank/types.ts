@@ -120,6 +120,12 @@ export type ConsolePayload = {
     } | null;
   } | null;
   rates: { depositRatePercent: number; lendingRatePercent: number } | null;
+  /** Estimated per-turn interest from the current book. Null without an active charter. */
+  interestPerTurn: {
+    depositCostPerTurn: number;
+    loanIncomePerTurn: number;
+    netPerTurn: number;
+  } | null;
   loans: Array<{
     id: string;
     borrowerType: string;

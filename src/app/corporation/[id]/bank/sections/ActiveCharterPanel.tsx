@@ -152,7 +152,7 @@ export function ActiveCharterPanel({
 
       {tab === "overview" && (
         <section className="rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
             <StatCell
               label="Posted capital"
               value={formatBankMoney(charter.postedCapital, charter.currency)}
@@ -189,6 +189,13 @@ export function ActiveCharterPanel({
               }
               sub="you pay / you charge"
             />
+            {data.interestPerTurn && (
+              <StatCell
+                label="Net interest / turn"
+                value={`${data.interestPerTurn.netPerTurn >= 0 ? "+" : ""}${formatBankMoney(data.interestPerTurn.netPerTurn, charter.currency)}`}
+                sub={`earn ${formatBankMoney(data.interestPerTurn.loanIncomePerTurn, charter.currency)} · pay ${formatBankMoney(data.interestPerTurn.depositCostPerTurn, charter.currency)}`}
+              />
+            )}
           </div>
         </section>
       )}
