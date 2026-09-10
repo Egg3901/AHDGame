@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   ACKNOWLEDGED_OUT_OF_SCOPE,
   BUCKET_A_MOVES,
   BUCKET_B_RELATIONAL,
   BUCKET_C_DERIVED,
+  BUCKET_D_RELOCATE,
   BUCKET_E_CLIENT,
   BUCKET_F_CONDITIONAL,
 } from "./jpCoverage";
@@ -13,19 +14,46 @@ import {
 /**
  * Every Japan-bearing file is classified.
  *
- * ⚠️ The denominator is deliberately SHAPE-BLIND. Earlier attempts enumerated
- * files via detection heuristics — a `Record<CountryId` filter, a `jp*` glob, a
- * composite-key grep, a `=== "JP"` grep — and every one of those heuristics had
- * a blind spot the enumeration then inherited. Measured, they reached 71 of the
- * 129 files that actually carry a Japan key.
+ * The denominator is a UNION OF FOUR GROUND TRUTHS, not one test. The first
+ * version of this file matched a JP object key and nothing else, which was the
+ * rev-8 mistake one level up: it replaced a union of detection heuristics with a
+ * single detection heuristic promoted to ground truth. Measured, it missed 47 of
+ * the 48 Japan-NAMED source files (~17,000 LOC) -- a file that *is* Japan
+ * carries no `JP:` key -- plus 32 files keyed `jp_<slug>` and 9 that branch on
+ * `=== "JP"` (no colon, so outside a key regex).
  *
- * So the rule is: match a Japan OBJECT KEY, whatever the surrounding type. Then
- * require every match to be classified. Heuristics can help you find things;
- * they cannot define what counts.
+ *   1. JP object key       `JP:` / `"JP":` / `"JP:HOK"` -- any surrounding type
+ *   2. Japan-named file    basename token `jp`/`japan`, or under a `jp/` dir
+ *   3. jp_<slug> key       `jp_national`, `jp_ldp`, `jp_resident_tax`
+ *   4. country comparison  `=== "JP"` / `case "JP"`
+ *
+ * Adding a Japan-bearing file fails this test until it is classified.
  */
 const JP_KEY = /(^|[^A-Za-z_"])JP\s*:|"JP"\s*:|"JP:/;
+const JP_SLUG = /\bjp_[a-z0-9_]+/;
+const JP_COMPARISON = /===\s*"JP"|"JP"\s*===|\bcase\s+"JP"\b/;
 
 const SRC = "src";
+
+/** Split camelCase and delimiters so `seedJP.ts` and `JPDietPage.tsx` both tokenize. */
+function nameTokens(file: string): Set<string> {
+  const spaced = basename(file)
+    .replace(/(?<=[A-Z])(?=[A-Z][a-z])/g, " ")
+    .replace(/(?<=[a-z0-9])(?=[A-Z])/g, " ");
+  return new Set(
+    spaced
+      .split(/[^A-Za-z0-9]+/)
+      .filter(Boolean)
+      .map((t) => t.toLowerCase())
+  );
+}
+
+function isJapanNamed(file: string): boolean {
+  const tokens = nameTokens(file);
+  return (
+    tokens.has("jp") || tokens.has("japan") || file.includes("/jp/") || file.includes("/japan/")
+  );
+}
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -43,25 +71,33 @@ function walk(dir: string): string[] {
 function japanBearingFiles(): string[] {
   return (
     walk(SRC)
-      // The destination folder is not a source of Japan facts; excluding it also
-      // stops this module's own doc comment matching the denominator.
-      .filter((f) => !f.startsWith("src/lib/countries/"))
-      .filter((f) => JP_KEY.test(readFileSync(f, "utf8")))
+      // Only this module is excluded, so its own doc comment cannot pad the
+      // denominator. The DESTINATION folder stays in scope on purpose: as bucket-D
+      // files move into src/lib/countries/jp/, their roster entry must follow them,
+      // which keeps the migration visible instead of silently emptying the set.
+      .filter((f) => f !== "src/lib/countries/jpCoverage.ts")
+      .filter((f) => {
+        if (isJapanNamed(f)) return true;
+        const source = readFileSync(f, "utf8");
+        return JP_KEY.test(source) || JP_SLUG.test(source) || JP_COMPARISON.test(source);
+      })
       .sort()
   );
 }
 
-describe("Japan coverage", () => {
-  it("classifies every file that carries a Japan key", () => {
-    const classified = new Set<string>([
-      ...BUCKET_A_MOVES,
-      ...BUCKET_B_RELATIONAL,
-      ...BUCKET_C_DERIVED,
-      ...BUCKET_E_CLIENT,
-      ...BUCKET_F_CONDITIONAL,
-      ...ACKNOWLEDGED_OUT_OF_SCOPE.map((e) => e.file),
-    ]);
+const ALL_BUCKETS = () => [
+  ...BUCKET_A_MOVES,
+  ...BUCKET_B_RELATIONAL,
+  ...BUCKET_C_DERIVED,
+  ...BUCKET_D_RELOCATE,
+  ...BUCKET_E_CLIENT,
+  ...BUCKET_F_CONDITIONAL,
+  ...ACKNOWLEDGED_OUT_OF_SCOPE.map((e) => e.file),
+];
 
+describe("Japan coverage", () => {
+  it("classifies every file that carries Japan", () => {
+    const classified = new Set<string>(ALL_BUCKETS());
     const unclassified = japanBearingFiles().filter((f) => !classified.has(f));
 
     expect(
@@ -73,30 +109,16 @@ describe("Japan coverage", () => {
   });
 
   it("puts each file in exactly one bucket", () => {
-    const all = [
-      ...BUCKET_A_MOVES,
-      ...BUCKET_B_RELATIONAL,
-      ...BUCKET_C_DERIVED,
-      ...BUCKET_E_CLIENT,
-      ...BUCKET_F_CONDITIONAL,
-      ...ACKNOWLEDGED_OUT_OF_SCOPE.map((e) => e.file),
-    ];
     const seen = new Set<string>();
-    const duplicated = all.filter((f) => (seen.has(f) ? true : (seen.add(f), false)));
+    const duplicated = ALL_BUCKETS().filter((f) => (seen.has(f) ? true : (seen.add(f), false)));
     expect(duplicated, `classified in more than one bucket: ${duplicated.join(", ")}`).toEqual([]);
   });
 
-  it("lists no file that has stopped carrying a Japan key", () => {
-    // Keeps the lists from rotting as the tree changes underneath them.
+  it("lists no file that has stopped carrying Japan", () => {
+    // Keeps the roster from rotting as the tree changes underneath it.
     const bearing = new Set(japanBearingFiles());
-    const stale = [
-      ...BUCKET_A_MOVES,
-      ...BUCKET_B_RELATIONAL,
-      ...BUCKET_C_DERIVED,
-      ...BUCKET_E_CLIENT,
-      ...BUCKET_F_CONDITIONAL,
-    ].filter((f) => !bearing.has(f));
-    expect(stale, `no longer carries a JP key: ${stale.join(", ")}`).toEqual([]);
+    const stale = ALL_BUCKETS().filter((f) => !bearing.has(f));
+    expect(stale, `no longer carries Japan: ${stale.join(", ")}`).toEqual([]);
   });
 
   it("gives every out-of-scope entry a reason", () => {

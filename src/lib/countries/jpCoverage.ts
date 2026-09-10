@@ -1,19 +1,19 @@
 /**
  * Where every Japan-bearing file in the tree is accounted for.
  *
- * WHY THIS FILE EXISTS: the country-folder plan maintained coverage by hand
- * across five uncross-checked places (bucket tables, per-phase file lists,
- * registry tables, count bullets, a self-review). Eight revisions each corrected
- * the last and reintroduced the same defect class, and the revision that finally
- * added a coverage *test* defined the test as the union of the same detection
- * heuristics that had been dropping files all along, so it would have reported
- * green over 44 percent of Japan.
+ * WHY THIS FILE EXISTS: the country-folder plan tracked Japan's footprint by
+ * hand across five uncross-checked places. Eight revisions each corrected the
+ * last and reintroduced the same defect class, and the revision that finally
+ * proposed a coverage test defined it as the union of the same four detection
+ * heuristics that had been dropping files all along.
  *
- * The denominator in jpCoverage.test.ts makes NO assumption about a registry's
- * type shape. It matches a Japan object key, so `Record<CountryId, X>`,
- * `Record<string, X>`, a narrowed alias and a composite `"JP:HOK"` key all count
- * equally. Heuristics may be used to FIND candidates; they may never define the
- * set. Adding a Japan-bearing file fails the test until it is classified.
+ * The first version of THIS file then made the same mistake one level up: it
+ * replaced that union with a single heuristic, the JP object key, and promoted
+ * it to ground truth. Measured, that missed 47 of the 48 Japan-NAMED source
+ * files, roughly 17,000 LOC, because a file that *is* Japan carries no `JP:`
+ * key. It also missed 32 files keyed `jp_<slug>` and 9 that branch on
+ * `=== "JP"`. The denominator is now a union of four ground truths; see
+ * jpCoverage.test.ts.
  *
  * WHAT THE TEST GUARANTEES: that no Japan-bearing file goes unexamined. It does
  * NOT guarantee the bucket is the right one. That stays review-time judgement.
@@ -23,21 +23,80 @@
  * INITIAL_RATES*, which must not). A file sits in the bucket describing its
  * DOMINANT treatment; the per-symbol split lives in the plan's registry tables.
  *
- * Precedence when a file could sit in two buckets: E > out-of-scope > F > B > C > A.
+ * Precedence when a file could sit in two buckets: E > out-of-scope > F > B > C > D > A.
+ * E outranks D because a Japan-named client component (JPDietPage.tsx) is a
+ * route surface that stays where Next.js routing needs it; it does not relocate.
  */
 
 /**
- * Japan content moves into `src/lib/countries/jp/`.
+ * Already per-country: Japan-named modules that relocate wholesale into
+ * `src/lib/countries/jp/`. The plan's largest concrete move, and the bucket the
+ * key-only denominator could not see at all.
  *
- * Bundle note: some of these are also imported by client components, so a move
+ * Size note: jpLegislationTypes.ts is 6,169 LOC, well past the 2,000-line
+ * blocking cap. SIZE_CAP_EXEMPT matches by SUBSTRING, so moving it out of
+ * `seeds/jp/` strips its exemption unless the new path is added first.
+ */
+export const BUCKET_D_RELOCATE: readonly string[] = [
+  "src/lib/admin/seed/seedJP.ts",
+  "src/lib/admin/seed/seedJpBudgets.ts",
+  "src/lib/constants/japan.ts",
+  "src/lib/constants/jpCabinet.ts",
+  "src/lib/constants/jpCabinetMechanics.ts",
+  "src/lib/constants/jpCabinetOrders.ts",
+  "src/lib/events/pree/handlers/jpEvents.ts",
+  "src/lib/maps/japanGeometry.ts",
+  "src/lib/seeds/international/jp.ts",
+  "src/lib/seeds/jp/jpBudgets.ts",
+  "src/lib/seeds/jp/jpCorporations.ts",
+  "src/lib/seeds/jp/jpDemographicCategories.ts",
+  "src/lib/seeds/jp/jpDemographicTurnout.ts",
+  "src/lib/seeds/jp/jpGovernmentFormation.ts",
+  "src/lib/seeds/jp/jpLegislationTypes.ts",
+  "src/lib/seeds/jp/jpMetricPresets.ts",
+  "src/lib/seeds/jp/jpMetricPresets1953.ts",
+  "src/lib/seeds/jp/jpMetricPresets1979.ts",
+  "src/lib/seeds/jp/jpParties.ts",
+  "src/lib/seeds/jp/jpPopulationAnchors.ts",
+  "src/lib/seeds/jp/jpRegionCensusData.ts",
+  "src/lib/seeds/jp/jpRegionCensusData1953.ts",
+  "src/lib/seeds/jp/jpRegionCensusData1979.ts",
+  "src/lib/seeds/jp/jpRegionCensusData1991.ts",
+  "src/lib/seeds/jp/jpRegionCensusData1999.ts",
+  "src/lib/seeds/jp/jpRegionCensusData2007.ts",
+  "src/lib/seeds/jp/jpRegionCensusData2023.ts",
+  "src/lib/seeds/jp/jpRegionDemographics.ts",
+  "src/lib/seeds/jp/jpRegionDemographics1979.ts",
+  "src/lib/seeds/jp/jpRegionDemographics1991.ts",
+  "src/lib/seeds/jp/jpRegionDemographics1999.ts",
+  "src/lib/seeds/jp/jpRegionDemographics2023.ts",
+  "src/lib/seeds/jp/jpRegionVoteShares1990.ts",
+  "src/lib/seeds/jp/jpRegions.ts",
+  "src/lib/seeds/jp/jpRegions1953.ts",
+  "src/lib/seeds/jp/jpRegions1979.ts",
+  "src/lib/seeds/jp/jpRegions1991.ts",
+  "src/lib/seeds/jp/jpRegions1999.ts",
+  "src/lib/seeds/jp/jpRegions2007.ts",
+  "src/lib/seeds/jp/jpRegions2023.ts",
+  "src/lib/seeds/jp/jpStateBaselines.ts",
+  "src/lib/seeds/jp/jpStateMetrics.ts",
+  "src/lib/seeds/jp/jpStatePartyOrgCalculations.ts",
+  "src/lib/seeds/wiki/content/jpOverview.ts",
+  "src/lib/turn/billLifecycle/configs/jp.ts",
+  "src/lib/turn/jpRegionalBudget.ts",
+  "src/lib/turn/perpetualElections/countries/jp.ts",
+];
+
+/**
+ * Japan content moves into `src/lib/countries/jp/`, but the file itself stays
+ * and keeps its other countries.
+ *
+ * Bundle note: 60 of these are reachable from a "use client" root, so a move
  * must not drag a server-only import into a client bundle. That is a per-phase
- * check, not a separate bucket. E below is for files that ARE client code.
+ * check, not a bucket. A pure import-graph rule would swallow 58% of this list.
  */
 export const BUCKET_A_MOVES: readonly string[] = [
-  "src/app/api/admin/seed/route.ts",
   "src/app/api/country/[code]/region/[id]/budget/route.ts",
-  "src/app/api/discord-bot/government/route.ts",
-  "src/app/api/search/universal/route.ts",
   "src/app/country/[code]/parties/[id]/components/slate/stateMapData.ts",
   "src/app/country/[code]/region/[id]/regionData.ts",
   "src/app/world/conflicts/_coldwar/regionOverlayBridge.ts",
@@ -75,24 +134,29 @@ export const BUCKET_A_MOVES: readonly string[] = [
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/institutionIdentity.ts",
   "src/lib/constants/internationalOrganizations.ts",
+  "src/lib/constants/legalStructures.ts",
   "src/lib/constants/military.ts",
   "src/lib/constants/monetaryEra.ts",
   "src/lib/constants/nationalIdentity.ts",
+  "src/lib/constants/nationalScope.ts",
   "src/lib/constants/nationalStatsIdentity.ts",
   "src/lib/constants/parliamentaryExecutiveSurface.ts",
   "src/lib/constants/regionCensusLabels.ts",
   "src/lib/constants/stateAdjacency.ts",
   "src/lib/constants/treasuryIdentity.ts",
   "src/lib/crises/regionHazards.ts",
+  "src/lib/db/types/regionalBudget.ts",
   "src/lib/demographicEffects.ts",
   "src/lib/demographics/bucketLabelsByCountry.ts",
-  "src/lib/demographics/compositionWeights.generated.ts",
   "src/lib/demographics/conscription.ts",
+  "src/lib/demographics/countryDemographics.ts",
   "src/lib/demographics/substrateCoverage.ts",
+  "src/lib/era/legislationCatalog.ts",
   "src/lib/era/legislationCostCatalog.ts",
   "src/lib/era/metricCatalog.ts",
   "src/lib/indexFunds/fundDefinitions.ts",
   "src/lib/indexFunds/nppInvesting.ts",
+  "src/lib/legislationTypeAliases.ts",
   "src/lib/legislature/process.ts",
   "src/lib/maps/countryAnchors.ts",
   "src/lib/military/regionTopology.ts",
@@ -101,16 +165,18 @@ export const BUCKET_A_MOVES: readonly string[] = [
   "src/lib/npp/nameGenerator.ts",
   "src/lib/policy/nationalPolicyRecords.ts",
   "src/lib/policy/nationalStateId.ts",
+  "src/lib/policyEffects.ts",
   "src/lib/politicalMetrics/derive/defenseBoards1953.ts",
-  "src/lib/politicalMetrics/seeds/approvalNeutrals.ts",
-  "src/lib/politicalMetrics/seeds/nonPlayableBoards.ts",
   "src/lib/politicalStrength/strengthConstants.ts",
   "src/lib/seeds/calibration/targets.ts",
   "src/lib/seeds/defaultPartyTiers.ts",
-  "src/lib/seeds/jp/jpGovernmentFormation.ts",
   "src/lib/seeds/metricPresets.ts",
   "src/lib/seeds/partySeedRegistry.ts",
   "src/lib/seeds/populationAnchors.ts",
+  "src/lib/seeds/reference/basePolicies1953.ts",
+  "src/lib/seeds/reference/basePolicies1979.ts",
+  "src/lib/seeds/reference/basePolicies1991.ts",
+  "src/lib/seeds/reference/basePolicies2019.ts",
   "src/lib/seeds/reference/budgets.ts",
   "src/lib/seeds/reference/gdpDenomination.ts",
   "src/lib/seeds/reference/moneySupply.ts",
@@ -155,15 +221,31 @@ export const BUCKET_B_RELATIONAL: readonly string[] = [
 ];
 
 /**
- * Derived or duplicated from another registry. Fix the duplication; do not give
- * Japan a second copy. The three world routes each re-hardcode the ISO numeric
- * code that `countryIso.ts` already owns.
+ * Derived, duplicated, or GENERATED. Fix the source; do not give Japan a second
+ * copy.
+ *
+ * The three world routes each re-hardcode the ISO numeric code `countryIso.ts`
+ * already owns. Two files duplicate the jp_ldp/jp_cdp display-name map.
+ *
+ * Three are emitter output carrying a do-not-edit header, and hand-moving them
+ * creates a second source the next --emit silently reverts:
+ * nonPlayableBoards.ts (41,827 LOC, keyed preset -> country -> region, so
+ * country is not the first key), compositionWeights.generated.ts (4,563), and
+ * approvalNeutrals.ts from the same generator. Their remedy is to change the
+ * generator, not the artifact.
  */
 export const BUCKET_C_DERIVED: readonly string[] = [
+  "src/app/api/admin/heal/dropped-npp-parties/route.ts",
+  "src/app/api/discord-bot/government/route.ts",
+  "src/app/api/search/universal/route.ts",
   "src/app/api/world/corps/route.ts",
   "src/app/api/world/metrics/route.ts",
   "src/app/api/world/parties/route.ts",
   "src/components/landing/globeEnhancements.ts",
+  "src/lib/demographics/compositionWeights.generated.ts",
+  "src/lib/npp/seedHistorical.ts",
+  "src/lib/politicalMetrics/seeds/approvalNeutrals.ts",
+  "src/lib/politicalMetrics/seeds/nonPlayableBoards.ts",
 ];
 
 /**
@@ -175,28 +257,64 @@ export const BUCKET_C_DERIVED: readonly string[] = [
 export const BUCKET_E_CLIENT: readonly string[] = [
   "src/app/country/[code]/budget/NationalBudgetClient.tsx",
   "src/app/country/[code]/executive/cabinet/parliamentaryCabinetConfig.ts",
+  "src/app/country/[code]/legislature/JPCabinetProposeBillModal.tsx",
+  "src/app/country/[code]/legislature/JPDietPage.tsx",
   "src/app/country/[code]/legislature/LegislatureClient.tsx",
+  "src/app/country/[code]/legislature/useJPDietPageState.ts",
   "src/app/country/[code]/map/components/countryMapConfigs.tsx",
+  "src/app/country/[code]/parties/[id]/components/SlateTab.tsx",
   "src/app/world/WorldMetricFilterContext.tsx",
+  "src/components/CountryMapPaths.tsx",
+  "src/components/JapanMapPaths.tsx",
   "src/components/admin/elections/ElectionTimerForm.tsx",
+  "src/components/admin/politics/NPPManagement.tsx",
+  "src/components/admin/system/UniversalSeeder.tsx",
   "src/components/landing/FlavorCardCarousel.tsx",
   "src/components/positionEditor/PositionMapView.tsx",
   "src/components/wiki/widgets/SectorSeedMap.tsx",
 ];
 
 /**
- * Country-conditional LOGIC only, a `case "JP":` branch or Set membership with
- * no data payload. These get refactored to read a country capability, not moved.
+ * Country-conditional LOGIC only: a `case "JP":` branch, an `=== "JP"`
+ * comparison, or set membership, with no data payload. These get refactored to
+ * read a country capability, not moved.
  */
 export const BUCKET_F_CONDITIONAL: readonly string[] = [
+  "src/app/api/admin/elections/sync-date/route.ts",
   "src/app/api/admin/position-editor/preset/route.ts",
+  "src/app/api/admin/seed/route.ts",
+  "src/app/api/admin/setup/route.ts",
+  "src/app/congress/bills/[id]/components/TimelineStepper.tsx",
+  "src/lib/billEnactment.ts",
   "src/lib/constants/regionBanner.ts",
+  "src/lib/legislature/queries/nationalBillQueries.ts",
   "src/lib/seeds/international/index.ts",
   "src/lib/states/regionalExecutive.ts",
+  "src/lib/world/tier1ReadinessMatrix1953.ts",
 ];
 
 /** Deliberately not handled by this plan. Each entry states why. */
 export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: string }> = [
+  {
+    file: "src/app/api/country/[code]/region/[id]/metrics/[category]/[metricId]/route.ts",
+    why: "Doc comments only, listing jp_national beside uk_national as national-scope id examples. The route branches on no country.",
+  },
+  {
+    file: "src/lib/budget/fiscalYear.ts",
+    why: "A doc comment naming jp_local_allocation_tax as an example of region-funding legislation. No Japan payload or branch.",
+  },
+  {
+    file: "src/lib/db/types/statePolicy.ts",
+    why: "A doc comment listing jp_national as a national-scope stateId example. The type itself is country-neutral.",
+  },
+  {
+    file: "src/lib/seeds/de/deLegislationTypes.ts",
+    why: "Germany's legislation file. The two JP mentions are comments cross-referencing Japanese equivalents for calibration.",
+  },
+  {
+    file: "src/lib/seeds/reference/legislationTypes.ts",
+    why: "One comment cross-referencing jp_regional_economic_development to explain a weight. The registry itself is country-neutral.",
+  },
   {
     file: "src/lib/seeds/reference/policyOptionHelpers.ts",
     why: "Helper functions only. The JP mentions are doc comments pointing at policyOptionsJP(), whose payload lives in the JP policy seed.",
