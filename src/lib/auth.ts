@@ -6,7 +6,7 @@ import { z } from "zod";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { getCharactersCollection, getUsersCollection } from "@/lib/db/collections";
-import { getCachedUser, setCachedUser } from "@/lib/auth/userDocCache";
+import { getCachedUser, invalidateCachedUser, setCachedUser } from "@/lib/auth/userDocCache";
 import type { Character, User } from "@/lib/db/types";
 import { getValidatedEnv } from "@/lib/env";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
@@ -188,17 +188,18 @@ export async function clearAuthCookie(reason: string) {
 }
 
 function mapUserToAuthUser(user: User, payload: UserPayload): AuthUser {
+  // Privilege derives from the current DB account record only. The verified
+  // JWT claims are identity (which account this session is for); a correctly
+  // signed but stale token minted before a demotion must never re-grant
+  // staff access, and a stale player-claim token must never mask a promotion.
+  const isAdmin = user.isAdmin === true || user.role === "admin";
   return {
     userId: payload.userId,
     username: payload.username,
     email: payload.email,
-    role: payload.role,
-    isAdmin: user.isAdmin === true || user.role === "admin" || payload.isAdmin === true,
-    isModerator:
-      user.role === "moderator" ||
-      user.role === "admin" ||
-      user.isAdmin === true ||
-      payload.isAdmin === true,
+    role: user.role,
+    isAdmin,
+    isModerator: isAdmin || user.role === "moderator",
     isBanned: user.isBanned === true,
     activeCharacterId: user.activeCharacterId ? user.activeCharacterId.toString() : null,
   };
@@ -227,7 +228,12 @@ export interface AuthUserWithCharacter extends AuthUser {
 /**
  * Verify JWT token and return user payload
  * Returns null if token is invalid or missing
- * Note: This only validates the JWT - use getAuthUser() to also verify user exists in DB
+ *
+ * Low-level JWT check only: signature, expiry, and claim shape. It performs
+ * no DB access and grants no privilege. Use getAuthUser(),
+ * getAuthUserWithCharacter(), or getAuthUserFromToken() for the DB-bound
+ * principal whose role/isAdmin/isModerator come from the current account
+ * record; stale claims in the payload are identity only.
  */
 export async function verifyAuthToken(token: string): Promise<UserPayload | null> {
   // `jose` throws `JOSEError` (or a subclass like `JWTExpired`,
@@ -282,6 +288,23 @@ export async function verifyAuth(): Promise<UserPayload | null> {
 }
 
 /**
+ * A session is a staff candidate when the verified JWT still carries a staff
+ * claim or the cached DB record still shows staff. Either signal forces an
+ * uncached account read before any grant below, so a demotion denies on the
+ * next request even though the process cache still holds the stale record.
+ */
+function isStaffCandidate(payload: UserPayload, cached: User | undefined): boolean {
+  return (
+    payload.isAdmin === true ||
+    payload.role === "admin" ||
+    payload.role === "moderator" ||
+    cached?.isAdmin === true ||
+    cached?.role === "admin" ||
+    cached?.role === "moderator"
+  );
+}
+
+/**
  * Resolve the user document for an authenticated session.
  *
  * Reads through the short-TTL process cache (`userDocCache`) so the many
@@ -289,21 +312,36 @@ export async function verifyAuth(): Promise<UserPayload | null> {
  * to enforce ban / token-revocation. Ban + revoke paths invalidate the cache,
  * so enforcement stays effectively immediate; the TTL is the upper bound for
  * anything we don't explicitly invalidate.
+ *
+ * Staff candidates bypass the cache (see `isStaffCandidate`): ordinary-player
+ * cache hits keep the fast path, but no staff grant ever comes from a cached
+ * record. Only a validated fresh record is cached; a null read (deleted
+ * account) drops any stale entry without caching anything. DB failures
+ * propagate so the caller fails closed without clearing the session cookie.
  */
-async function resolveUserDoc(db: Db, userId: string): Promise<User | null> {
+async function resolveUserDoc(db: Db, userId: string, payload: UserPayload): Promise<User | null> {
   const cached = getCachedUser(userId);
-  if (cached) return cached;
+  if (cached && !isStaffCandidate(payload, cached)) return cached;
 
   const users = await getUsersCollection(db);
   const user = await users.findOne({ _id: new ObjectId(userId) });
   if (user) setCachedUser(userId, user);
+  else invalidateCachedUser(userId);
   return user;
 }
 
+/**
+ * Resolve a DB-bound principal from a raw session token.
+ *
+ * This wrapper owns the DB role checks: role/isAdmin/isModerator on the
+ * returned principal always reflect the current account record, never the
+ * token claims. Returns null for bad tokens, deleted/banned accounts, and
+ * revoked tokens; throws (no grant) when the account read itself fails.
+ */
 export async function getAuthUserFromToken(token: string): Promise<AuthUser | null> {
   const payload = await verifyAuthToken(token);
   if (!payload) return null;
-  const user = await resolveUserDoc(await getDb(), payload.userId);
+  const user = await resolveUserDoc(await getDb(), payload.userId, payload);
   if (!user || user.isBanned === true || isAuthTokenRevoked(user, payload)) return null;
   return mapUserToAuthUser(user, payload);
 }
@@ -320,7 +358,7 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
   if (!payload) return null;
 
   // Verify user still exists in database (handles case where user was deleted)
-  const user = await resolveUserDoc(await getDb(), payload.userId);
+  const user = await resolveUserDoc(await getDb(), payload.userId, payload);
 
   if (!user) return null;
   if (user.isBanned === true) return null;
@@ -339,7 +377,7 @@ export const getAuthUserWithCharacter = cache(async (): Promise<AuthUserWithChar
 
   // Single DB handle for user + character lookups (avoids nested getAuthUser -> getDb + getDb).
   const db = await getDb();
-  const user = await resolveUserDoc(db, payload.userId);
+  const user = await resolveUserDoc(db, payload.userId, payload);
 
   if (!user) return null;
   if (user.isBanned === true) return null;
