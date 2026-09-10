@@ -141,6 +141,49 @@ export function perTurnInterestOn(balance: number, annualPercent: number): numbe
   return (balance * (annualPercent / 100)) / TURNS_PER_YEAR;
 }
 
+export interface InterestBookLine {
+  outstanding?: number | null;
+  ratePercent?: number | null;
+  status?: string | null;
+}
+
+export interface InterestPerTurnEstimate {
+  depositCostPerTurn: number;
+  loanIncomePerTurn: number;
+  netPerTurn: number;
+}
+
+/**
+ * Estimated per-turn interest from the current book: what the bank pays
+ * depositors at the deposit rate against what its performing loans earn.
+ * Only current/arrears lines count; anything else is not earning.
+ */
+export function estimateInterestPerTurn(args: {
+  totalDeposits: number;
+  depositRatePercent: number | null;
+  loans: readonly InterestBookLine[];
+  interbankLending?: readonly InterestBookLine[];
+}): InterestPerTurnEstimate {
+  const depositCostPerTurn = perTurnInterestOn(
+    Math.max(0, args.totalDeposits ?? 0),
+    args.depositRatePercent ?? 0
+  );
+  const bookIncome = args.loans.reduce((sum, loan) => {
+    if (loan.status != null && loan.status !== "current" && loan.status !== "arrears") return sum;
+    return sum + perTurnInterestOn(Math.max(0, loan.outstanding ?? 0), loan.ratePercent ?? 0);
+  }, 0);
+  const interbankIncome = (args.interbankLending ?? []).reduce((sum, loan) => {
+    if (loan.status != null && loan.status !== "current") return sum;
+    return sum + perTurnInterestOn(Math.max(0, loan.outstanding ?? 0), loan.ratePercent ?? 0);
+  }, 0);
+  const loanIncomePerTurn = bookIncome + interbankIncome;
+  return {
+    depositCostPerTurn,
+    loanIncomePerTurn,
+    netPerTurn: loanIncomePerTurn - depositCostPerTurn,
+  };
+}
+
 /**
  * Per-turn interest on a savings balance, rounded to the currency's minor
  * unit. Matches the central-bank savings pass so a balance earns the same

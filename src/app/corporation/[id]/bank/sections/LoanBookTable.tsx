@@ -7,9 +7,12 @@ import { formatBankMoney, formatRatePercent } from "@/components/banking/formatB
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   LENDING_PROFILES,
+  bandsForProfile,
+  demandShareForProfile,
   type CreditBandId,
   type LendingProfileId,
 } from "@/lib/banking/creditBands";
+import { MAX_NPC_FLOW_PER_TURN_FRACTION } from "@/lib/banking/rules/loans";
 import type { ConsolePayload } from "../types";
 import { partyHref } from "../lib/helpers";
 
@@ -161,16 +164,28 @@ function LendingProfilePicker({
     }
   };
 
+  // Profiles nest: each looser stance opens every band the tighter one opens,
+  // plus more. So switching only ever opens bands, only ever closes bands,
+  // or changes nothing.
+  const currentBands = new Set(bandsForProfile(current).map((b) => b.id));
+  const runOffPercent = MAX_NPC_FLOW_PER_TURN_FRACTION * 100;
+
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
       <div className="mb-1 text-sm font-semibold text-foreground">Lending stance</div>
       <p className="mb-3 text-xs text-muted">
         Sets which ratings the bank will lend to from the next turn. Loans already on the book keep
-        their rate and rating.
+        their rate and rating, and closed ratings run off at up to {runOffPercent}% of their balance
+        per turn, so expect the mix to move over several turns rather than at once.
       </p>
       <div className="grid gap-2 sm:grid-cols-3">
         {LENDING_PROFILES.map((profile) => {
           const active = profile.id === current;
+          const bands = bandsForProfile(profile.id);
+          const share = Math.round(demandShareForProfile(profile.id) * 100);
+          const range = bands.length > 0 ? `${bands[0].id}–${bands[bands.length - 1].id}` : "none";
+          const opens = bands.filter((b) => !currentBands.has(b.id)).map((b) => b.id);
+          const closes = [...currentBands].filter((id) => !bands.some((b) => b.id === id));
           return (
             <button
               key={profile.id}
@@ -188,6 +203,19 @@ function LendingProfilePicker({
                 </span>
               </div>
               <p className="mt-1 text-xs leading-snug text-muted">{profile.blurb}</p>
+              <p className="mt-1 font-mono text-[11px] tabular-nums text-muted">
+                {range} · {share}% of demand
+              </p>
+              {!active && opens.length > 0 && (
+                <p className="mt-0.5 text-[11px] font-medium text-foreground">
+                  Opens {opens.join(", ")}
+                </p>
+              )}
+              {!active && opens.length === 0 && closes.length > 0 && (
+                <p className="mt-0.5 text-[11px] font-medium text-foreground">
+                  Closes {closes.join(", ")}
+                </p>
+              )}
             </button>
           );
         })}

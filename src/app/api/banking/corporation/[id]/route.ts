@@ -22,6 +22,7 @@ import {
   getBankDepositCeiling,
   getBranchCapacityShare,
 } from "@/lib/banking/capacityAllocation";
+import { estimateInterestPerTurn } from "@/lib/banking/rules/loans";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
@@ -173,6 +174,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
         reserveRatio: null,
         charter: null,
         rates: null,
+        interestPerTurn: null,
         loans: [],
         interbankLoans: [],
         depositCeiling: null,
@@ -353,6 +355,31 @@ async function handleGET(_request: Request, { params }: RouteParams) {
           }
         : null;
 
+    // Estimated per-turn interest from the current book, using the same
+    // deposit total the console displays. Gross figures before defaults and
+    // fees: what the owner earns on performing loans vs pays on deposits.
+    const depositTotalForInterest =
+      hasActiveCharter && charter
+        ? sheetOptions.playerDepositsAreLiabilities
+          ? cashBackedDeposits(charter, sheetOptions)
+          : (charter.totalDeposits ?? 0)
+        : 0;
+    const interestPerTurn =
+      hasActiveCharter && rates
+        ? estimateInterestPerTurn({
+            totalDeposits: depositTotalForInterest,
+            depositRatePercent: rates.depositRatePercent,
+            loans,
+            interbankLending: interbankLoans
+              .filter((loan) => loan.lenderCorporationId.equals(corporation._id))
+              .map((loan) => ({
+                outstanding: loan.outstanding,
+                ratePercent: loan.ratePercent,
+                status: loan.status,
+              })),
+          })
+        : null;
+
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
@@ -450,6 +477,7 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       // cannot drift from the rule.
       caps: sheet ? explainBankCaps(sheet) : null,
       rates,
+      interestPerTurn,
       loans: loans.map((loan) => ({
         id: loan._id.toString(),
         borrowerType: loan.borrowerType,
