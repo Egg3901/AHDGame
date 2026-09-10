@@ -12,6 +12,8 @@ Each preset begins with its **Original Roster**. When an original justice reache
 
 The President nominates. The Senate confirms by **simple majority**, using the same seat-weighted Senate vote machinery as cabinet confirmation. See [Confirmation Process](/wiki/confirmation-process).
 
+A Court packed by one party hurts **democratic health** on a sliding scale. A 5-4 split is normal and costs nothing. From about 6-3 of the seated bench upward, one-party control subtracts from the country's Governance Style health score. Filling every vacancy from the same party is the most expensive. Vacant seats do not count.
+
 A justice seat is not a cabinet office and is not gated by year the way HUD or Homeland Security are.
 
 ## Docket
