@@ -47,7 +47,6 @@ export async function GET() {
     }
     const userId = payload.userId;
     const username = payload.username;
-    const isAdminFromJwt = payload.isAdmin;
 
     const db = await getDb();
     let user = await db.collection<User>("users").findOne({ _id: new ObjectId(userId) });
@@ -70,8 +69,10 @@ export async function GET() {
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Resolve admin status from JWT or DB (handles stale JWTs minted before isAdmin was added)
-    const isAdmin = isAdminFromJwt || user?.isAdmin || user?.role === "admin";
+    // Staff flags come from the current DB account record only. Verified JWT
+    // claims are identity (which account this session is for), never
+    // authority: an old token from before a demotion must not re-grant here.
+    const isAdmin = user?.isAdmin === true || user?.role === "admin";
     const isModerator = isAdmin || user?.role === "moderator";
 
     // Clear expired Patreon benefits inline — avoids 2 extra DB reads from clearExpiredPatreonBenefits

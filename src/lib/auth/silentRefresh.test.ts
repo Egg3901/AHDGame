@@ -109,6 +109,25 @@ describe("refreshSessionPreservingIssuedAt", () => {
     expect(result.iat).toBeLessThanOrEqual(nowSec);
   });
 
+  it("copies the current DB principal roles while preserving the original iat", async () => {
+    const nowSec = Math.floor(Date.now() / 1000);
+    const signInIat = nowSec - 3600;
+    // Old token minted when the account was a plain player.
+    const token = await sign({ iat: signInIat, exp: nowSec + 1800 });
+    // The caller sources these from the current DB record, which now shows admin.
+    const dbClaims: SilentRefreshClaims = { ...CLAIMS, role: "admin", isAdmin: true };
+
+    const result = await refreshSessionPreservingIssuedAt(token, dbClaims, SECRET);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.iat).toBe(signInIat);
+    const { payload } = await jwtVerify(result.token, SECRET, { algorithms: ["HS256"] });
+    expect(payload.iat).toBe(signInIat);
+    expect(payload.role).toBe("admin");
+    expect(payload.isAdmin).toBe(true);
+  });
+
   it("skips refresh when more than a day of expiry remains", async () => {
     const nowSec = Math.floor(Date.now() / 1000);
     const token = await sign({ iat: nowSec - 10, exp: nowSec + 2 * 24 * 60 * 60 });
