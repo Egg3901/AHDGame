@@ -30,6 +30,7 @@ import { build1991RegistrationSeeds } from "@/lib/seeds/registration/registratio
 import { build1999RegistrationSeeds } from "@/lib/seeds/registration/registrationLanes1999";
 import { build2007RegistrationSeeds } from "@/lib/seeds/registration/registrationLanes2007";
 import { build2023RegistrationSeeds } from "@/lib/seeds/registration/registrationLanes2023";
+import { build2027RegistrationSeeds } from "@/lib/seeds/registration/registrationLanes2027";
 import type { CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty, StatePartyOrg, StateRegistrationPool } from "@/lib/db/types";
 import { NUMERIC_BSON_TYPE } from "@/lib/db/queryHelpers";
@@ -72,6 +73,9 @@ function selectSeedBundle(presetId: string): StateRegistrationSeed[] | null {
   }
   if (presetId === "2023-default") {
     return build2023RegistrationSeeds();
+  }
+  if (presetId === "2027-default") {
+    return build2027RegistrationSeeds();
   }
   return null;
 }

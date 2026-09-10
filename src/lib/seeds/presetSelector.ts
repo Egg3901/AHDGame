@@ -8,7 +8,7 @@
  * while allowing 1991-default bundles to opt in incrementally.
  */
 
-export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023";
+export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023" | "2027";
 
 export type ResetPresetId =
   | "1953-default"
@@ -18,6 +18,7 @@ export type ResetPresetId =
   | "2007-default"
   | "2019-default"
   | "2023-default"
+  | "2027-default"
   | "empty"
   | "2019-no-parties"
   | string;
@@ -126,6 +127,7 @@ const ERA_MAP: Record<string, EraId> = {
   "2007-default": "2007",
   "2019-default": "2019",
   "2023-default": "2023",
+  "2027-default": "2027",
   empty: "2019",
   "2019-no-parties": "2019",
 };
@@ -157,6 +159,7 @@ const PRESET_FOR_ERA_MAP: Record<EraId, ResetPresetId> = {
   "2007": "2007-default",
   "2019": "2019-default",
   "2023": "2023-default",
+  "2027": "2027-default",
 };
 
 export function presetForEra(era: EraId): ResetPresetId {
@@ -219,6 +222,7 @@ export function isKnownPreset(preset: string): boolean {
     preset === "2007-default" ||
     preset === "2019-default" ||
     preset === "2023-default" ||
+    preset === "2027-default" ||
     preset === "empty" ||
     preset === "2019-no-parties"
   );

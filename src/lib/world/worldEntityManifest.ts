@@ -279,15 +279,15 @@ const SPHERE_SPONSOR_ELIGIBILITY: Readonly<Partial<Record<string, ReadonlySet<Co
     "1999-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2007-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN"])),
     "2019-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    "2023-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    "2027-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
   });
-
 /** True when the preset matrix lists this entity as a sphere sponsor. */
 export function isManifestSphereSponsor(presetId: string, entityId: WorldEntityId): boolean {
   const eligible = SPHERE_SPONSOR_ELIGIBILITY[presetId];
   if (!eligible) return false;
   return eligible.has(entityId as CountryId);
 }
-
 function buildCountryEntry(
   presetId: string,
   countryId: CountryId,
@@ -350,7 +350,6 @@ function entriesFromAccess(
     buildCountryEntry(presetId, countryId as CountryId, legacyAccess)
   );
 }
-
 const SPHERE_MACRO_BLOCKERS = [
   AUTONOMY_BLOCKER,
   PLAYER_BLOCKER,
@@ -1970,6 +1969,8 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
         ),
       })
     ),
+    // prettier-ignore
+    "2027-default": defineWorldEntityPresetManifest("2027-default", entriesFromAccess("2027-default", accessMap(["US", "UK", "DE", "JP", "CN"], POST_COLD_WAR_ECONOMY.filter((countryId) => !["DE", "JP", "CN"].includes(countryId))))),
   });
 
 export function getWorldEntityPresetManifest(presetId: string): WorldEntityPresetManifest {

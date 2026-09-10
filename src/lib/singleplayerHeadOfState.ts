@@ -5,6 +5,18 @@ import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilte
 import { appointPrimeMinister } from "@/lib/turn/parliamentaryGovernment";
 import { isSingleplayer } from "@/lib/singleplayer";
 
+export function mayRuleByDecree(
+  character: Pick<Character, "countryId" | "singleplayerHeadOfState">,
+  countryId: CountryId,
+  localSingleplayer = isSingleplayer()
+): boolean {
+  return (
+    localSingleplayer &&
+    character.countryId === countryId &&
+    character.singleplayerHeadOfState === true
+  );
+}
+
 /** Countries where the authored executive path is a directly seated office. */
 export function getSingleplayerHeadOfStateOfficeType(
   countryId: CountryId,

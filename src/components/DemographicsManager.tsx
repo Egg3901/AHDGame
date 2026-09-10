@@ -12,7 +12,7 @@ import { useDemographicsState } from "./demographics/useDemographicsState";
  * rather than silently seeding the default.
  */
 const RESEED_COUNTRIES = ["US", "UK", "DE", "RU", "DD", "JP", "IE", "BR", "CN", "NG"] as const;
-const RESEED_ERAS = ["1953", "1979", "1991", "1999", "2007", "2019", "2023"] as const;
+const RESEED_ERAS = ["1953", "1979", "1991", "1999", "2007", "2019", "2023", "2027"] as const;
 
 /**
  * Read-only view of the live demographic categories and one region's stored

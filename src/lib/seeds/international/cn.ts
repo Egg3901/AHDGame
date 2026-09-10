@@ -37,6 +37,7 @@ import { cnRegionCensusData1991 } from "@/lib/seeds/cn/cnRegionCensusData1991";
 import { cnRegionCensusData1999 } from "@/lib/seeds/cn/cnRegionCensusData1999";
 import { cnRegionCensusData2007 } from "@/lib/seeds/cn/cnRegionCensusData2007";
 import { cnRegionCensusData2023 } from "@/lib/seeds/cn/cnRegionCensusData2023";
+import { cnRegionCensusData2027 } from "@/lib/seeds/cn/cnRegionCensusData2027";
 import type { CNRegionLayer1 } from "@/lib/seeds/cn/cnRegionCensusData";
 import type { EraId } from "@/lib/seeds/presetSelector";
 
@@ -494,6 +495,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2007,
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2023,
+  "2027": POSITIONS_2023,
 };
 
 // ── Census conversion ─────────────────────────────────────────────────────────
@@ -524,6 +526,7 @@ const ERA_CENSUS: Record<EraId, Record<string, CNRegionLayer1>> = {
   "2007": cnRegionCensusData2007,
   "2019": cnRegionCensusData, // 2020 NBS base, used for 2019 era
   "2023": cnRegionCensusData2023,
+  "2027": cnRegionCensusData2027,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────
