@@ -97,7 +97,7 @@ describe("runReconcile", () => {
     expect(service.applyPatreonStatus).not.toHaveBeenCalled();
   });
 
-  it("starts grace for a lapsed supporter matched by email", async () => {
+  it("starts grace for a lapsed supporter matched by linked provider ID", async () => {
     const userId = new ObjectId();
     await setMembers([
       { patreonUserId: "p2", email: "lapsed@example.com", tier: null, active: false },
@@ -106,6 +106,7 @@ describe("runReconcile", () => {
       {
         _id: userId,
         username: "lapser",
+        patreonUserId: "p2",
         email: "lapsed@example.com",
         patreonTier: "supporter",
         patreonExpiresAt: null,
@@ -241,6 +242,50 @@ describe("runReconcile", () => {
       expect.anything(),
       expect.objectContaining({ userId, tier: "supporter-plus" })
     );
+  });
+
+  it("does not grant or link an account through a matching email", async () => {
+    await setMembers([
+      {
+        patreonUserId: "unlinked",
+        email: "shared@example.com",
+        tier: "supporter-plus",
+        active: true,
+      },
+    ]);
+    const service = await import("@/lib/patreon/service");
+    vi.mocked(service.findUserByPatreonUserId).mockResolvedValue(null);
+    const users = setSupporters(db, []);
+    vi.mocked(users.findOne).mockResolvedValue({
+      _id: new ObjectId(),
+      email: "shared@example.com",
+    } as never);
+    const { runReconcile } = await import("./route");
+    const result = await runReconcile(db as unknown as Db, true);
+    expect(result.toGrant).toHaveLength(0);
+    expect(result.unmatchedActivePatrons).toHaveLength(1);
+    expect(users.findOne).not.toHaveBeenCalled();
+    expect(service.applyPatreonStatus).not.toHaveBeenCalled();
+  });
+
+  it("does not revoke an unlinked supporter through a matching inactive member email", async () => {
+    await setMembers([
+      { patreonUserId: "unlinked", email: "shared@example.com", tier: null, active: false },
+    ]);
+    setSupporters(db, [
+      {
+        _id: new ObjectId(),
+        username: "supporter",
+        email: "shared@example.com",
+        patreonTier: "supporter",
+      },
+    ]);
+    const service = await import("@/lib/patreon/service");
+    const { runReconcile } = await import("./route");
+    const result = await runReconcile(db as unknown as Db, true);
+    expect(result.toDerole).toHaveLength(0);
+    expect(result.unmatchedAhdSupporters).toHaveLength(1);
+    expect(service.startPatreonGracePeriod).not.toHaveBeenCalled();
   });
 
   it("dry run computes lists but writes nothing", async () => {
