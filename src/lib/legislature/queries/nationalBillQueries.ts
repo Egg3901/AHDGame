@@ -69,6 +69,7 @@ import {
 } from "@/lib/legislature/nationalBillScope";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
 
 const BILL_PAGE_LIMIT = 50;
 
@@ -304,6 +305,12 @@ export async function listNationalLegislatureBills(
       );
       hasActiveBill = !!activeBill;
       canPropose = isMember && !hasActiveBill;
+      if (char && mayRuleByDecree(char, countryId)) {
+        isMember = true;
+        isMemberOfViewedChamber = chamber === lowerKey;
+        canPropose = true;
+        hasActiveBill = false;
+      }
     }
     if (authUser.isAdmin) {
       canPropose = true;
