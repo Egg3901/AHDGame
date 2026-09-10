@@ -23,6 +23,28 @@ export function isPartyValidForPreset(seed: PartySeed, preset: string): boolean 
 }
 
 /**
+ * Select a complete party roster for a preset. Countries without a newly
+ * authored roster inherit their nearest earlier roster instead of booting with
+ * zero parties. Explicit rows for the requested preset always win as a group.
+ */
+export function selectPartyRosterForPreset(seeds: PartySeed[], preset: string): PartySeed[] {
+  const direct = seeds.filter((seed) => isPartyValidForPreset(seed, preset));
+  if (direct.length > 0) return direct;
+
+  const requestedYear = Number.parseInt(preset, 10);
+  const availableYears = seeds
+    .flatMap((seed) => seed.validForPresets ?? [])
+    .map((id) => Number.parseInt(id, 10))
+    .filter((year) => Number.isFinite(year) && year <= requestedYear)
+    .sort((a, b) => b - a);
+  const fallbackYear = availableYears[0];
+  if (fallbackYear === undefined) return seeds.filter((seed) => !seed.validForPresets);
+  return seeds.filter(
+    (seed) => !seed.validForPresets || seed.validForPresets.includes(`${fallbackYear}-default`)
+  );
+}
+
+/**
  * Deletes default parties whose seed declares `validForPresets` that excludes
  * the active preset. Country seeders call this before upserting so a reseed
  * self-heals worlds that still carry wrong-era defaults (e.g. MSZMP lingering
