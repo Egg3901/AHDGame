@@ -1,11 +1,16 @@
 import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { SignJWT, decodeJwt } from "jose";
 import { ObjectId } from "mongodb";
 import type { Db, Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { getAuthUser, getJwtSecret, getAuthCookieOptions, clearAuthCookie } from "@/lib/auth";
+import {
+  getAuthUser,
+  getJwtSecret,
+  getAuthCookieOptions,
+  clearAuthCookie,
+  refreshSessionPreservingIssuedAt,
+} from "@/lib/auth";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCabinetOfficeNavEntry } from "@/lib/navigation/cabinetOfficeNavEntry";
@@ -583,28 +588,27 @@ export async function GET() {
       }
     }
 
-    // Silent token refresh — mint a new JWT when the current one is within 1 day of expiry.
+    // Silent token refresh extends expiry only. It keeps the original verified
+    // sign-in iat and is not a reauthentication.
     try {
       if (rawToken) {
-        const claims = decodeJwt(rawToken);
-        const oneDay = 60 * 60 * 24;
-        if (claims.exp && claims.exp - Math.floor(Date.now() / 1000) < oneDay) {
-          const freshToken = await new SignJWT({
+        const refreshed = await refreshSessionPreservingIssuedAt(
+          rawToken,
+          {
             userId: authUser.userId,
             email: authUser.email,
             username: authUser.username,
             role: authUser.role,
             isAdmin: authUser.isAdmin ?? false,
-          })
-            .setProtectedHeader({ alg: "HS256" })
-            .setIssuedAt()
-            .setExpirationTime("7d")
-            .sign(getJwtSecret());
-          cookieStore.set(AUTH_COOKIE_NAME, freshToken, await getAuthCookieOptions());
+          },
+          getJwtSecret()
+        );
+        if (refreshed.ok) {
+          cookieStore.set(AUTH_COOKIE_NAME, refreshed.token, await getAuthCookieOptions());
         }
       }
     } catch {
-      // Non-critical — if refresh fails, the user still has their current token
+      // Non-critical: if refresh fails, the user still has their current token
     }
 
     const canSeeCampaignManager = await computeCanSeeCampaignManager({
