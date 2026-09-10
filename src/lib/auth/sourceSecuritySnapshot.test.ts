@@ -14,7 +14,7 @@ const CANONICAL_ACCOUNT_ID = "abcdef12-abcd-4abc-8abc-abcdef123456";
 const ENROLLMENT_OPERATION_ID = "12345678-90ab-4cde-b123-456789abcdef";
 const ALT_CANONICAL_ACCOUNT_ID = "33333333-3333-4333-a333-333333333333";
 const ALT_ENROLLMENT_OPERATION_ID = "44444444-4444-4444-a444-444444444444";
-const BCRYPT_DIGEST = "$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy";
+const STORED_CREDENTIAL = "synthetic-stored-credential-for-snapshot-vector";
 const REVOKED_ISO = "2026-01-02T03:04:05.006Z";
 
 // Fixed compatibility vector: the canonical encoding byte layout and its digest
@@ -23,17 +23,17 @@ const EXPECTED_CANONICAL_ENCODING =
   '{"v":1,"sourceIssuer":"lakeside-test","sourceAccountId":"0123456789abcdef01234567",' +
   '"canonicalAccountId":"abcdef12-abcd-4abc-8abc-abcdef123456",' +
   '"enrollmentOperationId":"12345678-90ab-4cde-b123-456789abcdef",' +
-  '"password":{"t":"sha256","v":"3581796df0e57418dc4a011577ca7552ced00d967402265e363bb9111775fd6a"},' +
+  '"password":{"t":"sha256","v":"fba85919912b4be39f71c2e7d730824ff678c8123a5b797ffd4ce3f052c8503e"},' +
   '"googleId":{"t":"id","v":"google-opaque-ABC-123"},"discordId":{"t":"null"},' +
   '"role":{"t":"role","v":"player"},"isAdmin":{"t":"bool","v":false},' +
   '"isBanned":{"t":"bool","v":false},"authRevokedAt":{"t":"ms","v":1767323045006},' +
   '"accountDeletion":{"t":"absent"},"authMigrationFence":{"t":"absent"}}';
-const EXPECTED_SNAPSHOT_DIGEST = "89bcc7dc9039512f8eace42e5358131328be0afa307b258f52fcfc353caa4058";
+const EXPECTED_SNAPSHOT_DIGEST = "d7640473c28b8663f3c6168e57f01b2353d0bb4b18a5db198ef0f1d84ea2b80f";
 
 function baseUser(): SourceSecuritySnapshotUser {
   return {
     _id: new ObjectId(SOURCE_ACCOUNT_ID),
-    password: BCRYPT_DIGEST,
+    password: STORED_CREDENTIAL,
     googleId: "google-opaque-ABC-123",
     discordId: null,
     role: "player",
@@ -117,7 +117,7 @@ describe("source security snapshot", () => {
       role: "player",
       discordId: null,
       googleId: "google-opaque-ABC-123",
-      password: BCRYPT_DIGEST,
+      password: STORED_CREDENTIAL,
       _id: new ObjectId(SOURCE_ACCOUNT_ID),
     } as SourceSecuritySnapshotUser;
     const reorderedBinding = {
@@ -132,7 +132,7 @@ describe("source security snapshot", () => {
   it.each([
     [
       "password value",
-      (u: SourceSecuritySnapshotUser) => ({ ...u, password: `${BCRYPT_DIGEST}x` }),
+      (u: SourceSecuritySnapshotUser) => ({ ...u, password: `${STORED_CREDENTIAL}x` }),
     ],
     ["googleId value", (u: SourceSecuritySnapshotUser) => ({ ...u, googleId: "other-id" })],
     ["discordId set", (u: SourceSecuritySnapshotUser) => ({ ...u, discordId: "d-1" })],
@@ -171,16 +171,16 @@ describe("source security snapshot", () => {
     ["absent", () => rowWithout("password")],
     ["null", () => rowWith("password", null)],
     ["empty", () => rowWith("password", "")],
-    ["digest-a", () => rowWith("password", BCRYPT_DIGEST)],
-    ["digest-b", () => rowWith("password", `${BCRYPT_DIGEST}x`)],
+    ["digest-a", () => rowWith("password", STORED_CREDENTIAL)],
+    ["digest-b", () => rowWith("password", `${STORED_CREDENTIAL}x`)],
   ])("keeps password states distinct: %s", (_name, make) => {
     const digests = new Set<string>();
     for (const build of [
       () => rowWithout("password"),
       () => rowWith("password", null),
       () => rowWith("password", ""),
-      () => rowWith("password", BCRYPT_DIGEST),
-      () => rowWith("password", `${BCRYPT_DIGEST}x`),
+      () => rowWith("password", STORED_CREDENTIAL),
+      () => rowWith("password", `${STORED_CREDENTIAL}x`),
     ]) {
       digests.add(capture(build()).snapshotDigest);
     }
@@ -350,9 +350,9 @@ describe("source security snapshot", () => {
 
   it("stores only the hash of a nonempty password digest, never the bytes", () => {
     const out = capture();
-    const passwordHash = createHash("sha256").update(BCRYPT_DIGEST, "utf8").digest("hex");
-    expect(out.canonicalEncoding).not.toContain(BCRYPT_DIGEST);
-    expect(JSON.stringify(out)).not.toContain(BCRYPT_DIGEST);
+    const passwordHash = createHash("sha256").update(STORED_CREDENTIAL, "utf8").digest("hex");
+    expect(out.canonicalEncoding).not.toContain(STORED_CREDENTIAL);
+    expect(JSON.stringify(out)).not.toContain(STORED_CREDENTIAL);
     expect(out.canonicalEncoding).toContain(`"v":"${passwordHash}"`);
   });
 
