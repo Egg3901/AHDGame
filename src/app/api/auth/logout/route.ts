@@ -31,7 +31,7 @@ function hashIp(ip: string): string | undefined {
 
 // POST /api/auth/logout — Clears the auth cookie. Clients should navigate to / after success.
 // Auth: public
-// Errors: (none)
+// Errors: 503
 export async function POST(request: Request) {
   try {
     // Read auth payload and session context before clearing the cookie so we can
@@ -41,34 +41,38 @@ export async function POST(request: Request) {
     const userAgent = request.headers.get("user-agent") ?? undefined;
     const trackingId = (await cookies()).get("__ahd_track")?.value;
 
-    await clearAuthCookie("user_logout");
-
-    // Fire-and-forget: revoke this user's tokens, stamp lastLogout, and log the
-    // event. authRevokedAt invalidates every token issued before now (see
-    // isAuthTokenRevoked), so a token captured before logout cannot outlive it.
-    // If these writes fail the cookie is already cleared, so logout is unaffected.
+    // Confirm account-wide revocation before reporting successful logout.
+    // Activity logging is best effort; the security write is not.
     if (payload) {
-      // Evict the cached user doc so any in-flight parallel requests re-read the
-      // freshly-revoked record instead of the pre-logout TTL copy.
-      invalidateCachedUser(payload.userId);
       const userId = new ObjectId(payload.userId);
-      void getDb()
-        .then(async (db) => {
-          await db
-            .collection("users")
-            .updateOne(
-              { _id: userId },
-              { $set: { authRevokedAt: new Date(), lastLogout: new Date() } }
-            );
-          await db.collection("activityLog").insertOne({
-            type: "logout",
-            timestamp: new Date(),
-            userId,
-            username: payload.username,
-            ipAddress: clientIp ?? undefined,
-            userAgent,
-            trackingId: trackingId || undefined,
-          });
+      invalidateCachedUser(payload.userId);
+      let db;
+      try {
+        db = await getDb();
+        const now = new Date();
+        const result = await db
+          .collection("users")
+          .updateOne({ _id: userId }, { $max: { authRevokedAt: now }, $set: { lastLogout: now } });
+        if (result.acknowledged !== true) throw new Error("Revocation was not acknowledged");
+      } catch {
+        return NextResponse.json(
+          { error: "Logout is temporarily unavailable. Please try again." },
+          { status: 503, headers: { "Cache-Control": "private, no-store" } }
+        );
+      }
+      // A concurrent read may have repopulated this process's cache while
+      // the database write was pending. Evict again after acknowledgment.
+      invalidateCachedUser(payload.userId);
+      void db
+        .collection("activityLog")
+        .insertOne({
+          type: "logout",
+          timestamp: new Date(),
+          userId,
+          username: payload.username,
+          ipAddress: clientIp ?? undefined,
+          userAgent,
+          trackingId: trackingId || undefined,
         })
         .catch(() => {});
 
@@ -87,7 +91,8 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ ok: true });
+    await clearAuthCookie("user_logout");
+    return NextResponse.json({ ok: true }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
     return handleRouteError(error);
   }
