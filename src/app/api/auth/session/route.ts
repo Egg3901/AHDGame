@@ -47,14 +47,22 @@ export async function GET(request: Request) {
       .collection<User>("users")
       .findOne(
         { _id: new ObjectId(userId) },
-        { projection: { username: 1, isBanned: 1, authRevokedAt: 1 } }
+        { projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1 } }
       );
     if (!user || user.isBanned || !user.username) return inactive();
     if (user.authRevokedAt && user.authRevokedAt.getTime() >= iat * 1000) return inactive();
 
-    // Identity only. Staff permissions and email ownership are separate checks.
+    // Contact email preserves legacy consumer compatibility. It does not prove
+    // email ownership or grant staff permissions.
     return NextResponse.json(
-      { active: true, sub: user._id.toHexString(), username: user.username, iat, exp },
+      {
+        active: true,
+        sub: user._id.toHexString(),
+        username: user.username,
+        email: user.email,
+        iat,
+        exp,
+      },
       { headers }
     );
   } catch (error) {

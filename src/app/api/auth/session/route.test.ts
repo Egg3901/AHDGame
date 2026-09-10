@@ -27,11 +27,15 @@ function request(cookie: string) {
 describe("GET /api/auth/session", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    findOne.mockResolvedValue({ _id: id, username: "current-name" });
+    findOne.mockResolvedValue({
+      _id: id,
+      username: "current-name",
+      email: "current@example.invalid",
+    });
     getDb.mockResolvedValue({ collection: () => ({ findOne }) });
   });
 
-  it("returns current identity without email or token privilege claims, with one projected read", async () => {
+  it("returns current identity and contact email without token privilege claims, with one projected read", async () => {
     const response = await GET(
       request(
         `auth-token-test=${await token({ username: "old-name", email: "fixture@example.invalid", isAdmin: true })}`
@@ -42,12 +46,13 @@ describe("GET /api/auth/session", () => {
       active: true,
       sub: id.toHexString(),
       username: "current-name",
+      email: "current@example.invalid",
       iat: now - 10,
       exp: now + 300,
     });
     expect(findOne).toHaveBeenCalledExactlyOnceWith(
       { _id: id },
-      { projection: { username: 1, isBanned: 1, authRevokedAt: 1 } }
+      { projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1 } }
     );
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("set-cookie")).toBeNull();
