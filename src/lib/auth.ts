@@ -245,7 +245,17 @@ export async function verifyAuthToken(token: string): Promise<UserPayload | null
   // log users out at random.
   let payload: unknown;
   try {
-    ({ payload } = await jwtVerify(token, getJwtSecret()));
+    // Pin the algorithm and require both time claims. Every signing path
+    // (password, Discord/Google OAuth, offline singleplayer proxy, silent
+    // refresh) issues HS256 with iat+exp, so anything else is foreign.
+    // `requiredClaims` rejects missing iat/exp as a JOSE failure (null).
+    // jose does not check iat range or exp-vs-iat ordering without
+    // maxTokenAge (deliberately unused: sliding expiry has no total cap),
+    // so those are enforced below.
+    ({ payload } = await jwtVerify(token, getJwtSecret(), {
+      algorithms: ["HS256"],
+      requiredClaims: ["iat", "exp"],
+    }));
   } catch (err) {
     if (err instanceof joseErrors.JOSEError) {
       Sentry.addBreadcrumb({
@@ -268,6 +278,35 @@ export async function verifyAuthToken(token: string): Promise<UserPayload | null
       data: { issues: parsed.error.issues.slice(0, 3) },
     });
     return null;
+  }
+  // JOSE requires both claims above. The shared payload type also serves
+  // utility callers, so it remains optional while verified values are checked
+  // here for finite ranges and ordering.
+  const raw = payload as Record<string, unknown>;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const reject = (reason: string, data: Record<string, unknown>) => {
+    Sentry.addBreadcrumb({
+      category: "auth.verify",
+      level: "info",
+      message: `verifyAuth: ${reason}`,
+      data,
+    });
+    return null;
+  };
+  const { iat } = parsed.data;
+  if (iat !== undefined) {
+    if (!Number.isSafeInteger(iat) || iat < 0 || iat > nowSec) {
+      return reject("time claim rejected (iat)", { iat });
+    }
+  }
+  const { exp } = raw;
+  if (exp !== undefined) {
+    if (typeof exp !== "number" || !Number.isFinite(exp)) {
+      return reject("time claim rejected (exp)", { exp: typeof exp });
+    }
+    if (iat !== undefined && !(exp > iat)) {
+      return reject("time claim rejected (exp not after iat)", { iat, exp });
+    }
   }
   return parsed.data;
 }
