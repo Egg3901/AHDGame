@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import bcrypt from "bcryptjs";
+import { verifyAuth } from "@/lib/auth";
+import { credentialSessionIsCurrent } from "@/lib/auth/credentialSession";
+import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
+import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -28,13 +32,21 @@ export async function POST(request: Request) {
     const { currentPassword, newPassword } = parsed.data;
 
     const db = await getDb();
-    const usersCollection = db.collection("users");
+    const usersCollection = db.collection<User>("users");
 
     // Get user from database
     const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    // Credential changes require the uncached account state read above.
+    if (!credentialSessionIsCurrent(userId, user, await verifyAuth())) {
+      return NextResponse.json(
+        { error: "Please sign in again before changing your password." },
+        { status: 401, headers: { "Cache-Control": "private, no-store" } }
+      );
     }
 
     // Verify current password
@@ -46,18 +58,30 @@ export async function POST(request: Request) {
 
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const changedAt = new Date();
 
     // Update password in database — also invalidate all existing sessions
-    await usersCollection.updateOne(
-      { _id: new ObjectId(userId) },
+    const updated = await usersCollection.updateOne(
+      {
+        _id: new ObjectId(userId),
+        password: user.password ?? null,
+        isBanned: { $ne: true },
+        ...authRevocationSnapshotFilter(user.authRevokedAt),
+      },
       {
         $set: {
           password: hashedPassword,
-          passwordChangedAt: new Date(),
-          authRevokedAt: new Date(),
         },
+        $max: { passwordChangedAt: changedAt, authRevokedAt: changedAt },
       }
     );
+
+    if (updated.matchedCount !== 1) {
+      return NextResponse.json(
+        { error: "Your account changed during this request. Please sign in and try again." },
+        { status: 409, headers: { "Cache-Control": "private, no-store" } }
+      );
+    }
 
     // Token revocation must bite immediately, not after the userDocCache TTL.
     invalidateCachedUser(userId);
