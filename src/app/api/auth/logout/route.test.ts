@@ -55,6 +55,7 @@ describe("confirmed account logout", () => {
     expect(update.$set.lastLogout).toEqual(update.$max.authRevokedAt);
     expect(update.$set).not.toHaveProperty("authRevokedAt");
     expect(mocks.invalidateCachedUser).toHaveBeenCalledTimes(2);
+    expect(update.$max).not.toHaveProperty("authMigrationFence");
     expect(mocks.clearAuthCookie).toHaveBeenCalledExactlyOnceWith("user_logout");
     expect(mocks.insertOne.mock.calls[0][0]).toMatchObject({
       type: "logout",
@@ -110,5 +111,15 @@ describe("confirmed account logout", () => {
     mocks.insertOne.mockRejectedValue(new Error("synthetic audit unavailable"));
     expect((await POST(request())).status).toBe(200);
     expect(mocks.clearAuthCookie).toHaveBeenCalled();
+  });
+});
+
+describe("fenced account logout", () => {
+  it("still revokes sessions for a fenced account (no fence predicate on logout)", async () => {
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    const [filter] = mocks.updateOne.mock.calls[0];
+    expect(filter).toEqual({ _id: id });
+    expect(filter).not.toHaveProperty("authMigrationFence");
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { getClientIp } from "@/lib/utils/network";
@@ -46,6 +47,14 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const user = await db.collection<User>("users").findOne({ _id: reset.userId });
+    // Fenced accounts never consume a reset token via legacy reset. Same
+    // generic 400 body as an expired token so fenced is not an oracle.
+    if (user && isAuthMigrationFenced(user)) {
+      return NextResponse.json(
+        { error: "This reset link is invalid or has expired. Please request a new one." },
+        { status: 400, headers: { "Cache-Control": "private, no-store" } }
+      );
+    }
     if (
       !user ||
       !(reset.createdAt instanceof Date) ||
@@ -68,6 +77,7 @@ export async function POST(request: Request) {
         _id: reset.userId,
         password: user.password ?? null,
         ...authRevocationSnapshotFilter(user.authRevokedAt),
+        ...authMigrationFenceAbsentFilter(),
       },
       {
         $set: {

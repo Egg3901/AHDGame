@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { migration as repairOrphanIndexFundState } from "./entries/2026-09-03-repair-orphan-index-fund-state";
 import { migration as equityMarketPools } from "./entries/2026-09-03-equity-market-pools";
+import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { runMigrations, type RunSummary } from "./runner";
 import type { Migration } from "./types";
 
@@ -16,6 +17,7 @@ import type { Migration } from "./types";
 export const REQUIRED_STARTUP_MIGRATIONS: readonly Migration[] = [
   equityMarketPools,
   repairOrphanIndexFundState,
+  providerIdentityIndexes,
 ];
 
 export async function runRequiredStartupMigrations(db: Db): Promise<RunSummary> {

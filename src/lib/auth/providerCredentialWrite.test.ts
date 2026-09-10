@@ -34,6 +34,7 @@ describe("provider credential write guards", () => {
       discordId: "d1",
       isBanned: { $ne: true },
       authRevokedAt: cutoff,
+      authMigrationFence: { $exists: false },
     });
     expect(
       providerWriteSnapshotFilter({
@@ -45,6 +46,7 @@ describe("provider credential write guards", () => {
     ).toMatchObject({
       discordId: { $exists: false },
       authRevokedAt: { $exists: false },
+      authMigrationFence: { $exists: false },
     });
   });
 
