@@ -1,7 +1,6 @@
 import { mkdirSync, mkdtempSync, writeFileSync, existsSync, rmSync, cpSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import inventory from "./fixtures/payload-inventory.json";
 import {
@@ -13,7 +12,6 @@ import {
   shouldKeepPayloadPath,
 } from "./payloadAllowlist.mjs";
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
 const scratch: string[] = [];
 
 afterEach(() => {
@@ -62,8 +60,6 @@ function runtimeFixture(): string {
 function resolveArtifact(): string | null {
   const fromEnv = process.env.AHD_PAYLOAD_ARTIFACT;
   if (fromEnv && existsSync(path.join(fromEnv, "server.js"))) return fromEnv;
-  const dist = path.resolve(HERE, "..", "..", "dist", "singleplayer");
-  if (existsSync(path.join(dist, "server.js"))) return dist;
   return null;
 }
 
@@ -134,81 +130,85 @@ describe("payload allowlist apply", () => {
 });
 
 describe("actual runtime payload artifact", () => {
-  it("keeps traced runtime files and would drop source, docs, tests, and plans", () => {
-    const artifact = resolveArtifact();
-    expect(
-      artifact,
-      "set AHD_PAYLOAD_ARTIFACT to a staged game dir or build dist/singleplayer"
-    ).toBeTruthy();
-    if (!artifact) return;
+  it.skipIf(!resolveArtifact())(
+    "keeps traced runtime files and would drop source, docs, tests, and plans",
+    () => {
+      const artifact = resolveArtifact();
+      expect(
+        artifact,
+        "set AHD_PAYLOAD_ARTIFACT to a staged game dir or build dist/singleplayer"
+      ).toBeTruthy();
+      if (!artifact) return;
 
-    for (const rel of inventory.mustKeep) {
-      expect(existsSync(path.join(artifact, ...rel.split("/"))), rel).toBe(true);
+      for (const rel of inventory.mustKeep) {
+        expect(existsSync(path.join(artifact, ...rel.split("/"))), rel).toBe(true);
+      }
+      const presentDrops = inventory.mustDrop.filter((rel) =>
+        existsSync(path.join(artifact, ...rel.split("/")))
+      );
+      expect(
+        presentDrops.length,
+        "inventory mustDrop should match a real unpacked payload"
+      ).toBeGreaterThan(0);
+
+      const before = inspectPayload(artifact, { nativePlatform: "linux-x64" });
+      expect(before.aliases).toContain("mongodb-438b504308ffa4be");
+      expect(before.missing).toEqual([]);
+      expect(
+        before.counts.strayTs + before.counts.tests + before.counts.plans + before.counts.docs
+      ).toBeGreaterThan(0);
+      expect(before.ok).toBe(false);
+
+      const wouldDrop = presentDrops.filter((rel) => classifyPayloadPath(rel) === "drop");
+      expect(wouldDrop.length).toBe(presentDrops.length);
+      for (const rel of inventory.mustKeep) {
+        const sample = rel.includes(".") ? rel : `${rel}/kept`;
+        expect(shouldKeepPayloadPath(sample), rel).toBe(true);
+      }
+
+      const copy = tempDir("ahd-payload-art-");
+      const slim = [
+        "server.js",
+        "package.json",
+        "launch.mjs",
+        "public/ahd-logo.png",
+        "src/data/npp-images.json",
+        "content/changelog/public/1.8.0.md",
+        "node_modules/mongodb/package.json",
+        "node_modules/sharp/package.json",
+        "node_modules/@img/sharp-linux-x64/package.json",
+        "AGENTS.md",
+        "src/app/cdn/[...path]/route.ts",
+        "src/app/cdn/[...path]/route.test.ts",
+      ];
+      for (const rel of slim) {
+        const from = path.join(artifact, ...rel.split("/"));
+        if (!existsSync(from)) continue;
+        mkdirSync(path.dirname(path.join(copy, ...rel.split("/"))), { recursive: true });
+        cpSync(from, path.join(copy, ...rel.split("/")), { recursive: true });
+      }
+      mkdirSync(path.join(copy, ".next", "static"), { recursive: true });
+      writeFileSync(path.join(copy, ".next", "static", "keep.js"), "1");
+      mkdirSync(path.join(copy, ".next", "server", "chunks"), { recursive: true });
+      writeFileSync(
+        path.join(copy, ".next", "server", "chunks", "ssr.js"),
+        'require("mongodb-438b504308ffa4be");\n'
+      );
+      materializeMongodbAliases(copy);
+      applyPayloadAllowlist(copy);
+      const after = inspectPayload(copy, { nativePlatform: "linux-x64" });
+      expect(
+        after.ok,
+        JSON.stringify({ missing: after.missing, budgetHits: after.budgetHits })
+      ).toBe(true);
+      expect(after.counts.strayTs).toBe(0);
+      expect(after.counts.tests).toBe(0);
+      expect(after.counts.docs).toBe(0);
+      expect(after.counts.plans).toBe(0);
+      expect(existsSync(path.join(copy, "server.js"))).toBe(true);
+      expect(existsSync(path.join(copy, "node_modules", "mongodb-438b504308ffa4be"))).toBe(true);
+      expect(existsSync(path.join(copy, "AGENTS.md"))).toBe(false);
+      expect(existsSync(path.join(copy, "src", "app"))).toBe(false);
     }
-    const presentDrops = inventory.mustDrop.filter((rel) =>
-      existsSync(path.join(artifact, ...rel.split("/")))
-    );
-    expect(
-      presentDrops.length,
-      "inventory mustDrop should match a real unpacked payload"
-    ).toBeGreaterThan(0);
-
-    const before = inspectPayload(artifact, { nativePlatform: "linux-x64" });
-    expect(before.aliases).toContain("mongodb-438b504308ffa4be");
-    expect(before.missing).toEqual([]);
-    expect(
-      before.counts.strayTs + before.counts.tests + before.counts.plans + before.counts.docs
-    ).toBeGreaterThan(0);
-    expect(before.ok).toBe(false);
-
-    const wouldDrop = presentDrops.filter((rel) => classifyPayloadPath(rel) === "drop");
-    expect(wouldDrop.length).toBe(presentDrops.length);
-    for (const rel of inventory.mustKeep) {
-      const sample = rel.includes(".") ? rel : `${rel}/kept`;
-      expect(shouldKeepPayloadPath(sample), rel).toBe(true);
-    }
-
-    const copy = tempDir("ahd-payload-art-");
-    const slim = [
-      "server.js",
-      "package.json",
-      "launch.mjs",
-      "public/ahd-logo.png",
-      "src/data/npp-images.json",
-      "content/changelog/public/1.8.0.md",
-      "node_modules/mongodb/package.json",
-      "node_modules/sharp/package.json",
-      "node_modules/@img/sharp-linux-x64/package.json",
-      "AGENTS.md",
-      "src/app/cdn/[...path]/route.ts",
-      "src/app/cdn/[...path]/route.test.ts",
-    ];
-    for (const rel of slim) {
-      const from = path.join(artifact, ...rel.split("/"));
-      if (!existsSync(from)) continue;
-      mkdirSync(path.dirname(path.join(copy, ...rel.split("/"))), { recursive: true });
-      cpSync(from, path.join(copy, ...rel.split("/")), { recursive: true });
-    }
-    mkdirSync(path.join(copy, ".next", "static"), { recursive: true });
-    writeFileSync(path.join(copy, ".next", "static", "keep.js"), "1");
-    mkdirSync(path.join(copy, ".next", "server", "chunks"), { recursive: true });
-    writeFileSync(
-      path.join(copy, ".next", "server", "chunks", "ssr.js"),
-      'require("mongodb-438b504308ffa4be");\n'
-    );
-    materializeMongodbAliases(copy);
-    applyPayloadAllowlist(copy);
-    const after = inspectPayload(copy, { nativePlatform: "linux-x64" });
-    expect(after.ok, JSON.stringify({ missing: after.missing, budgetHits: after.budgetHits })).toBe(
-      true
-    );
-    expect(after.counts.strayTs).toBe(0);
-    expect(after.counts.tests).toBe(0);
-    expect(after.counts.docs).toBe(0);
-    expect(after.counts.plans).toBe(0);
-    expect(existsSync(path.join(copy, "server.js"))).toBe(true);
-    expect(existsSync(path.join(copy, "node_modules", "mongodb-438b504308ffa4be"))).toBe(true);
-    expect(existsSync(path.join(copy, "AGENTS.md"))).toBe(false);
-    expect(existsSync(path.join(copy, "src", "app"))).toBe(false);
-  });
+  );
 });

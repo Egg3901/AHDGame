@@ -1,3 +1,4 @@
+import { isSingleplayer } from "@/lib/singleplayer";
 import type { Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import type { GameConfig } from "@/lib/db/types";
@@ -96,6 +97,8 @@ export function invalidateMaintenanceCache(): void {
  * reader agrees.
  */
 export async function getCachedMaintenanceStatus(): Promise<MaintenanceStatusSnapshot> {
+  // Local pause belongs to singleplayerRuntime, never to hosted maintenance.
+  if (isSingleplayer()) return { mode: "off", enabled: false, reason: "", expectedEnd: "" };
   const now = Date.now();
   if (maintenanceCache && now < maintenanceCache.expiresAt) {
     return maintenanceCache.snapshot;

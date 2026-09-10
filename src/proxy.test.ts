@@ -163,18 +163,18 @@ describe("proxy() — tri-state maintenance gating", () => {
     expect(res.headers.get("location")).toBeNull();
   });
 
-  it("routes a sealed local player to the limited singleplayer controls", async () => {
+  it("keeps character creation reachable despite inherited hosted maintenance", async () => {
     vi.stubEnv("SINGLEPLAYER", "1");
     vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
     vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
     mockMaintenanceStatus.mockResolvedValueOnce({ mode: "full", enabled: true });
     const res = await proxy(
-      makeRequest("http://127.0.0.1:3111/profile", {
+      makeRequest("http://127.0.0.1:3111/create-character", {
         host: "127.0.0.1:3111",
         cookies: { [AUTH_COOKIE_NAME]: "local-player-token" },
       })
     );
-    expect(res.headers.get("location")).toContain("/singleplayer/admin");
+    expect(res.headers.get("location")).toBeNull();
   });
 
   it("keeps the limited singleplayer controls reachable while sealed", async () => {

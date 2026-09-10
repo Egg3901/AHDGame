@@ -120,7 +120,7 @@ export async function proxy(request: NextRequest) {
     singleplayer &&
     (pathname === "/login" || pathname === "/register" || pathname === "/logout")
   ) {
-    return NextResponse.redirect(new URL("/singleplayer", request.url));
+    return NextResponse.redirect(new URL("/profile", request.url));
   }
 
   // Canonical host is the apex domain. www duplicates every page (splits SEO
@@ -184,7 +184,7 @@ export async function proxy(request: NextRequest) {
   // requests in Next.js 16 — the layout runs, redirect is called, but the
   // response still returns the page content as a 200 RSC payload. Gating in
   // the proxy intercepts both hard loads and RSC requests.
-  if (!isMaintenanceBypassPath(pathname)) {
+  if (!singleplayer && !isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws (e.g. transient DB blip):
     // a 500 from the proxy would take down every page hit, which is worse
     // than briefly letting a request through.
@@ -200,10 +200,6 @@ export async function proxy(request: NextRequest) {
       console.warn("[proxy] maintenance lookup failed; passing through", err);
     }
     if (maintenanceMode === "full" && !(await requestIsAdmin(request))) {
-      if (singleplayer) {
-        if (pathname === "/singleplayer/admin") return passthrough(request);
-        return NextResponse.redirect(new URL("/singleplayer/admin", request.url));
-      }
       return NextResponse.redirect(new URL("/maintenance", request.url));
     }
   }
@@ -231,6 +227,8 @@ async function grantSingleplayerSession(request: NextRequest): Promise<NextRespo
     .sign(new TextEncoder().encode(secret));
 
   const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  requestHeaders.set("x-search", request.nextUrl.search);
   const existing = requestHeaders.get("cookie");
   requestHeaders.set(
     "cookie",

@@ -675,6 +675,11 @@ const RUNTIME: CollectionEntry[] = [
   { name: "actionLogs", category: "runtime" },
   { name: "activityLog", category: "runtime" },
   { name: "turnLogs", category: "runtime" },
+  {
+    name: "singleplayerRuntime",
+    category: "runtime",
+    notes: "Local pause state resets with the world.",
+  },
 
   // ── 2026-06 manifest-completeness backfill ─────────────────────────────────
   // Collections that existed in code but were never classified, so they

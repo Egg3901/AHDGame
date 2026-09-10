@@ -75,159 +75,167 @@ describe("GET /api/client-nav", () => {
     expect(gameStateFindOne).toHaveBeenCalledTimes(1);
   });
 
-  it("includes currentParty.countryId for multi-country party links", async () => {
-    const cookieStore = {
-      get: vi.fn().mockReturnValue(undefined),
-      set: vi.fn(),
-    };
+  it.each([false, true])(
+    "includes country links and singleplayer identity (local=%s)",
+    async (singleplayer) => {
+      vi.stubEnv("SINGLEPLAYER", singleplayer ? "1" : "0");
+      vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/test");
+      vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
+      const cookieStore = {
+        get: vi.fn().mockReturnValue(undefined),
+        set: vi.fn(),
+      };
 
-    const { cookies } = await import("next/headers");
-    vi.mocked(cookies).mockResolvedValue(cookieStore as never);
+      const { cookies } = await import("next/headers");
+      vi.mocked(cookies).mockResolvedValue(cookieStore as never);
 
-    const { getAuthUser } = await import("@/lib/auth");
-    vi.mocked(getAuthUser).mockResolvedValue({
-      userId: "507f1f77bcf86cd799439011",
-      email: "uk@example.com",
-      username: "uk-player",
-      role: "player",
-      isAdmin: false,
-    } as never);
+      const { getAuthUser } = await import("@/lib/auth");
+      vi.mocked(getAuthUser).mockResolvedValue({
+        userId: "507f1f77bcf86cd799439011",
+        email: "uk@example.com",
+        username: "uk-player",
+        role: "player",
+        isAdmin: false,
+      } as never);
 
-    const userId = new ObjectId("507f1f77bcf86cd799439011");
-    const characterId = new ObjectId("507f191e810c19729de860ea");
+      const userId = new ObjectId("507f1f77bcf86cd799439011");
+      const characterId = new ObjectId("507f191e810c19729de860ea");
 
-    const db = {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "elections") {
+      const db = {
+        collection: vi.fn().mockImplementation((name: string) => {
+          if (name === "elections") {
+            return {
+              findOne: vi.fn().mockResolvedValue(null),
+              find: vi.fn().mockReturnValue({
+                project: vi.fn().mockReturnValue({
+                  toArray: vi.fn().mockResolvedValue([]),
+                }),
+              }),
+            };
+          }
+
+          if (name === "users") {
+            return {
+              findOne: vi.fn().mockResolvedValue({
+                _id: userId,
+                role: "player",
+                isAdmin: false,
+                activeCharacterId: null,
+                activeCharacterType: "character",
+                activeImperialCharacterId: null,
+              }),
+              updateOne: vi.fn().mockResolvedValue({}),
+            };
+          }
+
+          if (name === "characters") {
+            return {
+              findOne: vi.fn().mockResolvedValue({
+                _id: characterId,
+                name: "Sheev Palpatine",
+                homeState: "WMI",
+                countryId: "UK",
+                party: "1",
+                displayCurrencyPreference: "JPY",
+                demographics: { age: 42 },
+                actions: 12,
+                funds: 5000,
+              }),
+              // Phase 6 — pendingCharterCount lookup walks every character
+              // owned by the userId, then counts charters where any of them
+              // is a founder. Test stub: one character, zero charters.
+              find: vi.fn().mockReturnValue({
+                project: () => ({
+                  toArray: vi.fn().mockResolvedValue([{ _id: characterId }]),
+                }),
+              }),
+            };
+          }
+
+          if (name === "states") {
+            return {
+              findOne: vi.fn().mockResolvedValue({ _id: "WMI", name: "West Midlands" }),
+            };
+          }
+
+          if (name === "politicalParties") {
+            return {
+              findOne: vi.fn().mockResolvedValue({
+                name: "Labour Party",
+                sequentialId: 1,
+                countryId: "UK",
+              }),
+            };
+          }
+
+          if (name === "notifications" || name === "playerMail") {
+            return {
+              countDocuments: vi.fn().mockResolvedValue(0),
+            };
+          }
+
+          if (name === "partyCharters") {
+            return {
+              countDocuments: vi.fn().mockResolvedValue(0),
+            };
+          }
+
+          if (name === "electionCandidates" || name === "cabinetMembers" || name === "campaigns") {
+            return {
+              findOne: vi.fn().mockResolvedValue(null),
+            };
+          }
+
           return {
             findOne: vi.fn().mockResolvedValue(null),
-            find: vi.fn().mockReturnValue({
-              project: vi.fn().mockReturnValue({
-                toArray: vi.fn().mockResolvedValue([]),
-              }),
-            }),
           };
-        }
+        }),
+      };
 
-        if (name === "users") {
-          return {
-            findOne: vi.fn().mockResolvedValue({
-              _id: userId,
-              role: "player",
-              isAdmin: false,
-              activeCharacterId: null,
-              activeCharacterType: "character",
-              activeImperialCharacterId: null,
-            }),
-            updateOne: vi.fn().mockResolvedValue({}),
-          };
-        }
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as never);
 
-        if (name === "characters") {
-          return {
-            findOne: vi.fn().mockResolvedValue({
-              _id: characterId,
-              name: "Sheev Palpatine",
-              homeState: "WMI",
-              countryId: "UK",
-              party: "1",
-              displayCurrencyPreference: "JPY",
-              demographics: { age: 42 },
-              actions: 12,
-              funds: 5000,
-            }),
-            // Phase 6 — pendingCharterCount lookup walks every character
-            // owned by the userId, then counts charters where any of them
-            // is a founder. Test stub: one character, zero charters.
-            find: vi.fn().mockReturnValue({
-              project: () => ({
-                toArray: vi.fn().mockResolvedValue([{ _id: characterId }]),
-              }),
-            }),
-          };
-        }
+      const { getGameStateCollection } = await import("@/lib/db/collections");
+      vi.mocked(getGameStateCollection).mockResolvedValue({
+        // rpgStatsEnabled gates needsStatAllocation — on here so the flag surfaces.
+        findOne: vi.fn().mockResolvedValue({ wikiDisabled: false, rpgStatsEnabled: true }),
+      } as never);
 
-        if (name === "states") {
-          return {
-            findOne: vi.fn().mockResolvedValue({ _id: "WMI", name: "West Midlands" }),
-          };
-        }
+      const { GET } = await import("./route");
+      const response = await GET();
+      const json = await response.json();
 
-        if (name === "politicalParties") {
-          return {
-            findOne: vi.fn().mockResolvedValue({
-              name: "Labour Party",
-              sequentialId: 1,
-              countryId: "UK",
-            }),
-          };
-        }
-
-        if (name === "notifications" || name === "playerMail") {
-          return {
-            countDocuments: vi.fn().mockResolvedValue(0),
-          };
-        }
-
-        if (name === "partyCharters") {
-          return {
-            countDocuments: vi.fn().mockResolvedValue(0),
-          };
-        }
-
-        if (name === "electionCandidates" || name === "cabinetMembers" || name === "campaigns") {
-          return {
-            findOne: vi.fn().mockResolvedValue(null),
-          };
-        }
-
-        return {
-          findOne: vi.fn().mockResolvedValue(null),
-        };
-      }),
-    };
-
-    const { getDb } = await import("@/lib/mongodb");
-    vi.mocked(getDb).mockResolvedValue(db as never);
-
-    const { getGameStateCollection } = await import("@/lib/db/collections");
-    vi.mocked(getGameStateCollection).mockResolvedValue({
-      // rpgStatsEnabled gates needsStatAllocation — on here so the flag surfaces.
-      findOne: vi.fn().mockResolvedValue({ wikiDisabled: false, rpgStatsEnabled: true }),
-    } as never);
-
-    const { GET } = await import("./route");
-    const response = await GET();
-    const json = await response.json();
-
-    expect(response.status).toBe(200);
-    expect(json.currentParty).toEqual({
-      id: "1",
-      name: "Labour Party",
-      countryId: "UK",
-    });
-    expect(json.homeState).toEqual({
-      id: "WMI",
-      name: "West Midlands",
-      countryId: "UK",
-    });
-    expect(json.myCorporationType).toBeNull();
-    expect(json.myCorporationCountryId).toBeNull();
-    expect(json.user.forexEnabled).toBe(true);
-    expect(json.user.character).toEqual({
-      id: characterId.toString(),
-      name: "Sheev Palpatine",
-      countryId: "UK",
-      party: "1",
-      displayCurrencyPreference: "JPY",
-      avatarUrl: null,
-      profileHeaderImageUrl: null,
-      borderKey: null,
-      tintColor: null,
-      // Fixture character has no statsAllocated → grandfather flag is true.
-      needsStatAllocation: true,
-    });
-  });
+      expect(response.status).toBe(200);
+      expect(json.currentParty).toEqual({
+        id: "1",
+        name: "Labour Party",
+        countryId: "UK",
+      });
+      expect(json.homeState).toEqual({
+        id: "WMI",
+        name: "West Midlands",
+        countryId: "UK",
+      });
+      expect(json.myCorporationType).toBeNull();
+      expect(json.myCorporationCountryId).toBeNull();
+      expect(json.user.forexEnabled).toBe(true);
+      expect(json.user.singleplayer).toBe(singleplayer);
+      expect(json.user.isAdmin).toBe(false);
+      expect(json.user.character).toEqual({
+        id: characterId.toString(),
+        name: "Sheev Palpatine",
+        countryId: "UK",
+        party: "1",
+        displayCurrencyPreference: "JPY",
+        avatarUrl: null,
+        profileHeaderImageUrl: null,
+        borderKey: null,
+        tintColor: null,
+        // Fixture character has no statsAllocated → grandfather flag is true.
+        needsStatAllocation: true,
+      });
+    }
+  );
 
   it("surfaces the active imperial display preference for currency bootstrap consumers", async () => {
     const cookieStore = {
