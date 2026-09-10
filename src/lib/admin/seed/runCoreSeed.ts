@@ -16,6 +16,7 @@ import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
 import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
 import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
 import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
+import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
 import { politicalParties } from "@/lib/seeds/reference/politicalParties";
 import { resolveSeedPartyTier } from "@/lib/seeds/defaultPartyTiers";
 import { generateStatePartyOrg } from "@/lib/seeds/reference/statePartyOrg";
@@ -461,6 +462,7 @@ export async function runSeed(
       "2007-default": stateCensusData2007,
       "2019-default": stateCensusData,
       "2023-default": stateCensusData2023,
+      "2027-default": stateCensusData2027,
     },
     "runCoreSeed:stateCensusData1953"
   );

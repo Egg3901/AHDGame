@@ -799,4 +799,5 @@ export const UNION_NAMES_BY_ERA: Partial<Record<EraId, UnionNameMap>> = {
   "2007": NAMES_2007,
   "2019": NAMES_MODERN,
   "2023": NAMES_MODERN,
+  "2027": NAMES_MODERN,
 };

@@ -39,6 +39,7 @@ export async function seedUKRegions(
   const { ukRegions1999 } = await import("@/lib/seeds/uk/ukRegions1999");
   const { ukRegions2007 } = await import("@/lib/seeds/uk/ukRegions2007");
   const { ukRegions2023 } = await import("@/lib/seeds/uk/ukRegions2023");
+  const { ukRegions2027 } = await import("@/lib/seeds/uk/ukRegions2027");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   const bundle = selectPresetBundle(
     preset,
@@ -50,6 +51,7 @@ export async function seedUKRegions(
       "1999-default": ukRegions1999,
       "2007-default": ukRegions2007,
       "2023-default": ukRegions2023,
+      "2027-default": ukRegions2027,
     },
     "seedUK:ukRegions1953"
   );

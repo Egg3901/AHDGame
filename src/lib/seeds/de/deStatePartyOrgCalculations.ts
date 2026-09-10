@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import type { StatePartyOrg, PoliticalParty } from "@/lib/db/types";
 import { DE_LAND_VOTE_SHARES_1990 } from "./deLandVoteShares1990";
 import { DE_LAND_VOTE_SHARES_1953 } from "./deLandVoteShares1953";
+import { DE_LAND_VOTE_SHARES_2025 } from "./deLandVoteShares2025";
 
 /**
  * Calculate DE state party organization levels from Bundestag Zweitstimmen
@@ -110,7 +111,9 @@ export async function buildDEPartySlugToSeqId(db: Db): Promise<Record<string, st
  *
  * `preset` selects the polling table: `1953-default` uses
  * `DE_LAND_VOTE_SHARES_1953`; `1991-default` uses `DE_LAND_VOTE_SHARES_1990`;
- * anything else (including the default `2019-default`) uses the 2021 dataset.
+ * `2027-default` uses `DE_LAND_VOTE_SHARES_2025` (AfD first in the East,
+ * Union/SPD at historic lows); anything else (including the default
+ * `2019-default`) uses the 2021 dataset.
  */
 export async function calculateDEStatePartyOrgs(
   db: Db,
@@ -123,7 +126,9 @@ export async function calculateDEStatePartyOrgs(
       ? DE_LAND_VOTE_SHARES_1953
       : preset === "1991-default"
         ? DE_LAND_VOTE_SHARES_1990
-        : DE_LAND_VOTE_SHARES_2021;
+        : preset === "2027-default"
+          ? DE_LAND_VOTE_SHARES_2025
+          : DE_LAND_VOTE_SHARES_2021;
 
   for (const [landId, partyVotes] of Object.entries(voteShares)) {
     for (const [partySlug, voteShare] of Object.entries(partyVotes)) {

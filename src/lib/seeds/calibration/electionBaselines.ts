@@ -55,6 +55,7 @@ export const ELECTION_BASELINES: Partial<Record<string, Partial<Record<EraId, El
       "2007": { margins: ELECTION_2008_MARGIN, election: "US 2008 presidential (Obama v McCain)" },
       "2019": { margins: ELECTION_2020_MARGIN, election: "US 2020 presidential (Biden v Trump)" },
       "2023": { margins: ELECTION_2024_MARGIN, election: "US 2024 presidential (Harris v Trump)" },
+      "2027": { margins: ELECTION_2024_MARGIN, election: "US 2024 presidential (Harris v Trump)" },
     },
   };
 

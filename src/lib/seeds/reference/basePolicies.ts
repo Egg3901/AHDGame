@@ -1398,6 +1398,10 @@ export async function getBasePolicies(preset: string): Promise<BasePolicyRecord[
     const { COUNTRY_POLICY_CONFIGS_2023 } = await import("./basePolicies2023");
     return buildBasePolicies(COUNTRY_POLICY_CONFIGS_2023, 2023);
   }
+  if (preset === "2027-default") {
+    const { COUNTRY_POLICY_CONFIGS_2027 } = await import("./basePolicies2027");
+    return buildBasePolicies(COUNTRY_POLICY_CONFIGS_2027, 2027);
+  }
   // Default ("2019-default" and any unknown / empty / no-parties variant): vacuum
   // at 2019 so a modern world doesn't seed a domain that opens after it (e.g.
   // cn_common_prosperity 2021). The raw `basePolicies` export stays un-vacuumed

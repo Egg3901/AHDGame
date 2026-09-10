@@ -3,7 +3,7 @@
  * Each era defines globe visual style, copy, seed access map, and nations list.
  */
 
-export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023";
+export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023" | "2027";
 
 export type EraAccess = {
   enabledForPlayers: boolean;
@@ -474,6 +474,57 @@ export const ERA_CONFIGS: Record<EraId, EraConfig> = {
       E("FR", "France"),
       E("JP", "Japan"),
       E("CN", "China"),
+      E("BR", "Brazil"),
+      E("IN", "India"),
+      N("RU", "Russia"),
+    ],
+  },
+  "2027": {
+    id: "2027",
+    year: 2027,
+    label: "Current Era · 2027",
+    gameDate: "January 2027",
+    wireframeColor: null,
+    loginTagline: "A political simulation set in 2027.",
+    heroHeadline: "A political simulation set in 2027.",
+    heroDek:
+      "Inflation is cooling but hasn't broken. The Ukraine war has reshaped European security. AI is upending labor markets. Every real hour is a game week.",
+    primaryCta: "Start playing",
+    secondaryCta: "Explore the map",
+    eraChips: [
+      "AI Revolution",
+      "Ukraine War",
+      "Inflation",
+      "De-Dollarization",
+      "Green Transition",
+      "Tech Regulation",
+    ],
+    playSectionDek:
+      "Govern through an era of rapid technological change, geopolitical realignment, and fiscal pressure.",
+    worldSectionDek:
+      "A multipolar world in 2027. {playableCount} nations are open to players. The rest run their own economies and politics. Drag the globe to explore.",
+    closingHeadline: "The decade is still being written.",
+    closingDek: "Pick a country, pick a role. The simulation runs whether you're in it or not.",
+    closingCta: "Get started",
+    footerTagline: "Persistent simulation. Multiple nations. No resets.",
+    accessMap: {
+      US: PLAYER,
+      UK: PLAYER,
+      DE: PLAYER,
+      FR: ECON,
+      JP: PLAYER,
+      CN: PLAYER,
+      BR: ECON,
+      IN: ECON,
+      RU: NPP,
+    },
+    nations: [
+      P("US", "United States"),
+      P("UK", "United Kingdom"),
+      P("DE", "Germany"),
+      E("FR", "France"),
+      P("JP", "Japan"),
+      P("CN", "China"),
       E("BR", "Brazil"),
       E("IN", "India"),
       N("RU", "Russia"),
