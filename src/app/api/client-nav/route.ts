@@ -4,8 +4,13 @@ import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import type { Db, Filter } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { getAuthUser, getJwtSecret, getAuthCookieOptions, clearAuthCookie } from "@/lib/auth";
-import { refreshSessionPreservingIssuedAt } from "@/lib/auth/silentRefresh";
+import {
+  getAuthUser,
+  getJwtSecret,
+  getAuthCookieOptions,
+  clearAuthCookie,
+  refreshSessionPreservingIssuedAt,
+} from "@/lib/auth";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCabinetOfficeNavEntry } from "@/lib/navigation/cabinetOfficeNavEntry";

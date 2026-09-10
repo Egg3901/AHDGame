@@ -7,7 +7,9 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
 
-vi.mock("@/lib/auth", () => ({
+vi.mock("@/lib/auth", async (importOriginal) => ({
+  refreshSessionPreservingIssuedAt: (await importOriginal<typeof import("@/lib/auth")>())
+    .refreshSessionPreservingIssuedAt,
   getAuthUser: vi.fn(),
   getJwtSecret: vi.fn(() => new TextEncoder().encode("test-secret")),
   getAuthCookieOptions: vi.fn(async () => ({

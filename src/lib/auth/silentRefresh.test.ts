@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { SignJWT, jwtVerify } from "jose";
-import { refreshSessionPreservingIssuedAt, type SilentRefreshClaims } from "./silentRefresh";
+import { refreshSessionPreservingIssuedAt, type SilentRefreshClaims } from "@/lib/auth";
 
 const mocks = vi.hoisted(() => ({ findUser: vi.fn() }));
 vi.mock("next/headers", () => ({ cookies: vi.fn(), headers: vi.fn() }));
