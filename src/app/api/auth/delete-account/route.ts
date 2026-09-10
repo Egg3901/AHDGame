@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
+import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
-import { clearAuthCookie } from "@/lib/auth";
+import { clearAuthCookie, verifyAuth } from "@/lib/auth";
+import { credentialSessionIsCurrent } from "@/lib/auth/credentialSession";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { createAdminLog } from "@/lib/adminLog";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { cascadeCharacterDeletion } from "@/lib/account/cascadeCharacterDeletion";
@@ -15,27 +18,18 @@ import { logCharacterDeleted } from "@/lib/db/collections/activityLog";
 // DELETE /api/auth/delete-account — Permanently deletes the authenticated user's account, character, and clears offices held.
 // Auth: requireBasicAuth
 // Errors: 400, 401, 404, 429
-export async function DELETE() {
+export const DELETE = withNoStore(async () => {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
     const userId = auth.user.userId;
-    const isAdmin = auth.user.isAdmin;
 
     const rateLimit = checkRateLimit(userId, 10, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
-    // Prevent admins from self-deleting via this route
-    if (isAdmin) {
-      return NextResponse.json(
-        { error: "Admin accounts cannot be self-deleted. Please contact another admin." },
-        { status: 400 }
-      );
-    }
-
     const objectId = new ObjectId(userId);
     const db = await getDb();
-    const usersCollection = db.collection("users");
+    const usersCollection = db.collection<User>("users");
     const charactersCollection = db.collection("characters");
     const actionLogsCollection = db.collection("actionLogs");
     const officialsCollection = db.collection("electedOfficials");
@@ -51,6 +45,17 @@ export async function DELETE() {
       return NextResponse.json(
         { error: "Your account changed during this request. Please sign in and try again." },
         { status: 409 }
+      );
+    }
+    // Recheck the verified session against the fresh account before any
+    // destructive work. The shared account cache is not sufficient here.
+    if (!credentialSessionIsCurrent(userId, user, await verifyAuth())) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+    if (user.isAdmin === true || user.role === "admin") {
+      return NextResponse.json(
+        { error: "Admin accounts cannot be self-deleted. Please contact another admin." },
+        { status: 400 }
       );
     }
 
@@ -179,4 +184,4 @@ export async function DELETE() {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});
