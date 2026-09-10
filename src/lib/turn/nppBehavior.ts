@@ -11,6 +11,7 @@
  */
 
 import { loadNPPContext } from "./npp/context";
+import { processNppMortality } from "@/lib/npp/mortality";
 import { processElectionEntry } from "./npp/electionEntry";
 import { processNppEndorsements } from "./npp/endorsements";
 import { processBillVoting } from "./npp/billVoting";
@@ -30,6 +31,7 @@ export async function processNPPTurn(
   votescast: number;
   speakerVotes: number;
   slateResponses: number;
+  deaths: number;
 }> {
   console.log("[Turn] NPP behavior processing started");
 
@@ -51,6 +53,17 @@ export async function processNPPTurn(
     currentTurn: options?.currentTurn,
   });
   mark("loadNPPContext");
+
+  // V5 aging: the dead retire and successors inherit their offices BEFORE
+  // slates and election entry run, so nothing files or votes on a dead NPP's
+  // behalf. No-op below V5 and for NPPs with no birth year on record.
+  const mortality = await processNppMortality(ctx.db, { now });
+  mark("processNppMortality");
+  if (mortality.deaths > 0) {
+    console.log(
+      `[Turn] NPP mortality: ${mortality.deaths} deaths, ${mortality.replacements} successors seated`
+    );
+  }
 
   const materialized = await syncPersistentSlateAssignments(ctx);
   mark("syncPersistentSlateAssignments");
@@ -99,5 +112,5 @@ export async function processNPPTurn(
   // leadership voting became player-only for NPPs.
   const speakerVotes = 0;
 
-  return { entered, votescast, speakerVotes, slateResponses };
+  return { entered, votescast, speakerVotes, slateResponses, deaths: mortality.deaths };
 }

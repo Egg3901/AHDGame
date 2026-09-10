@@ -949,7 +949,9 @@ export async function seedUKGovernors2020(db: Db, reset: boolean, log: (msg: str
 
   const { UK_FIRST_MINISTERS_2020 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, UK_FIRST_MINISTERS_2020);
+  const result = await seedFromSeats(db, UK_FIRST_MINISTERS_2020, "winners", {
+    presetId: "2019-default",
+  });
   log(
     `Seeded UK First Ministers + Mayor of London (2020): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );
@@ -1006,7 +1008,9 @@ export async function seedUKGovernors1992(db: Db, reset: boolean, log: (msg: str
 
   const { UK_FIRST_MINISTERS_1992 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, UK_FIRST_MINISTERS_1992);
+  const result = await seedFromSeats(db, UK_FIRST_MINISTERS_1992, "winners", {
+    presetId: "1991-default",
+  });
   log(
     `Seeded UK First Ministers + Mayor of London (1992): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );
