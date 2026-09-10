@@ -14,10 +14,12 @@ import {
   type TierReclassificationRecord,
 } from "@/lib/world/tier1Readiness1953Data";
 import { build1953Tier3Registry } from "./registry/assemble";
+import { expandManifestWithBackgroundCountries } from "./backgroundCountryRoster";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
-export type WorldSimulationTier = "full-autonomous" | "sphere-macro" | "historical-presence";
+export type WorldSimulationTier =
+  "full-autonomous" | "sphere-macro" | "background-macro" | "historical-presence";
 export type WorldEconomicArchetype = "market" | "planned" | "mixed" | "macro" | "none";
 export type ReadinessResult = "ready" | "blocked";
 export type LegacyCountryAccess = "player" | "economy-preview" | "hidden" | "config-fallback";
@@ -1919,49 +1921,85 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
   Object.freeze({
     "1953-default": defineWorldEntityPresetManifest(
       "1953-default",
-      apply1953Tier1MatrixAdjustments([
-        ...entriesFromAccess("1953-default", accessMap(COLD_WAR_PLAYER, COLD_WAR_ECONOMY)),
-        ...europeanSphereMacroEntries("1953-default"),
-        ...asianMiddleEastSphereMacroEntries("1953-default"),
-        ...africaAmericasSphereMacroEntries("1953-default"),
-        ...emergentDecolonizationEntries("1953-default"),
-        ...historicalPresenceEntries("1953-default"),
-      ])
+      expandManifestWithBackgroundCountries({
+        presetId: "1953-default",
+        entries: apply1953Tier1MatrixAdjustments([
+          ...entriesFromAccess("1953-default", accessMap(COLD_WAR_PLAYER, COLD_WAR_ECONOMY)),
+          ...europeanSphereMacroEntries("1953-default"),
+          ...asianMiddleEastSphereMacroEntries("1953-default"),
+          ...africaAmericasSphereMacroEntries("1953-default"),
+          ...emergentDecolonizationEntries("1953-default"),
+          ...historicalPresenceEntries("1953-default"),
+        ]),
+      })
     ),
     "1979-default": defineWorldEntityPresetManifest(
       "1979-default",
-      entriesFromAccess(
-        "1979-default",
-        // NG is already in COLD_WAR_ECONOMY; IE remains economy-preview in 1979+.
-        // AT/FI/GR are full-autonomous in 1953 (promoted from sphere-macro by
-        // europeanSphereMacroEntries' promotion override this pass) and full
-        // country entries in every later preset (#3791).
-        accessMap(
-          COLD_WAR_PLAYER,
-          [...COLD_WAR_ECONOMY, "IE", "AT", "FI", "GR"],
-          COLD_WAR_HIDDEN_1979
-        )
-      )
+      expandManifestWithBackgroundCountries({
+        presetId: "1979-default",
+        entries: entriesFromAccess(
+          "1979-default",
+          // NG is already in COLD_WAR_ECONOMY; IE remains economy-preview in 1979+.
+          // AT/FI/GR are full-autonomous in 1953 (promoted from sphere-macro by
+          // europeanSphereMacroEntries' promotion override this pass) and full
+          // country entries in every later preset (#3791).
+          accessMap(
+            COLD_WAR_PLAYER,
+            [...COLD_WAR_ECONOMY, "IE", "AT", "FI", "GR"],
+            COLD_WAR_HIDDEN_1979
+          )
+        ),
+      })
     ),
     "1991-default": defineWorldEntityPresetManifest(
       "1991-default",
-      entriesFromAccess("1991-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "1991-default",
+        entries: entriesFromAccess(
+          "1991-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
     "1999-default": defineWorldEntityPresetManifest(
       "1999-default",
-      entriesFromAccess("1999-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "1999-default",
+        entries: entriesFromAccess(
+          "1999-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
     "2007-default": defineWorldEntityPresetManifest(
       "2007-default",
-      entriesFromAccess("2007-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "2007-default",
+        entries: entriesFromAccess(
+          "2007-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
     "2019-default": defineWorldEntityPresetManifest(
       "2019-default",
-      entriesFromAccess("2019-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "2019-default",
+        entries: entriesFromAccess(
+          "2019-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
     "2023-default": defineWorldEntityPresetManifest(
       "2023-default",
-      entriesFromAccess("2023-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "2023-default",
+        entries: entriesFromAccess(
+          "2023-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
   });
 
