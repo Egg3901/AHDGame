@@ -57,7 +57,11 @@ describe("nppCorpSpawnPlan (1953-default)", () => {
     for (const p of plan) expect(p.hqState.length).toBeGreaterThan(0);
   });
 
-  it("returns [] for a preset with no enablement map", () => {
-    expect(nppCorpSpawnPlan("2019-default", 2019)).toEqual([]);
+  it("spawns corporations for the materialized 2019 player/economy tiers", () => {
+    const plan = nppCorpSpawnPlan("2019-default", 2019);
+    expect(plan.length).toBeGreaterThan(0);
+    expect(plan.map((entry) => entry.countryId)).toEqual(
+      expect.arrayContaining(["US", "UK", "JP", "DE", "IE", "CN"])
+    );
   });
 });
