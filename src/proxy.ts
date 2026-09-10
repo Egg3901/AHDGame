@@ -200,6 +200,10 @@ export async function proxy(request: NextRequest) {
       console.warn("[proxy] maintenance lookup failed; passing through", err);
     }
     if (maintenanceMode === "full" && !(await requestIsAdmin(request))) {
+      if (singleplayer) {
+        if (pathname === "/singleplayer/admin") return passthrough(request);
+        return NextResponse.redirect(new URL("/singleplayer/admin", request.url));
+      }
       return NextResponse.redirect(new URL("/maintenance", request.url));
     }
   }
