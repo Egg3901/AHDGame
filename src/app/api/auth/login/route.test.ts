@@ -277,3 +277,48 @@ describe("POST /api/auth/login — authRevokedAt", () => {
     expect(updateOne.mock.calls[0][0].authRevokedAt).toEqual({ $type: "null" });
   });
 });
+
+describe("POST /api/auth/login — source migration fence", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it.each([{}, null, "malformed"])(
+    "denies a fenced account without a write: %j",
+    async (authMigrationFence) => {
+      const { ObjectId } = await import("mongodb");
+      const userId = new ObjectId();
+      const hash = await hashedPassword();
+      const updateOne = await mockUsersDb({
+        _id: userId,
+        email: "a@b.com",
+        username: "alpha",
+        password: hash,
+        role: "player",
+        authMigrationFence,
+      });
+      const { POST } = await import("./route");
+      const res = await POST(loginRequest());
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: "Invalid credentials" });
+      expect(updateOne).not.toHaveBeenCalled();
+    }
+  );
+
+  it("pins fence absence on the login write so a concurrent fence matches zero", async () => {
+    const { ObjectId } = await import("mongodb");
+    const userId = new ObjectId();
+    const hash = await hashedPassword();
+    const updateOne = await mockUsersDb({
+      _id: userId,
+      email: "a@b.com",
+      username: "alpha",
+      password: hash,
+      role: "player",
+    });
+    const { POST } = await import("./route");
+    const res = await POST(loginRequest());
+    expect(res.status).toBe(200);
+    expect(updateOne.mock.calls[0][0]).toEqual(
+      expect.objectContaining({ authMigrationFence: { $exists: false } })
+    );
+  });
+});

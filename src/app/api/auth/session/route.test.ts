@@ -52,7 +52,9 @@ describe("GET /api/auth/session", () => {
     });
     expect(findOne).toHaveBeenCalledExactlyOnceWith(
       { _id: id },
-      { projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1 } }
+      {
+        projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1, authMigrationFence: 1 },
+      }
     );
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("set-cookie")).toBeNull();
@@ -103,6 +105,9 @@ describe("GET /api/auth/session", () => {
     { _id: id, username: "current-name", isBanned: true },
     { _id: id, username: "current-name", authRevokedAt: new Date((now - 10) * 1000) },
     { _id: id, username: "current-name", authRevokedAt: new Date(now * 1000) },
+    { _id: id, username: "current-name", authMigrationFence: {} },
+    { _id: id, username: "current-name", authMigrationFence: null },
+    { _id: id, username: "current-name", authMigrationFence: "malformed" },
   ])("rejects deleted, banned and revoked users", async (user) => {
     findOne.mockResolvedValue(user);
     expect((await GET(request(`auth-token-test=${await token()}`))).status).toBe(401);

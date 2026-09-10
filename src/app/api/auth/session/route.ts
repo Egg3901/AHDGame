@@ -3,6 +3,7 @@ import { jwtVerify, errors as joseErrors } from "jose";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getJwtSecret } from "@/lib/auth";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getDb } from "@/lib/mongodb";
 import type { User } from "@/lib/db/types";
@@ -43,13 +44,20 @@ export async function GET(request: Request) {
 
     // Bypass the app's user cache: bans and revocation must be current here.
     const db = await getDb();
-    const user = await db
-      .collection<User>("users")
-      .findOne(
-        { _id: new ObjectId(userId) },
-        { projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1 } }
-      );
+    const user = await db.collection<User>("users").findOne(
+      { _id: new ObjectId(userId) },
+      {
+        projection: {
+          username: 1,
+          email: 1,
+          isBanned: 1,
+          authRevokedAt: 1,
+          authMigrationFence: 1,
+        },
+      }
+    );
     if (!user || user.isBanned || !user.username) return inactive();
+    if (isAuthMigrationFenced(user)) return inactive();
     if (user.authRevokedAt && user.authRevokedAt.getTime() >= iat * 1000) return inactive();
 
     // Contact email preserves legacy consumer compatibility. It does not prove

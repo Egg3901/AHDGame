@@ -8,6 +8,7 @@ import { getJwtSecret, getAuthCookieOptions, getTrackingCookieOptions } from "@/
 import { needsCharacterHint } from "@/lib/auth/characterGate";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -112,6 +113,21 @@ export async function POST(request: Request) {
       );
     }
 
+    // Fenced accounts never authenticate via legacy password login. Same
+    // 401 body as a bad password so fenced vs unknown is indistinguishable.
+    if (isAuthMigrationFenced(user)) {
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.login",
+        subject: { type: "user", id: user._id, name: user.username },
+        net: netBase,
+        outcome: "rejected",
+        reason: "invalid_credentials",
+      });
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
     // Verify password — reject OAuth-only accounts that have no password set
     const isValidPassword = user.password && (await bcrypt.compare(password, user.password));
 
@@ -214,6 +230,7 @@ export async function POST(request: Request) {
         isBanned: { $ne: true },
         password: user.password,
         ...issued.snapshotFilter,
+        ...authMigrationFenceAbsentFilter(),
       },
       {
         $set: updateFields,

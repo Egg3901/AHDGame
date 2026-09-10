@@ -91,6 +91,7 @@ describe("conditional credential writes", () => {
         password: password ?? null,
         authRevokedAt: cutoff,
         ...(name === "reset" ? {} : { isBanned: { $ne: true } }),
+        authMigrationFence: { $exists: false },
       });
       expect(update.$set).toEqual({ password: "synthetic-new-digest" });
       expect(update.$max.authRevokedAt).toBeInstanceOf(Date);
@@ -113,7 +114,13 @@ describe("conditional credential writes", () => {
     ["change", changePassword],
     ["set", setPassword],
   ] as const) {
-    for (const restricted of [{ isBanned: true }, { authRevokedAt: issuedAt }]) {
+    for (const restricted of [
+      { isBanned: true },
+      { authRevokedAt: issuedAt },
+      { authMigrationFence: {} },
+      { authMigrationFence: null },
+      { authMigrationFence: "malformed" },
+    ]) {
       it(`${name} rejects fresh account restrictions despite a cached basic-auth grant: ${JSON.stringify(restricted)}`, async () => {
         mocks.findOne.mockResolvedValue({ _id: id, password: undefined, ...restricted });
         const response = await route(request());
@@ -167,6 +174,21 @@ describe("conditional credential writes", () => {
     mocks.findOne.mockResolvedValue({ _id: id, password: "digest", passwordChangedAt: cutoff });
     expect((await resetPassword(request())).status).toBe(200);
   });
+
+  for (const authMigrationFence of [{}, null, "malformed"]) {
+    it(`reset denies a fenced account without a write: ${JSON.stringify(authMigrationFence)}`, async () => {
+      mocks.findOne.mockResolvedValue({
+        _id: id,
+        password: "digest",
+        passwordChangedAt: cutoff,
+        authMigrationFence,
+      });
+      const response = await resetPassword(request());
+      expect(response.status).toBe(400);
+      expect(mocks.hash).not.toHaveBeenCalled();
+      expect(mocks.updateOne).not.toHaveBeenCalled();
+    });
+  }
 
   it("rejects consumed reset proof for a missing account", async () => {
     mocks.findOne.mockResolvedValue(null);
