@@ -943,11 +943,7 @@ function decolonizationDependencyEntries(presetId: string): WorldEntityManifestE
   ];
 }
 
-/**
- * Tier-3 historical-presence entities that are not already Tier-1/2 on this branch.
- * Gold Coast / decolonization tracers stay authored above; the global 1953 registry
- * (#3728) fills the remainder under src/lib/world/registry/.
- */
+/** Remaining 1953 historical-presence entities from the global registry. */
 function historicalPresenceEntries(presetId: string): WorldEntityManifestEntry[] {
   if (presetId !== "1953-default") return [];
   const registry = build1953Tier3Registry(presetId).filter(
@@ -956,23 +952,7 @@ function historicalPresenceEntries(presetId: string): WorldEntityManifestEntry[]
   return [...decolonizationDependencyEntries(presetId), ...registry];
 }
 
-/**
- * Full-autonomous readiness override for AT/FI/GR/IE, applied on top of the base
- * `sphereMacroEntry(...)` result below (#3791). These countries were originally
- * authored as Tier-2 sphere-macro NPC entries (`legacyAccess: "hidden"`) but
- * `bootstrapGameWorld.ts` (`seedATRegions`/`seedATParties`/…,
- * mirroring `seedFRRegions`/`seedFRParties`/…) and `ECON_TIER_ROSTER_COUNTRIES`
- * in `seedEconTierRosters.ts` build them out with real states, parties, and
- * NPP incumbents — identically to FR/IT/ES/SE/TR — and `COUNTRY_ORDER`'s own
- * doc comment lists GR/AT/FI as "registered: real configs + seed data, gated
- * per-preset by countryGameStates" alongside FR/IT/ES/SE/TR.
- *
- * The sphere-macro classification never caught up: `explicitCountryEntries`
- * (seedCountryGameStates.ts) requires a country-backed economy-preview entry.
- * AT/FI/GR lacked a `countryId`, while IE remained hidden despite its investable
- * sector seed. This override brings their access tier in line with what is
- * actually seeded without touching their sphere, recognition, or UN flavor data.
- */
+/** Promote seeded AT/FI/GR/IE economies without changing their sphere/UN data. */
 function promoteEuropeanSphereMacroToFullAutonomous(
   entry: WorldEntityManifestEntry,
   countryId: CountryId
@@ -998,18 +978,7 @@ function promoteEuropeanSphereMacroToFullAutonomous(
   };
 }
 
-/**
- * European 1953 sphere-macro roster (#3719). AT/FI/GR/IE are promoted to
- * full-autonomous economy-preview entries (see
- * `promoteEuropeanSphereMacroToFullAutonomous` above). Their sphere
- * relationships/recognition/UN posture below are unchanged occupation-era
- * flavor data is not affected by the promotion. CS/YU/DD stay unmapped.
- * Warsaw Pact / Yugoslavia reuse existing CountryIds with hidden legacy access.
- * ES is the inverse: demoted from full-autonomous to sphere-macro for
- * 1953-default ONLY (owner decision, 2026-07-28) — Franco's Spain never holds
- * a legislative election in this preset, so it stays an abstract Tier-2
- * economy here while remaining full-autonomous in every later preset.
- */
+/** European 1953 macro roster; AT/FI/GR/IE promote, while ES remains aggregate. */
 function europeanSphereMacroEntries(presetId: string): WorldEntityManifestEntry[] {
   if (presetId !== "1953-default") return [];
   return [
