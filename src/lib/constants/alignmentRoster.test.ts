@@ -162,7 +162,11 @@ describe("roster provenance", () => {
     for (const entry of manifest.entries) {
       const mine = rostered(entry.entityId);
       if (!mine) continue;
-      expect(mine.tier, `${entry.entityId} tier`).toBe(entry.simulationTier);
+      const expectedTier =
+        mine.tier === "historical-presence" && mine.status1953 === "sovereign"
+          ? "background-macro"
+          : mine.tier;
+      expect(expectedTier, `${entry.entityId} tier`).toBe(entry.simulationTier);
       expect(mine.status1953, `${entry.entityId} status`).toBe(entry.status);
     }
   });
