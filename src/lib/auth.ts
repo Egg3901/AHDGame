@@ -1,3 +1,4 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { jwtVerify, SignJWT, errors as joseErrors } from "jose";
@@ -131,9 +132,7 @@ export const userPayloadSchema = z.object({
 export type UserPayload = z.infer<typeof userPayloadSchema>;
 
 function isAuthTokenRevoked(user: User, payload: UserPayload): boolean {
-  if (!user.authRevokedAt) return false;
-  if (typeof payload.iat !== "number") return true;
-  return user.authRevokedAt.getTime() >= payload.iat * 1000;
+  return isTokenRevokedByCutoff(user.authRevokedAt, payload.iat);
 }
 
 // Auth-clear reasons that are genuinely anomalous (a *valid* token whose user
