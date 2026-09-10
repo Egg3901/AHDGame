@@ -39,9 +39,12 @@ describe("isKnownPreset", () => {
     expect(isKnownPreset(preset)).toBe(true);
   });
 
-  it.each(["custom", "2024-default", "", "random"])("returns false for %s", (preset) => {
-    expect(isKnownPreset(preset)).toBe(false);
-  });
+  it.each(["custom", "2024-default", "2027-default", "", "random"])(
+    "returns false for %s",
+    (preset) => {
+      expect(isKnownPreset(preset)).toBe(false);
+    }
+  );
 });
 
 describe("selectPresetBundle", () => {

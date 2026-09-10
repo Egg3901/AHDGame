@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import {
+  DRAFT_SEED_PRESET_IDS,
+  STARTING_YEAR,
+  getStartingYearForPreset,
+  isDraftSeedPreset,
+} from "./turnTime";
 import { getCycleAnchors } from "@/lib/elections/cycleAnchorContext";
 
 describe("getStartingYearForPreset", () => {
@@ -14,6 +19,13 @@ describe("getStartingYearForPreset", () => {
     expect(getStartingYearForPreset("2007-default")).toBe(2007);
     expect(getStartingYearForPreset("2019-default")).toBe(2019);
     expect(getStartingYearForPreset("2023-default")).toBe(2023);
+  });
+
+  it("gives the draft 2027 preset its own calendar without publishing it", () => {
+    expect(getStartingYearForPreset("2027-default")).toBe(2027);
+    expect(DRAFT_SEED_PRESET_IDS).toContain("2027-default");
+    expect(isDraftSeedPreset("2027-default")).toBe(true);
+    expect(isDraftSeedPreset("2023-default")).toBe(false);
   });
 
   it("1991-default → 1991", () => {
