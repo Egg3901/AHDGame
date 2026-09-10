@@ -71,6 +71,19 @@ interface UnionDetail {
   demandedWageLevel: number | null;
   /** True while this union's country bans unions: every action 403s server-side. */
   suspended: boolean;
+  /**
+   * Illicit-union shadow snapshot, present only while suspended. Exact heat
+   * never leaves the server: `heatText` is the vague bracket the UI renders.
+   */
+  underground: {
+    strength: number;
+    status: "dark" | "suspected" | "exposed";
+    heatText: "cold" | "warm" | "hot";
+    exposedUntilTurn: number | null;
+    actionCost: number;
+    quietGain: number;
+    massGain: number;
+  } | null;
   currentTurn: number;
 }
 
@@ -273,7 +286,7 @@ export default function UnionDashboardPage({ params }: PageProps) {
   }, [id]);
 
   async function runAction(path: string, body?: unknown) {
-    const setResult = path === "organize" ? setOrganizeResult : setActionResult;
+    const setResult = path.startsWith("organize") ? setOrganizeResult : setActionResult;
     setActionPending(true);
     setResult(null);
     try {
@@ -283,10 +296,16 @@ export default function UnionDashboardPage({ params }: PageProps) {
         body: JSON.stringify(body ?? {}),
       });
       const data = await res.json();
-      setResult({
-        ok: res.ok,
-        text: res.ok ? "Done." : (data.error ?? "Action failed"),
-      });
+      // Underground drives report what the cell won and how hot it runs, so
+      // the player learns the quiet/mass tradeoff by observation.
+      if (res.ok && path === "organize-underground") {
+        setResult({ ok: true, text: describeUndergroundResult(data) });
+      } else {
+        setResult({
+          ok: res.ok,
+          text: res.ok ? "Done." : (data.error ?? "Action failed"),
+        });
+      }
       if (res.ok) await loadData();
     } catch {
       setResult({ ok: false, text: "Network error. Nothing was spent." });
@@ -561,65 +580,79 @@ export default function UnionDashboardPage({ params }: PageProps) {
             </p>
             <p className="mt-0.5 text-xs text-muted">
               This union is suspended: leadership, treasury, and membership are frozen, not lost,
-              until the ban is repealed by legislation. Every union action is unavailable and
-              unionization is declining while the ban holds.
+              until the ban is repealed by legislation. Legal drives, dues, and strikes are frozen
+              and open unionization is declining while the ban holds, but cells can still organize
+              underground below.
             </p>
           </div>
         </div>
       )}
 
-      {/* Open to everyone, led or not: the rank-and-file loop. */}
-      <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
-        <div className="flex items-center gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Organize</h2>
-          <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
-        </div>
-
-        <p className="text-sm text-muted">
-          Anyone in {union.countryName} can organize this union. Every drive adds{" "}
-          {union.organizeStrengthGain} strength to the union and the same amount to your own banked
-          total, which is your vote weight in the leadership contest. Strength decays{" "}
-          {(UNION_STRENGTH_DECAY_PER_TURN * 100).toFixed(1)}% a turn, so a union nobody works at
-          loses its power, and so does an organizer who stops showing up.
-        </p>
-
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div>
-            <span className="text-muted">Union strength:</span>{" "}
-            <span className="font-semibold tabular-nums">{Math.round(union.strength)}</span>
+      {/* Open to everyone, led or not: the rank-and-file loop. Under a ban the
+          legal loop is fully off and cells organize underground instead. */}
+      {suspended && union.underground ? (
+        <UndergroundOrganizePanel
+          countryName={union.countryName}
+          underground={union.underground}
+          currentTurn={union.currentTurn}
+          myActions={myActions}
+          actionPending={actionPending}
+          result={organizeResult}
+          onDrive={(mode) => runAction("organize-underground", { mode })}
+        />
+      ) : (
+        <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
+          <div className="flex items-center gap-3">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">Organize</h2>
+            <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
           </div>
-          <div>
-            <span className="text-muted">Organizers:</span>{" "}
-            <span className="font-semibold tabular-nums">{organizerCount}</span>
-          </div>
-          <div>
-            <span className="text-muted">Your voting power:</span>{" "}
-            <span className="font-semibold tabular-nums">{Math.round(myVotingPower)}</span>
-          </div>
-        </div>
 
-        <div className="flex flex-col gap-1">
-          <button
-            type="button"
-            disabled={actionPending || suspended || cannotAffordOrganize}
-            onClick={() => runAction("organize")}
-            className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-          >
-            Run Organize Drive
-          </button>
-          <span className="text-[11px] text-muted">
-            Costs {organizeActionCost} action points
-            {myActions != null && ` · you have ${myActions}`}
-          </span>
-          {cannotAffordOrganize && (
-            <span className="text-[11px] font-medium text-error">
-              Not enough action points. They refresh each turn.
+          <p className="text-sm text-muted">
+            Anyone in {union.countryName} can organize this union. Every drive adds{" "}
+            {union.organizeStrengthGain} strength to the union and the same amount to your own
+            banked total, which is your vote weight in the leadership contest. Strength decays{" "}
+            {(UNION_STRENGTH_DECAY_PER_TURN * 100).toFixed(1)}% a turn, so a union nobody works at
+            loses its power, and so does an organizer who stops showing up.
+          </p>
+
+          <div className="flex flex-wrap gap-4 text-sm">
+            <div>
+              <span className="text-muted">Union strength:</span>{" "}
+              <span className="font-semibold tabular-nums">{Math.round(union.strength)}</span>
+            </div>
+            <div>
+              <span className="text-muted">Organizers:</span>{" "}
+              <span className="font-semibold tabular-nums">{organizerCount}</span>
+            </div>
+            <div>
+              <span className="text-muted">Your voting power:</span>{" "}
+              <span className="font-semibold tabular-nums">{Math.round(myVotingPower)}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              disabled={actionPending || suspended || cannotAffordOrganize}
+              onClick={() => runAction("organize")}
+              className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+            >
+              Run Organize Drive
+            </button>
+            <span className="text-[11px] text-muted">
+              Costs {organizeActionCost} action points
+              {myActions != null && ` · you have ${myActions}`}
             </span>
-          )}
-        </div>
+            {cannotAffordOrganize && (
+              <span className="text-[11px] font-medium text-error">
+                Not enough action points. They refresh each turn.
+              </span>
+            )}
+          </div>
 
-        <ActionResult result={organizeResult} />
-      </section>
+          <ActionResult result={organizeResult} />
+        </section>
+      )}
 
       {/* Dues, services and political contributions: the head's levers over
           the union's finances and approval. Everyone sees the current values;
@@ -1281,6 +1314,176 @@ function StanceBadge({ stance }: { stance: "endorse" | "oppose" }) {
 }
 
 /** Outcome of the last union action, success or the server's reason for refusing. */
+/**
+ * Success line for an underground drive response. Reports the gain and the
+ * vague heat bracket, never exact heat (the server never sends it).
+ */
+function describeUndergroundResult(data: {
+  strengthGain?: unknown;
+  heatText?: unknown;
+  status?: unknown;
+}): string {
+  const gain = typeof data.strengthGain === "number" ? data.strengthGain : null;
+  const heat =
+    data.heatText === "cold" || data.heatText === "warm" || data.heatText === "hot"
+      ? data.heatText
+      : "warm";
+  const base =
+    gain != null
+      ? `Cell work done: +${gain} underground strength. Running ${heat}.`
+      : `Cell work done. Running ${heat}.`;
+  return data.status === "exposed"
+    ? `${base} Exposed: gains run at half pace until the cell goes dark.`
+    : base;
+}
+
+const UNDERGROUND_STATUS_COPY: Record<
+  "dark" | "suspected" | "exposed",
+  { label: string; toneClass: string }
+> = {
+  dark: { label: "Operating in the dark", toneClass: "text-muted" },
+  suspected: { label: "Drawing attention", toneClass: "text-warning" },
+  exposed: { label: "Exposed", toneClass: "text-error" },
+};
+
+const UNDERGROUND_HEAT_COPY: Record<"cold" | "warm" | "hot", string> = {
+  cold: "Cold",
+  warm: "Warm",
+  hot: "Hot",
+};
+
+/**
+ * The rank-and-file loop under a ban. Replaces the legal organize panel on
+ * suspended unions: two drive modes (quiet cell work vs mass drive), a vague
+ * heat readout, and the shadow pool that converts at half on repeal.
+ */
+function UndergroundOrganizePanel({
+  countryName,
+  underground,
+  currentTurn,
+  myActions,
+  actionPending,
+  result,
+  onDrive,
+}: {
+  countryName: string;
+  underground: NonNullable<UnionDetail["underground"]>;
+  currentTurn: number;
+  myActions: number | null;
+  actionPending: boolean;
+  result: { ok: boolean; text: string } | null;
+  onDrive: (mode: "quiet" | "mass") => void;
+}) {
+  const status = UNDERGROUND_STATUS_COPY[underground.status];
+  const cannotAfford = myActions != null && myActions < underground.actionCost;
+  const exposedTurnsLeft =
+    underground.status === "exposed" && underground.exposedUntilTurn != null
+      ? Math.max(0, underground.exposedUntilTurn - currentTurn + 1)
+      : 0;
+  return (
+    <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
+      <div className="flex items-center gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted">
+          Organize underground
+        </h2>
+        <div className="h-px flex-1 bg-gradient-to-r from-card-border to-transparent" />
+      </div>
+
+      <p className="text-sm text-muted">
+        The ban froze this union&apos;s treasury and leadership, but the cells kept meeting. Anyone
+        in {countryName} can run quiet cell work or a loud mass drive. Both build hidden strength
+        that converts to legal strength at half if the ban is ever repealed. Noise brings attention:
+        loud stretches get noticed, and an exposed cell builds at half pace.
+      </p>
+
+      <div className="flex flex-wrap gap-4 text-sm">
+        <div>
+          <span className="text-muted">Built underground:</span>{" "}
+          <span className="font-semibold tabular-nums">{Math.round(underground.strength)}</span>
+        </div>
+        <div>
+          <span className="text-muted">Status:</span>{" "}
+          <span className={`font-semibold ${status.toneClass}`}>{status.label}</span>
+          {exposedTurnsLeft > 0 && (
+            <span className="text-muted"> · {exposedTurnsLeft} turns left</span>
+          )}
+        </div>
+      </div>
+
+      {/* Heat is vague by design: the server never sends the number, only the bracket. */}
+      <div className="space-y-1">
+        <div className="flex gap-1" role="img" aria-label={`Heat: ${underground.heatText}`}>
+          {(Object.keys(UNDERGROUND_HEAT_COPY) as ("cold" | "warm" | "hot")[]).map((level) => {
+            const active = underground.heatText === level;
+            const tone =
+              level === "cold"
+                ? "border-success/30 bg-success/10 text-success"
+                : level === "warm"
+                  ? "border-warning/30 bg-warning/10 text-warning"
+                  : "border-error/30 bg-error/10 text-error";
+            return (
+              <span
+                key={level}
+                className={`rounded-md border px-2 py-0.5 text-[11px] font-semibold ${
+                  active ? tone : "border-card-border bg-card-elevated text-muted"
+                }`}
+              >
+                {UNDERGROUND_HEAT_COPY[level]}
+              </span>
+            );
+          })}
+        </div>
+        <p className="text-[11px] text-muted">
+          You never see the exact number. Quiet work and idle turns cool the trail.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-4">
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            disabled={actionPending || cannotAfford}
+            onClick={() => onDrive("quiet")}
+            className="w-fit rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50"
+          >
+            Quiet cell work
+          </button>
+          <span className="text-[11px] text-muted">
+            +{underground.quietGain} strength · low heat
+          </span>
+        </div>
+        <div className="flex flex-col gap-1">
+          <button
+            type="button"
+            disabled={actionPending || cannotAfford}
+            onClick={() => onDrive("mass")}
+            className="w-fit rounded-lg border border-card-border px-4 py-2 text-sm font-medium transition-colors hover:bg-card-elevated disabled:opacity-50"
+          >
+            Mass drive
+          </button>
+          <span className="text-[11px] text-muted">
+            +{underground.massGain} strength · high heat
+            {underground.status === "exposed" && " · halved while exposed"}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-col gap-1">
+        <span className="text-[11px] text-muted">
+          Costs {underground.actionCost} action points
+          {myActions != null && ` · you have ${myActions}`} · one drive per turn
+        </span>
+        {cannotAfford && (
+          <span className="text-[11px] font-medium text-error">
+            Not enough action points. They refresh each turn.
+          </span>
+        )}
+      </div>
+
+      <ActionResult result={result} />
+    </section>
+  );
+}
+
 function ActionResult({ result }: { result: { ok: boolean; text: string } | null }) {
   if (!result) return null;
   return (

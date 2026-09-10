@@ -656,9 +656,14 @@ describe("processUnionsTurn, safety-net seeding + union-ban suspension", () => {
 
     await processUnionsTurn(db);
 
-    expect(unionsFind).toHaveBeenCalledTimes(1);
-    const [filter] = unionsFind.mock.calls[0];
-    expect(filter).toMatchObject({ ownerId: { $ne: null }, suspended: { $ne: true } });
+    // Two unions.find calls: the underground step's suspended-cells query
+    // plus the owned-unions query below.
+    expect(unionsFind).toHaveBeenCalledTimes(2);
+    const ownedCall = unionsFind.mock.calls.find(
+      (call) => (call[0] as Record<string, unknown>).ownerId !== undefined
+    );
+    expect(ownedCall).toBeDefined();
+    expect(ownedCall![0]).toMatchObject({ ownerId: { $ne: null }, suspended: { $ne: true } });
   });
 });
 

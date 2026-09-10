@@ -31,6 +31,7 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { processUndergroundTurn } from "./undergroundTurn";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { processLabourRelationsTurn } from "./labourRelationsTurn";
@@ -219,6 +220,14 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
         { $mul: { strength: strengthDecayMultiplier }, $set: { updatedAt: decayStamp } }
       ),
   ]);
+
+  // Illicit unions under ban: heat decay, detection rolls, and exposure
+  // windows for suspended cells. Suspended unions never reach the owned
+  // pass below, so this runs unconditionally (even with zero owned unions).
+  const underground = await processUndergroundTurn(db, currentTurn);
+  if (underground.newlyExposed > 0) {
+    console.warn(`[unionsTurn] exposed ${underground.newlyExposed} underground union(s)`);
+  }
 
   const sectorsAdopted = await adoptUnrepresentedSectors(db);
   if (sectorsAdopted > 0) {

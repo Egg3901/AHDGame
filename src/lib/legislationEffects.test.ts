@@ -362,6 +362,43 @@ describe("applyLegislationEffect — union ban (player suggestion #93)", () => {
     expect(unionCalls[1][1].$set.suspended).toBe(false);
   });
 
+  it("repeal converts the underground pool to legal strength at a haircut and clears shadow fields", async () => {
+    const suspendedId = new ObjectId();
+    // Touch the collection first: mocks are created lazily on access.
+    db.collection("unions");
+    db.collectionMocks["unions"]!.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { _id: suspendedId, strength: 200, undergroundStrength: 100, suspended: true },
+        ]),
+    });
+
+    await applyLegislationEffect(db as unknown as Db, {
+      _id: new ObjectId(),
+      countryId: "US",
+      stateId: "us_national",
+      provisions: [{ type: "union_law", bias: 0, banAction: "repeal_ban" }],
+    });
+
+    expect(db.collectionMocks["unions"]?.bulkWrite).toHaveBeenCalledTimes(1);
+    const ops = db.collectionMocks["unions"]!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: {
+        filter: Record<string, unknown>;
+        update: { $set: Record<string, unknown>; $unset: Record<string, unknown> };
+      };
+    }>;
+    expect(ops).toHaveLength(1);
+    // Legal strength intact plus half the shadow pool; cell wiped clean.
+    expect(ops[0].updateOne.update.$set.strength).toBe(250);
+    expect(ops[0].updateOne.update.$set.suspended).toBe(false);
+    expect(ops[0].updateOne.update.$unset).toMatchObject({
+      undergroundStrength: "",
+      heat: "",
+      exposedUntilTurn: "",
+    });
+  });
+
   it("a bias-only union_law provision still writes unionLawBias and never touches the ban fields", async () => {
     await applyLegislationEffect(db as unknown as Db, {
       _id: new ObjectId(),
