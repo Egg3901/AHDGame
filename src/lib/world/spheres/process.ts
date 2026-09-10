@@ -22,7 +22,7 @@ export async function processSphereSponsorTurn(
   const macros = await (
     await getMacroCountriesCollection(db)
   )
-    .find({}, { projection: { entityId: 1, presetId: 1 } })
+    .find({ simulationTier: "sphere-macro" }, { projection: { entityId: 1, presetId: 1 } })
     .toArray();
 
   const memberships = [];
