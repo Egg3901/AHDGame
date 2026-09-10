@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
-import { SignJWT, jwtVerify } from "jose";
+import { CompactSign, SignJWT, jwtVerify } from "jose";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 
 vi.mock("next/headers", () => ({
@@ -439,16 +439,20 @@ describe("GET /api/client-nav", () => {
     const secret = new TextEncoder().encode("test-secret");
     const userId = "507f1f77bcf86cd799439011";
     const nowSec = Math.floor(Date.now() / 1000);
-    const rawToken = await new SignJWT({
-      userId,
-      email: "uk@example.com",
-      username: "uk-player",
-      role: "player",
-      isAdmin: false,
-      iat: "not-a-time",
-    })
+    const rawToken = await new CompactSign(
+      new TextEncoder().encode(
+        JSON.stringify({
+          userId,
+          email: "uk@example.com",
+          username: "uk-player",
+          role: "player",
+          isAdmin: false,
+          iat: "not-a-time",
+          exp: nowSec + 1800,
+        })
+      )
+    )
       .setProtectedHeader({ alg: "HS256" })
-      .setExpirationTime(nowSec + 1800)
       .sign(secret);
 
     const cookieStore = {
