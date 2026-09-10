@@ -1,4 +1,6 @@
 ---
+date: "2026-09-10"
+title: "Protect account credentials during login migration"
 badges: [patch]
 areas: [backend]
 tags: [auth]
