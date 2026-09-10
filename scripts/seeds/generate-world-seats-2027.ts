@@ -9,7 +9,7 @@ type Target = Record<string, number>;
 
 function apportion(
   source: HistoricalSeat[],
-  officeType: string,
+  officeType: HistoricalSeat["officeType"],
   targets: Target
 ): HistoricalSeat[] {
   const regions = [...new Set(source.map((seat) => seat.state))];
