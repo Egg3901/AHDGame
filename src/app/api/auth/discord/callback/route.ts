@@ -49,6 +49,7 @@ import {
   takeOAuthReturnUrlCookie,
 } from "@/lib/auth/lakesideLoginReturn";
 import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 
 // GET /api/auth/discord/callback — Handles the Discord OAuth callback to log in or register a user via Discord.
 // Auth: public
@@ -183,6 +184,18 @@ async function handleDiscordLogin(
       const reason = encodeURIComponent(existingUser.banReason || "Violation of rules");
       return NextResponse.redirect(new URL(`/banned?reason=${reason}`, baseUrl));
     }
+    // Fenced provider accounts never log in via legacy OAuth. Same
+    // session_expired redirect as a revocation race so fenced is not an oracle.
+    // This return sits before registration so a fenced alias never falls
+    // through to duplicate creation.
+    if (isAuthMigrationFenced(existingUser)) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/discord/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
 
     const existingTrack = cookieStore.get("__ahd_track")?.value;
     const trackingId = existingTrack || randomUUID();
@@ -219,6 +232,7 @@ async function handleDiscordLogin(
         isBanned: { $ne: true },
         discordId: discordUser.id,
         ...issued.snapshotFilter,
+        ...authMigrationFenceAbsentFilter(),
       },
       {
         $set: {
@@ -563,6 +577,10 @@ async function handleDiscordLink(
   const auth = await verifyAuth();
   if (!credentialSessionIsCurrent(grant.userId, account, auth)) {
     return linkRedirect(new URL("/login", baseUrl));
+  }
+  // Fenced accounts never mutate provider bindings via legacy link.
+  if (isAuthMigrationFenced(account)) {
+    return linkRedirect(errorUrl("session_expired"));
   }
 
   // The link flow started by one account/session must not complete for another:

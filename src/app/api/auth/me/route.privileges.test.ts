@@ -150,4 +150,26 @@ describe("GET /api/auth/me privilege flags", () => {
     expect(body.user.isModerator).toBe(true);
     expect(body.user.role).toBe("moderator");
   });
+  it.each([null, {}, "malformed", undefined])(
+    "denies a present migration fence without returning profile data: %s",
+    async (authMigrationFence) => {
+      const response = await getMe(
+        {
+          userId: USER_ID,
+          email: "p@example.invalid",
+          username: "player",
+          iat: Math.floor(Date.now() / 1000),
+        },
+        {
+          _id: new ObjectId(USER_ID),
+          email: "p@example.invalid",
+          username: "player",
+          authMigrationFence,
+        }
+      );
+      expect(response.status).toBe(401);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+      expect(await response.json()).toEqual({ error: "Authentication required" });
+    }
+  );
 });

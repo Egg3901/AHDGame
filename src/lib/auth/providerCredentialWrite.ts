@@ -1,10 +1,14 @@
 import type { Filter } from "mongodb";
 import type { User } from "@/lib/db/types";
 import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter } from "@/lib/auth/sourceFence";
 
 export type ProviderKind = "google" | "discord";
 
-type CredentialSnapshot = Pick<User, "password" | "googleId" | "discordId" | "authRevokedAt">;
+type CredentialSnapshot = Pick<
+  User,
+  "password" | "googleId" | "discordId" | "authRevokedAt" | "authMigrationFence"
+>;
 
 /** A stored password counts as a usable login method only when non-empty. */
 export function hasUsablePassword(account: Pick<User, "password">): boolean {
@@ -40,6 +44,7 @@ export function providerWriteSnapshotFilter(account: CredentialSnapshot): Filter
       : { discordId: account.discordId }),
     isBanned: { $ne: true },
     ...authRevocationSnapshotFilter(account.authRevokedAt),
+    ...authMigrationFenceAbsentFilter(),
   };
 }
 

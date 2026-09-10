@@ -206,6 +206,7 @@ describe("google link", () => {
       discordId: "d1",
       isBanned: { $ne: true },
       authRevokedAt: cutoff,
+      authMigrationFence: { $exists: false },
     });
     expect(update.$set.googleId).toBe("google-1");
     expect(update.$set.googleLinkedAt).toBeInstanceOf(Date);
@@ -418,6 +419,7 @@ describe("discord link", () => {
       discordId: { $exists: false },
       isBanned: { $ne: true },
       authRevokedAt: cutoff,
+      authMigrationFence: { $exists: false },
     });
     expect(update.$set.discordId).toBe("discord-1");
     expect(update.$max.authRevokedAt).toBeInstanceOf(Date);
@@ -555,6 +557,7 @@ describe("google unlink", () => {
       discordId: "d1",
       isBanned: { $ne: true },
       authRevokedAt: cutoff,
+      authMigrationFence: { $exists: false },
     });
     expect(update.$unset).toMatchObject({ googleId: "", googleLinkedAt: "" });
     expect(update.$max.authRevokedAt).toBeInstanceOf(Date);
@@ -662,6 +665,7 @@ describe("discord unlink", () => {
       discordId: "d1",
       isBanned: { $ne: true },
       authRevokedAt: cutoff,
+      authMigrationFence: { $exists: false },
     });
     expect(update.$unset).toMatchObject({ discordId: "", discordLinkedAt: "" });
     expect(update.$max.authRevokedAt).toBeInstanceOf(Date);
@@ -738,4 +742,27 @@ describe("provider link lookup failures", () => {
       }
     }
   );
+});
+
+describe("migration fences on provider credentials", () => {
+  it.each([
+    ["google link", googleGet],
+    ["discord link", discordGet],
+  ] as const)("rejects %s before any write", async (_name, get) => {
+    freshReads(account({ authMigrationFence: null }));
+    const response = await get();
+    expect(response.headers.get("location")).toContain("/login");
+    expect(noStore(response)).toContain("no-store");
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["google unlink", googleUnlink],
+    ["discord unlink", discordUnlink],
+  ] as const)("rejects %s before any write", async (_name, post) => {
+    freshAccount(account({ googleId: "google-1", discordId: "discord-1", authMigrationFence: {} }));
+    const response = await post();
+    expect(response.status).toBe(401);
+    expect(noStore(response)).toContain("no-store");
+    expect(mocks.updateOne).not.toHaveBeenCalled();
+  });
 });
