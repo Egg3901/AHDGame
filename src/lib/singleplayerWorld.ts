@@ -42,7 +42,9 @@ export async function advanceWorldsim(
   const results: WorldsimTurnResult["results"] = [];
   for (let index = 0; index < turns; index++) {
     const result = await advance();
-    if (!result.success || result.turn <= 0) {
+    // A positive turn is committed even when optional phases produced warnings.
+    // The engine uses turn zero for lock contention and hard failures.
+    if (result.turn <= 0) {
       throw new Error(
         `Worldsim stopped after ${index} turn${index === 1 ? "" : "s"}: ${result.message}`
       );

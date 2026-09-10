@@ -1,13 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { requireSingleplayer, advanceWorldsim, getDb, getSingleplayerConfig } = vi.hoisted(() => ({
+const {
+  requireSingleplayer,
+  advanceWorldsim,
+  getDb,
+  getSingleplayerConfig,
+  getSingleplayerWorldAvailability,
+} = vi.hoisted(() => ({
   requireSingleplayer: vi.fn(),
   advanceWorldsim: vi.fn(),
   getDb: vi.fn(),
+  getSingleplayerWorldAvailability: vi.fn(),
   getSingleplayerConfig: vi.fn(),
 }));
 
 vi.mock("@/lib/api/requireSingleplayer", () => ({ requireSingleplayer }));
+vi.mock("@/lib/singleplayerOperator", () => ({ getSingleplayerWorldAvailability }));
 vi.mock("@/lib/mongodb", () => ({ getDb }));
 vi.mock("@/lib/singleplayerServer", () => ({ getSingleplayerConfig }));
 vi.mock("@/lib/singleplayerWorld", () => ({
@@ -21,6 +29,7 @@ describe("POST /api/singleplayer/worldsim/advance", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     requireSingleplayer.mockReturnValue(null);
+    getSingleplayerWorldAvailability.mockResolvedValue("off");
     getDb.mockResolvedValue({
       collection: () => ({ countDocuments: vi.fn().mockResolvedValue(0) }),
     });

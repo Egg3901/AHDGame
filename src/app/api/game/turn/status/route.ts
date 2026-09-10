@@ -1,3 +1,4 @@
+import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { conditionalJson } from "@/lib/api/conditionalJson";
 import { handleRouteError } from "@/lib/api/errors";
@@ -44,7 +45,9 @@ export async function GET(request: Request) {
       ? computeTurnProcessingProgress(processingPhase, processingPhaseStatuses)
       : null;
 
+    const singleplayer = isSingleplayer();
     const payload = {
+      singleplayer,
       currentTurn: gameState.currentTurn,
       currentYear: gameState.currentYear,
       startingYear: gameState.startingYear,
@@ -58,7 +61,7 @@ export async function GET(request: Request) {
       isActive: gameState.isActive,
       isProcessing: gameState.isProcessing ?? false,
       lastTurnProcessed: gameState.lastTurnProcessed,
-      nextScheduledTurn: gameState.isActive ? nextCron.toISOString() : null,
+      nextScheduledTurn: !singleplayer && gameState.isActive ? nextCron.toISOString() : null,
       pausedAt: gameState.pausedAt ?? null,
       pauseReason: gameState.pauseReason ?? null,
       pauseKind: gameState.pauseKind ?? null,
@@ -84,7 +87,7 @@ export async function GET(request: Request) {
     // During processing, keep no-store so clients see turn_start promptly.
     // Otherwise attach a strong ETag: even where the edge does not honor
     // s-maxage, a bodyless 304 on unchanged polls cuts origin egress to ~0.
-    if (gameState.isProcessing) {
+    if (singleplayer || gameState.isProcessing) {
       return NextResponse.json(payload, { headers: { "Cache-Control": "no-store, no-transform" } });
     }
     return conditionalJson(request, payload, {

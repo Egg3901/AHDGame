@@ -109,8 +109,19 @@ export async function proxy(request: NextRequest) {
   // early with the cookie attached; the retried request then flows through
   // the normal path below. See @/lib/singleplayer for the guards that stop
   // this running anywhere that serves more than one person.
-  if (singleplayer && !request.cookies.get(AUTH_COOKIE_NAME)) {
-    return await grantSingleplayerSession(request);
+  if (singleplayer) {
+    const session = await verifySession(request);
+    const expected = singleplayerSessionClaims();
+    // Loopback cookies cross ports, but each world signs with its own secret.
+    // Also replace old admin claims when the current world is a player session.
+    if (
+      !session ||
+      session.userId !== expected.userId ||
+      session.role !== expected.role ||
+      session.isAdmin !== expected.isAdmin
+    ) {
+      return await grantSingleplayerSession(request);
+    }
   }
 
   // The local build has no account lifecycle. Keep old bookmarks to the
@@ -120,7 +131,7 @@ export async function proxy(request: NextRequest) {
     singleplayer &&
     (pathname === "/login" || pathname === "/register" || pathname === "/logout")
   ) {
-    return NextResponse.redirect(new URL("/singleplayer", request.url));
+    return NextResponse.redirect(new URL("/profile", request.url));
   }
 
   // Canonical host is the apex domain. www duplicates every page (splits SEO
@@ -184,7 +195,7 @@ export async function proxy(request: NextRequest) {
   // requests in Next.js 16 — the layout runs, redirect is called, but the
   // response still returns the page content as a 200 RSC payload. Gating in
   // the proxy intercepts both hard loads and RSC requests.
-  if (!isMaintenanceBypassPath(pathname)) {
+  if (!singleplayer && !isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws (e.g. transient DB blip):
     // a 500 from the proxy would take down every page hit, which is worse
     // than briefly letting a request through.
@@ -200,10 +211,6 @@ export async function proxy(request: NextRequest) {
       console.warn("[proxy] maintenance lookup failed; passing through", err);
     }
     if (maintenanceMode === "full" && !(await requestIsAdmin(request))) {
-      if (singleplayer) {
-        if (pathname === "/singleplayer/admin") return passthrough(request);
-        return NextResponse.redirect(new URL("/singleplayer/admin", request.url));
-      }
       return NextResponse.redirect(new URL("/maintenance", request.url));
     }
   }
@@ -231,7 +238,12 @@ async function grantSingleplayerSession(request: NextRequest): Promise<NextRespo
     .sign(new TextEncoder().encode(secret));
 
   const requestHeaders = new Headers(request.headers);
-  const existing = requestHeaders.get("cookie");
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  requestHeaders.set("x-search", request.nextUrl.search);
+  const existing = (requestHeaders.get("cookie") ?? "")
+    .split(";")
+    .filter((part) => part.trim() && part.trim().split("=")[0] !== AUTH_COOKIE_NAME)
+    .join(";");
   requestHeaders.set(
     "cookie",
     existing ? `${existing}; ${AUTH_COOKIE_NAME}=${token}` : `${AUTH_COOKIE_NAME}=${token}`
