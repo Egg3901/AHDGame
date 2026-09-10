@@ -58,7 +58,7 @@ export async function seedBRRegions(
 }
 
 export async function seedBRParties(db: Db, log: (msg: string) => void, preset?: string) {
-  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+  const { selectPartyRosterForPreset, prunePresetMismatchedDefaultParties } =
     await import("@/lib/seeds/ensureDefaultParties");
   const { brParties } = await import("@/lib/seeds/br/brParties");
 
@@ -72,9 +72,7 @@ export async function seedBRParties(db: Db, log: (msg: string) => void, preset?:
 
   await prunePresetMismatchedDefaultParties(db, brParties as PartySeed[], activePreset);
 
-  const filtered = (brParties as PartySeed[]).filter((seed) =>
-    isPartyValidForPreset(seed, activePreset!)
-  );
+  const filtered = selectPartyRosterForPreset(brParties as PartySeed[], activePreset!);
 
   const now = new Date();
   for (const party of filtered) {
