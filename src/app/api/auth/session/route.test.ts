@@ -113,6 +113,16 @@ describe("GET /api/auth/session", () => {
     expect((await GET(request(`auth-token-test=${await token()}`))).status).toBe(401);
   });
 
+  it.each([0, false, "", "2026-01-01", {}, new Date(NaN)])(
+    "rejects malformed revocation state %j",
+    async (authRevokedAt) => {
+      findOne.mockResolvedValue({ _id: id, username: "current-name", authRevokedAt });
+      const response = await GET(request(`auth-token-test=${await token()}`));
+      expect(response.status).toBe(401);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+    }
+  );
+
   it("rechecks revocation on the next request and accepts authentication after revocation", async () => {
     const cookie = `auth-token-test=${await token()}`;
     expect((await GET(request(cookie))).status).toBe(200);
