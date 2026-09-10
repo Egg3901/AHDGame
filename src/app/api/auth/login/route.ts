@@ -7,6 +7,7 @@ import { cookies } from "next/headers";
 import { getJwtSecret, getAuthCookieOptions, getTrackingCookieOptions } from "@/lib/auth";
 import { needsCharacterHint } from "@/lib/auth/characterGate";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
+import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -127,43 +128,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Create JWT token
-    const token = await new SignJWT({
-      userId: user._id.toString(),
-      email: user.email,
-      username: user.username,
-      role: user.role,
-      isAdmin: user.isAdmin || false,
-    })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
-      .setExpirationTime("7d")
-      .sign(getJwtSecret());
-
-    // Set HTTP-only cookie
-    const cookieStore = await cookies();
-    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
-
-    // Seed the character-creation hint cookie so a player with no character is
-    // redirected to /create-character from their first navigation (the /api/auth/me
-    // self-healer reconciles it against DB truth thereafter). hasCompletedSetup is
-    // the existing proxy the post-login client redirect already keys off of.
-    await setCharacterGateCookie(
-      cookieStore,
-      needsCharacterHint({
-        role: user.role,
-        isAdmin: user.isAdmin === true,
-        hasCharacter: user.hasCompletedSetup ?? true,
-      })
-    );
-
     // Persistent tracking cookie for anti-fraud duplicate detection.
     // Re-use existing value so the ID survives across logins; generate a new one only on first visit.
+    const cookieStore = await cookies();
     const existingTrack = cookieStore.get("__ahd_track")?.value;
     const trackingId = existingTrack || randomUUID();
-    if (!existingTrack) {
-      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
-    }
 
     const device = classifyDevice(request.headers.get("user-agent"));
 
@@ -178,6 +147,31 @@ export async function POST(request: Request) {
     // judged per signal (src/lib/auth/identitySignals.ts) — `lastLogin` is not
     // a valid proxy for signals written conditionally below.
     const observedAt = new Date();
+    const issued = await resolveReauthIssuedAt(user.authRevokedAt);
+    if (!issued.ok) {
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.login",
+        subject: { type: "user", id: user._id, name: user.username },
+        net: netBase,
+        outcome: "rejected",
+        reason: "invalid_credentials",
+      });
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+    const token = await new SignJWT({
+      userId: user._id.toString(),
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      isAdmin: user.isAdmin || false,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(issued.iat)
+      .setExpirationTime("7d")
+      .sign(getJwtSecret());
+
     const updateFields: Record<string, unknown> = {
       lastLogin: observedAt,
       lastKnownIp: clientIp,
@@ -211,17 +205,54 @@ export async function POST(request: Request) {
       updateFields.lastFingerprintComponents = fingerprintComponents;
     }
 
-    await usersCollection.updateOne(
-      { _id: user._id },
+    // Keep authRevokedAt. Conditional match on the snapshot plus current
+    // password/ban so a concurrent reset/logout/ban cannot be overwritten by
+    // a login that already verified the old credential.
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: user._id,
+        isBanned: { $ne: true },
+        password: user.password,
+        ...issued.snapshotFilter,
+      },
       {
         $set: updateFields,
-        // Successful re-auth invalidates prior session-revocation; otherwise a
-        // leftover authRevokedAt + stale sibling JWT breaks Lakeside/Ops SSO.
-        $unset: { authRevokedAt: "" },
         // Add fingerprint to history if it's new
         ...(fingerprint ? { $addToSet: { fingerprintHistory: fingerprint } } : {}),
       }
     );
+
+    if (updateResult.matchedCount !== 1) {
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.login",
+        subject: { type: "user", id: user._id, name: user.username },
+        net: netBase,
+        outcome: "rejected",
+        reason: "invalid_credentials",
+      });
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
+
+    // Seed the character-creation hint cookie so a player with no character is
+    // redirected to /create-character from their first navigation (the /api/auth/me
+    // self-healer reconciles it against DB truth thereafter). hasCompletedSetup is
+    // the existing proxy the post-login client redirect already keys off of.
+    await setCharacterGateCookie(
+      cookieStore,
+      needsCharacterHint({
+        role: user.role,
+        isAdmin: user.isAdmin === true,
+        hasCharacter: user.hasCompletedSetup ?? true,
+      })
+    );
+
+    if (!existingTrack) {
+      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
+    }
 
     // Fire-and-forget: log the login event for admin activity tracking.
     // If this insert fails, the login itself is unaffected.

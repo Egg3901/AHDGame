@@ -38,6 +38,7 @@ import {
   loginDestination,
   takeOAuthReturnUrlCookie,
 } from "@/lib/auth/lakesideLoginReturn";
+import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
 
 // GET /api/auth/google/callback — Handles the Google OAuth callback to log in or register a user via Google.
 // Auth: public
@@ -130,6 +131,23 @@ async function handleGoogleLogin(
       return NextResponse.redirect(new URL(`/banned?reason=${reason}`, baseUrl));
     }
 
+    const existingTrack = cookieStore.get("__ahd_track")?.value;
+    const trackingId = existingTrack || randomUUID();
+    const oauthDeviceKey = cookieStore.get(OAUTH_DEVICE_KEY_COOKIE)?.value;
+    cookieStore.delete(OAUTH_DEVICE_KEY_COOKIE);
+
+    const clientIp = await getClientIp();
+    const device = classifyDevice(userAgent);
+    const observedAt = new Date();
+    const issued = await resolveReauthIssuedAt(existingUser.authRevokedAt);
+    if (!issued.ok) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/google/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
     const token = await new SignJWT({
       userId: existingUser._id.toString(),
       email: existingUser.email,
@@ -138,32 +156,17 @@ async function handleGoogleLogin(
       isAdmin: existingUser.isAdmin || false,
     })
       .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
+      .setIssuedAt(issued.iat)
       .setExpirationTime("7d")
       .sign(getJwtSecret());
 
-    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
-    await setCharacterGateCookie(
-      cookieStore,
-      needsCharacterHint({
-        role: existingUser.role,
-        isAdmin: existingUser.isAdmin === true,
-        hasCharacter: existingUser.hasCompletedSetup ?? true,
-      })
-    );
-    const existingTrack = cookieStore.get("__ahd_track")?.value;
-    const trackingId = existingTrack || randomUUID();
-    if (!existingTrack) {
-      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
-    }
-    const oauthDeviceKey = cookieStore.get(OAUTH_DEVICE_KEY_COOKIE)?.value;
-    cookieStore.delete(OAUTH_DEVICE_KEY_COOKIE);
-
-    const clientIp = await getClientIp();
-    const device = classifyDevice(userAgent);
-    const observedAt = new Date();
-    await usersCollection.updateOne(
-      { _id: existingUser._id },
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: existingUser._id,
+        isBanned: { $ne: true },
+        googleId: googleUser.id,
+        ...issued.snapshotFilter,
+      },
       {
         $set: {
           lastLogin: observedAt,
@@ -186,9 +189,30 @@ async function handleGoogleLogin(
                 ...(existingUser.registrationCf == null ? { registrationCf: cf } : {}),
               }),
         },
-        $unset: { authRevokedAt: "" },
       }
     );
+
+    if (updateResult.matchedCount !== 1) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/google/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
+
+    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
+    await setCharacterGateCookie(
+      cookieStore,
+      needsCharacterHint({
+        role: existingUser.role,
+        isAdmin: existingUser.isAdmin === true,
+        hasCharacter: existingUser.hasCompletedSetup ?? true,
+      })
+    );
+    if (!existingTrack) {
+      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
+    }
 
     db.collection("activityLog")
       .insertOne({
