@@ -191,9 +191,8 @@ export function isEasternBlocEra(preset: string): boolean {
  *                  skips the executive backfill under `preIteration`. Chambers
  *                  start vacant BY DESIGN and the founding election seats them.
  *   1979-default   138 authored seats — RU/DD structures only; the US/UK
- *                  chambers have no authored roster at all. Same shape as 1953,
- *                  but flipping its default is a separate product call, so it
- *                  stays opt-in (`--pre-iteration` / `preIteration: true`).
+ *                  chambers have no authored roster at all. Same vacant-roster
+ *                  shape as 1953, so founding is required for a valid world.
  *   1991/1999/     ~1004-1015 authored seats each — every chamber ships a full
  *   2007/2019/     historical roster that seats at bootstrap. Defaulting the
  *   2023           founding phase on here would blank those rosters and replace
@@ -203,7 +202,7 @@ export function isEasternBlocEra(preset: string): boolean {
  * supplies the default when the caller says nothing.
  */
 export function presetDefaultsToFoundingPhase(preset: string): boolean {
-  return preset === "1953-default";
+  return preset === "1953-default" || preset === "1979-default";
 }
 
 /**

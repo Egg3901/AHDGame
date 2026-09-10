@@ -5,6 +5,7 @@ import {
   getWorldEntityPresetManifest,
   type WorldEntityManifestEntry,
 } from "./worldEntityManifest";
+import { COUNTRY_ORDER } from "@/lib/constants/countries";
 
 function validEntry(overrides: Partial<WorldEntityManifestEntry> = {}): WorldEntityManifestEntry {
   return {
@@ -308,6 +309,27 @@ describe("world entity manifest", () => {
       countryId: "UK",
       legacyAccess: "config-fallback",
     });
+  });
+
+  it("classifies every registered country in every supported reset era", () => {
+    for (const preset of [
+      "1953-default",
+      "1979-default",
+      "1991-default",
+      "1999-default",
+      "2007-default",
+      "2019-default",
+      "2023-default",
+    ]) {
+      const classified = new Set(
+        getWorldEntityPresetManifest(preset).entries.flatMap((entry) =>
+          entry.countryId ? [entry.countryId] : []
+        )
+      );
+      for (const countryId of COUNTRY_ORDER) {
+        expect(classified.has(countryId), `${preset} is missing ${countryId}`).toBe(true);
+      }
+    }
   });
 
   it("demotes ES to sphere-macro for 1953-default ONLY, leaving every later preset untouched (owner decision, 2026-07-28)", () => {

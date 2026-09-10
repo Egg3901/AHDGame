@@ -60,9 +60,9 @@ export interface FoundingSpawnResult {
  * "must run after deLandtagElections" that the flat version only satisfies by
  * luck plus a recompute fallback.
  *
- * A single failing family must never abort the reset, and it cannot hang the
- * phase either — `detectPreIterationComplete` only waits on races that actually
- * spawned. Failures are logged and the sweep continues.
+ * A failing family does not stop the remaining families from spawning. The
+ * aggregate failure count is returned so bootstrap can fail or mark the reset
+ * partial instead of presenting an incomplete founding world as valid.
  *
  * ⚠️ Failure logs are buffered per country and flushed in registry order, so the
  * emitted log is identical to the sequential version regardless of which country

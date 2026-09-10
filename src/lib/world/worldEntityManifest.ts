@@ -1563,10 +1563,12 @@ function accessMap(
   economy: readonly CountryId[],
   hidden: readonly CountryId[] = []
 ): Partial<Record<CountryId, LegacyCountryAccess>> {
+  const classified = new Set<CountryId>([...player, ...economy, ...hidden]);
+  const remaining = COUNTRY_ORDER.filter((countryId) => !classified.has(countryId));
   return Object.fromEntries([
     ...player.map((countryId) => [countryId, "player"] as const),
     ...economy.map((countryId) => [countryId, "economy-preview"] as const),
-    ...hidden.map((countryId) => [countryId, "hidden"] as const),
+    ...[...hidden, ...remaining].map((countryId) => [countryId, "hidden"] as const),
   ]);
 }
 

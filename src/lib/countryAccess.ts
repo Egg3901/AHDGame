@@ -206,7 +206,11 @@ export async function getCountryAccessFromDb(db: Db, countryId: CountryId): Prom
  */
 function registeredBase(docs: CountryGameState[]): CountryId[] {
   const activeExtra = docs
-    .filter((d) => d.status === "active" && !COUNTRY_ORDER.includes(d._id as CountryId))
+    .filter(
+      (d) =>
+        (d.status === "active" || d.status === "beta") &&
+        !COUNTRY_ORDER.includes(d._id as CountryId)
+    )
     .map((d) => d._id as CountryId)
     .sort();
   // A dissolved country is filtered out of the BASE, which is what lets a
