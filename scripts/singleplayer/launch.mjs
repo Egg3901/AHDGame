@@ -190,14 +190,40 @@ async function fetchMongod() {
       }
     }
     await writeFile(path.join(staging, `.complete-${MONGO_VERSION}`), `${MONGO_VERSION}\n`);
-    await rm(MONGO_DIR, { recursive: true, force: true });
-    await rename(staging, MONGO_DIR);
+    await publishMongoInstall(
+      staging,
+      MONGO_DIR,
+      `.complete-${MONGO_VERSION}`,
+      WIN ? "mongod.exe" : "mongod"
+    );
   } catch (error) {
     await rm(staging, { recursive: true, force: true });
     throw error;
   }
   log(`MongoDB ready at ${MONGOD}`);
   return MONGOD;
+}
+
+/**
+ * Atomically publish a complete runtime. Two client processes may reach this
+ * point together on first launch. The first rename wins; later installers
+ * reuse that complete directory instead of deleting it underneath a launch.
+ */
+export async function publishMongoInstall(staging, destination, completeName, binaryName) {
+  try {
+    await rename(staging, destination);
+  } catch (error) {
+    const complete = path.join(destination, completeName);
+    const binary = path.join(destination, binaryName);
+    if (
+      !["EEXIST", "ENOTEMPTY"].includes(error?.code) ||
+      !existsSync(complete) ||
+      !existsSync(binary)
+    ) {
+      throw error;
+    }
+    await rm(staging, { recursive: true, force: true });
+  }
 }
 
 /**

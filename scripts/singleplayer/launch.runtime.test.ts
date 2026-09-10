@@ -8,7 +8,7 @@
  * listening but silent, erroring, and not in singleplayer mode at all.
  */
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createTcpServer, type Server as TcpServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -163,6 +163,30 @@ describe("tailOfFile", () => {
     expect(launcher.tailOfFile(file, 2)).toEqual(["line 19998", "line 19999"]);
     expect(launcher.tailOfFile(path.join(dir, "missing.log"))).toEqual([]);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("publishMongoInstall", () => {
+  it("keeps the first complete runtime when two clients install concurrently", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ahd-mongo-race-"));
+    const destination = path.join(root, "mongodb");
+    const first = path.join(root, "first");
+    const second = path.join(root, "second");
+    for (const [dir, marker] of [
+      [first, "first"],
+      [second, "second"],
+    ] as const) {
+      mkdirSync(dir);
+      writeFileSync(path.join(dir, "mongod"), marker);
+      writeFileSync(path.join(dir, ".complete-test"), "test");
+    }
+
+    await launcher.publishMongoInstall(first, destination, ".complete-test", "mongod");
+    await launcher.publishMongoInstall(second, destination, ".complete-test", "mongod");
+
+    expect(readFileSync(path.join(destination, "mongod"), "utf8")).toBe("first");
+    expect(existsSync(second)).toBe(false);
+    rmSync(root, { recursive: true, force: true });
   });
 });
 
