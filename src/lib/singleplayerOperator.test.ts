@@ -15,10 +15,10 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("singleplayer operator world availability", () => {
-  it("reads the reset-created maintenance state without silently clearing it", async () => {
+  it("ignores hosted maintenance inherited from a seed", async () => {
     const db = createMockDb();
     db.collection("gameConfig").findOne.mockResolvedValue({ maintenanceMode: "full" });
-    await expect(getSingleplayerWorldAvailability(db as unknown as Db)).resolves.toBe("full");
+    await expect(getSingleplayerWorldAvailability(db as unknown as Db)).resolves.toBe("off");
     expect(db.collectionMocks.gameConfig.updateOne).not.toHaveBeenCalled();
   });
 
@@ -27,9 +27,9 @@ describe("singleplayer operator world availability", () => {
     await expect(setSingleplayerWorldAvailability(db as unknown as Db, "open")).resolves.toBe(
       "off"
     );
-    expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
-      { _id: "default" },
-      expect.objectContaining({ $set: { maintenanceMode: "off" } }),
+    expect(db.collectionMocks.singleplayerRuntime.updateOne).toHaveBeenCalledWith(
+      { _id: "current" },
+      expect.objectContaining({ $set: { paused: false } }),
       { upsert: true }
     );
   });
@@ -39,12 +39,11 @@ describe("singleplayer operator world availability", () => {
     await expect(setSingleplayerWorldAvailability(db as unknown as Db, "sealed")).resolves.toBe(
       "full"
     );
-    expect(db.collectionMocks.gameConfig.updateOne).toHaveBeenCalledWith(
-      { _id: "default" },
+    expect(db.collectionMocks.singleplayerRuntime.updateOne).toHaveBeenCalledWith(
+      { _id: "current" },
       expect.objectContaining({
         $set: expect.objectContaining({
-          maintenanceMode: "full",
-          maintenanceEnabledBy: "singleplayer-operator",
+          paused: true,
         }),
       }),
       { upsert: true }

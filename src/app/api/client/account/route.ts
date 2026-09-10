@@ -1,3 +1,4 @@
+import { clientAvatarUrl } from "@/lib/client/avatarUrl";
 import { NextResponse } from "next/server";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
@@ -25,6 +26,9 @@ export async function GET() {
     {
       projection: {
         displayName: 1,
+        activeCharacterId: 1,
+        discordId: 1,
+        discordAvatar: 1,
         username: 1,
         patreonTier: 1,
         patreonExpiresAt: 1,
@@ -34,6 +38,21 @@ export async function GET() {
     }
   );
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 401 });
+  const character = user.activeCharacterId
+    ? await db.collection("characters").findOne(
+        {
+          _id: user.activeCharacterId,
+          userId: new ObjectId(auth.user.userId),
+          retiredAt: { $exists: false },
+        },
+        { projection: { avatarUrl: 1 } }
+      )
+    : null;
+  const discordAvatar =
+    user.discordId && user.discordAvatar
+      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(user.discordId)}/${encodeURIComponent(user.discordAvatar)}.png?size=128`
+      : null;
+  const avatarUrl = clientAvatarUrl(character?.avatarUrl) ?? clientAvatarUrl(discordAvatar);
   const nowMs = Date.now();
   const supporter = isPatreonActive(user.patreonTier ?? null, user.patreonExpiresAt ?? null);
   const plusActive = supporter && isPlusOrBetter(user.patreonTier ?? null);
@@ -56,6 +75,7 @@ export async function GET() {
       linked: true,
       displayName: user.displayName || user.username,
       supporter,
+      avatarUrl,
       singleplayer: {
         entitled: singleplayerEntitled,
         // A bounded cache keeps officially entitled players working through a

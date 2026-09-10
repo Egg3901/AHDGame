@@ -1,0 +1,36 @@
+{
+  "source": "AHDClient 2.3.0 bundled game payload",
+  "mustKeep": [
+    "server.js",
+    "launch.mjs",
+    "package.json",
+    ".next/static",
+    ".next/server",
+    "public/ahd-logo.png",
+    "node_modules/mongodb",
+    "node_modules/mongodb-438b504308ffa4be",
+    "node_modules/sharp",
+    "node_modules/@img/sharp-linux-x64",
+    "src/data/npp-images.json",
+    "src/data/counties/CA.json",
+    "content/changelog/public/1.8.0.md"
+  ],
+  "mustDrop": [
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "SECURITY.md",
+    "PUBLIC_CHANGELOG.md",
+    "README.md",
+    "src/app/cdn/[...path]/route.ts",
+    "src/app/cdn/[...path]/route.test.ts",
+    "src/lib/navair/CONTEXT.md",
+    "src/lib/seeds/audit/era-1991-audit-2026-06-22.md",
+    "content/changelog/unreleased/temp-sp-access.md",
+    "content/changelog/dev/1.8.0.md",
+    "scripts/seeds/legislationTypes.admin.ts",
+    "scripts/sim/reports/atomic-defense-appropriation.md",
+    "shared/constants/README.md"
+  ]
+}

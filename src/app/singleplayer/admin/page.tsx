@@ -1,20 +1,19 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getDb } from "@/lib/mongodb";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { singleplayerStatus } from "@/lib/singleplayerServer";
-import { getSingleplayerWorldAvailability } from "@/lib/singleplayerOperator";
-import { SingleplayerAdmin } from "./SingleplayerAdmin";
 
 export const dynamic = "force-dynamic";
 
+/** Old Control Room bookmarks return to the game. Native setup owns world rules. */
 export default async function SingleplayerAdminPage() {
   if (!isSingleplayer()) notFound();
-  const db = await getDb();
-  const [status, mode] = await Promise.all([
-    singleplayerStatus(db),
-    getSingleplayerWorldAvailability(db),
-  ]);
-  return (
-    <SingleplayerAdmin status={status} initialAvailability={mode === "off" ? "open" : "sealed"} />
+  const status = await singleplayerStatus(await getDb());
+  redirect(
+    status.mode === "worldsim"
+      ? status.spectatorPath
+      : status.hasCharacter
+        ? "/profile"
+        : "/create-character"
   );
 }

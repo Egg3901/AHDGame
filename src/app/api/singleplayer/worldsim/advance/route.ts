@@ -5,6 +5,7 @@ import { requireSingleplayer } from "@/lib/api/requireSingleplayer";
 import { getDb } from "@/lib/mongodb";
 import { parseJsonBody } from "@/lib/api/validate";
 import { advanceWorldsim, MAX_WORLD_SIM_BATCH_TURNS } from "@/lib/singleplayerWorld";
+import { getSingleplayerWorldAvailability } from "@/lib/singleplayerOperator";
 import { getSingleplayerConfig } from "@/lib/singleplayerServer";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +24,12 @@ export async function POST(request: Request) {
     const config = await getSingleplayerConfig(db);
     if (config?.mode !== "worldsim") {
       return NextResponse.json({ error: "Worldsim mode is not configured" }, { status: 409 });
+    }
+    if ((await getSingleplayerWorldAvailability(db)) !== "off") {
+      return NextResponse.json(
+        { error: "Resume the world before ending a turn." },
+        { status: 409 }
+      );
     }
     const playerCount = await db
       .collection("characters")

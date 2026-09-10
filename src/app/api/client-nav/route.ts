@@ -1,3 +1,4 @@
+import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { SignJWT, decodeJwt } from "jose";
@@ -128,6 +129,7 @@ export async function GET() {
         {
           projection: {
             wikiDisabled: 1,
+            singleplayerConfig: 1,
             rpgStatsEnabled: 1,
             conflictsEnabled: 1,
             settlementCrisisEnabled: 1,
@@ -652,7 +654,9 @@ export async function GET() {
       {
         user: {
           id: userId,
-          username: authUser.username,
+          username: isSingleplayer() ? user.displayName || "Admin" : authUser.username,
+          singleplayer: isSingleplayer(),
+          singleplayerMode: isSingleplayer() ? (gameState?.singleplayerConfig?.mode ?? null) : null,
           isAdmin: authUser.isAdmin ?? false,
           isModerator:
             (authUser.isAdmin ?? false) || user.role === "moderator" || user.role === "admin",
