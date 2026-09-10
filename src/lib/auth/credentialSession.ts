@@ -1,3 +1,4 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import type { UserPayload } from "@/lib/auth";
 import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 
@@ -17,11 +18,5 @@ export function credentialSessionIsCurrent(
     isAuthMigrationFenced(account)
   )
     return false;
-  const cutoff = account.authRevokedAt;
-  if (cutoff === undefined || cutoff === null) return true;
-  return (
-    cutoff instanceof Date &&
-    Number.isFinite(cutoff.getTime()) &&
-    cutoff.getTime() < payload.iat * 1000
-  );
+  return !isTokenRevokedByCutoff(account.authRevokedAt, payload.iat);
 }

@@ -300,6 +300,29 @@ describe("auth", () => {
       }
     );
 
+    it.each([0, false, "", "2026-01-01", {}, new Date(NaN)])(
+      "denies cookie, token and character principals for malformed revocation data: %s",
+      async (authRevokedAt) => {
+        const current = { ...mockUser, authRevokedAt };
+        mockCookies.mockResolvedValue({ get: vi.fn().mockReturnValue({ value: "token" }) });
+        mockJwtVerify.mockResolvedValue({
+          payload: {
+            userId: "507f1f77bcf86cd799439011",
+            email: "test@example.invalid",
+            username: "testuser",
+            iat: Math.floor(Date.now() / 1000),
+          },
+        });
+        mockGetUsersCollection.mockResolvedValue({ findOne: vi.fn().mockResolvedValue(current) });
+        const { getAuthUser, getAuthUserFromToken, getAuthUserWithCharacter } =
+          await import("./auth");
+        expect(await getAuthUser()).toBeNull();
+        expect(await getAuthUserFromToken("token")).toBeNull();
+        expect(await getAuthUserWithCharacter()).toBeNull();
+        expect(mockGetCharactersCollection).not.toHaveBeenCalled();
+      }
+    );
+
     it("returns null when the user is banned", async () => {
       const bannedUser = { ...mockUser, isBanned: true, banReason: "Violation of rules" };
       const validPayload = {
