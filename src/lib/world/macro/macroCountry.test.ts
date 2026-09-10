@@ -203,7 +203,8 @@ describe("Austria Tier-2 sphere-macro economy", () => {
       expect(db.collectionMocks.macroCountries!.bulkWrite).toHaveBeenCalledTimes(1);
 
       const seededIds = db.collectionMocks.macroCountries!.bulkWrite.mock.calls[0]![0].map(
-        (op) => op.replaceOne.replacement.entityId as string
+        (op: { replaceOne: { replacement: { entityId: string } } }) =>
+          op.replaceOne.replacement.entityId
       );
       expect(seededIds).toEqual(expect.arrayContaining([...ALL_1953_MACRO_ENTITY_IDS]));
     });
