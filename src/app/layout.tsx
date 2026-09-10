@@ -234,7 +234,7 @@ export default async function RootLayout({
   } catch {
     // keep the COUNTRY_ORDER + 2019-default + no-override fallback
   }
-  if (!isMaintenanceBypassPath(pathname)) {
+  if (!isSingleplayer() && !isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws. The proxy is the primary
     // gate; this layout-level check is defense in depth, so a transient DB
     // blip here should render the page rather than 500 the whole layout.
@@ -360,6 +360,7 @@ export default async function RootLayout({
                         <CharacterStatsProvider>
                           {!isWikiSubdomain && (
                             <NavbarWrapper
+                              singleplayer={singleplayer}
                               displayMode={displayMode}
                               initialPageCountry={initialPageCountry}
                             />
@@ -391,7 +392,7 @@ export default async function RootLayout({
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
                           {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
                           {!isWikiSubdomain && <StatusBar />}
-                          {!isWikiSubdomain && <TurnProgressToast />}
+                          {!isWikiSubdomain && singleplayer && <TurnProgressToast />}
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}
                           {!isNativeApp && <CookieConsentBanner />}

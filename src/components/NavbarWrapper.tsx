@@ -233,13 +233,15 @@ function navbarWrapperReducer(
 export function NavbarWrapper({
   displayMode,
   initialPageCountry,
+  singleplayer = false,
 }: {
+  singleplayer?: boolean;
   displayMode?: "focused" | "classic";
   initialPageCountry?: CountryId | null;
 }) {
   const t = useTranslations("nav");
   const pathname = usePathname();
-  const useLightweightNav = isLightweightLayoutPath(pathname);
+  const useLightweightNav = !singleplayer && isLightweightLayoutPath(pathname);
   const isExcludedPath = isChromeHiddenPath(pathname);
   const router = useRouter();
   const { showToast } = useToast();
@@ -393,6 +395,13 @@ export function NavbarWrapper({
   ]);
 
   useEffect(() => {
+    if (!singleplayer) return;
+    const refresh = () => void fetchStatusData(navData?.user?.statusBarLayout);
+    window.addEventListener("ahd:turn-complete", refresh);
+    return () => window.removeEventListener("ahd:turn-complete", refresh);
+  }, [singleplayer, fetchStatusData, navData?.user?.statusBarLayout]);
+
+  useEffect(() => {
     statusLoadedRef.current = false;
   }, [navData?.user?.id, navData?.user?.character?.id]);
 
@@ -524,7 +533,9 @@ export function NavbarWrapper({
         <>
           {useExperimentalNav ? (
             <ExperimentalNavbar
-              user={state.user ?? undefined}
+              user={
+                state.user ?? (singleplayer ? { username: "Admin", singleplayer: true } : undefined)
+              }
               showProfile={state.hasCharacter}
               currentParty={state.currentParty ?? undefined}
               unreadCount={state.unreadCount}
@@ -550,7 +561,12 @@ export function NavbarWrapper({
             />
           ) : (
             <Navbar
-              user={useLightweightNav ? undefined : (state.user ?? undefined)}
+              user={
+                useLightweightNav
+                  ? undefined
+                  : (state.user ??
+                    (singleplayer ? { username: "Admin", singleplayer: true } : undefined))
+              }
               showProfile={useLightweightNav ? false : state.hasCharacter}
               homeState={useLightweightNav ? undefined : (state.homeState ?? undefined)}
               currentParty={useLightweightNav ? undefined : (state.currentParty ?? undefined)}

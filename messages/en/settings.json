@@ -83,28 +83,82 @@
       }
     },
     "sections": {
-      "accountProfile": { "label": "Profile", "summary": "Username & email" },
-      "identity": { "label": "Connected Accounts", "summary": "Discord, Google" },
-      "appearance": { "label": "Appearance", "summary": "Theme, experimental UI" },
-      "patreon": { "label": "Patreon", "summary": "Supporter benefits" },
-      "supporterPerks": { "label": "Supporter Perks", "summary": "Wall name, politician rename" },
-      "referrals": { "label": "Referrals", "summary": "Invite friends" },
-      "achievements": { "label": "Achievements", "summary": "Badges & milestones" },
-      "retiredCharacters": { "label": "Retired Characters", "summary": "Past character records" },
-      "security": { "label": "Security", "summary": "Password" },
-      "apiKeys": { "label": "API Keys", "summary": "API access & automation" },
-      "danger": { "label": "Danger Zone", "summary": "Delete account" },
-      "profile": { "label": "Character Profile", "summary": "Name, bio, avatar, header image" },
-      "demographics": { "label": "Background", "summary": "Race, gender, education" },
-      "politics": { "label": "Policy Positions", "summary": "Economic & social" },
-      "campaignSong": { "label": "Campaign Song", "summary": "Profile music" },
-      "characterDanger": { "label": "Character Danger Zone", "summary": "Retire character" },
+      "accountProfile": {
+        "label": "Profile",
+        "summary": "Username & email"
+      },
+      "identity": {
+        "label": "Connected Accounts",
+        "summary": "Discord, Google"
+      },
+      "appearance": {
+        "label": "Appearance",
+        "summary": "Theme, experimental UI"
+      },
+      "patreon": {
+        "label": "Patreon",
+        "summary": "Supporter benefits"
+      },
+      "supporterPerks": {
+        "label": "Supporter Perks",
+        "summary": "Wall name, politician rename"
+      },
+      "referrals": {
+        "label": "Referrals",
+        "summary": "Invite friends"
+      },
+      "achievements": {
+        "label": "Achievements",
+        "summary": "Badges & milestones"
+      },
+      "retiredCharacters": {
+        "label": "Retired Characters",
+        "summary": "Past character records"
+      },
+      "security": {
+        "label": "Security",
+        "summary": "Password"
+      },
+      "apiKeys": {
+        "label": "API Keys",
+        "summary": "API access & automation"
+      },
+      "danger": {
+        "label": "Danger Zone",
+        "summary": "Delete account"
+      },
+      "profile": {
+        "label": "Character Profile",
+        "summary": "Name, bio, avatar, header image"
+      },
+      "demographics": {
+        "label": "Background",
+        "summary": "Race, gender, education"
+      },
+      "politics": {
+        "label": "Policy Positions",
+        "summary": "Economic & social"
+      },
+      "campaignSong": {
+        "label": "Campaign Song",
+        "summary": "Profile music"
+      },
+      "characterDanger": {
+        "label": "Character Danger Zone",
+        "summary": "Retire character"
+      },
       "imperialProfile": {
         "label": "Imperial Profile",
         "summary": "Name, bio, avatar, header image"
       },
-      "royalIdentity": { "label": "Royal Identity", "summary": "Royal House, Coat of Arms" },
-      "royalAnthem": { "label": "Royal Anthem", "summary": "Profile music" }
+      "royalIdentity": {
+        "label": "Royal Identity",
+        "summary": "Royal House, Coat of Arms"
+      },
+      "royalAnthem": {
+        "label": "Royal Anthem",
+        "summary": "Profile music"
+      }
     },
     "buckets": {
       "account": {
@@ -150,7 +204,9 @@
         "alertMe": "Alert me when a new world turn is ready.",
         "loadingPreference": "Loading preference…",
         "on": "On",
-        "muted": "Muted"
+        "muted": "Muted",
+        "localTurns": "Use End turn to advance your local world when you are ready.",
+        "playerControlled": "You control the pace"
       },
       "interface": {
         "reducedMotion": "Reduced motion",

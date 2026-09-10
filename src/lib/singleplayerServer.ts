@@ -4,10 +4,8 @@ import { ObjectId, type Db } from "mongodb";
 import { SINGLEPLAYER_USER_ID, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { CDN_GEO } from "@/lib/images/cdnUrls";
 import { DEFAULT_GAME_STATE_FLAGS } from "@/lib/seeds/reference/featureFlagDefaults";
-import { invalidateMaintenanceCache } from "@/lib/maintenanceStatus";
 import type {
   GameState,
-  GameConfig,
   NppAutonomyLevel,
   SingleplayerConfig,
   SingleplayerDifficulty,
@@ -44,7 +42,7 @@ export function singleplayerCdnDir(env: Record<string, string | undefined> = pro
  */
 export async function ensureSingleplayerUser(
   db: Db,
-  displayName = "Player"
+  displayName = "Admin"
 ): Promise<{ created: boolean }> {
   const users = db.collection("users");
   const _id = new ObjectId(SINGLEPLAYER_USER_ID);
@@ -53,6 +51,7 @@ export async function ensureSingleplayerUser(
   const result = await users.updateOne(
     { _id },
     {
+      $set: { role: claims.role, isAdmin: claims.isAdmin },
       $setOnInsert: {
         _id,
         email: claims.email,
@@ -60,8 +59,6 @@ export async function ensureSingleplayerUser(
         displayName,
         // Never a valid hash: the proxy mints the session, nobody logs in.
         password: "!singleplayer-no-login",
-        role: claims.role,
-        isAdmin: claims.isAdmin,
         hasCompletedSetup: false,
         createdAt: now,
         updatedAt: now,
@@ -98,22 +95,6 @@ export interface SingleplayerStatus {
   warmAssets: string[];
 }
 
-async function clearSingleplayerMaintenance(db: Db): Promise<void> {
-  const result = await db.collection<GameConfig>("gameConfig").updateOne(
-    { _id: "default", maintenanceMode: { $ne: "off" } },
-    {
-      $set: { maintenanceMode: "off" },
-      $unset: {
-        maintenanceReason: "",
-        maintenanceExpectedEnd: "",
-        maintenanceEnabledBy: "",
-        maintenanceEnabledAt: "",
-      },
-    }
-  );
-  if (result.modifiedCount > 0) invalidateMaintenanceCache();
-}
-
 /**
  * What the launcher and the /singleplayer screen need to choose between
  * "new game" and "continue". Provisions the local account on first contact,
@@ -121,7 +102,6 @@ async function clearSingleplayerMaintenance(db: Db): Promise<void> {
  */
 export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
   const account = await ensureSingleplayerUser(db);
-  await clearSingleplayerMaintenance(db);
   const userId = new ObjectId(SINGLEPLAYER_USER_ID);
   const [gameState, character, characterCount] = await Promise.all([
     db
@@ -130,7 +110,9 @@ export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
         { _id: "current" },
         { projection: { currentTurn: 1, preset: 1, isProcessing: 1, singleplayerConfig: 1 } }
       ),
-    db.collection("characters").findOne({ userId }, { projection: { _id: 1, name: 1 } }),
+    db
+      .collection("characters")
+      .findOne({ userId, retiredAt: { $exists: false } }, { projection: { _id: 1, name: 1 } }),
     db.collection("characters").countDocuments({ retiredAt: { $exists: false } }),
   ]);
   const config = gameState?.singleplayerConfig;
@@ -195,7 +177,6 @@ export async function setSingleplayerConfig(
       },
     }
   );
-  await clearSingleplayerMaintenance(db);
   return persisted;
 }
 
