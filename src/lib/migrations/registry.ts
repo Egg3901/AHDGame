@@ -75,6 +75,8 @@ import { migration as uniqueVotingPartyElections } from "./entries/2026-09-09-un
 import { migration as manifestosIndex } from "./entries/2026-09-06-manifestos-index";
 import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
 
+import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
+
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
   bondCurrencyStamp,
@@ -235,6 +237,7 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1295: one voting leadership/committee race per seat. Seed indexes
   // cover a fresh bootstrap; this reaches worlds that are already running.
   uniqueVotingPartyElections,
+  providerIdentityIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
