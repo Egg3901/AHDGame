@@ -204,7 +204,7 @@ function suppliedPasswordOrThrow(password: unknown): string {
  * This is not an authentication grant, membership check, durable proof,
  * fence, session, or target activation. It does not bind a canonical
  * account or enrollment operation. The caller still has to snapshot the
- * the SAME original loaded source state once those bindings exist, then
+ * same original loaded source state once those bindings exist, then
  * compare-and-set against that original snapshot before any migration write.
  * A later database read is not the state whose password was verified. This
  * helper detects mutations of its input during bcrypt; it does not detect
