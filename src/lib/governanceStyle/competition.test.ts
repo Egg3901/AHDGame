@@ -92,6 +92,54 @@ describe("assessDemocraticCompetition", () => {
     });
   });
 
+  it("does not punish a 5-4 Supreme Court", () => {
+    const score = assessDemocraticCompetition({
+      seatsByParty: { dem: 218, rep: 217 },
+      justicesByParty: { "1": 5, "2": 4 },
+    });
+    expect(score).toMatchObject({
+      courtDominantPartyId: "1",
+      courtDominantShare: 55.6,
+      courtSeated: 9,
+      courtPenalty: 0,
+      penalty: 0,
+    });
+  });
+
+  it("scales a packed Court from 6-3 up to a 9-0 cap", () => {
+    expect(assessDemocraticCompetition({ justicesByParty: { "1": 6, "2": 3 } }).courtPenalty).toBe(
+      4
+    );
+    expect(assessDemocraticCompetition({ justicesByParty: { "1": 7, "2": 2 } }).courtPenalty).toBe(
+      10.7
+    );
+    expect(assessDemocraticCompetition({ justicesByParty: { "1": 8, "2": 1 } }).courtPenalty).toBe(
+      17.3
+    );
+    expect(assessDemocraticCompetition({ justicesByParty: { "1": 9 } }).courtPenalty).toBe(24);
+  });
+
+  it("ignores vacant seats and does not score a Court with fewer than 5 justices", () => {
+    const short = assessDemocraticCompetition({ justicesByParty: { "1": 4 } });
+    expect(short).toMatchObject({ courtSeated: 4, courtPenalty: 0, courtDominantPartyId: null });
+    const sixOne = assessDemocraticCompetition({ justicesByParty: { "1": 6, "2": 1 } });
+    expect(sixOne).toMatchObject({
+      courtSeated: 7,
+      courtDominantShare: 85.7,
+      courtPenalty: 15.4,
+    });
+  });
+
+  it("adds Court packing to the existing legislative penalty", () => {
+    const score = assessDemocraticCompetition({
+      seatsByParty: { dem: 75, rep: 25 },
+      justicesByParty: { dem: 9 },
+    });
+    expect(score.seatMarginPenalty).toBe(12);
+    expect(score.courtPenalty).toBe(24);
+    expect(score.penalty).toBe(36);
+  });
+
   it("stops the control streak at the last alternation", () => {
     const score = assessDemocraticCompetition({
       seatsByParty: { dem: 60, rep: 40 },

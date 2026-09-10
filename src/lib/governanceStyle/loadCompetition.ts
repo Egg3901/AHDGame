@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import type { ElectedOfficial } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
+import type { SupremeCourtSeat } from "@/lib/db/types/scotus";
 import {
   assessDemocraticCompetition,
   type DemocraticCompetition,
@@ -26,7 +27,7 @@ export async function loadDemocraticCompetition(
     chamberKeys.push(legislature.upperChamber.key);
   }
   const officeType = chamberKeys.length === 1 ? chamberKeys[0] : { $in: chamberKeys };
-  const [officials, history] = await Promise.all([
+  const [officials, history, courtSeats] = await Promise.all([
     db
       .collection<ElectedOfficial>("electedOfficials")
       .find({ countryId, officeType })
@@ -41,6 +42,23 @@ export async function loadDemocraticCompetition(
       .find({ countryId, officeType })
       .sort({ turn: 1 })
       .toArray(),
+    countryId === "US"
+      ? db
+          .collection<SupremeCourtSeat>("supremeCourtSeats")
+          .find({ countryId: "US" })
+          .project<
+            Pick<
+              SupremeCourtSeat,
+              "justiceParty" | "justiceMode" | "justiceCharacterId" | "justiceNppId"
+            >
+          >({
+            justiceParty: 1,
+            justiceMode: 1,
+            justiceCharacterId: 1,
+            justiceNppId: 1,
+          })
+          .toArray()
+      : Promise.resolve([]),
   ]);
 
   const chamberTallies = new Map<string, Record<string, number>>();
@@ -54,10 +72,21 @@ export async function loadDemocraticCompetition(
   const executiveTenure = gameState?.presidentialTenureByCountry?.[countryId];
   const hasSeparateExecutive = config.governmentType === "presidential";
 
+  const justicesByParty: Record<string, number> = {};
+  for (const seat of courtSeats) {
+    const occupied =
+      seat.justiceCharacterId != null ||
+      seat.justiceNppId != null ||
+      seat.justiceMode === "historical";
+    if (!occupied || !seat.justiceParty) continue;
+    justicesByParty[seat.justiceParty] = (justicesByParty[seat.justiceParty] ?? 0) + 1;
+  }
+
   return assessDemocraticCompetition({
     chambersByParty: chamberKeys.map((key) => chamberTallies.get(key) ?? {}),
     history,
     executivePartyId: hasSeparateExecutive ? executiveTenure?.party : null,
     consecutiveExecutiveTerms: hasSeparateExecutive ? (executiveTenure?.consecutiveTerms ?? 0) : 0,
+    justicesByParty,
   });
 }

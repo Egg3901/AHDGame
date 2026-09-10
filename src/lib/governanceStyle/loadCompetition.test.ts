@@ -88,6 +88,50 @@ describe("loadDemocraticCompetition", () => {
     expect(result.penalty).toBe(15);
   });
 
+  it("adds a Court-packing penalty from seated US justices", async () => {
+    db.collection("electedOfficials")
+      .find()
+      .toArray.mockResolvedValue([
+        { officeType: "house", party: "1", seatsHeld: 218 },
+        { officeType: "house", party: "2", seatsHeld: 217 },
+        { officeType: "senate", party: "1", seatsHeld: 50 },
+        { officeType: "senate", party: "2", seatsHeld: 50 },
+      ]);
+    db.collection("supremeCourtSeats")
+      .find()
+      .toArray.mockResolvedValue([
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        { justiceMode: "npp", justiceParty: "1", justiceNppId: "n1" },
+        { justiceMode: "npp", justiceParty: "1", justiceNppId: "n2" },
+        { justiceMode: "npp", justiceParty: "1", justiceNppId: "n3" },
+        { justiceMode: "character", justiceParty: "1", justiceCharacterId: "c1" },
+        { justiceMode: "npp", justiceParty: "2", justiceNppId: "n4" },
+        { justiceMode: null, justiceParty: null, justiceCharacterId: null, justiceNppId: null },
+        { justiceMode: null, justiceParty: null, justiceCharacterId: null, justiceNppId: null },
+      ]);
+
+    const result = await loadDemocraticCompetition(db as unknown as Db, "US", "1953-default", null);
+
+    expect(result).toMatchObject({
+      courtSeated: 7,
+      courtDominantPartyId: "1",
+      courtDominantShare: 85.7,
+      courtPenalty: 15.4,
+    });
+    expect(result.penalty).toBe(result.seatMarginPenalty + 15.4);
+  });
+
   it("does not apply a separate presidential signal to parliamentary government", async () => {
     db.collection("electedOfficials")
       .find()
