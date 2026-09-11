@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getOAuthStateCookieOptions } from "@/lib/auth";
+import { getUnifiedOidcFlowCookieOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 
 export async function GET() {
@@ -26,7 +26,7 @@ export async function GET() {
   }>("unifiedOidcFlows");
   await flows.insertOne({ _id: flowId, state, nonce, verifier, expiresAt });
   await flows.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-  (await cookies()).set("ahd_unified_oidc_flow", flowId, await getOAuthStateCookieOptions(300));
+  (await cookies()).set("ahd_unified_oidc_flow", flowId, getUnifiedOidcFlowCookieOptions(300));
   const url = new URL(`${issuer}/protocol/openid-connect/auth`);
   url.search = new URLSearchParams({
     client_id: clientId,
