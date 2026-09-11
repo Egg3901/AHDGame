@@ -38,9 +38,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const cookieStore = await cookies();
-  const flowId = cookieStore.get("ahd_unified_oidc_flow")?.value;
-  cookieStore.delete("ahd_unified_oidc_flow");
-  if (!code || !state || !flowId)
+  if (!code || !state)
     return NextResponse.redirect(new URL("/login?error=unified_state", appOrigin));
   const db = await getDb();
   const flow = await db
@@ -51,7 +49,7 @@ export async function GET(request: Request) {
       verifier: string;
       expiresAt: Date;
     }>("unifiedOidcFlows")
-    .findOneAndDelete({ _id: flowId, state, expiresAt: { $gt: new Date() } });
+    .findOneAndDelete({ state, expiresAt: { $gt: new Date() } });
   if (!flow) return NextResponse.redirect(new URL("/login?error=unified_state", appOrigin));
   const tokenResponse = await fetch(`${issuer}/protocol/openid-connect/token`, {
     method: "POST",
