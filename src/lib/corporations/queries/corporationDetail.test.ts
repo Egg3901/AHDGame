@@ -138,6 +138,8 @@ describe("loadCorporationDetailView", () => {
       npcDeposits: 6_000,
       totalDeposits: 6_000,
       totalLoans: 4_000,
+      lastBankingIncome: 100,
+      lastBankingIncomeTurn: 9,
     };
     const corporation = makeCorporation({
       _id: new ObjectId(),
@@ -168,6 +170,9 @@ describe("loadCorporationDetailView", () => {
 
     expect(result.balanceSheet.assets.bankEquity).toBe(8_000);
     expect(result.balanceSheet.assets.bankValuation).toBe(6_000);
+    expect(result.balanceSheet.assets.bankNPV).toBe(32_000);
+    expect(result.financials.bankingIncome).toBe(2_400);
+    expect(result.financials.bankingIncomeTurn).toBe(9);
   });
 
   it("applies dominance margin penalty for dominant sectors on the corp page", async () => {
