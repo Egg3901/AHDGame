@@ -136,6 +136,12 @@ export default function LoginPageClient({
     window.location.href = oauthLoginUrl("/api/auth/google/login");
   };
 
+  const beginLakesideLogin = () => {
+    // Full navigation is required because the route immediately leaves the application for OIDC.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = "/api/auth/oidc/login";
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -446,6 +452,14 @@ export default function LoginPageClient({
             </div>
 
             <div className="space-y-3">
+              <button
+                type="button"
+                onClick={beginLakesideLogin}
+                className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-body font-semibold text-primary shadow-card transition-colors hover:bg-primary/20"
+              >
+                {t("continueWithLakeside")}
+              </button>
+
               <button
                 type="button"
                 onClick={beginGoogleOAuth}
