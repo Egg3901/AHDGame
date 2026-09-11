@@ -76,6 +76,7 @@ import { migration as manifestosIndex } from "./entries/2026-09-06-manifestos-in
 import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
 
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
+import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -238,6 +239,7 @@ export const MIGRATIONS: Migration[] = [
   // cover a fresh bootstrap; this reaches worlds that are already running.
   uniqueVotingPartyElections,
   providerIdentityIndexes,
+  sourceFenceIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
