@@ -48,6 +48,10 @@ export type EventEffect =
       pct: number;
       durationTurns: number;
     }
+  /** Democratic-health change applied across the institutional metric basket. */
+  | { type: "democraticHealthDelta"; delta: number }
+  /** Temporary relief for the sitting President's additional health drag. */
+  | { type: "presidentialHealthRelief"; pct: number; durationTurns: number }
   /**
    * Temporary domestic relief from repeated war-scare events. Stacks only to
    * a hard cap and lengthens the shared crisis interval; it cannot disable the
@@ -239,5 +243,21 @@ export interface WarEmergencyMitigationModifier {
   createdAt: Date;
 }
 
+export interface PresidentialHealthReliefModifier {
+  _id: ObjectId;
+  countryId: string;
+  kind: "presidentialHealthRelief";
+  partyId: string;
+  characterId: string;
+  pct: number;
+  appliedAtTurn: number;
+  expiresAtTurn: number;
+  sourceInstanceId?: ObjectId;
+  createdAt: Date;
+}
+
 export type CountryModifier =
-  SectorDemandCountryModifier | SectorOutputDemandCountryModifier | WarEmergencyMitigationModifier;
+  | SectorDemandCountryModifier
+  | SectorOutputDemandCountryModifier
+  | WarEmergencyMitigationModifier
+  | PresidentialHealthReliefModifier;
