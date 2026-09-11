@@ -337,6 +337,8 @@ type BankPassResult = {
   npcDepositDelta: number;
   npcBulkShortfall: number;
   premiumShortfall: number;
+  insurancePremiumPaid: number;
+  bankingIncome: number;
 };
 
 async function processOneBank(
@@ -358,6 +360,8 @@ async function processOneBank(
     npcDepositDelta: 0,
     npcBulkShortfall: 0,
     premiumShortfall: 0,
+    insurancePremiumPaid: 0,
+    bankingIncome: 0,
   };
 
   // Re-check idempotency against live doc (concurrent / retry safety).
@@ -828,6 +832,7 @@ async function processOneBank(
       });
       if (premium.status === "applied" && premium.appliedLegs.length === 2) {
         cashReserves = Math.max(0, cashReserves - premiumPaid);
+        result.insurancePremiumPaid += premiumPaid;
       }
     }
   }
@@ -900,10 +905,22 @@ async function processOneBank(
         "bankCharter.totalLoans": totalLoans,
         "bankCharter.depositCeiling": depositCeiling,
         "bankCharter.lastBankingTurn": turn,
+        "bankCharter.lastBankingIncome":
+          result.loanInterestCollected -
+          result.depositInterestPaid -
+          result.insurancePremiumPaid -
+          result.defaultsWrittenOff,
+        "bankCharter.lastBankingIncomeTurn": turn,
         updatedAt: new Date(),
       },
     }
   );
+
+  result.bankingIncome =
+    result.loanInterestCollected -
+    result.depositInterestPaid -
+    result.insurancePremiumPaid -
+    result.defaultsWrittenOff;
 
   return result;
 }
@@ -1012,6 +1029,8 @@ async function processLoanBookOnlyBank(
         // derived aggregate and the idempotency stamp are written here.
         "bankCharter.totalLoans": totalLoans,
         "bankCharter.lastBankingTurn": turn,
+        "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
+        "bankCharter.lastBankingIncomeTurn": turn,
         updatedAt: new Date(),
       },
     }
@@ -1525,6 +1544,27 @@ async function serviceInterbankAndCbMargin(
     const result = await serviceOneInterbankLoan(db, turn, loan);
     summary.interbankInterestPaid += result.interestPaid;
     summary.interbankDefaultsWrittenOff += result.writtenOff;
+    if (result.interestPaid > 0) {
+      // Interbank interest is a transfer between two bank owners. It is still
+      // real income for the lender and a real expense for the borrower, so the
+      // per-bank realized earnings snapshot needs both sides.
+      await Promise.all([
+        db.collection<Corporation>("corporations").updateOne(
+          { _id: loan.borrowerCorporationId, "bankCharter.status": "active" },
+          {
+            $inc: { "bankCharter.lastBankingIncome": -result.interestPaid },
+            $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
+          }
+        ),
+        db.collection<Corporation>("corporations").updateOne(
+          { _id: loan.lenderCorporationId, "bankCharter.status": "active" },
+          {
+            $inc: { "bankCharter.lastBankingIncome": result.interestPaid },
+            $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
+          }
+        ),
+      ]);
+    }
   }
 
   const marginBanks = await db
@@ -1581,6 +1621,7 @@ async function serviceInterbankAndCbMargin(
     const liquid = getCashReserves(charter);
     let paid = Math.min(interestDue, liquid);
     let shortfall = Math.max(0, interestDue - paid);
+    let facilityInterestDue = interestDue;
     const cbDocId = getBankId(getCountryIdForCurrency(currency));
 
     // The bank's debit and the CB's reserveBalance credit travel together
@@ -1665,6 +1706,7 @@ async function serviceInterbankAndCbMargin(
     if (hasWindow) {
       const windowRate = discountWindowRatePercent(primeByCurrency.get(currency) ?? 0);
       const windowInterestDue = (windowDebt * (windowRate / 100)) / TURNS_PER_YEAR;
+      facilityInterestDue += windowInterestDue;
       const availableAfterMargin = Math.max(0, liquid - paid);
       let windowPaid = Math.min(windowInterestDue, availableAfterMargin);
       let windowShortfall = Math.max(0, windowInterestDue - windowPaid);
@@ -1717,6 +1759,18 @@ async function serviceInterbankAndCbMargin(
 
     summary.cbMarginInterestPaid += paid;
     summary.cbMarginInterestShortfall += shortfall;
+
+    if (facilityInterestDue > 0) {
+      // An unpaid facility bill becomes arrears, which is still a liability and
+      // therefore an economic loss even when no cash leg could settle it.
+      await db.collection<Corporation>("corporations").updateOne(
+        { _id: corp._id, "bankCharter.status": "active" },
+        {
+          $inc: { "bankCharter.lastBankingIncome": -facilityInterestDue },
+          $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
+        }
+      );
+    }
   }
 }
 
