@@ -122,7 +122,7 @@ export async function migratePasswordLoginToUnified(sourceAccountId: string, pas
   const receiptReaderPool = databasePool(
     "lakeside_provision_receipt_reader",
     "LAKESIDE_PROVISION_READER_PASSWORD",
-    "identity"
+    "railway"
   );
   try {
     const db = await getDb();
