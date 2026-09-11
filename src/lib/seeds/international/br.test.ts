@@ -96,7 +96,7 @@ describe("BR Layer-1 exported symbols (backwards compat)", () => {
 // ── Data integrity ─────────────────────────────────────────────────────────────
 
 describe("Model data integrity", () => {
-  const ERAS: EraId[] = ["1979", "1991", "1999", "2007", "2019", "2023"];
+  const ERAS: EraId[] = ["1979", "1991", "1999", "2007", "2019", "2023", "2027"];
   const REGIONS = ["NORTE", "NORDESTE", "CENTRO_OESTE", "SUDESTE", "SUL"];
   const DIMS = ["ethnicity", "age", "education", "income", "urbanization"];
 

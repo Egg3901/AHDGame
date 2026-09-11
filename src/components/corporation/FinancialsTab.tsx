@@ -418,7 +418,8 @@ export default function FinancialsTab({
                 financials.bondCouponIncome > 0 ||
                 financials.dividendIncomeReceived > 0 ||
                 financials.imfFacilityPaymentDaily > 0 ||
-                financials.imfFacilityReceiptsDaily > 0) && (
+                financials.imfFacilityReceiptsDaily > 0 ||
+                balanceSheet?.assets.bankEquity != null) && (
                 <>
                   <div className="border-t border-card-border mt-3" />
                   <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
@@ -449,6 +450,17 @@ export default function FinancialsTab({
                       valueClass="text-success"
                       indent
                       tooltip="Coupon income from bonds held in the corporate portfolio."
+                    />
+                  )}
+                  {balanceSheet?.assets.bankEquity != null && (
+                    <FinRowTip
+                      label="Banking Subsidiary Income"
+                      value={fmtSigned(scaleMoney(financials.bankingIncome ?? 0, periodView))}
+                      valueClass={
+                        (financials.bankingIncome ?? 0) >= 0 ? "text-success" : "text-error"
+                      }
+                      indent
+                      tooltip="Realized net income from the ring-fenced bank last turn: loan interest less deposit interest, insurance, defaults, and facility interest. Principal movements are excluded."
                     />
                   )}
                   {financials.dividendIncomeReceived > 0 && (
@@ -683,6 +695,42 @@ export default function FinancialsTab({
               />
             )}
 
+            {balanceSheet.assets.bankEquity != null && (
+              <>
+                <div className="border-t border-card-border mt-3" />
+                <div className="text-xs font-medium text-muted mb-1 mt-3 pl-4">
+                  Banking Subsidiary
+                </div>
+                <FinRowTip
+                  label="Bank Valuation (75% recognized)"
+                  value={fmtSigned(balanceSheet.assets.bankValuation ?? 0)}
+                  valueClass={
+                    (balanceSheet.assets.bankValuation ?? 0) >= 0 ? "text-success" : "text-error"
+                  }
+                  indent
+                  tooltip="Recognized value of the bank's ring-fenced residual equity. It is 75% of book equity, the same haircut used by the market share-price model. Deposits are liabilities of the bank, not spendable holding-company cash."
+                />
+                <FinRowTip
+                  label="Bank Book Equity"
+                  value={fmtSigned(balanceSheet.assets.bankEquity)}
+                  valueClass={
+                    balanceSheet.assets.bankEquity >= 0 ? "text-foreground" : "text-error"
+                  }
+                  indent
+                  tooltip="Cash plus loans, less cash-backed deposits and bank borrowings. This is the bank owner's residual claim before the market valuation haircut."
+                />
+                {(balanceSheet.assets.bankNPV ?? 0) !== 0 && (
+                  <FinRowTip
+                    label="Banking NPV"
+                    value={fmt(balanceSheet.assets.bankNPV ?? 0)}
+                    valueClass="text-success"
+                    indent
+                    tooltip="Positive going-concern NPV from the bank's most recent realized net income, annualized on the same basis as sector NPV. Losses contribute zero NPV."
+                  />
+                )}
+              </>
+            )}
+
             <div className="border-t border-card-border mt-3" />
             <div className="flex items-center justify-between pl-4 mt-3">
               <div className="text-xs font-medium text-muted uppercase tracking-wider">
@@ -820,6 +868,16 @@ export default function FinancialsTab({
                   {fmt(balanceSheet.assets.totalSectorNPV)}
                 </span>
               </div>
+              {balanceSheet.assets.bankNPV != null && (
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-xs font-medium text-muted">Total Operating NPV</span>
+                  <span className="text-sm font-medium text-foreground tabular-nums">
+                    {fmt(
+                      balanceSheet.assets.totalOperatingNPV ?? balanceSheet.assets.totalSectorNPV
+                    )}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Portfolio Investments */}
@@ -901,7 +959,7 @@ export default function FinancialsTab({
                 value={fmt(balanceSheet.assets.totalAssets)}
                 valueClass="text-foreground"
                 bold
-                tooltip="Cash on hand plus the total NPV of all sectors. Represents the total estimated value of the corporation's assets."
+                tooltip="Cash on hand, sector and banking NPVs, recognized bank equity, portfolio holdings, and technology assets."
               />
             </div>
 
@@ -953,7 +1011,7 @@ export default function FinancialsTab({
               value={fmt(balanceSheet.assets.totalAssets)}
               valueClass="text-foreground"
               indent
-              tooltip="Sum of all assets: cash and sector NPVs."
+              tooltip="Sum of all recognized assets, including the ring-fenced bank valuation and banking NPV when a charter is active."
             />
             {balanceSheet.liabilities.totalDebt > 0 && (
               <FinRowTip

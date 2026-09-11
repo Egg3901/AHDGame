@@ -905,6 +905,13 @@ export const MIN_SHARE_PRICE = 0.01;
 // ─── New fundamental formula weights ──────────────────────────────────────
 /** Weight for tangible-book-per-share in the fundamental value formula. */
 export const FUNDAMENTAL_TANGIBLE_BOOK_WEIGHT = 1.0;
+/**
+ * Share of chartered-bank book equity recognized in the parent corporation's
+ * tangible book. Bank equity is ring-fenced from holding-company cash, and a
+ * partial weight keeps the valuation generous without treating every loan
+ * dollar as immediately liquid.
+ */
+export const BANK_EQUITY_VALUATION_WEIGHT = 0.75;
 /** Weight for earnings-power-per-share in the fundamental value formula. */
 export const FUNDAMENTAL_EARNINGS_POWER_WEIGHT = 0.4;
 /** Weight for growth-premium-per-share in the fundamental value formula. */

@@ -23,6 +23,7 @@ describe("runRequiredStartupMigrations", () => {
     expect(REQUIRED_STARTUP_MIGRATIONS.map((migration) => migration.id)).toEqual([
       "2026-09-03-equity-market-pools",
       "2026-09-03-repair-orphan-index-fund-state",
+      "2026-09-10-provider-identity-indexes",
       "2026-09-11-central-bank-pricing-phase-in",
     ]);
     expect(REQUIRED_STARTUP_MIGRATIONS.every((migration) => migration.idempotent)).toBe(true);

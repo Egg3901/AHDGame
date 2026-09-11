@@ -117,6 +117,16 @@ export interface BankCharter {
    */
   lastBankingTurn?: number;
   /**
+   * Realized net banking income from the most recent banking pass, in the
+   * charter currency. Principal movements are excluded: interest income,
+   * deposit interest, insurance, defaults, and facility interest are earnings
+   * lines, while lending and repayment only exchange one balance-sheet asset
+   * for another.
+   */
+  lastBankingIncome?: number;
+  /** Turn represented by `lastBankingIncome`. */
+  lastBankingIncomeTurn?: number;
+  /**
    * Idempotency key for depositor resolution after failure. Set when
    * resolveFailedBankDepositors finishes (insurance payouts / haircuts / holder flips).
    */

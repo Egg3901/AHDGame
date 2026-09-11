@@ -17,7 +17,8 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  *
  * Era gating (`validForPresets`): Lib Dems (1988), Greens (1990) and the DUP
  * (1971) don't exist in the 1953 preset; the historic Liberal Party exists
- * ONLY in 1953. Reform UK is 2019-only; UUP is 1991-only.
+ * ONLY in 1953. Reform UK is 2019/2027-only; UUP is 1991-only. Every other
+ * modern default continues into 2027-default.
  *
  * These are seeded as `isDefault: true` for the UK — they always exist
  * and cannot be deleted (equivalent to Democrat/Republican in the US game).
@@ -89,6 +90,7 @@ export const ukParties: PartySeed[] = [
       "2007-default",
       "2019-default",
       "2023-default",
+      "2027-default",
     ],
   },
   {
@@ -156,13 +158,16 @@ export const ukParties: PartySeed[] = [
       "2007-default",
       "2019-default",
       "2023-default",
+      "2027-default",
     ],
   },
   {
-    // 2019-only: Reform UK was founded in 2018-2019 (originally the Brexit
-    // Party, renamed January 2021). Not a meaningful political force in
-    // 1991 — Anti-Federalist League / Referendum Party era predecessors
-    // were marginal single-issue groups, not stable party defaults.
+    // Reform UK was founded in 2018-2019 (originally the Brexit Party,
+    // renamed January 2021). Not a meaningful political force in 1991:
+    // Anti-Federalist League / Referendum Party era predecessors were
+    // marginal single-issue groups, not stable party defaults. Valid in
+    // 2019 (Brexit Party era) and 2027 (14.3% and five seats at the 2024
+    // general election, leading national polls through 2026-27).
     seedOrder: 7,
     countryId: "UK",
     name: "Reform UK",
@@ -180,7 +185,7 @@ export const ukParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default"],
+    validForPresets: ["2019-default", "2027-default"],
   },
   {
     // Founded 1971 (Paisley) — in 1953 Northern Ireland unionism was the
@@ -210,6 +215,7 @@ export const ukParties: PartySeed[] = [
       "2007-default",
       "2019-default",
       "2023-default",
+      "2027-default",
     ],
   },
   {

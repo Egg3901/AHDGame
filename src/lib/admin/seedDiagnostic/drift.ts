@@ -50,6 +50,7 @@ export const USD_GDP_PER_CAPITA_BANDS: Record<EraId, { min: number; max: number 
   "2007": { min: 200, max: 150_000 },
   "2019": { min: 200, max: 250_000 },
   "2023": { min: 200, max: 250_000 },
+  "2027": { min: 200, max: 300_000 },
 };
 
 const RECONSTRUCTED_NOTE = "reconstructed baseline — seed files may have changed since reset";

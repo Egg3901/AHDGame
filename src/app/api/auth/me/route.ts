@@ -1,3 +1,5 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { randomUUID } from "crypto";
@@ -5,6 +7,7 @@ import { cookies } from "next/headers";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { clearAuthCookie, getTrackingCookieOptions, verifyAuth } from "@/lib/auth";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { needsCharacterHint } from "@/lib/auth/characterGate";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
@@ -31,7 +34,7 @@ function getPatreonAdPreference(
 // GET /api/auth/me — Returns the current user's profile, character, and unread notification counts.
 // Auth: public (manual JWT via cookie)
 // Errors: 401
-export async function GET() {
+export const GET = withNoStore(async () => {
   try {
     const cookieStore = await cookies();
     const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
@@ -47,7 +50,6 @@ export async function GET() {
     }
     const userId = payload.userId;
     const username = payload.username;
-    const isAdminFromJwt = payload.isAdmin;
 
     const db = await getDb();
     let user = await db.collection<User>("users").findOne({ _id: new ObjectId(userId) });
@@ -62,16 +64,19 @@ export async function GET() {
         { status: 403 }
       );
     }
-    if (
-      user.authRevokedAt &&
-      (typeof payload.iat !== "number" || user.authRevokedAt >= new Date(payload.iat * 1000))
-    ) {
+    if (isAuthMigrationFenced(user)) {
+      await clearAuthCookie("auth_me:source_fenced");
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+    if (isTokenRevokedByCutoff(user.authRevokedAt, payload.iat)) {
       await clearAuthCookie("auth_me:auth_revoked");
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
-    // Resolve admin status from JWT or DB (handles stale JWTs minted before isAdmin was added)
-    const isAdmin = isAdminFromJwt || user?.isAdmin || user?.role === "admin";
+    // Staff flags come from the current DB account record only. Verified JWT
+    // claims are identity (which account this session is for), never
+    // authority: an old token from before a demotion must not re-grant here.
+    const isAdmin = user?.isAdmin === true || user?.role === "admin";
     const isModerator = isAdmin || user?.role === "moderator";
 
     // Clear expired Patreon benefits inline — avoids 2 extra DB reads from clearExpiredPatreonBenefits
@@ -343,4 +348,4 @@ export async function GET() {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

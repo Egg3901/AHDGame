@@ -22,7 +22,7 @@ import { computeDerivedComposition } from "@/lib/positionEditor/derive";
 import { allStatesFullToCsv, downloadCsv } from "@/lib/positionEditor/csv";
 import type { EraId, EditorStateConfig } from "@/lib/positionEditor/types";
 
-const ERAS: EraId[] = ["1979", "1991", "1999", "2007", "2019", "2023"];
+const ERAS: EraId[] = ["1979", "1991", "1999", "2007", "2019", "2023", "2027"];
 
 type CountryId = "US" | "UK" | "DE" | "JP" | "IE" | "BR" | "CN";
 
