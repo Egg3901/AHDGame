@@ -33,6 +33,7 @@ export async function GET(request: Request) {
   ) {
     return NextResponse.redirect(new URL("/login?error=unified_unavailable", request.url));
   }
+  const appOrigin = new URL(redirectUri).origin;
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
@@ -40,7 +41,7 @@ export async function GET(request: Request) {
   const flowId = cookieStore.get("ahd_unified_oidc_flow")?.value;
   cookieStore.delete("ahd_unified_oidc_flow");
   if (!code || !state || !flowId)
-    return NextResponse.redirect(new URL("/login?error=unified_state", request.url));
+    return NextResponse.redirect(new URL("/login?error=unified_state", appOrigin));
   const db = await getDb();
   const flow = await db
     .collection<{
@@ -51,7 +52,7 @@ export async function GET(request: Request) {
       expiresAt: Date;
     }>("unifiedOidcFlows")
     .findOneAndDelete({ _id: flowId, state, expiresAt: { $gt: new Date() } });
-  if (!flow) return NextResponse.redirect(new URL("/login?error=unified_state", request.url));
+  if (!flow) return NextResponse.redirect(new URL("/login?error=unified_state", appOrigin));
   const tokenResponse = await fetch(`${issuer}/protocol/openid-connect/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -66,10 +67,10 @@ export async function GET(request: Request) {
     signal: AbortSignal.timeout(5000),
   });
   if (!tokenResponse.ok)
-    return NextResponse.redirect(new URL("/login?error=unified_exchange", request.url));
+    return NextResponse.redirect(new URL("/login?error=unified_exchange", appOrigin));
   const tokens = (await tokenResponse.json()) as { id_token?: string };
   if (!tokens.id_token)
-    return NextResponse.redirect(new URL("/login?error=unified_exchange", request.url));
+    return NextResponse.redirect(new URL("/login?error=unified_exchange", appOrigin));
   const jwks = createRemoteJWKSet(new URL(`${issuer}/protocol/openid-connect/certs`));
   const { payload } = await jwtVerify(tokens.id_token, jwks, {
     issuer,
@@ -77,16 +78,16 @@ export async function GET(request: Request) {
     requiredClaims: ["sub", "nonce", "exp", "iat"],
   });
   if (payload.nonce !== flow.nonce || typeof payload.sub !== "string")
-    return NextResponse.redirect(new URL("/login?error=unified_identity", request.url));
+    return NextResponse.redirect(new URL("/login?error=unified_identity", appOrigin));
   const sourceId = cohortSourceForSubject(payload.sub);
   if (!sourceId || !ObjectId.isValid(sourceId))
-    return NextResponse.redirect(new URL("/login?error=unified_cohort", request.url));
+    return NextResponse.redirect(new URL("/login?error=unified_cohort", appOrigin));
   const user = await db.collection("users").findOne({
     _id: new ObjectId(sourceId),
     "authMigrationFence.canonicalAccountId": { $exists: true },
     isBanned: { $ne: true },
   });
-  if (!user) return NextResponse.redirect(new URL("/login?error=unified_identity", request.url));
+  if (!user) return NextResponse.redirect(new URL("/login?error=unified_identity", appOrigin));
   const sid = randomUUID();
   const now = Math.floor(Date.now() / 1000);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
@@ -124,5 +125,5 @@ export async function GET(request: Request) {
     .setExpirationTime("7d")
     .sign(getJwtSecret());
   cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
-  return NextResponse.redirect(new URL("/", request.url));
+  return NextResponse.redirect(new URL("/", appOrigin));
 }
