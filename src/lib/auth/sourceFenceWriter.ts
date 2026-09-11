@@ -58,6 +58,14 @@ export interface SourceFenceResult {
   readonly fencedAt?: string;
 }
 
+export interface CredentialImportMaterial {
+  readonly credentialDigest: string;
+  readonly sourceAccountId: string;
+  readonly canonicalAccountId: string;
+  readonly enrollmentOperationId: string;
+  readonly snapshotDigest: string;
+}
+
 export interface SourceFenceWriterConfig {
   readonly client: MongoClient;
   readonly db: Db;
@@ -74,6 +82,8 @@ export interface SourceFenceWriterConfig {
   ) => Promise<CentralFenceAttestation | null>;
   readonly proofTimeoutMs?: number;
   readonly attestationTimeoutMs?: number;
+  /** Exact temporary privileged cohort allowed to discard legacy social login at the fence. */
+  readonly privilegedCohortSourceAccountIds?: readonly string[];
 }
 
 type StoredBinding = {
@@ -324,6 +334,7 @@ function hasNoUsableSocialMethod(
 }
 
 export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
+  const privilegedIds = config?.privilegedCohortSourceAccountIds ?? [];
   if (
     !config?.client ||
     typeof config.client.startSession !== "function" ||
@@ -334,7 +345,11 @@ export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
     config.clockSkewBoundMs <= 0 ||
     !safeText(config.clockSkewEvidence, 512) ||
     typeof config.loadSourceProof !== "function" ||
-    typeof config.loadCentralFenceAttestation !== "function"
+    typeof config.loadCentralFenceAttestation !== "function" ||
+    !Array.isArray(privilegedIds) ||
+    privilegedIds.length > 16 ||
+    privilegedIds.some((id) => typeof id !== "string" || !HEX24.test(id)) ||
+    new Set(privilegedIds).size !== privilegedIds.length
   ) {
     throw new TypeError("Invalid source fence writer configuration");
   }
@@ -347,6 +362,7 @@ export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
   const users = config.db.collection<SourceSecuritySnapshotUser>(USERS);
   const consumptions = config.db.collection<StoredBinding>(CONSUMPTIONS);
   const receipts = config.db.collection<StoredReceipt>(RECEIPTS);
+  const privilegedCohort = new Set(privilegedIds);
 
   async function reconcile(proof: SourceOwnershipProof): Promise<SourceFenceResult | null> {
     const session = config.client.startSession();
@@ -472,15 +488,18 @@ export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
             canonicalAccountId: proof.canonicalAccountId,
             enrollmentOperationId: proof.enrollmentOperationId,
           });
+          const privileged = privilegedCohort.has(proof.sourceAccountId);
           if (
             snapshot.snapshotDigest !== proof.snapshotDigest ||
             typeof user.password !== "string" ||
             !BCRYPT12.test(user.password) ||
-            !hasNoUsableSocialMethod(user, "googleId") ||
-            !hasNoUsableSocialMethod(user, "discordId") ||
-            user.role !== "player" ||
             (Object.hasOwn(user, "isBanned") && user.isBanned !== false) ||
-            (Object.hasOwn(user, "isAdmin") && user.isAdmin !== false)
+            (privileged
+              ? user.role !== "admin" || user.isAdmin !== true
+              : !hasNoUsableSocialMethod(user, "googleId") ||
+                !hasNoUsableSocialMethod(user, "discordId") ||
+                user.role !== "player" ||
+                (Object.hasOwn(user, "isAdmin") && user.isAdmin !== false))
           ) {
             throw new StaleFenceError();
           }
@@ -570,5 +589,62 @@ export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
     }
   }
 
-  return Object.freeze({ applySourceFence });
+  async function loadCredentialImportMaterial(
+    input: Readonly<{ proofId: string; receiptId: string }>
+  ): Promise<CredentialImportMaterial | null> {
+    if (
+      !exactKeys(input, ["proofId", "receiptId"]) ||
+      !UUID.test(input.proofId) ||
+      !UUID.test(input.receiptId)
+    ) {
+      throw new TypeError("Invalid source fence receipt input");
+    }
+    const session = config.client.startSession();
+    try {
+      let material: CredentialImportMaterial | null = null;
+      await session.withTransaction(
+        async () => {
+          const receipt = await receipts.findOne(
+            { _id: input.receiptId, proofId: input.proofId },
+            { session }
+          );
+          if (!receipt) return;
+          const consumption = await consumptions.findOne({ _id: input.proofId }, { session });
+          const user = await users.findOne(
+            { _id: new ObjectId(receipt.sourceAccountId) },
+            { session, projection: { authMigrationFence: 1 } }
+          );
+          const fence = user?.authMigrationFence as Record<string, unknown> | undefined;
+          if (
+            !consumption ||
+            consumption.receiptId !== receipt._id ||
+            consumption.proofDigest !== receipt.proofDigest ||
+            fence?.["proofId"] !== receipt.proofId ||
+            fence["receiptId"] !== receipt._id ||
+            fence["operationId"] !== receipt.enrollmentOperationId ||
+            fence["canonicalAccountId"] !== receipt.canonicalAccountId ||
+            fence["snapshotDigest"] !== receipt.snapshotDigest ||
+            !BCRYPT12.test(receipt.passwordDigest)
+          ) {
+            throw new ConflictFenceError();
+          }
+          material = Object.freeze({
+            credentialDigest: receipt.passwordDigest,
+            sourceAccountId: receipt.sourceAccountId,
+            canonicalAccountId: receipt.canonicalAccountId,
+            enrollmentOperationId: receipt.enrollmentOperationId,
+            snapshotDigest: receipt.snapshotDigest,
+          });
+        },
+        { readConcern: { level: "snapshot" }, readPreference: ReadPreference.primary }
+      );
+      return material;
+    } catch {
+      return null;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  return Object.freeze({ applySourceFence, loadCredentialImportMaterial });
 }

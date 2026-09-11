@@ -22,6 +22,10 @@ import { getCfFingerprint, isEmptyCfFingerprint } from "@/lib/utils/cfFingerprin
 import type { GameConfig } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import type { ActionAuditNet } from "@/lib/db/types/actionAuditLog";
+import {
+  isUnifiedMigrationCohort,
+  migratePasswordLoginToUnified,
+} from "@/lib/auth/unifiedMigration";
 
 /** Partially redact an IP for display in forensic surfaces — never store the
  * raw address in `actionAuditLog.net` (plan §3.1 "net" doc-comment). */
@@ -142,6 +146,19 @@ export async function POST(request: Request) {
         reason: "invalid_credentials",
       });
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    if (
+      process.env.AHD_UNIFIED_COHORT_ENABLED === "true" &&
+      isUnifiedMigrationCohort(user._id.toString())
+    ) {
+      await migratePasswordLoginToUnified(user._id.toString(), password);
+      const cookieStore = await cookies();
+      cookieStore.delete(AUTH_COOKIE_NAME);
+      return NextResponse.json({
+        message: "Unified account activated",
+        unifiedRedirect: "/api/auth/oidc/login",
+      });
     }
 
     // Persistent tracking cookie for anti-fraud duplicate detection.

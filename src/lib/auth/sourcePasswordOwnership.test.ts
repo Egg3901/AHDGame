@@ -125,6 +125,40 @@ describe("source password ownership", { timeout: 30000 }, () => {
     await expect(verifySourcePasswordOwnership(user, PASSWORD)).resolves.toBe(true);
   });
 
+  it("allows only an exact configured privileged cohort account", async () => {
+    const user: SourcePasswordOwnershipUser = {
+      ...baseUser(),
+      role: "admin",
+      isAdmin: true,
+      discordId: "synthetic-discord-subject",
+    };
+    await expect(
+      verifySourcePasswordOwnership(user, PASSWORD, {
+        privilegedCohortSourceAccountIds: [SOURCE_ACCOUNT_ID],
+      })
+    ).resolves.toBe(true);
+    await expectRejected(() =>
+      verifySourcePasswordOwnership(user, PASSWORD, {
+        privilegedCohortSourceAccountIds: ["fedcba987654321001234567"],
+      })
+    );
+  });
+
+  it("fails closed on malformed privileged cohort policy", async () => {
+    const compare = vi.spyOn(bcrypt, "compare");
+    await expectRejected(() =>
+      verifySourcePasswordOwnership(baseUser(), PASSWORD, {
+        privilegedCohortSourceAccountIds: ["not-an-object-id"],
+      })
+    );
+    await expectRejected(() =>
+      verifySourcePasswordOwnership(baseUser(), PASSWORD, {
+        privilegedCohortSourceAccountIds: [SOURCE_ACCOUNT_ID, SOURCE_ACCOUNT_ID],
+      })
+    );
+    expect(compare).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["unpaired leading surrogate", "\uD800x"],
     ["unpaired trailing surrogate", "x\uDC00"],

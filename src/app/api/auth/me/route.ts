@@ -23,6 +23,7 @@ import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { getNotificationBundleUserIds } from "@/lib/notifications/notificationBundle";
+import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
 
 function getPatreonAdPreference(
   user: User | null | undefined
@@ -64,7 +65,7 @@ export const GET = withNoStore(async () => {
         { status: 403 }
       );
     }
-    if (isAuthMigrationFenced(user)) {
+    if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(db, payload))) {
       await clearAuthCookie("auth_me:source_fenced");
       return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
