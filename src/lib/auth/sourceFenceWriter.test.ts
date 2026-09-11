@@ -281,6 +281,51 @@ suite("source migration fence against an isolated replica set", () => {
     );
   });
 
+  it("lets exactly one fresh proof win against another fresh proof and the stale original writer", async () => {
+    const operation = "52345678-90ab-4cde-b123-456789abcdef";
+    const { id, proof: original, store } = await issue(operation);
+    const fencedAtMs = original.observedAtMs + 10;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const issueFresh = () =>
+      store.issuePasswordProof({
+        sourceAccountId: id.toHexString(),
+        password: PASSWORD,
+        reserveEnrollment: async () => ({
+          version: 1,
+          sourceIssuer: ISSUER,
+          sourceSubject: id.toHexString(),
+          canonicalAccountId: CANONICAL,
+          enrollmentOperationId: operation,
+        }),
+      });
+    const freshA = await issueFresh();
+    const freshB = await issueFresh();
+    const central = (proof: SourceOwnershipProof) =>
+      attestation(proof, { fencedAtMs, leaseExpiresAtMs: fencedAtMs + 1 });
+    const [stale, a, b] = await Promise.all([
+      writer(original, undefined, async () => central(original)).applySourceFence({
+        proofId: original.proofId,
+        provenance: "test:stale-race",
+      }),
+      writer(freshA, undefined, async () => central(freshA)).applySourceFence({
+        proofId: freshA.proofId,
+        provenance: "test:fresh-race-a",
+      }),
+      writer(freshB, undefined, async () => central(freshB)).applySourceFence({
+        proofId: freshB.proofId,
+        provenance: "test:fresh-race-b",
+      }),
+    ]);
+    expect(stale.status).toBe("STALE");
+    expect([a, b].filter((result) => result.status === "COMMITTED")).toHaveLength(1);
+    expect([a, b].filter((result) => result.status === "CONFLICT")).toHaveLength(1);
+    expect(
+      await client.db(database).collection("sourceFenceReceipts").countDocuments({
+        sourceAccountId: id.toHexString(),
+      })
+    ).toBe(1);
+  });
+
   it("consumes one proof once across concurrent identical fence attempts", async () => {
     const { id, proof } = await issue("32345678-90ab-4cde-b123-456789abcdef");
     const attempts = await Promise.all(
