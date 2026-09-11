@@ -3,7 +3,11 @@ import { decodeJwt } from "jose";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { reauthClock } from "@/lib/auth/sessionIssue";
 
-const { cookieSet } = vi.hoisted(() => ({ cookieSet: vi.fn() }));
+const { cookieDelete, cookieSet, migratePasswordLoginToUnified } = vi.hoisted(() => ({
+  cookieDelete: vi.fn(),
+  cookieSet: vi.fn(),
+  migratePasswordLoginToUnified: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/utils/network", () => ({ getClientIp: vi.fn().mockResolvedValue("203.0.113.5") }));
@@ -14,8 +18,14 @@ vi.mock("@/lib/api/rateLimit", () => ({
 vi.mock("@/lib/api/rateLimit.mongo", () => ({
   durableRateLimit: vi.fn().mockResolvedValue({ ok: true, remaining: 9 }),
 }));
+vi.mock("@/lib/auth/unifiedMigration", () => ({
+  isUnifiedMigrationCohort: vi.fn().mockReturnValue(true),
+  migratePasswordLoginToUnified,
+}));
 vi.mock("next/headers", () => ({
-  cookies: vi.fn().mockResolvedValue({ get: () => undefined, set: cookieSet }),
+  cookies: vi
+    .fn()
+    .mockResolvedValue({ delete: cookieDelete, get: () => undefined, set: cookieSet }),
   headers: vi.fn().mockResolvedValue({ get: () => null }),
 }));
 
@@ -279,7 +289,37 @@ describe("POST /api/auth/login — authRevokedAt", () => {
 });
 
 describe("POST /api/auth/login — source migration fence", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.AHD_UNIFIED_COHORT_ENABLED;
+  });
+
+  it("uses a valid password only to redrive an exact fenced cohort operation", async () => {
+    process.env.AHD_UNIFIED_COHORT_ENABLED = "true";
+    const { ObjectId } = await import("mongodb");
+    const userId = new ObjectId();
+    const hash = await hashedPassword();
+    const updateOne = await mockUsersDb({
+      _id: userId,
+      email: "a@b.com",
+      username: "alpha",
+      password: hash,
+      role: "admin",
+      isAdmin: true,
+      authMigrationFence: { v: 1 },
+    });
+    const { POST } = await import("./route");
+    const res = await POST(loginRequest());
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      message: "Unified account activated",
+      unifiedRedirect: "/api/auth/oidc/login",
+    });
+    expect(migratePasswordLoginToUnified).toHaveBeenCalledWith(userId.toString(), "password123");
+    expect(cookieDelete).toHaveBeenCalledWith(AUTH_COOKIE_NAME);
+    expect(cookieSet).not.toHaveBeenCalled();
+    expect(updateOne).not.toHaveBeenCalled();
+  });
 
   it.each([{}, null, "malformed"])(
     "denies a fenced account without a write: %j",
