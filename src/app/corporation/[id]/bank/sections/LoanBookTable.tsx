@@ -12,6 +12,7 @@ import {
 } from "@/lib/banking/creditBands";
 import type { ConsolePayload } from "../types";
 import { partyHref } from "../lib/helpers";
+import { Eyebrow } from "../components/BankSection";
 
 /** Colour ramp for the rating column: investment grade cools, junk warms. */
 const BAND_TONE: Record<CreditBandId, string> = {
@@ -162,7 +163,8 @@ function LendingProfilePicker({
   };
 
   return (
-    <div className="rounded-xl border border-card-border bg-card p-4">
+    <div className="space-y-2 rounded-xl border border-card-border bg-card p-4">
+      <Eyebrow>CEO control</Eyebrow>
       <div className="mb-1 text-sm font-semibold text-foreground">Lending stance</div>
       <p className="mb-3 text-xs text-muted">
         Sets which ratings the bank will lend to from the next turn. Loans already on the book keep
@@ -243,6 +245,7 @@ export function LoanBookTable({
 
   return (
     <section className="space-y-3">
+      <Eyebrow>Monitor</Eyebrow>
       <h3 className="text-base font-semibold text-foreground">Loan book</h3>
       {householdBook && <HouseholdBookTable book={householdBook} currency={currency} />}
       {householdBook && (

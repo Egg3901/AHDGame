@@ -1,6 +1,6 @@
 "use client";
 
-import { Badge } from "@/components/ui";
+import { Badge, Tooltip } from "@/components/ui";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import {
@@ -126,7 +126,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
                 ? "warning"
                 : "success"
           }
-          detail={
+          tooltip={
             capital.standing === "undercapitalized"
               ? `Post ${formatBankMoney(shortfall, charter.currency)} or lose the charter`
               : capital.standing === "stressed"
@@ -137,12 +137,12 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
         <HealthStat
           label="Reserves"
           // The bank's ring-fenced cash, which is the same quantity the
-          // surplus/shortfall beneath is measured from. This used to render a
+          // surplus/shortfall tooltip is measured from. This used to render a
           // legacy `reserves` mirror written once per turn, so the headline and
           // the line under it could be two different numbers on the same card.
           value={formatBankMoney(charter.cashReserves, charter.currency)}
           tone={reserveGap == null ? "default" : reserveGap < 0 ? "error" : "success"}
-          detail={
+          tooltip={
             requiredReserves == null
               ? "No reserve requirement"
               : reserveGap != null && reserveGap < 0
@@ -154,7 +154,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
           label="Bad loans"
           value={arrears.length === 0 ? "None" : String(arrears.length)}
           tone={arrears.length === 0 ? "success" : "warning"}
-          detail={
+          tooltip={
             arrears.length === 0
               ? "Every named loan is current"
               : `${formatBankMoney(arrearsValue, charter.currency)} in arrears or defaulted`
@@ -168,12 +168,12 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
 function HealthStat({
   label,
   value,
-  detail,
+  tooltip,
   tone,
 }: {
   label: string;
   value: string;
-  detail: string;
+  tooltip: string;
   tone: "success" | "warning" | "error" | "default";
 }) {
   const valueTone =
@@ -186,9 +186,11 @@ function HealthStat({
           : "text-foreground";
   return (
     <div className="rounded-lg border border-card-border bg-card px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+        {label}
+        <Tooltip content={tooltip} label={`About ${label}`} />
+      </div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
-      <div className="mt-1 text-xs text-muted">{detail}</div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import type { ConsolePayload, Party, ShowToast } from "../types";
 import { mergeState, partyHref } from "../lib/helpers";
 import { PartySearch } from "../components/PartySearch";
 import { StatCell } from "../components/StatCell";
+import { Eyebrow } from "../components/BankSection";
 
 /**
  * Both desks on this panel share one in-flight flag, and the lend form clears
@@ -108,17 +109,20 @@ export function InterbankPanel({
 
   return (
     <section className="space-y-4">
+      <Eyebrow>CEO control</Eyebrow>
       <h3 className="text-base font-semibold text-foreground">Interbank &amp; CB margin</h3>
       <div className="rounded-xl border border-card-border bg-card grid grid-cols-2 divide-x divide-card-border max-w-xl">
         <StatCell
           label="Interbank debt"
           value={formatBankMoney(interbankDebt, currency)}
           sub="borrowed outstanding"
+          tooltip="What the bank owes other banks. Market funding: cheaper than the window, but the lenders can pull it."
         />
         <StatCell
           label="CB margin debt"
           value={formatBankMoney(cbMarginDebt, currency)}
           sub="collateralised line"
+          tooltip="Central bank lending against posted collateral. Secured, but arrears here draw supervisory attention."
         />
       </div>
 

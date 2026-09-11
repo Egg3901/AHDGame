@@ -5,6 +5,7 @@ import { Button, Slider } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ShowToast } from "../types";
+import { Eyebrow } from "../components/BankSection";
 
 export function CapacityAllocationEditor({
   corporationId,
@@ -53,6 +54,7 @@ export function CapacityAllocationEditor({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
       <div>
+        <Eyebrow>CEO control</Eyebrow>
         <h3 className="text-base font-semibold text-foreground">Capacity allocation</h3>
         <p className="text-sm text-muted">
           Share of financial-sector capacity running the branch network (deposit ceiling). The rest

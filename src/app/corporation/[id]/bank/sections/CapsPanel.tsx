@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Tooltip } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ConsolePayload } from "../types";
+import { Eyebrow } from "../components/BankSection";
 
 /**
  * Every cap that can stop a player, with the rule and the numbers in it.
@@ -26,9 +28,12 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
   return (
     <section className="rounded-lg border border-card-border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
-          Your limits, and where they come from
-        </h3>
+        <div className="space-y-1">
+          <Eyebrow>Reference</Eyebrow>
+          <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
+            Your limits, and where they come from
+          </h3>
+        </div>
         <Link
           href="/wiki/private-banking"
           className="text-xs text-accent underline underline-offset-2"
@@ -41,24 +46,23 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
         {caps.map((cap) => (
           <div key={cap.key} className="rounded border border-card-border/60 p-3">
             <div className="flex items-baseline justify-between gap-2">
-              <span className="text-xs uppercase tracking-widest text-muted">{cap.label}</span>
+              <span className="text-xs uppercase tracking-widest text-muted">
+                {cap.label}
+                <Tooltip
+                  content={`${cap.formula}. Now: ${cap.inputs
+                    .map((input) =>
+                      input.unit === "percent"
+                        ? `${input.label} ${(input.value * 100).toFixed(1)}%`
+                        : `${input.label} ${formatBankMoney(input.value, currency)}`
+                    )
+                    .join("; ")}.`}
+                  label={`How ${cap.label} is computed`}
+                />
+              </span>
               <span className="font-mono text-sm text-foreground">
                 {formatBankMoney(cap.value, currency)}
               </span>
             </div>
-            <p className="mt-1 font-mono text-[11px] text-muted">{cap.formula}</p>
-            <dl className="mt-2 space-y-0.5">
-              {cap.inputs.map((input) => (
-                <div key={input.label} className="flex justify-between gap-2 text-[11px]">
-                  <dt className="text-muted">{input.label}</dt>
-                  <dd className="font-mono text-foreground/80">
-                    {input.unit === "percent"
-                      ? `${(input.value * 100).toFixed(1)}%`
-                      : formatBankMoney(input.value, currency)}
-                  </dd>
-                </div>
-              ))}
-            </dl>
             <p className="mt-2 text-[11px] text-muted">{cap.lever}</p>
           </div>
         ))}

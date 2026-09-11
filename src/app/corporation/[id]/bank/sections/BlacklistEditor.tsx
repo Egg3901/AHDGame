@@ -6,6 +6,7 @@ import type { ConsolePayload, Party, ShowToast } from "../types";
 import { mergeState, partyHref } from "../lib/helpers";
 import { PartySearch } from "../components/PartySearch";
 import { BlacklistChip } from "../components/BlacklistChip";
+import { Eyebrow } from "../components/BankSection";
 
 export function BlacklistEditor({
   corporationId,
@@ -79,6 +80,7 @@ export function BlacklistEditor({
   return (
     <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
       <div>
+        <Eyebrow>CEO control</Eyebrow>
         <h3 className="text-base font-semibold text-foreground">Who this bank refuses</h3>
         <p className="mt-1 text-sm text-muted">
           Listed players cannot deposit here or borrow from you. Listed companies cannot borrow.

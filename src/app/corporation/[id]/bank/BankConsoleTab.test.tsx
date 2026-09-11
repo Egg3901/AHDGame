@@ -235,6 +235,71 @@ describe("charter type switch (ticket 1069)", () => {
   });
 });
 
+describe("console hierarchy", () => {
+  it("links each overview figure to the tab that moves it", async () => {
+    global.fetch = vi.fn(async () => ok(payload)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Post capital/ }));
+    await screen.findByText("Capital adequacy");
+
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Manage loans/ }));
+    await screen.findByText("Rate offsets");
+  });
+
+  it("badges the Lending tab with pending decisions", async () => {
+    const withPending = {
+      ...payload,
+      loans: [
+        {
+          id: "loan9",
+          borrowerType: "character",
+          borrower: { id: "char-new", name: "Bo Marsh", sequentialId: 44 },
+          principal: 50_000,
+          outstanding: 50_000,
+          ratePercent: 5,
+          originatedTurn: 120,
+          termTurns: 12,
+          status: "pending",
+          arrearsTurns: 0,
+        },
+      ],
+    };
+    global.fetch = vi.fn(async () => ok(withPending)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    expect(await screen.findByRole("button", { name: /Lending 1/ })).toBeTruthy();
+  });
+
+  it("keeps cap formulas behind tooltips", async () => {
+    const withCaps = {
+      ...payload,
+      caps: [
+        {
+          key: "bookEquity",
+          label: "Book equity",
+          formula: "cash + loans out - deposits",
+          inputs: [{ label: "Cash", value: 100, unit: "money" }],
+          value: 100,
+          lever: "Post capital to raise it.",
+        },
+      ],
+    };
+    global.fetch = vi.fn(async () => ok(withCaps)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    await screen.findByText("Your limits, and where they come from");
+    expect(screen.queryByText(/cash \+ loans out/)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText("How Book equity is computed"));
+    await screen.findByText(/cash \+ loans out/);
+  });
+});
+
 describe("charter issue block reason", () => {
   const unchartered = { ...payload, charter: null };
 

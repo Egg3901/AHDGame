@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { EmptyState } from "@/components/ui";
+import { EmptyState, Tooltip } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
-import { borrowingsFromCharter } from "@/lib/banking/capitalAdequacy";
+import { assessCapital, borrowingsFromCharter } from "@/lib/banking/capitalAdequacy";
+import { Eyebrow } from "../components/BankSection";
 import type { BankTab, ConsolePayload, ShowToast } from "../types";
 import { charterLabel } from "../lib/helpers";
 import { StatCell } from "../components/StatCell";
@@ -62,28 +63,31 @@ function LoanApprovalToggle({
     }
   };
   return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-card-border bg-card p-4">
-      <div>
-        <div className="text-sm font-semibold text-foreground">Loan approval</div>
-        <p className="mt-1 text-xs text-muted">
-          {requireApproval
-            ? "New loan requests wait for you to approve or decline them in the loan book."
-            : "Loan requests are granted automatically when the borrower qualifies."}
-        </p>
+    <div className="space-y-2 rounded-xl border border-card-border bg-card p-4">
+      <Eyebrow>CEO control</Eyebrow>
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="text-sm font-semibold text-foreground">Loan approval</div>
+          <p className="mt-1 text-xs text-muted">
+            {requireApproval
+              ? "New loan requests wait for you to approve or decline them in the loan book."
+              : "Loan requests are granted automatically when the borrower qualifies."}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={!canMutate || busy}
+          onClick={() => void toggle()}
+          aria-pressed={requireApproval}
+          className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+            requireApproval
+              ? "border-accent bg-accent/10 text-accent"
+              : "border-card-border text-muted hover:border-accent/50"
+          }`}
+        >
+          {requireApproval ? "Approval required" : "Auto-approve"}
+        </button>
       </div>
-      <button
-        type="button"
-        disabled={!canMutate || busy}
-        onClick={() => void toggle()}
-        aria-pressed={requireApproval}
-        className={`shrink-0 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-          requireApproval
-            ? "border-accent bg-accent/10 text-accent"
-            : "border-card-border text-muted hover:border-accent/50"
-        }`}
-      >
-        {requireApproval ? "Approval required" : "Auto-approve"}
-      </button>
     </div>
   );
 }
@@ -106,10 +110,34 @@ export function ActiveCharterPanel({
   const tradingVisible = propEligible;
   const [tab, setTab] = useState<BankTab>("overview");
 
-  const tabs: { id: BankTab; label: string }[] = [
+  // Attention routing: the tabs that need the CEO carry the signal, so the
+  // console answers "does anything need me?" before any panel is opened.
+  const pendingCount = data.loans.filter(
+    (l) => l.borrowerType !== "npcBulk" && l.status === "pending"
+  ).length;
+  const capitalStanding = assessCapital({
+    cashReserves: charter.cashReserves,
+    totalLoans: charter.totalLoans,
+    borrowings: borrowingsFromCharter(charter),
+    propBookMarkValue: charter.propBookMarkValue,
+  }).standing;
+  const fundingAttention =
+    capitalStanding !== "adequate" || charter.cashReserves < charter.requiredReserves;
+
+  const tabs: { id: BankTab; label: string; badge?: number; alert?: boolean; hint?: string }[] = [
     { id: "overview", label: "Overview" },
-    { id: "lending", label: "Lending" },
-    { id: "funding", label: "Funding" },
+    {
+      id: "lending",
+      label: "Lending",
+      badge: pendingCount > 0 ? pendingCount : undefined,
+      hint: pendingCount > 0 ? `${pendingCount} awaiting decision` : undefined,
+    },
+    {
+      id: "funding",
+      label: "Funding",
+      alert: fundingAttention,
+      hint: fundingAttention ? "capital or reserves need attention" : undefined,
+    },
     ...(tradingVisible ? [{ id: "trading" as const, label: "Trading" }] : []),
     { id: "admin", label: "Admin" },
   ];
@@ -139,29 +167,54 @@ export function ActiveCharterPanel({
             type="button"
             onClick={() => setTab(t.id)}
             aria-current={tab === t.id ? "page" : undefined}
-            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            title={t.hint}
+            className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
               tab === t.id
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted hover:text-foreground"
             }`}
           >
             {t.label}
+            {t.badge != null && (
+              <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-accent">
+                {t.badge}
+              </span>
+            )}
+            {t.alert && (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-error" aria-hidden="true" />
+                <span className="sr-only">needs attention</span>
+              </>
+            )}
           </button>
         ))}
       </div>
 
       {tab === "overview" && (
         <section className="rounded-xl border border-card-border bg-card overflow-hidden">
+          <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+              Position
+            </span>
+            <Tooltip
+              content="Where the bank stands right now. Each figure links to the tab that moves it."
+              label="About position"
+            />
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
             <StatCell
               label="Posted capital"
               value={formatBankMoney(charter.postedCapital, charter.currency)}
               sub={`chartered T${charter.charteredTurn}`}
+              tooltip="Capital posted from the treasury plus retained earnings. It stands behind depositors and sets the deposit ceiling."
+              action={{ label: "Post capital", onClick: () => setTab("funding") }}
             />
             <StatCell
               label="Deposits"
               value={formatBankMoney(charter.totalDeposits, charter.currency)}
               sub={`players ${formatBankMoney(playerDeposits, charter.currency)} · households ${formatBankMoney(charter.npcDeposits, charter.currency)}`}
+              tooltip="Household savings plus player deposits pointed at the bank. More deposits raise the reserve requirement."
+              action={{ label: "Adjust rates", onClick: () => setTab("lending") }}
             />
             <StatCell
               label="Deposit ceiling"
@@ -170,6 +223,8 @@ export function ActiveCharterPanel({
                 charter.currency
               )}
               sub={`branch share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}%`}
+              tooltip="The most deposits the bank may hold: the lower of branch capacity and 12x book equity."
+              action={{ label: "Raise ceiling", onClick: () => setTab("funding") }}
             />
             <StatCell
               label="Loans out"
@@ -179,6 +234,8 @@ export function ActiveCharterPanel({
                   ? `reserve requirement ${(data.reserveRatio * 100).toFixed(0)}%`
                   : undefined
               }
+              tooltip="Named player loans plus the household book. Lending earns interest but consumes reserves."
+              action={{ label: "Manage loans", onClick: () => setTab("lending") }}
             />
             <StatCell
               label="Rates"
@@ -188,6 +245,8 @@ export function ActiveCharterPanel({
                   : "n/a"
               }
               sub="you pay / you charge"
+              tooltip="Your offsets versus central bank prime, inside the Regulation Q corridor. Pay more to attract savers; charge more to earn, at the cost of demand."
+              action={{ label: "Adjust rates", onClick: () => setTab("lending") }}
             />
           </div>
         </section>
@@ -309,7 +368,8 @@ export function ActiveCharterPanel({
 
       {tab === "admin" && (
         <div className="space-y-6">
-          <section className="rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
+          <section className="space-y-2 rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
+            <Eyebrow>Reference</Eyebrow>
             <h3 className="text-base font-semibold text-foreground">Charter</h3>
             <p className="mt-1">
               {charterLabel(charter.type)} charter in {charter.currency}, granted on turn{" "}
