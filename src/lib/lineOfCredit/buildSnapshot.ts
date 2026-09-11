@@ -29,6 +29,7 @@ import {
 } from "@/lib/lineOfCredit/netWorth";
 import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/currencyIncomeEstimate";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -67,8 +68,18 @@ export type LocSnapshot = {
   homePrimePercent: number;
   /** LOC debt / gross assets (0–1+). */
   debtToAssetsRatio: number;
-  /** Effective annual rate = prime + spread (percent). */
+  /** Effective annual rate = prime + borrower spread + policy adjustment (percent). */
   effectiveRatePercent: number;
+  /** Additional central-bank-wide LOC spread currently in phase-in. */
+  policySpreadAdjustmentPercentPoints?: number;
+  /** Central-bank savings bonus currently in phase-in. */
+  policyDepositBonusPercentPoints?: number;
+  /** Progress through the shared central-bank pricing phase-in. */
+  policyPricingProgress?: number;
+  /** Turns remaining until the shared central-bank pricing targets are reached. */
+  policyPricingTurnsRemaining?: number;
+  /** Whether this world has started the central-bank pricing change. */
+  policyPricingActive?: boolean;
   /** Rolling-average recurring income in home currency face over the recent 48-turn window. */
   incomePerTurnFace: number;
   /** Scheduled LOC auto-payment on current obligation (internal units per turn). */
@@ -183,7 +194,10 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
     homePrimePercent,
   });
   const spread = spreadPercentPointsFromComposite(composite);
-  const effectiveRatePercent = homePrimePercent + spread;
+  const currentTurn = await getCurrentTurn(db);
+  const centralBankPricing = await loadCentralBankPricingAdjustment(db, currentTurn);
+  const effectiveRatePercent =
+    homePrimePercent + spread + centralBankPricing.spreadHikePercentPoints;
 
   const loc = character.lineOfCredit;
   const balances = loc?.balances ?? {};
@@ -222,8 +236,6 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
         recentGarnishments.length
       : undefined;
 
-  const currentTurn = await getCurrentTurn(db);
-
   const paymentMode: Partial<Record<CurrencyCode, LocPaymentMode>> = {
     ...(loc?.paymentMode ?? {}),
   };
@@ -258,6 +270,11 @@ export async function buildLocSnapshot(db: Db, character: Character): Promise<Lo
     homePrimePercent,
     debtToAssetsRatio,
     effectiveRatePercent,
+    policySpreadAdjustmentPercentPoints: centralBankPricing.spreadHikePercentPoints,
+    policyDepositBonusPercentPoints: centralBankPricing.depositBonusPercentPoints,
+    policyPricingProgress: centralBankPricing.progress,
+    policyPricingTurnsRemaining: centralBankPricing.turnsRemaining,
+    policyPricingActive: centralBankPricing.startedTurn !== undefined,
     incomePerTurnFace: incomeGuess,
     scheduledDebtServiceInternal,
     dtiLimitInternal,

@@ -178,6 +178,15 @@ export interface GameConfig {
    */
   lineOfCreditEnabled?: boolean;
   /**
+   * One-time rollout marker for the central-bank pricing change. The turn
+   * engine fills in startedTurn when a fresh world reaches its first economy
+   * turn; existing hosted worlds receive it from the startup migration.
+   */
+  centralBankPricingPhaseIn?: {
+    startedTurn?: number;
+    notificationSentTurn?: number;
+  };
+  /**
    * Private banking (1.1): corp-chartered banks, deposits, lending, failure.
    * Defaults to **disabled** — only explicit `true` enables. Flag-off is a
    * read-only freeze: pages render, no actions accepted, nothing unwinds.

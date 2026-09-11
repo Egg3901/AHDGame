@@ -60,6 +60,8 @@ export interface LocLedgerEntry {
     paymentMode?: LocPaymentMode;
     /** Extra spread (percentage points) added because the account was on I/O. 0 or undefined when on P/I. */
     ioSurchargePoints?: number;
+    /** Shared central-bank LOC spread adjustment in effect for this turn. */
+    centralBankSpreadHikePercentPoints?: number;
     /** Previous mode on `paymode_change` rows. */
     from?: LocPaymentMode;
     /** New mode on `paymode_change` rows. */
