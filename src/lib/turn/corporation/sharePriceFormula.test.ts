@@ -13,6 +13,7 @@ import { SHARE_PRICE_MAX_TURN_MOVE } from "@/lib/constants/corporations";
 import {
   MIN_SHARE_PRICE,
   FUNDAMENTAL_TANGIBLE_BOOK_WEIGHT,
+  BANK_EQUITY_VALUATION_WEIGHT,
   FUNDAMENTAL_EARNINGS_POWER_WEIGHT,
   STOCK_SPLIT_PRICE_SMOOTHING_TURNS,
 } from "@/lib/constants/corporations";
@@ -140,6 +141,33 @@ describe("computeSharePrices — fundamental value", () => {
       TEST_TURN
     ).get("corpA")!;
     expect(withDebt).toBeLessThan(noDebt);
+  });
+
+  it("recognizes 75% of ring-fenced chartered-bank equity", () => {
+    const r = computeSharePrices(
+      [input({ bankEquityAnchor: 800_000, previousSharePrice: 0.5 })],
+      TEST_TURN
+    ).get("corpA")!;
+    expect(r).toBeCloseTo(BANK_EQUITY_VALUATION_WEIGHT * (800_000 / 1_000_000), 2);
+  });
+
+  it("keeps negative bank equity as a valuation drag", () => {
+    const healthy = computeSharePrices(
+      [input({ liquidCapitalAnchor: 1_000_000, previousSharePrice: 0.5 })],
+      TEST_TURN
+    ).get("corpA")!;
+    const impaired = computeSharePrices(
+      [
+        input({
+          liquidCapitalAnchor: 1_000_000,
+          bankEquityAnchor: -800_000,
+          previousSharePrice: 0.5,
+        }),
+      ],
+      TEST_TURN
+    ).get("corpA")!;
+    expect(impaired).toBeLessThan(healthy);
+    expect(impaired).toBeGreaterThanOrEqual(MIN_SHARE_PRICE);
   });
 
   it("tangibleBook floors at 0 — debt > cash does not produce negative price", () => {
