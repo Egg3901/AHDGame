@@ -119,7 +119,23 @@ export async function POST(request: Request) {
 
     // Fenced accounts never authenticate via legacy password login. Same
     // 401 body as a bad password so fenced vs unknown is indistinguishable.
+    // The exact migration cohort may use the retained digest only to redrive
+    // its already fenced operation. This path never grants a legacy session.
     if (isAuthMigrationFenced(user)) {
+      const isRecoveryCohort =
+        process.env.AHD_UNIFIED_COHORT_ENABLED === "true" &&
+        isUnifiedMigrationCohort(user._id.toString());
+      const isRecoveryPassword =
+        isRecoveryCohort && user.password && (await bcrypt.compare(password, user.password));
+      if (isRecoveryPassword) {
+        await migratePasswordLoginToUnified(user._id.toString(), password);
+        const cookieStore = await cookies();
+        cookieStore.delete(AUTH_COOKIE_NAME);
+        return NextResponse.json({
+          message: "Unified account activated",
+          unifiedRedirect: "/api/auth/oidc/login",
+        });
+      }
       recordAudit({
         source: "api",
         category: "auth",
