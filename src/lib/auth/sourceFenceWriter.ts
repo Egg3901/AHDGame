@@ -40,6 +40,7 @@ export interface CentralFenceAttestation {
   readonly fenceGeneration: string;
   readonly fenceAuthority: string;
   readonly fenceTokenHash: string;
+  readonly fencedAtMs: number;
   readonly leaseExpiresAtMs: number;
   readonly targetIssuer: string;
   readonly targetSubject: string;
@@ -225,6 +226,7 @@ const ATTESTATION_KEYS = [
   "fenceAuthority",
   "fenceGeneration",
   "fenceTokenHash",
+  "fencedAtMs",
   "leaseExpiresAtMs",
   "sourceAccountId",
   "sourceIssuer",
@@ -251,6 +253,8 @@ function validateAttestation(
     BigInt(item.fenceGeneration) > 9_223_372_036_854_775_807n ||
     !safeText(item.fenceAuthority, 128) ||
     !HEX64.test(item.fenceTokenHash) ||
+    !Number.isSafeInteger(item.fencedAtMs) ||
+    item.fencedAtMs <= 0 ||
     !Number.isSafeInteger(item.leaseExpiresAtMs) ||
     !safeText(item.targetIssuer, 512) ||
     !safeText(item.targetSubject, 512) ||
@@ -445,8 +449,15 @@ export function createSourceFenceWriter(config: SourceFenceWriterConfig) {
     const receiptId = randomUUID();
     const proofDigest = sourceProofDigest(proof);
     const fencedAt = new Date();
+    // A proof observed before the immutable central fence is the original
+    // attempt and remains bounded by its lease. A proof observed after the
+    // fence plus the proven clock-skew bound is fresh redrive authority under
+    // the same permanent operation, so only its own freshness window applies.
+    const postFenceProof = proof.observedAtMs >= attestation.fencedAtMs + config.clockSkewBoundMs;
     const deadline =
-      Math.min(proof.expiresAtMs, attestation.leaseExpiresAtMs) - config.clockSkewBoundMs;
+      (postFenceProof
+        ? proof.expiresAtMs
+        : Math.min(proof.expiresAtMs, attestation.leaseExpiresAtMs)) - config.clockSkewBoundMs;
     if (fencedAt.getTime() >= deadline) return Object.freeze({ status: "STALE" });
     let writeStarted = false;
     try {

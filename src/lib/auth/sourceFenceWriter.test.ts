@@ -54,7 +54,10 @@ async function waitForMongo(uri: string, child: ChildProcess): Promise<MongoClie
   throw last;
 }
 
-function attestation(proof: SourceOwnershipProof): CentralFenceAttestation {
+function attestation(
+  proof: SourceOwnershipProof,
+  override: Partial<Omit<CentralFenceAttestation, "attestationDigest">> = {}
+): CentralFenceAttestation {
   const unsigned = {
     version: 1 as const,
     sourceIssuer: proof.sourceIssuer,
@@ -64,9 +67,11 @@ function attestation(proof: SourceOwnershipProof): CentralFenceAttestation {
     fenceGeneration: "1",
     fenceAuthority: "source-fence-test",
     fenceTokenHash: "f".repeat(64),
+    fencedAtMs: proof.observedAtMs + 1_000,
     leaseExpiresAtMs: Date.now() + 60_000,
     targetIssuer: "https://issuer.test.lakesidegames.invalid/realms/lakeside",
     targetSubject: "target-user",
+    ...override,
   };
   return Object.freeze({ ...unsigned, attestationDigest: centralAttestationDigest(unsigned) });
 }
@@ -160,7 +165,8 @@ suite("source migration fence against an isolated replica set", () => {
         databaseName: database,
       }).loadProof({ proofId: proof.proofId });
       return value;
-    }
+    },
+    loadAttestation = async () => attestation(proof)
   ) {
     const db = client.db(database);
     return createSourceFenceWriter({
@@ -170,7 +176,7 @@ suite("source migration fence against an isolated replica set", () => {
       clockSkewBoundMs: 50,
       clockSkewEvidence: "isolated single-host fixture only",
       loadSourceProof: async () => load(),
-      loadCentralFenceAttestation: async () => attestation(proof),
+      loadCentralFenceAttestation: async () => loadAttestation(),
     });
   }
 
@@ -223,6 +229,48 @@ suite("source migration fence against an isolated replica set", () => {
     ).toBe(0);
     expect(await db.collection("users").findOne({ _id: id })).not.toHaveProperty(
       "authMigrationFence"
+    );
+  });
+
+  it("rejects the pre-fence proof after lease expiry and accepts a fresh same-operation redrive proof", async () => {
+    const { id, proof: original, store } = await issue("42345678-90ab-4cde-b123-456789abcdef");
+    const fencedAtMs = original.observedAtMs + 100;
+    const expiredLeaseMs = fencedAtMs + 1;
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    const fresh = await store.issuePasswordProof({
+      sourceAccountId: id.toHexString(),
+      password: PASSWORD,
+      reserveEnrollment: async () => ({
+        version: 1,
+        sourceIssuer: ISSUER,
+        sourceSubject: id.toHexString(),
+        canonicalAccountId: CANONICAL,
+        enrollmentOperationId: "42345678-90ab-4cde-b123-456789abcdef",
+      }),
+    });
+    const central = (proof: SourceOwnershipProof) =>
+      attestation(proof, { fencedAtMs, leaseExpiresAtMs: expiredLeaseMs });
+
+    await expect(
+      writer(original, undefined, async () => central(original)).applySourceFence({
+        proofId: original.proofId,
+        provenance: "test:expired-original",
+      })
+    ).resolves.toMatchObject({ status: "STALE" });
+    expect(
+      await client.db(database).collection("sourceFenceConsumptions").countDocuments({
+        _id: original.proofId,
+      })
+    ).toBe(0);
+
+    const redriven = await writer(fresh, undefined, async () => central(fresh)).applySourceFence({
+      proofId: fresh.proofId,
+      provenance: "test:expired-redrive",
+    });
+    expect(redriven.status).toBe("COMMITTED");
+    expect(await client.db(database).collection("users").findOne({ _id: id })).toHaveProperty(
+      "authMigrationFence.proofId",
+      fresh.proofId
     );
   });
 
