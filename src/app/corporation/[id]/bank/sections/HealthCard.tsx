@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge } from "@/components/ui";
+import { Badge, Tooltip } from "@/components/ui";
+import { useTranslations } from "next-intl";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/lib/banking/capitalAdequacy";
 import type { ConsolePayload } from "../types";
 import { charterLabel } from "../lib/helpers";
+import { Eyebrow } from "../components/BankSection";
 
 /** English ordinal for the panic-turn copy ("3rd", not "3th"). */
 export function panicTurnOrdinal(turns: number): string {
@@ -75,6 +77,7 @@ function bandMeaning(
 }
 
 export function HealthCard({ data }: { data: ConsolePayload }) {
+  const t = useTranslations("corporations.bankConsole");
   const charter = data.charter!;
   const capital = assessCapital({
     cashReserves: charter.cashReserves,
@@ -102,6 +105,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
     <section className={`space-y-4 rounded-xl border p-5 ${toneBorder}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
+          <Eyebrow kind="monitor" />
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{meaning.headline}</h2>
             <WarningBandBadge band={charter.warningBand} confidence={charter.confidence} />
@@ -126,38 +130,46 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
                 ? "warning"
                 : "success"
           }
-          detail={
+          tooltip={
             capital.standing === "undercapitalized"
-              ? `Post ${formatBankMoney(shortfall, charter.currency)} or lose the charter`
+              ? t("tooltips.capitalUndercapitalized", {
+                  amount: formatBankMoney(shortfall, charter.currency),
+                })
               : capital.standing === "stressed"
-                ? "Survives today, fails the stress scenario"
-                : "Above the minimum and the stress scenario"
+                ? t("tooltips.capitalStressed")
+                : t("tooltips.capitalAdequate")
           }
         />
         <HealthStat
           label="Reserves"
           // The bank's ring-fenced cash, which is the same quantity the
-          // surplus/shortfall beneath is measured from. This used to render a
+          // surplus/shortfall tooltip is measured from. This used to render a
           // legacy `reserves` mirror written once per turn, so the headline and
           // the line under it could be two different numbers on the same card.
           value={formatBankMoney(charter.cashReserves, charter.currency)}
           tone={reserveGap == null ? "default" : reserveGap < 0 ? "error" : "success"}
-          detail={
+          tooltip={
             requiredReserves == null
-              ? "No reserve requirement"
+              ? t("tooltips.noReserveRequirement")
               : reserveGap != null && reserveGap < 0
-                ? `${formatBankMoney(Math.abs(reserveGap), charter.currency)} short of the requirement`
-                : `${formatBankMoney(reserveGap ?? 0, charter.currency)} above the requirement`
+                ? t("tooltips.reserveShortfall", {
+                    amount: formatBankMoney(Math.abs(reserveGap), charter.currency),
+                  })
+                : t("tooltips.reserveSurplus", {
+                    amount: formatBankMoney(reserveGap ?? 0, charter.currency),
+                  })
           }
         />
         <HealthStat
           label="Bad loans"
           value={arrears.length === 0 ? "None" : String(arrears.length)}
           tone={arrears.length === 0 ? "success" : "warning"}
-          detail={
+          tooltip={
             arrears.length === 0
-              ? "Every named loan is current"
-              : `${formatBankMoney(arrearsValue, charter.currency)} in arrears or defaulted`
+              ? t("tooltips.noBadLoans")
+              : t("tooltips.badLoans", {
+                  amount: formatBankMoney(arrearsValue, charter.currency),
+                })
           }
         />
       </div>
@@ -168,14 +180,15 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
 function HealthStat({
   label,
   value,
-  detail,
+  tooltip,
   tone,
 }: {
   label: string;
   value: string;
-  detail: string;
+  tooltip: string;
   tone: "success" | "warning" | "error" | "default";
 }) {
+  const t = useTranslations("corporations.bankConsole");
   const valueTone =
     tone === "error"
       ? "text-error"
@@ -186,9 +199,11 @@ function HealthStat({
           : "text-foreground";
   return (
     <div className="rounded-lg border border-card-border bg-card px-4 py-3">
-      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</div>
+      <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+        {label}
+        <Tooltip content={tooltip} label={t("about", { label })} />
+      </div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
-      <div className="mt-1 text-xs text-muted">{detail}</div>
     </div>
   );
 }
