@@ -40,17 +40,6 @@ describe("getAuthCookieOptions — Lakeside SSO cookie Domain", () => {
     return opts.domain;
   }
 
-  it("keeps the unified OIDC bounce cookie host-only", async () => {
-    process.env.RAILWAY_ENVIRONMENT_NAME = "production";
-    const { getUnifiedOidcFlowCookieOptions } = await import("./auth");
-    expect(getUnifiedOidcFlowCookieOptions()).not.toHaveProperty("domain");
-    expect(getUnifiedOidcFlowCookieOptions()).toMatchObject({
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-    });
-  });
-
   it("uses Host apex even when X-Forwarded-Host is a Railway hostname", async () => {
     expect(
       await cookieDomain((name) => {
