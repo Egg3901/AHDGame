@@ -4,6 +4,8 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import { getCountryIdForCurrency, FOREX_ACTIVE_CURRENCIES } from "@/lib/constants/currencies";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
+import { getCurrentTurn } from "@/lib/currentTurn";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -27,12 +29,16 @@ export async function loadSavingsApyByCurrency(
   const inflationByBankId = new Map(
     banks.map((b) => [String(b._id), b.inflationHistory?.at(-1)?.rate ?? 0])
   );
+  const centralBankPricing = await loadCentralBankPricingAdjustment(db, await getCurrentTurn(db));
   const out: Partial<Record<CurrencyCode, number>> = {};
   for (const c of FOREX_ACTIVE_CURRENCIES) {
     const bankId = getBankId(getCountryIdForCurrency(c));
     const prime = primeByBankId.get(bankId) ?? DEFAULT_PRIME;
     const inflation = inflationByBankId.get(bankId) ?? 0;
-    out[c] = Math.round(savingsApyPercent(prime, inflation) * 100) / 100;
+    out[c] =
+      Math.round(
+        savingsApyPercent(prime, inflation, centralBankPricing.depositBonusPercentPoints) * 100
+      ) / 100;
   }
   return out;
 }

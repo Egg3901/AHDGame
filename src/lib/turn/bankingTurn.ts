@@ -43,6 +43,7 @@ import { effectiveBankRatesFromPrime } from "@/lib/banking/rates";
 import { getReserveRequirement } from "@/lib/banking/reserves";
 import { getBankDepositCeiling } from "@/lib/banking/capacityAllocation";
 import { roundSavingsAmount, savingsApyPercent } from "@/lib/currency/savingsInterest";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 import { discountWindowRatePercent } from "@/lib/banking/discountWindow";
 import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { isDepositTakingCharter, isNamedLendingCharter } from "@/lib/banking/charterKinds";
@@ -155,6 +156,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
   if (!policy.privateBanking) {
     return { ...ZERO_SUMMARY };
   }
+  const centralBankPricing = await loadCentralBankPricingAdjustment(db, turn);
 
   // Finish last turn's unfinished business before any new flow: a settlement
   // that crashed between two legs, an estate claimed and never settled. Doing
@@ -213,7 +215,7 @@ export async function processBankingTurn(db: Db, turn: number): Promise<BankingT
     const prime =
       typeof cb?.primeRate === "number" && Number.isFinite(cb.primeRate) ? cb.primeRate : 0;
     const inflation = cb?.inflationHistory?.at(-1)?.rate ?? 0;
-    return savingsApyPercent(prime, inflation);
+    return savingsApyPercent(prime, inflation, centralBankPricing.depositBonusPercentPoints);
   };
 
   // Competing deposit shares once per currency, among the deposit takers.

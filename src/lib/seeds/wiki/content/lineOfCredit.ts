@@ -66,7 +66,8 @@ final         = afterLeverage − rawStress × (1 − 0.65 × shield) // tighter
 The composite score maps to an interest-rate **spread** in percentage points versus the prime rate. A perfect 100 earns a 1pp discount; a zero score costs +5pp over prime.
 
 \`\`\`
-spread = 5 − (composite / 100) × 6
+creditSpread = 5 − (composite / 100) × 6
+effectiveRate = primeRate + creditSpread + centralBankPricingAdjustment
 // composite 0   → +5.0pp over prime
 // composite 50  → +2.0pp over prime
 // composite 100 → −1.0pp (below prime)
@@ -79,6 +80,8 @@ spread = 5 − (composite / 100) × 6
 | 50 | +2.0pp | 5.0% |
 | 75 | +0.5pp | 3.5% |
 | 100 | −1.0pp | 2.0% |
+
+The central bank can apply a shared pricing adjustment to every LOC. The current phase-in increases that adjustment from 0 to 2.0 percentage points over 8 turns. It is added after the borrower's credit spread, so the interface shows both numbers separately. Interest-only mode adds its separate 2.0 percentage-point surcharge on top.
 
 ## Borrowing limits and payment mode
 

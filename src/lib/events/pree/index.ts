@@ -66,5 +66,7 @@ import "./handlers/ddEraEvents";
 import "../worldEvents/handlers/coldWarWorldEvents";
 // High-tension society events (4), gated on the global tension reading.
 import "../worldEvents/handlers/highTensionEvents";
+// Constitutional-health event for the US presidency.
+import "../worldEvents/handlers/constitutionalCrisis";
 // Broadcast events (5) — shared historic moments offered to everyone at once.
 import "./handlers/broadcastEvents";

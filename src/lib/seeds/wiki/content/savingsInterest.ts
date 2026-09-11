@@ -8,7 +8,7 @@ The annual percentage yield (APY) paid on savings is half the **real** rate: the
 
 \`\`\`
 realRate = max(0.5, primeRate - inflation)
-APY      = realRate / 2
+APY      = realRate / 2 + centralBankDepositBonus
 \`\`\`
 
 So a 4.42% prime rate does **not** pay 2.21% APY unless inflation is zero. With 2% inflation the real rate is 2.42% and the APY is 1.21%.
@@ -23,6 +23,8 @@ So a 4.42% prime rate does **not** pay 2.21% APY unless inflation is zero. With 
 Using the real rate is what closes the carry trade. A currency with a high nominal prime rate normally also has high inflation, so its real spread, and therefore its savings APY, lands near everyone else's. Parking money in a high-nominal-rate currency earns no free real return.
 
 The real rate never falls below a 0.5 percentage point floor, so every currency pays at least 0.25% APY. The floor is the same everywhere, so it gives no currency an edge.
+
+During a central-bank pricing phase-in, central-bank-held deposits receive a temporary bonus in addition to this formula. The current rollout adds up to 0.25 percentage points over 8 turns. Private-bank deposit rates are set by their own charters and do not receive this central-bank bonus.
 
 When the [Central Bank Chair](/wiki/central-banks) raises rates, your savings yield rises with them, but only to the extent the rise beats inflation.
 

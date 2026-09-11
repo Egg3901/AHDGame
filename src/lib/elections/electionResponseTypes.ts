@@ -22,6 +22,7 @@ import type {
   PrimaryCalendarWave,
 } from "@/lib/elections/candidateEnrichment";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
+import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 
 export interface PollingData {
   leaderId: string | null;
@@ -279,6 +280,12 @@ export interface ElectionResponse {
     incumbentPartyName?: string;
     incumbentPartyColor?: string;
     recordedTurn: number;
+  };
+
+  /** President only: institutional-health pressure recorded by the vote engine. */
+  democraticHealth?: DemocraticHealthElectionSnapshot & {
+    rulingPartyName?: string;
+    rulingPartyColor?: string;
   };
 
   /**

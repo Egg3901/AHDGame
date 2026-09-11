@@ -15,6 +15,7 @@ export interface LocSnapshot {
   effectiveRatePercent: number;
   homePrimePercent: number;
   spreadPercentPoints: number;
+  policySpreadAdjustmentPercentPoints?: number;
   composite: number;
   incomePerTurnFace: number;
   drawFrozen: boolean;
@@ -40,6 +41,7 @@ export function LoansPane({
   const noIncome = s.incomePerTurnFace <= 0;
   const managePath = `${centralBankUrl(countryId)}?tab=loc`;
   const spreadSign = s.spreadPercentPoints >= 0 ? "+" : "";
+  const policySpread = s.policySpreadAdjustmentPercentPoints;
 
   if (!hasOutstanding && !Object.values(s.accountsOpened).some(Boolean)) {
     return (
@@ -81,6 +83,9 @@ export function LoansPane({
             <p className="text-xs text-muted mt-0.5">
               policy {s.homePrimePercent.toFixed(2)}% {spreadSign}
               {s.spreadPercentPoints.toFixed(2)}% spread
+              {typeof policySpread === "number"
+                ? ` + central-bank adjustment +${policySpread.toFixed(2)}%`
+                : ""}
             </p>
           </div>
           <div className="text-right">

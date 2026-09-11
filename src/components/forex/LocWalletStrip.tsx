@@ -14,6 +14,7 @@ interface LocMeResponse {
   availableBorrowInternal: number;
   drawFrozen: boolean;
   homePrimePercent?: number;
+  policySpreadAdjustmentPercentPoints?: number;
 }
 
 /**
@@ -49,6 +50,7 @@ export function LocWalletStrip({ countryId }: { countryId: CountryId }) {
   const href = `${centralBankUrl(countryId)}?tab=loc`;
   const primeLabel =
     typeof data.homePrimePercent === "number" ? `${data.homePrimePercent.toFixed(2)}%` : null;
+  const policySpread = data.policySpreadAdjustmentPercentPoints;
 
   return (
     <div className="rounded-lg border border-primary/20 bg-primary/[0.06] p-3 text-sm">
@@ -62,6 +64,9 @@ export function LocWalletStrip({ countryId }: { countryId: CountryId }) {
             Composite {(data.composite ?? 0).toFixed(0)} · spread{" "}
             {(data.spreadPercentPoints ?? 0) >= 0 ? "+" : ""}
             {(data.spreadPercentPoints ?? 0).toFixed(2)}% vs prime
+            {typeof policySpread === "number"
+              ? ` + central-bank adjustment +${policySpread.toFixed(2)}%`
+              : ""}
             {data.drawFrozen ? (
               <span className="ml-2 font-semibold text-warning"> · Draws frozen</span>
             ) : null}
