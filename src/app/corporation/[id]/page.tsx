@@ -17,6 +17,7 @@ import { ManagePrivateShareholdersPanel } from "@/components/corporation/ManageP
 import PrivateSalePanel from "@/components/corporation/shares/PrivateSalePanel";
 import { NationalizationStatusCard } from "@/components/corporation/NationalizationStatusCard";
 import BondMaturityNotice from "@/components/corporation/BondMaturityNotice";
+import PrivateNotListedNotice from "@/components/corporation/PrivateNotListedNotice";
 import { NewFeatureBadge } from "@/components/ui";
 import { useFeatureSeen } from "@/hooks/useFeatureSeen";
 import { CORP_PAGE_FEATURE_KEYS } from "@/lib/ui/corpPageFeatureKeys";
@@ -846,21 +847,19 @@ export default function CorporationDetailPage() {
           liquidCurrencyCode={corporation.liquidCurrencyCode}
           liquidCapital={corporation.liquidCapital}
           corporationName={corporation.name}
+          corporationId={corporation._id ?? id}
         />
 
         {/* Ticket #1153: a private corporation is deliberately excluded from
             every exchange snapshot, but nothing said so, so its owner read the
             absence as a listing that had failed and waited turns for it. Say it
-            on the page they are already looking at, and say what changes it. */}
+            on the page they are already looking at, and say what changes it.
+            Dismissable per corp — once the owner knows, it never nags again. */}
         {corporation.isPrivate && isCeo && (
-          <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm">
-            <p className="font-semibold text-foreground">Not listed on any exchange</p>
-            <p className="mt-0.5 text-muted">
-              {corporation.name} is private, and private corporations do not appear on the stock
-              market. Take it public from the Shares tab to list it. Buying your own shares back
-              until nothing is left on the public float has the same effect as staying private.
-            </p>
-          </div>
+          <PrivateNotListedNotice
+            corporationId={corporation._id ?? id}
+            corporationName={corporation.name}
+          />
         )}
 
         {corporation.isPrivate && !isCeo && (isModerator || isAdmin) && (
