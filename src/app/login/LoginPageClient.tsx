@@ -137,6 +137,8 @@ export default function LoginPageClient({
   };
 
   const beginLakesideLogin = () => {
+    // Full navigation is required because the route immediately leaves the application for OIDC.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.href = "/api/auth/oidc/login";
   };
 
