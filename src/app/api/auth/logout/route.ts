@@ -54,6 +54,16 @@ export async function POST(request: Request) {
           .collection("users")
           .updateOne({ _id: userId }, { $max: { authRevokedAt: now }, $set: { lastLogout: now } });
         if (result.acknowledged !== true) throw new Error("Revocation was not acknowledged");
+        if (payload.authSource === "unified" && payload.sid) {
+          const sessionResult = await db
+            .collection<{ _id: string; userId: string; revokedAt: Date | null }>("unifiedSessions")
+            .updateOne(
+              { _id: payload.sid, userId: payload.userId, revokedAt: null },
+              { $set: { revokedAt: now } }
+            );
+          if (sessionResult.acknowledged !== true)
+            throw new Error("Session revocation was not acknowledged");
+        }
       } catch {
         return NextResponse.json(
           { error: "Logout is temporarily unavailable. Please try again." },

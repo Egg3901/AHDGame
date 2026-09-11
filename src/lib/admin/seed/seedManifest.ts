@@ -993,6 +993,18 @@ const RUNTIME: CollectionEntry[] = [
 
 const PRESERVED: CollectionEntry[] = [
   {
+    name: "unifiedSessions",
+    category: "preserved",
+    notes:
+      "Durable unified identity sessions and revocation state. Account security data must survive game-world resets.",
+  },
+  {
+    name: "unifiedOidcFlows",
+    category: "preserved",
+    notes:
+      "Short-lived PKCE login transactions expire through a TTL index and remain independent of game-world resets.",
+  },
+  {
     name: "nativePushDevices",
     category: "preserved",
     notes:

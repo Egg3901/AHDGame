@@ -166,7 +166,8 @@ suite("source migration fence against an isolated replica set", () => {
       }).loadProof({ proofId: proof.proofId });
       return value;
     },
-    loadAttestation = async () => attestation(proof)
+    loadAttestation = async () => attestation(proof),
+    privilegedCohortSourceAccountIds: readonly string[] = []
   ) {
     const db = client.db(database);
     return createSourceFenceWriter({
@@ -177,6 +178,7 @@ suite("source migration fence against an isolated replica set", () => {
       clockSkewEvidence: "isolated single-host fixture only",
       loadSourceProof: async () => load(),
       loadCentralFenceAttestation: async () => loadAttestation(),
+      privilegedCohortSourceAccountIds,
     });
   }
 
@@ -201,6 +203,18 @@ suite("source migration fence against an isolated replica set", () => {
     ).toBe(1);
     const receipt = await db.collection("sourceFenceReceipts").findOne({ proofId: proof.proofId });
     expect(receipt?.["passwordDigest"]).toBe(HASH);
+    await expect(
+      writer(proof).loadCredentialImportMaterial({
+        proofId: proof.proofId,
+        receiptId: first.receiptId!,
+      })
+    ).resolves.toEqual({
+      credentialDigest: HASH,
+      sourceAccountId: id.toHexString(),
+      canonicalAccountId: CANONICAL,
+      enrollmentOperationId: OPERATION,
+      snapshotDigest: proof.snapshotDigest,
+    });
 
     const expiredLoader = async () => ({ proof, sourceNowMs: proof.expiresAtMs, expired: true });
     const replay = await writer(proof, expiredLoader).applySourceFence({
@@ -209,6 +223,49 @@ suite("source migration fence against an isolated replica set", () => {
     });
     expect(replay).toMatchObject({ status: "REPLAY_NO_MUTATION", receiptId: first.receiptId });
     expect(await db.collection("users").findOne({ _id: id })).toEqual(before);
+  });
+
+  it("fences only an exact privileged admin cohort member with a retained social link", async () => {
+    const operation = "62345678-90ab-4cde-b123-456789abcdef";
+    const id = new ObjectId();
+    const db = client.db(database);
+    await db.collection("users").insertOne({
+      _id: id,
+      password: HASH,
+      role: "admin",
+      isAdmin: true,
+      isBanned: false,
+      discordId: "retained-provider-link",
+    });
+    const store = createSourceOwnershipProofStore({
+      sourceIssuer: ISSUER,
+      client,
+      databaseName: database,
+      privilegedCohortSourceAccountIds: [id.toHexString()],
+    });
+    const proof = await store.issuePasswordProof({
+      sourceAccountId: id.toHexString(),
+      password: PASSWORD,
+      reserveEnrollment: async () => ({
+        version: 1,
+        sourceIssuer: ISSUER,
+        sourceSubject: id.toHexString(),
+        canonicalAccountId: CANONICAL,
+        enrollmentOperationId: operation,
+      }),
+    });
+    await expect(
+      writer(proof).applySourceFence({
+        proofId: proof.proofId,
+        provenance: "test:privileged-denied",
+      })
+    ).resolves.toMatchObject({ status: "STALE" });
+    await expect(
+      writer(proof, undefined, undefined, [id.toHexString()]).applySourceFence({
+        proofId: proof.proofId,
+        provenance: "test:privileged-allowed",
+      })
+    ).resolves.toMatchObject({ status: "COMMITTED" });
   });
 
   it("rolls every fence record back when the live credential changed", async () => {
