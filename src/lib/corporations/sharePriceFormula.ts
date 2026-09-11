@@ -1,9 +1,9 @@
 /**
  * Why a share price can fall while book value is high. computeSharePrices prices a
- * corp at tangible book per share (cash + bank equity + sector NPV + builds in progress + tech
- * assets + 0.75x bonds held, minus bond debt) plus 0.4x earnings power and 0.1x a
- * growth premium; weak earnings, living off bond coupons (bondRelianceValuationPenalty)
- * or a CEO holding over 65% (insiderConcentrationMultiplier) all cut the price.
+ * corp at tangible book per share (cash + 0.75x bank equity + sector NPV + builds in progress
+ * + tech assets + 0.75x bonds held, minus bond debt) plus 0.4x earnings power and 0.1x a
+ * growth premium; weak earnings, living off bond coupons (bondRelianceValuationPenalty) or a
+ * CEO holding over 65% (insiderConcentrationMultiplier) all cut the price.
  * rateLimitPrice caps the move at 35% per turn.
  */
 /**
@@ -23,6 +23,7 @@ import {
   STOCK_SPLIT_PRICE_SMOOTHING_TURNS,
   STOCK_SPLIT_SMOOTHING_PREV_WEIGHT,
   FUNDAMENTAL_TANGIBLE_BOOK_WEIGHT,
+  BANK_EQUITY_VALUATION_WEIGHT,
   FUNDAMENTAL_EARNINGS_POWER_WEIGHT,
   FUNDAMENTAL_GROWTH_PREMIUM_WEIGHT,
   GROWTH_PREMIUM_CAP_BUFFER,
@@ -45,7 +46,8 @@ export interface SharePriceInput {
    * Chartered bank book equity normalized to ₳: reserves plus loans, less
    * deposits and borrowings. Bank cash is ring-fenced from liquidCapital, so
    * it must enter separately to avoid valuing an active bank as if its equity
-   * had left the corporation.
+   * had left the corporation. The formula recognizes BANK_EQUITY_VALUATION_WEIGHT
+   * of this ring-fenced equity, rather than treating all of it as liquid cash.
    */
   bankEquityAnchor?: number;
   /** Sum of sector NPVs (₳). Added to liquidCapital for tangible book. */
@@ -166,7 +168,7 @@ export function computeSharePrices(
     // value of unlocked R&D with decade-decay weighting applied upstream.
     const tangibleBook =
       i.liquidCapitalAnchor +
-      (i.bankEquityAnchor ?? 0) +
+      BANK_EQUITY_VALUATION_WEIGHT * (i.bankEquityAnchor ?? 0) +
       i.sectorNPVAnchor +
       Math.max(0, i.constructionInProgressAnchor ?? 0) +
       (i.techAssetValueAnchor ?? 0) +
