@@ -195,7 +195,9 @@ suite("source migration fence against an isolated replica set", () => {
     });
     expect(before?.["authRevokedAt"]).toBeInstanceOf(Date);
     expect(
-      await db.collection("sourceFenceConsumptions").countDocuments({ _id: proof.proofId })
+      await db
+        .collection<{ _id: string }>("sourceFenceConsumptions")
+        .countDocuments({ _id: proof.proofId })
     ).toBe(1);
     const receipt = await db.collection("sourceFenceReceipts").findOne({ proofId: proof.proofId });
     expect(receipt?.["passwordDigest"]).toBe(HASH);
@@ -222,7 +224,9 @@ suite("source migration fence against an isolated replica set", () => {
     expect(result.status).toBe("STALE");
     const db = client.db(database);
     expect(
-      await db.collection("sourceFenceConsumptions").countDocuments({ _id: proof.proofId })
+      await db
+        .collection<{ _id: string }>("sourceFenceConsumptions")
+        .countDocuments({ _id: proof.proofId })
     ).toBe(0);
     expect(
       await db.collection("sourceFenceReceipts").countDocuments({ proofId: proof.proofId })
@@ -258,9 +262,12 @@ suite("source migration fence against an isolated replica set", () => {
       })
     ).resolves.toMatchObject({ status: "STALE" });
     expect(
-      await client.db(database).collection("sourceFenceConsumptions").countDocuments({
-        _id: original.proofId,
-      })
+      await client
+        .db(database)
+        .collection<{ _id: string }>("sourceFenceConsumptions")
+        .countDocuments({
+          _id: original.proofId,
+        })
     ).toBe(0);
 
     const redriven = await writer(fresh, undefined, async () => central(fresh)).applySourceFence({
@@ -293,7 +300,9 @@ suite("source migration fence against an isolated replica set", () => {
     }
     const db = client.db(database);
     expect(
-      await db.collection("sourceFenceConsumptions").countDocuments({ _id: proof.proofId })
+      await db
+        .collection<{ _id: string }>("sourceFenceConsumptions")
+        .countDocuments({ _id: proof.proofId })
     ).toBe(1);
     expect(
       await db.collection("sourceFenceReceipts").countDocuments({ proofId: proof.proofId })

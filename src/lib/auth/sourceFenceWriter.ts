@@ -250,7 +250,7 @@ function validateAttestation(
     item.canonicalAccountId !== proof.canonicalAccountId ||
     item.enrollmentOperationId !== proof.enrollmentOperationId ||
     !/^[1-9][0-9]{0,18}$/.test(item.fenceGeneration) ||
-    BigInt(item.fenceGeneration) > 9_223_372_036_854_775_807n ||
+    (item.fenceGeneration.length === 19 && item.fenceGeneration > "9223372036854775807") ||
     !safeText(item.fenceAuthority, 128) ||
     !HEX64.test(item.fenceTokenHash) ||
     !Number.isSafeInteger(item.fencedAtMs) ||
