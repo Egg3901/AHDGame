@@ -13,6 +13,7 @@ import type { Character, User } from "@/lib/db/types";
 import { getValidatedEnv } from "@/lib/env";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE } from "@/lib/auth/characterGate";
+import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
 
 const CANONICAL_COOKIE_DOMAIN = ".ahousedividedgame.com";
 
@@ -126,6 +127,8 @@ export const userPayloadSchema = z.object({
   username: z.string(),
   role: z.string(),
   isAdmin: z.boolean().optional(),
+  authSource: z.literal("unified").optional(),
+  sid: z.string().uuid().optional(),
   iat: z.number().optional(),
 });
 
@@ -386,7 +389,9 @@ export async function getAuthUserFromToken(token: string): Promise<AuthUser | nu
   const payload = await verifyAuthToken(token);
   if (!payload) return null;
   const user = await resolveUserDoc(await getDb(), payload.userId, payload);
-  if (!user || user.isBanned === true || isAuthMigrationFenced(user)) return null;
+  if (!user || user.isBanned === true) return null;
+  if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(await getDb(), payload)))
+    return null;
   if (isAuthTokenRevoked(user, payload)) return null;
   return mapUserToAuthUser(user, payload);
 }
@@ -407,7 +412,8 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
 
   if (!user) return null;
   if (user.isBanned === true) return null;
-  if (isAuthMigrationFenced(user)) return null;
+  if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(await getDb(), payload)))
+    return null;
   if (isAuthTokenRevoked(user, payload)) return null;
 
   return mapUserToAuthUser(user, payload);
@@ -427,7 +433,7 @@ export const getAuthUserWithCharacter = cache(async (): Promise<AuthUserWithChar
 
   if (!user) return null;
   if (user.isBanned === true) return null;
-  if (isAuthMigrationFenced(user)) return null;
+  if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(db, payload))) return null;
   if (isAuthTokenRevoked(user, payload)) return null;
 
   const authUser = mapUserToAuthUser(user, payload);
