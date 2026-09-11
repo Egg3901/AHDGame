@@ -1,10 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ObjectId } from "mongodb";
-import { getAuthCookieOptions, getJwtSecret } from "@/lib/auth";
-import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
+import { issueUnifiedGameSession } from "@/lib/auth/unifiedGameSession";
 import { getDb } from "@/lib/mongodb";
 
 function cohortSourceForSubject(subject: string): string | null {
@@ -86,42 +84,6 @@ export async function GET(request: Request) {
     isBanned: { $ne: true },
   });
   if (!user) return NextResponse.redirect(new URL("/login?error=unified_identity", appOrigin));
-  const sid = randomUUID();
-  const now = Math.floor(Date.now() / 1000);
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
-  await db
-    .collection<{
-      _id: string;
-      userId: string;
-      issuerSubject: string;
-      createdAt: Date;
-      expiresAt: Date;
-      revokedAt: Date | null;
-    }>("unifiedSessions")
-    .insertOne({
-      _id: sid,
-      userId: sourceId,
-      issuerSubject: payload.sub,
-      createdAt: new Date(),
-      expiresAt,
-      revokedAt: null,
-    });
-  await db
-    .collection<{ expiresAt: Date }>("unifiedSessions")
-    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-  const token = await new SignJWT({
-    userId: sourceId,
-    email: user.email,
-    username: user.username,
-    role: user.role,
-    isAdmin: user.isAdmin === true,
-    authSource: "unified",
-    sid,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt(now)
-    .setExpirationTime("7d")
-    .sign(getJwtSecret());
-  cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
+  await issueUnifiedGameSession({ db, cookieStore, sourceId, issuerSubject: payload.sub, user });
   return NextResponse.redirect(new URL("/", appOrigin));
 }

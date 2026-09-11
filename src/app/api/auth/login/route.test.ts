@@ -6,7 +6,10 @@ import { reauthClock } from "@/lib/auth/sessionIssue";
 const { cookieDelete, cookieSet, migratePasswordLoginToUnified } = vi.hoisted(() => ({
   cookieDelete: vi.fn(),
   cookieSet: vi.fn(),
-  migratePasswordLoginToUnified: vi.fn().mockResolvedValue(undefined),
+  migratePasswordLoginToUnified: vi.fn().mockResolvedValue({
+    accountId: "12e2ef3f-ba11-4c7a-b7d7-9655b11bf415",
+    userId: "a0f5e7e3-0ea6-4567-b581-2e170ed5fec2",
+  }),
 }));
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
@@ -48,6 +51,7 @@ async function mockUsersDb(
           }
         : {
             insertOne: vi.fn().mockResolvedValue({}),
+            createIndex: vi.fn().mockResolvedValue("expiresAt_1"),
             findOne: vi.fn().mockResolvedValue(null),
           },
   } as never);
@@ -311,13 +315,12 @@ describe("POST /api/auth/login — source migration fence", () => {
     const { POST } = await import("./route");
     const res = await POST(loginRequest());
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({
-      message: "Unified account activated",
-      unifiedRedirect: "/api/auth/oidc/login",
+    expect(await res.json()).toMatchObject({
+      message: "Login successful",
+      user: { id: userId.toString(), username: "alpha", isAdmin: true },
     });
     expect(migratePasswordLoginToUnified).toHaveBeenCalledWith(userId.toString(), "password123");
-    expect(cookieDelete).toHaveBeenCalledWith(AUTH_COOKIE_NAME);
-    expect(cookieSet).not.toHaveBeenCalled();
+    expect(cookieSet.mock.calls.some((call) => call[0] === AUTH_COOKIE_NAME)).toBe(true);
     expect(updateOne).not.toHaveBeenCalled();
   });
 
