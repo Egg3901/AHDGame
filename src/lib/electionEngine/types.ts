@@ -235,6 +235,17 @@ export interface DistributeVotesOptions {
    */
   presidentialModifierByParty?: Map<string, number>;
   /**
+   * Institutional-health pressure for a presidential own-race. The ruling
+   * party receives `partyPenalty`; the sitting President receives the larger
+   * `currentRulerPenalty` when their character id matches.
+   */
+  democraticHealth?: {
+    rulingPartyId: string;
+    currentRulerCharacterId?: string;
+    partyPenalty: number;
+    currentRulerPenalty: number;
+  };
+  /**
    * Per-party off-cycle opposition multiplier. Parties outside the national
    * government receive 1.05× in eligible UK Regional Council midterms;
    * governing and coalition parties remain neutral. Undefined outside those

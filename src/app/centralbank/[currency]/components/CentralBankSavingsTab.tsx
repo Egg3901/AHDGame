@@ -26,6 +26,10 @@ interface SavingsApiResponse {
   currencyCode: CurrencyCode;
   primeRate: number;
   apyPercent: number;
+  centralBankDepositBonusPercentPoints?: number;
+  centralBankPricingProgress?: number;
+  centralBankPricingTurnsRemaining?: number;
+  centralBankPricingActive?: boolean;
   totalNationalSavings: number;
   liquidBalance: number;
   savingsBalance: number;
@@ -153,6 +157,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
     savingsCashValue: h.savingsCashValue,
     exchangeRatesSnapshot: h.exchangeRatesSnapshot,
   }));
+  const depositBonusInProgress = (data.centralBankPricingProgress ?? 0) < 1;
 
   return (
     <div className="space-y-6">
@@ -162,7 +167,7 @@ export function CentralBankSavingsTab({ countryId }: Props) {
           <StatCell
             label="APY"
             value={`${data.apyPercent.toFixed(2)}%`}
-            sub={`half of ${data.primeRate.toFixed(2)}% prime`}
+            sub={`half of real ${data.primeRate.toFixed(2)}% prime${(data.centralBankDepositBonusPercentPoints ?? 0) > 0 ? ` + ${(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)}% CB bonus` : ""}`}
             tone="primary"
           />
           <StatCell
@@ -202,6 +207,20 @@ export function CentralBankSavingsTab({ countryId }: Props) {
           />
         </div>
       </div>
+
+      {data.centralBankPricingActive && (
+        <div className="rounded-xl border border-success/30 bg-success/10 p-4">
+          <p className="text-sm font-semibold text-success">Central-bank deposit bonus</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Central-bank deposits currently receive an extra +
+            {(data.centralBankDepositBonusPercentPoints ?? 0).toFixed(2)} percentage points.{" "}
+            {depositBonusInProgress ? "The bonus will reach" : "The bonus has reached"} +0.25 points
+            {depositBonusInProgress && (data.centralBankPricingTurnsRemaining ?? 0) > 0
+              ? ` over the next ${data.centralBankPricingTurnsRemaining} turns.`
+              : "."}
+          </p>
+        </div>
+      )}
 
       {/* Manage account + chart */}
       <div className="grid gap-4 lg:grid-cols-3">

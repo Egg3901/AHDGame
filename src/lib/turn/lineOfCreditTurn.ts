@@ -37,6 +37,7 @@ import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -128,6 +129,7 @@ export async function processLineOfCreditTurn(
   // One policy read per turn, like every other banking-aware pass: a flag
   // flipped mid-turn must not split this pass between two models.
   const bankingPolicy = await loadBankingPolicy(db);
+  const centralBankPricing = await loadCentralBankPricingAdjustment(db, turn);
   const rates = await loadExchangeRatesMap(db);
   const banks = await db
     .collection<CentralBank>("centralBanks")
@@ -226,7 +228,13 @@ export async function processLineOfCreditTurn(
       const ioSurcharge = mode === "io" ? LOC_IO_SURCHARGE_PERCENT_POINTS : 0;
       if (ioSurcharge > 0) ioSurchargeByCurrency[c] = ioSurcharge;
       const prime = resolvePrime(c);
-      const int = computeLocInterestForTurn(P, A, prime, spread + ioSurcharge, c);
+      const int = computeLocInterestForTurn(
+        P,
+        A,
+        prime,
+        spread + centralBankPricing.spreadHikePercentPoints + ioSurcharge,
+        c
+      );
       if (int <= 0) continue;
       interestAccruals[c] = int;
       arrears[c] = roundSavingsAmount((arrears[c] ?? 0) + int, c);
@@ -470,6 +478,7 @@ export async function processLineOfCreditTurn(
         meta: {
           primePercent: resolvePrime(c),
           spreadPercentPoints: spread,
+          centralBankSpreadHikePercentPoints: centralBankPricing.spreadHikePercentPoints,
           distress,
           paymentMode: modeByCurrency[c],
           ...(ioSurchargeByCurrency[c] ? { ioSurchargePoints: ioSurchargeByCurrency[c] } : {}),
@@ -536,7 +545,12 @@ export async function processLineOfCreditTurn(
           subjectName: char.name,
           amount: -interest,
           currencyCode: c,
-          meta: { primePercent: resolvePrime(c), spreadPercentPoints: spread, distress },
+          meta: {
+            primePercent: resolvePrime(c),
+            spreadPercentPoints: spread,
+            centralBankSpreadHikePercentPoints: centralBankPricing.spreadHikePercentPoints,
+            distress,
+          },
         });
       }
       const pay = payments[c] ?? 0;

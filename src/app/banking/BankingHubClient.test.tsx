@@ -157,8 +157,11 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Your loans" })).toBeTruthy();
     expect(screen.getByText("Acme Industrial liquid capital")).toBeTruthy();
     expect(screen.getAllByText("Continental Trust").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/Private-bank maximum/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Arrange private-bank loan" }));
+    expect(screen.getByRole("heading", { name: "Arrange private-bank credit" })).toBeTruthy();
     expect(screen.getByText(/Private-bank maximum/)).toBeTruthy();
-    expect(screen.getByText(/not bond issuance headroom/i)).toBeTruthy();
+    expect(screen.getByText(/separate from bond issuance capacity/i)).toBeTruthy();
 
     const primaryLink = screen.getByRole("link", { name: /Open policy desk/ });
     expect(primaryLink.getAttribute("href")).toBe("/centralbank/usd");

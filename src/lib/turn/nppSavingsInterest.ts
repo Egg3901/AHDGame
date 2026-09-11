@@ -28,7 +28,8 @@ export async function processNppSavingsInterest(
   turn: number,
   resolvePrime: (currency: CurrencyCode) => number,
   resolveInflation: (currency: CurrencyCode) => number = () => 0,
-  resolvePoolTotal: (currency: CurrencyCode) => number = () => 0
+  resolvePoolTotal: (currency: CurrencyCode) => number = () => 0,
+  depositBonusPercent = 0
 ): Promise<{ nppsAccrued: number; totalInterest: number }> {
   // Phase 1: accrue this turn's interest into the pending bucket for any NPP
   // holding savings in an active currency.
@@ -57,7 +58,8 @@ export async function processNppSavingsInterest(
         eligible,
         prime,
         currency,
-        resolveInflation(currency)
+        resolveInflation(currency),
+        depositBonusPercent
       );
       if (interest <= 0) continue;
       perNppInc[`currencyBalances.pendingSavingsInterest.${currency}`] = interest;
