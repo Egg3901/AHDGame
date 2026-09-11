@@ -49,6 +49,13 @@ import { getCountryState } from "@/lib/countryState";
 import { getAllStateApprovalsForElection } from "@/lib/utils/getStateApprovalForElection";
 import { resolvePresidentApproval } from "@/lib/electionEngine/presidentialCoattail";
 import {
+  democraticHealthPressure,
+  type DemocraticHealthElectionSnapshot,
+} from "@/lib/electionEngine/democraticHealth";
+import { democraticHealthLabel } from "@/lib/governanceStyle/score";
+import { loadDemocraticHealth } from "@/lib/governanceStyle/loadDemocraticHealth";
+import { loadActivePresidentialHealthReliefPct } from "@/lib/events/substrate/countryModifiers";
+import {
   applyReferendumShift,
   computeEconomicReferendum,
   type ReferendumResult,
@@ -310,6 +317,8 @@ export interface PresidentVoteTurnDryRun {
   candidateIds: string[];
   /** The referendum reading used this turn, when the channel was active. */
   referendum?: ReferendumResult;
+  /** The institutional-health pressure snapshot used by this turn. */
+  democraticHealth?: DemocraticHealthElectionSnapshot;
   /** The descriptive factor-ledger snapshot the engine teed this turn. */
   factorLedger?: FactorLedgerSnapshot;
 }
@@ -631,7 +640,52 @@ export async function accumulatePresidentVoteTurn(
   // `strengthMultiplier` comment's false claim of an incumbency boost — that
   // scalar only reweights turnout magnitude and is share-invariant. Null when
   // the presidency is vacant / has no party → driver degrades to neutral.
-  const incumbentExec = await resolvePresidentApproval(db, electionCountryId);
+  const [incumbentExec, democraticHealthValue] = await Promise.all([
+    resolvePresidentApproval(db, electionCountryId),
+    loadDemocraticHealth(db, electionCountryId, gsDoc),
+  ]);
+  const democraticHealthReliefPct =
+    incumbentExec?.characterId != null
+      ? await loadActivePresidentialHealthReliefPct(
+          db,
+          electionCountryId,
+          incumbentExec.partyId,
+          incumbentExec.characterId,
+          turnNumber
+        )
+      : 0;
+  const democraticHealthPressureValue =
+    democraticHealthValue == null
+      ? null
+      : democraticHealthPressure(democraticHealthValue, democraticHealthReliefPct);
+  const currentRulerInRace = Boolean(
+    incumbentExec?.characterId &&
+    enriched.some((candidate) => candidate.characterId === incumbentExec.characterId)
+  );
+  const democraticHealth: DemocraticHealthElectionSnapshot | undefined =
+    democraticHealthPressureValue == null
+      ? undefined
+      : {
+          value: democraticHealthPressureValue.value,
+          label: democraticHealthLabel(democraticHealthPressureValue.value),
+          ...(incumbentExec?.partyId ? { rulingPartyId: incumbentExec.partyId } : {}),
+          partyPenaltyPct: incumbentExec ? democraticHealthPressureValue.partyPenalty * 100 : 0,
+          currentRulerPenaltyPct: incumbentExec
+            ? democraticHealthPressureValue.currentRulerPenalty * 100
+            : 0,
+          currentRulerReliefPct: democraticHealthReliefPct,
+          currentRulerInRace,
+          recordedTurn: turnNumber,
+        };
+  const democraticHealthOptions =
+    democraticHealthPressureValue && incumbentExec
+      ? {
+          rulingPartyId: incumbentExec.partyId,
+          currentRulerCharacterId: incumbentExec.characterId,
+          partyPenalty: democraticHealthPressureValue.partyPenalty,
+          currentRulerPenalty: democraticHealthPressureValue.currentRulerPenalty,
+        }
+      : undefined;
 
   // Consecutive terms the incumbent PARTY has already held. Term fatigue is
   // priced by the economic referendum below (penalty-side multiplier); this
@@ -839,6 +893,7 @@ export async function accumulatePresidentVoteTurn(
           calibration?.incumbentApprovalSource === "state" ? approvalPct : incumbentExec?.approval,
         incumbencyApprovalPivot: calibration?.incumbencyApprovalPivot,
         incumbentConsecutiveTerms,
+        democraticHealth: democraticHealthOptions,
         votingSystem: "fptp",
         spoilerRate: PRESIDENTIAL_SPOILER_RATE,
         useOrgAwareSpoiler: true,
@@ -1066,6 +1121,7 @@ export async function accumulatePresidentVoteTurn(
       totalVotesByUnit: newTotalVotesByUnit,
       candidateIds: enriched.map((ec) => ec.candidateId),
       ...(referendum && { referendum }),
+      ...(democraticHealth && { democraticHealth }),
       ...(factorLedger && { factorLedger }),
     };
   }
@@ -1095,6 +1151,7 @@ export async function accumulatePresidentVoteTurn(
             recordedTurn: turnNumber,
           },
         }),
+        ...(democraticHealth && { democraticHealth }),
         // Additive, optional, descriptive: the read-only decomposition of why
         // each candidate is ahead or behind. Already baked into the vote totals
         // above (it is teed off them), so nothing downstream re-applies it.

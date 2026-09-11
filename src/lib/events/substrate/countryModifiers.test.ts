@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEMOCRATIC_HEALTH_RELIEF_CAP_PCT,
+  sumActivePresidentialHealthReliefPct,
   sumActiveSectorDemandModifierPct,
   sumActiveWarEmergencyMitigationPct,
   WAR_EMERGENCY_MITIGATION_CAP_PCT,
@@ -48,5 +50,23 @@ describe("sumActiveWarEmergencyMitigationPct", () => {
         100
       )
     ).toBe(WAR_EMERGENCY_MITIGATION_CAP_PCT);
+  });
+});
+
+describe("sumActivePresidentialHealthReliefPct", () => {
+  it("matches the current ruler, ignores expired relief, and caps the stack", () => {
+    expect(
+      sumActivePresidentialHealthReliefPct(
+        [
+          { partyId: "ruling", characterId: "pres", pct: 40, expiresAtTurn: 120 },
+          { partyId: "ruling", characterId: "pres", pct: 50, expiresAtTurn: 130 },
+          { partyId: "ruling", characterId: "other", pct: 50, expiresAtTurn: 130 },
+          { partyId: "ruling", characterId: "pres", pct: 50, expiresAtTurn: 100 },
+        ],
+        "ruling",
+        "pres",
+        110
+      )
+    ).toBe(DEMOCRATIC_HEALTH_RELIEF_CAP_PCT);
   });
 });

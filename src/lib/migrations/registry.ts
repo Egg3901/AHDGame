@@ -77,6 +77,7 @@ import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity
 import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-central-bank-pricing-phase-in";
 
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
+import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -241,6 +242,7 @@ export const MIGRATIONS: Migration[] = [
   providerIdentityIndexes,
   // Anchor the player-facing central-bank pricing phase-in on the live turn.
   centralBankPricingPhaseIn,
+  sourceFenceIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
