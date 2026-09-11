@@ -35,6 +35,7 @@ import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { sumConstructionInProgressAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
+import { bankEquity } from "@/lib/banking/balanceSheet";
 
 export interface RecomputeSharePricesResult {
   corpsRepriced: number;
@@ -137,6 +138,13 @@ export async function recomputeSharePricesAfterBondTurn(
       homeCurrency,
       fxRate
     );
+    const bankEquityAnchor = corp.bankCharter
+      ? corpCapitalToAnchor(
+          bankEquity(corp.bankCharter),
+          corp.bankCharter.currency,
+          lookups.exchangeRatesByCurrency.get(corp.bankCharter.currency) ?? 1
+        )
+      : 0;
 
     // Revenue-weighted sector growth rate from current sector state (already
     // updated this turn). Ratio is currency-neutral since all sector revenues
@@ -201,6 +209,7 @@ export async function recomputeSharePricesAfterBondTurn(
     inputs.push({
       corpId: id,
       liquidCapitalAnchor: Math.max(0, liquidCapitalAnchor - issuanceProceedsAnchor),
+      bankEquityAnchor,
       sectorNPVAnchor,
       issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,
       bondHoldingsAnchor: lookups.bondAndImfPortfolioAnchorByCorpId.get(id) ?? 0,

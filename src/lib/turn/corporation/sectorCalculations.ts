@@ -50,6 +50,7 @@ import {
 } from "@/lib/labour/laborCost";
 import { makeLabourDemandByState } from "@/lib/labour/labourMarket";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
+import { bankEquity } from "@/lib/banking/balanceSheet";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 // getCountryConfig is needed for the prime rate fallback:
@@ -1248,9 +1249,17 @@ export function processSectors(
     // bounds the effect, so a negative value only raises the floor toward true
     // liquidCapital, which is benign.
     const issuanceProceedsAnchor = corpCapitalToAnchor(corp.shareIssuanceProceeds ?? 0, code, rate);
+    const bankEquityAnchor = corp.bankCharter
+      ? corpCapitalToAnchor(
+          bankEquity(corp.bankCharter),
+          corp.bankCharter.currency,
+          lookups.exchangeRatesByCurrency.get(corp.bankCharter.currency) ?? 1
+        )
+      : 0;
     return {
       corpId: id,
       liquidCapitalAnchor: Math.max(0, s.liquidCapitalAnchorAfterIncome - issuanceProceedsAnchor),
+      bankEquityAnchor,
       sectorNPVAnchor: s.sectorNPV,
       issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,
       bondHoldingsAnchor: lookups.bondAndImfPortfolioAnchorByCorpId.get(id) ?? 0,
