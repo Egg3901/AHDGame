@@ -1,7 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { getUnifiedOidcFlowCookieOptions } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
 
 export async function GET() {
@@ -10,7 +8,6 @@ export async function GET() {
   const clientId = process.env.UNIFIED_OIDC_CLIENT_ID;
   const redirectUri = process.env.UNIFIED_OIDC_REDIRECT_URI;
   if (!issuer || !clientId || !redirectUri) return new NextResponse(null, { status: 503 });
-  const flowId = randomUUID();
   const state = randomBytes(32).toString("base64url");
   const nonce = randomBytes(32).toString("base64url");
   const verifier = randomBytes(48).toString("base64url");
@@ -24,9 +21,9 @@ export async function GET() {
     verifier: string;
     expiresAt: Date;
   }>("unifiedOidcFlows");
-  await flows.insertOne({ _id: flowId, state, nonce, verifier, expiresAt });
+  await flows.insertOne({ _id: randomUUID(), state, nonce, verifier, expiresAt });
+  await flows.createIndex({ state: 1 }, { unique: true });
   await flows.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-  (await cookies()).set("ahd_unified_oidc_flow", flowId, getUnifiedOidcFlowCookieOptions(300));
   const url = new URL(`${issuer}/protocol/openid-connect/auth`);
   url.search = new URLSearchParams({
     client_id: clientId,
