@@ -26,6 +26,7 @@ import {
   isUnifiedMigrationCohort,
   migratePasswordLoginToUnified,
 } from "@/lib/auth/unifiedMigration";
+import { issueUnifiedGameSession } from "@/lib/auth/unifiedGameSession";
 
 /** Partially redact an IP for display in forensic surfaces — never store the
  * raw address in `actionAuditLog.net` (plan §3.1 "net" doc-comment). */
@@ -128,12 +129,18 @@ export async function POST(request: Request) {
       const isRecoveryPassword =
         isRecoveryCohort && user.password && (await bcrypt.compare(password, user.password));
       if (isRecoveryPassword) {
-        await migratePasswordLoginToUnified(user._id.toString(), password);
+        const target = await migratePasswordLoginToUnified(user._id.toString(), password);
         const cookieStore = await cookies();
-        cookieStore.delete(AUTH_COOKIE_NAME);
+        const sessionUser = await issueUnifiedGameSession({
+          db,
+          cookieStore,
+          sourceId: user._id.toString(),
+          issuerSubject: target.userId,
+          user,
+        });
         return NextResponse.json({
-          message: "Unified account activated",
-          unifiedRedirect: "/api/auth/oidc/login",
+          message: "Login successful",
+          user: sessionUser,
         });
       }
       recordAudit({
@@ -168,12 +175,18 @@ export async function POST(request: Request) {
       process.env.AHD_UNIFIED_COHORT_ENABLED === "true" &&
       isUnifiedMigrationCohort(user._id.toString())
     ) {
-      await migratePasswordLoginToUnified(user._id.toString(), password);
+      const target = await migratePasswordLoginToUnified(user._id.toString(), password);
       const cookieStore = await cookies();
-      cookieStore.delete(AUTH_COOKIE_NAME);
+      const sessionUser = await issueUnifiedGameSession({
+        db,
+        cookieStore,
+        sourceId: user._id.toString(),
+        issuerSubject: target.userId,
+        user,
+      });
       return NextResponse.json({
-        message: "Unified account activated",
-        unifiedRedirect: "/api/auth/oidc/login",
+        message: "Login successful",
+        user: sessionUser,
       });
     }
 
