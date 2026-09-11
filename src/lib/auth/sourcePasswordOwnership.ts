@@ -34,6 +34,11 @@ export interface SourcePasswordOwnershipUser {
   readonly authMigrationFence?: unknown;
 }
 
+export interface SourcePasswordOwnershipPolicy {
+  /** Exact source IDs approved for the temporary privileged migration cohort. */
+  readonly privilegedCohortSourceAccountIds?: readonly string[];
+}
+
 const SOURCE_ACCOUNT_ID_PATTERN = /^[0-9a-f]{24}$/;
 const BCRYPT_COST12_PATTERN = /^\$2[aby]\$12\$[./A-Za-z0-9]{53}$/;
 const MAX_PASSWORD_UTF8_BYTES = 72;
@@ -144,24 +149,59 @@ function assertNoSocialMethod(present: boolean, value: unknown): void {
   throw new SourcePasswordOwnershipError("account not eligible");
 }
 
-function capturedHashOrThrow(state: CapturedState): string {
+function privilegedCohort(policy: SourcePasswordOwnershipPolicy | undefined): ReadonlySet<string> {
+  const ids = policy?.privilegedCohortSourceAccountIds ?? [];
+  if (!Array.isArray(ids) || ids.length > 16) {
+    throw new SourcePasswordOwnershipError("invalid ownership policy");
+  }
+  const checked = new Set<string>();
+  for (const id of ids) {
+    if (typeof id !== "string" || !SOURCE_ACCOUNT_ID_PATTERN.test(id)) {
+      throw new SourcePasswordOwnershipError("invalid ownership policy");
+    }
+    checked.add(id);
+  }
+  if (checked.size !== ids.length) {
+    throw new SourcePasswordOwnershipError("invalid ownership policy");
+  }
+  return checked;
+}
+
+function capturedHashOrThrow(
+  state: CapturedState,
+  privilegedSourceIds: ReadonlySet<string>
+): string {
   if (state.fencePresent || state.deletionPresent) {
     throw new SourcePasswordOwnershipError("account not eligible");
   }
   if (state.revokedKind === "malformed") {
     throw new SourcePasswordOwnershipError("account not eligible");
   }
-  if (!state.rolePresent || state.role !== "player") {
-    throw new SourcePasswordOwnershipError("account not eligible");
-  }
-  if (state.isAdminPresent && state.isAdmin !== false) {
-    throw new SourcePasswordOwnershipError("account not eligible");
+  const privileged = privilegedSourceIds.has(state.idHex);
+  if (privileged) {
+    if (
+      !state.rolePresent ||
+      state.role !== "admin" ||
+      !state.isAdminPresent ||
+      state.isAdmin !== true
+    ) {
+      throw new SourcePasswordOwnershipError("account not eligible");
+    }
+  } else {
+    if (!state.rolePresent || state.role !== "player") {
+      throw new SourcePasswordOwnershipError("account not eligible");
+    }
+    if (state.isAdminPresent && state.isAdmin !== false) {
+      throw new SourcePasswordOwnershipError("account not eligible");
+    }
   }
   if (state.isBannedPresent && state.isBanned !== false) {
     throw new SourcePasswordOwnershipError("account not eligible");
   }
-  assertNoSocialMethod(state.googlePresent, state.googleId);
-  assertNoSocialMethod(state.discordPresent, state.discordId);
+  if (!privileged) {
+    assertNoSocialMethod(state.googlePresent, state.googleId);
+    assertNoSocialMethod(state.discordPresent, state.discordId);
+  }
   if (
     !state.passwordPresent ||
     typeof state.password !== "string" ||
@@ -212,13 +252,14 @@ function suppliedPasswordOrThrow(password: unknown): string {
  */
 export async function verifySourcePasswordOwnership(
   user: SourcePasswordOwnershipUser,
-  password: string
+  password: string,
+  policy?: SourcePasswordOwnershipPolicy
 ): Promise<boolean> {
   if (!user || typeof user !== "object") {
     throw new SourcePasswordOwnershipError("invalid account record");
   }
   const before = captureState(user);
-  const storedHash = capturedHashOrThrow(before);
+  const storedHash = capturedHashOrThrow(before, privilegedCohort(policy));
   const supplied = suppliedPasswordOrThrow(password);
 
   let matched = false;

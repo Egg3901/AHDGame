@@ -170,6 +170,8 @@ export interface SourceOwnershipProofStoreConfig {
   readonly client: MongoClient;
   readonly db?: Db;
   readonly databaseName?: string;
+  /** Exact, temporary privileged source cohort. Omit for ordinary password-only migration. */
+  readonly privilegedCohortSourceAccountIds?: readonly string[];
 }
 
 interface CommittedProofState {
@@ -378,7 +380,8 @@ export function createSourceOwnershipProofStore(
 
     const verified = await verifySourcePasswordOwnership(
       original as unknown as Parameters<typeof verifySourcePasswordOwnership>[0],
-      password
+      password,
+      { privilegedCohortSourceAccountIds: config.privilegedCohortSourceAccountIds }
     );
     if (verified !== true) {
       throw new SourceOwnershipProofError("verification failed");

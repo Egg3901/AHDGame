@@ -164,6 +164,11 @@ export default function LoginPageClient({
         throw new Error(data.error || t("errors.loginFailed"));
       }
 
+      if (typeof data.unifiedRedirect === "string") {
+        window.location.assign(data.unifiedRedirect);
+        return;
+      }
+
       // Use a full navigation so the AuthDataProvider remounts and picks up the
       // freshly set session cookie. router.push would keep the provider's prior
       // (logged-out) state, causing navbar/footer to render as signed-out until
