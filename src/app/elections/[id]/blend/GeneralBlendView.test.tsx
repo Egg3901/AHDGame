@@ -103,6 +103,34 @@ describe("GeneralBlendView", () => {
     renderView();
     expect(screen.getAllByText("PA")).toHaveLength(2);
   });
+
+  it("shows democratic health and both presidential drag levels on both layouts", () => {
+    render(
+      <GeneralBlendView
+        election={{
+          ...election(),
+          democraticHealth: {
+            value: 42.5,
+            label: "Fragile democracy",
+            rulingPartyId: "1",
+            rulingPartyName: "Democratic Party",
+            partyPenaltyPct: 4.2,
+            currentRulerPenaltyPct: 6.3,
+            currentRulerReliefPct: 40,
+            currentRulerInRace: true,
+            recordedTurn: 412,
+          },
+        }}
+        electionId="e1"
+        wire={[]}
+        onRefresh={() => {}}
+      />
+    );
+    expect(screen.getAllByText("Democratic health")).toHaveLength(2);
+    expect(screen.getAllByText("Ruling party drag")).toHaveLength(2);
+    expect(screen.getAllByText("Sitting President drag")).toHaveLength(2);
+    expect(screen.getAllByText(/Temporary constitutional relief/)).toHaveLength(2);
+  });
 });
 
 describe("nothing on this screen is won", () => {

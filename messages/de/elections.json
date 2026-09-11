@@ -112,6 +112,17 @@
       "recordedTurn": "Stand von Zug {turn}.",
       "pts": "Pkt."
     },
+    "democraticHealth": {
+      "title": "Demokratische Gesundheit",
+      "subtitle": "Institutionelle Stärke verändert, wie Wähler {party} beurteilen.",
+      "partyFallback": "die Regierungspartei",
+      "scaleNote": "Der Wahlmalus beginnt unter 60 und wächst mit sinkender Gesundheit.",
+      "partyEffect": "Malus der Regierungspartei",
+      "rulerEffect": "Malus des amtierenden Präsidenten",
+      "rulerNotRunning": "Der amtierende Präsident tritt in diesem Rennen nicht an, daher ist der größere persönliche Malus nicht aktiv.",
+      "relief": "Eine zeitweilige verfassungsrechtliche Maßnahme senkt den zusätzlichen Präsidentenmalus um {percent}%.",
+      "recordedTurn": "Stand von Zug {turn}."
+    },
     "factorLedger": {
       "title": "Faktoren-Aufschluesselung",
       "subtitle": "Warum eine Kandidatin oder ein Kandidat vorn oder hinten liegt, aufgeteilt in benannte Faktoren. Dies steckt bereits in den Stimmen.",

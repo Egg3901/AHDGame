@@ -7,6 +7,7 @@ import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendS
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
+import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import {
   buildGeneralBlendViewModel,
   type DriverRowVM,
@@ -910,6 +911,22 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             </div>
           ) : null}
 
+          {election.democraticHealth ? (
+            <div style={{ marginTop: 24 }}>
+              <h2
+                style={{
+                  margin: "0 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                Democratic health
+              </h2>
+              <DemocraticHealthBlock data={election.democraticHealth} />
+            </div>
+          ) : null}
+
           {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
             <div style={{ marginTop: 24 }}>
               <h2
@@ -988,6 +1005,23 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                     National mood
                   </div>
                   <NationalMoodBlock vm={vm} />
+                </div>
+              ) : null}
+
+              {election.democraticHealth ? (
+                <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
+                  <div
+                    style={{
+                      fontFamily: FONT.mono,
+                      fontSize: 9.5,
+                      letterSpacing: ".16em",
+                      textTransform: "uppercase",
+                      color: BLEND.mutedDimmer,
+                    }}
+                  >
+                    Democratic health
+                  </div>
+                  <DemocraticHealthBlock data={election.democraticHealth} />
                 </div>
               ) : null}
 
