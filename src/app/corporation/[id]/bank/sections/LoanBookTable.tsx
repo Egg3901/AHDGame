@@ -164,7 +164,7 @@ function LendingProfilePicker({
 
   return (
     <div className="space-y-2 rounded-xl border border-card-border bg-card p-4">
-      <Eyebrow>CEO control</Eyebrow>
+      <Eyebrow kind="ceoControl" />
       <div className="mb-1 text-sm font-semibold text-foreground">Lending stance</div>
       <p className="mb-3 text-xs text-muted">
         Sets which ratings the bank will lend to from the next turn. Loans already on the book keep
@@ -245,7 +245,7 @@ export function LoanBookTable({
 
   return (
     <section className="space-y-3">
-      <Eyebrow>Monitor</Eyebrow>
+      <Eyebrow kind="monitor" />
       <h3 className="text-base font-semibold text-foreground">Loan book</h3>
       {householdBook && <HouseholdBookTable book={householdBook} currency={currency} />}
       {householdBook && (

@@ -54,7 +54,7 @@ export function CapacityAllocationEditor({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
       <div>
-        <Eyebrow>CEO control</Eyebrow>
+        <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Capacity allocation</h3>
         <p className="text-sm text-muted">
           Share of financial-sector capacity running the branch network (deposit ceiling). The rest

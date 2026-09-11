@@ -90,7 +90,7 @@ export function RiskPanel({
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="space-y-1">
-          <Eyebrow>Monitor</Eyebrow>
+          <Eyebrow kind="monitor" />
           <h3 className="text-base font-semibold text-foreground">Run risk</h3>
         </div>
         <span className={`text-sm font-semibold ${BAND_TONE[risk.band]}`}>

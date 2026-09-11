@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslations } from "next-intl";
 import { Tooltip } from "@/components/ui";
 
 /**
@@ -19,11 +20,13 @@ export function StatCell({
   tooltip?: string;
   action?: { label: string; onClick: () => void };
 }) {
+  const t = useTranslations("corporations.bankConsole");
+
   return (
     <div className="px-4 py-3">
       <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
         {label}
-        {tooltip ? <Tooltip content={tooltip} label={`About ${label}`} /> : null}
+        {tooltip ? <Tooltip content={tooltip} label={t("about", { label })} /> : null}
       </p>
       <div className="mt-1 text-sm font-semibold text-foreground">{value}</div>
       {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}

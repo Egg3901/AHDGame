@@ -96,7 +96,7 @@ export function PropBookPanel({
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="space-y-1">
-          <Eyebrow>CEO control</Eyebrow>
+          <Eyebrow kind="ceoControl" />
           <h3 className="text-base font-semibold text-foreground">Prop book</h3>
         </div>
         <p className="text-sm font-mono tabular-nums text-muted">

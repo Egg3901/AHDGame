@@ -5,6 +5,30 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BankConsoleTab } from "./BankConsoleTab";
 
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string, values?: Record<string, string | number>) => {
+    if (key === "about") return `About ${values?.label}`;
+    if (key === "aboutPosition") return "About position";
+    if (key === "tooltips.capFormula") return `${values?.formula}. Now: ${values?.inputs}.`;
+    if (key === "tooltips.capFormulaLabel") return `How ${values?.label} is computed`;
+    if (key === "pendingDecisions") return `${values?.count} awaiting decision`;
+    const messages: Record<string, string> = {
+      "eyebrow.ceoControl": "CEO control",
+      "eyebrow.monitor": "Monitor",
+      "eyebrow.reference": "Reference",
+      "eyebrow.supervision": "Supervision",
+      position: "Position",
+      fundingAttention: "capital or reserves need attention",
+      needsAttention: "needs attention",
+      "actions.postCapital": "Post capital",
+      "actions.adjustRates": "Adjust rates",
+      "actions.raiseCeiling": "Raise ceiling",
+      "actions.manageLoans": "Manage loans",
+    };
+    return messages[key] ?? key;
+  },
+}));
+
 const payload = {
   privateBankingEnabled: true,
   bankPropTradingEnabled: false,
@@ -272,6 +296,18 @@ describe("console hierarchy", () => {
     render(<BankConsoleTab corporationId="corp1" isCeo />);
 
     expect(await screen.findByRole("button", { name: /Lending 1/ })).toBeTruthy();
+  });
+
+  it("marks Funding when reserves need attention", async () => {
+    const reserveShortfall = {
+      ...payload,
+      charter: { ...payload.charter, cashReserves: 50, requiredReserves: 100 },
+    };
+    global.fetch = vi.fn(async () => ok(reserveShortfall)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    expect(await screen.findByRole("button", { name: "Funding needs attention" })).toBeTruthy();
   });
 
   it("keeps cap formulas behind tooltips", async () => {

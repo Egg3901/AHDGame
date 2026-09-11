@@ -80,7 +80,7 @@ export function BlacklistEditor({
   return (
     <section className="space-y-4 rounded-xl border border-card-border bg-card p-5">
       <div>
-        <Eyebrow>CEO control</Eyebrow>
+        <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Who this bank refuses</h3>
         <p className="mt-1 text-sm text-muted">
           Listed players cannot deposit here or borrow from you. Listed companies cannot borrow.

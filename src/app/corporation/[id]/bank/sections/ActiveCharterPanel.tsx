@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { EmptyState, Tooltip } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import { assessCapital, borrowingsFromCharter } from "@/lib/banking/capitalAdequacy";
@@ -64,7 +65,7 @@ function LoanApprovalToggle({
   };
   return (
     <div className="space-y-2 rounded-xl border border-card-border bg-card p-4">
-      <Eyebrow>CEO control</Eyebrow>
+      <Eyebrow kind="ceoControl" />
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className="text-sm font-semibold text-foreground">Loan approval</div>
@@ -103,6 +104,7 @@ export function ActiveCharterPanel({
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
+  const t = useTranslations("corporations.bankConsole");
   const charter = data.charter!;
   const depositTaking = charter.type === "retail" || charter.type === "universal";
   const propEligible = charter.type === "investment" || charter.type === "universal";
@@ -130,13 +132,13 @@ export function ActiveCharterPanel({
       id: "lending",
       label: "Lending",
       badge: pendingCount > 0 ? pendingCount : undefined,
-      hint: pendingCount > 0 ? `${pendingCount} awaiting decision` : undefined,
+      hint: pendingCount > 0 ? t("pendingDecisions", { count: pendingCount }) : undefined,
     },
     {
       id: "funding",
       label: "Funding",
       alert: fundingAttention,
-      hint: fundingAttention ? "capital or reserves need attention" : undefined,
+      hint: fundingAttention ? t("fundingAttention") : undefined,
     },
     ...(tradingVisible ? [{ id: "trading" as const, label: "Trading" }] : []),
     { id: "admin", label: "Admin" },
@@ -161,29 +163,29 @@ export function ActiveCharterPanel({
       )}
 
       <div className="flex flex-wrap gap-1 border-b border-card-border">
-        {tabs.map((t) => (
+        {tabs.map((tabItem) => (
           <button
-            key={t.id}
+            key={tabItem.id}
             type="button"
-            onClick={() => setTab(t.id)}
-            aria-current={tab === t.id ? "page" : undefined}
-            title={t.hint}
+            onClick={() => setTab(tabItem.id)}
+            aria-current={tab === tabItem.id ? "page" : undefined}
+            title={tabItem.hint}
             className={`-mb-px flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-              tab === t.id
+              tab === tabItem.id
                 ? "border-primary text-foreground"
                 : "border-transparent text-muted hover:text-foreground"
             }`}
           >
-            {t.label}
-            {t.badge != null && (
+            {tabItem.label}
+            {tabItem.badge != null && (
               <span className="rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-accent">
-                {t.badge}
+                {tabItem.badge}
               </span>
             )}
-            {t.alert && (
+            {tabItem.alert && (
               <>
                 <span className="h-1.5 w-1.5 rounded-full bg-error" aria-hidden="true" />
-                <span className="sr-only">needs attention</span>
+                <span className="sr-only">{t("needsAttention")}</span>
               </>
             )}
           </button>
@@ -193,28 +195,26 @@ export function ActiveCharterPanel({
       {tab === "overview" && (
         <section className="rounded-xl border border-card-border bg-card overflow-hidden">
           <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
+            <Eyebrow kind="monitor" />
             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-              Position
+              {t("position")}
             </span>
-            <Tooltip
-              content="Where the bank stands right now. Each figure links to the tab that moves it."
-              label="About position"
-            />
+            <Tooltip content={t("tooltips.position")} label={t("aboutPosition")} />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
             <StatCell
               label="Posted capital"
               value={formatBankMoney(charter.postedCapital, charter.currency)}
               sub={`chartered T${charter.charteredTurn}`}
-              tooltip="Capital posted from the treasury plus retained earnings. It stands behind depositors and sets the deposit ceiling."
-              action={{ label: "Post capital", onClick: () => setTab("funding") }}
+              tooltip={t("tooltips.postedCapital")}
+              action={{ label: t("actions.postCapital"), onClick: () => setTab("funding") }}
             />
             <StatCell
               label="Deposits"
               value={formatBankMoney(charter.totalDeposits, charter.currency)}
               sub={`players ${formatBankMoney(playerDeposits, charter.currency)} · households ${formatBankMoney(charter.npcDeposits, charter.currency)}`}
-              tooltip="Household savings plus player deposits pointed at the bank. More deposits raise the reserve requirement."
-              action={{ label: "Adjust rates", onClick: () => setTab("lending") }}
+              tooltip={t("tooltips.deposits")}
+              action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
             />
             <StatCell
               label="Deposit ceiling"
@@ -223,8 +223,8 @@ export function ActiveCharterPanel({
                 charter.currency
               )}
               sub={`branch share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}%`}
-              tooltip="The most deposits the bank may hold: the lower of branch capacity and 12x book equity."
-              action={{ label: "Raise ceiling", onClick: () => setTab("funding") }}
+              tooltip={t("tooltips.depositCeiling")}
+              action={{ label: t("actions.raiseCeiling"), onClick: () => setTab("funding") }}
             />
             <StatCell
               label="Loans out"
@@ -234,8 +234,8 @@ export function ActiveCharterPanel({
                   ? `reserve requirement ${(data.reserveRatio * 100).toFixed(0)}%`
                   : undefined
               }
-              tooltip="Named player loans plus the household book. Lending earns interest but consumes reserves."
-              action={{ label: "Manage loans", onClick: () => setTab("lending") }}
+              tooltip={t("tooltips.loansOut")}
+              action={{ label: t("actions.manageLoans"), onClick: () => setTab("lending") }}
             />
             <StatCell
               label="Rates"
@@ -245,8 +245,8 @@ export function ActiveCharterPanel({
                   : "n/a"
               }
               sub="you pay / you charge"
-              tooltip="Your offsets versus central bank prime, inside the Regulation Q corridor. Pay more to attract savers; charge more to earn, at the cost of demand."
-              action={{ label: "Adjust rates", onClick: () => setTab("lending") }}
+              tooltip={t("tooltips.rates")}
+              action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
             />
           </div>
         </section>
@@ -369,7 +369,7 @@ export function ActiveCharterPanel({
       {tab === "admin" && (
         <div className="space-y-6">
           <section className="space-y-2 rounded-xl border border-card-border bg-card p-5 text-sm text-muted">
-            <Eyebrow>Reference</Eyebrow>
+            <Eyebrow kind="reference" />
             <h3 className="text-base font-semibold text-foreground">Charter</h3>
             <p className="mt-1">
               {charterLabel(charter.type)} charter in {charter.currency}, granted on turn{" "}

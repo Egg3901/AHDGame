@@ -44,7 +44,7 @@ export function RevokeCharterForm({
 
   return (
     <section className="rounded-xl border border-error/30 bg-error/5 p-5 space-y-3 max-w-xl">
-      <Eyebrow>Supervision</Eyebrow>
+      <Eyebrow kind="supervision" />
       <h3 className="text-base font-semibold text-error">Revoke charter</h3>
       <p className="text-sm text-muted">
         Central bank chair of this currency, or an admin. The CEO cannot self-revoke.

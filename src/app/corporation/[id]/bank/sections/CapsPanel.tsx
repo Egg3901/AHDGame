@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Tooltip } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -21,6 +22,7 @@ import { Eyebrow } from "../components/BankSection";
  * the way a hand-written help string does.
  */
 export function CapsPanel({ data }: { data: ConsolePayload }) {
+  const t = useTranslations("corporations.bankConsole");
   const caps = data.caps;
   if (!caps || caps.length === 0) return null;
   const currency = data.currency as CurrencyCode;
@@ -29,7 +31,7 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
     <section className="rounded-lg border border-card-border bg-card p-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="space-y-1">
-          <Eyebrow>Reference</Eyebrow>
+          <Eyebrow kind="reference" />
           <h3 className="text-sm font-semibold uppercase tracking-widest text-muted">
             Your limits, and where they come from
           </h3>
@@ -49,14 +51,17 @@ export function CapsPanel({ data }: { data: ConsolePayload }) {
               <span className="text-xs uppercase tracking-widest text-muted">
                 {cap.label}
                 <Tooltip
-                  content={`${cap.formula}. Now: ${cap.inputs
-                    .map((input) =>
-                      input.unit === "percent"
-                        ? `${input.label} ${(input.value * 100).toFixed(1)}%`
-                        : `${input.label} ${formatBankMoney(input.value, currency)}`
-                    )
-                    .join("; ")}.`}
-                  label={`How ${cap.label} is computed`}
+                  content={t("tooltips.capFormula", {
+                    formula: cap.formula,
+                    inputs: cap.inputs
+                      .map((input) =>
+                        input.unit === "percent"
+                          ? `${input.label} ${(input.value * 100).toFixed(1)}%`
+                          : `${input.label} ${formatBankMoney(input.value, currency)}`
+                      )
+                      .join("; "),
+                  })}
+                  label={t("tooltips.capFormulaLabel", { label: cap.label })}
                 />
               </span>
               <span className="font-mono text-sm text-foreground">

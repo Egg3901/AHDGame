@@ -84,7 +84,7 @@ export function RecapitalizePanel({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
       <div>
-        <Eyebrow>CEO control</Eyebrow>
+        <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Capital adequacy</h3>
         <p className="text-sm text-muted">
           Money moved here crosses into the bank and stands behind the depositors. It can only come

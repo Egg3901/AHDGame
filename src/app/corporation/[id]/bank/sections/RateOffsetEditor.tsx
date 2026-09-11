@@ -57,7 +57,7 @@ export function RateOffsetEditor({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-5 max-w-xl">
       <div>
-        <Eyebrow>CEO control</Eyebrow>
+        <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Rate offsets</h3>
         <p className="text-sm text-muted">
           Offsets are percentage points versus the central bank prime, bounded by the Regulation Q

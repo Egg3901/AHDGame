@@ -92,7 +92,7 @@ export function CharterSwitchForm({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
       <div>
-        <Eyebrow>CEO control</Eyebrow>
+        <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Change charter type</h3>
         <p className="mt-1 text-sm text-muted">
           Change what kind of bank you run without re-chartering or re-posting capital. Switching to

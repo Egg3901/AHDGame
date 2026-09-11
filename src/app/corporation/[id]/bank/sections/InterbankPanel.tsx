@@ -2,6 +2,7 @@
 
 import { useReducer } from "react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { Badge, Button, Input } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -45,6 +46,7 @@ export function InterbankPanel({
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
+  const t = useTranslations("corporations.bankConsole");
   const [{ borrower, amount, rate, marginAmount, busy }, updateInterbankState] = useReducer(
     mergeState<InterbankState>,
     { borrower: null, amount: "", rate: "", marginAmount: "", busy: false }
@@ -109,20 +111,20 @@ export function InterbankPanel({
 
   return (
     <section className="space-y-4">
-      <Eyebrow>CEO control</Eyebrow>
+      <Eyebrow kind="ceoControl" />
       <h3 className="text-base font-semibold text-foreground">Interbank &amp; CB margin</h3>
       <div className="rounded-xl border border-card-border bg-card grid grid-cols-2 divide-x divide-card-border max-w-xl">
         <StatCell
           label="Interbank debt"
           value={formatBankMoney(interbankDebt, currency)}
           sub="borrowed outstanding"
-          tooltip="What the bank owes other banks. Market funding: cheaper than the window, but the lenders can pull it."
+          tooltip={t("tooltips.interbankDebt")}
         />
         <StatCell
           label="CB margin debt"
           value={formatBankMoney(cbMarginDebt, currency)}
           sub="collateralised line"
-          tooltip="Central bank lending against posted collateral. Secured, but arrears here draw supervisory attention."
+          tooltip={t("tooltips.marginDebt")}
         />
       </div>
 

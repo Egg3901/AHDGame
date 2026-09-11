@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge, Tooltip } from "@/components/ui";
+import { useTranslations } from "next-intl";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import {
@@ -10,6 +11,7 @@ import {
 } from "@/lib/banking/capitalAdequacy";
 import type { ConsolePayload } from "../types";
 import { charterLabel } from "../lib/helpers";
+import { Eyebrow } from "../components/BankSection";
 
 /** English ordinal for the panic-turn copy ("3rd", not "3th"). */
 export function panicTurnOrdinal(turns: number): string {
@@ -75,6 +77,7 @@ function bandMeaning(
 }
 
 export function HealthCard({ data }: { data: ConsolePayload }) {
+  const t = useTranslations("corporations.bankConsole");
   const charter = data.charter!;
   const capital = assessCapital({
     cashReserves: charter.cashReserves,
@@ -102,6 +105,7 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
     <section className={`space-y-4 rounded-xl border p-5 ${toneBorder}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
+          <Eyebrow kind="monitor" />
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold text-foreground">{meaning.headline}</h2>
             <WarningBandBadge band={charter.warningBand} confidence={charter.confidence} />
@@ -128,10 +132,12 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
           }
           tooltip={
             capital.standing === "undercapitalized"
-              ? `Post ${formatBankMoney(shortfall, charter.currency)} or lose the charter`
+              ? t("tooltips.capitalUndercapitalized", {
+                  amount: formatBankMoney(shortfall, charter.currency),
+                })
               : capital.standing === "stressed"
-                ? "Survives today, fails the stress scenario"
-                : "Above the minimum and the stress scenario"
+                ? t("tooltips.capitalStressed")
+                : t("tooltips.capitalAdequate")
           }
         />
         <HealthStat
@@ -144,10 +150,14 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
           tone={reserveGap == null ? "default" : reserveGap < 0 ? "error" : "success"}
           tooltip={
             requiredReserves == null
-              ? "No reserve requirement"
+              ? t("tooltips.noReserveRequirement")
               : reserveGap != null && reserveGap < 0
-                ? `${formatBankMoney(Math.abs(reserveGap), charter.currency)} short of the requirement`
-                : `${formatBankMoney(reserveGap ?? 0, charter.currency)} above the requirement`
+                ? t("tooltips.reserveShortfall", {
+                    amount: formatBankMoney(Math.abs(reserveGap), charter.currency),
+                  })
+                : t("tooltips.reserveSurplus", {
+                    amount: formatBankMoney(reserveGap ?? 0, charter.currency),
+                  })
           }
         />
         <HealthStat
@@ -156,8 +166,10 @@ export function HealthCard({ data }: { data: ConsolePayload }) {
           tone={arrears.length === 0 ? "success" : "warning"}
           tooltip={
             arrears.length === 0
-              ? "Every named loan is current"
-              : `${formatBankMoney(arrearsValue, charter.currency)} in arrears or defaulted`
+              ? t("tooltips.noBadLoans")
+              : t("tooltips.badLoans", {
+                  amount: formatBankMoney(arrearsValue, charter.currency),
+                })
           }
         />
       </div>
@@ -176,6 +188,7 @@ function HealthStat({
   tooltip: string;
   tone: "success" | "warning" | "error" | "default";
 }) {
+  const t = useTranslations("corporations.bankConsole");
   const valueTone =
     tone === "error"
       ? "text-error"
@@ -188,7 +201,7 @@ function HealthStat({
     <div className="rounded-lg border border-card-border bg-card px-4 py-3">
       <div className="text-[10px] font-semibold uppercase tracking-widest text-muted">
         {label}
-        <Tooltip content={tooltip} label={`About ${label}`} />
+        <Tooltip content={tooltip} label={t("about", { label })} />
       </div>
       <div className={`mt-1 text-xl font-semibold tabular-nums ${valueTone}`}>{value}</div>
     </div>
