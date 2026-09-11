@@ -105,6 +105,17 @@ export async function getOAuthStateCookieOptions(maxAge: number = 300) {
   return buildCookieOptions(maxAge);
 }
 
+/** OIDC authorization and callback share one host, so keep this bounce cookie host-only. */
+export function getUnifiedOidcFlowCookieOptions(maxAge: number = 300) {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    maxAge,
+    path: "/",
+  };
+}
+
 /** Shared auth cookie options - use for all `auth-token` cookie sets. */
 export async function getAuthCookieOptions() {
   return buildCookieOptions(60 * 60 * 24 * 7); // 7 days
