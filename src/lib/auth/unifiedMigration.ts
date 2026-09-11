@@ -15,6 +15,7 @@ import { getDb, getMongoClient } from "@/lib/mongodb";
 import { createSourceFenceRedriver } from "@/lib/auth/sourceFenceRedrive";
 import { createSourceFenceWriter } from "@/lib/auth/sourceFenceWriter";
 import { createSourceOwnershipProofStore } from "@/lib/auth/sourceOwnershipProof";
+import { recoverCredentialImport } from "@/lib/auth/credentialImportRecovery";
 
 const SOURCE_ISSUER = "urn:lakeside:legacy:ahd:production";
 const AUTHORITY = "ahd-unified-cohort";
@@ -193,6 +194,7 @@ export async function migratePasswordLoginToUnified(sourceAccountId: string, pas
       allowedImportIssuers: [targetIssuer],
       sourceProofReader,
       loadCommittedImportReceipt,
+      abortImport: loadCommittedImportReceipt,
       loadActivationReceipt: async (binding: Record<string, unknown>) =>
         postAuthority("activation-receipt", "LAKESIDE_ACTIVATION_RECEIPT_READER", {
           accountId: binding.accountId,
@@ -320,44 +322,64 @@ export async function migratePasswordLoginToUnified(sourceAccountId: string, pas
     });
     progress = await enrollment.getEnrollment(reservation.enrollmentOperationId);
     if (progress?.status === "enrolling") {
-      const storedAttempt = await coordinator.query<{
-        attempt_id: string;
-        binding: Record<string, unknown>;
-      }>(
-        `SELECT attempt_id::text, binding
-           FROM lakeside_enrollment.import_attempt
-          WHERE operation_id=$1
+      const loadUnresolvedAttempt = async () => {
+        const storedAttempt = await coordinator.query<{
+          attempt_id: string;
+          binding: Record<string, unknown>;
+        }>(
+          `SELECT a.attempt_id::text, a.binding
+           FROM lakeside_enrollment.import_attempt a
+           LEFT JOIN lakeside_enrollment.import_attempt_receipt r ON r.attempt_id=a.attempt_id
+           LEFT JOIN lakeside_enrollment.import_attempt_abort x ON x.attempt_id=a.attempt_id
+          WHERE a.operation_id=$1 AND r.attempt_id IS NULL AND x.attempt_id IS NULL
           ORDER BY attempt_generation DESC
           LIMIT 1`,
-        [reservation.enrollmentOperationId]
-      );
-      let attemptId: string;
-      let binding: Record<string, unknown>;
-      if (storedAttempt.rows[0]) {
-        attemptId = storedAttempt.rows[0].attempt_id;
-        binding = storedAttempt.rows[0].binding;
-      } else {
-        const attempt = await enrollment.issueImportAttemptLease({
-          operationId: reservation.enrollmentOperationId,
-          authorityId: AUTHORITY,
-          provenance: PROVENANCE,
-        });
-        attemptId = attempt.attemptId;
-        binding = await enrollment.bindImportAttempt({
-          operationId: reservation.enrollmentOperationId,
-          attemptId,
-          attemptGeneration: attempt.attemptGeneration,
-          leaseToken: attempt.leaseToken,
-          targetIdentity: { issuer: targetIssuer, realmId, subject: target.userId },
-          digestFingerprint: createHash("sha256").update(material.credentialDigest).digest("hex"),
-          provenance: PROVENANCE,
-        });
-      }
-      await dispatcher.importCredential(binding, material.credentialDigest);
-      await enrollment.reconcileImportAttempt({
-        operationId: reservation.enrollmentOperationId,
-        attemptId,
-        provenance: PROVENANCE,
+          [reservation.enrollmentOperationId]
+        );
+        return storedAttempt.rows[0]
+          ? { attemptId: storedAttempt.rows[0].attempt_id, binding: storedAttempt.rows[0].binding }
+          : null;
+      };
+      await recoverCredentialImport({
+        loadUnresolvedAttempt,
+        loadReceipt: (binding) =>
+          loadCommittedImportReceipt(binding) as Promise<Readonly<{
+            state: "COMMITTED" | "ABORTED";
+          }> | null>,
+        abortAttempt: async (attemptId) => {
+          await enrollment.abortCredentialImport({
+            operationId: reservation.enrollmentOperationId,
+            attemptId,
+            provenance: PROVENANCE,
+          });
+        },
+        createAttempt: async () => {
+          const attempt = await enrollment.issueImportAttemptLease({
+            operationId: reservation.enrollmentOperationId,
+            authorityId: AUTHORITY,
+            provenance: PROVENANCE,
+          });
+          const binding = await enrollment.bindImportAttempt({
+            operationId: reservation.enrollmentOperationId,
+            attemptId: attempt.attemptId,
+            attemptGeneration: attempt.attemptGeneration,
+            leaseToken: attempt.leaseToken,
+            targetIdentity: { issuer: targetIssuer, realmId, subject: target.userId },
+            digestFingerprint: createHash("sha256").update(material.credentialDigest).digest("hex"),
+            provenance: PROVENANCE,
+          });
+          return { attemptId: attempt.attemptId, binding };
+        },
+        dispatchAttempt: async (attempt) => {
+          await dispatcher.importCredential(attempt.binding, material.credentialDigest);
+        },
+        reconcileAttempt: async (attemptId) => {
+          await enrollment.reconcileImportAttempt({
+            operationId: reservation.enrollmentOperationId,
+            attemptId,
+            provenance: PROVENANCE,
+          });
+        },
       });
     } else if (progress?.status !== "credentialed" && progress?.status !== "unified") {
       throw new Error("Enrollment is not ready for credential recovery");
