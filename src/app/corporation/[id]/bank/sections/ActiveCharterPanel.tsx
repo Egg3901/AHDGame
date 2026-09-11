@@ -152,7 +152,7 @@ export function ActiveCharterPanel({
 
       {tab === "overview" && (
         <section className="rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
             <StatCell
               label="Posted capital"
               value={formatBankMoney(charter.postedCapital, charter.currency)}
@@ -178,6 +178,15 @@ export function ActiveCharterPanel({
                 data.reserveRatio != null
                   ? `reserve requirement ${(data.reserveRatio * 100).toFixed(0)}%`
                   : undefined
+              }
+            />
+            <StatCell
+              label="Last turn income"
+              value={formatBankMoney(charter.lastBankingIncome, charter.currency)}
+              sub={
+                charter.lastBankingIncomeTurn != null
+                  ? `banking pass T${charter.lastBankingIncomeTurn}`
+                  : "awaiting first banking pass"
               }
             />
             <StatCell

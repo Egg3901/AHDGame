@@ -1,6 +1,6 @@
 /**
  * Why a share price can fall while book value is high. computeSharePrices prices a
- * corp at tangible book per share (cash + 0.75x bank equity + sector NPV + builds in progress
+ * corp at tangible book per share (cash + 0.75x bank equity + sector/banking NPV + builds in progress
  * + tech assets + 0.75x bonds held, minus bond debt) plus 0.4x earnings power and 0.1x a
  * growth premium; weak earnings, living off bond coupons (bondRelianceValuationPenalty) or a
  * CEO holding over 65% (insiderConcentrationMultiplier) all cut the price.
@@ -50,7 +50,7 @@ export interface SharePriceInput {
    * of this ring-fenced equity, rather than treating all of it as liquid cash.
    */
   bankEquityAnchor?: number;
-  /** Sum of sector NPVs (₳). Added to liquidCapital for tangible book. */
+  /** Sum of sector and banking NPVs (₳). Added to liquidCapital for tangible book. */
   sectorNPVAnchor: number;
   /**
    * Σ outstanding construction-in-progress across the corp's sectors (₳, P3a).

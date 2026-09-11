@@ -36,6 +36,7 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import { sumConstructionInProgressAnchor } from "@/lib/corporations/sectorProfitBasis";
 import { ceoOwnershipFraction } from "@/lib/corporations/ceoOwnership";
 import { bankEquity } from "@/lib/banking/balanceSheet";
+import { bankNpvFromPerTurnIncome } from "@/lib/banking/valuation";
 
 export interface RecomputeSharePricesResult {
   corpsRepriced: number;
@@ -103,7 +104,15 @@ export async function recomputeSharePricesAfterBondTurn(
   const totalSharesById = new Map<string, number>();
   for (const corp of lookups.corporations) {
     const id = corp._id.toString();
-    baseEarningsMap.set(id, normalizedEarningsFromHistory(corp.earningsHistory ?? []));
+    const charter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
+    const bankIncomeAnchor = charter
+      ? (charter.lastBankingIncome ?? 0) /
+        (lookups.exchangeRatesByCurrency.get(charter.currency) ?? 1)
+      : 0;
+    baseEarningsMap.set(
+      id,
+      normalizedEarningsFromHistory(corp.earningsHistory ?? []) + bankIncomeAnchor * TURNS_PER_YEAR
+    );
     totalSharesById.set(id, corp.totalShares ?? 10_000_000);
   }
   const adjustedEarningsMap = applyEquityMethodEarnings(
@@ -138,12 +147,15 @@ export async function recomputeSharePricesAfterBondTurn(
       homeCurrency,
       fxRate
     );
-    const bankEquityAnchor = corp.bankCharter
-      ? corpCapitalToAnchor(
-          bankEquity(corp.bankCharter),
-          corp.bankCharter.currency,
-          lookups.exchangeRatesByCurrency.get(corp.bankCharter.currency) ?? 1
-        )
+    const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
+    const bankFxRate = activeBankCharter
+      ? (lookups.exchangeRatesByCurrency.get(activeBankCharter.currency) ?? 1)
+      : 1;
+    const bankEquityAnchor = activeBankCharter
+      ? corpCapitalToAnchor(bankEquity(activeBankCharter), activeBankCharter.currency, bankFxRate)
+      : 0;
+    const bankNpvAnchor = activeBankCharter
+      ? bankNpvFromPerTurnIncome((activeBankCharter.lastBankingIncome ?? 0) / bankFxRate)
       : 0;
 
     // Revenue-weighted sector growth rate from current sector state (already
@@ -204,7 +216,8 @@ export async function recomputeSharePricesAfterBondTurn(
 
     // hist.sectorNPV is stored in local currency (converted by marketCapSnapshot);
     // normalize to ₳ to match the formula's anchor space.
-    const sectorNPVAnchor = corpCapitalToAnchor(hist.sectorNPV ?? 0, homeCurrency, fxRate);
+    const sectorNPVAnchor =
+      corpCapitalToAnchor(hist.sectorNPV ?? 0, homeCurrency, fxRate) + bankNpvAnchor;
 
     inputs.push({
       corpId: id,
