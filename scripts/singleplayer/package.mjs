@@ -20,11 +20,92 @@ import {
 } from "./payloadAllowlist.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+export const BUILD_PROVENANCE_FILE = "build-provenance.json";
+export const BUILD_PROVENANCE_SCHEMA_VERSION = 1;
+
+/**
+ * @typedef {{schemaVersion: number, sourceCommit: string | null, sourceDirty: boolean | null,
+ *   status: "clean" | "dirty" | "unknown"}} BuildProvenance
+ */
+
+function runGit(args, root) {
+  return spawnSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+}
+
+/**
+ * @param {string} [root]
+ * @param {(args: string[], root: string) => {status: number | null, stdout: string | null}} [git]
+ * @returns {BuildProvenance}
+ */
+export function captureBuildProvenance(root = ROOT, git = runGit) {
+  const revision = git(["rev-parse", "HEAD"], root);
+  const sourceCommit = revision.status === 0 ? (revision.stdout ?? "").trim() : null;
+  if (!sourceCommit || !/^[0-9a-f]{40,64}$/i.test(sourceCommit)) {
+    return {
+      schemaVersion: BUILD_PROVENANCE_SCHEMA_VERSION,
+      sourceCommit: null,
+      sourceDirty: null,
+      status: "unknown",
+    };
+  }
+
+  const status = git(["status", "--porcelain=v1", "--untracked-files=all"], root);
+  if (status.status !== 0) {
+    return {
+      schemaVersion: BUILD_PROVENANCE_SCHEMA_VERSION,
+      sourceCommit,
+      sourceDirty: null,
+      status: "unknown",
+    };
+  }
+
+  const sourceDirty = (status.stdout ?? "").trim().length > 0;
+  return {
+    schemaVersion: BUILD_PROVENANCE_SCHEMA_VERSION,
+    sourceCommit,
+    sourceDirty,
+    status: sourceDirty ? "dirty" : "clean",
+  };
+}
+
+/** @param {BuildProvenance} before @param {BuildProvenance} after @returns {BuildProvenance} */
+export function finalizeBuildProvenance(before, after) {
+  if (
+    before.sourceCommit !== after.sourceCommit ||
+    before.sourceDirty !== after.sourceDirty ||
+    before.status !== after.status
+  ) {
+    return unknownBuildProvenance();
+  }
+  return before;
+}
+
+/** @returns {BuildProvenance} */
+function unknownBuildProvenance() {
+  return {
+    schemaVersion: BUILD_PROVENANCE_SCHEMA_VERSION,
+    sourceCommit: null,
+    sourceDirty: null,
+    status: "unknown",
+  };
+}
+
+export function writeBuildProvenance(out, provenance) {
+  writeFileSync(
+    path.join(out, BUILD_PROVENANCE_FILE),
+    `${JSON.stringify({ ...unknownBuildProvenance(), ...provenance }, null, 2)}\n`
+  );
+}
 
 export function assembleSingleplayerPayload({
   root = ROOT,
   out = path.join(root, "dist", "singleplayer"),
   standalone = path.join(root, ".next", "standalone"),
+  buildProvenance = unknownBuildProvenance(),
 } = {}) {
   if (!existsSync(path.join(standalone, "server.js"))) {
     throw new Error("standalone output missing; next.config.ts only emits it when SINGLEPLAYER=1");
@@ -41,6 +122,7 @@ export function assembleSingleplayerPayload({
 
   materializeMongodbAliases(out);
   applyPayloadAllowlist(out);
+  writeBuildProvenance(out, buildProvenance);
   writeFileSync(
     path.join(out, "README.txt"),
     [
@@ -79,8 +161,10 @@ function buildStandalone(root) {
 }
 
 export function packageSingleplayer(root = ROOT) {
+  const beforeBuild = captureBuildProvenance(root);
   buildStandalone(root);
-  const out = assembleSingleplayerPayload({ root });
+  const buildProvenance = finalizeBuildProvenance(beforeBuild, captureBuildProvenance(root));
+  const out = assembleSingleplayerPayload({ root, buildProvenance });
   console.log(`singleplayer build ready in ${out}`);
   return out;
 }

@@ -608,6 +608,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2007,
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2023,
+  "2027": POSITIONS_2023,
 };
 
 // ── Census conversion ──────────────────────────────────────────────────────────
@@ -638,6 +639,7 @@ const ERA_CENSUS: Record<EraId, Record<string, BRRegionLayer1>> = {
   "2007": brRegionCensusData2007,
   "2019": brRegionCensusData, // 2019 base (IBGE Censo 2022 estimates)
   "2023": brRegionCensusData2023,
+  "2027": brRegionCensusData2023,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

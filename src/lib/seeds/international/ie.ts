@@ -506,6 +506,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2007,
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2023,
+  "2027": POSITIONS_2023,
 };
 
 // ── Census conversion ─────────────────────────────────────────────────────────
@@ -535,6 +536,7 @@ const ERA_CENSUS: Record<EraId, Record<string, IERegionLayer1>> = {
   "2007": ieRegionCensusData2007,
   "2019": ieRegionCensusData, // CSO Census 2022 base, used for 2019 era
   "2023": ieRegionCensusData2023,
+  "2027": ieRegionCensusData2023,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

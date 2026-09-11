@@ -61,16 +61,14 @@ export async function seedFRRegions(
 
 export async function seedFRParties(db: Db, log: (msg: string) => void, preset?: string) {
   const { frParties } = await import("@/lib/seeds/fr/frParties");
-  const { isPartyValidForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { selectPartyRosterForPreset } = await import("@/lib/seeds/ensureDefaultParties");
 
   let activePreset = preset;
   if (!activePreset) {
     activePreset = await getGameStatePresetOrDefault(db);
   }
 
-  const filtered = (frParties as PartySeed[]).filter((seed) =>
-    isPartyValidForPreset(seed, activePreset)
-  );
+  const filtered = selectPartyRosterForPreset(frParties as PartySeed[], activePreset);
   const now = new Date();
   for (const party of filtered) {
     const { seedOrder: _seedOrder, validForPresets: _validForPresets, ...partyData } = party;

@@ -158,7 +158,24 @@ describe("1991-default seed bundles — coverage", () => {
     const configs = getNationalBudgetSeedConfigsForPreset("1991-default");
     const countries = new Set(configs.map((c) => c.countryId));
     expect(countries).toEqual(
-      new Set(["US", "UK", "JP", "DE", "IE", "BR", "CN", "NG", "FR", "IT", "ES", "SE", "TR"])
+      new Set([
+        "US",
+        "UK",
+        "JP",
+        "DE",
+        "IE",
+        "BR",
+        "CN",
+        "NG",
+        "FR",
+        "IT",
+        "ES",
+        "SE",
+        "TR",
+        "AT",
+        "FI",
+        "GR",
+      ])
     );
   });
 

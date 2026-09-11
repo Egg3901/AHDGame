@@ -5,6 +5,7 @@ import { UNION_NAMES_BY_ERA } from "@/lib/seeds/reference/unionNames";
 import { eraForPreset, type EraId } from "@/lib/seeds/presetSelector";
 
 const ERA_FALLBACK_CHAIN: Record<EraId, EraId[]> = {
+  "2027": ["2027", "2023", "2019"],
   "2023": ["2023", "2019"],
   "2019": ["2019"],
   "2007": ["2007", "2019"],

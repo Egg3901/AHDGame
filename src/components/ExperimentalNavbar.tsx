@@ -76,6 +76,7 @@ import type {
 } from "@/components/navbar/experimentalNavTypes";
 
 export interface ExperimentalNavbarProps {
+  clientShell?: boolean;
   user?: NavLinkRef;
   showProfile?: boolean;
   currentParty?: { id: string; name: string; countryId: string };
@@ -102,6 +103,7 @@ export interface ExperimentalNavbarProps {
 }
 
 export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
+  clientShell = false,
   user,
   showProfile = false,
   currentParty,
@@ -720,7 +722,7 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               </span>
             </Link>
 
-            {user?.singleplayer && <SingleplayerEndTurnButton />}
+            {user?.singleplayer && !clientShell && <SingleplayerEndTurnButton />}
 
             {/* Right group — primary tabs + icon cluster hug the right, classic-nav style */}
             <div className="relative flex min-w-0 flex-1 items-center justify-end gap-2 overflow-visible">

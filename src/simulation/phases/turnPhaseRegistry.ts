@@ -797,7 +797,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         await runtime.runPhase("generateChallengers", () => processChallengerGeneration(gameNow));
 
         const nppResult = await runtime.runPhase("nppBehavior", () =>
-          processNPPTurn(gameNow, { billDeadlineNow: realNow, currentTurn: newTurn })
+          processNPPTurn(gameNow, {
+            billDeadlineNow: realNow,
+            currentTurn: newTurn,
+            currentYear: context.currentYear,
+          })
         );
         if (nppResult) {
           phaseResults.nppBehavior = {

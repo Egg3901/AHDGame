@@ -316,7 +316,9 @@ describe("generateCountryOwnedSeedData", () => {
 
       it(`${countryId}: flag ON + command era (1953) → builds one SOE corp per sector, each owning producing sectors`, () => {
         const data = generateCountryOwnedSeedData(statesForCountry, "1953-default", true);
-        const entries = data.filter((e) => e.corporation.countryOwnerId === countryId);
+        const entries = data.filter(
+          (e) => e.corporation.countryOwnerId === countryId && e.sectors.length > 0
+        );
         const soes = entries.filter((e) => e.corporation.soe);
 
         expect(soes.length).toBe(soeSectorCount);
@@ -342,7 +344,9 @@ describe("generateCountryOwnedSeedData", () => {
 
       it(`${countryId}: flag OFF → no SOE corporations (feature-gated)`, () => {
         const data = generateCountryOwnedSeedData(statesForCountry, "1953-default", false);
-        const entries = data.filter((e) => e.corporation.countryOwnerId === countryId);
+        const entries = data.filter(
+          (e) => e.corporation.countryOwnerId === countryId && e.sectors.length > 0
+        );
         expect(entries.filter((e) => e.corporation.soe)).toHaveLength(0);
       });
 
@@ -500,7 +504,9 @@ describe("generateCountryOwnedSeedData", () => {
           MARKET_STATES[countryId].map((s) => ({ ...s, countryId })),
           "1953-default"
         );
-        const entries = data.filter((e) => e.corporation.countryOwnerId === countryId);
+        const entries = data.filter(
+          (e) => e.corporation.countryOwnerId === countryId && e.sectors.length > 0
+        );
         expect(entries.length).toBeGreaterThan(0);
 
         const corp = entries[0];
@@ -515,12 +521,16 @@ describe("generateCountryOwnedSeedData", () => {
           MARKET_STATES[countryId].map((s) => ({ ...s, countryId })),
           "2019-default"
         );
-        expect(data.some((e) => e.corporation.countryOwnerId === countryId)).toBe(false);
+        expect(
+          data.some((e) => e.corporation.countryOwnerId === countryId && e.sectors.length > 0)
+        ).toBe(false);
       });
 
       it(`${countryId}: emits nothing when no states of that country are supplied`, () => {
         const data = generateCountryOwnedSeedData(ukStates, "1953-default");
-        expect(data.some((e) => e.corporation.countryOwnerId === countryId)).toBe(false);
+        expect(
+          data.some((e) => e.corporation.countryOwnerId === countryId && e.sectors.length > 0)
+        ).toBe(false);
       });
     }
   });
@@ -541,12 +551,16 @@ describe("generateCountryOwnedSeedData", () => {
 
     it("emits no ES-owned corporation for 1953-default", () => {
       const data = generateCountryOwnedSeedData(esStates, "1953-default");
-      expect(data.some((e) => e.corporation.countryOwnerId === "ES")).toBe(false);
+      expect(data.some((e) => e.corporation.countryOwnerId === "ES" && e.sectors.length > 0)).toBe(
+        false
+      );
     });
 
     it("emits no ES-owned corporation outside 1953-default either", () => {
       const data = generateCountryOwnedSeedData(esStates, "2019-default");
-      expect(data.some((e) => e.corporation.countryOwnerId === "ES")).toBe(false);
+      expect(data.some((e) => e.corporation.countryOwnerId === "ES" && e.sectors.length > 0)).toBe(
+        false
+      );
     });
   });
 

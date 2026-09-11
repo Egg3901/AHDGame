@@ -428,4 +428,116 @@ describe("the national mood carries its own breakdown", () => {
       buildGeneralBlendViewModel({ election: election(), wire: [], rail: "overview" }).mood
     ).toBeNull();
   });
+
+  it("signs the figure and says what it does to the vote", () => {
+    const mood = withReferendum().mood;
+    expect(mood?.signedApproval).toBe("-0.1");
+    expect(mood?.effectNote).toMatch(/-0\.1 pts/);
+    expect(mood?.effectNote).toMatch(/Already counted/);
+    expect(mood?.pointsHint).toMatch(/percentage points of national vote share/);
+  });
+
+  it("splits misery and median so the view can tooltip each", () => {
+    const mood = withReferendum().mood;
+    expect(mood?.misery).toBe("0.3");
+    expect(mood?.miseryHint).toMatch(/unemployment above 6%/i);
+    expect(mood?.medianHint).toMatch(/EV-weighted average voter/);
+  });
+
+  it("normalizes a negative-zero median voter for display", () => {
+    const vm = buildGeneralBlendViewModel({
+      election: {
+        ...election(),
+        medianVoter: { ep: -0, sp: -0 },
+        economicReferendum: {
+          miseryIndex: 1.6,
+          sharePts: 0.5,
+          components: [],
+          fatigueMultiplier: 1,
+          recordedTurn: 775,
+        },
+      } as unknown as ElectionDetail,
+      wire: [],
+      rail: "overview",
+    });
+    expect(vm.mood?.median).toBe("0 economic, 0 social");
+  });
+
+  it("tooltips every component and the credit and fatigue lines", () => {
+    const mood = withReferendum({ forgivenessFrac: 0.25, fatigueMultiplier: 1.5 }).mood;
+    expect(mood?.components.every((c) => c.hint.length > 0)).toBe(true);
+    expect(mood?.components.find((c) => c.label === "Inflation")?.hint).toMatch(/1 to 4%/);
+    expect(mood?.creditHint).toMatch(/up to 40%/);
+    expect(mood?.fatigueHint).toMatch(/1\.5 times/);
+  });
+});
+
+describe("tickets link out", () => {
+  it("points characters at their profile and parties at the party page", () => {
+    const vm = buildGeneralBlendViewModel(input());
+    expect(vm.tickets.find((t) => t.id === "c1")).toMatchObject({
+      href: "/character/ch1",
+      partyHref: "/country/us/parties/1",
+    });
+  });
+
+  it("points NPP candidates at their politician page", () => {
+    const npp = election({
+      allCandidates: [
+        candidate({ id: "c9", characterName: "Machine Candidate", isNPP: true, nppId: "npp-7" }),
+      ],
+    });
+    const vm = buildGeneralBlendViewModel(input({ election: npp }));
+    expect(vm.tickets[0].href).toBe("/politicians/npp/npp-7");
+  });
+});
+
+describe("close summary", () => {
+  const withEnd = (endTime: string | null, currentTurn = 4182) =>
+    buildGeneralBlendViewModel(
+      input({
+        election: election({ endTime, gameState: { isActive: true, pausedAt: null, currentTurn } }),
+      })
+    );
+
+  it("pairs the turns left with the local close time", () => {
+    const vm = withEnd("2026-11-10T15:24:00.000Z");
+    expect(vm.endsLocal).toMatch(/2026/);
+    expect(vm.closeSummary).toMatch(/^4 turns left, closes /);
+    expect(vm.closeSummary).toContain(vm.endsLocal as string);
+  });
+
+  it("reads turns alone when the race carries no end timestamp", () => {
+    const vm = withEnd(null);
+    expect(vm.endsLocal).toBeNull();
+    expect(vm.closeSummary).toBe("4 turns left");
+  });
+
+  it("reads turns alone when the end timestamp is unusable", () => {
+    const vm = withEnd("not-a-date");
+    expect(vm.endsLocal).toBeNull();
+    expect(vm.closeSummary).toBe("4 turns left");
+  });
+
+  it("singularizes one turn and names the final turn", () => {
+    expect(withEnd(null, 4185).closeSummary).toBe("1 turn left");
+    expect(withEnd(null, 4186).closeSummary).toBe("Final turn");
+  });
+});
+
+describe("driver and vote-weight explanations", () => {
+  it("tooltips every driver row", () => {
+    const vm = buildGeneralBlendViewModel(input());
+    expect(vm.drivers.length).toBeGreaterThan(0);
+    expect(vm.drivers.every((d) => d.hint.length > 0)).toBe(true);
+    expect(vm.drivers.find((d) => d.label === "Money")?.hint).toMatch(/Saved treasuries/);
+  });
+
+  it("says what the units move, once, under the rows", () => {
+    expect(buildGeneralBlendViewModel(input()).driversNote).toMatch(/persuadable slice/);
+  });
+
+  it("keeps the vote-weighting line as a tooltip, not a footnote", () => {
+    expect(buildGeneralBlendViewModel(input()).voteWeightHint).toMatch(/final four turns/);
+  });
 });
