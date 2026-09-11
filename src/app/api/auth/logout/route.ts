@@ -56,7 +56,7 @@ export async function POST(request: Request) {
         if (result.acknowledged !== true) throw new Error("Revocation was not acknowledged");
         if (payload.authSource === "unified" && payload.sid) {
           const sessionResult = await db
-            .collection("unifiedSessions")
+            .collection<{ _id: string; userId: string; revokedAt: Date | null }>("unifiedSessions")
             .updateOne(
               { _id: payload.sid, userId: payload.userId, revokedAt: null },
               { $set: { revokedAt: now } }
