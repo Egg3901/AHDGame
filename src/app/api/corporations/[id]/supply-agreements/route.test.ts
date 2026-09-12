@@ -3,6 +3,11 @@ import { ObjectId, type Db } from "mongodb";
 import { createAsyncIterableCursor, createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+vi.mock("@/lib/api/requireAuth", () => ({ requireBasicAuth: vi.fn() }));
+vi.mock("@/lib/api/corporations/resolveQuery", () => ({
+  resolveCorporation: vi.fn(),
+  requireCeo: vi.fn(),
+}));
 
 let db: MockDb;
 const supplierId = new ObjectId();
@@ -17,6 +22,18 @@ beforeEach(async () => {
 
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+
+  const { requireBasicAuth } = await import("@/lib/api/requireAuth");
+  vi.mocked(requireBasicAuth).mockResolvedValue({
+    ok: true,
+    user: { userId: "ceo-user" },
+  } as never);
+  const { resolveCorporation, requireCeo } = await import("@/lib/api/corporations/resolveQuery");
+  vi.mocked(resolveCorporation).mockResolvedValue({
+    ok: true,
+    corporation: { _id: supplierId, countryOwnerId: null, userId: "ceo-user" },
+  } as never);
+  vi.mocked(requireCeo).mockReturnValue(null);
 
   db.collectionMocks.corporations.findOne.mockResolvedValue({ _id: buyerId });
   db.collectionMocks.corporations.find.mockReturnValue(
@@ -42,6 +59,22 @@ beforeEach(async () => {
 });
 
 describe("GET corporation supply agreements", () => {
+  it("requires the corporation CEO before returning private agreement terms", async () => {
+    const { requireCeo } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(requireCeo).mockReturnValue(
+      Response.json({ error: "Only the CEO can view supply agreements" }, { status: 403 }) as never
+    );
+
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/corporations/601/supply-agreements"),
+      { params: Promise.resolve({ id: "601" }) }
+    );
+
+    expect(response.status).toBe(403);
+    expect(db.collectionMocks.supplyAgreements.find).not.toHaveBeenCalled();
+  });
+
   it("returns both counterparty names and tickers", async () => {
     const { GET } = await import("./route");
     const response = await GET(
@@ -61,6 +94,12 @@ describe("GET corporation supply agreements", () => {
       buyerCorpName: "Tinky Corporation",
       buyerCorpTicker: "TCI",
     });
+    expect(body.agreements[0].currentOffer).toMatchObject({
+      revision: 1,
+      proposedByCorpId: supplierId.toString(),
+      volumeCap: 80,
+    });
+    expect(body.agreements[0].offers).toHaveLength(1);
   });
 
   it("returns current contract capacity and the latest achievable ceiling", async () => {

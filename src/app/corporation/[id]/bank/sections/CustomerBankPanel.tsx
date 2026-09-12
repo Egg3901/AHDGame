@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { ShowToast } from "../types";
 
 /**
@@ -16,6 +17,7 @@ export function CustomerBankPanel({
   bankName,
   currency,
   depositTaking,
+  depositRatePercent,
   onChanged,
   showToast,
 }: {
@@ -23,6 +25,7 @@ export function CustomerBankPanel({
   bankName: string;
   currency: CurrencyCode;
   depositTaking: boolean;
+  depositRatePercent: number | null;
   onChanged: () => void;
   showToast: ShowToast;
 }) {
@@ -79,7 +82,7 @@ export function CustomerBankPanel({
   };
 
   if (!depositTaking) {
-    // Investment charters don't take retail deposits or lend to individuals.
+    // Investment charters do not take retail deposits or lend to individuals.
     return null;
   }
 
@@ -89,14 +92,21 @@ export function CustomerBankPanel({
     "rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2">
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Deposit with {bankName}</h3>
+    <section id="customer-banking" className="grid scroll-mt-6 gap-4 sm:grid-cols-2">
+      <div id="customer-deposit" className="rounded-xl border border-card-border bg-card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Deposit savings at {bankName}</h3>
+          {depositRatePercent != null && (
+            <span className="font-mono text-xs font-semibold tabular-nums text-success">
+              {formatRatePercent(depositRatePercent)} deposit rate
+            </span>
+          )}
+        </div>
         <p className="mt-1 mb-3 text-xs text-muted">
           Moves your {currency} savings to this bank, so it earns this bank&apos;s deposit rate. You
           hold one bank per currency, so this moves your whole {currency} savings here.
         </p>
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             type="number"
             inputMode="decimal"
@@ -104,6 +114,7 @@ export function CustomerBankPanel({
             value={depositAmount}
             onChange={(e) => setDepositAmount(e.target.value)}
             placeholder={`Amount (${currency})`}
+            aria-label={`Deposit amount in ${currency}`}
             className={inputClass}
           />
           <button type="button" disabled={busy} onClick={() => void deposit()} className={btnClass}>
@@ -112,8 +123,8 @@ export function CustomerBankPanel({
         </div>
       </div>
 
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Borrow from {bankName}</h3>
+      <div id="customer-loan" className="rounded-xl border border-card-border bg-card p-4">
+        <h3 className="text-sm font-semibold text-foreground">Apply for a loan from {bankName}</h3>
         <p className="mt-1 mb-3 text-xs text-muted">
           Review a personal or corporation loan in the banking hub. It shows the quoted rate,
           destination, payment estimate, maximum, and approval status before you submit.

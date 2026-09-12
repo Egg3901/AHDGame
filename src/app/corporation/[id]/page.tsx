@@ -737,16 +737,16 @@ export default function CorporationDetailPage() {
   // procurement contract, so the tab would be permanently empty.
   const isDefenceCorp = corporation.type === "defense" || corporation.secondaryType === "defense";
   const gatedTabs = isDefenceCorp ? gatedBaseTabs : gatedBaseTabs.filter((t) => t.id !== "defence");
-  // Structure (subsidiary relationships + private supply agreements) is only
-  // offered when at least one of its panels has something to render — the
-  // subsidiary card self-hides otherwise.
+  // Structure is only offered when the subsidiary panel has something to
+  // render. Supply agreements live with commodity operations so both CEOs can
+  // find the negotiation surface without opening an ownership tab.
   const showSubsidiaryPanel =
     !!corporation.isFormalizedSubsidiary ||
     !!corporation.canFormalizeAsSubsidiary ||
     !!corporation.canManageAsParent ||
     !!corporation.canSpinOff;
   const showSupplyAgreements = isCeo && !isNationalCorp && !!corporation.supplyAgreementsEnabled;
-  const showStructureTab = showSubsidiaryPanel || showSupplyAgreements;
+  const showStructureTab = showSubsidiaryPanel;
 
   const visibleTabs = [
     ...gatedTabs,
@@ -1132,7 +1132,15 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "commodities" && (
-                  <CommoditiesTab corpId={id} isCeo={isCeo} modViewEnabled={modViewEnabled} />
+                  <div className="space-y-6">
+                    <CommoditiesTab corpId={id} isCeo={isCeo} modViewEnabled={modViewEnabled} />
+                    {showSupplyAgreements && (
+                      <SupplyAgreementsSection
+                        corpId={corporation._id}
+                        countryId={corporation.countryId}
+                      />
+                    )}
+                  </div>
                 )}
 
                 {/* Render-time guard, not just the tab-reset effect above: a ?tab=shares
@@ -1268,13 +1276,6 @@ export default function CorporationDetailPage() {
                       ).map(([type, count]) => ({ type, count }))}
                       onChanged={() => fetchCorporation()}
                     />
-                    {/* Private supply agreements — CEO-only, gated on the global feature flag. */}
-                    {showSupplyAgreements && (
-                      <SupplyAgreementsSection
-                        corpId={corporation._id}
-                        countryId={corporation.countryId}
-                      />
-                    )}
                   </div>
                 )}
 

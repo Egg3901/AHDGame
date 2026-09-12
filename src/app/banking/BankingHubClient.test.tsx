@@ -132,6 +132,20 @@ beforeEach(() => {
 });
 
 describe("BankingHubClient", () => {
+  it("puts private-bank customer actions in the first screen shortcuts", async () => {
+    render(<BankingHubClient />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Browse private banks" })).toBeTruthy()
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Browse private banks" }));
+    expect(screen.getByRole("heading", { name: "Private banks" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Deposit or borrow" }));
+    expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
+  });
+
   it("uses tabs for the policy, commercial banking, and account hierarchy", async () => {
     render(<BankingHubClient />);
 
@@ -150,6 +164,16 @@ describe("BankingHubClient", () => {
     expect(screen.getByRole("heading", { name: "Private banks" })).toBeTruthy();
     expect(screen.getByText("Continental Trust")).toBeTruthy();
     expect(screen.getByText("Player-run")).toBeTruthy();
+    expect(
+      screen
+        .getByRole("link", { name: "Deposit savings at Continental Trust" })
+        .getAttribute("href")
+    ).toBe("/corporation/17?tab=bank#customer-deposit");
+    expect(
+      screen
+        .getByRole("link", { name: "Apply for a loan at Continental Trust" })
+        .getAttribute("href")
+    ).toBe("/corporation/17?tab=bank#customer-loan");
 
     fireEvent.click(screen.getByRole("tab", { name: "Your accounts" }));
     expect(screen.getByRole("heading", { name: "Your accounts" })).toBeTruthy();
