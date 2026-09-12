@@ -18,6 +18,8 @@ import {
   buildCorporationBalanceAudit,
   type CorporationAuditInput,
 } from "../../src/lib/corporations/balanceAudit/rules";
+import type { CapacityDecisionAggregate } from "../../src/lib/corporations/capacityDecisionTelemetry/rules";
+import { CAPACITY_DECISION_COLLECTION } from "../../src/lib/corporations/capacityDecisionTelemetry/persistence";
 import { resolveMongoDbName } from "../../src/lib/mongodb";
 
 function finite(value: unknown): number {
@@ -38,35 +40,46 @@ async function main(): Promise<void> {
         MONGO_DB_NAME: process.env.MONGO_DB_NAME,
       })
     );
-    const [fxByCurrency, corporations, gameState, entryFunnel] = await Promise.all([
-      loadFxRatesByCurrency(db),
-      db
-        .collection<Corporation>("corporations")
-        .find(
-          {},
-          {
-            projection: {
-              _id: 1,
-              ceoType: 1,
-              ceoVacant: 1,
-              countryOwnerId: 1,
-              ownershipState: 1,
-              userId: 1,
-              countryId: 1,
-              liquidCurrencyCode: 1,
-              sharePrice: 1,
-              totalShares: 1,
-            },
-          }
-        )
-        .toArray(),
-      db
-        .collection<{ _id: string; currentTurn?: number }>("gameState")
-        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
-      db
-        .collection<NppMarketEntryFunnel>("nppMarketEntryFunnels")
-        .findOne({ _id: "current" }, { projection: { diagnostics: 0 } }),
-    ]);
+    const [fxByCurrency, corporations, gameState, entryFunnel, capacityDecisions] =
+      await Promise.all([
+        loadFxRatesByCurrency(db),
+        db
+          .collection<Corporation>("corporations")
+          .find(
+            {},
+            {
+              projection: {
+                _id: 1,
+                ceoType: 1,
+                ceoVacant: 1,
+                countryOwnerId: 1,
+                ownershipState: 1,
+                userId: 1,
+                countryId: 1,
+                liquidCurrencyCode: 1,
+                sharePrice: 1,
+                totalShares: 1,
+              },
+            }
+          )
+          .toArray(),
+        db
+          .collection<{ _id: string; currentTurn?: number }>("gameState")
+          .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+        db
+          .collection<NppMarketEntryFunnel>("nppMarketEntryFunnels")
+          .findOne({ _id: "current" }, { projection: { diagnostics: 0 } }),
+        db
+          .collection<{
+            schemaVersion: number;
+            turn: number;
+            buckets: Record<string, CapacityDecisionAggregate>;
+          }>(CAPACITY_DECISION_COLLECTION)
+          .findOne(
+            {},
+            { projection: { buckets: 1, schemaVersion: 1, turn: 1 }, sort: { turn: -1 } }
+          ),
+      ]);
     const currentTurn = finite(gameState?.currentTurn);
     const corporationById = new Map(corporations.map((corp) => [corp._id.toString(), corp]));
     const economicByCorporation = new Map<
@@ -145,8 +158,10 @@ async function main(): Promise<void> {
     const output = {
       generatedAt: new Date().toISOString(),
       turn: currentTurn,
-      source: "corporations + corporateSectors.plantsPnl + nppMarketEntryFunnels/current",
+      source:
+        "corporations + corporateSectors.plantsPnl + nppMarketEntryFunnels/current + capacityDecisionFunnels/latest",
       coverage,
+      latestCapacityDecisionFunnel: capacityDecisions,
       latestNppEntryFunnel: entryFunnel
         ? {
             schemaVersion: entryFunnel.schemaVersion,
