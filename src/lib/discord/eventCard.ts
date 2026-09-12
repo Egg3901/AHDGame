@@ -45,22 +45,29 @@ function clamp(value: string, max: number): string {
 }
 
 function wrap(value: string, maxCharacters: number, maxLines: number): string[] {
-  const words = clamp(value, maxCharacters * maxLines).split(" ");
+  const clean = value.replace(/\s+/g, " ").trim();
+  const words = clean.split(" ");
   const lines: string[] = [];
   let current = "";
+  let truncated = false;
   for (const word of words) {
     const candidate = current ? `${current} ${word}` : word;
     if (candidate.length <= maxCharacters) {
       current = candidate;
       continue;
     }
-    if (current) lines.push(current);
-    current = word;
-    if (lines.length === maxLines - 1) break;
+    if (current) {
+      lines.push(current);
+      if (lines.length === maxLines) {
+        truncated = true;
+        current = "";
+        break;
+      }
+    }
+    current = clamp(word, maxCharacters);
   }
   if (current && lines.length < maxLines) lines.push(current);
-  const consumed = lines.join(" ").length;
-  if (consumed < value.replace(/\s+/g, " ").trim().length && lines.length > 0) {
+  if ((truncated || lines.join(" ").length < clean.length) && lines.length > 0) {
     lines[lines.length - 1] = clamp(lines[lines.length - 1], maxCharacters - 1) + "…";
   }
   return lines;
@@ -157,8 +164,8 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   const accent = toneColor(input.tone ?? "neutral");
   const hasChart = Boolean(input.chartSvg);
   const hasPortrait = Boolean(input.portraitDataUrl) && !hasChart;
-  const titleLines = wrap(input.title, hasPortrait ? 27 : 36, 2);
-  const summaryLines = wrap(input.summary, hasPortrait ? 44 : 72, 2);
+  const titleLines = wrap(input.title, hasPortrait ? 20 : 36, hasPortrait ? 3 : 2);
+  const summaryLines = wrap(input.summary, hasPortrait ? 40 : 72, 2);
   const details = (input.detailLines ?? [])
     .slice(0, 4)
     .map((line) => clamp(line, hasPortrait ? 47 : 74));
@@ -211,6 +218,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#14141c"/><stop offset="1" stop-color="#101018"/></linearGradient>
     <radialGradient id="glow" cx="1" cy="0" r="1"><stop stop-color="${accent}" stop-opacity=".16"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>
     <clipPath id="portraitClip"><rect x="850" y="142" width="266" height="300" rx="28"/></clipPath>
+    <clipPath id="copyClip"><rect x="60" y="100" width="${hasPortrait ? 730 : 1060}" height="${height - 120}"/></clipPath>
     <style>
       ${bundledFontCss()}
       text { font-family: Geist, "DejaVu Sans", sans-serif; }
@@ -230,7 +238,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   <text x="84" y="62" class="brand">A HOUSE DIVIDED</text>
   <text x="1116" y="62" text-anchor="end" class="eyebrow">${escapeXml(clamp(input.eyebrow, 48).toUpperCase())}</text>
   <line x1="84" y1="88" x2="1116" y2="88" stroke="#2a2a3d"/>
-  ${titleSvg}${summarySvg}${chipsSvg}${chartSvg}${detailSvg}${portraitSvg}
+  <g clip-path="url(#copyClip)">${titleSvg}${summarySvg}${chipsSvg}${detailSvg}</g>${chartSvg}${portraitSvg}
 </svg>`;
 }
 
