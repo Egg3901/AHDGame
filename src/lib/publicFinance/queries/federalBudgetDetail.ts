@@ -93,12 +93,80 @@ export function buildFyHistory(
 }
 
 /** Live sovereign-health signals for the Sovereign Health panel (read-only). */
+export type SovereignCeilingStatus = "clear" | "warning" | "critical" | "exceeded";
+
 export interface SovereignProjection {
   state: SovereignCrisisState;
   demandRatio: number | null;
   failedAuctions: number;
   marketAccess: "Open" | "Locked";
   marketAccessUntilTurn: number | null;
+  ceilingUseRatio: number | null;
+  ceilingHeadroom: number | null;
+  ceilingHeadroomYears: number | null;
+  ceilingStatus: SovereignCeilingStatus;
+}
+
+type SovereignProjectionBudget = {
+  sovereignCrisisState?: SovereignCrisisState;
+  lastAuctionDemandRatio?: number;
+  failedAuctionConsecutiveCount?: number;
+  marketAccessLockedUntilTurn?: number | null;
+  debt?: Pick<FederalBudget["debt"], "principal" | "ceiling">;
+  revenue?: Pick<FederalBudget["revenue"], "total">;
+  spending?: Pick<FederalBudget["spending"], "total">;
+};
+
+function projectCeiling(
+  budget: SovereignProjectionBudget
+): Pick<
+  SovereignProjection,
+  "ceilingUseRatio" | "ceilingHeadroom" | "ceilingHeadroomYears" | "ceilingStatus"
+> {
+  const principal = budget.debt?.principal;
+  const ceiling = budget.debt?.ceiling;
+  if (
+    principal == null ||
+    ceiling == null ||
+    !Number.isFinite(principal) ||
+    !Number.isFinite(ceiling) ||
+    ceiling <= 0
+  ) {
+    return {
+      ceilingUseRatio: null,
+      ceilingHeadroom: null,
+      ceilingHeadroomYears: null,
+      ceilingStatus: "clear",
+    };
+  }
+
+  const ceilingUseRatio = Math.max(0, principal) / ceiling;
+  const ceilingHeadroom = Math.max(0, ceiling - Math.max(0, principal));
+  const revenue = budget.revenue?.total;
+  const spending = budget.spending?.total;
+  const deficit =
+    revenue != null && spending != null && Number.isFinite(revenue) && Number.isFinite(spending)
+      ? Math.max(0, spending - revenue)
+      : 0;
+  const ceilingHeadroomYears =
+    deficit > 0 && ceilingHeadroom > 0 ? ceilingHeadroom / deficit : null;
+
+  let ceilingStatus: SovereignCeilingStatus = "clear";
+  if (ceilingUseRatio > 1) {
+    ceilingStatus = "exceeded";
+  } else if (
+    ceilingUseRatio >= 0.95 ||
+    (ceilingHeadroomYears != null && ceilingHeadroomYears < 1)
+  ) {
+    ceilingStatus = "critical";
+  } else if (
+    ceilingUseRatio >= 0.85 ||
+    (ceilingHeadroomYears != null && ceilingHeadroomYears < 2.5)
+  ) {
+    ceilingStatus = "warning";
+  }
+
+  return { ceilingUseRatio, ceilingHeadroom, ceilingHeadroomYears, ceilingStatus };
 }
 
 /**
@@ -107,13 +175,7 @@ export interface SovereignProjection {
  * Open" posture (pre-migration / un-stressed countries).
  */
 export function projectSovereign(
-  budget: Pick<
-    FederalBudget,
-    | "sovereignCrisisState"
-    | "lastAuctionDemandRatio"
-    | "failedAuctionConsecutiveCount"
-    | "marketAccessLockedUntilTurn"
-  >,
+  budget: SovereignProjectionBudget,
   currentTurn: number
 ): SovereignProjection {
   const lockUntil = budget.marketAccessLockedUntilTurn ?? null;
@@ -124,6 +186,7 @@ export function projectSovereign(
     failedAuctions: budget.failedAuctionConsecutiveCount ?? 0,
     marketAccess: locked ? "Locked" : "Open",
     marketAccessUntilTurn: locked ? lockUntil : null,
+    ...projectCeiling(budget),
   };
 }
 
