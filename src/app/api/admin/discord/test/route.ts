@@ -91,6 +91,12 @@ export async function POST(request: Request) {
       const descriptor = (await getCountryWebhookDescriptors(db)).find(
         (candidate) => candidate.countryId === requestedCountryId
       );
+      if (!descriptor) {
+        return NextResponse.json(
+          { error: `Country ${requestedCountryId} is not enabled for players` },
+          { status: 400 }
+        );
+      }
       if (!descriptor?.url && !config?.discordGameWebhookUrl) {
         return NextResponse.json(
           { error: `No ${requestedCountryId} game-events webhook is configured` },
@@ -101,13 +107,13 @@ export async function POST(request: Request) {
         db
           .collection<Character>("characters")
           .findOne(
-            { countryId: requestedCountryId, avatarUrl: { $type: "string" } },
+            { countryId: descriptor.countryId, avatarUrl: { $type: "string" } },
             { projection: { avatarUrl: 1 } }
           ),
         db
           .collection<NPP>("npps")
           .findOne(
-            { countryId: requestedCountryId, avatarUrl: { $type: "string" } },
+            { countryId: descriptor.countryId, avatarUrl: { $type: "string" } },
             { projection: { avatarUrl: 1 } }
           ),
       ]);

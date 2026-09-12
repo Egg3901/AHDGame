@@ -1591,8 +1591,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       demand: globalBal.demand,
       priceKnee,
       previousPrice: existing?.globalPrice,
-      hardPeg: existing?.hardPeg,
-      nudge: nudgeMap.get(commodity),
+      hardPeg: existing?.hardPeg ?? undefined,
+      nudge: nudgeMap.get(commodity) ?? undefined,
     });
     const globalMktPrice = globalResult.appliedPrice;
     const effBasePrice = globalResult.effectiveBasePrice;
