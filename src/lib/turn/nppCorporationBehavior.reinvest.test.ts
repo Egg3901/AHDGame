@@ -267,6 +267,40 @@ describe("NPP capacity reinvestment — a selling-out, fully-utilized plant grow
     expect(order.unitsOrdered).toBeCloseTo(replacement, 6);
     expect(decision.unownedDraws).toBeUndefined();
   });
+
+  it("does not grow extraction when the state's deposits have no headroom", () => {
+    const s = sector({ sectorType: "extraction", strategyId: "rare_earth_mining" });
+    const decision = decide(
+      corp({ type: "extraction" }),
+      [s],
+      [pool({ sectorType: "extraction", headroomUnits: 0, revenue: 0 })],
+      plantsCtx,
+      { placementSignals: { extractionHeadroomOf: () => 0 } }
+    );
+
+    const order = pushedOrder(queueWrites(decision)[0]);
+    // Existing capacity still receives maintenance; only new capacity is
+    // blocked when the physical deposit is exhausted.
+    expect(order.unitsOrdered).toBeCloseTo(
+      (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN,
+      6
+    );
+    expect(decision.reinvestments).toHaveLength(1);
+  });
+
+  it("treats an unknown extraction capacity document as uncapped", () => {
+    const s = sector({ sectorType: "extraction", strategyId: "rare_earth_mining" });
+    const decision = decide(
+      corp({ type: "extraction" }),
+      [s],
+      [pool({ sectorType: "extraction", headroomUnits: 0, revenue: 0 })]
+    );
+
+    const order = pushedOrder(queueWrites(decision)[0]);
+    expect(order.unitsOrdered).toBeGreaterThan(
+      (s.producedUnits ?? 0) * CAPITAL_DEPRECIATION_PER_TURN
+    );
+  });
 });
 
 describe("NPP capacity reinvestment — does not fire", () => {

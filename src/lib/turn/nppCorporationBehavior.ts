@@ -1780,26 +1780,28 @@ export function makeNppCorpDecision(
         strandedDecayScale *
         NPP_REINVEST_AGGRESSION;
       // GROWTH — build from nothing, sized by cash and demand, exactly as a
-      // player tops up a plant with `buildCapacity`. NO unowned-pool gate or
-      // cap. Reaching here already means the plant is selling through its output
-      // (fill >= MIN_FILL, required above). If it is also profitable, allowed to
-      // grow, has queue room, and sits in a market that is not glutted, it grows
-      // to the scale its treasury supports — not one facility a turn. The old
-      // path sized growth off a 2%/yr target divided by 48 and queued capacity
-      // dust (median 0.00065 of a facility), then the pool capped even that to a
-      // quarter of a headroom number that is ~0 in every built-out market, so
-      // NPP plants never reached player scale. The per-sector affordability rail
-      // below and the cash floor bound the spend; a plant that overbuilds sees
-      // fill fall next turn and stops.
+      // player tops up a plant with `buildCapacity`. Demand-side sectors do not
+      // use the unowned pool as a hard cap: their proven sell-through is the
+      // demand signal and the affordability rail limits the order. Extraction
+      // is different. Its physical market is the state's finite deposit, so the
+      // deposit headroom signal gates and scales new growth. Without that second
+      // gate a rare-earth price spike could make a mine keep adding capacity
+      // after the state's geology was already exhausted; production was capped,
+      // but the balance sheet and national sector mix kept inflating.
       const facilityUnits = foundingStarterUnits(sector.sectorType);
       const utilization = capitalStock > 0 ? runUnits / capitalStock : 0;
+      const extractionHeadroom =
+        sector.sectorType === "extraction"
+          ? Math.max(0, Math.min(1, placementSignals?.extractionHeadroomOf?.(sector.stateId) ?? 1))
+          : 1;
       const canGrow =
         sp.isProfitable &&
         levers.allowGrowthCapex &&
         !(ctx.retailExpansionPaused && sector.sectorType === "retail") &&
         queueDepth < NPP_REINVEST_MAX_GROWTH_QUEUE_DEPTH &&
         stateShortage > NPP_GROWTH_MIN_SHORTAGE &&
-        utilization >= NPP_GROWTH_MIN_UTILIZATION;
+        utilization >= NPP_GROWTH_MIN_UTILIZATION &&
+        (sector.sectorType !== "extraction" || extractionHeadroom > 0);
       // The plant already exists, so its build is tolled at its own dominance
       // and pays the list price, not the founding discount — the same terms a
       // player's `buildCapacity` pays.
@@ -1826,12 +1828,14 @@ export function makeNppCorpDecision(
       const growthBudgetLocal =
         Math.max(0, cashLocal - effectiveCashFloor) * NPP_GROWTH_DEPLOY_FRACTION;
       // Demand anchor: grow by at most this share of proven throughput a turn
-      // (at least one facility), not the whole treasury at once. No headroom cap
-      // — the unowned pool does not ration this.
-      const growthCapUnits = Math.max(
-        facilityUnits,
-        Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN)
-      );
+      // (at least one facility for demand-side sectors), not the whole treasury
+      // at once. Extraction growth is additionally scaled by finite deposit
+      // headroom and never floors up to a facility when the deposit cannot
+      // support one.
+      const growthCapUnits =
+        sector.sectorType === "extraction"
+          ? Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN * extractionHeadroom)
+          : Math.max(facilityUnits, Math.floor(runUnits * NPP_GROWTH_MAX_STEP_OF_RUN));
       // Units the growth budget affords, bounded by that step. Growth only fires
       // if it clears one whole facility — below that the plant just replaces
       // depreciation, so a cash-poor corp keeps its maintenance rather than
@@ -1847,7 +1851,10 @@ export function makeNppCorpDecision(
               )
             )
           : 0;
-      const growthUnits = affordableGrowthUnits >= facilityUnits ? affordableGrowthUnits : 0;
+      const growthUnits =
+        affordableGrowthUnits >= facilityUnits && growthCapUnits >= facilityUnits
+          ? affordableGrowthUnits
+          : 0;
       const units = replacementUnits + growthUnits;
       if (!(units > 0)) continue;
 
