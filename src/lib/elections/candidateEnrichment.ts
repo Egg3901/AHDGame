@@ -227,12 +227,14 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
   const enrichedCandidates = candidates.map((c) => {
     const cid = c._id.toString();
     // Ballot / primary mechanics use the candidate row (entry-time party).
-    // In-progress races: labels follow current character.party so UI matches
+    // In-progress races: labels follow current character/NPP party so UI matches
     // profile after leaving/joining a party. Ended races: keep the ballot
     // party so historical maps/results are not recoloured by later switches (#939).
     const charForDisplay = !c.isNPP ? charMap.get(c.characterId.toString()) : undefined;
-    const displayPartyKey =
-      preferBallotParty || c.isNPP ? c.party : (charForDisplay?.party ?? c.party);
+    const nppForDisplay = c.isNPP && c.nppId ? nppMap.get(c.nppId.toString()) : undefined;
+    const displayPartyKey = preferBallotParty
+      ? c.party
+      : (charForDisplay?.party ?? nppForDisplay?.party ?? c.party);
 
     const party = partyMap.get(c.party);
     const partyEcon = party?.economicPosition ?? 0;
@@ -323,7 +325,7 @@ export function enrichElectionCandidates(deps: EnrichmentDependencies): Enriched
 
     const char = c.isNPP ? undefined : charMap.get(c.characterId.toString());
     // Resolve npp early so avatarUrl can fall back to the NPP's own portrait
-    const npp = c.isNPP && c.nppId ? nppMap.get(c.nppId.toString()) : null;
+    const npp = nppForDisplay ?? null;
     const avatarUrl = char?.avatarUrl ?? npp?.avatarUrl;
 
     const runningMateChar = c.runningMateId ? charMap.get(c.runningMateId.toString()) : null;
