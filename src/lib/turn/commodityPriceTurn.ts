@@ -43,6 +43,8 @@ import {
   COMMODITY_TYPES,
   eraScaledBasePrices,
   MARKETING_ADVERTISING_DEMAND_RATE,
+  MARKETING_ADVERTISING_DEMAND_EXPONENT,
+  MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
   GOVT_HEALTHCARE_DEMAND_RATE,
   GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
   GOVT_SPEND_CATEGORY_ALIASES,
@@ -869,7 +871,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // normalize each corp's stored marketingBudget (local currency post-v0.2.6)
   // to ₳ before computing units — otherwise a UK corp's GBP budget would
   // over-contribute demand proportional to GBP's FX rate.
+  // Demand audit step 7: sublinear conversion. Funded budgets are collected
+  // first so the exponent pivots on the economy-wide total; every corp's
+  // units then convert at the same damped rate. Uniform (not per-corp)
+  // damping keeps small advertisers' response predictable — no
+  // redistribution, only time-damping — and the factor is 1 when nothing is
+  // funded, so dead legs stay dead.
   const advertisingBasePrice = LEDGER_BASE_PRICES["advertising"];
+  const fundedAdvertisingBudgets: Array<{ stateId: string; fundedAnchor: number }> = [];
+  let totalFundedBudgetsAnchor = 0;
   for (const corp of allCorporations) {
     const budgetLocal = corp.marketingBudget ?? 0;
     if (budgetLocal <= 0 || !corp.headquartersState) continue;
@@ -889,21 +899,36 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       Math.max(0, liquidCapitalAnchor) * TURNS_PER_DAY
     );
     if (!(fundedBudgetAnchor > 0)) continue;
-    const units = (fundedBudgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE) / advertisingBasePrice;
+    fundedAdvertisingBudgets.push({
+      stateId: corp.headquartersState,
+      fundedAnchor: fundedBudgetAnchor,
+    });
+    totalFundedBudgetsAnchor += fundedBudgetAnchor;
+  }
+  const advertisingDemandFactor =
+    totalFundedBudgetsAnchor > 0
+      ? Math.pow(
+          totalFundedBudgetsAnchor / MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
+          MARKETING_ADVERTISING_DEMAND_EXPONENT - 1
+        )
+      : 1;
+  const effectiveAdvertisingRate = MARKETING_ADVERTISING_DEMAND_RATE * advertisingDemandFactor;
+  for (const { stateId, fundedAnchor } of fundedAdvertisingBudgets) {
+    const units = (fundedAnchor * effectiveAdvertisingRate) / advertisingBasePrice;
 
     // Add to global
     const advertisingBal = global.get("advertising")!;
     advertisingBal.demand += units;
 
     // Distribute to HQ state so state-level margins reflect real demand
-    if (!byState.has(corp.headquartersState)) {
+    if (!byState.has(stateId)) {
       const stateMap = new Map<CommodityType, { supply: number; demand: number }>();
       for (const c of COMMODITY_TYPES) {
         stateMap.set(c, { supply: 0, demand: 0 });
       }
-      byState.set(corp.headquartersState, stateMap);
+      byState.set(stateId, stateMap);
     }
-    const stateBal = byState.get(corp.headquartersState)!.get("advertising")!;
+    const stateBal = byState.get(stateId)!.get("advertising")!;
     stateBal.demand += units;
   }
 
