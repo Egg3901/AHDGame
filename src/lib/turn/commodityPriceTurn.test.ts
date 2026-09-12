@@ -642,6 +642,59 @@ describe("commodityPriceTurn", () => {
       expect(withBudget - globalDemandFor("ordnance")).toBeCloseTo(1.11, 2);
     });
 
+    /** State demand for one commodity/state out of the bulkWrite ops. */
+    function stateDemandFor(commodity: string, stateId: string): number {
+      const ops = mockBulkWrite.mock.calls[0][0];
+      return (
+        ops.find((op: any) => op.updateOne.filter.commodity === commodity).updateOne.update.$set
+          .stateDemand[stateId] ?? 0
+      );
+    }
+
+    it("writes government ordnance demand into the regional books pro-rata by state GDP", async () => {
+      setupMocks({
+        states: [
+          { _id: "us_tx", countryId: "US", gdp: 3_000_000 },
+          { _id: "us_ca", countryId: "US", gdp: 1_000_000 },
+        ],
+        exchangeRates: [{ currencyCode: "USD", rate: 1.0 }],
+        federalBudgets: [{ countryId: "US", spending: { byCategory: { defense: 48_000_000 } } }],
+      });
+
+      await processCommodityPriceTurn(100);
+      const tx = stateDemandFor("ordnance", "us_tx");
+      const ca = stateDemandFor("ordnance", "us_ca");
+      // 48M/yr → ~1.111 units/turn total, split 3:1 by state GDP. With no
+      // sectors the regional books hold ONLY this distribution. Persisted
+      // state demand is rounded to 2dp, so the ratio pin is loose.
+      expect(tx + ca).toBeCloseTo(1.11, 2);
+      expect(tx / ca).toBeCloseTo(3, 1);
+    });
+
+    it("floors rate-sensitive demand deltas at zero instead of subtracting (demand audit step 3)", async () => {
+      const world = (primeRate?: number) => ({
+        states: [{ _id: "us_tx", countryId: "US", gdp: 1_000_000 }],
+        centralBanks: primeRate === undefined ? [] : [{ countryId: "US", primeRate }],
+        stateBudgets: [{ stateId: "us_tx", stateGdp: 1_000_000_000 }],
+      });
+      setupMocks(world(10)); // far above neutral: old code subtracted food demand
+      await processCommodityPriceTurn(100);
+      const highPrime = globalDemandFor("food");
+
+      mockBulkWrite.mockClear();
+      // US neutral is 3.0 (MONETARY_BASELINES), not the 2.75 fallback: at
+      // exactly neutral the delta is 0 by construction.
+      setupMocks(world(3.0));
+      await processCommodityPriceTurn(100);
+      const neutral = globalDemandFor("food");
+      expect(highPrime).toBeCloseTo(neutral, 6);
+
+      mockBulkWrite.mockClear();
+      setupMocks(world(0.5)); // below neutral → positive leg intact
+      await processCommodityPriceTurn(100);
+      expect(globalDemandFor("food")).toBeGreaterThan(neutral);
+    });
+
     it("leaves ordnance demand untouched when a country spends nothing on defense", async () => {
       setupMocks({
         states: [{ _id: "us_tx", countryId: "US", gdp: 1_000_000 }],
