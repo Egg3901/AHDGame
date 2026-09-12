@@ -12,7 +12,7 @@ vi.mock("@/lib/discordWebhooks", () => ({
 vi.mock("@/lib/discord/eventCard", () => ({ generateDiscordEventCard }));
 vi.mock("@/lib/charts/parliamentChart", () => ({
   getChamberComposition: vi.fn().mockResolvedValue({ seats: [], totalSeats: 0 }),
-  generateParliamentChartSVG: vi.fn().mockReturnValue("<svg />"),
+  generateChamberDiagramSVG: vi.fn().mockReturnValue("<svg />"),
 }));
 vi.mock("@/lib/db/collections/gameState", () => ({
   getGameStatePreset: vi.fn().mockResolvedValue("1953"),
