@@ -27,12 +27,12 @@
  */
 
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
+import { OVERHANG_CAP } from "./rules";
+export { countryPhysicalDemandSupplyGapPct, OVERHANG_CAP, shortageIndexFrom } from "./rules";
 
 const clamp = (v: number, lo: number, hi: number): number =>
   !Number.isFinite(v) ? lo : Math.min(hi, Math.max(lo, v));
 
-/** Overhang is a pressure INDEX in [0, OVERHANG_CAP], not a currency amount. */
-export const OVERHANG_CAP = 100;
 /** Per-turn persistence of accumulated overhang absent new flow. 0.99/turn ≈ a
  *  ~2-year decay horizon (48 turns/yr) — forced savings bleed off slowly. */
 export const OVERHANG_DECAY = 0.99;
@@ -140,21 +140,6 @@ export function overhangInjectionFromIssuance(
   const share = clamp(plannedShare, 0, 1);
   const frac = issuance / base; // dimensionless share of plan output printed
   return clamp(CREDIT_OVERHANG_SCALE * frac * 100 * share, 0, OVERHANG_CAP);
-}
-
-/**
- * Shortage index in [0, 100]. Combines the accumulated overhang (too much money
- * chasing goods) with the physical demand-vs-supply gap at administered prices
- * (0 when unknown — P1 runs on overhang alone; P2 supplies the real gap).
- *
- * @param overhang            overhang index [0, OVERHANG_CAP]
- * @param demandSupplyGapPct  (demand-supply)/supply * 100 at the held price, ≥0
- */
-export function shortageIndexFrom(overhang: number, demandSupplyGapPct = 0): number {
-  const o = clamp(overhang, 0, OVERHANG_CAP);
-  const gap = clamp(demandSupplyGapPct, 0, 500);
-  // Overhang contributes up to ~70, the physical gap up to ~30.
-  return clamp(0.7 * o + 0.06 * gap, 0, 100);
 }
 
 /**
