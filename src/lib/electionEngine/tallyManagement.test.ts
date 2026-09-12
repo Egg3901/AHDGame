@@ -1218,13 +1218,17 @@ describe("removeWithdrawnCandidateFromTally", () => {
     expect(db.collectionMocks.electionVoteTallies.updateOne).not.toHaveBeenCalled();
   });
 
-  it("builds $unset paths for totalVotes, candidateNames, and candidateParties", async () => {
+  it("builds $unset paths for aggregate and per-unit candidate totals", async () => {
     const { removeWithdrawnCandidateFromTally } = await import("./tallyCleaner");
 
     const electionId = new ObjectId();
     db.collectionMocks.electionVoteTallies.findOne.mockResolvedValue(
       makeTally(electionId, {
         totalVotes: { cand1: 5_000, cand2: 3_000 },
+        totalVotesByUnit: {
+          CA: { cand1: 3_000, cand2: 2_000 },
+          TX: { cand1: 2_000, cand2: 1_000 },
+        },
         candidateNames: { cand1: "Alice", cand2: "Bob" },
         candidateParties: { cand1: "democrat", cand2: "republican" },
       })
@@ -1239,9 +1243,12 @@ describe("removeWithdrawnCandidateFromTally", () => {
     expect($unset["totalVotes.cand1"]).toBe("");
     expect($unset["candidateNames.cand1"]).toBe("");
     expect($unset["candidateParties.cand1"]).toBe("");
+    expect($unset["totalVotesByUnit.CA.cand1"]).toBe("");
+    expect($unset["totalVotesByUnit.TX.cand1"]).toBe("");
 
     // cand2 paths must NOT be unset
     expect($unset["totalVotes.cand2"]).toBeUndefined();
+    expect($unset["totalVotesByUnit.CA.cand2"]).toBeUndefined();
   });
 
   it("also unsets seatsEstimate entry when the candidate is present there", async () => {
