@@ -226,6 +226,14 @@ describe("resolveSourceLink", () => {
     expect(s?.href).toBe("/bond/b2");
   });
 
+  it("supply agreement offers link to the corporation's Commodities tab", () => {
+    const s = resolveSourceLink("corp_supply_agreement_offer", {
+      corporationId: "65f000000000000000000001",
+    });
+    expect(s?.href).toBe("/corporation/65f000000000000000000001?tab=commodities#supply-agreements");
+    expect(s?.label).toBe("Review supply offer");
+  });
+
   // ── Crisis ───────────────────────────────────────────────────────────────
   it("crisis with crisisId links to /world/crises/[id]", () => {
     const s = resolveSourceLink("crisis", { crisisId: "cr1" });
