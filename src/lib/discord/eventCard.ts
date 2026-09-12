@@ -144,9 +144,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
     .slice(0, 4)
     .map((line) => clamp(line, hasPortrait ? 47 : 74));
   const metadata = (input.metadata ?? []).slice(0, 3).map((item) => clamp(item, 28));
-  const height = hasChart
-    ? 760
-    : Math.max(hasPortrait ? 640 : 560, 470 + details.length * 52);
+  const height = hasChart ? 760 : Math.max(hasPortrait ? 640 : 560, 470 + details.length * 52);
   const chartData = input.chartSvg
     ? `data:image/svg+xml;base64,${Buffer.from(input.chartSvg).toString("base64")}`
     : undefined;
