@@ -234,8 +234,10 @@ export function NavbarWrapper({
   displayMode,
   initialPageCountry,
   singleplayer = false,
+  clientShell = false,
 }: {
   singleplayer?: boolean;
+  clientShell?: boolean;
   displayMode?: "focused" | "classic";
   initialPageCountry?: CountryId | null;
 }) {
@@ -533,6 +535,7 @@ export function NavbarWrapper({
         <>
           {useExperimentalNav ? (
             <ExperimentalNavbar
+              clientShell={clientShell}
               user={
                 state.user ?? (singleplayer ? { username: "Admin", singleplayer: true } : undefined)
               }
@@ -561,6 +564,7 @@ export function NavbarWrapper({
             />
           ) : (
             <Navbar
+              clientShell={clientShell}
               user={
                 useLightweightNav
                   ? undefined

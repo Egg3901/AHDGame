@@ -836,6 +836,8 @@ export async function _enrichElection(
   let economicReferendum: ElectionResponse["economicReferendum"];
   /** Read-through of the tally's factor ledger, fog-of-war applied (president only). */
   let factorLedger: ElectionResponse["factorLedger"];
+  /** Read-through of the tally's democratic-health pressure snapshot (president only). */
+  let democraticHealth: ElectionResponse["democraticHealth"];
   /** Presidential-primary stagger calendar with each wave's live status. */
   let primaryCalendar: PrimaryCalendarWave[] | undefined;
 
@@ -936,6 +938,18 @@ export async function _enrichElection(
             : {}),
           ...(referendumParty?.name ? { incumbentPartyName: referendumParty.name } : {}),
           ...(referendumParty?.color ? { incumbentPartyColor: referendumParty.color } : {}),
+        };
+      }
+
+      const democraticHealthSnapshot = resolvedTally.democraticHealth ?? tally?.democraticHealth;
+      if (isPresident && democraticHealthSnapshot) {
+        const rulingParty = democraticHealthSnapshot.rulingPartyId
+          ? partyMap.get(String(democraticHealthSnapshot.rulingPartyId))
+          : undefined;
+        democraticHealth = {
+          ...democraticHealthSnapshot,
+          ...(rulingParty?.name ? { rulingPartyName: rulingParty.name } : {}),
+          ...(rulingParty?.color ? { rulingPartyColor: rulingParty.color } : {}),
         };
       }
 
@@ -1438,6 +1452,7 @@ export async function _enrichElection(
 
     // National Mood gauge input (president only, when the engine recorded one).
     ...(economicReferendum ? { economicReferendum } : {}),
+    ...(democraticHealth ? { democraticHealth } : {}),
     ...(factorLedger ? { factorLedger } : {}),
 
     // Registration Influence card inputs (US presidential general only).

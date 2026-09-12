@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Db, ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { makeCharacter, makeCorporation } from "@/lib/test-utils/factories";
+import type { BankCharter } from "@/lib/db/types/bank";
 import { isLabourWagesEnabled } from "@/lib/labour/featureFlag";
 import {
   DOMINANCE_MARGIN_PENALTY_AT_FULL,
@@ -116,6 +117,62 @@ describe("loadCorporationDetailView", () => {
     expect(result.sectors).toEqual([]);
     expect(result.financials.totalRevenue).toBe(0);
     expect(result.balanceSheet.assets.cashOnHand).toBe(corporation.liquidCapital);
+  });
+
+  it("includes active bank equity in the balance sheet", async () => {
+    const ceo = makeCharacter({
+      _id: new ObjectId(),
+      userId: new ObjectId(),
+      name: "Bank CEO",
+      sequentialId: 43,
+    });
+    const bankCharter: BankCharter = {
+      type: "retail",
+      status: "active",
+      currency: "USD",
+      charteredTurn: 1,
+      postedCapital: 5_000,
+      depositOffset: 0,
+      lendingOffset: 0,
+      cashReserves: 10_000,
+      npcDeposits: 6_000,
+      totalDeposits: 6_000,
+      totalLoans: 4_000,
+      lastBankingIncome: 100,
+      lastBankingIncomeTurn: 9,
+    };
+    const corporation = makeCorporation({
+      _id: new ObjectId(),
+      ceoId: ceo._id,
+      userId: ceo.userId,
+      countryId: "US",
+      headquartersState: "CA",
+      liquidCurrencyCode: "USD",
+      bankCharter,
+    });
+
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue(ceo);
+    db.collectionMocks["corporateSectors"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: () => Promise.resolve([]),
+    } as never);
+    db.collectionMocks["corporationHistory"]!.findOne.mockResolvedValue({ income: 0 });
+
+    const { loadCorporationDetailView } = await import("./corporationDetail");
+    const result = await loadCorporationDetailView({
+      db: db as unknown as Db,
+      corporation,
+      currentTurn: 10,
+      viewerUserId: null,
+    });
+
+    expect(result.balanceSheet.assets.bankEquity).toBe(8_000);
+    expect(result.balanceSheet.assets.bankValuation).toBe(6_000);
+    expect(result.balanceSheet.assets.bankNPV).toBe(32_000);
+    expect(result.financials.bankingIncome).toBe(2_400);
+    expect(result.financials.bankingIncomeTurn).toBe(9);
   });
 
   it("applies dominance margin penalty for dominant sectors on the corp page", async () => {

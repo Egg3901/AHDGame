@@ -25,6 +25,7 @@ import { jpRegionCensusData1991 } from "@/lib/seeds/jp/jpRegionCensusData1991";
 import { jpRegionCensusData1999 } from "@/lib/seeds/jp/jpRegionCensusData1999";
 import { jpRegionCensusData2007 } from "@/lib/seeds/jp/jpRegionCensusData2007";
 import { jpRegionCensusData2023 } from "@/lib/seeds/jp/jpRegionCensusData2023";
+import { jpRegionCensusData2027 } from "@/lib/seeds/jp/jpRegionCensusData2027";
 import type { JPRegionLayer1 } from "@/lib/seeds/jp/jpRegionCensusData";
 import type { EraId } from "@/lib/seeds/presetSelector";
 
@@ -553,6 +554,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2007,
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2023,
+  "2027": POSITIONS_2023,
 };
 
 // ── Census conversion ─────────────────────────────────────────────────────────
@@ -583,6 +585,7 @@ const ERA_CENSUS: Record<EraId, Record<string, JPRegionLayer1>> = {
   "2007": jpRegionCensusData2007,
   "2019": jpRegionCensusData, // 2020 census base, used for 2019 era
   "2023": jpRegionCensusData2023,
+  "2027": jpRegionCensusData2027,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

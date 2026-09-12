@@ -5,8 +5,9 @@
 // Auth: public read (optional viewer for biddable-corp list)
 // Errors: 400
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { handleRouteError } from "@/lib/api/errors";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
@@ -20,7 +21,7 @@ interface RouteParams {
   params: Promise<{ code: string }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export const GET = withNoStore(async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { code } = await params;
     const countryId = code.toUpperCase() as CountryId;
@@ -34,10 +35,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
     const auctions = await buildAuctionListings(db, { currentTurn, countryId });
 
     // Optional viewer → corps they may bid on behalf of (CEO, not vacant).
-    const authUser = await verifyAuth().catch(() => null);
-    const viewer = authUser
-      ? await getCharacterByUserId(db, authUser.userId).catch(() => null)
-      : null;
+    const authUser = await getAuthUser();
+    const viewer = authUser ? await getCharacterByUserId(db, authUser.userId) : null;
     // Bidding is residency-gated (spec §13.3): only residents of the auction's
     // country may bid. Auctions stay visible to everyone (transparency); the UI
     // mirrors this flag, the server bid route is authoritative.
@@ -90,4 +89,4 @@ export async function GET(_request: Request, { params }: RouteParams) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

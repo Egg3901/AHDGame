@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface VoteTurnSnapshot {
@@ -110,6 +111,8 @@ export interface ElectionVoteTally {
     incumbentPartyId?: string;
     recordedTurn: number;
   };
+  /** President only: the institutional-health pressure applied on the last turn. */
+  democraticHealth?: DemocraticHealthElectionSnapshot;
   /**
    * President only: the descriptive factor ledger the engine teed on the last
    * accumulation turn (see `src/lib/electionEngine/factorLedger.ts`). A

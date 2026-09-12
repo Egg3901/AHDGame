@@ -65,6 +65,7 @@ interface ImperialCharacterNav {
 }
 
 interface NavbarProps {
+  clientShell?: boolean;
   user?: {
     username: string;
     isAdmin?: boolean;
@@ -134,6 +135,7 @@ function ChevronIcon({ open }: { open: boolean }) {
 }
 
 export const Navbar = React.memo(function Navbar({
+  clientShell = false,
   user,
   showProfile = false,
   homeState,
@@ -571,7 +573,7 @@ export const Navbar = React.memo(function Navbar({
 
             <StaffDropdown isAdmin={!!user?.isAdmin} isModerator={!!user?.isModerator} />
 
-            {user?.singleplayer && <SingleplayerEndTurnButton />}
+            {user?.singleplayer && !clientShell && <SingleplayerEndTurnButton />}
           </div>
 
           {/* Search + icon cluster */}

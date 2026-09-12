@@ -34,7 +34,7 @@ export type MacroEconomicSystem = "market" | "planned";
  * seeds are authored per era and must not inherit modern-preset bundles.
  */
 export interface MacroCountryDataQuality {
-  provenance: "authored-1953";
+  provenance: "authored-1953" | "estimated-background";
   economicSystem: MacroEconomicSystem;
   /** Required fields that were absent or non-positive at seed time. */
   missingFields: string[];
@@ -52,6 +52,9 @@ export interface MacroCountryState {
   _id: WorldEntityId;
   entityId: WorldEntityId;
   presetId: string;
+  simulationTier: "sphere-macro" | "background-macro";
+  /** Persisted so turn processing can query one staggered bucket directly. */
+  tickBucket: number;
   displayName: string;
   economicSystem: MacroEconomicSystem;
   population: number;

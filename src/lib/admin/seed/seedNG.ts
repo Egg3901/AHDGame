@@ -67,7 +67,7 @@ export async function seedNGRegions(
 }
 
 export async function seedNGParties(db: Db, log: (msg: string) => void, preset?: string) {
-  const { isPartyValidForPreset } = await import("@/lib/seeds/ensureDefaultParties");
+  const { selectPartyRosterForPreset } = await import("@/lib/seeds/ensureDefaultParties");
   const { ngParties } = await import("@/lib/seeds/ng/ngParties");
 
   let activePreset = preset;
@@ -78,9 +78,7 @@ export async function seedNGParties(db: Db, log: (msg: string) => void, preset?:
     activePreset = gameState?.preset ?? DEFAULT_SEED_PRESET;
   }
 
-  const filtered = (ngParties as PartySeed[]).filter((seed) =>
-    isPartyValidForPreset(seed, activePreset!)
-  );
+  const filtered = selectPartyRosterForPreset(ngParties as PartySeed[], activePreset!);
 
   const now = new Date();
   for (const party of filtered) {

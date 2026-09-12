@@ -74,6 +74,10 @@ import { migration as clientDiagnosticsTtlIndex } from "./entries/2026-09-06-cli
 import { migration as uniqueVotingPartyElections } from "./entries/2026-09-09-unique-voting-party-elections";
 import { migration as manifestosIndex } from "./entries/2026-09-06-manifestos-index";
 import { migration as equityPoolSeedBackfill } from "./entries/2026-09-07-equity-pool-seed-backfill";
+import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-central-bank-pricing-phase-in";
+
+import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
+import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -235,6 +239,10 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1295: one voting leadership/committee race per seat. Seed indexes
   // cover a fresh bootstrap; this reaches worlds that are already running.
   uniqueVotingPartyElections,
+  providerIdentityIndexes,
+  // Anchor the player-facing central-bank pricing phase-in on the live turn.
+  centralBankPricingPhaseIn,
+  sourceFenceIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

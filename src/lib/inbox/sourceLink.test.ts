@@ -140,6 +140,12 @@ describe("resolveSourceLink", () => {
     expect(s).toBeNull();
   });
 
+  it("links central-bank pricing notices to the banking hub", () => {
+    const s = resolveSourceLink("system", { type: "central_bank_pricing_change" });
+    expect(s?.href).toBe("/banking");
+    expect(s?.label).toBe("Open banking & credit");
+  });
+
   // ── Feedback ─────────────────────────────────────────────────────────────
   it("feedback_status_changed links to admin feedback tab", () => {
     const s = resolveSourceLink("feedback_status_changed", {

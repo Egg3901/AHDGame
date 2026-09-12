@@ -112,6 +112,10 @@ export function resolveSourceLink(
     }
   }
 
+  if (m.type === "central_bank_pricing_change") {
+    return { label: "Open banking & credit", href: "/banking" };
+  }
+
   // ── Feedback (admin) ──────────────────────────────────────────────────────
   if (
     (type === "feedback_status_changed" || type === "new_feedback") &&

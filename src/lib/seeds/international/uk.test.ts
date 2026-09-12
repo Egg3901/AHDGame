@@ -249,7 +249,7 @@ describe("LON vs NEE relative ordering in 2019", () => {
 // ── Data integrity ────────────────────────────────────────────────────────────
 
 describe("Model data integrity", () => {
-  const ERAS: EraId[] = ["1953", "1979", "1991", "1999", "2007", "2019", "2023"];
+  const ERAS: EraId[] = ["1953", "1979", "1991", "1999", "2007", "2019", "2023", "2027"];
   const REGIONS = [
     "LON",
     "SCO",

@@ -21,6 +21,7 @@ export interface TaggedMacroContribution {
   entityId: string;
   presetId: string;
   contribution: MacroMarketContribution;
+  simulationTier: "sphere-macro" | "background-macro";
 }
 
 export interface SphereMacroApplyResult {
@@ -38,7 +39,7 @@ export async function loadTaggedMacroContributions(db: Db): Promise<TaggedMacroC
   const docs = await (
     await getMacroCountriesCollection(db)
   )
-    .find({}, { projection: { entityId: 1, presetId: 1, contribution: 1 } })
+    .find({}, { projection: { entityId: 1, presetId: 1, contribution: 1, simulationTier: 1 } })
     .toArray();
   return docs
     .filter((doc) => doc.contribution && doc.entityId && doc.presetId)
@@ -46,6 +47,7 @@ export async function loadTaggedMacroContributions(db: Db): Promise<TaggedMacroC
       entityId: doc.entityId,
       presetId: doc.presetId,
       contribution: doc.contribution,
+      simulationTier: doc.simulationTier,
     }));
 }
 
@@ -66,8 +68,13 @@ export async function applySphereRoutedMacroContributions(
   const routed: SphereRoutedContribution[] = [];
   const explanations: SphereEffectExplanation[] = [];
   const allFlows: SphereRoutedContribution["flows"] = [];
+  const background = tagged.filter((item) => item.simulationTier === "background-macro");
+  applyMacroContributionsToGlobal(
+    global,
+    background.map((item) => item.contribution)
+  );
 
-  for (const item of tagged) {
+  for (const item of tagged.filter((candidate) => candidate.simulationTier === "sphere-macro")) {
     const membership = await loadSphereMembership(db, item.presetId, item.entityId);
     assertValidSphereMembership(membership);
 

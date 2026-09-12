@@ -64,6 +64,7 @@ import {
 } from "./electionFormulaFactors";
 import { persuasionDrivers } from "./persuasionDrivers";
 import type { EnrichedCandidate, DistributeVotesOptions, AppealWeightTrace } from "./types";
+import { democraticHealthMultiplierForCandidate } from "./democraticHealth";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -208,6 +209,20 @@ function appealWeight(
   // nominal-share nudge nationwide. Same shape as govMod; they stack.
   const presMod = options?.presidentialModifierByParty?.get(ec.party) ?? 1;
 
+  // Democratic-health pressure is a presidential own-race effect. It applies
+  // to every candidate from the sitting President's party, with an additional
+  // drag for the sitting President themselves.
+  const democraticHealthMult = options?.democraticHealth
+    ? democraticHealthMultiplierForCandidate({
+        candidateParty: ec.party,
+        candidateCharacterId: ec.characterId,
+        rulingPartyId: options.democraticHealth.rulingPartyId,
+        currentRulerCharacterId: options.democraticHealth.currentRulerCharacterId,
+        partyPenalty: options.democraticHealth.partyPenalty,
+        currentRulerPenalty: options.democraticHealth.currentRulerPenalty,
+      })
+    : 1;
+
   // Off-cycle opposition counterweight. Eligible parties receive a fixed,
   // modest nominal-share bump; governing and coalition parties stay neutral.
   const midtermOppositionMod = options?.midtermOppositionModifierByParty?.get(ec.party) ?? 1;
@@ -274,6 +289,7 @@ function appealWeight(
       regimeMult *
       govMod *
       presMod *
+      democraticHealthMult *
       midtermOppositionMod *
       regResist *
       regBaseline *
@@ -295,6 +311,7 @@ function appealWeight(
       regimeMult *
       govMod *
       presMod *
+      democraticHealthMult *
       midtermOppositionMod *
       regResist *
       regBaseline *

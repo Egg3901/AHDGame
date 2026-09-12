@@ -2,9 +2,10 @@
  * GET /api/congress/cabinet-nominations — Active cabinet nominations for Senate voting
  */
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
@@ -13,10 +14,10 @@ import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBrea
 // GET /api/congress/cabinet-nominations — Returns all active cabinet nominations with the current user's vote status.
 // Auth: public
 // Errors: 400
-export async function GET() {
+export const GET = withNoStore(async function GET() {
   try {
     const db = await getDb();
-    const authUser = await verifyAuth().catch(() => null);
+    const authUser = await getAuthUser();
 
     const activeNominations = await db
       .collection<CabinetNomination>("cabinetNominations")
@@ -74,4 +75,4 @@ export async function GET() {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

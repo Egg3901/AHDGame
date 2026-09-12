@@ -106,6 +106,50 @@
       "assumptions": "Holds last turn's prices, production pace, sales share and costs constant. Assumes existing cash funds the build; borrowing costs and returns forgone elsewhere are excluded. Capacity and strategy changes made since that turn are not included. Additional sales are capped by measured unmet demand; unwanted output still incurs production costs. Includes the construction ramp, physical depreciation, idle upkeep and freight. Excludes receipts from selling previously stored inventory. Allocates today's corporation overhead, including R&D, proportionally; taxes positive income at {tax}%. Reserves cash for replacement. Prices, demand, policies, staffing and competitors can change. Remaining value is depreciated construction spend, excludes transfer fees and is not a cash sale quote. Returns are cumulative, not annualized.",
       "deductions96": "Over 96 turns: overhead {overhead}, tax {tax}, replacement reserve {replacement}.",
       "noDemand": "There is no measured unmet demand for this output mix. This scenario gives new capacity no additional sales. A new strategy, better delivery or winning customers could change that."
+    },
+    "bankConsole": {
+      "eyebrow": {
+        "ceoControl": "CEO control",
+        "monitor": "Monitor",
+        "reference": "Reference",
+        "supervision": "Supervision"
+      },
+      "about": "About {label}",
+      "aboutPosition": "About position",
+      "position": "Position",
+      "pendingDecisions": "{count} awaiting decision",
+      "fundingAttention": "capital or reserves need attention",
+      "needsAttention": "needs attention",
+      "actions": {
+        "postCapital": "Post capital",
+        "adjustRates": "Adjust rates",
+        "raiseCeiling": "Raise ceiling",
+        "manageLoans": "Manage loans"
+      },
+      "tooltips": {
+        "position": "Where the bank stands right now. Each figure links to the tab that moves it.",
+        "postedCapital": "Capital posted from the treasury plus retained earnings. It stands behind depositors and sets the deposit ceiling.",
+        "deposits": "Household savings plus player deposits pointed at the bank. More deposits raise the reserve requirement.",
+        "depositCeiling": "The most deposits the bank may hold: the lower of branch capacity and 12x book equity.",
+        "loansOut": "Named player loans plus the household book. Lending earns interest but consumes reserves.",
+        "rates": "Your offsets versus central bank prime, inside the Regulation Q corridor. Pay more to attract savers; charge more to earn, at the cost of demand.",
+        "capitalUndercapitalized": "Post {amount} or lose the charter",
+        "capitalStressed": "Survives today, fails the stress scenario",
+        "capitalAdequate": "Above the minimum and the stress scenario",
+        "noReserveRequirement": "No reserve requirement",
+        "reserveShortfall": "{amount} short of the requirement",
+        "reserveSurplus": "{amount} above the requirement",
+        "noBadLoans": "Every named loan is current",
+        "badLoans": "{amount} in arrears or defaulted",
+        "capFormula": "{formula}. Now: {inputs}.",
+        "capFormulaLabel": "How {label} is computed",
+        "discountOutstanding": "What the bank currently owes the central bank. Repay it to start clearing the stigma.",
+        "discountRate": "Emergency borrowing costs more than the market. The penalty rate is the price of speed.",
+        "discountCapacity": "How much more the window will lend before it hits its cap.",
+        "discountStigma": "Drawing the window shakes depositor confidence. The penalty fades once the debt is repaid.",
+        "interbankDebt": "What the bank owes other banks. Market funding: cheaper than the window, but the lenders can pull it.",
+        "marginDebt": "Central bank lending against posted collateral. Secured, but arrears here draw supervisory attention."
+      }
     }
   }
 }

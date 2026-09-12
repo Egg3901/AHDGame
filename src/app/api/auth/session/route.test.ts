@@ -52,7 +52,9 @@ describe("GET /api/auth/session", () => {
     });
     expect(findOne).toHaveBeenCalledExactlyOnceWith(
       { _id: id },
-      { projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1 } }
+      {
+        projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1, authMigrationFence: 1 },
+      }
     );
     expect(response.headers.get("cache-control")).toContain("no-store");
     expect(response.headers.get("set-cookie")).toBeNull();
@@ -103,10 +105,23 @@ describe("GET /api/auth/session", () => {
     { _id: id, username: "current-name", isBanned: true },
     { _id: id, username: "current-name", authRevokedAt: new Date((now - 10) * 1000) },
     { _id: id, username: "current-name", authRevokedAt: new Date(now * 1000) },
+    { _id: id, username: "current-name", authMigrationFence: {} },
+    { _id: id, username: "current-name", authMigrationFence: null },
+    { _id: id, username: "current-name", authMigrationFence: "malformed" },
   ])("rejects deleted, banned and revoked users", async (user) => {
     findOne.mockResolvedValue(user);
     expect((await GET(request(`auth-token-test=${await token()}`))).status).toBe(401);
   });
+
+  it.each([0, false, "", "2026-01-01", {}, new Date(NaN)])(
+    "rejects malformed revocation state %j",
+    async (authRevokedAt) => {
+      findOne.mockResolvedValue({ _id: id, username: "current-name", authRevokedAt });
+      const response = await GET(request(`auth-token-test=${await token()}`));
+      expect(response.status).toBe(401);
+      expect(response.headers.get("cache-control")).toContain("no-store");
+    }
+  );
 
   it("rechecks revocation on the next request and accepts authentication after revocation", async () => {
     const cookie = `auth-token-test=${await token()}`;
@@ -119,6 +134,21 @@ describe("GET /api/auth/session", () => {
     expect((await GET(request(cookie))).status).toBe(401);
     expect((await GET(request(`auth-token-test=${await token({ iat: now })}`))).status).toBe(200);
     expect(findOne).toHaveBeenCalledTimes(3);
+  });
+
+  it("rejects the original token after reauth while the cutoff remains, and accepts a same-second fresh iat", async () => {
+    const cutoff = new Date(now * 1000 + 400);
+    findOne.mockResolvedValue({
+      _id: id,
+      username: "current-name",
+      email: "current@example.invalid",
+      authRevokedAt: cutoff,
+    });
+    expect((await GET(request(`auth-token-test=${await token({ iat: now })}`))).status).toBe(401);
+    expect(
+      (await GET(request(`auth-token-test=${await token({ iat: now + 1, exp: now + 300 })}`)))
+        .status
+    ).toBe(200);
   });
 
   it("reports outages separately without clearing the browser cookie or exposing errors", async () => {

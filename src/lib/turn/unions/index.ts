@@ -31,6 +31,8 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { INACTIVE_CEO_TURN_THRESHOLD } from "@/lib/turn/corporation/inactiveCeoSectorShed";
 import { MS_PER_TURN } from "@/lib/constants/turnTime";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import { processUndergroundTurn } from "./undergroundTurn";
+import { getBannedUnionCountryIds } from "@/lib/labour/unionLaws";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { processLabourRelationsTurn } from "./labourRelationsTurn";
@@ -200,9 +202,13 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
   // unowned union that nobody organizes must bleed power too, and the vote
   // weights have to decay in step with the pool they came from or the two
   // numbers drift apart. Suspended unions stay frozen, same as dues.
+  const bannedUnionCountryIds = await getBannedUnionCountryIds(db);
+  const bannedCountryList = Array.from(bannedUnionCountryIds);
+  const suspendedUnionFilter =
+    bannedCountryList.length > 0 ? { countryId: { $in: bannedCountryList } } : { suspended: true };
   const suspendedUnionIds = await db
     .collection<Union>("unions")
-    .distinct("_id", { suspended: true });
+    .distinct("_id", suspendedUnionFilter);
   const strengthDecayMultiplier = 1 - UNION_STRENGTH_DECAY_PER_TURN;
   const decayStamp = new Date();
   await Promise.all([
@@ -220,6 +226,14 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
       ),
   ]);
 
+  // Illicit unions under ban: heat decay, detection rolls, and exposure
+  // windows for suspended cells. Suspended unions never reach the owned
+  // pass below, so this runs unconditionally (even with zero owned unions).
+  const underground = await processUndergroundTurn(db, currentTurn, bannedUnionCountryIds);
+  if (underground.newlyExposed > 0) {
+    console.warn(`[unionsTurn] exposed ${underground.newlyExposed} underground union(s)`);
+  }
+
   const sectorsAdopted = await adoptUnrepresentedSectors(db);
   if (sectorsAdopted > 0) {
     console.warn(
@@ -233,7 +247,11 @@ export async function processUnionsTurn(db: Db, turn?: number): Promise<UnionsTu
       // Union ban (player suggestion #93): suspended unions (country under an
       // enacted ban) are frozen, no dues, no services, no approval trend, no
       // inactivity vacancy, so a repeal restores them exactly as the ban found them.
-      { ownerId: { $ne: null }, suspended: { $ne: true } },
+      {
+        ownerId: { $ne: null },
+        suspended: { $ne: true },
+        countryId: { $nin: bannedCountryList },
+      },
       {
         projection: {
           _id: 1,

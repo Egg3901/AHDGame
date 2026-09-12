@@ -6,6 +6,23 @@ import { ensureIndex } from "./helpers";
 export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
   log("Performance indexes:");
 
+  // Aggregate/background countries refresh one deterministic sixth of the
+  // roster per turn. This keeps the hot read proportional to the due bucket.
+  await ensureIndex(
+    db,
+    "macroCountries",
+    { tickBucket: 1 },
+    { name: "macroCountries_tickBucket" },
+    log
+  );
+  await ensureIndex(
+    db,
+    "macroCountries",
+    { presetId: 1, simulationTier: 1 },
+    { name: "macroCountries_presetId_simulationTier" },
+    log
+  );
+
   // bills — list filters + sort
   await ensureIndex(
     db,

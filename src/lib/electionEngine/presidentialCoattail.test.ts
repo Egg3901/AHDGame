@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Db } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import {
   isHeadOfGovernmentRace,
@@ -84,6 +84,25 @@ describe("resolvePresidentApproval", () => {
     db.collection("governmentApprovals").findOne.mockResolvedValue(null as never);
     const res = await resolvePresidentApproval(db as unknown as Db, "US");
     expect(res).toEqual({ partyId: "2", approval: 50 });
+  });
+
+  it("includes the sitting President character id when the official has one", async () => {
+    const db = createMockDb();
+    const characterId = new ObjectId();
+    db.collection("electedOfficials").findOne.mockResolvedValue({
+      party: "2",
+      officeType: "president",
+      countryId: "US",
+      characterId,
+    } as never);
+    db.collection("governmentApprovals").findOne.mockResolvedValue({
+      _id: "US",
+      approvalRating: 62,
+    } as never);
+
+    const res = await resolvePresidentApproval(db as unknown as Db, "US");
+
+    expect(res).toEqual({ partyId: "2", approval: 62, characterId: characterId.toString() });
   });
 
   it("returns null when the presidency is vacant", async () => {
