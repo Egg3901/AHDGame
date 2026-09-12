@@ -651,8 +651,8 @@ export function getPriceSoftKnee(commodity: CommodityType): number {
 export const MARKETING_ADVERTISING_DEMAND_RATE = 0.9;
 
 /**
- * Sublinear advertising-demand exponent (demand audit step 7): total funded
- * marketing budgets convert at `RATE × (total / REFERENCE) ^ (EXPONENT − 1)`.
+ * Sublinear advertising-demand elasticity (demand audit step 7): total funded
+ * marketing budgets convert at `RATE × (total / REFERENCE) ^ (ELASTICITY − 1)`.
  *
  * Was linear (exponent 1): every income dollar added 0.9 demand dollars, so
  * the richer the economy got, the faster ad demand outran supply — and in a
@@ -662,7 +662,7 @@ export const MARKETING_ADVERTISING_DEMAND_RATE = 0.9;
  * it: at 2x reference budgets demand runs ~10% under linear, at 0.5x ~11%
  * above it. Supply can finally close the gap instead of chasing it.
  */
-export const MARKETING_ADVERTISING_DEMAND_EXPONENT = 0.85;
+export const MARKETING_ADVERTISING_DEMAND_ELASTICITY = 0.85;
 
 /**
  * Funded-budget reference (anchor $/day) the sublinear exponent pivots on.
@@ -2409,10 +2409,8 @@ export function computeRawSupplyDemand(
   }
 
   // ── Building Materials: macro demand from GDP (construction/infrastructure) ─
-  // Same shape as the sibling macro legs above. Zero before demand audit
-  // step 3 (BUILDING_MATERIALS_GDP_DEMAND_FRACTION was 0); the leg is inert
-  // while the fraction is 0, so worlds and tests below the change are
-  // byte-identical.
+  // Same shape as the sibling macro legs above. This buyer was disabled before
+  // demand audit step 3; it now supplies the missing economy-wide demand.
   if (stateGdpMap) {
     const bmBasePrice = COMMODITY_BASE_PRICES["building_materials"];
     for (const [stateId, gdp] of stateGdpMap) {

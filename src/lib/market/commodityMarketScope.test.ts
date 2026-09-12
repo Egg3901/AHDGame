@@ -85,7 +85,7 @@ describe("commodityMarketScope", () => {
     ).toBe(0);
   });
 
-  it("adds hidden demand to the reachable leg and ignores garbage top-ups", () => {
+  it("restores hidden demand inside the reachable domestic gap", () => {
     const reachableBook = {
       supply: 100,
       demand: 100,
@@ -106,6 +106,14 @@ describe("commodityMarketScope", () => {
     expect(commodityDemandGap({ commodity: "steel", reachableBook, latentDemandTopUp: -5 })).toBe(
       50
     );
+
+    expect(
+      commodityDemandGap({
+        commodity: "steel",
+        reachableBook: { ...reachableBook, domesticDemand: 40, imports: 0, unmetForeignDemand: 0 },
+        latentDemandTopUp: 25,
+      })
+    ).toBe(0);
   });
 
   it("keeps every reachable commodity on its reachable book", () => {

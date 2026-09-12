@@ -37,19 +37,18 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
+import { distributeDemandToStates } from "@/lib/market/distributeDemandToStates";
+import { GOVERNMENT_COMMODITY_DEMAND } from "@/lib/market/governmentCommodityDemand";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
 import {
   COMMODITY_TYPES,
   eraScaledBasePrices,
   MARKETING_ADVERTISING_DEMAND_RATE,
-  MARKETING_ADVERTISING_DEMAND_EXPONENT,
+  MARKETING_ADVERTISING_DEMAND_ELASTICITY,
   MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
-  GOVT_HEALTHCARE_DEMAND_RATE,
-  GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
   GOVT_SPEND_CATEGORY_ALIASES,
   govtSpendForCategory,
-  STATE_MEDIA_DEMAND_RATE,
   COMMODITY_PRICE_DRIFT_RATE,
   NATIONAL_COMMODITY_STABILIZER,
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
@@ -909,7 +908,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     totalFundedBudgetsAnchor > 0
       ? Math.pow(
           totalFundedBudgetsAnchor / MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
-          MARKETING_ADVERTISING_DEMAND_EXPONENT - 1
+          MARKETING_ADVERTISING_DEMAND_ELASTICITY - 1
         )
       : 1;
   const effectiveAdvertisingRate = MARKETING_ADVERTISING_DEMAND_RATE * advertisingDemandFactor;
@@ -1199,27 +1198,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // fxRateForCountry is declared earlier (at the sector / marketing normalization
   // block) and reused here.
   //
-  // healthcare was the only channel here for a long time; defense/ordnance was
-  // added in #3880, which is why this is now a table rather than one inline loop.
-  const GOVT_SPEND_DEMAND: ReadonlyArray<{
-    category: string;
-    commodity: CommodityType;
-    rate: number;
-    /** Planned economies only — see STATE_MEDIA_DEMAND_RATE. */
-    plannedOnly?: boolean;
-  }> = [
-    { category: "healthcare", commodity: "healthcare_services", rate: GOVT_HEALTHCARE_DEMAND_RATE },
-    { category: "defense", commodity: "ordnance", rate: GOVT_DEFENSE_ORDNANCE_DEMAND_RATE },
-    // The buyer for state broadcasting. Bloc media was re-denominated off
-    // advertising (applyPlannedEconomyOutputMix); without this leg the glut
-    // simply moves into entertainment services instead of clearing.
-    {
-      category: "education",
-      commodity: "entertainment_services",
-      rate: STATE_MEDIA_DEMAND_RATE,
-      plannedOnly: true,
-    },
-  ];
   // Demand audit step 3: the same government units reach the REGIONAL books,
   // so the 25% state price leg stops understating exactly the goods
   // governments support (healthcare_services, ordnance). Global and national
@@ -1228,41 +1206,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // shares, so no FX normalization is needed); equal split when the country
   // has states but no GDP rows; national-only (prior behavior) when it has
   // no states at all.
-  const distributeGovtDemandToStates = (
-    countryId: string,
-    commodity: CommodityType,
-    units: number
-  ): void => {
-    const targets: Array<[string, number]> = [];
-    const shares = statesByCountry.get(countryId);
-    if (shares && shares.size > 0) {
-      const total = [...shares.values()].reduce((sum, value) => sum + value, 0);
-      if (total > 0) {
-        for (const [stateId, gdp] of shares) targets.push([stateId, units * (gdp / total)]);
-      } else {
-        const each = units / shares.size;
-        for (const stateId of shares.keys()) targets.push([stateId, each]);
-      }
-    } else {
-      const ids: string[] = [];
-      for (const [stateId, c] of stateToCountry) if (c === countryId) ids.push(stateId);
-      if (ids.length === 0) return;
-      const each = units / ids.length;
-      for (const stateId of ids) targets.push([stateId, each]);
-    }
-    for (const [stateId, share] of targets) {
-      if (!(share > 0)) continue;
-      let stateMap = byState.get(stateId);
-      if (!stateMap) {
-        stateMap = new Map<CommodityType, { supply: number; demand: number }>();
-        for (const c of COMMODITY_TYPES) stateMap.set(c, { supply: 0, demand: 0 });
-        byState.set(stateId, stateMap);
-      }
-      stateMap.get(commodity)!.demand += share;
-    }
-  };
   const turnsPerYear = 48;
-  for (const { category, commodity, rate, plannedOnly } of GOVT_SPEND_DEMAND) {
+  for (const { category, commodity, rate, plannedOnly, regional } of GOVERNMENT_COMMODITY_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
     const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
     for (const budget of federalBudgets) {
@@ -1286,7 +1231,16 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         byCountry.set(cid, countryBals);
       }
       byCountry.get(cid)!.get(commodity)!.demand += units;
-      distributeGovtDemandToStates(cid, commodity, units);
+      if (regional) {
+        distributeDemandToStates({
+          countryId: cid,
+          commodity,
+          units,
+          statesByCountry,
+          stateToCountry,
+          byState,
+        });
+      }
     }
   }
 

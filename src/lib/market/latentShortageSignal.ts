@@ -1,19 +1,7 @@
 /**
- * Latent-shortage build signals (demand audit step 1).
- *
- * The plants ledger caps recorded demand at 1.5x supply
- * (`PLANTS_LEDGER_DEMAND_SUPPLY_CAP`) and the household pass applies its own
- * matching clamp. The removed units are persisted per commodity as
- * `demandTruncatedUnits` — but nothing reads them: prices, the scarcity
- * integrator and every bot/advisor signal consume the capped books, so a
- * commodity 4x short reports a mild 1.5x shortage and nobody builds into it.
- *
- * This module feeds the truncated demand back into the READ-ONLY build
- * signals only: the NPP shortage scores / growth governor / entry ranking
- * (via `priceRatioOf`) and the player expansion advisor (via
- * `commodityDemandGap`). It never touches the ledger, prices, margins,
- * clearing, or any plant. When nothing was truncated every helper returns its
- * input unchanged, so worlds below the cap are byte-identical.
+ * Hidden market shortages. latentAwarePriceRatio restores demand omitted by
+ * the ledger cap when bots and players judge whether more capacity can sell.
+ * It does not alter prices, clearing, margins, or existing plants.
  */
 
 import {

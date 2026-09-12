@@ -1,6 +1,6 @@
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
 import type { ReachableBookEntry } from "@/lib/trade/reachableBook";
-import { reachableDemandGap } from "@/lib/trade/reachableBook";
+import { domesticDemandOf } from "@/lib/trade/reachableBook";
 
 export type CommodityMarketScope = "reachable" | "state";
 
@@ -77,10 +77,9 @@ export function commodityDemandGap(args: {
    * Truncated (1.5x-cap-hidden) demand attributable to this scope, from
    * `latentTopUpForCountry` / `latentTopUpForState`. Restores the true
    * `max(0, demand - supply)` on the state and global legs. On the reachable
-   * leg the book's domestic term cannot be re-opened at read time, so the
-   * top-up is added after the book gap — exact except in the narrow band
-   * where capped demand sits just under supply, where it overstates by at
-   * most the supply-side slack. Read-only build-signal correction only.
+   * reachable leg's domestic term is available on the book, so the top-up
+   * stays inside the same `max(0, demand - supply)` floor. Foreign unmet
+   * demand remains a separate source of room.
    */
   latentDemandTopUp?: number;
 }): number {
@@ -95,6 +94,12 @@ export function commodityDemandGap(args: {
       ? Math.max(0, args.stateBalance.demand + topUp - args.stateBalance.supply)
       : 0;
   }
-  if (args.reachableBook) return reachableDemandGap(args.reachableBook) + topUp;
+  if (args.reachableBook) {
+    const book = args.reachableBook;
+    const domesticGap = Math.max(0, domesticDemandOf(book) + topUp + book.exports - book.supply);
+    const foreign = book.unmetForeignDemand;
+    const reachableForeign = typeof foreign === "number" && Number.isFinite(foreign) ? foreign : 0;
+    return domesticGap + Math.max(0, reachableForeign);
+  }
   return Math.max(0, (args.globalBalance?.demand ?? 0) + topUp - (args.globalBalance?.supply ?? 0));
 }

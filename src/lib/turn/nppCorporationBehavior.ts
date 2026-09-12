@@ -6,19 +6,6 @@
  * only when profitable (makeNppCorpDecision), set dividends from margin and keep
  * a cash floor.
  */
-/**
- * NPP Corporation AI Behavior
- *
- * Each turn, NPP-run corporations make autonomous decisions:
- * - Analyze sector profitability to guide all decisions
- * - Adjust growth rates aggressively based on margin bands
- * - Scale budgets as % of REVENUE (not cash) — spend only what you earn
- * - Kill losing sectors (divest) that drag overall profitability
- * - Expand only when profitable, using recorded corporate credit only for shortages
- * - Set dividend rate based on profit margin, not just existence of profit
- * - Maintain a cash floor to avoid insolvency
- */
-
 import type { Db, ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -63,6 +50,7 @@ import {
   analyzeSectorProfitability,
   type SectorProfitInfo,
 } from "@/lib/turn/npp/sectorProfitability";
+import { chooseCostMothballSector, lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
 export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export {
   STRATEGY_SHIFT_MARGIN_TRIGGER,
@@ -813,26 +801,9 @@ export function makeNppCorpDecision(
   const sectorProfits = analyzeSectorProfitability(sectors, plants?.enabled === true);
   const profitableSectors = sectorProfits.filter((sp) => sp.isProfitable).length;
 
-  // ── P&L-loss chronicity (demand audit step 5) ─────────────────────────────
-  // Maintains `pnlLossTurns` per sector: +1 on a losing turn, reset on the
-  // first profitable one. Mothballed sectors hold their count (mirroring
-  // `lowFillTurns` in sectorTelemetry) — the restart pass resets it instead,
-  // so a revived plant re-earns its chronic status instead of inheriting it.
-  // NPP corps only by construction (this pass never sees player corps), so no
-  // player plant is ever touched. Only writes on change, so profitable and
-  // steady-state sectors cost nothing.
+  // Count consecutive loss turns for active NPP sectors. Restart resets the count.
   if (plants?.enabled === true) {
-    for (const sp of sectorProfits) {
-      if (sp.sector.mothballed === true) continue;
-      const prior = sp.sector.pnlLossTurns ?? 0;
-      const next = sp.income < 0 ? prior + 1 : 0;
-      if (next !== prior) {
-        sectorUpdates.push({
-          filter: { _id: sp.sector._id },
-          update: { $set: { pnlLossTurns: next, updatedAt: now } },
-        });
-      }
-    }
+    sectorUpdates.push(...lossChronicityUpdates(sectorProfits, now));
   }
 
   // `totalIncome`/`totalRevenue`/`corpMargin`/`isProfitable` below feed ONLY
@@ -1206,34 +1177,16 @@ export function makeNppCorpDecision(
           update: { $set: { mothballed: true, updatedAt: now } },
         });
       } else {
-        // ── Cost mothballing (demand audit step 5) ─────────────────────────
-        // The fill gate above cannot see a plant that sells everything yet
-        // bleeds on costs — live, nearly every losing plant clears above it.
-        // A plant P&L-negative for COST_MOTHBALL_LOSS_TURNS straight goes
-        // cold so the bleed stops while structural fixes (staff productivity,
-        // cheaper recipes, truer demand signals) land; the restart pass
-        // above reactivates it into a repaired market. Deliberately WITHOUT
-        // the divest protections it complements: divest is irreversible, so
-        // it spares primary-type and last sectors, while mothballing is
-        // reversible — a single-sector corp's only plant MAY go cold (like
-        // the fill trigger), and no profitable-elsewhere requirement applies
-        // because an all-losing corp is exactly what must stop digging.
-        // Shares the one-change budget above: fill sheds first.
-        let coldest: { sp: SectorProfitInfo; lossTurns: number } | null = null;
-        for (const sp of sectorProfits) {
-          if (sp.sector.mothballed === true) continue;
-          if (divestedSectorIds.includes(sp.sector._id)) continue;
-          if (sp.sector.sectorType === "extraction") continue;
-          if (sp.income >= 0) continue;
-          const lossTurns = sp.sector.pnlLossTurns ?? 0;
-          if (lossTurns < COST_MOTHBALL_LOSS_TURNS) continue;
-          if (coldest == null || lossTurns > coldest.lossTurns) {
-            coldest = { sp, lossTurns };
-          }
-        }
+        // Filled plants can still lose money. Mothball the longest-running loss;
+        // this reversible action shares the budget and follows fill-based sheds.
+        const coldest = chooseCostMothballSector(
+          sectorProfits,
+          divestedSectorIds,
+          COST_MOTHBALL_LOSS_TURNS
+        );
         if (coldest) {
           sectorUpdates.push({
-            filter: { _id: coldest.sp.sector._id },
+            filter: { _id: coldest.sector._id },
             update: { $set: { mothballed: true, updatedAt: now } },
           });
         }
