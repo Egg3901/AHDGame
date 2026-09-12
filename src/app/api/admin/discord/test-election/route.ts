@@ -17,7 +17,8 @@ import {
 } from "@/lib/discordWebhooks";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
 import { getDb } from "@/lib/mongodb";
-import { generateAndSaveChamberChart } from "@/lib/charts/parliamentChart";
+import { generateChamberDiagramSVG, getChamberComposition } from "@/lib/charts/parliamentChart";
+import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 import { ELECTION_TYPE_SHORT_LABEL } from "@/lib/utils/electionLabels";
 import {
   HOUSE_SEATS,
@@ -246,15 +247,34 @@ export async function POST(request: Request) {
     const chartTotal = chartSeatTotals[electionType];
     if (chartTotal) {
       const chartCountry = chartCountryMap[electionType] ?? "US";
-      chartUrl = await generateAndSaveChamberChart(db, electionType, chartTotal, chartCountry);
+      const composition = await getChamberComposition(db, electionType, chartCountry);
+      const chartSvg = generateChamberDiagramSVG(composition.seats, chartTotal, chartCountry, 1000);
+      chartUrl = await generateDiscordEventCard(
+        {
+          eyebrow: `${chartCountry} · Test preview`,
+          title: `${label} composition`,
+          summary: `${chartTotal} seats · ${Math.floor(chartTotal / 2) + 1} needed for a majority`,
+          chartSvg,
+          tone: "election",
+        },
+        `test-election-${chartCountry.toLowerCase()}-${electionType}`
+      );
     }
 
     // First embed: title and chart
     if (chartUrl) {
       embeds.push({
-        title: `[TEST] Election Results — ${label}`,
+        title: `[TEST PREVIEW] ${label} Composition`,
         color: DISCORD_COLORS.electionResult,
         image: { url: chartUrl },
+        url: `https://ahousedividedgame.com/country/${inferredCountryId}/legislature`,
+        fields: [
+          {
+            name: "Open chamber",
+            value: `[View in A House Divided](https://ahousedividedgame.com/country/${inferredCountryId}/legislature)`,
+            inline: true,
+          },
+        ],
         timestamp: now.toISOString(),
       });
     }

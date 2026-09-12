@@ -1,4 +1,6 @@
 import { saveChartAsPNG } from "@/lib/charts/parliamentChart";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 export type DiscordEventCardTone = "positive" | "election" | "warning" | "neutral";
 
@@ -24,6 +26,7 @@ export interface LegacyDiscordEventEmbed {
 }
 
 const WIDTH = 1200;
+let fontCssCache: string | undefined;
 const XML_ENTITIES: Record<string, string> = {
   "&": "&amp;",
   "<": "&lt;",
@@ -68,6 +71,22 @@ function toneColor(tone: DiscordEventCardTone): string {
   if (tone === "election") return "#f2c94c";
   if (tone === "warning") return "#ef4444";
   return "#94a3b8";
+}
+
+function bundledFontCss(): string {
+  if (fontCssCache !== undefined) return fontCssCache;
+  try {
+    const regular = readFileSync(join(process.cwd(), "public/fonts/Geist-Regular.ttf")).toString(
+      "base64"
+    );
+    const semibold = readFileSync(join(process.cwd(), "public/fonts/Geist-SemiBold.ttf")).toString(
+      "base64"
+    );
+    fontCssCache = `@font-face{font-family:AHDGeist;src:url(data:font/ttf;base64,${regular});font-weight:400}@font-face{font-family:AHDGeist;src:url(data:font/ttf;base64,${semibold});font-weight:600 900}`;
+  } catch {
+    fontCssCache = "";
+  }
+  return fontCssCache;
 }
 
 function plainDiscordText(value: string): string {
@@ -189,16 +208,17 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#111827"/><stop offset="1" stop-color="#090d16"/></linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#14141c"/><stop offset="1" stop-color="#101018"/></linearGradient>
     <radialGradient id="glow" cx="1" cy="0" r="1"><stop stop-color="${accent}" stop-opacity=".16"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>
     <clipPath id="portraitClip"><rect x="850" y="142" width="266" height="300" rx="28"/></clipPath>
     <style>
-      text { font-family: Inter, Arial, sans-serif; }
+      ${bundledFontCss()}
+      text { font-family: AHDGeist, sans-serif; }
       .brand { fill: #f8fafc; font-size: 24px; font-weight: 800; letter-spacing: 4px; }
       .eyebrow { fill: ${accent}; font-size: 23px; font-weight: 800; letter-spacing: 2px; }
       .title { fill: #f8fafc; font-size: 54px; font-weight: 800; }
-      .summary { fill: #cbd5e1; font-size: 29px; font-weight: 500; }
-      .chip { fill: #1e293b; stroke: #334155; }
+      .summary { fill: #b4b4c2; font-size: 29px; font-weight: 400; }
+      .chip { fill: #26263a; stroke: #2a2a3d; }
       .chipText { fill: #e2e8f0; font-size: 20px; font-weight: 700; }
       .detail { fill: #e2e8f0; font-size: ${hasChart ? 21 : 25}px; font-weight: 600; }
       .portraitLabel { fill: #071019; font-size: 15px; font-weight: 900; letter-spacing: 2px; }
@@ -209,7 +229,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   <rect width="12" height="${height}" rx="6" fill="${accent}"/>
   <text x="84" y="62" class="brand">A HOUSE DIVIDED</text>
   <text x="1116" y="62" text-anchor="end" class="eyebrow">${escapeXml(clamp(input.eyebrow, 48).toUpperCase())}</text>
-  <line x1="84" y1="88" x2="1116" y2="88" stroke="#334155"/>
+  <line x1="84" y1="88" x2="1116" y2="88" stroke="#2a2a3d"/>
   ${titleSvg}${summarySvg}${chipsSvg}${chartSvg}${detailSvg}${portraitSvg}
 </svg>`;
 }
