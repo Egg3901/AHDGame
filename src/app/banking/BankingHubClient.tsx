@@ -188,7 +188,11 @@ export function BankingHubClient() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 pb-16 sm:px-6 sm:py-8">
-      <BankingHero primary={primary} />
+      <BankingHero
+        primary={primary}
+        privateBankingEnabled={data.privateBankingEnabled}
+        onNavigate={setActiveTab}
+      />
 
       <HubTabs tabs={visibleTabs} activeTab={activeTab} onChange={setActiveTab} />
 
@@ -375,7 +379,15 @@ function SectionHeading({
   );
 }
 
-function BankingHero({ primary }: { primary: HubCentralBank | undefined }) {
+function BankingHero({
+  primary,
+  privateBankingEnabled,
+  onNavigate,
+}: {
+  primary: HubCentralBank | undefined;
+  privateBankingEnabled: boolean;
+  onNavigate: (tab: HubTab) => void;
+}) {
   return (
     <header className="relative overflow-hidden rounded-3xl border border-card-border bg-gradient-to-br from-card via-card to-card-elevated shadow-lg">
       <div
@@ -401,6 +413,26 @@ function BankingHero({ primary }: { primary: HubCentralBank | undefined }) {
             Follow monetary policy, compare chartered banks, and manage your savings and borrowing
             from one desk.
           </p>
+          {privateBankingEnabled && (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigate("private")}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              >
+                Browse private banks
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate("accounts")}
+                className="inline-flex items-center gap-2 rounded-lg border border-card-border bg-card/70 px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              >
+                Deposit or borrow
+                <WalletCards className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
         </div>
 
         {primary && (
@@ -524,58 +556,61 @@ function CentralBankCard({ bank }: { bank: HubCentralBank }) {
 }
 
 function PrivateBankCard({ bank }: { bank: HubPrivateBank }) {
+  const customerBank = bank.charterType === "retail" || bank.charterType === "universal";
   const depositRate =
     bank.charterType === "investment" ? "Not offered" : formatRatePercent(bank.depositRatePercent);
   const lendingRate =
     bank.charterType === "investment" ? "Not offered" : formatRatePercent(bank.lendingRatePercent);
 
   return (
-    <Link
-      href={bank.href}
-      className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-    >
-      <div className="flex items-start justify-between gap-3 p-5 pb-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card-elevated text-muted transition-colors group-hover:text-primary">
-            <Building2 className="h-4.5 w-4.5" aria-hidden />
+    <article className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg">
+      <Link
+        href={bank.href}
+        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+      >
+        <div className="flex items-start justify-between gap-3 p-5 pb-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card-elevated text-muted transition-colors group-hover:text-primary">
+              <Building2 className="h-4.5 w-4.5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
+                {bank.name}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted">
+                {bank.countryName} · <span className="font-mono">{bank.currency}</span>
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
-              {bank.name}
-            </h3>
-            <p className="mt-0.5 text-xs text-muted">
-              {bank.countryName} · <span className="font-mono">{bank.currency}</span>
-            </p>
-          </div>
+          <ArrowRight
+            className="mt-1 h-4 w-4 shrink-0 text-muted/50 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
+            aria-hidden
+          />
         </div>
-        <ArrowRight
-          className="mt-1 h-4 w-4 shrink-0 text-muted/50 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
-          aria-hidden
-        />
-      </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-5">
-        <Badge color={bank.operatorType === "player" ? "info" : "default"} variant="subtle">
-          {bank.operatorType === "player" ? "Player-run" : "NPP-run"}
-        </Badge>
-        <Badge color="default" variant="subtle">
-          {charterLabel(bank.charterType)}
-        </Badge>
-        <WarningBandBadge band={bank.warningBand} confidence={bank.confidence} />
-      </div>
+        <div className="flex flex-wrap items-center gap-2 px-5">
+          <Badge color={bank.operatorType === "player" ? "info" : "default"} variant="subtle">
+            {bank.operatorType === "player" ? "Player-run" : "NPP-run"}
+          </Badge>
+          <Badge color="default" variant="subtle">
+            {charterLabel(bank.charterType)}
+          </Badge>
+          <WarningBandBadge band={bank.warningBand} confidence={bank.confidence} />
+        </div>
 
-      <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border border-y border-card-border bg-background/35">
-        <RateMetric
-          label="Deposit rate"
-          value={depositRate}
-          compact={depositRate === "Not offered"}
-        />
-        <RateMetric
-          label="Lending rate"
-          value={lendingRate}
-          compact={lendingRate === "Not offered"}
-        />
-      </dl>
+        <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border border-y border-card-border bg-background/35">
+          <RateMetric
+            label="Deposit rate"
+            value={depositRate}
+            compact={depositRate === "Not offered"}
+          />
+          <RateMetric
+            label="Lending rate"
+            value={lendingRate}
+            compact={lendingRate === "Not offered"}
+          />
+        </dl>
+      </Link>
 
       <div className="mt-auto flex items-center justify-between gap-3 px-5 py-4">
         <div>
@@ -588,7 +623,35 @@ function PrivateBankCard({ bank }: { bank: HubPrivateBank }) {
         </div>
         <ShieldCheck className="h-4 w-4 text-muted/60" aria-label="Deposit supervision" />
       </div>
-    </Link>
+
+      <div className="grid gap-2 border-t border-card-border p-4 sm:grid-cols-2">
+        {customerBank ? (
+          <>
+            <Link
+              href={`${bank.href}#customer-deposit`}
+              aria-label={`Deposit savings at ${bank.name}`}
+              className="inline-flex items-center justify-center rounded-lg border border-success/35 bg-success/10 px-3 py-2 text-xs font-semibold text-success transition-colors hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
+            >
+              Deposit savings
+            </Link>
+            <Link
+              href={`${bank.href}#customer-loan`}
+              aria-label={`Apply for a loan at ${bank.name}`}
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Apply for a loan
+            </Link>
+          </>
+        ) : (
+          <Link
+            href={bank.href}
+            className="col-span-full inline-flex items-center justify-center rounded-lg border border-card-border px-3 py-2 text-xs font-semibold text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            View bank
+          </Link>
+        )}
+      </div>
+    </article>
   );
 }
 

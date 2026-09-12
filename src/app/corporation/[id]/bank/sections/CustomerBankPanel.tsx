@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import type { CurrencyCode } from "@/lib/constants/currencies";
+import { CHARACTER_LOAN_SPREAD_PP } from "@/lib/banking/lendingMath";
+import { formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { ShowToast } from "../types";
 
 /**
  * Customer-facing actions on a bank's own page: deposit into this bank, or take
- * out a loan from it — without going to the separate /banking hub. Shown to any
+ * out a loan from it without going to the separate /banking hub. Shown to any
  * viewer (the CEO manages the bank through the other panels). Borrow posts as a
  * character borrower; deposit routes this currency's savings to this bank.
  */
@@ -15,6 +17,8 @@ export function CustomerBankPanel({
   bankName,
   currency,
   depositTaking,
+  depositRatePercent,
+  lendingRatePercent,
   onChanged,
   showToast,
 }: {
@@ -22,6 +26,8 @@ export function CustomerBankPanel({
   bankName: string;
   currency: CurrencyCode;
   depositTaking: boolean;
+  depositRatePercent: number | null;
+  lendingRatePercent: number | null;
   onChanged: () => void;
   showToast: ShowToast;
 }) {
@@ -109,7 +115,7 @@ export function CustomerBankPanel({
       }
       showToast(
         json.pending
-          ? "Loan requested — awaiting the bank's approval"
+          ? "Loan requested. Awaiting the bank's approval."
           : `Loan of ${principal.toLocaleString("en-US")} ${currency} granted`,
         "success"
       );
@@ -131,16 +137,25 @@ export function CustomerBankPanel({
     "w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm font-mono tabular-nums focus:border-accent focus:outline-none";
   const btnClass =
     "rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50";
+  const personalLoanRate =
+    lendingRatePercent == null ? null : lendingRatePercent + CHARACTER_LOAN_SPREAD_PP;
 
   return (
-    <section className="grid gap-4 sm:grid-cols-2">
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Deposit with {bankName}</h3>
+    <section id="customer-banking" className="grid scroll-mt-6 gap-4 sm:grid-cols-2">
+      <div id="customer-deposit" className="rounded-xl border border-card-border bg-card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground">Deposit savings at {bankName}</h3>
+          {depositRatePercent != null && (
+            <span className="font-mono text-xs font-semibold tabular-nums text-success">
+              {formatRatePercent(depositRatePercent)} deposit rate
+            </span>
+          )}
+        </div>
         <p className="mt-1 mb-3 text-xs text-muted">
           Moves your {currency} savings to this bank, so it earns this bank&apos;s deposit rate. You
           hold one bank per currency, so this moves your whole {currency} savings here.
         </p>
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
           <input
             type="number"
             inputMode="decimal"
@@ -148,6 +163,7 @@ export function CustomerBankPanel({
             value={depositAmount}
             onChange={(e) => setDepositAmount(e.target.value)}
             placeholder={`Amount (${currency})`}
+            aria-label={`Deposit amount in ${currency}`}
             className={inputClass}
           />
           <button
@@ -161,13 +177,22 @@ export function CustomerBankPanel({
         </div>
       </div>
 
-      <div className="rounded-xl border border-card-border bg-card p-4">
-        <h3 className="text-sm font-semibold text-foreground">Borrow from {bankName}</h3>
+      <div id="customer-loan" className="rounded-xl border border-card-border bg-card p-4">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-semibold text-foreground">
+            Apply for a loan from {bankName}
+          </h3>
+          {personalLoanRate != null && (
+            <span className="font-mono text-xs font-semibold tabular-nums text-primary">
+              {formatRatePercent(personalLoanRate)} estimated rate
+            </span>
+          )}
+        </div>
         <p className="mt-1 mb-3 text-xs text-muted">
           Request a personal loan in {currency}. Some banks approve automatically; others review
-          each request.
+          each request. Terms run from 4 to 120 turns.
         </p>
-        <div className="flex gap-2">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_6rem_auto]">
           <input
             type="number"
             inputMode="decimal"
@@ -175,6 +200,7 @@ export function CustomerBankPanel({
             value={loanAmount}
             onChange={(e) => setLoanAmount(e.target.value)}
             placeholder={`Amount (${currency})`}
+            aria-label={`Loan amount in ${currency}`}
             className={inputClass}
           />
           <input
@@ -194,7 +220,7 @@ export function CustomerBankPanel({
             onClick={() => void borrow()}
             className={btnClass}
           >
-            {busy === "borrow" ? "…" : "Borrow"}
+            {busy === "borrow" ? "…" : "Apply for loan"}
           </button>
         </div>
       </div>

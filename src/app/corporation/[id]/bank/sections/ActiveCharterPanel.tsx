@@ -119,14 +119,16 @@ export function ActiveCharterPanel({
       <HealthCard data={data} />
       {data.risk && <RiskPanel risk={data.risk} currency={charter.currency} />}
 
-      {/* Customer actions: a non-CEO viewer can deposit or borrow straight from
-          this bank's page. The CEO manages the bank through the panels below. */}
-      {!data.isCeo && data.privateBankingEnabled && charter.status === "active" && (
+      {/* Customer actions are available alongside bank management. A CEO can
+          also use the bank as a personal customer. */}
+      {data.privateBankingEnabled && charter.status === "active" && (
         <CustomerBankPanel
           corporationId={data.corporation.id}
           bankName={data.corporation.name}
           currency={charter.currency}
           depositTaking={depositTaking}
+          depositRatePercent={data.rates?.depositRatePercent ?? null}
+          lendingRatePercent={data.rates?.lendingRatePercent ?? null}
           onChanged={() => void onChanged()}
           showToast={showToast}
         />

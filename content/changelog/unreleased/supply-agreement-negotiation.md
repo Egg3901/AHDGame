@@ -20,3 +20,5 @@ areas: [fullstack]
 - Fixed terms settle per turn and expire automatically. Existing open-ended
   agreements remain compatible.
 - The Commodities tab and player inbox now surface pending private offers.
+- Private-bank cards now link directly to deposit and personal-loan actions,
+  with rates and terms visible on the customer form.
