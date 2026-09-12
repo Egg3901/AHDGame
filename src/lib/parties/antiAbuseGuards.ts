@@ -20,7 +20,6 @@ export function isFreePartyMoveWindowOpen(
 export const PARTY_SWITCH_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const PARTY_NPP_CONTROL_TENURE_MS = 48 * 60 * 60 * 1000;
 export const PARTY_NPP_ENTRY_MIN_PARTY_AGE_MS = 48 * 60 * 60 * 1000;
-export const PARTY_NPP_CONTROL_MIN_PLAYERS = 3;
 
 export interface GuardResult {
   ok: boolean;
@@ -75,32 +74,6 @@ export function getPartyPowerTenureCooldown(
   return result;
 }
 
-async function countActivePlayerMembers(
-  db: Db,
-  countryId: CountryId,
-  partyId: string
-): Promise<number> {
-  const members = await db
-    .collection<Character>("characters")
-    .find({ countryId, party: partyId }, { projection: { userId: 1 } })
-    .project<Pick<Character, "userId">>({ userId: 1 })
-    .toArray();
-  if (members.length === 0) return 0;
-
-  const userIds = members
-    .map((member) => member.userId)
-    .filter((id): id is Character["userId"] => !!id);
-  if (userIds.length === 0) return 0;
-
-  const bannedUsers = await db
-    .collection("users")
-    .find({ _id: { $in: userIds }, isBanned: true })
-    .project<{ _id: NonNullable<Character["userId"]> }>({ _id: 1 })
-    .toArray();
-  const bannedUserIds = new Set(bannedUsers.map((user) => user._id.toString()));
-  return members.filter((member) => !bannedUserIds.has(member.userId.toString())).length;
-}
-
 export async function getPartyNppControlStatus(args: {
   db: Db;
   countryId: CountryId;
@@ -117,18 +90,6 @@ export async function getPartyNppControlStatus(args: {
     return {
       ...partyAge,
       error: `New custom parties cannot use NPP controls for 48 hours after creation (${partyAge.unblockAt?.toISOString()}).`,
-    };
-  }
-
-  const playerCount = await countActivePlayerMembers(
-    args.db,
-    args.countryId,
-    String(args.party.sequentialId)
-  );
-  if (playerCount < PARTY_NPP_CONTROL_MIN_PLAYERS) {
-    return {
-      ok: false,
-      error: `Custom parties need at least ${PARTY_NPP_CONTROL_MIN_PLAYERS} active player members before using NPP controls. Current player members: ${playerCount}.`,
     };
   }
 
