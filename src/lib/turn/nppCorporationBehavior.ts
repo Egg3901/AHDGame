@@ -115,6 +115,7 @@ import {
   unownedPoolTrailingSet,
 } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { latentAwareNationalRatio, latentAwareStateRatio } from "@/lib/market/latentShortageSignal";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -299,7 +300,14 @@ export async function processNppCorporationDecisions(
     const price =
       doc.reachablePrices?.[countryId] ?? doc.nationalPrices?.[countryId] ?? doc.globalPrice;
     if (!price || !Number.isFinite(price)) return null;
-    return price / doc.basePrice;
+    const stored = price / doc.basePrice;
+    // Demand audit step 1: lift the build signal by the 1.5x-cap-hidden
+    // demand. `latentAwareNationalRatio` returns the stored ratio unchanged
+    // when nothing was truncated, so this is a no-op below the cap. The
+    // national book supplies the lift basis even when the price leg is the
+    // reachable one (the book has no persisted S/D on the doc); the stored
+    // reachable price itself is preserved via `storedOverride`.
+    return latentAwareNationalRatio(doc, countryId, stored) ?? stored;
   };
 
   // ── Placement signals (supply-dislocation remediation, t202) ──────────────
@@ -310,7 +318,11 @@ export async function processNppCorporationDecisions(
     if (!doc || !doc.basePrice) return null;
     const price = doc.statePrices?.[stateId];
     if (price == null || !Number.isFinite(price)) return null;
-    return price / doc.basePrice;
+    const stored = price / doc.basePrice;
+    // Demand audit step 1, state resolution: same hidden-demand lift against
+    // the state's own book, so within-country placement still routes to the
+    // state that is actually starved.
+    return latentAwareStateRatio(doc, stateId, stored) ?? stored;
   };
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);

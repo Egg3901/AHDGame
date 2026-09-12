@@ -73,10 +73,28 @@ export function commodityDemandGap(args: {
   stateBalance?: Balance;
   reachableBook?: ReachableBookEntry;
   globalBalance?: Balance;
+  /**
+   * Truncated (1.5x-cap-hidden) demand attributable to this scope, from
+   * `latentTopUpForCountry` / `latentTopUpForState`. Restores the true
+   * `max(0, demand - supply)` on the state and global legs. On the reachable
+   * leg the book's domestic term cannot be re-opened at read time, so the
+   * top-up is added after the book gap — exact except in the narrow band
+   * where capped demand sits just under supply, where it overstates by at
+   * most the supply-side slack. Read-only build-signal correction only.
+   */
+  latentDemandTopUp?: number;
 }): number {
+  const topUp =
+    typeof args.latentDemandTopUp === "number" &&
+    Number.isFinite(args.latentDemandTopUp) &&
+    args.latentDemandTopUp > 0
+      ? args.latentDemandTopUp
+      : 0;
   if (isStateScopedCommodity(args.commodity)) {
-    return args.stateBalance ? Math.max(0, args.stateBalance.demand - args.stateBalance.supply) : 0;
+    return args.stateBalance
+      ? Math.max(0, args.stateBalance.demand + topUp - args.stateBalance.supply)
+      : 0;
   }
-  if (args.reachableBook) return reachableDemandGap(args.reachableBook);
-  return Math.max(0, (args.globalBalance?.demand ?? 0) - (args.globalBalance?.supply ?? 0));
+  if (args.reachableBook) return reachableDemandGap(args.reachableBook) + topUp;
+  return Math.max(0, (args.globalBalance?.demand ?? 0) + topUp - (args.globalBalance?.supply ?? 0));
 }

@@ -23,7 +23,8 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import { computeUnownedHeadroomUnits } from "@/lib/market/unownedHeadroom";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { sectorDemandGapUnits } from "@/lib/market/sectorDemandGap";
-import { commodityDemandGap } from "@/lib/market/commodityMarketScope";
+import { commodityDemandGap, isStateScopedCommodity } from "@/lib/market/commodityMarketScope";
+import { latentTopUpForCountry, latentTopUpForState } from "@/lib/market/latentShortageSignal";
 import { bookFor, loadReachableBooks } from "@/lib/trade/queries/loadReachableBooks";
 import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { CAPACITY_BUILD_TURNS, computeBuildCost } from "@/lib/constants/capacityEconomy";
@@ -172,8 +173,10 @@ export async function GET(request: Request, { params }: RouteParams) {
                   commodity: 1,
                   globalSupply: 1,
                   globalDemand: 1,
+                  nationalDemand: 1,
                   stateSupply: 1,
                   stateDemand: 1,
+                  demandTruncatedUnits: 1,
                 },
               }
             )
@@ -200,19 +203,31 @@ export async function GET(request: Request, { params }: RouteParams) {
         stateBalances.set(stateId, byCommodity);
       }
     }
+    const priceDocByCommodity = new Map(priceDocs.map((price) => [price.commodity, price]));
     const demandGapUnitsByState = new Map<string, number>();
     const demandGapUnitsFor = (stateId: string, countryId: string): number => {
       if (!plantsMode) return Number.POSITIVE_INFINITY;
       const cached = demandGapUnitsByState.get(stateId);
       if (cached !== undefined) return cached;
-      const gap = sectorDemandGapUnits(supplyMix, (mixCommodity) =>
-        commodityDemandGap({
+      const gap = sectorDemandGapUnits(supplyMix, (mixCommodity) => {
+        // Demand audit step 1: restore the 1.5x-cap-hidden demand to the
+        // advisor gap. State-local outputs attribute the state's share,
+        // reachable/global outputs the candidate country's share. Zero when
+        // nothing was truncated, leaving the quote unchanged below the cap.
+        const doc = priceDocByCommodity.get(mixCommodity);
+        const latentDemandTopUp = doc
+          ? isStateScopedCommodity(mixCommodity)
+            ? latentTopUpForState(doc, stateId)
+            : latentTopUpForCountry(doc, countryId)
+          : 0;
+        return commodityDemandGap({
           commodity: mixCommodity,
           stateBalance: stateBalances.get(stateId)?.get(mixCommodity),
           reachableBook: bookFor(reachableBooks, countryId, mixCommodity),
           globalBalance: globalBalances.get(mixCommodity),
-        })
-      );
+          latentDemandTopUp,
+        });
+      });
       demandGapUnitsByState.set(stateId, gap);
       return gap;
     };
