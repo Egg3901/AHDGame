@@ -33,6 +33,20 @@ describe("buildDiscordEventCardSvg", () => {
     expect(svg).toContain('height="760"');
     expect(svg).toContain('width="730" height="410"');
   });
+
+  it("renders a prominent official portrait without exposing a remote URL", () => {
+    const svg = buildDiscordEventCardSvg({
+      eyebrow: "USA · Election result",
+      title: "President-elect Jane Doe",
+      summary: "Won 312 electoral votes",
+      portraitDataUrl: "data:image/png;base64,cG9ydHJhaXQ=",
+      tone: "election",
+    });
+
+    expect(svg).toContain("OFFICIAL PORTRAIT");
+    expect(svg).toContain('width="266" height="300"');
+    expect(svg).toContain("data:image/png;base64,cG9ydHJhaXQ=");
+  });
 });
 
 describe("eventCardInputFromEmbed", () => {

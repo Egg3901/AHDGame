@@ -4,6 +4,7 @@ import type { ScotusNomination, SupremeCourtSeat } from "@/lib/db/types/scotus";
 import type { Character, NPP } from "@/lib/db/types";
 import { createNPP } from "@/lib/npp/generator";
 import { getGameTime } from "@/lib/time/gameTime";
+import { DISCORD_COLORS, sendCountryGameEvent } from "@/lib/discordWebhooks";
 
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
@@ -62,6 +63,7 @@ export async function createJusticeNomination(
   let nomineeNppId: ObjectId | null = null;
   let nomineeName: string;
   let nomineeParty: string | undefined;
+  let nomineeAvatarUrl: string | undefined;
 
   if (params.nomineeCharacterId) {
     const nominee = await db
@@ -75,6 +77,7 @@ export async function createJusticeNomination(
     nomineeCharacterId = nominee._id;
     nomineeName = nominee.name;
     nomineeParty = nominee.party;
+    nomineeAvatarUrl = nominee.avatarUrl;
   } else if (params.generateNppLegalScholar) {
     // Reuses the existing NPP-generation machinery as-is (party position +
     // random variance) — see src/lib/npp/generator.ts `generatePolicyPositions`.
@@ -90,6 +93,7 @@ export async function createJusticeNomination(
     nomineeNppId = npp._id;
     nomineeName = npp.name;
     nomineeParty = npp.party;
+    nomineeAvatarUrl = npp.avatarUrl;
   } else {
     return { ok: false, error: "Must supply either nomineeCharacterId or generateNppLegalScholar" };
   }
@@ -124,6 +128,14 @@ export async function createJusticeNomination(
   const result = await db
     .collection<ScotusNomination>("scotusNominations")
     .insertOne({ _id: new ObjectId(), ...nomination } as ScotusNomination);
+
+  sendCountryGameEvent("US", {
+    title: "Supreme Court Nomination",
+    description: `**${nomineeName}** has been nominated for Seat ${params.seatNumber} of the Supreme Court by President ${params.proposedByPresidentName}.`,
+    color: DISCORD_COLORS.scotusRuling,
+    fields: [{ name: "Status", value: "Awaiting Senate confirmation", inline: true }],
+    ...(nomineeAvatarUrl ? { thumbnail: { url: nomineeAvatarUrl } } : {}),
+  }).catch(() => {});
 
   return { ok: true, nominationId: result.insertedId, nomineeName };
 }

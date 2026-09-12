@@ -10,6 +10,8 @@ export interface DiscordEventCardInput {
   detailLines?: readonly string[];
   tone?: DiscordEventCardTone;
   chartSvg?: string;
+  /** Base64 image data resolved by the server. Never place an untrusted URL in the SVG. */
+  portraitDataUrl?: string;
 }
 
 export interface LegacyDiscordEventEmbed {
@@ -18,6 +20,7 @@ export interface LegacyDiscordEventEmbed {
   color: number;
   fields?: readonly { name: string; value: string; inline?: boolean }[];
   image?: { url: string };
+  thumbnail?: { url: string };
 }
 
 const WIDTH = 1200;
@@ -101,15 +104,49 @@ export function eventCardInputFromEmbed(
   };
 }
 
+async function loadPortraitDataUrl(urlValue: string | undefined): Promise<string | undefined> {
+  if (!urlValue) return undefined;
+  try {
+    const url = new URL(urlValue);
+    if (url.protocol !== "https:") return undefined;
+    const host = url.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "::1" ||
+      /^127\./.test(host) ||
+      /^10\./.test(host) ||
+      /^192\.168\./.test(host) ||
+      /^169\.254\./.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+    )
+      return undefined;
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const contentType = response.headers.get("content-type")?.split(";")[0];
+    const contentLength = Number(response.headers.get("content-length") ?? 0);
+    if (!response.ok || !contentType?.startsWith("image/") || contentLength > 5_000_000)
+      return undefined;
+    const bytes = Buffer.from(await response.arrayBuffer());
+    if (bytes.length > 5_000_000) return undefined;
+    return `data:${contentType};base64,${bytes.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Build a branded, fixed-size SVG that is converted to PNG before Discord delivery. */
 export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   const accent = toneColor(input.tone ?? "neutral");
-  const titleLines = wrap(input.title, 36, 2);
-  const summaryLines = wrap(input.summary, 72, 2);
-  const details = (input.detailLines ?? []).slice(0, 4).map((line) => clamp(line, 74));
-  const metadata = (input.metadata ?? []).slice(0, 3).map((item) => clamp(item, 28));
   const hasChart = Boolean(input.chartSvg);
-  const height = hasChart ? 760 : Math.max(560, 470 + details.length * 52);
+  const hasPortrait = Boolean(input.portraitDataUrl) && !hasChart;
+  const titleLines = wrap(input.title, hasPortrait ? 27 : 36, 2);
+  const summaryLines = wrap(input.summary, hasPortrait ? 44 : 72, 2);
+  const details = (input.detailLines ?? [])
+    .slice(0, 4)
+    .map((line) => clamp(line, hasPortrait ? 47 : 74));
+  const metadata = (input.metadata ?? []).slice(0, 3).map((item) => clamp(item, 28));
+  const height = hasChart
+    ? 760
+    : Math.max(hasPortrait ? 640 : 560, 470 + details.length * 52);
   const chartData = input.chartSvg
     ? `data:image/svg+xml;base64,${Buffer.from(input.chartSvg).toString("base64")}`
     : undefined;
@@ -148,11 +185,15 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
         `<circle cx="${hasChart ? 836 : 94}" cy="${detailY + index * 64 - 9}" r="5" fill="${accent}"/><text x="${hasChart ? 858 : 116}" y="${detailY + index * 64}" class="detail">${escapeXml(line)}</text>`
     )
     .join("");
+  const portraitSvg = hasPortrait
+    ? `<rect x="850" y="142" width="266" height="300" rx="28" fill="#1e293b" stroke="#334155" stroke-width="3"/><image x="850" y="142" width="266" height="300" preserveAspectRatio="xMidYMid slice" href="${input.portraitDataUrl}" clip-path="url(#portraitClip)"/><rect x="850" y="402" width="266" height="40" rx="0" fill="${accent}" opacity=".92"/><text x="983" y="429" text-anchor="middle" class="portraitLabel">OFFICIAL PORTRAIT</text>`
+    : "";
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${WIDTH}" height="${height}" viewBox="0 0 ${WIDTH} ${height}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#111827"/><stop offset="1" stop-color="#090d16"/></linearGradient>
     <radialGradient id="glow" cx="1" cy="0" r="1"><stop stop-color="${accent}" stop-opacity=".16"/><stop offset="1" stop-color="${accent}" stop-opacity="0"/></radialGradient>
+    <clipPath id="portraitClip"><rect x="850" y="142" width="266" height="300" rx="28"/></clipPath>
     <style>
       text { font-family: Inter, Arial, sans-serif; }
       .brand { fill: #f8fafc; font-size: 24px; font-weight: 800; letter-spacing: 4px; }
@@ -162,6 +203,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
       .chip { fill: #1e293b; stroke: #334155; }
       .chipText { fill: #e2e8f0; font-size: 20px; font-weight: 700; }
       .detail { fill: #e2e8f0; font-size: ${hasChart ? 21 : 25}px; font-weight: 600; }
+      .portraitLabel { fill: #071019; font-size: 15px; font-weight: 900; letter-spacing: 2px; }
     </style>
   </defs>
   <rect width="1200" height="${height}" rx="28" fill="url(#bg)"/>
@@ -170,7 +212,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   <text x="84" y="62" class="brand">A HOUSE DIVIDED</text>
   <text x="1116" y="62" text-anchor="end" class="eyebrow">${escapeXml(clamp(input.eyebrow, 48).toUpperCase())}</text>
   <line x1="84" y1="88" x2="1116" y2="88" stroke="#334155"/>
-  ${titleSvg}${summarySvg}${chipsSvg}${chartSvg}${detailSvg}
+  ${titleSvg}${summarySvg}${chipsSvg}${chartSvg}${detailSvg}${portraitSvg}
 </svg>`;
 }
 
@@ -190,5 +232,7 @@ export async function generateLegacyDiscordEventCard(
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 48);
-  return generateDiscordEventCard(eventCardInputFromEmbed(countryId, embed), slug || "event");
+  const input = eventCardInputFromEmbed(countryId, embed);
+  input.portraitDataUrl = await loadPortraitDataUrl(embed.thumbnail?.url);
+  return generateDiscordEventCard(input, slug || "event");
 }

@@ -70,7 +70,7 @@ export async function POST(request: Request, context: RouteContext) {
       }
     );
 
-    notifyCbChairResignedDiscord(countryId, chairName).catch((err) =>
+    notifyCbChairResignedDiscord(countryId, chairName, myChar.avatarUrl).catch((err) =>
       console.error("[central-bank/resign] Discord webhook failed:", err)
     );
 
