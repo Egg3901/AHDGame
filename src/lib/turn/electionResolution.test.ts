@@ -9,6 +9,18 @@ import type { Election } from "@/lib/db/types";
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
 }));
+vi.mock("@/lib/audit/recordAudit", () => ({
+  recordAuditBulk: vi.fn(),
+}));
+vi.mock("@/lib/turn/election/generalResolution", () => ({
+  resolveOneGeneralElection: vi.fn(),
+}));
+vi.mock("@/lib/news", () => ({
+  generateElectionNews: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/turn/election/electionNotifications", () => ({
+  sendBatchedElectionResults: vi.fn().mockResolvedValue(undefined),
+}));
 
 describe("electionResolution", () => {
   describe("spawnHouseElection", () => {
@@ -249,6 +261,88 @@ describe("electionResolution", () => {
         "senate",
         "governor",
         "president",
+      ]);
+    });
+  });
+
+  describe("resolveGeneralElections audit trail", () => {
+    it("records the authoritative contingent presidential result", async () => {
+      const electionId = new ObjectId();
+      const presidentWinnerId = new ObjectId().toString();
+      const vicePresidentWinnerId = new ObjectId().toString();
+      const election = {
+        _id: electionId,
+        electionType: "president",
+        countryId: "US",
+        state: "US",
+        status: "completed",
+      } as Election;
+      const preResolutionTally = {
+        _id: electionId,
+        electionId,
+        finalized: false,
+      };
+      const contingentResult = {
+        eligiblePresidentCandidateIds: [presidentWinnerId],
+        eligibleVicePresidentCandidateIds: [vicePresidentWinnerId],
+        houseDelegationVotes: { CA: presidentWinnerId },
+        houseVoteTotals: { [presidentWinnerId]: 26 },
+        senateVotes: { senator: vicePresidentWinnerId },
+        senateVoteTotals: { [vicePresidentWinnerId]: 51 },
+        presidentWinnerId,
+        vicePresidentWinnerId,
+        houseThreshold: 26,
+        senateThreshold: 51,
+        topElectoralVoteTotal: 258,
+      };
+      const finalTally = {
+        ...preResolutionTally,
+        finalized: true,
+        resolutionMode: "contingent",
+        candidateNames: { [presidentWinnerId]: "House Winner" },
+        electoralVotesByCandidate: { [presidentWinnerId]: 258, runnerUp: 217, third: 64 },
+        contingentResult,
+      };
+
+      const electionsFind = vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([election]),
+      });
+      const tallyFind = vi
+        .fn()
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([preResolutionTally]) })
+        .mockReturnValueOnce({ toArray: vi.fn().mockResolvedValue([finalTally]) });
+      const db = {
+        collection: vi.fn().mockImplementation((name: string) => {
+          if (name === "elections") return { find: electionsFind };
+          if (name === "electionVoteTallies") return { find: tallyFind };
+          if (name === "gameState") {
+            return { findOne: vi.fn().mockResolvedValue({ currentTurn: 816 }) };
+          }
+          return {};
+        }),
+      };
+      const { getDb } = await import("@/lib/mongodb");
+      vi.mocked(getDb).mockResolvedValue(db as never);
+      const { resolveOneGeneralElection } = await import("@/lib/turn/election/generalResolution");
+      vi.mocked(resolveOneGeneralElection).mockResolvedValue({ resolved: true, newsOutcomes: [] });
+
+      const { resolveGeneralElections } = await import("./electionResolution");
+      await resolveGeneralElections(new Date("2026-09-12T12:00:00Z"));
+
+      const { recordAuditBulk } = await import("@/lib/audit/recordAudit");
+      expect(recordAuditBulk).toHaveBeenCalledWith([
+        expect.objectContaining({
+          action: "election.resolve",
+          subject: expect.objectContaining({ id: electionId.toString() }),
+          meta: expect.objectContaining({
+            winnerId: presidentWinnerId,
+            winnerName: "House Winner",
+            winnerElectoralVotes: 258,
+            resolutionMode: "contingent",
+            electoralVotesByCandidate: finalTally.electoralVotesByCandidate,
+            contingentResult,
+          }),
+        }),
       ]);
     });
   });
