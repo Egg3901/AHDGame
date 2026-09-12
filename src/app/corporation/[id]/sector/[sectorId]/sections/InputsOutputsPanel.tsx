@@ -33,6 +33,13 @@ function fmtPrice(v: number): string {
   );
 }
 
+function signedPrice(v: number): string {
+  const rounded = Math.round(v * 100) / 100;
+  return `${rounded >= 0 ? "+" : ""}${rounded.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })}`;
+}
+
 /**
  * Inputs and outputs, side by side.
  *
@@ -326,6 +333,20 @@ function FlowRow({
         <p className="text-muted">
           {fmtUnits(flow.units, 1)} {flow.unit} a day at {priceText} each.
         </p>
+        {flow.priceAttribution && (
+          <p className="mt-2 text-muted">
+            Global price drivers: inflation {signedPrice(flow.priceAttribution.nominalInflation)},
+            scarcity memory {signedPrice(flow.priceAttribution.scarcityMemory)}, current market
+            balance {signedPrice(flow.priceAttribution.marketBalance)}, producer input costs{" "}
+            {signedPrice(flow.priceAttribution.producerInputCostPassThrough)}, adjustment lag{" "}
+            {signedPrice(flow.priceAttribution.adjustmentLag)}
+            {flow.priceAttribution.explicitOverride !== 0 && (
+              <>, override {signedPrice(flow.priceAttribution.explicitOverride)}</>
+            )}
+            . These explain the global leg; country and regional conditions set the local price
+            shown on this row.
+          </p>
+        )}
       </InfoTooltip>
       {badge && <span className="shrink-0">{badge}</span>}
       <span className="shrink-0 text-body-sm tabular-nums text-muted">

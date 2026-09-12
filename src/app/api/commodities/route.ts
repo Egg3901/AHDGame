@@ -188,6 +188,7 @@ export async function GET(request: Request) {
           if (!ref24h || ref24h.globalPrice === 0) return null;
           return ((globalPrice - ref24h.globalPrice) / ref24h.globalPrice) * 100;
         })(),
+        priceAttribution: data?.priceAttribution ?? null,
         turn: data?.turn ?? 0,
         // scope=full only: the complete per-state and per-country maps drive
         // the heat map's Country/State lens. Overrides the exchange-filtered
