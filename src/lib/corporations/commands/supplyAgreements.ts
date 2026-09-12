@@ -1,9 +1,15 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type Db, type UpdateFilter } from "mongodb";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
+import { parseJsonBody } from "@/lib/api/validate";
+import {
+  supplyAgreementProposalSchema,
+  supplyAgreementUpdateSchema,
+} from "@/lib/api/schemas/supplyAgreements";
 import { handleRouteError } from "@/lib/api/errors";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
+import { createNotification } from "@/lib/notifications";
 import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
@@ -12,6 +18,7 @@ import {
   SUPPLY_AGREEMENT_PRICE_BAND,
   CONTRACT_OVERCOMMIT_TOLERANCE,
   CONTRACT_CANCEL_NOTICE_TURNS,
+  type SupplyAgreementOffer,
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
@@ -25,44 +32,174 @@ import {
 import type { State } from "@/lib/db/types/state";
 
 /**
- * Private supply agreement lifecycle (bilateral, both-consent). The supplier's
- * CEO proposes; the buyer's CEO accepts; either side may cancel. Price is a
- * premium/discount vs market, bounded to ±35%. Gated by supplyAgreementsEnabled.
+ * Private supply agreement lifecycle (bilateral, both-consent). Either CEO can
+ * open a negotiation, the receiving CEO can counter or accept, and either side
+ * may cancel. Offers are retained as an embedded revision history.
  */
 
-/** POST /api/corporations/[id]/supply-agreements — propose (supplier CEO). */
-export async function proposeSupplyAgreement(request: Request, supplierCorpId: string) {
+type AgreementTerms = Pick<
+  SupplyAgreement,
+  "commodity" | "stateId" | "volumeCap" | "pricePremium" | "exclusive" | "durationTurns"
+>;
+
+function makeOffer(args: {
+  revision: number;
+  proposedByCorpId: ObjectId;
+  terms: Omit<AgreementTerms, "commodity" | "stateId">;
+  proposedAt: Date;
+  proposedAtTurn?: number;
+}): SupplyAgreementOffer {
+  return {
+    revision: args.revision,
+    proposedByCorpId: args.proposedByCorpId,
+    volumeCap: args.terms.volumeCap,
+    pricePremium: args.terms.pricePremium,
+    exclusive: args.terms.exclusive,
+    ...(args.terms.durationTurns !== undefined ? { durationTurns: args.terms.durationTurns } : {}),
+    ...(args.proposedAtTurn !== undefined ? { proposedAtTurn: args.proposedAtTurn } : {}),
+    proposedAt: args.proposedAt,
+  };
+}
+
+function latestOffer(agreement: SupplyAgreement): SupplyAgreementOffer {
+  if (agreement.currentOffer) return agreement.currentOffer;
+  const history = agreement.offers;
+  const last = history?.[history.length - 1];
+  if (last) return last;
+  return {
+    revision: 1,
+    proposedByCorpId: agreement.proposedByCorpId,
+    volumeCap: agreement.volumeCap,
+    pricePremium: agreement.pricePremium,
+    exclusive: agreement.exclusive,
+    ...(agreement.durationTurns !== undefined ? { durationTurns: agreement.durationTurns } : {}),
+    proposedAt: agreement.createdAt,
+  };
+}
+
+async function validateCapacity(
+  db: Db,
+  supplier: Corporation,
+  terms: Pick<AgreementTerms, "commodity" | "stateId" | "volumeCap">
+): Promise<{ volumeCapValidated: boolean; currentTurn: number; currentYear?: number }> {
+  const world = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } });
+  const currentTurn = world?.currentTurn ?? 0;
+  if (!marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
+    return { volumeCapValidated: false, currentTurn, currentYear: world?.currentYear };
+  }
+
+  const [sectors, config] = await Promise.all([
+    db
+      .collection<CorporateSector>("corporateSectors")
+      .find(
+        { corporationId: supplier._id },
+        {
+          projection: {
+            sectorType: 1,
+            capitalStock: 1,
+            strategyId: 1,
+            transitionFromStrategyId: 1,
+            retoolRescaleApplied: 1,
+            transitionStartTurn: 1,
+            mothballed: 1,
+            activeCapacityPercent: 1,
+            productionPolicyLevel: 1,
+            embargoSuspended: 1,
+            embargoExportExposure: 1,
+            countryId: 1,
+            stateId: 1,
+          },
+        }
+      )
+      .toArray(),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+  ]);
+  const capacityUnits = computeSupplierCommodityCapacityUnits({
+    sectors,
+    commodity: terms.commodity,
+    isNatcorp: !!supplier.countryOwnerId,
+    turn: currentTurn,
+    currentYear: world?.currentYear,
+    commandEconomyEnabled: config?.commandEconomyEnabled === true,
+    stateId: terms.stateId,
+  });
+  const maxCap = capacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE;
+  if (!(maxCap > 0)) {
+    throw new SupplyAgreementCommandError(
+      terms.stateId
+        ? `Your corporation has no plant capacity producing ${terms.commodity} in ${terms.stateId}`
+        : `Your corporation has no plant capacity producing ${terms.commodity}`
+    );
+  }
+  if (terms.volumeCap > maxCap) {
+    throw new SupplyAgreementCommandError(
+      `volumeCap exceeds what your plants can make. Usable output for ${terms.commodity} at your current production policy is about ${Math.round(capacityUnits)} units per turn, so the most you can contract is ${Math.round(maxCap)}.`
+    );
+  }
+  return { volumeCapValidated: true, currentTurn, currentYear: world?.currentYear };
+}
+
+class SupplyAgreementCommandError extends Error {}
+
+function responseForCommandError(error: SupplyAgreementCommandError): NextResponse {
+  return NextResponse.json({ error: error.message }, { status: 400 });
+}
+
+async function notifyOfferRecipient(args: {
+  recipient: Corporation;
+  proposer: Corporation;
+  agreementId: ObjectId;
+  commodity: CommodityType;
+  revision: number;
+  action: "proposed" | "countered";
+}): Promise<void> {
+  if (!args.recipient.userId) return;
+  await createNotification({
+    userId: args.recipient.userId,
+    type: "corp_supply_agreement_offer",
+    title: `Supply agreement ${args.action}`,
+    message: `${args.proposer.name ?? "A corporation"} has ${args.action} a ${args.commodity} supply agreement. Review the offer in the Commodities tab.`,
+    metadata: {
+      corporationId: args.recipient._id.toString(),
+      agreementId: args.agreementId.toString(),
+      offerRevision: args.revision,
+    },
+  });
+}
+
+/** POST /api/corporations/[id]/supply-agreements: open a negotiation. */
+export async function proposeSupplyAgreement(request: Request, initiatingCorpId: string) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
+    const parsed = await parseJsonBody(request, supplyAgreementProposalSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
     const db = await getDb();
 
-    const resolved = await resolveCorporation(db, supplierCorpId);
+    const resolved = await resolveCorporation(db, initiatingCorpId);
     if (!resolved.ok) return resolved.response;
-    const supplier = resolved.corporation;
-    const ceoCheck = requireCeo(supplier, auth.user.userId);
+    const initiator = resolved.corporation;
+    const ceoCheck = requireCeo(initiator, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
-    const body = (await request.json().catch(() => ({}))) as {
-      buyerCorpId?: string;
-      commodity?: string;
-      /** Required for a state-scoped commodity (freight): the state it is fulfilled from. */
-      stateId?: string;
-      volumeCap?: number;
-      pricePremium?: number;
-      exclusive?: boolean;
-    };
-
-    if (!body.buyerCorpId || !ObjectId.isValid(body.buyerCorpId)) {
-      return NextResponse.json({ error: "Valid buyerCorpId required" }, { status: 400 });
-    }
-    if (body.buyerCorpId === supplierCorpId) {
+    const body = parsed.data;
+    const isSupplierInitiated = !!body.buyerCorpId;
+    const counterpartyId = new ObjectId(
+      isSupplierInitiated ? body.buyerCorpId! : body.supplierCorpId!
+    );
+    if (counterpartyId.equals(initiator._id)) {
       return NextResponse.json(
         { error: "A corporation cannot contract with itself" },
         { status: 400 }
       );
     }
-    if (!body.commodity || !(COMMODITY_TYPES as readonly string[]).includes(body.commodity)) {
+    if (!(COMMODITY_TYPES as readonly string[]).includes(body.commodity)) {
       return NextResponse.json({ error: "Valid commodity required" }, { status: 400 });
     }
     // A state-scoped commodity (freight) is haulage capacity based in one
@@ -72,7 +209,7 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
     const commodity = body.commodity as CommodityType;
     let stateId: string | undefined;
     if (supplyAgreementRequiresState(commodity)) {
-      if (typeof body.stateId !== "string" || body.stateId.trim() === "") {
+      if (!body.stateId) {
         return NextResponse.json(
           {
             error:
@@ -81,7 +218,7 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
           { status: 400 }
         );
       }
-      stateId = body.stateId.trim();
+      stateId = body.stateId;
       const state = await db
         .collection<State>("states")
         .findOne({ _id: stateId }, { projection: { _id: 1 } });
@@ -89,11 +226,8 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
         return NextResponse.json({ error: "Unknown state" }, { status: 400 });
       }
     }
-    const volumeCap = Number(body.volumeCap);
-    if (!(volumeCap > 0)) {
-      return NextResponse.json({ error: "volumeCap must be positive" }, { status: 400 });
-    }
-    const pricePremium = Number(body.pricePremium ?? 0);
+    const volumeCap = body.volumeCap;
+    const pricePremium = body.pricePremium;
     if (!isAgreementPremiumLegal(pricePremium)) {
       return NextResponse.json(
         {
@@ -105,111 +239,50 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
       );
     }
 
-    // ── Contracts meet physics (plants tier) ─────────────────────────────────
-    // A promise the supplier's plants cannot physically keep is rejected here
-    // rather than silently under-delivering every turn. Capacity-implied units
-    // for this commodity = Σ over the supplier's sectors of
-    // capacity × the commodity's share of that sector's output mix — the same
-    // mix split clearing and the world supply ledger use.
-    // Only under plants: in earlier modes capacity is not the production base,
-    // so there is nothing meaningful to validate against.
-    //
-    // The capacity figure is SCALED through `plantsCapacityScaledUnits`, the
-    // nameplate-input variant of the same shared helper the clearing offer and
-    // the world supply ledger apply, and
-    // therefore the same quantity the shortfall penalty in
-    // `settleSupplyAgreements` measures against. Validating RAW capacity was a
-    // trap: a sector on a low production policy has an output multiplier well
-    // under 1, so it could legally sign for 1.2 × raw capacity while never
-    // physically producing more than about 0.85 × of it, and then pay
-    // CONTRACT_SHORTFALL_PENALTY on a gap it could never close, every turn,
-    // forever. The natcorp scale and the embargo write-off are in the same
-    // helper for the same reason.
-    //
-    // The ramp governor and throughput are deliberately NOT modelled here. Both
-    // are transient or ≤ 1 by construction, and CONTRACT_OVERCOMMIT_TOLERANCE is
-    // the intentional head-room a supplier is allowed to promise into. What
-    // matters is that the head-room now sits on top of the same base the penalty
-    // reads, instead of on top of a base the supplier can never reach.
-    let volumeCapValidated = false;
-    if (marketAtLeast(await getMarketSystemModeForDb(db), "plants")) {
-      const sectors = await db
-        .collection<CorporateSector>("corporateSectors")
-        .find(
-          { corporationId: supplier._id },
-          {
-            projection: {
-              sectorType: 1,
-              capitalStock: 1,
-              strategyId: 1,
-              transitionFromStrategyId: 1,
-              retoolRescaleApplied: 1,
-              transitionStartTurn: 1,
-              mothballed: 1,
-              activeCapacityPercent: 1,
-              productionPolicyLevel: 1,
-              embargoSuspended: 1,
-              embargoExportExposure: 1,
-              countryId: 1,
-              stateId: 1,
-            },
-          }
-        )
-        .toArray();
-      const world = await db
-        .collection<GameState>("gameState")
-        .findOne({ _id: "current" }, { projection: { currentTurn: 1, currentYear: 1 } });
-      const turnNow = world?.currentTurn ?? 0;
-      // A planned economy's media plant makes a different commodity from the
-      // same capacity and is derated differently, so the validator needs both
-      // to size this against what the production sink will credit.
-      const commandEconomyEnabled =
-        (
-          await db
-            .collection<GameConfig>("gameConfig")
-            .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } })
-        )?.commandEconomyEnabled === true;
-      const capacityUnits = computeSupplierCommodityCapacityUnits({
-        sectors,
-        commodity,
-        isNatcorp: !!supplier.countryOwnerId,
-        turn: turnNow,
-        currentYear: world?.currentYear,
-        commandEconomyEnabled,
-        stateId,
-      });
-      const maxCap = capacityUnits * CONTRACT_OVERCOMMIT_TOLERANCE;
-      if (!(maxCap > 0)) {
-        return NextResponse.json(
-          {
-            error: stateId
-              ? `Your corporation has no plant capacity producing ${commodity} in ${stateId}`
-              : `Your corporation has no plant capacity producing ${commodity}`,
-          },
-          { status: 400 }
-        );
-      }
-      if (volumeCap > maxCap) {
-        return NextResponse.json(
-          {
-            error: `volumeCap exceeds what your plants can make. Usable output for ${
-              body.commodity
-            } at your current production policy is about ${Math.round(capacityUnits)} units per day, so the most you can contract is ${Math.round(maxCap)}.`,
-          },
-          { status: 400 }
-        );
-      }
-      volumeCapValidated = true;
-    }
-
-    const buyer = await db
+    const counterparty = await db
       .collection<Corporation>("corporations")
-      .findOne({ _id: new ObjectId(body.buyerCorpId) }, { projection: { _id: 1 } });
-    if (!buyer) {
-      return NextResponse.json({ error: "Buyer corporation not found" }, { status: 404 });
+      .findOne({ _id: counterpartyId });
+    if (!counterparty) {
+      return NextResponse.json(
+        {
+          error: isSupplierInitiated
+            ? "Buyer corporation not found"
+            : "Supplier corporation not found",
+        },
+        { status: 404 }
+      );
+    }
+    const supplier = isSupplierInitiated ? initiator : counterparty;
+    const buyer = isSupplierInitiated ? counterparty : initiator;
+
+    let volumeCapValidated = false;
+    let currentTurn = 0;
+    try {
+      const capacity = await validateCapacity(db, supplier, {
+        commodity,
+        stateId,
+        volumeCap,
+      });
+      volumeCapValidated = capacity.volumeCapValidated;
+      currentTurn = capacity.currentTurn;
+    } catch (error) {
+      if (error instanceof SupplyAgreementCommandError) return responseForCommandError(error);
+      throw error;
     }
 
     const now = new Date();
+    const openingOffer = makeOffer({
+      revision: 1,
+      proposedByCorpId: initiator._id,
+      terms: {
+        volumeCap,
+        pricePremium,
+        exclusive: body.exclusive,
+        ...(body.durationTurns !== undefined ? { durationTurns: body.durationTurns } : {}),
+      },
+      proposedAt: now,
+      proposedAtTurn: currentTurn,
+    });
     // GRANDFATHER STAMP. `volumeCap` only has a defined physical basis when the
     // block above actually ran — that is, when the world was already at plants
     // and the cap was checked against scaled capacity. Contracts signed in
@@ -231,9 +304,12 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
       ...(stateId ? { stateId } : {}),
       volumeCap,
       pricePremium,
-      exclusive: body.exclusive === true,
+      exclusive: body.exclusive,
+      ...(body.durationTurns !== undefined ? { durationTurns: body.durationTurns } : {}),
       status: "pending",
-      proposedByCorpId: supplier._id,
+      proposedByCorpId: initiator._id,
+      currentOffer: openingOffer,
+      offers: [openingOffer],
       createdAt: now,
       updatedAt: now,
     };
@@ -244,8 +320,8 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
       action: "commodity.trade",
       category: "market",
       subject: { type: "supplyAgreement", id: res.insertedId, name: doc.commodity },
-      counterparty: { type: "corporation", id: buyer._id },
-      refs: { corporationId: supplier._id },
+      counterparty: { type: "corporation", id: counterparty._id },
+      refs: { corporationId: initiator._id },
       delta: [
         { field: "status", before: null, after: "pending" },
         { field: "commodity", before: null, after: doc.commodity },
@@ -256,6 +332,15 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
       outcome: "ok",
     });
 
+    await notifyOfferRecipient({
+      recipient: counterparty,
+      proposer: initiator,
+      agreementId: res.insertedId,
+      commodity,
+      revision: openingOffer.revision,
+      action: "proposed",
+    });
+
     return NextResponse.json({ success: true, agreementId: res.insertedId.toString() });
   } catch (error) {
     return handleRouteError(error);
@@ -263,13 +348,18 @@ export async function proposeSupplyAgreement(request: Request, supplierCorpId: s
 }
 
 /**
- * PATCH /api/corporations/[id]/supply-agreements/[agreementId] — accept or
- * cancel. Accept requires the BUYER's CEO; cancel is allowed to either party.
+ * PATCH /api/corporations/[id]/supply-agreements/[agreementId]: accept,
+ * counter, or cancel. Only the CEO receiving the current offer can accept or
+ * counter; either party can cancel.
  */
 export async function updateSupplyAgreement(request: Request, corpId: string, agreementId: string) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
+    const parsed = await parseJsonBody(request, supplyAgreementUpdateSchema);
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    }
     const db = await getDb();
     if (!ObjectId.isValid(agreementId)) {
       return NextResponse.json({ error: "Invalid agreement id" }, { status: 400 });
@@ -288,16 +378,19 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
       return NextResponse.json({ error: "Agreement not found" }, { status: 404 });
     }
 
-    const body = (await request.json().catch(() => ({}))) as { action?: string };
+    const body = parsed.data;
     const isSupplier = agreement.supplierCorpId.equals(corp._id);
     const isBuyer = agreement.buyerCorpId.equals(corp._id);
     if (!isSupplier && !isBuyer) {
       return NextResponse.json({ error: "Not a party to this agreement" }, { status: 403 });
     }
 
+    const currentOffer = latestOffer(agreement);
+    const currentOfferAuthor = currentOffer.proposedByCorpId;
+
     if (body.action === "accept") {
-      if (!isBuyer) {
-        return NextResponse.json({ error: "Only the buyer can accept" }, { status: 403 });
+      if (currentOfferAuthor.equals(corp._id)) {
+        return NextResponse.json({ error: "Only the counterparty can accept" }, { status: 403 });
       }
       if (agreement.status !== "pending") {
         return NextResponse.json({ error: "Agreement is not pending" }, { status: 400 });
@@ -311,9 +404,34 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
           { status: 409 }
         );
       }
-      await db
-        .collection<SupplyAgreement>("supplyAgreements")
-        .updateOne({ _id: agreement._id }, { $set: { status: "active", updatedAt: new Date() } });
+      const gameState = await db
+        .collection<GameState>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } });
+      const currentTurn = gameState?.currentTurn ?? 0;
+      const durationTurns = currentOffer.durationTurns ?? agreement.durationTurns;
+      const now = new Date();
+      const acceptedTerms = {
+        volumeCap: currentOffer.volumeCap,
+        pricePremium: currentOffer.pricePremium,
+        exclusive: currentOffer.exclusive,
+        ...(durationTurns !== undefined ? { durationTurns } : {}),
+      };
+      const accepted = await db.collection<SupplyAgreement>("supplyAgreements").updateOne(
+        { _id: agreement._id, status: "pending", proposedByCorpId: currentOfferAuthor },
+        {
+          $set: {
+            ...acceptedTerms,
+            status: "active",
+            startsAtTurn: currentTurn,
+            ...(durationTurns !== undefined ? { expiresAtTurn: currentTurn + durationTurns } : {}),
+            updatedAt: now,
+          },
+          ...(durationTurns === undefined ? { $unset: { expiresAtTurn: "" } } : {}),
+        }
+      );
+      if (accepted.matchedCount === 0) {
+        return NextResponse.json({ error: "This offer is no longer current" }, { status: 409 });
+      }
       recordAudit({
         source: "api",
         action: "commodity.trade",
@@ -325,6 +443,132 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
         outcome: "ok",
       });
       return NextResponse.json({ success: true, status: "active" });
+    }
+
+    if (body.action === "counter") {
+      if (agreement.status !== "pending") {
+        return NextResponse.json(
+          { error: "Only pending agreements can be countered" },
+          { status: 400 }
+        );
+      }
+      if (currentOfferAuthor.equals(corp._id)) {
+        return NextResponse.json(
+          { error: "Only the counterparty can make the next offer" },
+          { status: 403 }
+        );
+      }
+      if (isStateScopedCommodity(agreement.commodity) && !agreement.stateId) {
+        return NextResponse.json(
+          {
+            error:
+              "This legacy freight proposal cannot be countered because freight now sells in a state-local market. Ask the supplier to propose it again naming the state.",
+          },
+          { status: 409 }
+        );
+      }
+      if (!isAgreementPremiumLegal(body.pricePremium)) {
+        return NextResponse.json(
+          {
+            error: `Contract price must be within ±${Math.round(
+              SUPPLY_AGREEMENT_PRICE_BAND * 100
+            )}% of market`,
+          },
+          { status: 400 }
+        );
+      }
+
+      const supplier = isSupplier
+        ? corp
+        : await db
+            .collection<Corporation>("corporations")
+            .findOne({ _id: agreement.supplierCorpId });
+      if (!supplier) {
+        return NextResponse.json({ error: "Supplier corporation not found" }, { status: 404 });
+      }
+      let capacity: { volumeCapValidated: boolean; currentTurn: number };
+      try {
+        capacity = await validateCapacity(db, supplier, {
+          commodity: agreement.commodity,
+          stateId: agreement.stateId,
+          volumeCap: body.volumeCap,
+        });
+      } catch (error) {
+        if (error instanceof SupplyAgreementCommandError) return responseForCommandError(error);
+        throw error;
+      }
+
+      const now = new Date();
+      const revision = currentOffer.revision + 1;
+      const offer = makeOffer({
+        revision,
+        proposedByCorpId: corp._id,
+        terms: {
+          volumeCap: body.volumeCap,
+          pricePremium: body.pricePremium,
+          exclusive: body.exclusive,
+          ...(body.durationTurns !== undefined ? { durationTurns: body.durationTurns } : {}),
+        },
+        proposedAt: now,
+        proposedAtTurn: capacity.currentTurn,
+      });
+      const update: UpdateFilter<SupplyAgreement> = {
+        $set: {
+          volumeCap: body.volumeCap,
+          pricePremium: body.pricePremium,
+          exclusive: body.exclusive,
+          proposedByCorpId: corp._id,
+          currentOffer: offer,
+          updatedAt: now,
+          ...(body.durationTurns !== undefined ? { durationTurns: body.durationTurns } : {}),
+          ...(capacity.volumeCapValidated ? { volumeCapBasis: "scaledCapacity" } : {}),
+        },
+        $push: { offers: offer },
+        ...(body.durationTurns === undefined ? { $unset: { durationTurns: "" } } : {}),
+      };
+      const result = await db
+        .collection<SupplyAgreement>("supplyAgreements")
+        .updateOne(
+          { _id: agreement._id, status: "pending", proposedByCorpId: currentOfferAuthor },
+          update
+        );
+      if (result.matchedCount === 0) {
+        return NextResponse.json({ error: "This offer is no longer current" }, { status: 409 });
+      }
+
+      recordAudit({
+        source: "api",
+        action: "commodity.trade",
+        category: "market",
+        subject: { type: "supplyAgreement", id: agreement._id, name: agreement.commodity },
+        counterparty: {
+          type: "corporation",
+          id: isSupplier ? agreement.buyerCorpId : agreement.supplierCorpId,
+        },
+        refs: { corporationId: corp._id },
+        delta: [
+          { field: "offerRevision", before: currentOffer.revision, after: revision },
+          { field: "volumeCap", before: agreement.volumeCap, after: body.volumeCap },
+          { field: "pricePremium", before: agreement.pricePremium, after: body.pricePremium },
+        ],
+        outcome: "ok",
+      });
+
+      const counterpartyId = isSupplier ? agreement.buyerCorpId : agreement.supplierCorpId;
+      const counterparty = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: counterpartyId });
+      if (counterparty) {
+        await notifyOfferRecipient({
+          recipient: counterparty,
+          proposer: corp,
+          agreementId: agreement._id!,
+          commodity: agreement.commodity,
+          revision,
+          action: "countered",
+        });
+      }
+      return NextResponse.json({ success: true, status: "pending", revision });
     }
 
     if (body.action === "cancel") {
@@ -386,7 +630,7 @@ export async function updateSupplyAgreement(request: Request, corpId: string, ag
       });
     }
 
-    return NextResponse.json({ error: "Unknown action (accept|cancel)" }, { status: 400 });
+    return NextResponse.json({ error: "Unknown action (accept|counter|cancel)" }, { status: 400 });
   } catch (error) {
     return handleRouteError(error);
   }

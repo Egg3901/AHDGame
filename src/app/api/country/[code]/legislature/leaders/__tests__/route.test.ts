@@ -174,6 +174,138 @@ describe("GET /api/country/[code]/legislature/leaders (UK)", () => {
     expect(data.speaker).toBeNull();
   });
 
+  it("prefers the canonical formation when a stale character office disagrees", async () => {
+    const canonicalId = new ObjectId();
+    const staleId = new ObjectId();
+    const canonicalPM = {
+      _id: canonicalId,
+      name: "Canonical Premier",
+      party: "1",
+      currentOffice: { type: "premier" },
+      updatedAt: new Date("2026-01-01"),
+    };
+    const stalePM = {
+      _id: staleId,
+      name: "Stale Projection",
+      party: "1",
+      currentOffice: { type: "premier" },
+      updatedAt: new Date("2026-01-01"),
+    };
+
+    const { getDb } = await import("@/lib/mongodb");
+    const mockDb = {
+      collection: vi.fn((name: string) => {
+        if (name === "characters") {
+          return {
+            findOne: vi.fn().mockImplementation((query: any) => {
+              if (query["currentOffice.type"] === "premier") return Promise.resolve(stalePM);
+              if (query._id?.toString() === canonicalId.toString())
+                return Promise.resolve(canonicalPM);
+              return Promise.resolve(null);
+            }),
+          };
+        }
+        if (name === "governmentFormations") {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              _id: "CN",
+              countryId: "CN",
+              status: "formed",
+              pmCharacterId: canonicalId,
+              pmName: "Canonical Premier",
+              governingPartyId: "1",
+              coalitionPartyIds: [],
+              seatsByParty: {},
+            }),
+          };
+        }
+        if (name === "parliamentaryGovernments") {
+          return { findOne: vi.fn().mockResolvedValue(null) };
+        }
+        if (name === "politicalParties") {
+          return {
+            findOne: vi.fn().mockResolvedValue(null),
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+          };
+        }
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        };
+      }),
+    };
+    vi.mocked(getDb).mockResolvedValue(mockDb as unknown as Db);
+
+    const { GET } = await import("@/app/api/country/[code]/legislature/leaders/route");
+    const response = await GET(new Request("http://localhost/api/country/cn/legislature/leaders"), {
+      params: Promise.resolve({ code: "cn" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).primeMinister).toMatchObject({
+      characterId: canonicalId.toString(),
+      characterName: "Canonical Premier",
+    });
+  });
+
+  it("preserves a canonical parliamentary vacancy over legacy projections", async () => {
+    const staleId = new ObjectId();
+    const stalePM = {
+      _id: staleId,
+      name: "Stale Projection",
+      party: "1",
+      currentOffice: { type: "premier" },
+      updatedAt: new Date("2026-01-01"),
+    };
+
+    const { getDb } = await import("@/lib/mongodb");
+    const mockDb = {
+      collection: vi.fn((name: string) => {
+        if (name === "characters") {
+          return {
+            findOne: vi.fn().mockResolvedValue(stalePM),
+          };
+        }
+        if (name === "governmentFormations") {
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              _id: "CN",
+              countryId: "CN",
+              status: "pending",
+              pmCharacterId: null,
+              governingPartyId: null,
+              seatsByParty: {},
+            }),
+          };
+        }
+        if (name === "parliamentaryGovernments") {
+          return {
+            findOne: vi.fn().mockResolvedValue({ pmCharacterId: staleId, seatsByParty: {} }),
+          };
+        }
+        if (name === "politicalParties") {
+          return {
+            findOne: vi.fn().mockResolvedValue(null),
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+          };
+        }
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        };
+      }),
+    };
+    vi.mocked(getDb).mockResolvedValue(mockDb as unknown as Db);
+
+    const { GET } = await import("@/app/api/country/[code]/legislature/leaders/route");
+    const response = await GET(new Request("http://localhost/api/country/cn/legislature/leaders"), {
+      params: Promise.resolve({ code: "cn" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await response.json()).primeMinister).toBeNull();
+  });
+
   it("resolves PM and Opposition Leader from governmentFormations when parliamentaryGovernments is empty (post-election)", async () => {
     // Regression: after a UK Commons general election, parliamentaryGovernments is cleared
     // but governmentFormations remains canonical. Legislature leaders must not fall through

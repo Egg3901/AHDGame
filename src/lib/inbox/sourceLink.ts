@@ -176,6 +176,17 @@ export function resolveSourceLink(
     }
   }
 
+  // ── Supply agreement negotiation ─────────────────────────────────────────
+  if (type === "corp_supply_agreement_offer") {
+    const corporationId = asString(m.corporationId);
+    if (corporationId) {
+      return {
+        label: "Review supply offer",
+        href: `/corporation/${corporationId}?tab=commodities#supply-agreements`,
+      };
+    }
+  }
+
   // ── Ask service ───────────────────────────────────────────────────────────
   // Ask notifications carry a prebuilt href (the Ask site) in metadata.
   if (type.startsWith("ask_")) {

@@ -28,6 +28,12 @@ export async function removeWithdrawnCandidateFromTally(
     [`candidateParties.${candidateId}`]: "",
   };
 
+  for (const [unitId, unitVotes] of Object.entries(tally.totalVotesByUnit ?? {})) {
+    if (candidateId in unitVotes) {
+      unsetPaths[`totalVotesByUnit.${unitId}.${candidateId}`] = "";
+    }
+  }
+
   if (tally.seatsEstimate && candidateId in tally.seatsEstimate) {
     unsetPaths[`seatsEstimate.${candidateId}`] = "";
   }
