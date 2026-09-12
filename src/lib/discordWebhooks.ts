@@ -73,7 +73,10 @@ async function withBrandedGameEventCard(
   const fieldLink = embed.fields
     ?.map((field) => field.value.match(/\[([^\]]+)]\((https?:\/\/[^)]+)\)/))
     .find((match) => match != null);
-  const actionUrl = embed.url ?? fieldLink?.[2];
+  const actionUrl =
+    embed.url ??
+    fieldLink?.[2] ??
+    `https://ahousedividedgame.com/country/${encodeURIComponent(countryId.toUpperCase())}`;
   return {
     title: embed.title,
     description: compactDescription(embed.description),
