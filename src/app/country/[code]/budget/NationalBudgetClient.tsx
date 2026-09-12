@@ -1029,7 +1029,11 @@ export function NationalBudgetClient() {
         />
 
         {isLive && data.defenseFunding ? (
-          <DefenseFundingNote sym={moneyPrefix} funding={data.defenseFunding} />
+          <DefenseFundingNote
+            sym={moneyPrefix}
+            funding={data.defenseFunding}
+            soeNetPerTurn={data.stateEnterpriseNet ?? null}
+          />
         ) : null}
 
         {isLive && countryId === COUNTRY_CONFIGS.UK.id ? (

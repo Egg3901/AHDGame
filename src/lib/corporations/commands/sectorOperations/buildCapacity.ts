@@ -46,6 +46,7 @@ import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
+import { recordCapacityDecisionBestEffort } from "@/lib/corporations/capacityDecisionTelemetry/persistence";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -54,6 +55,10 @@ import {
   MAX_BUILD_UNITS_PER_ORDER,
   computeBuildCost,
 } from "@/lib/constants/capacityEconomy";
+import {
+  dominanceDensityFactor,
+  getDominanceGrowthCostMultiplier,
+} from "@/lib/constants/corporations";
 import {
   retailCapacityExpansionPaused,
   retailDemandTransitionTurnsRemaining,
@@ -527,8 +532,34 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       techGrowthCostMultiplier: techBuildCostMultiplier,
     });
     const buildTurns = CAPACITY_BUILD_TURNS(sector.sectorType);
+    const corpFxRate = await getCorpFxRate(db, corporation);
+    const spread = corpToSectorCountrySpread(corporation, countryId, cost.totalAnchor);
+    const totalCostAnchor = cost.totalAnchor + spread.spreadAnchor;
+    const corpCapitalAnchor = corpLiquidCapitalToAnchor(
+      corporation.liquidCapital,
+      corporation,
+      corpFxRate
+    );
+    const observe = (
+      stage: "quote" | "order",
+      outcome: "quoted" | "placed" | "queue_full" | "insufficient_cash" | "concurrent_change"
+    ) =>
+      recordCapacityDecisionBestEffort(db, currentTurn, {
+        actor: "player",
+        stage,
+        outcome,
+        marketSharePct,
+        competitorCount: competitorCount ?? 0,
+        rawDominanceMultiplier: getDominanceGrowthCostMultiplier(marketSharePct),
+        dominanceDensityFactor: dominanceDensityFactor(competitorCount),
+        dominanceMultiplier: cost.dominanceMultiplier,
+        unitPriceAnchor: cost.unitPriceAnchor,
+        cashHeadroomAnchor: corpCapitalAnchor - totalCostAnchor,
+        requestedUnits: units,
+      });
 
     if (preview) {
+      void observe("quote", "quoted");
       return NextResponse.json({
         success: true,
         preview: true,
@@ -546,6 +577,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     }
 
     if (queue.length >= MAX_OUTSTANDING_BUILD_ORDERS) {
+      void observe("order", "queue_full");
       return NextResponse.json(
         {
           error: `This sector already has ${MAX_OUTSTANDING_BUILD_ORDERS} builds under way. Wait for one to finish or cancel it.`,
@@ -556,15 +588,8 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
 
     // Cross-currency friction, mirroring expandSector: a corp building in a
     // different-currency country pays the reduced sector FX spread on top.
-    const corpFxRate = await getCorpFxRate(db, corporation);
-    const spread = corpToSectorCountrySpread(corporation, countryId, cost.totalAnchor);
-    const totalCostAnchor = cost.totalAnchor + spread.spreadAnchor;
-    const corpCapitalAnchor = corpLiquidCapitalToAnchor(
-      corporation.liquidCapital,
-      corporation,
-      corpFxRate
-    );
     if (corpCapitalAnchor < totalCostAnchor) {
+      void observe("order", "insufficient_cash");
       return NextResponse.json(
         {
           error: insufficientCapitalMessage(
@@ -608,6 +633,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
         { $inc: { liquidCapital: -costInCorpCapital }, $set: { updatedAt: now } }
       );
     if (debit.modifiedCount !== 1) {
+      void observe("order", "insufficient_cash");
       return NextResponse.json(
         {
           error: insufficientCapitalMessage(
@@ -642,6 +668,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
           { _id: corporation._id },
           { $inc: { liquidCapital: costInCorpCapital }, $set: { updatedAt: now } }
         );
+      void observe("order", "concurrent_change");
       return NextResponse.json(
         { error: "That build queue changed while you were ordering. Try again." },
         { status: 409 }
@@ -653,6 +680,7 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       );
       await safeDistributeConversionSpread(db, feeInCorp, spread.from, spread.to);
     }
+    void observe("order", "placed");
 
     // ─── Draw the ordered capacity DOWN from the unowned pool (#1145) ────────
     //
