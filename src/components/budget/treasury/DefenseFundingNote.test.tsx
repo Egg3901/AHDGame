@@ -31,6 +31,7 @@ describe("DefenseFundingNote (ticket #1269)", () => {
     render(<DefenseFundingNote sym="M" funding={funded} />);
     expect(screen.getByText("Defence funding")).toBeTruthy();
     expect(screen.getByText(/no overdraft drawn/)).toBeTruthy();
+    expect(screen.getByText(/running total falls/)).toBeTruthy();
   });
 
   it("names the beyond-the-line draw that the surplus tile misses", () => {
@@ -42,5 +43,13 @@ describe("DefenseFundingNote (ticket #1269)", () => {
     expect(screen.getByText(/Overdrawn/)).toBeTruthy();
     // The reconciliation sentence: why the treasury can fall under a surplus.
     expect(screen.getByText(/never appears in spending/)).toBeTruthy();
+  });
+
+  it("tells an overdrawn reader the balance grows and how to shrink it (issue #1753)", () => {
+    render(<DefenseFundingNote sym="M" funding={overdrawn} />);
+    expect(screen.getByText(/running total of past shortfalls/)).toBeTruthy();
+    expect(screen.getByText(/grows each turn upkeep beats the line/)).toBeTruthy();
+    expect(screen.getByText(/appropriate more or field less/)).toBeTruthy();
+    expect(screen.getByText(/covered turns pay it back down/)).toBeTruthy();
   });
 });
