@@ -3,9 +3,3 @@
 # previously had no usable sans face, so generated Discord cards rendered text
 # as tofu boxes even though the SVG contained valid text.
 nixPkgs = ["nodejs_24", "npm-9_x", "fontconfig", "dejavu_fonts"]
-
-[phases.build]
-# Cache the Next.js incremental compilation output between deploys.
-# Requires cleanDistDir: false in next.config.ts — otherwise Next.js
-# deletes .next at build start, discarding the restored cache.
-cacheDirectories = [".next/cache"]
