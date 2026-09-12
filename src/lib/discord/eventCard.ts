@@ -213,7 +213,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
     <clipPath id="portraitClip"><rect x="850" y="142" width="266" height="300" rx="28"/></clipPath>
     <style>
       ${bundledFontCss()}
-      text { font-family: AHDGeist, sans-serif; }
+      text { font-family: Geist, "DejaVu Sans", sans-serif; }
       .brand { fill: #f8fafc; font-size: 24px; font-weight: 800; letter-spacing: 4px; }
       .eyebrow { fill: ${accent}; font-size: 23px; font-weight: 800; letter-spacing: 2px; }
       .title { fill: #f8fafc; font-size: 54px; font-weight: 800; }
