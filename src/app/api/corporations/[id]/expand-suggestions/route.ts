@@ -145,9 +145,10 @@ export async function GET(request: Request, { params }: RouteParams) {
       }
     }
 
-    // Demand gap for this sector type's output mix, per physical market (min
-    // over legs because the market stops absorbing when the first leg
-    // saturates). Most outputs use the candidate country's reachable book;
+    // Demand gap for this sector type's output mix, per physical market (mean
+    // over legs so one balanced line does not veto answering a deep shortage
+    // in another — demand audit step 4). Most outputs use the candidate
+    // country's reachable book;
     // state-local outputs use the candidate state's own balance.
     // unowned pool's headroom is claimable market SHARE, not buyers; ranking
     // and labelling it "untapped demand" steered players straight into gluts
