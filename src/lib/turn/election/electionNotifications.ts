@@ -14,7 +14,7 @@ import {
   DISCORD_COLORS,
   type DiscordEmbed,
 } from "@/lib/discordWebhooks";
-import { generateParliamentChartSVG, getChamberComposition } from "@/lib/charts/parliamentChart";
+import { generateChamberDiagramSVG, getChamberComposition } from "@/lib/charts/parliamentChart";
 import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 
 export type ElectionNewsOutcome = {
@@ -123,10 +123,7 @@ export async function sendBatchedElectionResults(
       const chartCountry = (chartCountryMap[electionType] ?? "US") as CountryId;
       const chartOfficeKey = officeKeyForElectionType(electionType, chartCountry);
       const composition = await getChamberComposition(db, chartOfficeKey, chartCountry);
-      chartSvg = generateParliamentChartSVG(composition.seats, chartTotal, {
-        width: 1000,
-        showLabels: false,
-      });
+      chartSvg = generateChamberDiagramSVG(composition.seats, chartTotal, chartCountry, 1000);
     }
 
     // Group outcomes by party

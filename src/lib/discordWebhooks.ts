@@ -70,12 +70,27 @@ async function withBrandedGameEventCard(
   if (embed.image) return embed;
   const imageUrl = await generateLegacyDiscordEventCard(countryId, embed);
   if (!imageUrl) return embed;
+  const fieldLink = embed.fields
+    ?.map((field) => field.value.match(/\[([^\]]+)]\((https?:\/\/[^)]+)\)/))
+    .find((match) => match != null);
+  const actionUrl = embed.url ?? fieldLink?.[2];
   return {
     title: embed.title,
     description: compactDescription(embed.description),
     color: embed.color,
     timestamp: embed.timestamp,
-    url: embed.url,
+    url: actionUrl,
+    ...(actionUrl
+      ? {
+          fields: [
+            {
+              name: "Open event",
+              value: `[Open in A House Divided](${actionUrl})`,
+              inline: true,
+            },
+          ],
+        }
+      : {}),
     footer: embed.footer ?? { text: "A House Divided" },
     image: { url: imageUrl },
   };

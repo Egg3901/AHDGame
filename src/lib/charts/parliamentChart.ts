@@ -218,6 +218,30 @@ export function generateSeatBarSVG(
 </svg>`;
 }
 
+/** Match the chamber geometry used by the Discord bot's composition command. */
+export function generateChamberDiagramSVG(
+  seats: PartySeatsData[],
+  total: number,
+  countryId: string,
+  width = 1000
+): string {
+  if (countryId === COUNTRY_CONFIGS.UK.id) {
+    return (
+      westminsterParliamentSvgString(
+        seats.map((seat) => ({
+          party: seat.party,
+          partyColor: seat.partyColor,
+          economicPosition: seat.economicPosition,
+          seats: seat.seats,
+        })),
+        total,
+        "#3b3d4d"
+      ) ?? generateParliamentChartSVG(seats, total, { width, showLabels: false })
+    );
+  }
+  return generateParliamentChartSVG(seats, total, { width, showLabels: false });
+}
+
 /**
  * Fetch chamber composition with economic positions for chart generation.
  */
@@ -328,19 +352,7 @@ export async function generateAndSaveChamberChart(
 ): Promise<string | null> {
   try {
     const { seats } = await getChamberComposition(db, chamber, countryId);
-    const svg =
-      countryId === COUNTRY_CONFIGS.UK.id
-        ? (westminsterParliamentSvgString(
-            seats.map((s) => ({
-              party: s.party,
-              partyColor: s.partyColor,
-              economicPosition: s.economicPosition,
-              seats: s.seats,
-            })),
-            totalSeatsTarget,
-            "#3b3d4d"
-          ) ?? generateParliamentChartSVG(seats, totalSeatsTarget, { width: 600 }))
-        : generateParliamentChartSVG(seats, totalSeatsTarget, { width: 600 });
+    const svg = generateChamberDiagramSVG(seats, totalSeatsTarget, countryId, 600);
     return await saveChartAsPNG(svg, `${chamber}-composition`);
   } catch (err) {
     console.error(`[Charts] Failed to generate ${chamber} chart:`, err);
