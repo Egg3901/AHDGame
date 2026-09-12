@@ -304,17 +304,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // Second embed: party columns
-    embeds.push({
-      title: chartUrl ? undefined : `[TEST] Election Results — ${label}`,
-      description: "_This is a test using recent election data._",
-      color: DISCORD_COLORS.electionResult,
-      fields,
-      footer: {
-        text: `${outcomes.length} result${outcomes.length === 1 ? "" : "s"} shown (test)`,
-      },
-      timestamp: now.toISOString(),
-    });
+    // Non-chart election types retain a compact text fallback. National chamber
+    // charts stand alone so this test route mirrors the production no-wall layout.
+    if (!chartUrl) {
+      embeds.push({
+        title: `[TEST] Election Results — ${label}`,
+        description: "_This is a test using recent election data._",
+        color: DISCORD_COLORS.electionResult,
+        fields: fields.slice(0, 4),
+        footer: {
+          text: `${outcomes.length} result${outcomes.length === 1 ? "" : "s"} shown (test)`,
+        },
+        timestamp: now.toISOString(),
+      });
+    }
 
     // Route to the country's webhook (falls back to the global game webhook).
     await sendCountryGameEventMultiple(inferredCountryId, embeds);
