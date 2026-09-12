@@ -217,12 +217,11 @@ async function notifyPendingNominee(
 ): Promise<void> {
   const config = COUNTRY_CONFIGS[countryId];
 
+  const character = await db.collection<Character>("characters").findOne({ _id: characterId });
   // Country webhooks must not depend on in-app notification success or player-linked userId.
-  notifyCbChairPendingDiscord(countryId, characterName, pool).catch((err) =>
+  notifyCbChairPendingDiscord(countryId, characterName, pool, character?.avatarUrl).catch((err) =>
     logger.error("CentralBankChairSelection", "Discord pending failed", err)
   );
-
-  const character = await db.collection<Character>("characters").findOne({ _id: characterId });
   if (!character?.userId) return;
 
   await createNotifications([
@@ -583,7 +582,7 @@ export async function acceptCentralBankChairSelection(
     },
   ]);
 
-  notifyCbChairAcceptedDiscord(countryId, character.name).catch((err) =>
+  notifyCbChairAcceptedDiscord(countryId, character.name, character.avatarUrl).catch((err) =>
     logger.error("CentralBankChairSelection", "Discord accept failed", err)
   );
 
@@ -690,7 +689,7 @@ async function reselectAfterRefusal(
   // Resolve the refused nominee's user for an in-app notice (best effort).
   const refusedNominee = await db
     .collection<Character>("characters")
-    .findOne({ _id: pending.characterId }, { projection: { userId: 1, name: 1 } });
+    .findOne({ _id: pending.characterId }, { projection: { userId: 1, name: 1, avatarUrl: 1 } });
   if (refusedNominee?.userId) {
     const title =
       reason === "timeout"
@@ -721,7 +720,8 @@ async function reselectAfterRefusal(
     countryId,
     refusedNominee?.name ?? pending.characterName,
     next ? "reselected" : "vacancy",
-    reason
+    reason,
+    refusedNominee?.avatarUrl
   ).catch((err) => logger.error("CentralBankChairSelection", "Discord decline failed", err));
 
   if (!next) {
