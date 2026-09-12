@@ -118,10 +118,16 @@ export function governanceStyleFlavor(score: GovernanceStyleScore): GovernanceSt
           : competition.uninterruptedControlTurns > 0
             ? ` Its uninterrupted legislative lead has lasted ${competition.uninterruptedControlTurns} turns.`
             : "";
+    const courtStatus =
+      competition.courtPenalty > 0
+        ? ` The Supreme Court is ${competition.courtDominantShare.toFixed(1)}% one party among ${competition.courtSeated} seated justices; packing the bench subtracts ${competition.courtPenalty.toFixed(1)} points.`
+        : competition.courtSeated >= 5
+          ? ` The Supreme Court remains split enough that one-party control of the bench adds no health cost.`
+          : "";
     competitionNarrative =
       competition.penalty > 0
-        ? `One party averages ${competition.dominantSeatShare.toFixed(1)}% control ${chamberScope}.${executiveStatus} As the same governing settlement endures, oversight, appointments, and administrative habits begin to assume that power will not change hands. Chamber margins subtract ${competition.seatMarginPenalty.toFixed(1)} points, legislative continuity subtracts ${competition.legislativeContinuityPenalty.toFixed(1)}, and executive continuity subtracts ${competition.executiveContinuityPenalty.toFixed(1)}, for a total democratic-health penalty of ${competition.penalty.toFixed(1)}.`
-        : `The largest party averages ${competition.dominantSeatShare.toFixed(1)}% control ${chamberScope}.${executiveStatus} Power remains electorally contestable. Opposition offices retain a credible path back into government, appointments are made under the expectation of future scrutiny, and competitive balance applies no health penalty.`;
+        ? `One party averages ${competition.dominantSeatShare.toFixed(1)}% control ${chamberScope}.${executiveStatus}${courtStatus} As the same governing settlement endures, oversight, appointments, and administrative habits begin to assume that power will not change hands. Chamber margins subtract ${competition.seatMarginPenalty.toFixed(1)} points, legislative continuity subtracts ${competition.legislativeContinuityPenalty.toFixed(1)}, executive continuity subtracts ${competition.executiveContinuityPenalty.toFixed(1)}, and the Court subtracts ${competition.courtPenalty.toFixed(1)}, for a total democratic-health penalty of ${competition.penalty.toFixed(1)}.`
+        : `The largest party averages ${competition.dominantSeatShare.toFixed(1)}% control ${chamberScope}.${executiveStatus}${courtStatus} Power remains electorally contestable. Opposition offices retain a credible path back into government, appointments are made under the expectation of future scrutiny, and competitive balance applies no health penalty.`;
   }
   return {
     headline: health.headline,
