@@ -1441,7 +1441,6 @@ export function buildSectorPlantsSection(args: {
     money,
     regulatoryBurdenPp,
     crisisMarginPenaltyPp,
-    depositBound,
   } = args;
 
   const num = (v: unknown): number | null =>
@@ -1498,9 +1497,10 @@ export function buildSectorPlantsSection(args: {
         w: Math.min(1, Math.abs(sector.productionPolicyLevel ?? 0) / 10),
       });
     }
-    if (depositBound) {
-      weights.push({ cause: "deposits", w: idleShare });
-    }
+    // A deposit constraint is only a yes/no signal, not a measured loss.
+    // Assigning the entire remaining idle share to it fabricates a quantity,
+    // including for output legs whose deposits have ample headroom. Keep
+    // unmeasured losses under "other"; the resource panel shows constraints.
     const sumW = weights.reduce((s, x) => s + x.w, 0);
     const scale = sumW > 0 ? Math.min(1, idleShare / sumW) : 0;
     let attributed = coldUnits;

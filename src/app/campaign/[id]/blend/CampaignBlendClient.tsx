@@ -409,6 +409,103 @@ export function CampaignBlendClient({
           </div>
         ) : null}
 
+        {/* The strength contribution lived only in the desktop sidebar. That
+            sidebar is hidden below lg, leaving a phone user able to read their
+            strength but unable to spend it. Keep the mobile control alongside
+            the other immediate campaign actions. */}
+        {vm.strength ? (
+          <div style={{ padding: "22px 16px 0" }}>
+            <div
+              style={{
+                fontFamily: FONT.mono,
+                fontSize: 9.5,
+                letterSpacing: ".16em",
+                textTransform: "uppercase",
+                color: BLEND.mutedDimmer,
+              }}
+            >
+              Campaign strength
+            </div>
+            <div
+              style={{
+                marginTop: 10,
+                display: "flex",
+                alignItems: "baseline",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: FONT.mono,
+                  fontSize: 32,
+                  fontWeight: 500,
+                  color: BLEND.accent,
+                  letterSpacing: "-0.03em",
+                  minWidth: 0,
+                  overflowWrap: "anywhere",
+                }}
+              >
+                {vm.strength.strength}
+              </span>
+              <span
+                style={{
+                  flexShrink: 0,
+                  fontFamily: FONT.serif,
+                  fontSize: 14,
+                  color: BLEND.muted,
+                }}
+              >
+                +{vm.strength.boostPct}% votes
+              </span>
+            </div>
+            {canAct ? (
+              <>
+                <p
+                  style={{
+                    margin: "10px 0 14px",
+                    fontFamily: FONT.serif,
+                    fontSize: 13.5,
+                    lineHeight: 1.5,
+                    color: BLEND.muted,
+                  }}
+                >
+                  {vm.strength.strengthAdded > 0 ? (
+                    <>
+                      Contribute {vm.strength.strengthAdded.toFixed(2)} strength for{" "}
+                      {vm.strength.costText} and reach{" "}
+                      <span style={{ color: BLEND.accent }}>+{vm.strength.newBoostPct}%</span>.
+                    </>
+                  ) : (
+                    "You need national influence to contribute campaign strength."
+                  )}
+                </p>
+                <button
+                  type="button"
+                  disabled={!vm.strength.canContribute || busy === "strength"}
+                  onClick={() =>
+                    post("strength", `/api/campaigns/${campaign.id}/campaign-strength`)
+                  }
+                  style={{
+                    width: "100%",
+                    border: `1px solid rgba(220,38,38,.4)`,
+                    background: "transparent",
+                    padding: 9,
+                    fontFamily: FONT.mono,
+                    fontSize: 10.5,
+                    letterSpacing: ".08em",
+                    fontWeight: 700,
+                    color: vm.strength.canContribute ? BLEND.accent : BLEND.muted,
+                    cursor: vm.strength.canContribute ? "pointer" : "not-allowed",
+                  }}
+                >
+                  CONTRIBUTE STRENGTH
+                </button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+
         {presencePanel ? (
           <div style={{ padding: "18px 16px 0" }}>
             <div

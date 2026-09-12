@@ -13,6 +13,7 @@ import type {
   SingleplayerDifficulty,
   SingleplayerMode,
 } from "@/lib/db/types";
+import { reconcileSingleplayerHeadOfState } from "@/lib/singleplayerHeadOfState";
 
 /**
  * Node-only singleplayer helpers. `@/lib/singleplayer` must stay importable
@@ -135,6 +136,9 @@ export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
     db.collection("characters").countDocuments({ retiredAt: { $exists: false } }),
   ]);
   const config = gameState?.singleplayerConfig;
+  if (config?.mode === "head-of-state") {
+    await reconcileSingleplayerHeadOfState(db, { preset: gameState?.preset });
+  }
   return {
     singleplayer: true,
     accountCreated: account.created,
