@@ -19,6 +19,10 @@ vi.mock("@/lib/discordWebhooks", () => ({
   DISCORD_COLORS: { billEnacted: 0x00ff00 },
 }));
 
+vi.mock("@/lib/discord/eventCard", () => ({
+  generateDiscordEventCard: vi.fn().mockResolvedValue("https://cdn.test/event.png"),
+}));
+
 vi.mock("@/lib/archetypeAffinities", () => ({
   calculateShiftImpacts: vi.fn().mockReturnValue({}),
 }));
@@ -1159,7 +1163,8 @@ describe("onBillEnacted", () => {
     expect(sendCountryGameEvent).toHaveBeenCalledWith(
       "US",
       expect.objectContaining({
-        description: expect.stringContaining("Universal Tariff Act"),
+        title: expect.stringContaining("Universal Tariff Act"),
+        image: { url: "https://cdn.test/event.png" },
       })
     );
     // No policy work — no statePolicies upsert, no enacted-law record.

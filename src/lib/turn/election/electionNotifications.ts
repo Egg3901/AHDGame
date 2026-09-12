@@ -14,7 +14,8 @@ import {
   DISCORD_COLORS,
   type DiscordEmbed,
 } from "@/lib/discordWebhooks";
-import { generateAndSaveChamberChart } from "@/lib/charts/parliamentChart";
+import { generateParliamentChartSVG, getChamberComposition } from "@/lib/charts/parliamentChart";
+import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 
 export type ElectionNewsOutcome = {
   electionType: string;
@@ -27,8 +28,8 @@ export type ElectionNewsOutcome = {
 
 /**
  * Send batched election results to Discord, grouped by election type.
- * Includes seating charts for House and Senate elections.
- * Results are organized by party in 2-column layout.
+ * National chamber results are rendered as one branded image card. Party
+ * winners are summarized instead of posting a separate wall-of-text embed.
  */
 export async function sendBatchedElectionResults(
   db: Db,
@@ -114,26 +115,17 @@ export async function sendBatchedElectionResults(
   for (const typeOutcomes of grouped.values()) {
     const electionType = typeOutcomes[0].electionType;
     const label = ELECTION_TYPE_SHORT_LABEL[electionType] ?? electionType;
-    const embeds: DiscordEmbed[] = [];
-
-    // Generate chart for national chambers (first embed with just chart).
-    // Chart queries electedOfficials by officeType — snap_* winners are stored
-    // under the regular key, so normalize before querying.
-    let chartUrl: string | null = null;
+    // Generate chart data for national chambers. The chart and result summary
+    // are combined into one branded card instead of separate Discord embeds.
+    let chartSvg: string | undefined;
     const chartTotal = chartSeatTotals[electionType];
     if (chartTotal) {
       const chartCountry = (chartCountryMap[electionType] ?? "US") as CountryId;
       const chartOfficeKey = officeKeyForElectionType(electionType, chartCountry);
-      chartUrl = await generateAndSaveChamberChart(db, chartOfficeKey, chartTotal, chartCountry);
-    }
-
-    // First embed: title and chart
-    if (chartUrl) {
-      embeds.push({
-        title: `Election Results — ${label}`,
-        color: DISCORD_COLORS.electionResult,
-        image: { url: chartUrl },
-        timestamp: now.toISOString(),
+      const composition = await getChamberComposition(db, chartOfficeKey, chartCountry);
+      chartSvg = generateParliamentChartSVG(composition.seats, chartTotal, {
+        width: 1000,
+        showLabels: false,
       });
     }
 
@@ -148,66 +140,45 @@ export async function sendBatchedElectionResults(
     // Sort parties by seat count (descending)
     const sortedParties = [...byParty.entries()].sort((a, b) => b[1].length - a[1].length);
 
-    // Build inline fields for party columns (2 per row)
-    // Discord shows inline fields side-by-side, up to 3 per row
-    const fields: { name: string; value: string; inline: boolean }[] = [];
-
-    for (const [partyId, partyOutcomes] of sortedParties) {
-      // Sort outcomes by state within each party
-      const sorted = [...partyOutcomes].sort((a, b) => a.state.localeCompare(b.state));
-
-      // Resolve party name from first outcome's countryId
+    const partySummary = sortedParties.slice(0, 4).map(([partyId, partyOutcomes]) => {
       const countryId = partyOutcomes[0]?.countryId ?? "US";
-      const partyName = getPartyName(countryId, partyId);
-
-      // Format: "STATE — Winner Name" with star for players
-      const lines = sorted.map((o) => {
-        const playerMark = o.isPlayer ? " :star:" : "";
-        return `${o.state} — ${o.winnerName}${playerMark}`;
-      });
-
-      // Discord field value max is 1024 chars
-      let value = lines.join("\n");
-      if (value.length > 1000) {
-        const truncated = [];
-        let len = 0;
-        for (const line of lines) {
-          if (len + line.length + 1 > 950) {
-            truncated.push(`... +${lines.length - truncated.length} more`);
-            break;
-          }
-          truncated.push(line);
-          len += line.length + 1;
-        }
-        value = truncated.join("\n");
-      }
-
-      fields.push({
-        name: `${partyName} (${partyOutcomes.length})`,
-        value: value || "—",
-        inline: true,
-      });
-
-      // Add empty spacer field after every 2 party fields to force 2-column layout
-      // (Discord fills up to 3 inline fields per row; spacer prevents 3rd column)
-      if (fields.length % 3 === 2) {
-        fields.push({ name: "\u200B", value: "\u200B", inline: true });
-      }
+      const playerSeats = partyOutcomes.filter((outcome) => outcome.isPlayer).length;
+      const playerSuffix = playerSeats
+        ? ` · ${playerSeats} player${playerSeats === 1 ? "" : "s"}`
+        : "";
+      return `${getPartyName(countryId, partyId)} · ${partyOutcomes.length} seat${partyOutcomes.length === 1 ? "" : "s"}${playerSuffix}`;
+    });
+    if (sortedParties.length > 4) {
+      partySummary.push(`Plus ${sortedParties.length - 4} other parties`);
     }
 
-    // Second embed: party columns
-    embeds.push({
-      title: chartUrl ? undefined : `Election Results — ${label}`,
+    const countryId = typeOutcomes[0]?.countryId ?? "US";
+    const cardUrl = await generateDiscordEventCard(
+      {
+        eyebrow: `${countryId} · Election night`,
+        title: `${label} results`,
+        summary: `${typeOutcomes.length} seat${typeOutcomes.length === 1 ? "" : "s"} decided`,
+        detailLines: partySummary,
+        tone: "election",
+        chartSvg,
+      },
+      `election-${countryId.toLowerCase()}-${electionType}`
+    );
+
+    const embed: DiscordEmbed = {
+      title: `Election results: ${label}`,
+      description: cardUrl
+        ? `${typeOutcomes.length} seat${typeOutcomes.length === 1 ? "" : "s"} decided.`
+        : partySummary.join("\n"),
       color: DISCORD_COLORS.electionResult,
-      fields,
+      image: cardUrl ? { url: cardUrl } : undefined,
       footer: {
-        text: `${typeOutcomes.length} seat${typeOutcomes.length === 1 ? "" : "s"} decided`,
+        text: "A House Divided",
       },
       timestamp: now.toISOString(),
-    });
+    };
 
     // Route to the country's webhook (falls back to the global game webhook).
-    const countryId = typeOutcomes[0]?.countryId ?? "US";
-    await sendCountryGameEventMultiple(countryId, embeds);
+    await sendCountryGameEventMultiple(countryId, [embed]);
   }
 }

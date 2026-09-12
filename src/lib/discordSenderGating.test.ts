@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/countryAccess", () => ({ isCountryEnabledForPlayers: vi.fn() }));
+vi.mock("@/lib/discord/eventCard", () => ({
+  generateLegacyDiscordEventCard: vi.fn().mockResolvedValue("https://cdn.test/event.png"),
+}));
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
