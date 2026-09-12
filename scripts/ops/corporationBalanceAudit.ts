@@ -7,6 +7,7 @@
 import "dotenv/config";
 import { MongoClient } from "mongodb";
 import type { CorporateSector, Corporation } from "../../src/lib/db/types/corporation";
+import type { NppMarketEntryFunnel } from "../../src/lib/db/types/marketFormation";
 import {
   fxRateForSectorHostFromMap,
   loadFxRatesByCurrency,
@@ -37,7 +38,7 @@ async function main(): Promise<void> {
         MONGO_DB_NAME: process.env.MONGO_DB_NAME,
       })
     );
-    const [fxByCurrency, corporations] = await Promise.all([
+    const [fxByCurrency, corporations, gameState, entryFunnel] = await Promise.all([
       loadFxRatesByCurrency(db),
       db
         .collection<Corporation>("corporations")
@@ -59,31 +60,60 @@ async function main(): Promise<void> {
           }
         )
         .toArray(),
+      db
+        .collection<{ _id: string; currentTurn?: number }>("gameState")
+        .findOne({ _id: "current" }, { projection: { currentTurn: 1 } }),
+      db
+        .collection<NppMarketEntryFunnel>("nppMarketEntryFunnels")
+        .findOne({ _id: "current" }, { projection: { diagnostics: 0 } }),
     ]);
+    const currentTurn = finite(gameState?.currentTurn);
     const corporationById = new Map(corporations.map((corp) => [corp._id.toString(), corp]));
     const economicByCorporation = new Map<
       string,
       { revenueAnchor: number; profitAnchor: number }
     >();
-    const sectors = db
-      .collection<CorporateSector>("corporateSectors")
-      .find(
-        {},
-        { projection: { corporationId: 1, countryId: 1, stateId: 1, revenue: 1, plantsPnl: 1 } }
-      );
+    const coverage = {
+      sectorRows: 0,
+      physicalPnlRows: 0,
+      missingPhysicalPnlRows: 0,
+      stalePhysicalPnlRows: 0,
+      orphanSectorRows: 0,
+    };
+    const sectors = db.collection<CorporateSector>("corporateSectors").find(
+      {},
+      {
+        projection: {
+          corporationId: 1,
+          countryId: 1,
+          stateId: 1,
+          "plantsPnl.revenue": 1,
+          "plantsPnl.profit": 1,
+          "plantsPnl.turn": 1,
+        },
+      }
+    );
     for await (const sector of sectors) {
+      coverage.sectorRows++;
       const id = sector.corporationId.toString();
       const corporation = corporationById.get(id) ?? null;
+      if (!corporation) coverage.orphanSectorRows++;
+      if (!sector.plantsPnl) {
+        coverage.missingPhysicalPnlRows++;
+        continue;
+      }
+      coverage.physicalPnlRows++;
+      if (currentTurn > 0 && sector.plantsPnl.turn !== currentTurn) coverage.stalePhysicalPnlRows++;
       const currency = resolveSectorHostCurrencyCode(sector, corporation);
       const rate = fxRateForSectorHostFromMap(sector, corporation, fxByCurrency);
       const current = economicByCorporation.get(id) ?? { revenueAnchor: 0, profitAnchor: 0 };
       current.revenueAnchor += readCorpEconomicAnchor(
-        finite(sector.plantsPnl?.revenue ?? sector.revenue),
+        finite(sector.plantsPnl.revenue),
         currency,
         rate
       );
       current.profitAnchor += readCorpEconomicAnchor(
-        finite(sector.plantsPnl?.profit),
+        finite(sector.plantsPnl.profit),
         currency,
         rate
       );
@@ -114,7 +144,19 @@ async function main(): Promise<void> {
 
     const output = {
       generatedAt: new Date().toISOString(),
-      source: "corporations + corporateSectors.plantsPnl",
+      turn: currentTurn,
+      source: "corporations + corporateSectors.plantsPnl + nppMarketEntryFunnels/current",
+      coverage,
+      latestNppEntryFunnel: entryFunnel
+        ? {
+            schemaVersion: entryFunnel.schemaVersion,
+            turn: entryFunnel.turn,
+            corporationsObserved: entryFunnel.corporationsObserved,
+            entered: entryFunnel.entered,
+            rejected: entryFunnel.rejected,
+            reasonCounts: entryFunnel.reasonCounts,
+          }
+        : null,
       ...buildCorporationBalanceAudit(rows),
     };
     process.stdout.write(
