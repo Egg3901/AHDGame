@@ -178,6 +178,8 @@ import {
   GLUT_MOTHBALL_FILL_THRESHOLD,
   GLUT_MOTHBALL_PRICE_RATIO,
   GLUT_RESTART_PRICE_RATIO,
+  COST_MOTHBALL_LOSS_TURNS,
+  ORDINARY_ENTRY_MIN_SHORTAGE,
   NPP_WAGE_STEP,
   NPP_WAGE_BASELINE,
   NPP_WAGE_SHORTAGE_TARGET,
@@ -799,6 +801,28 @@ export function makeNppCorpDecision(
   const sectorProfits = analyzeSectorProfitability(sectors, plants?.enabled === true);
   const profitableSectors = sectorProfits.filter((sp) => sp.isProfitable).length;
 
+  // ── P&L-loss chronicity (demand audit step 5) ─────────────────────────────
+  // Maintains `pnlLossTurns` per sector: +1 on a losing turn, reset on the
+  // first profitable one. Mothballed sectors hold their count (mirroring
+  // `lowFillTurns` in sectorTelemetry) — the restart pass resets it instead,
+  // so a revived plant re-earns its chronic status instead of inheriting it.
+  // NPP corps only by construction (this pass never sees player corps), so no
+  // player plant is ever touched. Only writes on change, so profitable and
+  // steady-state sectors cost nothing.
+  if (plants?.enabled === true) {
+    for (const sp of sectorProfits) {
+      if (sp.sector.mothballed === true) continue;
+      const prior = sp.sector.pnlLossTurns ?? 0;
+      const next = sp.income < 0 ? prior + 1 : 0;
+      if (next !== prior) {
+        sectorUpdates.push({
+          filter: { _id: sp.sector._id },
+          update: { $set: { pnlLossTurns: next, updatedAt: now } },
+        });
+      }
+    }
+  }
+
   // `totalIncome`/`totalRevenue`/`corpMargin`/`isProfitable` below feed ONLY
   // sections 3-5 (budgets, dividends, expansion) — never sections 1-2, which
   // read sp.income/sp.margin (nominal, per-sector) directly and are unaffected
@@ -1135,7 +1159,9 @@ export function makeNppCorpDecision(
       if (ratio >= GLUT_RESTART_PRICE_RATIO) {
         sectorUpdates.push({
           filter: { _id: sp.sector._id },
-          update: { $set: { mothballed: false, updatedAt: now } },
+          // A revived plant re-earns chronic-cost status from zero instead
+          // of mothballing again on its first losing turn (step 5).
+          update: { $set: { mothballed: false, pnlLossTurns: 0, updatedAt: now } },
         });
         stateChangeBudget -= 1;
       }
@@ -1167,6 +1193,38 @@ export function makeNppCorpDecision(
           filter: { _id: worst.sp.sector._id },
           update: { $set: { mothballed: true, updatedAt: now } },
         });
+      } else {
+        // ── Cost mothballing (demand audit step 5) ─────────────────────────
+        // The fill gate above cannot see a plant that sells everything yet
+        // bleeds on costs — live, nearly every losing plant clears above it.
+        // A plant P&L-negative for COST_MOTHBALL_LOSS_TURNS straight goes
+        // cold so the bleed stops while structural fixes (staff productivity,
+        // cheaper recipes, truer demand signals) land; the restart pass
+        // above reactivates it into a repaired market. Deliberately WITHOUT
+        // the divest protections it complements: divest is irreversible, so
+        // it spares primary-type and last sectors, while mothballing is
+        // reversible — a single-sector corp's only plant MAY go cold (like
+        // the fill trigger), and no profitable-elsewhere requirement applies
+        // because an all-losing corp is exactly what must stop digging.
+        // Shares the one-change budget above: fill sheds first.
+        let coldest: { sp: SectorProfitInfo; lossTurns: number } | null = null;
+        for (const sp of sectorProfits) {
+          if (sp.sector.mothballed === true) continue;
+          if (divestedSectorIds.includes(sp.sector._id)) continue;
+          if (sp.sector.sectorType === "extraction") continue;
+          if (sp.income >= 0) continue;
+          const lossTurns = sp.sector.pnlLossTurns ?? 0;
+          if (lossTurns < COST_MOTHBALL_LOSS_TURNS) continue;
+          if (coldest == null || lossTurns > coldest.lossTurns) {
+            coldest = { sp, lossTurns };
+          }
+        }
+        if (coldest) {
+          sectorUpdates.push({
+            filter: { _id: coldest.sp.sector._id },
+            update: { $set: { mothballed: true, updatedAt: now } },
+          });
+        }
       }
     }
   }
@@ -1355,10 +1413,18 @@ export function makeNppCorpDecision(
     ctx.shortageEntryEligible === true &&
     marketEntryEligible &&
     hasLogisticsCapacity;
+  // Demand audit step 5: never found an ordinary plant into a glutted
+  // market — the growth governor is trying to shrink out of ≤0.85, so
+  // building there manufactures the loser the corp would then have to shed.
+  // Peak score (not mean): a mixed plant with one healthy leg still founds.
+  // Score 0 means no leg was priced (early-world thin markets): fail open.
+  const ordinaryEntryTargetGlutted =
+    expansionShortageScore > 0 && expansionShortageScore <= ORDINARY_ENTRY_MIN_SHORTAGE;
   const ordinaryEntry =
     expansion !== null &&
     hasLogisticsCapacity &&
     marketEntryEligible &&
+    !ordinaryEntryTargetGlutted &&
     (plants?.enabled === true || surplusCash > effectiveExpansionMinCash);
   entryDiagnostic = buildNppMarketEntryDiagnostic({
     corporation: corp,
