@@ -343,6 +343,58 @@ export interface SourcingResult {
 
 type Balance = { supply: number; demand: number };
 
+type SourcingCandidate = {
+  originType: "state" | "country";
+  originId: string;
+  landed: number;
+  ask: number;
+  shippingPerUnit: number;
+  tariffRatePct: number;
+  hopCount: number;
+  /** Same-country sellers win landed-price ties. */
+  domestic: boolean;
+};
+
+type FairForeignDemand = {
+  buyerStateId: string;
+  demandUnits: number;
+};
+
+const foreignBudgetKey = (exporter: CountryId, buyerStateId: string) =>
+  `${exporter}\u0000${buyerStateId}`;
+
+/**
+ * Split one foreign country's scarce spare by max-min fair share.
+ * Buyers with less remaining demand are filled first, and the rest share what
+ * remains equally. The result is a per-buyer cap for this commodity pass.
+ */
+function fairForeignBudgets(
+  totalSupply: number,
+  demands: readonly FairForeignDemand[]
+): Map<string, number> {
+  const budgets = new Map<string, number>();
+  let remainingSupply = Math.max(0, totalSupply);
+  let active = demands.filter((demand) => demand.demandUnits > 0).map((demand) => ({ ...demand }));
+
+  while (active.length > 0 && remainingSupply > Number.EPSILON) {
+    const equalShare = remainingSupply / active.length;
+    const capped = active.filter((demand) => demand.demandUnits <= equalShare);
+    if (capped.length === 0) {
+      for (const demand of active) budgets.set(demand.buyerStateId, equalShare);
+      break;
+    }
+
+    const cappedIds = new Set(capped.map((demand) => demand.buyerStateId));
+    for (const demand of capped) {
+      budgets.set(demand.buyerStateId, demand.demandUnits);
+      remainingSupply = Math.max(0, remainingSupply - demand.demandUnits);
+    }
+    active = active.filter((demand) => !cappedIds.has(demand.buyerStateId));
+  }
+
+  return budgets;
+}
+
 export interface SourcingInputs {
   /** Non-national-scope states with their country. */
   states: ReadonlyArray<{ stateId: string; countryId: CountryId }>;
@@ -521,6 +573,75 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
       spareByCountry.set(cid, Math.max(0, (bal?.supply ?? 0) - (bal?.demand ?? 0)));
     }
 
+    const buyerTerms = (buyer: { stateId: string; countryId: CountryId }) => {
+      const buyerPrice = statePrices[buyer.stateId] ?? basePrice;
+      const localBalance = byState.get(buyer.stateId)?.get(commodity);
+      const baseCeiling = buyerPrice * (1 + BUYER_TOLERANCE_SLACK);
+      const ceiling =
+        buyerPrice *
+        (1 +
+          shortageResponsiveToleranceSlack({
+            localSupply: localBalance?.supply ?? 0,
+            localDemand: localBalance?.demand ?? 0,
+            enabled: shortageResponsiveSourcingEnabled,
+          }));
+      return { buyerPrice, baseCeiling, ceiling };
+    };
+
+    const foreignCandidateFor = (
+      buyer: { stateId: string; countryId: CountryId },
+      cid: CountryId
+    ): SourcingCandidate | null => {
+      if (cid === buyer.countryId) return null;
+      if ((spareByCountry.get(cid) ?? 0) <= 0) return null;
+      if (isBlocked(commodity, cid, buyer.countryId)) return null;
+      const ask = nationalPrices[cid] ?? basePrice;
+      const shippingPerUnit = isGrid
+        ? gridWheelingPerHop(ask) * SEA_FREIGHT_HOP_EQUIV
+        : shippingPerUnitPerHop * SEA_FREIGHT_HOP_EQUIV;
+      const ratePct = tariffRatePct(commodity, cid, buyer.countryId);
+      const tariffPerUnit = ask * (ratePct / 100);
+      return {
+        originType: "country",
+        originId: cid,
+        landed: ask + shippingPerUnit + tariffPerUnit,
+        ask,
+        shippingPerUnit,
+        tariffRatePct: ratePct,
+        hopCount: SEA_FREIGHT_HOP_EQUIV,
+        domestic: false,
+      };
+    };
+
+    const initialForeignSpareByCountry = new Map(spareByCountry);
+    const foreignAllocatedByBuyer = new Map<string, number>();
+    const fairForeignBudgetFor = (
+      buyer: { stateId: string; countryId: CountryId },
+      exporter: CountryId
+    ): number => {
+      const initialSupply = initialForeignSpareByCountry.get(exporter) ?? 0;
+      if (!(initialSupply > 0)) return 0;
+      const demands: FairForeignDemand[] = [];
+      for (const otherBuyer of sortedStates) {
+        const remainingDemand = unmetByState.get(otherBuyer.stateId) ?? 0;
+        if (!(remainingDemand > 0)) continue;
+        const candidate = foreignCandidateFor(otherBuyer, exporter);
+        if (!candidate) continue;
+        const { ceiling } = buyerTerms(otherBuyer);
+        if (!isGrid && candidate.landed > ceiling) continue;
+        const deliveryFactor = gridDeliveryFactor(candidate.hopCount);
+        if (!(deliveryFactor > 0)) continue;
+        const key = foreignBudgetKey(exporter, otherBuyer.stateId);
+        demands.push({
+          buyerStateId: otherBuyer.stateId,
+          demandUnits: remainingDemand / deliveryFactor + (foreignAllocatedByBuyer.get(key) ?? 0),
+        });
+      }
+      const target = fairForeignBudgets(initialSupply, demands).get(buyer.stateId) ?? 0;
+      const allocated = foreignAllocatedByBuyer.get(foreignBudgetKey(exporter, buyer.stateId)) ?? 0;
+      return Math.max(0, target - allocated);
+    };
+
     const summary: SourcingCommoditySummary = {
       commodity,
       intraStateUnits: 0,
@@ -540,31 +661,10 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
     for (const buyer of sortedStates) {
       let unmet = unmetByState.get(buyer.stateId) ?? 0;
       if (unmet <= 0) continue;
-      const buyerPrice = statePrices[buyer.stateId] ?? basePrice;
-      const localBalance = byState.get(buyer.stateId)?.get(commodity);
-      const baseCeiling = buyerPrice * (1 + BUYER_TOLERANCE_SLACK);
-      const ceiling =
-        buyerPrice *
-        (1 +
-          shortageResponsiveToleranceSlack({
-            localSupply: localBalance?.supply ?? 0,
-            localDemand: localBalance?.demand ?? 0,
-            enabled: shortageResponsiveSourcingEnabled,
-          }));
+      const { baseCeiling, ceiling } = buyerTerms(buyer);
 
       // Candidate sellers: same-country states with spare + foreign countries.
-      type Candidate = {
-        originType: "state" | "country";
-        originId: string;
-        landed: number;
-        ask: number;
-        shippingPerUnit: number;
-        tariffRatePct: number;
-        hopCount: number;
-        /** Same-country sellers win landed-price ties. */
-        domestic: boolean;
-      };
-      const candidates: Candidate[] = [];
+      const candidates: SourcingCandidate[] = [];
 
       for (const seller of sortedStates) {
         if (seller.countryId !== buyer.countryId || seller.stateId === buyer.stateId) continue;
@@ -592,26 +692,8 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         });
       }
       for (const cid of countryIds) {
-        if (cid === buyer.countryId) continue;
-        const spare = spareByCountry.get(cid) ?? 0;
-        if (spare <= 0) continue;
-        if (isBlocked(commodity, cid, buyer.countryId)) continue;
-        const ask = nationalPrices[cid] ?? basePrice;
-        const shippingPerUnit = isGrid
-          ? gridWheelingPerHop(ask) * SEA_FREIGHT_HOP_EQUIV
-          : shippingPerUnitPerHop * SEA_FREIGHT_HOP_EQUIV;
-        const ratePct = tariffRatePct(commodity, cid, buyer.countryId);
-        const tariffPerUnit = ask * (ratePct / 100);
-        candidates.push({
-          originType: "country",
-          originId: cid,
-          landed: ask + shippingPerUnit + tariffPerUnit,
-          ask,
-          shippingPerUnit,
-          tariffRatePct: ratePct,
-          hopCount: SEA_FREIGHT_HOP_EQUIV,
-          domestic: false,
-        });
+        const candidate = foreignCandidateFor(buyer, cid);
+        if (candidate) candidates.push(candidate);
       }
 
       candidates.sort(
@@ -650,6 +732,13 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
         const deliveryFactor = gridDeliveryFactor(cand.hopCount);
         let deliver = Math.min(unmet, spare * deliveryFactor);
         let dispatch = deliveryFactor > 0 ? deliver / deliveryFactor : 0;
+        if (cand.originType === "country") {
+          const fairBudget = fairForeignBudgetFor(buyer, cand.originId as CountryId);
+          if (dispatch > fairBudget) {
+            dispatch = fairBudget;
+            deliver = dispatch * deliveryFactor;
+          }
+        }
         let teuConsumed = 0;
         let overflowDispatch = 0;
         let congestionSurchargePaid = 0;
@@ -732,8 +821,11 @@ export function runSourcingPass(inputs: SourcingInputs): SourcingResult {
           spareByCountry.set(cand.originId as CountryId, spare - dispatch);
           summary.importUnits += take;
           summary.tariffPaid += tariffPaid;
+          const key = foreignBudgetKey(cand.originId as CountryId, buyer.stateId);
+          foreignAllocatedByBuyer.set(key, (foreignAllocatedByBuyer.get(key) ?? 0) + dispatch);
         }
         unmet -= take;
+        unmetByState.set(buyer.stateId, unmet);
 
         // Delivered-units + extra-cost accumulation for money wiring, regardless
         // of the itemization floor below (that floor only caps the doc's flow
