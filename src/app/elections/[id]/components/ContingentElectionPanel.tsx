@@ -58,6 +58,8 @@ export function ContingentElectionPanel({
   const delegationEntries = Object.entries(contingentResult.houseDelegationVotes).sort(([a], [b]) =>
     a.localeCompare(b)
   );
+  const houseBallots = contingentResult.houseBallots ?? [];
+  const finalHouseBallot = houseBallots.at(-1);
 
   const vpWinnerName = contingentResult.vicePresidentWinnerId
     ? resolveVpDisplayName(contingentResult.vicePresidentWinnerId, candidates, candidateNames)
@@ -75,6 +77,11 @@ export function ContingentElectionPanel({
           {senateRows.length > 0 &&
             ` The Senate elected the Vice President from the top two running mates (${SENATE_CONTINGENT_THRESHOLD} votes needed).`}
         </p>
+        {houseBallots.length > 1 && finalHouseBallot && (
+          <p className="mt-2 text-sm text-amber-200/90">
+            The House required {houseBallots.length} ballots. {finalHouseBallot.reason}.
+          </p>
+        )}
         {resolutionMode === "contingent_deadlock" && contingentResult.deadlockBreakerUsed && (
           <p className="mt-2 text-sm text-amber-300/90">
             No chamber reached the required threshold on the simulated ballot. A deterministic

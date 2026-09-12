@@ -746,6 +746,15 @@ describe("resolvePresidentElection", () => {
       eligibleVicePresidentCandidateIds: [],
       houseDelegationVotes: { TX: winnerId.toString() },
       houseVoteTotals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
+      houseBallots: [
+        {
+          ballot: 1,
+          activeCandidateIds: [winnerId.toString(), loserId.toString()],
+          delegationVotes: { TX: winnerId.toString() },
+          totals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
+          reason: "Initial state-delegation ballot",
+        },
+      ],
       senateVotes: {},
       senateVoteTotals: {},
       presidentWinnerId: winnerId.toString(),
@@ -803,6 +812,12 @@ describe("resolvePresidentElection", () => {
           resolutionMode: "contingent",
           contingentResult: expect.objectContaining({
             presidentWinnerId: winnerId.toString(),
+            houseBallots: [
+              expect.objectContaining({
+                ballot: 1,
+                reason: "Initial state-delegation ballot",
+              }),
+            ],
           }),
         }),
       })
