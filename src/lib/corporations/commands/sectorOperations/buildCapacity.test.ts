@@ -53,6 +53,9 @@ vi.mock("@/lib/corporations/sectorGrowthCost", () => ({
 vi.mock("@/lib/corporations/economicActionLog", () => ({
   logEconomicAction: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/corporations/capacityDecisionTelemetry/persistence", () => ({
+  recordCapacityDecisionBestEffort: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@/lib/market/featureFlag", () => ({
   getMarketSystemMode: vi.fn().mockResolvedValue("plants"),
   isMarketSystemMode: (m: string) => typeof m === "string",
@@ -289,6 +292,18 @@ describe("buildCapacity — build", () => {
     expect(res.status).toBe(200);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+    const { recordCapacityDecisionBestEffort } =
+      await import("@/lib/corporations/capacityDecisionTelemetry/persistence");
+    expect(vi.mocked(recordCapacityDecisionBestEffort)).toHaveBeenCalledWith(
+      db,
+      CURRENT_TURN,
+      expect.objectContaining({
+        actor: "player",
+        stage: "quote",
+        outcome: "quoted",
+        requestedUnits: 500,
+      })
+    );
   });
 
   it("rejects a build the corp cannot afford", async () => {
@@ -302,6 +317,13 @@ describe("buildCapacity — build", () => {
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     expect(res.status).toBe(400);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+    const { recordCapacityDecisionBestEffort } =
+      await import("@/lib/corporations/capacityDecisionTelemetry/persistence");
+    expect(vi.mocked(recordCapacityDecisionBestEffort)).toHaveBeenCalledWith(
+      db,
+      CURRENT_TURN,
+      expect.objectContaining({ actor: "player", stage: "order", outcome: "insufficient_cash" })
+    );
   });
 
   it("rejects non-positive and absurd unit counts", async () => {

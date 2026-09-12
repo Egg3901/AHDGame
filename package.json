@@ -71,6 +71,7 @@
     "sim:setup": "bash scripts/sim/local-setup.sh",
     "sim:worker": "bash scripts/sim/start-worker.sh",
     "sim:mcp": "npx tsx scripts/sim/localWorldsimMcp.ts",
+    "ops:corporation-balance": "npx tsx scripts/ops/corporationBalanceAudit.ts --pretty",
     "architecture:audit": "node scripts/architecture-audit.mjs",
     "verify:build": "next build"
   },
