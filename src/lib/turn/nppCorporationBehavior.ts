@@ -6,19 +6,6 @@
  * only when profitable (makeNppCorpDecision), set dividends from margin and keep
  * a cash floor.
  */
-/**
- * NPP Corporation AI Behavior
- *
- * Each turn, NPP-run corporations make autonomous decisions:
- * - Analyze sector profitability to guide all decisions
- * - Adjust growth rates aggressively based on margin bands
- * - Scale budgets as % of REVENUE (not cash) — spend only what you earn
- * - Kill losing sectors (divest) that drag overall profitability
- * - Expand only when profitable, using recorded corporate credit only for shortages
- * - Set dividend rate based on profit margin, not just existence of profit
- * - Maintain a cash floor to avoid insolvency
- */
-
 import type { Db, ObjectId } from "mongodb";
 import type {
   Corporation,
@@ -63,6 +50,7 @@ import {
   analyzeSectorProfitability,
   type SectorProfitInfo,
 } from "@/lib/turn/npp/sectorProfitability";
+import { chooseCostMothballSector, lossChronicityUpdates } from "@/lib/turn/npp/costMothball";
 export { GLUT_STATE_CHANGE_STAGGER, glutStaggerEligible } from "@/lib/turn/npp/cohort";
 export {
   STRATEGY_SHIFT_MARGIN_TRIGGER,
@@ -115,6 +103,7 @@ import {
   unownedPoolTrailingSet,
 } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
+import { latentAwareNationalRatio, latentAwareStateRatio } from "@/lib/market/latentShortageSignal";
 import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
@@ -178,6 +167,8 @@ import {
   GLUT_MOTHBALL_FILL_THRESHOLD,
   GLUT_MOTHBALL_PRICE_RATIO,
   GLUT_RESTART_PRICE_RATIO,
+  COST_MOTHBALL_LOSS_TURNS,
+  ORDINARY_ENTRY_MIN_SHORTAGE,
   NPP_WAGE_STEP,
   NPP_WAGE_BASELINE,
   NPP_WAGE_SHORTAGE_TARGET,
@@ -299,7 +290,14 @@ export async function processNppCorporationDecisions(
     const price =
       doc.reachablePrices?.[countryId] ?? doc.nationalPrices?.[countryId] ?? doc.globalPrice;
     if (!price || !Number.isFinite(price)) return null;
-    return price / doc.basePrice;
+    const stored = price / doc.basePrice;
+    // Demand audit step 1: lift the build signal by the 1.5x-cap-hidden
+    // demand. `latentAwareNationalRatio` returns the stored ratio unchanged
+    // when nothing was truncated, so this is a no-op below the cap. The
+    // national book supplies the lift basis even when the price leg is the
+    // reachable one (the book has no persisted S/D on the doc); the stored
+    // reachable price itself is preserved via `storedOverride`.
+    return latentAwareNationalRatio(doc, countryId, stored) ?? stored;
   };
 
   // ── Placement signals (supply-dislocation remediation, t202) ──────────────
@@ -310,7 +308,11 @@ export async function processNppCorporationDecisions(
     if (!doc || !doc.basePrice) return null;
     const price = doc.statePrices?.[stateId];
     if (price == null || !Number.isFinite(price)) return null;
-    return price / doc.basePrice;
+    const stored = price / doc.basePrice;
+    // Demand audit step 1, state resolution: same hidden-demand lift against
+    // the state's own book, so within-country placement still routes to the
+    // state that is actually starved.
+    return latentAwareStateRatio(doc, stateId, stored) ?? stored;
   };
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
@@ -799,6 +801,11 @@ export function makeNppCorpDecision(
   const sectorProfits = analyzeSectorProfitability(sectors, plants?.enabled === true);
   const profitableSectors = sectorProfits.filter((sp) => sp.isProfitable).length;
 
+  // Count consecutive loss turns for active NPP sectors. Restart resets the count.
+  if (plants?.enabled === true) {
+    sectorUpdates.push(...lossChronicityUpdates(sectorProfits, now));
+  }
+
   // `totalIncome`/`totalRevenue`/`corpMargin`/`isProfitable` below feed ONLY
   // sections 3-5 (budgets, dividends, expansion) — never sections 1-2, which
   // read sp.income/sp.margin (nominal, per-sector) directly and are unaffected
@@ -1135,7 +1142,9 @@ export function makeNppCorpDecision(
       if (ratio >= GLUT_RESTART_PRICE_RATIO) {
         sectorUpdates.push({
           filter: { _id: sp.sector._id },
-          update: { $set: { mothballed: false, updatedAt: now } },
+          // A revived plant re-earns chronic-cost status from zero instead
+          // of mothballing again on its first losing turn (step 5).
+          update: { $set: { mothballed: false, pnlLossTurns: 0, updatedAt: now } },
         });
         stateChangeBudget -= 1;
       }
@@ -1167,6 +1176,20 @@ export function makeNppCorpDecision(
           filter: { _id: worst.sp.sector._id },
           update: { $set: { mothballed: true, updatedAt: now } },
         });
+      } else {
+        // Filled plants can still lose money. Mothball the longest-running loss;
+        // this reversible action shares the budget and follows fill-based sheds.
+        const coldest = chooseCostMothballSector(
+          sectorProfits,
+          divestedSectorIds,
+          COST_MOTHBALL_LOSS_TURNS
+        );
+        if (coldest) {
+          sectorUpdates.push({
+            filter: { _id: coldest.sector._id },
+            update: { $set: { mothballed: true, updatedAt: now } },
+          });
+        }
       }
     }
   }
@@ -1355,10 +1378,18 @@ export function makeNppCorpDecision(
     ctx.shortageEntryEligible === true &&
     marketEntryEligible &&
     hasLogisticsCapacity;
+  // Demand audit step 5: never found an ordinary plant into a glutted
+  // market — the growth governor is trying to shrink out of ≤0.85, so
+  // building there manufactures the loser the corp would then have to shed.
+  // Peak score (not mean): a mixed plant with one healthy leg still founds.
+  // Score 0 means no leg was priced (early-world thin markets): fail open.
+  const ordinaryEntryTargetGlutted =
+    expansionShortageScore > 0 && expansionShortageScore <= ORDINARY_ENTRY_MIN_SHORTAGE;
   const ordinaryEntry =
     expansion !== null &&
     hasLogisticsCapacity &&
     marketEntryEligible &&
+    !ordinaryEntryTargetGlutted &&
     (plants?.enabled === true || surplusCash > effectiveExpansionMinCash);
   entryDiagnostic = buildNppMarketEntryDiagnostic({
     corporation: corp,

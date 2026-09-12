@@ -651,6 +651,30 @@ export function getPriceSoftKnee(commodity: CommodityType): number {
 export const MARKETING_ADVERTISING_DEMAND_RATE = 0.9;
 
 /**
+ * Sublinear advertising-demand elasticity (demand audit step 7): total funded
+ * marketing budgets convert at `RATE × (total / REFERENCE) ^ (ELASTICITY − 1)`.
+ *
+ * Was linear (exponent 1): every income dollar added 0.9 demand dollars, so
+ * the richer the economy got, the faster ad demand outran supply — and in a
+ * downturn demand fell fastest exactly when media most needed buyers. With
+ * 0.85, demand still grows monotonically in budgets (media is never nerfed),
+ * but slower than income above the reference and relatively cushioned below
+ * it: at 2x reference budgets demand runs ~10% under linear, at 0.5x ~11%
+ * above it. Supply can finally close the gap instead of chasing it.
+ */
+export const MARKETING_ADVERTISING_DEMAND_ELASTICITY = 0.85;
+
+/**
+ * Funded-budget reference (anchor $/day) the sublinear exponent pivots on.
+ * Live prod turn ~803 funds ~196M/day across ~415 corps, so 2e8 keeps the
+ * switchover continuous (day-one factor ≈ 1.003): no shock to media on
+ * deploy, bending only as budgets move away. Worlds at very different
+ * scales still behave sanely — the factor is smooth and monotonic — but the
+ * pivot sits nearest today's economy by construction.
+ */
+export const MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR = 2e8;
+
+/**
  * Fraction of annual national healthcare budget spending (normalized to ₳) that
  * converts to healthcare_services commodity demand per turn. Calibrated so that
  * the US budget (~$935B ≈ ₳873B) produces ~180k demand units/turn, with UK and
@@ -1009,11 +1033,18 @@ export const RETAIL_GDP_MULTIPLIER_MIN = 0.5;
 export const RETAIL_GDP_MULTIPLIER_MAX = 2.0;
 
 /**
- * Fraction of state GDP that converts to building materials demand (construction/infrastructure).
- * At 0.00002, a state with $500B GDP generates 25 tons/day of building materials demand
- * ($500B × 0.00002 / $400 base price = 25 units). Scaled by GDP growth multiplier.
+ * Fraction of state GDP that converts to building materials demand
+ * (construction/infrastructure).
+ *
+ * Was 0 (no economy-wide buyer) while ~6M units of sector-intermediate demand
+ * existed against ~8.2M supply, leaving the good in a structural 1.35x
+ * oversupply with no macro buyer to absorb it (demand audit step 3, live prod
+ * turn 803). Sized to close roughly half that gap: at 2e-4 the turn-803 state
+ * GDP book (~27.1M GDP-units, ×69.8 era scale, ÷ $400 base) yields ~1M
+ * units/day of macro demand, moving D/S from ~0.74 toward ~0.86 without
+ * risking an overshoot into shortage if sector-intermediate legs grow.
  */
-export const BUILDING_MATERIALS_GDP_DEMAND_FRACTION = 0;
+export const BUILDING_MATERIALS_GDP_DEMAND_FRACTION = 2e-4;
 
 /**
  * Real estate services demand as a fraction of state GDP.
@@ -2374,6 +2405,26 @@ export function computeRawSupplyDemand(
         byState.set(stateId, stateMap);
       }
       byState.get(stateId)!.get("construction_services")!.demand += units;
+    }
+  }
+
+  // ── Building Materials: macro demand from GDP (construction/infrastructure) ─
+  // Same shape as the sibling macro legs above. This buyer was disabled before
+  // demand audit step 3; it now supplies the missing economy-wide demand.
+  if (stateGdpMap) {
+    const bmBasePrice = COMMODITY_BASE_PRICES["building_materials"];
+    for (const [stateId, gdp] of stateGdpMap) {
+      if (gdp <= 0) continue;
+      const units = ((gdp * BUILDING_MATERIALS_GDP_DEMAND_FRACTION) / bmBasePrice) * luScale;
+      if (units <= 0) continue;
+      global.get("building_materials")!.demand += units;
+      addUnscaledDemand("building_materials", units / luScale);
+      if (!byState.has(stateId)) {
+        const stateMap = new Map<CommodityType, { supply: number; demand: number }>();
+        for (const c of COMMODITY_TYPES) stateMap.set(c, { supply: 0, demand: 0 });
+        byState.set(stateId, stateMap);
+      }
+      byState.get(stateId)!.get("building_materials")!.demand += units;
     }
   }
 
