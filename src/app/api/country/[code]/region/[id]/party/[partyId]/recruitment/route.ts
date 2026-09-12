@@ -24,6 +24,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
+import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   recruitmentCooldownRemainingTurns,
@@ -108,6 +109,8 @@ export async function GET(
       isAdmin: auth.isAdmin,
       now,
     });
+    const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
+    const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
     // State leadership uses its own per-state cooldown, independent of the
     // national party cooldown. Turn-first remaining (+ Date fallback in helper),
     // projected end instant from real time so the display doesn't drift.
@@ -135,6 +138,7 @@ export async function GET(
       !cooldownRemaining &&
       isStateLeadership &&
       nppControl.ok &&
+      !capacityError &&
       availableSlots > 0 &&
       availableAp >= recruitCost &&
       stateTreasury >= recruitFund;
@@ -143,6 +147,9 @@ export async function GET(
       cooldownUntil,
       cooldownRemaining,
       partyNPPCount,
+      partyNPPMax: partyNppCapacity.maxNpps,
+      activeMemberCount: partyNppCapacity.activeMemberCount,
+      availablePartyNppSlots: Math.max(0, partyNppCapacity.maxNpps - partyNPPCount),
       stateNPPCount,
       stateOrg,
       maxSlots,
@@ -154,7 +161,7 @@ export async function GET(
       nppActionPointCap: nppActionPointCap("state", apTier),
       nppActionPointRegen: nppActionPointRegen("state", apTier),
       canRecruit,
-      blockedReason: nppControl.ok ? null : nppControl.error,
+      blockedReason: nppControl.ok ? capacityError : nppControl.error,
       isStateLeadership,
     });
   } catch (error) {
@@ -247,6 +254,14 @@ export async function POST(
     const stateNPPCount = await db
       .collection<NPP>("npps")
       .countDocuments({ party: partyIdStr, homeState: stateId, retiredAt: null });
+    const partyNPPCount = await db
+      .collection<NPP>("npps")
+      .countDocuments({ party: partyIdStr, retiredAt: null });
+    const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
+    const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
+    if (capacityError) {
+      return NextResponse.json({ error: capacityError }, { status: 400 });
+    }
 
     const maxSlots = calculateRecruitmentSlots(stateOrg);
     if (stateNPPCount >= maxSlots) {
