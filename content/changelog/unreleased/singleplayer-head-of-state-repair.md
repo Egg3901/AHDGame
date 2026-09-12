@@ -15,3 +15,5 @@ areas: [backend, engine]
   executive office with `governmentFormations`, including one-party states.
   Executive and legislature views therefore agree after an update without
   requiring a new world.
+
+- Stop labeling unexplained idle extraction capacity as a measured deposit shortage. The resource panel continues to show each resource limit.
