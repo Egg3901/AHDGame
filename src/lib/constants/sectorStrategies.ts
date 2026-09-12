@@ -893,6 +893,28 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       },
     },
     {
+      id: "wireline",
+      name: "Wireline Network",
+      description:
+        "Copper-wire telephony and exchanges. Lower scarce-component intensity: less electronics, rare earth and construction per unit of network output, substituting toward abundant building materials and steel. Smaller output than Standard, but cheaper to run when components are dear. Available in every era.",
+      // Demand audit step 5: the optional cheaper telecom recipe. Cuts the
+      // dearest inputs hardest (rare_earth 0.09→0.04, electronics 0.18→0.10,
+      // construction_services 0.08→0.04, energy 0.10→0.08) while holding
+      // output composition, so margin survives component shortages that sink
+      // Standard. Opt-in only: foundings still land on Standard, and NPP
+      // retool adopts it solely on price advantage like any other recipe.
+      supply: { software: 0.1, network_services: 0.35 },
+      demand: {
+        electronics: 0.1,
+        energy: 0.08,
+        building_materials: 0.07,
+        construction_services: 0.04,
+        steel: 0.05,
+        real_estate_services: 0.03,
+        rare_earth: 0.04,
+      },
+    },
+    {
       id: "infrastructure",
       name: "5G/Infrastructure",
       description:
