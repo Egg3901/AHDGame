@@ -142,6 +142,13 @@ import type { Db } from "mongodb";
 import { depletedCapacityDoc, buildDepletionInc } from "@/lib/extraction/depletion";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/latentShortage";
+import {
+  relativeLaggedPriceRatio,
+  resolveCommodityNominalIndices,
+} from "@/lib/market/commodityNominalIndex";
+import { persistCommodityNominalIndex } from "@/lib/turn/commodityNominalIndexPersistence";
+import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
+export { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
 
 /**
  * P3b — book this turn's extraction against each state's deposits (plants only).
@@ -170,30 +177,6 @@ import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/late
  * cross-country state-id collision to one doc, and the write must land on the
  * same one it rationed with.
  */
-/**
- * Realized ÷ nameplate output for one sector, clamped to [0, 1] at BOTH ends.
- *
- * The lower clamp guards a negative produced figure. The upper clamp guards a
- * `revenue` that is stale-LOW relative to the capacity that produced the units:
- * the concrete case is a NatCorp sector minted by `nationalizeSectorWide`, which
- * writes a 15%-haircut revenue alongside FULL capacity, so until its first
- * `sectorTurn` restates `revenue` the raw ratio reads ~1.18. This fraction scales
- * extraction DEPLETION, so an unclamped value quietly mines more out of the
- * ground than the sector can physically have produced. A sector can never
- * realize more than its own nameplate, so 1 is the correct ceiling.
- *
- * Returns null when there is no meaningful measurement (non-positive nameplate),
- * which callers treat as "leave the booking at the nameplate derivation".
- */
-export function realizedOutputFraction(
-  producedUnits: number,
-  nameplateUnits: number
-): number | null {
-  if (!Number.isFinite(nameplateUnits) || nameplateUnits <= 0) return null;
-  if (!Number.isFinite(producedUnits)) return null;
-  return Math.min(1, Math.max(0, producedUnits / nameplateUnits));
-}
-
 async function bookExtractionDepletion(
   db: Db,
   inputs: ReadonlyArray<ExtractionSectorInput>,
@@ -368,7 +351,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // feature has been inert ever since. It also hid the `health` spelling
       // that UK/CN/IE use. Projecting the map means adding a leg to
       // GOVT_SPEND_DEMAND cannot silently read zero again.
-      .find({}, { projection: { countryId: 1, "spending.byCategory": 1 } })
+      .find({}, { projection: { countryId: 1, "spending.byCategory": 1, economicFactors: 1 } })
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -461,9 +444,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         commandEconomyEnabled: 1,
         retailDemandTransitionStartTurn: 1,
         retailDemandTransitionTurns: 1,
+        commodityNominalPriceIndex: 1,
+        commodityNominalPriceIndexTurn: 1,
       },
     }
   );
+  const nominalIndices = resolveCommodityNominalIndices({
+    index: ledgerConfig?.commodityNominalPriceIndex,
+    lastTurn: ledgerConfig?.commodityNominalPriceIndexTurn,
+    currentTurn: turn,
+    countryInflationRates: federalBudgets.map(
+      (budget) => budget.economicFactors?.inflationRate ?? Number.NaN
+    ),
+  });
+  const commodityNominalPriceIndex = nominalIndices.current;
   const ledgerCommandEconomyEnabled = ledgerConfig?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
@@ -1529,9 +1523,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   for (const commodity of COMMODITY_TYPES) {
     const base = LEDGER_BASE_PRICES[commodity];
     const prior = existingPriceMap.get(commodity)?.globalPrice;
-    if (typeof prior === "number" && prior > 0 && base > 0) {
-      laggedRatios.set(commodity, prior / base);
-    }
+    const ratio = relativeLaggedPriceRatio(prior, base, nominalIndices.lagged);
+    if (ratio != null) laggedRatios.set(commodity, ratio);
   }
 
   for (const commodity of COMMODITY_TYPES) {
@@ -1575,14 +1568,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // src/lib/market/costPassThrough.ts for the full rationale (the 62%-of-
     // farms-negative incident).
     const costMult = costPassThroughMultiplier(commodity, laggedRatios);
-    const effBasePrice = Math.round(basePrice * scarcityMult * costMult * 100) / 100;
+    const nominalBasePrice = basePrice * commodityNominalPriceIndex;
+    const effBasePrice = Math.round(nominalBasePrice * scarcityMult * costMult * 100) / 100;
     // Country-scoped effective base: the country's own reachable-scarcity
     // multiplier when it has one, the world base otherwise. Every
     // country-scoped leg (national, wide, regional, administered) reads this
     // so a country's price level carries ITS market's scarcity memory.
     const effBaseFor = (countryId: string | undefined): number => {
       const m = countryId != null ? scarcityMultByCountry[countryId] : undefined;
-      return m != null ? Math.round(basePrice * m * costMult * 100) / 100 : effBasePrice;
+      return m != null ? Math.round(nominalBasePrice * m * costMult * 100) / 100 : effBasePrice;
     };
     const priceKnee = getPriceSoftKnee(commodity);
 
@@ -1835,6 +1829,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   if (ops.length > 0) {
     await db.collection("commodityPrices").bulkWrite(ops);
   }
+  await persistCommodityNominalIndex(db, commodityNominalPriceIndex, turn);
 
   // Store price history snapshots for charting — uses the actual applied price
   // (including drift, pegs, and nudges) so charts match what players see.
@@ -1845,7 +1840,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       turn,
       globalPrice:
         appliedGlobalPrices.get(commodity) ??
-        computeMarketPrice(LEDGER_BASE_PRICES[commodity], globalBal.supply, globalBal.demand),
+        computeMarketPrice(
+          LEDGER_BASE_PRICES[commodity] * commodityNominalPriceIndex,
+          globalBal.supply,
+          globalBal.demand
+        ),
       globalSupply: Math.round(globalBal.supply * 100) / 100,
       globalDemand: Math.round(globalBal.demand * 100) / 100,
       ...latentShortageFields(globalBal, demandTruncated.get(commodity)),
