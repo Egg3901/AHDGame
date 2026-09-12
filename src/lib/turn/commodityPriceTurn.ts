@@ -37,6 +37,7 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
+import { computeGlobalCommodityPrice } from "@/lib/market/globalCommodityPrice";
 import { distributeDemandToStates } from "@/lib/market/distributeDemandToStates";
 import { GOVERNMENT_COMMODITY_DEMAND } from "@/lib/market/governmentCommodityDemand";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
@@ -1569,7 +1570,6 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // farms-negative incident).
     const costMult = costPassThroughMultiplier(commodity, laggedRatios);
     const nominalBasePrice = basePrice * commodityNominalPriceIndex;
-    const effBasePrice = Math.round(nominalBasePrice * scarcityMult * costMult * 100) / 100;
     // Country-scoped effective base: the country's own reachable-scarcity
     // multiplier when it has one, the world base otherwise. Every
     // country-scoped leg (national, wide, regional, administered) reads this
@@ -1580,26 +1580,23 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     };
     const priceKnee = getPriceSoftKnee(commodity);
 
-    // ── Global price with drift + peg/nudge precedence ──
-    let globalMktPrice: number;
-    if (existing?.hardPeg != null) {
-      globalMktPrice = existing.hardPeg;
-    } else if (nudgeMap.has(commodity)) {
-      globalMktPrice = nudgeMap.get(commodity)!;
-    } else {
-      const targetPrice = computeMarketPrice(
-        effBasePrice,
-        globalBal.supply,
-        globalBal.demand,
-        priceKnee
-      );
-      const previousPrice = existing?.globalPrice ?? targetPrice;
-      globalMktPrice =
-        Math.round(
-          (previousPrice + COMMODITY_PRICE_DRIFT_RATE * (targetPrice - previousPrice)) * 100
-        ) / 100;
-    }
-
+    // Global price with drift and peg/nudge precedence, plus an exact
+    // explanation of every formula stage.
+    const globalResult = computeGlobalCommodityPrice({
+      realBasePrice: basePrice,
+      nominalIndex: commodityNominalPriceIndex,
+      scarcityMultiplier: scarcityMult,
+      costPassThroughMultiplier: costMult,
+      supply: globalBal.supply,
+      demand: globalBal.demand,
+      priceKnee,
+      previousPrice: existing?.globalPrice,
+      hardPeg: existing?.hardPeg,
+      nudge: nudgeMap.get(commodity),
+    });
+    const globalMktPrice = globalResult.appliedPrice;
+    const effBasePrice = globalResult.effectiveBasePrice;
+    const priceAttribution = globalResult.attribution;
     appliedGlobalPrices.set(commodity, globalMktPrice);
 
     // ── National prices per country ───────────────────────────────────────
@@ -1817,6 +1814,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             scarcityMult,
             scarcityMultByCountry,
             reachablePrices,
+            priceAttribution,
             updatedAt: now,
           },
           ...(Object.keys(latentShortage.unset).length > 0 ? { $unset: latentShortage.unset } : {}),
