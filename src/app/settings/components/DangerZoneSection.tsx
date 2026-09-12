@@ -9,12 +9,44 @@ interface Props {
   onAccountDeleted: () => void;
 }
 
+interface ResignablePosition {
+  id: string;
+  label: string;
+  category: string;
+}
+
 export function DangerZoneSection({ onAccountDeleted }: Props) {
   const t = useTranslations("settings");
   // ── Resign All ──────────────────────────────────────────────────────────────
   const [showResignConfirm, setShowResignConfirm] = useState(false);
   const [resigning, setResigning] = useState(false);
   const [resignResult, setResignResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [positions, setPositions] = useState<ResignablePosition[]>([]);
+  const [positionsLoading, setPositionsLoading] = useState(true);
+  const [showSpecificPositions, setShowSpecificPositions] = useState(false);
+  const [selectedPositionId, setSelectedPositionId] = useState("");
+  const [showSpecificConfirm, setShowSpecificConfirm] = useState(false);
+  const [resigningSpecific, setResigningSpecific] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPositions = async () => {
+      try {
+        const res = await fetch("/api/settings/resignable-positions");
+        if (!res.ok) return;
+        const data = (await res.json()) as { positions?: ResignablePosition[] };
+        if (!cancelled) setPositions(data.positions ?? []);
+      } catch {
+        // The all-positions action remains available if this inventory read fails.
+      } finally {
+        if (!cancelled) setPositionsLoading(false);
+      }
+    };
+    void loadPositions();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleResignAll = async () => {
     setResigning(true);
@@ -25,6 +57,9 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
       if (res.ok) {
         setResignResult({ ok: true, text: data.message });
         setShowResignConfirm(false);
+        setPositions([]);
+        setSelectedPositionId("");
+        setShowSpecificConfirm(false);
       } else {
         setResignResult({ ok: false, text: data.error || t("danger.resignFailed") });
       }
@@ -32,6 +67,36 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
       setResignResult({ ok: false, text: t("common.networkErrorRetry") });
     } finally {
       setResigning(false);
+    }
+  };
+
+  const selectedPosition = positions.find((position) => position.id === selectedPositionId);
+
+  const handleResignSpecific = async () => {
+    if (!selectedPosition) return;
+    setResigningSpecific(true);
+    setResignResult(null);
+    try {
+      const res = await fetch("/api/settings/resign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ positionId: selectedPosition.id }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResignResult({ ok: true, text: data.message });
+        setPositions((current) =>
+          current.filter((position) => position.id !== selectedPosition.id)
+        );
+        setSelectedPositionId("");
+        setShowSpecificConfirm(false);
+      } else {
+        setResignResult({ ok: false, text: data.error || t("danger.resignFailed") });
+      }
+    } catch {
+      setResignResult({ ok: false, text: t("common.networkErrorRetry") });
+    } finally {
+      setResigningSpecific(false);
     }
   };
 
@@ -79,7 +144,7 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
 
   return (
     <>
-      {/* ── Resign All Positions ─────────────────────────────────────────────── */}
+      {/* ── Resign Positions ─────────────────────────────────────────────────── */}
       <div className="mb-8">
         <h4 className="text-sm font-semibold text-foreground mb-1">{t("danger.resignTitle")}</h4>
         <p className="text-sm text-muted mb-4">{t("danger.resignDesc")}</p>
@@ -92,14 +157,26 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
             />
           </div>
         )}
-        {!showResignConfirm ? (
-          <button
-            onClick={() => setShowResignConfirm(true)}
-            className="rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5 text-sm font-medium text-warning transition-colors hover:bg-warning/20"
-          >
-            {t("danger.resignTitle")}
-          </button>
-        ) : (
+        <div className="flex flex-wrap gap-3">
+          {!showResignConfirm && (
+            <button
+              onClick={() => setShowResignConfirm(true)}
+              className="rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5 text-sm font-medium text-warning transition-colors hover:bg-warning/20"
+            >
+              {t("danger.resignTitle")}
+            </button>
+          )}
+          {!showSpecificPositions && (
+            <button
+              onClick={() => setShowSpecificPositions(true)}
+              className="rounded-xl border border-card-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-card-elevated"
+            >
+              {t("danger.resignSpecificTitle")}
+            </button>
+          )}
+        </div>
+
+        {showResignConfirm && (
           <div className="rounded-xl border border-warning/40 bg-warning/5 p-4">
             <p className="text-sm text-foreground mb-3">
               {t.rich("danger.resignPrompt", {
@@ -123,6 +200,90 @@ export function DangerZoneSection({ onAccountDeleted }: Props) {
                 {t("common.cancel")}
               </button>
             </div>
+          </div>
+        )}
+
+        {showSpecificPositions && (
+          <div className="mt-4 rounded-xl border border-card-border bg-background/40 p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-sm font-medium text-foreground">
+                {t("danger.resignSpecificTitle")}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSpecificPositions(false);
+                  setShowSpecificConfirm(false);
+                }}
+                className="text-xs text-muted transition-colors hover:text-foreground"
+              >
+                {t("common.cancel")}
+              </button>
+            </div>
+            {positionsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted">
+                <SpinnerIcon />
+                {t("danger.loadingPositions")}
+              </div>
+            ) : positions.length === 0 ? (
+              <p className="text-sm text-muted">{t("danger.noPositions")}</p>
+            ) : (
+              <>
+                <select
+                  value={selectedPositionId}
+                  onChange={(event) => {
+                    setSelectedPositionId(event.target.value);
+                    setShowSpecificConfirm(false);
+                  }}
+                  className="w-full rounded-xl border border-card-border bg-background px-4 py-2.5 text-sm text-foreground focus:border-warning focus:outline-none focus:ring-1 focus:ring-warning/30"
+                  aria-label={t("danger.resignSpecificTitle")}
+                >
+                  <option value="">{t("danger.selectPosition")}</option>
+                  {positions.map((position) => (
+                    <option key={position.id} value={position.id}>
+                      {position.label}
+                    </option>
+                  ))}
+                </select>
+                {selectedPosition && !showSpecificConfirm && (
+                  <button
+                    type="button"
+                    onClick={() => setShowSpecificConfirm(true)}
+                    className="mt-3 rounded-xl border border-warning/50 bg-warning/10 px-4 py-2.5 text-sm font-medium text-warning transition-colors hover:bg-warning/20"
+                  >
+                    {t("danger.resignSelected")}
+                  </button>
+                )}
+                {selectedPosition && showSpecificConfirm && (
+                  <div className="mt-3 rounded-xl border border-warning/40 bg-warning/5 p-3">
+                    <p className="text-sm text-foreground mb-3">
+                      {t("danger.resignSpecificPrompt", { position: selectedPosition.label })}
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={handleResignSpecific}
+                        disabled={resigningSpecific}
+                        className="rounded-xl bg-warning px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-warning/90 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-2"
+                      >
+                        {resigningSpecific && <SpinnerIcon />}
+                        {resigningSpecific
+                          ? t("danger.resigning")
+                          : t("danger.confirmResignSpecific")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowSpecificConfirm(false)}
+                        disabled={resigningSpecific}
+                        className="rounded-xl border border-card-border px-4 py-2.5 text-sm text-muted transition-colors hover:text-foreground disabled:opacity-50"
+                      >
+                        {t("common.cancel")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
       </div>
