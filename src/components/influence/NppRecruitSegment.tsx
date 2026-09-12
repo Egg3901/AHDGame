@@ -58,7 +58,7 @@ export function NppRecruitSegment({
   const q = quality(st.stateOrg);
   const avail = st.availableSlots;
   const affordable = actionPoints >= st.actionCost && treasury >= recruitFund;
-  const disabled = busy || avail <= 0 || !affordable;
+  const disabled = busy || !st.canRecruit || avail <= 0 || !affordable;
 
   const handle = async () => {
     setBusy(true);
@@ -136,11 +136,13 @@ export function NppRecruitSegment({
         >
           {avail <= 0
             ? `No slots available in ${st.stateName}`
-            : !affordable
-              ? "Insufficient Action Points or funds"
-              : busy
-                ? "Recruiting…"
-                : `Recruit NPP in ${st.stateName}`}
+            : !st.canRecruit
+              ? "Party NPP capacity reached"
+              : !affordable
+                ? "Insufficient Action Points or funds"
+                : busy
+                  ? "Recruiting…"
+                  : `Recruit NPP in ${st.stateName}`}
         </button>
       </div>
 
