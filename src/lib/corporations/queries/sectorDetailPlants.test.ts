@@ -120,6 +120,19 @@ describe("buildSectorPlantsSection", () => {
     expect(s.idleCauses.map((c) => c.cause)).toContain("strike");
   });
 
+  it("names demand-throttled capacity instead of hiding it in other", () => {
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: {
+        ...sectorFixture({ capitalStock: 1_000, producedUnits: 100, soldUnits: 80 }),
+        demandThrottleFactor: 0.1,
+      } as CorporateSector,
+    });
+
+    expect(s.idleCauses).toEqual([{ cause: "demand", units: 900 }]);
+  });
+
   it("reports a mothballed sector's whole capacity as idle under one cause", () => {
     const s = buildSectorPlantsSection({
       eraUnitScale: 1,

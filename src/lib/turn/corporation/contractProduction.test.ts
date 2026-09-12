@@ -48,5 +48,6 @@ describe("computeContractProduction", () => {
 
     expect(result.producedUnits).toBeCloseTo(23, 8);
     expect(result.contractAchievableUnits).toBeCloseTo(23, 8);
+    expect(result.demandThrottleFactor).toBeCloseTo(0.23, 8);
   });
 });
