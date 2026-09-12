@@ -142,6 +142,10 @@ import type { Db } from "mongodb";
 import { depletedCapacityDoc, buildDepletionInc } from "@/lib/extraction/depletion";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/latentShortage";
+import {
+  advanceCommodityNominalIndex,
+  medianGlobalInflation,
+} from "@/lib/market/commodityNominalIndex";
 
 /**
  * P3b — book this turn's extraction against each state's deposits (plants only).
@@ -368,7 +372,16 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // feature has been inert ever since. It also hid the `health` spelling
       // that UK/CN/IE use. Projecting the map means adding a leg to
       // GOVT_SPEND_DEMAND cannot silently read zero again.
-      .find({}, { projection: { countryId: 1, "spending.byCategory": 1 } })
+      .find(
+        {},
+        {
+          projection: {
+            countryId: 1,
+            "spending.byCategory": 1,
+            "economicFactors.inflationRate": 1,
+          },
+        }
+      )
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -461,9 +474,26 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         commandEconomyEnabled: 1,
         retailDemandTransitionStartTurn: 1,
         retailDemandTransitionTurns: 1,
+        commodityNominalPriceIndex: 1,
+        commodityNominalPriceIndexTurn: 1,
       },
     }
   );
+  const globalInflationPct = medianGlobalInflation(
+    federalBudgets.map((budget) => budget.economicFactors?.inflationRate ?? Number.NaN)
+  );
+  const laggedCommodityNominalPriceIndex =
+    typeof ledgerConfig?.commodityNominalPriceIndex === "number" &&
+    Number.isFinite(ledgerConfig.commodityNominalPriceIndex) &&
+    ledgerConfig.commodityNominalPriceIndex > 0
+      ? ledgerConfig.commodityNominalPriceIndex
+      : 1;
+  const commodityNominalPriceIndex = advanceCommodityNominalIndex({
+    index: ledgerConfig?.commodityNominalPriceIndex,
+    lastTurn: ledgerConfig?.commodityNominalPriceIndexTurn,
+    currentTurn: turn,
+    annualInflationPct: globalInflationPct,
+  });
   const ledgerCommandEconomyEnabled = ledgerConfig?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
@@ -1530,7 +1560,9 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     const base = LEDGER_BASE_PRICES[commodity];
     const prior = existingPriceMap.get(commodity)?.globalPrice;
     if (typeof prior === "number" && prior > 0 && base > 0) {
-      laggedRatios.set(commodity, prior / base);
+      // Strip the common nominal price level. Cost pass-through should transmit
+      // relative input scarcity, not recursively amplify economy-wide inflation.
+      laggedRatios.set(commodity, prior / base / laggedCommodityNominalPriceIndex);
     }
   }
 
@@ -1575,14 +1607,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // src/lib/market/costPassThrough.ts for the full rationale (the 62%-of-
     // farms-negative incident).
     const costMult = costPassThroughMultiplier(commodity, laggedRatios);
-    const effBasePrice = Math.round(basePrice * scarcityMult * costMult * 100) / 100;
+    const nominalBasePrice = basePrice * commodityNominalPriceIndex;
+    const effBasePrice = Math.round(nominalBasePrice * scarcityMult * costMult * 100) / 100;
     // Country-scoped effective base: the country's own reachable-scarcity
     // multiplier when it has one, the world base otherwise. Every
     // country-scoped leg (national, wide, regional, administered) reads this
     // so a country's price level carries ITS market's scarcity memory.
     const effBaseFor = (countryId: string | undefined): number => {
       const m = countryId != null ? scarcityMultByCountry[countryId] : undefined;
-      return m != null ? Math.round(basePrice * m * costMult * 100) / 100 : effBasePrice;
+      return m != null ? Math.round(nominalBasePrice * m * costMult * 100) / 100 : effBasePrice;
     };
     const priceKnee = getPriceSoftKnee(commodity);
 
@@ -1835,6 +1868,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   if (ops.length > 0) {
     await db.collection("commodityPrices").bulkWrite(ops);
   }
+  await db.collection<GameConfig>("gameConfig").updateOne(
+    { _id: "default" },
+    {
+      $set: {
+        commodityNominalPriceIndex,
+        commodityNominalPriceIndexTurn: turn,
+      },
+    }
+  );
 
   // Store price history snapshots for charting — uses the actual applied price
   // (including drift, pegs, and nudges) so charts match what players see.
@@ -1845,7 +1887,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       turn,
       globalPrice:
         appliedGlobalPrices.get(commodity) ??
-        computeMarketPrice(LEDGER_BASE_PRICES[commodity], globalBal.supply, globalBal.demand),
+        computeMarketPrice(
+          LEDGER_BASE_PRICES[commodity] * commodityNominalPriceIndex,
+          globalBal.supply,
+          globalBal.demand
+        ),
       globalSupply: Math.round(globalBal.supply * 100) / 100,
       globalDemand: Math.round(globalBal.demand * 100) / 100,
       ...latentShortageFields(globalBal, demandTruncated.get(commodity)),

@@ -135,8 +135,9 @@ describe("commodityPriceTurn", () => {
 
       const result = await processCommodityPriceTurn(412);
 
-      expect(mockTradeUpdateOne).toHaveBeenCalledTimes(1);
-      const [filter, update, options] = mockTradeUpdateOne.mock.calls[0];
+      const tradeCall = mockTradeUpdateOne.mock.calls.find(([filter]) => filter.turn === 412);
+      expect(tradeCall).toBeDefined();
+      const [filter, update, options] = tradeCall!;
       expect(filter).toEqual({ turn: 412 });
       expect(options).toEqual({ upsert: true });
       expect(update.$set.turn).toBe(412);

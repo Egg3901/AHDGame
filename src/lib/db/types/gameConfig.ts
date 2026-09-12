@@ -2,6 +2,10 @@ import type { EconomicInterventionPlan } from "@/lib/economy/interventionGoverna
 
 export interface GameConfig {
   _id: string;
+  /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
+  commodityNominalPriceIndex?: number;
+  /** Last commodity turn included in commodityNominalPriceIndex. */
+  commodityNominalPriceIndexTurn?: number;
   /**
    * Outcome of the most recent reset. Makes a SEALED world interpretable: an
    * admin who did not watch the SSE stream can tell "fresh world awaiting your
