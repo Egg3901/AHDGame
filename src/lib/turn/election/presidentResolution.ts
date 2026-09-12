@@ -61,6 +61,25 @@ function recoverUnitVotesFromSnapshots(
   return anyData ? recovered : null;
 }
 
+function filterUnitVotesToCandidates(
+  totalVotesByUnit: Record<string, Record<string, number>>,
+  activeCandidateIds: Set<string>
+): Record<string, Record<string, number>> {
+  if (activeCandidateIds.size === 0) return totalVotesByUnit;
+
+  const filtered: Record<string, Record<string, number>> = {};
+  for (const [unitId, votesByCandidate] of Object.entries(totalVotesByUnit)) {
+    const unitVotes: Record<string, number> = {};
+    for (const [candidateId, votes] of Object.entries(votesByCandidate ?? {})) {
+      if (activeCandidateIds.has(candidateId) && votes > 0) {
+        unitVotes[candidateId] = votes;
+      }
+    }
+    filtered[unitId] = unitVotes;
+  }
+  return filtered;
+}
+
 function computeTiedEv(ranked: [string, number][]): number {
   if (ranked.length < 2) return 0;
   const topEv = ranked[0][1];
@@ -264,13 +283,13 @@ export async function resolvePresidentElection(
     ContingentElectionResult | undefined;
 
   if (!seatingRetryOnly) {
+    const activeCandidateIds = new Set(Object.keys(tally.candidateNames ?? {}));
     let totalVotesByUnit = tally.totalVotesByUnit;
     const totalVotesByUnitIsEmpty =
       !totalVotesByUnit ||
       Object.keys(totalVotesByUnit).length === 0 ||
       Object.values(totalVotesByUnit).every((uv) => !uv || Object.values(uv).every((v) => !v));
     if (totalVotesByUnitIsEmpty) {
-      const activeCandidateIds = new Set(Object.keys(tally.candidateNames ?? {}));
       const recovered = recoverUnitVotesFromSnapshots(tally.unitTurnSnapshots, activeCandidateIds);
       if (recovered) {
         console.warn(
@@ -278,6 +297,10 @@ export async function resolvePresidentElection(
         );
         totalVotesByUnit = recovered;
       }
+    }
+
+    if (totalVotesByUnit) {
+      totalVotesByUnit = filterUnitVotesToCandidates(totalVotesByUnit, activeCandidateIds);
     }
 
     if (!totalVotesByUnit || Object.keys(totalVotesByUnit).length === 0) {
