@@ -30,6 +30,19 @@ function partyColor(partyId: string, storedColor?: string): string {
   return DEFAULT_COLORS[partyId] ?? storedColor ?? "#8B5CF6";
 }
 
+function tiedPartyNames(
+  sorted: [string, number][],
+  topSeats: number,
+  partyNameMap: Map<string, string>
+): string {
+  const names = sorted
+    .filter(([, seats]) => seats === topSeats)
+    .map(([partyId]) => partyNameMap.get(partyId) ?? partyId)
+    .sort();
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")}, and ${names.at(-1)}`;
+}
+
 export async function computeHouseMap(
   db: Db,
   countryId: CountryId
@@ -55,7 +68,7 @@ export async function computeHouseMap(
   return buildHouseOrCommons(reps, partyColorMap, partyNameMap);
 }
 
-function buildHouseOrCommons(
+export function buildHouseOrCommons(
   reps: ElectedOfficial[],
   partyColorMap: Map<string, string>,
   partyNameMap: Map<string, string>
@@ -81,15 +94,18 @@ function buildHouseOrCommons(
     const sorted = [...seatsByParty.entries()].sort((a, b) => b[1] - a[1]);
     const [topParty, topSeats] = sorted[0];
     const runnerUp = sorted[1]?.[1] ?? 0;
+    const tied = runnerUp === topSeats;
     const name = partyNameMap.get(topParty) ?? topParty;
     result[stateId] = {
-      leadingParty: topParty,
-      leadColor: partyColorMap.get(topParty) ?? partyColor(topParty),
+      leadingParty: tied ? "" : topParty,
+      leadColor: tied ? VACANT_COLOR : (partyColorMap.get(topParty) ?? partyColor(topParty)),
       seats: topSeats,
       total,
       tooltip: [
-        `${name}: ${topSeats} / ${total} seats`,
-        ...(runnerUp > 0 ? [`Lead: +${topSeats - runnerUp}`] : []),
+        tied
+          ? `Tied delegation: ${tiedPartyNames(sorted, topSeats, partyNameMap)} at ${topSeats} seats`
+          : `${name}: ${topSeats} / ${total} seats`,
+        ...(!tied && runnerUp > 0 ? [`Lead: +${topSeats - runnerUp}`] : []),
         ...sorted.map(([pId, s]) => `${partyNameMap.get(pId) ?? pId}: ${s}`),
       ],
     };
@@ -136,16 +152,19 @@ function buildCommonsUK(
     const sorted = [...seatsByParty.entries()].sort((a, b) => b[1] - a[1]);
     const [topParty, topSeats] = sorted[0];
     const runnerUp = sorted[1]?.[1] ?? 0;
+    const tied = runnerUp === topSeats;
     const name = partyNameMap.get(topParty) ?? topParty;
     result[region.id] = {
-      leadingParty: topParty,
-      leadColor: partyColorMap.get(topParty) ?? partyColor(topParty),
+      leadingParty: tied ? "" : topParty,
+      leadColor: tied ? VACANT_COLOR : (partyColorMap.get(topParty) ?? partyColor(topParty)),
       seats: topSeats,
       total,
       tooltip: [
         regionName,
-        `${name}: ${topSeats} / ${total} MPs`,
-        ...(runnerUp > 0 ? [`Lead: +${topSeats - runnerUp}`] : []),
+        tied
+          ? `Tied delegation: ${tiedPartyNames(sorted, topSeats, partyNameMap)} at ${topSeats} MPs`
+          : `${name}: ${topSeats} / ${total} MPs`,
+        ...(!tied && runnerUp > 0 ? [`Lead: +${topSeats - runnerUp}`] : []),
         ...sorted.map(([pId, s]) => `${partyNameMap.get(pId) ?? pId}: ${s}`),
       ],
     };

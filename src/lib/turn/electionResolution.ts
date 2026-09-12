@@ -12,6 +12,7 @@ import { resolveOneGeneralElection } from "@/lib/turn/election/generalResolution
 import { logger } from "../observability/logger";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
+import { resolvePresidentialWinnerCandidateId } from "@/lib/elections/presidentialResolutionDisplay";
 
 export { HOUSE_SEATS, UK_COMMONS_SEATS };
 export { spawnHouseElection, spawnCommonsElection };
@@ -63,6 +64,7 @@ export async function resolveGeneralElections(
 
   let resolved = 0;
   const allNewsOutcomes: ElectionNewsOutcome[] = [];
+  const resolvedElections: Election[] = [];
   // Forensics/alt-detection audit spine (plan §3.1, T2.7): one entry per
   // resolved election, flushed with ONE `recordAuditBulk` call after all
   // groups finish (never a per-election DB round trip — resolveGeneralElections
@@ -116,28 +118,77 @@ export async function resolveGeneralElections(
         if (!result) continue;
         if (result.resolved) {
           resolved++;
-          actionAuditEntries.push({
-            source: "turn",
-            category: "election",
-            action: "election.resolve",
-            phase: "electionResolution",
-            subject: {
-              type: "election",
-              id: election._id.toString(),
-              name: `${election.electionType}/${election.state}`,
-            },
-            outcome: "ok",
-            turn: currentTurn,
-            meta: {
-              electionType: election.electionType,
-              state: election.state,
-              countryId: election.countryId,
-            },
-          });
+          resolvedElections.push(election);
         }
         allNewsOutcomes.push(...result.newsOutcomes);
       }
     }
+  }
+
+  const resolvedPresidentIds = resolvedElections
+    .filter((election) => election.electionType === "president")
+    .map((election) => election._id);
+  const finalPresidentTallies =
+    resolvedPresidentIds.length > 0
+      ? await db
+          .collection<ElectionVoteTally>("electionVoteTallies")
+          .find(
+            { electionId: { $in: resolvedPresidentIds } },
+            {
+              projection: {
+                electionId: 1,
+                finalized: 1,
+                candidateNames: 1,
+                electoralVotesByCandidate: 1,
+                resolutionMode: 1,
+                contingentResult: 1,
+              },
+            }
+          )
+          .toArray()
+      : [];
+  const finalPresidentTallyMap = new Map(
+    finalPresidentTallies.map((tally) => [tally.electionId.toString(), tally])
+  );
+
+  for (const election of resolvedElections) {
+    const finalTally = finalPresidentTallyMap.get(election._id.toString());
+    const winnerId = finalTally?.electoralVotesByCandidate
+      ? resolvePresidentialWinnerCandidateId(
+          finalTally.electoralVotesByCandidate,
+          finalTally.resolutionMode ?? "majority",
+          finalTally.contingentResult
+        )
+      : null;
+    actionAuditEntries.push({
+      source: "turn",
+      category: "election",
+      action: "election.resolve",
+      phase: "electionResolution",
+      subject: {
+        type: "election",
+        id: election._id.toString(),
+        name: `${election.electionType}/${election.state}`,
+      },
+      refs: { electionId: election._id },
+      outcome: "ok",
+      turn: currentTurn,
+      meta: {
+        electionType: election.electionType,
+        state: election.state,
+        countryId: election.countryId,
+        ...(finalTally?.electoralVotesByCandidate && {
+          winnerId,
+          winnerName: winnerId ? finalTally.candidateNames?.[winnerId] : undefined,
+          winnerElectoralVotes: winnerId
+            ? (finalTally.electoralVotesByCandidate[winnerId] ?? 0)
+            : undefined,
+          resolutionMode: finalTally.resolutionMode ?? "majority",
+          electoralVotesByCandidate: finalTally.electoralVotesByCandidate,
+          contingentResult: finalTally.contingentResult,
+        }),
+      },
+    });
   }
 
   if (actionAuditEntries.length > 0) {
