@@ -73,8 +73,8 @@ export function DefenseFundingNote({ sym, funding }: DefenseFundingNoteProps) {
           </div>
           <p className="mt-1 text-[11px] leading-snug text-muted">
             {overdrawn
-              ? "Overdrawn: past shortfalls already borrowed against the treasury."
-              : "The pot still covers the force; no overdraft drawn."}
+              ? "Overdrawn: running total of past shortfalls already borrowed against the treasury. It grows each turn upkeep beats the line; appropriate more or field less, and covered turns pay it back down."
+              : "The pot still covers the force; no overdraft drawn. This running total falls whenever upkeep beats the line."}
           </p>
         </div>
       </div>
