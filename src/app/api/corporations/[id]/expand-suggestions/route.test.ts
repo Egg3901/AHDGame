@@ -90,7 +90,7 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
     expect(db.collectionMocks.unownedSectors.find).not.toHaveBeenCalled();
   });
 
-  it("quotes local freight room without state-scoping consulting from the same sector", async () => {
+  it("keeps scope per leg while averaging: NJ logistics quotes on consulting strength despite its freight glut", async () => {
     db.collectionMocks.gameConfig.findOne.mockResolvedValue({
       _id: "default",
       marketSystemMode: "plants",
@@ -175,7 +175,15 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
 
     expect(response.status).toBe(200);
     expect(byState.get("AZ")?.headroomUnits).toBeGreaterThan(0);
-    expect(byState.get("NJ")?.headroomUnits).toBe(0);
+    // Demand audit step 4: the mean over legs replaces the min veto, so NJ's
+    // nationally-short consulting leg lifts its quote above zero even though
+    // its state-local freight leg is glutted. Scope is still per leg — NJ
+    // uses NJ freight (0) and US consulting (900), never AZ's freight — so
+    // the local glut still drags NJ to no more than AZ.
+    expect(byState.get("NJ")?.headroomUnits).toBeGreaterThan(0);
+    expect(byState.get("NJ")?.headroomUnits).toBeLessThanOrEqual(
+      byState.get("AZ")?.headroomUnits ?? 0
+    );
   });
 
   it("offers zero-revenue greenfield markets under plants", async () => {

@@ -1,14 +1,30 @@
 import { describe, it, expect } from "vitest";
 import { sectorDemandGapUnits } from "./sectorDemandGap";
-import type { CommodityType } from "@/lib/constants/commodities";
+import {
+  COMMODITY_BASE_PRICES,
+  commodityMixWeight,
+  type CommodityType,
+} from "@/lib/constants/commodities";
 
 describe("sectorDemandGapUnits", () => {
-  it("takes the min over output legs, not the sum", () => {
-    // A chemical plant cannot sell chemicals into a plastics shortage: the
-    // saturated leg binds.
+  it("averages over output legs, so one balanced line no longer vetoes expansion", () => {
+    // Chemicals deeply short, plastics balanced: the old min read 0 and the
+    // plant sorted last. The rate-weighted mean answers the chemicals leg.
     const mix: Partial<Record<CommodityType, number>> = { chemicals: 0.5, plastics: 0.15 };
-    const gap = sectorDemandGapUnits(mix, (c) => (c === "plastics" ? 100_000 : 0));
-    expect(gap).toBe(0);
+    const chemGap = 100_000;
+    const gap = sectorDemandGapUnits(mix, (c) => (c === "chemicals" ? chemGap : 0));
+    const chemWeight = commodityMixWeight(mix, COMMODITY_BASE_PRICES, "chemicals");
+    const expected = (0.5 * (chemGap / chemWeight)) / 0.65;
+    expect(gap).toBeCloseTo(expected, 6);
+    expect(gap).toBeGreaterThan(0);
+    // Mean, not max: the balanced leg pulls the quote below the deep leg alone.
+    expect(gap).toBeLessThan(chemGap / chemWeight);
+  });
+
+  it("still reads ~0 for a uniformly glutted mix", () => {
+    const mix: Partial<Record<CommodityType, number>> = { chemicals: 0.5, plastics: 0.15 };
+    expect(sectorDemandGapUnits(mix, () => -1000)).toBe(0);
+    expect(sectorDemandGapUnits(mix, () => 0)).toBe(0);
   });
 
   it("scales the binding leg's gap by its mix weight", () => {
