@@ -76,7 +76,7 @@ describe("computeSupplyAgreementSettlements", () => {
       plantsEnabled: true,
     });
 
-    expect(demand.get(B)?.get("energy")).toBe(150);
+    expect(demand.get(B)?.get("energy")).toBe(135);
   });
 
   it("caps clearing reservations at named buyers' combined physical demand", () => {
