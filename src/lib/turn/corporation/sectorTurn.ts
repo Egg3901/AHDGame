@@ -852,7 +852,7 @@ export function processSector(
       ? 0
       : plantsCapacity * bankingCommodityScale * activeFraction
     : nameplateUnits * bankingCommodityScale;
-  const { producedUnits, soldUnits, contractAchievableUnits } = computeContractProduction({
+  const production = computeContractProduction({
     plantsEnabled,
     actualNameplateUnits: productionNameplateUnits,
     actualProductionFactor: productionFactor,
@@ -872,6 +872,7 @@ export function processSector(
         : sector.producedUnits * priorProductionUnitRatio,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
+  const { producedUnits, soldUnits, contractAchievableUnits, demandThrottleFactor } = production;
   // Plants: revenue is DERIVED from produced output, exactly inverting the P1
   // identity (producedUnits × mixPrice × sales legs == realizedRevenue). At the
   // flip, capacity == impliedOutputUnits(nameplate) and every leg is unchanged,
@@ -1617,6 +1618,10 @@ export function processSector(
     // so a supplier is never billed for output it could not physically have
     // made. See the derivation beside `contractAchievableUnits` above.
     contractAchievableUnits: Math.round(contractAchievableUnits * 100) / 100,
+    // Demand-aware production telemetry. This is display-only: it records the
+    // deliberate run-rate cap so the sector page can distinguish market demand
+    // from physical input shortages and the residual "other" bucket.
+    demandThrottleFactor: plantsEnabled ? Math.round(demandThrottleFactor * 1000) / 1000 : null,
     currentGrowthRate: newCurrentGrowthRate,
     // Persisted so the brake is durable: without this the next turn's trend
     // simply pulls the rate straight back toward the old, unaffordable target.
