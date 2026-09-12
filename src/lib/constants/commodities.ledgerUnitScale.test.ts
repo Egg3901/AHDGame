@@ -119,6 +119,7 @@ describe("computeRawSupplyDemand - ledgerUnitScale (ticket #1027 phase 2)", () =
       "network_services",
       "entertainment_services",
       "construction_services",
+      "building_materials",
     ] as CommodityType[]) {
       const stab = getCommodityStabilizer(c);
       const baseLeg = base.global.get(c)!.demand - stab;

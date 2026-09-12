@@ -1095,7 +1095,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // ── Rate-sensitive signed delta demand: food, vehicles, financial_services ──
   // delta = anchorGdp × fraction × (neutral - primeRate) / basePrice
-  // Negative at high rates (suppresses demand), positive at low rates (adds demand).
+  // Positive at low rates (adds demand). At high rates the delta is floored
+  // at zero instead of subtracting demand (demand audit step 3): a demand
+  // generator must never un-buy goods — dear money cools the economy through
+  // every other channel already, and a negative leg could drive a thin state
+  // book below zero.
   const anchorGdpByState = new Map<string, number>();
   for (const sb of allStateBudgets) {
     if (!sb.stateGdp || sb.stateGdp <= 0) continue;
@@ -1121,7 +1125,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       const primeRate = centralBankByCountry.get(countryId) ?? FINANCIAL_NEUTRAL_RATE;
       const neutralRate =
         MONETARY_BASELINES[countryId as CountryId]?.neutralPrimeRate ?? FINANCIAL_NEUTRAL_RATE;
-      const delta = (anchorGdp * fraction * (neutralRate - primeRate)) / basePrice;
+      const delta = Math.max(0, (anchorGdp * fraction * (neutralRate - primeRate)) / basePrice);
       if (delta === 0) continue;
 
       globalBal.demand += delta;
@@ -1191,6 +1195,47 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       plannedOnly: true,
     },
   ];
+  // Demand audit step 3: the same government units reach the REGIONAL books,
+  // so the 25% state price leg stops understating exactly the goods
+  // governments support (healthcare_services, ordnance). Global and national
+  // totals are unchanged — this only places the already-counted units.
+  // Distribution is pro-rata by state GDP within the country (same-currency
+  // shares, so no FX normalization is needed); equal split when the country
+  // has states but no GDP rows; national-only (prior behavior) when it has
+  // no states at all.
+  const distributeGovtDemandToStates = (
+    countryId: string,
+    commodity: CommodityType,
+    units: number
+  ): void => {
+    const targets: Array<[string, number]> = [];
+    const shares = statesByCountry.get(countryId);
+    if (shares && shares.size > 0) {
+      const total = [...shares.values()].reduce((sum, value) => sum + value, 0);
+      if (total > 0) {
+        for (const [stateId, gdp] of shares) targets.push([stateId, units * (gdp / total)]);
+      } else {
+        const each = units / shares.size;
+        for (const stateId of shares.keys()) targets.push([stateId, each]);
+      }
+    } else {
+      const ids: string[] = [];
+      for (const [stateId, c] of stateToCountry) if (c === countryId) ids.push(stateId);
+      if (ids.length === 0) return;
+      const each = units / ids.length;
+      for (const stateId of ids) targets.push([stateId, each]);
+    }
+    for (const [stateId, share] of targets) {
+      if (!(share > 0)) continue;
+      let stateMap = byState.get(stateId);
+      if (!stateMap) {
+        stateMap = new Map<CommodityType, { supply: number; demand: number }>();
+        for (const c of COMMODITY_TYPES) stateMap.set(c, { supply: 0, demand: 0 });
+        byState.set(stateId, stateMap);
+      }
+      stateMap.get(commodity)!.demand += share;
+    }
+  };
   const turnsPerYear = 48;
   for (const { category, commodity, rate, plannedOnly } of GOVT_SPEND_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
@@ -1216,6 +1261,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         byCountry.set(cid, countryBals);
       }
       byCountry.get(cid)!.get(commodity)!.demand += units;
+      distributeGovtDemandToStates(cid, commodity, units);
     }
   }
 

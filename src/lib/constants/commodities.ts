@@ -1009,11 +1009,18 @@ export const RETAIL_GDP_MULTIPLIER_MIN = 0.5;
 export const RETAIL_GDP_MULTIPLIER_MAX = 2.0;
 
 /**
- * Fraction of state GDP that converts to building materials demand (construction/infrastructure).
- * At 0.00002, a state with $500B GDP generates 25 tons/day of building materials demand
- * ($500B × 0.00002 / $400 base price = 25 units). Scaled by GDP growth multiplier.
+ * Fraction of state GDP that converts to building materials demand
+ * (construction/infrastructure).
+ *
+ * Was 0 (no economy-wide buyer) while ~6M units of sector-intermediate demand
+ * existed against ~8.2M supply, leaving the good in a structural 1.35x
+ * oversupply with no macro buyer to absorb it (demand audit step 3, live prod
+ * turn 803). Sized to close roughly half that gap: at 2e-4 the turn-803 state
+ * GDP book (~27.1M GDP-units, ×69.8 era scale, ÷ $400 base) yields ~1M
+ * units/day of macro demand, moving D/S from ~0.74 toward ~0.86 without
+ * risking an overshoot into shortage if sector-intermediate legs grow.
  */
-export const BUILDING_MATERIALS_GDP_DEMAND_FRACTION = 0;
+export const BUILDING_MATERIALS_GDP_DEMAND_FRACTION = 2e-4;
 
 /**
  * Real estate services demand as a fraction of state GDP.
@@ -2374,6 +2381,28 @@ export function computeRawSupplyDemand(
         byState.set(stateId, stateMap);
       }
       byState.get(stateId)!.get("construction_services")!.demand += units;
+    }
+  }
+
+  // ── Building Materials: macro demand from GDP (construction/infrastructure) ─
+  // Same shape as the sibling macro legs above. Zero before demand audit
+  // step 3 (BUILDING_MATERIALS_GDP_DEMAND_FRACTION was 0); the leg is inert
+  // while the fraction is 0, so worlds and tests below the change are
+  // byte-identical.
+  if (stateGdpMap) {
+    const bmBasePrice = COMMODITY_BASE_PRICES["building_materials"];
+    for (const [stateId, gdp] of stateGdpMap) {
+      if (gdp <= 0) continue;
+      const units = ((gdp * BUILDING_MATERIALS_GDP_DEMAND_FRACTION) / bmBasePrice) * luScale;
+      if (units <= 0) continue;
+      global.get("building_materials")!.demand += units;
+      addUnscaledDemand("building_materials", units / luScale);
+      if (!byState.has(stateId)) {
+        const stateMap = new Map<CommodityType, { supply: number; demand: number }>();
+        for (const c of COMMODITY_TYPES) stateMap.set(c, { supply: 0, demand: 0 });
+        byState.set(stateId, stateMap);
+      }
+      byState.get(stateId)!.get("building_materials")!.demand += units;
     }
   }
 
