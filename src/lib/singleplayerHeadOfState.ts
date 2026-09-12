@@ -1,9 +1,25 @@
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { Character, ElectedOfficial, NPP, OfficeType } from "@/lib/db/types";
-import { COUNTRY_CONFIGS, getCountryConfig, type CountryId } from "@/lib/constants/countries";
+import type { GovernmentFormation } from "@/lib/db/types/governmentFormation";
+import {
+  COUNTRY_CONFIGS,
+  getCountryConfig,
+  isParliamentarySystem,
+  type CountryId,
+} from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
-import { appointPrimeMinister } from "@/lib/turn/parliamentaryGovernment";
-import { isSingleplayer } from "@/lib/singleplayer";
+import {
+  appointPrimeMinister,
+  ensureParliamentaryGovernmentFormation,
+  tallySeatsByParty,
+} from "@/lib/turn/parliamentaryGovernment";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import {
+  getLiveLowerChamberSeats,
+  lowerChamberMajorityThreshold,
+} from "@/lib/turn/lowerChamberSeats";
+import { getGameState } from "@/lib/gameState";
+import { SINGLEPLAYER_USER_ID, isSingleplayer } from "@/lib/singleplayer";
 
 export function mayRuleByDecree(
   character: Pick<Character, "countryId" | "singleplayerHeadOfState">,
@@ -31,6 +47,121 @@ export function getSingleplayerHeadOfStateOfficeType(
   return config.officeTypes.find((office) => office.isExecutive)?.key ?? null;
 }
 
+function isDirectSingleplayerGovernment(countryId: CountryId, preset?: string): boolean {
+  const config = getCountryConfig(countryId, preset);
+  return config.governmentType !== "presidential" && isParliamentarySystem(config);
+}
+
+function supportingSeats(
+  government: Pick<GovernmentFormation, "governingPartyId" | "coalitionPartyIds" | "seatsByParty">
+): number {
+  const partyIds = new Set([
+    ...(government.governingPartyId ? [government.governingPartyId] : []),
+    ...(government.coalitionPartyIds ?? []),
+  ]);
+  return [...partyIds].reduce(
+    (total, partyId) => total + (government.seatsByParty?.[partyId] ?? 0),
+    0
+  );
+}
+
+function sameSeatSnapshot(
+  current: Record<string, number> | null | undefined,
+  next: Record<string, number>
+): boolean {
+  const keys = new Set([...Object.keys(current ?? {}), ...Object.keys(next)]);
+  return [...keys].every((key) => (current?.[key] ?? 0) === (next[key] ?? 0));
+}
+
+/**
+ * Write the canonical government formation after directly seating the local
+ * player. The character office is useful for profile and legislature views,
+ * but governmentFormations is the source used by executive powers, budgets,
+ * confidence and turn processing.
+ */
+async function formSingleplayerGovernment(
+  db: Db,
+  args: { countryId: CountryId; character: Character; now: Date; preset?: string }
+): Promise<void> {
+  const government = await getGovernmentFormationsCollection(db).findOne({ _id: args.countryId });
+  if (!government) return;
+
+  const gameState = await getGameState(db);
+  const liveSeatsByParty = await tallySeatsByParty(db, args.countryId, args.preset);
+  const seatsByParty =
+    Object.keys(liveSeatsByParty).length > 0 ? liveSeatsByParty : (government.seatsByParty ?? {});
+  const totalSeats = government.totalSeats || (await getLiveLowerChamberSeats(db, args.countryId));
+  const majorityThreshold =
+    government.majorityThreshold || lowerChamberMajorityThreshold(totalSeats);
+  const governingPartyId =
+    government.governingPartyId ??
+    (args.character.party && args.character.party !== "independent"
+      ? args.character.party
+      : (getCountryConfig(args.countryId, args.preset).rulingPartyId?.toString() ?? null));
+  const formationType =
+    government.formationType ??
+    (governingPartyId && (seatsByParty[governingPartyId] ?? 0) >= majorityThreshold
+      ? "majority"
+      : governingPartyId
+        ? "minority"
+        : "admin");
+  const formedAt = government.formedAt ?? args.now;
+  const formedTurn = government.formedTurn ?? gameState?.currentTurn ?? null;
+  const totalSeatsSupporting = supportingSeats({
+    governingPartyId,
+    coalitionPartyIds: government.coalitionPartyIds,
+    seatsByParty,
+  });
+
+  if (
+    government.status === "formed" &&
+    government.formationType === formationType &&
+    government.pmCharacterId?.toString() === args.character._id.toString() &&
+    government.pmName === args.character.name &&
+    government.pmNppId == null &&
+    government.governingPartyId === governingPartyId &&
+    sameSeatSnapshot(government.seatsByParty, seatsByParty) &&
+    government.totalSeats === totalSeats &&
+    government.majorityThreshold === majorityThreshold &&
+    government.totalSeatsSupporting === totalSeatsSupporting &&
+    government.activeVoteId == null &&
+    government.pmVacancyDeadlineTurn == null &&
+    government.lostMajority === false &&
+    government.collapsedAt == null
+  ) {
+    return;
+  }
+
+  await getGovernmentFormationsCollection(db).updateOne(
+    { _id: args.countryId },
+    {
+      $set: {
+        status: "formed",
+        formationType,
+        lostMajority: false,
+        pmCharacterId: args.character._id,
+        pmNppId: null,
+        pmName: args.character.name,
+        governingPartyId,
+        seatsByParty,
+        totalSeats,
+        majorityThreshold,
+        totalSeatsSupporting,
+        activeVoteId: null,
+        formedAt,
+        formedTurn,
+        collapsedAt: null,
+        pmVacancyDeadlineTurn: null,
+        updatedAt: args.now,
+      },
+      $unset: {
+        pmAppointmentNominationLockId: "",
+        pmAppointmentNominationLockExpiresAt: "",
+      },
+    }
+  );
+}
+
 /**
  * Seat the local character through the same electedOfficials/currentOffice
  * records consumed by the game. This is intentionally local-only: callers
@@ -45,16 +176,27 @@ export async function seatSingleplayerHeadOfState(
   const character = await db.collection<Character>("characters").findOne({ _id: args.characterId });
   if (!character || character.countryId !== args.countryId) return false;
 
-  if (officeType === "primeMinister") {
-    await appointPrimeMinister(
-      db,
-      args.countryId,
-      args.characterId,
-      null,
-      character.name,
-      args.now,
-      args.preset
-    );
+  if (isDirectSingleplayerGovernment(args.countryId, args.preset)) {
+    await ensureParliamentaryGovernmentFormation(db, args.countryId, args.preset);
+    const government = await getGovernmentFormationsCollection(db).findOne({ _id: args.countryId });
+    const alreadyHoldsOffice = character.currentOffice?.type === officeType;
+    const isCanonicalHolder =
+      government?.status === "formed" &&
+      government.pmCharacterId?.toString() === character._id.toString();
+    const hasConflictingGovernmentHolder =
+      government?.pmCharacterId != null || government?.pmNppId != null;
+    if (!alreadyHoldsOffice || (hasConflictingGovernmentHolder && !isCanonicalHolder)) {
+      await appointPrimeMinister(
+        db,
+        args.countryId,
+        args.characterId,
+        null,
+        character.name,
+        args.now,
+        args.preset
+      );
+    }
+    await formSingleplayerGovernment(db, { ...args, character });
     return true;
   }
 
@@ -112,6 +254,47 @@ export async function seatSingleplayerHeadOfState(
     .collection<Character>("characters")
     .updateOne({ _id: args.characterId }, { $set: { currentOffice: office, updatedAt: args.now } });
   return true;
+}
+
+/**
+ * Repair an existing local HOS world. Version 1.8.3 only ran the seating path
+ * during character creation, leaving old worlds with a character office but no
+ * canonical government formation. This pass is local-only and idempotent.
+ */
+export async function reconcileSingleplayerHeadOfState(
+  db: Db,
+  args: { now?: Date; preset?: string } = {}
+): Promise<boolean> {
+  if (!isSingleplayer()) return false;
+
+  const gameState = await getGameState(db);
+  if (gameState?.singleplayerConfig?.mode !== "head-of-state") return false;
+
+  const character = await db.collection<Character>("characters").findOne({
+    userId: new ObjectId(SINGLEPLAYER_USER_ID),
+    retiredAt: { $exists: false },
+  });
+  if (!character) return false;
+
+  const countryId = character.countryId;
+  const preset = args.preset ?? gameState.preset;
+  if (!getSingleplayerHeadOfStateOfficeType(countryId, preset)) return false;
+
+  if (character.singleplayerHeadOfState !== true) {
+    await db
+      .collection<Character>("characters")
+      .updateOne(
+        { _id: character._id },
+        { $set: { singleplayerHeadOfState: true, updatedAt: args.now ?? new Date() } }
+      );
+  }
+
+  return seatSingleplayerHeadOfState(db, {
+    characterId: character._id,
+    countryId,
+    now: args.now ?? new Date(),
+    preset,
+  });
 }
 
 export async function pinnedSingleplayerHeadOfState(

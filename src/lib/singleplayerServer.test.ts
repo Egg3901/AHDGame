@@ -10,6 +10,11 @@ import {
   singleplayerStatus,
 } from "./singleplayerServer";
 import { createMockDb } from "@/lib/test-utils/mockDb";
+import { reconcileSingleplayerHeadOfState } from "@/lib/singleplayerHeadOfState";
+
+vi.mock("@/lib/singleplayerHeadOfState", () => ({
+  reconcileSingleplayerHeadOfState: vi.fn().mockResolvedValue(false),
+}));
 
 describe("singleplayer data directory", () => {
   it("defaults to a dotfolder in the home directory", () => {
@@ -50,6 +55,23 @@ describe("singleplayer account", () => {
 });
 
 describe("singleplayer maintenance recovery", () => {
+  it("repairs a head-of-state world during the launcher status handshake", async () => {
+    const db = createMockDb();
+    vi.mocked(reconcileSingleplayerHeadOfState).mockClear();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 3,
+      preset: "2019-default",
+      singleplayerConfig: { mode: "head-of-state" },
+    });
+
+    await singleplayerStatus(db as unknown as Db);
+
+    expect(reconcileSingleplayerHeadOfState).toHaveBeenCalledWith(db, {
+      preset: "2019-default",
+    });
+  });
+
   it("clears hosted maintenance when an existing local world reports status", async () => {
     const db = createMockDb();
     db.collection("gameState").findOne.mockResolvedValue({

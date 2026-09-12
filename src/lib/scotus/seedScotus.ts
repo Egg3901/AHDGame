@@ -14,10 +14,11 @@ import { getScotusPresetSeed } from "./presetData";
  * been authored yet — see `src/lib/scotus/presetData/index.ts` — so this hook
  * is safe to ship ahead of the four content tickets (#3599-#3602).
  *
- * Historical justices are seated from the preset's authored succession chain
- * (`justiceMode: "historical"`, `isDivergent: false`). Tenure then replays
- * scripted death/retirement until a seat's chain is exhausted — only then does
- * the seat go vacant for a live presidential nomination (the Divergence Point).
+ * Historical justices are seated from the preset's Original Roster
+ * (`justiceMode: "historical"`, `isDivergent: false`). Tenure vacates that
+ * first occupant on their authored date. Later historical occupants are
+ * reference data only; the President nominates and the Senate confirms every
+ * replacement (ticket #1289). The Divergence Point is that live confirmation.
  *
  * On `reset=true`, wipes `supremeCourtSeats`/`docketCases`/`scotusNominations`
  * for the country first so a world reset always starts from the Original
