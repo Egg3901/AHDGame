@@ -4,6 +4,7 @@ import { jwtVerify, errors as joseErrors } from "jose";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getJwtSecret } from "@/lib/auth";
+import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
 import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getDb } from "@/lib/mongodb";
@@ -13,10 +14,12 @@ const claimsSchema = z.object({
   userId: z.string().regex(/^[a-fA-F0-9]{24}$/),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
+  authSource: z.literal("unified").optional(),
+  sid: z.string().uuid().optional(),
 });
 const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 
-/** Read-only legacy session check. Consumers must pin the deployment origin. */
+/** Read-only game session check. Consumers must pin the deployment origin. */
 export async function GET(request: Request) {
   const values = (request.headers.get("cookie") ?? "")
     .split(";")
@@ -58,7 +61,14 @@ export async function GET(request: Request) {
       }
     );
     if (!user || user.isBanned || !user.username) return inactive();
-    if (isAuthMigrationFenced(user)) return inactive();
+    // Migrated players carry a newly issued game JWT bound to a live unified
+    // session. Verify that binding instead of treating it as a legacy token.
+    // Old credentials remain fenced, and every broker recheck observes logout.
+    if (parsed.data.authSource === "unified") {
+      if (!(await unifiedSessionIsCurrent(db, parsed.data))) return inactive();
+    } else if (isAuthMigrationFenced(user)) {
+      return inactive();
+    }
     if (isTokenRevokedByCutoff(user.authRevokedAt, iat)) return inactive();
 
     // Contact email preserves legacy consumer compatibility. It does not prove
