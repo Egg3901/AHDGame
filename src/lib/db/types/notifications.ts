@@ -139,6 +139,8 @@ export const NOTIFICATION_TYPES = [
   "transfer_pricing_assessed",
   /** A supply agreement charged its supplier shortfall damages this turn. */
   "corp_supply_agreement_damages",
+  /** A supply agreement needs the CEO's response to a new offer or counter. */
+  "corp_supply_agreement_offer",
   "bank_supervision_breach",
   "bank_supervision_cleared",
   // Defence procurement: a government offering one of this corp's plants an order.
