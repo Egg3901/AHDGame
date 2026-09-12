@@ -88,7 +88,7 @@ export function DefenseFundingNote({ sym, funding, soeNetPerTurn }: DefenseFundi
           <p className="mt-1 text-[11px] leading-snug text-muted">
             {overdrawn
               ? "Overdrawn: running total of past shortfalls already borrowed against the treasury. It grows each turn upkeep beats the line; appropriate more or field less, and covered turns pay it back down."
-              : "The pot still covers the force; no overdraft drawn. This running total falls whenever upkeep beats the line."}
+              : "The pot still covers the force; no overdraft drawn. It rises when the line exceeds upkeep and falls when upkeep exceeds the line."}
           </p>
         </div>
         {soeBacking > 0 ? (

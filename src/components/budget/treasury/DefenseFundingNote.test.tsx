@@ -31,7 +31,7 @@ describe("DefenseFundingNote (ticket #1269)", () => {
     render(<DefenseFundingNote sym="M" funding={funded} />);
     expect(screen.getByText("Defence funding")).toBeTruthy();
     expect(screen.getByText(/no overdraft drawn/)).toBeTruthy();
-    expect(screen.getByText(/running total falls/)).toBeTruthy();
+    expect(screen.getByText(/rises when the line exceeds upkeep/)).toBeTruthy();
   });
 
   it("names the beyond-the-line draw that the surplus tile misses", () => {
