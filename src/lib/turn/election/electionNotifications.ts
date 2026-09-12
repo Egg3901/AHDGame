@@ -158,7 +158,6 @@ export async function sendBatchedElectionResults(
         eyebrow: `${countryId} · Election night`,
         title: `${label} results`,
         summary: `${typeOutcomes.length} seat${typeOutcomes.length === 1 ? "" : "s"} decided`,
-        metadata: ["Final results"],
         detailLines: partySummary,
         tone: "election",
         chartSvg,
