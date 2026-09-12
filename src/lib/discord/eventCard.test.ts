@@ -30,6 +30,7 @@ describe("buildDiscordEventCardSvg", () => {
     expect(svg).toContain("data:image/svg+xml;base64,");
     expect(svg).toContain(">Four</text>");
     expect(svg).not.toContain(">Five</text>");
-    expect(svg).toContain('height="1158"');
+    expect(svg).toContain('height="760"');
+    expect(svg).toContain('width="730" height="410"');
   });
 });

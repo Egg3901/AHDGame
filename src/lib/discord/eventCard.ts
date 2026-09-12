@@ -67,7 +67,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
   const details = (input.detailLines ?? []).slice(0, 4).map((line) => clamp(line, 74));
   const metadata = (input.metadata ?? []).slice(0, 3).map((item) => clamp(item, 28));
   const hasChart = Boolean(input.chartSvg);
-  const height = hasChart ? 950 + details.length * 52 : Math.max(560, 470 + details.length * 52);
+  const height = hasChart ? 760 : Math.max(560, 470 + details.length * 52);
   const chartData = input.chartSvg
     ? `data:image/svg+xml;base64,${Buffer.from(input.chartSvg).toString("base64")}`
     : undefined;
@@ -97,13 +97,13 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
     .join("");
   const contentY = chipY + (metadata.length ? 78 : 28);
   const chartSvg = chartData
-    ? `<rect x="74" y="${contentY}" width="1052" height="420" rx="22" fill="#111827"/><image x="94" y="${contentY + 20}" width="1012" height="380" preserveAspectRatio="xMidYMid meet" href="${chartData}"/>`
+    ? `<rect x="60" y="286" width="730" height="410" rx="22" fill="#111827"/><image x="78" y="304" width="694" height="374" preserveAspectRatio="xMidYMid meet" href="${chartData}"/>`
     : "";
-  const detailY = hasChart ? contentY + 470 : contentY;
+  const detailY = hasChart ? 374 : contentY;
   const detailSvg = details
     .map(
       (line, index) =>
-        `<circle cx="94" cy="${detailY + index * 52 - 9}" r="5" fill="${accent}"/><text x="116" y="${detailY + index * 52}" class="detail">${escapeXml(line)}</text>`
+        `<circle cx="${hasChart ? 836 : 94}" cy="${detailY + index * 64 - 9}" r="5" fill="${accent}"/><text x="${hasChart ? 858 : 116}" y="${detailY + index * 64}" class="detail">${escapeXml(line)}</text>`
     )
     .join("");
 
@@ -119,7 +119,7 @@ export function buildDiscordEventCardSvg(input: DiscordEventCardInput): string {
       .summary { fill: #cbd5e1; font-size: 29px; font-weight: 500; }
       .chip { fill: #1e293b; stroke: #334155; }
       .chipText { fill: #e2e8f0; font-size: 20px; font-weight: 700; }
-      .detail { fill: #e2e8f0; font-size: 25px; font-weight: 600; }
+      .detail { fill: #e2e8f0; font-size: ${hasChart ? 21 : 25}px; font-weight: 600; }
     </style>
   </defs>
   <rect width="1200" height="${height}" rx="28" fill="url(#bg)"/>
