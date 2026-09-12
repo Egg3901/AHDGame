@@ -38,6 +38,43 @@ const payload = (over: Partial<SectorRevenueTaxPayload> = {}): SectorRevenueTaxP
 });
 
 describe("sectorGrowthNode (the cyclical signal — old gdpGrowth logic)", () => {
+  it("hands off a young physical history gradually without a measurement cliff", () => {
+    const inputs = payload({
+      plantsEnabled: true,
+      revenueEmaNow: 1100,
+      revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+      outputEmaNow: 1000,
+      outputTrendBaseline: { value: 1000, spanTurns: 8 },
+    });
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBeCloseTo(
+      10
+    );
+  });
+
+  it("does not turn a price-only revenue decline into an output contraction", () => {
+    const inputs = payload({
+      plantsEnabled: true,
+      revenueEmaNow: 800,
+      revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+      outputEmaNow: 1000,
+      outputTrendBaseline: { value: 1000, spanTurns: 48 },
+    });
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBe(0);
+  });
+
+  it("retains an actual output contraction even when nominal revenue is flat", () => {
+    const inputs = payload({
+      plantsEnabled: true,
+      revenueEmaNow: 1000,
+      revenueTrendBaseline: { value: 1000, spanTurns: 48 },
+      outputEmaNow: 950,
+      outputTrendBaseline: { value: 1000, spanTurns: 48 },
+    });
+    expect(sectorGrowthNode.compute!(ctx({ providers: { sectorRevenueTax: inputs } }))).toBeCloseTo(
+      -5
+    );
+  });
+
   it("computes the revenue-weighted, tax-adjusted sector growth as the sim target", () => {
     // (1000*3 + 500*0.5)/1500 = 2.1667 ; US neutral tax (fed0/state6) → gap 0
     const out = evalNode(

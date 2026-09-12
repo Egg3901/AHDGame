@@ -78,6 +78,9 @@ export interface State {
    * recurring sharp negative GDP prints. Reset on the legacy→host unit flip.
    * Absent ⇒ the signal uses the one-turn fallback until the log matures.
    */
+  /** Constant-price plants production trend. Cold-starts independently of nominal revenue. */
+  sectorOutputEma?: number;
+  sectorOutputSnapshots?: Array<{ turn: number; value: number }>;
   sectorRevenueEma?: number;
   sectorRevenueSnapshots?: Array<{ turn: number; value: number }>;
   /**

@@ -1,3 +1,4 @@
+import { constantPriceOutput } from "./rules/outputVolume";
 import type { Db } from "mongodb";
 import type { ConflictDoc } from "@/lib/db/types/conflict";
 import { warDamageByCountry, type WarDamage } from "@/lib/military/warDamage";
@@ -42,6 +43,7 @@ export interface SectorRevenueTax {
       hostRevenue: number;
       /** Host-currency realized revenue when the sector has one. */
       hostRealizedRevenue?: number;
+      outputVolume?: number;
     }>
   >;
   /** Per-state unowned-sector revenue (₳-native). */
@@ -69,7 +71,7 @@ function finiteRate(value: unknown): number {
  * node consumes it instead of reading collections itself. Behavior-preserving:
  * the golden-master fixtures (R2) assert identical downstream results.
  */
-export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax> {
+export async function sectorRevenueTaxProvider(db: Db, turn = 0): Promise<SectorRevenueTax> {
   const [
     ownedSectors,
     unownedSectors,
@@ -89,6 +91,10 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
           | "stateId"
           | "revenue"
           | "realizedRevenue"
+          | "producedUnits"
+          | "strategyId"
+          | "transitionFromStrategyId"
+          | "transitionStartTurn"
           | "currentGrowthRate"
           | "growthRate"
           | "corporationId"
@@ -105,6 +111,10 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
         // capacity only depreciates, so a nameplate-based delta reads a
         // permanent ~-2.4%/yr recession that no player action caused.
         realizedRevenue: 1,
+        producedUnits: 1,
+        strategyId: 1,
+        transitionFromStrategyId: 1,
+        transitionStartTurn: 1,
         currentGrowthRate: 1,
         // P3c: the environment tier derives the carbon mix from sector types.
         sectorType: 1,
@@ -174,6 +184,7 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
       realizedRevenue?: number;
       hostRevenue: number;
       hostRealizedRevenue?: number;
+      outputVolume?: number;
       currentGrowthRate: number;
       sectorType?: CorporationType;
     }>
@@ -199,6 +210,7 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
       hostRealized !== undefined
         ? readCorpEconomicAnchor(hostRealized, hostCode, hostRate)
         : undefined;
+    const outputVolume = plantsEnabled ? constantPriceOutput(sector, turn) : null;
     const list = ownedByState.get(sector.stateId) ?? [];
     // Fallback chain: new field → legacy field → 0 (undefined would propagate NaN).
     const growth = sector.currentGrowthRate ?? sector.growthRate ?? 0;
@@ -207,6 +219,7 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
       ...(realizedAnchor !== undefined ? { realizedRevenue: realizedAnchor } : {}),
       hostRevenue,
       ...(hostRealized !== undefined ? { hostRealizedRevenue: hostRealized } : {}),
+      ...(outputVolume !== null ? { outputVolume } : {}),
       currentGrowthRate: growth,
       sectorType: sector.sectorType,
     });
