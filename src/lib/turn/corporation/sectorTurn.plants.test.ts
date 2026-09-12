@@ -714,6 +714,22 @@ describe("plants mode — demand-aware production throttle", () => {
     expect(glutted).toBeCloseTo((unthrottled / 6) * (1 + DEMAND_PROBE_MARGIN), 2);
   });
 
+  it("persists the demand throttle for the sector diagnostics", () => {
+    const unthrottled = producedWithHistory();
+    const result = run(
+      "plants",
+      makeSector({
+        capitalStock: stock,
+        plantsStartTurn: 100,
+        producedUnits: unthrottled,
+        soldUnits: unthrottled / 3,
+      }),
+      1000
+    );
+
+    expect(result.update.demandThrottleFactor).toBeCloseTo((1 + DEMAND_PROBE_MARGIN) / 3, 3);
+  });
+
   it("leaves a sector with no sales history exactly where it was", () => {
     // Newly founded, or a world that has never run the clearing pre-pass —
     // there is nothing to infer a demand ceiling from.

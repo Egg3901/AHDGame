@@ -697,6 +697,14 @@ export interface CorporateSector {
    */
   producedUnits?: number;
   /**
+   * Plants-tier telemetry: the deliberate market-demand run-rate multiplier
+   * applied to this sector's production last turn. 1 means no demand cap;
+   * lower values mean the plant was held below its physical plan because
+   * recent sales did not support a full run. Display-only, never read back
+   * into the economy.
+   */
+  demandThrottleFactor?: number | null;
+  /**
    * Units this sector could have produced after external constraints but before
    * the operator's production-policy and mothball choices. Used by supply
    * agreement damages. Absent until the sector has run after rollout.
