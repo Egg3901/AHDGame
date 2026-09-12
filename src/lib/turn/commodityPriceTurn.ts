@@ -143,9 +143,12 @@ import { depletedCapacityDoc, buildDepletionInc } from "@/lib/extraction/depleti
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/latentShortage";
 import {
-  advanceCommodityNominalIndex,
-  medianGlobalInflation,
+  relativeLaggedPriceRatio,
+  resolveCommodityNominalIndices,
 } from "@/lib/market/commodityNominalIndex";
+import { persistCommodityNominalIndex } from "@/lib/turn/commodityNominalIndexPersistence";
+import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
+export { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
 
 /**
  * P3b — book this turn's extraction against each state's deposits (plants only).
@@ -174,30 +177,6 @@ import {
  * cross-country state-id collision to one doc, and the write must land on the
  * same one it rationed with.
  */
-/**
- * Realized ÷ nameplate output for one sector, clamped to [0, 1] at BOTH ends.
- *
- * The lower clamp guards a negative produced figure. The upper clamp guards a
- * `revenue` that is stale-LOW relative to the capacity that produced the units:
- * the concrete case is a NatCorp sector minted by `nationalizeSectorWide`, which
- * writes a 15%-haircut revenue alongside FULL capacity, so until its first
- * `sectorTurn` restates `revenue` the raw ratio reads ~1.18. This fraction scales
- * extraction DEPLETION, so an unclamped value quietly mines more out of the
- * ground than the sector can physically have produced. A sector can never
- * realize more than its own nameplate, so 1 is the correct ceiling.
- *
- * Returns null when there is no meaningful measurement (non-positive nameplate),
- * which callers treat as "leave the booking at the nameplate derivation".
- */
-export function realizedOutputFraction(
-  producedUnits: number,
-  nameplateUnits: number
-): number | null {
-  if (!Number.isFinite(nameplateUnits) || nameplateUnits <= 0) return null;
-  if (!Number.isFinite(producedUnits)) return null;
-  return Math.min(1, Math.max(0, producedUnits / nameplateUnits));
-}
-
 async function bookExtractionDepletion(
   db: Db,
   inputs: ReadonlyArray<ExtractionSectorInput>,
@@ -372,16 +351,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // feature has been inert ever since. It also hid the `health` spelling
       // that UK/CN/IE use. Projecting the map means adding a leg to
       // GOVT_SPEND_DEMAND cannot silently read zero again.
-      .find(
-        {},
-        {
-          projection: {
-            countryId: 1,
-            "spending.byCategory": 1,
-            "economicFactors.inflationRate": 1,
-          },
-        }
-      )
+      .find({}, { projection: { countryId: 1, "spending.byCategory": 1, economicFactors: 1 } })
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -479,21 +449,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       },
     }
   );
-  const globalInflationPct = medianGlobalInflation(
-    federalBudgets.map((budget) => budget.economicFactors?.inflationRate ?? Number.NaN)
-  );
-  const laggedCommodityNominalPriceIndex =
-    typeof ledgerConfig?.commodityNominalPriceIndex === "number" &&
-    Number.isFinite(ledgerConfig.commodityNominalPriceIndex) &&
-    ledgerConfig.commodityNominalPriceIndex > 0
-      ? ledgerConfig.commodityNominalPriceIndex
-      : 1;
-  const commodityNominalPriceIndex = advanceCommodityNominalIndex({
+  const nominalIndices = resolveCommodityNominalIndices({
     index: ledgerConfig?.commodityNominalPriceIndex,
     lastTurn: ledgerConfig?.commodityNominalPriceIndexTurn,
     currentTurn: turn,
-    annualInflationPct: globalInflationPct,
+    countryInflationRates: federalBudgets.map(
+      (budget) => budget.economicFactors?.inflationRate ?? Number.NaN
+    ),
   });
+  const commodityNominalPriceIndex = nominalIndices.current;
   const ledgerCommandEconomyEnabled = ledgerConfig?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
@@ -1559,11 +1523,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   for (const commodity of COMMODITY_TYPES) {
     const base = LEDGER_BASE_PRICES[commodity];
     const prior = existingPriceMap.get(commodity)?.globalPrice;
-    if (typeof prior === "number" && prior > 0 && base > 0) {
-      // Strip the common nominal price level. Cost pass-through should transmit
-      // relative input scarcity, not recursively amplify economy-wide inflation.
-      laggedRatios.set(commodity, prior / base / laggedCommodityNominalPriceIndex);
-    }
+    const ratio = relativeLaggedPriceRatio(prior, base, nominalIndices.lagged);
+    if (ratio != null) laggedRatios.set(commodity, ratio);
   }
 
   for (const commodity of COMMODITY_TYPES) {
@@ -1868,15 +1829,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   if (ops.length > 0) {
     await db.collection("commodityPrices").bulkWrite(ops);
   }
-  await db.collection<GameConfig>("gameConfig").updateOne(
-    { _id: "default" },
-    {
-      $set: {
-        commodityNominalPriceIndex,
-        commodityNominalPriceIndexTurn: turn,
-      },
-    }
-  );
+  await persistCommodityNominalIndex(db, commodityNominalPriceIndex, turn);
 
   // Store price history snapshots for charting — uses the actual applied price
   // (including drift, pegs, and nudges) so charts match what players see.

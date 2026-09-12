@@ -48,3 +48,32 @@ export function compoundGlobalInflationHistory(
   }
   return index;
 }
+
+export function resolveCommodityNominalIndices(args: {
+  index: number | null | undefined;
+  lastTurn: number | null | undefined;
+  currentTurn: number;
+  countryInflationRates: readonly number[];
+}): { lagged: number; current: number } {
+  const lagged = Number.isFinite(args.index) && (args.index as number) > 0 ? args.index! : 1;
+  return {
+    lagged,
+    current: advanceCommodityNominalIndex({
+      index: lagged,
+      lastTurn: args.lastTurn,
+      currentTurn: args.currentTurn,
+      annualInflationPct: medianGlobalInflation(args.countryInflationRates),
+    }),
+  };
+}
+
+/** Remove common nominal inflation before producer scarcity pass-through. */
+export function relativeLaggedPriceRatio(
+  priorPrice: number | null | undefined,
+  basePrice: number,
+  nominalIndex: number
+): number | null {
+  return typeof priorPrice === "number" && priorPrice > 0 && basePrice > 0
+    ? priorPrice / basePrice / nominalIndex
+    : null;
+}
