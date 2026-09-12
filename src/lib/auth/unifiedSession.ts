@@ -1,11 +1,16 @@
 import type { Db } from "mongodb";
 import type { UserPayload } from "@/lib/auth";
 
-export function isUnifiedPayload(payload: UserPayload): boolean {
+type UnifiedSessionClaims = Pick<UserPayload, "userId" | "authSource" | "sid">;
+
+export function isUnifiedPayload(payload: UnifiedSessionClaims): boolean {
   return payload.authSource === "unified" && typeof payload.sid === "string";
 }
 
-export async function unifiedSessionIsCurrent(db: Db, payload: UserPayload): Promise<boolean> {
+export async function unifiedSessionIsCurrent(
+  db: Db,
+  payload: UnifiedSessionClaims
+): Promise<boolean> {
   if (!isUnifiedPayload(payload)) return false;
   const session = await db
     .collection<{ _id: string; userId: string; revokedAt: Date | null; expiresAt: Date }>(
