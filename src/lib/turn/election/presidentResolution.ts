@@ -197,6 +197,7 @@ async function finalizePresidentTally(
             eligibleVicePresidentCandidateIds: contingentResult.eligibleVicePresidentCandidateIds,
             houseDelegationVotes: contingentResult.houseDelegationVotes,
             houseVoteTotals: contingentResult.houseVoteTotals,
+            houseBallots: contingentResult.houseBallots,
             senateVotes: contingentResult.senateVotes,
             senateVoteTotals: contingentResult.senateVoteTotals,
             presidentWinnerId: contingentResult.presidentWinnerId,

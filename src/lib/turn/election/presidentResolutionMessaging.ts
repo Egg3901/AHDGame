@@ -251,6 +251,7 @@ async function recordPresidentLeaderChange(db: Db, ctx: PresidentMessagingContex
           contingentResult && {
             houseDelegationVotes,
             houseVoteTotals: contingentResult.houseVoteTotals,
+            houseBallots: contingentResult.houseBallots,
             senateVoteTotals: contingentResult.senateVoteTotals,
             contingentPresidentWinnerId: contingentResult.presidentWinnerId,
             contingentVicePresidentWinnerId: contingentResult.vicePresidentWinnerId,

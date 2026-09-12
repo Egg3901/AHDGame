@@ -205,6 +205,41 @@ describe("resolveContingentElection", () => {
     expect(["dem", "gop"]).toContain(result.presidentWinnerId);
   });
 
+  it("uses a recorded compromise ballot instead of electing a first-ballot plurality", () => {
+    const splitDelegations = Array.from({ length: 16 }, (_, i) => ({
+      stateId: `T${i}`,
+      voters: [demRep(`T${i}-d`), gopRep(`T${i}-r`)],
+    }));
+
+    const result = resolveContingentElection({
+      electionId: new ObjectId("64b000000000000000000001"),
+      electoralVotesByCandidate: { dem: 258, ind: 217, gop: 64 },
+      presidentCandidates: [demPresident, indPresident, gopPresident],
+      vicePresidentCandidates: [demVp, gopVp],
+      houseDelegations: [
+        ...buildDelegations(
+          Array.from({ length: 19 }, (_, i) => `D${i}`),
+          Array.from({ length: 4 }, (_, i) => `R${i}`)
+        ),
+        ...Array.from({ length: 11 }, (_, i) => ({
+          stateId: `I${i}`,
+          voters: [{ id: `I${i}-i`, party: "3", economic: 0, social: 0 }],
+        })),
+        ...splitDelegations,
+      ],
+      senators: [demRep("s1"), demRep("s2"), gopRep("s3")],
+    });
+
+    expect(result.houseBallots).toHaveLength(2);
+    expect(result.houseBallots[0].totals).toEqual({ dem: 19, gop: 4, ind: 11 });
+    expect(result.houseBallots[1].activeCandidateIds).toEqual(["dem", "ind"]);
+    expect(result.houseBallots[1].withdrawnCandidateId).toBe("gop");
+    expect(result.houseVoteTotals.dem).toBe(35);
+    expect(result.presidentWinnerId).toBe("dem");
+    expect(result.deadlockBreakerUsed).toBe(false);
+    expect(result.houseBallots[1].reason).toMatch(/withdrew.*compromise ballot/i);
+  });
+
   it("auto-seats sole eligible VP without a Senate ballot", () => {
     const result = resolveContingentElection({
       electionId: new ObjectId(),
