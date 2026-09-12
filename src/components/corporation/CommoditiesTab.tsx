@@ -128,12 +128,12 @@ export default function CommoditiesTab({
           </div>
           {isCeo && data?.supplyAgreementsEnabled && (
             <p className="mt-2 text-xs text-muted">
-              Propose private supply deals from the{" "}
+              Open private supply deals from the{" "}
               <Link
-                href={`/corporation/${corpId}?tab=ownership&sub=structure`}
+                href={`/corporation/${corpId}?tab=commodities#supply-agreements`}
                 className="text-primary hover:underline"
               >
-                Structure
+                Commodities
               </Link>{" "}
               tab.
             </p>
@@ -390,7 +390,7 @@ export default function CommoditiesTab({
                   )}
                 {isCeo && data?.supplyAgreementsEnabled && c.outputUnits > 0 && (
                   <Link
-                    href={`/corporation/${corpId}?tab=ownership&sub=structure`}
+                    href={`/corporation/${corpId}?tab=commodities#supply-agreements`}
                     className="rounded-md border border-card-border bg-card-elevated px-2 py-1 text-[11px] font-medium text-muted hover:text-foreground"
                   >
                     Supply deal
