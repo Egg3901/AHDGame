@@ -654,6 +654,13 @@ export async function appointPrimeMinister(
   }
 
   const config = getCountryConfig(countryId, activePreset);
+  const appointedPerson = characterId
+    ? await db
+        .collection<Character>("characters")
+        .findOne({ _id: characterId }, { projection: { avatarUrl: 1 } })
+    : nppId
+      ? await db.collection<NPP>("npps").findOne({ _id: nppId }, { projection: { avatarUrl: 1 } })
+      : null;
 
   // Country history: record the head-of-government transition. Fetch PM's
   // party for the event (if a player character) — we don't already have it
@@ -698,6 +705,7 @@ export async function appointPrimeMinister(
       color: DISCORD_COLORS.govFormed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(appointedPerson?.avatarUrl ? { thumbnail: { url: appointedPerson.avatarUrl } } : {}),
     }).catch(() => {});
   }
 }
@@ -1041,9 +1049,13 @@ export async function resolveParliamentaryAppointmentVote(
       color: DISCORD_COLORS.govFormed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(nomineeChar?.avatarUrl ? { thumbnail: { url: nomineeChar.avatarUrl } } : {}),
     }).catch(() => {});
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });
+    const nomineeChar = await db
+      .collection<Character>("characters")
+      .findOne({ _id: vote.nomineeCharacterId });
 
     // S#17: confidence motion failure semantics. If a failed confidence
     // motion has no alternative candidate whose appointment vote has
@@ -1065,13 +1077,11 @@ export async function resolveParliamentaryAppointmentVote(
           color: DISCORD_COLORS.govCollapsed,
           footer: { text: "A House Divided" },
           timestamp: now.toISOString(),
+          ...(nomineeChar?.avatarUrl ? { thumbnail: { url: nomineeChar.avatarUrl } } : {}),
         }).catch(() => {});
       }
     }
 
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: vote.nomineeCharacterId });
     if (nomineeChar?.userId) {
       const config = getCountryConfig(countryId);
       const title = vote.isConfidenceMotion
@@ -1218,6 +1228,7 @@ export async function resolveParliamentaryNoConfidenceVote(
       color: DISCORD_COLORS.govCollapsed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(pmChar?.avatarUrl ? { thumbnail: { url: pmChar.avatarUrl } } : {}),
     }).catch(() => {});
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });

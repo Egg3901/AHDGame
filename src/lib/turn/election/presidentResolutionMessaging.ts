@@ -292,6 +292,15 @@ async function sendPresidentialElectionWebhook(
     .toArray();
   const partyMap = new Map(parties.map((p) => [`${p.countryId}:${p.sequentialId}`, p]));
   const winnerParty = partyMap.get(`US:${winnerCandidate.party}`);
+  const winnerPerson = winnerCandidate.isNPP
+    ? winnerCandidate.nppId
+      ? await db
+          .collection<NPP>("npps")
+          .findOne({ _id: winnerCandidate.nppId }, { projection: { avatarUrl: 1 } })
+      : null
+    : await db
+        .collection<Character>("characters")
+        .findOne({ _id: winnerCandidate.characterId }, { projection: { avatarUrl: 1 } });
 
   const resultsLines: string[] = [];
   for (const [candidateId, evCount] of ranked) {
@@ -399,6 +408,7 @@ async function sendPresidentialElectionWebhook(
     ],
     footer: { text: footerText },
     timestamp: now.toISOString(),
+    ...(winnerPerson?.avatarUrl ? { thumbnail: { url: winnerPerson.avatarUrl } } : {}),
   };
 
   await sendCountryGameEvent("US", embed);

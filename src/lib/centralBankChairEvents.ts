@@ -28,13 +28,15 @@ function chairEventRecipients(countryId: CountryId): CountryId[] {
 /** Player resigned as seated chair (mid-term vacancy). */
 export async function notifyCbChairResignedDiscord(
   countryId: CountryId,
-  chairName: string
+  chairName: string,
+  avatarUrl?: string
 ): Promise<void> {
   const { abbrev, chairTitle } = bankLabels(countryId);
   await sendMultiCountryGameEvent(chairEventRecipients(countryId), {
     title: `${abbrev}: ${chairTitle} resigned`,
     description: `**${chairName}** resigned as ${chairTitle}. A successor will be proposed through the usual selection process.`,
     color: DISCORD_COLORS.govCollapsed,
+    ...(avatarUrl ? { thumbnail: { url: avatarUrl } } : {}),
   });
 }
 
@@ -68,13 +70,15 @@ export async function notifyImfMonetarySupervisionLiftedDiscord(
 export async function notifyCbExecutiveNominationDiscord(
   countryId: CountryId,
   nomineeName: string,
-  nominatedByName: string
+  nominatedByName: string,
+  avatarUrl?: string
 ): Promise<void> {
   const { abbrev, chairTitle } = bankLabels(countryId);
   await sendMultiCountryGameEvent(chairEventRecipients(countryId), {
     title: `${abbrev}: ${chairTitle} nomination`,
     description: `${nominatedByName} nominated **${nomineeName}** for ${chairTitle}.`,
     color: DISCORD_COLORS.leadership,
+    ...(avatarUrl ? { thumbnail: { url: avatarUrl } } : {}),
   });
 }
 
@@ -82,7 +86,8 @@ export async function notifyCbExecutiveNominationDiscord(
 export async function notifyCbChairPendingDiscord(
   countryId: CountryId,
   nomineeName: string,
-  pool: "political" | "economic"
+  pool: "political" | "economic",
+  avatarUrl?: string
 ): Promise<void> {
   const { abbrev, chairTitle, name } = bankLabels(countryId);
   const poolLabel = pool === "political" ? "executive nominations" : "market candidates";
@@ -90,18 +95,21 @@ export async function notifyCbChairPendingDiscord(
     title: `${abbrev}: ${chairTitle} selected`,
     description: `**${nomineeName}** was chosen from the ${poolLabel} pool to lead the ${name} and must accept the appointment.`,
     color: DISCORD_COLORS.leadership,
+    ...(avatarUrl ? { thumbnail: { url: avatarUrl } } : {}),
   });
 }
 
 export async function notifyCbChairAcceptedDiscord(
   countryId: CountryId,
-  chairName: string
+  chairName: string,
+  avatarUrl?: string
 ): Promise<void> {
   const { abbrev, chairTitle, name } = bankLabels(countryId);
   await sendMultiCountryGameEvent(chairEventRecipients(countryId), {
     title: `${abbrev}: ${chairTitle} confirmed`,
     description: `**${chairName}** accepted and is now ${chairTitle} of the ${name}.`,
     color: DISCORD_COLORS.billEnacted,
+    ...(avatarUrl ? { thumbnail: { url: avatarUrl } } : {}),
   });
 }
 
@@ -109,7 +117,8 @@ export async function notifyCbChairDeclinedDiscord(
   countryId: CountryId,
   declinedName: string,
   outcome: "reselected" | "vacancy",
-  reason: "declined" | "timeout" = "declined"
+  reason: "declined" | "timeout" = "declined",
+  avatarUrl?: string
 ): Promise<void> {
   const { abbrev, chairTitle } = bankLabels(countryId);
   // A timeout is a passive lapse, not an active refusal — phrase it accordingly.
@@ -123,5 +132,6 @@ export async function notifyCbChairDeclinedDiscord(
     title: `${abbrev}: ${chairTitle} ${reason === "timeout" ? "lapsed" : "declined"}`,
     description: desc,
     color: DISCORD_COLORS.govCollapsed,
+    ...(avatarUrl ? { thumbnail: { url: avatarUrl } } : {}),
   });
 }
