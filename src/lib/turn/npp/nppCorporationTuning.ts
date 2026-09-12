@@ -123,6 +123,29 @@ export const GLUT_MOTHBALL_FILL_THRESHOLD = 0.25;
 export const GLUT_MOTHBALL_PRICE_RATIO = 0.65;
 export const GLUT_RESTART_PRICE_RATIO = 0.9;
 
+/**
+ * Consecutive P&L-losing turns before an NPP corp mothballs a cost-bleeding
+ * plant (demand audit step 5). Fill-based machinery cannot see a plant that
+ * sells everything yet loses money on costs — live, 248 of 254 losing plants
+ * clear above the mothball fill gate — so chronicity on measured P&L is the
+ * trigger. 12 turns matches the stranded-divest chronic window: long enough
+ * that an investing corp's lumpy capex turns never trip it, short enough to
+ * stop the bleed within half a game year.
+ */
+export const COST_MOTHBALL_LOSS_TURNS = 12;
+
+/**
+ * Ordinary (non-essential-shortage) NPP foundings require the target's peak
+ * output shortage score above this bar (demand audit step 5). The growth
+ * governor already treats ≤0.85 as glut worth shrinking out of; founding
+ * into the same market would build the loser the governor is trying to
+ * shed. Peak, not mean, so a mixed plant with one healthy leg still founds.
+ * A score of exactly 0 means no leg was priced (early-world thin markets) —
+ * fail open, never block on missing signal. The essential-shortage override
+ * (≥ ESSENTIAL_SHORTAGE_SCORE) bypasses this entirely.
+ */
+export const ORDINARY_ENTRY_MIN_SHORTAGE = 0.85;
+
 /** Per-turn wage step toward the target. 0.02 × ~4 turns reaches the shortage premium. */
 export const NPP_WAGE_STEP = 0.02;
 export const NPP_WAGE_BASELINE = 1;

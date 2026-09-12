@@ -18,7 +18,10 @@ export interface CommodityPrice {
   /**
    * Demand units the PLANTS_LEDGER_DEMAND_SUPPLY_CAP and
    * PLANTS_HOUSEHOLD_SUPPLY_CAP passes removed this turn (#1460). Absent when
-   * nothing was truncated. Recorded only; not an input to any price.
+   * nothing was truncated. Recorded only; not an input to any price — but it
+   * IS an input to the read-only build signals (NPP shortage scores and the
+   * expansion advisor gap, see `market/latentShortageSignal.ts`), so builders
+   * can see the shortage the caps hide.
    */
   demandTruncatedUnits?: number;
   /**

@@ -927,6 +927,15 @@ export interface CorporateSector {
    */
   lowFillTurns?: number;
   /**
+   * Consecutive turns the sector's measured P&L was negative (plants
+   * `plantsPnl.profit < 0`). Maintained by the NPP decision pass for NPP-run
+   * corps only — players never get this field written — and reset on the
+   * first profitable turn and on mothball restart. The chronic-cost-loss
+   * signal behind NPP cost-mothballing (demand audit step 5): fill-based
+   * machinery cannot see a plant that sells everything yet bleeds on costs.
+   */
+  pnlLossTurns?: number;
+  /**
    * Player toggle (design-realization-legs §6): true = the unsold remainder of
    * storable outputs becomes sector inventory; absent/false = sell-all, the
    * unsold remainder evaporates (legacy behavior). CEO-set, default off.
