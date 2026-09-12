@@ -46,6 +46,20 @@ describe("buildDiscordEventCardSvg", () => {
     expect(svg).toContain("OFFICIAL PORTRAIT");
     expect(svg).toContain('width="266" height="300"');
     expect(svg).toContain("data:image/png;base64,cG9ydHJhaXQ=");
+    expect(svg).toContain('<clipPath id="copyClip"><rect x="60" y="100" width="730"');
+  });
+
+  it("wraps long portrait titles before the photo column", () => {
+    const svg = buildDiscordEventCardSvg({
+      eyebrow: "US · National event",
+      title: "[TEST PREVIEW] Central Bank Appointment",
+      summary: "Eleanor Hart has been confirmed as central bank chair.",
+      portraitDataUrl: "data:image/png;base64,cG9ydHJhaXQ=",
+    });
+
+    expect(svg).toContain(">[TEST PREVIEW]</text>");
+    expect(svg).toContain(">Central Bank</text>");
+    expect(svg).toContain(">Appointment</text>");
   });
 });
 
