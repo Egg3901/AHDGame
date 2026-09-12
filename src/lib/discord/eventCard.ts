@@ -12,6 +12,14 @@ export interface DiscordEventCardInput {
   chartSvg?: string;
 }
 
+export interface LegacyDiscordEventEmbed {
+  title?: string;
+  description?: string;
+  color: number;
+  fields?: readonly { name: string; value: string; inline?: boolean }[];
+  image?: { url: string };
+}
+
 const WIDTH = 1200;
 const XML_ENTITIES: Record<string, string> = {
   "&": "&amp;",
@@ -57,6 +65,40 @@ function toneColor(tone: DiscordEventCardTone): string {
   if (tone === "election") return "#f2c94c";
   if (tone === "warning") return "#ef4444";
   return "#94a3b8";
+}
+
+function plainDiscordText(value: string): string {
+  return value
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/[*_~`>|]/g, "")
+    .replace(/<a?:[^:>]+:\d+>/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toneFromEmbedColor(color: number): DiscordEventCardTone {
+  if (color === 0x57f287 || color === 0x1abc9c) return "positive";
+  if (color === 0xffd700 || color === 0xc0a062) return "election";
+  if (color === 0xed4245 || color === 0xb03a2e) return "warning";
+  return "neutral";
+}
+
+/** Normalize a legacy text embed into the deliberately small card vocabulary. */
+export function eventCardInputFromEmbed(
+  countryId: string,
+  embed: LegacyDiscordEventEmbed
+): DiscordEventCardInput {
+  const details = (embed.fields ?? [])
+    .filter((field) => plainDiscordText(field.name) && plainDiscordText(field.value))
+    .slice(0, 4)
+    .map((field) => `${plainDiscordText(field.name)} · ${plainDiscordText(field.value)}`);
+  return {
+    eyebrow: `${countryId.toUpperCase()} · National event`,
+    title: plainDiscordText(embed.title || "National update"),
+    summary: plainDiscordText(embed.description || details.shift() || "A new event has occurred."),
+    detailLines: details,
+    tone: toneFromEmbedColor(embed.color),
+  };
 }
 
 /** Build a branded, fixed-size SVG that is converted to PNG before Discord delivery. */
@@ -137,4 +179,16 @@ export async function generateDiscordEventCard(
   filename: string
 ): Promise<string | null> {
   return saveChartAsPNG(buildDiscordEventCardSvg(input), `event-${filename}`);
+}
+
+export async function generateLegacyDiscordEventCard(
+  countryId: string,
+  embed: LegacyDiscordEventEmbed
+): Promise<string | null> {
+  const slug = (embed.title || "national-update")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 48);
+  return generateDiscordEventCard(eventCardInputFromEmbed(countryId, embed), slug || "event");
 }

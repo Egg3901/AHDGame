@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDiscordEventCardSvg } from "./eventCard";
+import { buildDiscordEventCardSvg, eventCardInputFromEmbed } from "./eventCard";
 
 describe("buildDiscordEventCardSvg", () => {
   it("renders AHD branding and escapes player-controlled text", () => {
@@ -32,5 +32,32 @@ describe("buildDiscordEventCardSvg", () => {
     expect(svg).not.toContain(">Five</text>");
     expect(svg).toContain('height="760"');
     expect(svg).toContain('width="730" height="410"');
+  });
+});
+
+describe("eventCardInputFromEmbed", () => {
+  it("turns markdown-heavy legacy embeds into a short card model", () => {
+    expect(
+      eventCardInputFromEmbed("uk", {
+        title: "Government **Formed**",
+        description: "**Jane Doe** formed a government.\n\nMore procedural detail follows.",
+        color: 0x57f287,
+        fields: Array.from({ length: 6 }, (_, index) => ({
+          name: `Field ${index + 1}`,
+          value: `[Open item](https://example.test/${index})`,
+        })),
+      })
+    ).toEqual({
+      eyebrow: "UK · National event",
+      title: "Government Formed",
+      summary: "Jane Doe formed a government. More procedural detail follows.",
+      detailLines: [
+        "Field 1 · Open item",
+        "Field 2 · Open item",
+        "Field 3 · Open item",
+        "Field 4 · Open item",
+      ],
+      tone: "positive",
+    });
   });
 });
