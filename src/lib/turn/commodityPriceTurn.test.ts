@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { processCommodityPriceTurn, realizedOutputFraction } from "./commodityPriceTurn";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import { COMMODITY_TYPES, COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import {
+  COMMODITY_TYPES,
+  COMMODITY_BASE_PRICES,
+  getCommodityStabilizer,
+} from "@/lib/constants/commodities";
 
 vi.mock("@/lib/market/featureFlag", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/market/featureFlag")>();
@@ -315,7 +319,13 @@ describe("commodityPriceTurn", () => {
       await processCommodityPriceTurn(100);
       const ops = mockBulkWrite.mock.calls[0][0];
       const advertisingOp = ops.find((op: any) => op.updateOne.filter.commodity === "advertising");
-      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBe(60);
+      // $10k funded against a $10k economy-wide total: far below the 2e8
+      // reference, so the sublinear pivot cushions demand — 60 linear units
+      // × (1e4/2e8)^-0.15 (demand audit step 7).
+      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBeCloseTo(
+        60 * Math.pow(10_000 / 2e8, -0.15),
+        0
+      );
     });
 
     it("does not book advertising demand a corporation cannot afford", async () => {
@@ -781,6 +791,67 @@ describe("commodityPriceTurn", () => {
       // A named sub-path would silently drop every other category.
       const projected = Object.keys(budgetFind![1].projection as Record<string, unknown>);
       expect(projected.some((k) => k.startsWith("spending.byCategory."))).toBe(false);
+    });
+  });
+
+  describe("sublinear advertising demand (demand audit step 7)", () => {
+    const adWorld = (budgets: number[]) => ({
+      states: [{ _id: "us_ny", countryId: "US", gdp: 1_000_000 }],
+      corporations: budgets.map((marketingBudget) => ({
+        _id: new ObjectId(),
+        marketingBudget,
+        liquidCapital: 1e12,
+        headquartersState: "us_ny",
+      })),
+    });
+    /** Advertising demand net of the ledger stabilizer. */
+    function netAdDemand(): number {
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const op = ops.find((o: any) => o.updateOne.filter.commodity === "advertising");
+      return op.updateOne.update.$set.globalDemand - getCommodityStabilizer("advertising");
+    }
+
+    it("is continuous at the reference: 2e8 budgets convert at the old linear rate", async () => {
+      setupMocks(adWorld([2e8]));
+      await processCommodityPriceTurn(100);
+      // 2e8 × 0.9 / 150 with factor ≈ 1.003 (2e8 reference vs 1.96e8 live).
+      expect(netAdDemand() / ((2e8 * 0.9) / 150)).toBeCloseTo(1, 2);
+    });
+
+    it("grows slower than budgets above the reference and cushions below it", async () => {
+      setupMocks(adWorld([2e8]));
+      await processCommodityPriceTurn(100);
+      const atRef = netAdDemand();
+
+      mockBulkWrite.mockClear();
+      setupMocks(adWorld([4e8]));
+      await processCommodityPriceTurn(100);
+      const doubled = netAdDemand();
+
+      mockBulkWrite.mockClear();
+      setupMocks(adWorld([1e8]));
+      await processCommodityPriceTurn(100);
+      const halved = netAdDemand();
+
+      // Monotonic in budgets (media is never nerfed), sublinear above the
+      // reference (2 × budgets → ~1.80 × demand), cushioned below (0.5 ×
+      // budgets → ~0.56 × demand, i.e. above the 0.5 linear mark).
+      expect(halved).toBeGreaterThan(0);
+      expect(atRef).toBeGreaterThan(halved);
+      expect(doubled).toBeGreaterThan(atRef);
+      expect(doubled / atRef).toBeCloseTo(2 * Math.pow(2, -0.15), 3);
+      expect(halved / atRef).toBeCloseTo(0.5 * Math.pow(0.5, -0.15), 3);
+    });
+
+    it("scales the HQ-state leg by the same factor", async () => {
+      setupMocks(adWorld([2e8, 2e8]));
+      await processCommodityPriceTurn(100);
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const op = ops.find((o: any) => o.updateOne.filter.commodity === "advertising");
+      // Two corps at 2e8 each: total 4e8 → same damped rate on both legs,
+      // and the whole 4e8 worth lands in the shared HQ state.
+      const expected = ((4e8 * 0.9) / 150) * Math.pow(2, -0.15);
+      expect(op.updateOne.update.$set.stateDemand["us_ny"]).toBeCloseTo(expected, 0);
     });
   });
 });

@@ -651,6 +651,30 @@ export function getPriceSoftKnee(commodity: CommodityType): number {
 export const MARKETING_ADVERTISING_DEMAND_RATE = 0.9;
 
 /**
+ * Sublinear advertising-demand exponent (demand audit step 7): total funded
+ * marketing budgets convert at `RATE × (total / REFERENCE) ^ (EXPONENT − 1)`.
+ *
+ * Was linear (exponent 1): every income dollar added 0.9 demand dollars, so
+ * the richer the economy got, the faster ad demand outran supply — and in a
+ * downturn demand fell fastest exactly when media most needed buyers. With
+ * 0.85, demand still grows monotonically in budgets (media is never nerfed),
+ * but slower than income above the reference and relatively cushioned below
+ * it: at 2x reference budgets demand runs ~10% under linear, at 0.5x ~11%
+ * above it. Supply can finally close the gap instead of chasing it.
+ */
+export const MARKETING_ADVERTISING_DEMAND_EXPONENT = 0.85;
+
+/**
+ * Funded-budget reference (anchor $/day) the sublinear exponent pivots on.
+ * Live prod turn ~803 funds ~196M/day across ~415 corps, so 2e8 keeps the
+ * switchover continuous (day-one factor ≈ 1.003): no shock to media on
+ * deploy, bending only as budgets move away. Worlds at very different
+ * scales still behave sanely — the factor is smooth and monotonic — but the
+ * pivot sits nearest today's economy by construction.
+ */
+export const MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR = 2e8;
+
+/**
  * Fraction of annual national healthcare budget spending (normalized to ₳) that
  * converts to healthcare_services commodity demand per turn. Calibrated so that
  * the US budget (~$935B ≈ ₳873B) produces ~180k demand units/turn, with UK and
