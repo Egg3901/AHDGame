@@ -226,18 +226,39 @@ export function generateChamberDiagramSVG(
   width = 1000
 ): string {
   if (countryId === COUNTRY_CONFIGS.UK.id) {
-    return (
-      westminsterParliamentSvgString(
-        seats.map((seat) => ({
-          party: seat.party,
-          partyColor: seat.partyColor,
-          economicPosition: seat.economicPosition,
-          seats: seat.seats,
-        })),
-        total,
-        "#3b3d4d"
-      ) ?? generateParliamentChartSVG(seats, total, { width, showLabels: false })
+    // Match the Discord bot's chamber command: the largest party forms the
+    // government, the next two parties occupy the opposition benches, and
+    // every remaining party sits on the crossbenches.
+    const ranked = [...seats].sort((a, b) => b.seats - a.seats);
+    const governmentContext = {
+      governingParties: new Set(ranked.slice(0, 1).map((seat) => seat.party)),
+      officialOpposition: ranked[1]?.party,
+      additionalOpposition: ranked.slice(2, 3).map((seat) => seat.party),
+    };
+    const westminsterSvg = westminsterParliamentSvgString(
+      seats.map((seat) => ({
+        party: seat.party,
+        partyColor: seat.partyColor,
+        economicPosition: seat.economicPosition,
+        seats: seat.seats,
+      })),
+      total,
+      "#3b3d4d",
+      governmentContext
     );
+
+    if (westminsterSvg) {
+      const viewBox = westminsterSvg.match(/viewBox="([-\d.,\s]+)"/);
+      const dimensions = viewBox?.[1].split(/[,\s]+/).map(Number);
+      const viewBoxWidth = dimensions?.[2];
+      const viewBoxHeight = dimensions?.[3];
+      if (viewBoxWidth && viewBoxHeight) {
+        const height = Math.max(1, Math.round((width * viewBoxHeight) / viewBoxWidth));
+        return westminsterSvg.replace("<svg ", `<svg width="${width}" height="${height}" `);
+      }
+    }
+
+    return generateParliamentChartSVG(seats, total, { width, showLabels: false });
   }
   return generateParliamentChartSVG(seats, total, { width, showLabels: false });
 }
