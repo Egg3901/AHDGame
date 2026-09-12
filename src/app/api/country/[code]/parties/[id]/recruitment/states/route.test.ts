@@ -45,6 +45,20 @@ describe("GET /api/country/[code]/parties/[id]/recruitment/states", () => {
   });
 
   it("returns every state — including ones with active state leadership — so national chairs can recruit anywhere", async () => {
+    const activeUserId = new ObjectId();
+    db.collection("characters").find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ userId: activeUserId }]),
+      }),
+    } as never);
+    db.collection("users").find.mockReturnValue({
+      project: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue([{ _id: activeUserId }]),
+      }),
+    } as never);
+    db.collection("activityLog").aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: activeUserId }]),
+    } as never);
     const states = [
       { _id: "CA", name: "California" },
       { _id: "TX", name: "Texas" },
@@ -69,6 +83,12 @@ describe("GET /api/country/[code]/parties/[id]/recruitment/states", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      partyNPPCount: 1,
+      partyNPPMax: 5,
+      activeMemberCount: 1,
+      availablePartyNppSlots: 4,
+    });
     expect(body.states).toHaveLength(2);
     const ca = body.states.find((s: { stateId: string }) => s.stateId === "CA");
     expect(ca).toMatchObject({
