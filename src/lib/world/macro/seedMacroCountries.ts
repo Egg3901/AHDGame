@@ -3,6 +3,7 @@ import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
 import { getAuthored1953MacroCountry } from "@/lib/world/macro/roster1953";
 import { getTransitionMacroCountry } from "@/lib/world/transitions";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { buildBackgroundMacroCountry } from "./backgroundSeed";
 
 /**
  * Collections that must remain empty for a Tier-2 macro country.
@@ -34,19 +35,30 @@ export async function seedMacroCountries(
   log: (msg: string) => void = () => {}
 ): Promise<number> {
   const manifest = getWorldEntityPresetManifest(preset);
-  const macroEntries = manifest.entries.filter((entry) => entry.simulationTier === "sphere-macro");
+  const macroEntries = manifest.entries.filter(
+    (entry) =>
+      entry.simulationTier === "sphere-macro" || entry.simulationTier === "background-macro"
+  );
+  const collection = await getMacroCountriesCollection(db);
+  // Aggregate state belongs to exactly one world seed; never leak a previous
+  // preset's held contributions across reset/bootstrap.
+  await collection.deleteMany({});
   if (macroEntries.length === 0) {
     log(`[macroCountries] no sphere-macro entities for preset ${preset}`);
     return 0;
   }
 
-  const collection = await getMacroCountriesCollection(db);
   const now = new Date();
-  let seeded = 0;
+  const docs = [];
 
   for (const entry of macroEntries) {
     // Emergent sphere-macro targets wait for a sovereignty transition.
     if (entry.status !== "sovereign") continue;
+
+    if (entry.simulationTier === "background-macro") {
+      docs.push(buildBackgroundMacroCountry(entry, preset, now));
+      continue;
+    }
 
     if (preset !== "1953-default") {
       throw new Error(
@@ -57,17 +69,7 @@ export async function seedMacroCountries(
     // Post-sovereignty transition targets (Ghana + #3727 roster).
     const transitionMacro = getTransitionMacroCountry(entry.entityId, 1, now);
     if (transitionMacro) {
-      await collection.updateOne(
-        { _id: transitionMacro._id },
-        {
-          $set: {
-            ...transitionMacro,
-            updatedAt: now,
-          },
-        },
-        { upsert: true }
-      );
-      seeded++;
+      docs.push({ ...transitionMacro, simulationTier: "sphere-macro" as const });
       continue;
     }
 
@@ -90,19 +92,18 @@ export async function seedMacroCountries(
       );
     }
 
-    await collection.updateOne(
-      { _id: doc._id },
-      {
-        $set: {
-          ...doc,
-          updatedAt: now,
-        },
-      },
-      { upsert: true }
-    );
-    seeded++;
+    docs.push(doc);
   }
 
-  log(`[macroCountries] seeded ${seeded} sphere-macro countries for ${preset}`);
-  return seeded;
+  if (docs.length > 0) {
+    await collection.bulkWrite(
+      docs.map((doc) => ({
+        replaceOne: { filter: { _id: doc._id }, replacement: doc, upsert: true },
+      })),
+      { ordered: false }
+    );
+  }
+
+  log(`[macroCountries] seeded ${docs.length} aggregate countries for ${preset}`);
+  return docs.length;
 }

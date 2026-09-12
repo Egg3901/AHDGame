@@ -338,9 +338,10 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                         the Senate confirms by majority vote.
                       </li>
                       <li>
-                        Historical justices leave on their real dates. Divergent justices have a{" "}
-                        {formatDeathChancePercent()} death chance each turn after about two years,
-                        which opens the seat.
+                        Original justices leave on their historical dates. The President nominates
+                        the replacement; the Senate confirms. Later historical justices are never
+                        seated automatically. Player and NPP justices have a{" "}
+                        {formatDeathChancePercent()} death chance each turn after about two years.
                       </li>
                       <li>
                         The court&apos;s ideological balance decides whether landmark historical
@@ -355,9 +356,10 @@ export default function SupremeCourtClient({ countryId }: { countryId: CountryId
                 </InfoTooltip>
               </div>
               <p className="mt-1 max-w-2xl text-sm text-muted">
-                Nine seats. Historical justices follow real departure dates. Divergent justices have
-                a {formatDeathChancePercent()} death chance each turn after their first two years.
-                The President nominates; the Senate confirms by simple majority.
+                Nine seats. When a justice leaves, the President nominates and the Senate confirms
+                by simple majority. Original justices leave on their historical dates; later
+                historical successors are never auto-seated. Player and NPP justices have a{" "}
+                {formatDeathChancePercent()} death chance each turn after their first two years.
               </p>
               <div className="mt-4 flex items-center gap-6 border-t border-card-border pt-4">
                 <div>

@@ -1,4 +1,5 @@
 import type { ObjectId } from "mongodb";
+import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
 
 export interface VoteTurnSnapshot {
@@ -76,6 +77,14 @@ export interface ElectionVoteTally {
     eligibleVicePresidentCandidateIds: string[];
     houseDelegationVotes: Record<string, string | null>;
     houseVoteTotals: Record<string, number>;
+    houseBallots?: Array<{
+      ballot: number;
+      activeCandidateIds: string[];
+      delegationVotes: Record<string, string | null>;
+      totals: Record<string, number>;
+      reason: string;
+      withdrawnCandidateId?: string;
+    }>;
     senateVotes: Record<string, string | null>;
     senateVoteTotals: Record<string, number>;
     presidentWinnerId: string;
@@ -110,6 +119,8 @@ export interface ElectionVoteTally {
     incumbentPartyId?: string;
     recordedTurn: number;
   };
+  /** President only: the institutional-health pressure applied on the last turn. */
+  democraticHealth?: DemocraticHealthElectionSnapshot;
   /**
    * President only: the descriptive factor ledger the engine teed on the last
    * accumulation turn (see `src/lib/electionEngine/factorLedger.ts`). A

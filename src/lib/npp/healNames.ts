@@ -30,7 +30,7 @@ export interface NppRename {
 
 type HealCandidate = Pick<
   NPP,
-  "_id" | "name" | "countryId" | "gender" | "ethnicity" | "avatarUrl" | "isTechnocrat"
+  "_id" | "name" | "countryId" | "gender" | "ethnicity" | "avatarUrl" | "isTechnocrat" | "birthYear"
 >;
 
 /**
@@ -55,6 +55,7 @@ export async function planNppNameHeal(
       ethnicity: 1,
       avatarUrl: 1,
       isTechnocrat: 1,
+      birthYear: 1,
     })
     .toArray();
 
@@ -72,6 +73,10 @@ export async function planNppNameHeal(
     // "Reginald Finch". That pool is a design choice, not the silent US
     // fallback this heal exists to undo, so they are left alone.
     if (npp.isTechnocrat) continue;
+    // Aged NPPs carry a real or generated birth year — historical officeholders
+    // and their successors. Their names are deliberately not from the
+    // generator pools, so without this guard the heal would "fix" every one.
+    if (npp.birthYear != null) continue;
     if (isNameFromCountryPool(npp.name, countryId)) continue;
 
     const generated = generateUniqueNPPNameAndGender(takenNames, 200, countryId);

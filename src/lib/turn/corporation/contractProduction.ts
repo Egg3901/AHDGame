@@ -34,6 +34,7 @@ export function computeContractProduction(args: ContractProductionArgs): {
   producedUnits: number;
   soldUnits: number;
   contractAchievableUnits: number;
+  demandThrottleFactor: number;
 } {
   const actualPlannedUnits = args.actualNameplateUnits * args.actualProductionFactor;
   const actualDemandThrottle = args.plantsEnabled
@@ -45,7 +46,9 @@ export function computeContractProduction(args: ContractProductionArgs): {
     soldFraction: args.soldFraction,
   });
 
-  if (!args.plantsEnabled) return { ...actual, contractAchievableUnits: 0 };
+  if (!args.plantsEnabled) {
+    return { ...actual, contractAchievableUnits: 0, demandThrottleFactor: 1 };
+  }
 
   const involuntaryUnits = Math.max(
     0,
@@ -59,5 +62,6 @@ export function computeContractProduction(args: ContractProductionArgs): {
   return {
     ...actual,
     contractAchievableUnits: involuntaryUnits * contractDemandThrottle,
+    demandThrottleFactor: actualDemandThrottle,
   };
 }

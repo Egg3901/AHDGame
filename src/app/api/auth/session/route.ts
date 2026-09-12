@@ -1,8 +1,11 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import { NextResponse } from "next/server";
 import { jwtVerify, errors as joseErrors } from "jose";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getJwtSecret } from "@/lib/auth";
+import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getDb } from "@/lib/mongodb";
 import type { User } from "@/lib/db/types";
@@ -11,10 +14,12 @@ const claimsSchema = z.object({
   userId: z.string().regex(/^[a-fA-F0-9]{24}$/),
   iat: z.number().int().nonnegative(),
   exp: z.number().int().positive(),
+  authSource: z.literal("unified").optional(),
+  sid: z.string().uuid().optional(),
 });
 const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
 
-/** Read-only legacy session check. Consumers must pin the deployment origin. */
+/** Read-only game session check. Consumers must pin the deployment origin. */
 export async function GET(request: Request) {
   const values = (request.headers.get("cookie") ?? "")
     .split(";")
@@ -43,14 +48,28 @@ export async function GET(request: Request) {
 
     // Bypass the app's user cache: bans and revocation must be current here.
     const db = await getDb();
-    const user = await db
-      .collection<User>("users")
-      .findOne(
-        { _id: new ObjectId(userId) },
-        { projection: { username: 1, email: 1, isBanned: 1, authRevokedAt: 1 } }
-      );
+    const user = await db.collection<User>("users").findOne(
+      { _id: new ObjectId(userId) },
+      {
+        projection: {
+          username: 1,
+          email: 1,
+          isBanned: 1,
+          authRevokedAt: 1,
+          authMigrationFence: 1,
+        },
+      }
+    );
     if (!user || user.isBanned || !user.username) return inactive();
-    if (user.authRevokedAt && user.authRevokedAt.getTime() >= iat * 1000) return inactive();
+    // Migrated players carry a newly issued game JWT bound to a live unified
+    // session. Verify that binding instead of treating it as a legacy token.
+    // Old credentials remain fenced, and every broker recheck observes logout.
+    if (parsed.data.authSource === "unified") {
+      if (!(await unifiedSessionIsCurrent(db, parsed.data))) return inactive();
+    } else if (isAuthMigrationFenced(user)) {
+      return inactive();
+    }
+    if (isTokenRevokedByCutoff(user.authRevokedAt, iat)) return inactive();
 
     // Contact email preserves legacy consumer compatibility. It does not prove
     // email ownership or grant staff permissions.

@@ -150,6 +150,9 @@ import {
 import { computeFillRate, fillRateBand } from "@/lib/corporations/financialFogOfWar";
 import { summarizeBuildQueue } from "@/lib/corporations/sectorBuildQueue";
 import { readPlantsPnl } from "@/lib/corporations/plantsPnlBasis";
+import { loadBankingPolicy } from "@/lib/banking/policy";
+import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
+import { bankBookEquity, bankNpvFromPerTurnIncome, bankValuation } from "@/lib/banking/valuation";
 
 function getEmptyStateMetricValues(): StateMetricValues {
   return {
@@ -450,6 +453,9 @@ export async function loadCorporationDetailView(args: {
 
   const refDataPromise = getTurnReferenceData(db, currentTurn);
   const equityQuotePromise = loadEquityQuote(db, corporation);
+  const bankingPolicyPromise = corporation.bankCharter
+    ? loadBankingPolicy(db)
+    : Promise.resolve(null);
 
   const [openListingsForInvariant, openSellOrdersForInvariant] = await Promise.all([
     db
@@ -1639,6 +1645,38 @@ export async function loadCorporationDetailView(args: {
 
   const corpCurrency = resolveCorpLiquidCurrencyCode(corporation);
   const corpFxRate = fxRateForCorpFromMap(corporation, fxByCurrency);
+  const bankingPolicy = await bankingPolicyPromise;
+  const activeBankCharter =
+    corporation.bankCharter?.status === "active" ? corporation.bankCharter : null;
+  const bankCurrency = activeBankCharter?.currency as CurrencyCode | undefined;
+  const bankSheetOptions =
+    activeBankCharter && bankingPolicy && bankCurrency
+      ? {
+          playerDepositsAreLiabilities: savingsReadsAuthoritative(bankingPolicy, bankCurrency),
+        }
+      : {};
+  const bankFxRate = bankCurrency ? (fxByCurrency.get(bankCurrency) ?? 1) : 1;
+  const bankBookEquityAnchor = activeBankCharter
+    ? bankBookEquity(activeBankCharter, bankSheetOptions) / bankFxRate
+    : 0;
+  const bankValuationAnchor = activeBankCharter
+    ? bankValuation(activeBankCharter, bankSheetOptions) / bankFxRate
+    : 0;
+  const bankIncomePerTurnAnchor = activeBankCharter
+    ? (activeBankCharter.lastBankingIncome ?? 0) / bankFxRate
+    : 0;
+  const bankIncomeLocalPerDay = anchorToCorpCapital(
+    bankIncomePerTurnAnchor * TURNS_PER_DAY,
+    corpCurrency,
+    corpFxRate
+  );
+  const bankNpvLocal = anchorToCorpCapital(
+    bankNpvFromPerTurnIncome(bankIncomePerTurnAnchor),
+    corpCurrency,
+    corpFxRate
+  );
+  const bankBookEquityLocal = anchorToCorpCapital(bankBookEquityAnchor, corpCurrency, corpFxRate);
+  const bankValuationLocal = anchorToCorpCapital(bankValuationAnchor, corpCurrency, corpFxRate);
   const dailyInterestLocal = anchorToCorpCapital(dailyInterestAnchor, corpCurrency, corpFxRate);
   const dailyCouponIncomeLocal = anchorToCorpCapital(dailyCouponIncome, corpCurrency, corpFxRate);
 
@@ -1710,6 +1748,7 @@ export async function loadCorporationDetailView(args: {
     };
   });
   const totalSectorNPV = sectorNPVs.reduce((sum, s) => sum + s.npv, 0);
+  const totalOperatingNPV = totalSectorNPV + bankNpvLocal;
   const currentSharePrice = Math.round((corporation.sharePrice ?? MIN_SHARE_PRICE) * 100) / 100;
   const totalPortfolioAnchor =
     totalStockHoldingsValue + totalBondHoldingsValue + imfReceivablesPrincipal;
@@ -1720,7 +1759,11 @@ export async function loadCorporationDetailView(args: {
     corpFxRate
   );
   const totalAssets =
-    corporation.liquidCapital + totalSectorNPV + totalPortfolioValue + techAssetValueLocal;
+    corporation.liquidCapital +
+    totalOperatingNPV +
+    bankValuationLocal +
+    totalPortfolioValue +
+    techAssetValueLocal;
   const bookValue = totalAssets - totalDebtLocal;
   const bondHoldingsValueLocal = anchorToCorpCapital(
     totalBondHoldingsValue,
@@ -1743,6 +1786,14 @@ export async function loadCorporationDetailView(args: {
       cashOnHand: Math.round(corporation.liquidCapital),
       sectorNPVs,
       totalSectorNPV,
+      totalOperatingNPV: Math.round(totalOperatingNPV),
+      ...(activeBankCharter
+        ? {
+            bankEquity: Math.round(bankBookEquityLocal),
+            bankValuation: Math.round(bankValuationLocal),
+            bankNPV: Math.round(bankNpvLocal),
+          }
+        : {}),
       bondHoldingsValue: Math.round(bondHoldingsValueLocal),
       stockHoldingsValue: Math.round(stockHoldingsValueLocal),
       imfFacilityReceivablesValue: Math.round(imfReceivablesPrincipalLocal),
@@ -2001,6 +2052,14 @@ export async function loadCorporationDetailView(args: {
     imfFacilityReceiptsDaily: Math.round(imfFacilityReceiptsDailyLocal),
     totalCosts: Math.round(totalCostsLocal),
     income: Math.round(income),
+    // A bank's cash is ring-fenced, so its realized earnings are reported as
+    // a separate subsidiary line rather than silently mixed into the holding
+    // company's spendable cash income.
+    bankingIncome: Math.round(bankIncomeLocalPerDay),
+    ...(activeBankCharter?.lastBankingIncomeTurn != null
+      ? { bankingIncomeTurn: activeBankCharter.lastBankingIncomeTurn }
+      : {}),
+    economicIncomeIncludingBank: Math.round(income + bankIncomeLocalPerDay),
     // Ground-truth realized net income from the engine's last snapshot, converted
     // from per-turn to the daily display units the projected `income` uses. This
     // is what actually hit liquidCapital last turn — it reflects embargo/tariff/

@@ -2,6 +2,7 @@ import type { CorporationType } from "@/lib/constants/corporations";
 import type { ExtractableResource } from "@/lib/constants/commodities";
 import type { MacroCountryState, MacroSectorState } from "@/lib/world/macro/types";
 import { computeMacroContribution } from "@/lib/world/macro/kernel";
+import { macroTickBucket } from "@/lib/world/macro/schedule";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { getGhanaMacroCountry } from "./ghana";
 import {
@@ -61,6 +62,8 @@ function buildMacroCountry(profile: MacroProfile, turn: number, now: Date): Macr
     _id: profile.entityId,
     entityId: profile.entityId,
     presetId: "1953-default",
+    simulationTier: "sphere-macro" as const,
+    tickBucket: macroTickBucket(profile.entityId),
     displayName: profile.displayName,
     economicSystem: "market" as const,
     population: profile.population,

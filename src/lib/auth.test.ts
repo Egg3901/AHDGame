@@ -223,7 +223,7 @@ describe("auth", () => {
         userId: validPayload.userId,
         username: validPayload.username,
         email: validPayload.email,
-        role: validPayload.role,
+        role: mockUser.role,
         isAdmin: false,
         isModerator: false,
         isBanned: false,
@@ -277,6 +277,52 @@ describe("auth", () => {
       expect(result?.isAdmin).toBe(true);
     });
 
+    it.each([null, {}, "malformed", undefined])(
+      "denies cookie, token and character principals for a present migration fence: %s",
+      async (authMigrationFence) => {
+        const current = { ...mockUser, authMigrationFence };
+        mockCookies.mockResolvedValue({ get: vi.fn().mockReturnValue({ value: "token" }) });
+        mockJwtVerify.mockResolvedValue({
+          payload: {
+            userId: "507f1f77bcf86cd799439011",
+            email: "test@example.invalid",
+            username: "testuser",
+            iat: Math.floor(Date.now() / 1000),
+          },
+        });
+        mockGetUsersCollection.mockResolvedValue({ findOne: vi.fn().mockResolvedValue(current) });
+        const { getAuthUser, getAuthUserFromToken, getAuthUserWithCharacter } =
+          await import("./auth");
+        expect(await getAuthUser()).toBeNull();
+        expect(await getAuthUserFromToken("token")).toBeNull();
+        expect(await getAuthUserWithCharacter()).toBeNull();
+        expect(mockGetCharactersCollection).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each([0, false, "", "2026-01-01", {}, new Date(NaN)])(
+      "denies cookie, token and character principals for malformed revocation data: %s",
+      async (authRevokedAt) => {
+        const current = { ...mockUser, authRevokedAt };
+        mockCookies.mockResolvedValue({ get: vi.fn().mockReturnValue({ value: "token" }) });
+        mockJwtVerify.mockResolvedValue({
+          payload: {
+            userId: "507f1f77bcf86cd799439011",
+            email: "test@example.invalid",
+            username: "testuser",
+            iat: Math.floor(Date.now() / 1000),
+          },
+        });
+        mockGetUsersCollection.mockResolvedValue({ findOne: vi.fn().mockResolvedValue(current) });
+        const { getAuthUser, getAuthUserFromToken, getAuthUserWithCharacter } =
+          await import("./auth");
+        expect(await getAuthUser()).toBeNull();
+        expect(await getAuthUserFromToken("token")).toBeNull();
+        expect(await getAuthUserWithCharacter()).toBeNull();
+        expect(mockGetCharactersCollection).not.toHaveBeenCalled();
+      }
+    );
+
     it("returns null when the user is banned", async () => {
       const bannedUser = { ...mockUser, isBanned: true, banReason: "Violation of rules" };
       const validPayload = {
@@ -326,6 +372,53 @@ describe("auth", () => {
       const result = await getAuthUser();
 
       expect(result).toBeNull();
+    });
+
+    it("still rejects the original token when authRevokedAt is kept after reauth", async () => {
+      const cutoff = new Date("2026-04-25T12:00:00.400Z");
+      const revokedUser = { ...mockUser, authRevokedAt: cutoff };
+      const originalPayload = {
+        userId: "507f1f77bcf86cd799439011",
+        email: "test@example.com",
+        username: "testuser",
+        role: "user",
+        iat: Math.floor(cutoff.getTime() / 1000),
+      };
+
+      mockCookies.mockResolvedValue({
+        get: vi.fn().mockReturnValue({ value: "token" }),
+      } as any);
+      mockJwtVerify.mockResolvedValue({ payload: originalPayload } as any);
+      mockGetUsersCollection.mockResolvedValue({
+        findOne: vi.fn().mockResolvedValue(revokedUser),
+      } as any);
+
+      const { getAuthUser } = await import("./auth");
+      expect(await getAuthUser()).toBeNull();
+    });
+
+    it("accepts a token issued strictly after a persisted authRevokedAt cutoff", async () => {
+      const cutoff = new Date("2026-04-25T12:00:00.400Z");
+      const revokedUser = { ...mockUser, authRevokedAt: cutoff };
+      const freshPayload = {
+        userId: "507f1f77bcf86cd799439011",
+        email: "test@example.com",
+        username: "testuser",
+        role: "user",
+        iat: Math.floor(cutoff.getTime() / 1000) + 1,
+      };
+
+      mockCookies.mockResolvedValue({
+        get: vi.fn().mockReturnValue({ value: "token" }),
+      } as any);
+      mockJwtVerify.mockResolvedValue({ payload: freshPayload } as any);
+      mockGetUsersCollection.mockResolvedValue({
+        findOne: vi.fn().mockResolvedValue(revokedUser),
+      } as any);
+
+      const { getAuthUser } = await import("./auth");
+      const result = await getAuthUser();
+      expect(result?.userId).toBe(freshPayload.userId);
     });
   });
 
@@ -391,7 +484,7 @@ describe("auth", () => {
         userId: validPayload.userId,
         username: validPayload.username,
         email: validPayload.email,
-        role: validPayload.role,
+        role: mockUser.role,
         isAdmin: false,
         isModerator: false,
         isBanned: false,
@@ -428,7 +521,7 @@ describe("auth", () => {
         userId: validPayload.userId,
         username: validPayload.username,
         email: validPayload.email,
-        role: validPayload.role,
+        role: mockUser.role,
         isAdmin: false,
         isModerator: false,
         isBanned: false,

@@ -44,12 +44,14 @@ interface SnapshotLaw {
   enactedYear: number;
 }
 
+type DisplayEnactedLaw = EnactedLaw & { annualCost?: number };
+
 interface BudgetData {
   budget: FederalBudget;
   primeRate: number;
   turnsUntilFY: number;
   stateGrantBreakdown: { stateId: string; stateName: string; federalGrants: number }[];
-  enactedLaws: EnactedLaw[] | SnapshotLaw[];
+  enactedLaws: DisplayEnactedLaw[] | SnapshotLaw[];
   grantLabel: string;
   grantRecipientLabel: string;
   isSnapshot?: boolean;
@@ -821,7 +823,8 @@ export function NationalBudgetClient() {
     grantRecipientLabel,
   } = data;
 
-  const describeLawCost = (law: EnactedLaw) => {
+  const describeLawCost = (law: DisplayEnactedLaw) => {
+    if (law.annualCost != null) return formatMoney(law.annualCost);
     // New-generation catalog laws price through costModelV2 (routed first,
     // like the cost engine) — without this branch every catalog law fell
     // through to the misleading "No direct fiscal delta" fallback.
@@ -857,8 +860,8 @@ export function NationalBudgetClient() {
     return "No direct fiscal delta";
   };
 
-  const formatLawCost = (law: EnactedLaw | SnapshotLaw): string =>
-    "costModel" in law ? law.costModel : describeLawCost(law as EnactedLaw);
+  const formatLawCost = (law: DisplayEnactedLaw | SnapshotLaw): string =>
+    "costModel" in law ? law.costModel : describeLawCost(law as DisplayEnactedLaw);
 
   // Structured revenue lines for the expandable breakdown panel (rate + base).
   const revenueLines: BreakdownLine[] = displayRevenueEntries(budget.revenue).map(
@@ -1029,7 +1032,11 @@ export function NationalBudgetClient() {
         />
 
         {isLive && data.defenseFunding ? (
-          <DefenseFundingNote sym={moneyPrefix} funding={data.defenseFunding} />
+          <DefenseFundingNote
+            sym={moneyPrefix}
+            funding={data.defenseFunding}
+            soeNetPerTurn={data.stateEnterpriseNet ?? null}
+          />
         ) : null}
 
         {isLive && countryId === COUNTRY_CONFIGS.UK.id ? (

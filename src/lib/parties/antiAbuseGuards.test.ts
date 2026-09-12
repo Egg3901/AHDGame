@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import type { Character, PoliticalParty } from "@/lib/db/types";
 import { createMockDb } from "@/lib/test-utils/mockDb";
@@ -8,7 +8,6 @@ import {
   getPartySwitchCooldown,
   getPurgeRejoinBlock,
   prunePurgeRejoinBlocks,
-  PARTY_NPP_CONTROL_MIN_PLAYERS,
 } from "./antiAbuseGuards";
 import { PURGE_REJOIN_COOLDOWN_TURNS } from "@/lib/constants/partyActions";
 import type { PurgeRejoinBlock } from "@/lib/db/types";
@@ -84,21 +83,8 @@ describe("party anti-abuse guards", () => {
     expect(result.error).toContain("48 hours");
   });
 
-  it("allows custom party NPP controls after age, membership, and actor tenure pass", async () => {
+  it("allows a one-player custom party to use NPP controls after age and actor tenure pass", async () => {
     const db = createMockDb();
-    const members = Array.from({ length: PARTY_NPP_CONTROL_MIN_PLAYERS }, () => ({
-      userId: new ObjectId(),
-    }));
-    db.collection("characters").find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue(members),
-      }),
-    });
-    db.collection("users").find.mockReturnValue({
-      project: vi.fn().mockReturnValue({
-        toArray: vi.fn().mockResolvedValue([]),
-      }),
-    });
 
     const result = await getPartyNppControlStatus({
       db: db as unknown as Db,

@@ -17,6 +17,7 @@ import { ManagePrivateShareholdersPanel } from "@/components/corporation/ManageP
 import PrivateSalePanel from "@/components/corporation/shares/PrivateSalePanel";
 import { NationalizationStatusCard } from "@/components/corporation/NationalizationStatusCard";
 import BondMaturityNotice from "@/components/corporation/BondMaturityNotice";
+import PrivateNotListedNotice from "@/components/corporation/PrivateNotListedNotice";
 import { NewFeatureBadge } from "@/components/ui";
 import { useFeatureSeen } from "@/hooks/useFeatureSeen";
 import { CORP_PAGE_FEATURE_KEYS } from "@/lib/ui/corpPageFeatureKeys";
@@ -736,16 +737,16 @@ export default function CorporationDetailPage() {
   // procurement contract, so the tab would be permanently empty.
   const isDefenceCorp = corporation.type === "defense" || corporation.secondaryType === "defense";
   const gatedTabs = isDefenceCorp ? gatedBaseTabs : gatedBaseTabs.filter((t) => t.id !== "defence");
-  // Structure (subsidiary relationships + private supply agreements) is only
-  // offered when at least one of its panels has something to render — the
-  // subsidiary card self-hides otherwise.
+  // Structure is only offered when the subsidiary panel has something to
+  // render. Supply agreements live with commodity operations so both CEOs can
+  // find the negotiation surface without opening an ownership tab.
   const showSubsidiaryPanel =
     !!corporation.isFormalizedSubsidiary ||
     !!corporation.canFormalizeAsSubsidiary ||
     !!corporation.canManageAsParent ||
     !!corporation.canSpinOff;
   const showSupplyAgreements = isCeo && !isNationalCorp && !!corporation.supplyAgreementsEnabled;
-  const showStructureTab = showSubsidiaryPanel || showSupplyAgreements;
+  const showStructureTab = showSubsidiaryPanel;
 
   const visibleTabs = [
     ...gatedTabs,
@@ -846,21 +847,19 @@ export default function CorporationDetailPage() {
           liquidCurrencyCode={corporation.liquidCurrencyCode}
           liquidCapital={corporation.liquidCapital}
           corporationName={corporation.name}
+          corporationId={corporation._id ?? id}
         />
 
         {/* Ticket #1153: a private corporation is deliberately excluded from
             every exchange snapshot, but nothing said so, so its owner read the
             absence as a listing that had failed and waited turns for it. Say it
-            on the page they are already looking at, and say what changes it. */}
+            on the page they are already looking at, and say what changes it.
+            Dismissable per corp — once the owner knows, it never nags again. */}
         {corporation.isPrivate && isCeo && (
-          <div className="rounded-xl border border-info/30 bg-info/10 px-4 py-3 text-sm">
-            <p className="font-semibold text-foreground">Not listed on any exchange</p>
-            <p className="mt-0.5 text-muted">
-              {corporation.name} is private, and private corporations do not appear on the stock
-              market. Take it public from the Shares tab to list it. Buying your own shares back
-              until nothing is left on the public float has the same effect as staying private.
-            </p>
-          </div>
+          <PrivateNotListedNotice
+            corporationId={corporation._id ?? id}
+            corporationName={corporation.name}
+          />
         )}
 
         {corporation.isPrivate && !isCeo && (isModerator || isAdmin) && (
@@ -1133,7 +1132,15 @@ export default function CorporationDetailPage() {
                 )}
 
                 {tab === "commodities" && (
-                  <CommoditiesTab corpId={id} isCeo={isCeo} modViewEnabled={modViewEnabled} />
+                  <div className="space-y-6">
+                    <CommoditiesTab corpId={id} isCeo={isCeo} modViewEnabled={modViewEnabled} />
+                    {showSupplyAgreements && (
+                      <SupplyAgreementsSection
+                        corpId={corporation._id}
+                        countryId={corporation.countryId}
+                      />
+                    )}
+                  </div>
                 )}
 
                 {/* Render-time guard, not just the tab-reset effect above: a ?tab=shares
@@ -1269,13 +1276,6 @@ export default function CorporationDetailPage() {
                       ).map(([type, count]) => ({ type, count }))}
                       onChanged={() => fetchCorporation()}
                     />
-                    {/* Private supply agreements — CEO-only, gated on the global feature flag. */}
-                    {showSupplyAgreements && (
-                      <SupplyAgreementsSection
-                        corpId={corporation._id}
-                        countryId={corporation.countryId}
-                      />
-                    )}
                   </div>
                 )}
 

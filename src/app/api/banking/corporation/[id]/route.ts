@@ -412,6 +412,8 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               totalLoans: charter.totalLoans ?? 0,
               npcDeposits: charter.npcDeposits ?? 0,
               cashReserves: getCashReserves(charter),
+              lastBankingIncome: charter.lastBankingIncome ?? 0,
+              lastBankingIncomeTurn: charter.lastBankingIncomeTurn ?? null,
               requiredReserves: requiredReserves(charter, reserveRatio ?? 0, sheetOptions),
               upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0, sheetOptions),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,

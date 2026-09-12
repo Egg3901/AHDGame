@@ -60,8 +60,76 @@ beforeEach(() => {
             stateId: "TX",
             volumeCap: 120,
             pricePremium: 0.05,
+            exclusive: false,
             status: "pending",
             proposedByCorpId: "supplier",
+            currentOffer: {
+              revision: 2,
+              proposedByCorpId: "supplier",
+              volumeCap: 120,
+              pricePremium: 0.05,
+              exclusive: false,
+              proposedAt: "2026-09-12T00:00:00.000Z",
+            },
+            offers: [
+              {
+                revision: 1,
+                proposedByCorpId: "buyer2",
+                volumeCap: 100,
+                pricePremium: 0,
+                exclusive: false,
+                proposedAt: "2026-09-11T00:00:00.000Z",
+              },
+              {
+                revision: 2,
+                proposedByCorpId: "supplier",
+                volumeCap: 120,
+                pricePremium: 0.05,
+                exclusive: false,
+                proposedAt: "2026-09-12T00:00:00.000Z",
+              },
+            ],
+          },
+          {
+            _id: "agreement-3",
+            supplierCorpId: "supplier",
+            supplierCorpName: "Gridworks",
+            supplierCorpTicker: "GRID",
+            buyerCorpId: "buyer",
+            buyerCorpName: "Buyer Industries",
+            buyerCorpTicker: "BUY",
+            commodity: "steel",
+            volumeCap: 100,
+            pricePremium: -0.05,
+            exclusive: false,
+            status: "pending",
+            proposedByCorpId: "supplier",
+            currentOffer: {
+              revision: 2,
+              proposedByCorpId: "supplier",
+              volumeCap: 100,
+              pricePremium: -0.05,
+              exclusive: false,
+              proposedAt: "2026-09-12T00:00:00.000Z",
+            },
+            offers: [
+              {
+                revision: 1,
+                proposedByCorpId: "buyer",
+                volumeCap: 100,
+                pricePremium: 0,
+                exclusive: false,
+                proposedAt: "2026-09-11T00:00:00.000Z",
+              },
+              {
+                revision: 2,
+                proposedByCorpId: "supplier",
+                volumeCap: 100,
+                pricePremium: -0.05,
+                exclusive: false,
+                proposedAt: "2026-09-12T00:00:00.000Z",
+              },
+            ],
           },
         ],
         capacityByCommodity: {
@@ -91,7 +159,7 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     render(<SupplyAgreementsSection corpId="buyer" />);
 
     await waitFor(() => expect(screen.getByText("As buyer")).toBeTruthy());
-    expect(screen.getByRole("link", { name: /Gridworks \(GRID\)/ })).toBeTruthy();
+    expect(screen.getAllByRole("link", { name: /Gridworks \(GRID\)/ }).length).toBeGreaterThan(0);
     expect(screen.getByText(/60 MWh on turn 296/)).toBeTruthy();
   });
 
@@ -99,7 +167,9 @@ describe("SupplyAgreementsSection delivery outcome", () => {
     render(<SupplyAgreementsSection corpId="supplier" />);
 
     await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
-    expect(screen.getByRole("link", { name: /Buyer Industries \(BUY\)/ })).toBeTruthy();
+    expect(
+      screen.getAllByRole("link", { name: /Buyer Industries \(BUY\)/ }).length
+    ).toBeGreaterThan(0);
     expect(screen.getByText("Shortfall damages")).toBeTruthy();
     expect(screen.getByText("Chargeable shortfall")).toBeTruthy();
     expect(screen.getByText("Damages assessed")).toBeTruthy();
@@ -138,5 +208,79 @@ describe("SupplyAgreementsSection delivery outcome", () => {
 
     await waitFor(() => expect(screen.getByText("As supplier")).toBeTruthy());
     expect(screen.getByText(/· TX/)).toBeTruthy();
+  });
+
+  it("lets the receiving CEO open a counter-offer and keeps the revision history visible", async () => {
+    render(<SupplyAgreementsSection corpId="buyer" />);
+
+    await waitFor(() => expect(screen.getByText("As buyer")).toBeTruthy());
+    expect(screen.getByText("Revision 2 from the counterparty")).toBeTruthy();
+    expect(screen.getByText("Offer history (2 revisions)")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Counter-offer" }));
+    fireEvent.change(screen.getByLabelText("Volume cap per turn"), {
+      target: { value: "110" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send counter-offer" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        "/api/corporations/buyer/supply-agreements/agreement-3",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({
+            action: "counter",
+            volumeCap: 110,
+            pricePremium: -0.05,
+            exclusive: false,
+          }),
+        })
+      )
+    );
+  });
+
+  it("lets the buyer CEO open an offer to a searched supplier", async () => {
+    vi.mocked(fetch).mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("buyer-search")) {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [{ id: "supplier", name: "Gridworks", ticker: "GRID", countryId: "US" }],
+          }),
+        } as Response;
+      }
+      if (init?.method === "POST") {
+        return { ok: true, json: async () => ({ success: true }) } as Response;
+      }
+      return {
+        ok: true,
+        json: async () => ({ agreements: [], capacityByCommodity: {}, capacityByState: {} }),
+      } as Response;
+    });
+
+    render(<SupplyAgreementsSection corpId="buyer" />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Propose agreement" })).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Propose agreement" }));
+    fireEvent.click(screen.getByRole("button", { name: "I need supply" }));
+    fireEvent.change(screen.getByPlaceholderText("Search corporations by name…"), {
+      target: { value: "Grid" },
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /Gridworks/ })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Gridworks/ }));
+    fireEvent.change(screen.getByPlaceholderText("e.g. 5000"), { target: { value: "200" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send opening offer" }));
+
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        "/api/corporations/buyer/supply-agreements",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"supplierCorpId":"supplier"'),
+        })
+      )
+    );
   });
 });

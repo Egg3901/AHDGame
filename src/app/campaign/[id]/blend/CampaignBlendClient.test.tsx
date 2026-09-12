@@ -132,6 +132,13 @@ describe("manager view", () => {
     expect(screen.getAllByText(/RALLY · 4/)).toHaveLength(2);
   });
 
+  it("keeps campaign strength contribution reachable on mobile", () => {
+    // The desktop sidebar is hidden below lg. Both layouts stay in the test
+    // DOM, so this asserts that the mobile shell has its own real control.
+    renderClient();
+    expect(screen.getAllByRole("button", { name: "CONTRIBUTE STRENGTH" })).toHaveLength(2);
+  });
+
   it("names the running mate on the ticket, on both layouts", () => {
     // One copy was the fault, not the fixture: the sidebar this sits in is
     // `hidden lg:block`, so the phone had no ticket block at all.

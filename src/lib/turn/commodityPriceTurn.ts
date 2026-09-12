@@ -37,17 +37,19 @@ import {
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 import { costPassThroughMultiplier } from "@/lib/market/costPassThrough";
+import { computeGlobalCommodityPrice } from "@/lib/market/globalCommodityPrice";
+import { distributeDemandToStates } from "@/lib/market/distributeDemandToStates";
+import { GOVERNMENT_COMMODITY_DEMAND } from "@/lib/market/governmentCommodityDemand";
 import { eraForPreset } from "@/lib/seeds/presetSelector";
 import { commodityDemandCalibration } from "@/lib/constants/commodityDemandCalibration";
 import {
   COMMODITY_TYPES,
   eraScaledBasePrices,
   MARKETING_ADVERTISING_DEMAND_RATE,
-  GOVT_HEALTHCARE_DEMAND_RATE,
-  GOVT_DEFENSE_ORDNANCE_DEMAND_RATE,
+  MARKETING_ADVERTISING_DEMAND_ELASTICITY,
+  MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
   GOVT_SPEND_CATEGORY_ALIASES,
   govtSpendForCategory,
-  STATE_MEDIA_DEMAND_RATE,
   COMMODITY_PRICE_DRIFT_RATE,
   NATIONAL_COMMODITY_STABILIZER,
   COMMODITIES_NATIONAL_REGIONAL_PRICE_BLEND,
@@ -141,6 +143,13 @@ import type { Db } from "mongodb";
 import { depletedCapacityDoc, buildDepletionInc } from "@/lib/extraction/depletion";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/latentShortage";
+import {
+  relativeLaggedPriceRatio,
+  resolveCommodityNominalIndices,
+} from "@/lib/market/commodityNominalIndex";
+import { persistCommodityNominalIndex } from "@/lib/turn/commodityNominalIndexPersistence";
+import { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
+export { realizedOutputFraction } from "@/lib/extraction/realizedOutputFraction";
 
 /**
  * P3b — book this turn's extraction against each state's deposits (plants only).
@@ -169,30 +178,6 @@ import { latentShortageFields, latentShortagePersistence } from "@/lib/turn/late
  * cross-country state-id collision to one doc, and the write must land on the
  * same one it rationed with.
  */
-/**
- * Realized ÷ nameplate output for one sector, clamped to [0, 1] at BOTH ends.
- *
- * The lower clamp guards a negative produced figure. The upper clamp guards a
- * `revenue` that is stale-LOW relative to the capacity that produced the units:
- * the concrete case is a NatCorp sector minted by `nationalizeSectorWide`, which
- * writes a 15%-haircut revenue alongside FULL capacity, so until its first
- * `sectorTurn` restates `revenue` the raw ratio reads ~1.18. This fraction scales
- * extraction DEPLETION, so an unclamped value quietly mines more out of the
- * ground than the sector can physically have produced. A sector can never
- * realize more than its own nameplate, so 1 is the correct ceiling.
- *
- * Returns null when there is no meaningful measurement (non-positive nameplate),
- * which callers treat as "leave the booking at the nameplate derivation".
- */
-export function realizedOutputFraction(
-  producedUnits: number,
-  nameplateUnits: number
-): number | null {
-  if (!Number.isFinite(nameplateUnits) || nameplateUnits <= 0) return null;
-  if (!Number.isFinite(producedUnits)) return null;
-  return Math.min(1, Math.max(0, producedUnits / nameplateUnits));
-}
-
 async function bookExtractionDepletion(
   db: Db,
   inputs: ReadonlyArray<ExtractionSectorInput>,
@@ -367,7 +352,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       // feature has been inert ever since. It also hid the `health` spelling
       // that UK/CN/IE use. Projecting the map means adding a leg to
       // GOVT_SPEND_DEMAND cannot silently read zero again.
-      .find({}, { projection: { countryId: 1, "spending.byCategory": 1 } })
+      .find({}, { projection: { countryId: 1, "spending.byCategory": 1, economicFactors: 1 } })
       .toArray(),
     db
       .collection<ExchangeRate>("exchangeRates")
@@ -460,9 +445,20 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         commandEconomyEnabled: 1,
         retailDemandTransitionStartTurn: 1,
         retailDemandTransitionTurns: 1,
+        commodityNominalPriceIndex: 1,
+        commodityNominalPriceIndexTurn: 1,
       },
     }
   );
+  const nominalIndices = resolveCommodityNominalIndices({
+    index: ledgerConfig?.commodityNominalPriceIndex,
+    lastTurn: ledgerConfig?.commodityNominalPriceIndexTurn,
+    currentTurn: turn,
+    countryInflationRates: federalBudgets.map(
+      (budget) => budget.economicFactors?.inflationRate ?? Number.NaN
+    ),
+  });
+  const commodityNominalPriceIndex = nominalIndices.current;
   const ledgerCommandEconomyEnabled = ledgerConfig?.commandEconomyEnabled === true;
   const eraRates = getInitialRates(activePreset);
   /** ₳-normalizing FX rate for a country's budget, era-aware. */
@@ -869,7 +865,15 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // normalize each corp's stored marketingBudget (local currency post-v0.2.6)
   // to ₳ before computing units — otherwise a UK corp's GBP budget would
   // over-contribute demand proportional to GBP's FX rate.
+  // Demand audit step 7: sublinear conversion. Funded budgets are collected
+  // first so the exponent pivots on the economy-wide total; every corp's
+  // units then convert at the same damped rate. Uniform (not per-corp)
+  // damping keeps small advertisers' response predictable — no
+  // redistribution, only time-damping — and the factor is 1 when nothing is
+  // funded, so dead legs stay dead.
   const advertisingBasePrice = LEDGER_BASE_PRICES["advertising"];
+  const fundedAdvertisingBudgets: Array<{ stateId: string; fundedAnchor: number }> = [];
+  let totalFundedBudgetsAnchor = 0;
   for (const corp of allCorporations) {
     const budgetLocal = corp.marketingBudget ?? 0;
     if (budgetLocal <= 0 || !corp.headquartersState) continue;
@@ -889,21 +893,36 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       Math.max(0, liquidCapitalAnchor) * TURNS_PER_DAY
     );
     if (!(fundedBudgetAnchor > 0)) continue;
-    const units = (fundedBudgetAnchor * MARKETING_ADVERTISING_DEMAND_RATE) / advertisingBasePrice;
+    fundedAdvertisingBudgets.push({
+      stateId: corp.headquartersState,
+      fundedAnchor: fundedBudgetAnchor,
+    });
+    totalFundedBudgetsAnchor += fundedBudgetAnchor;
+  }
+  const advertisingDemandFactor =
+    totalFundedBudgetsAnchor > 0
+      ? Math.pow(
+          totalFundedBudgetsAnchor / MARKETING_ADVERTISING_REFERENCE_BUDGETS_ANCHOR,
+          MARKETING_ADVERTISING_DEMAND_ELASTICITY - 1
+        )
+      : 1;
+  const effectiveAdvertisingRate = MARKETING_ADVERTISING_DEMAND_RATE * advertisingDemandFactor;
+  for (const { stateId, fundedAnchor } of fundedAdvertisingBudgets) {
+    const units = (fundedAnchor * effectiveAdvertisingRate) / advertisingBasePrice;
 
     // Add to global
     const advertisingBal = global.get("advertising")!;
     advertisingBal.demand += units;
 
     // Distribute to HQ state so state-level margins reflect real demand
-    if (!byState.has(corp.headquartersState)) {
+    if (!byState.has(stateId)) {
       const stateMap = new Map<CommodityType, { supply: number; demand: number }>();
       for (const c of COMMODITY_TYPES) {
         stateMap.set(c, { supply: 0, demand: 0 });
       }
-      byState.set(corp.headquartersState, stateMap);
+      byState.set(stateId, stateMap);
     }
-    const stateBal = byState.get(corp.headquartersState)!.get("advertising")!;
+    const stateBal = byState.get(stateId)!.get("advertising")!;
     stateBal.demand += units;
   }
 
@@ -1095,7 +1114,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
 
   // ── Rate-sensitive signed delta demand: food, vehicles, financial_services ──
   // delta = anchorGdp × fraction × (neutral - primeRate) / basePrice
-  // Negative at high rates (suppresses demand), positive at low rates (adds demand).
+  // Positive at low rates (adds demand). At high rates the delta is floored
+  // at zero instead of subtracting demand (demand audit step 3): a demand
+  // generator must never un-buy goods — dear money cools the economy through
+  // every other channel already, and a negative leg could drive a thin state
+  // book below zero.
   const anchorGdpByState = new Map<string, number>();
   for (const sb of allStateBudgets) {
     if (!sb.stateGdp || sb.stateGdp <= 0) continue;
@@ -1121,7 +1144,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       const primeRate = centralBankByCountry.get(countryId) ?? FINANCIAL_NEUTRAL_RATE;
       const neutralRate =
         MONETARY_BASELINES[countryId as CountryId]?.neutralPrimeRate ?? FINANCIAL_NEUTRAL_RATE;
-      const delta = (anchorGdp * fraction * (neutralRate - primeRate)) / basePrice;
+      const delta = Math.max(0, (anchorGdp * fraction * (neutralRate - primeRate)) / basePrice);
       if (delta === 0) continue;
 
       globalBal.demand += delta;
@@ -1170,29 +1193,16 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   // fxRateForCountry is declared earlier (at the sector / marketing normalization
   // block) and reused here.
   //
-  // healthcare was the only channel here for a long time; defense/ordnance was
-  // added in #3880, which is why this is now a table rather than one inline loop.
-  const GOVT_SPEND_DEMAND: ReadonlyArray<{
-    category: string;
-    commodity: CommodityType;
-    rate: number;
-    /** Planned economies only — see STATE_MEDIA_DEMAND_RATE. */
-    plannedOnly?: boolean;
-  }> = [
-    { category: "healthcare", commodity: "healthcare_services", rate: GOVT_HEALTHCARE_DEMAND_RATE },
-    { category: "defense", commodity: "ordnance", rate: GOVT_DEFENSE_ORDNANCE_DEMAND_RATE },
-    // The buyer for state broadcasting. Bloc media was re-denominated off
-    // advertising (applyPlannedEconomyOutputMix); without this leg the glut
-    // simply moves into entertainment services instead of clearing.
-    {
-      category: "education",
-      commodity: "entertainment_services",
-      rate: STATE_MEDIA_DEMAND_RATE,
-      plannedOnly: true,
-    },
-  ];
+  // Demand audit step 3: the same government units reach the REGIONAL books,
+  // so the 25% state price leg stops understating exactly the goods
+  // governments support (healthcare_services, ordnance). Global and national
+  // totals are unchanged — this only places the already-counted units.
+  // Distribution is pro-rata by state GDP within the country (same-currency
+  // shares, so no FX normalization is needed); equal split when the country
+  // has states but no GDP rows; national-only (prior behavior) when it has
+  // no states at all.
   const turnsPerYear = 48;
-  for (const { category, commodity, rate, plannedOnly } of GOVT_SPEND_DEMAND) {
+  for (const { category, commodity, rate, plannedOnly, regional } of GOVERNMENT_COMMODITY_DEMAND) {
     const basePrice = LEDGER_BASE_PRICES[commodity];
     const aliases = GOVT_SPEND_CATEGORY_ALIASES[category] ?? [category];
     for (const budget of federalBudgets) {
@@ -1216,6 +1226,16 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
         byCountry.set(cid, countryBals);
       }
       byCountry.get(cid)!.get(commodity)!.demand += units;
+      if (regional) {
+        distributeDemandToStates({
+          countryId: cid,
+          commodity,
+          units,
+          statesByCountry,
+          stateToCountry,
+          byState,
+        });
+      }
     }
   }
 
@@ -1504,9 +1524,8 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   for (const commodity of COMMODITY_TYPES) {
     const base = LEDGER_BASE_PRICES[commodity];
     const prior = existingPriceMap.get(commodity)?.globalPrice;
-    if (typeof prior === "number" && prior > 0 && base > 0) {
-      laggedRatios.set(commodity, prior / base);
-    }
+    const ratio = relativeLaggedPriceRatio(prior, base, nominalIndices.lagged);
+    if (ratio != null) laggedRatios.set(commodity, ratio);
   }
 
   for (const commodity of COMMODITY_TYPES) {
@@ -1550,37 +1569,34 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
     // src/lib/market/costPassThrough.ts for the full rationale (the 62%-of-
     // farms-negative incident).
     const costMult = costPassThroughMultiplier(commodity, laggedRatios);
-    const effBasePrice = Math.round(basePrice * scarcityMult * costMult * 100) / 100;
+    const nominalBasePrice = basePrice * commodityNominalPriceIndex;
     // Country-scoped effective base: the country's own reachable-scarcity
     // multiplier when it has one, the world base otherwise. Every
     // country-scoped leg (national, wide, regional, administered) reads this
     // so a country's price level carries ITS market's scarcity memory.
     const effBaseFor = (countryId: string | undefined): number => {
       const m = countryId != null ? scarcityMultByCountry[countryId] : undefined;
-      return m != null ? Math.round(basePrice * m * costMult * 100) / 100 : effBasePrice;
+      return m != null ? Math.round(nominalBasePrice * m * costMult * 100) / 100 : effBasePrice;
     };
     const priceKnee = getPriceSoftKnee(commodity);
 
-    // ── Global price with drift + peg/nudge precedence ──
-    let globalMktPrice: number;
-    if (existing?.hardPeg != null) {
-      globalMktPrice = existing.hardPeg;
-    } else if (nudgeMap.has(commodity)) {
-      globalMktPrice = nudgeMap.get(commodity)!;
-    } else {
-      const targetPrice = computeMarketPrice(
-        effBasePrice,
-        globalBal.supply,
-        globalBal.demand,
-        priceKnee
-      );
-      const previousPrice = existing?.globalPrice ?? targetPrice;
-      globalMktPrice =
-        Math.round(
-          (previousPrice + COMMODITY_PRICE_DRIFT_RATE * (targetPrice - previousPrice)) * 100
-        ) / 100;
-    }
-
+    // Global price with drift and peg/nudge precedence, plus an exact
+    // explanation of every formula stage.
+    const globalResult = computeGlobalCommodityPrice({
+      realBasePrice: basePrice,
+      nominalIndex: commodityNominalPriceIndex,
+      scarcityMultiplier: scarcityMult,
+      costPassThroughMultiplier: costMult,
+      supply: globalBal.supply,
+      demand: globalBal.demand,
+      priceKnee,
+      previousPrice: existing?.globalPrice,
+      hardPeg: existing?.hardPeg ?? undefined,
+      nudge: nudgeMap.get(commodity) ?? undefined,
+    });
+    const globalMktPrice = globalResult.appliedPrice;
+    const effBasePrice = globalResult.effectiveBasePrice;
+    const priceAttribution = globalResult.attribution;
     appliedGlobalPrices.set(commodity, globalMktPrice);
 
     // ── National prices per country ───────────────────────────────────────
@@ -1798,6 +1814,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
             scarcityMult,
             scarcityMultByCountry,
             reachablePrices,
+            priceAttribution,
             updatedAt: now,
           },
           ...(Object.keys(latentShortage.unset).length > 0 ? { $unset: latentShortage.unset } : {}),
@@ -1810,6 +1827,7 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
   if (ops.length > 0) {
     await db.collection("commodityPrices").bulkWrite(ops);
   }
+  await persistCommodityNominalIndex(db, commodityNominalPriceIndex, turn);
 
   // Store price history snapshots for charting — uses the actual applied price
   // (including drift, pegs, and nudges) so charts match what players see.
@@ -1820,7 +1838,11 @@ export async function processCommodityPriceTurn(turn: number): Promise<Commodity
       turn,
       globalPrice:
         appliedGlobalPrices.get(commodity) ??
-        computeMarketPrice(LEDGER_BASE_PRICES[commodity], globalBal.supply, globalBal.demand),
+        computeMarketPrice(
+          LEDGER_BASE_PRICES[commodity] * commodityNominalPriceIndex,
+          globalBal.supply,
+          globalBal.demand
+        ),
       globalSupply: Math.round(globalBal.supply * 100) / 100,
       globalDemand: Math.round(globalBal.demand * 100) / 100,
       ...latentShortageFields(globalBal, demandTruncated.get(commodity)),

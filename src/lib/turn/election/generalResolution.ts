@@ -192,10 +192,43 @@ export async function resolveOneGeneralElection(
     const candidateIds = Object.keys(effectiveVotes);
     const candidates = await db
       .collection<ElectionCandidate>("electionCandidates")
-      .find({ _id: { $in: candidateIds.map((id) => new ObjectId(id)) } })
+      .find({
+        _id: { $in: candidateIds.map((id) => new ObjectId(id)) },
+        status: "active",
+      })
       .toArray();
 
     const candidateMap = new Map(candidates.map((c) => [c._id.toString(), c]));
+
+    // Mortality withdraws a deceased NPP's candidacies before ordinary
+    // resolution. Keep the resolver safe if it runs against a stale row or a
+    // concurrent process that retired the NPP after the candidate query.
+    const candidateNppIds = candidates
+      .filter((c): c is typeof c & { nppId: ObjectId } => !!c.isNPP && !!c.nppId)
+      .map((c) => c.nppId);
+    const liveCandidateNpps =
+      candidateNppIds.length > 0
+        ? await db
+            .collection<NPP>("npps")
+            .find({ _id: { $in: candidateNppIds }, retiredAt: null }, { projection: { _id: 1 } })
+            .toArray()
+        : [];
+    const liveCandidateNppIds = new Set(liveCandidateNpps.map((npp) => npp._id.toString()));
+    const retiredNppCandidateIds = new Set(
+      candidates
+        .filter((c) => !!c.isNPP && !!c.nppId && !liveCandidateNppIds.has(c.nppId.toString()))
+        .map((c) => c._id.toString())
+    );
+    if (retiredNppCandidateIds.size > 0) {
+      console.warn(
+        `[Turn] Election ${election._id} (${election.electionType}/${election.state}): ` +
+          `excluding ${retiredNppCandidateIds.size} retired or missing NPP candidate(s)`
+      );
+      effectiveVotes = Object.fromEntries(
+        Object.entries(effectiveVotes).filter(([id]) => !retiredNppCandidateIds.has(id))
+      );
+      totalVotesCast = Object.values(effectiveVotes).reduce((sum, votes) => sum + votes, 0);
+    }
 
     // Warn if any candidate IDs in the tally have no matching document — votes would be lost.
     const missingIds = candidateIds.filter((id) => !candidateMap.has(id));
@@ -216,7 +249,9 @@ export async function resolveOneGeneralElection(
       electionType: election.electionType,
       state: election.state ?? undefined,
       effectiveVotes,
-      candidates: candidates.map((c) => ({ _id: c._id, party: c.party })),
+      candidates: candidates
+        .filter((c) => !retiredNppCandidateIds.has(c._id.toString()))
+        .map((c) => ({ _id: c._id, party: c.party })),
       totalVotes: totalVotesCast,
     });
     if (hookResult.nudgeApplied !== 0 || hookResult.proIndyBonusApplied !== 0) {
@@ -266,17 +301,21 @@ export async function resolveOneGeneralElection(
       }
     }
 
+    const ineligibleCandidateIds = new Set([...deletedCandidateIds, ...retiredNppCandidateIds]);
     const ranked = candidateIds
       // `party` lets allocateSeats compute its minimum-share eligibility on the
       // PARTY aggregate share (same-party candidates pooled) instead of the
       // per-candidate share — see RankedCandidate.party.
       .map((id) => ({ id, votes: effectiveVotes[id] ?? 0, party: candidateMap.get(id)?.party }))
-      .filter(({ id }) => candidateMap.has(id) && !deletedCandidateIds.has(id))
+      .filter(({ id }) => candidateMap.has(id) && !ineligibleCandidateIds.has(id))
       .sort((a, b) => b.votes - a.votes);
 
-    // A dropped deleted-character candidate's votes must not inflate the
-    // share-eligibility denominator used by multi-seat allocation.
-    if (deletedCandidateIds.size > 0) {
+    // Dropped candidates must not inflate the share-eligibility denominator or
+    // reach the district allocator used by multi-seat elections.
+    if (ineligibleCandidateIds.size > 0) {
+      effectiveVotes = Object.fromEntries(
+        Object.entries(effectiveVotes).filter(([id]) => !ineligibleCandidateIds.has(id))
+      );
       totalVotesCast = ranked.reduce((sum, { votes }) => sum + votes, 0);
     }
 
@@ -516,7 +555,7 @@ export async function resolveOneGeneralElection(
             .collection<NPP>("npps")
             // Seat resolution reads the office, never the 30KB stance map.
             .find(
-              { _id: { $in: allCandidateNppIds } },
+              { _id: { $in: allCandidateNppIds }, retiredAt: null },
               { projection: { "policies.domainPositions": 0 } }
             )
             .toArray()

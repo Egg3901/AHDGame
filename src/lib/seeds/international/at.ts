@@ -190,6 +190,7 @@ const ERA_POSITIONS: Partial<Record<EraId, EraPositions>> = {
   "2007": POSITIONS_1979,
   "2019": POSITIONS_1979,
   "2023": POSITIONS_1979,
+  "2027": POSITIONS_1979,
 };
 
 const ERA_CENSUS: Partial<Record<EraId, Record<string, ATRegionLayer1>>> = {
@@ -200,6 +201,7 @@ const ERA_CENSUS: Partial<Record<EraId, Record<string, ATRegionLayer1>>> = {
   "2007": atRegionCensusData,
   "2019": atRegionCensusData,
   "2023": atRegionCensusData,
+  "2027": atRegionCensusData,
 };
 
 function convertCensus(

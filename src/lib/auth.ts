@@ -1,16 +1,19 @@
+import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
-import { jwtVerify, errors as joseErrors } from "jose";
+import { jwtVerify, SignJWT, errors as joseErrors } from "jose";
 import { ObjectId, type Db } from "mongodb";
 import { z } from "zod";
 import * as Sentry from "@sentry/nextjs";
 import { getDb } from "@/lib/mongodb";
 import { getCharactersCollection, getUsersCollection } from "@/lib/db/collections";
-import { getCachedUser, setCachedUser } from "@/lib/auth/userDocCache";
+import { getCachedUser, invalidateCachedUser, setCachedUser } from "@/lib/auth/userDocCache";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import type { Character, User } from "@/lib/db/types";
 import { getValidatedEnv } from "@/lib/env";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE } from "@/lib/auth/characterGate";
+import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
 
 const CANONICAL_COOKIE_DOMAIN = ".ahousedividedgame.com";
 
@@ -124,15 +127,15 @@ export const userPayloadSchema = z.object({
   username: z.string(),
   role: z.string(),
   isAdmin: z.boolean().optional(),
+  authSource: z.literal("unified").optional(),
+  sid: z.string().uuid().optional(),
   iat: z.number().optional(),
 });
 
 export type UserPayload = z.infer<typeof userPayloadSchema>;
 
 function isAuthTokenRevoked(user: User, payload: UserPayload): boolean {
-  if (!user.authRevokedAt) return false;
-  if (typeof payload.iat !== "number") return true;
-  return user.authRevokedAt.getTime() >= payload.iat * 1000;
+  return isTokenRevokedByCutoff(user.authRevokedAt, payload.iat);
 }
 
 // Auth-clear reasons that are genuinely anomalous (a *valid* token whose user
@@ -188,17 +191,18 @@ export async function clearAuthCookie(reason: string) {
 }
 
 function mapUserToAuthUser(user: User, payload: UserPayload): AuthUser {
+  // Privilege derives from the current DB account record only. The verified
+  // JWT claims are identity (which account this session is for); a correctly
+  // signed but stale token minted before a demotion must never re-grant
+  // staff access, and a stale player-claim token must never mask a promotion.
+  const isAdmin = user.isAdmin === true || user.role === "admin";
   return {
     userId: payload.userId,
     username: payload.username,
     email: payload.email,
-    role: payload.role,
-    isAdmin: user.isAdmin === true || user.role === "admin" || payload.isAdmin === true,
-    isModerator:
-      user.role === "moderator" ||
-      user.role === "admin" ||
-      user.isAdmin === true ||
-      payload.isAdmin === true,
+    role: user.role,
+    isAdmin,
+    isModerator: isAdmin || user.role === "moderator",
     isBanned: user.isBanned === true,
     activeCharacterId: user.activeCharacterId ? user.activeCharacterId.toString() : null,
   };
@@ -227,7 +231,12 @@ export interface AuthUserWithCharacter extends AuthUser {
 /**
  * Verify JWT token and return user payload
  * Returns null if token is invalid or missing
- * Note: This only validates the JWT - use getAuthUser() to also verify user exists in DB
+ *
+ * Low-level JWT check only: signature, expiry, and claim shape. It performs
+ * no DB access and grants no privilege. Use getAuthUser(),
+ * getAuthUserWithCharacter(), or getAuthUserFromToken() for the DB-bound
+ * principal whose role/isAdmin/isModerator come from the current account
+ * record; stale claims in the payload are identity only.
  */
 export async function verifyAuthToken(token: string): Promise<UserPayload | null> {
   // `jose` throws `JOSEError` (or a subclass like `JWTExpired`,
@@ -239,7 +248,17 @@ export async function verifyAuthToken(token: string): Promise<UserPayload | null
   // log users out at random.
   let payload: unknown;
   try {
-    ({ payload } = await jwtVerify(token, getJwtSecret()));
+    // Pin the algorithm and require both time claims. Every signing path
+    // (password, Discord/Google OAuth, offline singleplayer proxy, silent
+    // refresh) issues HS256 with iat+exp, so anything else is foreign.
+    // `requiredClaims` rejects missing iat/exp as a JOSE failure (null).
+    // jose does not check iat range or exp-vs-iat ordering without
+    // maxTokenAge (deliberately unused: sliding expiry has no total cap),
+    // so those are enforced below.
+    ({ payload } = await jwtVerify(token, getJwtSecret(), {
+      algorithms: ["HS256"],
+      requiredClaims: ["iat", "exp"],
+    }));
   } catch (err) {
     if (err instanceof joseErrors.JOSEError) {
       Sentry.addBreadcrumb({
@@ -263,6 +282,35 @@ export async function verifyAuthToken(token: string): Promise<UserPayload | null
     });
     return null;
   }
+  // JOSE requires both claims above. The shared payload type also serves
+  // utility callers, so it remains optional while verified values are checked
+  // here for finite ranges and ordering.
+  const raw = payload as Record<string, unknown>;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const reject = (reason: string, data: Record<string, unknown>) => {
+    Sentry.addBreadcrumb({
+      category: "auth.verify",
+      level: "info",
+      message: `verifyAuth: ${reason}`,
+      data,
+    });
+    return null;
+  };
+  const { iat } = parsed.data;
+  if (iat !== undefined) {
+    if (!Number.isSafeInteger(iat) || iat < 0 || iat > nowSec) {
+      return reject("time claim rejected (iat)", { iat });
+    }
+  }
+  const { exp } = raw;
+  if (exp !== undefined) {
+    if (typeof exp !== "number" || !Number.isFinite(exp)) {
+      return reject("time claim rejected (exp)", { exp: typeof exp });
+    }
+    if (iat !== undefined && !(exp > iat)) {
+      return reject("time claim rejected (exp not after iat)", { iat, exp });
+    }
+  }
   return parsed.data;
 }
 
@@ -282,6 +330,23 @@ export async function verifyAuth(): Promise<UserPayload | null> {
 }
 
 /**
+ * A session is a staff candidate when the verified JWT still carries a staff
+ * claim or the cached DB record still shows staff. Either signal forces an
+ * uncached account read before any grant below, so a demotion denies on the
+ * next request even though the process cache still holds the stale record.
+ */
+function isStaffCandidate(payload: UserPayload, cached: User | undefined): boolean {
+  return (
+    payload.isAdmin === true ||
+    payload.role === "admin" ||
+    payload.role === "moderator" ||
+    cached?.isAdmin === true ||
+    cached?.role === "admin" ||
+    cached?.role === "moderator"
+  );
+}
+
+/**
  * Resolve the user document for an authenticated session.
  *
  * Reads through the short-TTL process cache (`userDocCache`) so the many
@@ -289,22 +354,45 @@ export async function verifyAuth(): Promise<UserPayload | null> {
  * to enforce ban / token-revocation. Ban + revoke paths invalidate the cache,
  * so enforcement stays effectively immediate; the TTL is the upper bound for
  * anything we don't explicitly invalidate.
+ *
+ * Staff candidates bypass the cache (see `isStaffCandidate`): ordinary-player
+ * cache hits keep the fast path, but no staff grant ever comes from a cached
+ * record. Only a validated fresh record is cached; a null read (deleted
+ * account) drops any stale entry without caching anything. DB failures
+ * propagate so the caller fails closed without clearing the session cookie.
+ *
+ * The full account read includes `authMigrationFence` so fenced accounts deny
+ * even with an otherwise valid signed token. Fence denial is bounded by the
+ * 10s cache TTL for sessions cached before fencing; the future fence writer
+ * must stamp `authRevokedAt` and evict the cache entry to revoke live sessions.
  */
-async function resolveUserDoc(db: Db, userId: string): Promise<User | null> {
+async function resolveUserDoc(db: Db, userId: string, payload: UserPayload): Promise<User | null> {
   const cached = getCachedUser(userId);
-  if (cached) return cached;
+  if (cached && !isStaffCandidate(payload, cached)) return cached;
 
   const users = await getUsersCollection(db);
   const user = await users.findOne({ _id: new ObjectId(userId) });
   if (user) setCachedUser(userId, user);
+  else invalidateCachedUser(userId);
   return user;
 }
 
+/**
+ * Resolve a DB-bound principal from a raw session token.
+ *
+ * This wrapper owns the DB role checks: role/isAdmin/isModerator on the
+ * returned principal always reflect the current account record, never the
+ * token claims. Returns null for bad tokens, deleted/banned accounts, and
+ * revoked tokens; throws (no grant) when the account read itself fails.
+ */
 export async function getAuthUserFromToken(token: string): Promise<AuthUser | null> {
   const payload = await verifyAuthToken(token);
   if (!payload) return null;
-  const user = await resolveUserDoc(await getDb(), payload.userId);
-  if (!user || user.isBanned === true || isAuthTokenRevoked(user, payload)) return null;
+  const user = await resolveUserDoc(await getDb(), payload.userId, payload);
+  if (!user || user.isBanned === true) return null;
+  if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(await getDb(), payload)))
+    return null;
+  if (isAuthTokenRevoked(user, payload)) return null;
   return mapUserToAuthUser(user, payload);
 }
 
@@ -320,10 +408,12 @@ export const getAuthUser = cache(async (): Promise<AuthUser | null> => {
   if (!payload) return null;
 
   // Verify user still exists in database (handles case where user was deleted)
-  const user = await resolveUserDoc(await getDb(), payload.userId);
+  const user = await resolveUserDoc(await getDb(), payload.userId, payload);
 
   if (!user) return null;
   if (user.isBanned === true) return null;
+  if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(await getDb(), payload)))
+    return null;
   if (isAuthTokenRevoked(user, payload)) return null;
 
   return mapUserToAuthUser(user, payload);
@@ -339,10 +429,11 @@ export const getAuthUserWithCharacter = cache(async (): Promise<AuthUserWithChar
 
   // Single DB handle for user + character lookups (avoids nested getAuthUser -> getDb + getDb).
   const db = await getDb();
-  const user = await resolveUserDoc(db, payload.userId);
+  const user = await resolveUserDoc(db, payload.userId, payload);
 
   if (!user) return null;
   if (user.isBanned === true) return null;
+  if (isAuthMigrationFenced(user) && !(await unifiedSessionIsCurrent(db, payload))) return null;
   if (isAuthTokenRevoked(user, payload)) return null;
 
   const authUser = mapUserToAuthUser(user, payload);
@@ -382,4 +473,86 @@ export async function getAuthModerator(): Promise<AuthUserWithCharacter | null> 
   if (!user || !user.isModerator) return null;
 
   return user;
+}
+
+/**
+ * Silent session refresh extends cookie expiry only. It keeps the original
+ * verified sign-in iat and is not a reauthentication.
+ */
+
+export type SilentRefreshClaims = {
+  userId: string;
+  email: string;
+  username: string;
+  role: string;
+  isAdmin: boolean;
+};
+
+export type SilentRefreshResult =
+  { ok: true; token: string; iat: number } | { ok: false; reason: "not_due" | "invalid_iat" };
+
+/** Match the existing client-nav window: refresh when fewer than 24h remain. */
+const REFRESH_WITHIN_SECONDS = 60 * 60 * 24;
+
+function isUsableIssuedAt(iat: unknown, nowSec: number): iat is number {
+  return typeof iat === "number" && Number.isSafeInteger(iat) && iat >= 0 && iat <= nowSec;
+}
+
+function readVerifiedSession(
+  payload: unknown
+): { userId: string; iat: unknown; exp: unknown } | null {
+  if (!payload || typeof payload !== "object") return null;
+  const { userId, iat, exp } = payload as Record<string, unknown>;
+  if (typeof userId !== "string" || userId.length === 0) return null;
+  return { userId, iat, exp };
+}
+
+/**
+ * Re-sign a still-valid session JWT, copying the verified iat. Missing,
+ * non-integer, or future iat fails closed (no new cookie).
+ */
+export async function refreshSessionPreservingIssuedAt(
+  token: string,
+  claims: SilentRefreshClaims,
+  secret: Uint8Array,
+  nowMs: number = Date.now()
+): Promise<SilentRefreshResult> {
+  if (!Number.isFinite(nowMs)) return { ok: false, reason: "invalid_iat" };
+  const nowSec = Math.floor(nowMs / 1000);
+  if (!Number.isSafeInteger(nowSec)) return { ok: false, reason: "invalid_iat" };
+
+  let payload: unknown;
+  try {
+    ({ payload } = await jwtVerify(token, secret, { algorithms: ["HS256"] }));
+  } catch {
+    return { ok: false, reason: "invalid_iat" };
+  }
+
+  const session = readVerifiedSession(payload);
+  if (!session || session.userId !== claims.userId) {
+    return { ok: false, reason: "invalid_iat" };
+  }
+
+  if (!isUsableIssuedAt(session.iat, nowSec)) {
+    return { ok: false, reason: "invalid_iat" };
+  }
+
+  const { exp } = session;
+  if (typeof exp !== "number" || !Number.isFinite(exp) || exp - nowSec >= REFRESH_WITHIN_SECONDS) {
+    return { ok: false, reason: "not_due" };
+  }
+
+  const freshToken = await new SignJWT({
+    userId: claims.userId,
+    email: claims.email,
+    username: claims.username,
+    role: claims.role,
+    isAdmin: claims.isAdmin,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt(session.iat)
+    .setExpirationTime("7d")
+    .sign(secret);
+
+  return { ok: true, token: freshToken, iat: session.iat };
 }

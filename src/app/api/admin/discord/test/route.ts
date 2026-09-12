@@ -2,11 +2,16 @@ import { NextResponse } from "next/server";
 import { requireAdminOrApiKey } from "@/lib/api/requireAdminOrApiKey";
 import { handleRouteError } from "@/lib/api/errors";
 import { parseJsonBody } from "@/lib/api/validate";
-import { sendDiscordWebhook, DISCORD_COLORS } from "@/lib/discordWebhooks";
+import {
+  sendCountryGameEventMultiple,
+  sendDiscordWebhook,
+  DISCORD_COLORS,
+  type DiscordEmbed,
+} from "@/lib/discordWebhooks";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
 import { getDb } from "@/lib/mongodb";
 import { z } from "zod";
-import type { GameConfig } from "@/lib/db/types";
+import type { Character, GameConfig, NPP } from "@/lib/db/types";
 
 /**
  * Either a general integration webhook, or any player-enabled country's game
@@ -14,9 +19,60 @@ import type { GameConfig } from "@/lib/db/types";
  * descriptor, so a newly-enabled country is testable with no code change.
  */
 const schema = z.union([
+  z.object({ countryId: z.string().min(2), showcase: z.literal(true) }),
   z.object({ target: z.enum(["game", "news", "suggestions"]) }),
   z.object({ countryId: z.string().min(2) }),
 ]);
+
+function showcaseEmbeds(avatarUrl?: string): DiscordEmbed[] {
+  const portrait = avatarUrl ? { thumbnail: { url: avatarUrl } } : {};
+  return [
+    {
+      title: "[TEST PREVIEW] Presidential Winner",
+      description: "**Eleanor Hart** has won the presidency with 312 electoral votes.",
+      color: DISCORD_COLORS.electionResult,
+      fields: [{ name: "Result", value: "312 EV · 51.8% popular vote" }],
+      ...portrait,
+    },
+    {
+      title: "[TEST PREVIEW] Prime Minister Appointed",
+      description: "**Eleanor Hart** has been appointed Prime Minister.",
+      color: DISCORD_COLORS.govFormed,
+      ...portrait,
+    },
+    {
+      title: "[TEST PREVIEW] Prime Minister Resigned",
+      description: "**Eleanor Hart** has resigned as Prime Minister.",
+      color: DISCORD_COLORS.govCollapsed,
+      ...portrait,
+    },
+    {
+      title: "[TEST PREVIEW] Central Bank Appointment",
+      description: "**Eleanor Hart** has been confirmed as central bank chair.",
+      color: DISCORD_COLORS.leadership,
+      ...portrait,
+    },
+    {
+      title: "[TEST PREVIEW] Central Bank Resignation",
+      description: "**Eleanor Hart** has resigned as central bank chair.",
+      color: DISCORD_COLORS.govCollapsed,
+      ...portrait,
+    },
+    {
+      title: "[TEST PREVIEW] Supreme Court Nomination",
+      description: "**Eleanor Hart** has been nominated to the Supreme Court.",
+      color: DISCORD_COLORS.scotusRuling,
+      fields: [{ name: "Status", value: "Awaiting confirmation" }],
+      ...portrait,
+    },
+    {
+      title: "[TEST PREVIEW] Bill Enacted",
+      description: "**Education and Opportunity Act** has been signed into law.",
+      color: DISCORD_COLORS.billEnacted,
+      fields: [{ name: "Policy", value: "Education" }],
+    },
+  ];
+}
 
 export async function POST(request: Request) {
   try {
@@ -29,6 +85,44 @@ export async function POST(request: Request) {
 
     const db = await getDb();
     const config = await db.collection<GameConfig>("gameConfig").findOne({ _id: "default" });
+
+    if ("showcase" in parsed.data) {
+      const requestedCountryId = parsed.data.countryId.toUpperCase();
+      const descriptor = (await getCountryWebhookDescriptors(db)).find(
+        (candidate) => candidate.countryId === requestedCountryId
+      );
+      if (!descriptor) {
+        return NextResponse.json(
+          { error: `Country ${requestedCountryId} is not enabled for players` },
+          { status: 400 }
+        );
+      }
+      if (!descriptor?.url && !config?.discordGameWebhookUrl) {
+        return NextResponse.json(
+          { error: `No ${requestedCountryId} game-events webhook is configured` },
+          { status: 400 }
+        );
+      }
+      const [character, npp] = await Promise.all([
+        db
+          .collection<Character>("characters")
+          .findOne(
+            { countryId: descriptor.countryId, avatarUrl: { $type: "string" } },
+            { projection: { avatarUrl: 1 } }
+          ),
+        db
+          .collection<NPP>("npps")
+          .findOne(
+            { countryId: descriptor.countryId, avatarUrl: { $type: "string" } },
+            { projection: { avatarUrl: 1 } }
+          ),
+      ]);
+      await sendCountryGameEventMultiple(
+        requestedCountryId,
+        showcaseEmbeds(character?.avatarUrl ?? npp?.avatarUrl)
+      );
+      return NextResponse.json({ success: true, cards: 7, portrait: true });
+    }
 
     let url: string | undefined;
     let label: string;

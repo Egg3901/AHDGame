@@ -11,6 +11,8 @@ import {
 } from "@/lib/constants/commodities";
 import {
   CONTRACT_SHORTFALL_PENALTY,
+  SUPPLY_AGREEMENT_DURATION_MAX_TURNS,
+  SUPPLY_AGREEMENT_DURATION_MIN_TURNS,
   SUPPLY_AGREEMENT_PRICE_BAND,
 } from "@/lib/db/types/supplyAgreement";
 import { useToast } from "@/contexts/ToastContext";
@@ -29,8 +31,12 @@ interface SupplyAgreement {
   stateId?: string;
   volumeCap: number;
   pricePremium: number;
+  exclusive: boolean;
+  durationTurns?: number;
   status: "pending" | "active" | "cancelling" | "cancelled";
   proposedByCorpId: string;
+  currentOffer?: SupplyAgreementOffer;
+  offers?: SupplyAgreementOffer[];
   lastDeliveryTurn?: number;
   lastDeliveredUnits?: number;
   /** #1147: what the last settlement charged for, and the ceiling it used. */
@@ -41,6 +47,16 @@ interface SupplyAgreement {
   lastSupplierCashDelta?: number;
   lastSupplierCashCurrency?: string;
   lastUnpaidSettlementAnchor?: number;
+}
+
+interface SupplyAgreementOffer {
+  revision: number;
+  proposedByCorpId: string;
+  volumeCap: number;
+  pricePremium: number;
+  exclusive: boolean;
+  durationTurns?: number;
+  proposedAt?: string;
 }
 
 interface CapacitySnapshot {
@@ -61,8 +77,17 @@ interface CorpSearchResult {
   countryId: string | null;
 }
 
+interface CounterDraft {
+  volumeCap: string;
+  premiumPct: string;
+  exclusive: boolean;
+  durationTurns: string;
+}
+
 const BAND_PCT = Math.round(SUPPLY_AGREEMENT_PRICE_BAND * 100);
 const SHORTFALL_PENALTY_PCT = Math.round(CONTRACT_SHORTFALL_PENALTY * 100);
+const MIN_DURATION_TURNS = SUPPLY_AGREEMENT_DURATION_MIN_TURNS;
+const MAX_DURATION_TURNS = SUPPLY_AGREEMENT_DURATION_MAX_TURNS;
 const AGREEMENT_COMMODITIES = COMMODITY_TYPES;
 
 /** Fraction premium to signed percent string, e.g. 0.2 to "+20%", -0.1 to "−10%". */
@@ -81,9 +106,8 @@ const STATUS_STYLES: Record<SupplyAgreement["status"], string> = {
 
 /**
  * CEO-only panel for private supply agreements: bilateral off-market commodity
- * contracts. Lists the corp's agreements grouped by role (as supplier / as
- * buyer) and lets the supplier CEO propose a new one. Gated upstream on
- * `supplyAgreementsEnabled`; only mounted for the corp's CEO.
+ * negotiations. Either CEO can open a deal, respond with a counter-offer, and
+ * review the retained offer history. Gated upstream on `supplyAgreementsEnabled`.
  */
 export default function SupplyAgreementsSection({
   corpId,
@@ -110,8 +134,11 @@ export default function SupplyAgreementsSection({
   const [showForm, setShowForm] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCancelled, setShowCancelled] = useState(false);
+  const [counterOpenId, setCounterOpenId] = useState<string | null>(null);
+  const [counterDrafts, setCounterDrafts] = useState<Record<string, CounterDraft>>({});
 
-  // Propose form state
+  // Opening-offer form state
+  const [proposalRole, setProposalRole] = useState<"supplier" | "buyer">("supplier");
   const [buyerQuery, setBuyerQuery] = useState("");
   const [buyerResults, setBuyerResults] = useState<CorpSearchResult[]>([]);
   const [selectedBuyer, setSelectedBuyer] = useState<CorpSearchResult | null>(null);
@@ -120,6 +147,8 @@ export default function SupplyAgreementsSection({
   );
   const [volumeCap, setVolumeCap] = useState("");
   const [premiumPct, setPremiumPct] = useState(0);
+  const [exclusive, setExclusive] = useState(false);
+  const [durationTurns, setDurationTurns] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -179,7 +208,12 @@ export default function SupplyAgreementsSection({
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast(action === "accept" ? "Agreement accepted" : "Agreement cancelled", "success");
+        showToast(
+          action === "accept"
+            ? t("negotiation.offerAccepted")
+            : t("negotiation.agreementCancelled"),
+          "success"
+        );
         await load();
       } else {
         showToast(data.error || "Action failed", "error");
@@ -191,47 +225,132 @@ export default function SupplyAgreementsSection({
     }
   }
 
+  function openCounter(a: SupplyAgreement) {
+    const offer = a.currentOffer ?? a.offers?.[a.offers.length - 1];
+    const offerDuration = offer?.durationTurns ?? a.durationTurns;
+    setCounterOpenId(a._id);
+    setCounterDrafts((current) => ({
+      ...current,
+      [a._id]: {
+        volumeCap: String(offer?.volumeCap ?? a.volumeCap),
+        premiumPct: String(Math.round((offer?.pricePremium ?? a.pricePremium) * 100)),
+        exclusive: offer?.exclusive ?? a.exclusive,
+        durationTurns: offerDuration !== undefined ? String(offerDuration) : "",
+      },
+    }));
+  }
+
+  async function handleCounter(e: React.FormEvent, agreementId: string) {
+    e.preventDefault();
+    const draft = counterDrafts[agreementId];
+    const cap = Number(draft?.volumeCap);
+    const premium = Number(draft?.premiumPct);
+    const term = draft?.durationTurns.trim() ? Number(draft.durationTurns) : undefined;
+    if (!(cap > 0)) {
+      showToast(t("validation.positiveVolume"), "error");
+      return;
+    }
+    if (!Number.isFinite(premium) || premium < -BAND_PCT || premium > BAND_PCT) {
+      showToast(t("validation.priceBand", { band: BAND_PCT }), "error");
+      return;
+    }
+    if (
+      term !== undefined &&
+      (!Number.isInteger(term) || term < MIN_DURATION_TURNS || term > MAX_DURATION_TURNS)
+    ) {
+      showToast(
+        t("validation.termRange", { min: MIN_DURATION_TURNS, max: MAX_DURATION_TURNS }),
+        "error"
+      );
+      return;
+    }
+    setBusyId(agreementId);
+    try {
+      const res = await fetch(`/api/corporations/${corpId}/supply-agreements/${agreementId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "counter",
+          volumeCap: cap,
+          pricePremium: premium / 100,
+          exclusive: draft?.exclusive === true,
+          ...(term !== undefined ? { durationTurns: term } : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(t("negotiation.counterOfferSent"), "success");
+        setCounterOpenId(null);
+        await load();
+      } else {
+        showToast(data.error || t("negotiation.counterOfferFailed"), "error");
+      }
+    } catch {
+      showToast("Network error", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function handlePropose(e: React.FormEvent) {
     e.preventDefault();
     if (!selectedBuyer) {
-      showToast("Select a buyer corporation", "error");
+      showToast(t("negotiation.selectCounterparty"), "error");
       return;
     }
     const cap = Number(volumeCap);
     if (!(cap > 0)) {
-      showToast("Volume cap must be a positive number", "error");
+      showToast(t("validation.positiveVolume"), "error");
       return;
     }
     if (supplyAgreementRequiresState(commodity) && !stateId) {
-      showToast("Select the state this freight contract is fulfilled from", "error");
+      showToast(t("validation.freightState"), "error");
       return;
     }
     setSubmitting(true);
+    const term = durationTurns.trim() ? Number(durationTurns) : undefined;
+    if (
+      term !== undefined &&
+      (!Number.isInteger(term) || term < MIN_DURATION_TURNS || term > MAX_DURATION_TURNS)
+    ) {
+      showToast(
+        t("validation.termRange", { min: MIN_DURATION_TURNS, max: MAX_DURATION_TURNS }),
+        "error"
+      );
+      setSubmitting(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/corporations/${corpId}/supply-agreements`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          buyerCorpId: selectedBuyer.id,
+          ...(proposalRole === "supplier"
+            ? { buyerCorpId: selectedBuyer.id }
+            : { supplierCorpId: selectedBuyer.id }),
           commodity,
           ...(supplyAgreementRequiresState(commodity) ? { stateId } : {}),
           volumeCap: cap,
           pricePremium: premiumPct / 100,
+          exclusive,
+          ...(term !== undefined ? { durationTurns: term } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast("Agreement proposed", "success");
+        showToast(t("negotiation.openingOfferSent"), "success");
         // Reset form
         setBuyerQuery("");
         setSelectedBuyer(null);
         setVolumeCap("");
         setPremiumPct(0);
+        setExclusive(false);
+        setDurationTurns("");
         setStateId("");
         setShowForm(false);
         await load();
       } else {
-        showToast(data.error || "Failed to propose agreement", "error");
+        showToast(data.error || t("negotiation.failedToPropose"), "error");
       }
     } catch {
       showToast("Network error", "error");
@@ -250,10 +369,14 @@ export default function SupplyAgreementsSection({
   const requiresState = supplyAgreementRequiresState(commodity);
   const stateOptions = requiresState ? Object.entries(capacityByState[commodity] ?? {}) : [];
   const selectedCapacity = requiresState
-    ? stateId
-      ? capacityByState[commodity]?.[stateId]
+    ? proposalRole === "supplier"
+      ? stateId
+        ? capacityByState[commodity]?.[stateId]
+        : undefined
       : undefined
-    : capacityByCommodity[commodity];
+    : proposalRole === "supplier"
+      ? capacityByCommodity[commodity]
+      : undefined;
 
   const formatUnits = (value: number) => Math.round(value).toLocaleString(locale);
   const formatAnchor = (value: number) => `₳${Math.round(value).toLocaleString(locale)}`;
@@ -272,7 +395,19 @@ export default function SupplyAgreementsSection({
   };
 
   function renderAgreement(a: SupplyAgreement, role: "supplier" | "buyer") {
-    const canAccept = role === "buyer" && a.status === "pending";
+    const currentOffer: SupplyAgreementOffer = a.currentOffer ??
+      a.offers?.[a.offers.length - 1] ?? {
+        revision: 1,
+        proposedByCorpId: a.proposedByCorpId,
+        volumeCap: a.volumeCap,
+        pricePremium: a.pricePremium,
+        exclusive: a.exclusive,
+        ...(a.durationTurns !== undefined ? { durationTurns: a.durationTurns } : {}),
+      };
+    const offerHistory = a.offers ?? [currentOffer];
+    const canRespond = a.status === "pending" && currentOffer.proposedByCorpId !== corpId;
+    const canAccept = canRespond;
+    const canCounter = canRespond;
     const canCancel = a.status === "pending" || a.status === "active";
     const counterparty =
       role === "supplier"
@@ -314,7 +449,54 @@ export default function SupplyAgreementsSection({
           <span>
             Price: <span className="font-medium text-foreground">{fmtPremium(a.pricePremium)}</span>
           </span>
+          <span>
+            {t("negotiation.term")}:{" "}
+            <span className="font-medium text-foreground">
+              {a.durationTurns
+                ? t("negotiation.turns", { count: a.durationTurns })
+                : t("negotiation.openEnded")}
+            </span>
+          </span>
         </div>
+
+        {a.status === "pending" && (
+          <div className="rounded-lg border border-warning/30 bg-warning/5 p-3 text-xs text-muted">
+            <p className="font-semibold text-foreground">
+              {t("negotiation.revision", {
+                revision: currentOffer.revision,
+                author:
+                  currentOffer.proposedByCorpId === corpId
+                    ? t("negotiation.you")
+                    : t("negotiation.counterparty"),
+              })}
+            </p>
+            <p className="mt-1">
+              {canRespond ? t("negotiation.acceptOrCounter") : t("negotiation.waiting")}
+            </p>
+            {offerHistory.length > 1 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer font-medium text-foreground">
+                  {t("negotiation.history", { count: offerHistory.length })}
+                </summary>
+                <ol className="mt-2 space-y-1">
+                  {offerHistory.map((offer) => (
+                    <li key={offer.revision}>
+                      {t("negotiation.historyLine", {
+                        revision: offer.revision,
+                        author:
+                          offer.proposedByCorpId === corpId
+                            ? t("negotiation.you")
+                            : t("negotiation.counterparty"),
+                        volume: formatUnits(offer.volumeCap),
+                        premium: fmtPremium(offer.pricePremium),
+                      })}
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
+          </div>
+        )}
 
         {(a.status === "active" || a.status === "cancelling") && (
           <p className="text-xs text-muted">
@@ -394,7 +576,7 @@ export default function SupplyAgreementsSection({
             </div>
           )}
 
-        {(canAccept || canCancel) && (
+        {(canAccept || canCounter || canCancel) && (
           <div className="flex flex-wrap gap-2 border-t border-card-border pt-3">
             {canAccept && (
               <button
@@ -403,7 +585,17 @@ export default function SupplyAgreementsSection({
                 onClick={() => handleAction(a._id, "accept")}
                 className="rounded-lg bg-success px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-success/90 disabled:opacity-50"
               >
-                {busyId === a._id ? "Working…" : "Accept"}
+                {busyId === a._id ? t("negotiation.working") : t("negotiation.accept")}
+              </button>
+            )}
+            {canCounter && (
+              <button
+                type="button"
+                disabled={busyId === a._id}
+                onClick={() => openCounter(a)}
+                className="rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+              >
+                {t("negotiation.counter")}
               </button>
             )}
             {canCancel && (
@@ -413,33 +605,126 @@ export default function SupplyAgreementsSection({
                 onClick={() => handleAction(a._id, "cancel")}
                 className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-muted transition-colors hover:text-foreground disabled:opacity-50"
               >
-                {busyId === a._id ? "Working…" : "Cancel"}
+                {busyId === a._id ? t("negotiation.working") : t("negotiation.cancel")}
               </button>
             )}
           </div>
+        )}
+
+        {counterOpenId === a._id && canCounter && (
+          <form
+            onSubmit={(event) => void handleCounter(event, a._id)}
+            className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3"
+          >
+            <p className="text-xs font-semibold text-foreground">{t("negotiation.yourCounter")}</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="space-y-1 text-xs text-muted">
+                <span className="font-semibold text-foreground">
+                  {t("negotiation.volumePerTurn")}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  value={counterDrafts[a._id]?.volumeCap ?? ""}
+                  onChange={(event) =>
+                    setCounterDrafts((current) => ({
+                      ...current,
+                      [a._id]: { ...current[a._id]!, volumeCap: event.target.value },
+                    }))
+                  }
+                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-muted">
+                <span className="font-semibold text-foreground">
+                  {t("negotiation.pricePremium")}
+                </span>
+                <input
+                  type="number"
+                  min={-BAND_PCT}
+                  max={BAND_PCT}
+                  value={counterDrafts[a._id]?.premiumPct ?? "0"}
+                  onChange={(event) =>
+                    setCounterDrafts((current) => ({
+                      ...current,
+                      [a._id]: { ...current[a._id]!, premiumPct: event.target.value },
+                    }))
+                  }
+                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label className="space-y-1 text-xs text-muted">
+                <span className="font-semibold text-foreground">{t("negotiation.term")}</span>
+                <input
+                  type="number"
+                  min={MIN_DURATION_TURNS}
+                  max={MAX_DURATION_TURNS}
+                  placeholder={t("negotiation.openEnded")}
+                  value={counterDrafts[a._id]?.durationTurns ?? ""}
+                  onChange={(event) =>
+                    setCounterDrafts((current) => ({
+                      ...current,
+                      [a._id]: { ...current[a._id]!, durationTurns: event.target.value },
+                    }))
+                  }
+                  className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none"
+                />
+              </label>
+              <label className="flex items-center gap-2 self-end pb-2 text-xs text-muted">
+                <input
+                  type="checkbox"
+                  checked={counterDrafts[a._id]?.exclusive ?? false}
+                  onChange={(event) =>
+                    setCounterDrafts((current) => ({
+                      ...current,
+                      [a._id]: { ...current[a._id]!, exclusive: event.target.checked },
+                    }))
+                  }
+                  className="accent-primary"
+                />
+                {t("negotiation.exclusiveSupply")}
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setCounterOpenId(null)}
+                className="rounded-lg border border-card-border px-3 py-1.5 text-xs font-medium text-muted hover:text-foreground"
+              >
+                {t("negotiation.close")}
+              </button>
+              <button
+                type="submit"
+                disabled={busyId === a._id}
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white hover:bg-primary/90 disabled:opacity-50"
+              >
+                {busyId === a._id ? t("negotiation.sending") : t("negotiation.sendCounter")}
+              </button>
+            </div>
+          </form>
         )}
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-card-border bg-card-elevated p-5 sm:p-6 space-y-5">
+    <div
+      id="supply-agreements"
+      className="rounded-2xl border border-card-border bg-card-elevated p-5 sm:p-6 space-y-5"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-bold uppercase tracking-widest text-muted">
             Supply Agreements
           </h2>
-          <p className="mt-1 text-xs text-muted max-w-lg">
-            Private off-market commodity contracts. As supplier, propose a deal; the buyer&apos;s
-            CEO must accept. Either party can cancel.
-          </p>
+          <p className="mt-1 text-xs text-muted max-w-lg">{t("negotiation.intro")}</p>
         </div>
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
           className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/20"
         >
-          {showForm ? "Close" : "Propose agreement"}
+          {showForm ? t("negotiation.close") : t("negotiation.proposeButton")}
         </button>
       </div>
 
@@ -448,9 +733,46 @@ export default function SupplyAgreementsSection({
           onSubmit={handlePropose}
           className="rounded-xl border border-card-border bg-card p-4 space-y-4"
         >
-          {/* Buyer picker */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-foreground">
+              {t("negotiation.openingQuestion")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["supplier", t("negotiation.supplierRole")],
+                  ["buyer", t("negotiation.buyerRole")],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    setProposalRole(value);
+                    setSelectedBuyer(null);
+                    setBuyerQuery("");
+                    setStateId("");
+                  }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    proposalRole === value
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : "border-card-border text-muted hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted">{t("negotiation.openingHelp")}</p>
+          </div>
+
+          {/* Counterparty picker */}
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-foreground">Buyer corporation</label>
+            <label className="text-xs font-semibold text-foreground">
+              {proposalRole === "supplier"
+                ? t("negotiation.buyerCorporation")
+                : t("negotiation.supplierCorporation")}
+            </label>
             {selectedBuyer ? (
               <div className="flex items-center justify-between gap-2 rounded-lg border border-card-border bg-card-elevated px-3 py-2">
                 <span className="text-sm text-foreground truncate">
@@ -475,7 +797,7 @@ export default function SupplyAgreementsSection({
                   type="text"
                   value={buyerQuery}
                   onChange={(e) => setBuyerQuery(e.target.value)}
-                  placeholder="Search corporations by name…"
+                  placeholder={t("negotiation.searchPlaceholder")}
                   className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
                 />
                 {buyerResults.length > 0 && (
@@ -499,9 +821,7 @@ export default function SupplyAgreementsSection({
                     ))}
                   </ul>
                 )}
-                <p className="text-[11px] text-muted">
-                  Any player-run corporation, including foreign ones, can be a counterparty.
-                </p>
+                <p className="text-[11px] text-muted">{t("negotiation.counterpartyHelp")}</p>
               </>
             )}
           </div>
@@ -529,44 +849,56 @@ export default function SupplyAgreementsSection({
                   <label className="block pt-1 text-xs font-semibold text-foreground">
                     Fulfilled from state
                   </label>
-                  <select
-                    value={stateId}
-                    onChange={(e) => setStateId(e.target.value)}
-                    disabled={stateOptions.length === 0}
-                    className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
-                  >
-                    <option value="">
-                      {stateOptions.length === 0 ? "No plants producing freight" : "Select a state"}
-                    </option>
-                    {stateOptions.map(([id, snapshot]) => (
-                      <option key={id} value={id}>
-                        {snapshot.stateName} ({id})
+                  {proposalRole === "supplier" ? (
+                    <select
+                      value={stateId}
+                      onChange={(e) => setStateId(e.target.value)}
+                      disabled={stateOptions.length === 0}
+                      className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground focus:border-primary focus:outline-none disabled:opacity-60"
+                    >
+                      <option value="">
+                        {stateOptions.length === 0
+                          ? t("negotiation.noFreightPlants")
+                          : t("negotiation.selectState")}
                       </option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-muted">
-                    Freight is haulage capacity based in one state. The contract reserves your
-                    plants there for the buyer&apos;s plants in the same state.
-                  </p>
+                      {stateOptions.map(([id, snapshot]) => (
+                        <option key={id} value={id}>
+                          {snapshot.stateName} ({id})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={stateId}
+                      onChange={(e) => setStateId(e.target.value.toUpperCase())}
+                      placeholder={t("negotiation.statePlaceholder")}
+                      maxLength={32}
+                      className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+                    />
+                  )}
+                  <p className="text-[11px] text-muted">{t("negotiation.freightHelp")}</p>
+                  {proposalRole === "buyer" && (
+                    <p className="text-[11px] text-muted">{t("negotiation.buyerFreightHelp")}</p>
+                  )}
                 </>
               )}
             </div>
 
             {/* Volume cap */}
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-foreground">Volume cap (per turn)</label>
+              <label className="text-xs font-semibold text-foreground">
+                {t("negotiation.volumeLabel")}
+              </label>
               <input
                 type="number"
                 min={1}
                 value={volumeCap}
                 onChange={(e) => setVolumeCap(e.target.value)}
-                placeholder="e.g. 5000"
+                placeholder={t("negotiation.volumePlaceholder")}
                 className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
               />
-              <p className="text-[11px] text-muted">
-                Units/day reserved for the buyer. Anything your sectors make above this still sells
-                on the open market as normal.
-              </p>
+              <p className="text-[11px] text-muted">{t("negotiation.volumeHelp")}</p>
               {selectedCapacity && (
                 <dl className="grid grid-cols-2 gap-x-3 gap-y-1 rounded-lg border border-card-border bg-card-elevated p-2 text-[11px] text-muted">
                   <dt>{t("capacity.current")}</dt>
@@ -595,7 +927,7 @@ export default function SupplyAgreementsSection({
           {/* Price premium */}
           <div className="space-y-1">
             <label className="flex items-center justify-between text-xs font-semibold text-foreground">
-              <span>Contract price</span>
+              <span>{t("negotiation.priceLabel")}</span>
               <span className="tabular-nums text-primary">{fmtPremium(premiumPct / 100)}</span>
             </label>
             <input
@@ -608,9 +940,35 @@ export default function SupplyAgreementsSection({
               className="w-full accent-primary"
             />
             <p className="text-[11px] text-muted">
-              At most ±{BAND_PCT}% of market price. Positive favours the supplier; negative favours
-              the buyer.
+              {t("negotiation.priceHelp", { band: BAND_PCT })}
             </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-muted">
+              <span className="font-semibold text-foreground">{t("negotiation.term")}</span>
+              <input
+                type="number"
+                min={MIN_DURATION_TURNS}
+                max={MAX_DURATION_TURNS}
+                value={durationTurns}
+                onChange={(e) => setDurationTurns(e.target.value)}
+                placeholder={t("negotiation.openEnded")}
+                className="w-full rounded-lg border border-card-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted focus:border-primary focus:outline-none"
+              />
+              <span className="block text-[11px]">
+                {t("negotiation.termHelp", { min: MIN_DURATION_TURNS, max: MAX_DURATION_TURNS })}
+              </span>
+            </label>
+            <label className="flex items-center gap-2 self-start pt-6 text-xs text-muted">
+              <input
+                type="checkbox"
+                checked={exclusive}
+                onChange={(e) => setExclusive(e.target.checked)}
+                className="accent-primary"
+              />
+              {t("negotiation.exclusiveBuyer")}
+            </label>
           </div>
 
           <div className="flex justify-end">
@@ -619,7 +977,7 @@ export default function SupplyAgreementsSection({
               disabled={submitting}
               className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
             >
-              {submitting ? "Proposing…" : "Propose agreement"}
+              {submitting ? t("negotiation.sending") : t("negotiation.sendOpening")}
             </button>
           </div>
         </form>

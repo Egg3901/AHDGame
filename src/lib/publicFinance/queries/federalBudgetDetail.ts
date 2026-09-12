@@ -16,7 +16,7 @@ import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/co
 import { calculateFederalRevenue, loadLatestSourcedImportAggregates } from "@/lib/budget/revenue";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { FISCAL_YEAR_START_TURN_IN_YEAR, calculateFiscalYear } from "@/lib/budget/fiscalYear";
-import { normalizeFederalSpending } from "@/lib/budget/spending";
+import { calculateFederalLawAnnualCosts, normalizeFederalSpending } from "@/lib/budget/spending";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { liveNationalGdpUnits } from "@/lib/budget/gdpDenominator";
 import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
@@ -473,11 +473,23 @@ export async function loadFederalBudgetDetail(params: {
       if (t.taxRateChange?.taxType) revenueTaxTypeByLegId.set(t._id, t.taxRateChange.taxType);
     }
   }
+  const { items: federalLawCosts } = await calculateFederalLawAnnualCosts(
+    db,
+    resolvedNationalBudget
+  );
+  const annualCostByLawId = new Map(
+    federalLawCosts.map(({ law, amount }) => [law._id.toString(), amount])
+  );
   const enrichedLaws = enactedLaws.map((law) => {
     const revenueTaxType = law.legislationTypeId
       ? revenueTaxTypeByLegId.get(law.legislationTypeId)
       : undefined;
-    return revenueTaxType ? { ...law, revenueTaxType } : law;
+    const annualCost = annualCostByLawId.get(law._id.toString());
+    return {
+      ...law,
+      ...(revenueTaxType ? { revenueTaxType } : {}),
+      ...(annualCost != null ? { annualCost } : {}),
+    };
   });
 
   // Signed per-turn State-enterprise (National Corporation) net, in local

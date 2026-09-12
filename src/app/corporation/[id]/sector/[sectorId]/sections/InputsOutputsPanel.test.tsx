@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import InputsOutputsPanel from "./InputsOutputsPanel";
 import type { CommoditiesData, CommodityFlow, PlantsData } from "../types";
 
@@ -85,5 +85,41 @@ describe("InputsOutputsPanel layout", () => {
     for (const section of sections) {
       expect(section.className).toMatch(/min-w-0/);
     }
+  });
+
+  it("explains the exact global price drivers without calling them regional", () => {
+    const attributed: CommoditiesData = {
+      ...commodities,
+      supplies: [
+        flow({
+          commodity: "advertising",
+          label: "Advertising & Media",
+          icon: "Ad",
+          priceAttribution: {
+            appliedPrice: 120,
+            realBasePrice: 100,
+            nominalInflation: 10,
+            scarcityMemory: 2,
+            producerInputCostPassThrough: 3,
+            marketBalance: 8,
+            adjustmentLag: -3,
+            explicitOverride: 0,
+          },
+        }),
+      ],
+    };
+    render(
+      <InputsOutputsPanel
+        commodities={attributed}
+        plants={plants}
+        countryId="US"
+        isExtraction={false}
+        forexEnabled={false}
+        exchangeRates={{}}
+      />
+    );
+    fireEvent.focus(screen.getByText("Advertising & Media").parentElement!);
+    expect(screen.getByText(/Global price drivers: inflation \+10/)).toBeTruthy();
+    expect(screen.getByText(/country and regional conditions set the local price/)).toBeTruthy();
   });
 });

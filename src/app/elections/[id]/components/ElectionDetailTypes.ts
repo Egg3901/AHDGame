@@ -4,6 +4,7 @@ import type {
   PresidentialResolutionMode,
 } from "@/lib/elections/presidentialResolutionDisplay";
 import type { FactorLedgerSnapshot } from "@/lib/electionEngine/factorLedger";
+import type { DemocraticHealthElectionSnapshot } from "@/lib/electionEngine/democraticHealth";
 
 export interface Endorsement {
   nppId?: string;
@@ -374,6 +375,12 @@ export interface ElectionDetail {
     incumbentPartyName?: string;
     incumbentPartyColor?: string;
     recordedTurn: number;
+  };
+
+  /** President only: institutional-health pressure passed through by `_enrichElection`. */
+  democraticHealth?: DemocraticHealthElectionSnapshot & {
+    rulingPartyName?: string;
+    rulingPartyColor?: string;
   };
 
   /**

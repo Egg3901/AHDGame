@@ -16,18 +16,10 @@ import { Badge, Button, EmptyState, Input, Skeleton } from "@/components/ui";
 import { useToast } from "@/contexts/ToastContext";
 import { WarningBandBadge } from "@/components/banking/WarningBandBadge";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
+import { PrivateLoanModal } from "@/app/banking/PrivateLoanModal";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 import type { BankCharterType } from "@/lib/db/types/bank";
-import {
-  CHARACTER_LOAN_SPREAD_PP,
-  NAMED_LOAN_DTI_MAX_FRACTION,
-  bindingNamedLoanCap,
-  maxPrincipalFromIncome,
-  namedLoanPaymentDue,
-  namedLoanPrincipalCap,
-  remainingLoanTurns,
-} from "@/lib/banking/lendingMath";
 
 type HubCentralBank = {
   currency: CurrencyCode;
@@ -56,6 +48,7 @@ type HubPrivateBank = {
   totalDeposits: number;
   cashReserves: number;
   lendableHeadroom: number;
+  requireApproval?: boolean;
   href: string;
 };
 
@@ -106,6 +99,7 @@ type HubPayload = {
   privateBanks: HubPrivateBank[];
   savings: HubSavingsRow[];
   personalCash: Partial<Record<CurrencyCode, number>>;
+  exchangeRates?: Partial<Record<CurrencyCode, number>>;
   personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
   currentTurn: number;
   ceoCorporations: HubCeoCorporation[];
@@ -188,7 +182,11 @@ export function BankingHubClient() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 pb-16 sm:px-6 sm:py-8">
-      <BankingHero primary={primary} />
+      <BankingHero
+        primary={primary}
+        privateBankingEnabled={data.privateBankingEnabled}
+        onNavigate={setActiveTab}
+      />
 
       <HubTabs tabs={visibleTabs} activeTab={activeTab} onChange={setActiveTab} />
 
@@ -268,6 +266,7 @@ export function BankingHubClient() {
               banks={data.lendingBanks}
               ceoCorporations={data.ceoCorporations}
               personalCash={data.personalCash ?? {}}
+              exchangeRates={data.exchangeRates ?? {}}
               personalIncomeByCurrency={data.personalIncomeByCurrency ?? {}}
               currentTurn={data.currentTurn ?? 1}
               loans={data.loans ?? []}
@@ -375,7 +374,15 @@ function SectionHeading({
   );
 }
 
-function BankingHero({ primary }: { primary: HubCentralBank | undefined }) {
+function BankingHero({
+  primary,
+  privateBankingEnabled,
+  onNavigate,
+}: {
+  primary: HubCentralBank | undefined;
+  privateBankingEnabled: boolean;
+  onNavigate: (tab: HubTab) => void;
+}) {
   return (
     <header className="relative overflow-hidden rounded-3xl border border-card-border bg-gradient-to-br from-card via-card to-card-elevated shadow-lg">
       <div
@@ -401,6 +408,26 @@ function BankingHero({ primary }: { primary: HubCentralBank | undefined }) {
             Follow monetary policy, compare chartered banks, and manage your savings and borrowing
             from one desk.
           </p>
+          {privateBankingEnabled && (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => onNavigate("private")}
+                className="inline-flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              >
+                Browse private banks
+                <ArrowRight className="h-4 w-4" aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => onNavigate("accounts")}
+                className="inline-flex items-center gap-2 rounded-lg border border-card-border bg-card/70 px-3.5 py-2 text-sm font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-card"
+              >
+                Deposit or borrow
+                <WalletCards className="h-4 w-4" aria-hidden />
+              </button>
+            </div>
+          )}
         </div>
 
         {primary && (
@@ -524,58 +551,61 @@ function CentralBankCard({ bank }: { bank: HubCentralBank }) {
 }
 
 function PrivateBankCard({ bank }: { bank: HubPrivateBank }) {
+  const customerBank = bank.charterType === "retail" || bank.charterType === "universal";
   const depositRate =
     bank.charterType === "investment" ? "Not offered" : formatRatePercent(bank.depositRatePercent);
   const lendingRate =
     bank.charterType === "investment" ? "Not offered" : formatRatePercent(bank.lendingRatePercent);
 
   return (
-    <Link
-      href={bank.href}
-      className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-    >
-      <div className="flex items-start justify-between gap-3 p-5 pb-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card-elevated text-muted transition-colors group-hover:text-primary">
-            <Building2 className="h-4.5 w-4.5" aria-hidden />
+    <article className="group flex min-h-full flex-col overflow-hidden rounded-2xl border border-card-border bg-card shadow-card transition-all hover:-translate-y-0.5 hover:border-primary/35 hover:shadow-lg">
+      <Link
+        href={bank.href}
+        className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+      >
+        <div className="flex items-start justify-between gap-3 p-5 pb-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-card-elevated text-muted transition-colors group-hover:text-primary">
+              <Building2 className="h-4.5 w-4.5" aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
+                {bank.name}
+              </h3>
+              <p className="mt-0.5 text-xs text-muted">
+                {bank.countryName} · <span className="font-mono">{bank.currency}</span>
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h3 className="truncate font-bold text-foreground transition-colors group-hover:text-primary">
-              {bank.name}
-            </h3>
-            <p className="mt-0.5 text-xs text-muted">
-              {bank.countryName} · <span className="font-mono">{bank.currency}</span>
-            </p>
-          </div>
+          <ArrowRight
+            className="mt-1 h-4 w-4 shrink-0 text-muted/50 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
+            aria-hidden
+          />
         </div>
-        <ArrowRight
-          className="mt-1 h-4 w-4 shrink-0 text-muted/50 transition-all group-hover:translate-x-0.5 group-hover:text-primary"
-          aria-hidden
-        />
-      </div>
 
-      <div className="flex flex-wrap items-center gap-2 px-5">
-        <Badge color={bank.operatorType === "player" ? "info" : "default"} variant="subtle">
-          {bank.operatorType === "player" ? "Player-run" : "NPP-run"}
-        </Badge>
-        <Badge color="default" variant="subtle">
-          {charterLabel(bank.charterType)}
-        </Badge>
-        <WarningBandBadge band={bank.warningBand} confidence={bank.confidence} />
-      </div>
+        <div className="flex flex-wrap items-center gap-2 px-5">
+          <Badge color={bank.operatorType === "player" ? "info" : "default"} variant="subtle">
+            {bank.operatorType === "player" ? "Player-run" : "NPP-run"}
+          </Badge>
+          <Badge color="default" variant="subtle">
+            {charterLabel(bank.charterType)}
+          </Badge>
+          <WarningBandBadge band={bank.warningBand} confidence={bank.confidence} />
+        </div>
 
-      <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border border-y border-card-border bg-background/35">
-        <RateMetric
-          label="Deposit rate"
-          value={depositRate}
-          compact={depositRate === "Not offered"}
-        />
-        <RateMetric
-          label="Lending rate"
-          value={lendingRate}
-          compact={lendingRate === "Not offered"}
-        />
-      </dl>
+        <dl className="mt-5 grid grid-cols-2 divide-x divide-card-border border-y border-card-border bg-background/35">
+          <RateMetric
+            label="Deposit rate"
+            value={depositRate}
+            compact={depositRate === "Not offered"}
+          />
+          <RateMetric
+            label="Lending rate"
+            value={lendingRate}
+            compact={lendingRate === "Not offered"}
+          />
+        </dl>
+      </Link>
 
       <div className="mt-auto flex items-center justify-between gap-3 px-5 py-4">
         <div>
@@ -588,7 +618,35 @@ function PrivateBankCard({ bank }: { bank: HubPrivateBank }) {
         </div>
         <ShieldCheck className="h-4 w-4 text-muted/60" aria-label="Deposit supervision" />
       </div>
-    </Link>
+
+      <div className="grid gap-2 border-t border-card-border p-4 sm:grid-cols-2">
+        {customerBank ? (
+          <>
+            <Link
+              href={`${bank.href}#customer-deposit`}
+              aria-label={`Deposit savings at ${bank.name}`}
+              className="inline-flex items-center justify-center rounded-lg border border-success/35 bg-success/10 px-3 py-2 text-xs font-semibold text-success transition-colors hover:bg-success/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-success"
+            >
+              Deposit savings
+            </Link>
+            <Link
+              href={`${bank.href}#customer-loan`}
+              aria-label={`Apply for a loan at ${bank.name}`}
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            >
+              Apply for a loan
+            </Link>
+          </>
+        ) : (
+          <Link
+            href={bank.href}
+            className="col-span-full inline-flex items-center justify-center rounded-lg border border-card-border px-3 py-2 text-xs font-semibold text-muted transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          >
+            View bank
+          </Link>
+        )}
+      </div>
+    </article>
   );
 }
 
@@ -716,6 +774,7 @@ function GetLoanForm({
   banks,
   ceoCorporations,
   personalCash,
+  exchangeRates,
   personalIncomeByCurrency,
   currentTurn,
   loans,
@@ -726,6 +785,7 @@ function GetLoanForm({
   banks: HubPrivateBank[];
   ceoCorporations: HubCeoCorporation[];
   personalCash: Partial<Record<CurrencyCode, number>>;
+  exchangeRates: Partial<Record<CurrencyCode, number>>;
   personalIncomeByCurrency: Partial<Record<CurrencyCode, number>>;
   currentTurn: number;
   loans: HubLoan[];
@@ -733,140 +793,7 @@ function GetLoanForm({
   onChanged: () => Promise<void>;
   showToast: (msg: string, type?: "success" | "error" | "info" | "warning") => void;
 }) {
-  const [bankId, setBankId] = useState(banks[0]?.corporationId ?? "");
-  const [borrowerType, setBorrowerType] = useState<"character" | "corporation">("character");
-  const [corpId, setCorpId] = useState(ceoCorporations[0]?.id ?? "");
-  const [principal, setPrincipal] = useState("");
-  const [termTurns, setTermTurns] = useState("12");
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    if (!bankId && banks[0]) setBankId(banks[0].corporationId);
-  }, [banks, bankId]);
-
-  const selected = banks.find((b) => b.corporationId === bankId);
-  const selectedCorp = ceoCorporations.find((c) => c.id === corpId);
-  const term = parseInt(termTurns, 10);
-  const quotedRatePercent =
-    selected == null
-      ? 0
-      : borrowerType === "character"
-        ? selected.lendingRatePercent + CHARACTER_LOAN_SPREAD_PP
-        : selected.lendingRatePercent;
-  const incomePerTurn =
-    borrowerType === "corporation"
-      ? (selectedCorp?.incomePerTurn ?? 0)
-      : selected
-        ? (personalIncomeByCurrency[selected.currency] ?? 0)
-        : 0;
-  const committedPaymentPerTurn = loans
-    .filter((loan) => {
-      if (loan.status !== "current" && loan.status !== "arrears") return false;
-      if (borrowerType === "character") return loan.borrowerType === "character";
-      return loan.borrowerType === "corporation" && loan.borrowerId === selectedCorp?.id;
-    })
-    .reduce(
-      (sum, loan) =>
-        sum +
-        namedLoanPaymentDue(
-          loan.outstanding,
-          loan.ratePercent,
-          remainingLoanTurns(loan.originatedTurn, loan.termTurns, currentTurn)
-        ),
-      0
-    );
-  const incomeCap = maxPrincipalFromIncome({
-    incomePerTurn,
-    ratePercent: quotedRatePercent,
-    termTurns: Number.isFinite(term) ? term : 12,
-    committedPaymentPerTurn,
-  });
-  const capInput = {
-    bankCashReserves: selected?.cashReserves ?? 0,
-    lendableHeadroom: selected?.lendableHeadroom ?? 0,
-    incomeCap,
-  };
-  const maxPrincipal = namedLoanPrincipalCap(capInput);
-  const bind = bindingNamedLoanCap(capInput);
-  const bindLabel =
-    bind === "cashReserves"
-      ? "the bank's cash reserves"
-      : bind === "headroom"
-        ? "deposit headroom"
-        : `income (${Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated per-turn income, after existing private-bank payments)`;
-
-  const submit = async () => {
-    const p = Number(principal);
-    const term = parseInt(termTurns, 10);
-    if (!Number.isFinite(p) || p <= 0) {
-      showToast("Enter a valid principal", "error");
-      return;
-    }
-    if (!Number.isFinite(term) || term < 4 || term > 120) {
-      showToast("Term must be between 4 and 120 turns", "error");
-      return;
-    }
-    if (selected && p > maxPrincipal) {
-      showToast(
-        `Principal exceeds the private-bank maximum (${formatBankMoney(maxPrincipal, selected.currency)}). That cap is not bond issuance headroom.`,
-        "error"
-      );
-      return;
-    }
-    if (!bankId) {
-      showToast("Select a bank", "error");
-      return;
-    }
-    setBusy(true);
-    try {
-      const body: Record<string, unknown> = {
-        bankCorporationId: bankId,
-        borrowerType,
-        principal: p,
-        termTurns: term,
-      };
-      if (borrowerType === "corporation") {
-        if (!corpId) {
-          showToast("Select a corporation", "error");
-          return;
-        }
-        body.borrowerCorporationId = corpId;
-      }
-      const res = await fetch("/api/banking/loans", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const json = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        creditedTo?: {
-          kind: "character" | "corporation";
-          name: string;
-          destination: "personalCash" | "corporationLiquidCapital";
-        };
-      };
-      if (!res.ok) {
-        showToast(json.error ?? "Loan request failed", "error");
-        return;
-      }
-      const credited = json.creditedTo;
-      const amountLabel = selected ? formatBankMoney(p, selected.currency) : String(p);
-      if (credited?.destination === "corporationLiquidCapital") {
-        showToast(
-          `Loan originated. ${amountLabel} credited to ${credited.name} liquid capital.`,
-          "success"
-        );
-      } else if (credited?.destination === "personalCash") {
-        showToast(`Loan originated. ${amountLabel} credited to your personal cash.`, "success");
-      } else {
-        showToast("Loan originated", "success");
-      }
-      setPrincipal("");
-      await onChanged();
-    } finally {
-      setBusy(false);
-    }
-  };
+  const [open, setOpen] = useState(false);
 
   if (banks.length === 0) {
     return (
@@ -885,157 +812,44 @@ function GetLoanForm({
   }
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-card">
-      <AccountCardHeader
-        icon={HandCoins}
-        title="New credit"
-        description="Borrow personally or for a corporation you lead."
-      />
-      <div className="space-y-4 p-5">
-        <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-          Bank
-          <select
-            className="h-10 w-full rounded-lg border border-card-border bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-            value={bankId}
-            onChange={(e) => setBankId(e.target.value)}
-            aria-label="Lending bank"
-          >
-            {banks.map((b) => (
-              <option key={b.corporationId} value={b.corporationId}>
-                {b.name} · {formatRatePercent(b.lendingRatePercent)} · {b.currency}
-              </option>
-            ))}
-          </select>
-        </label>
-        {selected && (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-card-border bg-background/45 px-3.5 py-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-                Offered rate
-              </p>
-              <p className="mt-0.5 font-mono text-base font-bold tabular-nums text-foreground">
-                {formatRatePercent(selected.lendingRatePercent)}
-              </p>
-            </div>
-            <WarningBandBadge band={selected.warningBand} confidence={selected.confidence} />
-          </div>
-        )}
-        <fieldset className="space-y-2.5">
-          <legend className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-            Borrower
-          </legend>
-          <div className="grid grid-cols-2 gap-2">
-            <label
-              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-                borrowerType === "character"
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-card-border bg-background/35 text-muted hover:text-foreground"
-              }`}
-            >
-              <input
-                type="radio"
-                name="borrower"
-                className="accent-primary"
-                checked={borrowerType === "character"}
-                onChange={() => setBorrowerType("character")}
-                disabled={!hasCharacter}
-              />
-              Myself
-            </label>
-            <label
-              className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2.5 text-sm transition-colors ${
-                borrowerType === "corporation"
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-card-border bg-background/35 text-muted hover:text-foreground"
-              }`}
-            >
-              <input
-                type="radio"
-                name="borrower"
-                className="accent-primary"
-                checked={borrowerType === "corporation"}
-                onChange={() => setBorrowerType("corporation")}
-                disabled={ceoCorporations.length === 0}
-              />
-              My corporation
-            </label>
-          </div>
-        </fieldset>
-        {borrowerType === "corporation" && (
-          <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-            Corporation
-            <select
-              className="h-10 w-full rounded-lg border border-card-border bg-background px-3 text-sm font-normal normal-case tracking-normal text-foreground outline-none transition-colors focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value={corpId}
-              onChange={(e) => setCorpId(e.target.value)}
-              aria-label="Borrowing corporation"
-            >
-              {ceoCorporations.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <p className="rounded-lg border border-card-border bg-background/45 px-3 py-2 text-xs leading-relaxed text-muted">
-          {borrowerType === "corporation"
-            ? selectedCorp
-              ? `Proceeds credit ${selectedCorp.name} liquid capital (currently ${formatBankMoney(selectedCorp.liquidCapital, selectedCorp.currency)}). They do not appear in your personal cash or savings.`
-              : "Proceeds credit that corporation's liquid capital, not your personal cash or savings."
-            : `Proceeds credit your personal cash${
-                selected
-                  ? ` (currently ${formatBankMoney(personalCash[selected.currency] ?? 0, selected.currency)})`
-                  : ""
-              }. They do not appear in savings or corporation liquid capital.`}
-        </p>
-        {selected && (
-          <div className="rounded-lg border border-card-border bg-background/45 px-3 py-2 text-xs leading-relaxed text-muted">
-            <p>
-              Private-bank maximum:{" "}
-              <span className="font-mono font-semibold text-foreground">
-                {formatBankMoney(maxPrincipal, selected.currency)}
-              </span>
-              {maxPrincipal > 0 ? ` (limited by ${bindLabel}).` : ` — ${bindLabel} is exhausted.`}
-            </p>
+    <>
+      <div className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-card">
+        <AccountCardHeader
+          icon={HandCoins}
+          title="New credit"
+          description="Borrow personally or for a corporation you lead."
+        />
+        <div className="space-y-4 p-5">
+          <div className="rounded-xl border border-card-border bg-background/45 px-4 py-3 text-sm leading-relaxed text-muted">
+            <p className="font-semibold text-foreground">Clear terms before you submit</p>
             <p className="mt-1">
-              This is not bond issuance headroom. Named loans are capped by the bank&apos;s own cash
-              reserves, leftover deposit headroom, and{" "}
-              {Math.round(NAMED_LOAN_DTI_MAX_FRACTION * 100)}% of demonstrated income.
+              Choose Personal loan or Corporation loan. The review screen shows the lender, quoted
+              rate, destination, payment estimate, and maximum before any request is sent.
             </p>
           </div>
-        )}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-            Principal
-            <Input
-              className="font-normal normal-case tracking-normal"
-              value={principal}
-              onChange={(e) => setPrincipal(e.target.value)}
-              inputMode="decimal"
-              placeholder="Amount"
-              aria-label="Loan principal"
-            />
-          </label>
-          <label className="block space-y-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted">
-            Term (turns)
-            <Input
-              className="font-normal normal-case tracking-normal"
-              value={termTurns}
-              onChange={(e) => setTermTurns(e.target.value)}
-              inputMode="numeric"
-              aria-label="Loan term in turns"
-            />
-          </label>
+          <Button type="button" className="w-full" onClick={() => setOpen(true)}>
+            Arrange private-bank loan
+          </Button>
         </div>
-        <Button type="button" className="w-full" onClick={() => void submit()} isLoading={busy}>
-          Request loan
-        </Button>
       </div>
-    </div>
+      {open && (
+        <PrivateLoanModal
+          banks={banks}
+          ceoCorporations={ceoCorporations}
+          personalCash={personalCash}
+          exchangeRates={exchangeRates}
+          personalIncomeByCurrency={personalIncomeByCurrency}
+          currentTurn={currentTurn}
+          loans={loans}
+          hasCharacter={hasCharacter}
+          onClose={() => setOpen(false)}
+          onChanged={onChanged}
+          showToast={showToast}
+        />
+      )}
+    </>
   );
 }
-
 function YourLoansSection({ loans }: { loans: HubLoan[] }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-card-border bg-card shadow-card">

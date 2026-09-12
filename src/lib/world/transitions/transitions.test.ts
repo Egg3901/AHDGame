@@ -189,7 +189,7 @@ describe("Gold Coast → Ghana historical transition (#3726)", () => {
       expect(db.collectionMocks.macroCountries!.updateOne).toHaveBeenCalledTimes(1);
       const [, update] = db.collectionMocks.macroCountries!.updateOne.mock.calls[0]!;
       expect(update.$set.entityId).toBe(GHANA_ENTITY_ID);
-      expect(update.$set.simulationTier).toBeUndefined();
+      expect(update.$set.simulationTier).toBe("sphere-macro");
       expect(update.$set.displayName).toBe("Ghana");
     });
 
