@@ -77,6 +77,14 @@ export interface ElectionVoteTally {
     eligibleVicePresidentCandidateIds: string[];
     houseDelegationVotes: Record<string, string | null>;
     houseVoteTotals: Record<string, number>;
+    houseBallots?: Array<{
+      ballot: number;
+      activeCandidateIds: string[];
+      delegationVotes: Record<string, string | null>;
+      totals: Record<string, number>;
+      reason: string;
+      withdrawnCandidateId?: string;
+    }>;
     senateVotes: Record<string, string | null>;
     senateVoteTotals: Record<string, number>;
     presidentWinnerId: string;
