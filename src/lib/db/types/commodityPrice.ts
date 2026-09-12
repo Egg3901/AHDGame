@@ -1,4 +1,5 @@
 import type { CommodityType } from "../../constants/commodities";
+import type { CommodityPriceAttribution } from "@/lib/market/priceAttribution";
 
 /**
  * Stored commodity market price, updated each turn.
@@ -109,5 +110,11 @@ export interface CommodityPrice {
    * the worldwide `globalPrice`. Pegs/nudges override to the pegged value.
    */
   reachablePrices?: Record<string, number>;
+  /**
+   * Exact attribution of the applied global price to every formula stage. The
+   * components reconcile exactly to
+   * `globalPrice - realBasePrice`. See `market/priceAttribution.ts`.
+   */
+  priceAttribution?: CommodityPriceAttribution;
   updatedAt: Date;
 }

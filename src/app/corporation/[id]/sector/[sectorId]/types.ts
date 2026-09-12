@@ -100,6 +100,8 @@ export interface CommodityFlow {
   nationalPrice: number;
   regionalPrice: number;
   marketPrice: number;
+  /** Exact explanation of the global leg used by this regional price. */
+  priceAttribution?: import("@/lib/market/priceAttribution").CommodityPriceAttribution;
   /**
    * Demand rows only: the per-unit price the engine actually bills for this
    * input (base price through the revenue realization function,
