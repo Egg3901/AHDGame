@@ -4,7 +4,24 @@ import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import type { Election, ElectionCandidate, ElectionVoteTally } from "@/lib/db/types";
 
-// GET /api/admin/elections/heal-withdrawn-tallies — Diagnoses active election tallies that still contain data for withdrawn candidates.
+function staleCandidateIds(tally: ElectionVoteTally, activeIds: Set<string>): string[] {
+  const tallyCandidateIds = new Set(Object.keys(tally.totalVotes));
+  for (const unitVotes of Object.values(tally.totalVotesByUnit ?? {})) {
+    for (const candidateId of Object.keys(unitVotes)) tallyCandidateIds.add(candidateId);
+  }
+  return [...tallyCandidateIds].filter((candidateId) => !activeIds.has(candidateId));
+}
+
+function staleVoteCount(tally: ElectionVoteTally, candidateId: string): number {
+  const summaryVotes = tally.totalVotes[candidateId];
+  if (typeof summaryVotes === "number") return summaryVotes;
+  return Object.values(tally.totalVotesByUnit ?? {}).reduce(
+    (sum, unitVotes) => sum + (unitVotes[candidateId] ?? 0),
+    0
+  );
+}
+
+// GET /api/admin/elections/heal-withdrawn-tallies — Diagnoses active election tallies that still contain data for withdrawn candidates, including presidential unit votes.
 // Auth: requireAdmin
 // Errors: 403
 export async function GET() {
@@ -48,19 +65,18 @@ export async function GET() {
       if (!election) continue;
 
       const electionCandidates = candidates.filter((c) => c.electionId.toString() === electionId);
-      const withdrawnIds = new Set(
-        electionCandidates.filter((c) => c.status === "withdrawn").map((c) => c._id.toString())
+      const activeIds = new Set(
+        electionCandidates.filter((c) => c.status === "active").map((c) => c._id.toString())
       );
 
-      const staleEntries: string[] = [];
-      let staleVotes = 0;
-      for (const [candidateId, votes] of Object.entries(tally.totalVotes)) {
-        if (withdrawnIds.has(candidateId)) {
-          const name = tally.candidateNames?.[candidateId] ?? candidateId;
-          staleEntries.push(name);
-          staleVotes += votes as number;
-        }
-      }
+      const staleIds = staleCandidateIds(tally, activeIds);
+      const staleEntries = staleIds.map(
+        (candidateId) => tally.candidateNames?.[candidateId] ?? candidateId
+      );
+      const staleVotes = staleIds.reduce(
+        (sum, candidateId) => sum + staleVoteCount(tally, candidateId),
+        0
+      );
 
       if (staleEntries.length > 0) {
         affected.push({
@@ -122,8 +138,8 @@ export async function POST() {
         electionCandidates.filter((c) => c.status === "active").map((c) => c._id.toString())
       );
 
-      // Find stale entries in tally
-      const staleIds = Object.keys(tally.totalVotes).filter((id) => !activeIds.has(id));
+      // Find stale entries in both summary and presidential unit tallies.
+      const staleIds = staleCandidateIds(tally, activeIds);
       if (staleIds.length === 0) continue;
 
       // Build $unset to remove stale entries
@@ -134,6 +150,9 @@ export async function POST() {
         unsetPaths[`candidateParties.${id}`] = "";
         if (tally.seatsEstimate && id in tally.seatsEstimate) {
           unsetPaths[`seatsEstimate.${id}`] = "";
+        }
+        for (const unitId of Object.keys(tally.totalVotesByUnit ?? {})) {
+          unsetPaths[`totalVotesByUnit.${unitId}.${id}`] = "";
         }
       }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 
-import type { Character, ElectionCandidate, PoliticalParty, State } from "@/lib/db/types";
+import type { Character, ElectionCandidate, NPP, PoliticalParty, State } from "@/lib/db/types";
 
 import { enrichElectionCandidates } from "./candidateEnrichment";
 
@@ -583,5 +583,91 @@ describe("enrichElectionCandidates", () => {
     expect(historical.party).toBe("1");
     expect(historical.partyName).toBe("Democratic Party");
     expect(historical.partyColor).toBe("#1d4ed8");
+  });
+
+  it("uses an NPP's live party in active races while preserving historical ballot labels", () => {
+    const electionId = new ObjectId();
+    const candidateId = new ObjectId();
+    const nppId = new ObjectId();
+
+    const liberalParty: PoliticalParty = {
+      _id: new ObjectId(),
+      sequentialId: 1,
+      countryId: "UK",
+      name: "Liberal Party",
+      abbreviation: "LIB",
+      color: "#facc15",
+      economicPosition: 0,
+      socialPosition: 0,
+      chairId: null,
+      viceChairId: null,
+      treasurerId: null,
+      committeeIds: [],
+      memberCount: 0,
+      isDefault: false,
+      createdBy: null,
+      treasury: 0,
+      nationalTaxRate: 0,
+      politicalStrength: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const liberalDemocrats: PoliticalParty = {
+      ...liberalParty,
+      _id: new ObjectId(),
+      sequentialId: 2,
+      name: "Liberal Democrats",
+      abbreviation: "LD",
+      color: "#f97316",
+    };
+    const candidate: ElectionCandidate = {
+      _id: candidateId,
+      electionId,
+      characterId: nppId,
+      characterName: "Florence Hart",
+      party: "1", // original ballot party
+      status: "active",
+      isNPP: true,
+      nppId,
+      enteredAt: new Date(),
+    } as ElectionCandidate;
+    const npp: NPP = {
+      _id: nppId,
+      countryId: "UK",
+      name: "Florence Hart",
+      homeState: "UK_WLS",
+      politicalInfluence: 40,
+      favorability: 50,
+      policies: { economic: 0, social: 0 },
+      party: "2", // updated by the party merger
+      currentOffice: null,
+      personality: { loyalty: 50, ambition: 50, stubbornness: 50 },
+      generatedAt: new Date(),
+      retiredAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const deps = {
+      candidates: [candidate],
+      characters: [],
+      npps: [npp],
+      parties: [liberalParty, liberalDemocrats],
+      nppEndorsements: [],
+      playerEndorsements: [],
+      campaigns: [],
+      statePartyOrgs: [],
+      isPresident: false,
+      myCharId: null,
+    };
+
+    const [live] = enrichElectionCandidates(deps);
+    expect(live.party).toBe("2");
+    expect(live.partyName).toBe("Liberal Democrats");
+    expect(live.partyColor).toBe("#f97316");
+
+    const [historical] = enrichElectionCandidates({ ...deps, preferBallotParty: true });
+    expect(historical.party).toBe("1");
+    expect(historical.partyName).toBe("Liberal Party");
   });
 });
