@@ -18,6 +18,7 @@ import { MinisterCallouts } from "@/components/budget/treasury/MinisterCallouts"
 import { FiscalMechanicsNote } from "@/components/budget/treasury/FiscalMechanicsNote";
 import { DefenseFundingNote } from "@/components/budget/treasury/DefenseFundingNote";
 import type { DefenseFundingPosition } from "@/lib/publicFinance/queries/defenseFunding";
+import type { OrganizationContributionPosition } from "@/lib/publicFinance/queries/organizationContributions";
 import { BudgetAuthoringPanel } from "@/components/uk/budget/BudgetAuthoringPanel";
 import { PlannedEconomyPanel } from "@/components/economy/PlannedEconomyPanel";
 import { Button, Skeleton, CardSkeleton, StatGridSkeleton, ListRowSkeleton } from "@/components/ui";
@@ -65,6 +66,8 @@ interface BudgetData {
   treasuryReserve?: number;
   /** Defence funding position (live budget only; null when the country fields no force). */
   defenseFunding?: DefenseFundingPosition | null;
+  /** Recurring organization dues or tribute debited directly from the treasury per turn. */
+  organizationContributions?: OrganizationContributionPosition | null;
   /** Live national GDP in base currency units, summed from every region this
    *  turn. `budget.gdp` is the fiscal-close snapshot and lags this. */
   liveGdpUnits?: number;
@@ -962,8 +965,29 @@ export function NationalBudgetClient() {
     soeLink: true,
   });
   const revenueLinesFinal = soeNet > 0 ? [...revenueLines, soeLine(soeNet)] : revenueLines;
-  const spendingLinesFinal =
-    soeNet < 0 ? [...spendingLines, soeLine(Math.abs(soeNet))] : spendingLines;
+  const organizationContributionPerTurn = Math.round(data.organizationContributions?.perTurn ?? 0);
+  const organizationNames = [
+    ...new Set(data.organizationContributions?.lines.map((line) => line.organizationId)),
+  ]
+    .map((organizationId) => organizationId.replaceAll("_", " "))
+    .join(", ");
+  const organizationKinds = [
+    ...new Set(data.organizationContributions?.lines.map((line) => line.kind)),
+  ].join(" and ");
+  const organizationContributionLine: BreakdownLine = {
+    id: "internationalOrganizations",
+    label: "International organizations",
+    description:
+      `Recurring ${organizationKinds || "dues or tribute"}${organizationNames ? ` from ${organizationNames}` : ""}. ` +
+      "Charged directly to the treasury and not included in annual spending.",
+    amount: organizationContributionPerTurn,
+    perTurn: true,
+  };
+  const spendingLinesFinal = [
+    ...(soeNet < 0 ? [soeLine(Math.abs(soeNet))] : []),
+    ...(organizationContributionPerTurn > 0 ? [organizationContributionLine] : []),
+    ...spendingLines,
+  ];
 
   const treasuryIdentity = getTreasuryIdentity(countryId);
   const fyHistory = data.fyHistory ?? [];
@@ -1036,6 +1060,7 @@ export function NationalBudgetClient() {
             sym={moneyPrefix}
             funding={data.defenseFunding}
             soeNetPerTurn={data.stateEnterpriseNet ?? null}
+            organizationContributions={data.organizationContributions ?? null}
           />
         ) : null}
 

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { applyDefenseAppropriation } from "./defenseAppropriationTurn";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 const treasurySpends: { countryId: string; amount: number }[] = [];
 vi.mock("@/lib/budget/treasurySpend", () => ({
@@ -8,6 +9,9 @@ vi.mock("@/lib/budget/treasurySpend", () => ({
     treasurySpends.push({ countryId, amount });
     return { fromSurplus: 0, addedToDebt: 0, newTreasuryBalance: 0, newDebtPrincipal: 0 };
   }),
+}));
+vi.mock("@/lib/financialTxLog/emit", () => ({
+  emitTx: vi.fn().mockResolvedValue(undefined),
 }));
 
 interface Capture {
@@ -149,6 +153,7 @@ describe("applyDefenseAppropriation", () => {
 
   it("draws the overdraft to the treasury when upkeep outruns the balance", async () => {
     treasurySpends.length = 0;
+    vi.mocked(emitTx).mockClear();
     const capture: Capture = { updates: [], unitOps: [] };
     // A huge roster against a tiny line forces the overdraft path.
     const many = Array.from({ length: 400 }, () => UNIT);
@@ -162,6 +167,14 @@ describe("applyDefenseAppropriation", () => {
     expect(treasurySpends).toHaveLength(0);
     const treasuryInc = (capture.updates[0]!.update as { $inc: Record<string, number> }).$inc;
     expect(treasuryInc.treasuryBalance).toBe(-Math.round(s!.overdraftDrawn));
+    expect(emitTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        type: "gov_defense_overdraft",
+        countryId: "US",
+        amount: -Math.round(s!.overdraftDrawn),
+      })
+    );
   });
 
   it("does not touch the treasury when no overdraft is drawn", async () => {

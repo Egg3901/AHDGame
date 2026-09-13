@@ -7,6 +7,7 @@ import { buildFyHistory, projectSovereign } from "./federalBudgetDetail";
 // Revenue recompute is independent of the fiscal-year derivation under test.
 vi.mock("@/lib/budget/revenue", () => ({
   calculateFederalRevenue: vi.fn().mockResolvedValue({ total: 1_000_000 }),
+  computeTaxBaseGdpShareBaseline: vi.fn().mockReturnValue({}),
 }));
 
 describe("buildFyHistory", () => {

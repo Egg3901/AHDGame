@@ -109,6 +109,7 @@ export const ALL_TX_TYPES: readonly FinancialTxType[] = [
   "gov_subsidy_paid",
   "gov_grant_paid",
   "gov_budget_transfer",
+  "gov_defense_overdraft",
   "monetary_treasury_advance",
 
   // ── Crisis / events (deferred per Phase 3 commit — wired by the crisis
@@ -221,6 +222,7 @@ export const TX_TYPE_LABELS: Record<FinancialTxType, string> = {
   gov_subsidy_paid: "Govt Subsidy Paid",
   gov_grant_paid: "Govt Grant Paid",
   gov_budget_transfer: "Govt Budget Transfer",
+  gov_defense_overdraft: "Govt Defence Appropriation Overdraft",
   monetary_treasury_advance: "Central Bank Treasury Advance",
 
   crisis_payout: "Crisis Payout",
