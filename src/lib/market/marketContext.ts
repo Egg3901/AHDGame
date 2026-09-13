@@ -32,6 +32,12 @@ export interface MarketContext {
    */
   clearingBySectorId?: ReadonlyMap<string, SectorClearingResult>;
   /**
+   * Plants tier: scalar output units each sector should make to meet the
+   * corporation's named-buyer reservations. This is a demand floor, not an
+   * additional supply stream, and is populated before processSectors runs.
+   */
+  contractProductionTargetBySectorId?: ReadonlyMap<string, number>;
+  /**
    * Advertising sellers that filled the clearing book this turn, keyed by
    * corporation id. Values are the per-turn anchor value of campaign units
    * actually delivered at their reachable clearing price.
