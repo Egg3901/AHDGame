@@ -54,6 +54,7 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   bond_maturity: "bond_settlement",
   gov_coupon_payment: "bond_coupon_settlement",
   bond_coupon: "bond_coupon_settlement",
+  gov_defense_overdraft: "defense_appropriation_overdraft",
   // This is the issuer-side settlement row paired with dissolution payouts.
   // It records a modeled default loss, not an unexplained money-supply leak.
   bond_default: "bond_default_settlement",
