@@ -1156,7 +1156,9 @@ export function NationalBudgetClient() {
         />
 
         <div className="grid gap-6 lg:grid-cols-2">
-          {isLive && data.sovereign && <SovereignHealthPanel sovereign={data.sovereign} />}
+          {isLive && data.sovereign && (
+            <SovereignHealthPanel sym={moneyPrefix} sovereign={data.sovereign} />
+          )}
           <GrantsPanel
             title={grantLabel}
             recipientLabel={grantRecipientLabel}
