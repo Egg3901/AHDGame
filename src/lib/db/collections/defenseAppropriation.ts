@@ -1,8 +1,11 @@
 import type { Db } from "mongodb";
 import type { DefenseAppropriation, FederalBudget } from "@/lib/db/types/budget";
 import type { AppropriationSettlement } from "@/lib/military/appropriation";
+import type { CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
 import { deriveFiscalState } from "@/lib/budget/treasuryBalance";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 const EMPTY: DefenseAppropriation = { balance: 0, accruedThroughTurn: 0, arrearsRatio: 0 };
 
@@ -144,6 +147,27 @@ export async function applyAppropriationSettlementWithOverdraft(
     },
     { $inc: inc, $set: set }
   );
+  if (res.modifiedCount > 0 && overdraft > 0) {
+    // This is a real national-treasury debit, not just a movement inside the
+    // defence pot. Keep it in the financial trail so the shadow ledger can
+    // reconcile the government balance and admins can see why debt increased.
+    await emitTx(db, {
+      type: "gov_defense_overdraft",
+      turn,
+      createdAt: new Date(),
+      subjectType: "government",
+      countryId,
+      subjectName: `${countryId} Government`,
+      amount: -overdraft,
+      currencyCode: COUNTRY_CURRENCY_MAP[countryId as CountryId] ?? "USD",
+      meta: {
+        appropriationOpeningBalance: expectedAppropriation,
+        appropriationDelta: Math.round(settlement.delta),
+        appropriationClosingBalance: Math.round(settlement.balance),
+        upkeepPaid: Math.round(settlement.paid),
+      },
+    });
+  }
   return res.modifiedCount > 0;
 }
 

@@ -76,12 +76,21 @@ describe("settleAppropriation", () => {
     expect(s.arrearsRatio).toBe(0);
   });
 
+  it("does not redraw an existing negative balance when the current turn improves it", () => {
+    const s = settleAppropriation(-25_000, 1_000, 600, FLOOR);
+    expect(s.balance).toBe(-24_600);
+    expect(s.overdraftDrawn).toBe(0);
+    expect(s.arrearsRatio).toBe(0);
+  });
+
   it("stops at the overdraft floor and reports the unfunded share", () => {
     // −47,500 + 1,000 accrual leaves 1,500 above the −48,000 floor; 3,000 was due.
     const s = settleAppropriation(-47_500, 1_000, 3_000, FLOOR);
     expect(s.balance).toBe(-FLOOR);
     expect(s.paid).toBe(1_500);
-    expect(s.overdraftDrawn).toBe(1_500);
+    // 500 of new debt: the opening 47,500 below zero was already borrowed in
+    // an earlier turn and must not be charged again.
+    expect(s.overdraftDrawn).toBe(500);
     expect(s.arrearsRatio).toBeCloseTo(0.5, 9);
   });
 

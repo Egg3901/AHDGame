@@ -75,6 +75,7 @@ describe("loadDefenseFunding", () => {
       accrualPerTurn: accrual,
       upkeepPerTurn: upkeep,
       shortfallPerTurn: Math.max(0, upkeep - accrual),
+      treasuryDrawPerTurn: 0,
       potBalance: -5_000_000,
       arrearsRatio: 0,
       unitCount: 1,

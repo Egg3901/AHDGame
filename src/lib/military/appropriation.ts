@@ -102,9 +102,11 @@ export function settleAppropriation(
   const due = Math.max(0, upkeep);
   const paid = Math.min(due, payable);
   const balance = afterAccrual - paid;
-  // The INCREASE in the negative position — an opening balance already below zero has
-  // been borrowed for in an earlier turn and must not be charged to the treasury twice.
-  const overdraftDrawn = Math.max(0, -balance) - Math.max(0, -afterAccrual);
+  // Only the increase in the negative position is a NEW treasury draw. An opening balance
+  // already below zero was borrowed for in an earlier turn. Comparing with afterAccrual
+  // charged the entire current upkeep again whenever the pot started negative, even when
+  // this turn's accrual covered it and the pot was moving back toward zero.
+  const overdraftDrawn = Math.max(0, Math.max(0, -balance) - Math.max(0, -opening));
   const arrearsRatio = due > 0 ? (due - paid) / due : 0;
   return { balance, delta: accrual - paid, paid, overdraftDrawn, arrearsRatio };
 }
