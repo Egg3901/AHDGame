@@ -703,6 +703,31 @@ describe("plants mode — demand-aware production throttle", () => {
     ).update.producedUnits as number;
   }
 
+  function producedWithNamedDemand(
+    namedDemandUnits: number,
+    history: {
+      producedUnits?: number;
+      soldUnits?: number;
+    }
+  ): { producedUnits: number; demandThrottleFactor: number } {
+    const env = makeEnv("plants", 1000);
+    env.market.contractProductionTargetBySectorId = new Map([
+      [SECTOR_ID.toString(), namedDemandUnits],
+    ]);
+    processSector(
+      env,
+      makeCorp(),
+      makeSector({ capitalStock: stock, plantsStartTurn: 100, ...history }),
+      1,
+      undefined,
+      1
+    );
+    return {
+      producedUnits: sectorUpdateOf(env).producedUnits as number,
+      demandThrottleFactor: sectorUpdateOf(env).demandThrottleFactor as number,
+    };
+  }
+
   it("cuts output toward what actually sold, instead of stockpiling losses", () => {
     const unthrottled = producedWithHistory();
     const glutted = producedWithHistory({
@@ -712,6 +737,17 @@ describe("plants mode — demand-aware production throttle", () => {
     expect(glutted).toBeLessThan(unthrottled);
     // Target is last turn's sales plus the probe margin.
     expect(glutted).toBeCloseTo((unthrottled / 6) * (1 + DEMAND_PROBE_MARGIN), 2);
+  });
+
+  it("lets a named buyer lift a supplier above its open-market probe", () => {
+    const unthrottled = producedWithHistory();
+    const result = producedWithNamedDemand(unthrottled / 2, {
+      producedUnits: unthrottled,
+      soldUnits: unthrottled / 6,
+    });
+
+    expect(result.producedUnits).toBeCloseTo(unthrottled / 2, 2);
+    expect(result.demandThrottleFactor).toBeCloseTo(0.5, 3);
   });
 
   it("persists the demand throttle for the sector diagnostics", () => {

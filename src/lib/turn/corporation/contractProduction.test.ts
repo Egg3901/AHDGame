@@ -50,4 +50,22 @@ describe("computeContractProduction", () => {
     expect(result.contractAchievableUnits).toBeCloseTo(23, 8);
     expect(result.demandThrottleFactor).toBeCloseTo(0.23, 8);
   });
+
+  it("lets named buyer demand lift a throttled supplier run", () => {
+    const result = computeContractProduction({
+      plantsEnabled: true,
+      actualNameplateUnits: 100,
+      actualProductionFactor: 1,
+      fullPolicyNameplateUnits: 100,
+      involuntaryProductionFactor: 1,
+      priorSoldUnits: 20,
+      priorProducedUnits: 100,
+      guaranteedDemandUnits: 80,
+      soldFraction: 1,
+    });
+
+    expect(result.producedUnits).toBeCloseTo(80, 8);
+    expect(result.contractAchievableUnits).toBeCloseTo(80, 8);
+    expect(result.demandThrottleFactor).toBeCloseTo(0.8, 8);
+  });
 });
