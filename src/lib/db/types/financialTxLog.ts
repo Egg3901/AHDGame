@@ -131,6 +131,7 @@ export type FinancialTxType =
   | "gov_subsidy_paid"
   | "gov_grant_paid"
   | "gov_budget_transfer"
+  | "gov_defense_overdraft"
   | "monetary_treasury_advance"
 
   // Crisis / events

@@ -204,6 +204,7 @@ const TX_TYPE_TO_AUDIT_ACTION: Partial<Record<FinancialTxType, string>> = {
   gov_subsidy_paid: "gov.subsidy_paid",
   gov_grant_paid: "gov.grant_paid",
   gov_budget_transfer: "gov.budget_transfer",
+  gov_defense_overdraft: "gov.defense_overdraft",
 
   // Crisis / events
   crisis_payout: "crisis.payout",
