@@ -308,10 +308,9 @@ export interface FederalDebt {
 }
 
 /**
- * Authored starting point for sovereign-risk repricing. Historical debt
- * capacity and nominal-rate regimes differ sharply, so runtime changes are
- * measured relative to this seed instead of forcing every era through one
- * absolute modern debt/GDP ladder.
+ * Authored starting point retained for seed and migration provenance. Runtime
+ * sovereign risk is calculated from current fiscal conditions, so this record
+ * is no longer used to rescale the debt-to-GDP ladder or interest rate.
  */
 export interface SovereignRiskAnchor {
   debtToGdpRatio: number;
