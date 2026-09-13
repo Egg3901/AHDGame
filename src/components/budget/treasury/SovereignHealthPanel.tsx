@@ -3,12 +3,14 @@
 import { Fragment } from "react";
 import type { SovereignProjection } from "@/lib/publicFinance/queries/federalBudgetDetail";
 import type { SovereignCrisisState } from "@/lib/db/types/budget";
+import { formatFundsCompact } from "@/lib/utils/formatters";
 
 /**
  * Sovereign-health panel (ported from the design prototype `bdebt.jsx`): the
  * default-risk state machine (Normal → Warning → Crisis → Recovering) wired to
  * the live `sovereignCrisisState`, plus auction demand, failed-auction count,
- * and market access. Live-only (omitted on historical FY snapshots).
+ * market access, and effective debt-ceiling use. Live-only (omitted on
+ * historical FY snapshots).
  */
 
 type NodeTone = "up" | "warning" | "down" | "info";
@@ -61,7 +63,7 @@ function narrative(state: SovereignCrisisState): { headline: string; note: strin
     default:
       return {
         headline: "Stable",
-        note: "You can pay the interest with room to spare, and every bond auction sells out. You can borrow as much as you need.",
+        note: "You can pay the interest with room to spare, and every bond auction sells out. Check the ceiling signal below for remaining borrowing room.",
       };
   }
 }
@@ -98,10 +100,49 @@ function Signal({ label, value, gold }: { label: string; value: string; gold?: b
   );
 }
 
-export function SovereignHealthPanel({ sovereign }: { sovereign: SovereignProjection }) {
+function ceilingTone(status: SovereignProjection["ceilingStatus"]): NodeTone {
+  if (status === "clear") return "up";
+  if (status === "warning") return "warning";
+  return "down";
+}
+
+function ceilingNotice(sovereign: SovereignProjection, sym: string) {
+  if (sovereign.ceilingStatus === "clear" || sovereign.ceilingUseRatio == null) return null;
+
+  const use = `${(sovereign.ceilingUseRatio * 100).toFixed(0)}% of the effective limit is used.`;
+  const headroom =
+    sovereign.ceilingHeadroom != null
+      ? ` ${formatFundsCompact(sovereign.ceilingHeadroom, sym)} remains.`
+      : "";
+  const horizon =
+    sovereign.ceilingHeadroomYears != null
+      ? ` At the current deficit, that is about ${sovereign.ceilingHeadroomYears.toFixed(1)} years.`
+      : "";
+
+  if (sovereign.ceilingStatus === "exceeded") {
+    return {
+      title: "Debt ceiling exceeded",
+      detail: `Debt is beyond the effective borrowing limit. ${use}`,
+    };
+  }
+  if (sovereign.ceilingStatus === "critical") {
+    return { title: "Debt ceiling critical", detail: `${use}${headroom}${horizon}` };
+  }
+  return { title: "Debt ceiling warning", detail: `${use}${headroom}${horizon}` };
+}
+
+export function SovereignHealthPanel({
+  sovereign,
+  sym,
+}: {
+  sovereign: SovereignProjection;
+  sym: string;
+}) {
   const activeIdx = stateToIndex(sovereign.state);
   const tone = SOV_NODES[activeIdx].tone;
   const { headline, note } = narrative(sovereign.state);
+  const ceiling = ceilingNotice(sovereign, sym);
+  const ceilingSignalTone = ceilingTone(sovereign.ceilingStatus);
 
   return (
     <div className="rounded-xl border border-card-border bg-card p-4">
@@ -154,7 +195,7 @@ export function SovereignHealthPanel({ sovereign }: { sovereign: SovereignProjec
 
       <p className="mt-3 text-body-sm leading-snug text-muted">{note}</p>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Signal
           label="Auction demand"
           value={sovereign.demandRatio != null ? `${sovereign.demandRatio.toFixed(1)}×` : "—"}
@@ -162,7 +203,28 @@ export function SovereignHealthPanel({ sovereign }: { sovereign: SovereignProjec
         />
         <Signal label="Failed auctions" value={String(sovereign.failedAuctions)} />
         <Signal label="Market access" value={sovereign.marketAccess} />
+        <Signal
+          label="Ceiling use"
+          value={
+            sovereign.ceilingUseRatio != null
+              ? `${(sovereign.ceilingUseRatio * 100).toFixed(0)}%`
+              : "—"
+          }
+          gold={ceilingSignalTone === "warning"}
+        />
       </div>
+
+      {ceiling && (
+        <div
+          className={`mt-3 rounded-md border px-3 py-2 ${TONE_BADGE[ceilingSignalTone]}`}
+          role="status"
+        >
+          <div className="text-body-xs font-semibold">{ceiling.title}</div>
+          <div className="mt-0.5 text-body-xs leading-snug text-foreground/80">
+            {ceiling.detail}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

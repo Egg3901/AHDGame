@@ -78,6 +78,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
+import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -243,6 +244,9 @@ export const MIGRATIONS: Migration[] = [
   // Anchor the player-facing central-bank pricing phase-in on the live turn.
   centralBankPricingPhaseIn,
   sourceFenceIndexes,
+  // Ticket #1269: persisted sovereign fields must follow the current debt/GDP
+  // ladder after historical seed anchors stop rescaling live risk.
+  repriceCurrentSovereignRisk,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.

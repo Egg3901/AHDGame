@@ -39,7 +39,7 @@ describe(migration.id, () => {
     expect(db.collectionMocks.federalBudget!.updateOne).not.toHaveBeenCalled();
   });
 
-  it("reprices live UK debt from its authored AAA 4 percent anchor", async () => {
+  it("reprices live UK debt from its current debt-to-GDP ratio", async () => {
     const db = createMockDb();
     db.collection("gameState");
     db.collectionMocks.gameState!.findOne.mockResolvedValue({
@@ -68,8 +68,8 @@ describe(migration.id, () => {
     const update = db.collectionMocks.federalBudget!.updateOne.mock.calls[0]![1] as {
       $set: Record<string, unknown>;
     };
-    expect(update.$set.creditRating).toBe("AAA");
-    expect(update.$set["debt.interestRate"]).toBeCloseTo(0.04, 8);
-    expect(update.$set["spending.debtInterest"]).toBeCloseTo(1_040_000_000, -2);
+    expect(update.$set.creditRating).toBe("B");
+    expect(update.$set["debt.interestRate"]).toBeCloseTo(0.1, 8);
+    expect(update.$set["spending.debtInterest"]).toBeCloseTo(2_600_000_000, -2);
   });
 });
