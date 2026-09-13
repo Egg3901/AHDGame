@@ -1,6 +1,7 @@
 "use client";
 
 import type { DefenseFundingPosition } from "@/lib/publicFinance/queries/defenseFunding";
+import type { OrganizationContributionPosition } from "@/lib/publicFinance/queries/organizationContributions";
 import { formatFundsCompact1dp } from "@/lib/utils/formatters";
 
 export interface DefenseFundingNoteProps {
@@ -13,6 +14,8 @@ export interface DefenseFundingNoteProps {
    * Null/undefined omits the enterprise figure. Read-only like the rest.
    */
   soeNetPerTurn?: number | null;
+  /** Recurring dues or tribute debited directly from the treasury per turn. */
+  organizationContributions?: OrganizationContributionPosition | null;
 }
 
 /**
@@ -25,16 +28,25 @@ export interface DefenseFundingNoteProps {
  * treasury under a surplus reconciles on screen. Read-only; the turn phase
  * stays the sole writer of every pot.
  */
-export function DefenseFundingNote({ sym, funding, soeNetPerTurn }: DefenseFundingNoteProps) {
+export function DefenseFundingNote({
+  sym,
+  funding,
+  soeNetPerTurn,
+  organizationContributions,
+}: DefenseFundingNoteProps) {
   const money = (n: number) => formatFundsCompact1dp(n, sym);
   const moneySigned = (n: number) =>
     `${n < 0 ? "-" : ""}${formatFundsCompact1dp(Math.abs(n), sym)}`;
   const overdrawn = (funding.potBalance ?? 0) < 0;
   const shortfall = Math.max(0, funding.shortfallPerTurn);
   const soeBacking = soeNetPerTurn != null ? Math.max(0, -soeNetPerTurn) : 0;
+  const organizationBacking = Math.max(0, organizationContributions?.perTurn ?? 0);
   const draws: string[] = [];
   if (shortfall > 0) draws.push(`${money(shortfall)} beyond the defence line`);
   if (soeBacking > 0) draws.push(`${money(soeBacking)} state enterprise backing`);
+  if (organizationBacking > 0) {
+    draws.push(`${money(organizationBacking)} international organization contributions`);
+  }
 
   return (
     <section
@@ -42,7 +54,7 @@ export function DefenseFundingNote({ sym, funding, soeNetPerTurn }: DefenseFundi
       className="rounded-xl border border-card-border bg-card p-4"
     >
       <div className="text-sm font-semibold text-foreground">Defence funding</div>
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
         <div>
           <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
             Appropriated per turn
@@ -105,13 +117,27 @@ export function DefenseFundingNote({ sym, funding, soeNetPerTurn }: DefenseFundi
             </p>
           </div>
         ) : null}
+        {organizationBacking > 0 ? (
+          <div>
+            <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+              International organization contributions per turn
+            </div>
+            <div className="mt-0.5 font-mono text-body-sm font-semibold text-foreground">
+              {money(organizationBacking)}
+            </div>
+            <p className="mt-1 text-[11px] leading-snug text-muted">
+              Dues or tribute for current memberships. Charged directly to the treasury and not
+              included in annual spending.
+            </p>
+          </div>
+        ) : null}
       </div>
       {draws.length > 0 ? (
         <p className="mt-3 border-t border-card-border pt-3 text-[11px] leading-snug text-muted">
           Treasury check: each turn the balance moves by roughly this turn&apos;s slice of the
           surplus, minus {draws.join(" plus ")}. None of these appear in spending, so the surplus
-          reads high by {money(shortfall + soeBacking)}. That is why the treasury can fall while the
-          surplus stays green.
+          reads high by {money(shortfall + soeBacking + organizationBacking)}. That is why the
+          treasury can fall while the surplus stays green.
           {soeNetPerTurn == null ? " State enterprise backing is not shown here." : null}
         </p>
       ) : (

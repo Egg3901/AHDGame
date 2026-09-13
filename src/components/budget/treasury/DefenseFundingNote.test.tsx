@@ -84,4 +84,25 @@ describe("DefenseFundingNote (ticket #1269)", () => {
     expect(screen.queryByText("State enterprise backing per turn")).toBeNull();
     expect(screen.getByText(/not shown here/)).toBeTruthy();
   });
+
+  it("surfaces recurring international organization contributions", () => {
+    render(
+      <DefenseFundingNote
+        sym="M"
+        funding={funded}
+        organizationContributions={{
+          perTurn: 2_000_000_000,
+          lines: [
+            { organizationId: "COMECON", kind: "dues", perTurn: 1_000_000_000 },
+            { organizationId: "WARSAW_PACT", kind: "dues", perTurn: 1_000_000_000 },
+          ],
+        }}
+      />
+    );
+    expect(screen.getByText("International organization contributions per turn")).toBeTruthy();
+    expect(screen.getByText("M2.0B")).toBeTruthy();
+    const check = screen.getByText(/Treasury check/);
+    expect(check.textContent).toContain("M2.0B international organization contributions");
+    expect(check.textContent).toContain("surplus reads high by M2.0B");
+  });
 });
