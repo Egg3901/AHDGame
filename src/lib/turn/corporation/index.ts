@@ -38,6 +38,7 @@ import {
   type SettleableSupplyAgreement,
   type SupplyAgreementDemandSector,
 } from "./settleSupplyAgreements";
+import { computeContractProductionTargets } from "./contractProductionDemand";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { FREIGHT_CLASS_BY_COMMODITY, type FreightClass } from "@/lib/logistics/freightClass";
 import {
@@ -727,6 +728,26 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         agreements: settleableAgreements,
         buyerDemandByCorpCommodity,
       });
+      if (market.plantsEnabled && contractedByCorpCommodity.size > 0) {
+        const supplyRatesBySectorId = new Map<string, Partial<Record<CommodityType, number>>>();
+        for (const input of clearingInputs) {
+          supplyRatesBySectorId.set(input.sectorId, input.supplyRates);
+        }
+        market.contractProductionTargetBySectorId = computeContractProductionTargets({
+          reservations: contractedByCorpCommodity,
+          sectors: [...lookups.sectorsByCorp.values()].flatMap((sectors) =>
+            sectors.map((sector) => ({
+              sectorId: sector._id.toString(),
+              corporationId: sector.corporationId.toString(),
+              stateId: sector.stateId,
+              capacityUnits: sector.operatingCapacityUnits ?? sector.capitalStock,
+              supplyRates: supplyRatesBySectorId.get(sector._id.toString()) ?? {},
+              mothballed: sector.mothballed,
+            }))
+          ),
+          basePrices: eraScaledBasePrices(lookups.eraUnitScale),
+        });
+      }
     }
     // Book-sanity invariant: the diagnostic reports the RAW revenue/base nameplate.
     // A modest excess over lagged supply is EXPECTED and benign, the supply ledger
