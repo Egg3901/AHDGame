@@ -870,6 +870,9 @@ export function processSector(
       sector.producedUnits == null
         ? sector.producedUnits
         : sector.producedUnits * priorProductionUnitRatio,
+    guaranteedDemandUnits: market.plantsEnabled
+      ? market.contractProductionTargetBySectorId?.get(sector._id.toString())
+      : undefined,
     soldFraction: market.clearingEnabled && clearing ? clearing.soldFraction : null,
   });
   const { producedUnits, soldUnits, contractAchievableUnits, demandThrottleFactor } = production;

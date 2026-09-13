@@ -13,6 +13,8 @@ interface ContractProductionArgs {
   involuntaryProductionFactor: number;
   priorSoldUnits?: number | null;
   priorProducedUnits?: number | null;
+  /** Scalar output demand allocated from the supplier's named contracts. */
+  guaranteedDemandUnits?: number | null;
   soldFraction: number | null;
 }
 
@@ -21,7 +23,8 @@ interface ContractProductionArgs {
  *
  * Actual production follows the operator's production policy and mothball
  * choice. It also follows the demand throttle, which targets last turn's sales
- * plus a probe margin so a plant does not run flat out into a glut.
+ * plus a probe margin so a plant does not run flat out into a glut. A named
+ * buyer's allocated demand is a floor on that target.
  *
  * The contract ceiling asks a different question: what could the sector have
  * produced if the operator requested a full run? External constraints still
@@ -38,7 +41,12 @@ export function computeContractProduction(args: ContractProductionArgs): {
 } {
   const actualPlannedUnits = args.actualNameplateUnits * args.actualProductionFactor;
   const actualDemandThrottle = args.plantsEnabled
-    ? demandThrottleFactor(actualPlannedUnits, args.priorSoldUnits, args.priorProducedUnits)
+    ? demandThrottleFactor(
+        actualPlannedUnits,
+        args.priorSoldUnits,
+        args.priorProducedUnits,
+        args.guaranteedDemandUnits
+      )
     : 1;
   const actual = computeSectorOutputUnits({
     nameplateUnits: args.actualNameplateUnits,
@@ -57,7 +65,8 @@ export function computeContractProduction(args: ContractProductionArgs): {
   const contractDemandThrottle = demandThrottleFactor(
     involuntaryUnits,
     args.priorSoldUnits,
-    args.priorProducedUnits
+    args.priorProducedUnits,
+    args.guaranteedDemandUnits
   );
   return {
     ...actual,
