@@ -27,6 +27,7 @@ import type {
   ElectionCandidate,
   ElectionVoteTally,
   NPP,
+  NPPEndorsement,
   PlayerEndorsement,
   PoliticalParty,
   State,
@@ -86,6 +87,7 @@ export interface PrimaryPartyData {
   nppMap: Map<string, NPP>;
   campaignColorByCandidateKey: Map<string, string | null>;
   endorsementCounts: Map<string, number>;
+  endorsementNames: Map<string, string[]>;
   allocationByState: Record<string, "PR" | "WTA">;
   candidateColorMap: Record<string, string>;
   apportionmentPreset: string | undefined;
@@ -326,15 +328,52 @@ export async function loadPrimaryPartyData(
     countryId,
   });
 
-  const allEndorsements = await db
+  const playerEndorsements = await db
     .collection<PlayerEndorsement>("playerEndorsements")
     .find({ electionId: election._id, isActive: true })
-    .project<{ candidateId: ObjectId }>({ candidateId: 1 })
+    .project<Pick<PlayerEndorsement, "candidateId" | "characterId">>({
+      candidateId: 1,
+      characterId: 1,
+    })
     .toArray();
+  const nppEndorsements = await db
+    .collection<NPPEndorsement>("nppEndorsements")
+    .find({ electionId: election._id, isActive: true })
+    .project<Pick<NPPEndorsement, "candidateId" | "nppName">>({ candidateId: 1, nppName: 1 })
+    .toArray();
+  const playerEndorserIds = [
+    ...new Set(playerEndorsements.map((e) => e.characterId.toString())),
+  ].map((id) => new ObjectId(id));
+  const playerEndorsers = playerEndorserIds.length
+    ? await db
+        .collection<Character>("characters")
+        .find({ _id: { $in: playerEndorserIds } })
+        .project<Pick<Character, "_id" | "name">>({ _id: 1, name: 1 })
+        .toArray()
+    : [];
+  const playerEndorserName = new Map(playerEndorsers.map((c) => [c._id.toString(), c.name]));
   const endorsementCounts = new Map<string, number>();
-  for (const e of allEndorsements) {
+  const endorsementNames = new Map<string, string[]>();
+  for (const e of playerEndorsements) {
     const cid = e.candidateId.toString();
     endorsementCounts.set(cid, (endorsementCounts.get(cid) ?? 0) + 1);
+    endorsementNames.set(cid, [
+      ...(endorsementNames.get(cid) ?? []),
+      playerEndorserName.get(e.characterId.toString()) ?? "Unknown player",
+    ]);
+  }
+  const candidateIdByCharacterId = new Map(
+    candidates.map((candidate) => [candidate.characterId.toString(), candidate._id.toString()])
+  );
+  for (const endorsement of nppEndorsements) {
+    if (endorsement.source === "organic") continue;
+    const cid = candidateIdByCharacterId.get(endorsement.candidateId.toString());
+    if (!cid) continue;
+    endorsementCounts.set(cid, (endorsementCounts.get(cid) ?? 0) + 1);
+    endorsementNames.set(cid, [
+      ...(endorsementNames.get(cid) ?? []),
+      endorsement.nppName || "Unknown politician",
+    ]);
   }
 
   const partyColor = getPartyHex(party.abbreviation ?? partyKey, party.color);
@@ -395,6 +434,7 @@ export async function loadPrimaryPartyData(
     nppMap,
     campaignColorByCandidateKey,
     endorsementCounts,
+    endorsementNames,
     allocationByState,
     candidateColorMap,
     apportionmentPreset,
