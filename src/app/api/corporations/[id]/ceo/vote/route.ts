@@ -30,6 +30,27 @@ interface CeoVote {
   updatedAt: Date;
 }
 
+const SOLE_OWNER_RECLAIM_THRESHOLD = 0.99;
+
+function canSoleOwnerReclaim(
+  corporation: Corporation,
+  voterCharacterId: ObjectId,
+  candidateCharacterId: ObjectId
+): boolean {
+  if (
+    !corporation.isPrivate ||
+    corporation.ceoVacant !== true ||
+    !candidateCharacterId.equals(voterCharacterId) ||
+    !(corporation.totalShares > 0)
+  ) {
+    return false;
+  }
+  const owned = (corporation.shareholders ?? [])
+    .filter((sh) => sh.characterId?.equals(voterCharacterId))
+    .reduce((sum, sh) => sum + Math.max(0, sh.shares), 0);
+  return owned / corporation.totalShares >= SOLE_OWNER_RECLAIM_THRESHOLD;
+}
+
 function dedupeCeoVotes(votes: CeoVote[]): CeoVote[] {
   // Dedupe by voter identity — a character voter and a corporation voter are
   // distinct entries (different voter field), so they must not collapse into
@@ -265,7 +286,12 @@ export async function POST(request: Request, { params }: RouteParams) {
     // own corporation: shareholders could not re-affirm them, so any challenger
     // ran unopposed and the incumbent could not defend the seat.
     const isIncumbentCandidate = seatedCeoId(corporation) === candidateOid.toString();
-    if (!isIncumbentCandidate) {
+    const isSoleOwnerReclaim = canSoleOwnerReclaim(
+      corporation,
+      voterCharacter._id,
+      candidateOid
+    );
+    if (!isIncumbentCandidate && !isSoleOwnerReclaim) {
       if (candidate.homeState !== corporation.headquartersState) {
         return NextResponse.json(
           { error: "Candidate must be located in the corporation's HQ state" },
