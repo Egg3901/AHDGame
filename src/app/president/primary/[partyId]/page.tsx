@@ -138,6 +138,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
     charMap,
     nppMap,
     endorsementCounts,
+    endorsementNames,
     allocationByState,
     candidateColorMap,
     apportionmentPreset,
@@ -338,6 +339,7 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
         nationalInfluence: charDoc?.nationalInfluence ?? null,
         favorability: charDoc?.favorability ?? nppDoc?.favorability ?? null,
         endorsements: endorsementCounts.get(cid) ?? 0,
+        endorsementNames: endorsementNames.get(cid) ?? [],
       };
     })
     .sort((a, b) => b.projectedDelegates - a.projectedDelegates);
@@ -654,9 +656,23 @@ export default async function PartyPrimaryPage({ params, searchParams }: PagePro
                       </td>
                       <td className="px-3 py-2.5 text-right tabular-nums text-muted">
                         {s.endorsements > 0 ? (
-                          <span style={{ color: partyColor }} className="font-medium">
-                            {s.endorsements}
-                          </span>
+                          <details className="group relative inline-block text-left">
+                            <summary
+                              style={{ color: partyColor }}
+                              className="cursor-pointer list-none font-medium"
+                              title="Show endorsers"
+                            >
+                              {s.endorsements}
+                            </summary>
+                            <div className="absolute right-0 z-20 mt-1 min-w-40 rounded border border-border bg-surface p-2 text-xs text-foreground shadow-lg">
+                              <p className="mb-1 font-semibold">Endorsed by</p>
+                              <ul className="space-y-0.5">
+                                {s.endorsementNames.map((name, index) => (
+                                  <li key={`${name}-${index}`}>{name}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </details>
                         ) : (
                           "—"
                         )}

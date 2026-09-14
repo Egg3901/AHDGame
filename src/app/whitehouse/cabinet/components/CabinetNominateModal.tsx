@@ -16,12 +16,19 @@ interface Character {
   homeState: string;
 }
 
+export type CabinetNomineeMode = "character" | "npp";
+
 export function CabinetNominateModal({
   open,
   positions,
   characters,
+  npps = [],
+  mode = "character",
+  onModeChange,
   selectedPositionId,
   selectedCharId,
+  selectedNppId = "",
+  onNppChange,
   message,
   submitting,
   onPositionChange,
@@ -29,7 +36,7 @@ export function CabinetNominateModal({
   onSubmit,
   onCancel,
   title = "Propose Cabinet Nomination",
-  description = "Nominees require Senate confirmation. Only player characters can be nominated.",
+  description = "Nominees require Senate confirmation. Nominate a player character or an NPP.",
   submitLabel = "Propose",
   nomineeLabel = "Nominee",
   pendingNominationLabel = " (replace pending)",
@@ -39,8 +46,14 @@ export function CabinetNominateModal({
   open: boolean;
   positions: Position[];
   characters: Character[];
+  /** Existing NPPs eligible for nomination. Empty hides the NPP toggle (e.g. acting flow). */
+  npps?: Character[];
+  mode?: CabinetNomineeMode;
+  onModeChange?: (mode: CabinetNomineeMode) => void;
   selectedPositionId: string;
   selectedCharId: string;
+  selectedNppId?: string;
+  onNppChange?: (id: string) => void;
   message: string;
   submitting: boolean;
   onPositionChange: (id: string) => void;
@@ -104,22 +117,76 @@ export function CabinetNominateModal({
           </option>
         )}
       </select>
-      <label htmlFor="cabinet-nominee" className="block text-sm font-medium mb-2">
-        {nomineeLabel}
-      </label>
-      <select
-        id="cabinet-nominee"
-        value={selectedCharId}
-        onChange={(e) => onCharChange(e.target.value)}
-        className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm mb-4"
-      >
-        <option value="">Select character</option>
-        {characters.map((c) => (
-          <option key={c._id} value={c._id}>
-            {c.name} ({c.party}), {c.homeState}
-          </option>
-        ))}
-      </select>
+      {npps.length > 0 && onModeChange && (
+        <fieldset className="mb-4">
+          <legend className="block text-sm font-medium mb-2">Nominee</legend>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onModeChange("character")}
+              aria-pressed={mode === "character"}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                mode === "character"
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-card-border bg-card text-muted hover:bg-card-elevated"
+              }`}
+            >
+              Player Character
+            </button>
+            <button
+              type="button"
+              onClick={() => onModeChange("npp")}
+              aria-pressed={mode === "npp"}
+              className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                mode === "npp"
+                  ? "border-primary/50 bg-primary/10 text-primary"
+                  : "border-card-border bg-card text-muted hover:bg-card-elevated"
+              }`}
+            >
+              NPP
+            </button>
+          </div>
+        </fieldset>
+      )}
+      {mode === "npp" && npps.length > 0 ? (
+        <>
+          <label htmlFor="cabinet-nominee-npp" className="block text-sm font-medium mb-2">
+            {nomineeLabel} (NPP)
+          </label>
+          <select
+            id="cabinet-nominee-npp"
+            value={selectedNppId}
+            onChange={(e) => onNppChange?.(e.target.value)}
+            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm mb-4"
+          >
+            <option value="">Select NPP</option>
+            {npps.map((n) => (
+              <option key={n._id} value={n._id}>
+                {n.name} ({n.party}), {n.homeState}
+              </option>
+            ))}
+          </select>
+        </>
+      ) : (
+        <>
+          <label htmlFor="cabinet-nominee" className="block text-sm font-medium mb-2">
+            {nomineeLabel}
+          </label>
+          <select
+            id="cabinet-nominee"
+            value={selectedCharId}
+            onChange={(e) => onCharChange(e.target.value)}
+            className="w-full rounded-lg border border-card-border bg-background px-3 py-2 text-sm mb-4"
+          >
+            <option value="">Select character</option>
+            {characters.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name} ({c.party}), {c.homeState}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       {message && (
         <p
           role="alert"
@@ -137,7 +204,11 @@ export function CabinetNominateModal({
         </button>
         <button
           onClick={onSubmit}
-          disabled={submitting || !selectedPositionId || !selectedCharId}
+          disabled={
+            submitting ||
+            !selectedPositionId ||
+            (mode === "npp" && npps.length > 0 ? !selectedNppId : !selectedCharId)
+          }
           className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
         >
           {submitLabel}

@@ -1022,9 +1022,10 @@ export async function resolveParliamentaryAppointmentVote(
 
     await db.collection("ukCabinetCooldowns").deleteMany({ countryId });
 
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: vote.nomineeCharacterId });
+    // PM appointment votes are character-only; the null arm is defensive.
+    const nomineeChar = vote.nomineeCharacterId
+      ? await db.collection<Character>("characters").findOne({ _id: vote.nomineeCharacterId })
+      : null;
     if (nomineeChar?.userId) {
       const config = getCountryConfig(countryId);
       await createNotifications([
@@ -1033,7 +1034,7 @@ export async function resolveParliamentaryAppointmentVote(
           title: `Appointed ${config.executiveTitle}`,
           message: `Your appointment as ${config.executiveTitle} has been confirmed (${vote.votesFor} ayes, ${vote.votesAgainst} nays).`,
           type: "system",
-          metadata: { recipientCharacterId: vote.nomineeCharacterId.toString() },
+          metadata: { recipientCharacterId: vote.nomineeCharacterId!.toString() },
         },
       ]);
     }
@@ -1053,9 +1054,10 @@ export async function resolveParliamentaryAppointmentVote(
     }).catch(() => {});
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: vote.nomineeCharacterId });
+    // PM appointment votes are character-only; the null arm is defensive.
+    const nomineeChar = vote.nomineeCharacterId
+      ? await db.collection<Character>("characters").findOne({ _id: vote.nomineeCharacterId })
+      : null;
 
     // S#17: confidence motion failure semantics. If a failed confidence
     // motion has no alternative candidate whose appointment vote has
@@ -1256,9 +1258,10 @@ export async function resolveParliamentaryNoConfidenceVote(
         { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
       );
       for (const appt of activeAppointments) {
-        const nominee = await db
-          .collection<Character>("characters")
-          .findOne({ _id: appt.nomineeCharacterId });
+        // PM appointment votes are character-only; the null arm is defensive.
+        const nominee = appt.nomineeCharacterId
+          ? await db.collection<Character>("characters").findOne({ _id: appt.nomineeCharacterId })
+          : null;
         if (nominee?.userId) {
           notificationInputs.push({
             userId: nominee.userId,

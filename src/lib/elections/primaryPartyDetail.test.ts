@@ -181,6 +181,48 @@ describe("buildPrimaryPartyDetail", () => {
     expect(detail?.votedStateIds).toEqual([]);
   });
 
+  it("shows arranged NPP endorsers without counting them in primary standings", async () => {
+    const filed = candidateRow();
+    const detail = await build(
+      {
+        politicalParties: [DEM],
+        electionCandidates: [filed],
+        nppEndorsements: [
+          {
+            electionId: ELECTION_ID,
+            candidateId: filed.characterId,
+            nppName: "Senator Example",
+            source: "arranged",
+            isActive: true,
+          },
+        ],
+      },
+      "1"
+    );
+
+    expect(detail).not.toBeNull();
+    const full = await import("./primaryPartyDetail").then(({ loadPrimaryPartyData }) =>
+      loadPrimaryPartyData(
+        stubDb({
+          politicalParties: [DEM],
+          electionCandidates: [filed],
+          nppEndorsements: [
+            {
+              electionId: ELECTION_ID,
+              candidateId: filed.characterId,
+              nppName: "Senator Example",
+              source: "arranged",
+              isActive: true,
+            },
+          ],
+        }),
+        { election: ELECTION, partyId: "1", viewer: null }
+      )
+    );
+    expect(full?.endorsementCounts.get(filed._id.toString())).toBeUndefined();
+    expect(full?.endorsementNames.get(filed._id.toString())).toEqual(["Senator Example"]);
+  });
+
   it("takes voted states from the wave history, not from awarded delegates", async () => {
     // primaryDelegatesByState is keyed by what a wave AWARDED this party, so a
     // state that voted but awarded this party nothing would read as unvoted.

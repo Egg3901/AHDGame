@@ -13,6 +13,7 @@ import { unformGovernmentAndVacatePM } from "@/lib/turn/parliamentaryGovernment"
 import { leadershipRoleLabel } from "@/lib/congress/leadership/electionRoleMap";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
 import { resignExecutiveOffice } from "@/lib/elections/resignExecutiveOffice";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import type {
   CabinetMember,
@@ -472,7 +473,8 @@ async function resignCabinet(
   member: CabinetMember,
   now: Date
 ): Promise<boolean> {
-  if (!member.characterId.equals(character._id)) return false;
+  // NPP-held seats have no character holder and cannot resign down this path.
+  if (!member.characterId || !member.characterId.equals(character._id)) return false;
   const result = await db
     .collection<CabinetMember>("cabinetMembers")
     .deleteOne({ _id: member._id, characterId: character._id });
@@ -637,6 +639,10 @@ export async function resignPosition(
 }
 
 async function withdrawActiveCandidacies(db: Db, characterId: ObjectId, now: Date) {
+  const activeRows = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .find({ characterId, status: "active" })
+    .toArray();
   const [elections, stateParty] = await Promise.all([
     db
       .collection<ElectionCandidate>("electionCandidates")
@@ -651,6 +657,19 @@ async function withdrawActiveCandidacies(db: Db, characterId: ObjectId, now: Dat
         { $set: { status: "withdrawn", withdrawnAt: now } }
       ),
   ]);
+  // Withdrawn candidates' campaigns must leave active surfaces (ticket #1313).
+  // Re-entry reactivates the campaign with funds/levels intact.
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: activeRows.map((c) => ({
+      electionId: c.electionId,
+      characterId: c.characterId,
+      isNPP: c.isNPP,
+      nppId: c.nppId,
+    })),
+    reason: "withdrawn",
+    now,
+  });
   return { elections, stateParty };
 }
 
