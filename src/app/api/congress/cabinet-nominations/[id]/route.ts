@@ -55,13 +55,16 @@ export const GET = withNoStore(async function GET(
 
     const pos = getCabinetPositionById(nomination.positionId);
 
-    // Fetch the nominee's sequentialId and countryId (fallback for legacy docs without countryId)
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne(
-        { _id: nomination.nomineeCharacterId },
-        { projection: { sequentialId: 1, countryId: 1 } }
-      );
+    // Fetch the nominee's sequentialId and countryId (fallback for legacy docs without countryId).
+    // NPP nominees have no character doc, so skip the lookup for them.
+    const nomineeChar = nomination.nomineeCharacterId
+      ? await db
+          .collection<Character>("characters")
+          .findOne(
+            { _id: nomination.nomineeCharacterId },
+            { projection: { sequentialId: 1, countryId: 1 } }
+          )
+      : null;
     const nomineeSequentialId = nomineeChar?.sequentialId;
     const countryId = nomination.countryId ?? nomineeChar?.countryId ?? "US";
 
@@ -83,7 +86,9 @@ export const GET = withNoStore(async function GET(
       countryId,
       positionId: nomination.positionId,
       positionName: pos?.name ?? nomination.positionId,
-      nomineeCharacterId: nomination.nomineeCharacterId.toString(),
+      nomineeCharacterId: nomination.nomineeCharacterId?.toString() ?? null,
+      nomineeNppId: nomination.nomineeNppId?.toString() ?? null,
+      nomineeMode: nomination.nomineeMode ?? "character",
       nomineeSequentialId,
       nomineeCharacterName: nomination.nomineeCharacterName,
       nomineeParty: nomination.nomineeParty,

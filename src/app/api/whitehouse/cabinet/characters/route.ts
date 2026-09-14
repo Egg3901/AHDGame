@@ -6,7 +6,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
-import type { Character, ElectedOfficial } from "@/lib/db/types";
+import type { Character, ElectedOfficial, NPP } from "@/lib/db/types";
 import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry";
 
 // GET /api/whitehouse/cabinet/characters — Returns US player characters for the cabinet nomination dropdown (President only).
@@ -42,13 +42,23 @@ export async function GET(request: Request) {
       );
     }
 
-    // Only same-country characters can be nominated to this cabinet
-    const characters = await db
-      .collection<Character>("characters")
-      .find({ userId: { $exists: true }, countryId })
-      .project({ _id: 1, name: 1, party: 1, homeState: 1, currentOffice: 1 })
-      .sort({ name: 1 })
-      .toArray();
+    // Only same-country characters can be nominated to this cabinet.
+    // Same-country NPPs are listed alongside so the President can nominate
+    // either kind. Follows the nomineeMode pattern on CabinetNomination.
+    const [characters, npps] = await Promise.all([
+      db
+        .collection<Character>("characters")
+        .find({ userId: { $exists: true }, countryId })
+        .project({ _id: 1, name: 1, party: 1, homeState: 1, currentOffice: 1 })
+        .sort({ name: 1 })
+        .toArray(),
+      db
+        .collection<NPP>("npps")
+        .find({ $or: [{ countryId }, { countryId: { $exists: false } }] })
+        .project({ _id: 1, name: 1, party: 1, homeState: 1, currentOffice: 1 })
+        .sort({ name: 1 })
+        .toArray(),
+    ]);
 
     return NextResponse.json({
       characters: characters.map((c) => ({
@@ -57,6 +67,13 @@ export async function GET(request: Request) {
         party: c.party,
         homeState: c.homeState,
         currentOffice: c.currentOffice,
+      })),
+      npps: npps.map((n) => ({
+        _id: n._id.toString(),
+        name: n.name,
+        party: n.party,
+        homeState: n.homeState,
+        currentOffice: n.currentOffice,
       })),
     });
   } catch (error) {

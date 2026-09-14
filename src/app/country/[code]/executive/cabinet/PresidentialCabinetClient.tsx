@@ -108,6 +108,9 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
   const [selectedPositionId, setSelectedPositionId] = useState("");
   const [selectedCharId, setSelectedCharId] = useState("");
   const [characters, setCharacters] = useState<Character[]>([]);
+  const [npps, setNpps] = useState<Character[]>([]);
+  const [nomineeMode, setNomineeMode] = useState<"character" | "npp">("character");
+  const [selectedNppId, setSelectedNppId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [nominateError, setNominateError] = useState("");
   const [votingId, setVotingId] = useState<string | null>(null);
@@ -137,9 +140,16 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
   useEffect(() => {
     if ((!nominateModal && !actingModal) || !data?.isPresident) return;
     fetch(`/api/whitehouse/cabinet/characters${countryQuery}`)
-      .then((response) => (response.ok ? response.json() : { characters: [] }))
-      .then((json) => setCharacters((json as { characters?: Character[] }).characters ?? []))
-      .catch(() => setCharacters([]));
+      .then((response) => (response.ok ? response.json() : { characters: [], npps: [] }))
+      .then((json) => {
+        const pool = json as { characters?: Character[]; npps?: Character[] };
+        setCharacters(pool.characters ?? []);
+        setNpps(pool.npps ?? []);
+      })
+      .catch(() => {
+        setCharacters([]);
+        setNpps([]);
+      });
   }, [nominateModal, actingModal, data?.isPresident, countryQuery]);
 
   const activeNominations = useMemo(
@@ -150,7 +160,8 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
   const filledCount = data?.positions.filter((position) => position.member).length ?? 0;
 
   async function handleNominate() {
-    if (!selectedPositionId || !selectedCharId) {
+    const nomineeId = nomineeMode === "npp" ? selectedNppId : selectedCharId;
+    if (!selectedPositionId || !nomineeId) {
       setNominateError("Select a position and nominee");
       return;
     }
@@ -162,7 +173,9 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           positionId: selectedPositionId,
-          nomineeCharacterId: selectedCharId,
+          ...(nomineeMode === "npp"
+            ? { nomineeNppId: nomineeId }
+            : { nomineeCharacterId: nomineeId }),
         }),
       });
       const json = (await response.json()) as { message?: string; error?: string };
@@ -174,6 +187,8 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
       setNominateModal(false);
       setSelectedPositionId("");
       setSelectedCharId("");
+      setSelectedNppId("");
+      setNomineeMode("character");
       await fetchData();
     } catch {
       setNominateError("Network error - please try again");
@@ -669,8 +684,13 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
         open={nominateModal}
         positions={data.positions}
         characters={characters}
+        npps={npps}
+        mode={nomineeMode}
+        onModeChange={setNomineeMode}
         selectedPositionId={selectedPositionId}
         selectedCharId={selectedCharId}
+        selectedNppId={selectedNppId}
+        onNppChange={setSelectedNppId}
         message={nominateError}
         submitting={submitting}
         onPositionChange={setSelectedPositionId}
@@ -684,6 +704,8 @@ export default function PresidentialCabinetClient({ countryId }: { countryId: Co
           setNominateModal(false);
           setSelectedPositionId("");
           setSelectedCharId("");
+          setSelectedNppId("");
+          setNomineeMode("character");
           setNominateError("");
         }}
       />

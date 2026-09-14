@@ -473,7 +473,8 @@ async function resignCabinet(
   member: CabinetMember,
   now: Date
 ): Promise<boolean> {
-  if (!member.characterId.equals(character._id)) return false;
+  // NPP-held seats have no character holder and cannot resign down this path.
+  if (!member.characterId || !member.characterId.equals(character._id)) return false;
   const result = await db
     .collection<CabinetMember>("cabinetMembers")
     .deleteOne({ _id: member._id, characterId: character._id });

@@ -65,9 +65,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       .collection<CabinetNomination>("cabinetNominations")
       .updateOne({ _id: nominationOid }, { $set: { status: "withdrawn", updatedAt: now } });
 
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: nomination.nomineeCharacterId }, { projection: { userId: 1 } });
+    const nomineeChar = nomination.nomineeCharacterId
+      ? await db
+          .collection<Character>("characters")
+          .findOne({ _id: nomination.nomineeCharacterId }, { projection: { userId: 1 } })
+      : null;
     if (nomineeChar?.userId) {
       await createNotification({
         userId: nomineeChar.userId,
