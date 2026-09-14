@@ -262,6 +262,17 @@ export async function POST(request: Request, { params }: RouteParams) {
           existingCandidate.electionId,
           existingCandidate._id.toString()
         );
+        // The candidate is still in the race under the new party: carry the
+        // campaign across with its funds/levels instead of leaving it filed
+        // under the old party (ticket #1313).
+        await db.collection("campaigns").updateOne(
+          {
+            electionId: electionObjectId,
+            candidateId: character._id,
+            status: { $ne: "archived" },
+          },
+          { $set: { party: character.party, updatedAt: new Date() } }
+        );
       } else {
         logRequest("POST", path, 400, Date.now() - start);
         return NextResponse.json(

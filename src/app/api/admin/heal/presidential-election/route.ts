@@ -3,6 +3,7 @@ import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
 import { DEFAULT_DURATIONS } from "@/lib/turn/perpetualElections";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import type { Election, GameState } from "@/lib/db/types";
 
 /**
@@ -127,13 +128,30 @@ export async function POST() {
     );
 
     // Also withdraw any candidates from the old bugged election
-    // (they can re-enter the healed primary)
+    // (they can re-enter the healed primary; re-entry reactivates the
+    // archived campaign with funds/levels intact)
+    const healedRows = await db
+      .collection("electionCandidates")
+      .find({ electionId: liveElection._id, status: "active" })
+      .toArray();
     const withdrawn = await db
       .collection("electionCandidates")
       .updateMany(
         { electionId: liveElection._id, status: "active" },
         { $set: { status: "withdrawn", withdrawnAt: now } }
       );
+    // Withdrawn candidates' campaigns must leave active surfaces (ticket #1313).
+    await archiveCampaignsForCandidates({
+      db,
+      candidates: healedRows.map((c) => ({
+        electionId: liveElection._id,
+        characterId: c.characterId,
+        isNPP: c.isNPP,
+        nppId: c.nppId,
+      })),
+      reason: "withdrawn",
+      now,
+    });
 
     return NextResponse.json({
       healed: true,
