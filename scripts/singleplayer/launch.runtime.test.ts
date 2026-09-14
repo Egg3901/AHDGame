@@ -338,3 +338,25 @@ describe("launcher process shutdown over the control channel", () => {
     expect(output).toMatch(/startup took .*account \d/);
   }, 40_000);
 });
+
+describe("resolveBindHost", () => {
+  it("stays on loopback by default", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs"], {})).toBe("127.0.0.1");
+  });
+
+  it("binds all interfaces with --host", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs", "--host"], {})).toBe("0.0.0.0");
+  });
+
+  it("binds all interfaces with SINGLEPLAYER_HOST=1", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs"], { SINGLEPLAYER_HOST: "1" })).toBe(
+      "0.0.0.0"
+    );
+  });
+
+  it("ignores other SINGLEPLAYER_HOST values", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs"], { SINGLEPLAYER_HOST: "0" })).toBe(
+      "127.0.0.1"
+    );
+  });
+});
