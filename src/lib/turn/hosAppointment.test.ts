@@ -120,6 +120,36 @@ describe("resolveHeadOfStateAppointmentVote", () => {
     );
   });
 
+  it("pass: seats an NPP nominee with npp officials and hosNppId stamped", async () => {
+    await setTally(10, 3);
+    const nppId = new ObjectId();
+    const vote = makeVote({
+      nomineeCharacterId: null,
+      nomineeNppId: nppId,
+      nomineeMode: "npp",
+      nomineeName: "NPP Chairman",
+    });
+    const { db, officialInserts, govUpdates } = makeDb(vote);
+
+    await resolveHeadOfStateAppointmentVote(db as never, "RU", vote._id as ObjectId, new Date());
+
+    expect(officialInserts[0]).toMatchObject({
+      countryId: "RU",
+      officeType: "chairmanOfPresidium",
+      characterId: null,
+      nppId,
+      characterName: "NPP Chairman",
+      isNPP: true,
+    });
+    expect(govUpdates[0]).toEqual({
+      $set: expect.objectContaining({
+        hosCharacterId: null,
+        hosNppId: nppId,
+        hosName: "NPP Chairman",
+      }),
+    });
+  });
+
   it("fail: closes the vote without seating anyone", async () => {
     await setTally(2, 9);
     const vote = makeVote();

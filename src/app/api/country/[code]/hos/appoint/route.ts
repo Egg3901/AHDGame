@@ -16,9 +16,14 @@ import { getParliamentaryCountryId } from "@/lib/government/parliamentaryCountry
 import { getHosAppointmentCandidates } from "@/lib/government/queries/parliamentaryGovernment";
 import { proposeHosAppointment } from "@/lib/government/commands/parliamentaryGovernment";
 
-const appointSchema = z.object({
-  nomineeCharacterId: schemas.objectId,
-});
+const appointSchema = z
+  .object({
+    nomineeCharacterId: schemas.objectId.optional(),
+    nomineeNppId: schemas.objectId.optional(),
+  })
+  .refine((v) => Boolean(v.nomineeCharacterId) !== Boolean(v.nomineeNppId), {
+    message: "Provide exactly one of nomineeCharacterId or nomineeNppId",
+  });
 
 export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -63,7 +68,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         db,
         countryId,
         auth.user.character,
-        parsed.data.nomineeCharacterId
+        parsed.data.nomineeCharacterId as string,
+        parsed.data.nomineeNppId as string | undefined
       )
     );
   } catch (error) {

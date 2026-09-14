@@ -178,6 +178,11 @@ async function seatConfirmedVicePresident(
 ): Promise<void> {
   const countryId = nom.countryId ?? "US";
 
+  // VP nominations are character-only (no NPP vice presidents): the VP
+  // nominate route accepts nomineeCharacterId alone. Bail defensively rather
+  // than seating a null holder.
+  if (!nom.nomineeCharacterId) return;
+
   // Clear the nominee's other seats so they don't hold two offices simultaneously.
   await db.collection<ElectedOfficial>("electedOfficials").updateMany(
     { characterId: nom.nomineeCharacterId, officeType: { $nin: ["president", "vicePresident"] } },
@@ -369,6 +374,10 @@ export async function processCabinetNominationLifecycle(
           countryId: nom.countryId,
           positionId: nom.positionId,
           characterId: nom.nomineeCharacterId,
+          // NPP-confirmed secretaries hold the seat without a character doc,
+          // mirroring V2.1 NPP caretaker seats that readers already surface.
+          isNPP: nom.nomineeMode === "npp",
+          nppId: nom.nomineeNppId ?? undefined,
           characterName: nom.nomineeCharacterName,
           party: nom.nomineeParty,
           appointedByPresidentId: nom.proposedByPresidentId,
@@ -398,7 +407,7 @@ export async function processCabinetNominationLifecycle(
         // leftover from an earlier design that routed DE through
         // nominations; removing it keeps the parliamentary appointment
         // flow uniform across UK/JP/DE/CN.
-        if (nom.countryId === "US") {
+        if (nom.countryId === "US" && nom.nomineeCharacterId) {
           const cabinetOffice: OfficeType = { type: "usCabinet", positionId: nom.positionId };
           const careerEvent: CareerEvent = {
             type: "appointed",
@@ -437,9 +446,9 @@ export async function processCabinetNominationLifecycle(
       const presidentChar = await db
         .collection<Character>("characters")
         .findOne({ _id: nom.proposedByPresidentId });
-      const nomineeChar = await db
-        .collection<Character>("characters")
-        .findOne({ _id: nom.nomineeCharacterId });
+      const nomineeChar = nom.nomineeCharacterId
+        ? await db.collection<Character>("characters").findOne({ _id: nom.nomineeCharacterId })
+        : null;
       const isVpNomination = nom.positionId === "vicePresident";
       const posName = isVpNomination
         ? "Vice President"

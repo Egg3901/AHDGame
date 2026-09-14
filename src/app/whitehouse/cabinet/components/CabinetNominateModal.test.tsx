@@ -57,6 +57,32 @@ function positionOptions() {
     .map((o) => (o as HTMLOptionElement).text);
 }
 
+describe("CabinetNominateModal NPP nominees", () => {
+  const npps = [{ _id: "npp1", name: "NPP Nominee", party: "1", homeState: "VA" }];
+
+  it("shows the NPP toggle and picker when NPPs are provided", () => {
+    render(
+      CabinetNominateModal({
+        ...baseProps(),
+        npps,
+        mode: "npp",
+        onModeChange: noop,
+        selectedNppId: "",
+        onNppChange: noop,
+      } as never)
+    );
+    expect(screen.getByText("NPP")).toBeTruthy();
+    const select = document.getElementById("cabinet-nominee-npp") as HTMLSelectElement;
+    expect(within(select).getByRole("option", { name: "NPP Nominee (1), VA" })).toBeTruthy();
+  });
+
+  it("hides the NPP toggle for the acting flow", () => {
+    render(CabinetNominateModal(baseProps() as never));
+    expect(screen.queryByText("NPP")).toBeNull();
+    expect(document.getElementById("cabinet-nominee")).toBeTruthy();
+  });
+});
+
 describe("CabinetNominateModal acting-held seats", () => {
   it("lists vacant seats but hides held seats by default (acting flow)", () => {
     render(<CabinetNominateModal {...baseProps()} />);

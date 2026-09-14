@@ -66,9 +66,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .updateOne({ _id: nominationOid }, { $set: { status: "withdrawn", updatedAt: now } });
 
     const posName = getCabinetPositionById(nomination.positionId)?.name ?? nomination.positionId;
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: nomination.nomineeCharacterId }, { projection: { userId: 1 } });
+    const nomineeChar = nomination.nomineeCharacterId
+      ? await db
+          .collection<Character>("characters")
+          .findOne({ _id: nomination.nomineeCharacterId }, { projection: { userId: 1 } })
+      : null;
     if (nomineeChar?.userId) {
       await createNotification({
         userId: nomineeChar.userId,

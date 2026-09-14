@@ -181,12 +181,14 @@ export async function getHosAppointmentCandidates(
   );
 
   const qualifyingPartyIdStrings = eligibility.qualifyingPartyIds.map(String);
+  // Joint-sitting deputies of qualifying parties, characters and NPPs alike.
+  // The HoS office can go to either kind; the nomineeMode on each candidate
+  // tells the appoint route which id field to read.
   const deputies = await db
     .collection<ElectedOfficial>("electedOfficials")
     .find({
       countryId,
       officeType: { $in: getJointSittingOfficeTypes(countryId) },
-      isNPP: { $ne: true },
       party: { $in: qualifyingPartyIdStrings },
     })
     .toArray();
@@ -212,6 +214,13 @@ export async function getHosAppointmentCandidates(
     .toArray();
   const charMap = new Map(characters.map((char) => [char._id.toString(), char]));
 
+  const nppIds = deputies.map((mp) => mp.nppId).filter((id): id is ObjectId => id != null);
+  const npps = await db
+    .collection<{ _id: ObjectId; name: string; party?: string }>("npps")
+    .find({ _id: { $in: nppIds } })
+    .toArray();
+  const nppMap = new Map(npps.map((npp) => [npp._id.toString(), npp]));
+
   const parties = await db
     .collection<PoliticalParty>("politicalParties")
     .find({ countryId, sequentialId: { $in: eligibility.qualifyingPartyIds } })
@@ -219,19 +228,35 @@ export async function getHosAppointmentCandidates(
   const partyNameMap = new Map(parties.map((party) => [party.sequentialId.toString(), party.name]));
 
   return {
-    candidates: deputies
-      .filter((mp) => mp.characterId && charMap.has(mp.characterId.toString()))
-      .map((mp) => {
-        const char = charMap.get(mp.characterId!.toString())!;
-        return {
-          _id: char._id.toString(),
-          name: char.name,
-          party: mp.party ?? char.party ?? null,
-          partyName: partyNameMap.get(mp.party ?? char.party ?? "") ?? null,
+    candidates: deputies.flatMap((mp): PmAppointmentCandidateView[] => {
+      if (mp.characterId && charMap.has(mp.characterId.toString())) {
+        const char = charMap.get(mp.characterId.toString())!;
+        return [
+          {
+            _id: char._id.toString(),
+            nomineeMode: "character" as const,
+            name: char.name,
+            party: mp.party ?? char.party ?? null,
+            partyName: partyNameMap.get(mp.party ?? char.party ?? "") ?? null,
+            seatsHeld: mp.seatsHeld ?? 1,
+            seatsByParty: seatsByParty[mp.party ?? char.party ?? ""] ?? 0,
+          },
+        ];
+      }
+      const npp = mp.nppId ? nppMap.get(mp.nppId.toString()) : undefined;
+      if (!npp) return [];
+      return [
+        {
+          _id: npp._id.toString(),
+          nomineeMode: "npp" as const,
+          name: npp.name,
+          party: mp.party ?? npp.party ?? null,
+          partyName: partyNameMap.get(mp.party ?? npp.party ?? "") ?? null,
           seatsHeld: mp.seatsHeld ?? 1,
-          seatsByParty: seatsByParty[mp.party ?? char.party ?? ""] ?? 0,
-        };
-      }),
+          seatsByParty: seatsByParty[mp.party ?? npp.party ?? ""] ?? 0,
+        },
+      ];
+    }),
     callerHasActiveVote: existingVote != null,
   };
 }
@@ -264,7 +289,9 @@ export async function getPmAppointmentVoteView(
   return {
     _id: voteDoc._id.toString(),
     countryId: voteDoc.countryId,
-    nomineeCharacterId: voteDoc.nomineeCharacterId.toString(),
+    nomineeCharacterId: voteDoc.nomineeCharacterId?.toString() ?? null,
+    nomineeNppId: voteDoc.nomineeNppId?.toString() ?? null,
+    nomineeMode: voteDoc.nomineeMode ?? "character",
     nomineeName: voteDoc.nomineeName,
     nomineePartyId: voteDoc.nomineePartyId,
     nominatedByCharacterId: voteDoc.nominatedByCharacterId.toString(),

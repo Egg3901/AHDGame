@@ -71,7 +71,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ code
         id: n._id.toString(),
         positionId: n.positionId,
         positionName: getPositionName(n.positionId),
-        nomineeCharacterId: n.nomineeCharacterId.toString(),
+        nomineeCharacterId: n.nomineeCharacterId?.toString() ?? null,
+        nomineeNppId: n.nomineeNppId?.toString() ?? null,
+        nomineeMode: n.nomineeMode ?? "character",
         nomineeCharacterName: n.nomineeCharacterName,
         nomineeParty: n.nomineeParty ?? null,
         proposedByPresidentName: n.proposedByPresidentName ?? "President",
@@ -140,6 +142,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
         {
           $set: {
             characterId: nomination.nomineeCharacterId,
+            isNPP: nomination.nomineeMode === "npp",
+            nppId: nomination.nomineeNppId ?? undefined,
             characterName: nomination.nomineeCharacterName,
             party: nomination.nomineeParty,
             appointedAt: now,
@@ -159,8 +163,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       // settings immediately (cabinetSettings is keyed by position, not holder).
       await resetCabinetSettingCooldowns(db, nomination.countryId ?? "US", nomination.positionId);
 
-      // Add career history entry for cabinet confirmation (US only - UK uses direct appointment)
-      if (nomination.countryId === "US") {
+      // Add career history entry for cabinet confirmation (US only - UK uses direct appointment).
+      // NPP nominees have no character doc, so skip the push for them.
+      if (nomination.countryId === "US" && nomination.nomineeCharacterId) {
         const cabinetOffice: OfficeType = { type: "usCabinet", positionId: nomination.positionId };
         const careerEvent: CareerEvent = {
           type: "appointed",

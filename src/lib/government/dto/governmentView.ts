@@ -5,6 +5,8 @@ export interface PmAppointmentCandidateView {
   partyName: string | null;
   seatsHeld: number;
   seatsByParty: number;
+  /** "npp" for NPP-backed candidates. Absent on legacy character candidates. */
+  nomineeMode?: "character" | "npp";
 }
 
 export interface ParliamentaryVoteView {
@@ -22,7 +24,9 @@ export interface ParliamentaryVoteView {
 }
 
 export interface PmAppointmentVoteView extends ParliamentaryVoteView {
-  nomineeCharacterId: string;
+  nomineeCharacterId: string | null;
+  nomineeNppId?: string | null;
+  nomineeMode?: "character" | "npp";
   nomineeName: string;
   nomineePartyId: string;
   nominatedByCharacterId: string;

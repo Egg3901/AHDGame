@@ -147,7 +147,9 @@ export async function GET(request: Request) {
         nomination: nomination
           ? {
               id: nomination._id.toString(),
-              nomineeCharacterId: nomination.nomineeCharacterId.toString(),
+              nomineeCharacterId: nomination.nomineeCharacterId?.toString() ?? null,
+              nomineeNppId: nomination.nomineeNppId?.toString() ?? null,
+              nomineeMode: nomination.nomineeMode ?? "character",
               nomineeCharacterName: nomination.nomineeCharacterName,
               nomineeParty: nomination.nomineeParty,
               nomineePartyName:
