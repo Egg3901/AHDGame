@@ -181,7 +181,7 @@ describe("buildPrimaryPartyDetail", () => {
     expect(detail?.votedStateIds).toEqual([]);
   });
 
-  it("includes arranged NPP endorsements in the primary standings count", async () => {
+  it("shows arranged NPP endorsers without counting them in primary standings", async () => {
     const filed = candidateRow();
     const detail = await build(
       {
@@ -219,7 +219,7 @@ describe("buildPrimaryPartyDetail", () => {
         { election: ELECTION, partyId: "1", viewer: null }
       )
     );
-    expect(full?.endorsementCounts.get(filed._id.toString())).toBe(1);
+    expect(full?.endorsementCounts.get(filed._id.toString())).toBeUndefined();
     expect(full?.endorsementNames.get(filed._id.toString())).toEqual(["Senator Example"]);
   });
 
