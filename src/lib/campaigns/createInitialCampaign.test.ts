@@ -134,4 +134,54 @@ describe("createInitialCampaign", () => {
     const inserted = db.collectionMocks.campaigns!.insertOne.mock.calls[0][0];
     expect(inserted.status).toBe("active");
   });
+
+  it("reactivates an archived campaign on re-entry (ticket #1313)", async () => {
+    const existingId = new ObjectId();
+    db.collectionMocks.campaigns!.findOne.mockResolvedValue({
+      _id: existingId,
+      status: "archived",
+    });
+
+    const { createInitialCampaign } = await import("./createInitialCampaign");
+    const id = await createInitialCampaign({
+      db: db as unknown as Db,
+      electionId: new ObjectId(),
+      candidateId: new ObjectId(),
+      candidateIsNPP: false,
+      party: "3",
+      now: NOW,
+    });
+
+    expect(db.collectionMocks.campaigns!.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.campaigns!.updateOne).toHaveBeenCalledTimes(1);
+    const [filter, update] = db.collectionMocks.campaigns!.updateOne.mock.calls[0];
+    expect(filter).toEqual({ _id: existingId });
+    expect(update.$set.status).toBe("active");
+    expect(update.$set.archivedAt).toBeNull();
+    expect(update.$set.party).toBe("3");
+    expect(update.$unset).toEqual({ archivedReason: "" });
+    expect(id).toEqual(existingId);
+  });
+
+  it("leaves an active campaign untouched on re-entry", async () => {
+    const existingId = new ObjectId();
+    db.collectionMocks.campaigns!.findOne.mockResolvedValue({
+      _id: existingId,
+      status: "active",
+    });
+
+    const { createInitialCampaign } = await import("./createInitialCampaign");
+    const id = await createInitialCampaign({
+      db: db as unknown as Db,
+      electionId: new ObjectId(),
+      candidateId: new ObjectId(),
+      candidateIsNPP: false,
+      party: "3",
+      now: NOW,
+    });
+
+    expect(db.collectionMocks.campaigns!.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.campaigns!.updateOne).not.toHaveBeenCalled();
+    expect(id).toEqual(existingId);
+  });
 });
