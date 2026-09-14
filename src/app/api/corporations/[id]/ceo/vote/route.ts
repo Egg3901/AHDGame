@@ -286,11 +286,7 @@ export async function POST(request: Request, { params }: RouteParams) {
     // own corporation: shareholders could not re-affirm them, so any challenger
     // ran unopposed and the incumbent could not defend the seat.
     const isIncumbentCandidate = seatedCeoId(corporation) === candidateOid.toString();
-    const isSoleOwnerReclaim = canSoleOwnerReclaim(
-      corporation,
-      voterCharacter._id,
-      candidateOid
-    );
+    const isSoleOwnerReclaim = canSoleOwnerReclaim(corporation, voterCharacter._id, candidateOid);
     if (!isIncumbentCandidate && !isSoleOwnerReclaim) {
       if (candidate.homeState !== corporation.headquartersState) {
         return NextResponse.json(
