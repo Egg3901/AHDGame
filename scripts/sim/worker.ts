@@ -34,6 +34,7 @@ import { MongoClient, type Db, type Collection } from "mongodb";
 // as invalid). Pure constant module: no Mongo, no env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
+import { canClaimAt, parseClaimWindow } from "./claimWindow";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
 const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
@@ -48,6 +49,10 @@ const TICK_MS = Number(process.env.SIM_WORKER_TICK_MS || "15000");
 const LIVE_MONGODB_URI = process.env.LIVE_MONGODB_URI;
 const LIVE_DB_NAME = process.env.LIVE_DB_NAME || "a-house-divided";
 const STATUS_MIRROR_MS = Number(process.env.SIM_WORKER_STATUS_MIRROR_MS || "20000");
+const CLAIM_WINDOW = parseClaimWindow(
+  process.env.SIM_WORKER_CLAIM_WINDOW,
+  process.env.SIM_WORKER_CLAIM_TIMEZONE || "America/New_York"
+);
 
 if (!OPS_MONGODB_URI) {
   console.error("OPS_MONGODB_URI is required (control-plane DB for the simJobs queue).");
@@ -490,6 +495,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
 }
 
 async function tick(jobsCol: Collection<SimJob>) {
+  // A running simulation is never interrupted at the window boundary. The
+  // window controls admission of the next queued job only.
+  if (!canClaimAt(new Date(), CLAIM_WINDOW)) return;
   const job = await jobsCol.findOneAndUpdate(
     { status: "queued" },
     { $set: { status: "running", workerStartedAt: new Date(), updatedAt: new Date() } },
@@ -501,6 +509,9 @@ async function tick(jobsCol: Collection<SimJob>) {
 
 async function main() {
   log(`Starting — control-plane DB=${OPS_DB_NAME}, game repo=${GAME_REPO_DIR}, tick=${TICK_MS}ms`);
+  if (CLAIM_WINDOW) {
+    log(`Claim window=${process.env.SIM_WORKER_CLAIM_WINDOW} ${CLAIM_WINDOW.timeZone}`);
+  }
   const client = new MongoClient(OPS_MONGODB_URI as string);
   await client.connect();
   const jobsCol = getSimJobsCollection(client.db(OPS_DB_NAME));

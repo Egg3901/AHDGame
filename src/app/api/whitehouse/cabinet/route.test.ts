@@ -99,6 +99,39 @@ describe("GET /api/whitehouse/cabinet acting reporting", () => {
     expect(position.member.isNPP).toBe(true);
   });
 
+  it("recognizes a repaired singleplayer head of state as president with a visible roster", async () => {
+    // Regression for the perma-HoS report: an SP world whose character holds
+    // the presidency (the reconcileSingleplayerHeadOfState shape: character
+    // office plus canonical electedOfficials president row) must see the
+    // cabinet roster and be recognized as president.
+    const hosId = new ObjectId();
+    const { getAuthUser } = await import("@/lib/auth");
+    vi.mocked(getAuthUser).mockResolvedValue({ userId: hosId.toString() } as never);
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({ _id: hosId, name: "HoS Player" });
+    db.collectionMocks["electedOfficials"]!.findOne.mockImplementation(async (filter: unknown) => {
+      const f = filter as { officeType?: string };
+      if (f.officeType === "president") {
+        return { countryId: "US", officeType: "president", characterId: hosId };
+      }
+      return null;
+    });
+    seatMember({
+      _id: new ObjectId(),
+      countryId: "US",
+      positionId: "secretary_of_treasury",
+      characterId: new ObjectId(),
+      characterName: "M. Ruiz",
+      confirmedAt: new Date(0),
+      createdAt: new Date(0),
+    });
+
+    const body = await (await get()).json();
+    expect(body.isPresident).toBe(true);
+    expect(body.positions.length).toBeGreaterThan(0);
+    const position = body.positions.find((p: { id: string }) => p.id === "secretary_of_treasury");
+    expect(position.member.characterName).toBe("M. Ruiz");
+  });
+
   it("reports a confirmed holder as not acting", async () => {
     seatMember({
       _id: new ObjectId(),

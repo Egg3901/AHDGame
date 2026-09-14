@@ -133,10 +133,12 @@ export async function clearCabinetOnTransition(db: Db, countryId: CountryId): Pr
       );
 
     // Restore office state for the cleared secretaries and notify the players.
+    // NPP-held seats carry a null characterId: no player to notify, no office
+    // to restore, so they are filtered out here.
     await notifyAndRestoreClearedHolders(
       db,
       countryId,
-      members.map((m) => m.characterId)
+      members.map((m) => m.characterId).filter((id): id is NonNullable<typeof id> => id != null)
     );
   } else {
     // Parliamentary / one-party cabinets (UK, JP, DE, IE, CN, NG). The unified
@@ -164,7 +166,9 @@ export async function clearCabinetOnTransition(db: Db, countryId: CountryId): Pr
 
     // Restore office state and notify the player holders. NPP-held seats carry a
     // null characterId — they have no player to notify and no office to restore.
-    const memberIds = members.filter((m) => m.characterId).map((m) => m.characterId);
+    const memberIds = members
+      .map((m) => m.characterId)
+      .filter((id): id is NonNullable<typeof id> => id != null);
     await notifyAndRestoreClearedHolders(db, countryId, memberIds);
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import type { Election, ElectionCandidate, NPP } from "@/lib/db/types";
 
 // POST /api/admin/npps/vacate-primaries — Withdraws all NPP candidates from every active election
@@ -38,11 +39,17 @@ export async function POST() {
 
     // Withdraw candidates where characterId is an NPP
     // This catches all NPP candidates regardless of isNPP/nppId tagging
-    const result = await db.collection<ElectionCandidate>("electionCandidates").updateMany(
-      {
+    const vacated = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({
         electionId: { $in: electionIds },
         characterId: { $in: nppIds },
         status: "active",
+      })
+      .toArray();
+    const result = await db.collection<ElectionCandidate>("electionCandidates").updateMany(
+      {
+        _id: { $in: vacated.map((c) => c._id) },
       },
       {
         $set: {
@@ -51,6 +58,18 @@ export async function POST() {
         },
       }
     );
+    // Withdrawn candidates' campaigns must leave active surfaces (ticket #1313).
+    await archiveCampaignsForCandidates({
+      db,
+      candidates: vacated.map((c) => ({
+        electionId: c.electionId,
+        characterId: c.characterId,
+        isNPP: c.isNPP,
+        nppId: c.nppId,
+      })),
+      reason: "withdrawn",
+      now,
+    });
 
     // Also fix tagging on these candidates for consistency
     await db.collection<ElectionCandidate>("electionCandidates").updateMany(

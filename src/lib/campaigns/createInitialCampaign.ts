@@ -37,8 +37,22 @@ export async function createInitialCampaign({
 }: CreateInitialCampaignArgs): Promise<ObjectId> {
   const existing = await db
     .collection<Campaign>("campaigns")
-    .findOne({ electionId, candidateId }, { projection: { _id: 1 } });
-  if (existing) return existing._id;
+    .findOne({ electionId, candidateId }, { projection: { _id: 1, status: 1 } });
+  if (existing) {
+    // A re-entering candidate keeps their retained funds/levels: reactivate a
+    // campaign archived by an earlier withdrawal (ticket #1313 archives on
+    // every withdraw path, so entry must undo it). Active rows stay a no-op.
+    if (existing.status === "archived") {
+      await db.collection<Campaign>("campaigns").updateOne(
+        { _id: existing._id },
+        {
+          $set: { status: "active", archivedAt: null, party, updatedAt: now },
+          $unset: { archivedReason: "" },
+        }
+      );
+    }
+    return existing._id;
+  }
 
   const fogOfWar = {
     fundraisingLevel: 0,

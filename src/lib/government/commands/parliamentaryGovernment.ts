@@ -202,7 +202,8 @@ export async function proposeHosAppointment(
   db: Db,
   countryId: CountryId,
   nominator: Pick<Character, "_id" | "name">,
-  nomineeCharacterId: string
+  nomineeCharacterId: string,
+  nomineeNppId?: string
 ): Promise<{ success: true; voteId: string }> {
   getParliamentaryCountryConfig(countryId);
   const config = getCountryConfig(countryId);
@@ -252,25 +253,52 @@ export async function proposeHosAppointment(
     throw badRequest("Your party already has an active head-of-state appointment vote");
   }
 
-  const nomineeId = new ObjectId(nomineeCharacterId);
-  const nomineeChar = await db
-    .collection<{ _id: ObjectId; name: string; party?: string; userId?: ObjectId }>("characters")
-    .findOne({ _id: nomineeId, userId: { $exists: true } });
-  if (!nomineeChar) {
-    throw notFound("Nominee not found or is not a player character");
-  }
+  // Nominee is either a player character or an NPP holding a joint-sitting
+  // seat. Follows the cabinet/SCOTUS nomineeMode pattern.
+  const jointOffices = getJointSittingOfficeTypes(countryId);
+  let nomineeId: ObjectId | null = null;
+  let nomineeNppOid: ObjectId | null = null;
+  let nomineeName: string;
+  let nomineePartyStr: string;
+  if (nomineeNppId) {
+    nomineeNppOid = new ObjectId(nomineeNppId);
+    const nomineeNpp = await db
+      .collection<{ _id: ObjectId; name: string; party?: string }>("npps")
+      .findOne({ _id: nomineeNppOid });
+    if (!nomineeNpp) {
+      throw notFound("Nominee NPP not found");
+    }
+    const nomineeOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+      nppId: nomineeNppOid,
+      countryId,
+      officeType: { $in: jointOffices },
+    });
+    if (!nomineeOfficial) {
+      throw badRequest("Nominee must hold a seat in the legislature");
+    }
+    nomineeName = nomineeNpp.name;
+    nomineePartyStr = nomineeOfficial.party ?? nomineeNpp.party ?? "";
+  } else {
+    nomineeId = new ObjectId(nomineeCharacterId);
+    const nomineeChar = await db
+      .collection<{ _id: ObjectId; name: string; party?: string; userId?: ObjectId }>("characters")
+      .findOne({ _id: nomineeId, userId: { $exists: true } });
+    if (!nomineeChar) {
+      throw notFound("Nominee not found or is not a player character");
+    }
 
-  // Joint sitting: the nominee may sit in either Supreme Soviet chamber.
-  const nomineeOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-    characterId: nomineeId,
-    countryId,
-    officeType: { $in: getJointSittingOfficeTypes(countryId) },
-  });
-  if (!nomineeOfficial) {
-    throw badRequest("Nominee must hold a seat in the legislature");
+    // Joint sitting: the nominee may sit in either Supreme Soviet chamber.
+    const nomineeOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+      characterId: nomineeId,
+      countryId,
+      officeType: { $in: jointOffices },
+    });
+    if (!nomineeOfficial) {
+      throw badRequest("Nominee must hold a seat in the legislature");
+    }
+    nomineeName = nomineeChar.name;
+    nomineePartyStr = nomineeOfficial.party ?? nomineeChar.party ?? "";
   }
-
-  const nomineePartyStr = nomineeOfficial.party ?? nomineeChar.party ?? "";
   const nomineePartyId = parseInt(nomineePartyStr, 10);
   if (!eligibility.qualifyingPartyIds.includes(nomineePartyId)) {
     throw forbidden(
@@ -287,7 +315,9 @@ export async function proposeHosAppointment(
     countryId,
     office: "headOfState" as const,
     nomineeCharacterId: nomineeId,
-    nomineeName: nomineeChar.name,
+    nomineeNppId: nomineeNppOid,
+    nomineeMode: (nomineeNppOid ? "npp" : "character") as "character" | "npp",
+    nomineeName,
     nomineePartyId: nomineePartyStr,
     nominatedByCharacterId: nominator._id,
     formationType: eligibility.formationType,

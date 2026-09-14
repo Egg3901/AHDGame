@@ -7,6 +7,8 @@ interface PMCandidate {
   _id: string;
   name: string;
   partyName: string;
+  /** Present on the HoS endpoint for NPP-backed candidates. Absent means character. */
+  nomineeMode?: "character" | "npp";
 }
 
 interface AppointPMModalProps {
@@ -71,10 +73,15 @@ export default function AppointPMModal({
     setSubmitting(true);
     setError(null);
     try {
+      const selected = candidates.find((c) => c._id === selectedId);
+      const body =
+        selected?.nomineeMode === "npp"
+          ? { nomineeNppId: selectedId }
+          : { nomineeCharacterId: selectedId };
       const res = await fetch(`/api/country/${countryCode}/${endpointPath}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nomineeCharacterId: selectedId }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -111,6 +118,7 @@ export default function AppointPMModal({
             {candidates.map((c) => (
               <option key={c._id} value={c._id}>
                 {c.name} — {c.partyName}
+                {c.nomineeMode === "npp" ? " (NPP)" : ""}
               </option>
             ))}
           </select>

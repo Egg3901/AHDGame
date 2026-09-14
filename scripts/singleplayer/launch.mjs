@@ -15,6 +15,13 @@
  *   node launch.mjs --home DIR      data directory (default ~/.a-house-divided)
  *   node launch.mjs --no-browser    do not open a browser; a host app will
  *   node launch.mjs --parent-pid P  exit, taking MongoDB with it, when P dies
+ *   node launch.mjs --host          serve the LAN so guests can join this world
+ *                                   (SINGLEPLAYER_HOST=1 does the same). The
+ *                                   database stays on loopback; only the web
+ *                                   server binds out. Guests register their own
+ *                                   accounts; world control (new game, shutdown,
+ *                                   operator) stays loopback-only, and the fixed
+ *                                   local session is never minted to guests.
  *
  * The last two exist for the desktop client, which runs this file under a
  * bundled Node and shows the game in its own window. Readiness is announced
@@ -63,6 +70,23 @@ const RUNTIME_HOME = path.resolve(
   arg("--runtime-home", process.env.SINGLEPLAYER_RUNTIME_HOME || HOME)
 );
 const APP_PORT = Number(arg("--port", process.env.PORT || 3111));
+/**
+ * Host mode: serve the LAN so guests can join. Loopback-only by default;
+ * `--host` or SINGLEPLAYER_HOST=1 binds all interfaces. Pure function of its
+ * inputs so the mode decision is unit-testable.
+ */
+/**
+ * @param {string[]} [argv]
+ * @param {Record<string, string | undefined>} [env]
+ */
+export function resolveBindHost(argv = process.argv, env = process.env) {
+  const flag = argv.includes("--host");
+  const value = env.SINGLEPLAYER_HOST;
+  const hostMode = flag || value === "1" || value?.toLowerCase() === "true";
+  return hostMode ? "0.0.0.0" : "127.0.0.1";
+}
+const BIND_HOST = resolveBindHost();
+const PUBLIC_HOST = BIND_HOST === "0.0.0.0";
 const MONGO_PORT = Number(arg("--mongo-port", process.env.SINGLEPLAYER_MONGO_PORT || 27117));
 const OPEN_BROWSER = !process.argv.includes("--no-browser");
 const PARENT_PID = Number(arg("--parent-pid", 0));
@@ -746,7 +770,9 @@ function startApp() {
     CRON_SECRET: persistentSecret("cron-secret"),
     ADMIN_REGISTRATION_KEY: persistentSecret("admin-registration-key"),
     PORT: String(APP_PORT),
-    HOSTNAME: "127.0.0.1",
+    // Host mode binds the web server to the LAN; the database directly above
+    // stays on loopback in every mode.
+    HOSTNAME: BIND_HOST,
   };
   // Captured pipes, never inherited handles. This is the Windows first-start
   // fix: when the launcher itself runs under a host's pipes (the desktop
@@ -941,6 +967,11 @@ async function main() {
     gameReady = true;
     log(`startup took ${formatTimings(timings)}`);
     log(`ready at ${base}`);
+    // The ready line above keeps its loopback shape: host apps parse it, and
+    // the host's own browser must use loopback for the fixed local session.
+    // Guests join on the machine's LAN address and register their own accounts.
+    if (PUBLIC_HOST)
+      log(`hosting on all interfaces: guests join at http://<this-machine>:${APP_PORT}`);
     if (OPEN_BROWSER) openBrowser(`${base}/singleplayer`);
     void warmAssets(base);
     watchParent();

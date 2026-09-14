@@ -14,6 +14,7 @@ import type {
   SingleplayerMode,
 } from "@/lib/db/types";
 import { reconcileSingleplayerHeadOfState } from "@/lib/singleplayerHeadOfState";
+import { promoteSingleplayerOwnerIfNoAdmin } from "@/lib/singleplayerOwnerAdmin";
 
 /**
  * Node-only singleplayer helpers. `@/lib/singleplayer` must stay importable
@@ -121,6 +122,9 @@ async function clearSingleplayerMaintenance(db: Db): Promise<void> {
  */
 export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
   const account = await ensureSingleplayerUser(db);
+  // Existing worlds predate owner-admin: promote the earliest account when
+  // nobody holds admin, next to the head-of-state repair below.
+  await promoteSingleplayerOwnerIfNoAdmin(db);
   await clearSingleplayerMaintenance(db);
   const userId = new ObjectId(SINGLEPLAYER_USER_ID);
   const [gameState, character, characterCount] = await Promise.all([

@@ -12,7 +12,7 @@ import { createNotification } from "@/lib/notifications";
 import { CONGRESS_LIMITS, checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isActiveCabinetNominationDuplicateKey } from "@/lib/elections/duplicateKey";
 import { getGameTime } from "@/lib/time/gameTime";
-import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
+import type { CabinetNomination, ElectedOfficial, Character, NPP } from "@/lib/db/types";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
 import { getLiveGameYear, getManuallyEnabledSeats } from "@/lib/cabinet/liveGameYear";
@@ -21,12 +21,17 @@ import { resolvePresidentialCountry } from "@/lib/executive/presidentialCountry"
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
 
-const proposeNominationSchema = z.object({
-  // positionId is validated against the resolved country's cabinet positions
-  // inside the handler (the set is country-specific), not here.
-  positionId: z.string().min(1, "positionId required"),
-  nomineeCharacterId: schemas.objectId,
-});
+const proposeNominationSchema = z
+  .object({
+    // positionId is validated against the resolved country's cabinet positions
+    // inside the handler (the set is country-specific), not here.
+    positionId: z.string().min(1, "positionId required"),
+    nomineeCharacterId: schemas.objectId.optional(),
+    nomineeNppId: schemas.objectId.optional(),
+  })
+  .refine((v) => Boolean(v.nomineeCharacterId) !== Boolean(v.nomineeNppId), {
+    message: "Provide exactly one of nomineeCharacterId or nomineeNppId",
+  });
 
 // POST /api/whitehouse/cabinet/nominations — President proposes a cabinet nomination and opens a 24-hour Senate confirmation vote.
 // Auth: requireBasicAuth
@@ -47,7 +52,7 @@ export async function POST(request: Request) {
     const parsed = await parseJsonBody(request, proposeNominationSchema);
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
-    const { positionId, nomineeCharacterId } = parsed.data;
+    const { positionId, nomineeCharacterId, nomineeNppId } = parsed.data;
 
     const countryId = resolvePresidentialCountry(request);
     if (!countryId) {
@@ -92,29 +97,56 @@ export async function POST(request: Request) {
       );
     }
 
-    // Nominee must be a player character (has userId)
-    let nomineeOid: ObjectId;
-    try {
-      nomineeOid = new ObjectId(nomineeCharacterId);
-    } catch {
-      return NextResponse.json({ error: "Invalid nomineeCharacterId" }, { status: 400 });
-    }
-
-    const nominee = await db.collection<Character>("characters").findOne({ _id: nomineeOid });
-    if (!nominee) {
-      return NextResponse.json({ error: "Nominee character not found" }, { status: 404 });
-    }
-    if (!nominee.userId) {
-      return NextResponse.json(
-        { error: "Only player characters can be nominated" },
-        { status: 400 }
-      );
-    }
-    if (nominee.countryId !== countryId) {
-      return NextResponse.json(
-        { error: "Nominee must be a politician of this country" },
-        { status: 400 }
-      );
+    // Nominee is either a player character (has userId) or an NPP of this
+    // country. Follows the FOMC/SCOTUS nominee pattern.
+    let nomineeOid: ObjectId | null = null;
+    let nomineeNppOid: ObjectId | null = null;
+    let nomineeName: string;
+    let nomineeParty: string | undefined;
+    let nomineeUserId: ObjectId | undefined;
+    if (nomineeCharacterId) {
+      try {
+        nomineeOid = new ObjectId(nomineeCharacterId);
+      } catch {
+        return NextResponse.json({ error: "Invalid nomineeCharacterId" }, { status: 400 });
+      }
+      const nominee = await db.collection<Character>("characters").findOne({ _id: nomineeOid });
+      if (!nominee) {
+        return NextResponse.json({ error: "Nominee character not found" }, { status: 404 });
+      }
+      if (!nominee.userId) {
+        return NextResponse.json(
+          { error: "Only player characters can be nominated" },
+          { status: 400 }
+        );
+      }
+      if (nominee.countryId !== countryId) {
+        return NextResponse.json(
+          { error: "Nominee must be a politician of this country" },
+          { status: 400 }
+        );
+      }
+      nomineeName = nominee.name;
+      nomineeParty = nominee.party;
+      nomineeUserId = nominee.userId;
+    } else {
+      try {
+        nomineeNppOid = new ObjectId(nomineeNppId);
+      } catch {
+        return NextResponse.json({ error: "Invalid nomineeNppId" }, { status: 400 });
+      }
+      const npp = await db.collection<NPP>("npps").findOne({ _id: nomineeNppOid });
+      if (!npp) {
+        return NextResponse.json({ error: "Nominee NPP not found" }, { status: 404 });
+      }
+      if (npp.countryId != null && npp.countryId !== countryId) {
+        return NextResponse.json(
+          { error: "Nominee must be a politician of this country" },
+          { status: 400 }
+        );
+      }
+      nomineeName = npp.name;
+      nomineeParty = npp.party;
     }
 
     // Withdraw any existing active/proposed nomination for this position
@@ -135,8 +167,10 @@ export async function POST(request: Request) {
       countryId: myCharacter.countryId,
       positionId,
       nomineeCharacterId: nomineeOid,
-      nomineeCharacterName: nominee.name,
-      nomineeParty: nominee.party,
+      nomineeNppId: nomineeNppOid,
+      nomineeMode: nomineeNppOid ? "npp" : "character",
+      nomineeCharacterName: nomineeName,
+      nomineeParty,
       proposedByPresidentId: presidentOfficial.characterId,
       proposedByPresidentName: myCharacter.name,
       status: "active",
@@ -183,13 +217,13 @@ export async function POST(request: Request) {
         userId: c.userId,
         type: "system",
         title: "Cabinet Nomination",
-        message: `President has nominated ${nominee.name} for ${posName}. Senate vote is open.`,
+        message: `President has nominated ${nomineeName} for ${posName}. Senate vote is open.`,
         metadata: { nominationId: result.insertedId.toString(), type: "cabinet_nomination" },
       });
     }
-    if (nominee.userId) {
+    if (nomineeUserId) {
       await createNotification({
-        userId: nominee.userId,
+        userId: nomineeUserId,
         type: "system",
         title: "Cabinet Nomination",
         message: `You have been nominated for ${posName}. The Senate will vote on your confirmation.`,
@@ -203,7 +237,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       nominationId: result.insertedId.toString(),
-      message: `Nominated ${nominee.name} for ${posName}. Senate vote opens for 24 hours.`,
+      message: `Nominated ${nomineeName} for ${posName}. Senate vote opens for 24 hours.`,
     });
   } catch (error) {
     return handleRouteError(error);

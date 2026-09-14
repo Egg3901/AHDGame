@@ -115,17 +115,22 @@ export async function deriveSeanadComposition(
     .find({ countryId })
     .sort({ confirmedAt: 1 });
   const cabinet = await cabinetCursor.toArray();
-  const cabinetPicks: SeanadTaoiseachPick[] = cabinet.slice(0, TAOISEACH_PICKS).map((m) => {
-    const partyId = m.party ?? "independent";
-    return {
-      characterId: m.characterId.toString(),
-      characterName: m.characterName,
-      partyId,
-      ...partyLabel(partyId),
-      positionId: m.positionId,
-      source: "cabinet" as const,
-    };
-  });
+  // NPP-held seats carry a null characterId and are not Taoiseach-pickable people.
+  const cabinetPicks: SeanadTaoiseachPick[] = cabinet
+    .filter((m) => m.characterId != null)
+    .slice(0, TAOISEACH_PICKS)
+    .map((m) => {
+      const partyId = m.party ?? "independent";
+      return {
+        // Filtered above to character-held seats; the assertion documents that.
+        characterId: m.characterId!.toString(),
+        characterName: m.characterName,
+        partyId,
+        ...partyLabel(partyId),
+        positionId: m.positionId,
+        source: "cabinet" as const,
+      };
+    });
 
   let loyalistPartyId = "independent";
   if (cabinetPicks.length < TAOISEACH_PICKS) {

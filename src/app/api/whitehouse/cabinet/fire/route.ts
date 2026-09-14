@@ -76,9 +76,11 @@ export async function POST(request: Request) {
 
     const posName = positionDef.name;
 
-    const firedChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: member.characterId }, { projection: { userId: 1 } });
+    const firedChar = member.characterId
+      ? await db
+          .collection<Character>("characters")
+          .findOne({ _id: member.characterId }, { projection: { userId: 1 } })
+      : null;
     if (firedChar?.userId) {
       await createNotification({
         userId: firedChar.userId,

@@ -546,11 +546,18 @@ export default function MarketOverviewPanel({
                   // own row and could not be re-affirmed by anyone.
                   const isSeatedCeo =
                     sh.characterId != null && sh.characterId === corporation.ceoCharacterId;
+                  const isSoleOwnerReclaim =
+                    corporation.isPrivate === true &&
+                    corporation.ceoVacant === true &&
+                    sh.characterId === myCharacterId &&
+                    corporation.totalShares > 0 &&
+                    sh.shares / corporation.totalShares >= 0.99;
                   const isVoteEligible =
                     !isCorporateShareholder &&
                     !sh.isImperial &&
                     !isNppOrFund &&
                     (isSeatedCeo ||
+                      isSoleOwnerReclaim ||
                       (sh.homeState === corporation.headquartersState &&
                         sh.countryId === corporation.countryId));
                   return (
@@ -643,7 +650,11 @@ export default function MarketOverviewPanel({
                                 }
                                 disabled={voteLoading}
                                 title={
-                                  hasVotedFor ? "Withdraw your vote" : `Vote for ${sh.name} as CEO`
+                                  hasVotedFor
+                                    ? "Withdraw your vote"
+                                    : isSoleOwnerReclaim
+                                      ? "Reclaim the vacant CEO seat"
+                                      : `Vote for ${sh.name} as CEO`
                                 }
                                 className={`text-xs px-2 py-1 rounded-md transition-colors ${
                                   hasVotedFor
@@ -651,7 +662,11 @@ export default function MarketOverviewPanel({
                                     : "border border-card-border text-muted hover:text-foreground hover:border-primary/50 disabled:opacity-50"
                                 }`}
                               >
-                                {hasVotedFor ? "Voted (undo)" : "Vote CEO"}
+                                {hasVotedFor
+                                  ? "Voted (undo)"
+                                  : isSoleOwnerReclaim
+                                    ? "Reclaim CEO"
+                                    : "Vote CEO"}
                               </button>
                             )}
                           <div className="text-right">
