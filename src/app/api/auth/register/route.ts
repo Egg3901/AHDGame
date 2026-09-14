@@ -23,6 +23,8 @@ import { getCfFingerprint, isEmptyCfFingerprint } from "@/lib/utils/cfFingerprin
 import type { GameConfig } from "@/lib/db/types";
 import { normalizeMaintenanceMode } from "@/lib/maintenanceStatus";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { isSingleplayer } from "@/lib/singleplayer";
+import { shouldGrantOwnerAdminOnRegister } from "@/lib/singleplayerOwnerAdmin";
 import { lakesideAccountFields } from "@/lib/auth/lakesideAccount";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import type { ActionAuditNet } from "@/lib/db/types/actionAuditLog";
@@ -245,7 +247,26 @@ export async function POST(request: Request) {
 
     // Determine if user should be an admin
     let isAdmin = false;
-    if (adminKey && adminKey.trim() !== "") {
+    if (
+      shouldGrantOwnerAdminOnRegister({
+        singleplayer: isSingleplayer(),
+        existingUserCount: await usersCollection.countDocuments(),
+      })
+    ) {
+      // First account of a singleplayer world owns the machine: full admin
+      // in the DB record, so the hardening invariant keeps holding.
+      isAdmin = true;
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.register",
+        subject: { type: "user", name: email.toLowerCase() },
+        net: netBase,
+        outcome: "ok",
+        reason: "first_singleplayer_account_owner_admin",
+      });
+    }
+    if (!isAdmin && adminKey && adminKey.trim() !== "") {
       // Master switch — checked before key validation so a disabled flag
       // never leaks timing info about whether the provided key matches.
       // Treated as enabled when undefined for legacy configs.

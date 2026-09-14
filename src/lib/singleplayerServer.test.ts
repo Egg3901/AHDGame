@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import path from "path";
 import os from "os";
 import type { Db } from "mongodb";
+import { ObjectId } from "mongodb";
 import {
   ensureSingleplayerUser,
   setSingleplayerConfig,
@@ -70,6 +71,26 @@ describe("singleplayer maintenance recovery", () => {
     expect(reconcileSingleplayerHeadOfState).toHaveBeenCalledWith(db, {
       preset: "2019-default",
     });
+  });
+
+  it("promotes the earliest account to admin when a world reports status with none", async () => {
+    const db = createMockDb();
+    const earliestId = new ObjectId();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 3,
+      preset: "2019-default",
+      singleplayerConfig: { mode: "career" },
+    });
+    db.collection("users").countDocuments.mockResolvedValue(0);
+    db.collection("users").findOne.mockResolvedValue({ _id: earliestId });
+
+    await singleplayerStatus(db as unknown as Db);
+
+    expect(db.collection("users").updateOne).toHaveBeenCalledWith(
+      { _id: earliestId },
+      { $set: { isAdmin: true, updatedAt: expect.any(Date) } }
+    );
   });
 
   it("clears hosted maintenance when an existing local world reports status", async () => {
