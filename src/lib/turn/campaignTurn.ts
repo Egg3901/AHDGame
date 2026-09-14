@@ -32,7 +32,6 @@ import {
 } from "@/lib/electionEngine/constants";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
-import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import { logger } from "../observability/logger";
 
 export interface CampaignTurnResults {
@@ -311,28 +310,10 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         const candidateRowIds = candidateRows.map((row) => row._id);
 
         const [
-          nppEndorsementCounts,
           playerEndorsementCounts,
           governorEndorsementCounts,
           executiveEndorsementCounts,
         ] = await Promise.all([
-          db
-            .collection("nppEndorsements")
-            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-              {
-                $match: buildActiveVisibleNppEndorsementFilter({
-                  electionId: { $in: campaignElectionIds },
-                  candidateId: { $in: campaignCandidateIds },
-                }),
-              },
-              {
-                $group: {
-                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                  count: { $sum: 1 },
-                },
-              },
-            ])
-            .toArray(),
           candidateRowIds.length > 0
             ? db
                 .collection("playerEndorsements")
@@ -394,12 +375,6 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         ]);
 
         const endorsementKey = (eId: ObjectId, cId: ObjectId) => `${eId}:${cId}`;
-        const nppEndorsementMap = new Map(
-          nppEndorsementCounts.map((e) => [
-            endorsementKey(e._id.electionId, e._id.candidateId),
-            e.count,
-          ])
-        );
         const playerEndorsementMap = new Map(
           playerEndorsementCounts
             .map((e): [string, number] | null => {
@@ -480,7 +455,6 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
             // Look up pre-fetched endorsement counts
             const eKey = endorsementKey(campaign.electionId, campaign.candidateId);
-            const nppEndorsementCount = nppEndorsementMap.get(eKey) ?? 0;
             const playerEndorsementCount = playerEndorsementMap.get(eKey) ?? 0;
             /*
              * Player endorsements only grant campaign actions for presidential races.
@@ -508,8 +482,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             const executiveEndorsementCount = executiveEndorsementMap.get(eKey) ?? 0;
             const baseline = campaign.candidateIsNPP ? nppBaseActions : playerBaseActions;
             const actions = calculateCampaignActions(
-              nppEndorsementCount +
-                effectivePlayerEndorsements +
+              effectivePlayerEndorsements +
                 (governorEndorsementCount + executiveEndorsementCount) *
                   GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS,
               baseline

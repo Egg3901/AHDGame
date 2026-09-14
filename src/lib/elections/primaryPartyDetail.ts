@@ -339,7 +339,11 @@ export async function loadPrimaryPartyData(
   const nppEndorsements = await db
     .collection<NPPEndorsement>("nppEndorsements")
     .find({ electionId: election._id, isActive: true })
-    .project<Pick<NPPEndorsement, "candidateId" | "nppName">>({ candidateId: 1, nppName: 1 })
+    .project<Pick<NPPEndorsement, "candidateId" | "nppName" | "source">>({
+      candidateId: 1,
+      nppName: 1,
+      source: 1,
+    })
     .toArray();
   const playerEndorserIds = [
     ...new Set(playerEndorsements.map((e) => e.characterId.toString())),
@@ -369,7 +373,8 @@ export async function loadPrimaryPartyData(
     if (endorsement.source === "organic") continue;
     const cid = candidateIdByCharacterId.get(endorsement.candidateId.toString());
     if (!cid) continue;
-    endorsementCounts.set(cid, (endorsementCounts.get(cid) ?? 0) + 1);
+    // NPP endorsements are visible context, not player-action endorsements.
+    // Keep the name in the endorser list without inflating the standings count.
     endorsementNames.set(cid, [
       ...(endorsementNames.get(cid) ?? []),
       endorsement.nppName || "Unknown politician",
