@@ -309,16 +309,15 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         );
         const candidateRowIds = candidateRows.map((row) => row._id);
 
-        const [
-          playerEndorsementCounts,
-          governorEndorsementCounts,
-          executiveEndorsementCounts,
-        ] = await Promise.all([
-          candidateRowIds.length > 0
-            ? db
-                .collection("playerEndorsements")
-                .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>(
-                  [
+        const [playerEndorsementCounts, governorEndorsementCounts, executiveEndorsementCounts] =
+          await Promise.all([
+            candidateRowIds.length > 0
+              ? db
+                  .collection("playerEndorsements")
+                  .aggregate<{
+                    _id: { electionId: ObjectId; candidateId: ObjectId };
+                    count: number;
+                  }>([
                     {
                       $match: {
                         electionId: { $in: campaignElectionIds },
@@ -332,47 +331,46 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
                         count: { $sum: 1 },
                       },
                     },
-                  ]
-                )
-                .toArray()
-            : Promise.resolve([]),
-          db
-            .collection("governorEndorsements")
-            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-              {
-                $match: {
-                  electionId: { $in: campaignElectionIds },
-                  candidateId: { $in: campaignCandidateIds },
-                  isActive: true,
+                  ])
+                  .toArray()
+              : Promise.resolve([]),
+            db
+              .collection("governorEndorsements")
+              .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+                {
+                  $match: {
+                    electionId: { $in: campaignElectionIds },
+                    candidateId: { $in: campaignCandidateIds },
+                    isActive: true,
+                  },
                 },
-              },
-              {
-                $group: {
-                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                  count: { $sum: 1 },
+                {
+                  $group: {
+                    _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                    count: { $sum: 1 },
+                  },
                 },
-              },
-            ])
-            .toArray(),
-          db
-            .collection("executiveEndorsements")
-            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-              {
-                $match: {
-                  electionId: { $in: campaignElectionIds },
-                  candidateId: { $in: campaignCandidateIds },
-                  isActive: true,
+              ])
+              .toArray(),
+            db
+              .collection("executiveEndorsements")
+              .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+                {
+                  $match: {
+                    electionId: { $in: campaignElectionIds },
+                    candidateId: { $in: campaignCandidateIds },
+                    isActive: true,
+                  },
                 },
-              },
-              {
-                $group: {
-                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                  count: { $sum: 1 },
+                {
+                  $group: {
+                    _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                    count: { $sum: 1 },
+                  },
                 },
-              },
-            ])
-            .toArray(),
-        ]);
+              ])
+              .toArray(),
+          ]);
 
         const endorsementKey = (eId: ObjectId, cId: ObjectId) => `${eId}:${cId}`;
         const playerEndorsementMap = new Map(
