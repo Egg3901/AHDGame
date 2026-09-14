@@ -265,3 +265,54 @@ describe("local sessions across worlds", () => {
     }
   );
 });
+
+describe("proxy() — singleplayer host mode (LAN guests)", () => {
+  function stubSingleplayer() {
+    vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("AUTH_SECRET", "local-world-test-secret");
+    vi.stubEnv("MONGODB_URI", "mongodb://127.0.0.1:27099/ahd-singleplayer");
+    vi.stubEnv("NEXT_PUBLIC_BASE_URL", "http://127.0.0.1:3111");
+  }
+
+  it("mints the fixed local session for the host's own loopback browser", async () => {
+    stubSingleplayer();
+    mockMaintenanceStatus.mockResolvedValueOnce({ mode: "off", enabled: false });
+    const res = await proxy(makeRequest("http://127.0.0.1:3111/", { host: "127.0.0.1:3111" }));
+    expect(res.cookies.get(AUTH_COOKIE_NAME)?.value).toBeTruthy();
+  });
+
+  it("never mints the host session for a LAN guest", async () => {
+    stubSingleplayer();
+    mockMaintenanceStatus.mockResolvedValueOnce({ mode: "off", enabled: false });
+    const res = await proxy(
+      makeRequest("http://192.168.1.10:3111/", { host: "192.168.1.10:3111" })
+    );
+    expect(res.cookies.get(AUTH_COOKIE_NAME)?.value).toBeUndefined();
+  });
+
+  it("keeps the real register page for LAN guests", async () => {
+    stubSingleplayer();
+    mockMaintenanceStatus.mockResolvedValueOnce({ mode: "off", enabled: false });
+    const res = await proxy(
+      makeRequest("http://192.168.1.10:3111/register", { host: "192.168.1.10:3111" })
+    );
+    expect(res.headers.get("location")).toBeNull();
+  });
+
+  it("still redirects loopback bookmarks away from the auth pages", async () => {
+    stubSingleplayer();
+    mockMaintenanceStatus.mockResolvedValueOnce({ mode: "off", enabled: false });
+    const valid = await new SignJWT(singleplayerSessionClaims())
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(new TextEncoder().encode("local-world-test-secret"));
+    const res = await proxy(
+      makeRequest("http://127.0.0.1:3111/register", {
+        host: "127.0.0.1:3111",
+        cookies: { [AUTH_COOKIE_NAME]: valid },
+      })
+    );
+    expect(res.headers.get("location")).toContain("/profile");
+  });
+});

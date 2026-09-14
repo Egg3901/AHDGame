@@ -5,7 +5,7 @@ import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maint
 import { getCachedPublicViewingMode, isPublicApiReadBypassPath } from "@/lib/publicViewing";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE, isCharacterGatedPath } from "@/lib/auth/characterGate";
-import { isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
+import { isLoopbackOrigin, isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
 import { getAuthUserFromToken, verifyAuthToken, type AuthUser } from "@/lib/auth";
 
 // Well-known root files that must never be rewritten under /wiki on the
@@ -115,7 +115,14 @@ export async function proxy(request: NextRequest) {
   // early with the cookie attached; the retried request then flows through
   // the normal path below. See @/lib/singleplayer for the guards that stop
   // this running anywhere that serves more than one person.
-  if (singleplayer) {
+  //
+  // Host mode (singleplayer serving the LAN): only loopback remotes get the
+  // fixed local session. A guest arriving over the network must register and
+  // log in as themselves — minting them the host's session would hand every
+  // guest the keys to the world. The request URL names the server address
+  // the request targeted, so a loopback hostname means the host's own browser.
+  const loopbackRemote = isLoopbackOrigin(request.nextUrl.origin);
+  if (singleplayer && loopbackRemote) {
     // Offline mint path: strict shared JWT check only, no DB. A transient
     // verification failure re-mints rather than blocking the local player.
     let session = null;
@@ -140,9 +147,11 @@ export async function proxy(request: NextRequest) {
 
   // The local build has no account lifecycle. Keep old bookmarks to the
   // public auth pages inside the local launcher rather than showing a sign-in,
-  // registration, or logout screen for the fixed local session.
+  // registration, or logout screen for the fixed local session. Loopback-only
+  // like the mint above: LAN guests in host mode need the real auth pages.
   if (
     singleplayer &&
+    loopbackRemote &&
     (pathname === "/login" || pathname === "/register" || pathname === "/logout")
   ) {
     return NextResponse.redirect(new URL("/profile", request.url));
