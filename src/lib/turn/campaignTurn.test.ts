@@ -889,7 +889,7 @@ describe("auto-downgrade on insolvency", () => {
 });
 
 describe("endorsement filter", () => {
-  it("uses only NPP endorsements for action calculation in non-presidential elections", async () => {
+  it("does not grant campaign actions for NPP endorsements", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { calculateCampaignActions } = await import("@/lib/campaigns/actions");
 
@@ -920,13 +920,13 @@ describe("endorsement filter", () => {
     }[] = campaignBulkWrite.mock.calls[0][0];
 
     const campaignOp = ops[0];
-    // Only 4 NPP endorsements should count. Baseline defaults to 4 per turn
-    // (player base action gain) when no gameConfig doc is present in the test.
-    const expectedActions = calculateCampaignActions(4, 4);
+    // Neither NPP nor lower-race player endorsements count. Baseline defaults
+    // to 4 per turn when no gameConfig doc is present in the test.
+    const expectedActions = calculateCampaignActions(0, 4);
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 
-  it("uses both NPP and player endorsements for presidential elections", async () => {
+  it("uses only player endorsements for presidential campaign actions", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { calculateCampaignActions } = await import("@/lib/campaigns/actions");
 
@@ -957,9 +957,8 @@ describe("endorsement filter", () => {
     }[] = campaignBulkWrite.mock.calls[0][0];
 
     const campaignOp = ops[0];
-    // Both 4 NPP + 9 player = 13 total. Baseline 4 (player base action gain)
-    // since no gameConfig doc exists in the test mock.
-    const expectedActions = calculateCampaignActions(13, 4);
+    // The 9 player endorsements count; the 4 NPP endorsements do not.
+    const expectedActions = calculateCampaignActions(9, 4);
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 });
