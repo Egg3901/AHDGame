@@ -1,5 +1,4 @@
 #!/usr/bin/env npx tsx
-import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -8,6 +7,7 @@ import { EJSON } from "bson";
 import type { Db } from "mongodb";
 import {
   buildDifferentialTrace,
+  hashNormalizedMongoObservation,
   normalizeMongoObservation,
   type PhaseCapture,
 } from "./differentialTraceExport";
@@ -161,7 +161,7 @@ async function main() {
   if (!result.success || captures.length === 0) {
     throw new Error(`AHDGame turn did not produce a complete trace: ${result.message}`);
   }
-  const sourceSha256 = createHash("sha256").update(JSON.stringify(rawInitial)).digest("hex");
+  const sourceSha256 = hashNormalizedMongoObservation(initial);
   const trace = buildDifferentialTrace({
     revision,
     fixtureId: arg("fixture"),

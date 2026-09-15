@@ -55,6 +55,7 @@ describe("authoritative differential trace export", () => {
         budgets: { mutations: [] },
       },
     });
+    expect(trace.input.source.sha256).toHaveLength(64);
   });
 
   it("fails before database access unless the CLI targets an isolated sim database", async () => {

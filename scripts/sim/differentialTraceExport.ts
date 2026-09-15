@@ -111,6 +111,10 @@ function sha256(value: TraceJson): string {
     .digest("hex");
 }
 
+export function hashNormalizedMongoObservation(value: MongoObservation): string {
+  return sha256(value);
+}
+
 export function buildDifferentialTrace(input: {
   revision: string;
   fixtureId: string;
