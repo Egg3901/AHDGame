@@ -55,6 +55,8 @@ export interface NppCorpDecision {
    * `$inc` so it composes with the income credit instead of racing it.
    */
   liquidCapitalDelta: number;
+  /** Local-currency cash floor that later NPP operator passes must preserve. */
+  cashFloorLocal: number;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;

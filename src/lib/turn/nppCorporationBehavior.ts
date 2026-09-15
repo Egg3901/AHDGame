@@ -124,7 +124,7 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
 import { pickBestNppTechNode } from "@/lib/turn/npp/corpBehaviorConfig";
 import {
@@ -164,7 +164,6 @@ import {
   NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_REINVEST_MAX_SECTORS_PER_TURN,
   NPP_REINVEST_MAINTENANCE_CASH_SHARE,
-  CASH_FLOOR,
   EXPANSION_COST,
   EXPANSION_MIN_CASH,
   EXPANSION_MIN_MARGIN,
@@ -172,7 +171,6 @@ import {
   NPP_FOUNDING_DEPLOY_FRACTION,
   NPP_FOUNDING_HEADROOM_SHARE,
   NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
-  SAFE_CASH_FLOOR_MIN,
   MAX_DIVIDEND_RATE,
   DEFAULT_ARCHETYPE,
   GLUT_MOTHBALL_FILL_THRESHOLD,
@@ -583,11 +581,23 @@ export async function processNppCorporationDecisions(
     if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
     // Sector tech tree: auto-unlock one node per turn when affordable. Separate
-    // op from the budget decision above (same _id) — bulkWrite applies both.
+    // op from the budget decision above (same _id) because bulkWrite composes
+    // both $inc operations. The tech check must see the cash left after the
+    // decision's founding/reinvestment spend, not the opening balance read at
+    // the start of this phase, and it must preserve the same safety floor.
     if (techTreesEnabled) {
       const dailyGrossRevenue =
         sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0) * TURNS_PER_DAY;
-      const pick = pickBestNppTechNode(corp, techCurrentYear, dailyGrossRevenue);
+      const cashAfterDecision = Math.max(
+        0,
+        (corp.liquidCapital ?? 0) + (decision.liquidCapitalDelta ?? 0)
+      );
+      const pick = pickBestNppTechNode(
+        { ...corp, liquidCapital: cashAfterDecision },
+        techCurrentYear,
+        dailyGrossRevenue,
+        { cashReserve: decision.cashFloorLocal }
+      );
       if (pick) {
         const { node: techNode, cashCost } = pick;
         const grants = sumStrengthGrants(techNode.effects);
@@ -782,13 +792,8 @@ export function makeNppCorpDecision(
   // Archetype-adjusted levers, each clamped to a safe rail so no personality can
   // bankrupt a profitable corp. Clamped in ₳ (where the rails are authored),
   // then converted once into the currency `liquidCapital` is compared in.
-  const eraMoney = (amountAnchor: number): number =>
-    plants?.enabled ? getEraNominalAmount(amountAnchor, plants.preset) : amountAnchor;
   const effectiveCashFloor = toCorpLocal(
-    Math.max(
-      eraMoney(SAFE_CASH_FLOOR_MIN),
-      Math.round(eraMoney(CASH_FLOOR) * modifiers.cashFloorMult)
-    )
+    getNppCashFloorAnchor(plants?.enabled ? plants.preset : undefined, modifiers.cashFloorMult)
   );
   const effectiveExpansionMinMargin = EXPANSION_MIN_MARGIN * modifiers.expansionMinMarginMult;
   const effectiveExpansionMinCash = toCorpLocal(
@@ -1247,8 +1252,11 @@ export function makeNppCorpDecision(
   let marketingPct: number;
   let logisticsPct: number;
   let rdPct: number;
-  if (!isProfitable || totalRevenue === 0) {
-    // Losing money: cut everything to minimum
+  const isCashCrisis = liquidCapital <= effectiveCashFloor;
+  if (!isProfitable || totalRevenue === 0 || isCashCrisis) {
+    // Losing money or below the safety floor: cut everything to minimum.
+    // Profitability cannot justify discretionary spend when the corporation
+    // lacks the cash buffer needed to absorb the next operating turn.
     marketingPct = 0.005;
     logisticsPct = 0.003;
     rdPct = 0;
@@ -1952,6 +1960,7 @@ export function makeNppCorpDecision(
     // up, a founding cost or growth capex down — so this one subtraction is the
     // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
+    cashFloorLocal: effectiveCashFloor,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,

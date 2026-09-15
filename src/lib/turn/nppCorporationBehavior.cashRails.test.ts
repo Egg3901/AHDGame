@@ -134,6 +134,14 @@ describe("NPP cash rails at 1953 scale", () => {
     expect(decision.newSectors).toBeUndefined();
   });
 
+  it("cuts discretionary budgets immediately when cash is below the floor", () => {
+    const decision = decide(50_000, "aggressive");
+
+    expect(decision.updates.logisticsBudget).toBe(3_000);
+    expect(decision.updates.rdBudget ?? 0).toBe(0);
+    expect(decision.updates.marketingBudget as number).toBeLessThan(15_000);
+  });
+
   it("lets a mid-size corp reach the expansion gate", () => {
     // cautious expansion needs surplus > EXPANSION_MIN_CASH × 1.5 = ₳937,500
     // on top of the ₳375,000 floor. Under the old constants that was ₳7,500,000

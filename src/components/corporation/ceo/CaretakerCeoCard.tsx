@@ -98,8 +98,8 @@ export function CaretakerCeoCard({
       <h2 className="text-lg font-bold text-foreground mb-2">NPP Caretaker</h2>
       <p className="text-sm text-muted mb-4">
         {isCaretakerRun
-          ? "An autonomous NPP caretaker is running this corporation on your behalf. You remain the owner and can resume control at any time."
-          : "Hand day-to-day operation to an autonomous NPP caretaker. It runs the corporation under the same bounded rules as any AI-run corp; you stay the owner and can reclaim it anytime."}
+          ? "An autonomous NPP caretaker is running this corporation on your behalf. You remain the owner and can resume control immediately. After an owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."
+          : "Hand day-to-day operation to an autonomous NPP caretaker. It runs the corporation under the same bounded rules as any AI-run corp. You stay the owner and can resume control immediately. After this owner-initiated handoff, a cooldown of three real days applies before you can hand it back to a caretaker."}
       </p>
       {error && (
         <div className="rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error mb-3">
