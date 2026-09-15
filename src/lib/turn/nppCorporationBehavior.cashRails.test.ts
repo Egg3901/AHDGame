@@ -149,4 +149,39 @@ describe("NPP cash rails at 1953 scale", () => {
     const decision = decide(4_000_000, "cautious", true);
     expect(decision.newSectors).toHaveLength(1);
   });
+
+  it("makes no new discretionary commitments under a passive caretaker mandate", () => {
+    const passiveCorp = corp(4_000_000);
+    passiveCorp.marketingBudget = 20_000;
+    passiveCorp.logisticsBudget = 12_000;
+    passiveCorp.rdBudget = 8_000;
+    passiveCorp.dividendRate = 8;
+    const decision = makeNppCorpDecision(
+      {
+        corp: passiveCorp,
+        sectors: [sector()],
+        turn: TURN,
+        now: new Date(),
+        fxRate: 1,
+        modifiers: ceoArchetypeModifiers("aggressive"),
+        ordinaryEntryEligible: true,
+        caretakerMandate: "passive",
+      },
+      new Map<string, UnownedSector[]>([["US", [pool()]]]),
+      noState,
+      noPrices,
+      plantsCtx
+    );
+
+    expect(decision.liquidCapitalDelta).toBe(0);
+    expect(decision.newSectors).toBeUndefined();
+    expect(decision.reinvestments).toBeUndefined();
+    expect(decision.shortageCreditRequest).toBeUndefined();
+    expect(decision.updates).toMatchObject({
+      marketingBudget: 0,
+      logisticsBudget: 0,
+      rdBudget: 0,
+      dividendRate: 0,
+    });
+  });
 });

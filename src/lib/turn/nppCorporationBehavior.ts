@@ -499,6 +499,7 @@ export async function processNppCorporationDecisions(
       ordinaryEntryEligible: entryCohortEligible,
       shortageEntryEligible: entryCohortEligible,
       retailExpansionPaused,
+      caretakerMandate: corp.caretakerCeo?.mandate ?? "active",
       strategyLoopEnabled,
       debtServiceAnchor: netPerTurnDebtServiceAnchor({
         issuerBonds: issuerBondsByCorpId.get(corp._id.toString()),
@@ -570,7 +571,7 @@ export async function processNppCorporationDecisions(
     if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
     // Budget tech from post-decision cash and preserve the same safety floor.
-    if (techTreesEnabled) {
+    if (techTreesEnabled && decisionContext.caretakerMandate !== "passive") {
       maybePushNppTechUnlock({
         corp,
         sectors,
@@ -649,6 +650,7 @@ export function makeNppCorpDecision(
   let entryDiagnostic: NppCorpDecision["entryDiagnostic"];
 
   const liquidCapital = corp.liquidCapital ?? 0;
+  const passive = ctx.caretakerMandate === "passive";
   // Running balance across the spending sections below (founding, then
   // reinvestment). Both charge the SAME `liquidCapital`, so a section that read
   // the opening balance after another had already committed would let the corp
@@ -1188,6 +1190,21 @@ export function makeNppCorpDecision(
   }
   if (targetDividendRate !== (corp.dividendRate ?? 0)) {
     updates.dividendRate = targetDividendRate;
+  }
+
+  if (passive) {
+    updates.marketingBudget = 0;
+    updates.logisticsBudget = 0;
+    updates.rdBudget = 0;
+    updates.dividendRate = 0;
+    return {
+      corpId: corp._id,
+      updates,
+      liquidCapitalDelta: 0,
+      cashFloorLocal: effectiveCashFloor,
+      sectorUpdates,
+      strategy: strategyDecision?.state,
+    };
   }
 
   // ── 5. Sector expansion ───────────────────────────────────────────────────

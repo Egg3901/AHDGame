@@ -38,6 +38,8 @@ export interface NppCorpDecisionContext {
    * already holds; absent reads as 0 so pure unit tests stay db-free.
    */
   competitorCountOf?: (stateId: string, sectorType: string, ownCorporationId: string) => number;
+  /** Player-appointed caretaker mandate. NPP-owned corporations are always active. */
+  caretakerMandate?: "active" | "passive";
 }
 
 /** A composable sector write emitted by the NPP corporation decision engine. */
