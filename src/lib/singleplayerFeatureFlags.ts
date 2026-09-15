@@ -62,7 +62,9 @@ export const SINGLEPLAYER_FEATURE_FLAGS: readonly SingleplayerFeatureFlagOption[
   DEFAULT_GAME_STATE_FLAGS
 )
   .filter((entry): entry is [BooleanDefaultKey, boolean] => typeof entry[1] === "boolean")
-  .filter(([key]) => key !== "nppAutonomyEnabled")
+  .filter(
+    (entry): entry is [SingleplayerFeatureFlagKey, boolean] => entry[0] !== "nppAutonomyEnabled"
+  )
   .map(([key, defaultEnabled]) => ({
     key,
     label: LABELS[key],

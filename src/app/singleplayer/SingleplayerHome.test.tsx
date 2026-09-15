@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { SingleplayerStatus } from "@/lib/singleplayerServer";
 import { DEFAULT_SINGLEPLAYER_FEATURE_FLAGS } from "@/lib/singleplayerFeatureFlags";
 import { SingleplayerHome } from "./SingleplayerHome";
 
@@ -14,7 +15,7 @@ const emptyStatus = {
   turnInProgress: false,
   playerless: true,
   warmAssets: [],
-} as never;
+} as unknown as SingleplayerStatus;
 
 describe("SingleplayerHome new-game rules", () => {
   beforeEach(() => {
@@ -24,14 +25,12 @@ describe("SingleplayerHome new-game rules", () => {
   });
 
   it("shows shipped rule defaults and submits changed rules plus the complete feature map", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify({ logs: [] }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        })
-      );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ logs: [] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
     render(<SingleplayerHome status={emptyStatus} />);
 
     expect((screen.getByLabelText("Career") as HTMLInputElement).checked).toBe(true);
@@ -60,7 +59,7 @@ describe("SingleplayerHome new-game rules", () => {
 
   it("keeps an existing world until the second destructive click", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("{}"));
-    render(<SingleplayerHome status={{ ...emptyStatus, hasWorld: true } as never} />);
+    render(<SingleplayerHome status={{ ...emptyStatus, hasWorld: true }} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     expect(fetchMock).not.toHaveBeenCalled();
