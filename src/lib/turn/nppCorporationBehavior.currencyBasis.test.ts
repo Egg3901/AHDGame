@@ -142,7 +142,9 @@ describe("NPP decisions in a non-anchor currency", () => {
       countryId: "US",
       headquartersState: "NY",
       liquidCurrencyCode: "USD",
-      liquidCapital: 0,
+      // Keep this currency-focused fixture above the cautious cash floor.
+      // Cash-crisis budget behavior is covered by cashRails.test.ts.
+      liquidCapital: 1_000_000,
     });
     const foreignSectors = [
       {

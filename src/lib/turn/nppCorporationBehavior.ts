@@ -133,7 +133,7 @@ import {
 } from "@/lib/turn/npp/capacityWriteback";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
+import { getNppCashFloorAnchor } from "@/lib/turn/npp/nppCashReserve";
 import { loadNppBehaviorConfig } from "@/lib/turn/npp/behaviorConfig";
 import { maybePushNppTechUnlock } from "@/lib/turn/npp/corpBehaviorConfig";
 import {
@@ -172,7 +172,6 @@ import {
   NPP_GROWTH_MAX_STEP_OF_RUN,
   NPP_REINVEST_MAX_SECTORS_PER_TURN,
   NPP_REINVEST_MAINTENANCE_CASH_SHARE,
-  CASH_FLOOR,
   EXPANSION_COST,
   EXPANSION_MIN_CASH,
   EXPANSION_MIN_MARGIN,
@@ -180,7 +179,6 @@ import {
   NPP_FOUNDING_DEPLOY_FRACTION,
   NPP_FOUNDING_HEADROOM_SHARE,
   NPP_EXTRACTION_FOUNDING_MAX_FACILITIES,
-  SAFE_CASH_FLOOR_MIN,
   MAX_DIVIDEND_RATE,
   DEFAULT_ARCHETYPE,
   GLUT_MOTHBALL_FILL_THRESHOLD,
@@ -574,7 +572,16 @@ export async function processNppCorporationDecisions(
     // Sector tech tree: auto-unlock one node per turn when affordable; see
     // corpBehaviorConfig.
     if (techTreesEnabled) {
-      maybePushNppTechUnlock({ corp, sectors, techCurrentYear, turn, now, corpUpdates });
+      maybePushNppTechUnlock({
+        corp,
+        sectors,
+        techCurrentYear,
+        turn,
+        now,
+        corpUpdates,
+        liquidCapitalDelta: decision.liquidCapitalDelta,
+        cashReserve: decision.cashFloorLocal,
+      });
     }
 
     if (decision.strategy) {
@@ -675,13 +682,8 @@ export function makeNppCorpDecision(
   // Archetype-adjusted levers, each clamped to a safe rail so no personality can
   // bankrupt a profitable corp. Clamped in ₳ (where the rails are authored),
   // then converted once into the currency `liquidCapital` is compared in.
-  const eraMoney = (amountAnchor: number): number =>
-    plants?.enabled ? getEraNominalAmount(amountAnchor, plants.preset) : amountAnchor;
   const effectiveCashFloor = toCorpLocal(
-    Math.max(
-      eraMoney(SAFE_CASH_FLOOR_MIN),
-      Math.round(eraMoney(CASH_FLOOR) * modifiers.cashFloorMult)
-    )
+    getNppCashFloorAnchor(plants?.enabled ? plants.preset : undefined, modifiers.cashFloorMult)
   );
   const effectiveExpansionMinMargin = EXPANSION_MIN_MARGIN * modifiers.expansionMinMarginMult;
   const effectiveExpansionMinCash = toCorpLocal(
@@ -1135,8 +1137,11 @@ export function makeNppCorpDecision(
   let marketingPct: number;
   let logisticsPct: number;
   let rdPct: number;
-  if (!isProfitable || totalRevenue === 0) {
-    // Losing money: cut everything to minimum
+  const isCashCrisis = liquidCapital <= effectiveCashFloor;
+  if (!isProfitable || totalRevenue === 0 || isCashCrisis) {
+    // Losing money or below the safety floor: cut everything to minimum.
+    // Profitability cannot justify discretionary spend when the corporation
+    // lacks the cash buffer needed to absorb the next operating turn.
     marketingPct = 0.005;
     logisticsPct = 0.003;
     rdPct = 0;
@@ -1947,6 +1952,7 @@ export function makeNppCorpDecision(
     // up, a founding cost or growth capex down — so this one subtraction is the
     // net movement whichever path ran. See `nppCashWrite.ts`.
     liquidCapitalDelta: cashLocal - liquidCapital,
+    cashFloorLocal: effectiveCashFloor,
     sectorUpdates,
     newSectors: newSectors.length > 0 ? newSectors : undefined,
     divestedSectorIds: divestedSectorIds.length > 0 ? divestedSectorIds : undefined,

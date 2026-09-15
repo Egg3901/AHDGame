@@ -324,6 +324,27 @@ describe("buildCapacity — build", () => {
     );
   });
 
+  it("rejects an owner build while an NPP operates the corporation", async () => {
+    await wireMocks(sectorDoc());
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        ...corporation,
+        ceoType: "npp",
+      },
+    } as never);
+
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toContain("Resume player control");
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
   it("rejects non-positive and absurd unit counts", async () => {
     await wireMocks(sectorDoc());
     expect((await buildCapacity(request({ action: "build", units: 0 }), { params })).status).toBe(
