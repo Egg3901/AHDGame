@@ -237,7 +237,7 @@ function driverHint(label: string, unit: "pts" | "%"): string {
     case "Money":
       return "Compares recent campaign spending: this turn counts fully, earlier spending fades over a few idle turns. Saved treasuries do not count.";
     case "Incumbency":
-      return "The sitting president's party carries an approval-scaled shield at high approval, or an approval-scaled drag when approval is low.";
+      return "The sitting president's party carries an approval-scaled shield at high approval, or an approval-scaled drag when approval is low. An open seat with no sitting president reads 0.";
     default:
       return unit === "%"
         ? "A direct tilt to vote share in %, not points of the persuadable slice."

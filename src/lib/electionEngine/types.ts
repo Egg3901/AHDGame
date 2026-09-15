@@ -281,11 +281,14 @@ export interface DistributeVotesOptions {
    *
    * Models the codebase's vote-share → seat-share allocation for multi-
    * seat races (US House, UK Regional Council, JP Shugiin/Sangiin, DE
-   * Bundestag, etc). Single-seat races do NOT use this map: executives use
-   * `incumbentPartyId` (approval curve) and US Senate uses
-   * `legislativeIncumbentPartyId` (flat shield). The map holds raw prior-cycle
-   * vote shares, so a single-seat race would otherwise yield a meaningless
-   * margin-scaled value.
+   * Bundestag, etc). Races with an officeholder incumbency path do NOT use
+   * this map: single-winner executives use `incumbentPartyId` (approval curve)
+   * and US Senate uses `legislativeIncumbentPartyId` (flat shield). The map
+   * holds raw prior-cycle vote shares, so for a single winner it would
+   * otherwise yield a meaningless margin-scaled value — and on a vacant seat,
+   * an incumbency bonus with no incumbent. Enforced by
+   * `usesSeatShareIncumbency` in `incumbentSeatShare.ts`, whose doc records the
+   * one case still left on this path by design.
    *
    * Plumbed in A1 from `2026-05-22-swing-flow-driver-activation.md`;
    * consumed by `persuasionDrivers.ts`.
@@ -296,8 +299,11 @@ export interface DistributeVotesOptions {
    * and approval (0..100). When `incumbentPartyId` is set, the incumbency
    * driver switches to a full-magnitude directional shield/drag scaled by
    * `incumbentApproval` (see `approvalAdjustedIncumbencyBudget`). Unset for
-   * legislatures / primaries / vacant offices → driver keeps the seat-share
-   * fallback. Plumbed from `2026-06-22-incumbency-approval-bonus-design.md`.
+   * legislatures / primaries / vacant offices. A vacant executive office is an
+   * OPEN seat: `incumbentSeatShareByParty` is empty for single-winner races
+   * (see `usesSeatShareIncumbency`), so the driver reads 0 rather than
+   * inheriting the prior holder's vote margin.
+   * Plumbed from `2026-06-22-incumbency-approval-bonus-design.md`.
    */
   incumbentPartyId?: string;
   incumbentApproval?: number;
