@@ -32,6 +32,7 @@ import {
 } from "@/lib/electionEngine/constants";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
+import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
 import { logger } from "../observability/logger";
 
 export interface CampaignTurnResults {
@@ -309,70 +310,101 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         );
         const candidateRowIds = candidateRows.map((row) => row._id);
 
-        const [playerEndorsementCounts, governorEndorsementCounts, executiveEndorsementCounts] =
-          await Promise.all([
-            candidateRowIds.length > 0
-              ? db
-                  .collection("playerEndorsements")
-                  .aggregate<{
-                    _id: { electionId: ObjectId; candidateId: ObjectId };
-                    count: number;
-                  }>([
-                    {
-                      $match: {
-                        electionId: { $in: campaignElectionIds },
-                        candidateId: { $in: candidateRowIds },
-                        isActive: true,
-                      },
+        const [
+          nppEndorsementCounts,
+          playerEndorsementCounts,
+          governorEndorsementCounts,
+          executiveEndorsementCounts,
+        ] = await Promise.all([
+          db
+            .collection("nppEndorsements")
+            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+              {
+                // Active AND visible: the shared filter hides legacy
+                // `source: "organic"` rows, and it is the same filter the
+                // campaign panel counts with, so the accrual the engine grants
+                // and the figure the panel promises cannot drift apart.
+                $match: buildActiveVisibleNppEndorsementFilter({
+                  electionId: { $in: campaignElectionIds },
+                  candidateId: { $in: campaignCandidateIds },
+                }),
+              },
+              {
+                $group: {
+                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                  count: { $sum: 1 },
+                },
+              },
+            ])
+            .toArray(),
+          candidateRowIds.length > 0
+            ? db
+                .collection("playerEndorsements")
+                .aggregate<{
+                  _id: { electionId: ObjectId; candidateId: ObjectId };
+                  count: number;
+                }>([
+                  {
+                    $match: {
+                      electionId: { $in: campaignElectionIds },
+                      candidateId: { $in: candidateRowIds },
+                      isActive: true,
                     },
-                    {
-                      $group: {
-                        _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                        count: { $sum: 1 },
-                      },
+                  },
+                  {
+                    $group: {
+                      _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                      count: { $sum: 1 },
                     },
-                  ])
-                  .toArray()
-              : Promise.resolve([]),
-            db
-              .collection("governorEndorsements")
-              .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-                {
-                  $match: {
-                    electionId: { $in: campaignElectionIds },
-                    candidateId: { $in: campaignCandidateIds },
-                    isActive: true,
                   },
+                ])
+                .toArray()
+            : Promise.resolve([]),
+          db
+            .collection("governorEndorsements")
+            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+              {
+                $match: {
+                  electionId: { $in: campaignElectionIds },
+                  candidateId: { $in: campaignCandidateIds },
+                  isActive: true,
                 },
-                {
-                  $group: {
-                    _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                    count: { $sum: 1 },
-                  },
+              },
+              {
+                $group: {
+                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                  count: { $sum: 1 },
                 },
-              ])
-              .toArray(),
-            db
-              .collection("executiveEndorsements")
-              .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-                {
-                  $match: {
-                    electionId: { $in: campaignElectionIds },
-                    candidateId: { $in: campaignCandidateIds },
-                    isActive: true,
-                  },
+              },
+            ])
+            .toArray(),
+          db
+            .collection("executiveEndorsements")
+            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+              {
+                $match: {
+                  electionId: { $in: campaignElectionIds },
+                  candidateId: { $in: campaignCandidateIds },
+                  isActive: true,
                 },
-                {
-                  $group: {
-                    _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                    count: { $sum: 1 },
-                  },
+              },
+              {
+                $group: {
+                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                  count: { $sum: 1 },
                 },
-              ])
-              .toArray(),
-          ]);
+              },
+            ])
+            .toArray(),
+        ]);
 
         const endorsementKey = (eId: ObjectId, cId: ObjectId) => `${eId}:${cId}`;
+        const nppEndorsementMap = new Map(
+          nppEndorsementCounts.map((e) => [
+            endorsementKey(e._id.electionId, e._id.candidateId),
+            e.count,
+          ])
+        );
         const playerEndorsementMap = new Map(
           playerEndorsementCounts
             .map((e): [string, number] | null => {
@@ -453,6 +485,15 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
             // Look up pre-fetched endorsement counts
             const eKey = endorsementKey(campaign.electionId, campaign.candidateId);
+            /*
+             * NPP endorsements grant campaign actions in every race type. They
+             * are arranged rather than organic, so they are farmable in a way
+             * player endorsements are not, but accrual is
+             * baseline + floor(sqrt(n) * 3): the marginal yield of the n-th
+             * arranged endorsement falls away on its own, which is what bounds
+             * the farming rather than a cap.
+             */
+            const nppEndorsementCount = nppEndorsementMap.get(eKey) ?? 0;
             const playerEndorsementCount = playerEndorsementMap.get(eKey) ?? 0;
             /*
              * Player endorsements only grant campaign actions for presidential races.
@@ -480,7 +521,8 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             const executiveEndorsementCount = executiveEndorsementMap.get(eKey) ?? 0;
             const baseline = campaign.candidateIsNPP ? nppBaseActions : playerBaseActions;
             const actions = calculateCampaignActions(
-              effectivePlayerEndorsements +
+              nppEndorsementCount +
+                effectivePlayerEndorsements +
                 (governorEndorsementCount + executiveEndorsementCount) *
                   GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS,
               baseline
