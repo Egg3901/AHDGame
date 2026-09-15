@@ -142,7 +142,7 @@ describe("singleplayer maintenance recovery", () => {
     const db = createMockDb();
 
     await setSingleplayerConfig(db as unknown as Db, {
-      mode: "career",
+      mode: "normal",
       difficulty: "hard",
       nppAutonomyLevel: "v4",
       permanentHeadOfState: true,
@@ -151,7 +151,7 @@ describe("singleplayer maintenance recovery", () => {
 
     const set = db.collectionMocks.gameState.updateOne.mock.calls[0]?.[1].$set;
     expect(set.singleplayerConfig).toMatchObject({
-      mode: "career",
+      mode: "normal",
       difficulty: "hard",
       nppAutonomyLevel: "v4",
       permanentHeadOfState: true,
