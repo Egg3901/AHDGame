@@ -55,6 +55,7 @@ import {
 import { getAnomalyScanCadencePredicate } from "@/simulation/phases/anomalyScanCadence";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { reconcileFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
+import type { CompletedTurnPhaseObservation } from "@/simulation/engine/types";
 
 // Re-export public helpers consumed by other modules
 export {
@@ -212,7 +213,12 @@ interface CrashedTurnRecovery {
   appliedPhases: Set<string>;
 }
 
-export async function processTurn(): Promise<{
+export async function processTurn(
+  options: {
+    /** Sandbox tooling hook. Production callers omit it. */
+    onPhaseCompleted?: (phase: CompletedTurnPhaseObservation) => Promise<void>;
+  } = {}
+): Promise<{
   success: boolean;
   turn: number;
   message: string;
@@ -527,6 +533,7 @@ export async function processTurn(): Promise<{
       ),
       // Audit traceId convention "turn:<n>:<phase>" (forensics plan §3.1, T2.7).
       turn: nextTurnNumber,
+      onPhaseCompleted: options.onPhaseCompleted,
     });
 
     activeTurn = context.newTurn;

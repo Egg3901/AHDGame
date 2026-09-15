@@ -61,6 +61,7 @@
         "banking": "Banking"
       },
       "staff": {
+        "localWorld": "Local World",
         "adminPanel": "Admin Panel",
         "modPanel": "Mod Panel",
         "opsDashboard": "Ops Dashboard",

@@ -44,9 +44,11 @@ import { MOBILE_MENU_PANEL_CLASS } from "@/components/navbar/dropdownStyles";
 import { bypassNextImageOptimization } from "@/lib/images/bypassImageOptimization";
 import { Chevron, NavIcon, isNavActive } from "./experimentalNavPrimitives";
 import type {
+  AdminCharacter,
   CharacterProfile,
   CharterNavEntry,
   ExperimentalNavItem,
+  ImperialCharacterNav,
   MobileSubKey,
   NavLinkRef,
 } from "./experimentalNavTypes";
@@ -63,6 +65,13 @@ export interface ExperimentalMobileMenuProps {
   characterProfile?: CharacterProfile;
   profileDisplayName: string;
   unreadCount: number;
+  isImperialMode: boolean;
+  adminCharacters?: AdminCharacter[];
+  imperialCharacter?: ImperialCharacterNav;
+  switchingCharacter: boolean;
+  switchingImperial: boolean;
+  handleSwitchCharacter: (characterId: string) => Promise<void>;
+  handleSwitchImperial: (type: "character" | "imperial") => Promise<void>;
   currentParty?: { id: string; name: string; countryId: string };
   homeState?: { id: string; name: string; countryId: string };
   activeElection?: { id: string; seatId?: string; label: string };
@@ -96,6 +105,13 @@ export function ExperimentalMobileMenu({
   characterProfile,
   profileDisplayName,
   unreadCount,
+  isImperialMode,
+  adminCharacters,
+  imperialCharacter,
+  switchingCharacter,
+  switchingImperial,
+  handleSwitchCharacter,
+  handleSwitchImperial,
   currentParty,
   homeState,
   activeElection,
@@ -229,6 +245,18 @@ export function ExperimentalMobileMenu({
               )}
             </div>
           </div>
+          {((adminCharacters && adminCharacters.length > 1) || imperialCharacter) && (
+            <MobileCharacterSwitcher
+              adminCharacters={adminCharacters}
+              imperialCharacter={imperialCharacter}
+              isImperialMode={isImperialMode}
+              switchingCharacter={switchingCharacter}
+              switchingImperial={switchingImperial}
+              onClose={onClose}
+              handleSwitchCharacter={handleSwitchCharacter}
+              handleSwitchImperial={handleSwitchImperial}
+            />
+          )}
           <Link
             href="/changelog"
             onClick={onClose}
@@ -674,6 +702,93 @@ export function ExperimentalMobileMenu({
           >
             {t("common.register")}
           </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface MobileCharacterSwitcherProps {
+  adminCharacters?: AdminCharacter[];
+  imperialCharacter?: ImperialCharacterNav;
+  isImperialMode: boolean;
+  switchingCharacter: boolean;
+  switchingImperial: boolean;
+  onClose: () => void;
+  handleSwitchCharacter: (characterId: string) => Promise<void>;
+  handleSwitchImperial: (type: "character" | "imperial") => Promise<void>;
+}
+
+export function MobileCharacterSwitcher({
+  adminCharacters,
+  imperialCharacter,
+  isImperialMode,
+  switchingCharacter,
+  switchingImperial,
+  onClose,
+  handleSwitchCharacter,
+  handleSwitchImperial,
+}: MobileCharacterSwitcherProps) {
+  const t = useTranslations("nav");
+  return (
+    <div className="border-t border-card-border px-2 py-2">
+      <div className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
+        {t("userMenu.characters")}
+      </div>
+      {adminCharacters?.map((char) =>
+        char.isActive && !isImperialMode ? (
+          <Link
+            key={char.id}
+            href="/profile"
+            onClick={onClose}
+            className="flex items-center justify-between rounded-lg px-2 py-2 text-sm text-foreground transition-colors hover:bg-white/5"
+          >
+            <span>{char.name}</span>
+            <span className="text-xs font-medium text-primary">{t("common.active")}</span>
+          </Link>
+        ) : (
+          <button
+            key={char.id}
+            type="button"
+            onClick={() => {
+              onClose();
+              void (isImperialMode
+                ? handleSwitchImperial("character")
+                : handleSwitchCharacter(char.id));
+            }}
+            disabled={isImperialMode ? switchingImperial : switchingCharacter}
+            className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
+          >
+            <span>{char.name}</span>
+            <span className="text-xs text-muted/60">{char.countryId}</span>
+          </button>
+        )
+      )}
+      {imperialCharacter && (
+        <div className="mt-1 border-t border-card-border/40 pt-1">
+          {isImperialMode ? (
+            <Link
+              href={`/imperial/${imperialCharacter.id}`}
+              onClick={onClose}
+              className="flex items-center justify-between rounded-lg px-2 py-2 text-sm text-foreground transition-colors hover:bg-white/5"
+            >
+              <span>{imperialCharacter.name}</span>
+              <span className="text-xs font-medium text-primary">{t("common.active")}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                void handleSwitchImperial("imperial");
+              }}
+              disabled={switchingImperial}
+              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-sm text-muted transition-colors hover:bg-white/5 disabled:opacity-50"
+            >
+              <span>{imperialCharacter.name}</span>
+              <span className="text-xs text-amber-400/70">{t("common.imperial")}</span>
+            </button>
+          )}
         </div>
       )}
     </div>

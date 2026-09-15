@@ -15,7 +15,7 @@ import {
 } from "@/lib/observability/mongoRoundTrips";
 import { roundTripBudgetFor } from "./turnPhaseBudgets";
 import { withSpan } from "@/lib/observability/spans";
-import type { TurnPhaseRuntime } from "@/simulation/engine/types";
+import type { CompletedTurnPhaseObservation, TurnPhaseRuntime } from "@/simulation/engine/types";
 import { TURN_LOCK_HEARTBEAT_MS, PHASE_TIMEOUT_MS } from "@/lib/turn/processingLock";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { runInAuditContext, turnPhaseTraceId } from "@/lib/observability/context";
@@ -107,8 +107,18 @@ export function createTurnPhaseRuntime(input: {
    * audit spine don't have to thread it through; defaults to 0.
    */
   turn?: number;
+  /** Sandbox tooling hook. Omitted by production turn execution. */
+  onPhaseCompleted?: (phase: CompletedTurnPhaseObservation) => Promise<void>;
 }): TurnPhaseRuntime {
-  const { db, phaseStatuses, warnings, currentPhaseRef, shouldRunPhase, alreadyApplied } = input;
+  const {
+    db,
+    phaseStatuses,
+    warnings,
+    currentPhaseRef,
+    shouldRunPhase,
+    alreadyApplied,
+    onPhaseCompleted,
+  } = input;
   const turn = input.turn ?? 0;
   let lastFlushAtMs = 0;
 
@@ -268,6 +278,7 @@ export function createTurnPhaseRuntime(input: {
         timeoutPromise,
       ]);
       const phaseDurationMs = Date.now() - phaseStart;
+      if (onPhaseCompleted) await onPhaseCompleted({ name, result });
       Sentry.addBreadcrumb({
         category: "turn.phase",
         message: `Phase "${name}" completed`,

@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { SingleplayerStatus } from "@/lib/singleplayerServer";
+import {
+  DEFAULT_SINGLEPLAYER_FEATURE_FLAGS,
+  SINGLEPLAYER_FEATURE_FLAGS,
+  type SingleplayerFeatureFlagKey,
+} from "@/lib/singleplayerFeatureFlags";
 
 interface BriefingItem {
   category: string;
@@ -28,6 +33,15 @@ export function SingleplayerAdmin({
   const [briefing, setBriefing] = useState<BriefingItem[]>([]);
   const [difficulty, setDifficulty] = useState(status.setup?.difficulty ?? "normal");
   const [autonomy, setAutonomy] = useState(status.setup?.autonomyLevel ?? "off");
+  const [featureFlags, setFeatureFlags] = useState<Record<SingleplayerFeatureFlagKey, boolean>>(
+    () =>
+      Object.fromEntries(
+        SINGLEPLAYER_FEATURE_FLAGS.map(({ key }) => [
+          key,
+          status.setup?.featureFlags?.[key] ?? DEFAULT_SINGLEPLAYER_FEATURE_FLAGS[key],
+        ])
+      ) as Record<SingleplayerFeatureFlagKey, boolean>
+  );
   const [diagnostics, setDiagnostics] = useState<string | null>(null);
 
   const changeAvailability = async (next: "open" | "sealed") => {
@@ -58,7 +72,7 @@ export function SingleplayerAdmin({
       const response = await fetch("/api/singleplayer/operator/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ difficulty, autonomyLevel: autonomy }),
+        body: JSON.stringify({ difficulty, autonomyLevel: autonomy, featureFlags }),
       });
       const body = (await response.json().catch(() => null)) as { error?: string } | null;
       if (!response.ok) throw new Error(body?.error ?? "Could not save world rules");
@@ -229,6 +243,37 @@ export function SingleplayerAdmin({
                   <option value="v5">V5</option>
                 </select>
               </label>
+            </div>
+            <div className="mt-4">
+              <p className="text-sm font-medium">Feature flags</p>
+              <p className="mt-1 text-xs text-muted">
+                Running-world gates. Saving updates the stored config and the live world together.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {SINGLEPLAYER_FEATURE_FLAGS.map((flag) => (
+                  <label
+                    key={flag.key}
+                    className="flex cursor-pointer gap-3 rounded border border-card-border p-3"
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={flag.label}
+                      checked={featureFlags[flag.key]}
+                      onChange={(event) =>
+                        setFeatureFlags((current) => ({
+                          ...current,
+                          [flag.key as SingleplayerFeatureFlagKey]: event.target.checked,
+                        }))
+                      }
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">{flag.label}</span>
+                      <span className="block text-xs text-muted">{flag.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
             <button
               disabled={busy}

@@ -51,7 +51,7 @@ import {
 import { buildNationalDetailsSections } from "@/components/navbar/nationDetailsSections";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
 import { visibleProfileOrgItems } from "@/components/navbar/profileNavItems";
-import { visibleStaffNavItems } from "@/components/navbar/staffNavItems";
+import { viewerIsSingleplayerOwner, visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import {
   Chevron,
   DropdownPanel,
@@ -337,7 +337,11 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
 
   const staffSubItems =
     user?.isAdmin || user?.isModerator
-      ? visibleStaffNavItems({ isAdmin: !!user?.isAdmin, isModerator: !!user?.isModerator })
+      ? visibleStaffNavItems({
+          isAdmin: !!user?.isAdmin,
+          isModerator: !!user?.isModerator,
+          isSingleplayerOwner: viewerIsSingleplayerOwner(user),
+        })
       : [];
 
   // ── Dropdown panels ────────────────────────────────────────────────────────
@@ -1067,6 +1071,13 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               characterProfile={characterProfile}
               profileDisplayName={profileDisplayName}
               unreadCount={unreadCount}
+              isImperialMode={isImperialMode}
+              adminCharacters={adminCharacters}
+              imperialCharacter={imperialCharacter}
+              switchingCharacter={switchingCharacter}
+              switchingImperial={switchingImperial}
+              handleSwitchCharacter={handleSwitchCharacter}
+              handleSwitchImperial={handleSwitchImperial}
               currentParty={currentParty}
               homeState={homeState}
               activeElection={activeElection}
