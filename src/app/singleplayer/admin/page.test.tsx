@@ -91,6 +91,15 @@ describe("SingleplayerAdminPage owner routing", () => {
     expect(screen.getByText("Paused and sealed")).toBeTruthy();
   });
 
+  it("resolves the viewer after status repairs owner-admin", async () => {
+    mocks.admin.mockResolvedValue(null);
+
+    await expect(redirectUrl(() => SingleplayerAdminPage())).resolves.toBe("/profile");
+    expect(mocks.status.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.admin.mock.invocationCallOrder[0]!
+    );
+  });
+
   it("returns a non-owner with a character to the game", async () => {
     mocks.admin.mockResolvedValue(null);
 

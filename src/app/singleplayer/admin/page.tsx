@@ -16,11 +16,14 @@ export const dynamic = "force-dynamic";
 export default async function SingleplayerAdminPage() {
   if (!isSingleplayer()) notFound();
   const db = await getDb();
-  const [status, mode, admin] = await Promise.all([
+  const [status, mode] = await Promise.all([
     singleplayerStatus(db),
     getSingleplayerWorldAvailability(db),
-    getAuthAdmin(),
   ]);
+  // Status repairs owner-admin on pre-existing worlds with no admin yet, so
+  // resolve the viewer only after it lands: a concurrent read could otherwise
+  // bounce the owner back to the game on their first visit.
+  const admin = await getAuthAdmin();
   if (!admin) {
     redirect(
       status.mode === "worldsim"

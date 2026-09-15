@@ -103,6 +103,13 @@ describe("PATCH /api/singleplayer/operator/config", () => {
     expect(mocks.setSingleplayerConfig).not.toHaveBeenCalled();
   });
 
+  it("rejects unknown top-level keys before writes", async () => {
+    const response = await PATCH(request({ difficulty: "hard", godMode: true }));
+
+    expect(response.status).toBe(400);
+    expect(mocks.setSingleplayerConfig).not.toHaveBeenCalled();
+  });
+
   it("rejects an empty patch", async () => {
     const response = await PATCH(request({}));
 
