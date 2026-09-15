@@ -58,6 +58,11 @@ export interface CampaignBlendInput {
   runningMateName: string | null;
   rail: CampaignRail;
   ledgerPage: number;
+  /** Which ledger tab is open. Defaults to the activity log. */
+  ledgerTab?: LedgerTab;
+  /** Page within the endorsements tab, tracked separately from `ledgerPage`. */
+  endorsementPage?: number;
+  endorsementFilter?: EndorsementFilter;
   expandedCategory: UpgradeCategory | null;
 }
 
@@ -120,6 +125,21 @@ export interface LedgerRowVM {
   cost: string;
   demoted: boolean;
   reason: string | null;
+}
+
+export type LedgerTab = "activity" | "endorsements";
+export type EndorsementFilter = "all" | "player" | "npp";
+
+export interface EndorsementRowVM {
+  kind: "player" | "npp";
+  /**
+   * What the reader calls this endorser. "NPP" is an internal word for a
+   * non-player politician and never reaches the panel.
+   */
+  kindLabel: string;
+  name: string;
+  /** Endorsement rows carry a date, not a turn: the records store no turn. */
+  sinceText: string;
 }
 
 export interface SparklineBarVM {
@@ -208,7 +228,16 @@ export interface CampaignBlendVM {
   ops: OpsRowVM[];
   money: MoneyVM | null;
   ledger: {
+    tab: LedgerTab;
+    /** Activity rows. Empty while the endorsements tab is open. */
     rows: LedgerRowVM[];
+    /** Endorser rows. Empty while the activity tab is open. */
+    endorsementRows: EndorsementRowVM[];
+    filter: EndorsementFilter;
+    /** Unfiltered totals, so the chips say what sits behind each filter. */
+    filterCounts: { all: number; player: number; npp: number };
+    emptyText: string;
+    /** Pager state belongs to whichever tab is open. */
     rangeText: string;
     pageText: string;
     hasPager: boolean;
@@ -473,10 +502,41 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     : null;
 
   // ── Ledger ────────────────────────────────────────────────────────────────
-  const pageCount = Math.max(1, Math.ceil(history.length / LEDGER_PAGE_SIZE));
-  const page = Math.min(Math.max(0, inp.ledgerPage), pageCount - 1);
+  // Two tabs share one pager. The open tab decides which list is paged, so the
+  // pager reports that list's length rather than the other one's.
+  const ledgerTab: LedgerTab = inp.ledgerTab ?? "activity";
+  const endorsementFilter: EndorsementFilter = inp.endorsementFilter ?? "all";
+  const allEndorsements = campaign.endorsements ?? [];
+  const filteredEndorsements =
+    endorsementFilter === "all"
+      ? allEndorsements
+      : allEndorsements.filter((e) => e.kind === endorsementFilter);
+
+  const pagedLength = ledgerTab === "endorsements" ? filteredEndorsements.length : history.length;
+  const requestedPage = ledgerTab === "endorsements" ? (inp.endorsementPage ?? 0) : inp.ledgerPage;
+  const pageCount = Math.max(1, Math.ceil(pagedLength / LEDGER_PAGE_SIZE));
+  // Clamp rather than trust the caller: narrowing the filter can strand the
+  // viewer on a page the shorter list no longer has.
+  const page = Math.min(Math.max(0, requestedPage), pageCount - 1);
   const start = page * LEDGER_PAGE_SIZE;
-  const pageRows = history.slice(start, start + LEDGER_PAGE_SIZE);
+
+  const endorsementRows: EndorsementRowVM[] =
+    ledgerTab === "endorsements"
+      ? filteredEndorsements.slice(start, start + LEDGER_PAGE_SIZE).map((e) => ({
+          kind: e.kind,
+          kindLabel: e.kind === "npp" ? "Politician" : "Player",
+          name: e.name,
+          sinceText: e.since
+            ? new Date(e.since).toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })
+            : "",
+        }))
+      : [];
+
+  const pageRows = ledgerTab === "activity" ? history.slice(start, start + LEDGER_PAGE_SIZE) : [];
 
   const ledgerRows: LedgerRowVM[] = pageRows.map((a) => {
     const demoted = a.type === "downgrade";
@@ -571,12 +631,26 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     ops,
     money: money_,
     ledger: {
+      tab: ledgerTab,
       rows: ledgerRows,
-      rangeText: history.length
-        ? `${start + 1}-${start + pageRows.length} of ${history.length}`
+      endorsementRows,
+      filter: endorsementFilter,
+      filterCounts: {
+        all: allEndorsements.length,
+        player: allEndorsements.filter((e) => e.kind === "player").length,
+        npp: allEndorsements.filter((e) => e.kind === "npp").length,
+      },
+      emptyText:
+        ledgerTab === "endorsements"
+          ? endorsementFilter === "all"
+            ? "No one has endorsed this campaign yet."
+            : "No endorsements from this source yet."
+          : "Nothing has been bought yet.",
+      rangeText: pagedLength
+        ? `${start + 1}-${start + (ledgerTab === "endorsements" ? endorsementRows.length : pageRows.length)} of ${pagedLength}`
         : "0 of 0",
       pageText: `Page ${page + 1} of ${pageCount}`,
-      hasPager: history.length > LEDGER_PAGE_SIZE,
+      hasPager: pagedLength > LEDGER_PAGE_SIZE,
       canPrev: page > 0,
       canNext: page < pageCount - 1,
       page,

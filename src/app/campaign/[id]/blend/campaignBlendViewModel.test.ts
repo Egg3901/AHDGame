@@ -435,6 +435,103 @@ describe("ledger", () => {
   });
 });
 
+describe("ledger endorsements tab", () => {
+  function endorsers(n: number, kind: "player" | "npp" = "npp") {
+    return Array.from({ length: n }, (_, i) => ({
+      kind,
+      name: `${kind === "npp" ? "Politician" : "Player"} ${i + 1}`,
+      since: `2026-05-${String((i % 28) + 1).padStart(2, "0")}T00:00:00.000Z`,
+    }));
+  }
+
+  it("lists endorsers instead of activity when the endorsements tab is open", () => {
+    const campaign = campaignFixture({
+      endorsements: [
+        { kind: "npp", name: "Carol Martin", since: "2026-05-05T00:00:00.000Z" },
+        { kind: "player", name: "Richard Nixon", since: "2026-05-04T00:00:00.000Z" },
+      ],
+    });
+    const vm = buildCampaignBlendViewModel(input({ campaign, ledgerTab: "endorsements" }));
+
+    expect(vm.ledger.tab).toBe("endorsements");
+    expect(vm.ledger.endorsementRows.map((r) => r.name)).toEqual(["Carol Martin", "Richard Nixon"]);
+    expect(vm.ledger.endorsementRows[0].kindLabel).toBe("Politician");
+    expect(vm.ledger.endorsementRows[1].kindLabel).toBe("Player");
+  });
+
+  it("narrows the list to one source when the filter names it", () => {
+    const campaign = campaignFixture({
+      endorsements: [
+        { kind: "npp", name: "Carol Martin", since: "2026-05-05T00:00:00.000Z" },
+        { kind: "player", name: "Richard Nixon", since: "2026-05-04T00:00:00.000Z" },
+      ],
+    });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "endorsements", endorsementFilter: "player" })
+    );
+
+    expect(vm.ledger.endorsementRows.map((r) => r.name)).toEqual(["Richard Nixon"]);
+    // The chips report the unfiltered totals, so switching filters does not
+    // change what the chips say is available behind them.
+    expect(vm.ledger.filterCounts).toEqual({ all: 2, player: 1, npp: 1 });
+  });
+
+  it("pages endorsers ten to a page like the activity tab", () => {
+    const campaign = campaignFixture({ endorsements: endorsers(23) });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "endorsements", endorsementPage: 1 })
+    );
+
+    expect(vm.ledger.endorsementRows).toHaveLength(LEDGER_PAGE_SIZE);
+    expect(vm.ledger.pageCount).toBe(3);
+    expect(vm.ledger.canPrev).toBe(true);
+    expect(vm.ledger.canNext).toBe(true);
+    expect(vm.ledger.rangeText).toBe("11-20 of 23");
+  });
+
+  it("pages the filtered list, not the whole one", () => {
+    const campaign = campaignFixture({
+      endorsements: [...endorsers(12, "npp"), ...endorsers(3, "player")],
+    });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "endorsements", endorsementFilter: "player" })
+    );
+
+    expect(vm.ledger.hasPager).toBe(false);
+    expect(vm.ledger.pageCount).toBe(1);
+    expect(vm.ledger.rangeText).toBe("1-3 of 3");
+  });
+
+  it("clamps a page left past the end of a narrowed list", () => {
+    const campaign = campaignFixture({
+      endorsements: [...endorsers(12, "npp"), ...endorsers(3, "player")],
+    });
+    // Page 1 is valid for 12 NPP endorsers but not for the 3 player ones, which
+    // is what a viewer sees when they page forward and then switch filters.
+    const vm = buildCampaignBlendViewModel(
+      input({
+        campaign,
+        ledgerTab: "endorsements",
+        endorsementFilter: "player",
+        endorsementPage: 1,
+      })
+    );
+
+    expect(vm.ledger.page).toBe(0);
+    expect(vm.ledger.endorsementRows).toHaveLength(3);
+  });
+
+  it("keeps the activity pager on its own page when the endorsements tab pages", () => {
+    const campaign = campaignFixture({ endorsements: endorsers(23) });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "activity", endorsementPage: 2 })
+    );
+
+    expect(vm.ledger.tab).toBe("activity");
+    expect(vm.ledger.page).toBe(0);
+  });
+});
+
 describe("strength contribution", () => {
   it("quotes the real cost, actions and resulting boost", () => {
     const vm = buildCampaignBlendViewModel(input());

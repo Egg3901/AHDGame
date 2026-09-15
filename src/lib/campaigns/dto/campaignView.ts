@@ -166,6 +166,20 @@ export interface CampaignData {
       actionsSpent: number;
     };
   };
+  /**
+   * Active endorsers of this campaign, newest first. Both sources appear: NPP
+   * rows are filtered to the active AND visible set (legacy organic rows stay
+   * hidden), so the length equals the `budget.actions.endorsementCount` the
+   * action panel reports.
+   *
+   * `since` is the endorsement's timestamp; endorsement records carry no turn
+   * number, so the ledger shows a date for these rows rather than a turn tag.
+   */
+  endorsements?: Array<{
+    kind: "player" | "npp";
+    name: string;
+    since: string | null;
+  }>;
   activityHistory?: Array<{
     type: "upgrade" | "downgrade" | "suspend_endorse";
     category?: string;

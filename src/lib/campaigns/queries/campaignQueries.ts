@@ -54,6 +54,7 @@ import type {
   ElectionVoteTally,
   NPP,
   NPPEndorsement,
+  PlayerEndorsement,
   PoliticalParty,
 } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
@@ -320,21 +321,50 @@ export async function getCampaignDetail(
     candidateRowCandidates.find((row) => row.status === "active") ??
     candidateRowCandidates[0] ??
     null;
-  const [nppEndorsementCount, playerEndorsementCount] = await Promise.all([
-    db.collection<NPPEndorsement>("nppEndorsements").countDocuments(
-      buildActiveVisibleNppEndorsementFilter({
-        electionId: campaign.electionId,
-        candidateId: campaign.candidateId,
-      })
-    ),
-    candidateRow
-      ? db.collection("playerEndorsements").countDocuments({
+  // Read the endorsing rows rather than counting them: the ledger's
+  // endorsements tab lists the same rows the action panel counts, so one read
+  // serves both and the list cannot disagree with the number beside it.
+  const [nppEndorsementRows, playerEndorsementRows] = await Promise.all([
+    db
+      .collection<NPPEndorsement>("nppEndorsements")
+      .find(
+        buildActiveVisibleNppEndorsementFilter({
           electionId: campaign.electionId,
-          candidateId: candidateRow._id,
-          isActive: true,
-        })
-      : Promise.resolve(0),
+          candidateId: campaign.candidateId,
+        }),
+        { projection: { nppName: 1, createdAt: 1 } }
+      )
+      .toArray(),
+    candidateRow
+      ? db
+          .collection<PlayerEndorsement>("playerEndorsements")
+          .find(
+            {
+              electionId: campaign.electionId,
+              candidateId: candidateRow._id,
+              isActive: true,
+            },
+            { projection: { characterName: 1, createdAt: 1 } }
+          )
+          .toArray()
+      : Promise.resolve([]),
   ]);
+  const endorsements: CampaignData["endorsements"] = [
+    ...nppEndorsementRows.map((row) => ({
+      kind: "npp" as const,
+      name: row.nppName || "Unknown politician",
+      since: row.createdAt?.toISOString() ?? null,
+    })),
+    ...playerEndorsementRows.map((row) => ({
+      kind: "player" as const,
+      name: row.characterName || "Unknown candidate",
+      since: row.createdAt?.toISOString() ?? null,
+    })),
+    // Newest first. Rows without a timestamp sort last rather than jumping to
+    // the top, which is where an empty string would put them.
+  ].sort((a, b) => (b.since ?? "").localeCompare(a.since ?? ""));
+  const nppEndorsementCount = nppEndorsementRows.length;
+  const playerEndorsementCount = playerEndorsementRows.length;
   const endorsementCount = nppEndorsementCount + playerEndorsementCount;
   // Baseline mirrors the turn engine (campaignTurn.ts): max(baseActionsPerTurn, 4),
   // NOT the calculateCampaignActions default of 1 — otherwise the panel understates
@@ -515,6 +545,7 @@ export async function getCampaignDetail(
         }
       : {}),
     ...(suspendEndorse ? { suspendEndorse } : {}),
+    endorsements,
     activityHistory: campaign.activityHistory.map((entry: CampaignActivity) => ({
       ...entry,
       timestamp: entry.timestamp.toISOString(),
