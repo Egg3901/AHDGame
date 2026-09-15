@@ -132,9 +132,7 @@ export function buildDifferentialTrace(input: {
       OBSERVATION_DOMAINS.map((domain) => [
         domain,
         {
-          before: previous[domain],
           mutations: mutations(previous[domain], capture.observations[domain]),
-          after: capture.observations[domain],
         },
       ])
     );
