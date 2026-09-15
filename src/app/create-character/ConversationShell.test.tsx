@@ -184,3 +184,108 @@ describe("ConversationShell player flow", () => {
     expect(screen.getByLabelText("Politician name")).toBeTruthy();
   });
 });
+
+describe("ConversationShell toggle round-trip", () => {
+  /**
+   * Page-lifetime harness: the parent parks progression in a ref while the
+   * classic form is shown and hands it back on remount, exactly like the
+   * creator page. Answers stay in parent state throughout.
+   */
+  function ToggleHarness() {
+    const [chat, setChat] = useState(true);
+    const [answer, setAnswer] = useState("");
+    const [progress, setProgress] = useState<{ activeId: string | null; reached: string[] }>({
+      activeId: null,
+      reached: [],
+    });
+
+    const steps = buildConversationSteps({
+      regionNoun: "state",
+      rpgStatsEnabled: false,
+      complete: {
+        country: true,
+        politician: answer.trim().length >= 2,
+        region: true,
+        compass: true,
+        party: true,
+        stats: false,
+        review: true,
+      },
+      summary: {
+        country: "United States",
+        politician: answer.trim().length >= 2 ? answer.trim() : null,
+        region: "California",
+        compass: "Dead center",
+        party: "Independent",
+        stats: null,
+        review: null,
+      },
+    });
+
+    return (
+      <>
+        <button type="button" onClick={() => setChat((c) => !c)}>
+          {chat ? "Show all steps" : "Try guided chat"}
+        </button>
+        {chat ? (
+          <ConversationShell
+            steps={steps}
+            renderStep={(id: ConversationStepId) =>
+              id === "politician" ? (
+                <input
+                  aria-label="Politician name"
+                  value={answer}
+                  onChange={(e) => setAnswer(e.target.value)}
+                />
+              ) : (
+                <p>{`Content for ${id}`}</p>
+              )
+            }
+            initialActiveId={progress.activeId ?? undefined}
+            initialReached={progress.reached.length > 0 ? progress.reached : undefined}
+            onProgressChange={setProgress}
+          />
+        ) : (
+          <p>Classic form</p>
+        )}
+      </>
+    );
+  }
+
+  it("preserves active and reached steps across a chat/classic round-trip", () => {
+    render(<ToggleHarness />);
+
+    // Walk to the region step with a named politician.
+    fireEvent.click(continueButton());
+    fireEvent.change(screen.getByLabelText("Politician name"), {
+      target: { value: "Eleanor Vance" },
+    });
+    fireEvent.click(continueButton());
+    expect(screen.getByText("Content for region")).toBeTruthy();
+
+    // Toggle to the classic form and back: no re-walk to Country.
+    fireEvent.click(screen.getByRole("button", { name: "Show all steps" }));
+    expect(screen.getByText("Classic form")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try guided chat" }));
+
+    expect(screen.getByText("Content for region")).toBeTruthy();
+    expect(screen.queryByText("Content for country")).toBeNull();
+    // Reached steps stay directly reachable after the round-trip.
+    expect(screen.getByRole("button", { name: "Go to The politician" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Your answers so far" }).textContent).toContain(
+      "Eleanor Vance"
+    );
+
+    // Editing still works after the round-trip: reopen, rename, continue.
+    fireEvent.click(screen.getByRole("button", { name: "Edit The politician" }));
+    expect(screen.getByLabelText("Politician name")).toHaveProperty("value", "Eleanor Vance");
+    fireEvent.change(screen.getByLabelText("Politician name"), {
+      target: { value: "Albus Stone" },
+    });
+    fireEvent.click(continueButton());
+    expect(screen.getByText("Content for region")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Your answers so far" }).textContent).toContain(
+      "Albus Stone"
+    );
+  });
+});

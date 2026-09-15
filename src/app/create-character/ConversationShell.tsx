@@ -14,6 +14,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ConversationStep, ConversationStepId } from "./conversationSteps";
 
+interface ConversationProgress {
+  activeId: string;
+  reached: string[];
+}
+
 interface ConversationShellProps {
   steps: ConversationStep[];
   renderStep: (id: ConversationStepId) => ReactNode;
@@ -22,6 +27,15 @@ interface ConversationShellProps {
   /** Destination of the outer Back action while on the first step. */
   startHref?: string;
   startLabel?: string;
+  /**
+   * Parked progression from a previous mount. The page holds these while the
+   * shell is unmounted (classic form shown) and hands them back on remount,
+   * so toggling flows never forces a re-walk. Unknown ids are ignored.
+   */
+  initialActiveId?: string;
+  initialReached?: string[];
+  /** Observed on every navigation so the page can park the latest pointers. */
+  onProgressChange?: (progress: ConversationProgress) => void;
 }
 
 export function ConversationShell({
@@ -30,9 +44,24 @@ export function ConversationShell({
   alert,
   startHref = "/dashboard",
   startLabel = "Back to dashboard",
+  initialActiveId,
+  initialReached,
+  onProgressChange,
 }: ConversationShellProps) {
-  const [activeId, setActiveId] = useState<string>(() => steps[0]?.id ?? "");
-  const [reached, setReached] = useState<string[]>(() => (steps[0] ? [steps[0].id] : []));
+  const [activeId, setActiveId] = useState<string>(() =>
+    initialActiveId && steps.some((s) => s.id === initialActiveId)
+      ? initialActiveId
+      : (steps[0]?.id ?? "")
+  );
+  const [reached, setReached] = useState<string[]>(() => {
+    const known = new Set(steps.map((s) => s.id));
+    const parked = (initialReached ?? []).filter((id) => known.has(id));
+    const first = steps[0]?.id;
+    if (first && !parked.includes(first)) parked.unshift(first);
+    const active = initialActiveId && known.has(initialActiveId) ? initialActiveId : first;
+    if (active && !parked.includes(active)) parked.push(active);
+    return parked;
+  });
   const headingRef = useRef<HTMLHeadingElement>(null);
   const mountedRef = useRef(false);
 
@@ -59,8 +88,10 @@ export function ConversationShell({
   if (!active) return null;
 
   const goTo = (id: string) => {
+    const nextReached = reached.includes(id) ? reached : [...reached, id];
     setActiveId(id);
-    setReached((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setReached(nextReached);
+    onProgressChange?.({ activeId: id, reached: nextReached });
   };
 
   const answered = steps.filter((s) => s.id !== active.id && s.complete && s.summary);

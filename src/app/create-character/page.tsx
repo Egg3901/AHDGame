@@ -140,6 +140,16 @@ export default function CreateCharacterPage() {
       // Best effort only; the in-memory choice still applies.
     }
   };
+  // Guided-chat progression parked while the classic form is shown. Answers
+  // stay in the form state above; only the shell's active/reached pointers
+  // rest here during the page lifetime, so toggling flows never re-walks.
+  const [chatProgress, setChatProgress] = useState<{
+    activeId: string | null;
+    reached: string[];
+  }>({ activeId: null, reached: [] });
+  const handleChatProgress = useCallback((progress: { activeId: string; reached: string[] }) => {
+    setChatProgress(progress);
+  }, []);
 
   const [formData, setFormData] = useState({
     characterName: "",
@@ -1038,6 +1048,9 @@ export default function CreateCharacterPage() {
             steps={conversationSteps}
             renderStep={renderChatStep}
             alert={errorBanner}
+            initialActiveId={chatProgress.activeId ?? undefined}
+            initialReached={chatProgress.reached.length > 0 ? chatProgress.reached : undefined}
+            onProgressChange={handleChatProgress}
           />
         ) : (
           <div className="mx-auto grid max-w-7xl grid-cols-1 gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_21rem] lg:items-start">
