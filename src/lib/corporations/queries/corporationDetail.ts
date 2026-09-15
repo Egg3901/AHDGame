@@ -2354,6 +2354,7 @@ export async function loadCorporationDetailView(args: {
       // the appointing owner even though the resolved `ceo` is now the NPP.
       caretakerUnderlyingCharacterId:
         corporation.caretakerCeo?.underlyingCharacterId?.toString() ?? null,
+      caretakerMandate: corporation.caretakerCeo?.mandate ?? "active",
       // Turns left on the post-reclaim cooldown before a new caretaker may be installed.
       caretakerReappointCooldownTurnsRemaining: caretakerReappointCooldownRemaining(
         corporation,

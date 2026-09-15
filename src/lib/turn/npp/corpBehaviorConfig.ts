@@ -13,10 +13,14 @@ import {
 export function pickBestNppTechNode(
   corp: Corporation,
   currentYear: number,
-  dailyGrossRevenue: number
+  dailyGrossRevenue: number,
+  options: { cashReserve?: number } = {}
 ): { node: TechTreeNode; cashCost: number } | null {
   const rdScore = corp.rdScore ?? 0;
-  const cashAvailable = corp.liquidCapital ?? 0;
+  const cashAvailable = Math.max(
+    0,
+    (corp.liquidCapital ?? 0) - Math.max(0, options.cashReserve ?? 0)
+  );
   const candidates = getTreeForType(corp.type)
     .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
     .filter(

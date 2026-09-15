@@ -146,11 +146,13 @@ describe("appointCaretakerCeo (I/O)", () => {
       underlyingUserId: ObjectId;
       appointedTurn: number;
       appointmentSource: "owner" | "vacancy";
+      mandate: "active" | "passive";
     };
     expect(caretaker.underlyingCharacterId.equals(ceoId)).toBe(true);
     expect(caretaker.underlyingUserId.equals(userId)).toBe(true);
     expect(caretaker.appointedTurn).toBe(42);
     expect(caretaker.appointmentSource).toBe("owner");
+    expect(caretaker.mandate).toBe("active");
   });
 
   it("refuses when the corp already has a caretaker (no write)", async () => {

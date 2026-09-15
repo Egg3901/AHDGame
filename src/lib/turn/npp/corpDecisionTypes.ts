@@ -31,6 +31,8 @@ export interface NppCorpDecisionContext {
   shortageEntryCreditLocal?: number;
   /** Pause new Retail entry/growth while fake supply-derived demand unwinds. */
   retailExpansionPaused?: boolean;
+  /** Player-appointed caretaker mandate. NPP-owned corporations are always active. */
+  caretakerMandate?: "active" | "passive";
 }
 
 /** A composable sector write emitted by the NPP corporation decision engine. */
@@ -55,6 +57,8 @@ export interface NppCorpDecision {
    * `$inc` so it composes with the income credit instead of racing it.
    */
   liquidCapitalDelta: number;
+  /** Local-currency cash floor that later NPP operator passes must preserve. */
+  cashFloorLocal: number;
   sectorUpdates: Array<{
     filter: { _id: ObjectId };
     update: NppSectorUpdateDoc;
