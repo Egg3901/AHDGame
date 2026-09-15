@@ -121,6 +121,103 @@ describe("processCampaignTurn", () => {
     // Should update campaign with income and actions via bulkWrite
     expect(mockBulkWrite).toHaveBeenCalled();
   });
+
+  it("does not generate income for an archived campaign", async () => {
+    const { getDb } = await import("@/lib/mongodb");
+    const candidateObjectId = new ObjectId();
+
+    // Same campaign as above, but archived — a withdrawn candidate's campaign.
+    // It must not keep earning funds and actions every turn.
+    const archivedCampaign = {
+      _id: new ObjectId(),
+      electionId: "election1",
+      candidateId: candidateObjectId,
+      candidateIsNPP: false,
+      party: "democrat",
+      status: "archived",
+      funds: 50000,
+      actions: 10,
+      fundraisingLevel: 1,
+      oppositionResearchLevel: 0,
+      groundGameLevel: 1,
+      mediaSpendingLevel: 1,
+      oppositionTargetId: null,
+      totalFundsGenerated: 0,
+      totalActionsGenerated: 0,
+    };
+
+    const mockCharacter = {
+      _id: candidateObjectId,
+      politicalInfluence: 50,
+      funds: 100000,
+      favorability: 50,
+    };
+
+    mockFind.mockReturnValueOnce({
+      toArray: vi.fn().mockResolvedValue([archivedCampaign]),
+    });
+    mockFindOne.mockResolvedValueOnce(mockCharacter);
+    mockCountDocuments.mockResolvedValue(4);
+
+    vi.mocked(getDb).mockResolvedValue({
+      collection: vi.fn((name: string) => {
+        if (name === "elections") {
+          return {
+            find: vi
+              .fn()
+              .mockReturnValue({ toArray: vi.fn().mockResolvedValue([{ _id: "election1" }]) }),
+          };
+        }
+        if (name === "campaigns") {
+          return { find: mockFind, updateOne: mockUpdateOne, bulkWrite: mockBulkWrite };
+        }
+        if (name === "characters") {
+          return {
+            find: vi.fn().mockReturnValue({
+              toArray: vi.fn().mockResolvedValue([mockCharacter]),
+            }),
+            findOne: mockFindOne,
+            updateOne: mockUpdateOne,
+            bulkWrite: mockBulkWrite,
+            countDocuments: vi.fn().mockResolvedValue(0),
+          };
+        }
+        if (name === "npps") {
+          return {
+            find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+            bulkWrite: mockBulkWrite,
+            countDocuments: vi.fn().mockResolvedValue(0),
+          };
+        }
+        if (name === "nppEndorsements" || name === "playerEndorsements") {
+          return {
+            countDocuments: mockCountDocuments,
+            aggregate: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+          };
+        }
+        if (name === "electionCandidates") {
+          return {
+            find: vi.fn().mockReturnValue({
+              project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+            }),
+          };
+        }
+        return {
+          findOne: mockFindOne,
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+          updateOne: mockUpdateOne,
+          bulkWrite: mockBulkWrite,
+          aggregate: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        };
+      }),
+    } as never);
+
+    const results = await processCampaignTurn(5);
+
+    expect(results.campaignsProcessed).toBe(0);
+    expect(results.totalFundsGenerated).toBe(0);
+    expect(results.totalActionsGenerated).toBe(0);
+  });
 });
 
 // ─── Campaign-Fund De-Forex (static INITIAL_RATES scale) ────────────────────

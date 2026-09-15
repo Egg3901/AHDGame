@@ -15,6 +15,7 @@ import type {
   PoliticalParty,
 } from "@/lib/db/types";
 import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCleaner";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import { withdrawFromPartyLeadershipElections } from "@/lib/elections/withdrawFromPartyLeadershipElections";
 import { withdrawPlayerEndorsementsOnPartyChange } from "@/lib/elections/playerEndorsements";
 import { vacateCongressLeadershipRole } from "@/lib/congress/leadershipElections";
@@ -82,6 +83,22 @@ export async function withdrawFromMismatchedPrimaries(
     await removeWithdrawnCandidateFromTally(db, c.electionId, c._id.toString());
   }
 
+  // Archive their campaigns so a party switcher's campaign stops appearing on
+  // Campaign Operations alongside the candidates still in the race (#1313).
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: toWithdraw
+      .filter((c) => c.characterId)
+      .map((c) => ({
+        electionId: c.electionId,
+        characterId: c.characterId!,
+        isNPP: c.isNPP,
+        nppId: c.nppId ?? null,
+      })),
+    reason: "withdrawn",
+    now,
+  });
+
   // Get election details for logging
   const withdrawnElectionDetails = toWithdraw.map((c) => {
     const election = elections.find((e) => e._id.toString() === c.electionId.toString());
@@ -148,6 +165,20 @@ export async function withdrawNPPFromMismatchedPrimaries(
   for (const c of toWithdraw) {
     await removeWithdrawnCandidateFromTally(db, c.electionId, c._id.toString());
   }
+
+  // Archive their campaigns. NPP campaigns key `candidateId` by the NPP id,
+  // which archiveCampaignsForCandidates matches via `nppId` (#1313).
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: toWithdraw.map((c) => ({
+      electionId: c.electionId,
+      characterId: nppId,
+      isNPP: true,
+      nppId,
+    })),
+    reason: "withdrawn",
+    now,
+  });
 
   const withdrawnElectionDetails = toWithdraw.map((c) => {
     const election = elections.find((e) => e._id.toString() === c.electionId.toString());
@@ -546,6 +577,23 @@ export async function sweepPartyMismatchedCandidates(): Promise<number> {
     await removeWithdrawnCandidateFromTally(db, c.electionId, c._id.toString());
   }
 
+  // Archive their campaigns — a stale-party candidacy that is swept out of the
+  // race must not keep a live campaign on Campaign Operations (#1313).
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: toWithdraw
+      .filter((c) => c.characterId || c.nppId)
+      .map((c) => ({
+        electionId: c.electionId,
+        // NPP rows have no characterId; campaigns key those by the NPP id.
+        characterId: (c.characterId ?? c.nppId)!,
+        isNPP: c.isNPP,
+        nppId: c.nppId ?? null,
+      })),
+    reason: "withdrawn",
+    now,
+  });
+
   if (toWithdraw.length > 0) {
     console.log(
       `[Turn] sweepPartyMismatchedCandidates: withdrew ${toWithdraw.length} stale-party candidacies`
@@ -602,6 +650,21 @@ export async function withdrawAllActiveCandidacies(characterId: ObjectId): Promi
       for (const c of toWithdraw) {
         await removeWithdrawnCandidateFromTally(db, c.electionId, c._id.toString());
       }
+      // Archive their campaigns — relocation takes the character out of the
+      // race, so the campaign leaves Campaign Operations with it (#1313).
+      await archiveCampaignsForCandidates({
+        db,
+        candidates: toWithdraw
+          .filter((c) => c.characterId)
+          .map((c) => ({
+            electionId: c.electionId,
+            characterId: c.characterId!,
+            isNPP: c.isNPP,
+            nppId: c.nppId ?? null,
+          })),
+        reason: "withdrawn",
+        now,
+      });
       withdrawnGeneralElections = toWithdraw.length;
     }
   }

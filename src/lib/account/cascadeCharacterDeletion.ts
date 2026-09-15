@@ -19,6 +19,7 @@ import { releaseCharacterHeldSharesToFloat } from "@/lib/corporations/releaseCha
 import { releaseCorporationHeldSharesToFloat } from "@/lib/corporations/releaseHeldSharesToFloat";
 import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 
 export interface CascadeResult {
   sharesReleased: number;
@@ -208,12 +209,31 @@ export async function cascadeCharacterDeletion(
   // seated as a phantom officeholder referencing a character that no longer
   // exists (the IL Class III senator). retireCharacter already does this; the
   // hard-delete flows (self-delete / admin force-delete) route through here.
+  // Read the rows first: archiving their campaigns needs each row's electionId,
+  // and after the update they are no longer `status: "active"`.
+  const activeCandidacies = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .find({ characterId, status: "active" })
+    .project<{ _id: ObjectId; electionId: ObjectId }>({ _id: 1, electionId: 1 })
+    .toArray();
+
   const candidacyRes = await db
     .collection<ElectionCandidate>("electionCandidates")
     .updateMany(
       { characterId, status: "active" },
       { $set: { status: "withdrawn", withdrawnAt: now } }
     );
+
+  // Archive the deleted character's campaigns so they stop appearing on
+  // Campaign Operations alongside candidates still in the race (#1313).
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: activeCandidacies
+      .filter((c) => c.electionId)
+      .map((c) => ({ electionId: c.electionId, characterId })),
+    reason: "removed",
+    now,
+  });
 
   return {
     sharesReleased: releasedCharacterShares.sharesReleased,

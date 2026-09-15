@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { stubElectionCandidates } from "@/lib/test-utils/stubElectionCandidates";
 
 vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(true),
@@ -165,6 +166,31 @@ describe("cascadeCharacterDeletion", () => {
       expect.objectContaining({ $set: expect.objectContaining({ status: "withdrawn" }) })
     );
     expect(result.activeCandidaciesWithdrawn).toBe(2);
+  });
+
+  it("archives the deleted character's campaigns so they leave Campaign Operations", async () => {
+    const charId = new ObjectId();
+    const electionId = new ObjectId();
+    db.collection("corporations").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collection("corporations")
+      .updateMany.mockResolvedValueOnce({ modifiedCount: 0 } as never)
+      .mockResolvedValueOnce({ modifiedCount: 0 } as never);
+    stubElectionCandidates(db, [
+      { _id: new ObjectId(), electionId, characterId: charId, status: "active" },
+    ]);
+    db.collection("campaigns").updateMany.mockResolvedValue({ modifiedCount: 1 } as never);
+
+    const { cascadeCharacterDeletion } = await import("./cascadeCharacterDeletion");
+    await cascadeCharacterDeletion(db as unknown as Db, charId);
+
+    expect(db.collection("campaigns").updateMany).toHaveBeenCalled();
+    const [filter, update] = db.collection("campaigns").updateMany.mock.calls[0];
+    expect(filter.electionId).toEqual(electionId);
+    expect(filter.candidateId.$in.map(String)).toContain(charId.toString());
+    expect(update.$set.status).toBe("archived");
+    expect(update.$set.archivedReason).toBe("removed");
   });
 
   it("defaults ceoVacantSinceTurn to 0 when gameState is missing", async () => {
