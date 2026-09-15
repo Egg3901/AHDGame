@@ -7,18 +7,20 @@
  * Council, JP Shugiin/Sangiin, DE Bundestag, etc), so "incumbent" is not
  * a single ID but a per-party seat-share map.
  *
- * Single-seat races do NOT use this fallback: `totalVotes` holds raw per-
- * candidate vote counts, so a single-seat share map is just the prior vote
- * split (e.g. 0.52 / 0.45), which the incumbency driver would turn into a
- * meaningless margin-scaled value. Executives use the approval curve
- * (`incumbentPartyId`) and US Senate uses the flat shield
- * (`legislativeIncumbentPartyId`); both bypass this map.
+ * Races with their own OFFICEHOLDER incumbency path do NOT use this fallback:
+ * `totalVotes` holds raw per-candidate vote counts, so for a single winner the
+ * map is just the prior vote split (e.g. 0.52 / 0.45), which the incumbency
+ * driver would turn into a meaningless margin-scaled value. Single-winner
+ * executives use the approval curve (`incumbentPartyId`) and the US Senate uses
+ * the flat shield (`legislativeIncumbentPartyId`); both bypass this map, and
+ * both correctly go quiet on a vacant seat.
  *
  * That exclusion is enforced by {@link usesSeatShareIncumbency} inside
  * `getIncumbentSeatShareByParty` itself. It used to live only at the call
  * sites, and only covered the US Senate — so a single-winner EXECUTIVE race
  * whose officeholder path went quiet (a vacant seat) silently fell through to
- * this map. See that helper's doc for the live regression.
+ * this map. See that helper's doc for the live regression it caused, and for
+ * the one case still left on the seat-share path by design.
  */
 
 import type { Db } from "mongodb";
@@ -28,22 +30,35 @@ import { SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES } from "@/lib/constants/countrie
 import { isSingleSeatLegislativeRace } from "./singleSeatIncumbency";
 
 /**
- * True when a race's prior-cycle tally can honestly be read as a per-party
- * SEAT share — i.e. multi-seat chambers whose seats are allocated from vote
- * share (US House, UK Regional Council, JP Shugiin/Sangiin, DE Bundestag, …).
+ * False for the races that have a dedicated OFFICEHOLDER incumbency path, so
+ * they must never fall back to a prior-cycle vote split:
+ *   - single-winner executives ({@link SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES})
+ *     — the `incumbentPartyId` approval curve
+ *   - the US Senate ({@link isSingleSeatLegislativeRace}) — the
+ *     `legislativeIncumbentPartyId` flat shield
  *
- * False for every single-winner race, because there `totalVotes` is a two-way
- * vote split, not a seat split. Those races get their incumbency from an
- * officeholder instead: single-winner executives via the `incumbentPartyId`
- * approval curve, the US Senate via the `legislativeIncumbentPartyId` flat
- * shield. When the seat is VACANT both of those are correctly unset, and the
+ * For those races `totalVotes` is a two-way vote split, not a seat split, so
+ * the map would price a margin nobody in the current race earned. Crucially,
+ * when the seat is VACANT both officeholder paths are correctly unset, and the
  * driver must then read 0 (open seat) — NOT fall through to this map.
  *
- * Regression this guards (#FL-governor, cycle 5): a vacant FL Governor seat
+ * Regression this guards (live FL Governor, cycle 5): a vacant FL Governor seat
  * left `incumbentPartyId` unset, so the driver read the prior race's 72/28
  * vote split as a seat share and handed a party that had never held the office
- * a -7.2pt "Incumbency" drag. The seat-share fallback is only meaningful when
- * the map's entries really are seats each party is defending.
+ * a -7.2pt "Incumbency" drag.
+ *
+ * True otherwise — chambers whose seats are allocated from vote share (US
+ * House, UK Regional Council, JP Shugiin/Sangiin, DE Bundestag, …), where the
+ * map's entries really are seats each party is defending.
+ *
+ * KNOWN RESIDUAL, deliberately not covered here: a race can be multi-seat by
+ * TYPE but single-seat in one region (US House in a one-district state such as
+ * VT / WY / AK; BR `chamber`, seeded at `totalSeats: 1`). There the map also
+ * degenerates to a vote split. It is left alone because, unlike a vacant
+ * executive seat, those races have a real sitting incumbent, so zeroing the
+ * driver would remove incumbency rather than correct it — a balance change
+ * needing its own issue and simulation report, not a defect fix. Gate on
+ * `totalSeats` here if that is ever taken on.
  */
 export function usesSeatShareIncumbency(election: Election): boolean {
   if (SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES.has(election.electionType)) return false;

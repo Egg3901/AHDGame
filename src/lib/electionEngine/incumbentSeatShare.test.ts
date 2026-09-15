@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Db } from "mongodb";
 import type { Election } from "@/lib/db/types";
-import { createMockDb } from "@/lib/test-utils/mockDb";
+import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import {
   computeSeatShareFromTally,
   getIncumbentSeatShareByParty,
@@ -114,7 +114,7 @@ describe("getIncumbentSeatShareByParty", () => {
     candidateParties: { c1: "1", c2: "2" },
   };
 
-  function dbWithPrior(prior: Election, tally: unknown): Db {
+  function dbWithPrior(prior: Election, tally: unknown): MockDb {
     const db = createMockDb();
     db.collection.mockImplementation((name: string) => {
       if (name === "elections") {
@@ -122,7 +122,7 @@ describe("getIncumbentSeatShareByParty", () => {
       }
       return { findOne: async () => tally };
     });
-    return db as unknown as Db;
+    return db;
   }
 
   function electionOf(electionType: string, cycle: number): Election {
@@ -142,27 +142,33 @@ describe("getIncumbentSeatShareByParty", () => {
     // 72/28 vote split as a "seat share" — handing a party that never held the
     // seat a phantom -7.2pt drag (live FL Governor, cycle 5). Single-winner
     // executives must never produce this map; a vacant seat is an open seat.
-    const out = await getIncumbentSeatShareByParty(
-      electionOf("governor", 5),
-      dbWithPrior(electionOf("governor", 4), priorTally)
-    );
+    const db = dbWithPrior(electionOf("governor", 4), priorTally);
+    const out = await getIncumbentSeatShareByParty(electionOf("governor", 5), db as unknown as Db);
     expect(out.size).toBe(0);
+    // Bails out BEFORE any query: the guard also drops the two round-trips this
+    // resolver otherwise pays on every executive race, every turn.
+    expect(db.collection).not.toHaveBeenCalled();
   });
 
   it("returns an empty map for a presidential race", async () => {
-    const out = await getIncumbentSeatShareByParty(
-      electionOf("president", 5),
-      dbWithPrior(electionOf("president", 4), priorTally)
-    );
+    const db = dbWithPrior(electionOf("president", 4), priorTally);
+    const out = await getIncumbentSeatShareByParty(electionOf("president", 5), db as unknown as Db);
     expect(out.size).toBe(0);
+    expect(db.collection).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty map for a US Senate race without querying", async () => {
+    const db = dbWithPrior(electionOf("senate", 4), priorTally);
+    const out = await getIncumbentSeatShareByParty(electionOf("senate", 5), db as unknown as Db);
+    expect(out.size).toBe(0);
+    expect(db.collection).not.toHaveBeenCalled();
   });
 
   it("still returns the prior-cycle map for a multi-seat chamber", async () => {
-    const out = await getIncumbentSeatShareByParty(
-      electionOf("house", 5),
-      dbWithPrior(electionOf("house", 4), priorTally)
-    );
+    const db = dbWithPrior(electionOf("house", 4), priorTally);
+    const out = await getIncumbentSeatShareByParty(electionOf("house", 5), db as unknown as Db);
     expect(out.get("1")).toBeCloseTo(0.7213, 4);
     expect(out.get("2")).toBeCloseTo(0.2787, 4);
+    expect(db.collection).toHaveBeenCalled();
   });
 });
