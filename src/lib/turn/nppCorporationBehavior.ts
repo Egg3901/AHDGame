@@ -569,8 +569,7 @@ export async function processNppCorporationDecisions(
     const corpUpdateOp = buildNppCorpUpdateOp(decision);
     if (corpUpdateOp) corpUpdates.push(corpUpdateOp);
 
-    // Sector tech tree: auto-unlock one node per turn when affordable; see
-    // corpBehaviorConfig.
+    // Budget tech from post-decision cash and preserve the same safety floor.
     if (techTreesEnabled) {
       maybePushNppTechUnlock({
         corp,
@@ -1139,9 +1138,7 @@ export function makeNppCorpDecision(
   let rdPct: number;
   const isCashCrisis = liquidCapital <= effectiveCashFloor;
   if (!isProfitable || totalRevenue === 0 || isCashCrisis) {
-    // Losing money or below the safety floor: cut everything to minimum.
-    // Profitability cannot justify discretionary spend when the corporation
-    // lacks the cash buffer needed to absorb the next operating turn.
+    // Cash distress overrides accounting profit for discretionary budgets.
     marketingPct = 0.005;
     logisticsPct = 0.003;
     rdPct = 0;
