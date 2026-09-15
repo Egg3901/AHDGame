@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { processCampaignTurn } from "./campaignTurn";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -785,6 +786,10 @@ describe("auto-downgrade on insolvency", () => {
     expect(op.updateOne.update.$set.groundGameLevel).toBe(0);
     expect(op.updateOne.update.$set.mediaSpendingLevel).toBe(0);
     expect(op.updateOne.update.$push).toBeDefined();
+    // Same cap as the upgrade, reset and suspend-endorse writers, so the turn
+    // engine cannot truncate entries a player action had kept.
+    const push = op.updateOne.update.$push!.activityHistory as { $slice: number };
+    expect(push.$slice).toBe(-CAMPAIGN_ACTIVITY_HISTORY_CAP);
   });
 
   it("leaves solvent campaigns untouched", async () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
@@ -123,7 +124,9 @@ describe("POST /api/campaigns/[id]/opposition-research/reset — success", () =>
     expect(update["$set"]["oppositionResearchCooldownUntil"]).toBeNull();
 
     const push = update["$push"]["activityHistory"] as { $each: any[]; $slice: number };
-    expect(push.$slice).toBe(-10);
+    // Same cap as the upgrade, insolvency-downgrade and suspend-endorse
+    // writers, so no path truncates another's entries.
+    expect(push.$slice).toBe(-CAMPAIGN_ACTIVITY_HISTORY_CAP);
     expect(push.$each).toHaveLength(1);
     expect(push.$each[0]).toMatchObject({
       type: "downgrade",

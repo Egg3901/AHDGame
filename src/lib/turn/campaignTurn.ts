@@ -33,6 +33,7 @@ import {
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 import { logger } from "../observability/logger";
 
 export interface CampaignTurnResults {
@@ -132,7 +133,11 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
         const campaigns = await db
           .collection<Campaign>("campaigns")
-          .find({ electionId: { $in: activeElectionIds } })
+          // activityHistory is write-only for the turn engine: it pushes
+          // insolvency downgrades and never reads the array back. Excluding it
+          // keeps the hourly read flat as the history deepens, rather than
+          // dragging every campaign's whole ledger through the turn.
+          .find({ electionId: { $in: activeElectionIds } }, { projection: { activityHistory: 0 } })
           .toArray();
 
         // Primary state attacks are NOT applied here. A local attack is scoped
@@ -610,7 +615,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               campaignUpdate.$push = {
                 activityHistory: {
                   $each: downgradeActivities,
-                  $slice: -10,
+                  $slice: -CAMPAIGN_ACTIVITY_HISTORY_CAP,
                 },
               };
             }
