@@ -13,11 +13,45 @@
  * meaningless margin-scaled value. Executives use the approval curve
  * (`incumbentPartyId`) and US Senate uses the flat shield
  * (`legislativeIncumbentPartyId`); both bypass this map.
+ *
+ * That exclusion is enforced by {@link usesSeatShareIncumbency} inside
+ * `getIncumbentSeatShareByParty` itself. It used to live only at the call
+ * sites, and only covered the US Senate — so a single-winner EXECUTIVE race
+ * whose officeholder path went quiet (a vacant seat) silently fell through to
+ * this map. See that helper's doc for the live regression.
  */
 
 import type { Db } from "mongodb";
 import type { Election, ElectionVoteTally } from "@/lib/db/types";
 import { getElectionSeatKey } from "@/lib/turn/autoReelectionEntry";
+import { SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES } from "@/lib/constants/countries";
+import { isSingleSeatLegislativeRace } from "./singleSeatIncumbency";
+
+/**
+ * True when a race's prior-cycle tally can honestly be read as a per-party
+ * SEAT share — i.e. multi-seat chambers whose seats are allocated from vote
+ * share (US House, UK Regional Council, JP Shugiin/Sangiin, DE Bundestag, …).
+ *
+ * False for every single-winner race, because there `totalVotes` is a two-way
+ * vote split, not a seat split. Those races get their incumbency from an
+ * officeholder instead: single-winner executives via the `incumbentPartyId`
+ * approval curve, the US Senate via the `legislativeIncumbentPartyId` flat
+ * shield. When the seat is VACANT both of those are correctly unset, and the
+ * driver must then read 0 (open seat) — NOT fall through to this map.
+ *
+ * Regression this guards (#FL-governor, cycle 5): a vacant FL Governor seat
+ * left `incumbentPartyId` unset, so the driver read the prior race's 72/28
+ * vote split as a seat share and handed a party that had never held the office
+ * a -7.2pt "Incumbency" drag. The seat-share fallback is only meaningful when
+ * the map's entries really are seats each party is defending.
+ */
+export function usesSeatShareIncumbency(election: Election): boolean {
+  if (SINGLE_WINNER_EXECUTIVE_ELECTION_TYPES.has(election.electionType)) return false;
+  // Country-scoped: BR reuses the "senate" type for 3-seat PR races, which DO
+  // want the map. `isSingleSeatLegislativeRace` already makes that distinction.
+  if (isSingleSeatLegislativeRace(election)) return false;
+  return true;
+}
 
 /**
  * Compute per-party vote share from a resolved tally's raw votes. Pure
@@ -55,6 +89,8 @@ export function computeSeatShareFromTally(
  * driver treats an empty map as "no incumbent" and returns 0.
  *
  * Strategy:
+ *   0. Bail out for races that must not use a seat-share map at all
+ *      ({@link usesSeatShareIncumbency}).
  *   1. Compute the current election's seat key.
  *   2. Find resolved elections sharing the same seat key, prior cycle.
  *   3. Take the most-recent one's `ElectionVoteTally`.
@@ -64,6 +100,11 @@ export async function getIncumbentSeatShareByParty(
   election: Election,
   db: Db
 ): Promise<Map<string, number>> {
+  // Guarded here rather than at each call site so no caller can reintroduce
+  // the single-winner fallback by forgetting the check. Also saves the two
+  // round-trips below on every executive / US Senate race.
+  if (!usesSeatShareIncumbency(election)) return new Map();
+
   const seatKey = getElectionSeatKey(election);
 
   // Find resolved elections in this country+state in prior cycles. We

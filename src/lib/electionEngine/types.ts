@@ -296,8 +296,11 @@ export interface DistributeVotesOptions {
    * and approval (0..100). When `incumbentPartyId` is set, the incumbency
    * driver switches to a full-magnitude directional shield/drag scaled by
    * `incumbentApproval` (see `approvalAdjustedIncumbencyBudget`). Unset for
-   * legislatures / primaries / vacant offices → driver keeps the seat-share
-   * fallback. Plumbed from `2026-06-22-incumbency-approval-bonus-design.md`.
+   * legislatures / primaries / vacant offices. A vacant executive office is an
+   * OPEN seat: `incumbentSeatShareByParty` is empty for single-winner races
+   * (see `usesSeatShareIncumbency`), so the driver reads 0 rather than
+   * inheriting the prior holder's vote margin.
+   * Plumbed from `2026-06-22-incumbency-approval-bonus-design.md`.
    */
   incumbentPartyId?: string;
   incumbentApproval?: number;

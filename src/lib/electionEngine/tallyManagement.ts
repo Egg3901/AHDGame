@@ -43,7 +43,6 @@ import { distributeVotesBySwingFlow } from "./voteDistributionSwingFlow";
 import { getIncumbentSeatShareByParty } from "./incumbentSeatShare";
 import {
   resolveSingleSeatLegislativeIncumbent,
-  isSingleSeatLegislativeRace,
   resolveHouseIncumbentTenures,
 } from "./singleSeatIncumbency";
 import { getFundsByPartyForElection } from "./fundsByParty";
@@ -527,13 +526,13 @@ export async function accumulateVoteTurn(
     // the swing-flow engine's incumbency driver can scale lift / drag by how
     // much each party was defending. Empty Map when no prior cycle exists
     // (driver returns 0, matching open-seat semantics). General elections
-    // only — primaries don't route through the swing-flow engine. Single-seat
-    // legislative races (US Senate) use the dedicated flat-shield path below,
-    // not the raw-vote-share fallback (which would produce a meaningless
-    // margin-scaled value for a single winner).
-    isGeneralElection && !isSingleSeatLegislativeRace(election)
-      ? getIncumbentSeatShareByParty(election, db)
-      : undefined,
+    // only — primaries don't route through the swing-flow engine. Every
+    // single-winner race (US Senate, and executives such as governor /
+    // president) is excluded by `usesSeatShareIncumbency` inside the resolver:
+    // they use the flat-shield / approval-curve paths below, never the raw-
+    // vote-share fallback (which would produce a meaningless margin-scaled
+    // value for a single winner, including on a VACANT seat).
+    isGeneralElection ? getIncumbentSeatShareByParty(election, db) : undefined,
     // Money driver. Aggregate per-party recent spend across all campaigns
     // in the race (carried stock plus this turn's accumulator). Reads
     // spend persistence, not treasury balance; the `campaignSpendReset`

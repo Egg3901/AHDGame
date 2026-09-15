@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { computeSeatShareFromTally } from "./incumbentSeatShare";
+import type { Db } from "mongodb";
+import type { Election } from "@/lib/db/types";
+import { createMockDb } from "@/lib/test-utils/mockDb";
+import {
+  computeSeatShareFromTally,
+  getIncumbentSeatShareByParty,
+  usesSeatShareIncumbency,
+} from "./incumbentSeatShare";
 
 describe("computeSeatShareFromTally", () => {
   it("returns empty Map for zero total votes", () => {
@@ -70,5 +77,92 @@ describe("computeSeatShareFromTally", () => {
     expect(out.has("rep")).toBe(false);
     expect(out.has("grn")).toBe(false);
     expect(out.has("ind")).toBe(false);
+  });
+});
+
+describe("usesSeatShareIncumbency", () => {
+  const base = { countryId: "US", state: "FL", cycle: 5 } as unknown as Election;
+
+  it("is true for multi-seat proportional chambers", () => {
+    for (const electionType of ["house", "commons", "shugiin", "bundestag", "landtag"]) {
+      expect(usesSeatShareIncumbency({ ...base, electionType } as Election)).toBe(true);
+    }
+  });
+
+  it("is false for every single-winner executive office", () => {
+    for (const electionType of ["governor", "president", "uachtaran", "ministerPresident"]) {
+      expect(usesSeatShareIncumbency({ ...base, electionType } as Election)).toBe(false);
+    }
+  });
+
+  it("is false for the US Senate (flat officeholder shield instead)", () => {
+    expect(usesSeatShareIncumbency({ ...base, electionType: "senate" } as Election)).toBe(false);
+  });
+
+  it("is true for a BR senate race (multi-seat PR despite the shared type)", () => {
+    expect(
+      usesSeatShareIncumbency({ ...base, countryId: "BR", electionType: "senate" } as Election)
+    ).toBe(true);
+  });
+});
+
+describe("getIncumbentSeatShareByParty", () => {
+  /** Mirrors the live FL cycle-4 result: party 1 won 72.13% of a two-way race. */
+  const priorTally = {
+    finalized: true,
+    totalVotes: { c1: 721_300, c2: 278_700 },
+    candidateParties: { c1: "1", c2: "2" },
+  };
+
+  function dbWithPrior(prior: Election, tally: unknown): Db {
+    const db = createMockDb();
+    db.collection.mockImplementation((name: string) => {
+      if (name === "elections") {
+        return { find: () => ({ sort: () => ({ toArray: async () => [prior] }) }) };
+      }
+      return { findOne: async () => tally };
+    });
+    return db as unknown as Db;
+  }
+
+  function electionOf(electionType: string, cycle: number): Election {
+    return {
+      _id: `${electionType}-${cycle}`,
+      countryId: "US",
+      state: "FL",
+      electionType,
+      status: cycle === 4 ? "resolved" : "active",
+      cycle,
+    } as unknown as Election;
+  }
+
+  it("returns an empty map for a single-winner executive race even when a prior tally exists", async () => {
+    // Regression: a VACANT governor seat leaves `incumbentPartyId` unset, so the
+    // incumbency driver fell through to this map and read the prior race's
+    // 72/28 vote split as a "seat share" — handing a party that never held the
+    // seat a phantom -7.2pt drag (live FL Governor, cycle 5). Single-winner
+    // executives must never produce this map; a vacant seat is an open seat.
+    const out = await getIncumbentSeatShareByParty(
+      electionOf("governor", 5),
+      dbWithPrior(electionOf("governor", 4), priorTally)
+    );
+    expect(out.size).toBe(0);
+  });
+
+  it("returns an empty map for a presidential race", async () => {
+    const out = await getIncumbentSeatShareByParty(
+      electionOf("president", 5),
+      dbWithPrior(electionOf("president", 4), priorTally)
+    );
+    expect(out.size).toBe(0);
+  });
+
+  it("still returns the prior-cycle map for a multi-seat chamber", async () => {
+    const out = await getIncumbentSeatShareByParty(
+      electionOf("house", 5),
+      dbWithPrior(electionOf("house", 4), priorTally)
+    );
+    expect(out.get("1")).toBeCloseTo(0.7213, 4);
+    expect(out.get("2")).toBeCloseTo(0.2787, 4);
   });
 });
