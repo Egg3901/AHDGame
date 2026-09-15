@@ -4,6 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { SingleplayerStatus } from "@/lib/singleplayerServer";
+import {
+  DEFAULT_SINGLEPLAYER_FEATURE_FLAGS,
+  SINGLEPLAYER_FEATURE_FLAGS,
+  type SingleplayerFeatureFlagKey,
+} from "@/lib/singleplayerFeatureFlags";
 
 /** Era presets a local player can start from, oldest first. */
 const ERA_PRESETS: ReadonlyArray<{ preset: string; label: string; blurb: string }> = [
@@ -48,6 +53,12 @@ export function SingleplayerHome({ status }: Props) {
   const router = useRouter();
   const [preset, setPreset] = useState(status.preset ?? "1953-default");
   const [displayName, setDisplayName] = useState("");
+  const [mode, setMode] = useState<"normal" | "head-of-state" | "worldsim">("normal");
+  const [difficulty, setDifficulty] = useState<"easy" | "normal" | "hard">("normal");
+  const [autonomyLevel, setAutonomyLevel] = useState<
+    "off" | "v0" | "v1" | "v2" | "v3" | "v4" | "v5"
+  >("v4");
+  const [featureFlags, setFeatureFlags] = useState(DEFAULT_SINGLEPLAYER_FEATURE_FLAGS);
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "error">("idle");
   const [logs, setLogs] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +76,14 @@ export function SingleplayerHome({ status }: Props) {
       const res = await fetch("/api/singleplayer/new-game", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preset, displayName: displayName.trim() || undefined }),
+        body: JSON.stringify({
+          preset,
+          mode,
+          difficulty,
+          autonomyLevel,
+          featureFlags,
+          displayName: displayName.trim() || undefined,
+        }),
       });
       const body = (await res.json().catch(() => null)) as {
         logs?: string[];
@@ -163,6 +181,96 @@ export function SingleplayerHome({ status }: Props) {
                 </label>
               ))}
             </div>
+
+            <div>
+              <span className="block text-sm text-muted">Play mode</span>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {[
+                  ["normal", "Career"],
+                  ["head-of-state", "Head of state"],
+                  ["worldsim", "World simulation"],
+                ].map(([value, label]) => (
+                  <label
+                    key={value}
+                    className="flex cursor-pointer items-center gap-2 rounded border border-card-border p-3 text-sm"
+                  >
+                    <input
+                      type="radio"
+                      name="mode"
+                      checked={mode === value}
+                      onChange={() => setMode(value as typeof mode)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="grid gap-2 text-sm">
+                <span className="text-muted">Difficulty</span>
+                <select
+                  value={difficulty}
+                  onChange={(event) => setDifficulty(event.target.value as typeof difficulty)}
+                  className="rounded border border-card-border bg-background px-3 py-2"
+                >
+                  <option value="easy">Easy</option>
+                  <option value="normal">Normal</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="text-muted">Autonomous politicians</span>
+                <select
+                  value={autonomyLevel}
+                  onChange={(event) => setAutonomyLevel(event.target.value as typeof autonomyLevel)}
+                  className="rounded border border-card-border bg-background px-3 py-2"
+                >
+                  <option value="off">Off</option>
+                  <option value="v0">Basic</option>
+                  <option value="v1">V1</option>
+                  <option value="v2">V2</option>
+                  <option value="v3">V3</option>
+                  <option value="v4">V4</option>
+                  <option value="v5">V5</option>
+                </select>
+              </label>
+            </div>
+
+            <details className="rounded border border-card-border bg-background p-3">
+              <summary className="cursor-pointer text-sm font-semibold">
+                Advanced feature flags
+              </summary>
+              <p className="mt-2 text-xs text-muted">
+                Shipped defaults are recommended. Turn systems off only when you want a narrower
+                local simulation.
+              </p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {SINGLEPLAYER_FEATURE_FLAGS.map((flag) => (
+                  <label
+                    key={flag.key}
+                    className="flex cursor-pointer gap-3 rounded border border-card-border p-3"
+                  >
+                    <input
+                      type="checkbox"
+                      aria-label={flag.label}
+                      checked={featureFlags[flag.key]}
+                      onChange={(event) =>
+                        setFeatureFlags((current) => ({
+                          ...current,
+                          [flag.key as SingleplayerFeatureFlagKey]: event.target.checked,
+                        }))
+                      }
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">{flag.label}</span>
+                      <span className="block text-xs text-muted">{flag.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </details>
 
             <label className="block text-sm">
               <span className="text-muted">Your name (optional)</span>
