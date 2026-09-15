@@ -335,10 +335,9 @@ export interface Corporation {
   /**
    * Set while an NPP caretaker runs this player-owned corp (NPP-autonomy V2.1).
    * The autonomy brain operates the corp through `ceoType:"npp"` + `ceoId` (the
-   * NPP), but `userId` deliberately stays the appointing owner so they keep CEO
-   * authorization (`requireCeo`) and private-data access, that retained control
-   * is precisely what makes this a *caretaker* (player-appointed, player-revoked)
-   * rather than a full handover to an autonomous NPP corp. Stores the displaced
+   * NPP), but `userId` deliberately stays the appointing owner for private-data
+   * access and immediate reclaim. Operational commands reject NPP-run corps, so
+   * retained ownership is not retained operational control. Stores the displaced
    * human CEO so dismissal restores them. Absent ⇒ the corp is not caretaker-run.
    */
   caretakerCeo?: {
@@ -356,6 +355,8 @@ export interface Corporation {
     appointedTurn: number;
     /** Whether the owner chose the caretaker or the turn loop filled a vacancy. */
     appointmentSource?: "owner" | "vacancy";
+    /** Owner-selected operating mandate. Legacy caretakers default to active. */
+    mandate?: "active" | "passive";
   };
   /**
    * Turn until which a new caretaker may NOT be installed, stamped when the owner

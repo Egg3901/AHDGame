@@ -163,6 +163,7 @@ export async function appointCaretakerCeo(
           underlyingUserId: corp.userId,
           appointedTurn: turn,
           appointmentSource: "owner",
+          mandate: "active",
         },
         updatedAt: now,
       },

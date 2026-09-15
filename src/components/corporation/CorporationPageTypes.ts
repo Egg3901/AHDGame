@@ -232,6 +232,8 @@ export interface CorporationDetail {
   ceoCharacterId?: string | null;
   /** Underlying owner character while an NPP caretaker runs the corp (absent otherwise). Keeps the CEO tab reachable for reclaim. */
   caretakerUnderlyingCharacterId?: string | null;
+  /** Owner-selected caretaker operating mandate. */
+  caretakerMandate?: "active" | "passive";
   /** Turns left on the post-reclaim cooldown before a new caretaker may be installed (0 = none). */
   caretakerReappointCooldownTurnsRemaining?: number;
   pendingCeoCharacterId: string | null;

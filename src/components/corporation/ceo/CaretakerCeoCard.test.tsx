@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CaretakerCeoCard } from "./CaretakerCeoCard";
 
 const onRefresh = vi.fn();
@@ -46,5 +46,20 @@ describe("CaretakerCeoCard", () => {
 
     expect(await screen.findByText(/resume control immediately/i)).toBeTruthy();
     expect(screen.getByText(/owner-initiated handoff/i)).toBeTruthy();
+  });
+
+  it("lets the owner select a passive caretaker mandate", async () => {
+    renderCard({ ceoCharacterId: null, caretakerMandate: "active" });
+    const select = await screen.findByLabelText("Caretaker mandate");
+
+    fireEvent.change(select, { target: { value: "passive" } });
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/corporations/446/ceo/caretaker",
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ mandate: "passive" }) })
+      )
+    );
+    expect(screen.getByText(/existing debt and operating costs still settle/i)).toBeTruthy();
   });
 });
