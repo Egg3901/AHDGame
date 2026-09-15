@@ -24,7 +24,7 @@ export interface ExecutiveSeal {
   backing?: "medallion" | "plain";
 }
 
-const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
+export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
   US: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Seal_of_the_President_of_the_United_States.svg/330px-Seal_of_the_President_of_the_United_States.svg.png",
     alt: "Seal of the President of the United States",

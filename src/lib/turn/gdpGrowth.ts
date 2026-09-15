@@ -47,14 +47,14 @@ export const MAX_POLICY_DELTA = 4;
 const SALES_TAX_GROWTH_COEFFICIENT = 0.05;
 const SALES_TAX_GAP_CLAMP = 30;
 
-const NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
+export const NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
   US: 0,
   UK: 20,
   JP: 10,
   DE: 19,
 };
 
-const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
+export const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
   US: 6,
   UK: 0,
   JP: 0,

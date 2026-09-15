@@ -15,7 +15,7 @@ import { ukStateMetrics } from "@/lib/seeds/uk/ukStateMetrics";
 
 // Seceded nations (SCO/WAL) have no static seed bundle — their metrics are
 // fanned out from the UK aggregate at secession — so this is a partial map.
-const RAW_BUNDLES: Partial<Record<CountryId, StateMetrics[]>> = {
+export const RAW_BUNDLES: Partial<Record<CountryId, StateMetrics[]>> = {
   US: stateMetrics,
   UK: ukStateMetrics,
   DE: deStateMetrics,

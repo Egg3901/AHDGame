@@ -6,7 +6,7 @@ import type { CountryId } from "@/lib/constants/countries";
  * national statistical series. The 1953 table gives historical worlds their
  * own monetary scale while the snapshot keeps modeled balances fully visible.
  */
-const M2_TO_GDP_1953: Partial<Record<CountryId, number>> = {
+export const M2_TO_GDP_1953: Partial<Record<CountryId, number>> = {
   US: 0.62,
   UK: 0.58,
   JP: 0.45,

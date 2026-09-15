@@ -706,6 +706,18 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
 /** Deliberately not handled by this plan, so no phase. Each entry states why. */
 export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: string }> = [
   {
+    file: "scripts/countries/emit-jp-snapshot.ts",
+    why: "Created by D1 as the one-off snapshot emitter. It reads every registry Japan will move but owns no Japan fact itself, so there is nothing to relocate.",
+  },
+  {
+    file: "src/lib/countries/contract.ts",
+    why: "Created by D1 as the declared shape of a country folder. It is the destination of the move, not a source of Japan facts.",
+  },
+  {
+    file: "src/lib/countries/jp/index.ts",
+    why: "Created by D1 as Japan's folder barrel. It is the destination of the move, not a source of Japan facts.",
+  },
+  {
     file: "scripts/migrations/2026-05-18-backfill-bond-currency-code.mjs",
     why: "An applied one-shot migration. It records a past database state and is never re-run, so its Japan references are history rather than a live Japan surface.",
   },

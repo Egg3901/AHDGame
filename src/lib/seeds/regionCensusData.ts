@@ -61,7 +61,7 @@ export interface ArchetypeRegionCensus {
 
 export type RegionCensus = Layer1Config | ArchetypeRegionCensus;
 
-type PresetBundles = Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
+export type PresetBundles = Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
 
 /**
  * Per-country census bundles keyed by preset. New eras/countries register here.
@@ -82,7 +82,7 @@ import { balRegionCensusData1953 } from "@/lib/seeds/bal/balRegionCensusData1953
 import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
-const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
+export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
     // Authored 1953 census existed but was never registered here, so
     // getRegionCensusData returned null and seedCohortVectors silently skipped

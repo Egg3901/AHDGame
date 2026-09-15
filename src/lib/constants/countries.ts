@@ -7062,7 +7062,7 @@ export function getOfficeTypeConfig(
 }
 
 /** Maps country to the office key used for regional executive assent on state bills. */
-const REGIONAL_BILL_ASSENT_OFFICE_KEY: Partial<Record<CountryId, string>> = {
+export const REGIONAL_BILL_ASSENT_OFFICE_KEY: Partial<Record<CountryId, string>> = {
   US: "governor",
   UK: "governor",
   JP: "governor",
@@ -7438,7 +7438,7 @@ export function getRegionalAddressName(countryId: CountryId): string {
   return REGIONAL_ADDRESS_NAME[countryId] ?? "State of the State";
 }
 
-const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
+export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
   US: "State of the Union",
   UK: "Address to the Nation",
   DE: "Government Declaration",

@@ -32,7 +32,7 @@ export interface InstitutionIdentity {
   accentSoft: string;
 }
 
-type IdentityText = Omit<InstitutionIdentity, "palette" | "accent" | "accentSoft">;
+export type IdentityText = Omit<InstitutionIdentity, "palette" | "accent" | "accentSoft">;
 
 function composeFromNational(countryId: CountryId, text: IdentityText): InstitutionIdentity {
   const national = getNationalIdentity(countryId);
@@ -46,7 +46,7 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 
 // ── Executive ────────────────────────────────────────────────────────────────
 
-const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
+export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   US: {
     glyph: "★",
     serif: "mono",
@@ -239,7 +239,7 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 
 // ── National Policy (code of law) ────────────────────────────────────────────
 
-const POLICY_TEXT: Record<CountryId, IdentityText> = {
+export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   US: {
     glyph: "§",
     serif: "mono",

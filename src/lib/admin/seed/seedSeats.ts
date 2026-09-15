@@ -126,7 +126,7 @@ const IE_LOCAL_COUNCIL_SEATS_LOCAL: Record<string, number> = {
   MID: 12,
 };
 
-const REGION_NAME_MAPS: Partial<Record<CountryId, Record<string, string>>> = {
+export const REGION_NAME_MAPS: Partial<Record<CountryId, Record<string, string>>> = {
   UK: UK_REGION_NAMES,
   JP: JP_REGION_NAMES,
   DE: DE_REGION_NAMES,

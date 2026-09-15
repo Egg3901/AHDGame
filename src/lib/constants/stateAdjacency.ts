@@ -140,7 +140,7 @@ const DE_ADJACENCY: AdjacencyMap = {
  * bridges/ferries (KNS↔SHI, CGK↔SHI, CGK↔KYU). HOK↔TOH via the
  * Tsugaru Strait (Seikan Tunnel ferries / rail).
  */
-const JP_ADJACENCY: AdjacencyMap = {
+export const JP_ADJACENCY: AdjacencyMap = {
   HOK: ["TOH"], // sea via Tsugaru Strait
   TOH: ["HOK", "KAN"],
   KAN: ["TOH", "CHU"],

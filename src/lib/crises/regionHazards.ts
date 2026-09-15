@@ -12,7 +12,7 @@ import type { HazardTag } from "@/lib/db/types/crisis";
  * has no special hazards and is therefore ineligible for tag-gated disasters
  * (ungated disasters like heat waves or bridge collapses can still hit it).
  */
-const HAZARD_GROUPS: Partial<Record<CountryId, Partial<Record<HazardTag, string[]>>>> = {
+export const HAZARD_GROUPS: Partial<Record<CountryId, Partial<Record<HazardTag, string[]>>>> = {
   US: {
     coastal: [
       "AK",

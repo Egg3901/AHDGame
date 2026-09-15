@@ -48,7 +48,7 @@ type PresetBundles = Partial<Record<ResetPresetId, MetricPresetBundle>>;
  * falls back to `2019-default`, so a country with only a 2019 bundle never throws for a
  * 1991 world. Countries register here as their presets are authored.
  */
-const METRIC_PRESET_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
+export const METRIC_PRESET_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   IE: {
     "2019-default": ieMetricPresets2019,
     "1991-default": ieMetricPresets1991,

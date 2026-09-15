@@ -116,7 +116,7 @@ import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateRe
  * the seed so a fresh world doesn't depend on the backfill migration ever
  * running.
  */
-const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
+export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
   US: "us_c_corp",
   UK: "uk_plc",
   JP: "jp_kk",

@@ -46,9 +46,9 @@ export const COVERAGE_ERAS: readonly EraId[] = [
  * exactly what `selectPresetBundle` does at seed time — see the per-country
  * `seedXXRegions` functions.
  */
-type RosterThunk = () => Promise<State[]>;
+export type RosterThunk = () => Promise<State[]>;
 
-const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThunk>>>> = {
+export const REGION_ROSTERS: Partial<Record<CountryId, Partial<Record<EraId, RosterThunk>>>> = {
   US: {
     "1953": () => import("@/lib/seeds/reference/states1953").then((m) => m.states1953),
     "1979": () => import("@/lib/seeds/reference/states1979").then((m) => m.states1979),

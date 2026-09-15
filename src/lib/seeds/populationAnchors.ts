@@ -42,7 +42,7 @@ type PresetBundles = Partial<Record<ResetPresetId, AnchorBundle>>;
  * `selectPresetBundle` falls back to `2019-default` so a country with only a 2019
  * bundle never throws for a 1991 world.
  */
-const POPULATION_ANCHOR_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
+export const POPULATION_ANCHOR_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   IE: { "2019-default": iePopulationAnchors2019, "1991-default": iePopulationAnchors1991 },
   DE: { "2019-default": dePopulationAnchors2019, "1991-default": dePopulationAnchors1991 },
   JP: { "2019-default": jpPopulationAnchors2019, "1991-default": jpPopulationAnchors1991 },

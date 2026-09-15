@@ -376,7 +376,10 @@ const CORE5_SPREADS: Record<
   povertyRate: { best: -7, worst: 14, bestFloor: 3, worstCeil: 45 },
 };
 
-const CORE5_NORMALS: Record<string, Partial<Record<CountryId | "global", NormalAnchor[]>>> = {
+export const CORE5_NORMALS: Record<
+  string,
+  Partial<Record<CountryId | "global", NormalAnchor[]>>
+> = {
   gdpGrowth: {
     global: [
       { year: 1950, value: 4.2 },

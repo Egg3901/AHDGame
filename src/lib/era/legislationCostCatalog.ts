@@ -910,7 +910,7 @@ export const CALIBRATION_SCALE = 1.5;
 // Representative modern (gdp, population) per playable country — from the 2019/2023
 // budget seed configs. Used to precompute the income-to-GDP ratio so a perCapita
 // share targets the same %GDP as a gdpFraction share.
-const REP_ECON: Record<string, { gdp: number; population: number }> = {
+export const REP_ECON: Record<string, { gdp: number; population: number }> = {
   US: { gdp: 27_000_000_000_000, population: 333_000_000 },
   UK: { gdp: 2_900_000_000_000, population: 68_000_000 },
   DE: { gdp: 4_500_000_000_000, population: 84_400_000 },

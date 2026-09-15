@@ -38,7 +38,7 @@ export interface ConscriptionPolicy {
 }
 
 /** Per-country seed rung (§4.5.4) — a starting point, NOT a ceiling. */
-const CONSCRIPTION_SEED: Partial<Record<CountryId, ConscriptionPolicy>> = {
+export const CONSCRIPTION_SEED: Partial<Record<CountryId, ConscriptionPolicy>> = {
   US: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
   UK: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
   DE: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 1 }, // suspended
