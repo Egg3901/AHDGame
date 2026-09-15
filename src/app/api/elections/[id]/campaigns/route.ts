@@ -56,6 +56,13 @@ export async function GET(request: Request, { params }: RouteParams) {
       .find({ electionId: electionOid, status: { $ne: "archived" } })
       .toArray();
 
+    // Most races have no campaigns at all — Campaign Manager is US-only — and
+    // both election-page components call this endpoint on every load, so skip
+    // the candidacy read rather than pay for it on every non-US election view.
+    if (allCampaigns.length === 0) {
+      return NextResponse.json({ campaigns: [] });
+    }
+
     // Then narrow to candidates who are actually still standing. `status:
     // "archived"` alone is not trustworthy here: it is bookkeeping that every
     // withdrawal path has to remember to set, and several (party-switch sweeps,

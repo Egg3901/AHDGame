@@ -123,6 +123,22 @@ describe("GET /api/elections/[id]/campaigns", () => {
     ]);
   });
 
+  it("returns an empty list without reading candidacies when the race has no campaigns", async () => {
+    // Campaign Manager is US-only, so most races hit this path on every page
+    // load. It must not pay for the candidacy read.
+    stubFind("campaigns", []);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/elections/UK-commons/campaigns"), {
+      params: Promise.resolve({ id: "UK-commons" }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.campaigns).toEqual([]);
+    expect(db.collectionMocks.electionCandidates!.find).not.toHaveBeenCalled();
+  });
+
   it("still lists a candidate who is actively running", async () => {
     stubFind("campaigns", [campaign(runningId, "active")]);
     stubFind("electionCandidates", [
