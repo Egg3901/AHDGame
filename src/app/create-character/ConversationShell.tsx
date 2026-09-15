@@ -15,8 +15,8 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ConversationStep, ConversationStepId } from "./conversationSteps";
 
 interface ConversationProgress {
-  activeId: string;
-  reached: string[];
+  activeId: ConversationStepId;
+  reached: ConversationStepId[];
 }
 
 interface ConversationShellProps {
@@ -48,17 +48,19 @@ export function ConversationShell({
   initialReached,
   onProgressChange,
 }: ConversationShellProps) {
-  const [activeId, setActiveId] = useState<string>(() =>
-    initialActiveId && steps.some((s) => s.id === initialActiveId)
-      ? initialActiveId
-      : (steps[0]?.id ?? "")
+  const isStepId = (id: string | undefined): id is ConversationStepId =>
+    id !== undefined && steps.some((step) => step.id === id);
+  const [activeId, setActiveId] = useState<ConversationStepId | "">(() =>
+    isStepId(initialActiveId) ? initialActiveId : (steps[0]?.id ?? "")
   );
-  const [reached, setReached] = useState<string[]>(() => {
+  const [reached, setReached] = useState<ConversationStepId[]>(() => {
     const known = new Set(steps.map((s) => s.id));
-    const parked = (initialReached ?? []).filter((id) => known.has(id));
+    const parked = (initialReached ?? []).filter((id): id is ConversationStepId =>
+      known.has(id as ConversationStepId)
+    );
     const first = steps[0]?.id;
     if (first && !parked.includes(first)) parked.unshift(first);
-    const active = initialActiveId && known.has(initialActiveId) ? initialActiveId : first;
+    const active = isStepId(initialActiveId) ? initialActiveId : first;
     if (active && !parked.includes(active)) parked.push(active);
     return parked;
   });
@@ -87,7 +89,7 @@ export function ConversationShell({
 
   if (!active) return null;
 
-  const goTo = (id: string) => {
+  const goTo = (id: ConversationStepId) => {
     const nextReached = reached.includes(id) ? reached : [...reached, id];
     setActiveId(id);
     setReached(nextReached);
