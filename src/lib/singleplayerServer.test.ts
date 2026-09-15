@@ -117,6 +117,52 @@ describe("singleplayer maintenance recovery", () => {
     );
   });
 
+  it("exposes the persisted boolean feature map to the owner panel", async () => {
+    const db = createMockDb();
+    const featureFlags = { forexEnabled: false, worldEventsEnabled: true };
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 3,
+      preset: "modern",
+      singleplayerConfig: {
+        mode: "career",
+        difficulty: "normal",
+        nppAutonomyLevel: "v4",
+        permanentHeadOfState: false,
+        featureFlags,
+      },
+    });
+
+    const status = await singleplayerStatus(db as unknown as Db);
+
+    expect(status.setup?.featureFlags).toEqual(featureFlags);
+  });
+
+  it("writes partial flags to both the stored config and the live world", async () => {
+    const db = createMockDb();
+
+    await setSingleplayerConfig(db as unknown as Db, {
+      mode: "normal",
+      difficulty: "hard",
+      nppAutonomyLevel: "v4",
+      permanentHeadOfState: true,
+      featureFlags: { forexEnabled: false },
+    });
+
+    const set = db.collectionMocks.gameState.updateOne.mock.calls[0]?.[1].$set;
+    expect(set.singleplayerConfig).toMatchObject({
+      mode: "normal",
+      difficulty: "hard",
+      nppAutonomyLevel: "v4",
+      permanentHeadOfState: true,
+    });
+    expect(set.singleplayerConfig.featureFlags.forexEnabled).toBe(false);
+    expect(set.singleplayerConfig.featureFlags.worldEventsEnabled).toBe(true);
+    expect(set.forexEnabled).toBe(false);
+    expect(set.worldEventsEnabled).toBe(true);
+    expect(set.nppAutonomyLevel).toBe("v4");
+  });
+
   it("clears reset maintenance when a new local world is configured", async () => {
     const db = createMockDb();
 

@@ -61,6 +61,7 @@
         "banking": "Bankwesen"
       },
       "staff": {
+        "localWorld": "Lokale Welt",
         "adminPanel": "Admin-Panel",
         "modPanel": "Mod-Panel",
         "opsDashboard": "Ops-Dashboard",

@@ -14,6 +14,12 @@ export interface StaffNavItem {
 export interface StaffNavOpts {
   isAdmin?: boolean;
   isModerator?: boolean;
+  /**
+   * The viewer owns the local singleplayer world: singleplayer mode AND the
+   * DB account record carries admin (the owner grant). Never true from
+   * singleplayer mode alone, so LAN guests and multiplayer admins stay out.
+   */
+  isSingleplayerOwner?: boolean;
 }
 
 /**
@@ -23,8 +29,15 @@ export interface StaffNavOpts {
 export function buildStaffNavItems({
   isAdmin = false,
   isModerator = false,
+  isSingleplayerOwner = false,
 }: StaffNavOpts): StaffNavItem[] {
   return [
+    {
+      label: "Local World",
+      labelKey: "menus.staff.localWorld",
+      href: "/singleplayer/admin",
+      show: isSingleplayerOwner,
+    },
     { label: "Admin Panel", labelKey: "menus.staff.adminPanel", href: "/admin", show: isAdmin },
     {
       label: "Mod Panel",
@@ -65,6 +78,19 @@ export function buildStaffNavItems({
 
 export function visibleStaffNavItems(opts: StaffNavOpts): StaffNavItem[] {
   return buildStaffNavItems(opts).filter((i) => i.show);
+}
+
+/**
+ * Whether the viewer owns the local singleplayer world. Singleplayer mode
+ * alone is never enough (LAN guests share the mode without owner status);
+ * the DB account record must also carry admin, which is what client-nav
+ * surfaces as `user.isAdmin`. All navbar render sites share this predicate
+ * so desktop and mobile agree.
+ */
+export function viewerIsSingleplayerOwner(
+  viewer: { singleplayer?: boolean; isAdmin?: boolean } | null | undefined
+): boolean {
+  return !!viewer?.singleplayer && !!viewer?.isAdmin;
 }
 
 export function isStaffUser(opts: StaffNavOpts): boolean {
