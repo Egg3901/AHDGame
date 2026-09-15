@@ -25,6 +25,23 @@ async function flushAsyncStatusWrites() {
 }
 
 describe("createTurnPhaseRuntime", () => {
+  it("reports a completed phase to an opt-in sandbox observer without changing its result", async () => {
+    const observed: Array<{ name: string; result: unknown }> = [];
+    const runtime = createTurnPhaseRuntime({
+      db: createMockDb().db,
+      phaseStatuses: {},
+      warnings: [],
+      currentPhaseRef: { current: null },
+      onPhaseCompleted: async (phase) => {
+        observed.push({ name: phase.name, result: phase.result });
+      },
+    });
+
+    await expect(runtime.runPhase("traceablePhase", async () => ({ changed: 2 }))).resolves.toEqual(
+      { changed: 2 }
+    );
+    expect(observed).toEqual([{ name: "traceablePhase", result: { changed: 2 } }]);
+  });
   beforeEach(() => {
     recordAudit.mockClear();
   });
