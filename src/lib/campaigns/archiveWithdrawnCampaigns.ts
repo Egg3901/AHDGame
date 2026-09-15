@@ -1,5 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
-import type { Campaign } from "@/lib/db/types";
+import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 
 export type CampaignArchiveReason = NonNullable<Campaign["archivedReason"]>;
 
@@ -52,10 +52,39 @@ export async function archiveCampaignsForCandidates({
 
   let archived = 0;
   for (const { electionId, candidateIds } of byElection.values()) {
+    // Never archive someone who is still standing in this race. A candidate can
+    // hold a second, valid candidacy in the same election — the party-mismatch
+    // sweep withdraws only the stale-party row when the character has already
+    // re-entered under their new party. Archiving on the strength of the
+    // withdrawn row alone would pull a live campaign out from under a candidate
+    // who is still running (and lock them out of their own campaign actions).
+    // Callers mark rows withdrawn before calling this, so the read is current.
+    const stillStanding = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({
+        electionId,
+        status: "active",
+        $or: [{ characterId: { $in: candidateIds } }, { nppId: { $in: candidateIds } }],
+      })
+      .project<{ characterId: ObjectId | null; nppId: ObjectId | null }>({
+        characterId: 1,
+        nppId: 1,
+      })
+      .toArray();
+
+    const standingIds = new Set<string>();
+    for (const row of stillStanding) {
+      if (row.characterId) standingIds.add(row.characterId.toString());
+      if (row.nppId) standingIds.add(row.nppId.toString());
+    }
+
+    const archivableIds = candidateIds.filter((id) => !standingIds.has(id.toString()));
+    if (archivableIds.length === 0) continue;
+
     const result = await db.collection<Campaign>("campaigns").updateMany(
       {
         electionId,
-        candidateId: { $in: candidateIds },
+        candidateId: { $in: archivableIds },
         status: { $ne: "archived" },
       },
       {

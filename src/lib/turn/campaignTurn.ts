@@ -406,6 +406,15 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               continue;
             }
 
+            // An archived campaign belongs to a candidate who is out of the
+            // race (withdrew, lost a primary, was removed). It is retained for
+            // history and for reactivation on re-entry, but it must not keep
+            // drawing income, actions or maintenance — nor keep refreshing its
+            // fog-of-war — while its candidate is no longer running.
+            if (campaign.status === "archived") {
+              continue;
+            }
+
             const suspendedKey = `${campaign.electionId.toString()}:${campaign.candidateId.toString()}`;
             if (suspendedCampaignKeys.has(suspendedKey)) {
               continue;

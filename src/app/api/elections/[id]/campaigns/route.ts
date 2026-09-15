@@ -7,7 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUserWithCharacter()
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
-import type { Campaign, Character, NPP, PoliticalParty } from "@/lib/db/types";
+import type { Campaign, Character, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { getEffectiveUpgradeCost, getMaintenanceCost } from "@/lib/campaigns/upgradeCosts";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
@@ -51,10 +51,36 @@ export async function GET(request: Request, { params }: RouteParams) {
     // list surface — they are retained for history but should not appear
     // alongside the candidates still in the race. The direct /campaign/[id]
     // page still renders an archived campaign for its owner.
-    const campaigns = await db
+    const allCampaigns = await db
       .collection<Campaign>("campaigns")
       .find({ electionId: electionOid, status: { $ne: "archived" } })
       .toArray();
+
+    // Then narrow to candidates who are actually still standing. `status:
+    // "archived"` alone is not trustworthy here: it is bookkeeping that every
+    // withdrawal path has to remember to set, and several (party-switch sweeps,
+    // relocation, inactivity) historically did not — which left withdrawn
+    // candidates rendering on this list with a live campaign. The candidacy row
+    // is the real predicate and cannot drift, so it gates the list. Campaigns
+    // for active candidates are guaranteed to exist by selfHealMissingCampaigns.
+    const activeCandidacies = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId: electionOid, status: "active" })
+      .project<{ characterId: ObjectId | null; nppId: ObjectId | null }>({
+        characterId: 1,
+        nppId: 1,
+      })
+      .toArray();
+    // Campaigns key `candidateId` by character id for players and by NPP id for
+    // NPPs, so both identities go into the set.
+    const standingCandidateIds = new Set<string>();
+    for (const c of activeCandidacies) {
+      if (c.characterId) standingCandidateIds.add(c.characterId.toString());
+      if (c.nppId) standingCandidateIds.add(c.nppId.toString());
+    }
+    const campaigns = allCampaigns.filter((c) =>
+      standingCandidateIds.has(c.candidateId?.toString() ?? "")
+    );
 
     // Fix C1: Batch fetch all candidates and managers to avoid N+1 queries
     const characterIds: ObjectId[] = [];
