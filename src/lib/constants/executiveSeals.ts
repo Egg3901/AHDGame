@@ -11,6 +11,7 @@
  * so these are an enhancement, never a hard dependency.
  */
 import type { CountryId } from "./countries";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export interface ExecutiveSeal {
   src: string;
@@ -37,12 +38,7 @@ export const EXECUTIVE_SEALS: Partial<Record<CountryId, ExecutiveSeal>> = {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e3/Bundesadler_Bundesorgane.svg/330px-Bundesadler_Bundesorgane.svg.png",
     alt: "Federal eagle of Germany",
   },
-  JP: {
-    src: "https://upload.wikimedia.org/wikipedia/commons/thumb/c/c3/Emblem_of_the_Prime_Minister_of_Japan.svg/330px-Emblem_of_the_Prime_Minister_of_Japan.svg.png",
-    alt: "Emblem of the Prime Minister of Japan",
-    // Self-contained colored oval — reads on the dark band without a disc.
-    backing: "plain",
-  },
+  JP: JP_IDENTITY.executiveSeal,
   IE: {
     src: "https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Coat_of_arms_of_Ireland.svg/330px-Coat_of_arms_of_Ireland.svg.png",
     alt: "Coat of arms of Ireland",

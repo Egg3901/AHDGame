@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 /**
  * Treasury / Finance-Ministry identity overlay for the National Budget surface.
@@ -88,17 +89,7 @@ export const TREASURY_TEXT: Record<
     native: "Bundesrepublik Deutschland · Bundesfinanzministerium",
     nativeEn: "Federal Republic of Germany · Federal Ministry of Finance",
   },
-  JP: {
-    glyph: "日",
-    serif: "cjk",
-    budgetTitle: "国家予算",
-    budgetTitleEn: "National Budget",
-    ministry: "財務省 · MOF",
-    publicSeal: "公開 · PUBLIC",
-    registry: "Japan · Ministry of Finance",
-    native: "日本国 · 財務省",
-    nativeEn: "Japan · Ministry of Finance",
-  },
+  JP: JP_IDENTITY.treasuryText,
   IE: {
     glyph: "ÉN",
     serif: "mono",

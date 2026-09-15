@@ -48,8 +48,13 @@ export interface CountryIdentity {
   readonly cabinet: CabinetIdentity;
   readonly national: NationalIdentity;
   readonly stats: StatsIdentity;
-  readonly treasury: TreasuryIdentity;
-  /** TREASURY_IDENTITY overlays text on NATIONAL_IDENTITY's palette; only the text is here. */
+  /**
+   * ⚠️ The authored TEXT only. There is deliberately no `treasury` field, because
+   * TREASURY_IDENTITY is DERIVED: treasuryIdentity.ts:324 composes it as
+   * `{ ...TREASURY_TEXT[c], palette, accent, accentSoft }` from
+   * getNationalIdentity(c). It recomposes itself once the text moves, so holding
+   * a copy here would create a second source of the same values.
+   */
   readonly treasuryText: Omit<TreasuryIdentity, "palette" | "accent" | "accentSoft">;
   readonly economyText: Omit<EconomyIdentity, "accent">;
   readonly executiveText: IdentityText;
@@ -62,6 +67,8 @@ export interface CountryIdentity {
    */
   readonly parliamentarySurface: ParliamentaryExecutiveSurface;
   readonly regionCensusLabels: CensusLabelSet;
+  /** Region display names (STATE_DISPLAY_NAMES), used by the commodity map. */
+  readonly stateDisplayNames: Readonly<Record<string, string>>;
   /**
    * `regional` is OPTIONAL: Japan has no REGIONAL_ADDRESS_NAME entry and uses the
    * documented "State of the State" default. Requiring it would author a fallback

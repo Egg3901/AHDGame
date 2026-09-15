@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { CountryId } from "./countries";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export interface CabinetIdentity {
   /** Large faded background glyph + chop fallback. */
@@ -58,15 +59,7 @@ export const CABINET_IDENTITY: Partial<Record<CountryId, CabinetIdentity>> = {
     g1: "#1a150d",
     g2: "#100c07",
   },
-  JP: {
-    glyph: "日",
-    serif: "cjk",
-    gov: "#e6b85c",
-    govSoft: "#f3d79a",
-    g0: "#7a1d12",
-    g1: "#3a0e0a",
-    g2: "#1c0707",
-  },
+  JP: JP_IDENTITY.cabinet,
   IE: {
     glyph: "IE",
     serif: "mono",

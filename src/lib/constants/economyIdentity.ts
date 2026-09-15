@@ -11,6 +11,7 @@
  */
 import type { CountryId } from "./countries";
 import { getStatsIdentity, type StatsAccent } from "./nationalStatsIdentity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export interface EconomyIdentity {
   /** Watermark / chop glyph (经 / US / …). */
@@ -68,15 +69,7 @@ export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "acce
     officeEn: "Federal Statistical Office · National Accounts",
     registry: "Federal Republic of Germany · National Accounts Registry",
   },
-  JP: {
-    glyph: "経",
-    serif: "cjk",
-    title: "経済展望",
-    titleEn: "Economic Outlook",
-    office: "内閣府 · 経済社会総合研究所",
-    officeEn: "Cabinet Office · Economic and Social Research Institute",
-    registry: "Japan · National Accounts Registry",
-  },
+  JP: JP_IDENTITY.economyText,
   IE: {
     glyph: "ÉI",
     serif: "mono",

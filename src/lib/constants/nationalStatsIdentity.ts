@@ -12,6 +12,7 @@
  * properties on the masthead container only — never on the themed body.
  */
 import type { CountryId } from "./countries";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export interface StatsAccent {
   /** Accent gold/brass. */
@@ -92,17 +93,7 @@ export const NATIONAL_STATS_IDENTITY: Partial<Record<CountryId, StatsIdentity>> 
     seal: "DESTATIS",
     accent: { stat: "#d4a244", statSoft: "#e8c884", g0: "#2a2218", g1: "#1a150d", g2: "#100c07" },
   },
-  JP: {
-    glyph: "統",
-    serif: "cjk",
-    office: "総務省統計局",
-    officeEn: "Statistics Bureau of Japan",
-    title: "国家統計 (National Statistics)",
-    titleEn: "National Statistics",
-    registry: "Japan · Statistics Bureau",
-    seal: "統計局 · SBJ",
-    accent: { stat: "#e6b85c", statSoft: "#f3d79a", g0: "#7a1d12", g1: "#3a0e0a", g2: "#1c0707" },
-  },
+  JP: JP_IDENTITY.stats,
   IE: {
     glyph: "CSO",
     serif: "mono",

@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 /**
  * National-identity layer for state-owned / National Corporation surfaces.
@@ -128,21 +129,7 @@ export const NATIONAL_IDENTITY: Record<CountryId, NationalIdentity> = {
     accentSoft: "#e8c884",
     accentName: "Schwarz-Gold",
   },
-  JP: {
-    glyph: "日",
-    serif: "cjk",
-    motif: "rays",
-    name: "Japan National Corporation",
-    native: "日本国有企業",
-    registry: "日本国 · 国有資産登記",
-    ministry: "財務省 · MOF",
-    publicSeal: "公開 · PUBLIC REGISTER",
-    hqCity: "Tokyo",
-    palette: ["#4a1414", "#2c0d0d", "#160909"],
-    accent: "#e3dcd0",
-    accentSoft: "#ffffff",
-    accentName: "Vermilion & ivory",
-  },
+  JP: JP_IDENTITY.national,
   IE: {
     glyph: "ÉN",
     serif: "mono",

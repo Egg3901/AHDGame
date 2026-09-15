@@ -8,6 +8,7 @@
 import { getCountryConfig, type CountryId } from "./countries";
 import { getCountryFlagUrl } from "./flags";
 import { getExecutiveSurface } from "./executiveSurface";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export interface ParliamentaryExecutivePlaque {
   title: string;
@@ -87,28 +88,7 @@ export const SURFACES: Partial<Record<CountryId, ParliamentaryExecutiveSurface>>
       breadcrumbLast: "Federal Chancellery",
     },
   },
-  JP: {
-    executiveTitle: "Prime Minister",
-    memberLabel: "MP",
-    headPlaque: {
-      title: "Prime Minister",
-      sealGlyph: "総",
-      vacancyNote: "A qualifying party or coalition chair may nominate a Prime Minister.",
-    },
-    oppositionPlaque: {
-      title: "Leader of the Opposition",
-      sealGlyph: "野",
-      vacancyNote: "The leader of the largest opposition party in the Diet.",
-    },
-    seatsPanel: { title: "Shūgiin seats by party", emptyText: "No Diet members elected yet." },
-    hero: {
-      image: "/api/images/hero/kantei",
-      alt: "Naikaku Sōri Daijin Kantei",
-      title: "Government of Japan",
-      tagline: "Naikaku Sōri Daijin Kantei · Cabinet and the Kokkai",
-      breadcrumbLast: "Naikaku Sōri Daijin Kantei",
-    },
-  },
+  JP: JP_IDENTITY.parliamentarySurface,
   IE: {
     executiveTitle: "Taoiseach",
     memberLabel: "TD",

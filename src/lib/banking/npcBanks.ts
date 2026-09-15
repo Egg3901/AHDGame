@@ -14,6 +14,7 @@ import { getRateCorridors } from "@/lib/banking/regulationQ";
 import { setBankRates } from "@/lib/banking/rates";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
 export const NPC_BANKS_PER_COUNTRY = 2;
@@ -73,7 +74,7 @@ const DEFAULT_MODERN_NAMES = ["Meridian Banking Group", "Harbourline Financial"]
 export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string[]>> = {
   US: ["Continental Merchants Bank", "Prairie States Savings Bank"],
   UK: ["Midland Counties Bank", "Clydeside Mercantile Bank"],
-  JP: ["Kanto Commercial Bank", "Osaka Harbour Trust"],
+  JP: JP_IDENTITY.historicalNames,
   DE: ["Rhineland Credit Bank", "Hanseatic Merchants Bank"],
   FR: ["Banque du Littoral", "Comptoir des Provinces"],
   IT: ["Banca Adriatica", "Credito Tirreno"],
@@ -91,7 +92,7 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
 export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
   US: ["Continental Merchants Bancorp", "Prairie States Financial"],
   UK: ["Midland Counties Banking Group", "Clydeside Financial"],
-  JP: ["Kanto Commercial Banking Group", "Osaka Harbour Financial"],
+  JP: JP_IDENTITY.modernNames,
   DE: ["Rhineland Credit Group", "Hanseatic Banking Group"],
   FR: ["Groupe Bancaire du Littoral", "Comptoir des Provinces"],
   IT: ["Banca Adriatica Group", "Credito Tirreno"],

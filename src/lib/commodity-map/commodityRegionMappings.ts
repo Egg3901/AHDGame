@@ -23,6 +23,7 @@ import { bgRegions } from "@/lib/seeds/bg/bgRegions";
 import { csRegions } from "@/lib/seeds/cs/csRegions";
 import { blrRegions } from "@/lib/seeds/blr/blrRegions";
 import { balRegions } from "@/lib/seeds/bal/balRegions";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 // ISO-numeric ⇄ CountryId now live in the neutral countryIso module so non-commodity
 // surfaces (e.g. the IntOrg world map) can reuse them without depending on this file.
@@ -50,16 +51,7 @@ export const STATE_DISPLAY_NAMES: Partial<Record<CountryId, Record<string, strin
     WAL: "Wales",
     NIR: "N. Ireland",
   },
-  JP: {
-    HOK: "Hokkaido",
-    TOH: "Tohoku",
-    KAN: "Kanto",
-    CHU: "Chubu",
-    KNS: "Kansai",
-    CGK: "Chugoku",
-    SHI: "Shikoku",
-    KYU: "Kyushu & Okinawa",
-  },
+  JP: JP_IDENTITY.stateDisplayNames,
   DE: {
     NW: "North Rhine-Westphalia",
     BY: "Bavaria",

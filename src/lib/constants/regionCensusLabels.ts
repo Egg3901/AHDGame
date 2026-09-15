@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export interface CensusLabelSet {
   cardTitles: {
@@ -74,31 +75,7 @@ export const REGION_CENSUS_LABELS: Partial<Record<CountryId, CensusLabelSet>> = 
   UK: UK_CENSUS_LABELS,
   SCO: UK_CENSUS_LABELS,
   WAL: UK_CENSUS_LABELS,
-  JP: {
-    cardTitles: {
-      ethnicity: "Ethnicity",
-      age: "Age Distribution",
-      education: "Education Level",
-      income: "Household Income",
-      urbanization: "Urbanization",
-    },
-    ethnicity: {
-      japanese: "Japanese",
-      chinese: "Chinese",
-      korean: "Korean",
-      southeast_asian: "Southeast Asian",
-      other_foreign: "Other Foreign",
-    },
-    age: { ...AGE_LABELS },
-    education: {
-      high_school: "High School",
-      vocational: "Vocational College",
-      university: "University",
-      graduate: "Graduate",
-    },
-    income: { ...INCOME_TIERS },
-    urbanization: { urban: "Urban / city", suburban: "Suburban / town", rural: "Rural / village" },
-  },
+  JP: JP_IDENTITY.regionCensusLabels,
   DE: {
     cardTitles: {
       ethnicity: "Ethnicity / Background",

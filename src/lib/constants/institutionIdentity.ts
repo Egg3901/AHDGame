@@ -1,6 +1,7 @@
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -66,13 +67,7 @@ export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
     title: "Bundeskanzleramt",
     titleEn: "Federal Chancellery",
   },
-  JP: {
-    glyph: "閣",
-    serif: "cjk",
-    registry: "Japan · Cabinet of the Government",
-    title: "首相官邸",
-    titleEn: "Office of the Prime Minister",
-  },
+  JP: JP_IDENTITY.executiveText,
   IE: {
     glyph: "DT",
     serif: "mono",
@@ -259,13 +254,7 @@ export const POLICY_TEXT: Record<CountryId, IdentityText> = {
     title: "Bundesrecht",
     titleEn: "National Policy",
   },
-  JP: {
-    glyph: "法",
-    serif: "cjk",
-    registry: "Code of National Law · Japan",
-    title: "国家法令",
-    titleEn: "National Policy",
-  },
+  JP: JP_IDENTITY.policyText,
   IE: {
     glyph: "§",
     serif: "mono",

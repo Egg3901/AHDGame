@@ -714,6 +714,10 @@ export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: strin
     why: "Created by D1 as the declared shape of a country folder. It is the destination of the move, not a source of Japan facts.",
   },
   {
+    file: "src/lib/countries/jp/identity.ts",
+    why: "Created by D2 as the destination for Japan's names and labels. Generated from the pre-move snapshot, so it is where Japan's facts now live rather than a source still awaiting relocation.",
+  },
+  {
     file: "src/lib/countries/jp/index.ts",
     why: "Created by D1 as Japan's folder barrel. It is the destination of the move, not a source of Japan facts.",
   },

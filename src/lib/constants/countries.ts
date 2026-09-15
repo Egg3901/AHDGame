@@ -20,6 +20,7 @@ import { CN_POPULAR_MOOD_PROFILE } from "./popularMoodProfiles";
 import { RU_NATIONALITIES_SEATS } from "./ruSeats";
 
 import type { EraSeedModels } from "./economicModels";
+import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 
 export type CountryId =
   | "US"
@@ -7442,7 +7443,7 @@ export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
   US: "State of the Union",
   UK: "Address to the Nation",
   DE: "Government Declaration",
-  JP: "Policy Speech",
+  JP: JP_IDENTITY.addressNames.national,
   IE: "Address to the Oireachtas",
 };
 

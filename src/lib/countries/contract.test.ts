@@ -160,14 +160,29 @@ describe("pre-move snapshot", () => {
 });
 
 describe("faithful replacement", () => {
-  // `it.each` throws on an empty table, and both tables are empty until D2.
   if (MOVED_REGISTRIES.length === 0) {
     it("has no moved registries yet", () => {
       expect(MOVED_REGISTRIES).toEqual([]);
     });
   } else {
-    it.each(MOVED_REGISTRIES)("$name is unchanged by the move", ({ before, after }) => {
-      expect(after()).toEqual(before());
+    /**
+     * The whole point of the phase. `after()` reads the live registry, which now
+     * forwards to Japan's folder; the expected value comes from the committed
+     * pre-move fixture, never from the registry itself. Comparing the registry
+     * to the registry would pass vacuously no matter what the move broke.
+     */
+    it.each(MOVED_REGISTRIES)("$name is unchanged by the move", ({ name, after }) => {
+      const entry = snapshot()[name];
+      expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
+      expect(after()).toEqual(entry.value);
+    });
+
+    it("forwards every registry the fixture recorded for this phase", () => {
+      // Guards the other direction: a registry quietly dropped from the table
+      // would otherwise just stop being checked.
+      expect(MOVED_REGISTRIES.length).toBe(15);
+      const missing = MOVED_REGISTRIES.filter((r) => !snapshot()[r.name]);
+      expect(missing.map((r) => r.name)).toEqual([]);
     });
   }
 
