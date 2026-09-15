@@ -34,6 +34,11 @@ export interface TurnPhaseRuntime {
   markPhaseSkipped(phase: string, reason: TurnPhaseSkipReason, message: string): Promise<void>;
 }
 
+export interface CompletedTurnPhaseObservation {
+  name: string;
+  result: unknown;
+}
+
 export interface TurnPhaseAdapter {
   key: string;
   execute(context: TurnExecutionContext, runtime: TurnPhaseRuntime): Promise<void>;

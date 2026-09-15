@@ -42,7 +42,7 @@ import {
   partyUrl,
   countryUrl,
 } from "@/lib/urls";
-import { visibleStaffNavItems } from "@/components/navbar/staffNavItems";
+import { viewerIsSingleplayerOwner, visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
 import {
   MOBILE_MENU_PANEL_CLASS,
@@ -571,7 +571,11 @@ export const Navbar = React.memo(function Navbar({
               isAdminOrMod={!!(user?.isAdmin || user?.isModerator)}
             />
 
-            <StaffDropdown isAdmin={!!user?.isAdmin} isModerator={!!user?.isModerator} />
+            <StaffDropdown
+              isAdmin={!!user?.isAdmin}
+              isModerator={!!user?.isModerator}
+              isSingleplayerOwner={viewerIsSingleplayerOwner(user)}
+            />
 
             {user?.singleplayer && !clientShell && <SingleplayerEndTurnButton />}
           </div>
@@ -956,6 +960,7 @@ export const Navbar = React.memo(function Navbar({
                 const staffItems = visibleStaffNavItems({
                   isAdmin: !!user?.isAdmin,
                   isModerator: !!user?.isModerator,
+                  isSingleplayerOwner: viewerIsSingleplayerOwner(user),
                 });
                 if (staffItems.length === 0) return null;
                 return (
