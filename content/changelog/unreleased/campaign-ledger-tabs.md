@@ -13,13 +13,16 @@ areas: [fullstack]
 ## What changed
 
 - The ledger is now two tabs. **Activity** is the log you already had, and
-  **Endorsements** lists everyone actively backing the campaign.
+  **Endorsements** lists the players and politicians actively backing the
+  campaign.
 - The activity log keeps a campaign's whole history instead of only the ten most
   recent entries, so its pager finally has more than one page to turn.
 - Endorsements can be narrowed to players or to politicians, and each chip
   carries the number sitting behind it. Both tabs page ten at a time.
-- Endorsement rows show a date rather than a turn, because endorsement records
-  do not store one.
+- Endorsement rows name the endorser and whether they are a player or a
+  politician. They carry no "when": endorsement records store no turn number,
+  and the only timestamp on them is a real-world one that would read oddly
+  beside the game's own calendar. It still orders the list, newest first.
 
 ## Notes
 

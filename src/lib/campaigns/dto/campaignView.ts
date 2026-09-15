@@ -167,13 +167,21 @@ export interface CampaignData {
     };
   };
   /**
-   * Active endorsers of this campaign, newest first. Both sources appear: NPP
-   * rows are filtered to the active AND visible set (legacy organic rows stay
+   * Active player and NPP endorsers of this campaign, newest first. NPP rows
+   * are filtered to the active AND visible set (legacy organic rows stay
    * hidden), so the length equals the `budget.actions.endorsementCount` the
    * action panel reports.
    *
-   * `since` is the endorsement's timestamp; endorsement records carry no turn
-   * number, so the ledger shows a date for these rows rather than a turn tag.
+   * Governor and executive endorsements are NOT listed here or counted in
+   * `endorsementCount`, though `campaignActionsPerTurn` does pay them. Both are
+   * reachable in game, so a campaign holding one accrues from an endorsement
+   * this list does not name. The tab's filter is Player / Politician by
+   * design; widening it means widening the filter with it.
+   *
+   * `since` is the endorsement's real-world timestamp and orders the list. It
+   * is never displayed: endorsement records carry no turn number, and the game
+   * runs on its era preset's calendar, so a wall-clock date would stamp the
+   * wrong year on the fiction.
    */
   endorsements?: Array<{
     kind: "player" | "npp";

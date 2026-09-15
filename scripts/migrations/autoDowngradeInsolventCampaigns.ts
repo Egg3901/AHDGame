@@ -20,6 +20,7 @@ import * as dotenv from "dotenv";
 import * as path from "path";
 import { computeAutoDowngrade } from "../../src/lib/campaigns/autoDowngrade";
 import { calculateCampaignIncome } from "../../src/lib/campaigns/income";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "../../src/lib/campaigns/constants/activityHistory";
 
 dotenv.config({ path: path.resolve(__dirname, "../../.env.local") });
 
@@ -117,7 +118,7 @@ async function main() {
             $push: {
               activityHistory: {
                 $each: activityEntries,
-                $slice: -20,
+                $slice: -CAMPAIGN_ACTIVITY_HISTORY_CAP,
               },
             },
           },

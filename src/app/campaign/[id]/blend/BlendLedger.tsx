@@ -125,7 +125,7 @@ export function BlendLedger({
         </button>
       </div>
 
-      {endorsing ? (
+      {endorsing && ledger.showFilters ? (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14 }}>
           {FILTERS.map((f) => (
             <button
@@ -167,23 +167,13 @@ export function BlendLedger({
                   <span
                     style={{
                       fontFamily: FONT.mono,
-                      fontSize: 12,
-                      color: BLEND.muted,
+                      fontSize: 10.5,
+                      color: BLEND.mutedDimmer,
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {r.sinceText}
+                    {r.kindLabel}
                   </span>
-                </div>
-                <div
-                  style={{
-                    marginTop: 3,
-                    fontFamily: FONT.mono,
-                    fontSize: 10,
-                    color: BLEND.mutedDimmer,
-                  }}
-                >
-                  {r.kindLabel}
                 </div>
               </div>
             ) : (
@@ -191,7 +181,7 @@ export function BlendLedger({
                 key={`${r.kind}-${r.name}-${i}`}
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "86px minmax(0, 1fr) auto",
+                  gridTemplateColumns: "86px minmax(0, 1fr)",
                   gap: 16,
                   alignItems: "baseline",
                   padding: "11px 0",
@@ -202,16 +192,6 @@ export function BlendLedger({
                   {r.kindLabel}
                 </span>
                 <span style={{ fontFamily: FONT.serif, fontSize: 15 }}>{r.name}</span>
-                <span
-                  style={{
-                    fontFamily: FONT.mono,
-                    fontSize: 12.5,
-                    color: BLEND.muted,
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {r.sinceText}
-                </span>
               </div>
             )
           )

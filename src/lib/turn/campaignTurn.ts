@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 import type { UpdateFilter } from "mongodb";
 import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
-import { calculateCampaignActions } from "@/lib/campaigns/actions";
+import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { diminishPassiveFavorabilityGain } from "@/lib/actions";
 import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
 import { getCampaignFamilyScalar, getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
@@ -17,7 +17,6 @@ import {
 import { buildRallyAccrualEntry } from "@/lib/turn/elections/supportAccrual";
 import { computeAutoDowngrade } from "@/lib/campaigns/autoDowngrade";
 import { calculateCampaignStrengthLeaderPullbacks } from "@/lib/campaigns/campaignStrength";
-import { GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS } from "@/lib/constants/governorOffice";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { selfHealMissingCampaigns } from "@/lib/campaigns/selfHealCampaigns";
@@ -86,9 +85,9 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         const gameConfig = await db
           .collection<{ _id: string; baseActionsPerTurn?: number }>("gameConfig")
           .findOne({ _id: "default" });
-        const playerBaseActions = Math.max(gameConfig?.baseActionsPerTurn ?? 4, 4);
-        // NPPs get a smaller baseline since they don't have active piloting.
-        const nppBaseActions = Math.max(1, Math.floor(playerBaseActions / 2));
+        // Passed through raw. `campaignActionsPerTurn` owns the floor and the
+        // halving for NPP-run campaigns, so the desk applies the same ones.
+        const rawBaseActionsPerTurn = gameConfig?.baseActionsPerTurn ?? 4;
 
         // Only process campaigns tied to elections that are still active — completed
         // elections should have had their campaigns deleted at resolution time, but
@@ -327,8 +326,9 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               {
                 // Active AND visible: the shared filter hides legacy
                 // `source: "organic"` rows, and it is the same filter the
-                // campaign panel counts with, so the accrual the engine grants
-                // and the figure the panel promises cannot drift apart.
+                // campaign desk counts with, so the two agree on which
+                // endorsements exist. What is then done with them is decided
+                // once, in `campaignActionsPerTurn`, which both callers use.
                 $match: buildActiveVisibleNppEndorsementFilter({
                   electionId: { $in: campaignElectionIds },
                   candidateId: { $in: campaignCandidateIds },
@@ -491,47 +491,27 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
             // Look up pre-fetched endorsement counts
             const eKey = endorsementKey(campaign.electionId, campaign.candidateId);
             /*
-             * NPP endorsements grant campaign actions in every race type. They
-             * are arranged rather than organic, so they are farmable in a way
-             * player endorsements are not, but accrual is
-             * baseline + floor(sqrt(n) * 3): the marginal yield of the n-th
-             * arranged endorsement falls away on its own, which is what bounds
-             * the farming rather than a cap.
+             * Accrual rules (which endorsement sources count, in which races, at
+             * what weight, off which baseline) live in `campaignActionsPerTurn`
+             * so the campaign desk promises exactly what this pays. Deriving
+             * them here separately is what let the panel advertise 15 actions a
+             * turn while this credited 8.
+             *
+             * Politician endorsements are arranged rather than organic, so they
+             * are farmable in a way player endorsements are not; the square-root
+             * curve is what bounds that, not a cap.
              */
-            const nppEndorsementCount = nppEndorsementMap.get(eKey) ?? 0;
-            const playerEndorsementCount = playerEndorsementMap.get(eKey) ?? 0;
-            /*
-             * Player endorsements only grant campaign actions for presidential races.
-             * In lower-level races (governor, senate, house) endorsements are
-             * primarily a social/favorability signal — they don't meaningfully
-             * mobilise the national coalitions needed to convert endorsements into
-             * ground-level canvassing actions. Presidential campaigns are different:
-             * a high-profile player endorsement can unlock national volunteer networks.
-             */
+            // Also read further down for the in-state travel bonus.
             const isPresidential = electionData?.electionType === "president";
-            const effectivePlayerEndorsements = isPresidential ? playerEndorsementCount : 0;
-            // Governor endorsements weigh more than a single NPP endorsement and
-            // apply at sub-presidential races as a national campaign-action boost.
-            // For presidential, the boost is intentionally NOT granted here — a
-            // governor's presidential endorsement is state-scoped and applied as
-            // an in-state vote multiplier in accumulatePresidentVoteTurn, not as
-            // a national resource bump.
-            const governorEndorsementCount = isPresidential
-              ? 0
-              : (governorEndorsementMap.get(eKey) ?? 0);
-            // Executive (President / PM / Chancellor) endorsements use the same
-            // weight as governor endorsements. The leader is also blocked from
-            // endorsing the presidential race itself (server-side via the
-            // endorseable-types allowlist), so no isPresidential gate is needed.
-            const executiveEndorsementCount = executiveEndorsementMap.get(eKey) ?? 0;
-            const baseline = campaign.candidateIsNPP ? nppBaseActions : playerBaseActions;
-            const actions = calculateCampaignActions(
-              nppEndorsementCount +
-                effectivePlayerEndorsements +
-                (governorEndorsementCount + executiveEndorsementCount) *
-                  GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS,
-              baseline
-            );
+            const actions = campaignActionsPerTurn({
+              nppEndorsements: nppEndorsementMap.get(eKey) ?? 0,
+              playerEndorsements: playerEndorsementMap.get(eKey) ?? 0,
+              governorEndorsements: governorEndorsementMap.get(eKey) ?? 0,
+              executiveEndorsements: executiveEndorsementMap.get(eKey) ?? 0,
+              isPresidential,
+              candidateIsNPP: campaign.candidateIsNPP === true,
+              baseActionsPerTurn: rawBaseActionsPerTurn,
+            });
 
             // Calculate maintenance costs at the campaign's current (pre-downgrade)
             // levels. Passive favorability effects below still use these levels —

@@ -465,7 +465,14 @@ export async function accumulatePresidentVoteTurn(
   // two channels: `swing` (+% in swing states, from starter + Field Offices) and
   // `gotv` (+% in ALL areas, from the Get-Out-The-Vote branch). Legacy rows fall
   // back to the old `groundGameLevel * 0.03` swing-only bonus (gotv = 0).
-  const campaigns = await db.collection<Campaign>("campaigns").find({ electionId }).toArray();
+  // Ground-game and strength fields only. This runs for every presidential
+  // election every turn, and a campaign now keeps 200 activity entries rather
+  // than 10, so the array is projected away rather than carried through the
+  // hourly vote accumulation.
+  const campaigns = await db
+    .collection<Campaign>("campaigns")
+    .find({ electionId }, { projection: { activityHistory: 0 } })
+    .toArray();
   const groundGameByCandidate = new Map<string, { swing: number; gotv: number }>();
   for (const c of campaigns) {
     groundGameByCandidate.set(c.candidateId.toString(), {

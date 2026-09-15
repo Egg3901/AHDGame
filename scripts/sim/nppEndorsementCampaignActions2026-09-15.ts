@@ -21,9 +21,12 @@
  *          arranged endorsement is the number that decides whether restoring
  *          them re-opens the direction conflict #1891 closed.
  *
- * Accrual math is never reimplemented here -- `calculateCampaignActions` is
- * imported from the module the turn engine itself calls, so the arms cannot
- * drift from production the way the read path did.
+ * Accrual math is never reimplemented here. Arm A calls
+ * `campaignActionsPerTurn`, the same function the turn engine and the campaign
+ * desk use, so the live verdict cannot drift from what the game pays. Arm B
+ * sweeps the curve itself through `calculateCampaignActions`, since the
+ * question there is the shape of the marginal yield rather than any one
+ * campaign's rate.
  *
  *   npx tsx scripts/sim/nppEndorsementCampaignActions2026-09-15.ts
  */
@@ -33,9 +36,8 @@ import * as path from "path";
 import type { Db } from "mongodb";
 import type { Campaign } from "@/lib/db/types/campaign";
 import type { Election, NPPEndorsement } from "@/lib/db/types";
-import { calculateCampaignActions } from "@/lib/campaigns/actions";
+import { calculateCampaignActions, campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
-import { GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS } from "@/lib/constants/governorOffice";
 
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 let uri = process.env.MONGODB_URI_LIVE!;
@@ -61,24 +63,7 @@ interface CampaignRow {
   after: number;
 }
 
-/**
- * The engine's endorsement argument, with NPP either excluded (today) or
- * included (the proposed change). Mirrors campaignTurn.ts exactly: player
- * endorsements are gated to presidential races, governor endorsements are
- * excluded from presidential (they land as an in-state vote multiplier
- * instead), and executive endorsements always apply.
- */
-function endorsementArgument(
-  row: Pick<CampaignRow, "isPresidential" | "npp" | "player" | "governor" | "executive">,
-  countNpp: boolean
-): number {
-  const player = row.isPresidential ? row.player : 0;
-  const governor = row.isPresidential ? 0 : row.governor;
-  const weighted = (governor + row.executive) * GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS;
-  return (countNpp ? row.npp : 0) + player + weighted;
-}
-
-async function loadRows(db: Db, baseline: number, nppBaseline: number): Promise<CampaignRow[]> {
+async function loadRows(db: Db, rawBaseActionsPerTurn: number): Promise<CampaignRow[]> {
   const campaigns = await db
     .collection<Campaign>("campaigns")
     .find({ status: { $ne: "archived" }, archivedAt: null })
@@ -123,8 +108,10 @@ async function loadRows(db: Db, baseline: number, nppBaseline: number): Promise<
         characterName: 1,
       })
       .toArray();
-    const candidateRow =
-      candidateRows.find((r) => r.status === "active") ?? candidateRows[0] ?? null;
+    // Active row only, with no fallback: the turn engine joins player
+    // endorsements on `status: "active"` rows and nothing else, so falling back
+    // to a withdrawn row here would overstate the BEFORE arm.
+    const candidateRow = candidateRows.find((r) => r.status === "active") ?? null;
     const player = candidateRow
       ? await db.collection("playerEndorsements").countDocuments({
           electionId: campaign.electionId,
@@ -153,15 +140,26 @@ async function loadRows(db: Db, baseline: number, nppBaseline: number): Promise<
       governor,
       executive,
     };
-    const effectiveBaseline = campaign.candidateIsNPP ? nppBaseline : baseline;
+    // Both arms go through the production rule, differing only in whether the
+    // politician endorsements are handed to it.
+    const accrual = (countNpp: boolean) =>
+      campaignActionsPerTurn({
+        nppEndorsements: countNpp ? npp : 0,
+        playerEndorsements: player,
+        governorEndorsements: governor,
+        executiveEndorsements: executive,
+        isPresidential,
+        candidateIsNPP: campaign.candidateIsNPP === true,
+        baseActionsPerTurn: rawBaseActionsPerTurn,
+      });
     rows.push({
       name: candidateRow?.characterName ?? campaign.candidateId.toString(),
       electionType: election?.electionType ?? "unknown",
       countryId: election?.countryId ?? "??",
       candidateIsNPP: campaign.candidateIsNPP === true,
       ...partial,
-      before: calculateCampaignActions(endorsementArgument(partial, false), effectiveBaseline),
-      after: calculateCampaignActions(endorsementArgument(partial, true), effectiveBaseline),
+      before: accrual(false),
+      after: accrual(true),
     });
   }
   return rows;
@@ -255,7 +253,7 @@ async function main(): Promise<void> {
     const nppBaseline = Math.max(1, Math.floor(baseline / 2));
     console.log(`baseActionsPerTurn baseline: ${baseline} (NPP-run campaigns: ${nppBaseline})`);
 
-    const rows = await loadRows(db, baseline, nppBaseline);
+    const rows = await loadRows(db, gameConfig?.baseActionsPerTurn ?? 4);
     armA(rows);
     armB(baseline);
   } finally {

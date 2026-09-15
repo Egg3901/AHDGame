@@ -21,6 +21,7 @@ function ledger(over: Partial<CampaignBlendVM["ledger"]> = {}): CampaignBlendVM[
     endorsementRows: [],
     filter: "all",
     filterCounts: { all: 0, player: 0, npp: 0 },
+    showFilters: true,
     emptyText: "Nothing has been bought yet.",
     rangeText: "1-10 of 24",
     pageText: "Page 1 of 3",
@@ -133,7 +134,7 @@ describe("tabs", () => {
     expect(onTab).toHaveBeenCalledWith("endorsements");
   });
 
-  it("lists endorsers with their source and date on the endorsements tab", () => {
+  it("lists endorsers with their source on the endorsements tab", () => {
     renderLedger({
       ledger: ledger({
         tab: "endorsements",
@@ -141,15 +142,15 @@ describe("tabs", () => {
         hasPager: false,
         filterCounts: { all: 2, player: 1, npp: 1 },
         endorsementRows: [
-          { kind: "npp", kindLabel: "Politician", name: "Carol Martin", sinceText: "May 5, 2026" },
-          { kind: "player", kindLabel: "Player", name: "Richard Nixon", sinceText: "May 4, 2026" },
+          { kind: "npp", kindLabel: "Politician", name: "Carol Martin" },
+          { kind: "player", kindLabel: "Player", name: "Richard Nixon" },
         ],
       }),
     });
     expect(screen.getByText("Carol Martin")).toBeTruthy();
     expect(screen.getByText("Richard Nixon")).toBeTruthy();
     expect(screen.getByText("Politician")).toBeTruthy();
-    expect(screen.getByText("May 4, 2026")).toBeTruthy();
+    expect(screen.getByText("Player")).toBeTruthy();
   });
 
   it("says so plainly when no one has endorsed", () => {
@@ -200,6 +201,12 @@ describe("endorsement filter", () => {
     expect(screen.getByRole("button", { name: /All 5/ }).getAttribute("aria-pressed")).toBe(
       "false"
     );
+  });
+
+  it("renders no chips when the viewer cannot see the records behind them", () => {
+    renderLedger({ ledger: filtered({ showFilters: false }) });
+    expect(screen.queryByRole("button", { name: /All 5/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Politicians/ })).toBeNull();
   });
 
   it("keeps the filter off the activity tab, which it does not narrow", () => {

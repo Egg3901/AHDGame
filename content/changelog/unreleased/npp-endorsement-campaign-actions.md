@@ -17,7 +17,11 @@ areas: [engine]
   campaign backed by them earned the baseline rate instead.
 - The campaign desk's "per turn" figure already counted these endorsements, so
   campaigns holding them were shown an action income they never received. The
-  displayed figure and the income now agree.
+  desk and the turn that pays it now work from one shared rule, so the figure a
+  campaign is shown is the figure it earns. That also closes three quieter
+  mismatches the old desk carried: it counted player endorsements in races that
+  do not grant actions for them, ignored governor and executive endorsements
+  entirely, and used a full baseline for campaigns an unaligned politician runs.
 
 ## Why
 

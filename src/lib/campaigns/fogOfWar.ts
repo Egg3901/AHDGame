@@ -17,7 +17,13 @@ export function applyFog(actualLevel: number, variance: number, max: number): nu
 export async function updateCampaignFogOfWar(): Promise<void> {
   try {
     const db = await getDb();
-    const campaigns = await db.collection<Campaign>("campaigns").find({}).toArray();
+    // Only the four level fields are read below. activityHistory is never
+    // touched here, and a campaign now keeps 200 entries rather than 10, so
+    // pulling it would make this sweep twenty times heavier for nothing.
+    const campaigns = await db
+      .collection<Campaign>("campaigns")
+      .find({}, { projection: { activityHistory: 0 } })
+      .toArray();
 
     if (campaigns.length === 0) {
       return; // No campaigns to update
