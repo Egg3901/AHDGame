@@ -48,6 +48,13 @@ function Harness() {
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
           />
+        ) : id === "review" ? (
+          <>
+            <p>{`Content for ${id}`}</p>
+            {/* Mirrors production: the review step owns final submission
+                (CandidateFile's submit), the shell never submits itself. */}
+            <button type="submit">File character</button>
+          </>
         ) : (
           <p>{`Content for ${id}`}</p>
         )
@@ -139,6 +146,30 @@ describe("ConversationShell player flow", () => {
     fireEvent.click(continueButton());
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByText("Content for country")).toBeTruthy();
+  });
+
+  it("moves focus on step change but not on first render", () => {
+    render(<Harness />);
+
+    // A restored chat session must not yank focus past the page heading and
+    // the flow toggle on load.
+    expect(document.activeElement).not.toBe(screen.getByRole("heading", { name: "Country" }));
+
+    fireEvent.click(continueButton());
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "The politician" }));
+  });
+
+  it("leaves final submission to the review step", () => {
+    render(<Harness />);
+    fireEvent.click(continueButton());
+    fireEvent.change(screen.getByLabelText("Politician name"), {
+      target: { value: "Eleanor Vance" },
+    });
+    advanceToReview();
+
+    expect(screen.getByText("Content for review")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Continue|Review your file/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "File character" })).toBeTruthy();
   });
 
   it("opens any reached step directly from the stepper", () => {

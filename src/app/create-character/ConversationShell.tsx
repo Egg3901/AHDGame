@@ -34,6 +34,7 @@ export function ConversationShell({
   const [activeId, setActiveId] = useState<string>(() => steps[0]?.id ?? "");
   const [reached, setReached] = useState<string[]>(() => (steps[0] ? [steps[0].id] : []));
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const mountedRef = useRef(false);
 
   const activeIndex = Math.max(
     0,
@@ -45,7 +46,13 @@ export function ConversationShell({
 
   // Move keyboard focus to the new prompt on every step change, so screen
   // reader and keyboard users land on the question, not the top of the page.
+  // Skipped on first render: a restored chat session must not yank focus past
+  // the page heading and the flow toggle on load.
   useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
     headingRef.current?.focus();
   }, [activeId]);
 
