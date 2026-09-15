@@ -1,15 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
-import {
-  ACKNOWLEDGED_OUT_OF_SCOPE,
-  BUCKET_A_MOVES,
-  BUCKET_B_RELATIONAL,
-  BUCKET_C_DERIVED,
-  BUCKET_D_RELOCATE,
-  BUCKET_E_CLIENT,
-  BUCKET_F_CONDITIONAL,
-} from "./jpCoverage";
+import { ACKNOWLEDGED_OUT_OF_SCOPE, JP_COVERAGE, type Phase } from "./jpCoverage";
 
 /**
  * Every Japan-bearing file is classified.
@@ -117,14 +109,11 @@ function japanBearingFiles(): string[] {
 }
 
 const allBuckets = () => [
-  ...BUCKET_A_MOVES,
-  ...BUCKET_B_RELATIONAL,
-  ...BUCKET_C_DERIVED,
-  ...BUCKET_D_RELOCATE,
-  ...BUCKET_E_CLIENT,
-  ...BUCKET_F_CONDITIONAL,
+  ...JP_COVERAGE.map((e) => e.file),
   ...ACKNOWLEDGED_OUT_OF_SCOPE.map((e) => e.file),
 ];
+
+const PHASES: readonly Phase[] = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"];
 
 describe("Japan coverage", () => {
   it("classifies every file that carries Japan", () => {
@@ -155,5 +144,32 @@ describe("Japan coverage", () => {
   it("gives every out-of-scope entry a reason", () => {
     const unexplained = ACKNOWLEDGED_OUT_OF_SCOPE.filter((e) => e.why.trim().length < 15);
     expect(unexplained.map((e) => e.file)).toEqual([]);
+  });
+
+  /**
+   * The gap that let the streak continue: coverage was mechanical, assignment
+   * was prose, and 126 files sat classified-but-unplanned while this suite went
+   * green. `phase` being required makes that a compile error rather than a
+   * silent omission; this asserts the value is a real phase and not a typo that
+   * would quietly create a phase nobody runs.
+   */
+  it("gives every classified file a real phase", () => {
+    const bad = JP_COVERAGE.filter((e) => !PHASES.includes(e.phase));
+    expect(
+      bad.map((e) => `${e.file} -> ${e.phase}`),
+      "phase must be one of D1-D8"
+    ).toEqual([]);
+  });
+
+  it("assigns every file that moves to a phase that does the moving", () => {
+    // D8 is the gate: it audits and decides, it does not move data. A bucket-A
+    // or bucket-D file parked there would be a file nobody actually relocates.
+    const parked = JP_COVERAGE.filter(
+      (e) => (e.bucket === "A" || e.bucket === "D") && e.phase === "D8"
+    );
+    expect(
+      parked.map((e) => e.file),
+      "D8 is the gate; these files move but no phase moves them"
+    ).toEqual([]);
   });
 });
