@@ -1,139 +1,211 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+/**
+ * Integration tests for GET /api/elections/[id]/campaigns — the Campaign
+ * Operations list on the election page.
+ *
+ * Regression: a withdrawn candidate kept appearing in the list because the
+ * route trusted `campaign.status !== "archived"`, a flag ~10 different
+ * withdrawal paths each had to remember to set. Live evidence on the US
+ * presidential race: Vladimir Iskra and Keiko Fujimori were both withdrawn by
+ * a party switch (`withdrawFromMismatchedPrimaries`), which left their
+ * campaigns `status: "active"` and rendered them next to candidates still
+ * running. The list now keys off the candidacy itself, which cannot drift.
+ */
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
-vi.mock("@/lib/auth", () => ({ getAuthUserWithCharacter: vi.fn() }));
-vi.mock("@/lib/time/gameTime", async (importActual) => ({
-  ...(await importActual<typeof import("@/lib/time/gameTime")>()),
+
+vi.mock("@/lib/auth", () => ({
+  getAuthUserWithCharacter: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/time/gameTime", () => ({
   getGameTime: vi.fn().mockResolvedValue({
-    currentTurn: 5,
-    effectiveNow: new Date(),
-    lastTurnProcessed: new Date(),
+    currentTurn: 892,
+    lastTurnProcessed: new Date("2026-09-15"),
     isActive: true,
     pausedAt: null,
-    startingYear: 2019,
+    effectiveNow: new Date("2026-09-15"),
   }),
 }));
-vi.mock("@/lib/elections/electionParamResolution", () => ({
-  resolveElectionRouteParam: vi.fn(),
-}));
 
-let db: MockDb;
+vi.mock("@/lib/campaigns/campaignCurrency", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/campaigns/campaignCurrency")>();
+  return { ...actual, loadCampaignCurrencyRates: vi.fn().mockResolvedValue({}) };
+});
 
 const electionId = new ObjectId();
-const campaignId = new ObjectId();
-const candidateId = new ObjectId();
-const userId = new ObjectId();
+const runningId = new ObjectId();
+const withdrawnId = new ObjectId();
 
-function makeRequest() {
-  return new Request(`http://localhost/api/elections/${electionId.toString()}/campaigns`);
-}
-
-function makeUser() {
-  return {
-    userId: userId.toString(),
-    username: "tester",
-    email: "tester@example.com",
-    role: "user",
-    isAdmin: false,
-    hasCharacter: true,
-    character: {
-      _id: candidateId,
-      userId,
-      name: "Nominee",
-      countryId: "US",
-      party: "1",
-    },
-  };
-}
-
-async function setUp() {
-  const { getDb } = await import("@/lib/mongodb");
-  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-
-  const { getAuthUserWithCharacter } = await import("@/lib/auth");
-  vi.mocked(getAuthUserWithCharacter).mockResolvedValue(makeUser() as never);
-
-  const { resolveElectionRouteParam } = await import("@/lib/elections/electionParamResolution");
-  vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+vi.mock("@/lib/elections/electionParamResolution", () => ({
+  resolveElectionRouteParam: vi.fn(async () => ({
     ok: true,
     election: {
       _id: electionId,
       countryId: "US",
       electionType: "president",
+      state: "US",
       status: "active",
-      primaryEndTurn: 20,
-      endTurn: 40,
     },
-  } as never);
+  })),
+}));
 
-  db.collection("campaigns");
-  db.collection("characters");
-  db.collection("npps");
-  db.collection("politicalParties");
-  db.collection("exchangeRates");
-
-  db.collectionMocks["campaigns"]!.find.mockReturnValue({
-    toArray: vi.fn().mockResolvedValue([
-      {
-        _id: campaignId,
-        electionId,
-        candidateId,
-        candidateIsNPP: false,
-        party: "1",
-        funds: 125_000,
-        actions: 10,
-        fundraisingLevel: 1,
-        oppositionResearchLevel: 0,
-        groundGameLevel: 0,
-        mediaSpendingLevel: 0,
-        totalFundsGenerated: 0,
-        totalFundsSpent: 0,
-        campaignStrength: 3,
-      },
-    ]),
-  });
-  db.collectionMocks["characters"]!.find.mockReturnValue({
-    toArray: vi.fn().mockResolvedValue([{ _id: candidateId, name: "Nominee" }]),
-  });
+function campaign(candidateId: ObjectId, status: string) {
+  return {
+    _id: new ObjectId(),
+    electionId,
+    candidateId,
+    candidateIsNPP: false,
+    party: "1",
+    status,
+    funds: 1_000_000,
+    actions: 50,
+    fundraisingLevel: 0,
+    oppositionResearchLevel: 0,
+    groundGameLevel: 0,
+    mediaSpendingLevel: 0,
+    activityHistory: [],
+    totalFundsGenerated: 0,
+    totalFundsSpent: 0,
+    totalActionsGenerated: 0,
+    totalActionsSpent: 0,
+  };
 }
 
 describe("GET /api/elections/[id]/campaigns", () => {
-  beforeEach(() => {
+  let db: MockDb;
+
+  function stubFind(collection: string, docs: unknown[]) {
+    const cursor = {
+      project: () => cursor,
+      sort: () => cursor,
+      limit: () => cursor,
+      toArray: async () => docs,
+    };
+    db.collectionMocks[collection]!.find.mockReturnValue(cursor as never);
+  }
+
+  beforeEach(async () => {
     vi.clearAllMocks();
     db = createMockDb();
+    for (const c of ["campaigns", "electionCandidates", "characters", "npps", "politicalParties"]) {
+      db.collection(c);
+      stubFind(c, []);
+    }
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
   });
 
-  it("projects the activity history out of the query rather than reading it", async () => {
-    // This is a list endpoint over every campaign in the election, and a
-    // campaign keeps 200 activity entries. Reading them here would carry twenty
-    // times the weight of the old ten-entry array for a field nothing renders.
-    await setUp();
+  it("omits a withdrawn candidate whose campaign was never archived", async () => {
+    // Both campaigns are status:"active" — exactly the live data shape. Only the
+    // candidacy distinguishes who is still in the race.
+    stubFind("campaigns", [campaign(runningId, "active"), campaign(withdrawnId, "active")]);
+    stubFind("electionCandidates", [
+      { _id: new ObjectId(), electionId, characterId: runningId, status: "active" },
+    ]);
+    stubFind("characters", [
+      { _id: runningId, name: "Sean Oppenheimer", sequentialId: 11 },
+      { _id: withdrawnId, name: "Vladimir Iskra", sequentialId: 12 },
+    ]);
 
     const { GET } = await import("./route");
-    await GET(makeRequest(), { params: Promise.resolve({ id: electionId.toString() }) });
+    const res = await GET(new Request("http://localhost/api/elections/US-president/campaigns"), {
+      params: Promise.resolve({ id: "US-president" }),
+    });
+    const body = await res.json();
 
-    const [, options] = db.collectionMocks["campaigns"]!.find.mock.calls[0];
+    expect(res.status).toBe(200);
+    expect(body.campaigns.map((c: { candidateName: string }) => c.candidateName)).toEqual([
+      "Sean Oppenheimer",
+    ]);
+  });
+
+  it("returns an empty list without reading candidacies when the race has no campaigns", async () => {
+    // Campaign Manager is US-only, so most races hit this path on every page
+    // load. It must not pay for the candidacy read.
+    stubFind("campaigns", []);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/elections/UK-commons/campaigns"), {
+      params: Promise.resolve({ id: "UK-commons" }),
+    });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.campaigns).toEqual([]);
+    expect(db.collectionMocks.electionCandidates!.find).not.toHaveBeenCalled();
+  });
+
+  it("projects the activity history out of the campaigns query", async () => {
+    // This endpoint serves every campaign in the election at once and returns
+    // no activity history, so it must not read one either: a campaign keeps 200
+    // entries now rather than 10.
+    stubFind("campaigns", [campaign(runningId, "active")]);
+    stubFind("electionCandidates", [
+      { _id: new ObjectId(), electionId, characterId: runningId, status: "active" },
+    ]);
+    stubFind("characters", [{ _id: runningId, name: "Ariane Yeong", sequentialId: 11 }]);
+
+    const { GET } = await import("./route");
+    await GET(new Request("http://localhost/api/elections/US-president/campaigns"), {
+      params: Promise.resolve({ id: "US-president" }),
+    });
+
+    const [, options] = db.collectionMocks.campaigns!.find.mock.calls[0];
     expect((options as { projection?: Record<string, number> })?.projection).toMatchObject({
       activityHistory: 0,
     });
   });
 
-  it("does not return an activity history to the campaign's own side", async () => {
-    // Neither consumer of this endpoint reads the field; the ledger sources its
-    // history from the per-campaign detail endpoint instead.
-    await setUp();
+  it("returns no activity history even to the campaign's own candidate", async () => {
+    // The nominee gets the privileged payload. The ledger reads its history from
+    // the per-campaign detail endpoint, and neither consumer of this list reads
+    // the field, so it is not shipped here at any access level.
+    const { getAuthUserWithCharacter } = await import("@/lib/auth");
+    vi.mocked(getAuthUserWithCharacter).mockResolvedValue({
+      userId: new ObjectId().toString(),
+      username: "nominee",
+      email: "nominee@example.com",
+      role: "user",
+      isAdmin: false,
+      hasCharacter: true,
+      character: { _id: runningId, name: "Ariane Yeong", countryId: "US", party: "1" },
+    } as never);
+
+    stubFind("campaigns", [campaign(runningId, "active")]);
+    stubFind("electionCandidates", [
+      { _id: new ObjectId(), electionId, characterId: runningId, status: "active" },
+    ]);
+    stubFind("characters", [{ _id: runningId, name: "Ariane Yeong", sequentialId: 11 }]);
 
     const { GET } = await import("./route");
-    const res = await GET(makeRequest(), {
-      params: Promise.resolve({ id: electionId.toString() }),
+    const res = await GET(new Request("http://localhost/api/elections/US-president/campaigns"), {
+      params: Promise.resolve({ id: "US-president" }),
     });
-    const data = await res.json();
+    const body = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(data.campaigns).toHaveLength(1);
-    expect(data.campaigns[0]).not.toHaveProperty("activityHistory");
+    expect(body.campaigns).toHaveLength(1);
+    expect(body.campaigns[0].isExact).toBe(true);
+    expect(body.campaigns[0]).not.toHaveProperty("activityHistory");
+  });
+
+  it("still lists a candidate who is actively running", async () => {
+    stubFind("campaigns", [campaign(runningId, "active")]);
+    stubFind("electionCandidates", [
+      { _id: new ObjectId(), electionId, characterId: runningId, status: "active" },
+    ]);
+    stubFind("characters", [{ _id: runningId, name: "Ariane Yeong", sequentialId: 11 }]);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/elections/US-president/campaigns"), {
+      params: Promise.resolve({ id: "US-president" }),
+    });
+    const body = await res.json();
+
+    expect(body.campaigns).toHaveLength(1);
+    expect(body.campaigns[0].candidateName).toBe("Ariane Yeong");
   });
 });

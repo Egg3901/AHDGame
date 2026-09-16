@@ -549,6 +549,14 @@ export async function getCampaignDetail(
   // campaigns (no live plan to brief). Delegate/tipping paths and coalition
   // weakness are presidential concepts read off the tally; the cash runway
   // applies to any race.
+  /**
+   * Whether the turn will move this campaign at all. `campaignTurn.ts`
+   * `continue`s past an archived campaign and past a suspended one before it
+   * computes income, charges maintenance or credits actions, so the desk has to
+   * report zero rather than a rate that will never be applied.
+   */
+  const accruesNothing = campaign.status === "archived" || campaignSuspended;
+
   const briefing =
     campaign.status === "archived"
       ? undefined
@@ -561,7 +569,7 @@ export async function getCampaignDetail(
           // Zero when suspended, like every other per-turn figure: the runway
           // built from this is a countdown to insolvency, and a campaign the
           // turn engine skips is neither earning nor burning.
-          netPerTurn: campaignSuspended ? 0 : toLocal(income) - toLocal(maintenance),
+          netPerTurn: accruesNothing ? 0 : toLocal(income) - toLocal(maintenance),
         });
 
   return {
@@ -588,28 +596,28 @@ export async function getCampaignDetail(
       // income / maintenance are anchor constants; funds is stored local.
       // Localize the per-turn figures so the budget panel matches the balance.
       //
-      // A suspended campaign moves on none of these. The turn engine skips it
-      // (campaignTurn.ts, `suspendedCampaignKeys`) BEFORE it computes income,
+      // A dormant campaign moves on none of these. The turn engine `continue`s
+      // past both archived and suspended campaigns BEFORE it computes income,
       // charges maintenance or credits actions, so every per-turn figure here
       // is zero rather than a rate the turn will never apply. Reporting money
       // at full value beside zero actions would put two contradictory rates in
       // the same row.
-      income: { total: campaignSuspended ? 0 : toLocal(income) },
+      income: { total: accruesNothing ? 0 : toLocal(income) },
       expenses: {
-        groundGameMaintenance: campaignSuspended ? 0 : toLocal(groundGameMaintenance),
-        mediaSpendingMaintenance: campaignSuspended ? 0 : toLocal(mediaSpendingMaintenance),
-        total: campaignSuspended ? 0 : toLocal(maintenance),
+        groundGameMaintenance: accruesNothing ? 0 : toLocal(groundGameMaintenance),
+        mediaSpendingMaintenance: accruesNothing ? 0 : toLocal(mediaSpendingMaintenance),
+        total: accruesNothing ? 0 : toLocal(maintenance),
       },
-      netIncome: campaignSuspended ? 0 : toLocal(income) - toLocal(maintenance),
+      netIncome: accruesNothing ? 0 : toLocal(income) - toLocal(maintenance),
       actions: {
         endorsementCount,
-        perTurn: campaignSuspended ? 0 : grossActionsPerTurn - rallyTourActionDrain,
-        grossPerTurn: campaignSuspended ? 0 : grossActionsPerTurn,
+        perTurn: accruesNothing ? 0 : grossActionsPerTurn - rallyTourActionDrain,
+        grossPerTurn: accruesNothing ? 0 : grossActionsPerTurn,
         // What the campaign would earn with no endorsements at all, from the
         // same rule that produced the figure above. Zeroed alongside the rest
         // when suspended: a baseline beside a zero rate is the contradiction
         // the zeroing exists to avoid.
-        baseline: campaignSuspended
+        baseline: accruesNothing
           ? 0
           : campaignActionsPerTurn({
               nppEndorsements: 0,

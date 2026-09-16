@@ -1179,7 +1179,10 @@ export async function _enrichElection(
     if (fundsMap.size > 0) {
       fundsByPartyMap = Object.fromEntries(fundsMap);
     }
-    if (seatShareMap.size > 0 && !isSingleSeatLegislativeRace(election)) {
+    // `getIncumbentSeatShareByParty` already returns an empty map for every
+    // single-winner race (US Senate + executives), so the card can never show
+    // a prior vote split as an "Incumbency" row on a vacant seat.
+    if (seatShareMap.size > 0) {
       incumbentSeatShareByPartyMap = Object.fromEntries(seatShareMap);
     }
 
