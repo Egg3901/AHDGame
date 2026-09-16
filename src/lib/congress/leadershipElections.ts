@@ -828,11 +828,22 @@ export async function resolveExpiredLeadershipElections(db: Db): Promise<void> {
 }
 
 /**
- * Vacate all Congress leadership positions for leaders who no longer hold
- * the correct seat (lost re-election, changed chambers, elected to Governor/State Senate).
- * Called after general elections resolve to ensure leadership is cleared immediately.
+ * Vacate every Congress leadership office whose holder no longer sits in the
+ * chamber it requires — lost re-election, withdrew from their race, changed
+ * chambers, took a Governor's seat — and open the election to refill it.
+ *
+ * Runs every turn, not only when a general resolves. A seat can be given up at
+ * any time, and the only other thing that noticed was a lazy check on the
+ * congress page GETs, so a chair could stand empty for hours until somebody
+ * happened to open the page.
+ *
+ * Safe to run every turn because it fires on the holder-loses-seat transition:
+ * once the chair is vacant it is skipped, so it cannot re-open a race that a
+ * previous one resolved into a vacancy.
+ *
+ * @returns how many chairs it actually emptied.
  */
-export async function vacateLeadershipAfterElections(db: Db): Promise<number> {
+export async function vacateLeadershipForLostSeats(db: Db): Promise<number> {
   const now = new Date();
 
   // All leadership roles and their required chamber. `bundestag` covers the
@@ -892,10 +903,18 @@ export async function vacateLeadershipAfterElections(db: Db): Promise<number> {
     }
   }
 
-  let vacated = 0;
+  const lostSeats: Array<{
+    leaderRole: LeadershipRole;
+    holderId: ObjectId;
+    formerHolderName?: string;
+  }> = [];
 
   for (const { role, chamber } of leadershipRoles) {
     const leaderDoc = leaderRoleToDoc.get(role);
+    // An already-vacant chair is not a fresh vacancy. Keying on "the holder
+    // lost their seat" rather than "the seat is empty" is what keeps this a
+    // transition check instead of a poller: a race nobody enters resolves by
+    // vacating the role and closing, which a poller would re-open forever.
     if (!leaderDoc?.characterId) continue;
 
     const charId = leaderDoc.characterId.toString();
@@ -908,24 +927,31 @@ export async function vacateLeadershipAfterElections(db: Db): Promise<number> {
             ? bundestagCharacterIds
             : npcDelegateCharacterIds;
 
-    if (!requiredSet.has(charId)) {
-      // Leader no longer holds the required seat — vacate
-      await db.collection<CongressLeader>("congressLeaders").updateOne(
-        { role },
-        {
-          $set: {
-            characterId: null,
-            characterName: "Vacant",
-            updatedAt: now,
-          },
-        }
-      );
-      console.log(
-        `[Turn] Vacated ${role}: ${leaderDoc.characterName} no longer holds a ${chamber} seat`
-      );
-      vacated++;
-    }
+    // No seats at all is a failed or not-yet-seeded read, not a chamber that
+    // lost every member. Without this the sweep would empty an entire
+    // leadership slate, and now announce a race for each seat, on one bad read.
+    if (requiredSet.size === 0) continue;
+    if (requiredSet.has(charId)) continue;
+
+    console.log(
+      `[Turn] Vacating ${role}: ${leaderDoc.characterName} no longer holds a ${chamber} seat`
+    );
+    lostSeats.push({
+      leaderRole: role,
+      holderId: leaderDoc.characterId,
+      formerHolderName: leaderDoc.characterName,
+    });
   }
 
-  return vacated;
+  if (lostSeats.length === 0) return 0;
+
+  // Vacate AND open the race to refill each chair. Vacating alone is what left
+  // the House with no Speaker: the seat-loss sweep emptied the chair, and the
+  // Speaker's own auto-open (`vacateSpeakerIfLostSeat`) then early-returned
+  // because `characterId` was already null, so nothing ever refilled it.
+  // Imported lazily because `reconcilePartyEligibility` imports this module.
+  const { vacateAllLeadershipRoles } =
+    await import("@/lib/congress/leadership/reconcilePartyEligibility");
+  const vacated = await vacateAllLeadershipRoles(db, lostSeats, now);
+  return vacated.length;
 }

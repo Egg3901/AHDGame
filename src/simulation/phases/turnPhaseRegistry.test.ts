@@ -163,6 +163,40 @@ describe("turn phase registry", () => {
     expect(timers).toBeLessThan(resolution);
   });
 
+  it("sweeps lost leadership seats every turn, not only after a general election", async () => {
+    // A seat can be given up at any time — a withdrawal, a resignation, a move
+    // to another chamber. Gating the sweep on a general meant the only other
+    // thing that would notice was a congress page GET, so a chair could stand
+    // empty for hours until somebody happened to open the page.
+    const registry = getTurnPhaseRegistry();
+    const adapter = registry.find((a) => a.key === "electionResolutionAndGovernment");
+    expect(adapter).toBeDefined();
+
+    const calledPhases: string[] = [];
+    const runPhase = vi.fn(async (name: string, _fn: () => unknown) => {
+      calledPhases.push(name);
+      // No general resolved this turn.
+      return name === "electionResolution" ? 0 : undefined;
+    });
+
+    const context = {
+      db: {} as never,
+      gameNow: new Date(),
+      newTurn: 2,
+      phaseResults: {} as Record<string, unknown>,
+    } as never;
+    const runtime = { runPhase, markPhaseSkipped: vi.fn() } as never;
+
+    await adapter!.execute(context, runtime);
+
+    expect(calledPhases).toContain("leadershipVacate");
+    // Still after resolution, so it reads settled seats rather than a chamber
+    // mid-rewrite.
+    expect(calledPhases.indexOf("electionResolution")).toBeLessThan(
+      calledPhases.indexOf("leadershipVacate")
+    );
+  });
+
   it("electionResolutionAndGovernment adapter calls primaryResolution before voteAccumulation before electionTimers before electionResolution", async () => {
     const registry = getTurnPhaseRegistry();
     const adapter = registry.find((a) => a.key === "electionResolutionAndGovernment");
