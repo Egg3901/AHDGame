@@ -173,10 +173,14 @@ export async function GET(request: Request) {
     // Computed once for the whole request; only the "unowned" view (and its
     // count badge) consult it — owned/forSale sectors may legitimately be
     // held by a National Corporation (SOE) in these countries.
-    const commandEconomyBlockedCountries = await loadCommandEconomyBlockedCountries(
-      db,
-      COUNTRY_ORDER
-    );
+    // Derived from the states actually in play plus any explicit country filter,
+    // NOT from COUNTRY_ORDER: that list omits BLR, BAL and UKR, so asking it
+    // would never ask about the union republics and their unowned markets would
+    // be advertised as capture opportunities that `expandSector` then refuses.
+    // Harmless while those countries were unblocked; a real gap now they are not.
+    const commandEconomyBlockedCountries = await loadCommandEconomyBlockedCountries(db, [
+      ...new Set([...states.map((s) => s.countryId), ...(countryFilter ? [countryFilter] : [])]),
+    ]);
     const blockedStateIds = states
       .filter((s) => commandEconomyBlockedCountries.has(s.countryId))
       .map((s) => s._id);

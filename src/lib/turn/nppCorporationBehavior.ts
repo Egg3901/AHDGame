@@ -67,6 +67,7 @@ import {
 } from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
+import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
@@ -317,15 +318,17 @@ export async function processNppCorporationDecisions(
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
 
+  const { open: openUnowned, blocked } = await partitionOpenMarkets(db, unownedSectors);
+
   // Index unowned sectors by countryId for fast lookup
   const unownedByCountry = new Map<string, UnownedSector[]>();
-  for (const us of unownedSectors) {
+  for (const us of openUnowned) {
     if (!unownedByCountry.has(us.countryId)) unownedByCountry.set(us.countryId, []);
     unownedByCountry.get(us.countryId)!.push(us);
   }
   // Shared object references let each founding deplete later candidates in this pass.
   const unownedIndex = new Map<string, UnownedSector>();
-  for (const us of unownedSectors) {
+  for (const us of openUnowned) {
     unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
   }
 
@@ -630,6 +633,7 @@ export async function processNppCorporationDecisions(
 
     if (decision.newSectors) {
       for (const ns of decision.newSectors) {
+        if (blocked.has(ns.countryId as CountryId)) continue; // belt and braces
         newSectors.push({
           _id: new (await import("mongodb")).ObjectId(),
           corporationId: corp._id,

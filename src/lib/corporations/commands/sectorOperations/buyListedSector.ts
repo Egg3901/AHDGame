@@ -16,6 +16,7 @@
  *   profit margin is revenue-weighted, then the purchased sector doc is deleted.
  */
 import { NextResponse } from "next/server";
+import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -123,6 +124,21 @@ export async function buyListedSector(request: Request, { params }: RouteParams)
       return NextResponse.json(
         { error: "Sector is not currently listed for sale" },
         { status: 400 }
+      );
+    }
+
+    // Keyed on the SECTOR's country, not the buyer's: a foreign private corp
+    // must not acquire production inside a planned economy either. `expandSector`
+    // was gated by #676 and this was not, leaving the secondary market as an
+    // unguarded route to the same outcome.
+    const sectorCountryId = sector.countryId ?? seller.countryId;
+    if (await isPrivateEnterpriseBlocked(db, sectorCountryId)) {
+      return NextResponse.json(
+        {
+          error:
+            "This market is state-controlled under a command economy and is closed to private sector expansion.",
+        },
+        { status: 403 }
       );
     }
 

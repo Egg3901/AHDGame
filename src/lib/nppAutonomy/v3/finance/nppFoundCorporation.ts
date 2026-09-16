@@ -36,6 +36,7 @@ import type { Corporation, NPP } from "@/lib/db/types";
 import type { CorporationType } from "@/lib/constants/corporations";
 import { generateNppCorpName, spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
+import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 
 export type NppFoundCorporationResult =
   | {
@@ -62,6 +63,17 @@ export async function nppFoundCorporation(
     return { ok: false, reason: "NPP has no home state to headquarter a corporation in." };
   }
   const countryId = npp.countryId ?? "US";
+
+  // Defence in depth. `foundNppCorporationsSurplus` already excludes command
+  // economies from the candidate pool, but this is a creation path and must not
+  // depend on every future caller remembering to filter. Reads the dial, so a
+  // country converting either direction is honoured without touching this code.
+  if (await isPrivateEnterpriseBlocked(db, countryId)) {
+    return {
+      ok: false,
+      reason: "Private corporations cannot be founded in a command economy.",
+    };
+  }
 
   const alreadyCeo = await db
     .collection<Corporation>("corporations")

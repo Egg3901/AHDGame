@@ -10,6 +10,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { CORPORATION_TYPES, type CorporationType } from "@/lib/constants/corporations";
 import { CARVE_FRACTION_MIN, CARVE_FRACTION_MAX } from "./constants";
 import { isStateOwned } from "./nationalCorporation";
+import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 
 type NatProvision = NationalizeProvision | PrivatizeProvision | DesignateStrategicSectorProvision;
 
@@ -98,6 +99,17 @@ export async function validateNationalizationProvisions(
     }
 
     if (p.type === "privatize") {
+      // Reject at authoring time, not at enactment. `privatizeAsset` refuses a
+      // command economy, and `legislativePrivatize` catches that throw so one bad
+      // provision cannot abort a whole bill's enactment - which would leave a
+      // privatization bill passing with the provision silently doing nothing and
+      // no feedback to anyone. Failing here gives the drafter a real message.
+      if (await isPrivateEnterpriseBlocked(db, countryId)) {
+        return fail(
+          "State enterprises cannot be privatized under a command economy. The state controls all enterprise.",
+          403
+        );
+      }
       const r = raw as {
         sourceNationalCorporationId?: string;
         selections?: { sectorId?: string; carveFraction?: number }[];
