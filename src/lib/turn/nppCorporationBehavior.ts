@@ -67,6 +67,7 @@ import {
 } from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
+import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { CommodityType } from "@/lib/constants/commodities";
 import {
@@ -317,15 +318,32 @@ export async function processNppCorporationDecisions(
 
   const placementSignals = await loadNppPlacementSignals(db, turn, allSectors, statePriceRatioOf);
 
+  // Planned-economy production belongs to state enterprises. The NPP corporate
+  // brain runs in EVERY country under v4 autonomy, and nothing here asked whether
+  // a country permits private enterprise: roughly 80 of the 92 leaked sectors
+  // inside command economies arrived through this sweep, not through founding.
+  //
+  // Filtered at the SOURCE so every index derived below (`unownedByCountry`,
+  // `unownedIndex`, the per-country pool index in the draw site) inherits it,
+  // rather than filtering one of them and leaving another as a way in.
+  //
+  // Reads the marketization dial, so a country converting into a command economy
+  // stops being a candidate on the next turn, and one converting out becomes a
+  // candidate again, with no code change.
+  const blockedCountries = await loadPrivateEnterpriseBlockedCountries(db);
+  const openUnownedSectors = unownedSectors.filter(
+    (us) => !blockedCountries.has(us.countryId as CountryId)
+  );
+
   // Index unowned sectors by countryId for fast lookup
   const unownedByCountry = new Map<string, UnownedSector[]>();
-  for (const us of unownedSectors) {
+  for (const us of openUnownedSectors) {
     if (!unownedByCountry.has(us.countryId)) unownedByCountry.set(us.countryId, []);
     unownedByCountry.get(us.countryId)!.push(us);
   }
   // Shared object references let each founding deplete later candidates in this pass.
   const unownedIndex = new Map<string, UnownedSector>();
-  for (const us of unownedSectors) {
+  for (const us of openUnownedSectors) {
     unownedIndex.set(bucketKey(us.stateId, us.sectorType), us);
   }
 
@@ -630,6 +648,11 @@ export async function processNppCorporationDecisions(
 
     if (decision.newSectors) {
       for (const ns of decision.newSectors) {
+        // Belt and braces: the candidate pool above is already filtered, so this
+        // should never fire. It exists because this is the only line that turns a
+        // decision into a persisted sector, and a future decision path that
+        // sources candidates elsewhere must not be able to slip past.
+        if (blockedCountries.has(ns.countryId as CountryId)) continue;
         newSectors.push({
           _id: new (await import("mongodb")).ObjectId(),
           corporationId: corp._id,
