@@ -22,7 +22,7 @@ export {
   DEFAULT_ORDER_DURATION,
 } from "./cabinetMechanicsTypes";
 
-const ORDERS_BY_COUNTRY: Record<string, Record<string, MinisterialOrderConfig[]>> = {
+export const ORDERS_BY_COUNTRY: Record<string, Record<string, MinisterialOrderConfig[]>> = {
   DE: DE_MINISTERIAL_ORDERS,
   IE: IE_MINISTERIAL_ORDERS,
   UK: UK_MINISTERIAL_ORDERS,

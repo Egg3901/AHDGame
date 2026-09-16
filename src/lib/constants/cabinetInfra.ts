@@ -1,5 +1,6 @@
 import type { CountryId } from "./countries";
 import type { InfraProject, BuildFundingLevel } from "@/lib/db/types/infraProject";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 export interface InfraArchetype {
   id: string;
@@ -125,7 +126,7 @@ export const INFRA_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   UK: "transport_secretary",
   DE: "transport_minister",
   CN: "minister_of_transport",
-  JP: "land_minister",
+  JP: JP_INSTITUTIONS.positions.infrastructure,
   IE: "minister_for_transport",
   RU: "minister_of_railways",
   DD: "minister_of_railways",

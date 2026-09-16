@@ -44,10 +44,6 @@ import {
   ensureUKElections,
   ensureUKRegionalCouncilElections,
   ensureUKGovernorElections,
-  ensureJPElections,
-  ensureJPRegionalCouncilElections,
-  ensureJPCouncillorElections,
-  ensureJPGovernorElections,
   ensureIEElections,
   ensureIEUachtaranElections,
   ensureIELocalCouncilElections,
@@ -118,6 +114,7 @@ import { appointNppPrimeMinister } from "@/lib/nppAutonomy/appointNppPrimeMinist
 import { updateGovernmentSeats as updateUKGovernmentSeats } from "@/lib/turn/ukGovernmentFormation";
 import { getDb } from "@/lib/mongodb";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
+import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
 
 /** Countries that need a custom updateGovernmentSeats wrapper (e.g. for legacy seed). */
 const SEAT_UPDATE_OVERRIDES: Partial<Record<CountryId, () => Promise<void>>> = {
@@ -312,18 +309,7 @@ export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionP
     { name: "ukRegionalCouncilElections", fn: ensureUKRegionalCouncilElections },
     { name: "ukGovernorElections", fn: ensureUKGovernorElections },
   ],
-  JP: [
-    { name: "jpElections", fn: ensureJPElections },
-    // Regional Council mirrors live Shugiin timing. Listed after jpElections by
-    // convention (UK/DE pairs do the same), but these phases run concurrently
-    // via Promise.all, so the order is best-effort, not a guarantee: when a
-    // concurrently-created Shugiin race isn't yet visible (clean roll-over /
-    // bootstrap), the spawner's fallback recomputes the identical Shugiin
-    // canonical cycle, so the council still aligns with the Shugiin.
-    { name: "jpRegionalCouncilElections", fn: ensureJPRegionalCouncilElections },
-    { name: "jpCouncillorElections", fn: ensureJPCouncillorElections },
-    { name: "jpGovernorElections", fn: ensureJPGovernorElections },
-  ],
+  JP: JP_ELECTIONS.electionPhases,
   IE: [
     { name: "ieElections", fn: ensureIEElections },
     { name: "ieUachtaranElections", fn: ensureIEUachtaranElections },

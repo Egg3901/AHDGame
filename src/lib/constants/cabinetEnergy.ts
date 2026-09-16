@@ -1,5 +1,6 @@
 import type { CountryId } from "./countries";
 import type { EnergyPlant, EnergySource } from "@/lib/db/types/energyPlant";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 export interface EnergySourceDef {
   id: EnergySource;
@@ -96,7 +97,7 @@ export const ENERGY_POSITION_BY_COUNTRY: Partial<Record<CountryId, string>> = {
   UK: "environment_secretary",
   DE: "economy_minister",
   CN: "minister_of_ecology_environment",
-  JP: "environment_minister",
+  JP: JP_INSTITUTIONS.positions.energy,
   IE: "minister_for_environment_climate",
   // Power generation sat under heavy industry in the command-economy
   // abstraction. This seat is also an estates seat, so FlagshipRouter renders it

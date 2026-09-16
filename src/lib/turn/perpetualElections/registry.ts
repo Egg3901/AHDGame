@@ -12,11 +12,6 @@ import {
   ensureIELocalCouncilElections,
   ensureIEUachtaranElections,
 } from "./countries/ie";
-import {
-  ensureJPCouncillorElections,
-  ensureJPElections,
-  ensureJPGovernorElections,
-} from "./countries/jp";
 import { ensureNGElections } from "./countries/ng";
 import {
   ensureUKElections,
@@ -24,6 +19,7 @@ import {
   ensureUKRegionalCouncilElections,
 } from "./countries/uk";
 import { ensurePresidentialElection } from "./shared";
+import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
 
 export interface SpawnElectionsResult {
   message: string;
@@ -46,14 +42,7 @@ export const SPAWN_ELECTIONS_REGISTRY: Partial<Record<CountryId, SpawnElectionsH
     await ensureDEElections(now);
     return { message: "DE Bundestag continuity check complete." };
   },
-  JP: async (now) => {
-    // Shugiin (lower) + Sangiin (upper, classOverride omitted = natural class) +
-    // prefectural Governor seats.
-    await ensureJPElections(now);
-    await ensureJPCouncillorElections(now);
-    await ensureJPGovernorElections(now);
-    return { message: "JP Shugiin / Sangiin / Governor continuity check complete." };
-  },
+  JP: JP_ELECTIONS.spawn,
   CN: async (now) => {
     // National NPC Delegates + Provincial People's Congress + macro-region Governor.
     await ensureCNElections(now);

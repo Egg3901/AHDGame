@@ -1,5 +1,6 @@
 import type { CountryId } from "./countries";
 import type { UnitDomain, Posture, MilitaryUnit, UnitEquipment } from "@/lib/db/types/militaryUnit";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 export interface Branch {
   id: string;
@@ -355,50 +356,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
       establishedYear: 1955,
     },
   ],
-  JP: [
-    // National Safety Force (保安隊, Hoantai): NPR renamed 15 Oct 1952; became JGSDF
-    // 1 Jul 1954 (National Archives of Japan; Self-Defense Forces Act 1954).
-    {
-      id: "nsf",
-      name: "National Safety Force",
-      abbr: "NSF",
-      domain: "ground",
-      establishedYear: 1952,
-      dissolvedYear: 1954,
-    },
-    // Safety Security Force / Coastal Safety Force (警備隊): under National Safety
-    // Agency from 1 Aug 1952; became JMSDF 1 Jul 1954.
-    {
-      id: "csf",
-      name: "Coastal Safety Force",
-      abbr: "CSF",
-      domain: "naval",
-      establishedYear: 1952,
-      dissolvedYear: 1954,
-    },
-    // JSDF branches: Self-Defense Forces Act, 1 Jul 1954.
-    {
-      id: "jgsdf",
-      name: "Ground Self-Defense Force",
-      abbr: "JGSDF",
-      domain: "ground",
-      establishedYear: 1954,
-    },
-    {
-      id: "jmsdf",
-      name: "Maritime Self-Defense Force",
-      abbr: "JMSDF",
-      domain: "naval",
-      establishedYear: 1954,
-    },
-    {
-      id: "jasdf",
-      name: "Air Self-Defense Force",
-      abbr: "JASDF",
-      domain: "air",
-      establishedYear: 1954,
-    },
-  ],
+  JP: JP_INSTITUTIONS.military.branches,
   IE: [
     { id: "army", name: "Irish Army", abbr: "Army", domain: "ground" },
     { id: "navy", name: "Naval Service", abbr: "NS", domain: "naval" },
@@ -574,7 +532,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
 export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   US: 2.6,
   CN: 2.0,
-  JP: 1.4,
+  JP: JP_INSTITUTIONS.military.scale,
   UK: 1.7,
   DE: 1.0,
   IE: 1.0,
@@ -612,7 +570,7 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   UK: "defence_secretary",
   CN: "minister_of_defense",
   DE: "defense_minister",
-  JP: "defense_minister",
+  JP: JP_INSTITUTIONS.positions.defense,
   IE: "minister_for_defence",
   BR: "minister_of_defence",
   NG: "minister_of_defence",

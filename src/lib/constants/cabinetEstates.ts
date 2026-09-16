@@ -1,5 +1,6 @@
 import type { CountryId } from "./countries";
 import type { CabinetEstate, EstateFundingLevel } from "@/lib/db/types/cabinetEstate";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 // ── Archetype catalog ────────────────────────────────────────────────────────
 export interface EstateArchetype {
@@ -701,15 +702,7 @@ export const ESTATE_PORTFOLIO_BY_COUNTRY: Partial<Record<CountryId, Record<strin
     minister_of_agriculture_rural_affairs: "agriculture",
     minister_of_housing_urban_rural: "housing",
   },
-  JP: {
-    foreign_affairs_minister: "foreign",
-    justice_minister: "justice",
-    health_minister: "health",
-    education_minister: "education",
-    economy_minister: "commerce",
-    environment_minister: "interior",
-    internal_affairs_minister: "homeland",
-  },
+  JP: JP_INSTITUTIONS.estatePortfolio,
   IE: {
     minister_for_foreign_affairs: "foreign",
     minister_for_enterprise: "commerce",

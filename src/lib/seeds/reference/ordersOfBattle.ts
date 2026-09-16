@@ -18,6 +18,8 @@
  * those services from every later era.
  */
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
+import { JP_ERAS } from "@/lib/countries/jp/eras";
 
 export interface OrderOfBattleEntry {
   /** Must match a Branch id for this country (`MILITARY_BRANCHES_BY_COUNTRY`). */
@@ -121,21 +123,7 @@ export const ORDERS_OF_BATTLE: Partial<Record<CountryId, OrderOfBattleEntry[]>> 
    * offensive platforms, and the JMSDF's post-war shape is ASW escorts and
    * submarines pointed at the Soviet Pacific Fleet.
    */
-  JP: [
-    { branchId: "nsf", type: "Infantry Division", count: 4 },
-    { branchId: "nsf", type: "Artillery Regiment", count: 1 },
-    { branchId: "csf", type: "Frigate Squadron", count: 2 },
-    { branchId: "jgsdf", type: "Infantry Division", count: 5 },
-    { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-    { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-    { branchId: "jgsdf", type: "Air Defense Battalion", count: 1 },
-    { branchId: "jmsdf", type: "Frigate Squadron", count: 4 },
-    { branchId: "jmsdf", type: "Attack Submarine", count: 2 },
-    { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 1 },
-    { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-    { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-    { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-  ],
+  JP: JP_INSTITUTIONS.military.ordersOfBattle,
   /**
    * A neutral state with a Permanent Defence Force of about eight thousand, three
    * corvettes and a handful of Vampires. Four units total, below Austria and
@@ -475,18 +463,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
     /** Thirteen JGSDF divisions and an ASW fleet aimed at the Soviet Pacific Fleet. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 6 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 5 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 3 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 2 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["1979-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_TROUBLES,
     /** Still an infantry-mass army, now with the Second Artillery Corps (1966). */
     CN: [
@@ -554,18 +531,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
     /** Bubble-era budgets: the JMSDF grows into one of the largest escort fleets afloat. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 6 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 5 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 3 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["1991-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_TROUBLES,
     /** Post-Deng: the four-million-man army is being cut, modernisation is slow. */
     CN: [
@@ -636,18 +602,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Air Defense Wing", count: 1 },
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 5 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 2 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 1 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 4 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 3 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["1999-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /** After the Gulf War shock and the 1996 Strait crisis: doctrine turns, hardware lags. */
     CN: [
@@ -737,19 +692,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Airlift Wing", count: 1 },
     ],
     /** Ballistic-missile defence after the 1998 Taepodong overflight; helicopter destroyers. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 4 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 3 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 1 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 3 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 4 },
-      { branchId: "jmsdf", type: "Amphibious Group", count: 1 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-    ],
+    JP: JP_ERAS["2007-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /** Double-digit budget growth: the ground army mechanises, the navy goes to sea. */
     CN: [
@@ -830,21 +773,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Drone Command", count: 1 },
     ],
     /** Izumo conversion approved 2018, the amphibious rapid deployment brigade stood up. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 3 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 4 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 1 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 2 },
-      { branchId: "jmsdf", type: "Carrier Strike Group", count: 1 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 3 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 4 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 4 },
-      { branchId: "jmsdf", type: "Amphibious Group", count: 1 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-      { branchId: "jasdf", type: "Drone Command", count: 1 },
-    ],
+    JP: JP_ERAS["2019-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /**
      * Two carriers, the Strategic Support Force (2016), and a rocket force that
@@ -933,21 +862,7 @@ export const ORDERS_OF_BATTLE_BY_ERA: Partial<
       { branchId: "luftwaffe", type: "Drone Command", count: 1 },
     ],
     /** The 2022 National Security Strategy: defence spending to 2% and a counterstrike arm. */
-    JP: [
-      { branchId: "jgsdf", type: "Infantry Division", count: 3 },
-      { branchId: "jgsdf", type: "Mechanized Brigade", count: 4 },
-      { branchId: "jgsdf", type: "Artillery Regiment", count: 2 },
-      { branchId: "jgsdf", type: "Air Defense Battalion", count: 3 },
-      { branchId: "jmsdf", type: "Carrier Strike Group", count: 2 },
-      { branchId: "jmsdf", type: "Frigate Squadron", count: 3 },
-      { branchId: "jmsdf", type: "Attack Submarine", count: 5 },
-      { branchId: "jmsdf", type: "Guided-Missile Destroyer", count: 4 },
-      { branchId: "jmsdf", type: "Amphibious Group", count: 1 },
-      { branchId: "jasdf", type: "Fighter Wing", count: 4 },
-      { branchId: "jasdf", type: "Air Defense Wing", count: 2 },
-      { branchId: "jasdf", type: "Airlift Wing", count: 1 },
-      { branchId: "jasdf", type: "Drone Command", count: 2 },
-    ],
+    JP: JP_ERAS["2023-default"]?.institutions?.military?.ordersOfBattle,
     IE: IE_MODERN,
     /** Three carriers with Fujian launched, and the largest navy afloat by hull count. */
     CN: [

@@ -32,6 +32,12 @@ describe("era country config overrides", () => {
       ["US", "1953-default"],
       ["UK", "1991-default"],
       ["JP", "1991-default"],
+      // JP-1953 was the hole. Japan holds overrides in TWO eras and this loop
+      // pinned only 1991, despite the comment below warning that a country may
+      // have entries in several eras. The 1953 override supplies a full
+      // `legislature`, so the shallow merge replaces it wholesale -- exactly the
+      // case this test exists to catch, in the era it was not watching.
+      ["JP", "1953-default"],
     ] as const) {
       const base = COUNTRY_CONFIGS[id].legislature;
       const era = getCountryConfig(id, preset).legislature;
@@ -43,6 +49,18 @@ describe("era country config overrides", () => {
       expect(era.lowerChamber.description, `${preset}/${id}`).toBeTruthy();
       expect(era.upperChamber?.description, `${preset}/${id}`).toBeTruthy();
     }
+  });
+
+  it("gives the 1953 Diet its era chamber sizes", () => {
+    // 466 Shugiin (pre-1996 multi-member districts) and 248 Sangiin. The 1953
+    // override also carries usdExchangeRate 1.0, majorPartyIds and a
+    // coalitionThreshold of 234, none of which any test watched before.
+    const jp = getCountryConfig("JP", "1953-default");
+    expect(jp.legislature.lowerChamber.seats).toBe(466);
+    expect(jp.legislature.upperChamber?.seats).toBe(248);
+    expect(jp.usdExchangeRate).toBe(1.0);
+    expect(jp.majorPartyIds).toEqual(["ryo", "jsp"]);
+    expect(jp.coalitionThreshold).toBe(234);
   });
 
   it("keeps each era's override to its own era", () => {

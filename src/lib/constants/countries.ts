@@ -21,6 +21,8 @@ import { RU_NATIONALITIES_SEATS } from "./ruSeats";
 
 import type { EraSeedModels } from "./economicModels";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { JP_ERAS } from "@/lib/countries/jp/eras";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 export type CountryId =
   | "US"
@@ -1261,194 +1263,7 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     executiveLabel: "Federal Chancellery",
     centralGovernmentLabel: "Federal Grants",
   },
-  JP: {
-    id: "JP",
-    seedEconomicModel: { "1991": "industrialPowerhouse", "2019": "industrialPowerhouse" },
-    name: "Japan",
-    flagEmoji: "🇯🇵",
-    code: "JP",
-    socialAxisBaseline: 0,
-
-    regionLabel: "Region",
-    regionLabelPlural: "Regions",
-
-    executiveTitle: "Prime Minister",
-    headOfStateTitle: "Emperor",
-    executiveRealmPhrase: "Japan",
-    governmentType: "parliamentaryMonarchy",
-    governmentTypeLabel: "Constitutional Monarchy",
-    coalitionThreshold: 233, // House of Representatives majority (465 seats / 2 + 1)
-    cabinetEligibleChamberKeys: ["shugiin", "sangiin"],
-
-    legislature: {
-      name: "Kokkai",
-      path: "/country/jp/legislature",
-      bicameral: true,
-      upperChamber: {
-        key: "sangiin",
-        name: "Sangiin",
-        shortName: "Sangiin",
-        seats: 248,
-        description:
-          "248 councillors elected on staggered 6-year terms. Half are contested every 3 years. Cannot be dissolved.",
-        elected: true,
-      },
-      lowerChamber: {
-        key: "shugiin",
-        name: "Shūgiin",
-        shortName: "Shūgiin",
-        seats: 465,
-        description:
-          "465 members elected by FPTP from regional constituencies. Invests confidence in the Cabinet.",
-      },
-    },
-
-    lowerElectionSystem: {
-      termYears: 4,
-      seatsContested: "all",
-      singleMemberConstituencies: true,
-      snapElectionsAllowed: true,
-    },
-    upperElectionSystem: {
-      termYears: 6,
-      seatsContested: "partial",
-      staggeredClasses: 2,
-      singleMemberConstituencies: true,
-      snapElectionsAllowed: false,
-    },
-    electionSystems: {
-      lowerChamber: "pr_hareQuota", // Shūgiin
-      upperChamber: "pr_hareQuota", // Sangiin (class-staggered)
-      subNationalChamber: "pr_hareQuota",
-      headOfGovernment: "parliamentary",
-      headOfState: "ceremonial", // Emperor
-    },
-
-    officeTypes: [
-      {
-        key: "primeMinister",
-        label: "Prime Minister",
-        labelPlural: "Prime Ministers",
-        isExecutive: true,
-        isSubNational: false,
-        actionBonus: 4,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        key: "shugiin",
-        label: "Member of the House of Representatives",
-        labelPlural: "Members of the House of Representatives",
-        chamberKey: "shugiin",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 4,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        key: "sangiin",
-        label: "Member of the House of Councillors",
-        labelPlural: "Members of the House of Councillors",
-        chamberKey: "sangiin",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 6,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        // JP prefectural assembly (Regional Council). Mirrors UK's
-        // regionalCouncil office. Declared BEFORE `governor` so the naive
-        // "first sub-national non-executive office" lookups resolve to the
-        // legislature, not the (also sub-national, non-executive) governor.
-        // termYears: 4 matches the Shugiin sync (UK uses 5 to match Commons).
-        key: "regionalCouncil",
-        label: "Regional Councillor",
-        labelPlural: "Regional Councillors",
-        chamberKey: "regionalCouncil",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 4,
-        actionBonus: 1,
-        partyStrengthWeight: 0.85,
-      },
-      {
-        // JP regional governor — 4-year cycle matches CYCLE_TURNS.governor
-        // (192 turns). RL Japanese prefectural-governor terms are 4 years;
-        // earlier config metadata read 6, which conflicted with the actual
-        // election cycle and was never load-bearing (the cycle constant
-        // is authoritative at runtime).
-        key: "governor",
-        label: "Governor",
-        labelPlural: "Governors",
-        isExecutive: false,
-        isSubNational: true,
-        termYears: 4,
-        actionBonus: 2,
-        partyStrengthWeight: 1.0,
-      },
-      {
-        key: "centralBankChair",
-        label: "Governor of the Bank of Japan",
-        labelPlural: "Governors of the Bank of Japan",
-        isExecutive: false,
-        isSubNational: false,
-        termYears: 5,
-        actionBonus: 3,
-        partyStrengthWeight: 0,
-      },
-    ],
-
-    subNationalChamber: {
-      key: "regionalCouncil",
-      name: "Regional Council",
-      shortName: "Regional Council",
-      seats: 2679, // sum of stateSenateSeats across the 8 JP regions (informational)
-      description: "Elected regional councillors representing Japan's regions.",
-      regionalModel: true,
-    },
-
-    majorPartyIds: ["ldp", "cdp"],
-    partyCreationNPPs: { statesRequired: 2, lockHomeState: false, nppsPerState: 1 },
-    demographicProfileId: "jp_archetypes",
-
-    centralBank: {
-      name: "Bank of Japan",
-      abbreviation: "BoJ",
-      chairTitle: "Governor of the Bank of Japan",
-      defaultPrimeRate: 1.0,
-      heroImage: "/api/images/hero/bank-of-japan",
-    },
-
-    exchangeName: "Nikkei",
-    cabinetBillsEnabled: true,
-    usdExchangeRate: 0.00943,
-    currencyCode: "JPY",
-    fiscalYearStartTurnInYear: 40,
-    financeMinisterCabinetId: "finance_minister",
-
-    status: "active",
-    tagline:
-      "Parliamentary democracy under the National Diet - FPTP lower house elections and a revising upper chamber.",
-    descriptor:
-      "A parliamentary constitutional monarchy where the Prime Minister leads government through confidence in the House of Representatives, alongside the House of Councillors and elected regional governments.",
-    heroImage: getCountryFlagUrl("JP"),
-    entryPath: "/country/jp",
-    overviewPath: "/country/jp",
-    mapPath: "/country/jp/map",
-    executivePath: "/country/jp/executive",
-    executiveLabel: "Naikaku Sōri Daijin Kantei",
-    centralGovernmentLabel: "National Transfers",
-    imperialTitles: {
-      male: "Emperor",
-      female: "Empress",
-      nonbinary: "Emperor",
-    },
-    imperialCorporation: {
-      name: "Chrysanthemum Properties",
-      sector: "real_estate",
-    },
-  },
+  JP: JP_INSTITUTIONS.config,
 
   IE: {
     id: "IE",
@@ -5538,42 +5353,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
         },
       },
     },
-    JP: {
-      // Shugiin: 512 seats at the February 1990 general election, matching the
-      // seeded roster exactly.
-      //
-      // Sangiin: 252. NOTE this is neither the seeded figure nor the modern one.
-      // The House of Councillors held 252 seats from Okinawa's reversion until
-      // the 2001 reduction, so 252 is the era-correct size; the base config's
-      // 248 is modern, and the seeded roster totals only 206 (104 + 102 across
-      // the two classes), leaving it 46 short. Setting the config to the real
-      // number rather than to the roster's is deliberate: an era override exists
-      // to make the config historically right, and bending it to match an
-      // incomplete roster would enshrine a wrong chamber size in a country the
-      // next reset opens to players. The shortfall is recorded in S4 instead.
-      legislature: {
-        name: "Kokkai",
-        path: "/country/jp/legislature",
-        bicameral: true,
-        upperChamber: {
-          key: "sangiin",
-          name: "Sangiin",
-          shortName: "Sangiin",
-          seats: 252,
-          description:
-            "252 councillors elected on staggered 6-year terms. Half are contested every 3 years. Cannot be dissolved.",
-          elected: true,
-        },
-        lowerChamber: {
-          key: "shugiin",
-          name: "Shūgiin",
-          shortName: "Shūgiin",
-          seats: 512,
-          description:
-            "512 members elected from multi-member constituencies under the pre-1994 system.",
-        },
-      },
-    },
+    JP: JP_ERAS["1991-default"]?.config,
   },
   "1953-default": {
     US: {
@@ -6235,37 +6015,7 @@ export const ERA_COUNTRY_CONFIG_OVERRIDES: Record<
         },
       },
     },
-    JP: {
-      // USD-anchored GDP/income seed (refs #3498) — match US/DE convention.
-      usdExchangeRate: 1.0,
-      // Pre-LDP Japan: Yoshida's Liberal Party (RYO) governing; JSP main opposition.
-      // LDP formed Nov 1955; CDP is a 2017 creation.
-      majorPartyIds: ["ryo", "jsp"],
-      // 466 / 2 + 1 — 1953 Shūgiin (jpRegions1953); modern base is 465.
-      coalitionThreshold: 234,
-      legislature: {
-        name: "Kokkai",
-        path: "/country/jp/legislature",
-        bicameral: true,
-        upperChamber: {
-          key: "sangiin",
-          name: "Sangiin",
-          shortName: "Sangiin",
-          seats: 248,
-          description:
-            "248 councillors elected on staggered 6-year terms. Half are contested every 3 years. Cannot be dissolved.",
-          elected: true,
-        },
-        lowerChamber: {
-          key: "shugiin",
-          name: "Shūgiin",
-          shortName: "Shūgiin",
-          seats: 466,
-          description:
-            "466 members elected in the April 1953 general election from regional constituencies.",
-        },
-      },
-    },
+    JP: JP_ERAS["1953-default"]?.config,
     IE: {
       // 0.357 IEP/USD — hard 1:1 sterling link at Bretton Woods par
       // (INITIAL_RATES_1953.IE, itself pinned to INITIAL_RATES_1953.UK).
@@ -7066,7 +6816,7 @@ export function getOfficeTypeConfig(
 export const REGIONAL_BILL_ASSENT_OFFICE_KEY: Partial<Record<CountryId, string>> = {
   US: "governor",
   UK: "governor",
-  JP: "governor",
+  JP: JP_INSTITUTIONS.regionalBillAssentOfficeKey,
   IE: "governor",
   DE: "ministerPresident",
   // One-party regional executives — Republic / Land First Secretaries. Without

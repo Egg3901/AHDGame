@@ -7,8 +7,9 @@
  */
 export type CabinetGroup =
   "Centre" | "Economy" | "Security & Foreign" | "Society" | "Domestic" | "Nations";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
-const GROUPS: Record<string, Record<string, CabinetGroup>> = {
+export const GROUPS: Record<string, Record<string, CabinetGroup>> = {
   US: {
     director_of_intelligence: "Security & Foreign",
     secretary_of_state: "Security & Foreign",
@@ -48,19 +49,7 @@ const GROUPS: Record<string, Record<string, CabinetGroup>> = {
     scotland: "Nations",
     wales: "Nations",
   },
-  JP: {
-    chief_cabinet_secretary: "Centre",
-    finance_minister: "Economy",
-    economy_minister: "Economy",
-    foreign_affairs_minister: "Security & Foreign",
-    justice_minister: "Security & Foreign",
-    defense_minister: "Security & Foreign",
-    health_minister: "Society",
-    education_minister: "Society",
-    land_minister: "Domestic",
-    environment_minister: "Domestic",
-    internal_affairs_minister: "Domestic",
-  },
+  JP: JP_INSTITUTIONS.cabinet.groups,
   IE: {
     taoiseach: "Centre",
     tanaiste: "Centre",

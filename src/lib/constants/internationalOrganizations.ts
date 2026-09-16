@@ -1,6 +1,7 @@
 import type { CountryId } from "./countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import type { OrganizationCategory } from "./orgCategory";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 /**
  * The built-in organizations seeded at game start. Player-created orgs use
@@ -621,7 +622,7 @@ export const FOREIGN_AFFAIRS_POSITION_BY_COUNTRY: Record<CountryId, string | nul
   US: "secretary_of_state",
   UK: "foreign_secretary",
   DE: "foreign_minister",
-  JP: "foreign_affairs_minister",
+  JP: JP_INSTITUTIONS.positions.foreignAffairs,
   IE: "minister_for_foreign_affairs",
   BR: "minister_of_foreign_affairs",
   CN: "minister_of_foreign_affairs",
@@ -672,7 +673,7 @@ export const TRADE_MINISTER_POSITION_BY_COUNTRY: Record<CountryId, string | null
   US: "secretary_of_commerce",
   UK: "business_secretary",
   DE: "economy_minister",
-  JP: "economy_minister",
+  JP: JP_INSTITUTIONS.positions.tradeMinister,
   CN: "minister_of_commerce",
   IE: "minister_for_enterprise", // Minister for Enterprise, Trade and Employment
   BR: "minister_of_trade_industry",

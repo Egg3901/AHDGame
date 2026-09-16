@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
 
 /** Chamber seating geometry used by the composition + vote-seating charts. */
 export type SeatingStyle = "hemicycle" | "benches" | "horseshoe";
@@ -138,39 +139,14 @@ const DE: LegislativeProcess = {
   seatingStyle: "hemicycle",
 };
 
-const JP: LegislativeProcess = {
-  executive: {
-    title: "The Emperor",
-    canVeto: false,
-    signLabel: "Promulgation",
-    signNote: "The bill is promulgated by the Emperor on the Cabinet's advice — a formality.",
-    override: null,
-  },
-  upperNote:
-    "If the Sangiin (Councillors) rejects or amends a bill, the Shūgiin (Representatives) can override with a two-thirds majority.",
-  dissolution: {
-    actor: "Prime Minister",
-    body: "The PM may dissolve the Shūgiin and call an election; bills in progress lapse.",
-  },
-  quirks: [
-    {
-      icon: "users",
-      title: "Shūgiin override",
-      body: "The lower house can override the Sangiin with a two-thirds vote.",
-    },
-    {
-      icon: "doc",
-      title: "Cabinet bills",
-      body: "Most legislation is Cabinet-submitted (Kakuhō), not member-introduced.",
-    },
-    {
-      icon: "bolt",
-      title: "Dissolution",
-      body: "The PM can dissolve the Shūgiin, ending all pending business.",
-    },
-  ],
-  seatingStyle: "hemicycle",
-};
+/**
+ * Forwarder. Japan's legislative process moved to the country folder in D3.
+ *
+ * ⚠️ Declared as a module-level const rather than an inline key: the registry
+ * below composes from these consts by shorthand, so the usual "replace the JP
+ * entry" pass does not apply here.
+ */
+const JP: LegislativeProcess = JP_INSTITUTIONS.legislativeProcess;
 
 const IE: LegislativeProcess = {
   executive: {

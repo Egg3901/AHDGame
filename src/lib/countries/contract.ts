@@ -4,6 +4,8 @@ import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
+import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";
+import type { Branch } from "@/lib/constants/military";
 import type { EraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import type { NationalIdentity } from "@/lib/constants/nationalIdentity";
 import type { StatsIdentity } from "@/lib/constants/nationalStatsIdentity";
@@ -15,6 +17,7 @@ import type { LegislativeProcess } from "@/lib/legislature/process";
 import type { CalibrationTarget } from "@/lib/seeds/calibration/types";
 import type { PresetBundles } from "@/lib/seeds/regionCensusData";
 import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
+import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsHandler } from "@/lib/turn/perpetualElections/registry";
 import type { ShippingPreset } from "@/lib/world/eraRoster";
 
@@ -103,18 +106,43 @@ export interface CountryInstitutions {
    * Cabinet seat ids. Five of these are one id or null; ESTATE_PORTFOLIO is a
    * portfolio MAP, not a position, which is why it is typed separately.
    */
+  /**
+   * ⚠️ These are NOT uniformly optional, and they are not uniformly nullable.
+   * The forwarders exposed it: ENERGY and INFRA live in `Partial<Record<...,
+   * string>>` so they are `string | undefined`, while DEFENSE, FOREIGN_AFFAIRS
+   * and TRADE_MINISTER live in `Record<..., string | null>` so they are required
+   * and nullable. Declaring all five the same way compiles in the folder and
+   * fails at every forwarder.
+   */
   readonly positions: {
-    readonly energy?: string | null;
-    readonly infrastructure?: string | null;
-    readonly defense?: string | null;
-    readonly foreignAffairs?: string | null;
-    readonly tradeMinister?: string | null;
+    readonly energy?: string;
+    readonly infrastructure?: string;
+    readonly defense: string | null;
+    readonly foreignAffairs: string | null;
+    readonly tradeMinister: string | null;
   };
-  readonly estatePortfolio?: Record<string, string>;
+  readonly estatePortfolio: Record<string, string>;
+  /**
+   * Cabinet data. `orders` and `mechanics` are the SAME objects the registries
+   * ORDERS_BY_COUNTRY and MECHANICS_BY_COUNTRY hold for Japan -- their source
+   * files were relocated into the folder, so those registries already forward
+   * here. Holding copies would be a second source of 1,333 lines.
+   */
+  readonly cabinet: {
+    readonly positions: readonly unknown[];
+    readonly orders: Readonly<Record<string, unknown>>;
+    readonly mechanics: Readonly<Record<string, unknown>>;
+    readonly groups: Record<string, CabinetGroup>;
+  };
   readonly military: {
-    readonly branches?: readonly string[];
-    readonly scale?: number;
-    readonly ordersOfBattle?: readonly OrderOfBattleEntry[];
+    /**
+     * ⚠️ Branch objects, not names. D1 guessed `string[]` here and the generated
+     * module caught it: each entry carries id, name, abbr, domain and
+     * establishedYear, with dissolvedYear on the branches that were disbanded.
+     */
+    readonly branches: Branch[];
+    readonly scale: number;
+    readonly ordersOfBattle: OrderOfBattleEntry[];
   };
 }
 
@@ -134,7 +162,14 @@ export interface CountryInstitutions {
 export interface CountryElections {
   readonly spawn?: SpawnElectionsHandler;
   readonly billPhases?: unknown;
-  readonly electionPhases?: unknown;
+  /**
+   * `{ name, fn }` per phase. The fn values are FUNCTIONS, so toEqual compares
+   * them by reference and the ordinary harness is blind -- see
+   * MOVED_THUNK_REGISTRIES. Typed as the registry's own entry type rather than a
+   * structural guess, because `fn: unknown` compiles in the folder and fails at
+   * the forwarder.
+   */
+  readonly electionPhases?: CountryElectionPhaseEntry[];
   readonly seats: {
     readonly byChamber: Readonly<Record<string, Readonly<Record<string, number>>>>;
     readonly totals: Readonly<Record<string, number>>;
@@ -227,7 +262,19 @@ export interface CountryEraOverride {
   readonly preset: ShippingPreset;
   readonly config?: EraCountryConfigOverride;
   readonly identity?: Partial<CountryIdentity>;
-  readonly institutions?: Partial<CountryInstitutions>;
+  /**
+   * ⚠️ NOT `Partial<CountryInstitutions>`. `Partial` only makes the TOP level
+   * optional, so a nested `military` still demanded `branches` and `scale` from
+   * every era that carries only orders of battle. An era override supplies
+   * differences, so each nested group is optional in its own right.
+   */
+  readonly institutions?: {
+    readonly military?: {
+      readonly branches?: Branch[];
+      readonly scale?: number;
+      readonly ordersOfBattle?: OrderOfBattleEntry[];
+    };
+  };
   readonly elections?: Partial<CountryElections>;
   readonly economy?: Partial<CountryEconomy>;
   readonly geography?: Partial<CountryGeography>;

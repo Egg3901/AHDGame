@@ -155,7 +155,11 @@ const SIZE_CAP_EXEMPT = [
   "src/lib/constants/techTree/earlySectorFill.ts",
   "src/lib/constants/usCabinetMechanics.ts",
   "src/lib/constants/ukCabinetMechanics.ts",
-  "src/lib/constants/jpCabinetMechanics.ts",
+  // Japan's cabinet data moved to the country folder in D3. Scoped to the
+  // cabinet/ subdirectory on purpose: SIZE_CAP_EXEMPT is matched by SUBSTRING,
+  // so a bare "src/lib/countries/" would exempt every module the folder ever
+  // gains, including the logic ones.
+  "src/lib/countries/jp/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

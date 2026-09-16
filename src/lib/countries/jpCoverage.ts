@@ -99,6 +99,31 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
     phase: "D1",
     source: "derived",
   },
+  {
+    file: "src/lib/countries/jp/cabinet/positions.ts",
+    bucket: "D",
+    phase: "D3",
+    source: "derived",
+  },
+  { file: "src/lib/countries/jp/cabinet/orders.ts", bucket: "D", phase: "D3", source: "derived" },
+  {
+    file: "src/lib/countries/jp/cabinet/mechanics.ts",
+    bucket: "D",
+    phase: "D3",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/elections/perpetual.ts",
+    bucket: "D",
+    phase: "D3",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/elections/billLifecycle.ts",
+    bucket: "D",
+    phase: "D3",
+    source: "derived",
+  },
   { file: "src/lib/seeds/international/jp.ts", bucket: "D", phase: "D1", source: "plan" },
   { file: "src/lib/banking/npcBanks.ts", bucket: "A", phase: "D2", source: "plan" },
   {
@@ -169,14 +194,14 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
   { file: "src/lib/military/theaters.ts", bucket: "A", phase: "D3", source: "derived" },
   { file: "src/lib/turn/countryPhases.ts", bucket: "A", phase: "D3", source: "plan" },
   { file: "src/lib/turn/perpetualElections/registry.ts", bucket: "A", phase: "D3", source: "plan" },
-  { file: "src/lib/constants/jpCabinet.ts", bucket: "D", phase: "D3", source: "plan" },
-  { file: "src/lib/constants/jpCabinetMechanics.ts", bucket: "D", phase: "D3", source: "plan" },
-  { file: "src/lib/constants/jpCabinetOrders.ts", bucket: "D", phase: "D3", source: "plan" },
-  { file: "src/lib/turn/billLifecycle/configs/jp.ts", bucket: "D", phase: "D3", source: "plan" },
+  { file: "src/lib/constants/jpCabinet.ts", bucket: "D", phase: "D7", source: "plan" },
+  { file: "src/lib/constants/jpCabinetMechanics.ts", bucket: "D", phase: "D7", source: "plan" },
+  { file: "src/lib/constants/jpCabinetOrders.ts", bucket: "D", phase: "D7", source: "plan" },
+  { file: "src/lib/turn/billLifecycle/configs/jp.ts", bucket: "D", phase: "D7", source: "plan" },
   {
     file: "src/lib/turn/perpetualElections/countries/jp.ts",
     bucket: "D",
-    phase: "D3",
+    phase: "D7",
     source: "plan",
   },
   {
@@ -706,12 +731,68 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
 /** Deliberately not handled by this plan, so no phase. Each entry states why. */
 export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: string }> = [
   {
+    file: "scripts/countries/verify-jp-runtime.ts",
+    why: "Created by D3 to prove every forwarded registry resolves at runtime. A circular import typechecks cleanly and yields undefined, so this runs outside vitest to exercise the app's own module-init order. It owns no Japan fact.",
+  },
+  {
+    file: "scripts/countries/audit-jp-snapshot.ts",
+    why: "Created by D3 to audit the fixture for entries whose functions were dropped silently. It reads the snapshot and reports; it owns no Japan fact and writes nothing.",
+  },
+  {
+    file: "scripts/countries/correct-jp-snapshot.ts",
+    why: "Created by D3 to repair three entries the D1 extractor recorded incompletely. It rewrites only those three, only while their registries still hold pre-move values, and owns no Japan fact itself.",
+  },
+  {
+    file: "scripts/countries/append-jp-snapshot.ts",
+    why: "Created by D3 to append registries the original emitter missed. It reads registries that have not moved yet and owns no Japan fact itself; the plan forbids re-emitting the fixture, so appending is the only sanctioned path.",
+  },
+  {
     file: "scripts/countries/emit-jp-snapshot.ts",
     why: "Created by D1 as the one-off snapshot emitter. It reads every registry Japan will move but owns no Japan fact itself, so there is nothing to relocate.",
   },
   {
     file: "src/lib/countries/contract.ts",
     why: "Created by D1 as the declared shape of a country folder. It is the destination of the move, not a source of Japan facts.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/1953.ts",
+    why: "Created by D3 as Japan's 1953 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/1979.ts",
+    why: "Created by D3 as Japan's 1979 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/1991.ts",
+    why: "Created by D3 as Japan's 1991 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/1999.ts",
+    why: "Created by D3 as Japan's 1999 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/2007.ts",
+    why: "Created by D3 as Japan's 2007 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/2019.ts",
+    why: "Created by D3 as Japan's 2019 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/2023.ts",
+    why: "Created by D3 as Japan's 2023 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/index.ts",
+    why: "Created by D3 as the barrel over Japan's seven era overrides. Composes the era modules and owns no Japan fact of its own.",
+  },
+  {
+    file: "src/lib/countries/jp/elections.ts",
+    why: "Created by D3 as the destination for Japan's elections. Server-only: it reaches getDb through elections/perpetual.ts, so it is deliberately not re-exported from the folder barrel.",
+  },
+  {
+    file: "src/lib/countries/jp/institutions.ts",
+    why: "Created by D3 as the destination for Japan's institutions. Generated from the pre-move snapshot for authored tables and composed by import for the relocated cabinet data, so it is where Japan's facts now live.",
   },
   {
     file: "src/lib/countries/jp/identity.ts",

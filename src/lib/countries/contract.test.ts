@@ -30,9 +30,11 @@ const snapshot = (): Record<string, SnapshotEntry> =>
 describe("pre-move snapshot", () => {
   it("exists and covers every registry Japan's folder will absorb", () => {
     const entries = Object.entries(snapshot());
-    // 79 registries, emitted before anything moved. If this drops, the fixture
-    // was regenerated after a rewire and no longer records pre-move values.
-    expect(entries.length).toBe(79);
+    // 79 emitted before anything moved, plus 4 APPENDED in D3. If this drops,
+    // the fixture was regenerated after a rewire and no longer records pre-move
+    // values. It may only ever grow, one appended entry at a time, and only for
+    // registries that have not moved yet.
+    expect(entries.length).toBe(88);
   });
 
   /**
@@ -135,6 +137,35 @@ describe("pre-move snapshot", () => {
   });
 
   /**
+   * Japan's canonical chamber seat tables, appended in D3.
+   *
+   * ⚠️ These live in constants/states.ts, which is not Japan-named and carries no
+   * `JP:` key, so four earlier coverage rules AND the original emitter's symbol
+   * list all missed them. They are the most load-bearing structural fact Japan
+   * has, and they were the last thing to be noticed.
+   *
+   * The per-region tables must keep summing to their TOTAL constants: a region
+   * silently dropped during the move would otherwise leave a chamber short and
+   * nothing would fail loudly.
+   */
+  it("keeps the chamber seat tables whole", () => {
+    const snap = snapshot();
+    const sum = (v: unknown) =>
+      Object.values(v as Record<string, number>).reduce((a, b) => a + b, 0);
+
+    expect(Object.keys(snap.JP_SHUGIIN_SEATS.value as object)).toHaveLength(8);
+    expect(sum(snap.JP_SHUGIIN_SEATS.value)).toBe(465);
+    expect(snap.TOTAL_JP_SHUGIIN_SEATS.value).toBe(465);
+
+    expect(Object.keys(snap.JP_SANGIIN_SEATS.value as object)).toHaveLength(8);
+    expect(sum(snap.JP_SANGIIN_SEATS.value)).toBe(248);
+    expect(snap.TOTAL_JP_SANGIIN_SEATS.value).toBe(248);
+
+    // One governor per region.
+    expect(sum(snap.JP_GOVERNOR_SEATS.value)).toBe(8);
+  });
+
+  /**
    * ⚠️ toEqual compares functions by REFERENCE, so the faithful-replacement
    * harness is blind to these. They are listed here so the blindness is on the
    * record, and D3/D5 must pin them by resolved BEHAVIOUR via
@@ -145,7 +176,44 @@ describe("pre-move snapshot", () => {
       .filter(([, e]) => e.shape === "function-valued")
       .map(([name]) => name)
       .sort();
-    expect(fnValued).toEqual(["COUNTRY_BILL_PHASES", "REGION_ROSTERS", "SPAWN_ELECTIONS_REGISTRY"]);
+    // The plan names TWO. There are FIVE.
+    //
+    // PARLIAMENTARY_CABINET_CONFIGS hides its function one level down at
+    // `hero.titleFor`, so a top-level typeof check misses it. COUNTRY_ELECTION_
+    // PHASES hides four functions inside an ARRAY, which the D1 extractor's
+    // isObj guard skipped entirely -- it recorded four `{ name }` entries where
+    // the live registry holds four `{ name, fn }`, and JSON.stringify dropped
+    // the functions without a word. See correct-jp-snapshot.ts.
+    expect(fnValued).toEqual([
+      "COUNTRY_BILL_PHASES",
+      "COUNTRY_ELECTION_PHASES",
+      "PARLIAMENTARY_CABINET_CONFIGS",
+      "REGION_ROSTERS",
+      "SPAWN_ELECTIONS_REGISTRY",
+    ]);
+
+    /**
+     * A function-valued entry must still record its NON-function siblings.
+     * Recording `value: null` threw them away: COUNTRY_BILL_PHASES carries a
+     * phaseName and an emptyResult that no longer existed anywhere.
+     */
+    const billPhases = snapshot().COUNTRY_BILL_PHASES.value as Record<string, unknown>;
+    expect(billPhases.phaseName).toBe("jpBillLifecycle");
+    expect(billPhases.emptyResult).toEqual({
+      enacted: 0,
+      failed: 0,
+      overrides: 0,
+      cabinetPassed: 0,
+    });
+    expect(
+      (snapshot().COUNTRY_ELECTION_PHASES.value as { name: string }[]).map((p) => p.name)
+    ).toEqual([
+      "jpElections",
+      "jpRegionalCouncilElections",
+      "jpCouncillorElections",
+      "jpGovernorElections",
+    ]);
+    expect(snapshot().PARLIAMENTARY_CABINET_CONFIGS.functionKeys).toEqual(["hero.titleFor"]);
     // All seven shipping presets, not the five an earlier revision listed.
     expect(snapshot().REGION_ROSTERS.functionKeys).toEqual([
       "1953",
@@ -171,16 +239,26 @@ describe("faithful replacement", () => {
      * pre-move fixture, never from the registry itself. Comparing the registry
      * to the registry would pass vacuously no matter what the move broke.
      */
-    it.each(MOVED_REGISTRIES)("$name is unchanged by the move", ({ name, after }) => {
-      const entry = snapshot()[name];
-      expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
-      expect(after()).toEqual(entry.value);
-    });
+    it.each(MOVED_REGISTRIES)(
+      "$name$subKey is unchanged by the move",
+      ({ name, subKey, after }) => {
+        const entry = snapshot()[name];
+        expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
+        // An outer-keyed entry holds Japan once per era or preset; compare only
+        // the slice this row owns, so a dropped era fails on its own line.
+        const expected = subKey ? (entry.value as Record<string, unknown>)[subKey] : entry.value;
+        expect(expected, `${name}.${subKey} is not in the fixture`).toBeDefined();
+        expect(after()).toEqual(expected);
+      }
+    );
 
     it("forwards every registry the fixture recorded for this phase", () => {
       // Guards the other direction: a registry quietly dropped from the table
       // would otherwise just stop being checked.
-      expect(MOVED_REGISTRIES.length).toBe(15);
+      //
+      // 15 from D2 (identity), 23 from D3 (institutions and elections, with the
+      // preset-first registries split one row per era).
+      expect(MOVED_REGISTRIES.length).toBe(38);
       const missing = MOVED_REGISTRIES.filter((r) => !snapshot()[r.name]);
       expect(missing.map((r) => r.name)).toEqual([]);
     });
@@ -191,14 +269,54 @@ describe("faithful replacement", () => {
       expect(MOVED_THUNK_REGISTRIES).toEqual([]);
     });
   } else {
-    it.each(MOVED_THUNK_REGISTRIES)(
-      "$name resolves to the same values after the move",
-      async ({ paths, resolved }) => {
-        const snapshotted = await resolved();
-        // Pin the key set too: a silently dropped era would otherwise compare
-        // an empty intersection and pass.
-        expect(paths().map((p) => p.join("."))).toEqual(Object.keys(snapshotted));
+    /**
+     * ⚠️ `toEqual` compares functions by REFERENCE, so the ordinary harness above
+     * cannot see these at all: a re-export passes tautologically and a
+     * re-declaration fails despite identical behaviour.
+     *
+     * Instead, replace every function with a marker and compare the result to
+     * the fixture. That verifies the surrounding DATA and the function TOPOLOGY
+     * in one assertion -- a function that vanished, moved to a new path, or
+     * appeared where there was none all fail, and so does a changed sibling.
+     *
+     * This is what caught the D1 extractor bug: COUNTRY_ELECTION_PHASES holds
+     * its functions inside an ARRAY, which the original `isObj` guard skipped,
+     * so four `{ name, fn }` entries were recorded as four `{ name }`.
+     */
+    const mark = (v: unknown): unknown => {
+      if (typeof v === "function") return "<function>";
+      if (Array.isArray(v)) return v.map(mark);
+      if (typeof v === "object" && v !== null) {
+        return Object.fromEntries(Object.entries(v).map(([k, inner]) => [k, mark(inner)]));
       }
-    );
+      return v;
+    };
+
+    const paths = (v: unknown, at: string[] = []): string[] => {
+      if (typeof v === "function") return [at.join(".") || "<self>"];
+      if (Array.isArray(v)) return v.flatMap((item, i) => paths(item, [...at, String(i)]));
+      if (typeof v === "object" && v !== null) {
+        return Object.entries(v).flatMap(([k, inner]) => paths(inner, [...at, k]));
+      }
+      return [];
+    };
+
+    it.each(MOVED_THUNK_REGISTRIES)("$name keeps its data and its functions", ({ name, after }) => {
+      const entry = snapshot()[name];
+      expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
+      const live = after();
+      expect(mark(live)).toEqual(entry.value);
+      expect(paths(live)).toEqual(entry.functionKeys);
+    });
+
+    it("covers every function-valued registry this phase owns", () => {
+      // REGION_ROSTERS is D5's; the other four are D3's.
+      expect(MOVED_THUNK_REGISTRIES.map((r) => r.name).sort()).toEqual([
+        "COUNTRY_BILL_PHASES",
+        "COUNTRY_ELECTION_PHASES",
+        "PARLIAMENTARY_CABINET_CONFIGS",
+        "SPAWN_ELECTIONS_REGISTRY",
+      ]);
+    });
   }
 });
