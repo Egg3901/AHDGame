@@ -22,8 +22,7 @@ import { clientIpFromRequest } from "@/lib/utils/network";
 //   collapses to 1/hour per identity while legitimate display is unchanged.
 //
 // The viewer identity is the authenticated user when a session exists, else
-// the client IP. Keying on both (never one alone) means neither logging out
-// nor rotating IPs alone resets the gates.
+// the client IP. Authenticated viewers cannot reset the gates by rotating IPs.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
@@ -52,8 +51,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       );
       counted = impression.ok;
     } catch {
-      // Storage hiccup: fail open to counting so ad display keeps working.
-      counted = true;
+      // Preserve ad display availability, but fail closed for counting. An
+      // unavailable dedupe store must not reopen unbounded rotation gaming.
+      counted = false;
     }
     if (!counted) return NextResponse.json({ success: true, counted: false });
 

@@ -121,7 +121,7 @@ describe("POST /api/player-ads/[id]/view", () => {
     expect(db.collection("playerBannerAds").updateOne).not.toHaveBeenCalled();
   });
 
-  it("fails open to counting when the impression store is unavailable", async () => {
+  it("preserves display but fails closed for counting when the impression store is unavailable", async () => {
     const { mongoRateLimit } = await import("@/lib/api/rateLimit.mongo");
     vi.mocked(mongoRateLimit).mockRejectedValue(new Error("mongo down"));
 
@@ -131,8 +131,8 @@ describe("POST /api/player-ads/[id]/view", () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data).toEqual({ success: true, counted: true });
-    expect(db.collection("playerBannerAds").updateOne).toHaveBeenCalledOnce();
+    expect(data).toEqual({ success: true, counted: false });
+    expect(db.collection("playerBannerAds").updateOne).not.toHaveBeenCalled();
   });
 
   it("returns 400 for an invalid ad id", async () => {
