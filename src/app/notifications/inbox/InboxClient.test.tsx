@@ -83,8 +83,9 @@ describe("InboxClient handleMarkAllRead", () => {
 
     await waitFor(() => {
       const calls = (global.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter(
-        ([url, init]: [string, RequestInit | undefined]) =>
-          url === "/api/notifications" && init?.method === "PATCH"
+        (call) =>
+          call[0] === "/api/notifications" &&
+          (call[1] as RequestInit | undefined)?.method === "PATCH"
       );
       expect(calls).toHaveLength(2);
     });
