@@ -283,7 +283,8 @@ export interface ArchetypeResolutionInput {
   governmentType: GovernmentType;
   economicArchetype: WorldEconomicArchetype;
   /** Explicit planned-economy signal from country config. */
-  disallowPrivateCorporationFounding?: boolean;
+  /** True when this country has a marketization trajectory (i.e. is modelled as planned). */
+  hasMarketizationSchedule?: boolean;
 }
 
 /**
@@ -304,8 +305,7 @@ export function resolveReadinessArchetypes(input: ArchetypeResolutionInput): Rea
     archetypes.push("parliamentary");
   }
 
-  const planned =
-    input.economicArchetype === "planned" || input.disallowPrivateCorporationFounding === true;
+  const planned = input.economicArchetype === "planned" || input.hasMarketizationSchedule === true;
   if (planned) {
     archetypes.push("planned-economy");
   } else if (input.economicArchetype === "market" || input.economicArchetype === "mixed") {
@@ -325,7 +325,7 @@ export function resolveReadinessArchetypesForCountry(
   return resolveReadinessArchetypes({
     governmentType: config.governmentType,
     economicArchetype: entity.economicArchetype,
-    disallowPrivateCorporationFounding: config.disallowPrivateCorporationFounding,
+    hasMarketizationSchedule: Boolean(MARKETIZATION_SCHEDULE[countryId]),
   });
 }
 
@@ -606,14 +606,15 @@ function probeParties(countryId: CountryId, presetId: string): CapabilityEvidenc
 
 function probeEconomyModel(countryId: CountryId, planned: boolean): CapabilityEvidence {
   if (planned) {
-    const scheduled = Boolean(MARKETIZATION_SCHEDULE[countryId]);
-    const blockedFounding = COUNTRY_CONFIGS[countryId].disallowPrivateCorporationFounding === true;
-    const present = scheduled || blockedFounding;
+    // The marketization schedule is now the ONLY planned-economy signal: the
+    // former `disallowPrivateCorporationFounding` config flag was redundant with
+    // it and has been retired.
+    const present = Boolean(MARKETIZATION_SCHEDULE[countryId]);
     return {
       present,
       evidence: present
-        ? `Planned economy: marketizationSchedule=${scheduled}, disallowPrivateCorporationFounding=${blockedFounding}.`
-        : `Planned economy missing marketization schedule and private-corp founding block.`,
+        ? `Planned economy: marketizationSchedule=true.`
+        : `Planned economy missing a marketization schedule.`,
     };
   }
   const forex = FOREX_ACTIVE_COUNTRIES.includes(countryId);
@@ -698,18 +699,15 @@ function probeOnePartyMood(countryId: CountryId): CapabilityEvidence {
 }
 
 function probePlannedControls(countryId: CountryId): CapabilityEvidence {
-  const config = COUNTRY_CONFIGS[countryId];
-  const scheduled = Boolean(MARKETIZATION_SCHEDULE[countryId]);
-  const blocked = config.disallowPrivateCorporationFounding === true;
-  // Either signal is sufficient: some planned countries (e.g. CN) rely on the
-  // marketization schedule alone, while Cold-War command states also set the
-  // private-corp founding block.
-  const present = scheduled || blocked;
+  // One signal: every planned country carries a marketization schedule. CN always
+  // relied on it alone; the Cold-War command states duplicated it in a config
+  // flag that has been retired.
+  const present = Boolean(MARKETIZATION_SCHEDULE[countryId]);
   return {
     present,
     evidence: present
-      ? `Planned controls present (schedule=${scheduled}, disallowFounding=${blocked}).`
-      : `plannedEconomyControls incomplete (schedule=${scheduled}, disallowFounding=${blocked}).`,
+      ? `Planned controls present (marketizationSchedule=true).`
+      : `plannedEconomyControls incomplete: no marketization schedule.`,
   };
 }
 

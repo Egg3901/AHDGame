@@ -15,6 +15,7 @@ import { NATIONALIZATION_BOOK_PREMIUM } from "./constants";
 import { getNextSequentialId } from "@/lib/db/sequentialId";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { isStateOwned, ensurePrimaryNationalCorporation } from "./nationalCorporation";
+import { assertPrivateEnterprisePermitted } from "@/lib/economy/queries/privateEnterpriseGate";
 import { computeSpunOutShareStructure } from "./privatizationShares";
 import { creditTreasuryProceeds } from "./treasury";
 import { applyPrivatizationConsequences } from "./consequences/apply";
@@ -88,6 +89,18 @@ export async function privatizeAsset(
   db: Db,
   params: PrivatizeAssetParams
 ): Promise<PrivatizeAssetResult> {
+  // A command economy has no private sector to spin an asset out INTO. This
+  // guard sits in the engine rather than the route because `privatizeAsset` has
+  // FOUR callers: the executive privatize route, the legislative provision
+  // (`legislativePrivatize`), the court-ordered reversal fallback
+  // (`reverseNationalization`), and the auction path. Gating the route covered
+  // one of the four, which is how #676 left this open and let a Soviet SOE be
+  // auctioned into private hands 300 turns later.
+  //
+  // Runs before any collection access so a blocked country costs two reads and
+  // touches nothing.
+  await assertPrivateEnterprisePermitted(db, params.countryId);
+
   const now = new Date();
   const corps = db.collection<Corporation>("corporations");
   const sectors = db.collection<CorporateSector>("corporateSectors");

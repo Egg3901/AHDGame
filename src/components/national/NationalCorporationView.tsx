@@ -17,6 +17,8 @@ import { NatRegisterTab } from "./tabs/NatRegisterTab";
 import { NatOperationsTab } from "./tabs/NatOperationsTab";
 import { NationalizeWizard } from "./official/NationalizeWizard";
 import { PrivatizeWizard } from "./official/PrivatizeWizard";
+import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { privateEnterpriseBlockedByYear } from "@/lib/economy/queries/privateEnterpriseRegime";
 import { StrategicSectorPanel } from "./official/StrategicSectorPanel";
 
 type NatTabId =
@@ -40,6 +42,7 @@ const READONLY_TABS: { id: NatTabId; label: string }[] = [
 
 export function NationalCorporationView({ corpId }: { corpId: string }) {
   const searchParams = useSearchParams();
+  const turnStatus = useGameTurnStatus();
   // Deep-link support: `?tab=register` (etc.) opens that tab on load. Only the
   // public read-only tabs are honored — the official/CEO-gated tabs stay hidden
   // until the role toggle, so a deep-link can't surface a gated tab.
@@ -98,7 +101,18 @@ export function NationalCorporationView({ corpId }: { corpId: string }) {
   const isOfficial = role === "official";
   const actionTabs: { id: NatTabId; label: string }[] = [];
   if (vm.viewerIsHeadOfGovernment) actionTabs.push({ id: "nationalize", label: "Nationalize" });
-  if (vm.viewerHasTreasuryAuthority) actionTabs.push({ id: "privatize", label: "Privatization" });
+  // A command economy has no private sector to privatize INTO, and the server
+  // refuses with 403. Hide the tab rather than offering a control that always
+  // fails. Schedule-only (client component, no DB): the server re-checks against
+  // the live persisted dial and remains the authority, so near the command
+  // ceiling the tab can show and the request still refuse.
+  const privateEnterprisePermitted = !privateEnterpriseBlockedByYear(
+    vm.countryId,
+    turnStatus?.currentYear ?? null
+  );
+  if (vm.viewerHasTreasuryAuthority && privateEnterprisePermitted) {
+    actionTabs.push({ id: "privatize", label: "Privatization" });
+  }
   // The Operations tab is CEO-gated, independent of the official role toggle.
   const ceoTabs: { id: NatTabId; label: string }[] = vm.viewerIsCeo
     ? [{ id: "operations", label: "Operations" }]

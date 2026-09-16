@@ -36,6 +36,7 @@ import { careerArchetypeModifiersContinuous } from "@/lib/nppAutonomy/v3/careerA
 import { nppBuyBond } from "@/lib/nppAutonomy/v3/finance/nppBonds";
 import { nppBuyShares, nppSellShares } from "@/lib/nppAutonomy/v3/finance/nppShares";
 import { nppFoundCorporation } from "@/lib/nppAutonomy/v3/finance/nppFoundCorporation";
+import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import { nppBuildPartyOrg } from "@/lib/nppAutonomy/v3/party/nppBuildOrg";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import type { Corporation } from "@/lib/db/types/corporation";
@@ -1087,6 +1088,13 @@ async function foundNppCorporationsSurplus(
   // ₳ investment capital; the core enforces exact per-NPP affordability (fee is
   // FX-converted there). minFunds doubles as a rough ₳ threshold.
   const minFunds = NPP_FOUNDING_FEE * NPP_FOUNDING_FUNDS_BUFFER;
+  // v4 autonomy sets `econScopeCountries` to null (global), which removed the
+  // only barrier that had been keeping the NPP economic brain out of planned
+  // economies: the v3 scope was a player-enablement rail, never a
+  // command-economy gate. Resolve the live blocked set from the marketization
+  // dial so a country converting in either direction is honoured with no code
+  // change. One gameState read plus one federalBudget $in, once per sweep.
+  const blockedCountries = [...(await loadPrivateEnterpriseBlockedCountries(db))];
   const candidates = await db
     .collection<NPP>("npps")
     .find(
@@ -1094,6 +1102,11 @@ async function foundNppCorporationsSurplus(
         retiredAt: null,
         nppInvestmentCashAnchor: { $gte: minFunds },
         ...countryScopeFilter(countryScope),
+        // Applied last and combined explicitly: `countryScopeFilter` writes its
+        // own `countryId` key, so a second one here would silently clobber it.
+        ...(countryScope
+          ? { countryId: { $in: countryScope, $nin: blockedCountries } }
+          : { countryId: { $nin: blockedCountries } }),
       },
       {
         projection: {
