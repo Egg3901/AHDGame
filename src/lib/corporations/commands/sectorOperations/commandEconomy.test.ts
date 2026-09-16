@@ -72,3 +72,23 @@ describe("secondary sector market - command economy", () => {
     });
   });
 });
+
+describe("subsidiary spin-off is a creation path", () => {
+  /**
+   * Found during the branch audit: `spinOff` creates a brand-new PRIVATE
+   * corporation in the parent's country and had no regime gate. Reachable
+   * today, because the private corporations still sitting inside command
+   * economies awaiting remediation could each spin off more.
+   */
+  it("blocks a spin-off whose parent sits in a command economy", async () => {
+    const db = stubMarketizationDb({ currentYear: 1970 });
+    for (const id of ["RU", "DD", "CN", "UKR"]) {
+      await expect(isPrivateEnterpriseBlocked(db, id), id).resolves.toBe(true);
+    }
+  });
+
+  it("permits a spin-off in a market economy", async () => {
+    const db = stubMarketizationDb({ currentYear: 1970 });
+    await expect(isPrivateEnterpriseBlocked(db, "US")).resolves.toBe(false);
+  });
+});

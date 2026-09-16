@@ -100,13 +100,36 @@ describe("loadPrivateEnterpriseBlockedCountries", () => {
     expect(blocked.has("RU")).toBe(true);
   });
 
-  it("resolves the US through its legacy 'federal' budget id", async () => {
-    // Guards the getNationalBudgetId special case: a persisted command-level US
-    // must actually block, proving the row was matched rather than missed.
+  it("IGNORES a stray persisted level on an unscheduled market economy", async () => {
+    // Caught in the branch audit. Live prod carries
+    // DE.economicFactors.marketizationLevel = 0.0919 - noise from an unrelated
+    // write. Reading it for every country (rather than only for countries that
+    // carry a marketization trajectory) closed West Germany to private
+    // enterprise outright. The old gate was immune by accident because it only
+    // considered scheduled countries; this pins that behaviour deliberately.
     const blocked = await loadPrivateEnterpriseBlockedCountries(
-      stubDb({ currentYear: 1970, levels: { US: 5 } })
+      stubDb({ currentYear: 1970, levels: { DE: 0.09199919567338562 } })
     );
-    expect(blocked.has("US")).toBe(true);
+    expect(blocked.has("DE")).toBe(false);
+  });
+
+  it("ignores a stray persisted level on every unscheduled country", async () => {
+    const blocked = await loadPrivateEnterpriseBlockedCountries(
+      stubDb({ currentYear: 1970, levels: { US: 0, UK: 1, JP: 2, FR: 0, IT: 5 } })
+    );
+    for (const id of ["US", "UK", "JP", "FR", "IT"]) {
+      expect(blocked.has(id as CountryId), id).toBe(false);
+    }
+  });
+
+  it("matches persisted rows by budget id, not country id", async () => {
+    // Guards the getNationalBudgetId mapping: RU's persisted 55 must be found
+    // and must release it, proving the row was matched rather than missed (a
+    // missed row would silently fall back to the schedule and still block).
+    const blocked = await loadPrivateEnterpriseBlockedCountries(
+      stubDb({ currentYear: 1970, levels: { RU: 55 } })
+    );
+    expect(blocked.has("RU")).toBe(false);
   });
 });
 
