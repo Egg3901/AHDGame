@@ -28,7 +28,7 @@ describe("withdrawInactiveCandidates", () => {
     const userId = new ObjectId();
 
     db.collectionMocks.electionCandidates.find.mockReturnValue(
-      projectCursor([{ _id: candidateId, characterId }])
+      projectCursor([{ _id: candidateId, characterId, electionId: new ObjectId() }])
     );
     db.collectionMocks.characters.find.mockReturnValue(
       projectCursor([{ _id: characterId, userId }])
@@ -37,6 +37,7 @@ describe("withdrawInactiveCandidates", () => {
       projectCursor([{ _id: userId, lastActivity: ago(200) }])
     );
     db.collectionMocks.electionCandidates.updateMany.mockResolvedValue({ modifiedCount: 1 });
+    db.collection("campaigns").updateMany.mockResolvedValue({ modifiedCount: 1 });
 
     const result = await withdrawInactiveCandidates(db as unknown as Db, NOW);
 

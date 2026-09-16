@@ -7,7 +7,7 @@ import { getDb } from "@/lib/mongodb";
 import { getAuthUserWithCharacter, type AuthUserWithCharacter } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUserWithCharacter()
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
-import type { Campaign, Character, NPP, PoliticalParty } from "@/lib/db/types";
+import type { Campaign, Character, ElectionCandidate, NPP, PoliticalParty } from "@/lib/db/types";
 import { resolveElectionRouteParam } from "@/lib/elections/electionParamResolution";
 import { getEffectiveUpgradeCost, getMaintenanceCost } from "@/lib/campaigns/upgradeCosts";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
@@ -51,10 +51,50 @@ export async function GET(request: Request, { params }: RouteParams) {
     // list surface — they are retained for history but should not appear
     // alongside the candidates still in the race. The direct /campaign/[id]
     // page still renders an archived campaign for its owner.
-    const campaigns = await db
+    const allCampaigns = await db
       .collection<Campaign>("campaigns")
-      .find({ electionId: electionOid, status: { $ne: "archived" } })
+      // activityHistory is not returned by this endpoint (see the privileged
+      // payload below), so it must not be read either: this is a list query
+      // over every campaign in the election, and a campaign now keeps 200
+      // entries rather than 10.
+      .find(
+        { electionId: electionOid, status: { $ne: "archived" } },
+        { projection: { activityHistory: 0 } }
+      )
       .toArray();
+
+    // Most races have no campaigns at all — Campaign Manager is US-only — and
+    // both election-page components call this endpoint on every load, so skip
+    // the candidacy read rather than pay for it on every non-US election view.
+    if (allCampaigns.length === 0) {
+      return NextResponse.json({ campaigns: [] });
+    }
+
+    // Then narrow to candidates who are actually still standing. `status:
+    // "archived"` alone is not trustworthy here: it is bookkeeping that every
+    // withdrawal path has to remember to set, and several (party-switch sweeps,
+    // relocation, inactivity) historically did not — which left withdrawn
+    // candidates rendering on this list with a live campaign. The candidacy row
+    // is the real predicate and cannot drift, so it gates the list. Campaigns
+    // for active candidates are guaranteed to exist by selfHealMissingCampaigns.
+    const activeCandidacies = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .find({ electionId: electionOid, status: "active" })
+      .project<{ characterId: ObjectId | null; nppId: ObjectId | null }>({
+        characterId: 1,
+        nppId: 1,
+      })
+      .toArray();
+    // Campaigns key `candidateId` by character id for players and by NPP id for
+    // NPPs, so both identities go into the set.
+    const standingCandidateIds = new Set<string>();
+    for (const c of activeCandidacies) {
+      if (c.characterId) standingCandidateIds.add(c.characterId.toString());
+      if (c.nppId) standingCandidateIds.add(c.nppId.toString());
+    }
+    const campaigns = allCampaigns.filter((c) =>
+      standingCandidateIds.has(c.candidateId?.toString() ?? "")
+    );
 
     // Fix C1: Batch fetch all candidates and managers to avoid N+1 queries
     const characterIds: ObjectId[] = [];
@@ -276,12 +316,14 @@ function formatCampaignForViewer(
     // income/maintenance/upgrade costs at the frozen world-seeded currency basis.
     const toLocal = (anchor: number) =>
       campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
+    // activityHistory is deliberately NOT returned here. This is a list
+    // endpoint that serves every campaign in the election at once, and neither
+    // consumer (CampaignManagerTab, CampaignsListPanel) reads the field. Once a
+    // campaign keeps 200 entries instead of 10 it would carry twenty times the
+    // weight for nothing. The ledger reads its history from the per-campaign
+    // detail endpoint, which is the only surface that renders it.
     const privilegedData = {
       ...base,
-      activityHistory: campaign.activityHistory.map((a) => ({
-        ...a,
-        timestamp: a.timestamp.toISOString(),
-      })),
       budget: {
         // funds + cumulative totals are already local in storage.
         income: {

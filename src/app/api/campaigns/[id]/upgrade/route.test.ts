@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@/lib/api/requireAuth", () => ({ requireAuthWithCharacter: vi.fn() }));
@@ -122,6 +123,13 @@ describe("POST /api/campaigns/[id]/upgrade — primary phase (no multiplier)", (
     expect(incOp["actions"]).toBe(-10);
     expect(incOp["totalFundsSpent"]).toBe(50_000);
     expect(incOp["totalActionsSpent"]).toBe(10);
+
+    // Same cap as the reset, insolvency-downgrade and suspend-endorse writers,
+    // so a purchase cannot truncate entries another path had kept.
+    const pushOp = (
+      updateCall[1] as Record<string, Record<string, { $each: unknown[]; $slice: number }>>
+    )["$push"];
+    expect(pushOp["activityHistory"].$slice).toBe(-CAMPAIGN_ACTIVITY_HISTORY_CAP);
   });
 });
 

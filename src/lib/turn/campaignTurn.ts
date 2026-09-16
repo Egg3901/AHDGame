@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 import type { UpdateFilter } from "mongodb";
 import type { Campaign, ElectionCandidate } from "@/lib/db/types";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
-import { calculateCampaignActions } from "@/lib/campaigns/actions";
+import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { diminishPassiveFavorabilityGain } from "@/lib/actions";
 import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
 import { getCampaignFamilyScalar, getOpsBranchMagnitude } from "@/lib/campaigns/upgradeCosts";
@@ -17,7 +17,6 @@ import {
 import { buildRallyAccrualEntry } from "@/lib/turn/elections/supportAccrual";
 import { computeAutoDowngrade } from "@/lib/campaigns/autoDowngrade";
 import { calculateCampaignStrengthLeaderPullbacks } from "@/lib/campaigns/campaignStrength";
-import { GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS } from "@/lib/constants/governorOffice";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { presidentialRulesetFor } from "@/lib/elections/presidentialRuleset";
 import { selfHealMissingCampaigns } from "@/lib/campaigns/selfHealCampaigns";
@@ -32,6 +31,8 @@ import {
 } from "@/lib/electionEngine/constants";
 import { loadTxThresholds, emitTxBulk } from "@/lib/financialTxLog/emit";
 import type { FinancialTxLogEntry } from "@/lib/db/types/financialTxLog";
+import { buildActiveVisibleNppEndorsementFilter } from "@/lib/nppEndorsements";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 import { logger } from "../observability/logger";
 
 export interface CampaignTurnResults {
@@ -84,9 +85,9 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         const gameConfig = await db
           .collection<{ _id: string; baseActionsPerTurn?: number }>("gameConfig")
           .findOne({ _id: "default" });
-        const playerBaseActions = Math.max(gameConfig?.baseActionsPerTurn ?? 4, 4);
-        // NPPs get a smaller baseline since they don't have active piloting.
-        const nppBaseActions = Math.max(1, Math.floor(playerBaseActions / 2));
+        // Passed through raw. `campaignActionsPerTurn` owns the floor and the
+        // halving for NPP-run campaigns, so the desk applies the same ones.
+        const rawBaseActionsPerTurn = gameConfig?.baseActionsPerTurn ?? 4;
 
         // Only process campaigns tied to elections that are still active — completed
         // elections should have had their campaigns deleted at resolution time, but
@@ -131,7 +132,11 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
         const campaigns = await db
           .collection<Campaign>("campaigns")
-          .find({ electionId: { $in: activeElectionIds } })
+          // activityHistory is write-only for the turn engine: it pushes
+          // insolvency downgrades and never reads the array back. Excluding it
+          // keeps the hourly read flat as the history deepens, rather than
+          // dragging every campaign's whole ledger through the turn.
+          .find({ electionId: { $in: activeElectionIds } }, { projection: { activityHistory: 0 } })
           .toArray();
 
         // Primary state attacks are NOT applied here. A local attack is scoped
@@ -309,70 +314,102 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
         );
         const candidateRowIds = candidateRows.map((row) => row._id);
 
-        const [playerEndorsementCounts, governorEndorsementCounts, executiveEndorsementCounts] =
-          await Promise.all([
-            candidateRowIds.length > 0
-              ? db
-                  .collection("playerEndorsements")
-                  .aggregate<{
-                    _id: { electionId: ObjectId; candidateId: ObjectId };
-                    count: number;
-                  }>([
-                    {
-                      $match: {
-                        electionId: { $in: campaignElectionIds },
-                        candidateId: { $in: candidateRowIds },
-                        isActive: true,
-                      },
+        const [
+          nppEndorsementCounts,
+          playerEndorsementCounts,
+          governorEndorsementCounts,
+          executiveEndorsementCounts,
+        ] = await Promise.all([
+          db
+            .collection("nppEndorsements")
+            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+              {
+                // Active AND visible: the shared filter hides legacy
+                // `source: "organic"` rows, and it is the same filter the
+                // campaign desk counts with, so the two agree on which
+                // endorsements exist. What is then done with them is decided
+                // once, in `campaignActionsPerTurn`, which both callers use.
+                $match: buildActiveVisibleNppEndorsementFilter({
+                  electionId: { $in: campaignElectionIds },
+                  candidateId: { $in: campaignCandidateIds },
+                }),
+              },
+              {
+                $group: {
+                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                  count: { $sum: 1 },
+                },
+              },
+            ])
+            .toArray(),
+          candidateRowIds.length > 0
+            ? db
+                .collection("playerEndorsements")
+                .aggregate<{
+                  _id: { electionId: ObjectId; candidateId: ObjectId };
+                  count: number;
+                }>([
+                  {
+                    $match: {
+                      electionId: { $in: campaignElectionIds },
+                      candidateId: { $in: candidateRowIds },
+                      isActive: true,
                     },
-                    {
-                      $group: {
-                        _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                        count: { $sum: 1 },
-                      },
+                  },
+                  {
+                    $group: {
+                      _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                      count: { $sum: 1 },
                     },
-                  ])
-                  .toArray()
-              : Promise.resolve([]),
-            db
-              .collection("governorEndorsements")
-              .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-                {
-                  $match: {
-                    electionId: { $in: campaignElectionIds },
-                    candidateId: { $in: campaignCandidateIds },
-                    isActive: true,
                   },
+                ])
+                .toArray()
+            : Promise.resolve([]),
+          db
+            .collection("governorEndorsements")
+            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+              {
+                $match: {
+                  electionId: { $in: campaignElectionIds },
+                  candidateId: { $in: campaignCandidateIds },
+                  isActive: true,
                 },
-                {
-                  $group: {
-                    _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                    count: { $sum: 1 },
-                  },
+              },
+              {
+                $group: {
+                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                  count: { $sum: 1 },
                 },
-              ])
-              .toArray(),
-            db
-              .collection("executiveEndorsements")
-              .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
-                {
-                  $match: {
-                    electionId: { $in: campaignElectionIds },
-                    candidateId: { $in: campaignCandidateIds },
-                    isActive: true,
-                  },
+              },
+            ])
+            .toArray(),
+          db
+            .collection("executiveEndorsements")
+            .aggregate<{ _id: { electionId: ObjectId; candidateId: ObjectId }; count: number }>([
+              {
+                $match: {
+                  electionId: { $in: campaignElectionIds },
+                  candidateId: { $in: campaignCandidateIds },
+                  isActive: true,
                 },
-                {
-                  $group: {
-                    _id: { electionId: "$electionId", candidateId: "$candidateId" },
-                    count: { $sum: 1 },
-                  },
+              },
+              {
+                $group: {
+                  _id: { electionId: "$electionId", candidateId: "$candidateId" },
+                  count: { $sum: 1 },
                 },
-              ])
-              .toArray(),
-          ]);
+              },
+            ])
+            .toArray(),
+        ]);
 
         const endorsementKey = (eId: ObjectId, cId: ObjectId) => `${eId}:${cId}`;
+        const nppEndorsementMap = new Map(
+          nppEndorsementCounts.map((e) => [
+            endorsementKey(e._id.electionId, e._id.candidateId),
+            e.count,
+          ])
+        );
         const playerEndorsementMap = new Map(
           playerEndorsementCounts
             .map((e): [string, number] | null => {
@@ -403,6 +440,15 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               console.warn(
                 `[Campaign Turn] Candidate ${campaign.candidateId} not found for campaign ${campaign._id}, skipping`
               );
+              continue;
+            }
+
+            // An archived campaign belongs to a candidate who is out of the
+            // race (withdrew, lost a primary, was removed). It is retained for
+            // history and for reactivation on re-entry, but it must not keep
+            // drawing income, actions or maintenance — nor keep refreshing its
+            // fog-of-war — while its candidate is no longer running.
+            if (campaign.status === "archived") {
               continue;
             }
 
@@ -453,38 +499,28 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
 
             // Look up pre-fetched endorsement counts
             const eKey = endorsementKey(campaign.electionId, campaign.candidateId);
-            const playerEndorsementCount = playerEndorsementMap.get(eKey) ?? 0;
             /*
-             * Player endorsements only grant campaign actions for presidential races.
-             * In lower-level races (governor, senate, house) endorsements are
-             * primarily a social/favorability signal — they don't meaningfully
-             * mobilise the national coalitions needed to convert endorsements into
-             * ground-level canvassing actions. Presidential campaigns are different:
-             * a high-profile player endorsement can unlock national volunteer networks.
+             * Accrual rules (which endorsement sources count, in which races, at
+             * what weight, off which baseline) live in `campaignActionsPerTurn`
+             * so the campaign desk promises exactly what this pays. Deriving
+             * them here separately is what let the panel advertise 15 actions a
+             * turn while this credited 8.
+             *
+             * Politician endorsements are arranged rather than organic, so they
+             * are farmable in a way player endorsements are not; the square-root
+             * curve is what bounds that, not a cap.
              */
+            // Also read further down for the in-state travel bonus.
             const isPresidential = electionData?.electionType === "president";
-            const effectivePlayerEndorsements = isPresidential ? playerEndorsementCount : 0;
-            // Governor endorsements weigh more than a single NPP endorsement and
-            // apply at sub-presidential races as a national campaign-action boost.
-            // For presidential, the boost is intentionally NOT granted here — a
-            // governor's presidential endorsement is state-scoped and applied as
-            // an in-state vote multiplier in accumulatePresidentVoteTurn, not as
-            // a national resource bump.
-            const governorEndorsementCount = isPresidential
-              ? 0
-              : (governorEndorsementMap.get(eKey) ?? 0);
-            // Executive (President / PM / Chancellor) endorsements use the same
-            // weight as governor endorsements. The leader is also blocked from
-            // endorsing the presidential race itself (server-side via the
-            // endorseable-types allowlist), so no isPresidential gate is needed.
-            const executiveEndorsementCount = executiveEndorsementMap.get(eKey) ?? 0;
-            const baseline = campaign.candidateIsNPP ? nppBaseActions : playerBaseActions;
-            const actions = calculateCampaignActions(
-              effectivePlayerEndorsements +
-                (governorEndorsementCount + executiveEndorsementCount) *
-                  GOVERNOR_ENDORSEMENT_CAMPAIGN_ACTIONS,
-              baseline
-            );
+            const actions = campaignActionsPerTurn({
+              nppEndorsements: nppEndorsementMap.get(eKey) ?? 0,
+              playerEndorsements: playerEndorsementMap.get(eKey) ?? 0,
+              governorEndorsements: governorEndorsementMap.get(eKey) ?? 0,
+              executiveEndorsements: executiveEndorsementMap.get(eKey) ?? 0,
+              isPresidential,
+              candidateIsNPP: campaign.candidateIsNPP === true,
+              baseActionsPerTurn: rawBaseActionsPerTurn,
+            });
 
             // Calculate maintenance costs at the campaign's current (pre-downgrade)
             // levels. Passive favorability effects below still use these levels —
@@ -568,7 +604,7 @@ export async function processCampaignTurn(turnNumber: number): Promise<CampaignT
               campaignUpdate.$push = {
                 activityHistory: {
                   $each: downgradeActivities,
-                  $slice: -10,
+                  $slice: -CAMPAIGN_ACTIVITY_HISTORY_CAP,
                 },
               };
             }
