@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Broad-money calibration ratios for the unmodeled rest of the economy.
@@ -9,7 +10,7 @@ import type { CountryId } from "@/lib/constants/countries";
 export const M2_TO_GDP_1953: Partial<Record<CountryId, number>> = {
   US: 0.62,
   UK: 0.58,
-  JP: 0.45,
+  JP: JP_ECONOMY.m2ToGdp1953,
   DE: 0.38,
   IE: 0.5,
   BR: 0.28,

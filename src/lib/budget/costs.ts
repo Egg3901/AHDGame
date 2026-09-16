@@ -6,6 +6,7 @@ import { getCostClass, resolveEraSpendingCost } from "@/lib/era/legislationCostC
 import { computeLawCost } from "@/lib/politicalLegislation/costEngine";
 import { COST_INCOME_ANCHORS } from "@/lib/politicalLegislation/costAnchors";
 import type { CostAnchorCountryId } from "@/lib/politicalLegislation/types";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 export interface BudgetCostContext {
   budgetCapacity: number;
@@ -83,7 +84,7 @@ function eraSpendingCost(
   });
 }
 
-interface CostScaleAnchor {
+export interface CostScaleAnchor {
   /** 1991-era seed GDP & population (where scaleLow is calibrated). */
   gdpLow: number;
   popLow: number;
@@ -125,14 +126,7 @@ export const COST_SCALE_ANCHORS: Partial<Record<CountryId, CostScaleAnchor>> = {
     popHigh: 68_000_000,
     scaleHigh: 1.05,
   },
-  JP: {
-    gdpLow: 470_000_000_000_000,
-    popLow: 124_000_000,
-    scaleLow: 1.0,
-    gdpHigh: 550_000_000_000_000,
-    popHigh: 126_000_000,
-    scaleHigh: 1.09,
-  },
+  JP: JP_ECONOMY.costScaleAnchors,
   DE: {
     gdpLow: 1_600_000_000_000,
     popLow: 80_000_000,

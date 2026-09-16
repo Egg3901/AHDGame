@@ -257,8 +257,8 @@ describe("faithful replacement", () => {
       // would otherwise just stop being checked.
       //
       // 15 from D2 (identity), 23 from D3 (institutions and elections, with the
-      // preset-first registries split one row per era).
-      expect(MOVED_REGISTRIES.length).toBe(38);
+      // preset-first registries split one row per era), 21 from D4 (economy).
+      expect(MOVED_REGISTRIES.length).toBe(59);
       const missing = MOVED_REGISTRIES.filter((r) => !snapshot()[r.name]);
       expect(missing.map((r) => r.name)).toEqual([]);
     });

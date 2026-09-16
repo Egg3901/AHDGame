@@ -23,6 +23,7 @@ import type {
 import { getMetricDefinition } from "@/lib/constants/metricDefinitions";
 import type { MetricCategoryId } from "@/lib/db/types";
 import { taxSliderRateLabel } from "@/lib/politicalLegislation/taxSlider";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Shared national policy-record assembly — extracted verbatim from
@@ -50,7 +51,7 @@ export const LEGISLATION_COUNTRY_SCOPES: Record<
 > = {
   US: "us",
   UK: "uk",
-  JP: "jp",
+  JP: JP_ECONOMY.legislationScope,
   DE: "de",
   IE: "ie",
   BR: "br",

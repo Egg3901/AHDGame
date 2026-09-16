@@ -4,7 +4,12 @@ import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
 import type { ExecutiveSeal } from "@/lib/constants/executiveSeals";
 import type { ExecutiveSurfaceConfig } from "@/lib/constants/executiveSurface";
 import type { IdentityText } from "@/lib/constants/institutionIdentity";
+import type { CostScaleAnchor } from "@/lib/budget/costs";
 import type { CabinetGroup } from "@/lib/constants/cabinetPositionGroups";
+import type { CorporationType } from "@/lib/constants/corporations";
+import type { CurrencyCode, MonetaryBaseline } from "@/lib/constants/currencies";
+import type { LegalStructureId } from "@/lib/constants/legalStructures";
+import type { LegislationType } from "@/lib/db/types";
 import type { Branch } from "@/lib/constants/military";
 import type { EraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import type { NationalIdentity } from "@/lib/constants/nationalIdentity";
@@ -14,7 +19,6 @@ import type { CensusLabelSet } from "@/lib/constants/regionCensusLabels";
 import type { TreasuryIdentity } from "@/lib/constants/treasuryIdentity";
 import type { RosterThunk } from "@/lib/demographics/substrateCoverage";
 import type { LegislativeProcess } from "@/lib/legislature/process";
-import type { CalibrationTarget } from "@/lib/seeds/calibration/types";
 import type { PresetBundles } from "@/lib/seeds/regionCensusData";
 import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
@@ -196,25 +200,51 @@ export interface CountryElections {
  * must change none of them.
  */
 export interface CountryEconomy {
-  readonly currencyCode: string;
+  /**
+   * ⚠️ NARROW UNION, not string. COUNTRY_CURRENCY_MAP is keyed to CurrencyCode,
+   * so a plain string compiles in the folder and fails at the forwarder -- the
+   * same mismatch class that cost D3 six contract corrections.
+   */
+  readonly currencyCode: CurrencyCode;
   readonly nationalPolicyStateId: string;
+  /** Scope key for country-scoped legislation. Also a narrow union. */
+  readonly legislationScope: NonNullable<LegislationType["countryScope"]>;
+  readonly economicBaseline: { readonly gdpGrowth: number; readonly tradeGrowth: number };
   readonly monetary: {
-    readonly baseline?: EraMonetaryBaseline;
-    readonly byEra: Partial<Record<ShippingPreset, EraMonetaryBaseline>>;
+    /** Required: MONETARY_BASELINES is a total Record, not a Partial. */
+    readonly baseline: MonetaryBaseline;
+    /**
+     * ⚠️ Keyed by YEAR, not by shipping preset. There are four era tables
+     * (1953/1971/1979/1991) and seven presets; ERA_TABLES maps a year onto one
+     * of these and has no country axis of its own.
+     */
+    readonly byEra: Record<string, EraMonetaryBaseline>;
   };
+  /**
+   * ⚠️ Keyed to CorporationType, not string. A loose Record<string, number>
+   * accepts a sector name that does not exist, on a BALANCE surface where a
+   * typo would silently drop a sector's weight.
+   */
   readonly sectorWeights: {
-    readonly base?: Readonly<Record<string, number>>;
-    readonly byEra: Partial<Record<ShippingPreset, Readonly<Record<string, number>>>>;
+    /** Required: COUNTRY_SECTOR_WEIGHTS is a total Record, not a Partial. */
+    readonly base: Partial<Record<CorporationType, number>>;
+    /** Only 1979 and 1991 carry era-specific weights. */
+    readonly byEra: Record<string, Partial<Record<CorporationType, number>>>;
   };
-  readonly strategicSectors?: readonly string[];
+  readonly strategicSectors?: CorporationType[];
+  /** GDP and population anchors for legislation cost scaling. BALANCE SURFACE. */
+  readonly repEcon: { readonly gdp: number; readonly population: number };
+  /** Cost-scale interpolation anchors. BALANCE SURFACE. */
+  readonly costScaleAnchors: CostScaleAnchor;
   readonly tax: {
     readonly neutralFederalSalesTax?: number;
     readonly neutralStateSalesTax?: number;
-    readonly treasuryPsRate?: number;
+    /** Required and mutable: the registry is a total Record of mutable objects. */
+    readonly treasuryPsRate: { national: number; state: number };
   };
   readonly payoutCapPerTurn?: number;
-  readonly sovereignCorpLegalStructure?: string;
-  readonly calibrationTargets?: Partial<Record<string, CalibrationTarget>>;
+  readonly sovereignCorpLegalStructure?: LegalStructureId;
+  readonly m2ToGdp1953?: number;
 }
 
 /**
@@ -235,6 +265,13 @@ export interface CountryEconomy {
  * ⚠️ CORE5_NORMALS is METRIC-first with a `global` pseudo-country. There is no
  * CORE5_NORMALS.JP to read; Japan's values sit under eight metric keys beside
  * `global` fallbacks that must not move.
+ */
+/**
+ * D5 -- geography, regions, demographics.
+ *
+ * ⚠️ TARGETS (seeds/calibration/targets.ts) belongs HERE, not in CountryEconomy.
+ * It was briefly typed on the economy member; the plan lists it under D5, and
+ * the unused import it left behind is what surfaced the misplacement.
  */
 export interface CountryGeography {
   readonly continent: string;

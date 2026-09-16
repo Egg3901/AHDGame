@@ -44,6 +44,17 @@ import { SPAWN_ELECTIONS_REGISTRY } from "../../src/lib/turn/perpetualElections/
 import { CABINET_IDENTITY } from "../../src/lib/constants/cabinetIdentity";
 import { NATIONAL_IDENTITY } from "../../src/lib/constants/nationalIdentity";
 import { TREASURY_IDENTITY } from "../../src/lib/constants/treasuryIdentity";
+import {
+  COUNTRY_CURRENCY_MAP,
+  ECONOMIC_BASELINES,
+  MONETARY_BASELINES,
+} from "../../src/lib/constants/currencies";
+import { COST_SCALE_ANCHORS } from "../../src/lib/budget/costs";
+import { REP_ECON } from "../../src/lib/era/legislationCostCatalog";
+import { COUNTRY_SECTOR_WEIGHTS } from "../../src/lib/seeds/reference/sectorSeedWeights";
+import { NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY } from "../../src/lib/turn/gdpGrowth";
+import { PLAYER_PAYOUT_CAP_PER_TURN } from "../../src/lib/treasury/payoutCapValues";
+import { INITIAL_RATES } from "../../src/lib/constants/currencies";
 
 type Check = [name: string, value: unknown, expectation?: (v: never) => boolean];
 
@@ -79,6 +90,21 @@ const checks: Check[] = [
   ["TREASURY_IDENTITY.JP (derived)", TREASURY_IDENTITY.JP],
 ];
 
+// D4 -- economy and fiscal. Balance surfaces.
+checks.push(
+  ["COUNTRY_CURRENCY_MAP.JP", COUNTRY_CURRENCY_MAP.JP],
+  ["ECONOMIC_BASELINES.JP", ECONOMIC_BASELINES.JP],
+  ["MONETARY_BASELINES.JP", MONETARY_BASELINES.JP],
+  ["COST_SCALE_ANCHORS.JP", COST_SCALE_ANCHORS.JP],
+  ["REP_ECON.JP", REP_ECON.JP],
+  ["COUNTRY_SECTOR_WEIGHTS.JP", COUNTRY_SECTOR_WEIGHTS.JP],
+  ["PLAYER_PAYOUT_CAP_PER_TURN.JP", PLAYER_PAYOUT_CAP_PER_TURN.JP],
+  // ⚠️ Relational, and it must STILL be here: INITIAL_RATES shares a file with
+  // COUNTRY_CURRENCY_MAP, which moved. If forwarding took its neighbour along,
+  // this is where that shows up.
+  ["INITIAL_RATES.JP (must NOT have moved)", INITIAL_RATES.JP]
+);
+
 for (const year of ["1979", "1991", "1999", "2007", "2019", "2023"] as const) {
   checks.push([`ORDERS_OF_BATTLE_BY_ERA.${year}.JP`, ORDERS_OF_BATTLE_BY_ERA[year]?.JP]);
 }
@@ -109,6 +135,25 @@ if (era1953?.legislature?.lowerChamber?.seats !== 466) {
   console.log(
     `FAIL  1953 override lower chamber = ${era1953?.legislature?.lowerChamber?.seats}, expected 466`
   );
+  failed++;
+}
+// Balance surfaces, spot-checked by value. A half-initialised cycle leaves
+// these structurally present but wrong, and a wrong GDP anchor silently
+// rescales every legislation cost in the game.
+if (REP_ECON.JP?.gdp !== 550_000_000_000_000) {
+  console.log(`FAIL  REP_ECON.JP.gdp = ${REP_ECON.JP?.gdp}, expected 550000000000000`);
+  failed++;
+}
+if (REP_ECON.JP?.population !== 126_000_000) {
+  console.log(`FAIL  REP_ECON.JP.population = ${REP_ECON.JP?.population}`);
+  failed++;
+}
+if (COUNTRY_CURRENCY_MAP.JP !== "JPY") {
+  console.log(`FAIL  COUNTRY_CURRENCY_MAP.JP = ${COUNTRY_CURRENCY_MAP.JP}`);
+  failed++;
+}
+if (NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP !== 10) {
+  console.log(`FAIL  consumption tax = ${NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP}, expected 10`);
   failed++;
 }
 if (TREASURY_IDENTITY.JP?.budgetTitle !== "国家予算") {

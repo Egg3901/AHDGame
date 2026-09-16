@@ -30,6 +30,7 @@
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -131,25 +132,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1991: Record<CountryId, SectorWeightMap> = {
     agriculture: 1,
     extraction: 1,
   },
-  JP: {
-    manufacturing: 18,
-    automobiles: 12,
-    real_estate: 9, // bubble-era weighting; collapsing
-    financial: 12,
-    construction: 9, // public works heavy
-    technology: 8, // 1991 JP tech = electronics (Sony/NEC/Toshiba), not platforms
-    retail: 7,
-    chemical_industries: 5,
-    healthcare: 5,
-    telecommunications: 3,
-    logistics: 4,
-    entertainment: 2,
-    media: 2,
-    energy: 2,
-    defense: 1,
-    agriculture: 2,
-    extraction: 1,
-  },
+  JP: JP_ECONOMY.sectorWeights.byEra["1991"],
   CN: {
     manufacturing: 28,
     agriculture: 24,

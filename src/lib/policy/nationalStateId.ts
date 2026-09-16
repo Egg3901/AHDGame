@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Mapping from country to the "stateId" used in collections like statePolicies
@@ -10,7 +11,7 @@ import type { CountryId } from "@/lib/constants/countries";
 export const NATIONAL_POLICY_STATE_IDS: Record<CountryId, string> = {
   US: "federal",
   UK: "uk_national",
-  JP: "jp_national",
+  JP: JP_ECONOMY.nationalPolicyStateId,
   DE: "de_national",
   IE: "ie_national",
   BR: "br_national",

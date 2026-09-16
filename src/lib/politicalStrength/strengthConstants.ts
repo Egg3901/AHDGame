@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -49,7 +50,7 @@ export const TREASURY_PS_RATE_BY_COUNTRY: Record<CountryId, { national: number; 
   US: { national: 75_000, state: 37_500 },
   UK: { national: 60_000, state: 30_000 },
   DE: { national: 70_000, state: 35_000 },
-  JP: { national: 5_000_000, state: 2_500_000 },
+  JP: JP_ECONOMY.tax.treasuryPsRate,
   IE: { national: 60_000, state: 30_000 },
   BR: { national: 350_000, state: 175_000 },
   CN: { national: 500_000, state: 250_000 },

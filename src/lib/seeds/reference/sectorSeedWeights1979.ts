@@ -22,6 +22,7 @@
 import { CORPORATION_TYPES } from "@/lib/constants/corporations";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -91,25 +92,7 @@ export const COUNTRY_SECTOR_WEIGHTS_1979: Record<string, SectorWeightMap> = {
   // JP: manufacturing PEAK (Sony/Toyota/Honda; steel/shipbuilding; electronics for
   // export). MITI-directed economy. Low financial (protected banking). No real estate
   // bubble yet (comes 1986-89).
-  JP: {
-    manufacturing: 30,
-    automobiles: 12,
-    technology: 5,
-    chemical_industries: 6,
-    energy: 5,
-    retail: 6,
-    real_estate: 5,
-    construction: 6,
-    agriculture: 4,
-    defense: 1,
-    healthcare: 3,
-    logistics: 5,
-    financial: 3,
-    telecommunications: 2,
-    extraction: 1,
-    media: 2,
-    entertainment: 4,
-  },
+  JP: JP_ECONOMY.sectorWeights.byEra["1979"],
   // FR: large nationalised sector (steel/coal/PSA/Renault). Giscard d'Estaing.
   // High agriculture (CAP subsidies). Minitel telecom project beginning.
   FR: {

@@ -13,6 +13,7 @@
  */
 
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /** Maximum a single character may receive from party funds in one turn. */
 export const PLAYER_PAYOUT_CAP_PER_TURN: Partial<Record<CountryId, number>> = {
@@ -20,7 +21,7 @@ export const PLAYER_PAYOUT_CAP_PER_TURN: Partial<Record<CountryId, number>> = {
   UK: 2_000_000,
   RU: 1_500_000,
   DD: 1_500_000,
-  JP: 10_000_000,
+  JP: JP_ECONOMY.payoutCapPerTurn,
 };
 
 /** Applied to any country not named above. */

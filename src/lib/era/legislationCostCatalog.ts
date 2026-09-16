@@ -8,6 +8,7 @@
  */
 import { getIncomeAnchor } from "./metricCatalog";
 import { bankingSeparationLegislationTypes } from "@/lib/seeds/shared/bankingSeparationLegislation";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 export type CostClass = "gdpFraction" | "perCapita" | "none";
 
@@ -914,7 +915,7 @@ export const REP_ECON: Record<string, { gdp: number; population: number }> = {
   US: { gdp: 27_000_000_000_000, population: 333_000_000 },
   UK: { gdp: 2_900_000_000_000, population: 68_000_000 },
   DE: { gdp: 4_500_000_000_000, population: 84_400_000 },
-  JP: { gdp: 550_000_000_000_000, population: 126_000_000 },
+  JP: JP_ECONOMY.repEcon,
   IE: { gdp: 500_000_000_000, population: 5_100_000 },
   CN: { gdp: 126_000_000_000_000, population: 1_412_000_000 },
   NG: { gdp: 144_000_000_000_000, population: 200_000_000 },

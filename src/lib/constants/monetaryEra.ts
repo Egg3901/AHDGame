@@ -56,6 +56,7 @@
 
 import type { CountryId } from "./countries";
 import type { MonetaryBaseline } from "./currencies";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 export interface EraMonetaryBaseline extends MonetaryBaseline {
   /**
@@ -75,7 +76,7 @@ export const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBasel
   // Bank of Japan discount ~5.8%; post-Korean-War CPI spike cooling toward
   // low single digits by 1955; reconstruction boom (growth authored in the
   // JP 1953 metric presets).
-  JP: { targetInflation: 2.0, neutralPrimeRate: 5.5 },
+  JP: JP_ECONOMY.monetary.byEra["1953"],
   // Bank deutscher Länder discount 3.5%; Wirtschaftswunder price stability
   // (CPI ~ -1.7 to +2%).
   DE: { targetInflation: 2.0, neutralPrimeRate: 3.5 },
@@ -183,7 +184,7 @@ export const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBasel
 export const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   US: { targetInflation: 10.0, neutralPrimeRate: 12.0 },
   UK: { targetInflation: 12.0, neutralPrimeRate: 14.0 },
-  JP: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
+  JP: JP_ECONOMY.monetary.byEra["1979"],
   DE: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
   IE: { targetInflation: 12.0, neutralPrimeRate: 14.0 },
   // Military-regime "miracle" hangover: chronic high inflation, pre-hyper era.
@@ -214,7 +215,7 @@ export const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBasel
 export const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   US: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
   UK: { targetInflation: 4.5, neutralPrimeRate: 8.0 },
-  JP: { targetInflation: 2.5, neutralPrimeRate: 4.5 },
+  JP: JP_ECONOMY.monetary.byEra["1991"],
   DE: { targetInflation: 3.5, neutralPrimeRate: 7.0 },
   IE: { targetInflation: 3.0, neutralPrimeRate: 6.0 },
   CN: { targetInflation: 5.0, neutralPrimeRate: 7.0 },
@@ -245,7 +246,7 @@ export const MONETARY_BASELINES_1971: Partial<Record<CountryId, EraMonetaryBasel
   US: { targetInflation: 6.0, neutralPrimeRate: 7.5 },
   UK: { targetInflation: 9.0, neutralPrimeRate: 10.0 },
   DE: { targetInflation: 4.5, neutralPrimeRate: 6.0 },
-  JP: { targetInflation: 6.5, neutralPrimeRate: 7.0, trendGdpGrowth: 4.5 },
+  JP: JP_ECONOMY.monetary.byEra["1971"],
   IE: { targetInflation: 9.0, neutralPrimeRate: 10.0 },
   CN: { targetInflation: 2.0, neutralPrimeRate: 4.0, trendGdpGrowth: 5.0 },
   BR: { targetInflation: 12.0, neutralPrimeRate: 15.0 },

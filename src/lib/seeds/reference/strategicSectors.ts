@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { CorporationType } from "@/lib/constants/corporations";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Per-country default strategic sectors (spec §6.3). Designating a sector type
@@ -10,7 +11,7 @@ export const DEFAULT_STRATEGIC_SECTORS: Partial<Record<CountryId, CorporationTyp
   US: ["defense", "technology"],
   UK: ["financial", "energy"],
   DE: ["automobiles", "energy"],
-  JP: ["technology", "automobiles"],
+  JP: JP_ECONOMY.strategicSectors,
   CN: ["telecommunications", "technology", "energy"],
   IE: ["technology", "financial"],
   BR: ["agriculture", "extraction"],

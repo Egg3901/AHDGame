@@ -9,6 +9,7 @@
  */
 import type { CountryId } from "./countries";
 import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Currency codes for all countries — active and future.
@@ -74,7 +75,7 @@ export const ZOD_CURRENCY_ENUM: [CurrencyCode, CurrencyCode, ...CurrencyCode[]] 
 export const COUNTRY_CURRENCY_MAP: Record<CountryId, CurrencyCode> = {
   US: "USD",
   UK: "GBP",
-  JP: "JPY",
+  JP: JP_ECONOMY.currencyCode,
   DE: "EUR",
   // Irish pound (Saorstát/IEP). Distinct from EUR so 1953 Bretton Woods par
   // (1:1 GBP) can have its own exchangeRates doc without colliding with DE's DM/EUR rate.
@@ -741,7 +742,7 @@ export interface EconomicBaseline {
 export const ECONOMIC_BASELINES: Partial<Record<CountryId, EconomicBaseline>> = {
   US: { gdpGrowth: 2.5, tradeGrowth: 0 },
   UK: { gdpGrowth: 1.5, tradeGrowth: 0 },
-  JP: { gdpGrowth: 1.0, tradeGrowth: 0 },
+  JP: JP_ECONOMY.economicBaseline,
   DE: { gdpGrowth: 1.5, tradeGrowth: 0 },
   IE: { gdpGrowth: 3.5, tradeGrowth: 2.5 },
   BR: { gdpGrowth: 2.5, tradeGrowth: 2.0 },
@@ -765,7 +766,7 @@ export interface MonetaryBaseline {
 export const MONETARY_BASELINES: Record<CountryId, MonetaryBaseline> = {
   US: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   UK: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
-  JP: { targetInflation: 1.0, neutralPrimeRate: 1.0 },
+  JP: JP_ECONOMY.monetary.baseline,
   DE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   IE: { targetInflation: 2.0, neutralPrimeRate: 3.0 },
   BR: { targetInflation: 4.0, neutralPrimeRate: 8.0 },

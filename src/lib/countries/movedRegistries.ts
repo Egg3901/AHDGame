@@ -34,6 +34,33 @@ import { LEGISLATIVE_PROCESS } from "@/lib/legislature/process";
 import { ORDERS_OF_BATTLE, ORDERS_OF_BATTLE_BY_ERA } from "@/lib/seeds/reference/ordersOfBattle";
 import { ORDERS_BY_COUNTRY } from "@/lib/constants/cabinetOrders";
 import { MECHANICS_BY_COUNTRY } from "@/lib/constants/cabinetMechanics";
+import {
+  COUNTRY_CURRENCY_MAP,
+  ECONOMIC_BASELINES,
+  MONETARY_BASELINES,
+} from "@/lib/constants/currencies";
+import {
+  MONETARY_BASELINES_1953,
+  MONETARY_BASELINES_1971,
+  MONETARY_BASELINES_1979,
+  MONETARY_BASELINES_1991,
+} from "@/lib/constants/monetaryEra";
+import { COST_SCALE_ANCHORS } from "@/lib/budget/costs";
+import { SOVEREIGN_CORP_LEGAL_STRUCTURE } from "@/lib/seeds/reference/budgets";
+import { M2_TO_GDP_1953 } from "@/lib/seeds/reference/moneySupply";
+import { COUNTRY_SECTOR_WEIGHTS } from "@/lib/seeds/reference/sectorSeedWeights";
+import { COUNTRY_SECTOR_WEIGHTS_1979 } from "@/lib/seeds/reference/sectorSeedWeights1979";
+import { COUNTRY_SECTOR_WEIGHTS_1991 } from "@/lib/seeds/reference/sectorSeedWeights1991";
+import { DEFAULT_STRATEGIC_SECTORS } from "@/lib/seeds/reference/strategicSectors";
+import { REP_ECON } from "@/lib/era/legislationCostCatalog";
+import { TREASURY_PS_RATE_BY_COUNTRY } from "@/lib/politicalStrength/strengthConstants";
+import {
+  NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY,
+  NEUTRAL_STATE_SALES_TAX_BY_COUNTRY,
+} from "@/lib/turn/gdpGrowth";
+import { PLAYER_PAYOUT_CAP_PER_TURN } from "@/lib/treasury/payoutCapValues";
+import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
+import { LEGISLATION_COUNTRY_SCOPES } from "@/lib/policy/nationalPolicyRecords";
 import { SPAWN_ELECTIONS_REGISTRY } from "@/lib/turn/perpetualElections/registry";
 import { PARLIAMENTARY_CABINET_CONFIGS } from "@/app/country/[code]/executive/cabinet/parliamentaryCabinetConfig";
 
@@ -162,6 +189,47 @@ export const MOVED_REGISTRIES: readonly MovedRegistry[] = [
     subKey: preset,
     after: () => ERA_COUNTRY_CONFIG_OVERRIDES[preset]?.JP,
   })),
+
+  /**
+   * D4 -- economy and fiscal.
+   *
+   * ⚠️⚠️ BALANCE SURFACE. These are the numbers CLAUDE.md requires a GitHub
+   * issue and a scripts/sim/ report to change. This phase is a move, so every
+   * one of them must still equal the pre-move snapshot. A failure here is not a
+   * test to adjust -- it is a balance change that has to be escalated.
+   *
+   * ⚠️ INITIAL_RATES* is absent on purpose. It lives in the same file as
+   * COUNTRY_CURRENCY_MAP but is RELATIONAL -- a rate is a fact between two
+   * currencies, so a per-country copy drifts. Same for the two SOE ID-range
+   * tables, which allocate non-overlapping ranges across countries.
+   */
+  { name: "COUNTRY_CURRENCY_MAP", after: () => COUNTRY_CURRENCY_MAP.JP },
+  { name: "ECONOMIC_BASELINES", after: () => ECONOMIC_BASELINES.JP },
+  { name: "MONETARY_BASELINES", after: () => MONETARY_BASELINES.JP },
+  { name: "MONETARY_BASELINES_1953", after: () => MONETARY_BASELINES_1953.JP },
+  { name: "MONETARY_BASELINES_1971", after: () => MONETARY_BASELINES_1971.JP },
+  { name: "MONETARY_BASELINES_1979", after: () => MONETARY_BASELINES_1979.JP },
+  { name: "MONETARY_BASELINES_1991", after: () => MONETARY_BASELINES_1991.JP },
+  { name: "COST_SCALE_ANCHORS", after: () => COST_SCALE_ANCHORS.JP },
+  { name: "SOVEREIGN_CORP_LEGAL_STRUCTURE", after: () => SOVEREIGN_CORP_LEGAL_STRUCTURE.JP },
+  { name: "M2_TO_GDP_1953", after: () => M2_TO_GDP_1953.JP },
+  { name: "COUNTRY_SECTOR_WEIGHTS", after: () => COUNTRY_SECTOR_WEIGHTS.JP },
+  { name: "COUNTRY_SECTOR_WEIGHTS_1979", after: () => COUNTRY_SECTOR_WEIGHTS_1979.JP },
+  { name: "COUNTRY_SECTOR_WEIGHTS_1991", after: () => COUNTRY_SECTOR_WEIGHTS_1991.JP },
+  { name: "DEFAULT_STRATEGIC_SECTORS", after: () => DEFAULT_STRATEGIC_SECTORS.JP },
+  { name: "REP_ECON", after: () => REP_ECON.JP },
+  { name: "TREASURY_PS_RATE_BY_COUNTRY", after: () => TREASURY_PS_RATE_BY_COUNTRY.JP },
+  {
+    name: "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY",
+    after: () => NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP,
+  },
+  {
+    name: "NEUTRAL_STATE_SALES_TAX_BY_COUNTRY",
+    after: () => NEUTRAL_STATE_SALES_TAX_BY_COUNTRY.JP,
+  },
+  { name: "PLAYER_PAYOUT_CAP_PER_TURN", after: () => PLAYER_PAYOUT_CAP_PER_TURN.JP },
+  { name: "NATIONAL_POLICY_STATE_IDS", after: () => NATIONAL_POLICY_STATE_IDS.JP },
+  { name: "LEGISLATION_COUNTRY_SCOPES", after: () => LEGISLATION_COUNTRY_SCOPES.JP },
 ];
 
 /**

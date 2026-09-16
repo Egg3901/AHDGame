@@ -119,7 +119,7 @@ import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateRe
 export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
   US: "us_c_corp",
   UK: "uk_plc",
-  JP: "jp_kk",
+  JP: JP_ECONOMY.sovereignCorpLegalStructure,
   DE: "de_ag",
   IE: "ie_plc",
   BR: "br_sa_aberta",
@@ -495,6 +495,7 @@ function derivePolicyRevenueLines(
  * pipeline is year-driven rather than 1953-gated.
  */
 import { POLITICAL_LEGISLATION_EXCLUDED_SCOPES as POLITICAL_LEGISLATION_OLD_SCOPES } from "@/lib/politicalMetrics/pipelinePreset";
+import { JP_ECONOMY } from "@/lib/countries/jp/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,

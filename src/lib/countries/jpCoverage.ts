@@ -787,6 +787,10 @@ export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: strin
     why: "Created by D3 as the barrel over Japan's seven era overrides. Composes the era modules and owns no Japan fact of its own.",
   },
   {
+    file: "src/lib/countries/jp/economy.ts",
+    why: "Created by D4 as the destination for Japan's economy and fiscal constants. Generated from the pre-move snapshot because these are balance surfaces; hand-copying a fourteen-digit GDP anchor is how a balance change arrives disguised as a refactor.",
+  },
+  {
     file: "src/lib/countries/jp/elections.ts",
     why: "Created by D3 as the destination for Japan's elections. Server-only: it reaches getDb through elections/perpetual.ts, so it is deliberately not re-exported from the folder barrel.",
   },
