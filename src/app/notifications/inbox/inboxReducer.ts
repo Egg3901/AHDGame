@@ -15,6 +15,7 @@ export type InboxAction =
   | { type: "SET_GROUPING"; grouping: "grouped" | "flat" }
   | { type: "MARK_READ"; id: string }
   | { type: "MARK_ALL_READ"; ids: string[] }
+  | { type: "UNMARK_READ"; ids: string[] }
   | { type: "ARCHIVE"; id: string }
   | { type: "SNOOZE"; id: string };
 
@@ -66,6 +67,16 @@ export function inboxReducer(state: InboxState, action: InboxAction): InboxState
         ...state,
         readIds: new Set([...state.readIds, ...action.ids]),
       };
+
+    case "UNMARK_READ": {
+      // Roll back an optimistic mark-read: drop the failed ids so client
+      // state matches the authoritative server state again.
+      const failed = new Set(action.ids);
+      return {
+        ...state,
+        readIds: new Set([...state.readIds].filter((id) => !failed.has(id))),
+      };
+    }
 
     case "ARCHIVE":
       return {
