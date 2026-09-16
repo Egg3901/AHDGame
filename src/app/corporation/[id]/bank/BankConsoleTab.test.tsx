@@ -336,6 +336,53 @@ describe("console hierarchy", () => {
   });
 });
 
+describe("last turn earnings (issue 1748)", () => {
+  it("shows interest earned vs paid and the net from the ledgered split", async () => {
+    const withEarnings = {
+      ...payload,
+      charter: {
+        ...payload.charter,
+        lastBankingIncome: 60,
+        lastBankingIncomeTurn: 150,
+        lastBankingDepositInterest: 40,
+        lastBankingLoanInterest: 120,
+        lastBankingInterbankInterestPaid: 0,
+        lastBankingInterbankInterestReceived: 10,
+        lastBankingFacilityInterest: 5,
+        lastBankingInsurancePremium: 15,
+        lastBankingWriteoffs: 50,
+      },
+    };
+    global.fetch = vi.fn(async () => ok(withEarnings)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    // Overview tab is the default: earned = 120 + 10, paid = 40 + 0 + 5.
+    expect(await screen.findByText("Last turn earnings")).toBeTruthy();
+    expect(screen.getByText("Interest earned")).toBeTruthy();
+    expect(screen.getByText("Interest paid")).toBeTruthy();
+    expect(screen.getByText("Net interest")).toBeTruthy();
+    expect(screen.getByText("$130")).toBeTruthy();
+    expect(screen.getByText("$45")).toBeTruthy();
+    expect(screen.getByText("$85")).toBeTruthy();
+    // The detail lines name the ledgered components behind each total.
+    expect(screen.getByText(/loans \$120/)).toBeTruthy();
+    expect(screen.getByText(/deposits \$40/)).toBeTruthy();
+    // Profits are taken via Funding, not as a separate interest withdrawal.
+    expect(screen.getByRole("button", { name: "Withdraw in Funding" })).toBeTruthy();
+  });
+
+  it("reads a missing split as zero, never blank", async () => {
+    global.fetch = vi.fn(async () => ok(payload)) as unknown as typeof fetch;
+
+    render(<BankConsoleTab corporationId="corp1" isCeo />);
+
+    expect(await screen.findByText("Last turn earnings")).toBeTruthy();
+    expect(screen.getByText("Net interest")).toBeTruthy();
+    expect(screen.getAllByText("$0").length).toBeGreaterThan(0);
+  });
+});
+
 describe("charter issue block reason", () => {
   const unchartered = { ...payload, charter: null };
 

@@ -93,6 +93,130 @@ function LoanApprovalToggle({
   );
 }
 
+/**
+ * Per-turn interest split from the last banking pass: what the bank paid its
+ * depositors and lenders versus what its loans earned, and the net interest
+ * between them. Every figure is a ledgered amount in the charter currency for
+ * one turn, not a rate. Earned and paid lines are magnitudes; only the net
+ * and the bottom line carry a sign.
+ */
+function EarningsBreakdown({ data, onFunding }: { data: ConsolePayload; onFunding: () => void }) {
+  const t = useTranslations("corporations.bankConsole");
+  const charter = data.charter!;
+  const depositInterest = charter.lastBankingDepositInterest ?? 0;
+  const loanInterest = charter.lastBankingLoanInterest ?? 0;
+  const ibPaid = charter.lastBankingInterbankInterestPaid ?? 0;
+  const ibReceived = charter.lastBankingInterbankInterestReceived ?? 0;
+  const facility = charter.lastBankingFacilityInterest ?? 0;
+  const premium = charter.lastBankingInsurancePremium ?? 0;
+  const writeoffs = charter.lastBankingWriteoffs ?? 0;
+  const earned = loanInterest + ibReceived;
+  const paid = depositInterest + ibPaid + facility;
+  const net = earned - paid;
+  const currency = charter.currency;
+
+  return (
+    <section className="rounded-xl border border-card-border bg-card overflow-hidden">
+      <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
+        <Eyebrow kind="monitor" />
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+          Last turn earnings
+        </span>
+        <Tooltip
+          content={t("tooltips.netInterest")}
+          label={t("about", { label: "Last turn earnings" })}
+        />
+      </div>
+      <dl className="divide-y divide-card-border px-4">
+        <EarningsRow
+          label="Interest earned"
+          detail={`loans ${formatBankMoney(loanInterest, currency)} · interbank received ${formatBankMoney(ibReceived, currency)}`}
+          value={formatBankMoney(earned, currency)}
+          tooltip={t("tooltips.interestEarned")}
+          aboutLabel={t("about", { label: "Interest earned" })}
+        />
+        <EarningsRow
+          label="Interest paid"
+          detail={`deposits ${formatBankMoney(depositInterest, currency)} · interbank paid ${formatBankMoney(ibPaid, currency)} · central-bank facilities ${formatBankMoney(facility, currency)}`}
+          value={formatBankMoney(paid, currency)}
+          tooltip={t("tooltips.interestPaid")}
+          aboutLabel={t("about", { label: "Interest paid" })}
+        />
+        <EarningsRow
+          label="Net interest"
+          detail={
+            charter.lastBankingIncomeTurn != null
+              ? `banking pass T${charter.lastBankingIncomeTurn}`
+              : "awaiting first banking pass"
+          }
+          value={formatBankMoney(net, currency)}
+          tone={net < 0 ? "text-error" : "text-success"}
+          tooltip={t("tooltips.netInterest")}
+          aboutLabel={t("about", { label: "Net interest" })}
+        />
+        <EarningsRow
+          label="Insurance and write-offs"
+          detail={`premium ${formatBankMoney(premium, currency)} · defaults ${formatBankMoney(writeoffs, currency)}`}
+          value={formatBankMoney(premium + writeoffs, currency)}
+          tooltip={t("tooltips.otherCharges")}
+          aboutLabel={t("about", { label: "Insurance and write-offs" })}
+        />
+        <EarningsRow
+          label="Bottom line"
+          detail="net interest minus insurance and write-offs"
+          value={formatBankMoney(charter.lastBankingIncome, currency)}
+          tone={charter.lastBankingIncome < 0 ? "text-error" : "text-success"}
+          tooltip={t("tooltips.otherCharges")}
+          aboutLabel={t("about", { label: "Bottom line" })}
+        />
+      </dl>
+      <div className="border-t border-card-border px-4 py-3">
+        <p className="text-xs text-muted">
+          {t("tooltips.takeProfits")}{" "}
+          <button
+            type="button"
+            onClick={onFunding}
+            className="font-medium text-accent underline-offset-2 hover:underline"
+          >
+            Withdraw in Funding
+          </button>
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function EarningsRow({
+  label,
+  detail,
+  value,
+  tone,
+  tooltip,
+  aboutLabel,
+}: {
+  label: string;
+  detail: string;
+  value: string;
+  tone?: string;
+  tooltip: string;
+  aboutLabel: string;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5">
+      <div className="min-w-0">
+        <dt className="text-sm font-medium text-foreground">
+          {label}
+          <Tooltip content={tooltip} label={aboutLabel} />
+        </dt>
+        <dd className="truncate text-xs text-muted">{detail}</dd>
+      </div>
+      <dd className={`shrink-0 text-sm font-semibold tabular-nums ${tone ?? "text-foreground"}`}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
 export function ActiveCharterPanel({
   data,
   canMutate,
@@ -194,72 +318,76 @@ export function ActiveCharterPanel({
       </div>
 
       {tab === "overview" && (
-        <section className="rounded-xl border border-card-border bg-card overflow-hidden">
-          <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
-            <Eyebrow kind="monitor" />
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
-              {t("position")}
-            </span>
-            <Tooltip content={t("tooltips.position")} label={t("aboutPosition")} />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
-            <StatCell
-              label="Posted capital"
-              value={formatBankMoney(charter.postedCapital, charter.currency)}
-              sub={`chartered T${charter.charteredTurn}`}
-              tooltip={t("tooltips.postedCapital")}
-              action={{ label: t("actions.postCapital"), onClick: () => setTab("funding") }}
-            />
-            <StatCell
-              label="Deposits"
-              value={formatBankMoney(charter.totalDeposits, charter.currency)}
-              sub={`players ${formatBankMoney(playerDeposits, charter.currency)} · households ${formatBankMoney(charter.npcDeposits, charter.currency)}`}
-              tooltip={t("tooltips.deposits")}
-              action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
-            />
-            <StatCell
-              label="Deposit ceiling"
-              value={formatBankMoney(
-                data.depositCeiling ?? charter.depositCeiling,
-                charter.currency
-              )}
-              sub={`branch share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}%`}
-              tooltip={t("tooltips.depositCeiling")}
-              action={{ label: t("actions.raiseCeiling"), onClick: () => setTab("funding") }}
-            />
-            <StatCell
-              label="Loans out"
-              value={formatBankMoney(charter.totalLoans, charter.currency)}
-              sub={
-                data.reserveRatio != null
-                  ? `reserve requirement ${(data.reserveRatio * 100).toFixed(0)}%`
-                  : undefined
-              }
-              tooltip={t("tooltips.loansOut")}
-              action={{ label: t("actions.manageLoans"), onClick: () => setTab("lending") }}
-            />
-            <StatCell
-              label="Last turn income"
-              value={formatBankMoney(charter.lastBankingIncome, charter.currency)}
-              sub={
-                charter.lastBankingIncomeTurn != null
-                  ? `banking pass T${charter.lastBankingIncomeTurn}`
-                  : "awaiting first banking pass"
-              }
-            />
-            <StatCell
-              label="Rates"
-              value={
-                data.rates
-                  ? `${formatRatePercent(data.rates.depositRatePercent)} / ${formatRatePercent(data.rates.lendingRatePercent)}`
-                  : "n/a"
-              }
-              sub="you pay / you charge"
-              tooltip={t("tooltips.rates")}
-              action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
-            />
-          </div>
-        </section>
+        <>
+          <section className="rounded-xl border border-card-border bg-card overflow-hidden">
+            <div className="flex items-center gap-1 border-b border-card-border px-4 py-2">
+              <Eyebrow kind="monitor" />
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+                {t("position")}
+              </span>
+              <Tooltip content={t("tooltips.position")} label={t("aboutPosition")} />
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-y divide-card-border sm:divide-y-0 sm:divide-x">
+              <StatCell
+                label="Posted capital"
+                value={formatBankMoney(charter.postedCapital, charter.currency)}
+                sub={`chartered T${charter.charteredTurn}`}
+                tooltip={t("tooltips.postedCapital")}
+                action={{ label: t("actions.postCapital"), onClick: () => setTab("funding") }}
+              />
+              <StatCell
+                label="Deposits"
+                value={formatBankMoney(charter.totalDeposits, charter.currency)}
+                sub={`players ${formatBankMoney(playerDeposits, charter.currency)} · households ${formatBankMoney(charter.npcDeposits, charter.currency)}`}
+                tooltip={t("tooltips.deposits")}
+                action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
+              />
+              <StatCell
+                label="Deposit ceiling"
+                value={formatBankMoney(
+                  data.depositCeiling ?? charter.depositCeiling,
+                  charter.currency
+                )}
+                sub={`branch share ${((charter.branchCapacityShare ?? data.defaultBranchCapacityShare) * 100).toFixed(0)}%`}
+                tooltip={t("tooltips.depositCeiling")}
+                action={{ label: t("actions.raiseCeiling"), onClick: () => setTab("funding") }}
+              />
+              <StatCell
+                label="Loans out"
+                value={formatBankMoney(charter.totalLoans, charter.currency)}
+                sub={
+                  data.reserveRatio != null
+                    ? `reserve requirement ${(data.reserveRatio * 100).toFixed(0)}%`
+                    : undefined
+                }
+                tooltip={t("tooltips.loansOut")}
+                action={{ label: t("actions.manageLoans"), onClick: () => setTab("lending") }}
+              />
+              <StatCell
+                label="Last turn income"
+                value={formatBankMoney(charter.lastBankingIncome, charter.currency)}
+                sub={
+                  charter.lastBankingIncomeTurn != null
+                    ? `banking pass T${charter.lastBankingIncomeTurn}`
+                    : "awaiting first banking pass"
+                }
+                tooltip={t("tooltips.netInterest")}
+              />
+              <StatCell
+                label="Rates"
+                value={
+                  data.rates
+                    ? `${formatRatePercent(data.rates.depositRatePercent)} / ${formatRatePercent(data.rates.lendingRatePercent)}`
+                    : "n/a"
+                }
+                sub="you pay / you charge"
+                tooltip={t("tooltips.rates")}
+                action={{ label: t("actions.adjustRates"), onClick: () => setTab("lending") }}
+              />
+            </div>
+          </section>
+          <EarningsBreakdown data={data} onFunding={() => setTab("funding")} />
+        </>
       )}
 
       {tab === "lending" && (
