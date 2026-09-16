@@ -26,10 +26,10 @@ vi.mock("@/lib/economy/queries/privateEnterpriseGate", async (importOriginal) =>
     await importOriginal<typeof import("@/lib/economy/queries/privateEnterpriseGate")>();
   return {
     ...actual,
-    loadPrivateEnterpriseBlockedCountries: vi.fn(actual.loadPrivateEnterpriseBlockedCountries),
+    partitionOpenMarkets: vi.fn(actual.partitionOpenMarkets),
   };
 });
-import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
+import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import { processNppCorporationDecisions } from "./nppCorporationBehavior";
 
 const CURRENT_YEAR = 1970;
@@ -125,7 +125,7 @@ function makeDb(rows: {
 describe("processNppCorporationDecisions - command economy", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("consults the private-enterprise gate before proposing any entry", async () => {
+  it("partitions candidate markets through the gate before proposing any entry", async () => {
     // The deletion guard. If the filter is removed the gate is never called and
     // this fails, regardless of whether the fixture happened to trigger entry.
     const ru = makeCorp("RU", "CEN");
@@ -137,7 +137,7 @@ describe("processNppCorporationDecisions - command economy", () => {
 
     await processNppCorporationDecisions(db, TURN, new Date());
 
-    expect(loadPrivateEnterpriseBlockedCountries).toHaveBeenCalledTimes(1);
+    expect(partitionOpenMarkets).toHaveBeenCalledTimes(1);
   });
 
   it("returns the real blocked set, so RU, CN and UKR are excluded from entry", async () => {
@@ -152,7 +152,7 @@ describe("processNppCorporationDecisions - command economy", () => {
 
     await processNppCorporationDecisions(db, TURN, new Date());
 
-    const blocked = await vi.mocked(loadPrivateEnterpriseBlockedCountries).mock.results[0].value;
+    const { blocked } = await vi.mocked(partitionOpenMarkets).mock.results[0].value;
     for (const id of ["RU", "CN", "UKR", "DD", "BLR", "BAL"]) {
       expect(blocked.has(id), id).toBe(true);
     }

@@ -110,6 +110,30 @@ export async function loadPrivateEnterpriseBlockedCountries(db: Db): Promise<Set
 }
 
 /**
+ * Split market rows into those sited in a country that permits private
+ * enterprise and those that do not, returning the blocked set alongside so the
+ * caller can re-check individual rows without a second lookup.
+ *
+ * Exists so the NPP corporate sweep can filter its candidate markets at the
+ * SOURCE. That sweep derives several indexes from one list (`unownedByCountry`,
+ * `unownedIndex`, a per-country pool index at the draw site); filtering one and
+ * leaving another is how a planned market stays reachable. Roughly 80 of the 92
+ * sectors that leaked into command economies on the live world arrived through
+ * that sweep rather than through founding.
+ *
+ * Reads the marketization dial, so a country converting into a command economy
+ * stops being a candidate on the next turn and one converting out becomes a
+ * candidate again, with no code change at the call site.
+ */
+export async function partitionOpenMarkets<T extends { countryId: string }>(
+  db: Db,
+  rows: readonly T[]
+): Promise<{ open: T[]; blocked: Set<CountryId> }> {
+  const blocked = await loadPrivateEnterpriseBlockedCountries(db);
+  return { open: rows.filter((r) => !blocked.has(r.countryId as CountryId)), blocked };
+}
+
+/**
  * Boolean form, for call sites that return a validation result rather than
  * throwing. Fails closed: any lookup failure reports blocked.
  */
