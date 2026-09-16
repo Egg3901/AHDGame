@@ -104,17 +104,23 @@ export async function loadPrivateEnterpriseBlockedCountries(db: Db): Promise<Set
 }
 
 /**
+ * Boolean form, for call sites that return a validation result rather than
+ * throwing. Fails closed: any lookup failure reports blocked.
+ */
+export async function isPrivateEnterpriseBlocked(db: Db, countryId: string): Promise<boolean> {
+  try {
+    return (await loadPrivateEnterpriseBlockedCountries(db)).has(countryId as CountryId);
+  } catch {
+    return true;
+  }
+}
+
+/**
  * Throws `PrivateEnterpriseBlockedError` when this country is fully command.
  * Fails closed: any lookup failure blocks rather than permits.
  */
 export async function assertPrivateEnterprisePermitted(db: Db, countryId: string): Promise<void> {
-  let blocked: Set<CountryId>;
-  try {
-    blocked = await loadPrivateEnterpriseBlockedCountries(db);
-  } catch {
-    throw new PrivateEnterpriseBlockedError(countryId);
-  }
-  if (blocked.has(countryId as CountryId)) {
+  if (await isPrivateEnterpriseBlocked(db, countryId)) {
     throw new PrivateEnterpriseBlockedError(countryId);
   }
 }

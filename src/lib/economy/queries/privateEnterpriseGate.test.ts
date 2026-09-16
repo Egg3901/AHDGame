@@ -1,41 +1,16 @@
 import type { Db } from "mongodb";
 import { describe, expect, it } from "vitest";
 import { COMMAND_CEILING } from "@/lib/constants/commandEconomy";
-import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { CountryId } from "@/lib/constants/countries";
+import { stubMarketizationDb as stubDb } from "@/lib/test-utils/stubMarketizationDb";
 import {
   assertPrivateEnterprisePermitted,
+  isPrivateEnterpriseBlocked,
   isPrivateEnterprisePermittedAtLevel,
   loadPrivateEnterpriseBlockedCountries,
   PrivateEnterpriseBlockedError,
   privateEnterpriseBlockedByYear,
 } from "./privateEnterpriseGate";
-
-/**
- * Minimal `Db` stub covering exactly the two reads the gate performs. Countries
- * absent from `levels` return no budget row, so the schedule fallback is
- * exercised in the same test rather than needing a separate fixture.
- */
-export function stubDb(opts: {
-  currentYear: number | null;
-  levels?: Partial<Record<CountryId, number>>;
-}): Db {
-  const rows = Object.entries(opts.levels ?? {}).map(([id, level]) => ({
-    _id: getNationalBudgetId(id as CountryId),
-    economicFactors: { marketizationLevel: level },
-  }));
-  return {
-    collection(name: string) {
-      if (name === "gameState") {
-        return { findOne: async () => ({ _id: "current", currentYear: opts.currentYear }) };
-      }
-      if (name === "federalBudget") {
-        return { find: () => ({ toArray: async () => rows }) };
-      }
-      throw new Error(`unexpected collection ${name}`);
-    },
-  } as unknown as Db;
-}
 
 const FULLY_COMMAND_IN_1970 = ["RU", "DD", "PL", "HU", "CS", "BG", "RO", "BLR", "UKR", "BAL", "CN"];
 
@@ -163,5 +138,28 @@ describe("assertPrivateEnterprisePermitted", () => {
     await expect(
       assertPrivateEnterprisePermitted(stubDb({ currentYear: 1970 }), "RU")
     ).rejects.toMatchObject({ countryId: "RU" });
+  });
+});
+
+describe("isPrivateEnterpriseBlocked", () => {
+  it("reports blocked for a fully command country", async () => {
+    await expect(isPrivateEnterpriseBlocked(stubDb({ currentYear: 1970 }), "RU")).resolves.toBe(
+      true
+    );
+  });
+
+  it("reports permitted for a market economy", async () => {
+    await expect(isPrivateEnterpriseBlocked(stubDb({ currentYear: 1970 }), "US")).resolves.toBe(
+      false
+    );
+  });
+
+  it("fails CLOSED when the lookup throws", async () => {
+    const db = {
+      collection: () => {
+        throw new Error("db down");
+      },
+    } as unknown as Db;
+    await expect(isPrivateEnterpriseBlocked(db, "US")).resolves.toBe(true);
   });
 });
