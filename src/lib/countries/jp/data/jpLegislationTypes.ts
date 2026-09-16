@@ -3,7 +3,7 @@ import {
   policyOptions,
   taxRateOptions,
   withPerCapitaCosts,
-} from "../reference/policyOptionHelpers";
+} from "@/lib/seeds/reference/policyOptionHelpers";
 
 /**
  * Japan-specific legislation types.

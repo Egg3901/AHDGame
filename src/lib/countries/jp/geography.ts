@@ -2,26 +2,26 @@ import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { CountryGeography } from "../contract";
-import { jpRegionCensusData } from "@/lib/seeds/jp/jpRegionCensusData";
-import { jpRegionCensusData1953 } from "@/lib/seeds/jp/jpRegionCensusData1953";
-import { jpRegionCensusData1979 } from "@/lib/seeds/jp/jpRegionCensusData1979";
-import { jpRegionCensusData1991 } from "@/lib/seeds/jp/jpRegionCensusData1991";
-import { jpMetricPresets2019 } from "@/lib/seeds/jp/jpMetricPresets";
-import { jpMetricPresets1953 } from "@/lib/seeds/jp/jpMetricPresets1953";
-import { jpMetricPresets1979 } from "@/lib/seeds/jp/jpMetricPresets1979";
-import { jpMetricPresets1991 } from "@/lib/seeds/jp/jpMetricPresets";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
-import { jpRegions1979 } from "@/lib/seeds/jp/jpRegions1979";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
-import { jpRegions1999 } from "@/lib/seeds/jp/jpRegions1999";
-import { jpRegions2007 } from "@/lib/seeds/jp/jpRegions2007";
-import { jpRegions2023 } from "@/lib/seeds/jp/jpRegions2023";
+import { jpRegionCensusData } from "@/lib/countries/jp/data/jpRegionCensusData";
+import { jpRegionCensusData1953 } from "@/lib/countries/jp/data/jpRegionCensusData1953";
+import { jpRegionCensusData1979 } from "@/lib/countries/jp/data/jpRegionCensusData1979";
+import { jpRegionCensusData1991 } from "@/lib/countries/jp/data/jpRegionCensusData1991";
+import { jpMetricPresets2019 } from "@/lib/countries/jp/data/jpMetricPresets";
+import { jpMetricPresets1953 } from "@/lib/countries/jp/data/jpMetricPresets1953";
+import { jpMetricPresets1979 } from "@/lib/countries/jp/data/jpMetricPresets1979";
+import { jpMetricPresets1991 } from "@/lib/countries/jp/data/jpMetricPresets";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
+import { jpRegions1953 } from "@/lib/countries/jp/data/jpRegions1953";
+import { jpRegions1979 } from "@/lib/countries/jp/data/jpRegions1979";
+import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
+import { jpRegions1999 } from "@/lib/countries/jp/data/jpRegions1999";
+import { jpRegions2007 } from "@/lib/countries/jp/data/jpRegions2007";
+import { jpRegions2023 } from "@/lib/countries/jp/data/jpRegions2023";
 import {
   jpPopulationAnchors2019,
   jpPopulationAnchors1991,
-} from "@/lib/seeds/jp/jpPopulationAnchors";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+} from "@/lib/countries/jp/data/jpPopulationAnchors";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 
 /**
  * Japan's geography, regions and demographics. Phase D5.

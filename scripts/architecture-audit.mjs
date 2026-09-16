@@ -160,6 +160,15 @@ const SIZE_CAP_EXEMPT = [
   // so a bare "src/lib/countries/" would exempt every module the folder ever
   // gains, including the logic ones.
   "src/lib/countries/jp/cabinet/",
+  // Japan's relocated authored seed data (D6). Added BEFORE the move: the
+  // list holds a bare "src/lib/seeds/" and is matched by SUBSTRING, so moving
+  // seeds/jp/ out strips the exemption from all 39 files at once, and
+  // jpLegislationTypes.ts is 6,168 LOC against a 2,000 blocking cap.
+  //
+  // Scoped to data/ deliberately. A bare "src/lib/countries/" would exempt
+  // contract.ts, institutions.ts, economy.ts and every logic module the
+  // folder ever gains -- uncapping the whole thing from day one.
+  "src/lib/countries/jp/data/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",

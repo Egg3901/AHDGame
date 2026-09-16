@@ -1,4 +1,4 @@
-import type { MetricPresetBundle } from "@/lib/seeds/jp/jpMetricPresets";
+import type { MetricPresetBundle } from "@/lib/countries/jp/data/jpMetricPresets";
 
 /**
  * 1953 Japan — Yoshida Shigeru (Liberal Party); San Francisco Peace Treaty (April 1952)

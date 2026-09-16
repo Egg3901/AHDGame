@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { applyEra1991Adjustments } from "@/lib/seeds/reference/stateMetrics1991";
 import { ieStateMetrics } from "@/lib/seeds/ie/ieStateMetrics";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 import { brStateMetrics } from "@/lib/seeds/br/brStateMetrics";
 import { cnStateMetrics } from "@/lib/seeds/cn/cnStateMetrics";
 import { ukStateMetrics } from "@/lib/seeds/uk/ukStateMetrics";
 import { iePopulationAnchors1991 } from "@/lib/seeds/ie/iePopulationAnchors";
-import { jpPopulationAnchors1991 } from "@/lib/seeds/jp/jpPopulationAnchors";
+import { jpPopulationAnchors1991 } from "@/lib/countries/jp/data/jpPopulationAnchors";
 import { brPopulationAnchors1991 } from "@/lib/seeds/br/brPopulationAnchors";
 import { cnPopulationAnchors1991 } from "@/lib/seeds/cn/cnPopulationAnchors";
 import { ukPopulationAnchors1991 } from "@/lib/seeds/uk/ukPopulationAnchors";

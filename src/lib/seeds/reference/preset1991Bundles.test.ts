@@ -19,7 +19,7 @@ import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { stateMetrics1991, applyEra1991Adjustments } from "./stateMetrics1991";
 import { stateMetrics } from "./stateMetrics";
 import { ukRegions1991 } from "@/lib/seeds/uk/ukRegions1991";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
+import { jpRegions1991 } from "@/lib/countries/jp/data/jpRegions1991";
 import { deRegions1991 } from "@/lib/seeds/de/deRegions1991";
 import { brRegions1991 } from "@/lib/seeds/br/brRegions1991";
 import { cnRegions1991 } from "@/lib/seeds/cn/cnRegions1991";

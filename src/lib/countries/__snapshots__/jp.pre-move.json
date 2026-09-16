@@ -9199,5 +9199,27 @@
   "TOTAL_JP_SANGIIN_SEATS": {
     "shape": "whole-registry",
     "value": 248
+  },
+  "COUNTRY_READINESS_EXPECTATIONS": {
+    "shape": "function-valued",
+    "value": {
+      "regionCount": 47,
+      "partyMin": 5,
+      "partyRoster": "LDP, CDP, Komeito, JIP, JCP",
+      "statePartyOrgMin": 235,
+      "seatMin": 713,
+      "seatNote": "Expected ≥713 (465 Shugiin + 248 Sangiin)",
+      "nppMin": 700,
+      "nppNote": "Expected ≥700 Diet NPPs",
+      "officialMin": 700,
+      "demographicsCount": 47,
+      "stateMetricsFilter": {
+        "countryId": "JP"
+      },
+      "stateMetricsCount": 47,
+      "legislationTypesMin": 0,
+      "extras": ["<function>"]
+    },
+    "functionKeys": ["extras.0"]
   }
 }

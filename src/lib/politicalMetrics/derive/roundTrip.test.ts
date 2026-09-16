@@ -25,7 +25,7 @@ function flatten(doc: Record<string, unknown>): Record<string, number> {
 }
 
 async function jpFlat(): Promise<Record<string, number>> {
-  const { jpStateMetrics } = await import("@/lib/seeds/jp/jpStateMetrics");
+  const { jpStateMetrics } = await import("@/lib/countries/jp/data/jpStateMetrics");
   return flatten(jpStateMetrics[0] as unknown as Record<string, unknown>);
 }
 

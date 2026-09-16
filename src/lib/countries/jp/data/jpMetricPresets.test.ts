@@ -3,7 +3,7 @@ import {
   jpMetricPresets2019,
   jpMetricPresets1991,
   JP_AUTHORED_METRIC_PATHS,
-} from "@/lib/seeds/jp/jpMetricPresets";
+} from "@/lib/countries/jp/data/jpMetricPresets";
 import { metricCategories } from "@/lib/constants/metricDefinitions";
 
 const JP_REGIONS = ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"];

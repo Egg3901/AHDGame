@@ -23,6 +23,7 @@ import { ORDERS_BY_COUNTRY } from "../../src/lib/constants/cabinetOrders";
 import { MECHANICS_BY_COUNTRY } from "../../src/lib/constants/cabinetMechanics";
 import { GROUPS } from "../../src/lib/constants/cabinetPositionGroups";
 import { PARLIAMENTARY_CABINET_CONFIGS } from "../../src/app/country/[code]/executive/cabinet/parliamentaryCabinetConfig";
+import { COUNTRY_READINESS_EXPECTATIONS } from "../../src/lib/constants/countryReadinessExpectations";
 import {
   JP_GOVERNOR_SEATS,
   JP_SANGIIN_SEATS,
@@ -47,20 +48,28 @@ const ADDITIONS: Record<string, unknown> = {
   JP_GOVERNOR_SEATS,
   TOTAL_JP_SHUGIIN_SEATS,
   TOTAL_JP_SANGIIN_SEATS,
+  // ⚠️ THE THIRD SNAPSHOT KIND. Its `extras` field holds a function --
+  // [(db) => checkGovernmentFormation("JP", db)] -- so JSON.stringify writes the
+  // array as [null] and the executable part vanishes. Recorded with the function
+  // marked, and pinned in MOVED_THUNK_REGISTRIES rather than the value table.
+  COUNTRY_READINESS_EXPECTATIONS,
 };
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
-function fnKeys(v: unknown): string[] {
-  if (typeof v === "function") return ["<self>"];
+/**
+ * ⚠️ WALKS ARRAYS. The D1 version guarded on `isObj`, which returns false for
+ * arrays, so a function inside an array was invisible and JSON.stringify dropped
+ * it without a word. That bug cost COUNTRY_ELECTION_PHASES its four handlers and
+ * then, in D6, recorded COUNTRY_READINESS_EXPECTATIONS with `extras: [null]` --
+ * precisely the failure the plan predicted for it.
+ */
+function fnKeys(v: unknown, path: string[] = []): string[] {
+  if (typeof v === "function") return [path.join(".") || "<self>"];
+  if (Array.isArray(v)) return v.flatMap((item, i) => fnKeys(item, [...path, String(i)]));
   if (!isObj(v)) return [];
-  const out: string[] = [];
-  for (const [k, inner] of Object.entries(v)) {
-    if (typeof inner === "function") out.push(k);
-    else for (const deeper of fnKeys(inner)) out.push(k + "." + deeper);
-  }
-  return out;
+  return Object.entries(v).flatMap(([k, inner]) => fnKeys(inner, [...path, k]));
 }
 
 /** Same shape rules as the original emitter, so entries stay comparable. */
@@ -77,8 +86,17 @@ function extract(
   if (COUNTRY in registry) {
     const value = registry[COUNTRY];
     const fns = fnKeys(value);
+    // ⚠️ Preserve the surrounding data. Recording `value: null` for anything
+    // holding a function threw away every non-function sibling -- the D1 bug
+    // that lost COUNTRY_BILL_PHASES' phaseName and emptyResult.
+    const mark = (v: unknown): unknown => {
+      if (typeof v === "function") return "<function>";
+      if (Array.isArray(v)) return v.map(mark);
+      if (isObj(v)) return Object.fromEntries(Object.entries(v).map(([k, i]) => [k, mark(i)]));
+      return v;
+    };
     return fns.length
-      ? { shape: "function-valued", value: null, functionKeys: fns }
+      ? { shape: "function-valued", value: mark(value), functionKeys: fns }
       : { shape: "country-first", value: value ?? null };
   }
   const outer: Record<string, unknown> = {};

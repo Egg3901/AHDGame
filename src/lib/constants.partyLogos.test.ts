@@ -3,7 +3,7 @@ import { PARTY_LOGOS } from "./constants";
 import { politicalParties as usParties } from "./seeds/reference/politicalParties";
 import { ukParties } from "./seeds/uk/ukParties";
 import { deParties } from "./seeds/de/deParties";
-import { jpParties } from "./seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { brParties } from "./seeds/br/brParties";
 import { ieParties } from "./seeds/ie/ieParties";
 import { cnParties } from "./seeds/cn/cnParties";

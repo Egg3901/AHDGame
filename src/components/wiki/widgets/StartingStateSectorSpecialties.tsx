@@ -12,7 +12,7 @@ import { getStateSectorWeights } from "@/lib/seeds/reference/sectorSeedWeights";
 import { states } from "@/lib/seeds/reference/states";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
 import { deRegions } from "@/lib/seeds/de/deRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";

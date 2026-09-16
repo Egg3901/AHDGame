@@ -34,7 +34,7 @@ describe("pre-move snapshot", () => {
     // the fixture was regenerated after a rewire and no longer records pre-move
     // values. It may only ever grow, one appended entry at a time, and only for
     // registries that have not moved yet.
-    expect(entries.length).toBe(88);
+    expect(entries.length).toBe(89);
   });
 
   /**
@@ -184,9 +184,14 @@ describe("pre-move snapshot", () => {
     // isObj guard skipped entirely -- it recorded four `{ name }` entries where
     // the live registry holds four `{ name, fn }`, and JSON.stringify dropped
     // the functions without a word. See correct-jp-snapshot.ts.
+    // The plan names TWO. There are SIX. COUNTRY_READINESS_EXPECTATIONS joined in
+    // D6: its `extras` is an ARRAY holding a function, which the append script's
+    // fnKeys could not see until it was taught to walk arrays -- the third time
+    // that same blind spot has cost a registry its executable part.
     expect(fnValued).toEqual([
       "COUNTRY_BILL_PHASES",
       "COUNTRY_ELECTION_PHASES",
+      "COUNTRY_READINESS_EXPECTATIONS",
       "PARLIAMENTARY_CABINET_CONFIGS",
       "REGION_ROSTERS",
       "SPAWN_ELECTIONS_REGISTRY",
@@ -360,6 +365,7 @@ describe("faithful replacement", () => {
       expect(MOVED_THUNK_REGISTRIES.map((r) => r.name).sort()).toEqual([
         "COUNTRY_BILL_PHASES",
         "COUNTRY_ELECTION_PHASES",
+        "COUNTRY_READINESS_EXPECTATIONS",
         "PARLIAMENTARY_CABINET_CONFIGS",
         "REGION_ROSTERS",
         "SPAWN_ELECTIONS_REGISTRY",

@@ -10,7 +10,7 @@ import { isPartyValidForPreset } from "@/lib/seeds/ensureDefaultParties";
 import { huParties } from "@/lib/seeds/hu/huParties";
 import { roParties } from "@/lib/seeds/ro/roParties";
 import { deParties } from "@/lib/seeds/de/deParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { esParties } from "@/lib/seeds/es/esParties";
 import { trParties } from "@/lib/seeds/tr/trParties";
 import { seParties } from "@/lib/seeds/se/seParties";

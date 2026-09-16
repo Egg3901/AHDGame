@@ -1709,7 +1709,7 @@ export const JP_REGIONAL_COUNCIL_2020: HistoricalSeat[] = [
 //
 // Unlike `JP_REGIONAL_COUNCIL_2020` (which under-counts and rolls
 // independents into commentary), totals here match each region's
-// configured `stateSenateSeats` in `src/lib/seeds/jp/jpRegions.ts` so the
+// configured `stateSenateSeats` in `src/lib/countries/jp/data/jpRegions.ts` so the
 // chamber size and seat allocation line up — matching the US/UK pattern
 // used in this file.
 //

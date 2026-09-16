@@ -6,7 +6,7 @@ import {
 } from "@/lib/seeds/reference/politicalParties";
 import { ukParties } from "./uk/ukParties";
 import { deParties } from "./de/deParties";
-import { jpParties } from "./jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { brParties } from "./br/brParties";
 import { ieParties } from "./ie/ieParties";
 import { cnParties } from "./cn/cnParties";

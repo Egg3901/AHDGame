@@ -14,7 +14,7 @@ import { SLUG_TO_NAME, INDEPENDENT_SLUGS, buildOfficeType } from "./seedHistoric
 import { getPresetSeats } from "@/lib/constants/historicalSeats";
 import { politicalParties as usParties } from "@/lib/seeds/reference/politicalParties";
 import { ukParties } from "@/lib/seeds/uk/ukParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { deParties } from "@/lib/seeds/de/deParties";
 import { brParties } from "@/lib/seeds/br/brParties";
 import { ieParties } from "@/lib/seeds/ie/ieParties";

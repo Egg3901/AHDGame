@@ -37,7 +37,7 @@ import { COUNTRY_POLICY_CONFIGS_1999 } from "./basePolicies1999";
 import { COUNTRY_POLICY_CONFIGS_2007 } from "./basePolicies2007";
 import { COUNTRY_POLICY_CONFIGS_2023 } from "./basePolicies2023";
 import { legislationTypes } from "./legislationTypes";
-import { jpLegislationTypes } from "@/lib/seeds/jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 import { deLegislationTypes } from "@/lib/seeds/de/deLegislationTypes";
 import { ieLegislationTypes } from "@/lib/seeds/ie/ieLegislationTypes";
 import { cnLegislationTypes } from "@/lib/seeds/cn/cnLegislationTypes";

@@ -17,7 +17,7 @@
 import { describe, expect, it } from "vitest";
 
 import { legislationTypes } from "./legislationTypes";
-import { jpLegislationTypes } from "@/lib/seeds/jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 import { deLegislationTypes } from "@/lib/seeds/de/deLegislationTypes";
 import { ieLegislationTypes } from "@/lib/seeds/ie/ieLegislationTypes";
 import { cnLegislationTypes } from "@/lib/seeds/cn/cnLegislationTypes";

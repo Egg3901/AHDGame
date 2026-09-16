@@ -9,7 +9,7 @@ import {
 } from "./historicalSeats";
 import { states } from "@/lib/seeds/reference/states";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { deRegions } from "@/lib/seeds/de/deRegions";
 
 describe("US_STATE_SENATE_1990", () => {

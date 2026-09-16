@@ -80,6 +80,7 @@ import { RAW_BUNDLES } from "@/lib/states/conditions/seedMetricsLoader";
 import { COUNTRY_ERA1991_PATCHES } from "@/lib/states/conditions/countryEra1991Patches";
 import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "@/lib/turn/partyOrg/pacingConstants";
 import { REGION_ROSTERS } from "@/lib/demographics/substrateCoverage";
+import { COUNTRY_READINESS_EXPECTATIONS } from "@/lib/constants/countryReadinessExpectations";
 import { SPAWN_ELECTIONS_REGISTRY } from "@/lib/turn/perpetualElections/registry";
 import { PARLIAMENTARY_CABINET_CONFIGS } from "@/app/country/[code]/executive/cabinet/parliamentaryCabinetConfig";
 
@@ -304,12 +305,25 @@ export const MOVED_THUNK_REGISTRIES: readonly MovedThunkRegistry[] = [
   { name: "SPAWN_ELECTIONS_REGISTRY", after: () => SPAWN_ELECTIONS_REGISTRY.JP },
   /**
    * ⚠️ NOT FORWARDED IN D5, DELIBERATELY. Japan's seven era thunks are
-   * `() => import("@/lib/seeds/jp/jpRegions1953")...` -- they point at the seed
+   * `() => import("@/lib/countries/jp/data/jpRegions1953")...` -- they point at the seed
    * modules D6 relocates. Forwarding now would write paths that D6 immediately
    * rewrites, touching the same lines twice for no gain. It is PINNED here so
    * the thunk set cannot change in the meantime, and D6 owns the move.
    */
   { name: "REGION_ROSTERS", after: () => REGION_ROSTERS.JP },
+  /**
+   * ⚠️ THE THIRD SNAPSHOT KIND, and the one the plan singled out. Its `extras`
+   * field is an ARRAY holding a function -- [(db) => checkGovernmentFormation]
+   * -- so JSON.stringify writes it as [null] and the only executable part
+   * disappears. It first recorded exactly that way here, because the append
+   * script's fnKeys still had the array blind spot the correction script had
+   * already been fixed for.
+   *
+   * Pinned in the THUNK table, not the value table: the thunk comparison marks
+   * functions instead of serialising them, so the data fields compare by value
+   * and the function compares by PATH.
+   */
+  { name: "COUNTRY_READINESS_EXPECTATIONS", after: () => COUNTRY_READINESS_EXPECTATIONS.JP },
   { name: "COUNTRY_BILL_PHASES", after: () => COUNTRY_BILL_PHASES.JP },
   { name: "COUNTRY_ELECTION_PHASES", after: () => COUNTRY_ELECTION_PHASES.JP },
   { name: "PARLIAMENTARY_CABINET_CONFIGS", after: () => PARLIAMENTARY_CABINET_CONFIGS.JP },

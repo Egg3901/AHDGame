@@ -3,7 +3,7 @@ import { getCountryLayer1Model, buildModelRegionDemographics } from "@/lib/seeds
 import { editorConfigFromCountryModel, computeDerivedCompositionGeneric } from "./derive";
 import { ukDemographicCategories } from "@/lib/seeds/uk/ukDemographicCategories";
 import { deDemographicCategories } from "@/lib/seeds/de/deDemographicCategories";
-import { jpDemographicCategories } from "@/lib/seeds/jp/jpDemographicCategories";
+import { jpDemographicCategories } from "@/lib/countries/jp/data/jpDemographicCategories";
 import { ieDemographicCategories } from "@/lib/seeds/ie/ieDemographicCategories";
 import { brDemographicCategories } from "@/lib/seeds/br/brDemographicCategories";
 import { cnDemographicCategories } from "@/lib/seeds/cn/cnDemographicCategories";

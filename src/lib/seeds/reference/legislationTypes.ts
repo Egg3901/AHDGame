@@ -1,7 +1,7 @@
 import type { LegislationType, EffectTargetWeighted, MetricCategoryId } from "@/lib/db/types";
 import { policyOptions, taxRateOptions, withPerCapitaCosts } from "./policyOptionHelpers";
 import { withEraCosts } from "@/lib/era/legislationCostCatalog";
-import { jpLegislationTypes } from "../jp/jpLegislationTypes";
+import { jpLegislationTypes } from "@/lib/countries/jp/data/jpLegislationTypes";
 import { deLegislationTypes } from "../de/deLegislationTypes";
 import { ieLegislationTypes } from "../ie/ieLegislationTypes";
 import { cnLegislationTypes } from "../cn/cnLegislationTypes";

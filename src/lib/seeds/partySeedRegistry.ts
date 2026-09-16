@@ -17,7 +17,7 @@ import type { CountryId } from "@/lib/constants/countries";
 import { politicalParties, type PartySeed } from "@/lib/seeds/reference/politicalParties";
 import { ukParties } from "@/lib/seeds/uk/ukParties";
 import { deParties } from "@/lib/seeds/de/deParties";
-import { jpParties } from "@/lib/seeds/jp/jpParties";
+import { jpParties } from "@/lib/countries/jp/data/jpParties";
 import { cnParties } from "@/lib/seeds/cn/cnParties";
 import { ruParties } from "@/lib/seeds/ru/ruParties";
 import { ieParties } from "@/lib/seeds/ie/ieParties";

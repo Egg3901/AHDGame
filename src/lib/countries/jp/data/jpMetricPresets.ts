@@ -1,5 +1,5 @@
 import type { StateMetrics } from "@/lib/db/types";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 
 /**
  * Per-region, per-era HAND-AUTHORED values for Japan's new overhaul ROOT metrics.

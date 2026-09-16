@@ -34,7 +34,7 @@ import type { CountryPolicyConfig } from "./basePolicies";
 import { states } from "./states";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
 import { deRegions } from "@/lib/seeds/de/deRegions";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
+import { jpRegions } from "@/lib/countries/jp/data/jpRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { frRegions } from "@/lib/seeds/fr/frRegions";

@@ -10,7 +10,7 @@ import {
   dePopulationAnchors2019,
   dePopulationAnchors1991,
 } from "@/lib/seeds/de/dePopulationAnchors";
-import {} from "@/lib/seeds/jp/jpPopulationAnchors";
+import {} from "@/lib/countries/jp/data/jpPopulationAnchors";
 import {
   brPopulationAnchors2019,
   brPopulationAnchors1991,

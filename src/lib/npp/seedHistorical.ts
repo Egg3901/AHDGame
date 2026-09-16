@@ -22,7 +22,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
  *
  * Names MUST match the names in the seed files
  * (`src/lib/seeds/reference/politicalParties.ts`, `src/lib/seeds/uk/ukParties.ts`,
- * `src/lib/seeds/jp/jpParties.ts`, `src/lib/seeds/de/deParties.ts`,
+ * `src/lib/countries/jp/data/jpParties.ts`, `src/lib/seeds/de/deParties.ts`,
  * `src/lib/seeds/br/brParties.ts`, `src/lib/seeds/ie/ieParties.ts`,
  * `src/lib/seeds/cn/cnParties.ts`).
  */

@@ -1,4 +1,4 @@
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
+import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 import type { PopulationAnchor } from "@/lib/seeds/ie/iePopulationAnchors";
 
 /**

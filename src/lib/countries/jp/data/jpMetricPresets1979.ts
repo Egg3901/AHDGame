@@ -1,4 +1,4 @@
-import type { MetricPresetBundle } from "@/lib/seeds/jp/jpMetricPresets";
+import type { MetricPresetBundle } from "@/lib/countries/jp/data/jpMetricPresets";
 
 /**
  * 1979 Japan — Ohira Masayoshi (LDP); second oil shock (Iran Revolution) hitting hard;
