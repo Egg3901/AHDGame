@@ -3,7 +3,8 @@ import { AsyncLocalStorage } from "async_hooks";
 import { ObjectId, type AnyBulkWriteOperation, type Db } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getCountryAccessFromDb, withCountryAccessSnapshot } from "@/lib/countryAccess";
-import type { Election, GameState, Seat, State } from "@/lib/db/types";
+import type { Election, ElectionCandidate, GameState, Seat, State } from "@/lib/db/types";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import { CURRENT_PRESIDENTIAL_RULESET_VERSION } from "@/lib/elections/presidentialRuleset";
 import { US_STATE_FILTER } from "@/lib/utils/electionLabels";
 import { MS_PER_TURN, STARTING_YEAR } from "@/lib/constants/turnTime";
@@ -934,12 +935,43 @@ export async function cleanupStaleElectionCandidates(now: Date): Promise<void> {
 
   if (completedElectionIds.length === 0) return;
 
+  // Read the rows before the update — archiving their campaigns needs each
+  // row's electionId + candidate identity, and the update clears `active`.
+  const staleCandidates = await db
+    .collection<ElectionCandidate>("electionCandidates")
+    .find({ electionId: { $in: completedElectionIds }, status: "active" })
+    .project<{
+      _id: ObjectId;
+      electionId: ObjectId;
+      characterId: ObjectId | null;
+      nppId: ObjectId | null;
+      isNPP: boolean | undefined;
+    }>({ _id: 1, electionId: 1, characterId: 1, nppId: 1, isNPP: 1 })
+    .toArray();
+
   const result = await db
     .collection("electionCandidates")
     .updateMany(
       { electionId: { $in: completedElectionIds }, status: "active" },
       { $set: { status: "withdrawn", withdrawnAt: now } }
     );
+
+  // Archive their campaigns so a completed race's Campaign Operations list
+  // stops rendering candidates who are no longer standing (#1313).
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: staleCandidates
+      .filter((c) => c.electionId && (c.characterId || c.nppId))
+      .map((c) => ({
+        electionId: c.electionId,
+        // NPP rows have no characterId; campaigns key those by the NPP id.
+        characterId: (c.characterId ?? c.nppId)!,
+        isNPP: c.isNPP,
+        nppId: c.nppId ?? null,
+      })),
+    reason: "withdrawn",
+    now,
+  });
 
   if (result.modifiedCount > 0) {
     console.log(

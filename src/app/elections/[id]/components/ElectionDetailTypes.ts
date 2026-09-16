@@ -263,8 +263,11 @@ export interface ElectionDetail {
    * Phase B follow-up — per-party prior-cycle seat-share for the race
    * (share of the seat pool the party held last cycle, 0..1). Sourced
    * from the most-recent resolved tally on the same seat key. Populated
-   * for general-phase elections only. Fed to the PersuasionDrivers
-   * card's Incumbency driver row. Not fog-sensitive.
+   * for general-phase elections only, and never for a race with an
+   * officeholder incumbency path (single-winner executives, US Senate) —
+   * see `usesSeatShareIncumbency`, which keeps a vacant seat reading as an
+   * open seat rather than inheriting the last holder's margin. Fed to the
+   * PersuasionDrivers card's Incumbency driver row. Not fog-sensitive.
    */
   incumbentSeatShareByParty?: Record<string, number>;
 

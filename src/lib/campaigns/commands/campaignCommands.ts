@@ -49,6 +49,7 @@ import {
   maxAffordableCampaignStrengthClicks,
 } from "@/lib/campaigns/campaignStrength";
 import { emitOpsLevelWire, emitRallyWire } from "@/lib/elections/raceWireEmit";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 
 export async function upgradeCampaign(params: {
   db: Db;
@@ -236,7 +237,9 @@ export async function upgradeCampaign(params: {
 
   const updateResult = await db.collection<Campaign>("campaigns").updateOne(guard, {
     $inc: incOnPurchase,
-    $push: { activityHistory: { $each: [activity], $slice: -10 } },
+    $push: {
+      activityHistory: { $each: [activity], $slice: -CAMPAIGN_ACTIVITY_HISTORY_CAP },
+    },
     $set: setOnPurchase,
   });
   if (updateResult.modifiedCount === 0) {
@@ -1147,7 +1150,7 @@ export async function resetOppositionResearch(params: {
       $push: {
         activityHistory: {
           $each: [activity],
-          $slice: -10,
+          $slice: -CAMPAIGN_ACTIVITY_HISTORY_CAP,
         },
       },
     }

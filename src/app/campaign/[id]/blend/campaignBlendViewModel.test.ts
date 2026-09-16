@@ -70,14 +70,17 @@ function campaignFixture(over: Partial<CampaignData> = {}): CampaignData {
         actionsSpent: 187,
       },
     },
+    // Stored oldest-first: `$push` appends, so index 0 is the earliest entry.
+    // The fixture has to match, or paging tests pass against an order the
+    // database never produces.
     activityHistory: Array.from({ length: 24 }, (_, i) => ({
       type: "upgrade" as const,
       category: "groundGame",
-      newLevel: 24 - i,
-      costFunds: 1000 * (i + 1),
+      newLevel: i + 1,
+      costFunds: 1000 * (24 - i),
       costActions: 3,
-      timestamp: new Date().toISOString(),
-      turnNumber: 4182 - i,
+      timestamp: new Date(Date.UTC(2026, 4, 1) + i * 3_600_000).toISOString(),
+      turnNumber: 4159 + i,
     })),
     opsTrees: {
       fundraising: tree(true, 1, 0, 1),
@@ -130,9 +133,29 @@ describe("rail", () => {
     expect(OPS_TOTAL_CAP).toBe(40);
   });
 
-  it("badges the activity log with the entry count", () => {
-    const vm = buildCampaignBlendViewModel(input());
-    expect(vm.railItems.find((i) => i.id === "log")?.badge).toBe("24");
+  it("badges the ledger with everything both tabs hold", () => {
+    // The rail names the whole panel, so a badge counting only purchases would
+    // read "Ledger 0" for a campaign with no buys and a dozen endorsers.
+    const vm = buildCampaignBlendViewModel(
+      input({
+        campaign: campaignFixture({
+          endorsements: [
+            { kind: "npp", name: "Carol Martin", since: null },
+            { kind: "player", name: "Richard Nixon", since: null },
+          ],
+        }),
+      })
+    );
+    expect(vm.railItems.find((i) => i.id === "log")?.badge).toBe("26");
+  });
+
+  it("badges nothing for a fogged viewer rather than a count of zero", () => {
+    // The payload is redacted upstream, so history arrives empty whatever the
+    // campaign did. A "0" badge asserts the absence the empty text is careful
+    // not to claim.
+    const fogged = campaignFixture({ accessLevel: "public", activityHistory: [] });
+    const vm = buildCampaignBlendViewModel(input({ campaign: fogged }));
+    expect(vm.railItems.find((i) => i.id === "log")?.badge).toBeUndefined();
   });
 
   it("titles the pane from the selected rail item", () => {
@@ -378,6 +401,21 @@ describe("ledger", () => {
     expect(vm.ledger.pageText).toBe("Page 1 of 3");
   });
 
+  it("opens on the newest entries, not the oldest", () => {
+    // The array is stored oldest-first. While only ten entries were kept the
+    // single page happened to be the newest ten; now that a campaign keeps its
+    // whole history, showing it in stored order would open the log on ancient
+    // purchases and bury last turn's on the final page.
+    const vm = buildCampaignBlendViewModel(input());
+    expect(vm.ledger.rows[0].turnTag).toBe("T4182");
+    expect(vm.ledger.rows[9].turnTag).toBe("T4173");
+  });
+
+  it("runs oldest-last, so the final page holds the earliest entries", () => {
+    const vm = buildCampaignBlendViewModel(input({ ledgerPage: 2 }));
+    expect(vm.ledger.rows[vm.ledger.rows.length - 1].turnTag).toBe("T4159");
+  });
+
   it("serves the last, short page without inventing rows", () => {
     const vm = buildCampaignBlendViewModel(input({ ledgerPage: 2 }));
     expect(vm.ledger.rows).toHaveLength(4);
@@ -414,6 +452,26 @@ describe("ledger", () => {
     expect(row.label).toMatch(/down to/i);
   });
 
+  it("reads a suspend-and-endorse as an endorsement, not a level 0 purchase", () => {
+    // These entries carry no category, level or cost. Run through the upgrade
+    // row builder they render as a level 0 purchase priced at nothing.
+    const suspended = campaignFixture({
+      activityHistory: [
+        {
+          type: "suspend_endorse",
+          targetName: "Rival Candidate",
+          timestamp: new Date().toISOString(),
+          turnNumber: 4181,
+        },
+      ],
+    });
+    const row = buildCampaignBlendViewModel(input({ campaign: suspended })).ledger.rows[0];
+    expect(row.label).toBe("Suspended and endorsed Rival Candidate");
+    expect(row.label).not.toMatch(/Lv 0/);
+    expect(row.cost).toBe("");
+    expect(row.demoted).toBe(false);
+  });
+
   it("names the opposition target on a targeted upgrade", () => {
     const targeted = campaignFixture({
       activityHistory: [
@@ -432,6 +490,166 @@ describe("ledger", () => {
     const row = buildCampaignBlendViewModel(input({ campaign: targeted })).ledger.rows[0];
     expect(row.label).toContain("Rival Candidate");
     expect(row.turnTag).toBe("T4180");
+  });
+});
+
+describe("ledger endorsements tab", () => {
+  function endorsers(n: number, kind: "player" | "npp" = "npp") {
+    return Array.from({ length: n }, (_, i) => ({
+      kind,
+      name: `${kind === "npp" ? "Politician" : "Player"} ${i + 1}`,
+      since: `2026-05-${String((i % 28) + 1).padStart(2, "0")}T00:00:00.000Z`,
+    }));
+  }
+
+  it("does not tell a fogged viewer the records are empty when they are hidden", () => {
+    // A non-owner's payload is redacted upstream: `getCampaignDetail` returns
+    // before it reads either list, so both arrive empty. Saying nobody has
+    // endorsed, or nothing was bought, states as fact something the viewer was
+    // simply not shown.
+    const fogged = campaignFixture({
+      accessLevel: "public",
+      activityHistory: [],
+      endorsements: [],
+    });
+
+    const activity = buildCampaignBlendViewModel(input({ campaign: fogged }));
+    expect(activity.ledger.emptyText).toMatch(/cannot see|not visible|own side/i);
+    expect(activity.ledger.emptyText).not.toMatch(/Nothing has been bought/i);
+
+    const endorsing = buildCampaignBlendViewModel(
+      input({ campaign: fogged, ledgerTab: "endorsements" })
+    );
+    expect(endorsing.ledger.emptyText).not.toMatch(/No one has endorsed/i);
+  });
+
+  it("still says plainly when an owner's own records are genuinely empty", () => {
+    const owner = campaignFixture({ accessLevel: "owner", activityHistory: [], endorsements: [] });
+    expect(buildCampaignBlendViewModel(input({ campaign: owner })).ledger.emptyText).toBe(
+      "Nothing has been bought yet."
+    );
+    // Scoped to the two sources the tab actually lists: governor and executive
+    // endorsements pay actions but are not shown here.
+    expect(
+      buildCampaignBlendViewModel(input({ campaign: owner, ledgerTab: "endorsements" })).ledger
+        .emptyText
+    ).toBe("No players or politicians have endorsed this campaign yet.");
+  });
+
+  it("offers no source filter to a viewer who cannot see the records", () => {
+    // The counts behind the chips are all zero for a fogged viewer because the
+    // payload was redacted. Rendering "All 0 / Players 0 / Politicians 0" over
+    // the "visible only to the campaign's own side" line reports the absence
+    // that line is careful not to claim.
+    const fogged = campaignFixture({ accessLevel: "public", endorsements: [] });
+    const vm = buildCampaignBlendViewModel(input({ campaign: fogged, ledgerTab: "endorsements" }));
+    expect(vm.ledger.showFilters).toBe(false);
+  });
+
+  it("offers the source filter to the campaign's own side", () => {
+    const owner = campaignFixture({
+      accessLevel: "owner",
+      endorsements: [{ kind: "npp", name: "Carol Martin", since: null }],
+    });
+    const vm = buildCampaignBlendViewModel(input({ campaign: owner, ledgerTab: "endorsements" }));
+    expect(vm.ledger.showFilters).toBe(true);
+  });
+
+  it("keeps real-world dates out of the endorsement rows", () => {
+    // `createdAt` is a 2026 wall-clock stamp; the game's own calendar comes from
+    // the era preset, so printing it beside turn tags dates the fiction wrongly.
+    const campaign = campaignFixture({
+      endorsements: [{ kind: "npp", name: "Carol Martin", since: "2026-05-05T00:00:00.000Z" }],
+    });
+    const vm = buildCampaignBlendViewModel(input({ campaign, ledgerTab: "endorsements" }));
+    expect(JSON.stringify(vm.ledger.endorsementRows)).not.toMatch(/2026|May/);
+  });
+
+  it("lists endorsers instead of activity when the endorsements tab is open", () => {
+    const campaign = campaignFixture({
+      endorsements: [
+        { kind: "npp", name: "Carol Martin", since: "2026-05-05T00:00:00.000Z" },
+        { kind: "player", name: "Richard Nixon", since: "2026-05-04T00:00:00.000Z" },
+      ],
+    });
+    const vm = buildCampaignBlendViewModel(input({ campaign, ledgerTab: "endorsements" }));
+
+    expect(vm.ledger.tab).toBe("endorsements");
+    expect(vm.ledger.endorsementRows.map((r) => r.name)).toEqual(["Carol Martin", "Richard Nixon"]);
+    expect(vm.ledger.endorsementRows[0].kindLabel).toBe("Politician");
+    expect(vm.ledger.endorsementRows[1].kindLabel).toBe("Player");
+  });
+
+  it("narrows the list to one source when the filter names it", () => {
+    const campaign = campaignFixture({
+      endorsements: [
+        { kind: "npp", name: "Carol Martin", since: "2026-05-05T00:00:00.000Z" },
+        { kind: "player", name: "Richard Nixon", since: "2026-05-04T00:00:00.000Z" },
+      ],
+    });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "endorsements", endorsementFilter: "player" })
+    );
+
+    expect(vm.ledger.endorsementRows.map((r) => r.name)).toEqual(["Richard Nixon"]);
+    // The chips report the unfiltered totals, so switching filters does not
+    // change what the chips say is available behind them.
+    expect(vm.ledger.filterCounts).toEqual({ all: 2, player: 1, npp: 1 });
+  });
+
+  it("pages endorsers ten to a page like the activity tab", () => {
+    const campaign = campaignFixture({ endorsements: endorsers(23) });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "endorsements", endorsementPage: 1 })
+    );
+
+    expect(vm.ledger.endorsementRows).toHaveLength(LEDGER_PAGE_SIZE);
+    expect(vm.ledger.pageCount).toBe(3);
+    expect(vm.ledger.canPrev).toBe(true);
+    expect(vm.ledger.canNext).toBe(true);
+    expect(vm.ledger.rangeText).toBe("11-20 of 23");
+  });
+
+  it("pages the filtered list, not the whole one", () => {
+    const campaign = campaignFixture({
+      endorsements: [...endorsers(12, "npp"), ...endorsers(3, "player")],
+    });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "endorsements", endorsementFilter: "player" })
+    );
+
+    expect(vm.ledger.hasPager).toBe(false);
+    expect(vm.ledger.pageCount).toBe(1);
+    expect(vm.ledger.rangeText).toBe("1-3 of 3");
+  });
+
+  it("clamps a page left past the end of a narrowed list", () => {
+    const campaign = campaignFixture({
+      endorsements: [...endorsers(12, "npp"), ...endorsers(3, "player")],
+    });
+    // Page 1 is valid for 12 NPP endorsers but not for the 3 player ones, which
+    // is what a viewer sees when they page forward and then switch filters.
+    const vm = buildCampaignBlendViewModel(
+      input({
+        campaign,
+        ledgerTab: "endorsements",
+        endorsementFilter: "player",
+        endorsementPage: 1,
+      })
+    );
+
+    expect(vm.ledger.page).toBe(0);
+    expect(vm.ledger.endorsementRows).toHaveLength(3);
+  });
+
+  it("keeps the activity pager on its own page when the endorsements tab pages", () => {
+    const campaign = campaignFixture({ endorsements: endorsers(23) });
+    const vm = buildCampaignBlendViewModel(
+      input({ campaign, ledgerTab: "activity", endorsementPage: 2 })
+    );
+
+    expect(vm.ledger.tab).toBe("activity");
+    expect(vm.ledger.page).toBe(0);
   });
 });
 
