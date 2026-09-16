@@ -52,6 +52,7 @@ import {
 import { CURRENCY_SYMBOLS, COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 import {
   prepareEquityPrimaryPlacement,
   refundPreparedEquityPlacement,
@@ -283,9 +284,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Character not found" }, { status: 404 });
     }
 
-    // Block founding in command-economy countries (USSR etc.)
-    const corpCountryConfig = COUNTRY_CONFIGS[character.countryId as CountryId];
-    if (corpCountryConfig?.disallowPrivateCorporationFounding) {
+    // Block founding in command-economy countries (USSR etc.). Reads the
+    // marketization dial rather than a static config flag, so a country
+    // converting in either direction is honoured without a code change.
+    if (await isPrivateEnterpriseBlocked(db, character.countryId)) {
       return NextResponse.json(
         {
           error:

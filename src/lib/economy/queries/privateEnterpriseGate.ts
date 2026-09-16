@@ -31,7 +31,8 @@
 
 import type { Db } from "mongodb";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import { COMMAND_CEILING, scheduledMarketizationLevel } from "@/lib/constants/commandEconomy";
+import { scheduledMarketizationLevel } from "@/lib/constants/commandEconomy";
+import { isPrivateEnterprisePermittedAtLevel } from "./privateEnterpriseRegime";
 import { getNationalBudgetId } from "@/lib/bonds/sovereign";
 import type { FederalBudget, GameState } from "@/lib/db/types";
 
@@ -46,24 +47,13 @@ export class PrivateEnterpriseBlockedError extends Error {
   }
 }
 
-/** Dual-track and above permits private enterprise; fully command does not. */
-export function isPrivateEnterprisePermittedAtLevel(level: number): boolean {
-  return level >= COMMAND_CEILING;
-}
-
-/**
- * Pure, schedule-only answer. Safe in a client component: no DB, no driver.
- *
- * Ignores any persisted drift, so it can disagree with the live value near the
- * threshold. Use it for UI affordances only, never as the write-path authority -
- * server paths take `loadPrivateEnterpriseBlockedCountries`.
- */
-export function privateEnterpriseBlockedByYear(
-  countryId: string | null | undefined,
-  currentYear: number | null | undefined
-): boolean {
-  return !isPrivateEnterprisePermittedAtLevel(scheduledMarketizationLevel(countryId, currentYear));
-}
+// The pure predicates live in `privateEnterpriseRegime` so a client component can
+// import them without dragging the Mongo driver in through this module's
+// `getNationalBudgetId` dependency. Re-exported for server callers' convenience.
+export {
+  isPrivateEnterprisePermittedAtLevel,
+  privateEnterpriseBlockedByYear,
+} from "./privateEnterpriseRegime";
 
 /**
  * The live blocked set for every registered country: the persisted

@@ -8,6 +8,7 @@ import {
 } from "./nppCorpCeoSelection";
 import type { State } from "@/lib/db/types/state";
 import type { CountryId } from "@/lib/constants/countries";
+import { assertPrivateEnterprisePermitted } from "@/lib/economy/queries/privateEnterpriseGate";
 import {
   getGdpAnchorRate,
   loadWorldEraUnitScale,
@@ -55,6 +56,10 @@ export const NPP_DEFAULT_STARTING_CAPITAL_ANCHOR = 2_000_000;
  * Capital state for each enabled country.
  * Used as default HQ when batch-spawning NPP corporations.
  */
+// A capital here means "this country HAS a seedable capital region", nothing
+// more. Whether a private corp may spawn there is decided by the marketization
+// dial in spawnNppCorporation above, never by blanking an entry in this map.
+// Blanks mean only "no seeded regions yet".
 export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   US: "DC",
   UK: "LON",
@@ -88,7 +93,7 @@ export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   GR: "GR_ATT", // Attica (Athens)
   AT: "AT_VIE", // Vienna
   FI: "FI_UUS", // Uusimaa (Helsinki)
-  DD: "", // planned economy — SOEs seeded by the budget seeders, no market corps
+  DD: "", // regions not yet seeded
   SCO: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
   WAL: "", // Latent — sub-regions seeded at secession (cannot spawn pre-activation)
 };
@@ -235,6 +240,16 @@ export async function spawnNppCorporation(
     tickerSymbol: customTicker,
     nppPartyId,
   } = input;
+
+  // A planned economy has no private sector to spawn into. Throws rather than
+  // returning a sentinel because every caller already handles a throw:
+  // `batchSpawnNppCorporations` catches per-spawn and continues to the next
+  // sector, and `nppFoundCorporation` catches and refunds the founding fee.
+  //
+  // This also defuses the NPP_CAPITAL_STATES booby trap below, where the
+  // command-economy exclusion was encoded as an empty-string capital region with
+  // the reasoning written on exactly one of ten entries.
+  await assertPrivateEnterprisePermitted(db, countryId);
 
   // Validate state exists and belongs to the country
   const state = await db.collection<State>("states").findOne({ _id: headquartersState });

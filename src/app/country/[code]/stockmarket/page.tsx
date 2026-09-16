@@ -31,6 +31,7 @@ import { AuctionTable } from "./components/AuctionTable";
 import type { AuctionListing } from "@/lib/nationalization/auctionListing";
 import Link from "next/link";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { privateEnterpriseBlockedByYear } from "@/lib/economy/queries/privateEnterpriseRegime";
 import { getFoundingFxRate } from "@/lib/corporations/foundingCosts";
 import { useCountryDisplayName } from "@/contexts/RegisteredCountriesContext";
 import { buildRuntimeExchangeMeta, getStockMarketBasePath } from "./stockMarketRouting";
@@ -186,10 +187,17 @@ function StockMarketPageInner({ params }: { params: Promise<{ code: string }> })
     countryId: playerCountryId,
     baseRates,
   } = useCurrency();
+  const turnStatusForGate = useGameTurnStatus();
+  // Schedule-only (no DB) because this is a client component: the server route is
+  // the authority and re-checks against the live persisted dial. Near the command
+  // ceiling the two can disagree, in which case the button shows and the POST
+  // returns 403 with the same message.
   const canFoundCorp =
     !playerCountryId ||
-    !COUNTRY_CONFIGS[playerCountryId.toUpperCase() as CountryId]
-      ?.disallowPrivateCorporationFounding;
+    !privateEnterpriseBlockedByYear(
+      playerCountryId.toUpperCase(),
+      turnStatusForGate?.currentYear ?? null
+    );
   const { navData } = useAuthMe();
   const [data, setData] = useState<ExchangeData | null>(null);
   const [commodities, setCommodities] = useState<CommodityData[]>([]);

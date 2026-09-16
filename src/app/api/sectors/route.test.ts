@@ -28,6 +28,11 @@ beforeEach(async () => {
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
+  // The command-economy gate reads the world year to resolve each country's
+  // marketization level. Without it every country reads as fully market and the
+  // gate stops blocking, so the exclusion assertions below go vacuous.
+  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
+
   db.collectionMocks.states.find.mockReturnValue({
     project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue([
@@ -90,6 +95,7 @@ describe("GET /api/sectors country identity (ticket #1271)", () => {
     // listed it as "Russia" while every other surface disagreed.
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
+      currentYear: 1970,
       preset: "1953-default",
     });
 
