@@ -7,7 +7,7 @@ import { JP_ECONOMY } from "@/lib/countries/jp/economy";
  * national statistical series. The 1953 table gives historical worlds their
  * own monetary scale while the snapshot keeps modeled balances fully visible.
  */
-export const M2_TO_GDP_1953: Partial<Record<CountryId, number>> = {
+const M2_TO_GDP_1953: Partial<Record<CountryId, number>> = {
   US: 0.62,
   UK: 0.58,
   JP: JP_ECONOMY.m2ToGdp1953,

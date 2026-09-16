@@ -68,7 +68,39 @@ import { CONSCRIPTION_SEED } from "../../src/lib/demographics/conscription";
 
 type Check = [name: string, value: unknown, expectation?: (v: never) => boolean];
 
+import { DOMAIN_BUCKET_AFFINITIES } from "../../src/lib/bucketAffinities";
+import { UNION_NAMES_BY_ERA } from "../../src/lib/seeds/reference/unionNames";
+import { COUNTRY_MODIFIER_PATCHES } from "../../src/lib/states/conditions/countryPatches";
+import { COUNTRY_BUCKET_LABELS } from "../../src/lib/demographics/bucketLabelsByCountry";
+import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
+import { MAJOR_DEFAULT_PARTIES } from "../../src/lib/seeds/defaultPartyTiers";
+import { COUNTRY_READINESS_EXPECTATIONS } from "../../src/lib/constants/countryReadinessExpectations";
+import { METRIC_ERA_WINDOWS, METRIC_BAND_CURVES } from "../../src/lib/era/metricCatalog";
+import { MEDIAN_INCOME_THRESHOLDS } from "../../src/lib/utils/metricScoring";
+import { COUNTRY_ANCHOR } from "../../src/lib/maps/countryAnchors";
+import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
+import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
+
 const checks: Check[] = [
+  // ---- D7: registries whose Japan payload moved in the final sweep. ----
+  // Each was a literal block until D7 step 4 and is now a forwarder, so each
+  // has a NEW chance to resolve to undefined at module-init time.
+  ["DOMAIN_BUCKET_AFFINITIES.JP", DOMAIN_BUCKET_AFFINITIES.JP],
+  ["DOMAIN_BUCKET_AFFINITIES.JP.education", DOMAIN_BUCKET_AFFINITIES.JP?.education],
+  ["UNION_NAMES_BY_ERA.2019.JP", UNION_NAMES_BY_ERA["2019"]?.JP],
+  ["UNION_NAMES_BY_ERA.1953.JP", UNION_NAMES_BY_ERA["1953"]?.JP],
+  ["COUNTRY_MODIFIER_PATCHES.JP", COUNTRY_MODIFIER_PATCHES.JP],
+  ["COUNTRY_BUCKET_LABELS.JP", COUNTRY_BUCKET_LABELS.JP],
+  ["COUNTRY_BUCKET_LABELS.JP.dims", COUNTRY_BUCKET_LABELS.JP?.dims],
+  ["COUNTRY_SECTOR_WEIGHTS_1953.JP", COUNTRY_SECTOR_WEIGHTS_1953.JP],
+  ["MAJOR_DEFAULT_PARTIES.JP", MAJOR_DEFAULT_PARTIES.JP],
+  ["COUNTRY_READINESS_EXPECTATIONS.JP", COUNTRY_READINESS_EXPECTATIONS.JP],
+  ["COUNTRY_READINESS_EXPECTATIONS.JP.extras", COUNTRY_READINESS_EXPECTATIONS.JP?.extras],
+  ["METRIC_ERA_WINDOWS.nuclearSafety.JP", METRIC_ERA_WINDOWS.nuclearSafety?.countryOverrides?.JP],
+  ["MEDIAN_INCOME_THRESHOLDS.JP", MEDIAN_INCOME_THRESHOLDS.JP],
+  ["COUNTRY_ANCHOR.JP", COUNTRY_ANCHOR.JP],
+  ["COUNTRY_COMMAND_FLAVOR.JP", COUNTRY_COMMAND_FLAVOR.JP],
+  ["GDP_DENOMINATION_1953.JP", GDP_DENOMINATION_1953.JP],
   ["COUNTRY_CONFIGS.JP", COUNTRY_CONFIGS.JP],
   [
     "COUNTRY_CONFIGS.JP.legislature.lowerChamber.seats",
@@ -215,6 +247,44 @@ if (Object.keys(REGION_ROSTERS.JP ?? {}).length !== 7) {
 if (TREASURY_IDENTITY.JP?.budgetTitle !== "国家予算") {
   console.log(`FAIL  TREASURY_IDENTITY.JP.budgetTitle = ${TREASURY_IDENTITY.JP?.budgetTitle}`);
   failed++;
+}
+
+// ---- D7 value assertions. Present-but-wrong is the cycle failure mode. ----
+if (COUNTRY_READINESS_EXPECTATIONS.JP?.seatMin !== 713) {
+  console.log(
+    `FAIL  readiness seatMin = ${COUNTRY_READINESS_EXPECTATIONS.JP?.seatMin}, expected 713`
+  );
+  failed++;
+}
+if (MAJOR_DEFAULT_PARTIES.JP?.length !== 4) {
+  console.log(`FAIL  MAJOR_DEFAULT_PARTIES.JP has ${MAJOR_DEFAULT_PARTIES.JP?.length}, expected 4`);
+  failed++;
+}
+// ⚠ UNION_NAMES_BY_ERA IS KEYED BY BARE YEAR ("2019"), not by preset id
+// ("2019-default") like most era tables in this repo. A preset id here returns
+// undefined rather than erroring.
+// The 2007 union map SPREADS the modern one. Resolved against an uninitialised
+// binding it comes back silently SHORT rather than absent, which no presence
+// check catches.
+{
+  const modern = Object.keys(UNION_NAMES_BY_ERA["2019"]?.JP ?? {}).length;
+  const y2007 = Object.keys(UNION_NAMES_BY_ERA["2007"]?.JP ?? {}).length;
+  if (y2007 < modern) {
+    console.log(
+      `FAIL  2007 JP union map has ${y2007} sectors, modern has ${modern} -- spread lost`
+    );
+    failed++;
+  }
+}
+// METRIC_BAND_CURVES is metric-first. Japan's moved slice is `uninsuredRate`,
+// and SEVERAL other metrics also carry a JP band -- looking up "the first curve
+// with a JP entry" finds a different metric and passes on the wrong data.
+{
+  const band = METRIC_BAND_CURVES.uninsuredRate?.byCountry?.JP;
+  if (!band || band.length !== 3) {
+    console.log(`FAIL  JP uninsuredRate band has ${band?.length} rows, expected 3`);
+    failed++;
+  }
 }
 
 console.log(`\n${checks.length} registries checked, ${failed} failed.`);

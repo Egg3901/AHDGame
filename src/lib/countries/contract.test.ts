@@ -1,375 +1,123 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { MOVED_REGISTRIES, MOVED_THUNK_REGISTRIES } from "./movedRegistries";
+import { JP } from "./jp";
+import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 
 /**
- * The move must change nothing. Each entry pins one registry's pre-move value
- * against the folder that replaces it.
+ * Japan satisfies `CountryFolder`, with nothing quietly absent.
  *
- * ⚠️ `before` MUST read the committed snapshot, never the live registry. Once a
- * registry forwards to the folder, reading it back compares the new thing to
- * itself. That tautology is not hypothetical: it happened in Plan C task C0,
- * where rewiring `getPresetSeats` made its faithful-replacement test vacuous
- * until it was rebuilt against the raw source arrays.
+ * ⚠️ THE PRE-MOVE FIXTURE IS GONE, DELIBERATELY. Through D2-D6 this file
+ * compared every moved registry against `__snapshots__/jp.pre-move.json`, which
+ * recorded Japan's values before anything moved. That was the right check while
+ * the move was in flight and is the wrong one now: with the move finished, the
+ * fixture pins a world that no longer exists, so the first legitimate edit to
+ * Japan's data would fail it and the only available fix would be to update the
+ * fixture -- at which point it proves nothing at all. A guard that must be
+ * rewritten to stay green is worse than no guard, so it was deleted in the same
+ * commit rather than left to rot.
  *
- * D1 ships both tables empty; D2 onward fill them. The fixture tests below are
- * what make this file worth running today.
+ * TWO CHECKS REPLACE IT, and they answer different questions:
+ *
+ *   - `jp/japanReachable.test.ts` -- is Japan still reachable through the
+ *     registries consumers actually use? 51 of 74 moved registries are
+ *     `Partial<Record<CountryId, X>>`, so dropping Japan's key is not a type
+ *     error and nothing else catches it.
+ *   - this file -- is the CONTRACT satisfied? Not whether the values are right,
+ *     but whether the shape the plan declared is expressible by a real country.
+ *
+ * That second question is the one that matters for the other 23 countries. If
+ * Japan only fits `CountryFolder` because a member is optional and quietly
+ * absent, the shape is wrong and the next country inherits the problem.
  */
 
-const SNAPSHOT = "src/lib/countries/__snapshots__/jp.pre-move.json";
+/** Members that must be present and non-empty for any country. */
+const REQUIRED_MEMBERS = [
+  "identity",
+  "institutions",
+  "elections",
+  "economy",
+  "geography",
+  "eras",
+] as const;
 
-interface SnapshotEntry {
-  shape: string;
-  value: unknown;
-  functionKeys?: string[];
-}
-
-const snapshot = (): Record<string, SnapshotEntry> =>
-  JSON.parse(readFileSync(SNAPSHOT, "utf8")) as Record<string, SnapshotEntry>;
-
-describe("pre-move snapshot", () => {
-  it("exists and covers every registry Japan's folder will absorb", () => {
-    const entries = Object.entries(snapshot());
-    // 79 emitted before anything moved, plus 4 APPENDED in D3. If this drops,
-    // the fixture was regenerated after a rewire and no longer records pre-move
-    // values. It may only ever grow, one appended entry at a time, and only for
-    // registries that have not moved yet.
-    expect(entries.length).toBe(89);
+describe("Japan satisfies the country contract", () => {
+  it("provides every member of CountryFolder", () => {
+    expect(JP.id).toBe("JP");
+    for (const member of REQUIRED_MEMBERS) {
+      expect(JP[member], `JP.${member}`).toBeDefined();
+      expect(Object.keys(JP[member]).length, `JP.${member} is empty`).toBeGreaterThan(0);
+    }
   });
 
   /**
-   * ⚠️ THE EMITTER NOW READS ONLY 78. The fixture holds 79 and that difference
-   * is deliberate.
-   *
-   * POPULATION_MULTIPLIERS cannot be exported. Seven country seeders destructure
-   * `applyEra1991DemographicAdjustments` out of a ternary that unions the WHOLE
-   * module type with a stub object:
-   *
-   *   const { applyEra1991DemographicAdjustments } = is1991
-   *     ? await import(".../stateDemographics1991")
-   *     : { applyEra1991DemographicAdjustments: <T>(x: T): T => x };
-   *
-   * Adding any export changes the module shape, the union call stops resolving,
-   * and the seeded value becomes `unknown` -- 19 errors across
-   * seedBR/CN/DE/IE/JP/NG/UK. The value below was captured on the initial run
-   * while the export was briefly in place, which is why the fixture has it and
-   * a re-run of the emitter would not.
-   *
-   * D5 owns POPULATION_MULTIPLIERS. It must either fix that seeder pattern
-   * first or move the registry without exporting it in place.
+   * ⚠️ The point of the exercise. A member satisfied by an empty object, or by a
+   * field that happens to be optional, means the contract is not actually being
+   * met -- it is being sidestepped. Each assertion below names a field that a
+   * country genuinely cannot do without.
    */
-  it("keeps the pre-move value of the registry that cannot be exported", () => {
-    const entry = snapshot().POPULATION_MULTIPLIERS;
-    expect(entry.shape).toBe("country-first");
-    // Japan's 1991 cohort multipliers, eight groups.
-    expect(Object.keys(entry.value as object).sort()).toEqual([
-      "komeito_faithful",
-      "reform_populist",
-      "retiree",
-      "rural_traditionalist",
-      "salaryman_conservative",
-      "urban_progressive",
-      "working_mothers",
-      "young_urban",
-    ]);
+  it("fills each member with real content rather than an empty shell", () => {
+    expect(JP.identity.displayName).toBe("Japan");
+    expect(JP.identity.cabinet.glyph).toBeTruthy();
+    expect(JP.identity.addressNames.national).toBeTruthy();
+
+    expect(JP.institutions.config.name).toBe("Japan");
+    expect(JP.institutions.legislativeProcess.executive.title).toBeTruthy();
+    expect(JP.institutions.cabinet.positions.length).toBeGreaterThan(0);
+    expect(Object.keys(JP.institutions.cabinet.orders).length).toBeGreaterThan(0);
+    expect(JP.institutions.military.branches.length).toBeGreaterThan(0);
+
+    expect(JP.elections.seats.totals.shugiin).toBe(465);
+    expect(JP.elections.seats.totals.sangiin).toBe(248);
+    expect(JP.elections.electionPhases?.length).toBe(4);
+
+    expect(JP.economy.currencyCode).toBe("JPY");
+    expect(JP.economy.repEcon.gdp).toBeGreaterThan(0);
+    expect(Object.keys(JP.economy.sectorWeights.base).length).toBeGreaterThan(0);
+
+    expect(JP.geography.continent).toBe("Asia");
+    expect(Object.keys(JP.geography.adjacency)).toHaveLength(8);
+    expect(JP.geography.rawMetrics.length).toBeGreaterThan(0);
   });
 
   /**
-   * "absent" means the extractor found no Japan anywhere in the registry. That
-   * is either a registry Japan genuinely has no entry in -- which the plan must
-   * state deliberately, as it does for ERA_COUNTRY_NAMES -- or a shape the
-   * extractor does not understand. The second kind is silent data loss, so it
-   * fails here rather than surfacing as an empty era file three phases later.
+   * ⚠️ ALL SEVEN shipping presets, not the five an early revision listed. 1999
+   * and 2007 were dropped once already, and Japan carries real region, census
+   * and demographic data for both.
    */
-  it("found Japan in every registry it recorded", () => {
-    const absent = Object.entries(snapshot())
-      .filter(([, e]) => e.shape === "absent")
-      .map(([name]) => name);
-    expect(absent, "extractor found no Japan in these; verify each by hand").toEqual([]);
+  it("has an era override for every shipping preset", () => {
+    for (const preset of SHIPPING_PRESETS) {
+      expect(JP.eras[preset], `no era file for ${preset}`).toBeDefined();
+      expect(JP.eras[preset]?.preset, `${preset} mislabelled`).toBe(preset);
+    }
+    expect(Object.keys(JP.eras)).toHaveLength(SHIPPING_PRESETS.length);
   });
 
   /**
-   * Japan does not sit at the same depth everywhere. Recording the shape makes
-   * the awkward ones visible instead of leaving them to be rediscovered:
-   * CORE5_NORMALS is metric-first with a `global` sibling that must not move,
-   * ERA_COUNTRY_CONFIG_OVERRIDES is preset-first and holds Japan in TWO eras,
-   * and ISO_NUMERIC_TO_COUNTRY keys by ISO code with JP as the value.
+   * ⚠️ Japan holds config overrides in TWO eras, and 1953 -- the one no test
+   * watched before D3 -- carries a full 466/248 legislature. An era table naming
+   * only 1991 loses it silently.
    */
-  it("records a known shape for every entry", () => {
-    const known = new Set([
-      "country-first",
-      "nested-under-country",
-      "outer-keyed",
-      "composite-key",
-      "function-valued",
-      "whole-registry",
-      "value-keyed",
-    ]);
-    const odd = Object.entries(snapshot())
-      .filter(([, e]) => !known.has(e.shape))
-      .map(([name, e]) => `${name} -> ${e.shape}`);
-    expect(odd).toEqual([]);
+  it("keeps both era config overrides intact", () => {
+    const y1953 = JP.eras["1953-default"]?.config;
+    const y1991 = JP.eras["1991-default"]?.config;
+    expect(y1953?.legislature?.lowerChamber?.seats).toBe(466);
+    expect(y1953?.legislature?.upperChamber?.seats).toBe(248);
+    expect(y1991?.legislature?.lowerChamber?.seats).toBe(512);
+    expect(y1991?.legislature?.upperChamber?.seats).toBe(252);
+    // The eras that carry no config override must say so by absence, not by an
+    // empty object that looks like an override and overrides nothing.
+    expect(JP.eras["2019-default"]?.config).toBeUndefined();
   });
 
   /**
-   * The plan warned that an executor writing eras/1953.ts from a table naming
-   * only 1991 would silently drop Japan's 1953 override -- which carries a full
-   * 466/248 legislature. Pin both eras so the fixture cannot lose one.
+   * Orders of battle start at 1979. The 1953 era has none and must fall back to
+   * the base set rather than inventing an empty one.
    */
-  it("keeps both of Japan's era config overrides", () => {
-    const eras = snapshot().ERA_COUNTRY_CONFIG_OVERRIDES;
-    expect(Object.keys(eras.value as object).sort()).toEqual(["1953-default", "1991-default"]);
-    const y1953 = (eras.value as Record<string, Record<string, unknown>>)["1953-default"];
-    expect(Object.keys(y1953).sort()).toEqual([
-      "coalitionThreshold",
-      "legislature",
-      "majorPartyIds",
-      "usdExchangeRate",
-    ]);
+  it("carries per-era orders of battle only where they exist", () => {
+    expect(JP.eras["1953-default"]?.institutions?.military?.ordersOfBattle).toBeUndefined();
+    for (const preset of ["1979-default", "1991-default", "2023-default"] as const) {
+      const oob = JP.eras[preset]?.institutions?.military?.ordersOfBattle;
+      expect(oob, `${preset} orders of battle`).toBeDefined();
+      expect(oob?.length).toBeGreaterThan(0);
+    }
   });
-
-  /**
-   * Rev 8 counted five orders-of-battle eras and a `| head -5` grep hid two more.
-   */
-  it("keeps all six orders-of-battle eras", () => {
-    const value = snapshot().ORDERS_OF_BATTLE_BY_ERA.value as Record<string, unknown>;
-    expect(Object.keys(value).sort()).toEqual(["1979", "1991", "1999", "2007", "2019", "2023"]);
-  });
-
-  /**
-   * Japan's canonical chamber seat tables, appended in D3.
-   *
-   * ⚠️ These live in constants/states.ts, which is not Japan-named and carries no
-   * `JP:` key, so four earlier coverage rules AND the original emitter's symbol
-   * list all missed them. They are the most load-bearing structural fact Japan
-   * has, and they were the last thing to be noticed.
-   *
-   * The per-region tables must keep summing to their TOTAL constants: a region
-   * silently dropped during the move would otherwise leave a chamber short and
-   * nothing would fail loudly.
-   */
-  it("keeps the chamber seat tables whole", () => {
-    const snap = snapshot();
-    const sum = (v: unknown) =>
-      Object.values(v as Record<string, number>).reduce((a, b) => a + b, 0);
-
-    expect(Object.keys(snap.JP_SHUGIIN_SEATS.value as object)).toHaveLength(8);
-    expect(sum(snap.JP_SHUGIIN_SEATS.value)).toBe(465);
-    expect(snap.TOTAL_JP_SHUGIIN_SEATS.value).toBe(465);
-
-    expect(Object.keys(snap.JP_SANGIIN_SEATS.value as object)).toHaveLength(8);
-    expect(sum(snap.JP_SANGIIN_SEATS.value)).toBe(248);
-    expect(snap.TOTAL_JP_SANGIIN_SEATS.value).toBe(248);
-
-    // One governor per region.
-    expect(sum(snap.JP_GOVERNOR_SEATS.value)).toBe(8);
-  });
-
-  /**
-   * ⚠️ toEqual compares functions by REFERENCE, so the faithful-replacement
-   * harness is blind to these. They are listed here so the blindness is on the
-   * record, and D3/D5 must pin them by resolved BEHAVIOUR via
-   * MOVED_THUNK_REGISTRIES instead.
-   */
-  it("names every function-valued registry the harness cannot compare", () => {
-    const fnValued = Object.entries(snapshot())
-      .filter(([, e]) => e.shape === "function-valued")
-      .map(([name]) => name)
-      .sort();
-    // The plan names TWO. There are FIVE.
-    //
-    // PARLIAMENTARY_CABINET_CONFIGS hides its function one level down at
-    // `hero.titleFor`, so a top-level typeof check misses it. COUNTRY_ELECTION_
-    // PHASES hides four functions inside an ARRAY, which the D1 extractor's
-    // isObj guard skipped entirely -- it recorded four `{ name }` entries where
-    // the live registry holds four `{ name, fn }`, and JSON.stringify dropped
-    // the functions without a word. See correct-jp-snapshot.ts.
-    // The plan names TWO. There are SIX. COUNTRY_READINESS_EXPECTATIONS joined in
-    // D6: its `extras` is an ARRAY holding a function, which the append script's
-    // fnKeys could not see until it was taught to walk arrays -- the third time
-    // that same blind spot has cost a registry its executable part.
-    expect(fnValued).toEqual([
-      "COUNTRY_BILL_PHASES",
-      "COUNTRY_ELECTION_PHASES",
-      "COUNTRY_READINESS_EXPECTATIONS",
-      "PARLIAMENTARY_CABINET_CONFIGS",
-      "REGION_ROSTERS",
-      "SPAWN_ELECTIONS_REGISTRY",
-    ]);
-
-    /**
-     * A function-valued entry must still record its NON-function siblings.
-     * Recording `value: null` threw them away: COUNTRY_BILL_PHASES carries a
-     * phaseName and an emptyResult that no longer existed anywhere.
-     */
-    const billPhases = snapshot().COUNTRY_BILL_PHASES.value as Record<string, unknown>;
-    expect(billPhases.phaseName).toBe("jpBillLifecycle");
-    expect(billPhases.emptyResult).toEqual({
-      enacted: 0,
-      failed: 0,
-      overrides: 0,
-      cabinetPassed: 0,
-    });
-    expect(
-      (snapshot().COUNTRY_ELECTION_PHASES.value as { name: string }[]).map((p) => p.name)
-    ).toEqual([
-      "jpElections",
-      "jpRegionalCouncilElections",
-      "jpCouncillorElections",
-      "jpGovernorElections",
-    ]);
-    expect(snapshot().PARLIAMENTARY_CABINET_CONFIGS.functionKeys).toEqual(["hero.titleFor"]);
-    // All seven shipping presets, not the five an earlier revision listed.
-    expect(snapshot().REGION_ROSTERS.functionKeys).toEqual([
-      "1953",
-      "1979",
-      "1991",
-      "1999",
-      "2007",
-      "2019",
-      "2023",
-    ]);
-  });
-});
-
-describe("faithful replacement", () => {
-  if (MOVED_REGISTRIES.length === 0) {
-    it("has no moved registries yet", () => {
-      expect(MOVED_REGISTRIES).toEqual([]);
-    });
-  } else {
-    /**
-     * The whole point of the phase. `after()` reads the live registry, which now
-     * forwards to Japan's folder; the expected value comes from the committed
-     * pre-move fixture, never from the registry itself. Comparing the registry
-     * to the registry would pass vacuously no matter what the move broke.
-     */
-    /**
-     * ⚠️ The title takes `$name` ALONE. `"$name$subKey"` reads as one property
-     * path -- `name$subKey` -- which does not exist, so every row rendered
-     * "undefined is unchanged by the move" and a failure named no registry.
-     * The per-row label goes in the assertion message instead.
-     */
-    it.each(MOVED_REGISTRIES)("$name is unchanged by the move", ({ name, subKey, after }) => {
-      const entry = snapshot()[name];
-      expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
-      // An outer-keyed entry holds Japan once per era or preset; compare only
-      // the slice this row owns, so a dropped era fails on its own line.
-      const expected = subKey ? (entry.value as Record<string, unknown>)[subKey] : entry.value;
-      const label = subKey ? `${name}.${subKey}` : name;
-      expect(expected, `${label} is not in the fixture`).toBeDefined();
-      /**
-       * ⚠️ NORMALISE THE LIVE VALUE THROUGH JSON BEFORE COMPARING.
-       *
-       * The fixture is a JSON document, and `JSON.stringify` DROPS properties
-       * whose value is `undefined`. jpStateMetrics carries `trend: undefined` on
-       * many metrics, so the recorded entry has no `trend` key at all while the
-       * live object does -- a difference in the RECORDING, not in the data.
-       *
-       * Putting the live value through the same transform makes the comparison
-       * apples-to-apples. It costs nothing in strictness: any real change
-       * (undefined -> a value, or a changed value) still survives JSON and still
-       * fails. Only undefined-to-undefined is invisible, which is not a change.
-       */
-      const throughJson = (v: unknown) => JSON.parse(JSON.stringify(v ?? null));
-
-      /**
-       * ⚠️ AND STRIP NON-DETERMINISTIC FIELDS.
-       *
-       * jpStateMetrics builds every region with `lastUpdated: new Date()`, so
-       * the value changes on every module load. The fixture froze one instant;
-       * the live value is whenever the test ran. That is not a move difference
-       * and no phase can make it stable.
-       *
-       * Only `lastUpdated` is stripped, and only because it is provably a
-       * load-time `new Date()` -- a scan of all 88 entries found ISO timestamps
-       * in RAW_BUNDLES alone. Anything broader would start hiding real drift.
-       */
-      const NON_DETERMINISTIC = new Set(["lastUpdated"]);
-      const strip = (v: unknown): unknown => {
-        if (Array.isArray(v)) return v.map(strip);
-        if (v && typeof v === "object") {
-          return Object.fromEntries(
-            Object.entries(v)
-              .filter(([k]) => !NON_DETERMINISTIC.has(k))
-              .map(([k, inner]) => [k, strip(inner)])
-          );
-        }
-        return v;
-      };
-
-      expect(strip(throughJson(after())), `${label} differs from its pre-move value`).toEqual(
-        strip(expected)
-      );
-    });
-
-    it("forwards every registry the fixture recorded for this phase", () => {
-      // Guards the other direction: a registry quietly dropped from the table
-      // would otherwise just stop being checked.
-      //
-      // 15 from D2 (identity), 23 from D3 (institutions and elections, with the
-      // preset-first registries split one row per era), 21 from D4 (economy), 26 from D5 (geography, with CORE5_NORMALS split one row per metric and both halves of the ISO pair pinned).
-      expect(MOVED_REGISTRIES.length).toBe(85);
-      const missing = MOVED_REGISTRIES.filter((r) => !snapshot()[r.name]);
-      expect(missing.map((r) => r.name)).toEqual([]);
-    });
-  }
-
-  if (MOVED_THUNK_REGISTRIES.length === 0) {
-    it("has no moved thunk registries yet", () => {
-      expect(MOVED_THUNK_REGISTRIES).toEqual([]);
-    });
-  } else {
-    /**
-     * ⚠️ `toEqual` compares functions by REFERENCE, so the ordinary harness above
-     * cannot see these at all: a re-export passes tautologically and a
-     * re-declaration fails despite identical behaviour.
-     *
-     * Instead, replace every function with a marker and compare the result to
-     * the fixture. That verifies the surrounding DATA and the function TOPOLOGY
-     * in one assertion -- a function that vanished, moved to a new path, or
-     * appeared where there was none all fail, and so does a changed sibling.
-     *
-     * This is what caught the D1 extractor bug: COUNTRY_ELECTION_PHASES holds
-     * its functions inside an ARRAY, which the original `isObj` guard skipped,
-     * so four `{ name, fn }` entries were recorded as four `{ name }`.
-     */
-    const mark = (v: unknown): unknown => {
-      if (typeof v === "function") return "<function>";
-      if (Array.isArray(v)) return v.map(mark);
-      if (typeof v === "object" && v !== null) {
-        return Object.fromEntries(Object.entries(v).map(([k, inner]) => [k, mark(inner)]));
-      }
-      return v;
-    };
-
-    const paths = (v: unknown, at: string[] = []): string[] => {
-      if (typeof v === "function") return [at.join(".") || "<self>"];
-      if (Array.isArray(v)) return v.flatMap((item, i) => paths(item, [...at, String(i)]));
-      if (typeof v === "object" && v !== null) {
-        return Object.entries(v).flatMap(([k, inner]) => paths(inner, [...at, k]));
-      }
-      return [];
-    };
-
-    it.each(MOVED_THUNK_REGISTRIES)("$name keeps its data and its functions", ({ name, after }) => {
-      const entry = snapshot()[name];
-      expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
-      const live = after();
-      expect(mark(live)).toEqual(entry.value);
-      expect(paths(live)).toEqual(entry.functionKeys);
-    });
-
-    it("covers every function-valued registry this phase owns", () => {
-      // REGION_ROSTERS is D5's; the other four are D3's.
-      expect(MOVED_THUNK_REGISTRIES.map((r) => r.name).sort()).toEqual([
-        "COUNTRY_BILL_PHASES",
-        "COUNTRY_ELECTION_PHASES",
-        "COUNTRY_READINESS_EXPECTATIONS",
-        "PARLIAMENTARY_CABINET_CONFIGS",
-        "REGION_ROSTERS",
-        "SPAWN_ELECTIONS_REGISTRY",
-      ]);
-    });
-  }
 });

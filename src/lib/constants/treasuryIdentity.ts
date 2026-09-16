@@ -45,7 +45,7 @@ export interface TreasuryIdentity {
 }
 
 /** Finance-ministry text overlay; brand colors are composed from NATIONAL_IDENTITY. */
-export const TREASURY_TEXT: Record<
+const TREASURY_TEXT: Record<
   CountryId,
   Omit<TreasuryIdentity, "palette" | "accent" | "accentSoft">
 > = {

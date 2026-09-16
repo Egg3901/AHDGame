@@ -131,3 +131,27 @@ export const JP_NATIONAL_CONFIG: BillLifecycleConfig = {
     CONCURRENT_VOTE_STAGE,
   ],
 };
+
+/**
+ * Japan's registration in the turn loop's bill-lifecycle phase table.
+ *
+ * Forwarded from `src/lib/turn/countryPhases.ts`, which composes this with the
+ * runner function.
+ *
+ * ⚠ THE `fn` IS DELIBERATELY NOT HERE. `runBillLifecycleForJP` lives in
+ * `turn/billLifecycle/dispatch`, which reaches this module back through
+ * `configs/jp` -- so naming it here would be a real runtime import cycle, not
+ * the harmless type-only kind. The registry keeps the one line of wiring and
+ * this module keeps the two facts that are Japan's.
+ *
+ * ⚠ `emptyResult` IS NOT BOILERPLATE. Every other country reports
+ * `{ enacted, failed }`; Japan also reports `overrides` and `cabinetPassed`,
+ * because the Diet can pass a bill by cabinet route and the upper house can be
+ * overridden. Those two keys are what make a zero-activity turn report zero for
+ * those paths rather than omitting them, and a turn summary that omits a key
+ * renders it blank rather than "0".
+ */
+export const JP_BILL_PHASE_SHAPE = {
+  phaseName: "jpBillLifecycle",
+  emptyResult: { enacted: 0, failed: 0, overrides: 0, cabinetPassed: 0 },
+} as const;

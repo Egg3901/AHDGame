@@ -22,7 +22,10 @@ import { RU_NATIONALITIES_SEATS } from "./ruSeats";
 import type { EraSeedModels } from "./economicModels";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
 import { JP_ERAS } from "@/lib/countries/jp/eras";
-import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
+import {
+  JP_CONFIG,
+  JP_REGIONAL_BILL_ASSENT_OFFICE_KEY,
+} from "@/lib/countries/jp/institutionsFacts";
 
 export type CountryId =
   | "US"
@@ -1263,7 +1266,7 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     executiveLabel: "Federal Chancellery",
     centralGovernmentLabel: "Federal Grants",
   },
-  JP: JP_INSTITUTIONS.config,
+  JP: JP_CONFIG,
 
   IE: {
     id: "IE",
@@ -6816,7 +6819,7 @@ export function getOfficeTypeConfig(
 export const REGIONAL_BILL_ASSENT_OFFICE_KEY: Partial<Record<CountryId, string>> = {
   US: "governor",
   UK: "governor",
-  JP: JP_INSTITUTIONS.regionalBillAssentOfficeKey,
+  JP: JP_REGIONAL_BILL_ASSENT_OFFICE_KEY,
   IE: "governor",
   DE: "ministerPresident",
   // One-party regional executives — Republic / Land First Secretaries. Without
@@ -7189,7 +7192,7 @@ export function getRegionalAddressName(countryId: CountryId): string {
   return REGIONAL_ADDRESS_NAME[countryId] ?? "State of the State";
 }
 
-export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
+const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
   US: "State of the Union",
   UK: "Address to the Nation",
   DE: "Government Declaration",

@@ -649,6 +649,72 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
   },
   { file: "src/lib/countries/jp/data/jpRegions.ts", bucket: "D", phase: "D6", source: "derived" },
   {
+    file: "src/lib/countries/jp/data/jpBucketAffinities.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpBucketLabels.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpMetricOverrides.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpModifierPatches.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpNppEthnicity.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpPartyTiers.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpReadinessExpectations.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpSectorWeights1953.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpUnionNames.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/geographyFacts.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/institutionsFacts.ts",
+    bucket: "A",
+    phase: "D7",
+    source: "derived",
+  },
+  {
     file: "src/lib/countries/jp/data/jpRegions1953.ts",
     bucket: "D",
     phase: "D6",
@@ -818,22 +884,6 @@ export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: strin
   {
     file: "scripts/countries/verify-jp-runtime.ts",
     why: "Created by D3 to prove every forwarded registry resolves at runtime. A circular import typechecks cleanly and yields undefined, so this runs outside vitest to exercise the app's own module-init order. It owns no Japan fact.",
-  },
-  {
-    file: "scripts/countries/audit-jp-snapshot.ts",
-    why: "Created by D3 to audit the fixture for entries whose functions were dropped silently. It reads the snapshot and reports; it owns no Japan fact and writes nothing.",
-  },
-  {
-    file: "scripts/countries/correct-jp-snapshot.ts",
-    why: "Created by D3 to repair three entries the D1 extractor recorded incompletely. It rewrites only those three, only while their registries still hold pre-move values, and owns no Japan fact itself.",
-  },
-  {
-    file: "scripts/countries/append-jp-snapshot.ts",
-    why: "Created by D3 to append registries the original emitter missed. It reads registries that have not moved yet and owns no Japan fact itself; the plan forbids re-emitting the fixture, so appending is the only sanctioned path.",
-  },
-  {
-    file: "scripts/countries/emit-jp-snapshot.ts",
-    why: "Created by D1 as the one-off snapshot emitter. It reads every registry Japan will move but owns no Japan fact itself, so there is nothing to relocate.",
   },
   {
     file: "src/lib/countries/contract.ts",

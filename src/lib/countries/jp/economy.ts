@@ -188,3 +188,93 @@ export const JP_ECONOMY: CountryEconomy = {
   sovereignCorpLegalStructure: "jp_kk" as LegalStructureId,
   m2ToGdp1953: 0.45,
 };
+
+/**
+ * Index-fund product names offered on the Japanese exchange.
+ *
+ * Forwarded from `src/lib/indexFunds/fundDefinitions.ts`.
+ */
+export const JP_INDEX_FUND_NAMES: Record<number, string> = {
+  25: "Nikkei 25 Index",
+  50: "Nikkei 50 Index",
+};
+
+/**
+ * Liquid capital an NPP needs before it will buy into an index fund.
+ *
+ * Forwarded from `src/lib/indexFunds/nppInvesting.ts`.
+ *
+ * ⚠ DENOMINATED IN YEN, LIKE EVERY OTHER ENTRY IN THAT TABLE. The values are
+ * LOCAL currency, not anchor units, so Japan's 34,000 is not comparable to the
+ * US 80,000 -- it is roughly two orders of magnitude smaller in real terms. Do
+ * not "correct" it toward its neighbours.
+ */
+export const JP_NPP_INVESTING_MINIMUM = 34000;
+
+/**
+ * Whether Japan's authored 1953 GDP figures are denominated in USD or in yen.
+ *
+ * Forwarded from `GDP_DENOMINATION_1953` in
+ * `src/lib/seeds/reference/gdpDenomination.ts`.
+ *
+ * ⚠ 1953 ONLY. That registry is the era table and holds no other preset, so
+ * this says nothing about how Japan's 1979 or modern series are denominated.
+ * A later era needing its own answer gets its own const, not a widened one.
+ *
+ * ⚠ "usd" IS LOAD-BEARING. Japan's authored 1953 macro series are already in
+ * USD, so the seeder must NOT convert them again at the JPY rate. Flipping this
+ * to "local" silently multiplies Japan's 1953 GDP by roughly the yen rate.
+ */
+export const JP_GDP_DENOMINATION_1953 = "usd";
+
+/** Which budget field carries central-to-region transfers. */
+export const JP_REGIONAL_GRANT_FIELD = "nationalGrant";
+
+/**
+ * Median-income band used to score the household-income metric.
+ *
+ * Forwarded from `src/lib/utils/metricScoring.ts`.
+ *
+ * ⚠ IN YEN. 5,500,000 to 2,000,000 is a yen band, which is why it is three
+ * orders of magnitude above the US entry in the same table. The scorer reads
+ * each country's band against that country's own local-currency income.
+ */
+export const JP_MEDIAN_INCOME_BAND = { best: 5_500_000, worst: 2_000_000 };
+
+/** Seed sector specialisation for Japanese regions with no authored override. */
+export const JP_SECTOR_SPECIALIZATION = {
+  primary: "automobiles",
+  secondary: "technology",
+} as const;
+
+/**
+ * Central-government grant multiplier applied to regional budgets at seed.
+ *
+ * Forwarded from `src/lib/seeds/reference/budgets.ts`.
+ */
+export const JP_GRANT_MULTIPLIER = 0.018;
+
+/** Budget categories Japan overrides beyond the shared defaults. */
+export const JP_EXTRA_OVERRIDE_CATEGORIES = ["infrastructure", "social"] as const;
+
+/**
+ * Default per-region tax rates applied when Japan's regions are seeded.
+ *
+ * Forwarded from `generateStateBudgets` in `src/lib/seeds/reference/budgets.ts`.
+ *
+ * ⚠ ZERO IS A RATE, NOT A GAP. Japanese prefectures levy no regional income
+ * or sales tax -- those are national -- so the zeros say "this tier does not tax
+ * that base", which is different from "not yet authored". Filling them in gives
+ * Japan a second income tax on top of the national one.
+ *
+ * ⚠ FOREIGN MIRRORS DOMESTIC AT SEED, by the day-one parity rule. The two
+ * are separate fields so legislators can diverge them later through the foreign
+ * corporate tax bills; they start equal deliberately.
+ */
+export const JP_DEFAULT_REGIONAL_TAX_RATES = {
+  incomeTax: 0,
+  salesTax: 0,
+  domesticCorporateTax: 1.5,
+  foreignCorporateTax: 1.5,
+  propertyTax: 1.4,
+};

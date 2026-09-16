@@ -55,7 +55,7 @@ export const NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, num
   DE: 19,
 };
 
-export const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
+const NEUTRAL_STATE_SALES_TAX_BY_COUNTRY: Partial<Record<CountryId, number>> = {
   US: 6,
   UK: 0,
   JP: JP_ECONOMY.tax.neutralStateSalesTax,

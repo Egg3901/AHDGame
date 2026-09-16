@@ -2,6 +2,7 @@ import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { getNationalIdentity, type NationalIdentity } from "@/lib/constants/nationalIdentity";
 import { JP_IDENTITY } from "@/lib/countries/jp/identity";
+import { JP_BANK_TEXT } from "@/lib/countries/jp/identity";
 
 /**
  * Institution identity overlays for the country-pages masthead family
@@ -47,7 +48,7 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 
 // ── Executive ────────────────────────────────────────────────────────────────
 
-export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
+const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   US: {
     glyph: "★",
     serif: "mono",
@@ -234,7 +235,7 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 
 // ── National Policy (code of law) ────────────────────────────────────────────
 
-export const POLICY_TEXT: Record<CountryId, IdentityText> = {
+const POLICY_TEXT: Record<CountryId, IdentityText> = {
   US: {
     glyph: "§",
     serif: "mono",
@@ -450,16 +451,7 @@ const BANK_TEXT: Record<string, { countryId: CountryId; text: IdentityText }> = 
       title: "Bank of England",
     },
   },
-  JP: {
-    countryId: "JP",
-    text: {
-      glyph: "¥",
-      serif: "cjk",
-      registry: "Monetary Authority · Japan",
-      title: "日本銀行",
-      titleEn: "Bank of Japan",
-    },
-  },
+  JP: { countryId: "JP", text: JP_BANK_TEXT },
   CN: {
     countryId: "CN",
     text: {

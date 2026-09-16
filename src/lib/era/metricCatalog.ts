@@ -1,6 +1,10 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { metricCategories, type MetricDefinition } from "@/lib/constants/metricDefinitions";
-import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { JP_CORE5_NORMALS, JP_INCOME_ANCHORS } from "@/lib/countries/jp/geographyFacts";
+import {
+  JP_HEALTH_COVERAGE_BAND,
+  JP_NUCLEAR_SAFETY_WINDOW,
+} from "@/lib/countries/jp/data/jpMetricOverrides";
 
 /**
  * Metric Era Catalog — the single source of truth for how a metric behaves
@@ -111,13 +115,7 @@ export const METRIC_ERA_WINDOWS: Record<string, MetricEraWindow> = {
   nuclearSafety: {
     from: 1957,
     countryOverrides: {
-      JP: {
-        from: 1966,
-        news: {
-          title: "Japan Enters the Atomic Age",
-          body: "At Tōkai, Japan has stepped into the atomic age of electricity. For a nation hungry for power and technological standing, the reactor is more than a machine; it is a statement that Japan intends to master the industries of the future. Officials in Tokyo speak of energy security, engineering skill, and a modern grid fit for a rising economy.\n\nYet the achievement arrives with solemn questions. In fishing towns, factory districts, and university halls, citizens ask how safety will be proven and who will be trusted to prove it. Nuclear safety has entered Japan's national conversation as both a technical standard and a test of public confidence.",
-        },
-      },
+      JP: JP_NUCLEAR_SAFETY_WINDOW,
     },
     news: {
       title: "The Atom Goes to Work",
@@ -410,7 +408,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 1.2 },
       { year: 2040, value: 1.0 },
     ],
-    JP: JP_GEOGRAPHY.core5Normals["gdpGrowth"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["gdpGrowth"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 2.0 },
       { year: 1979, value: 3.5 },
@@ -469,7 +467,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 3.2 },
       { year: 2040, value: 3.5 },
     ],
-    JP: JP_GEOGRAPHY.core5Normals["unemploymentRate"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["unemploymentRate"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 8.0 },
       { year: 1979, value: 7.5 },
@@ -528,7 +526,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 81 },
       { year: 2040, value: 84 },
     ],
-    JP: JP_GEOGRAPHY.core5Normals["lifeExpectancy"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["lifeExpectancy"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 66.9 },
       { year: 1979, value: 72.5 },
@@ -588,7 +586,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 220 },
       { year: 2040, value: 200 },
     ],
-    JP: JP_GEOGRAPHY.core5Normals["violentCrimeRate"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["violentCrimeRate"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 60 },
       { year: 1979, value: 150 },
@@ -647,7 +645,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 10.5 },
       { year: 2040, value: 10 },
     ],
-    JP: JP_GEOGRAPHY.core5Normals["povertyRate"] as NormalAnchor[],
+    JP: JP_CORE5_NORMALS["povertyRate"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 30 },
       { year: 1979, value: 20 },
@@ -901,11 +899,7 @@ export const METRIC_BAND_CURVES: Record<string, MetricBandCurve> = {
         { year: 1979, best: 3, worst: 33 }, // normal 13
         { year: 2019, best: 0, worst: 22 }, // = THRESHOLDS
       ],
-      JP: [
-        { year: 1953, best: 15, worst: 70 }, // normal 40 (NHI universal only in 1961)
-        { year: 1979, best: 0, worst: 22 }, // universal since 1961 → modern band
-        { year: 2019, best: 0, worst: 22 },
-      ],
+      JP: JP_HEALTH_COVERAGE_BAND,
       IE: [
         { year: 1953, best: 12, worst: 62 }, // normal 35 (Mother-and-Child defeat)
         { year: 2019, best: 0, worst: 22 },
@@ -1394,7 +1388,7 @@ export const INCOME_ANCHORS: Partial<Record<CountryId, Array<{ year: number; val
     { year: 1991, value: 28_000 },
     { year: 2019, value: 47_000 },
   ],
-  JP: JP_GEOGRAPHY.incomeAnchors,
+  JP: JP_INCOME_ANCHORS,
   IE: [
     // 1953 re-anchored from 3,100 to 180 (#income-gdp-scale-audit) to match
     // ieMetricPresets1953.ts's newly-authored national medianIncome (the

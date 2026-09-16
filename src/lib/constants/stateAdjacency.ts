@@ -20,7 +20,7 @@
  */
 
 import type { CountryId } from "./countries";
-import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { JP_ADJACENCY_MAP } from "@/lib/countries/jp/geographyFacts";
 
 export type AdjacencyMap = Record<string, readonly string[]>;
 
@@ -141,7 +141,7 @@ const DE_ADJACENCY: AdjacencyMap = {
  * bridges/ferries (KNS↔SHI, CGK↔SHI, CGK↔KYU). HOK↔TOH via the
  * Tsugaru Strait (Seikan Tunnel ferries / rail).
  */
-export const JP_ADJACENCY: AdjacencyMap = {
+const JP_ADJACENCY: AdjacencyMap = {
   HOK: ["TOH"], // sea via Tsugaru Strait
   TOH: ["HOK", "KAN"],
   KAN: ["TOH", "CHU"],
@@ -465,7 +465,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   US: US_ADJACENCY,
   UK: UK_ADJACENCY,
   DE: DE_ADJACENCY,
-  JP: JP_GEOGRAPHY.adjacency,
+  JP: JP_ADJACENCY_MAP,
   CN: CN_ADJACENCY,
   IE: IE_ADJACENCY,
   BR: BR_ADJACENCY,

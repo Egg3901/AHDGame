@@ -248,3 +248,34 @@ export const JP_IDENTITY: CountryIdentity = {
   historicalNames,
   modernNames,
 };
+
+/**
+ * Chrome for Japan's military theatre display.
+ *
+ * Forwarded from `src/lib/military/theaters.ts`.
+ */
+export const JP_THEATER_IDENTITY = {
+  glyph: "日",
+  command: "JOINT STAFF",
+  strip: "◆ 機密 · ACTIVE THEATERS",
+  acc: "#f0a0a0",
+};
+
+/**
+ * Bank of Japan identity text, for the institution header.
+ *
+ * Forwarded from `src/lib/constants/institutionIdentity.ts`, which composes it
+ * with a palette to build the full `InstitutionIdentity`.
+ *
+ * ⚠ `titleEn` IS NOT DECORATION. `title` is rendered in Japanese and
+ * `serif: "cjk"` selects the font that can display it; `titleEn` is what
+ * non-Japanese surfaces fall back to. Dropping it leaves those surfaces with an
+ * empty heading rather than an English one.
+ */
+export const JP_BANK_TEXT = {
+  glyph: "¥",
+  serif: "cjk" as const,
+  registry: "Monetary Authority · Japan",
+  title: "日本銀行",
+  titleEn: "Bank of Japan",
+};

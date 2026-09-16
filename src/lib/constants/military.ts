@@ -1,6 +1,10 @@
 import type { CountryId } from "./countries";
 import type { UnitDomain, Posture, MilitaryUnit, UnitEquipment } from "@/lib/db/types/militaryUnit";
-import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
+import {
+  JP_CABINET_SEAT_IDS,
+  JP_MILITARY_BRANCHES,
+  JP_MILITARY_SCALE,
+} from "@/lib/countries/jp/institutionsFacts";
 
 export interface Branch {
   id: string;
@@ -356,7 +360,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
       establishedYear: 1955,
     },
   ],
-  JP: JP_INSTITUTIONS.military.branches,
+  JP: JP_MILITARY_BRANCHES,
   IE: [
     { id: "army", name: "Irish Army", abbr: "Army", domain: "ground" },
     { id: "navy", name: "Naval Service", abbr: "NS", domain: "naval" },
@@ -532,7 +536,7 @@ export const MILITARY_BRANCHES_BY_COUNTRY: Record<CountryId, Branch[]> = {
 export const MILITARY_COUNTRY_SCALE: Record<CountryId, number> = {
   US: 2.6,
   CN: 2.0,
-  JP: JP_INSTITUTIONS.military.scale,
+  JP: JP_MILITARY_SCALE,
   UK: 1.7,
   DE: 1.0,
   IE: 1.0,
@@ -570,7 +574,7 @@ export const DEFENSE_POSITION_BY_COUNTRY: Record<CountryId, string | null> = {
   UK: "defence_secretary",
   CN: "minister_of_defense",
   DE: "defense_minister",
-  JP: JP_INSTITUTIONS.positions.defense,
+  JP: JP_CABINET_SEAT_IDS.defense,
   IE: "minister_for_defence",
   BR: "minister_of_defence",
   NG: "minister_of_defence",

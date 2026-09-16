@@ -7,6 +7,7 @@ import type { Db } from "mongodb";
 import type { Posture } from "@/lib/db/types/militaryUnit";
 import type { Bloc } from "@/lib/military/bloc";
 import { conflictExists } from "@/lib/db/collections/conflicts";
+import { JP_THEATER_IDENTITY } from "@/lib/countries/jp/identity";
 
 /**
  * Situation-board dressing for a nation's command: its classification strip, the name
@@ -67,7 +68,7 @@ export const COUNTRY_COMMAND_FLAVOR: Record<string, CountryCommandFlavor> = {
     strip: "◆ VERTRAULICHE VERSCHLUSSSACHE",
     acc: EAST_ACC,
   },
-  JP: { glyph: "日", command: "JOINT STAFF", strip: "◆ 機密 · ACTIVE THEATERS", acc: "#f0a0a0" },
+  JP: JP_THEATER_IDENTITY,
   NG: { glyph: "NG", command: "DEFENCE HEADQUARTERS", strip: "◆ RESTRICTED", acc: NEUTRAL_ACC },
   RU: {
     glyph: "RU",

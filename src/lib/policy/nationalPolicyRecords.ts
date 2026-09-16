@@ -45,7 +45,7 @@ export type PolicyRecordLike = Pick<
 
 export type ActiveOrderInfo = NonNullable<PolicyRecordResponse["activeOrder"]>;
 
-export const LEGISLATION_COUNTRY_SCOPES: Record<
+const LEGISLATION_COUNTRY_SCOPES: Record<
   CountryId,
   NonNullable<LegislationType["countryScope"]>
 > = {

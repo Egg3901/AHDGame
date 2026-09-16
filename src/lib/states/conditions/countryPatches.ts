@@ -1,5 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { Condition } from "@/lib/utils/approvalModifiers";
+import { condition as c } from "@/lib/states/conditions/condition";
+import { JP_MODIFIER_PATCHES } from "@/lib/countries/jp/data/jpModifierPatches";
 
 export interface CountryModifierPatch {
   suppress?: boolean;
@@ -8,13 +10,6 @@ export interface CountryModifierPatch {
 }
 
 type CountryPatchMap = Partial<Record<CountryId, Record<string, CountryModifierPatch>>>;
-
-const c = (category: string, metric: string, op: Condition["op"], value: number): Condition => ({
-  category,
-  metric,
-  op,
-  value,
-});
 
 /**
  * Per-country threshold overrides and suppressions. Applied after global (and
@@ -40,49 +35,7 @@ export const COUNTRY_MODIFIER_PATCHES: CountryPatchMap = {
     research_hub: { conditions: [c("economic", "rdIntensity", ">=", 2.0)] },
   },
 
-  JP: {
-    // Nationally low / flat baselines — only fire on meaningful regional spread.
-    universal_healthcare: { suppress: true },
-    low_unemployment: { suppress: true },
-    heavy_public_debt: { suppress: true },
-    high_broadband: { suppress: true },
-    low_broadband: { suppress: true },
-    infrastructure_boom: { suppress: true },
-    balanced_budget: { suppress: true },
-    corruption_concerns: { suppress: true },
-    high_corruption: { suppress: true },
-    high_life_expectancy: { suppress: true },
-    longevity: { suppress: true },
-    aging_population: { suppress: true },
-    safe_streets: {
-      conditions: [
-        c("publicSafety", "violentCrimeRate", "<=", 18),
-        c("publicSafety", "publicSafetyConfidence", ">=", 72),
-      ],
-    },
-    falling_crime: { conditions: [c("publicSafety", "violentCrimeRate", "<=", 17)] },
-    crime_wave: {
-      conditions: [
-        c("publicSafety", "violentCrimeRate", ">=", 26),
-        c("publicSafety", "publicSafetyConfidence", "<=", 58),
-      ],
-    },
-    high_violent_crime: { conditions: [c("publicSafety", "violentCrimeRate", ">=", 27)] },
-    poor_air_quality: { conditions: [c("environment", "airQuality", ">=", 84)] },
-    slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", 0.2)] },
-    research_hub: { conditions: [c("economic", "rdIntensity", ">=", 3.45)] },
-    housing_stress: { conditions: [c("social", "housingAffordability", ">=", 75)] },
-    affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 52)] },
-    high_poverty: { conditions: [c("economic", "povertyRate", ">=", 15)] },
-    green_transition: { conditions: [c("environment", "renewableEnergy", ">=", 32)] },
-    free_press: { conditions: [c("mediaInformation", "pressFreedom", ">=", 74)] },
-    innovation_economy: {
-      conditions: [
-        c("economic", "smallBusinessFormation", ">=", 6),
-        c("education", "workforceSkill", ">=", 82),
-      ],
-    },
-  },
+  JP: JP_MODIFIER_PATCHES,
 
   DE: {
     universal_healthcare: { suppress: true },

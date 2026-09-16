@@ -115,6 +115,7 @@ import { updateGovernmentSeats as updateUKGovernmentSeats } from "@/lib/turn/ukG
 import { getDb } from "@/lib/mongodb";
 import { getGameStatePreset } from "@/lib/db/collections/gameState";
 import { JP_ELECTIONS } from "@/lib/countries/jp/elections";
+import { JP_BILL_PHASE_SHAPE } from "@/lib/countries/jp/elections/billLifecycle";
 
 /** Countries that need a custom updateGovernmentSeats wrapper (e.g. for legacy seed). */
 const SEAT_UPDATE_OVERRIDES: Partial<Record<CountryId, () => Promise<void>>> = {
@@ -166,11 +167,7 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
     fn: (now) => runBillLifecycleForCountry(DE_NATIONAL_CONFIG, now),
     emptyResult: { enacted: 0, failed: 0 },
   },
-  JP: {
-    phaseName: "jpBillLifecycle",
-    fn: runBillLifecycleForJP,
-    emptyResult: { enacted: 0, failed: 0, overrides: 0, cabinetPassed: 0 },
-  },
+  JP: { ...JP_BILL_PHASE_SHAPE, fn: runBillLifecycleForJP },
   IE: {
     phaseName: "ieBillLifecycle",
     fn: (now) => runBillLifecycleForCountry(IE_NATIONAL_CONFIG, now),

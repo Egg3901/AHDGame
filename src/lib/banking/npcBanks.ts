@@ -71,7 +71,7 @@ const DEFAULT_MODERN_NAMES = ["Meridian Banking Group", "Harbourline Financial"]
  * Per-country display flavor. Patterns only; never real bank brands.
  * Absent countries fall back to the defaults above.
  */
-export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string[]>> = {
+const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string[]>> = {
   US: ["Continental Merchants Bank", "Prairie States Savings Bank"],
   UK: ["Midland Counties Bank", "Clydeside Mercantile Bank"],
   JP: JP_IDENTITY.historicalNames,
@@ -89,7 +89,7 @@ export const COUNTRY_HISTORICAL_NAMES: Partial<Record<CountryId, readonly string
   FI: ["Lakeland Savings Bank", "Bothnia Commercial Bank"],
 };
 
-export const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
+const COUNTRY_MODERN_NAMES: Partial<Record<CountryId, readonly string[]>> = {
   US: ["Continental Merchants Bancorp", "Prairie States Financial"],
   UK: ["Midland Counties Banking Group", "Clydeside Financial"],
   JP: JP_IDENTITY.modernNames,

@@ -1,5 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
-import { JP_INSTITUTIONS } from "@/lib/countries/jp/institutions";
+import { JP_LEGISLATIVE_PROCESS } from "@/lib/countries/jp/institutionsFacts";
 
 /** Chamber seating geometry used by the composition + vote-seating charts. */
 export type SeatingStyle = "hemicycle" | "benches" | "horseshoe";
@@ -146,7 +146,7 @@ const DE: LegislativeProcess = {
  * below composes from these consts by shorthand, so the usual "replace the JP
  * entry" pass does not apply here.
  */
-const JP: LegislativeProcess = JP_INSTITUTIONS.legislativeProcess;
+const JP: LegislativeProcess = JP_LEGISLATIVE_PROCESS;
 
 const IE: LegislativeProcess = {
   executive: {

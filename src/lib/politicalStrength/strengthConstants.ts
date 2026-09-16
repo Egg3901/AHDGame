@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { JP_STRENGTH_REGION_COUNT } from "@/lib/countries/jp/geographyFacts";
 
 /**
  * Political Strength reserve and pressure-ladder constants for Phase 3.
@@ -220,7 +221,7 @@ export const REGION_COUNT_BY_COUNTRY: Record<CountryId, number> = {
   US: 50,
   UK: 12,
   DE: 16,
-  JP: 8,
+  JP: JP_STRENGTH_REGION_COUNT,
   IE: 8, // 8 authored planning regions (not the 26 IRL counties)
   BR: 27,
   CN: 7, // 7 authored macro-regions (not the 33 IRL provinces)

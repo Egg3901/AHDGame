@@ -1,24 +1,18 @@
-import { CORPORATION_TYPES } from "@/lib/constants/corporations";
+import { uniform } from "@/lib/seeds/reference/uniformUnionName";
 import type { CorporationType } from "@/lib/constants/corporations";
 import type { CountryId } from "@/lib/constants/countries";
 import type { EraId } from "@/lib/seeds/presetSelector";
+import {
+  JP_UNION_NAMES_1953,
+  JP_UNION_NAMES_1979,
+  JP_UNION_NAMES_1991,
+  JP_UNION_NAMES_1999,
+  JP_UNION_NAMES_2007,
+  JP_UNION_NAMES_MODERN,
+} from "@/lib/countries/jp/data/jpUnionNames";
 
 /** Per-country, per-sector historical union names for a given era. */
 export type UnionNameMap = Partial<Record<CountryId, Partial<Record<CorporationType, string>>>>;
-
-/**
- * One national labour body covering every sector. Used for state-directed
- * single-federation systems (Soviet bloc, Franco Spain, ACFTU) and for
- * countries where only the national confederation is safely attestable for
- * an era. Sectors deliberately omitted from a country's map fall back to
- * `genericUnionName` at lookup time; that generic fallback is preferred over
- * inventing a plausible-sounding but fake historical union.
- */
-function uniform(name: string): Partial<Record<CorporationType, string>> {
-  const map: Partial<Record<CorporationType, string>> = {};
-  for (const type of CORPORATION_TYPES) map[type] = name;
-  return map;
-}
 
 /**
  * Shared modern-era names (2019/2023 family). Era-specific bundles override
@@ -98,25 +92,7 @@ const NAMES_MODERN: UnionNameMap = {
     agriculture: "IG BAU",
     real_estate: "IG BAU",
   },
-  JP: {
-    manufacturing: "Japanese Trade Union Confederation",
-    automobiles: "Confederation of Japan Automobile Workers' Unions",
-    chemical_industries: "UA Zensen",
-    construction: "National Federation of Construction Workers' Unions",
-    energy: "Japanese Federation of Electric Wire and Electric Power Workers' Unions",
-    extraction: "Japan Mining Industry Workers' Union",
-    healthcare: "Japan Federation of Medical Workers' Unions",
-    retail: "UA Zensen",
-    media: "UA Zensen",
-    logistics: "All Japan Seamen's Union",
-    technology: "UA Zensen",
-    financial: "National Federation of Finance Industry Workers' Unions",
-    telecommunications: "UA Zensen",
-    entertainment: "UA Zensen",
-    defense: "Japan Federation of Aviation Industry Workers' Unions",
-    agriculture: "UA Zensen",
-    real_estate: "UA Zensen",
-  },
+  JP: JP_UNION_NAMES_MODERN,
   FR: {
     manufacturing: "CGT Metalworkers' Federation",
     automobiles: "CGT Metalworkers' Federation",
@@ -321,17 +297,7 @@ const NAMES_2007: UnionNameMap = {
     media: "The Newspaper Guild",
     entertainment: "Screen Actors Guild",
   },
-  JP: {
-    ...NAMES_MODERN.JP,
-    chemical_industries: "UI Zensen",
-    retail: "UI Zensen",
-    media: "UI Zensen",
-    technology: "UI Zensen",
-    telecommunications: "UI Zensen",
-    entertainment: "UI Zensen",
-    agriculture: "UI Zensen",
-    real_estate: "UI Zensen",
-  },
+  JP: JP_UNION_NAMES_2007,
   SE: {
     ...NAMES_MODERN.SE,
     energy: "Sif",
@@ -392,17 +358,7 @@ const NAMES_1999: UnionNameMap = {
     entertainment: "IG Medien",
     telecommunications: "Deutsche Postgewerkschaft",
   },
-  JP: {
-    ...NAMES_2007.JP,
-    chemical_industries: "Zensen Dōmei",
-    retail: "Zensen Dōmei",
-    media: "Zensen Dōmei",
-    technology: "Zensen Dōmei",
-    telecommunications: "Zensen Dōmei",
-    entertainment: "Zensen Dōmei",
-    agriculture: "Zensen Dōmei",
-    real_estate: "Zensen Dōmei",
-  },
+  JP: JP_UNION_NAMES_1999,
   IE: {
     ...NAMES_MODERN.IE,
     healthcare: "Irish Nurses Organisation",
@@ -474,23 +430,7 @@ const NAMES_1991: UnionNameMap = {
     extraction: "IG Bergbau und Energie",
     agriculture: "Gewerkschaft Gartenbau, Land- und Forstwirtschaft",
   },
-  JP: {
-    manufacturing: "Japanese Trade Union Confederation",
-    automobiles: "Confederation of Japan Automobile Workers' Unions",
-    chemical_industries: "Japanese Federation of Synthetic Chemistry Workers' Unions",
-    construction: "National Federation of Construction Workers' Unions",
-    // Attribution to a single-era energy federation is uncertain; this is the
-    // long-standing electric power workers' federation label.
-    energy: "Japanese Federation of Electric Wire and Electric Power Workers' Unions",
-    extraction: "Japan Coal Miners' Union",
-    healthcare: "Japan Federation of Medical Workers' Unions",
-    retail: "Zensen Dōmei",
-    media: "Japan Federation of Publishing Workers' Unions",
-    logistics: "All Japan Seamen's Union",
-    technology: "Japanese Federation of Electrical Machine Workers' Unions",
-    financial: "National Federation of Finance Industry Workers' Unions",
-    telecommunications: "Japan Telecommunications Workers' Union",
-  },
+  JP: JP_UNION_NAMES_1991,
   RU: uniform("General Confederation of Trade Unions"),
   RO: uniform("National Confederation of Free Trade Unions of Romania"),
   CS: uniform("Czech and Slovak Confederation of Trade Unions"),
@@ -606,21 +546,7 @@ const NAMES_1979: UnionNameMap = {
     media: "IG Druck und Papier",
     entertainment: "Deutsche Angestellten-Gewerkschaft",
   },
-  JP: {
-    manufacturing: "General Council of Trade Unions of Japan",
-    automobiles: "Confederation of Japan Automobile Workers' Unions",
-    chemical_industries: "Japanese Federation of Synthetic Chemistry Workers' Unions",
-    construction: "National Federation of Construction Workers' Unions",
-    energy: "Japanese Federation of Electric Wire and Electric Power Workers' Unions",
-    extraction: "Japan Coal Miners' Union",
-    healthcare: "Japan Federation of Medical Workers' Unions",
-    retail: "Zensen Dōmei",
-    media: "Japan Federation of Publishing Workers' Unions",
-    logistics: "All Japan Seamen's Union",
-    technology: "Japanese Federation of Electrical Machine Workers' Unions",
-    financial: "National Federation of Finance Industry Workers' Unions",
-    telecommunications: "Japan Telecommunications Workers' Union",
-  },
+  JP: JP_UNION_NAMES_1979,
   RU: uniform("All-Union Central Council of Trade Unions"),
   PL: uniform("Central Council of Trade Unions"),
   HU: uniform("National Council of Trade Unions"),
@@ -758,13 +684,7 @@ const NAMES_1953: UnionNameMap = {
     agriculture: "Gewerkschaft Gartenbau, Land- und Forstwirtschaft",
     real_estate: "IG Bau-Steine-Erden",
   },
-  JP: {
-    ...uniform("General Council of Trade Unions of Japan"),
-    automobiles: "All Japan Automobile Industry Workers' Union",
-    telecommunications: "Japan Telecommunications Workers' Union",
-    logistics: "All Japan Seamen's Union",
-    extraction: "Japan Coal Miners' Union",
-  },
+  JP: JP_UNION_NAMES_1953,
   RO: uniform("General Confederation of Labour"),
   NG: uniform("All-Nigeria Trade Union Federation"),
   TR: {

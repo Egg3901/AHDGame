@@ -7,6 +7,8 @@
  */
 import type { Db } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import { checkGovernmentFormation } from "@/lib/constants/readinessChecks";
+import { JP_READINESS_EXPECTATIONS } from "@/lib/countries/jp/data/jpReadinessExpectations";
 
 export interface ReadinessCheck {
   name: string;
@@ -72,18 +74,6 @@ async function checkCNCountryLeaderStates(db: Db): Promise<ReadinessCheck> {
 }
 
 /** CN: government formation doc */
-async function checkGovernmentFormation(countryId: CountryId, db: Db): Promise<ReadinessCheck> {
-  const gov = await db
-    .collection<{ _id: string; status?: string; cycle?: number }>("governmentFormations")
-    .findOne({ _id: countryId });
-  return {
-    name: "GovernmentFormation",
-    status: gov ? "ok" : "missing",
-    detail: gov
-      ? `Status: ${gov.status}, cycle: ${gov.cycle}`
-      : `No ${countryId} governmentFormations doc`,
-  };
-}
 
 /** DE: Landeslisten populated. */
 async function checkDELandeslisten(db: Db): Promise<ReadinessCheck> {
@@ -154,22 +144,7 @@ export const COUNTRY_READINESS_EXPECTATIONS: Partial<
     legislationTypesMin: 1,
     extras: [(db) => checkGovernmentFormation("DE", db), checkDELandeslisten],
   },
-  JP: {
-    regionCount: 47,
-    partyMin: 5,
-    partyRoster: "LDP, CDP, Komeito, JIP, JCP",
-    statePartyOrgMin: 235,
-    seatMin: 713,
-    seatNote: "Expected ≥713 (465 Shugiin + 248 Sangiin)",
-    nppMin: 700,
-    nppNote: "Expected ≥700 Diet NPPs",
-    officialMin: 700,
-    demographicsCount: 47,
-    stateMetricsFilter: { countryId: "JP" },
-    stateMetricsCount: 47,
-    legislationTypesMin: 0,
-    extras: [(db) => checkGovernmentFormation("JP", db)],
-  },
+  JP: JP_READINESS_EXPECTATIONS,
   CN: {
     regionCount: 7,
     partyMin: 3,

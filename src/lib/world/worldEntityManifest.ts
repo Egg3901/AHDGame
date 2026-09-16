@@ -237,7 +237,7 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
 };
 
 /** UN admission year priors for CountryConfig sovereigns (strong defaults). */
-export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
+const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   US: 1945,
   UK: 1945,
   FR: 1945,

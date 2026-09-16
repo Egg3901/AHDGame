@@ -1,3 +1,5 @@
+import { JP_GDP_DENOMINATION_1953 } from "@/lib/countries/jp/economy";
+
 /**
  * Per-country GDP denomination marker for the 1953 preset.
  *
@@ -70,7 +72,7 @@ export const GDP_DENOMINATION_1953: Record<string, GdpDenomination> = {
   AT: "local",
   FI: "local",
   DE: "local",
-  JP: "usd",
+  JP: JP_GDP_DENOMINATION_1953,
   CN: "usd",
   BR: "local",
   IE: "local",

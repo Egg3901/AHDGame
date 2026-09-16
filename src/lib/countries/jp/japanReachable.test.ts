@@ -22,23 +22,27 @@ import { MECHANICS_BY_COUNTRY } from "@/lib/constants/cabinetMechanics";
 /**
  * JAPAN IS STILL REACHABLE THROUGH THE REGISTRIES CONSUMERS ACTUALLY USE.
  *
- * ⚠️ THIS IS THE CHECK THAT SURVIVES. The pre-move fixture in
- * `__snapshots__/jp.pre-move.json` proves the FOLDER holds the right values; it
- * says nothing about whether anything still reaches them. Those are different
- * failures, and only one of them is caught by the other test.
+ * ⚠️ THIS IS THE CHECK THAT SURVIVED. Through D2-D6 a committed fixture,
+ * `__snapshots__/jp.pre-move.json`, proved the FOLDER held the right values. It
+ * said nothing about whether anything still REACHED them -- two different
+ * failures, and it caught only one. D7 deleted it: with the move finished it
+ * pinned a world that no longer exists, so the first legitimate edit to Japan's
+ * data would have failed it, and the only fix available would have been to
+ * rewrite the fixture -- at which point it proved nothing at all.
+ *
+ * This file is what replaced it. That is why the expected values below are
+ * written out inline rather than read from anywhere.
  *
  * ⚠️ WHY IT MATTERS MOST NOW. 51 of 74 moved registries are
  * `Partial<Record<CountryId, X>>`. Dropping Japan's key from one of those is NOT
  * a type error -- the registry is still valid, Japan just silently stops
- * existing in it. Nothing else in this repo catches that: typecheck is happy,
- * the folder still holds the data, and the harness still passes.
+ * existing in it. Nothing else in this repo catches that: typecheck is happy and
+ * the folder still holds the data, so every check that looks AT the folder
+ * passes. Only a check that looks THROUGH a registry fails, and this is it.
  *
- * ⚠️ EXPECTED VALUES ARE INLINE, DELIBERATELY. They came from the pre-move
- * snapshot, but they are written out here so this test outlives it. D7 retires
- * the fixture comparison -- once the forwarders are gone it pins a world that no
- * longer exists, and every legitimate future edit to Japan's data would fail it.
- * A permanent regression test cannot depend on a file that is about to be
- * deleted.
+ * ⚠️ EXPECTED VALUES ARE INLINE, DELIBERATELY. They were transcribed from the
+ * pre-move snapshot while it still existed, precisely so this test would outlive
+ * it. A permanent regression test cannot depend on a fixture that is going away.
  *
  * These are ANCHORS, not a full inventory: one value per subject area, chosen so
  * that a whole registry going missing fails loudly. Adding Japan facts does not

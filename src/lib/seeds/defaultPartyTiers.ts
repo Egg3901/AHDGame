@@ -1,3 +1,5 @@
+import { JP_PARTY_TIERS } from "@/lib/countries/jp/data/jpPartyTiers";
+
 /**
  * Major default parties by country, for seed-time tier assignment (D5, the
  * 2026-06-18 tier proposal). Any default party NOT listed here seeds **Minor**;
@@ -31,24 +33,7 @@ export const MAJOR_DEFAULT_PARTIES: Record<string, Array<{ abbr: string; presets
     },
   ],
   DE: [{ abbr: "SPD" }, { abbr: "CDU" }, { abbr: "GRN", presets: ["2019-default"] }],
-  JP: [
-    // LDP formed Nov 1955; in 1953 the Liberal Party (RYO) was the major conservative force.
-    // LDP is Major for all eras except 1953-default.
-    {
-      abbr: "LDP",
-      presets: [
-        "1979-default",
-        "1991-default",
-        "1999-default",
-        "2007-default",
-        "2019-default",
-        "2023-default",
-      ],
-    },
-    { abbr: "RYO", presets: ["1953-default"] },
-    { abbr: "JSP" },
-    { abbr: "CDP" },
-  ],
+  JP: JP_PARTY_TIERS,
   BR: [
     { abbr: "PMDB" },
     { abbr: "PFL" },

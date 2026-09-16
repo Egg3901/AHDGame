@@ -57,7 +57,7 @@ export interface ArchetypeRegionCensus {
 
 export type RegionCensus = Layer1Config | ArchetypeRegionCensus;
 
-export type PresetBundles = Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
+type PresetBundles = Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
 
 /**
  * Per-country census bundles keyed by preset. New eras/countries register here.

@@ -1,6 +1,7 @@
 import { metricCategories } from "@/lib/constants/metricDefinitions";
 import { getEraBand, getIncomeAnchor, isMetricActive } from "@/lib/era/metricCatalog";
 import { toUsd } from "./fxNormalize";
+import { JP_MEDIAN_INCOME_BAND } from "@/lib/countries/jp/economy";
 
 /**
  * Absolute metric scoring — converts a raw metric value to a 0–100 score
@@ -166,7 +167,7 @@ export const MEDIAN_INCOME_THRESHOLDS: Record<string, ScoreThreshold> = {
   UK: { best: 44_000, worst: 16_000 },
   DE: { best: 62_000, worst: 22_000 },
   IE: { best: 52_000, worst: 19_000 },
-  JP: { best: 5_500_000, worst: 2_000_000 },
+  JP: JP_MEDIAN_INCOME_BAND,
   BR: { best: 35_000, worst: 13_000 },
   CN: { best: 125_000, worst: 45_000 },
   NG: { best: 1_500_000, worst: 540_000 },

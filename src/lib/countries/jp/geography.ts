@@ -1,3 +1,10 @@
+import {
+  JP_ADJACENCY_MAP,
+  JP_CONTINENT,
+  JP_CORE5_NORMALS,
+  JP_INCOME_ANCHORS,
+  JP_ISO_NUMERIC,
+} from "./geographyFacts";
 import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
@@ -58,16 +65,6 @@ import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
  */
 
 /** Japan's eight regions and their neighbours. */
-const adjacency: Record<string, string[]> = {
-  HOK: ["TOH"],
-  TOH: ["HOK", "KAN"],
-  KAN: ["TOH", "CHU"],
-  CHU: ["KAN", "KNS"],
-  KNS: ["CHU", "CGK", "SHI"],
-  CGK: ["KNS", "SHI", "KYU"],
-  SHI: ["KNS", "CGK"],
-  KYU: ["CGK"],
-};
 
 const regionNames: Record<string, string> = {
   HOK: "Hokkaido",
@@ -133,25 +130,6 @@ const populationAnchors = {
   "2019-default": jpPopulationAnchors2019,
   "1991-default": jpPopulationAnchors1991,
 };
-
-const incomeAnchors = [
-  {
-    year: 1953,
-    value: 700,
-  },
-  {
-    year: 1979,
-    value: 2900000,
-  },
-  {
-    year: 1991,
-    value: 4500000,
-  },
-  {
-    year: 2019,
-    value: 5500000,
-  },
-];
 
 const calibrationTargets = {
   "1979": {
@@ -367,140 +345,43 @@ const mapRegistry = {
  * is no CORE5_NORMALS.JP to read: these are Japan's slices lifted out per
  * metric, and `global` stays where it is because it belongs to everyone.
  */
-const core5Normals = {
-  gdpGrowth: [
-    {
-      year: 1953,
-      value: 8,
-    },
-    {
-      year: 1979,
-      value: 5,
-    },
-    {
-      year: 1991,
-      value: 3.5,
-    },
-    {
-      year: 2019,
-      value: 0.8,
-    },
-    {
-      year: 2040,
-      value: 0.8,
-    },
-  ],
-  unemploymentRate: [
-    {
-      year: 1953,
-      value: 2,
-    },
-    {
-      year: 1979,
-      value: 2,
-    },
-    {
-      year: 1991,
-      value: 2.1,
-    },
-    {
-      year: 2019,
-      value: 2.4,
-    },
-    {
-      year: 2040,
-      value: 2.6,
-    },
-  ],
-  lifeExpectancy: [
-    {
-      year: 1953,
-      value: 63,
-    },
-    {
-      year: 1979,
-      value: 76,
-    },
-    {
-      year: 1991,
-      value: 79,
-    },
-    {
-      year: 2019,
-      value: 84.4,
-    },
-    {
-      year: 2040,
-      value: 87,
-    },
-  ],
-  violentCrimeRate: [
-    {
-      year: 1953,
-      value: 150,
-    },
-    {
-      year: 1979,
-      value: 80,
-    },
-    {
-      year: 1991,
-      value: 50,
-    },
-    {
-      year: 2019,
-      value: 25,
-    },
-    {
-      year: 2040,
-      value: 25,
-    },
-  ],
-  povertyRate: [
-    {
-      year: 1953,
-      value: 30,
-    },
-    {
-      year: 1979,
-      value: 12,
-    },
-    {
-      year: 1991,
-      value: 12,
-    },
-    {
-      year: 2019,
-      value: 15.5,
-    },
-    {
-      year: 2040,
-      value: 14,
-    },
-  ],
-};
 
 export const JP_GEOGRAPHY: CountryGeography = {
-  continent: "Asia",
-  isoNumeric: "392",
+  continent: JP_CONTINENT,
+  isoNumeric: JP_ISO_NUMERIC,
   unMemberSince: 1956,
   worldRegion: "asia",
   nppCapitalState: "KAN",
   nonPartyIndependentBias: 1.5,
-  adjacency,
+  adjacency: JP_ADJACENCY_MAP,
   regionNames,
   demographicCategoryIds,
   conscription,
   populationMultipliers,
   populationAnchors,
-  incomeAnchors,
+  incomeAnchors: JP_INCOME_ANCHORS,
   calibrationTargets,
   era1991Patches,
   hazardGroups,
   mapRegistry,
-  core5Normals,
+  core5Normals: JP_CORE5_NORMALS,
   regionBundles,
   censusBundles,
   metricPresets,
   rawMetrics: jpStateMetrics,
 };
+
+/**
+ * Re-exported from `./geographyFacts`, which holds them in a module with no
+ * value imports so client-reachable registries can read them without pulling
+ * this module's region and census datasets into the browser bundle.
+ */
+export {
+  JP_ADJACENCY_MAP,
+  JP_CONTINENT,
+  JP_CORE5_NORMALS,
+  JP_INCOME_ANCHORS,
+  JP_ISO_NUMERIC,
+  JP_MAP_ANCHOR,
+  JP_STRENGTH_REGION_COUNT,
+} from "./geographyFacts";

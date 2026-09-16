@@ -116,7 +116,7 @@ import { getStateResourceCapacity, lookupStateResourceCapacity } from "./stateRe
  * the seed so a fresh world doesn't depend on the backfill migration ever
  * running.
  */
-export const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
+const SOVEREIGN_CORP_LEGAL_STRUCTURE: Partial<Record<CountryId, LegalStructureId>> = {
   US: "us_c_corp",
   UK: "uk_plc",
   JP: JP_ECONOMY.sovereignCorpLegalStructure,
@@ -496,6 +496,11 @@ function derivePolicyRevenueLines(
  */
 import { POLITICAL_LEGISLATION_EXCLUDED_SCOPES as POLITICAL_LEGISLATION_OLD_SCOPES } from "@/lib/politicalMetrics/pipelinePreset";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import {
+  JP_DEFAULT_REGIONAL_TAX_RATES,
+  JP_EXTRA_OVERRIDE_CATEGORIES,
+  JP_GRANT_MULTIPLIER,
+} from "@/lib/countries/jp/economy";
 
 /**
  * Authored historical fiscal baselines for 1953 (Korean War defense shares,
@@ -571,7 +576,7 @@ const BASELINE_OVERRIDE_CATEGORIES = ["defense", "healthcare", "health"] as cons
  */
 const EXTRA_OVERRIDE_CATEGORIES_BY_COUNTRY: Partial<Record<string, readonly string[]>> = {
   CN: ["infrastructure"],
-  JP: ["infrastructure", "social"],
+  JP: JP_EXTRA_OVERRIDE_CATEGORIES,
   DE: ["welfare", "transport", "education", "other"],
   BR: ["socialSecurity", "infrastructure", "education", "other"],
   AT: ["socialSecurity", "education", "infrastructure", "other"],
@@ -6269,13 +6274,7 @@ export function generateStateBudgets(
         foreignCorporateTax: 1,
         propertyTax: 1.6,
       },
-      JP: {
-        incomeTax: 0,
-        salesTax: 0,
-        domesticCorporateTax: 1.5,
-        foreignCorporateTax: 1.5,
-        propertyTax: 1.4,
-      },
+      JP: JP_DEFAULT_REGIONAL_TAX_RATES,
       DE: {
         incomeTax: 0,
         salesTax: 0,
@@ -6312,7 +6311,7 @@ export function generateStateBudgets(
     const GRANT_MULTIPLIERS: Record<string, number> = {
       US: 0.012,
       UK: 0.022,
-      JP: 0.018,
+      JP: JP_GRANT_MULTIPLIER,
       DE: 0.02,
       IE: 0.022, // similar to UK — centralised parliamentary transfers
       BR: 0.015, // federal transfers to states
