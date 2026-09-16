@@ -7,6 +7,7 @@ vi.mock("@/lib/admin/spawnNppCorporation", () => ({
 }));
 import { spawnNppCorporation } from "@/lib/admin/spawnNppCorporation";
 import { nppFoundCorporation } from "./nppFoundCorporation";
+import { stubMarketizationDb } from "@/lib/test-utils/stubMarketizationDb";
 
 describe("nppFoundCorporation", () => {
   const founderId = new ObjectId();
@@ -35,12 +36,17 @@ describe("nppFoundCorporation", () => {
       .fn()
       .mockResolvedValue({ _id: founderId, nppInvestmentCashAnchor: 500_000 });
     nppUpdateOne = vi.fn().mockResolvedValue({});
-    db = {
-      collection: (name: string) =>
-        name === "corporations"
-          ? { findOne: corpFindOne, updateOne: corpUpdateOne }
-          : { findOneAndUpdate: nppFindOneAndUpdate, updateOne: nppUpdateOne },
-    } as unknown as Db;
+    // Layered under the marketization stub so the command-economy guard can
+    // resolve. Year 1970 leaves US permitted and RU/CN blocked.
+    db = stubMarketizationDb({
+      currentYear: 1970,
+      base: {
+        collection: (name: string) =>
+          name === "corporations"
+            ? { findOne: corpFindOne, updateOne: corpUpdateOne }
+            : { findOneAndUpdate: nppFindOneAndUpdate, updateOne: nppUpdateOne },
+      } as unknown as Db,
+    });
   });
 
   it("founds a corporation: deducts the fee, spawns, and reassigns CEO when a different NPP was auto-selected", async () => {
@@ -154,5 +160,66 @@ describe("nppFoundCorporation", () => {
       reason: "NPP has no home state to headquarter a corporation in.",
     });
     expect(nppFindOneAndUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("nppFoundCorporation - command economy", () => {
+  const founderId = new ObjectId();
+  const base = {
+    _id: founderId,
+    party: "1",
+    personality: { loyalty: 50, ambition: 70, stubbornness: 20 },
+  };
+
+  function guardDb() {
+    // Any access to `corporations` or `npps` means the guard did not stop first.
+    return stubMarketizationDb({
+      currentYear: 1970,
+      base: {
+        collection: (name: string) => {
+          throw new Error(`guard should have refused before touching ${name}`);
+        },
+      } as unknown as Db,
+    });
+  }
+
+  it("refuses in the USSR without deducting a fee or spawning", async () => {
+    const res = await nppFoundCorporation(
+      guardDb(),
+      { ...base, countryId: "RU", homeState: "CEN" },
+      "technology",
+      100_000,
+      50,
+      1
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toContain("command economy");
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  it("refuses in China, which is dial-governed and carried no config flag", async () => {
+    const res = await nppFoundCorporation(
+      guardDb(),
+      { ...base, countryId: "CN", homeState: "HB" },
+      "technology",
+      100_000,
+      50,
+      1
+    );
+    expect(res.ok).toBe(false);
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
+  });
+
+  it("refuses in a union republic, which carried no config flag either", async () => {
+    const res = await nppFoundCorporation(
+      guardDb(),
+      { ...base, countryId: "UKR", homeState: "UKR_KYI" },
+      "technology",
+      100_000,
+      50,
+      1
+    );
+    expect(res.ok).toBe(false);
+    expect(spawnNppCorporation).not.toHaveBeenCalled();
   });
 });

@@ -31,6 +31,20 @@ function makeDb(countryId: string, baseRate?: number) {
   const db = {
     corpInsertOne,
     collection: vi.fn().mockImplementation((name: string) => {
+      // The founding route's command-economy gate reads these two. It fails
+      // CLOSED, so a db that does not serve them refuses every founding with a
+      // 403 - including in market economies like JP/US/UK.
+      if (name === "gameState") {
+        return { findOne: async () => ({ _id: "current", currentYear: 1970 }) };
+      }
+      if (name === "federalBudget") {
+        // `find` serves the gate's marketization read; `findOne` serves
+        // readInvestorConfidence further down the founding path.
+        return {
+          find: () => ({ toArray: async () => [] }),
+          findOne: async () => null,
+        };
+      }
       if (name === "exchangeRates")
         return {
           find: () => ({
@@ -196,6 +210,18 @@ describe("POST /api/corporations — forex enabled", () => {
     // makeDb only funds USD/JPY; UK founder needs GBP cash for the debit.
     character.currencyBalances = { personal: { GBP: 2_000_000 } };
     db.collection = vi.fn().mockImplementation((name: string) => {
+      // This test replaces `db.collection` wholesale, so it needs the
+      // command-economy gate's two reads as well; the gate fails CLOSED and
+      // would otherwise refuse UK founding with a 403.
+      if (name === "gameState") {
+        return { findOne: async () => ({ _id: "current", currentYear: 1970 }) };
+      }
+      if (name === "federalBudget") {
+        return {
+          find: () => ({ toArray: async () => [] }),
+          findOne: async () => null,
+        };
+      }
       if (name === "exchangeRates") return { find: () => ({ toArray: async () => [] }) };
       if (name === "corporations") {
         return {

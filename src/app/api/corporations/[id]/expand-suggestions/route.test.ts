@@ -44,6 +44,11 @@ beforeEach(async () => {
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
+  // The command-economy gate reads the world year to resolve each country's
+  // marketization level. Without it every country reads as fully market and the
+  // gate stops blocking, so the exclusion assertions below go vacuous.
+  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
+
   const { requireBasicAuth } = await import("@/lib/api/requireAuth");
   vi.mocked(requireBasicAuth).mockResolvedValue({
     ok: true,
@@ -77,6 +82,7 @@ describe("GET /api/corporations/[id]/expand-suggestions (mode=unowned)", () => {
     });
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
+      currentYear: 1970,
       currentTurn: 148,
     });
 

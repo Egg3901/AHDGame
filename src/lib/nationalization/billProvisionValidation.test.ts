@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Corporation } from "@/lib/db/types";
+import { stubMarketizationDb } from "@/lib/test-utils/stubMarketizationDb";
 
 describe("validateNationalizationProvisions", () => {
   let db: MockDb;
@@ -124,5 +125,72 @@ describe("validateNationalizationProvisions", () => {
     const { validateNationalizationProvisions } = await import("./billProvisionValidation");
     const res = await validateNationalizationProvisions(db as unknown as Db, [], "US");
     expect(res.ok).toBe(false);
+  });
+});
+
+describe("validateNationalizationProvisions - command economy", () => {
+  /**
+   * Regression guard for leak L3. `privatizeAsset` refuses a command economy and
+   * `legislativePrivatize` swallows that throw so one bad provision cannot abort a
+   * bill's enactment. Without this authoring-time check a USSR privatization bill
+   * would pass its vote and then silently do nothing, with no feedback to anyone.
+   */
+  it("rejects a privatize provision in a command economy with a 403", async () => {
+    const db = stubMarketizationDb({ currentYear: 1970, base: createMockDb() as unknown as Db });
+    const { validateNationalizationProvisions } = await import("./billProvisionValidation");
+    const res = await validateNationalizationProvisions(
+      db,
+      [
+        {
+          type: "privatize",
+          sourceNationalCorporationId: new ObjectId().toHexString(),
+          selections: [{ sectorId: new ObjectId().toHexString(), carveFraction: 1 }],
+          newCorpName: "Soviet Spin Out",
+        },
+      ],
+      "RU"
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.status).toBe(403);
+      expect(res.error).toContain("command economy");
+    }
+  });
+
+  it("rejects in China too, which is dial-governed and never carried a config flag", async () => {
+    const db = stubMarketizationDb({ currentYear: 1970, base: createMockDb() as unknown as Db });
+    const { validateNationalizationProvisions } = await import("./billProvisionValidation");
+    const res = await validateNationalizationProvisions(
+      db,
+      [
+        {
+          type: "privatize",
+          sourceNationalCorporationId: new ObjectId().toHexString(),
+          selections: [{ sectorId: new ObjectId().toHexString(), carveFraction: 1 }],
+          newCorpName: "Beijing Spin Out",
+        },
+      ],
+      "CN"
+    );
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.status).toBe(403);
+  });
+
+  it("does NOT reject a nationalize provision in a command economy", async () => {
+    // Taking things INTO state hands is exactly what a command economy does.
+    const mock = createMockDb();
+    const corpId = new ObjectId();
+    mock.collection("corporations");
+    mock.collectionMocks.corporations.findOne.mockResolvedValue({
+      _id: corpId,
+      countryId: "RU",
+    } as unknown as Corporation);
+    const { validateNationalizationProvisions } = await import("./billProvisionValidation");
+    const res = await validateNationalizationProvisions(
+      mock as unknown as Db,
+      [{ type: "nationalize", targetCorporationId: corpId.toHexString() }],
+      "RU"
+    );
+    expect(res.ok).toBe(true);
   });
 });

@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { privateEnterpriseBlockedByYear } from "@/lib/economy/queries/privateEnterpriseRegime";
 import { CORPORATION_TYPES, CORPORATION_TYPE_LABELS } from "@/lib/constants/corporations";
 import { getCountryConfig, type CountryId } from "@/lib/constants/countries";
 import { fetchJson } from "@/lib/observability/fetchJson";
@@ -133,6 +135,14 @@ export function NationalizationProvisionEditor({
   onChange: (rows: NatProvisionInput[]) => void;
 }) {
   const code = countryCode.toLowerCase();
+  const turnStatus = useGameTurnStatus();
+  // A privatize provision is refused by the server in a command economy (403 at
+  // bill validation), so do not offer it. Schedule-only: the server re-checks
+  // against the live dial and stays the authority.
+  const privatizeAvailable = !privateEnterpriseBlockedByYear(
+    countryCode.toUpperCase(),
+    turnStatus?.currentYear ?? null
+  );
   const [natCorps, setNatCorps] = useState<RosterCorp[]>([]);
   const [stateOwnership, setStateOwnership] = useState<{
     concentration: number;
@@ -240,7 +250,7 @@ export function NationalizationProvisionEditor({
               className="flex-1 rounded-lg border border-card-border bg-background px-2 py-1.5 text-sm"
             >
               <option value="nationalize">Nationalize a corporation/sector</option>
-              <option value="privatize">Privatize a state holding</option>
+              {privatizeAvailable && <option value="privatize">Privatize a state holding</option>}
               <option value="designate_strategic_sector">Designate a strategic sector</option>
             </select>
             <button

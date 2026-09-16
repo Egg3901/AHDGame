@@ -28,11 +28,17 @@ beforeEach(async () => {
   const { getDb } = await import("@/lib/mongodb");
   vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
 
+  // The command-economy gate reads the world year to resolve each country's
+  // marketization level. Without it every country reads as fully market and the
+  // gate stops blocking, so the exclusion assertions below go vacuous.
+  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
+
   db.collectionMocks.states.find.mockReturnValue({
     project: vi.fn().mockReturnThis(),
     toArray: vi.fn().mockResolvedValue([
       { _id: "CA", name: "California", countryId: "US" },
       { _id: "UKR", name: "Ukraine", countryId: "RU" },
+      { _id: "BLR_MIN", name: "Minsk", countryId: "BLR" },
     ]),
   });
 });
@@ -90,6 +96,7 @@ describe("GET /api/sectors country identity (ticket #1271)", () => {
     // listed it as "Russia" while every other surface disagreed.
     db.collectionMocks.gameState.findOne.mockResolvedValue({
       _id: "current",
+      currentYear: 1970,
       preset: "1953-default",
     });
 
@@ -348,5 +355,40 @@ describe("GET /api/sectors (view=owned)", () => {
       countryName: "Japan",
       revenueAnchor: 100_000,
     });
+  });
+});
+
+describe("GET /api/sectors union-republic coverage", () => {
+  /**
+   * Found during the branch audit. The blocked-country lookup was keyed on
+   * `COUNTRY_ORDER`, which omits BLR, BAL and UKR, so the union republics were
+   * never asked about and their unowned markets were advertised as capture
+   * opportunities that `expandSector` then refuses. Harmless while those
+   * countries carried no block; a real gap once the dial started blocking them.
+   */
+  it("excludes union-republic states from the unowned view", async () => {
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: new ObjectId(), sectorType: "energy", stateId: "CA", countryId: "US", revenue: 10 },
+        {
+          _id: new ObjectId(),
+          sectorType: "energy",
+          stateId: "BLR_MIN",
+          countryId: "BLR",
+          revenue: 99,
+        },
+      ]),
+    });
+    db.collectionMocks.unownedSectors.countDocuments.mockResolvedValue(1);
+    db.collectionMocks.corporateSectors.countDocuments.mockResolvedValue(0);
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("view=unowned"));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    const stateIds = (data.sectors as { stateId: string }[]).map((s) => s.stateId);
+    expect(stateIds).toContain("CA");
+    expect(stateIds).not.toContain("BLR_MIN");
   });
 });

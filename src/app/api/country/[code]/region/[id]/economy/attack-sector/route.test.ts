@@ -87,7 +87,7 @@ beforeEach(async () => {
 describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
   it("blocks private attacks in an eastern-bloc command economy", async () => {
     const sectorId = new ObjectId();
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current" });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
     db.collectionMocks.states.findOne.mockResolvedValue({
       _id: "PL-WAW",
       countryId: "PL",
@@ -112,7 +112,7 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
     const orphanCorpId = new ObjectId(); // points to a corp that no longer exists
     const orphanSectorId = new ObjectId();
 
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current" });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
     db.collectionMocks.states.findOne.mockResolvedValue({
       _id: "CA",
       countryId: "US",
@@ -177,7 +177,7 @@ describe("POST /api/country/[code]/region/[id]/economy/attack-sector", () => {
     const shellCorpId = new ObjectId();
     const shellSectorId = new ObjectId();
 
-    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current" });
+    db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
     db.collectionMocks.states.findOne.mockResolvedValue({
       _id: "CA",
       countryId: "US",
