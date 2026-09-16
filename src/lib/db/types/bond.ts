@@ -173,7 +173,17 @@ export interface BondHolder {
   nppId?: ObjectId;
   /** Number of bond units held (each unit = $1,000 face value) */
   units: number;
-  /** Weighted average purchase price per unit (face value × marketPrice at purchase). Null for pre-tracking positions. */
+  /**
+   * Weighted average purchase price per unit (face value × marketPrice at
+   * purchase).
+   *
+   * ⚠️ Absent does NOT only mean "pre-tracking". Only the FUND
+   * (`purchaseBondUnitsForFund`) and NPP (`nppBonds`) purchase paths stamp this;
+   * character and corporation purchases through `/api/bonds/[bondId]/buy` never
+   * have, at any point. So a missing value on a character or corporation holder
+   * carries no information about when or at what price they bought, and must not
+   * be read as evidence of a cheap secondary-market entry.
+   */
   avgCostPerUnit?: number;
 }
 
