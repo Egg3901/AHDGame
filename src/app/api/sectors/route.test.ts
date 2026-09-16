@@ -38,6 +38,7 @@ beforeEach(async () => {
     toArray: vi.fn().mockResolvedValue([
       { _id: "CA", name: "California", countryId: "US" },
       { _id: "UKR", name: "Ukraine", countryId: "RU" },
+      { _id: "BLR_MIN", name: "Minsk", countryId: "BLR" },
     ]),
   });
 });
@@ -354,5 +355,40 @@ describe("GET /api/sectors (view=owned)", () => {
       countryName: "Japan",
       revenueAnchor: 100_000,
     });
+  });
+});
+
+describe("GET /api/sectors union-republic coverage", () => {
+  /**
+   * Found during the branch audit. The blocked-country lookup was keyed on
+   * `COUNTRY_ORDER`, which omits BLR, BAL and UKR, so the union republics were
+   * never asked about and their unowned markets were advertised as capture
+   * opportunities that `expandSector` then refuses. Harmless while those
+   * countries carried no block; a real gap once the dial started blocking them.
+   */
+  it("excludes union-republic states from the unowned view", async () => {
+    db.collectionMocks.unownedSectors.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: new ObjectId(), sectorType: "energy", stateId: "CA", countryId: "US", revenue: 10 },
+        {
+          _id: new ObjectId(),
+          sectorType: "energy",
+          stateId: "BLR_MIN",
+          countryId: "BLR",
+          revenue: 99,
+        },
+      ]),
+    });
+    db.collectionMocks.unownedSectors.countDocuments.mockResolvedValue(1);
+    db.collectionMocks.corporateSectors.countDocuments.mockResolvedValue(0);
+
+    const { GET } = await import("./route");
+    const response = await GET(makeRequest("view=unowned"));
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    const stateIds = (data.sectors as { stateId: string }[]).map((s) => s.stateId);
+    expect(stateIds).toContain("CA");
+    expect(stateIds).not.toContain("BLR_MIN");
   });
 });
