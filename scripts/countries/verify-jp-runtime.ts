@@ -55,6 +55,16 @@ import { COUNTRY_SECTOR_WEIGHTS } from "../../src/lib/seeds/reference/sectorSeed
 import { NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY } from "../../src/lib/turn/gdpGrowth";
 import { PLAYER_PAYOUT_CAP_PER_TURN } from "../../src/lib/treasury/payoutCapValues";
 import { INITIAL_RATES } from "../../src/lib/constants/currencies";
+import { COUNTRY_CONTINENT } from "../../src/lib/constants/countryContinents";
+import { COUNTRY_TO_ISO_NUMERIC, ISO_NUMERIC_TO_COUNTRY } from "../../src/lib/constants/countryIso";
+import { COUNTRY_REGIONS } from "../../src/lib/world/worldEntityManifest";
+import { STATE_ADJACENCY } from "../../src/lib/constants/stateAdjacency";
+import { CENSUS_BUNDLES } from "../../src/lib/seeds/regionCensusData";
+import { RAW_BUNDLES } from "../../src/lib/states/conditions/seedMetricsLoader";
+import { METRIC_PRESET_BUNDLES } from "../../src/lib/seeds/metricPresets";
+import { CORE5_NORMALS } from "../../src/lib/era/metricCatalog";
+import { REGION_ROSTERS } from "../../src/lib/demographics/substrateCoverage";
+import { CONSCRIPTION_SEED } from "../../src/lib/demographics/conscription";
 
 type Check = [name: string, value: unknown, expectation?: (v: never) => boolean];
 
@@ -109,6 +119,33 @@ for (const year of ["1979", "1991", "1999", "2007", "2019", "2023"] as const) {
   checks.push([`ORDERS_OF_BATTLE_BY_ERA.${year}.JP`, ORDERS_OF_BATTLE_BY_ERA[year]?.JP]);
 }
 
+// D5 -- geography, regions, demographics.
+checks.push(
+  ["COUNTRY_CONTINENT.JP", COUNTRY_CONTINENT.JP],
+  ["COUNTRY_TO_ISO_NUMERIC.JP", COUNTRY_TO_ISO_NUMERIC.JP],
+  ["COUNTRY_REGIONS.JP", COUNTRY_REGIONS.JP],
+  ["STATE_ADJACENCY.JP", STATE_ADJACENCY.JP],
+  ["CENSUS_BUNDLES.JP", CENSUS_BUNDLES.JP],
+  ["RAW_BUNDLES.JP", RAW_BUNDLES.JP],
+  ["METRIC_PRESET_BUNDLES.JP", METRIC_PRESET_BUNDLES.JP],
+  ["CONSCRIPTION_SEED.JP", CONSCRIPTION_SEED.JP],
+  ["REGION_ROSTERS.JP", REGION_ROSTERS.JP]
+);
+for (const metric of [
+  "gdpGrowth",
+  "unemploymentRate",
+  "lifeExpectancy",
+  "violentCrimeRate",
+  "povertyRate",
+]) {
+  checks.push([`CORE5_NORMALS.${metric}.JP`, CORE5_NORMALS[metric]?.JP]);
+  // ⚠️ The `global` fallback belongs to every country and must still be here.
+  checks.push([
+    `CORE5_NORMALS.${metric}.global (must NOT have moved)`,
+    CORE5_NORMALS[metric]?.global,
+  ]);
+}
+
 let failed = 0;
 for (const [name, value] of checks) {
   const empty =
@@ -154,6 +191,25 @@ if (COUNTRY_CURRENCY_MAP.JP !== "JPY") {
 }
 if (NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP !== 10) {
   console.log(`FAIL  consumption tax = ${NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP}, expected 10`);
+  failed++;
+}
+// Geography spot checks. A half-initialised cycle leaves these present but wrong.
+if (COUNTRY_TO_ISO_NUMERIC.JP !== "392" || ISO_NUMERIC_TO_COUNTRY["392"] !== "JP") {
+  console.log(
+    `FAIL  ISO pair out of sync: ${COUNTRY_TO_ISO_NUMERIC.JP} / ${ISO_NUMERIC_TO_COUNTRY["392"]}`
+  );
+  failed++;
+}
+if (Object.keys(STATE_ADJACENCY.JP ?? {}).length !== 8) {
+  console.log(
+    `FAIL  STATE_ADJACENCY.JP has ${Object.keys(STATE_ADJACENCY.JP ?? {}).length} regions, expected 8`
+  );
+  failed++;
+}
+if (Object.keys(REGION_ROSTERS.JP ?? {}).length !== 7) {
+  console.log(
+    `FAIL  REGION_ROSTERS.JP has ${Object.keys(REGION_ROSTERS.JP ?? {}).length} eras, expected 7`
+  );
   failed++;
 }
 if (TREASURY_IDENTITY.JP?.budgetTitle !== "国家予算") {

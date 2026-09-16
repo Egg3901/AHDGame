@@ -28,13 +28,6 @@ import { deRegions1991 } from "@/lib/seeds/de/deRegions1991";
 import { deRegions1999 } from "@/lib/seeds/de/deRegions1999";
 import { deRegions2007 } from "@/lib/seeds/de/deRegions2007";
 import { deRegions2023 } from "@/lib/seeds/de/deRegions2023";
-import { jpRegions } from "@/lib/seeds/jp/jpRegions";
-import { jpRegions1953 } from "@/lib/seeds/jp/jpRegions1953";
-import { jpRegions1979 } from "@/lib/seeds/jp/jpRegions1979";
-import { jpRegions1991 } from "@/lib/seeds/jp/jpRegions1991";
-import { jpRegions1999 } from "@/lib/seeds/jp/jpRegions1999";
-import { jpRegions2007 } from "@/lib/seeds/jp/jpRegions2007";
-import { jpRegions2023 } from "@/lib/seeds/jp/jpRegions2023";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { brRegions1953 } from "@/lib/seeds/br/brRegions1953";
 import { brRegions1979 } from "@/lib/seeds/br/brRegions1979";
@@ -70,6 +63,7 @@ import { ngRegions1991 } from "@/lib/seeds/ng/ngRegions1991";
 import { ngRegions1999 } from "@/lib/seeds/ng/ngRegions1999";
 import { ngRegions2007 } from "@/lib/seeds/ng/ngRegions2007";
 import { ngRegions2023 } from "@/lib/seeds/ng/ngRegions2023";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export const FULL_ERA_REGION_BUNDLES: Partial<
   Record<CountryId, Partial<Record<ResetPresetId, State[]>>>
@@ -83,15 +77,7 @@ export const FULL_ERA_REGION_BUNDLES: Partial<
     "2019-default": deRegions,
     "2023-default": deRegions2023,
   },
-  JP: {
-    "1953-default": jpRegions1953,
-    "1979-default": jpRegions1979,
-    "1991-default": jpRegions1991,
-    "1999-default": jpRegions1999,
-    "2007-default": jpRegions2007,
-    "2019-default": jpRegions,
-    "2023-default": jpRegions2023,
-  },
+  JP: JP_GEOGRAPHY.regionBundles,
   BR: {
     "1953-default": brRegions1953,
     "1979-default": brRegions1979,

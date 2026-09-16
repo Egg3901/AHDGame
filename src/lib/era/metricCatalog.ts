@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { metricCategories, type MetricDefinition } from "@/lib/constants/metricDefinitions";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Metric Era Catalog — the single source of truth for how a metric behaves
@@ -364,7 +365,7 @@ export interface MetricBandCurve {
  * countries (RU, …). Values are era-plausible authored estimates — the dry-run
  * review is the tuning gate before any flag flip.
  */
-type NormalAnchor = { year: number; value: number };
+export type NormalAnchor = { year: number; value: number };
 const CORE5_SPREADS: Record<
   string,
   { best: number; worst: number; bestFloor?: number; worstCeil?: number }
@@ -409,13 +410,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 1.2 },
       { year: 2040, value: 1.0 },
     ],
-    JP: [
-      { year: 1953, value: 8.0 },
-      { year: 1979, value: 5.0 },
-      { year: 1991, value: 3.5 },
-      { year: 2019, value: 0.8 },
-      { year: 2040, value: 0.8 },
-    ],
+    JP: JP_GEOGRAPHY.core5Normals["gdpGrowth"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 2.0 },
       { year: 1979, value: 3.5 },
@@ -474,13 +469,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 3.2 },
       { year: 2040, value: 3.5 },
     ],
-    JP: [
-      { year: 1953, value: 2.0 },
-      { year: 1979, value: 2.0 },
-      { year: 1991, value: 2.1 },
-      { year: 2019, value: 2.4 },
-      { year: 2040, value: 2.6 },
-    ],
+    JP: JP_GEOGRAPHY.core5Normals["unemploymentRate"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 8.0 },
       { year: 1979, value: 7.5 },
@@ -539,13 +528,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 81 },
       { year: 2040, value: 84 },
     ],
-    JP: [
-      { year: 1953, value: 63 },
-      { year: 1979, value: 76 },
-      { year: 1991, value: 79 },
-      { year: 2019, value: 84.4 },
-      { year: 2040, value: 87 },
-    ],
+    JP: JP_GEOGRAPHY.core5Normals["lifeExpectancy"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 66.9 },
       { year: 1979, value: 72.5 },
@@ -605,13 +588,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 220 },
       { year: 2040, value: 200 },
     ],
-    JP: [
-      { year: 1953, value: 150 },
-      { year: 1979, value: 80 },
-      { year: 1991, value: 50 },
-      { year: 2019, value: 25 },
-      { year: 2040, value: 25 },
-    ],
+    JP: JP_GEOGRAPHY.core5Normals["violentCrimeRate"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 60 },
       { year: 1979, value: 150 },
@@ -670,13 +647,7 @@ export const CORE5_NORMALS: Record<
       { year: 2019, value: 10.5 },
       { year: 2040, value: 10 },
     ],
-    JP: [
-      { year: 1953, value: 30 },
-      { year: 1979, value: 12 },
-      { year: 1991, value: 12 },
-      { year: 2019, value: 15.5 },
-      { year: 2040, value: 14 },
-    ],
+    JP: JP_GEOGRAPHY.core5Normals["povertyRate"] as NormalAnchor[],
     IE: [
       { year: 1953, value: 30 },
       { year: 1979, value: 20 },
@@ -1423,13 +1394,7 @@ export const INCOME_ANCHORS: Partial<Record<CountryId, Array<{ year: number; val
     { year: 1991, value: 28_000 },
     { year: 2019, value: 47_000 },
   ],
-  JP: [
-    // 1953: USD-anchored (~¥250k / 360 JPY/USD; refs #3498). Later eras stay in JPY.
-    { year: 1953, value: 700 },
-    { year: 1979, value: 2_900_000 },
-    { year: 1991, value: 4_500_000 },
-    { year: 2019, value: 5_500_000 },
-  ],
+  JP: JP_GEOGRAPHY.incomeAnchors,
   IE: [
     // 1953 re-anchored from 3,100 to 180 (#income-gdp-scale-audit) to match
     // ieMetricPresets1953.ts's newly-authored national medianIncome (the

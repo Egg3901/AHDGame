@@ -26,6 +26,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { COUNTRY_BILL_PHASES, COUNTRY_ELECTION_PHASES } from "../../src/lib/turn/countryPhases";
 import { SPAWN_ELECTIONS_REGISTRY } from "../../src/lib/turn/perpetualElections/registry";
+import { REGION_ROSTERS } from "../../src/lib/demographics/substrateCoverage";
 import { PARLIAMENTARY_CABINET_CONFIGS } from "../../src/app/country/[code]/executive/cabinet/parliamentaryCabinetConfig";
 
 const OUT = "src/lib/countries/__snapshots__/jp.pre-move.json";
@@ -40,6 +41,10 @@ const CORRECTIONS: Record<string, unknown> = {
   // A bare function. `value: null` was not wrong so much as useless -- the
   // marker says "a function lives here", which is what the harness compares.
   SPAWN_ELECTIONS_REGISTRY: (SPAWN_ELECTIONS_REGISTRY as Record<string, unknown>)[COUNTRY],
+  // Seven era thunks. Recorded as `value: null` by the D1 extractor, which threw
+  // away the era KEY SET along with the functions -- so a silently dropped era
+  // would have compared clean against nothing.
+  REGION_ROSTERS: (REGION_ROSTERS as Record<string, unknown>)[COUNTRY],
 };
 
 /** Walks objects AND arrays. The D1 version stopped at arrays. */
@@ -62,9 +67,28 @@ function preserveShape(v: unknown): unknown {
   return v;
 }
 
+/**
+ * ⚠️ REGISTRIES THAT HAVE ALREADY MOVED. Correcting one of these would read the
+ * POST-move value and overwrite the only record of what was there before.
+ *
+ * SPAWN_ELECTIONS_REGISTRY was forwarded in D3. Re-running this script after
+ * that read the forwarded value; it happened to serialise identically because
+ * both are bare functions, but that was luck, not safety. The script now refuses
+ * rather than relying on it.
+ */
+const ALREADY_MOVED = new Set([
+  "SPAWN_ELECTIONS_REGISTRY",
+  "COUNTRY_ELECTION_PHASES",
+  "COUNTRY_BILL_PHASES",
+]);
+
 const snapshot = JSON.parse(readFileSync(OUT, "utf8")) as Record<string, unknown>;
 
 for (const [name, live] of Object.entries(CORRECTIONS)) {
+  if (ALREADY_MOVED.has(name)) {
+    console.log(`refused ${name}: already forwarded, so the live value is POST-move`);
+    continue;
+  }
   if (!(name in snapshot)) throw new Error(`${name} is not in the fixture; append it instead.`);
   if (live === undefined) throw new Error(`${name}: no Japan entry in the live registry.`);
 

@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { HazardTag } from "@/lib/db/types/crisis";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Curated geographic hazard tags per region, used to gate the regional disaster
@@ -109,13 +110,7 @@ export const HAZARD_GROUPS: Partial<Record<CountryId, Partial<Record<HazardTag, 
     flood: ["LON", "SWE", "EAE", "YHU", "NWE", "SEE", "WAL", "SCO"],
     wintry: ["SCO", "NEE", "NWE", "YHU", "NIR"],
   },
-  JP: {
-    coastal: ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"],
-    seismic: ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"],
-    volcanic: ["HOK", "TOH", "KAN", "CHU", "KNS", "KYU"],
-    flood: ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"],
-    wintry: ["HOK", "TOH", "CHU"],
-  },
+  JP: JP_GEOGRAPHY.hazardGroups,
   DE: {
     coastal: ["SH", "HH", "BRE", "MV", "NI"],
     flood: ["NW", "RP", "BW", "BY", "SN", "ST", "BB", "NI", "SH", "HE"],

@@ -13,6 +13,7 @@
  */
 
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Passive Reg% drift per turn toward each party's `(Org% − country lag)`
@@ -135,7 +136,7 @@ export const REG_LAG_BELOW_ORG_PCT_BY_COUNTRY: Partial<Record<CountryId, number>
 export const NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY: Partial<Record<CountryId, number>> = {
   US: 7 / 3,
   UK: 1,
-  JP: 1.5,
+  JP: JP_GEOGRAPHY.nonPartyIndependentBias,
   DE: 3 / 7,
 };
 

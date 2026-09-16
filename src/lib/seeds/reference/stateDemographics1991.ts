@@ -47,6 +47,7 @@
 
 import type { StateDemographics } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Per-country, per-group multiplicative adjustments to `population`.
@@ -79,16 +80,7 @@ const POPULATION_MULTIPLIERS: Partial<Record<CountryId, Record<string, number>>>
     moderate_centrists: 0.9, // Lib Dems just merged 1988
     public_sector: 1.15, // Pre-Thatcher-cuts hangover
   },
-  JP: {
-    salaryman_conservative: 1.15, // Peak bubble salaryman culture
-    urban_progressive: 0.85, // Pre-globalisation
-    rural_traditionalist: 1.1, // Less rural-to-urban migration
-    young_urban: 1.15, // Larger young cohort, less aging
-    retiree: 0.7, // Aging wave hits hardest after 1995
-    komeito_faithful: 1.2, // Peak Komeito support
-    reform_populist: 0.0, // Ishin / reform parties post-2010 phenomenon
-    working_mothers: 0.5, // Pre-Womenomics; women in workforce much lower
-  },
+  JP: JP_GEOGRAPHY.populationMultipliers,
   DE: {
     katholische_konservative: 1.1, // Pre-secularisation
     gewerkschafter: 1.4, // 1991 union density ~32% vs ~17% in 2020

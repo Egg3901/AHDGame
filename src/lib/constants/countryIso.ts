@@ -1,4 +1,5 @@
 import type { CountryId } from "@/lib/constants/countries";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /** Natural-Earth ISO-numeric (topojson feature id) → in-game CountryId. */
 export const ISO_NUMERIC_TO_COUNTRY: Record<string, CountryId> = {
@@ -36,7 +37,7 @@ export const COUNTRY_TO_ISO_NUMERIC: Record<CountryId, string> = {
   US: "840",
   UK: "826",
   DE: "276",
-  JP: "392",
+  JP: JP_GEOGRAPHY.isoNumeric,
   IE: "372",
   BR: "076",
   CN: "156",

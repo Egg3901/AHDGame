@@ -239,26 +239,72 @@ describe("faithful replacement", () => {
      * pre-move fixture, never from the registry itself. Comparing the registry
      * to the registry would pass vacuously no matter what the move broke.
      */
-    it.each(MOVED_REGISTRIES)(
-      "$name$subKey is unchanged by the move",
-      ({ name, subKey, after }) => {
-        const entry = snapshot()[name];
-        expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
-        // An outer-keyed entry holds Japan once per era or preset; compare only
-        // the slice this row owns, so a dropped era fails on its own line.
-        const expected = subKey ? (entry.value as Record<string, unknown>)[subKey] : entry.value;
-        expect(expected, `${name}.${subKey} is not in the fixture`).toBeDefined();
-        expect(after()).toEqual(expected);
-      }
-    );
+    /**
+     * ⚠️ The title takes `$name` ALONE. `"$name$subKey"` reads as one property
+     * path -- `name$subKey` -- which does not exist, so every row rendered
+     * "undefined is unchanged by the move" and a failure named no registry.
+     * The per-row label goes in the assertion message instead.
+     */
+    it.each(MOVED_REGISTRIES)("$name is unchanged by the move", ({ name, subKey, after }) => {
+      const entry = snapshot()[name];
+      expect(entry, `${name} is not in the pre-move fixture`).toBeDefined();
+      // An outer-keyed entry holds Japan once per era or preset; compare only
+      // the slice this row owns, so a dropped era fails on its own line.
+      const expected = subKey ? (entry.value as Record<string, unknown>)[subKey] : entry.value;
+      const label = subKey ? `${name}.${subKey}` : name;
+      expect(expected, `${label} is not in the fixture`).toBeDefined();
+      /**
+       * ⚠️ NORMALISE THE LIVE VALUE THROUGH JSON BEFORE COMPARING.
+       *
+       * The fixture is a JSON document, and `JSON.stringify` DROPS properties
+       * whose value is `undefined`. jpStateMetrics carries `trend: undefined` on
+       * many metrics, so the recorded entry has no `trend` key at all while the
+       * live object does -- a difference in the RECORDING, not in the data.
+       *
+       * Putting the live value through the same transform makes the comparison
+       * apples-to-apples. It costs nothing in strictness: any real change
+       * (undefined -> a value, or a changed value) still survives JSON and still
+       * fails. Only undefined-to-undefined is invisible, which is not a change.
+       */
+      const throughJson = (v: unknown) => JSON.parse(JSON.stringify(v ?? null));
+
+      /**
+       * ⚠️ AND STRIP NON-DETERMINISTIC FIELDS.
+       *
+       * jpStateMetrics builds every region with `lastUpdated: new Date()`, so
+       * the value changes on every module load. The fixture froze one instant;
+       * the live value is whenever the test ran. That is not a move difference
+       * and no phase can make it stable.
+       *
+       * Only `lastUpdated` is stripped, and only because it is provably a
+       * load-time `new Date()` -- a scan of all 88 entries found ISO timestamps
+       * in RAW_BUNDLES alone. Anything broader would start hiding real drift.
+       */
+      const NON_DETERMINISTIC = new Set(["lastUpdated"]);
+      const strip = (v: unknown): unknown => {
+        if (Array.isArray(v)) return v.map(strip);
+        if (v && typeof v === "object") {
+          return Object.fromEntries(
+            Object.entries(v)
+              .filter(([k]) => !NON_DETERMINISTIC.has(k))
+              .map(([k, inner]) => [k, strip(inner)])
+          );
+        }
+        return v;
+      };
+
+      expect(strip(throughJson(after())), `${label} differs from its pre-move value`).toEqual(
+        strip(expected)
+      );
+    });
 
     it("forwards every registry the fixture recorded for this phase", () => {
       // Guards the other direction: a registry quietly dropped from the table
       // would otherwise just stop being checked.
       //
       // 15 from D2 (identity), 23 from D3 (institutions and elections, with the
-      // preset-first registries split one row per era), 21 from D4 (economy).
-      expect(MOVED_REGISTRIES.length).toBe(59);
+      // preset-first registries split one row per era), 21 from D4 (economy), 26 from D5 (geography, with CORE5_NORMALS split one row per metric and both halves of the ISO pair pinned).
+      expect(MOVED_REGISTRIES.length).toBe(85);
       const missing = MOVED_REGISTRIES.filter((r) => !snapshot()[r.name]);
       expect(missing.map((r) => r.name)).toEqual([]);
     });
@@ -315,6 +361,7 @@ describe("faithful replacement", () => {
         "COUNTRY_BILL_PHASES",
         "COUNTRY_ELECTION_PHASES",
         "PARLIAMENTARY_CABINET_CONFIGS",
+        "REGION_ROSTERS",
         "SPAWN_ELECTIONS_REGISTRY",
       ]);
     });

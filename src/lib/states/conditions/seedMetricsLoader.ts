@@ -9,9 +9,9 @@ import { brStateMetrics } from "@/lib/seeds/br/brStateMetrics";
 import { cnStateMetrics } from "@/lib/seeds/cn/cnStateMetrics";
 import { deStateMetrics } from "@/lib/seeds/de/deStateMetrics";
 import { ieStateMetrics } from "@/lib/seeds/ie/ieStateMetrics";
-import { jpStateMetrics } from "@/lib/seeds/jp/jpStateMetrics";
 import { ngStateMetrics } from "@/lib/seeds/ng/ngStateMetrics";
 import { ukStateMetrics } from "@/lib/seeds/uk/ukStateMetrics";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 // Seceded nations (SCO/WAL) have no static seed bundle — their metrics are
 // fanned out from the UK aggregate at secession — so this is a partial map.
@@ -19,7 +19,7 @@ export const RAW_BUNDLES: Partial<Record<CountryId, StateMetrics[]>> = {
   US: stateMetrics,
   UK: ukStateMetrics,
   DE: deStateMetrics,
-  JP: jpStateMetrics,
+  JP: JP_GEOGRAPHY.rawMetrics,
   IE: ieStateMetrics,
   BR: brStateMetrics,
   CN: cnStateMetrics,

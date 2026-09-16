@@ -1,6 +1,7 @@
 import type { CountryId } from "@/lib/constants/countries";
 import type { Condition } from "@/lib/utils/approvalModifiers";
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 const c = (category: string, metric: string, op: Condition["op"], value: number): Condition => ({
   category,
@@ -26,14 +27,7 @@ export const COUNTRY_ERA1991_PATCHES: Partial<
     high_violent_crime: { conditions: [c("publicSafety", "violentCrimeRate", ">=", 500)] },
   },
 
-  JP: {
-    housing_stress: { conditions: [c("social", "housingAffordability", ">=", 90)] },
-    affordable_housing: { conditions: [c("social", "housingAffordability", "<=", 79)] },
-    free_press: { conditions: [c("mediaInformation", "pressFreedom", ">=", 84)] },
-    slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", -1.5)] },
-    research_hub: { suppress: true },
-    affordable_living: { conditions: [c("economic", "costOfLiving", "<=", 48)] },
-  },
+  JP: JP_GEOGRAPHY.era1991Patches,
 
   DE: {
     slow_growth: { conditions: [c("economic", "gdpGrowth", "<=", -0.8)] },

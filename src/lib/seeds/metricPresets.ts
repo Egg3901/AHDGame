@@ -9,7 +9,6 @@ import {
   type MetricPresetBundle,
 } from "@/lib/seeds/ie/ieMetricPresets";
 import { deMetricPresets2019, deMetricPresets1991 } from "@/lib/seeds/de/deMetricPresets";
-import { jpMetricPresets2019, jpMetricPresets1991 } from "@/lib/seeds/jp/jpMetricPresets";
 import { brMetricPresets2019, brMetricPresets1991 } from "@/lib/seeds/br/brMetricPresets";
 import { cnMetricPresets2019, cnMetricPresets1991 } from "@/lib/seeds/cn/cnMetricPresets";
 import { ngMetricPresets2019, ngMetricPresets1991 } from "@/lib/seeds/ng/ngMetricPresets";
@@ -17,7 +16,6 @@ import { ukMetricPresets2019, ukMetricPresets1991 } from "@/lib/seeds/uk/ukMetri
 import { usMetricPresets2019, usMetricPresets1991 } from "@/lib/seeds/reference/usMetricPresets";
 import { ieMetricPresets1953 } from "@/lib/seeds/ie/ieMetricPresets1953";
 import { deMetricPresets1953 } from "@/lib/seeds/de/deMetricPresets1953";
-import { jpMetricPresets1953 } from "@/lib/seeds/jp/jpMetricPresets1953";
 import { brMetricPresets1953 } from "@/lib/seeds/br/brMetricPresets1953";
 import { cnMetricPresets1953 } from "@/lib/seeds/cn/cnMetricPresets1953";
 import { ngMetricPresets1953 } from "@/lib/seeds/ng/ngMetricPresets1953";
@@ -26,7 +24,6 @@ import { usMetricPresets1953 } from "@/lib/seeds/reference/usMetricPresets1953";
 import { ruMetricPresets1953 } from "@/lib/seeds/ru/ruMetricPresets1953";
 import { ukMetricPresets1979 } from "@/lib/seeds/uk/ukMetricPresets1979";
 import { deMetricPresets1979 } from "@/lib/seeds/de/deMetricPresets1979";
-import { jpMetricPresets1979 } from "@/lib/seeds/jp/jpMetricPresets1979";
 import { brMetricPresets1979 } from "@/lib/seeds/br/brMetricPresets1979";
 import { cnMetricPresets1979 } from "@/lib/seeds/cn/cnMetricPresets1979";
 import { itMetricPresets1953 } from "@/lib/seeds/it/itMetricPresets1953";
@@ -38,6 +35,7 @@ import { atMetricPresets1953 } from "@/lib/seeds/at/atMetricPresets1953";
 import { fiMetricPresets1953 } from "@/lib/seeds/fi/fiMetricPresets1953";
 import { grMetricPresets1953 } from "@/lib/seeds/gr/grMetricPresets1953";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export type { MetricPresetBundle };
 type PresetBundles = Partial<Record<ResetPresetId, MetricPresetBundle>>;
@@ -60,12 +58,7 @@ export const METRIC_PRESET_BUNDLES: Partial<Record<CountryId, PresetBundles>> = 
     "1979-default": deMetricPresets1979,
     "1953-default": deMetricPresets1953,
   },
-  JP: {
-    "2019-default": jpMetricPresets2019,
-    "1991-default": jpMetricPresets1991,
-    "1979-default": jpMetricPresets1979,
-    "1953-default": jpMetricPresets1953,
-  },
+  JP: JP_GEOGRAPHY.metricPresets,
   BR: {
     "2019-default": brMetricPresets2019,
     "1991-default": brMetricPresets1991,

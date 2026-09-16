@@ -17,6 +17,7 @@ import { getAuthUserWithCharacter } from "@/lib/auth";
 import { buildRegionTurnoutResponse } from "@/lib/demographics/regionTurnout";
 import type { ActiveModifier } from "@/lib/utils/approvalModifiers";
 import { getRegionalApprovalData } from "@/lib/states/approval/getRegionalApprovalData";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Coerce a Mongo timestamp field to an ISO string for client serialization.
@@ -37,7 +38,7 @@ export function toIsoStringOrNull(value: Date | string | null | undefined): stri
 /** Per-country voter-group category ids for region demographics (not US `find({})`). */
 export const REGION_DEMOGRAPHIC_CATEGORY_IDS: Partial<Record<CountryId, string[]>> = {
   UK: ["uk_voterGroups"],
-  JP: ["jp_voterGroups"],
+  JP: JP_GEOGRAPHY.demographicCategoryIds,
   DE: ["de_voterGroups"],
   IE: ["ie_voterGroups"],
   CN: ["cn_voterGroups"],

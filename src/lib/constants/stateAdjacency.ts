@@ -20,8 +20,9 @@
  */
 
 import type { CountryId } from "./countries";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
-type AdjacencyMap = Record<string, readonly string[]>;
+export type AdjacencyMap = Record<string, readonly string[]>;
 
 /**
  * US 50 states + DC. Standard contiguous-state adjacency from the
@@ -464,7 +465,7 @@ export const STATE_ADJACENCY: Readonly<Record<CountryId, AdjacencyMap>> = {
   US: US_ADJACENCY,
   UK: UK_ADJACENCY,
   DE: DE_ADJACENCY,
-  JP: JP_ADJACENCY,
+  JP: JP_GEOGRAPHY.adjacency,
   CN: CN_ADJACENCY,
   IE: IE_ADJACENCY,
   BR: BR_ADJACENCY,

@@ -1,3 +1,16 @@
+import type { AdjacencyMap } from "@/lib/constants/stateAdjacency";
+import type { Continent } from "@/lib/constants/countryContinents";
+import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
+import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
+import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
+import type { HazardTag } from "@/lib/db/types/crisis";
+import type { NormalAnchor } from "@/lib/era/metricCatalog";
+import type { AnchorBundle } from "@/lib/seeds/populationAnchors";
+import type { MetricPresetBundle } from "@/lib/seeds/metricPresets";
+import type { State, StateMetrics } from "@/lib/db/types";
+import type { RegionCensus } from "@/lib/seeds/regionCensusData";
+import type { EraId, ResetPresetId } from "@/lib/seeds/presetSelector";
+import type { CalibrationTarget } from "@/lib/seeds/calibration/types";
 import type { CabinetIdentity } from "@/lib/constants/cabinetIdentity";
 import type { CountryConfig, EraCountryConfigOverride } from "@/lib/constants/countries";
 import type { EconomyIdentity } from "@/lib/constants/economyIdentity";
@@ -17,13 +30,12 @@ import type { StatsIdentity } from "@/lib/constants/nationalStatsIdentity";
 import type { ParliamentaryExecutiveSurface } from "@/lib/constants/parliamentaryExecutiveSurface";
 import type { CensusLabelSet } from "@/lib/constants/regionCensusLabels";
 import type { TreasuryIdentity } from "@/lib/constants/treasuryIdentity";
-import type { RosterThunk } from "@/lib/demographics/substrateCoverage";
 import type { LegislativeProcess } from "@/lib/legislature/process";
-import type { PresetBundles } from "@/lib/seeds/regionCensusData";
 import type { OrderOfBattleEntry } from "@/lib/seeds/reference/ordersOfBattle";
 import type { CountryElectionPhaseEntry } from "@/lib/turn/countryPhases";
 import type { SpawnElectionsHandler } from "@/lib/turn/perpetualElections/registry";
 import type { ShippingPreset } from "@/lib/world/eraRoster";
+import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
 
 /**
  * The shape a country folder declares.
@@ -274,17 +286,59 @@ export interface CountryEconomy {
  * the unused import it left behind is what surfaced the misplacement.
  */
 export interface CountryGeography {
-  readonly continent: string;
+  readonly continent: Continent;
+  /**
+   * ⚠️ The ISO pair moves TOGETHER. COUNTRY_TO_ISO_NUMERIC and its exported
+   * inverse ISO_NUMERIC_TO_COUNTRY are two halves of one fact; separate homes
+   * let them drift. The inverse is keyed by code with JP as the VALUE, so it is
+   * pinned by the harness rather than forwarded.
+   */
   readonly isoNumeric: string;
   readonly unMemberSince?: number;
-  readonly adjacency: Readonly<Record<string, readonly string[]>>;
-  readonly rosters: Partial<Record<ShippingPreset, RosterThunk>>;
-  readonly regionNames: Readonly<Record<string, string>>;
-  readonly censusBundles: PresetBundles;
-  readonly demographicCategoryIds?: readonly string[];
-  readonly conscription?: unknown;
-  readonly hazardGroups?: readonly string[];
-  readonly nppCapitalState?: string;
+  /**
+   * ⚠️ NOT a count. COUNTRY_REGIONS is `Record<CountryId, WorldEntityRegion>` --
+   * which bloc-level world region Japan sits in ("asia"). The plural name reads
+   * like a tally; it is a single key, and a different taxonomy from `continent`
+   * ("Asia").
+   */
+  readonly worldRegion: WorldEntityRegion;
+  readonly nppCapitalState: string;
+  readonly nonPartyIndependentBias?: number;
+  readonly adjacency: AdjacencyMap;
+  readonly regionNames: Record<string, string>;
+  readonly demographicCategoryIds?: string[];
+  readonly conscription: ConscriptionPolicy;
+  /**
+   * ⚠️ Forwarded WITHOUT exporting its const. Seven seeders destructure
+   * applyEra1991DemographicAdjustments out of a ternary that unions the whole
+   * module type with a stub, so any new export on that module collapses the
+   * seeded value to `unknown`. Forwarding the JP entry only adds an import.
+   */
+  readonly populationMultipliers: Record<string, number>;
+  /**
+   * ⚠️ THREE DIFFERENT TYPES SHARE THE NAME `PresetBundles`, one per seed module:
+   * regionCensusData's is keyed to RegionCensus, populationAnchors' to
+   * AnchorBundle, metricPresets' to MetricPresetBundle. Only the first is
+   * exported. Importing "the" PresetBundles would type two of these three wrong,
+   * so each is spelled out here.
+   */
+  readonly censusBundles: Partial<Record<ResetPresetId, Record<string, RegionCensus>>>;
+  readonly populationAnchors: Partial<Record<ResetPresetId, AnchorBundle>>;
+  readonly metricPresets: Partial<Record<ResetPresetId, MetricPresetBundle>>;
+  readonly regionBundles: Partial<Record<ResetPresetId, State[]>>;
+  readonly rawMetrics: StateMetrics[];
+  readonly incomeAnchors?: NormalAnchor[];
+  /** TARGETS from seeds/calibration/targets.ts. D5 owns this, not the economy. */
+  readonly calibrationTargets?: Partial<Record<EraId, CalibrationTarget>>;
+  readonly era1991Patches?: Record<string, CountryModifierPatch>;
+  readonly hazardGroups?: Partial<Record<HazardTag, string[]>>;
+  readonly mapRegistry: CountryMapConfig;
+  /**
+   * ⚠️ METRIC-FIRST slices. CORE5_NORMALS is keyed metric -> country, with a
+   * `global` fallback per metric that belongs to every country and must NOT
+   * move. Keyed here by metric name.
+   */
+  readonly core5Normals: Record<string, NormalAnchor[]>;
 }
 
 /**

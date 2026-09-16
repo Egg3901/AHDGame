@@ -1,5 +1,6 @@
 import type { CountryId } from "@/lib/constants/countries";
 import { workingAgePopulation, type AgeSexVector } from "./cohortVector";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export interface ConscriptionOption {
   label: string;
@@ -42,7 +43,7 @@ export const CONSCRIPTION_SEED: Partial<Record<CountryId, ConscriptionPolicy>> =
   US: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
   UK: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
   DE: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 1 }, // suspended
-  JP: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
+  JP: JP_GEOGRAPHY.conscription,
   IE: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 2 },
   BR: { eligibleBand: [18, 20], sexEnabled: { male: true, female: false }, option: 5 },
   CN: { eligibleBand: [18, 22], sexEnabled: { male: true, female: false }, option: 6 },

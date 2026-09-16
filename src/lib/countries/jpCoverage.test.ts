@@ -84,7 +84,22 @@ function walk(dir: string): string[] {
   return out;
 }
 
+/**
+ * ⚠️ MEMOISED. Each test needs the same denominator, and computing it means
+ * walking src/ and scripts/ and reading every file. Doing that four times took
+ * long enough to trip the 15s timeout under full-suite parallel load -- a
+ * failure that looked like a coverage finding and was really just this test
+ * being wasteful.
+ */
+let cached: string[] | undefined;
+
 function japanBearingFiles(): string[] {
+  if (cached) return cached;
+  cached = computeJapanBearingFiles();
+  return cached;
+}
+
+function computeJapanBearingFiles(): string[] {
   return (
     ROOTS.flatMap((root) => walk(root))
       // Only this module is excluded, so its own doc comment cannot pad the

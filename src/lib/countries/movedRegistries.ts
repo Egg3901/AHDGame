@@ -61,6 +61,25 @@ import {
 import { PLAYER_PAYOUT_CAP_PER_TURN } from "@/lib/treasury/payoutCapValues";
 import { NATIONAL_POLICY_STATE_IDS } from "@/lib/policy/nationalStateId";
 import { LEGISLATION_COUNTRY_SCOPES } from "@/lib/policy/nationalPolicyRecords";
+import { COUNTRY_CONTINENT } from "@/lib/constants/countryContinents";
+import { COUNTRY_TO_ISO_NUMERIC, ISO_NUMERIC_TO_COUNTRY } from "@/lib/constants/countryIso";
+import { COUNTRY_REGIONS, COUNTRY_UN_MEMBER_SINCE } from "@/lib/world/worldEntityManifest";
+import { STATE_ADJACENCY } from "@/lib/constants/stateAdjacency";
+import { FULL_ERA_REGION_BUNDLES } from "@/lib/admin/seedDiagnostic/regionBundles";
+import { REGION_NAME_MAPS } from "@/lib/admin/seed/seedSeats";
+import { NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
+import { COUNTRY_MAP_REGISTRY } from "@/lib/commodity-map/commodityMapRegistry";
+import { HAZARD_GROUPS } from "@/lib/crises/regionHazards";
+import { CENSUS_BUNDLES } from "@/lib/seeds/regionCensusData";
+import { CONSCRIPTION_SEED } from "@/lib/demographics/conscription";
+import { POPULATION_ANCHOR_BUNDLES } from "@/lib/seeds/populationAnchors";
+import { METRIC_PRESET_BUNDLES } from "@/lib/seeds/metricPresets";
+import { CORE5_NORMALS, INCOME_ANCHORS } from "@/lib/era/metricCatalog";
+import { TARGETS } from "@/lib/seeds/calibration/targets";
+import { RAW_BUNDLES } from "@/lib/states/conditions/seedMetricsLoader";
+import { COUNTRY_ERA1991_PATCHES } from "@/lib/states/conditions/countryEra1991Patches";
+import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "@/lib/turn/partyOrg/pacingConstants";
+import { REGION_ROSTERS } from "@/lib/demographics/substrateCoverage";
 import { SPAWN_ELECTIONS_REGISTRY } from "@/lib/turn/perpetualElections/registry";
 import { PARLIAMENTARY_CABINET_CONFIGS } from "@/app/country/[code]/executive/cabinet/parliamentaryCabinetConfig";
 
@@ -230,6 +249,51 @@ export const MOVED_REGISTRIES: readonly MovedRegistry[] = [
   { name: "PLAYER_PAYOUT_CAP_PER_TURN", after: () => PLAYER_PAYOUT_CAP_PER_TURN.JP },
   { name: "NATIONAL_POLICY_STATE_IDS", after: () => NATIONAL_POLICY_STATE_IDS.JP },
   { name: "LEGISLATION_COUNTRY_SCOPES", after: () => LEGISLATION_COUNTRY_SCOPES.JP },
+
+  // D5 -- geography, regions, demographics.
+  { name: "COUNTRY_CONTINENT", after: () => COUNTRY_CONTINENT.JP },
+  { name: "COUNTRY_TO_ISO_NUMERIC", after: () => COUNTRY_TO_ISO_NUMERIC.JP },
+  /**
+   * ⚠️ The inverse half of the ISO pair, keyed by ISO CODE with JP as the VALUE.
+   * It is NOT forwarded -- inverting a lookup table to read from the folder buys
+   * nothing -- but it IS pinned, so the two halves of one fact cannot drift.
+   */
+  { name: "ISO_NUMERIC_TO_COUNTRY", after: () => ({ "392": ISO_NUMERIC_TO_COUNTRY["392"] }) },
+  { name: "COUNTRY_REGIONS", after: () => COUNTRY_REGIONS.JP },
+  { name: "COUNTRY_UN_MEMBER_SINCE", after: () => COUNTRY_UN_MEMBER_SINCE.JP },
+  { name: "STATE_ADJACENCY", after: () => STATE_ADJACENCY.JP },
+  { name: "JP_ADJACENCY", after: () => STATE_ADJACENCY.JP },
+  { name: "FULL_ERA_REGION_BUNDLES", after: () => FULL_ERA_REGION_BUNDLES.JP },
+  { name: "REGION_NAME_MAPS", after: () => REGION_NAME_MAPS.JP },
+  { name: "NPP_CAPITAL_STATES", after: () => NPP_CAPITAL_STATES.JP },
+  { name: "COUNTRY_MAP_REGISTRY", after: () => COUNTRY_MAP_REGISTRY.JP },
+  { name: "HAZARD_GROUPS", after: () => HAZARD_GROUPS.JP },
+  { name: "CENSUS_BUNDLES", after: () => CENSUS_BUNDLES.JP },
+  { name: "CONSCRIPTION_SEED", after: () => CONSCRIPTION_SEED.JP },
+  { name: "POPULATION_ANCHOR_BUNDLES", after: () => POPULATION_ANCHOR_BUNDLES.JP },
+  { name: "METRIC_PRESET_BUNDLES", after: () => METRIC_PRESET_BUNDLES.JP },
+  { name: "INCOME_ANCHORS", after: () => INCOME_ANCHORS.JP },
+  { name: "TARGETS", after: () => TARGETS.JP },
+  { name: "RAW_BUNDLES", after: () => RAW_BUNDLES.JP },
+  { name: "COUNTRY_ERA1991_PATCHES", after: () => COUNTRY_ERA1991_PATCHES.JP },
+  {
+    name: "NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY",
+    after: () => NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY.JP,
+  },
+
+  /**
+   * ⚠️ METRIC-FIRST, so one row per metric. CORE5_NORMALS is keyed metric ->
+   * country and each metric carries a `global` fallback that belongs to every
+   * country and must not move. Splitting by metric means a dropped metric fails
+   * on a line that names it.
+   */
+  ...(
+    ["gdpGrowth", "unemploymentRate", "lifeExpectancy", "violentCrimeRate", "povertyRate"] as const
+  ).map((metric) => ({
+    name: "CORE5_NORMALS",
+    subKey: metric,
+    after: () => CORE5_NORMALS[metric]?.JP,
+  })),
 ];
 
 /**
@@ -238,6 +302,14 @@ export const MOVED_REGISTRIES: readonly MovedRegistry[] = [
  */
 export const MOVED_THUNK_REGISTRIES: readonly MovedThunkRegistry[] = [
   { name: "SPAWN_ELECTIONS_REGISTRY", after: () => SPAWN_ELECTIONS_REGISTRY.JP },
+  /**
+   * ⚠️ NOT FORWARDED IN D5, DELIBERATELY. Japan's seven era thunks are
+   * `() => import("@/lib/seeds/jp/jpRegions1953")...` -- they point at the seed
+   * modules D6 relocates. Forwarding now would write paths that D6 immediately
+   * rewrites, touching the same lines twice for no gain. It is PINNED here so
+   * the thunk set cannot change in the meantime, and D6 owns the move.
+   */
+  { name: "REGION_ROSTERS", after: () => REGION_ROSTERS.JP },
   { name: "COUNTRY_BILL_PHASES", after: () => COUNTRY_BILL_PHASES.JP },
   { name: "COUNTRY_ELECTION_PHASES", after: () => COUNTRY_ELECTION_PHASES.JP },
   { name: "PARLIAMENTARY_CABINET_CONFIGS", after: () => PARLIAMENTARY_CABINET_CONFIGS.JP },

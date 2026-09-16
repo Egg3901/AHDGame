@@ -12,9 +12,6 @@ import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
 import { ukRegionCensusData } from "@/lib/seeds/uk/ukRegionCensusData";
 import { ukRegionCensusData1953 } from "@/lib/seeds/uk/ukRegionCensusData1953";
 import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
-import { jpRegionCensusData } from "@/lib/seeds/jp/jpRegionCensusData";
-import { jpRegionCensusData1953 } from "@/lib/seeds/jp/jpRegionCensusData1953";
-import { jpRegionCensusData1991 } from "@/lib/seeds/jp/jpRegionCensusData1991";
 import { deRegionCensusData } from "@/lib/seeds/de/deRegionCensusData";
 import { deRegionCensusData1953 } from "@/lib/seeds/de/deRegionCensusData1953";
 import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
@@ -39,7 +36,6 @@ import { ddRegionCensusData1953 } from "@/lib/seeds/dd/ddRegionCensusData1953";
 import { ngRegionCensusData1953 } from "@/lib/seeds/ng/ngRegionCensusData1953";
 // 1979-era census bundles (authored for the 1979 reset).
 import { ukRegionCensusData1979 } from "@/lib/seeds/uk/ukRegionCensusData1979";
-import { jpRegionCensusData1979 } from "@/lib/seeds/jp/jpRegionCensusData1979";
 import { deRegionCensusData1979 } from "@/lib/seeds/de/deRegionCensusData1979";
 import { ieRegionCensusData1979 } from "@/lib/seeds/ie/ieRegionCensusData1979";
 import { cnRegionCensusData1979 } from "@/lib/seeds/cn/cnRegionCensusData1979";
@@ -81,6 +77,7 @@ import { blrRegionCensusData } from "@/lib/seeds/blr/blrRegionCensusData";
 import { balRegionCensusData1953 } from "@/lib/seeds/bal/balRegionCensusData1953";
 import { balRegionCensusData } from "@/lib/seeds/bal/balRegionCensusData";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   PL: {
@@ -153,12 +150,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
     "2019-default": ukRegionCensusData,
     "1991-default": ukRegionCensusData1991,
   },
-  JP: {
-    "1953-default": jpRegionCensusData1953,
-    "1979-default": jpRegionCensusData1979,
-    "2019-default": jpRegionCensusData,
-    "1991-default": jpRegionCensusData1991,
-  },
+  JP: JP_GEOGRAPHY.censusBundles,
   DE: {
     "1953-default": deRegionCensusData1953,
     "1979-default": deRegionCensusData1979,

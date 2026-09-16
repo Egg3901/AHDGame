@@ -1,4 +1,5 @@
 import type { CountryId } from "./countries";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export type Continent =
   "North America" | "South America" | "Europe" | "Africa" | "Asia" | "Oceania";
@@ -46,6 +47,6 @@ export const COUNTRY_CONTINENT: Record<CountryId, Continent> = {
   SCO: "Europe",
   WAL: "Europe",
   NG: "Africa",
-  JP: "Asia",
+  JP: JP_GEOGRAPHY.continent,
   CN: "Asia",
 };

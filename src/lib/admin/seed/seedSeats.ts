@@ -11,13 +11,13 @@ import {
   getHouseSeats,
   getUkCommonsSeats,
 } from "@/lib/constants/states";
-import { JP_REGIONS } from "@/lib/constants/japan";
 import { deRegions } from "@/lib/seeds/de/deRegions";
 import { brRegions } from "@/lib/seeds/br/brRegions";
 import { ngRegions } from "@/lib/seeds/ng/ngRegions";
 import { cnRegions } from "@/lib/seeds/cn/cnRegions";
 import { ieRegions } from "@/lib/seeds/ie/ieRegions";
 import { TERRITORY_ADMISSIONS } from "@/lib/elections/statehoodAdmission";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 // State name lookup for display names
 const STATE_NAMES: Record<string, string> = {
@@ -88,13 +88,9 @@ const UK_REGION_NAMES: Record<string, string> = {
   NIR: "Northern Ireland",
 };
 
-const JP_REGION_NAMES: Record<string, string> = Object.fromEntries(
-  JP_REGIONS.map((r) => [r.id, r.name])
-);
 const DE_REGION_NAMES: Record<string, string> = Object.fromEntries(
   deRegions.map((r) => [r._id, r.name])
 );
-
 const BR_REGION_NAMES: Record<string, string> = Object.fromEntries(
   brRegions.map((r) => [r._id, r.name])
 );
@@ -128,7 +124,7 @@ const IE_LOCAL_COUNCIL_SEATS_LOCAL: Record<string, number> = {
 
 export const REGION_NAME_MAPS: Partial<Record<CountryId, Record<string, string>>> = {
   UK: UK_REGION_NAMES,
-  JP: JP_REGION_NAMES,
+  JP: JP_GEOGRAPHY.regionNames,
   DE: DE_REGION_NAMES,
   BR: BR_REGION_NAMES,
   NG: NG_REGION_NAMES,

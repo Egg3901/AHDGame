@@ -10,10 +10,7 @@ import {
   dePopulationAnchors2019,
   dePopulationAnchors1991,
 } from "@/lib/seeds/de/dePopulationAnchors";
-import {
-  jpPopulationAnchors2019,
-  jpPopulationAnchors1991,
-} from "@/lib/seeds/jp/jpPopulationAnchors";
+import {} from "@/lib/seeds/jp/jpPopulationAnchors";
 import {
   brPopulationAnchors2019,
   brPopulationAnchors1991,
@@ -31,9 +28,10 @@ import {
   usPopulationAnchors1991,
 } from "@/lib/seeds/reference/usPopulationAnchors";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export type { PopulationAnchor };
-type AnchorBundle = Record<string, PopulationAnchor>;
+export type AnchorBundle = Record<string, PopulationAnchor>;
 type PresetBundles = Partial<Record<ResetPresetId, AnchorBundle>>;
 
 /**
@@ -45,7 +43,7 @@ type PresetBundles = Partial<Record<ResetPresetId, AnchorBundle>>;
 export const POPULATION_ANCHOR_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
   IE: { "2019-default": iePopulationAnchors2019, "1991-default": iePopulationAnchors1991 },
   DE: { "2019-default": dePopulationAnchors2019, "1991-default": dePopulationAnchors1991 },
-  JP: { "2019-default": jpPopulationAnchors2019, "1991-default": jpPopulationAnchors1991 },
+  JP: JP_GEOGRAPHY.populationAnchors,
   BR: { "2019-default": brPopulationAnchors2019, "1991-default": brPopulationAnchors1991 },
   CN: { "2019-default": cnPopulationAnchors2019, "1991-default": cnPopulationAnchors1991 },
   UK: { "2019-default": ukPopulationAnchors2019, "1991-default": ukPopulationAnchors1991 },

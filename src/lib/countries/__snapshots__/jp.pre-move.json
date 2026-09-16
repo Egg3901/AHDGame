@@ -7535,7 +7535,15 @@
   },
   "REGION_ROSTERS": {
     "shape": "function-valued",
-    "value": null,
+    "value": {
+      "1953": "<function>",
+      "1979": "<function>",
+      "1991": "<function>",
+      "1999": "<function>",
+      "2007": "<function>",
+      "2019": "<function>",
+      "2023": "<function>"
+    },
     "functionKeys": ["1953", "1979", "1991", "1999", "2007", "2019", "2023"]
   },
   "REP_ECON": {

@@ -43,6 +43,7 @@ import {
 } from "@/lib/market/unownedHeadroom";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { capacityRescaleRatio } from "@/lib/constants/capacityEconomy";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Default founding book for an admin/NPP-spawned corporation, in ₳ at MODERN
@@ -58,7 +59,7 @@ export const NPP_DEFAULT_STARTING_CAPITAL_ANCHOR = 2_000_000;
 export const NPP_CAPITAL_STATES: Record<CountryId, string> = {
   US: "DC",
   UK: "LON",
-  JP: "KAN",
+  JP: JP_GEOGRAPHY.nppCapitalState,
   DE: "BE",
   CN: "HB", // Huabei (North China) — the region containing Beijing
   IE: "DUB",

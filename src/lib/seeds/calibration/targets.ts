@@ -1,5 +1,6 @@
 import type { EraId } from "@/lib/seeds/presetSelector";
 import type { CalibrationTarget, CountryId } from "./types";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 /**
  * Election-anchored targets. center/spread on the derived −5..+5 scale; sign
@@ -322,90 +323,7 @@ export const TARGETS: Partial<Record<CountryId, Partial<Record<EraId, Calibratio
   // ─── Japan — House of Representatives, by region (urban left / rural LDP) ──
   // Japan's regional left-right is subtle (LDP rural-dominant). Anchors are the
   // clearest urban (left) vs rural (right) contrast only. Low confidence.
-  JP: {
-    // Japan is graded on both axes (#3760). Left/right is asserted on the
-    // ECONOMIC axis, and the social axis must carry real regional variation
-    // rather than sitting at a near-constant level the vote engine cannot
-    // distinguish between regions. Metro Kanto/Kansai vs rural Tohoku/Shikoku.
-    "1979": {
-      center: 0,
-      centerTol: 0.7,
-      minSpread: 1.2,
-      expectLeft: ["KAN", "KNS"],
-      expectRight: ["TOH", "SHI"],
-      election: "Japan 1979 HR (urban opposition vs rural LDP — low confidence)",
-      twoAxis: {
-        minEconomicSpread: 0.6,
-        minSocialSpread: 1.2,
-        economicCenterTol: 0.35,
-      },
-    },
-    "1991": {
-      center: 0,
-      centerTol: 0.7,
-      minSpread: 1.2,
-      expectLeft: ["KAN", "KNS"],
-      expectRight: ["TOH", "SHI"],
-      election: "Japan 1990 HR (low confidence)",
-      twoAxis: {
-        minEconomicSpread: 0.6,
-        minSocialSpread: 1.2,
-        economicCenterTol: 0.35,
-      },
-    },
-    "1999": {
-      center: 0,
-      centerTol: 0.7,
-      minSpread: 1.2,
-      expectLeft: ["KAN", "KNS"],
-      expectRight: ["TOH", "SHI"],
-      election: "Japan 2000 HR (low confidence)",
-      twoAxis: {
-        minEconomicSpread: 0.6,
-        minSocialSpread: 1.2,
-        economicCenterTol: 0.35,
-      },
-    },
-    "2007": {
-      center: 0,
-      centerTol: 0.7,
-      minSpread: 1.2,
-      expectLeft: ["KAN", "KNS"],
-      expectRight: ["TOH", "SHI"],
-      election: "Japan 2009 HR (DPJ win; urban left — low confidence)",
-      twoAxis: {
-        minEconomicSpread: 0.6,
-        minSocialSpread: 1.2,
-        economicCenterTol: 0.35,
-      },
-    },
-    "2019": {
-      center: 0,
-      centerTol: 0.7,
-      minSpread: 1.2,
-      expectLeft: ["KAN", "KNS"],
-      expectRight: ["TOH", "SHI"],
-      election: "Japan 2017 HR (low confidence)",
-      twoAxis: {
-        minEconomicSpread: 0.6,
-        minSocialSpread: 1.2,
-        economicCenterTol: 0.35,
-      },
-    },
-    "2023": {
-      center: 0,
-      centerTol: 0.7,
-      minSpread: 1.2,
-      expectLeft: ["KAN", "KNS"],
-      expectRight: ["TOH", "SHI"],
-      election: "Japan 2021 HR (low confidence)",
-      twoAxis: {
-        minEconomicSpread: 0.6,
-        minSocialSpread: 1.2,
-        economicCenterTol: 0.35,
-      },
-    },
-  },
+  JP: JP_GEOGRAPHY.calibrationTargets,
 
   // ─── Ireland — Dáil, by region ────────────────────────────────────────────
   // Irish politics is weakly left-right (FF/FG both centre-right historically).

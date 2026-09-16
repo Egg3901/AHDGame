@@ -7,6 +7,7 @@
 
 import type { CountryId } from "@/lib/constants/countries";
 import { CDN_GEO } from "@/lib/images/cdnUrls";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export interface CountryMapConfig {
   /** Country ID */
@@ -99,68 +100,6 @@ const FIPS_TO_STATE: Record<string, string> = {
 };
 
 /**
- * JIS X 0401 prefecture code (as string "1"–"47") → our 8-region internal ID.
- * Multiple prefectures share a region — the map colors each prefecture by its region's data.
- */
-const JIS_TO_JP_REGION: Record<string, string> = {
-  // Hokkaido
-  "1": "HOK",
-  // Tohoku
-  "2": "TOH",
-  "3": "TOH",
-  "4": "TOH",
-  "5": "TOH",
-  "6": "TOH",
-  "7": "TOH",
-  // Kanto
-  "8": "KAN",
-  "9": "KAN",
-  "10": "KAN",
-  "11": "KAN",
-  "12": "KAN",
-  "13": "KAN",
-  "14": "KAN",
-  // Chubu
-  "15": "CHU",
-  "16": "CHU",
-  "17": "CHU",
-  "18": "CHU",
-  "19": "CHU",
-  "20": "CHU",
-  "21": "CHU",
-  "22": "CHU",
-  "23": "CHU",
-  // Kansai
-  "24": "KNS",
-  "25": "KNS",
-  "26": "KNS",
-  "27": "KNS",
-  "28": "KNS",
-  "29": "KNS",
-  "30": "KNS",
-  // Chugoku
-  "31": "CGK",
-  "32": "CGK",
-  "33": "CGK",
-  "34": "CGK",
-  "35": "CGK",
-  // Shikoku
-  "36": "SHI",
-  "37": "SHI",
-  "38": "SHI",
-  "39": "SHI",
-  // Kyushu & Okinawa
-  "40": "KYU",
-  "41": "KYU",
-  "42": "KYU",
-  "43": "KYU",
-  "44": "KYU",
-  "45": "KYU",
-  "46": "KYU",
-  "47": "KYU",
-};
-
-/**
  * RS (Regionalschlüssel) → German Bundesland code.
  * Both zero-padded ("01") and plain ("1") keys are included since
  * different GeoJSON sources use different ID formats.
@@ -248,20 +187,7 @@ export const COUNTRY_MAP_REGISTRY: Record<CountryId, CountryMapConfig> = {
     projectionCenter: [10.5, 51.2],
     projectionScale: 2200,
   },
-  JP: {
-    countryId: "JP",
-    name: "Japan",
-    overviewPath: "/country/jp",
-    mapPath: "/country/jp/map",
-    hasRegionMap: true,
-    // Prefecture-level GeoJSON; featureIdToStateId aggregates all 47 prefectures into 8 regions.
-    // Feature IDs come from geo.properties.id (JIS X 0401 numeric code, 1–47).
-    geoUrl: "https://cdn.jsdelivr.net/gh/dataofjapan/land@master/japan.geojson",
-    featureIdToStateId: JIS_TO_JP_REGION,
-    projection: "mercator",
-    projectionCenter: [136, 36],
-    projectionScale: 1300,
-  },
+  JP: JP_GEOGRAPHY.mapRegistry,
   IE: {
     countryId: "IE",
     name: "Ireland",

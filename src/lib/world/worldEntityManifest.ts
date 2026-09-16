@@ -23,6 +23,7 @@ import {
   sphereMacroEntry,
 } from "./registry/decolonization1953";
 import { isShippingPreset, tierFor } from "./eraRoster";
+import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
@@ -223,7 +224,7 @@ export const COUNTRY_REGIONS: Record<CountryId, WorldEntityRegion> = {
   UKR: "europe",
   RU: "europe",
   TR: "europe",
-  JP: "asia",
+  JP: JP_GEOGRAPHY.worldRegion,
   CN: "asia",
   NG: "africa",
   AT: "europe",
@@ -249,7 +250,7 @@ export const COUNTRY_UN_MEMBER_SINCE: Partial<Record<CountryId, number>> = {
   ES: 1955,
   SE: 1946,
   TR: 1945,
-  JP: 1956,
+  JP: JP_GEOGRAPHY.unMemberSince,
   IE: 1955,
   NG: 1960,
   PL: 1945,
