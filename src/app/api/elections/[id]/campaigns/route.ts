@@ -53,7 +53,14 @@ export async function GET(request: Request, { params }: RouteParams) {
     // page still renders an archived campaign for its owner.
     const allCampaigns = await db
       .collection<Campaign>("campaigns")
-      .find({ electionId: electionOid, status: { $ne: "archived" } })
+      // activityHistory is not returned by this endpoint (see the privileged
+      // payload below), so it must not be read either: this is a list query
+      // over every campaign in the election, and a campaign now keeps 200
+      // entries rather than 10.
+      .find(
+        { electionId: electionOid, status: { $ne: "archived" } },
+        { projection: { activityHistory: 0 } }
+      )
       .toArray();
 
     // Most races have no campaigns at all — Campaign Manager is US-only — and
@@ -309,12 +316,14 @@ function formatCampaignForViewer(
     // income/maintenance/upgrade costs at the frozen world-seeded currency basis.
     const toLocal = (anchor: number) =>
       campaignAnchorToLocal(anchor, electionCountryId, campaignRates);
+    // activityHistory is deliberately NOT returned here. This is a list
+    // endpoint that serves every campaign in the election at once, and neither
+    // consumer (CampaignManagerTab, CampaignsListPanel) reads the field. Once a
+    // campaign keeps 200 entries instead of 10 it would carry twenty times the
+    // weight for nothing. The ledger reads its history from the per-campaign
+    // detail endpoint, which is the only surface that renders it.
     const privilegedData = {
       ...base,
-      activityHistory: campaign.activityHistory.map((a) => ({
-        ...a,
-        timestamp: a.timestamp.toISOString(),
-      })),
       budget: {
         // funds + cumulative totals are already local in storage.
         income: {

@@ -58,6 +58,11 @@ export interface CampaignBlendInput {
   runningMateName: string | null;
   rail: CampaignRail;
   ledgerPage: number;
+  /** Which ledger tab is open. Defaults to the activity log. */
+  ledgerTab?: LedgerTab;
+  /** Page within the endorsements tab, tracked separately from `ledgerPage`. */
+  endorsementPage?: number;
+  endorsementFilter?: EndorsementFilter;
   expandedCategory: UpgradeCategory | null;
 }
 
@@ -120,6 +125,25 @@ export interface LedgerRowVM {
   cost: string;
   demoted: boolean;
   reason: string | null;
+}
+
+export type LedgerTab = "activity" | "endorsements";
+export type EndorsementFilter = "all" | "player" | "npp";
+
+export interface EndorsementRowVM {
+  kind: "player" | "npp";
+  /**
+   * What the reader calls this endorser. "NPP" is an internal word for a
+   * non-player politician and never reaches the panel.
+   */
+  kindLabel: string;
+  name: string;
+  /**
+   * No "when" column. Endorsement records store only a real-world `createdAt`
+   * and no turn number, and the game runs on its era preset's own calendar, so
+   * any date shown here would stamp the wrong year on the fiction. The
+   * timestamp still orders the list; it just never reaches the reader.
+   */
 }
 
 export interface SparklineBarVM {
@@ -208,7 +232,21 @@ export interface CampaignBlendVM {
   ops: OpsRowVM[];
   money: MoneyVM | null;
   ledger: {
+    tab: LedgerTab;
+    /** Activity rows. Empty while the endorsements tab is open. */
     rows: LedgerRowVM[];
+    /** Endorser rows. Empty while the activity tab is open. */
+    endorsementRows: EndorsementRowVM[];
+    filter: EndorsementFilter;
+    /** Unfiltered totals, so the chips say what sits behind each filter. */
+    filterCounts: { all: number; player: number; npp: number };
+    /**
+     * Whether to offer the source filter at all. False for a fogged viewer,
+     * whose counts are zero only because the payload was redacted.
+     */
+    showFilters: boolean;
+    emptyText: string;
+    /** Pager state belongs to whichever tab is open. */
     rangeText: string;
     pageText: string;
     hasPager: boolean;
@@ -232,7 +270,9 @@ const PANE_TITLES: Record<CampaignRail, string> = {
   overview: "Campaign overview",
   ops: "Strategic operations",
   money: "Budget & contributions",
-  log: "Activity log",
+  // Not "The ledger": BlendLedger heads itself with exactly that, and the pane
+  // header sits directly above it. Naming the two tabs distinguishes them.
+  log: "Activity & endorsements",
 };
 
 const CATEGORY_ORDER: UpgradeCategory[] = [
@@ -303,7 +343,14 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
   const { campaign, me, currentTurn, wire, runningMateName, rail, expandedCategory } = inp;
 
   const symbol = symbolFor(campaign.currencyCode);
-  const history = campaign.activityHistory ?? [];
+  /**
+   * Newest first. The array is stored oldest-first because every writer
+   * `$push`es onto the end, so it has to be reversed for display: a ledger that
+   * opens on a campaign's first purchase and buries last turn's on the final
+   * page reads backwards. While only the last ten entries were kept this was
+   * invisible, since the one page held the newest ten either way.
+   */
+  const history = [...(campaign.activityHistory ?? [])].reverse();
   const totalInvested = CATEGORY_ORDER.reduce((sum, c) => sum + investedIn(campaign, c), 0);
 
   // ── Rail ──────────────────────────────────────────────────────────────────
@@ -311,7 +358,16 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     { id: "overview", label: "Overview" },
     { id: "ops", label: "Operations", badge: `${totalInvested}/${OPS_TOTAL_CAP}` },
     { id: "money", label: "Money" },
-    { id: "log", label: "Activity log", badge: String(history.length) },
+    {
+      id: "log",
+      label: "Ledger",
+      // No badge for a fogged viewer: their history arrives empty because the
+      // payload was redacted, so a count would report an absence rather than
+      // measure one. The panel is two tabs now, so the rail names the panel.
+      ...(campaign.accessLevel === "owner"
+        ? { badge: String(history.length + (campaign.endorsements?.length ?? 0)) }
+        : {}),
+    },
   ];
 
   // ── Vitals ────────────────────────────────────────────────────────────────
@@ -473,12 +529,48 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     : null;
 
   // ── Ledger ────────────────────────────────────────────────────────────────
-  const pageCount = Math.max(1, Math.ceil(history.length / LEDGER_PAGE_SIZE));
-  const page = Math.min(Math.max(0, inp.ledgerPage), pageCount - 1);
+  // Two tabs share one pager. The open tab decides which list is paged, so the
+  // pager reports that list's length rather than the other one's.
+  const ledgerTab: LedgerTab = inp.ledgerTab ?? "activity";
+  const endorsementFilter: EndorsementFilter = inp.endorsementFilter ?? "all";
+  const allEndorsements = campaign.endorsements ?? [];
+  const filteredEndorsements =
+    endorsementFilter === "all"
+      ? allEndorsements
+      : allEndorsements.filter((e) => e.kind === endorsementFilter);
+
+  const pagedLength = ledgerTab === "endorsements" ? filteredEndorsements.length : history.length;
+  const requestedPage = ledgerTab === "endorsements" ? (inp.endorsementPage ?? 0) : inp.ledgerPage;
+  const pageCount = Math.max(1, Math.ceil(pagedLength / LEDGER_PAGE_SIZE));
+  // Clamp rather than trust the caller: narrowing the filter can strand the
+  // viewer on a page the shorter list no longer has.
+  const page = Math.min(Math.max(0, requestedPage), pageCount - 1);
   const start = page * LEDGER_PAGE_SIZE;
-  const pageRows = history.slice(start, start + LEDGER_PAGE_SIZE);
+
+  const endorsementRows: EndorsementRowVM[] =
+    ledgerTab === "endorsements"
+      ? filteredEndorsements.slice(start, start + LEDGER_PAGE_SIZE).map((e) => ({
+          kind: e.kind,
+          kindLabel: e.kind === "npp" ? "Politician" : "Player",
+          name: e.name,
+        }))
+      : [];
+
+  const pageRows = ledgerTab === "activity" ? history.slice(start, start + LEDGER_PAGE_SIZE) : [];
 
   const ledgerRows: LedgerRowVM[] = pageRows.map((a) => {
+    // Suspending and endorsing buys no lever, so it carries no category, level
+    // or cost. Through the purchase builder below it reads as a level 0 buy at
+    // no price, which is not what happened.
+    if (a.type === "suspend_endorse") {
+      return {
+        turnTag: `T${a.turnNumber}`,
+        label: `Suspended and endorsed ${a.targetName ?? "another candidate"}`,
+        cost: "",
+        demoted: false,
+        reason: null,
+      };
+    }
     const demoted = a.type === "downgrade";
     const spaced = (a.category ?? "").replace(/([A-Z])/g, " $1").trim();
     const label = spaced.charAt(0).toUpperCase() + spaced.slice(1);
@@ -571,12 +663,33 @@ export function buildCampaignBlendViewModel(inp: CampaignBlendInput): CampaignBl
     ops,
     money: money_,
     ledger: {
+      tab: ledgerTab,
       rows: ledgerRows,
-      rangeText: history.length
-        ? `${start + 1}-${start + pageRows.length} of ${history.length}`
+      endorsementRows,
+      filter: endorsementFilter,
+      filterCounts: {
+        all: allEndorsements.length,
+        player: allEndorsements.filter((e) => e.kind === "player").length,
+        npp: allEndorsements.filter((e) => e.kind === "npp").length,
+      },
+      showFilters: campaign.accessLevel === "owner",
+      // A fogged viewer's payload is redacted before either list is read, so
+      // both arrive empty whatever the campaign has actually done. Telling them
+      // nobody has endorsed it, or that nothing was bought, reports absence for
+      // something they were simply not shown.
+      emptyText:
+        campaign.accessLevel !== "owner"
+          ? "These records are visible only to the campaign's own side."
+          : ledgerTab === "endorsements"
+            ? endorsementFilter === "all"
+              ? "No players or politicians have endorsed this campaign yet."
+              : "No endorsements from this source yet."
+            : "Nothing has been bought yet.",
+      rangeText: pagedLength
+        ? `${start + 1}-${start + (ledgerTab === "endorsements" ? endorsementRows.length : pageRows.length)} of ${pagedLength}`
         : "0 of 0",
       pageText: `Page ${page + 1} of ${pageCount}`,
-      hasPager: history.length > LEDGER_PAGE_SIZE,
+      hasPager: pagedLength > LEDGER_PAGE_SIZE,
       canPrev: page > 0,
       canNext: page < pageCount - 1,
       page,

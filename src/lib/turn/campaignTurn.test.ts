@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
 import { processCampaignTurn } from "./campaignTurn";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -882,6 +883,10 @@ describe("auto-downgrade on insolvency", () => {
     expect(op.updateOne.update.$set.groundGameLevel).toBe(0);
     expect(op.updateOne.update.$set.mediaSpendingLevel).toBe(0);
     expect(op.updateOne.update.$push).toBeDefined();
+    // Same cap as the upgrade, reset and suspend-endorse writers, so the turn
+    // engine cannot truncate entries a player action had kept.
+    const push = op.updateOne.update.$push!.activityHistory as { $slice: number };
+    expect(push.$slice).toBe(-CAMPAIGN_ACTIVITY_HISTORY_CAP);
   });
 
   it("leaves solvent campaigns untouched", async () => {
@@ -986,7 +991,7 @@ describe("auto-downgrade on insolvency", () => {
 });
 
 describe("endorsement filter", () => {
-  it("does not grant campaign actions for NPP endorsements", async () => {
+  it("uses only NPP endorsements for action calculation in non-presidential elections", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { calculateCampaignActions } = await import("@/lib/campaigns/actions");
 
@@ -1004,7 +1009,7 @@ describe("endorsement filter", () => {
       mediaSpendingLevel: 0,
       oppositionResearchLevel: 0,
       nppEndorsementCount: 4,
-      playerEndorsementCount: 9, // player endorsements should be ignored
+      playerEndorsementCount: 9, // ignored outside presidential races
     });
 
     vi.mocked(getDb).mockResolvedValue(db as never);
@@ -1017,13 +1022,14 @@ describe("endorsement filter", () => {
     }[] = campaignBulkWrite.mock.calls[0][0];
 
     const campaignOp = ops[0];
-    // Neither NPP nor lower-race player endorsements count. Baseline defaults
-    // to 4 per turn when no gameConfig doc is present in the test.
-    const expectedActions = calculateCampaignActions(0, 4);
+    // Only the 4 NPP endorsements count: player endorsements are gated to
+    // presidential races. Baseline defaults to 4 per turn (player base action
+    // gain) when no gameConfig doc is present in the test.
+    const expectedActions = calculateCampaignActions(4, 4);
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 
-  it("uses only player endorsements for presidential campaign actions", async () => {
+  it("uses both NPP and player endorsements for presidential elections", async () => {
     const { getDb } = await import("@/lib/mongodb");
     const { calculateCampaignActions } = await import("@/lib/campaigns/actions");
 
@@ -1054,8 +1060,9 @@ describe("endorsement filter", () => {
     }[] = campaignBulkWrite.mock.calls[0][0];
 
     const campaignOp = ops[0];
-    // The 9 player endorsements count; the 4 NPP endorsements do not.
-    const expectedActions = calculateCampaignActions(9, 4);
+    // Both 4 NPP + 9 player = 13 total. Baseline 4 (player base action gain)
+    // since no gameConfig doc exists in the test mock.
+    const expectedActions = calculateCampaignActions(13, 4);
     expect(campaignOp.updateOne.update.$inc.actions).toBe(expectedActions);
   });
 });

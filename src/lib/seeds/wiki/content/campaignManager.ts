@@ -50,24 +50,31 @@ Each card shows the starter node and its branches, next-branch cost (both money 
 
 **General-phase cost multiplier:** All upgrade costs are **1.5× higher** once the election enters the general phase. Front-load upgrades in the primary.
 
-### Activity log
+### The ledger
 
-Chronological record of campaign events:
+Two tabs at the foot of the campaign page, ten rows to a page.
 
-- Upgrade purchases
-- Auto-downgrades (with reason)
-- Endorsements received
-- Manager assignments
-- Major stat changes
-- Ad campaigns and canvassing events
+**Activity** is a record of what the campaign has done, newest first:
 
-Used for campaign-owner review and for party/public intelligence.
+- Upgrade purchases, with what they cost in funds and actions
+- Auto-downgrades, with the reason
+- Suspending the campaign to endorse someone else
+
+A campaign keeps its whole run of these rather than only the most recent, so
+the pager reaches back to its first purchase.
+
+**Endorsements** lists the players and politicians currently backing the
+campaign, and can be narrowed to either. The panel says "Politicians" where the
+rest of the wiki says NPPs; they are the same people. Withdrawn endorsements
+drop off the list. Rows carry no date: the records store no turn number.
+
+Both tabs are visible only to the campaign's own side. Party and public viewers
+see the panel but not its contents.
 
 ### Endorsements
 
-- List of NPPs and players who've endorsed the candidate.
+- List of NPPs and players who have endorsed the candidate.
 - Contribution to campaign actions (via the \`baseline + floor(sqrt(endorsements) × 3)\` formula).
-- Endorsement history: when and by whom.
 
 Player endorsements only count toward the action bonus in **presidential** races. NPP endorsements count in all races.
 
@@ -165,7 +172,7 @@ Anyone can donate:
 - **Party-chair donations.** National or regional chair can disburse from the party treasury to any candidate in their party.
 - **Party-treasurer donations.** Treasurer has equivalent authority to chair for party-fund disbursements.
 
-Donations show up in the Budget tab and Activity Log with attribution.
+Donations show up in the Budget tab with attribution. They are kept in their own donation record, not in the ledger's Activity tab.
 
 ## Strategic use of the campaign page
 

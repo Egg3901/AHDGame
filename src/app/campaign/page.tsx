@@ -32,12 +32,17 @@ export default async function CampaignPage() {
   // stateSenate) per typical career importance.
   const candidateCampaigns = await db
     .collection<Campaign>("campaigns")
-    .find({
-      $or: [
-        { managerId: userOid },
-        ...(characterOids.length > 0 ? [{ candidateId: { $in: characterOids } }] : []),
-      ],
-    })
+    .find(
+      {
+        $or: [
+          { managerId: userOid },
+          ...(characterOids.length > 0 ? [{ candidateId: { $in: characterOids } }] : []),
+        ],
+      },
+      // This page routes the viewer to a campaign; it never renders the
+      // activity array, which is now 200 entries deep rather than 10.
+      { projection: { activityHistory: 0 } }
+    )
     .toArray();
 
   if (candidateCampaigns.length > 0) {

@@ -12,6 +12,8 @@ import {
   buildCampaignBlendViewModel,
   OPS_TOTAL_CAP,
   type CampaignRail,
+  type EndorsementFilter,
+  type LedgerTab,
   type ViewerResources,
 } from "./campaignBlendViewModel";
 import { BlendOpsSection } from "./BlendOpsSection";
@@ -61,6 +63,9 @@ export function CampaignBlendClient({
   const [rail, setRail] = useState<CampaignRail>("overview");
   const [expanded, setExpanded] = useState<UpgradeCategory | null>(null);
   const [ledgerPage, setLedgerPage] = useState(0);
+  const [ledgerTab, setLedgerTab] = useState<LedgerTab>("activity");
+  const [endorsementPage, setEndorsementPage] = useState(0);
+  const [endorsementFilter, setEndorsementFilter] = useState<EndorsementFilter>("all");
   const [busy, setBusy] = useState<string | null>(null);
   const [personalAmount, setPersonalAmount] = useState("");
   const [treasuryAmount, setTreasuryAmount] = useState("");
@@ -78,14 +83,48 @@ export function CampaignBlendClient({
         runningMateName: campaign.runningMateName ?? null,
         rail,
         ledgerPage,
+        ledgerTab,
+        endorsementPage,
+        endorsementFilter,
         expandedCategory: expanded,
       }),
-    [campaign, me, currentTurn, wire, rail, ledgerPage, expanded]
+    [
+      campaign,
+      me,
+      currentTurn,
+      wire,
+      rail,
+      ledgerPage,
+      ledgerTab,
+      endorsementPage,
+      endorsementFilter,
+      expanded,
+    ]
   );
 
   // A pane switch should never leave the reader parked on a ledger page that
   // no longer exists.
   useEffect(() => setLedgerPage(0), [rail]);
+
+  // Switching tab or narrowing the source shortens the list under the pager, so
+  // both send the reader back to the first page rather than onto a page the
+  // shorter list does not have.
+  useEffect(() => setEndorsementPage(0), [ledgerTab, endorsementFilter]);
+
+  // One pager serves both tabs, so it has to move whichever list is on screen.
+  // The two pages are held apart so paging the endorsements does not scroll the
+  // activity log out from under the reader when they switch back.
+  const pagePrev = useCallback(() => {
+    const back = (p: number) => Math.max(0, p - 1);
+    if (ledgerTab === "endorsements") setEndorsementPage(back);
+    else setLedgerPage(back);
+  }, [ledgerTab]);
+
+  const pageNext = useCallback(() => {
+    const forward = (p: number) => Math.min(vm.ledger.pageCount - 1, p + 1);
+    if (ledgerTab === "endorsements") setEndorsementPage(forward);
+    else setLedgerPage(forward);
+  }, [ledgerTab, vm.ledger.pageCount]);
 
   // The state operations hub. Fetched here rather than served with the page so
   // an attack can refresh it without a full round trip. Keyed by election and
@@ -281,8 +320,10 @@ export function CampaignBlendClient({
       {showLog ? (
         <BlendLedger
           ledger={vm.ledger}
-          onPrev={() => setLedgerPage((p) => Math.max(0, p - 1))}
-          onNext={() => setLedgerPage((p) => Math.min(vm.ledger.pageCount - 1, p + 1))}
+          onPrev={pagePrev}
+          onNext={pageNext}
+          onTab={setLedgerTab}
+          onFilter={setEndorsementFilter}
         />
       ) : null}
     </>
@@ -589,8 +630,10 @@ export function CampaignBlendClient({
           <BlendLedger
             ledger={vm.ledger}
             variant="mobile"
-            onPrev={() => setLedgerPage((p) => Math.max(0, p - 1))}
-            onNext={() => setLedgerPage((p) => Math.min(vm.ledger.pageCount - 1, p + 1))}
+            onPrev={pagePrev}
+            onNext={pageNext}
+            onTab={setLedgerTab}
+            onFilter={setEndorsementFilter}
           />
         ) : null}
       </div>

@@ -139,6 +139,59 @@ describe("GET /api/elections/[id]/campaigns", () => {
     expect(db.collectionMocks.electionCandidates!.find).not.toHaveBeenCalled();
   });
 
+  it("projects the activity history out of the campaigns query", async () => {
+    // This endpoint serves every campaign in the election at once and returns
+    // no activity history, so it must not read one either: a campaign keeps 200
+    // entries now rather than 10.
+    stubFind("campaigns", [campaign(runningId, "active")]);
+    stubFind("electionCandidates", [
+      { _id: new ObjectId(), electionId, characterId: runningId, status: "active" },
+    ]);
+    stubFind("characters", [{ _id: runningId, name: "Ariane Yeong", sequentialId: 11 }]);
+
+    const { GET } = await import("./route");
+    await GET(new Request("http://localhost/api/elections/US-president/campaigns"), {
+      params: Promise.resolve({ id: "US-president" }),
+    });
+
+    const [, options] = db.collectionMocks.campaigns!.find.mock.calls[0];
+    expect((options as { projection?: Record<string, number> })?.projection).toMatchObject({
+      activityHistory: 0,
+    });
+  });
+
+  it("returns no activity history even to the campaign's own candidate", async () => {
+    // The nominee gets the privileged payload. The ledger reads its history from
+    // the per-campaign detail endpoint, and neither consumer of this list reads
+    // the field, so it is not shipped here at any access level.
+    const { getAuthUserWithCharacter } = await import("@/lib/auth");
+    vi.mocked(getAuthUserWithCharacter).mockResolvedValue({
+      userId: new ObjectId().toString(),
+      username: "nominee",
+      email: "nominee@example.com",
+      role: "user",
+      isAdmin: false,
+      hasCharacter: true,
+      character: { _id: runningId, name: "Ariane Yeong", countryId: "US", party: "1" },
+    } as never);
+
+    stubFind("campaigns", [campaign(runningId, "active")]);
+    stubFind("electionCandidates", [
+      { _id: new ObjectId(), electionId, characterId: runningId, status: "active" },
+    ]);
+    stubFind("characters", [{ _id: runningId, name: "Ariane Yeong", sequentialId: 11 }]);
+
+    const { GET } = await import("./route");
+    const res = await GET(new Request("http://localhost/api/elections/US-president/campaigns"), {
+      params: Promise.resolve({ id: "US-president" }),
+    });
+    const body = await res.json();
+
+    expect(body.campaigns).toHaveLength(1);
+    expect(body.campaigns[0].isExact).toBe(true);
+    expect(body.campaigns[0]).not.toHaveProperty("activityHistory");
+  });
+
   it("still lists a candidate who is actively running", async () => {
     stubFind("campaigns", [campaign(runningId, "active")]);
     stubFind("electionCandidates", [

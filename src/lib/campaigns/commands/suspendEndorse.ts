@@ -21,6 +21,7 @@ import {
 import { loadPartyGroupFavorability } from "@/lib/governorOffice/address/partyGroupFavorabilityLoader";
 import type { CountryId } from "@/lib/constants/countries";
 import { ObjectId, type Db } from "mongodb";
+import { CAMPAIGN_ACTIVITY_HISTORY_CAP } from "@/lib/campaigns/constants/activityHistory";
 
 async function getCurrentTurn(db: Db): Promise<number> {
   const gameState = await db
@@ -196,10 +197,15 @@ export async function suspendCampaignAndEndorse(params: {
     {
       $push: {
         activityHistory: {
-          type: "suspend_endorse",
-          targetName: endorsedCandidate.characterName,
-          timestamp: now,
-          turnNumber,
+          $each: [
+            {
+              type: "suspend_endorse",
+              targetName: endorsedCandidate.characterName,
+              timestamp: now,
+              turnNumber,
+            },
+          ],
+          $slice: -CAMPAIGN_ACTIVITY_HISTORY_CAP,
         },
       } as never,
       $set: { updatedAt: now },
