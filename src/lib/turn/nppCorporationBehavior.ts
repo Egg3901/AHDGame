@@ -66,7 +66,6 @@ import {
   type CeoArchetype,
 } from "@/lib/turn/ceoArchetype";
 import type { CorporationType } from "@/lib/constants/corporations";
-import type { CountryId } from "@/lib/constants/countries";
 import { partitionOpenMarkets } from "@/lib/economy/queries/privateEnterpriseGate";
 import type { CommodityPrice } from "@/lib/db/types/commodityPrice";
 import type { CommodityType } from "@/lib/constants/commodities";

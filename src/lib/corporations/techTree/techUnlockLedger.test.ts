@@ -258,7 +258,10 @@ describe("tech unlock ledger (ticket #1998)", () => {
   it("adoption emits one shadow entry and one audit row, never duplicates", async () => {
     const corp = makeCorp();
     const { db, txInserts, corpsUpdateOne, collections } = mockDb();
-    const ledgerInsertMany = vi.fn(() => Promise.resolve({ insertedCount: 1 }));
+    type ShadowDoc = { legs: Array<{ amount: number }> };
+    const ledgerInsertMany = vi.fn((_docs: ShadowDoc[]) =>
+      Promise.resolve({ insertedCount: 1 })
+    );
     collections.ledgerEntries = { insertMany: ledgerInsertMany };
     vi.mocked(isLedgerShadowEnabled).mockResolvedValueOnce(true);
     mockAppliedButUnackedTx(db, txInserts);
@@ -269,7 +272,7 @@ describe("tech unlock ledger (ticket #1998)", () => {
     // The lost ack happened at the insert, before either fan ran, so adoption
     // emits each downstream exactly once from the adopted row.
     expect(ledgerInsertMany).toHaveBeenCalledOnce();
-    const shadowDocs = ledgerInsertMany.mock.calls[0][0] as Record<string, any>[];
+    const shadowDocs = ledgerInsertMany.mock.calls[0][0];
     expect(shadowDocs).toHaveLength(1);
     expect(shadowDocs[0].legs[0].amount).toBe(-CASH_1950_1);
     expect(shadowDocs[0].legs[1].amount).toBe(CASH_1950_1);
