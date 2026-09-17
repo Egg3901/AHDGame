@@ -112,6 +112,21 @@ import {
 import { NON_PARTY_BUCKET_INDEPENDENT_BIAS_BY_COUNTRY } from "../../src/lib/turn/partyOrg/pacingConstants";
 import { SPAWN_ELECTIONS_REGISTRY } from "../../src/lib/turn/perpetualElections/registry";
 import { COUNTRY_REGIONS, COUNTRY_UN_MEMBER_SINCE } from "../../src/lib/world/worldEntityManifest";
+import { DOMAIN_BUCKET_AFFINITIES } from "../../src/lib/bucketAffinities";
+import { GROUPS } from "../../src/lib/constants/cabinetPositionGroups";
+import { MECHANICS_BY_COUNTRY } from "../../src/lib/constants/cabinetMechanics";
+import { ORDERS_BY_COUNTRY } from "../../src/lib/constants/cabinetOrders";
+import { COUNTRY_READINESS_EXPECTATIONS } from "../../src/lib/constants/countryReadinessExpectations";
+import { INITIAL_RATES } from "../../src/lib/constants/currencies";
+import { COUNTRY_BUCKET_LABELS } from "../../src/lib/demographics/bucketLabelsByCountry";
+import { COUNTRY_ANCHOR } from "../../src/lib/maps/countryAnchors";
+import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
+import { MAJOR_DEFAULT_PARTIES } from "../../src/lib/seeds/defaultPartyTiers";
+import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
+import { COUNTRY_SECTOR_WEIGHTS_1953 } from "../../src/lib/seeds/reference/sectorSeedWeights1953";
+import { UNION_NAMES_BY_ERA } from "../../src/lib/seeds/reference/unionNames";
+import { COUNTRY_MODIFIER_PATCHES } from "../../src/lib/states/conditions/countryPatches";
+import { MEDIAN_INCOME_THRESHOLDS } from "../../src/lib/utils/metricScoring";
 
 const COUNTRY = process.argv[2]?.toUpperCase();
 if (!COUNTRY || !/^[A-Z]{2}$/.test(COUNTRY)) {
@@ -235,6 +250,35 @@ function extract(name: string, registry: unknown): Snapshot {
 }
 
 const REGISTRIES: Record<string, unknown> = {
+  // ⚠ THESE FIFTEEN WERE ABSENT FROM JAPAN'S EMITTER AND ARE NOT OPTIONAL.
+  //
+  // `verify-jp-runtime.ts` asserts the folder owns each of them -- GROUPS.JP,
+  // MECHANICS_BY_COUNTRY.JP, ORDERS_BY_COUNTRY.JP and the rest are in its
+  // identity block, checked with `===` -- yet none was ever snapshotted. Japan
+  // survived that because its generators imported these straight from source at
+  // a time when source still held the pre-move values. The fixture is supposed
+  // to be the INDEPENDENT record, and for these fifteen it was not a record at
+  // all; had a generator gone wrong here there was nothing to compare against.
+  //
+  // ⚠ INITIAL_RATES IS RECORDED AS EVIDENCE AND MUST NOT MOVE. An exchange rate
+  // is a fact about a PAIR of countries in a year, not a fact the country owns,
+  // and it belongs next to the rates it has to stay consistent with. It is here
+  // so a later reader can prove it did not change, not so a folder can absorb it.
+  COUNTRY_ANCHOR,
+  COUNTRY_BUCKET_LABELS,
+  COUNTRY_COMMAND_FLAVOR,
+  COUNTRY_MODIFIER_PATCHES,
+  COUNTRY_READINESS_EXPECTATIONS,
+  COUNTRY_SECTOR_WEIGHTS_1953,
+  DOMAIN_BUCKET_AFFINITIES,
+  GDP_DENOMINATION_1953,
+  GROUPS,
+  INITIAL_RATES,
+  MAJOR_DEFAULT_PARTIES,
+  MECHANICS_BY_COUNTRY,
+  MEDIAN_INCOME_THRESHOLDS,
+  ORDERS_BY_COUNTRY,
+  UNION_NAMES_BY_ERA,
   CABINET_IDENTITY,
   CENSUS_BUNDLES,
   CONSCRIPTION_SEED,
