@@ -92,11 +92,14 @@ export async function autoResolveLingeringDefaults(args: {
           "bondSettlementInProgressAt",
           now,
           async () => {
-            // 1. Prefer refinance — no sectors sold.
+            // 1. Prefer refinance — no sectors sold. The deterministic
+            // per-corp-per-turn key makes a turn retry converge instead of
+            // double-issuing (issue #1672).
             const refi = await executeCorporationBondRefinance(db, corp, {
               now,
               currentTurn: turn,
               maturityTurns: refiMaturityTurns,
+              idempotencyKey: `bond-refinance:${corp._id.toString()}:${turn}`,
             });
             if (refi.ok) {
               bondsAutoRefinanced += refi.bondsMatured;
@@ -150,9 +153,11 @@ export async function autoResolveLingeringDefaults(args: {
             }
 
             // 2. Refinance infeasible — sell the minimum sectors to repay.
+            // Same deterministic-key convergence as above (issue #1672).
             const result = await executeCorporationBondRestructure(db, corp, {
               now,
               cureTurn: turn,
+              idempotencyKey: `bond-restructure:${corp._id.toString()}:${turn}`,
             });
             bondsAutoRestructured += result.bondsMatured;
             if (corp.userId) {

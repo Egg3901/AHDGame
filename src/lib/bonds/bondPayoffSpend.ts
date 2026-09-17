@@ -8,6 +8,7 @@ import {
   failMoneyFlowReceipt,
   makeLegStep,
   MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
   runMoneyFlowSteps,
   type MoneyFlowAccount,
   type MoneyFlowLegOutcome,
@@ -44,6 +45,32 @@ export interface BondPayoffBond {
   priorDefaulted: boolean;
 }
 
+/**
+ * The caller-computed result summary for a payoff attempt. Stored on the
+ * resume plan at claim time so a same-key retry that finds no live bonds
+ * left (every maturity claim applied, crash before the receipt completed)
+ * can finish the stored plan and still report the attempted outcome instead
+ * of stranding paid-and-matured bonds behind a "no bonds" refusal.
+ */
+export interface BondPayoffOutcome {
+  /** Defaulted principal repaid, in anchor (the routes' `paid` response). */
+  paid: number;
+  /** Number of bonds matured. */
+  bondsMatured: number;
+}
+
+/**
+ * Runtime shape check for a persisted payoff outcome. The resume path
+ * reports the stored outcome as the attempt's result, so a receipt whose
+ * outcome is present but malformed is unusable: the caller keeps its public
+ * no-bonds result instead of reporting corrupt numbers.
+ */
+export function isBondPayoffOutcome(value: unknown): value is BondPayoffOutcome {
+  if (!value || typeof value !== "object") return false;
+  const outcome = value as Record<string, unknown>;
+  return typeof outcome.paid === "number" && typeof outcome.bondsMatured === "number";
+}
+
 export interface BondPayoffSpendInput {
   /** Corporation whose liquid capital (plus escrow for cash cures) pays. */
   payerCorpId: ObjectId;
@@ -62,6 +89,8 @@ export interface BondPayoffSpendInput {
   onlyDefaulted: boolean;
   curedAtTurn: number;
   now: Date;
+  /** Caller-computed result summary, persisted on the resume plan. */
+  outcome?: BondPayoffOutcome;
   /**
    * Caller-chosen fingerprint of the intended payoff (see
    * `buildBondPayoffFingerprint`). A retry presenting the same key with a
@@ -160,6 +189,7 @@ export interface BondPayoffStoredPlan {
     amount: number;
   }>;
   bonds: Array<{ bondIdHex: string; priorMarketPrice: number; priorDefaulted: boolean }>;
+  outcome?: BondPayoffOutcome;
 }
 
 function toStoredPlan(input: BondPayoffSpendInput): BondPayoffStoredPlan {
@@ -184,6 +214,7 @@ function toStoredPlan(input: BondPayoffSpendInput): BondPayoffStoredPlan {
       priorMarketPrice: b.priorMarketPrice,
       priorDefaulted: b.priorDefaulted,
     })),
+    ...(input.outcome !== undefined ? { outcome: { ...input.outcome } } : {}),
   };
 }
 
@@ -217,6 +248,177 @@ function isRemainderOfPlan(input: BondPayoffSpendInput, plan: BondPayoffStoredPl
     return false;
   }
   return true;
+}
+
+/** Receipt rows carry the resume plan under this field (never in the shared type). */
+type BondPayoffReceipt = MoneyFlowReceipt & { bondPayoffPlan?: unknown };
+
+interface NormalizedPayoffPlan {
+  payerCorpId: ObjectId;
+  issuerCorpId: ObjectId;
+  debitLiquidCapital: number;
+  debitEscrow: number;
+  holders: Array<{
+    kind: BondPayoffHolderKind;
+    holderId: ObjectId;
+    field: string;
+    amount: number;
+  }>;
+  bonds: Array<{ bondId: ObjectId; priorMarketPrice: number; priorDefaulted: boolean }>;
+  cureMethod: BondPayoffCureMethod;
+  onlyDefaulted: boolean;
+  curedAtTurn: number;
+  now: Date;
+  outcome?: BondPayoffOutcome;
+}
+
+function planFromInput(live: BondPayoffSpendInput): NormalizedPayoffPlan {
+  return {
+    payerCorpId: live.payerCorpId,
+    issuerCorpId: live.issuerCorpId,
+    debitLiquidCapital: live.debitLiquidCapital,
+    debitEscrow: live.debitEscrow ?? 0,
+    holders: live.holders.map((h) => ({
+      kind: h.kind,
+      holderId: h.holderId,
+      field: h.field,
+      amount: h.amount,
+    })),
+    bonds: live.bonds.map((b) => ({
+      bondId: b.bondId,
+      priorMarketPrice: b.priorMarketPrice,
+      priorDefaulted: b.priorDefaulted,
+    })),
+    cureMethod: live.cureMethod,
+    onlyDefaulted: live.onlyDefaulted,
+    curedAtTurn: live.curedAtTurn,
+    now: live.now,
+    outcome: live.outcome ? { ...live.outcome } : undefined,
+  };
+}
+
+function planFromStored(stored: BondPayoffStoredPlan): NormalizedPayoffPlan {
+  return {
+    payerCorpId: new ObjectId(stored.payerCorpIdHex),
+    issuerCorpId: new ObjectId(stored.issuerCorpIdHex),
+    debitLiquidCapital: stored.debitLiquidCapital,
+    debitEscrow: stored.debitEscrow,
+    holders: stored.holders.map((h) => ({
+      kind: h.kind,
+      holderId: new ObjectId(h.holderIdHex),
+      field: h.field,
+      amount: h.amount,
+    })),
+    bonds: stored.bonds.map((b) => ({
+      bondId: new ObjectId(b.bondIdHex),
+      priorMarketPrice: b.priorMarketPrice,
+      priorDefaulted: b.priorDefaulted,
+    })),
+    cureMethod: stored.cureMethod,
+    onlyDefaulted: stored.onlyDefaulted,
+    curedAtTurn: stored.curedAtTurn,
+    now: new Date(stored.nowIso),
+    outcome: stored.outcome ? { ...stored.outcome } : undefined,
+  };
+}
+
+function buildPayoffSteps(db: Db, key: string, plan: NormalizedPayoffPlan): MoneyFlowStep[] {
+  const bonds = db.collection<Bond>("bonds");
+  // The escrow slice rides the same atomic payer write as the liquid slice
+  // (one leg: two legs on one document under colliding keys would skip the
+  // second). When the liquid slice is zero the escrow field becomes the
+  // primary guarded field, so the guard always covers the drawn balance.
+  const liquid = plan.debitLiquidCapital;
+  const escrow = plan.debitEscrow;
+  const escrowOnly = escrow > 0 && !(liquid > 0);
+  const debitStep = makeLegStep(`${key}:payer-debit`, {
+    name: "payer-debit",
+    collection: db.collection<MoneyFlowAccount>("corporations"),
+    docId: plan.payerCorpId,
+    field: escrowOnly ? "shareEscrowBalance" : "liquidCapital",
+    delta: escrowOnly ? -escrow : -liquid,
+    minBalance: escrowOnly ? escrow : liquid,
+    ...(escrowOnly
+      ? {}
+      : escrow > 0
+        ? {
+            extraIncs: { shareEscrowBalance: -escrow },
+            extraFilter: {
+              shareEscrowBalance: { $gte: escrow },
+            } as Filter<MoneyFlowAccount>,
+          }
+        : {}),
+    set: { updatedAt: plan.now },
+  });
+
+  const holderSteps: MoneyFlowStep[] = plan.holders.map((holder) => {
+    const hex = holder.holderId.toHexString();
+    return makeLegStep(`${key}:holder:${holder.kind}:${hex}`, {
+      name: `holder-credit-${holder.kind}-${hex}`,
+      collection: db.collection<MoneyFlowAccount>(HOLDER_COLLECTION[holder.kind]),
+      docId: holder.holderId,
+      field: holder.field,
+      delta: holder.amount,
+      set: { updatedAt: plan.now },
+    });
+  });
+
+  const matureSteps: MoneyFlowStep[] = plan.bonds.map((bond) => {
+    const hex = bond.bondId.toHexString();
+    const subKey = `${key}:mature:${hex}`;
+    return {
+      name: `mature-${hex}`,
+      apply: (stepOpts) =>
+        applyKeyedUpdate(
+          subKey,
+          {
+            collection: bonds,
+            filter: {
+              _id: bond.bondId,
+              corporationId: plan.issuerCorpId,
+              matured: false,
+              ...(plan.onlyDefaulted ? { defaulted: true } : {}),
+            },
+            update: {
+              $set: {
+                matured: true,
+                marketPrice: 1,
+                defaulted: false,
+                defaultCure: {
+                  cureMethod: plan.cureMethod,
+                  curedAtTurn: plan.curedAtTurn,
+                },
+                updatedAt: plan.now,
+              },
+            },
+          },
+          stepOpts ?? {}
+        ),
+      // Only reached when a LATER bond's claim loses a race: restore the
+      // captured flags so compensation leaves no half-matured set. The
+      // filter is the bare `_id` so a revert is never guard-blocked.
+      revert: (stepOpts) =>
+        applyKeyedUpdate(
+          `${subKey}:compensate:mature`,
+          {
+            collection: bonds,
+            filter: { _id: bond.bondId },
+            update: {
+              $set: {
+                matured: false,
+                marketPrice: bond.priorMarketPrice,
+                defaulted: bond.priorDefaulted,
+                updatedAt: plan.now,
+              },
+              $unset: { defaultCure: "" },
+            },
+          },
+          stepOpts ?? {}
+        ),
+    };
+  });
+
+  return [debitStep, ...holderSteps, ...matureSteps];
 }
 
 /**
@@ -303,172 +505,11 @@ export async function applyBondPayoffSpend(
     throw new RangeError("Bond payoff idempotency key must be 1-128 characters");
   }
 
-  const bonds = db.collection<Bond>("bonds");
   const receipts = await getMoneyFlowReceiptsCollection(db);
-
-  /** Receipt rows carry the resume plan under this field (never in the shared type). */
-  type BondPayoffReceipt = MoneyFlowReceipt & { bondPayoffPlan?: unknown };
   const receiptCollection = receipts as unknown as Collection<BondPayoffReceipt>;
 
-  interface NormalizedPayoffPlan {
-    payerCorpId: ObjectId;
-    issuerCorpId: ObjectId;
-    debitLiquidCapital: number;
-    debitEscrow: number;
-    holders: Array<{
-      kind: BondPayoffHolderKind;
-      holderId: ObjectId;
-      field: string;
-      amount: number;
-    }>;
-    bonds: Array<{ bondId: ObjectId; priorMarketPrice: number; priorDefaulted: boolean }>;
-    cureMethod: BondPayoffCureMethod;
-    onlyDefaulted: boolean;
-    curedAtTurn: number;
-    now: Date;
-  }
-
-  const planFromInput = (live: BondPayoffSpendInput): NormalizedPayoffPlan => ({
-    payerCorpId: live.payerCorpId,
-    issuerCorpId: live.issuerCorpId,
-    debitLiquidCapital: live.debitLiquidCapital,
-    debitEscrow: live.debitEscrow ?? 0,
-    holders: live.holders.map((h) => ({
-      kind: h.kind,
-      holderId: h.holderId,
-      field: h.field,
-      amount: h.amount,
-    })),
-    bonds: live.bonds.map((b) => ({
-      bondId: b.bondId,
-      priorMarketPrice: b.priorMarketPrice,
-      priorDefaulted: b.priorDefaulted,
-    })),
-    cureMethod: live.cureMethod,
-    onlyDefaulted: live.onlyDefaulted,
-    curedAtTurn: live.curedAtTurn,
-    now: live.now,
-  });
-
-  const planFromStored = (stored: BondPayoffStoredPlan): NormalizedPayoffPlan => ({
-    payerCorpId: new ObjectId(stored.payerCorpIdHex),
-    issuerCorpId: new ObjectId(stored.issuerCorpIdHex),
-    debitLiquidCapital: stored.debitLiquidCapital,
-    debitEscrow: stored.debitEscrow,
-    holders: stored.holders.map((h) => ({
-      kind: h.kind,
-      holderId: new ObjectId(h.holderIdHex),
-      field: h.field,
-      amount: h.amount,
-    })),
-    bonds: stored.bonds.map((b) => ({
-      bondId: new ObjectId(b.bondIdHex),
-      priorMarketPrice: b.priorMarketPrice,
-      priorDefaulted: b.priorDefaulted,
-    })),
-    cureMethod: stored.cureMethod,
-    onlyDefaulted: stored.onlyDefaulted,
-    curedAtTurn: stored.curedAtTurn,
-    now: new Date(stored.nowIso),
-  });
-
-  const buildSteps = (plan: NormalizedPayoffPlan): MoneyFlowStep[] => {
-    // The escrow slice rides the same atomic payer write as the liquid slice
-    // (one leg: two legs on one document under colliding keys would skip the
-    // second). When the liquid slice is zero the escrow field becomes the
-    // primary guarded field, so the guard always covers the drawn balance.
-    const liquid = plan.debitLiquidCapital;
-    const escrow = plan.debitEscrow;
-    const escrowOnly = escrow > 0 && !(liquid > 0);
-    const debitStep = makeLegStep(`${key}:payer-debit`, {
-      name: "payer-debit",
-      collection: db.collection<MoneyFlowAccount>("corporations"),
-      docId: plan.payerCorpId,
-      field: escrowOnly ? "shareEscrowBalance" : "liquidCapital",
-      delta: escrowOnly ? -escrow : -liquid,
-      minBalance: escrowOnly ? escrow : liquid,
-      ...(escrowOnly
-        ? {}
-        : escrow > 0
-          ? {
-              extraIncs: { shareEscrowBalance: -escrow },
-              extraFilter: {
-                shareEscrowBalance: { $gte: escrow },
-              } as Filter<MoneyFlowAccount>,
-            }
-          : {}),
-      set: { updatedAt: plan.now },
-    });
-
-    const holderSteps: MoneyFlowStep[] = plan.holders.map((holder) => {
-      const hex = holder.holderId.toHexString();
-      return makeLegStep(`${key}:holder:${holder.kind}:${hex}`, {
-        name: `holder-credit-${holder.kind}-${hex}`,
-        collection: db.collection<MoneyFlowAccount>(HOLDER_COLLECTION[holder.kind]),
-        docId: holder.holderId,
-        field: holder.field,
-        delta: holder.amount,
-        set: { updatedAt: plan.now },
-      });
-    });
-
-    const matureSteps: MoneyFlowStep[] = plan.bonds.map((bond) => {
-      const hex = bond.bondId.toHexString();
-      const subKey = `${key}:mature:${hex}`;
-      return {
-        name: `mature-${hex}`,
-        apply: (stepOpts) =>
-          applyKeyedUpdate(
-            subKey,
-            {
-              collection: bonds,
-              filter: {
-                _id: bond.bondId,
-                corporationId: plan.issuerCorpId,
-                matured: false,
-                ...(plan.onlyDefaulted ? { defaulted: true } : {}),
-              },
-              update: {
-                $set: {
-                  matured: true,
-                  marketPrice: 1,
-                  defaulted: false,
-                  defaultCure: {
-                    cureMethod: plan.cureMethod,
-                    curedAtTurn: plan.curedAtTurn,
-                  },
-                  updatedAt: plan.now,
-                },
-              },
-            },
-            stepOpts ?? {}
-          ),
-        // Only reached when a LATER bond's claim loses a race: restore the
-        // captured flags so compensation leaves no half-matured set. The
-        // filter is the bare `_id` so a revert is never guard-blocked.
-        revert: (stepOpts) =>
-          applyKeyedUpdate(
-            `${subKey}:compensate:mature`,
-            {
-              collection: bonds,
-              filter: { _id: bond.bondId },
-              update: {
-                $set: {
-                  matured: false,
-                  marketPrice: bond.priorMarketPrice,
-                  defaulted: bond.priorDefaulted,
-                  updatedAt: plan.now,
-                },
-                $unset: { defaultCure: "" },
-              },
-            },
-            stepOpts ?? {}
-          ),
-      };
-    });
-
-    return [debitStep, ...holderSteps, ...matureSteps];
-  };
+  const buildSteps = (plan: NormalizedPayoffPlan): MoneyFlowStep[] =>
+    buildPayoffSteps(db, key, plan);
 
   const runPlan = async (
     plan: NormalizedPayoffPlan,
@@ -547,4 +588,79 @@ export async function applyBondPayoffSpend(
     async (session) => runSpend(session),
     async () => runSpend()
   );
+}
+
+export interface BondPayoffResumeResult {
+  /** Caller-computed result summary persisted on the stored plan. */
+  outcome: BondPayoffOutcome;
+}
+
+/**
+ * Key-only crash recovery for the empty-remainder retry (issue #1672): the
+ * routes rebuild every call from live state, so after a crash between the
+ * final maturity claim and the receipt completion the live bond set reads
+ * empty and there is no spend input to present — `applyBondPayoffSpend`
+ * itself requires at least one bond. The caller consults this path instead
+ * of returning "no bonds" and stranding paid-and-matured bonds behind an
+ * `in_progress` receipt.
+ *
+ * Returns null when there is nothing to resume (no receipt under the key, an
+ * already-`completed` receipt, or an `in_progress` receipt with no usable
+ * stored plan): the caller keeps its public no-bonds result. Throws
+ * `MoneyFlowTerminalError` when the receipt settled `failed`/`compensated`,
+ * and `MoneyFlowKeyConflictError` when the stored attempt names a different
+ * payer or issuer (fail closed on cross-corp key reuse).
+ */
+export async function resumeBondPayoffByKey(
+  db: Db,
+  key: string,
+  expectedPayerCorpId: ObjectId,
+  expectedIssuerCorpId: ObjectId
+): Promise<BondPayoffResumeResult | null> {
+  if (key.length === 0 || key.length > 128) {
+    throw new RangeError("Bond payoff idempotency key must be 1-128 characters");
+  }
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const receiptCollection = receipts as unknown as Collection<BondPayoffReceipt>;
+  const existing = await receiptCollection.findOne({ _id: key });
+  if (!existing) return null;
+  if (existing.status === "completed") {
+    const stored = existing.bondPayoffPlan;
+    if (
+      isStoredPlan(stored) &&
+      (stored.payerCorpIdHex !== expectedPayerCorpId.toHexString() ||
+        stored.issuerCorpIdHex !== expectedIssuerCorpId.toHexString())
+    ) {
+      throw new MoneyFlowKeyConflictError(key);
+    }
+    return null;
+  }
+  if (existing.status === "failed" || existing.status === "compensated") {
+    throw new MoneyFlowTerminalError(key, existing.status);
+  }
+  if (existing.status !== "in_progress") return null;
+  const stored = existing.bondPayoffPlan;
+  // Crashed between the claim insert and the plan write: nothing applied yet,
+  // and the live set is empty because the bonds matured elsewhere — the
+  // public no-bonds result is the truthful answer. A malformed outcome is
+  // equally unusable: report nothing rather than corrupt numbers.
+  if (!isStoredPlan(stored) || !isBondPayoffOutcome(stored.outcome)) return null;
+  if (
+    stored.payerCorpIdHex !== expectedPayerCorpId.toHexString() ||
+    stored.issuerCorpIdHex !== expectedIssuerCorpId.toHexString()
+  ) {
+    throw new MoneyFlowKeyConflictError(key);
+  }
+  const plan = planFromStored(stored);
+  const mapError = (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error =>
+    mapPayoffError(step.name, outcome);
+  await runWithOptionalTransaction(
+    async (session) =>
+      runMoneyFlowSteps(receipts, key, buildPayoffSteps(db, key, plan), mapError, { session }),
+    async () => runMoneyFlowSteps(receipts, key, buildPayoffSteps(db, key, plan), mapError)
+  );
+  // `stored.outcome` is narrowed valid by the guard above; report a copy of
+  // it (never `plan.outcome`, which stays optional, and never an alias of
+  // the receipt document).
+  return { outcome: { ...stored.outcome } };
 }

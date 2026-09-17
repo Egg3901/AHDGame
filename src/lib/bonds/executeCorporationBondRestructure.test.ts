@@ -27,6 +27,16 @@ vi.mock("@/lib/wireEvent", () => ({
   logWireEvent: vi.fn().mockResolvedValue(undefined),
   wireHeadlineCorpRestructured: vi.fn(() => "RESTRUCTURING"),
 }));
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn().mockResolvedValue(false),
+}));
+// Era unit scale is orthogonal to restructure settlement: the real
+// `loadWorldEraUnitScale` resolves the preset from gameState (absent here,
+// so the modern default → scale 1) through the world-seed graph, which is
+// import-heavy under vitest. Pin the leaf to its fixture value.
+vi.mock("@/lib/currency/gdpAnchorRate", () => ({
+  loadWorldEraUnitScale: vi.fn().mockResolvedValue(1),
+}));
 
 function makeCursor<T>(docs: T[]) {
   return {
@@ -85,12 +95,15 @@ describe("executeCorporationBondRestructure", () => {
       await import("./executeCorporationBondRestructure");
     const { restoreSectorsToUnowned } = await import("@/lib/corporations/restoreSectorsToUnowned");
 
+    // Explicit key so a turn/route retry converges instead of re-paying.
+    const idempotencyKey = "restructure-test-key";
     const result = await executeCorporationBondRestructure(
       db as unknown as Db,
       { _id: corpId } as never,
       {
         now: new Date(),
         cureTurn: 50,
+        idempotencyKey,
       }
     );
 
@@ -101,21 +114,36 @@ describe("executeCorporationBondRestructure", () => {
     const liquidatedIds = liquidated.map((s) => s._id.toString()).sort();
     expect(liquidatedIds).toEqual([idA.toString(), idB.toString()].sort());
 
-    // Bonds cured with the restructure cure method.
-    const updateManyCall = db.collection("bonds").updateMany.mock.calls[0]!;
+    // The keyed flow claims its idempotency receipt under the caller's key.
+    const receiptInsert = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne.mock
+      .calls[0]![0] as { _id: string };
+    expect(receiptInsert._id).toBe(idempotencyKey);
+
+    // Bonds cured with the restructure cure method via a per-bond keyed cure
+    // claim (guarded updateOne, never a blanket updateMany).
+    expect(db.collection("bonds").updateMany).not.toHaveBeenCalled();
+    const cureCall = db.collection("bonds").updateOne.mock.calls[0]!;
+    expect(cureCall[0]).toMatchObject({ matured: false, defaulted: true });
     expect(
-      (updateManyCall[1] as { $set: { defaultCure: { cureMethod: string } } }).$set.defaultCure
+      (cureCall[1] as { $set: { defaultCure: { cureMethod: string } } }).$set.defaultCure
     ).toEqual({ cureMethod: "restructure", curedAtTurn: 50 });
 
-    // Corp liquid capital nets +proceeds(1530) -cost(1000) = +530.
+    // Corp liquid capital nets +proceeds(1530) -cost(1000) = +530 through the
+    // keyed corp-lc leg (guarded $inc + idempotency-key record, no bare write).
     const corpUpdate = db.collection("corporations").updateOne.mock.calls[0]!;
     expect((corpUpdate[1] as { $inc: { liquidCapital: number } }).$inc.liquidCapital).toBeCloseTo(
       530,
       6
     );
+    expect(corpUpdate[1]).toHaveProperty("$push");
 
-    // Bondholder was paid (characters bulkWrite issued).
-    expect(db.collection("characters").bulkWrite).toHaveBeenCalled();
+    // Bondholder was paid the full face (10 units x $1k) through a keyed
+    // character credit (updateOne, never an unkeyed bulkWrite).
+    expect(db.collection("characters").bulkWrite).not.toHaveBeenCalled();
+    const charUpdate = db.collection("characters").updateOne.mock.calls[0]!;
+    expect((charUpdate[0] as { _id?: ObjectId })._id?.toString()).toBe(charId.toString());
+    expect((charUpdate[1] as { $inc: Record<string, number> }).$inc.cashOnHand).toBe(10_000);
+    expect(charUpdate[1]).toHaveProperty("$push");
 
     expect(result.sectorsLiquidated).toBe(2);
     expect(result.bondsMatured).toBe(1);

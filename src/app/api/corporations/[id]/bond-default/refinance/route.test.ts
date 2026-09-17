@@ -34,6 +34,9 @@ vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTxBulk: vi.fn().mockResolvedValue(undefined),
   loadTxThresholds: vi.fn().mockResolvedValue({}),
 }));
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn().mockResolvedValue(false),
+}));
 
 let db: MockDb;
 
@@ -82,7 +85,6 @@ describe("POST /api/corporations/[id]/bond-default/refinance — ledger emission
   it("emits a cashless bond_issuance tx for the new refinance bond", async () => {
     const corpId = new ObjectId();
     const charId = new ObjectId();
-    const newBondInsertId = new ObjectId();
 
     const corporation = {
       _id: corpId,
@@ -115,7 +117,6 @@ describe("POST /api/corporations/[id]/bond-default/refinance — ledger emission
     // Both `find` calls (defaulted bonds + all non-matured) return the same
     // single defaulted bond in this fixture.
     db.collectionMocks["bonds"]!.find.mockImplementation(() => makeCursor([defaultedBond]));
-    db.collectionMocks["bonds"]!.insertOne.mockResolvedValue({ insertedId: newBondInsertId });
 
     db.collectionMocks["corporateSectors"]!.find.mockReturnValue(makeCursor([]));
     db.collectionMocks["centralBanks"]!.find.mockReturnValue(
@@ -159,15 +160,24 @@ describe("POST /api/corporations/[id]/bond-default/refinance — ledger emission
     // Cash flow is zero — debt-for-debt swap, no investors paid in.
     expect(entry.amount).toBe(0);
     expect(entry.meta?.refinance).toBe(true);
-    expect(entry.meta?.bondId).toBe(newBondInsertId.toString());
+    // The replacement bond carries the deterministic key-derived _id (a
+    // retry converges instead of double-issuing), not a minted random id.
+    const insertCall = db.collectionMocks["bonds"]!.insertOne.mock.calls[0]!;
+    const insertedId = (insertCall[0] as { _id: ObjectId })._id.toString();
+    expect(entry.meta?.bondId).toBe(insertedId);
     expect(entry.meta?.faceValue).toBeGreaterThan(0);
 
-    // Retired bonds are flipped to matured + defaulted=false but their
-    // defaultedAtTurn is preserved and a defaultCure marker is stamped so
-    // the Bonds tab can render "DEFAULT CURED (T<x> → refinance)".
-    const oldBondsUpdateCall = db.collectionMocks["bonds"]!.updateMany.mock.calls[0];
-    expect(oldBondsUpdateCall).toBeDefined();
-    const oldBondsUpdate = oldBondsUpdateCall![1] as {
+    // The retired bond is cured through the keyed per-bond cure claim
+    // (guarded updateOne, never a blanket updateMany): flipped to matured +
+    // defaulted=false with a defaultCure marker so the Bonds tab can render
+    // "DEFAULT CURED (T<x> → refinance)", while defaultedAtTurn (the
+    // historical mark) is never overwritten or unset.
+    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+    const cureCall = db.collectionMocks["bonds"]!.updateOne.mock.calls.find(
+      (call) => (call[0] as { _id?: ObjectId })._id?.toString() === defaultedBond._id.toString()
+    );
+    expect(cureCall).toBeDefined();
+    const cureUpdate = cureCall![1] as {
       $set: {
         matured?: boolean;
         defaulted?: boolean;
@@ -175,10 +185,10 @@ describe("POST /api/corporations/[id]/bond-default/refinance — ledger emission
       };
       $unset?: Record<string, string>;
     };
-    expect(oldBondsUpdate.$set.matured).toBe(true);
-    expect(oldBondsUpdate.$set.defaulted).toBe(false);
-    expect(oldBondsUpdate.$set.defaultCure?.cureMethod).toBe("refinance");
-    expect(oldBondsUpdate.$set.defaultCure?.curedAtTurn).toBe(444);
-    expect(oldBondsUpdate.$unset?.defaultedAtTurn).toBeUndefined();
+    expect(cureUpdate.$set.matured).toBe(true);
+    expect(cureUpdate.$set.defaulted).toBe(false);
+    expect(cureUpdate.$set.defaultCure?.cureMethod).toBe("refinance");
+    expect(cureUpdate.$set.defaultCure?.curedAtTurn).toBe(444);
+    expect(cureUpdate.$unset?.defaultedAtTurn).toBeUndefined();
   });
 });

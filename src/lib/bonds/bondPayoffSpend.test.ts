@@ -3,6 +3,8 @@ import { ObjectId, type Db } from "mongodb";
 import {
   applyBondPayoffSpend,
   buildBondPayoffFingerprint,
+  isBondPayoffOutcome,
+  resumeBondPayoffByKey,
   BOND_PAYOFF_FUNDS,
   BOND_PAYOFF_HOLDER,
   BOND_PAYOFF_MATURE,
@@ -785,5 +787,176 @@ describe("applyBondPayoffSpend (standalone fallback)", () => {
     expect(bondDoc(db, bondA).matured).toBe(true);
     expect(bondDoc(db, bondB).matured).toBe(true);
     expect(receipt(db, key).status).toBe("completed");
+  });
+});
+
+describe("isBondPayoffOutcome (persisted outcome schema)", () => {
+  it("accepts a complete outcome and rejects malformed ones", () => {
+    expect(isBondPayoffOutcome({ paid: 22_000, bondsMatured: 2 })).toBe(true);
+    expect(isBondPayoffOutcome(undefined)).toBe(false);
+    expect(isBondPayoffOutcome(null)).toBe(false);
+    expect(isBondPayoffOutcome({})).toBe(false);
+    // Missing or mistyped fields are unusable: the caller must keep its
+    // public no-bonds result rather than report corrupt numbers.
+    expect(isBondPayoffOutcome({ paid: 22_000 })).toBe(false);
+    expect(isBondPayoffOutcome({ paid: "22000", bondsMatured: 2 })).toBe(false);
+  });
+});
+
+const PAYOFF_OUTCOME = { paid: 22_000, bondsMatured: 2 };
+
+describe("resumeBondPayoffByKey (empty-remainder recovery)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    supportMock.mockResolvedValue(false);
+  });
+
+  it("recovers a crash after the final maturity claim: settles the receipt and reports the stored outcome", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "payoff-resume-final-cure";
+    // Writes: claim, plan, payer debit, 5 holder credits, mature A, mature
+    // B, then the receipt completion — crashing on completion leaves every
+    // bond matured with an in_progress receipt and no live bond set to
+    // rebuild input from.
+    db.crashAfterWrites = 10;
+    await expect(
+      applyBondPayoffSpend(
+        db as unknown as Db,
+        payoffInput({ idempotencyKey: key, outcome: { ...PAYOFF_OUTCOME } })
+      )
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(receipt(db, key).status).toBe("in_progress");
+    expect(bondDoc(db, bondA).matured).toBe(true);
+    expect(bondDoc(db, bondB).matured).toBe(true);
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    db.writeCount = 0;
+    const resumed = await resumeBondPayoffByKey(db as unknown as Db, key, payerId, issuerId);
+
+    expect(resumed).toEqual({ outcome: PAYOFF_OUTCOME });
+    // No duplicate payout on recovery: every holder credited exactly once.
+    expect(num(db, "corporations", payerId, "liquidCapital")).toBe(1_000_000 - DEBIT);
+    expect(num(db, "characters", charId, "cashOnHand")).toBe(12_000);
+    expect(num(db, "indexFunds", fundId, "cashAnchor")).toBe(100 + 3_000);
+    expect(receipt(db, key).status).toBe("completed");
+  });
+
+  it("converges on the same key after recovery without paying again", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "payoff-resume-converge";
+    db.crashAfterWrites = 10;
+    await expect(
+      applyBondPayoffSpend(
+        db as unknown as Db,
+        payoffInput({ idempotencyKey: key, outcome: { ...PAYOFF_OUTCOME } })
+      )
+    ).rejects.toThrow("INJECTED_CRASH");
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    db.writeCount = 0;
+    await resumeBondPayoffByKey(db as unknown as Db, key, payerId, issuerId);
+
+    const retry = await applyBondPayoffSpend(
+      db as unknown as Db,
+      payoffInput({ idempotencyKey: key, outcome: { ...PAYOFF_OUTCOME } })
+    );
+    expect(retry).toEqual({ duplicate: true });
+    expect(num(db, "characters", charId, "cashOnHand")).toBe(12_000);
+  });
+
+  it("returns null when no receipt exists, so the caller keeps its public result", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    await expect(
+      resumeBondPayoffByKey(db as unknown as Db, "payoff-absent", payerId, issuerId)
+    ).resolves.toBeNull();
+  });
+
+  it("returns null for a completed receipt: genuinely finished work stays historical", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "payoff-resume-completed";
+    await applyBondPayoffSpend(
+      db as unknown as Db,
+      payoffInput({ idempotencyKey: key, outcome: { ...PAYOFF_OUTCOME } })
+    );
+    await expect(
+      resumeBondPayoffByKey(db as unknown as Db, key, payerId, issuerId)
+    ).resolves.toBeNull();
+  });
+
+  it("returns null for an in-progress receipt with no usable plan or outcome", async () => {
+    // Crash on the plan write: the claim landed but nothing applied yet.
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "payoff-resume-noplan";
+    db.crashAfterWrites = 1;
+    await expect(
+      applyBondPayoffSpend(db as unknown as Db, payoffInput({ idempotencyKey: key }))
+    ).rejects.toThrow("INJECTED_CRASH");
+    await expect(
+      resumeBondPayoffByKey(db as unknown as Db, key, payerId, issuerId)
+    ).resolves.toBeNull();
+
+    // A stored plan without a persisted outcome cannot report an attempt.
+    const db2 = new FakeDb();
+    seedDb(db2);
+    const key2 = "payoff-resume-nooutcome";
+    db2.crashAfterWrites = 9;
+    await expect(
+      applyBondPayoffSpend(db2 as unknown as Db, payoffInput({ idempotencyKey: key2 }))
+    ).rejects.toThrow("INJECTED_CRASH");
+    await expect(
+      resumeBondPayoffByKey(db2 as unknown as Db, key2, payerId, issuerId)
+    ).resolves.toBeNull();
+  });
+
+  it("throws terminal for a settled failed receipt", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    // The payer cannot cover the debit: the receipt settles failed with no
+    // effect, so a retry needs a new key.
+    db.collection("corporations").docs.get(payerId.toHexString())!.liquidCapital = 1;
+    const key = "payoff-resume-terminal";
+    await expect(
+      applyBondPayoffSpend(db as unknown as Db, payoffInput({ idempotencyKey: key }))
+    ).rejects.toThrow(new RegExp(`^${BOND_PAYOFF_FUNDS}`));
+    await expect(
+      resumeBondPayoffByKey(db as unknown as Db, key, payerId, issuerId)
+    ).rejects.toBeInstanceOf(MoneyFlowTerminalError);
+  });
+
+  it("throws conflict when the stored attempt names a different payer or issuer", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "payoff-resume-mismatch";
+    db.crashAfterWrites = 9;
+    await expect(
+      applyBondPayoffSpend(
+        db as unknown as Db,
+        payoffInput({ idempotencyKey: key, outcome: { ...PAYOFF_OUTCOME } })
+      )
+    ).rejects.toThrow("INJECTED_CRASH");
+    await expect(
+      resumeBondPayoffByKey(db as unknown as Db, key, new ObjectId(), issuerId)
+    ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
+    await expect(
+      resumeBondPayoffByKey(db as unknown as Db, key, payerId, new ObjectId())
+    ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
+
+    // The mismatch also holds on a completed receipt (fail closed on
+    // cross-corp key reuse even after settlement).
+    const db2 = new FakeDb();
+    seedDb(db2);
+    const key2 = "payoff-resume-completed-mismatch";
+    await applyBondPayoffSpend(
+      db2 as unknown as Db,
+      payoffInput({ idempotencyKey: key2, outcome: { ...PAYOFF_OUTCOME } })
+    );
+    await expect(
+      resumeBondPayoffByKey(db2 as unknown as Db, key2, new ObjectId(), issuerId)
+    ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
   });
 });

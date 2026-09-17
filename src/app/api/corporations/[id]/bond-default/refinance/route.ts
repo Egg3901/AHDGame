@@ -4,11 +4,20 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { parseJsonBody } from "@/lib/api/validate";
 import { bondDefaultRefinanceSchema } from "@/lib/api/schemas/bondDefault";
-import { handleRouteError } from "@/lib/api/errors";
+import { handleRouteError, internalError } from "@/lib/api/errors";
 import type { BondMaturityTurns } from "@/lib/db/types";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
 import { getGameState } from "@/lib/gameState";
 import { executeCorporationBondRefinance } from "@/lib/bonds/executeCorporationBondRefinance";
+import {
+  BOND_REFINANCE_COUNT,
+  BOND_REFINANCE_ISSUE,
+  BOND_REFINANCE_MATURE,
+} from "@/lib/bonds/bondRefinanceSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { MAX_BOND_DEFAULT_REFINANCES } from "@/lib/constants/bonds";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 
@@ -35,6 +44,13 @@ export async function POST(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
     const { maturityTurns } = parsed.data;
+
+    // Crash-safe settlement (issue #1672): a client retry with the same key
+    // replays the stored refinance outcome instead of issuing again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
 
     const db = await getDb();
 
@@ -93,11 +109,51 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const now = new Date();
-    const result = await executeCorporationBondRefinance(db, corporation, {
-      now,
-      currentTurn,
-      maturityTurns: maturityTurns as BondMaturityTurns,
-    });
+    // Map a keyed-settlement failure back onto the historical surface: a lost
+    // count race is the 400 cap refusal, a lost cure race the 400 bond-state
+    // refusal, a failed insert the 500 issuance error. The primitive already
+    // compensated any applied prefix.
+    let result: Awaited<ReturnType<typeof executeCorporationBondRefinance>>;
+    try {
+      result = await executeCorporationBondRefinance(db, corporation, {
+        now,
+        currentTurn,
+        maturityTurns: maturityTurns as BondMaturityTurns,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+    } catch (err) {
+      if (err instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "Refinance already settled; start a new attempt with a new key." },
+          { status: 409 }
+        );
+      }
+      if (err instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "Idempotency key was reused for a different refinance." },
+          { status: 409 }
+        );
+      }
+      const message = err instanceof Error ? err.message : "";
+      if (message.startsWith(BOND_REFINANCE_COUNT)) {
+        return NextResponse.json(
+          {
+            error: `Refinance limit reached. A corporation can refinance defaulted debt at most ${MAX_BOND_DEFAULT_REFINANCES} times. Dissolution is the only remaining option for the defaulted bonds.`,
+          },
+          { status: 400 }
+        );
+      }
+      if (message.startsWith(BOND_REFINANCE_MATURE)) {
+        return NextResponse.json(
+          { error: "Bond state changed during refinance. Refresh and try again." },
+          { status: 400 }
+        );
+      }
+      if (message.startsWith(BOND_REFINANCE_ISSUE)) {
+        throw internalError("Bond issuance failed during refinance; contact an admin.");
+      }
+      throw err;
+    }
 
     if (!result.ok) {
       const status =

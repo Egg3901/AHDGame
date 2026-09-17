@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { MAX_BOND_DEFAULT_REFINANCES } from "@/lib/constants/bonds";
+import { keyedInsertId } from "@/lib/db/nonAtomicMoneyFlow";
 
 vi.mock("@/lib/wireEvent", () => ({
   logWireEvent: vi.fn(),
@@ -18,6 +19,9 @@ vi.mock("@/lib/wireEvent", () => ({
 }));
 vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTx: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn().mockResolvedValue(false),
 }));
 
 function makeCursor<T>(docs: T[]) {
@@ -89,46 +93,74 @@ beforeEach(() => {
 describe("executeCorporationBondRefinance", () => {
   it("refinances a feasible corp into a new bond without selling sectors or moving cash", async () => {
     const bond = defaultedBond();
-    const newBondId = new ObjectId();
     db.collectionMocks["bonds"]!.find.mockImplementation(() => makeCursor([bond]));
-    db.collectionMocks["bonds"]!.insertOne.mockResolvedValue({ insertedId: newBondId });
+
+    // Explicit key so the replacement-bond id is deterministic
+    // (keyedInsertId), not a minted random id.
+    const idempotencyKey = "refi-test-key";
+    const expectedBondId = keyedInsertId(idempotencyKey, "bond-refinance").toHexString();
 
     const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
     const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
       now: new Date(),
       currentTurn: 444,
       maturityTurns: 96,
+      idempotencyKey,
     });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error("expected ok");
-    expect(result.bondId).toBe(newBondId.toString());
+    expect(result.bondId).toBe(expectedBondId);
     expect(result.bondsMatured).toBe(1);
     expect(result.maturityTurn).toBe(444 + 96);
 
-    // A single fresh, non-defaulted bond is inserted with the defaulted holders rolled in.
+    // The keyed flow claims its idempotency receipt under the caller's key.
+    const receiptInsert = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne.mock
+      .calls[0]![0] as { _id: string };
+    expect(receiptInsert._id).toBe(idempotencyKey);
+
+    // A single fresh, non-defaulted bond is inserted with the defaulted holders rolled in,
+    // carrying the deterministic key-derived _id (a retry converges, never double-issues).
     const insertCall = db.collectionMocks["bonds"]!.insertOne.mock.calls[0]!;
     const newDoc = insertCall[0] as {
+      _id: ObjectId;
       defaulted: boolean;
       matured: boolean;
       holders: { characterId?: ObjectId; units: number }[];
       totalIssued: number;
     };
+    expect(newDoc._id.toHexString()).toBe(expectedBondId);
     expect(newDoc.defaulted).toBe(false);
     expect(newDoc.matured).toBe(false);
     expect(newDoc.holders).toHaveLength(1);
     expect(newDoc.holders[0]!.units).toBe(10_000);
     expect(newDoc.totalIssued).toBe(10_000 * 1_000);
 
-    // Old bonds are matured + cured via the refinance cure method.
-    const updateManyCall = db.collectionMocks["bonds"]!.updateMany.mock.calls[0]!;
-    const set = (updateManyCall[1] as { $set: Record<string, unknown> }).$set;
+    // The old bond is matured + cured via a per-bond keyed cure claim
+    // (guarded updateOne, never a blanket updateMany).
+    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+    const cureCall = db.collectionMocks["bonds"]!.updateOne.mock.calls.find(
+      (call) =>
+        (call[0] as { _id?: ObjectId })._id?.toString() === bond._id.toString()
+    )!;
+    expect(cureCall).toBeDefined();
+    expect(cureCall[0]).toMatchObject({
+      _id: bond._id,
+      corporationId: corpId,
+      matured: false,
+      defaulted: true,
+    });
+    const set = (cureCall[1] as { $set: Record<string, unknown> }).$set;
     expect(set.matured).toBe(true);
     expect(set.defaulted).toBe(false);
     expect((set.defaultCure as { cureMethod: string }).cureMethod).toBe("refinance");
 
-    // Corp refinance count incremented; liquidCapital is NEVER touched (cashless swap).
+    // Corp refinance count claimed through the guarded count step (lifetime
+    // cap enforced inside the claim); liquidCapital is NEVER touched (cashless swap).
     const corpUpdate = db.collectionMocks["corporations"]!.updateOne.mock.calls[0]!;
+    const filter = corpUpdate[0] as { _id?: ObjectId; $or?: unknown };
+    expect(filter._id?.toString()).toBe(corpId.toString());
+    expect(filter.$or).toBeDefined();
     const update = corpUpdate[1] as {
       $inc?: Record<string, unknown>;
       $set?: Record<string, unknown>;

@@ -17,6 +17,7 @@ import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
   applyBondPayoffSpend,
   buildBondPayoffFingerprint,
+  resumeBondPayoffByKey,
   BOND_PAYOFF_FUNDS,
   BOND_PAYOFF_HOLDER,
   BOND_PAYOFF_MATURE,
@@ -155,6 +156,47 @@ export async function POST(request: Request, { params }: RouteParams) {
           .toArray();
 
         if (outstandingBonds.length === 0) {
+          // Empty-remainder recovery (issue #1672): a crash between the final
+          // maturity claim and the receipt completion leaves every bond
+          // matured with an `in_progress` receipt, so the next retry under
+          // the same key rebuilds an empty live set. Resuming the stored plan
+          // finishes it and reports the stored outcome instead of stranding
+          // the paid-and-matured bonds behind a refusal. Without a key (or
+          // with nothing resumable under it) the historical refusal stands;
+          // terminal/conflicting receipts keep their 409 semantics.
+          if (headerKey !== null) {
+            try {
+              const resumed = await resumeBondPayoffByKey(
+                db,
+                headerKey,
+                parent._id,
+                target._id
+              );
+              if (resumed) {
+                return NextResponse.json({
+                  success: true,
+                  paid: resumed.outcome.paid,
+                  bondsMatured: resumed.outcome.bondsMatured,
+                  parentCorporationId: parent._id.toString(),
+                  targetCorporationId: target._id.toString(),
+                });
+              }
+            } catch (err) {
+              if (err instanceof MoneyFlowTerminalError) {
+                return NextResponse.json(
+                  { error: "Payoff already settled; start a new attempt with a new key." },
+                  { status: 409 }
+                );
+              }
+              if (err instanceof MoneyFlowKeyConflictError) {
+                return NextResponse.json(
+                  { error: "Idempotency key was reused for a different payoff." },
+                  { status: 409 }
+                );
+              }
+              throw err;
+            }
+          }
           return NextResponse.json({ error: "No outstanding bonds to pay off" }, { status: 400 });
         }
 
@@ -452,6 +494,10 @@ export async function POST(request: Request, { params }: RouteParams) {
             onlyDefaulted: false,
             curedAtTurn: cureTurn,
             now,
+            // Persisted on the receipt's resume plan: an empty-remainder
+            // retry under the same key reports this stored outcome after
+            // finishing the plan.
+            outcome: { paid: totalCostAnchor, bondsMatured: bondIds.length },
             fingerprint,
             ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
           });

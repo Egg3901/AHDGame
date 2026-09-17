@@ -20,6 +20,11 @@ import {
 import { sumCorporateSectorConstructionInProgress } from "@/lib/bonds/corporateCredit";
 import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFlag";
 import { MAX_BOND_DEFAULT_REFINANCES } from "@/lib/constants/bonds";
+import {
+  applyBondRefinanceSpend,
+  buildBondRefinanceFingerprint,
+  resumeBondRefinanceByKey,
+} from "@/lib/bonds/bondRefinanceSpend";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { getCountryConfig } from "@/lib/constants/countries";
 import { logWireEvent, wireHeadlineBond } from "@/lib/wireEvent";
@@ -67,7 +72,17 @@ export interface CorporationRefinanceInfeasible {
 export async function executeCorporationBondRefinance(
   db: Db,
   corporation: Corporation,
-  options: { now: Date; currentTurn: number; maturityTurns: BondMaturityTurns }
+  options: {
+    now: Date;
+    currentTurn: number;
+    maturityTurns: BondMaturityTurns;
+    /**
+     * Idempotency key for the crash-safe money-flow run (issue #1672): the
+     * CEO route forwards the client's `Idempotency-Key` header, the turn
+     * tick passes a deterministic per-corp-per-turn key. Omit to mint one.
+     */
+    idempotencyKey?: string;
+  }
 ): Promise<CorporationRefinanceResult | CorporationRefinanceInfeasible> {
   const { now, currentTurn, maturityTurns } = options;
 
@@ -77,6 +92,32 @@ export async function executeCorporationBondRefinance(
     .toArray();
 
   if (defaultedBonds.length === 0) {
+    // Empty-remainder recovery (issue #1672): a crash between the final cure
+    // and the replacement insert leaves every bond cured with an
+    // `in_progress` receipt, so the next retry under the same key rebuilds an
+    // empty live set. Resuming the stored plan finishes the deterministic
+    // replacement insert and reports the stored outcome instead of stranding
+    // the receipt behind a "no defaulted bonds" refusal. Without a key (or
+    // with nothing resumable under it) the public no-default result stands;
+    // terminal/conflicting receipts keep their error semantics via throw.
+    if (options.idempotencyKey !== undefined) {
+      const resumed = await resumeBondRefinanceByKey(
+        db,
+        options.idempotencyKey,
+        corporation._id
+      );
+      if (resumed) {
+        return {
+          ok: true,
+          bondId: resumed.bondId,
+          faceValueAnchor: resumed.outcome.faceValueAnchor,
+          couponRate: resumed.outcome.couponRate,
+          maturityTurn: resumed.outcome.maturityTurn,
+          retiredBondIds: [...resumed.outcome.retiredBondIds],
+          bondsMatured: resumed.outcome.bondsMatured,
+        };
+      }
+    }
     return { ok: false, reason: "No defaulted bonds to refinance" };
   }
 
@@ -205,37 +246,61 @@ export async function executeCorporationBondRefinance(
     updatedAt: now,
   };
 
-  const inserted = await db.collection("bonds").insertOne(bondDoc);
-
+  // Crash-safe settlement (issue #1672): the count claim, the per-bond cure
+  // claims, and the replacement-bond insert run as keyed idempotent steps.
+  // Claim-first ordering means a concurrent second attempt loses the cure
+  // race before it can insert, so it compensates only its count claim and
+  // fails closed instead of double-issuing. A crash between cure and insert
+  // resumes the stored plan under the same key; the deterministic insert id
+  // converges instead of duplicating the bond.
+  //
   // Refinancing is a debt-for-debt swap: existing holders are rolled into the new
   // bond at par (no cash changes hands). Do NOT credit the corporation with the
   // face value — there are no new investors purchasing the issuance, so treating
   // it as a cash raise would print phantom money and enable a default → refi
   // cash-extraction loop.
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: corporation._id },
-    {
-      $inc: { bondDefaultRefinanceCount: 1 },
-      $set: { updatedAt: now },
-    }
-  );
-
   const oldIds = defaultedBonds.map((b) => b._id);
-  // Preserve `defaultedAtTurn` (historical mark) and stamp `defaultCure` so the
-  // Bonds tab can render the "Default cured" badge. The caller's game-state
-  // guard guarantees currentTurn > 0, so the stamp is unconditionally safe.
-  await db.collection<Bond>("bonds").updateMany(
-    { _id: { $in: oldIds } },
-    {
-      $set: {
-        matured: true,
-        marketPrice: 1,
-        defaulted: false,
-        defaultCure: { cureMethod: "refinance" as const, curedAtTurn: currentTurn },
-        updatedAt: now,
-      },
-    }
-  );
+  const fingerprint = buildBondRefinanceFingerprint({
+    corpId: corporation._id,
+    bonds: oldIds,
+    totalUnits,
+    couponRate,
+    maturityTurns,
+    currencyCode: bondCurrencyCode,
+    holders: holders.map((h) => ({
+      holderId: h.characterId ?? h.imperialCharacterId ?? h.corporationId!,
+      units: h.units,
+    })),
+  });
+  const outcome = {
+    faceValueAnchor: actualFaceAnchor,
+    couponRate,
+    maturityTurn: currentTurn + maturityTurns,
+    bondsMatured: defaultedBonds.length,
+    retiredBondIds: oldIds.map((x) => x.toString()),
+  };
+  const { bondId } = await applyBondRefinanceSpend(db, {
+    corpId: corporation._id,
+    // Preserve `defaultedAtTurn` (historical mark): the cure claim never
+    // overwrites it, and the revert path only restores the flipped flags.
+    // The caller's game-state guard guarantees currentTurn > 0, so the cure
+    // stamp is unconditionally safe.
+    bonds: defaultedBonds.map((b) => ({
+      bondId: b._id,
+      priorMarketPrice: b.marketPrice ?? 1,
+    })),
+    newBond: bondDoc,
+    cureTurn: currentTurn,
+    now,
+    // Persisted on the receipt's resume plan: an empty-remainder retry under
+    // the same key (crash after the final cure, before the insert) reports
+    // this stored outcome after finishing the deterministic insert.
+    outcome,
+    fingerprint,
+    ...(options.idempotencyKey !== undefined
+      ? { idempotencyKey: options.idempotencyKey }
+      : {}),
+  });
 
   const matLabel = BOND_MATURITY_LABELS[maturityTurns] ?? `${maturityTurns}T`;
   logWireEvent(
@@ -261,7 +326,7 @@ export async function executeCorporationBondRefinance(
     // AND unrecognized countryId). Avoids `currencyCode: undefined`.
     currencyCode: (bondCurrencyCode ?? "USD") as CurrencyCode,
     meta: {
-      bondId: inserted.insertedId.toString(),
+      bondId: bondId,
       units: totalUnits,
       couponRate,
       maturityTurns,
@@ -273,11 +338,7 @@ export async function executeCorporationBondRefinance(
 
   return {
     ok: true,
-    bondId: inserted.insertedId.toString(),
-    faceValueAnchor: actualFaceAnchor,
-    couponRate,
-    maturityTurn: currentTurn + maturityTurns,
-    retiredBondIds: oldIds.map((x) => x.toString()),
-    bondsMatured: defaultedBonds.length,
+    bondId: bondId,
+    ...outcome,
   };
 }

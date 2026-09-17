@@ -2,7 +2,7 @@ import { ObjectId, type Db } from "mongodb";
 import type { Bond, Character, Corporation, CorporateSector, CentralBank } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import {
   anchorToCorpLiquidCapital,
   corpCapitalToAnchor,
@@ -19,6 +19,12 @@ import { getMarketSystemModeForDb, marketAtLeast } from "@/lib/market/featureFla
 import { getGameState } from "@/lib/gameState";
 import { restoreSectorsToUnowned } from "@/lib/corporations/restoreSectorsToUnowned";
 import { previewRestructure } from "@/lib/bonds/restructure";
+import {
+  applyBondRestructureSpend,
+  buildBondRestructureFingerprint,
+  resumeBondRestructureByKey,
+  type BondRestructureHolderCredit,
+} from "@/lib/bonds/bondRestructureSpend";
 import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { logWireEvent, wireHeadlineCorpRestructured } from "@/lib/wireEvent";
 import { badRequest } from "@/lib/api/errors";
@@ -57,7 +63,16 @@ export interface CorporationRestructureResult {
 export async function executeCorporationBondRestructure(
   db: Db,
   corporation: Corporation,
-  options: { now: Date; cureTurn: number }
+  options: {
+    now: Date;
+    cureTurn: number;
+    /**
+     * Idempotency key for the crash-safe money-flow run (issue #1672): the
+     * CEO route forwards the client's `Idempotency-Key` header, the turn
+     * tick passes a deterministic per-corp-per-turn key. Omit to mint one.
+     */
+    idempotencyKey?: string;
+  }
 ): Promise<CorporationRestructureResult> {
   if (corporation.countryOwnerId) {
     throw badRequest("National corporations cannot restructure here");
@@ -76,6 +91,22 @@ export async function executeCorporationBondRestructure(
     .find({ corporationId: refreshed._id, matured: false, defaulted: true })
     .toArray();
   if (defaultedBonds.length === 0) {
+    // Empty-remainder recovery (issue #1672): a crash late in the flow leaves
+    // every bond cured with an `in_progress` receipt, so the next retry under
+    // the same key rebuilds an empty live set. Resuming the stored plan
+    // finishes the remaining deterministic steps and reports the stored
+    // outcome instead of stranding paid-and-cured bonds behind a refusal.
+    // Without a key (or with nothing resumable under it) the historical
+    // refusal stands; terminal/conflicting receipts keep their error
+    // semantics via throw.
+    if (options.idempotencyKey !== undefined) {
+      const resumed = await resumeBondRestructureByKey(
+        db,
+        options.idempotencyKey,
+        refreshed._id
+      );
+      if (resumed) return { ...resumed.outcome };
+    }
     throw badRequest("No defaulted bonds to restructure");
   }
 
@@ -201,41 +232,21 @@ export async function executeCorporationBondRestructure(
     { currency: CurrencyCode; fxRate: number; doc: Corporation }
   >();
 
-  // ── Sequential writes (caller holds the settlement lock) ──────────────────
-
-  // 1. Apply the net cash movement: + salvage proceeds − defaulted principal.
-  //    By construction (preview.feasible) the result is non-negative.
-  const proceedsLocal = anchorToCorpLiquidCapital(preview.proceeds, refreshed, corpFxRate);
-  const costLocal = anchorToCorpLiquidCapital(defaultedPrincipalAnchor, refreshed, corpFxRate);
-  await db
-    .collection<Corporation>("corporations")
-    .updateOne(
-      { _id: refreshed._id },
-      { $inc: { liquidCapital: proceedsLocal - costLocal }, $set: { updatedAt: now } }
-    );
-
-  // 2. Liquidate the selected sectors to the unowned market (idempotent, not
-  //    transaction-safe — must run outside any transaction).
+  // ── Crash-safe settlement (issue #1672; caller holds the settlement lock) ──
+  //
+  // 1. Liquidate the selected sectors FIRST, before any money moves.
+  //    restoreSectorsToUnowned is idempotent across retries (per-sector
+  //    restore tokens guard the pool credits; the final delete tolerates
+  //    already-deleted rows), so a crash here converges on retry. Sequencing
+  //    the sale before the money flow also keeps the imputed proceeds honest:
+  //    the proceeds credit inside the flow below never outlives the sale.
   if (sectorsToLiquidate.length > 0) {
     await restoreSectorsToUnowned(db, sectorsToLiquidate, now);
   }
 
-  // 3. Cure the defaulted bonds.
-  const bondIds = defaultedBonds.map((b) => b._id);
-  await db.collection<Bond>("bonds").updateMany(
-    { _id: { $in: bondIds }, corporationId: refreshed._id, matured: false, defaulted: true },
-    {
-      $set: {
-        matured: true,
-        marketPrice: 1,
-        defaulted: false,
-        defaultCure: { cureMethod: "restructure" as const, curedAtTurn: cureTurn },
-        updatedAt: now,
-      },
-    }
-  );
-
-  // 4. Pay bondholders in full.
+  // 2. Resolve holder credits in each holder's own denomination — the same
+  //    accounts and units the legacy bulkWrites credited.
+  const holderCredits: BondRestructureHolderCredit[] = [];
   if (charIncs.size > 0) {
     const charIds = [...charIncs.keys()].map((idStr) => new ObjectId(idStr));
     const charDocs = await db
@@ -247,20 +258,19 @@ export async function executeCorporationBondRestructure(
       charDocs.map((c) => [c._id.toString(), getHomeCurrency(c as Character)])
     );
     for (const c of charDocs) nameById.set(c._id.toString(), c.name as string);
-    const charOps = [...charIncs.entries()].map(([charIdStr, amtAnchor]) => {
+    for (const [charIdStr, amtAnchor] of charIncs.entries()) {
       const currency = charCurrencyMap.get(charIdStr) ?? "USD";
       const amt = forexEnabled ? anchorToLocal(amtAnchor, currency) : amtAnchor;
-      return {
-        updateOne: {
-          filter: { _id: new ObjectId(charIdStr) },
-          update: {
-            $inc: buildPersonalBalanceInc(amt, currency, forexEnabled),
-            $set: { updatedAt: now },
-          },
-        },
-      };
-    });
-    if (charOps.length > 0) await db.collection<Character>("characters").bulkWrite(charOps);
+      if (!(amt > 0)) continue;
+      holderCredits.push({
+        kind: "character",
+        holderId: new ObjectId(charIdStr),
+        // Same account buildPersonalBalanceInc credits: per-currency
+        // personal balance post-forex, cashOnHand before it.
+        field: forexEnabled ? `currencyBalances.personal.${currency}` : "cashOnHand",
+        amount: amt,
+      });
+    }
   }
 
   if (imperialIncs.size > 0) {
@@ -278,20 +288,17 @@ export async function executeCorporationBondRestructure(
       imperialDocs.map((c) => [c._id.toString(), getHomeCurrency(c as ImperialCharacter)])
     );
     for (const c of imperialDocs) nameById.set(c._id.toString(), c.name as string);
-    const imperialOps = [...imperialIncs.entries()].map(([imperialIdStr, amtAnchor]) => {
+    for (const [imperialIdStr, amtAnchor] of imperialIncs.entries()) {
       const currency = imperialCurrencyMap.get(imperialIdStr) ?? "USD";
       const amt = forexEnabled ? anchorToLocal(amtAnchor, currency) : amtAnchor;
-      return {
-        updateOne: {
-          filter: { _id: new ObjectId(imperialIdStr) },
-          update: {
-            $inc: buildPersonalBalanceInc(amt, currency, forexEnabled),
-            $set: { updatedAt: now },
-          },
-        },
-      };
-    });
-    if (imperialOps.length > 0) await db.collection("imperialCharacters").bulkWrite(imperialOps);
+      if (!(amt > 0)) continue;
+      holderCredits.push({
+        kind: "imperial",
+        holderId: new ObjectId(imperialIdStr),
+        field: forexEnabled ? `currencyBalances.personal.${currency}` : "cashOnHand",
+        amount: amt,
+      });
+    }
   }
 
   if (corpIncs.size > 0) {
@@ -309,21 +316,65 @@ export async function executeCorporationBondRestructure(
       holderCorpFxByHolderId.set(creditor._id.toString(), { currency, fxRate, doc: creditor });
       nameById.set(creditor._id.toString(), creditor.name);
     }
-    const corpOps = [...corpIncs.entries()].flatMap(([corpIdStr, amtAnchor]) => {
+    for (const [corpIdStr, amtAnchor] of corpIncs.entries()) {
       const info = holderCorpFxByHolderId.get(corpIdStr);
-      if (!info) return [];
+      if (!info) continue;
       const amtInCapital = anchorToCorpLiquidCapital(amtAnchor, info.doc, info.fxRate);
-      return [
-        {
-          updateOne: {
-            filter: { _id: new ObjectId(corpIdStr) },
-            update: { $inc: { liquidCapital: amtInCapital }, $set: { updatedAt: now } },
-          },
-        },
-      ];
-    });
-    if (corpOps.length > 0) await db.collection<Corporation>("corporations").bulkWrite(corpOps);
+      if (!(amtInCapital > 0)) continue;
+      holderCredits.push({
+        kind: "corp",
+        holderId: new ObjectId(corpIdStr),
+        field: "liquidCapital",
+        amount: amtInCapital,
+      });
+    }
   }
+
+  // 3. Run the keyed money flow: the corp liquid-capital net (+ salvage
+  //    proceeds − defaulted principal; non-negative by preview.feasible),
+  //    the holder credits, then the per-bond cure claims. A later failure
+  //    compensates its own prefix instead of leaving a strand where holders
+  //    were paid but bonds never cured, or the corp paid but holders got
+  //    nothing. A crash anywhere resumes under the same key.
+  const bondIds = defaultedBonds.map((b) => b._id);
+  const proceedsLocal = anchorToCorpLiquidCapital(preview.proceeds, refreshed, corpFxRate);
+  const costLocal = anchorToCorpLiquidCapital(defaultedPrincipalAnchor, refreshed, corpFxRate);
+  const fingerprint = buildBondRestructureFingerprint({
+    corpId: refreshed._id,
+    netLiquidCapitalDelta: proceedsLocal - costLocal,
+    bonds: bondIds,
+    holders: holderCredits.map((h) => ({
+      kind: h.kind,
+      holderId: h.holderId,
+      amount: h.amount,
+    })),
+    cureTurn,
+  });
+  const outcome = {
+    paid: defaultedPrincipalAnchor,
+    bondsMatured: bondIds.length,
+    sectorsLiquidated: sectorsToLiquidate.length,
+    proceeds: preview.proceeds,
+    residualLiquidCapital: preview.residualLiquidCapital,
+  };
+  await applyBondRestructureSpend(db, {
+    corpId: refreshed._id,
+    netLiquidCapitalDelta: proceedsLocal - costLocal,
+    holders: holderCredits,
+    bonds: defaultedBonds.map((b) => ({
+      bondId: b._id,
+      priorMarketPrice: b.marketPrice ?? 1,
+    })),
+    cureTurn,
+    now,
+    // Persisted on the receipt's resume plan: an empty-remainder retry under
+    // the same key reports this stored outcome after finishing the plan.
+    outcome,
+    fingerprint,
+    ...(options.idempotencyKey !== undefined
+      ? { idempotencyKey: options.idempotencyKey }
+      : {}),
+  });
 
   // 5. Ledger: one bond_maturity row per (holder, bond), tagged as a restructure payoff.
   if (pendingMaturityTxs.length > 0) {
@@ -391,11 +442,5 @@ export async function executeCorporationBondRestructure(
     )
   );
 
-  return {
-    paid: defaultedPrincipalAnchor,
-    bondsMatured: bondIds.length,
-    sectorsLiquidated: sectorsToLiquidate.length,
-    proceeds: preview.proceeds,
-    residualLiquidCapital: preview.residualLiquidCapital,
-  };
+  return { ...outcome };
 }
