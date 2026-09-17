@@ -654,9 +654,9 @@ async function resolveWhipTarget(
     throw forbidden("The whip cannot be withdrawn from the Prime Minister");
   }
   // The PM suspends rebels from their own parliamentary party, not the opposition.
-  const pmChar = await db
-    .collection<Character>("characters")
-    .findOne({ _id: govFormation.pmCharacterId });
+  const pmChar = govFormation.pmCharacterId
+    ? await db.collection<Character>("characters").findOne({ _id: govFormation.pmCharacterId })
+    : null;
   const governingParty = govFormation.governingPartyId ?? pmChar?.party ?? null;
   const targetParty = official.party ?? targetChar.party ?? null;
   if (!governingParty || targetParty !== governingParty) {
@@ -738,7 +738,7 @@ export async function withdrawWhipHandler(request: Request, countryId: CountryId
 
     if (targetChar.userId) {
       await createNotification({
-        userId: targetChar.userId.toString(),
+        userId: targetChar.userId,
         title: "Whip withdrawn",
         message:
           "The Prime Minister has withdrawn the whip. You sit as an independent with elevated reselection risk until it is restored.",
@@ -811,7 +811,7 @@ export async function restoreWhipHandler(request: Request, countryId: CountryId)
 
     if (targetChar.userId) {
       await createNotification({
-        userId: targetChar.userId.toString(),
+        userId: targetChar.userId,
         title: "Whip restored",
         message:
           "The Prime Minister has restored the whip. You sit with the parliamentary party again.",
