@@ -53,9 +53,7 @@ export function retoolOperatingCapacityRatio(args: RetoolCapacityBasis): number 
  * unit is worth in transitional operating units at this progress. The era
  * scale cancels between the two yields.
  */
-export function retoolBlendRatio(
-  args: Omit<RetoolCapacityBasis, "retoolRescaleApplied">
-): number {
+export function retoolBlendRatio(args: Omit<RetoolCapacityBasis, "retoolRescaleApplied">): number {
   if (!args.transitionFromStrategyId) return 1;
   const effective = getEffectiveStrategyRates(
     args.sectorType,
