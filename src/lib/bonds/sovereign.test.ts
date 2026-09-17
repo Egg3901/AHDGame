@@ -477,7 +477,7 @@ describe("reconcileSovereignDebt", () => {
     expect(result!.budgetInterestDelta).toBeCloseTo(expectedDelta, 2);
   });
 
-  it("updates principal, interest service, debtToGdpRatio and creditRating", async () => {
+  it("updates interest service, debtToGdpRatio and creditRating", async () => {
     const db = buildMockDb(0);
     const result = await reconcileSovereignDebt(db as unknown as Db, {
       countryId: COUNTRY_CONFIGS.US.id,
@@ -494,9 +494,106 @@ describe("reconcileSovereignDebt", () => {
     expect(setPayload.$set).toHaveProperty("surplus");
     expect(setPayload.$set).toHaveProperty("debtToGdpRatio");
     expect(setPayload.$set).toHaveProperty("creditRating");
-    // Principal = original $10B + all tranches issued
-    expect(result!.newPrincipal).toBeGreaterThan(10_000_000_000);
+    // New coupons are genuine service on the new paper.
     expect(result!.newDebtInterest).toBeGreaterThan(600_000_000_000);
+  });
+
+  it("re-points principal at the post-write ledger instead of double-adding the gap (#1975)", async () => {
+    // $4B covered by existing bonds, $6B gap to fill against a $10B stock.
+    const db = buildMockDb(4_000_000_000);
+    const result = await reconcileSovereignDebt(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.US.id,
+      turn: 240,
+      now: new Date(),
+    });
+    expect(result!.gap).toBe(6_000_000_000);
+    // Per-tranche unit flooring can leave dust under 3 bond units unissued.
+    expect(result!.gap - result!.totalIssued).toBeLessThan(3 * BOND_UNIT_FACE_VALUE);
+    // Ledger equality: covered + issued, NOT stored + issued ($16B would
+    // double-count the gap that was already inside the $10B stock).
+    expect(result!.newPrincipal).toBe(4_000_000_000 + result!.totalIssued);
+    expect(result!.newPrincipal).toBeLessThanOrEqual(10_000_000_000);
+    const updateCall = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0];
+    const setPayload = (
+      updateCall as unknown[] as unknown as { $set: Record<string, unknown> }[]
+    )[1];
+    expect((setPayload.$set.debt as { principal: number }).principal).toBe(
+      result!.newPrincipal
+    );
+  });
+
+  it("measures coverage net of restructure haircuts", async () => {
+    // $10B face with a 40% haircut contributes only $6B to the stock.
+    const db = buildMockDb(0);
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          issuerType: "sovereign",
+          countryId: "US",
+          totalIssued: 10_000_000_000,
+          restructureHaircutPercent: 0.4,
+        },
+      ],
+    });
+    const result = await reconcileSovereignDebt(db as unknown as Db, {
+      countryId: COUNTRY_CONFIGS.US.id,
+      turn: 240,
+      now: new Date(),
+    });
+    expect(result!.coveredByExistingBonds).toBe(6_000_000_000);
+    expect(result!.gap).toBe(4_000_000_000);
+    expect(result!.newPrincipal).toBe(6_000_000_000 + result!.totalIssued);
+    expect(result!.newPrincipal).toBeLessThanOrEqual(10_000_000_000);
+  });
+
+  it("converges on retry after a crash between insert and budget write without issuing twice", async () => {
+    // Stateful ledger: inserts persist, so a retry sees its own tranches.
+    const db = createMockDb();
+    const budget = { ...baseBudget };
+    db.collectionMocks["federalBudget"] = db.collection("federalBudget") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue(budget);
+    let crashOnce = true;
+    db.collectionMocks["federalBudget"]!.updateOne.mockImplementation(async () => {
+      if (crashOnce) {
+        crashOnce = false;
+        throw new Error("simulated crash before budget write");
+      }
+      return { modifiedCount: 1 };
+    });
+    db.collectionMocks["centralBanks"] = db.collection("centralBanks") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["centralBanks"]!.findOne.mockResolvedValue({ primeRate: 5.0 });
+    db.collectionMocks["corporations"] = db.collection("corporations") as ReturnType<
+      typeof db.collection
+    >;
+    db.collectionMocks["corporations"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["bonds"] = db.collection("bonds") as ReturnType<typeof db.collection>;
+    const ledger: { totalIssued: number }[] = [{ totalIssued: 4_000_000_000 }];
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: async () =>
+        ledger.map((b) => ({ issuerType: "sovereign", countryId: "US", ...b })),
+    });
+    let issuedFace = 0;
+    db.collectionMocks["bonds"]!.insertOne.mockImplementation(async (doc: { totalIssued: number }) => {
+      ledger.push({ totalIssued: doc.totalIssued });
+      issuedFace += doc.totalIssued;
+      return { insertedId: { toString: () => "mock-id" } };
+    });
+
+    const params = { countryId: COUNTRY_CONFIGS.US.id, turn: 240, now: new Date() };
+    await expect(reconcileSovereignDebt(db as unknown as Db, params)).rejects.toThrow(
+      "simulated crash"
+    );
+    const retry = await reconcileSovereignDebt(db as unknown as Db, params);
+    // The retry saw the first run's tranches in the ledger: no second issue,
+    // and the stock still lands exactly on the post-write ledger.
+    expect(retry!.totalIssued).toBe(0);
+    expect(retry!.gap).toBeLessThan(3 * BOND_UNIT_FACE_VALUE);
+    expect(retry!.newPrincipal).toBe(4_000_000_000 + issuedFace);
+    expect(retry!.newPrincipal).toBeLessThanOrEqual(10_000_000_000);
   });
 });
 

@@ -655,17 +655,23 @@ export interface SovereignReconcileResult {
  * Converts unrepresented sovereign debt principal into tradeable bond series,
  * spread across staggered maturities with term-premium yields.
  *
- * The gap = budget.debt.principal − Σ(active sovereign bond totalIssued).
- * Each tranche in `distribution` (defaults to SOVEREIGN_RECONCILE_DISTRIBUTION)
- * receives its share of the gap at getSovereignCouponRate(primeRate, maturity).
+ * The gap = budget.debt.principal minus the haircut-adjusted outstanding
+ * sovereign stock (see sovereignPrincipal.ts). Each tranche in `distribution`
+ * (defaults to SOVEREIGN_RECONCILE_DISTRIBUTION) receives its share of the
+ * gap at getSovereignCouponRate(primeRate, maturity).
  *
- * **Budget impact:** both debt.principal and spending.debtInterest are updated, matching
- * the standard issuance path. This ensures settleSovereignBondMaturity can correctly
- * net principal back to its pre-reconcile value when each tranche matures, and that
- * debtToGdpRatio / creditRating reflect the fully-accounted bond obligations.
- * The gap analysis compares the budget principal BEFORE the update against existing bonds,
- * so running reconcile twice is safe: the second run will see gap = 0 (all principal
- * now backed by bonds) and issue nothing.
+ * **Budget impact:** the new tranches add genuine annual coupon service, so
+ * spending.debtInterest rises by the new coupons. debt.principal is
+ * RE-POINTED at the canonical post-write ledger (pre-existing outstanding
+ * plus the face just issued), never incremented by the gap: the gap was
+ * already inside the stored principal, so old principal + gap would count
+ * the same debt twice (#1975). debtToGdpRatio / creditRating are refreshed
+ * off the re-pointed stock.
+ *
+ * Retry-safe: the principal write is a pure function of the ledger read
+ * back, so a crash between the bond inserts and the budget update converges
+ * on retry (the inserted tranches are already in the ledger, the gap reads
+ * as zero, nothing issues twice, and the stock still lands on the ledger).
  */
 export async function reconcileSovereignDebt(
   db: Db,
@@ -694,14 +700,16 @@ export async function reconcileSovereignDebt(
     ? sovereignCredibilitySpread(centralBank.chairInfamy ?? 0)
     : 0;
 
-  // Sum all active sovereign bonds already issued for this country.
+  // Canonical outstanding stock: active non-defaulted face minus any
+  // restructure haircuts (a haircut bond contributes its written-down stock).
   const activeBonds = await db
     .collection<Bond>("bonds")
     .find({ issuerType: "sovereign", countryId, matured: false, defaulted: false })
     .toArray();
-  const coveredByExistingBonds = activeBonds.reduce((sum, b) => sum + (b.totalIssued ?? 0), 0);
+  const coveredByExistingBonds = sumOutstandingSovereignPrincipal(activeBonds);
 
-  const rawGap = budget.debt.principal - coveredByExistingBonds;
+  const storedPrincipal = Math.max(0, budget.debt.principal ?? 0);
+  const rawGap = storedPrincipal - coveredByExistingBonds;
   const gap = Math.floor(Math.max(0, rawGap) / BOND_UNIT_FACE_VALUE) * BOND_UNIT_FACE_VALUE;
 
   const tranches: SovereignReconcileTranche[] = [];
@@ -768,22 +776,40 @@ export async function reconcileSovereignDebt(
     }
   }
 
-  // Update both principal and interest service so that settleSovereignBondMaturity
-  // can correctly net back to the original value when these bonds mature.
-  // The principal also rises here — this is intentional: reconcile converts
-  // "raw" historical debt into fully-accounted bond obligations; debtToGdpRatio
-  // and creditRating are recomputed accordingly.
-  const budgetUpdate = applySovereignDebtAdjustment(budget, totalIssued, totalInterestDelta);
-  if (totalIssued > 0) {
+  // Re-point principal at the post-write ledger. New tranches carry no
+  // haircut, so their face adds to the outstanding stock in full. This must
+  // NOT be old principal + gap: the gap was already inside the stored
+  // principal, and adding it again double-counts the same debt (#1975).
+  // Interest is a flow, not a stock, so it still rises incrementally by the
+  // genuine new coupon service. The write lands whenever the stock moved or
+  // drifted, so a crash/retry replay that issued nothing still converges the
+  // stored value onto the ledger.
+  const postWriteOutstanding = coveredByExistingBonds + totalIssued;
+  const newPrincipal = Math.round(postWriteOutstanding);
+  const newDebtInterest = Math.max(0, (budget.spending?.debtInterest ?? 0) + totalInterestDelta);
+  const newSpendingTotal = Math.max(0, (budget.spending?.total ?? 0) + totalInterestDelta);
+  const newSurplus = (budget.revenue?.total ?? 0) - newSpendingTotal;
+  const terms = sovereignDebtTerms(newPrincipal, {
+    gdp: budget.gdp ?? 0,
+    gdpSmoothed: budget.gdpSmoothed,
+    investorConfidence: budget.investorConfidence,
+    imfBailoutActive: budget.imfSovereignBailoutActive,
+    sovereignRiskAnchor: budget.sovereignRiskAnchor,
+  });
+  if (totalIssued > 0 || newPrincipal !== Math.round(storedPrincipal)) {
     await db.collection<FederalBudget>("federalBudget").updateOne(
       { _id: budgetId },
       {
         $set: {
-          debt: budgetUpdate.debt,
-          spending: budgetUpdate.spending,
-          surplus: budgetUpdate.surplus,
-          debtToGdpRatio: budgetUpdate.debtToGdpRatio,
-          creditRating: budgetUpdate.creditRating,
+          debt: { ...budget.debt, principal: newPrincipal, interestRate: terms.interestRate },
+          spending: {
+            ...budget.spending,
+            debtInterest: newDebtInterest,
+            total: newSpendingTotal,
+          },
+          surplus: newSurplus,
+          debtToGdpRatio: terms.debtToGdpRatio,
+          creditRating: terms.creditRating,
           updatedAt: now,
         },
       }
@@ -797,11 +823,11 @@ export async function reconcileSovereignDebt(
     tranches,
     totalIssued,
     budgetInterestDelta: totalInterestDelta,
-    newPrincipal: budgetUpdate.debt.principal,
-    newDebtInterest: budgetUpdate.spending.debtInterest,
-    newSurplus: budgetUpdate.surplus,
-    newDebtToGdpRatio: budgetUpdate.debtToGdpRatio,
-    newCreditRating: budgetUpdate.creditRating,
+    newPrincipal,
+    newDebtInterest,
+    newSurplus,
+    newDebtToGdpRatio: terms.debtToGdpRatio,
+    newCreditRating: terms.creditRating,
   };
 }
 

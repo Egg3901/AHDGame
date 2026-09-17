@@ -93,16 +93,11 @@ export async function applyRepudiateResolution(
     countryCode,
   });
 
-  // Genuine sovereign-ledger write-down (refs #3813) — same reasoning as the
-  // restructure path, but the near-total haircut a repudiation deals to
-  // bondholders (REPUDIATE_BOND_MARKET_PRICE = 0.05 recovery). Without this,
-  // Flipping the bonds to defaulted IS the write-down (refs #1975): the stored
-  // stock below is re-pointed at the outstanding sum read back from the ledger
-  // (zero once every active bond is defaulted). Treasury cash is a separate
-  // position and stays untouched. The old balance-model 5% residual is gone:
-  // a nonzero residual against an empty ledger would breach the bond-ledger
-  // invariant on the very next turn. Reading the ledger back keeps this a pure
-  // function of bond state, so crash/retry replay converges.
+  // Flipping the bonds to defaulted IS the write-down (refs #1975): the
+  // stored stock is re-pointed at the outstanding sum read back from the
+  // ledger (zero once every active bond is defaulted). Treasury cash is a
+  // separate position and stays untouched. Reading the ledger back keeps
+  // this a pure function of bond state, so crash/retry replay converges.
   const postDefaultBonds = await db
     .collection<Bond>("bonds")
     .find(
