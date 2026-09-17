@@ -657,13 +657,12 @@ export async function voteOnMotion(
   // deferred write from a ballot cast while eligible still lands, because the
   // roll is immutable.
   //
-  // Remaining residual, deliberately out of scope here: the
-  // leadership-cooldown check in reconcileConferenceEffects reads
-  // lastAmendedTurn before its conditional receipt write, so two different
-  // passed motions reconciling at once can both observe a satisfied cooldown
-  // (each motion still applies exactly once via its own
-  // appliedConferenceMotionIds receipt). This change moves no cooldown math,
-  // so that hazard is neither fixed nor widened by it.
+  // Leadership-cooldown serialization lives in applyPassedMotion, not here:
+  // the cooldown travels with the leadership write (compare-and-swap on the
+  // observed lastAmendedTurn), so concurrent applies of distinct motions
+  // elect exactly one winner and every loser voids on re-read instead of
+  // landing a second patch inside the window. Voting needs no cooldown gate:
+  // a passed motion can still void at apply time.
   const roll = await ensureEligibleRoll(db, party, doc, now);
   const voteKey = voter._id.toString();
   if (roll.persisted && !roll.committeeIds.includes(voteKey)) {
@@ -766,73 +765,119 @@ async function applyPassedMotion(
   now: Date
 ): Promise<{ applied: boolean; voidReason: string | null }> {
   const collection = getUKPartyLeadershipCollection(db);
-  const leadership = await getOrSeedPartyLeadership(db, countryId, party, now, currentTurn);
-  if ((leadership.appliedConferenceMotionIds ?? []).includes(motion.motionId)) {
-    // Replay guard: the effect is already durable, so there is nothing to
-    // re-apply. The write below is conditional on the same receipt, so even
-    // a concurrent caller that passed this check cannot double-apply.
-    return { applied: true, voidReason: null };
-  }
-  if (!Array.isArray(leadership.appliedConferenceMotionIds)) {
-    // Pre-receipt leadership row: create the receipt array before the
-    // conditional write below needs it. Idempotent; real Mongo would also
-    // create it via $push, but the test stand-in requires the array.
-    await collection.updateOne(
-      { _id: leadershipId },
-      { $set: { appliedConferenceMotionIds: [], updatedAt: now } }
-    );
-  }
-  const sinceAmend =
-    leadership.lastAmendedTurn == null ? undefined : currentTurn - leadership.lastAmendedTurn;
-  if (sinceAmend !== undefined && sinceAmend < LEADERSHIP_AMENDMENT_COOLDOWN_TURNS) {
-    return {
-      applied: false,
-      voidReason: `void: rules amended ${sinceAmend} turn(s) ago, cooldown is ${LEADERSHIP_AMENDMENT_COOLDOWN_TURNS}`,
-    };
-  }
-  const validation = validateRulesetAmendment(motion.patch);
-  if (!validation.ok) {
-    return { applied: false, voidReason: `void: ${validation.errors.join("; ")}` };
-  }
-  const ruleset = { ...leadership.ruleset, ...motion.patch };
-  // Effect + receipt in ONE conditional write: the ruleset patch, the audit
-  // entry, and the motion receipt land together or not at all, and the
-  // $ne guard makes a replay match zero documents.
-  const write = await collection.updateOne(
-    { _id: leadershipId, appliedConferenceMotionIds: { $ne: motion.motionId } },
-    {
-      $set: {
-        ruleset,
-        lastAmendedTurn: currentTurn,
-        lastAmendedByCharacterId: motion.proposedByCharacterId,
-        history: pushHistoryEntry(
-          leadership.history,
-          historyEntry(
-            currentTurn,
-            "rulesAmended",
-            `Conference motion carried: committee amended removal rules (${motion.motionId})`,
-            { characterId: motion.proposedByCharacterId, actorName: motion.proposedByName }
-          )
-        ),
-        updatedAt: now,
-      },
-      $push: { appliedConferenceMotionIds: motion.motionId },
+  // Durable serialization contract for distinct motions (ticket #862
+  // follow-up). Two reconcilers must not both pass a stale cooldown check and
+  // land mutually invalid patches, while retries of the same motion stay
+  // exactly-once:
+  //
+  // - Same motion: the motion receipt (`appliedConferenceMotionIds`, guarded
+  //   by `$ne` in the write filter) makes replays and concurrent appliers of
+  //   the SAME motion converge on applied without a second write.
+  // - Distinct motions: the cooldown travels WITH the write as a
+  //   compare-and-swap on the observed `lastAmendedTurn`. The first writer
+  //   moves it to the current turn, so every later distinct writer misses its
+  //   filter and voids on re-read instead of landing a second patch inside
+  //   the window. `{ lastAmendedTurn: null }` matches null AND missing, so a
+  //   legacy row without the field satisfies the first amendment.
+  // - A void is returned only after confirming the receipt is still absent: a
+  //   concurrent winner may have applied THIS motion between our read and our
+  //   decision, and that must report applied, never void.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const leadership = await getOrSeedPartyLeadership(db, countryId, party, now, currentTurn);
+    if ((leadership.appliedConferenceMotionIds ?? []).includes(motion.motionId)) {
+      // Replay guard: the effect is already durable, so there is nothing to
+      // re-apply. The write below is conditional on the same receipt, so even
+      // a concurrent caller that passed this check cannot double-apply.
+      return { applied: true, voidReason: null };
     }
-  );
-  if (write.matchedCount === 0) {
-    // The _id always matches, so a miss means the $ne guard failed: a
-    // concurrent resolver applied this motion first. Treat as applied.
+    if (!Array.isArray(leadership.appliedConferenceMotionIds)) {
+      // Pre-receipt leadership row: create the receipt array before the
+      // conditional write below needs it. Idempotent; real Mongo would also
+      // create it via $push, but the test stand-in requires the array.
+      await collection.updateOne(
+        { _id: leadershipId },
+        { $set: { appliedConferenceMotionIds: [], updatedAt: now } }
+      );
+    }
+    const observedAmendTurn = leadership.lastAmendedTurn ?? null;
+    const sinceAmend = observedAmendTurn == null ? undefined : currentTurn - observedAmendTurn;
+    if (sinceAmend !== undefined && sinceAmend < LEADERSHIP_AMENDMENT_COOLDOWN_TURNS) {
+      const current = await collection.findOne({ _id: leadershipId });
+      if ((current?.appliedConferenceMotionIds ?? []).includes(motion.motionId)) {
+        return { applied: true, voidReason: null };
+      }
+      const sinceCurrent =
+        current?.lastAmendedTurn == null ? undefined : currentTurn - current.lastAmendedTurn;
+      if (sinceCurrent !== undefined && sinceCurrent < LEADERSHIP_AMENDMENT_COOLDOWN_TURNS) {
+        return {
+          applied: false,
+          voidReason: `void: rules amended ${sinceCurrent} turn(s) ago, cooldown is ${LEADERSHIP_AMENDMENT_COOLDOWN_TURNS}`,
+        };
+      }
+      // The cooldown lifted under us (a cross-turn stale read): retry once
+      // from the fresh state instead of voiding or applying blind.
+      continue;
+    }
+    const validation = validateRulesetAmendment(motion.patch);
+    if (!validation.ok) {
+      return { applied: false, voidReason: `void: ${validation.errors.join("; ")}` };
+    }
+    const ruleset = { ...leadership.ruleset, ...motion.patch };
+    // Effect + receipt in ONE conditional write: the ruleset patch, the audit
+    // entry, and the motion receipt land together or not at all; the $ne
+    // guard makes a same-motion replay match zero documents, and the
+    // lastAmendedTurn predicate makes a distinct-motion loser miss.
+    const write = await collection.updateOne(
+      {
+        _id: leadershipId,
+        appliedConferenceMotionIds: { $ne: motion.motionId },
+        lastAmendedTurn: observedAmendTurn,
+      },
+      {
+        $set: {
+          ruleset,
+          lastAmendedTurn: currentTurn,
+          lastAmendedByCharacterId: motion.proposedByCharacterId,
+          history: pushHistoryEntry(
+            leadership.history,
+            historyEntry(
+              currentTurn,
+              "rulesAmended",
+              `Conference motion carried: committee amended removal rules (${motion.motionId})`,
+              { characterId: motion.proposedByCharacterId, actorName: motion.proposedByName }
+            )
+          ),
+          updatedAt: now,
+        },
+        $push: { appliedConferenceMotionIds: motion.motionId },
+      }
+    );
+    if (write.matchedCount === 1) {
+      recordAudit({
+        source: "turn",
+        category: "party",
+        action: "uk.conference.motionApplied",
+        outcome: "ok",
+        subject: { type: "party", id: partySeqIdOf(party), name: party.name },
+        meta: { motionId: motion.motionId, patch: motion.patch },
+      });
+      return { applied: true, voidReason: null };
+    }
+    // Miss: a concurrent writer moved the receipt or the cooldown first. The
+    // loop re-reads fresh: a same-motion receipt reports applied, an active
+    // cooldown voids, a lifted cooldown retries the write once.
+  }
+  // Two misses with no stable classification: writers are racing every
+  // attempt. Confirm the receipt one last time so a completed apply is never
+  // mislabeled, then void deterministically instead of spinning.
+  const current = await collection.findOne({ _id: leadershipId });
+  if ((current?.appliedConferenceMotionIds ?? []).includes(motion.motionId)) {
     return { applied: true, voidReason: null };
   }
-  recordAudit({
-    source: "turn",
-    category: "party",
-    action: "uk.conference.motionApplied",
-    outcome: "ok",
-    subject: { type: "party", id: partySeqIdOf(party), name: party.name },
-    meta: { motionId: motion.motionId, patch: motion.patch },
-  });
-  return { applied: true, voidReason: null };
+  return {
+    applied: false,
+    voidReason: "void: concurrent leadership-rules amendment won the cooldown race",
+  };
 }
 
 export interface ConferenceResolution {
@@ -993,42 +1038,82 @@ async function fillConferenceResolution(
 }
 
 /**
- * Reconcile resolution side effects for a decided row: the
- * standing-platform upsert (idempotent by key, confirmed via the platform
- * receipt) and each passed motion's leadership write (exactly-once via the
- * motion receipt in the conditional apply). Marks land in ONE batched row
- * write; a crash anywhere before it simply reconciles again, and the
- * leadership receipt makes the re-apply a no-op.
+ * A void mark must never durably cover a completed effect. A motion marked
+ * void while its leadership receipt exists means the receipt landed after
+ * this caller confirmed it absent (a concurrent applier won, or won then
+ * crashed before marking): adopt the receipt and mark the motion passed so
+ * the next mark write converges instead of cementing the mislabel. Voids
+ * with no receipt pass through untouched, so terminal voids stay terminal.
+ * Skips the read entirely when the row holds no void motions.
  */
-async function reconcileConferenceEffects(
+async function adoptReceiptedVoids(
+  db: Db,
+  countryId: CountryId,
+  partySeqId: string,
+  working: UKPartyConference
+): Promise<UKPartyConference> {
+  const voids = (working.motions ?? []).filter((motion) => motion.status === "void");
+  if (voids.length === 0) return working;
+  const leadership = await getUKPartyLeadershipCollection(db).findOne({
+    _id: `${countryId}:${partySeqId}`,
+  });
+  const receipts = new Set(leadership?.appliedConferenceMotionIds ?? []);
+  if (!voids.some((motion) => receipts.has(motion.motionId))) return working;
+  return {
+    ...working,
+    motions: (working.motions ?? []).map((motion) =>
+      motion.status === "void" && receipts.has(motion.motionId)
+        ? { ...motion, status: "passed" as const, voidReason: null }
+        : motion
+    ),
+  };
+}
+
+interface ReconcileDecisions {
+  platformAppliedTurn: number | null;
+  motions: ConferenceRulesMotion[];
+  applied: Set<string>;
+  newEntries: ConferenceHistoryEntry[];
+  motionsPassed: number;
+  motionsVoided: number;
+}
+
+/**
+ * Compute one reconcile pass over a decided row: the standing-platform
+ * upsert (idempotent by key, confirmed via the platform receipt) and each
+ * passed motion's leadership write (exactly-once via the motion receipt in
+ * the conditional apply). Pure computation plus receipt-guarded side
+ * effects; the caller persists the marks.
+ */
+async function computeReconcileDecisions(
   db: Db,
   countryId: CountryId,
   party: PoliticalParty,
-  doc: UKPartyConference,
+  partySeqId: string,
+  isNpp: boolean,
+  working: UKPartyConference,
   currentTurn: number,
   now: Date
-): Promise<{ motionsPassed: number; motionsVoided: number }> {
-  const partySeqId = partySeqIdOf(party);
-  const isNpp = !party.chairId;
+): Promise<ReconcileDecisions> {
   // Leftover voting motions on healed rows decide from the same frozen roll
   // the fill used; legacy rows without one fall back to live counts.
-  const frozen = frozenRollOf(doc);
+  const frozen = frozenRollOf(working);
   const committeeSize =
     frozen != null ? frozen.committeeIds.length : getEligibleVoterSet(party).size;
   let motionsPassed = 0;
   let motionsVoided = 0;
   const newEntries: ConferenceHistoryEntry[] = [];
 
-  let platformAppliedTurn = doc.platformAppliedTurn ?? null;
-  if (doc.ratified && platformAppliedTurn == null) {
-    if (!doc.proposal) {
+  let platformAppliedTurn = working.platformAppliedTurn ?? null;
+  if (working.ratified && platformAppliedTurn == null) {
+    if (!working.proposal) {
       // Decided ratified with no proposal to write: nothing exists to
       // persist, so mark it rather than retrying forever.
       platformAppliedTurn = currentTurn;
     } else {
       const key = `${countryId}:${partySeqId}`;
       const existing = await getUKPartyPlatformsCollection(db).findOne({ _id: key });
-      if (existing?.ratifiedConferenceId === doc._id) {
+      if (existing?.ratifiedConferenceId === working._id) {
         platformAppliedTurn = currentTurn;
       } else {
         await getUKPartyPlatformsCollection(db).updateOne(
@@ -1037,9 +1122,9 @@ async function reconcileConferenceEffects(
             $set: {
               countryId,
               partyId: partySeqId,
-              pledgeIds: [...doc.proposal.pledgeIds],
-              ratifiedConferenceId: doc._id,
-              ratifiedYear: doc.conferenceYear,
+              pledgeIds: [...working.proposal.pledgeIds],
+              ratifiedConferenceId: working._id,
+              ratifiedYear: working.conferenceYear,
               ratifiedAtTurn: currentTurn,
               updatedAt: now,
             },
@@ -1052,81 +1137,81 @@ async function reconcileConferenceEffects(
     }
   }
 
-  const applied = new Set(doc.appliedMotionIds ?? []);
+  const applied = new Set(working.appliedMotionIds ?? []);
   const motions = await Promise.all(
-    (doc.motions ?? []).map(async (motion) => {
-      let working = motion;
-      if (working.status === "voting") {
+    (working.motions ?? []).map(async (motion) => {
+      let current = motion;
+      if (current.status === "voting") {
         // Leftover from a row decided before vote outcomes were persisted:
         // decide it now from the frozen votes instead of stranding it.
-        const decided = decideMotionVote(working, committeeSize, isNpp);
+        const decided = decideMotionVote(current, committeeSize, isNpp);
         if (!decided.passed) {
           newEntries.push(
             conferenceHistoryEntry(
               currentTurn,
               "motionFailed",
-              `Conference motion ${working.motionId} failed: ${decided.reason}`,
+              `Conference motion ${current.motionId} failed: ${decided.reason}`,
               undefined,
               now
             )
           );
           return {
-            ...working,
+            ...current,
             votesFor: decided.votesFor,
             votesAgainst: decided.votesAgainst,
             status: "failed" as const,
             resolvedAtTurn: currentTurn,
           };
         }
-        working = {
-          ...working,
+        current = {
+          ...current,
           votesFor: decided.votesFor,
           votesAgainst: decided.votesAgainst,
           status: "passed" as const,
           resolvedAtTurn: currentTurn,
         };
       }
-      if (working.status !== "passed") return working;
-      if (applied.has(working.motionId)) {
+      if (current.status !== "passed") return current;
+      if (applied.has(current.motionId)) {
         motionsPassed += 1;
-        return working;
+        return current;
       }
       const result = await applyPassedMotion(
         db,
         countryId,
         party,
         `${countryId}:${partySeqId}`,
-        working,
+        current,
         currentTurn,
         now
       );
       if (result.applied) {
         motionsPassed += 1;
-        applied.add(working.motionId);
+        applied.add(current.motionId);
         newEntries.push(
           conferenceHistoryEntry(
             currentTurn,
             "motionPassed",
-            `Conference motion ${working.motionId} passed and amended leadership rules ` +
-              `(${working.votesFor} for, ${working.votesAgainst} against)`,
-            { characterId: working.proposedByCharacterId, actorName: working.proposedByName },
+            `Conference motion ${current.motionId} passed and amended leadership rules ` +
+              `(${current.votesFor} for, ${current.votesAgainst} against)`,
+            { characterId: current.proposedByCharacterId, actorName: current.proposedByName },
             now
           )
         );
-        return working;
+        return current;
       }
       motionsVoided += 1;
       newEntries.push(
         conferenceHistoryEntry(
           currentTurn,
           "motionVoided",
-          `Conference motion ${working.motionId} passed its vote but ${result.voidReason}`,
+          `Conference motion ${current.motionId} passed its vote but ${result.voidReason}`,
           undefined,
           now
         )
       );
       return {
-        ...working,
+        ...current,
         status: "void" as const,
         voidReason: result.voidReason,
         resolvedAtTurn: currentTurn,
@@ -1134,29 +1219,80 @@ async function reconcileConferenceEffects(
     })
   );
 
-  const motionsChanged = motions.some((motion, index) => motion !== (doc.motions ?? [])[index]);
-  if (
-    platformAppliedTurn !== (doc.platformAppliedTurn ?? null) ||
-    motionsChanged ||
-    applied.size !== (doc.appliedMotionIds ?? []).length ||
-    newEntries.length > 0
-  ) {
-    let history = doc.history ?? [];
-    for (const entry of newEntries) history = pushConferenceHistory(history, entry);
-    await getUKPartyConferencesCollection(db).updateOne(
-      { _id: doc._id },
-      {
-        $set: {
-          motions,
-          appliedMotionIds: [...applied],
-          platformAppliedTurn,
-          history,
-          updatedAt: now,
-        },
-      }
+  return { platformAppliedTurn, motions, applied, newEntries, motionsPassed, motionsVoided };
+}
+
+/**
+ * Reconcile resolution side effects for a decided row (see
+ * computeReconcileDecisions). Marks land in ONE batched row write guarded by
+ * a compare-and-swap on the row's updatedAt: concurrent reconcilers of the
+ * same row converge instead of clobbering each other's marks. The CAS loser
+ * re-reads fresh and recomputes (receipts make the re-apply a no-op and
+ * receipted voids adopt passed), so a void label can never durably cover a
+ * completed effect. Attempts are bounded; if contention outlasts them this
+ * call stands down and a heal resumes the marks. A crash anywhere before the
+ * mark simply reconciles again.
+ */
+async function reconcileConferenceEffects(
+  db: Db,
+  countryId: CountryId,
+  party: PoliticalParty,
+  doc: UKPartyConference,
+  currentTurn: number,
+  now: Date
+): Promise<{ motionsPassed: number; motionsVoided: number }> {
+  const partySeqId = partySeqIdOf(party);
+  const isNpp = !party.chairId;
+  const collection = getUKPartyConferencesCollection(db);
+  let stoodDown = { motionsPassed: 0, motionsVoided: 0 };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const reread = attempt === 0 ? doc : ((await collection.findOne({ _id: doc._id })) ?? doc);
+    const working = await adoptReceiptedVoids(db, countryId, partySeqId, reread);
+    const computed = await computeReconcileDecisions(
+      db,
+      countryId,
+      party,
+      partySeqId,
+      isNpp,
+      working,
+      currentTurn,
+      now
     );
+    stoodDown = { motionsPassed: computed.motionsPassed, motionsVoided: computed.motionsVoided };
+    const motionsChanged =
+      computed.motions.some((motion, index) => motion !== (working.motions ?? [])[index]) ||
+      computed.motions.length !== (working.motions ?? []).length;
+    if (
+      computed.platformAppliedTurn !== (working.platformAppliedTurn ?? null) ||
+      motionsChanged ||
+      computed.applied.size !== (working.appliedMotionIds ?? []).length ||
+      computed.newEntries.length > 0
+    ) {
+      let history = working.history ?? [];
+      for (const entry of computed.newEntries) history = pushConferenceHistory(history, entry);
+      const marked = await collection.updateOne(
+        {
+          _id: working._id,
+          ...(working.updatedAt != null ? { updatedAt: working.updatedAt } : {}),
+        },
+        {
+          $set: {
+            motions: computed.motions,
+            appliedMotionIds: [...computed.applied],
+            platformAppliedTurn: computed.platformAppliedTurn,
+            history,
+            updatedAt: now,
+          },
+        }
+      );
+      if (marked.matchedCount === 1) return stoodDown;
+      // A concurrent marker won the row under us: re-read fresh and
+      // recompute instead of clobbering its marks.
+      continue;
+    }
+    return stoodDown;
   }
-  return { motionsPassed, motionsVoided };
+  return stoodDown;
 }
 
 /**
