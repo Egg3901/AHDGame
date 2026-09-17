@@ -11,10 +11,12 @@ import type {
   Corporation,
   CorporateSector,
   FederalBudget,
+  GameConfig,
   State,
   StateMetrics,
   Union,
 } from "@/lib/db/types";
+import { isLabourMacroEnabled } from "@/lib/labour/featureFlag";
 import {
   labourTightnessScoreFromTightness,
   nationalTightnessWorkerWeighted,
@@ -100,10 +102,16 @@ async function costOfLivingByState(
  * COLD-START FALLBACK: when no state has a usable measured reading yet, the
  * score falls back to `laborTightnessFromUnemployment` off the national
  * unemployment rate — exactly today's behaviour.
+ *
+ * MODE GATE: the measured path is gated on `labourSystemMode` >= "macro",
+ * the same tier that gates the unemployment node's tightness channel in the
+ * metric engine. Below that tier the fallback applies even when measured
+ * readings exist (the corporation turn writes telemetry ungated), so a world
+ * with the labour macro loop switched off behaves exactly as before.
  */
 export async function bargainingMacroInputs(db: Db, countryId: Union["countryId"]) {
   const nationalDocId = getNationalDocId(countryId);
-  const [metrics, budget, states] = await Promise.all([
+  const [metrics, budget, states, labourConfig] = await Promise.all([
     nationalDocId
       ? db
           .collection<StateMetrics>("macroMetrics")
@@ -116,11 +124,14 @@ export async function bargainingMacroInputs(db: Db, countryId: Union["countryId"
       .collection<State>("states")
       .find({ countryId }, { projection: { _id: 1 } })
       .toArray(),
+    db
+      .collection<GameConfig>("gameConfig")
+      .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } }),
   ]);
   const unemploymentFallback = metrics?.economic?.unemploymentRate?.value ?? 5;
   let laborTightness = laborTightnessFromUnemployment(unemploymentFallback);
   const stateIds = states.map((state) => state._id);
-  if (stateIds.length > 0) {
+  if (stateIds.length > 0 && (await isLabourMacroEnabled(labourConfig))) {
     const stateDocs = await db
       .collection<StateMetrics>("macroMetrics")
       .find(

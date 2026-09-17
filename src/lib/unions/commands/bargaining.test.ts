@@ -138,6 +138,8 @@ describe("bargaining commands", () => {
         if (name === "bargainingCampaigns")
           return { insertOne, findOne: vi.fn().mockResolvedValue(null) };
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -228,6 +230,8 @@ describe("bargaining commands", () => {
         }
         if (name === "corporateSectors") return { updateMany: wageUpdate };
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -271,6 +275,8 @@ describe("bargaining commands", () => {
         }
         if (name === "unions") return { findOne: unionLookup };
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -349,6 +355,8 @@ describe("bargaining commands", () => {
           };
         }
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -416,6 +424,8 @@ describe("bargaining commands", () => {
           };
         }
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -497,6 +507,8 @@ describe("bargaining commands", () => {
             bulkWrite: sectorBulkWrite,
           };
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -555,6 +567,8 @@ describe("bargaining commands", () => {
         if (name === "bargainingCampaigns")
           return { insertOne, findOne: vi.fn().mockResolvedValue({ endedAtTurn: 118 }) };
         if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
+        if (name === "gameConfig")
+          return { findOne: vi.fn().mockResolvedValue({ labourSystemMode: "full" }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -582,6 +596,7 @@ describe("bargainingMacroInputs (#791)", () => {
     states: Array<{ _id: string }>;
     metricsDocs: unknown[];
     unemployment?: number;
+    labourSystemMode?: string | null;
   }) {
     return {
       collection: (name: string) => {
@@ -596,6 +611,16 @@ describe("bargainingMacroInputs (#791)", () => {
           };
         if (name === "federalBudget")
           return { findOne: vi.fn().mockResolvedValue({ unionLawBias: 10 }) };
+        if (name === "gameConfig")
+          return {
+            findOne: vi
+              .fn()
+              .mockResolvedValue(
+                args.labourSystemMode === null
+                  ? null
+                  : { labourSystemMode: args.labourSystemMode ?? "full" }
+              ),
+          };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -653,5 +678,36 @@ describe("bargainingMacroInputs (#791)", () => {
       "US"
     );
     expect(unmeasured.laborTightness).toBe(laborTightnessFromUnemployment(4));
+  });
+
+  it("stays on the fallback below the macro tier even when readings exist", async () => {
+    // Telemetry is written ungated, so a mode-off world can hold measured
+    // readings. Bargaining must still behave exactly as before there, matching
+    // the metric engine's gate on the unemployment channel.
+    for (const mode of ["off", "wages", null] as const) {
+      const macro = await bargainingMacroInputs(
+        macroDb({
+          states: [{ _id: "A" }, { _id: "B" }],
+          metricsDocs: [doc("A", 2, 500), doc("B", 2, 500)],
+          unemployment: 5,
+          labourSystemMode: mode,
+        }),
+        "US"
+      );
+      expect(macro.laborTightness).toBe(laborTightnessFromUnemployment(5));
+    }
+  });
+
+  it("uses the measured path at the macro tier", async () => {
+    const macro = await bargainingMacroInputs(
+      macroDb({
+        states: [{ _id: "A" }],
+        metricsDocs: [doc("A", 2, 500)],
+        unemployment: 5,
+        labourSystemMode: "macro",
+      }),
+      "US"
+    );
+    expect(macro.laborTightness).toBe(67.3);
   });
 });
