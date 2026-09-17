@@ -192,6 +192,7 @@ export interface MarketAccessMetrics {
   depthToMarketCap: number | null;
   medianFilledOrderExecutionHours: number | null;
   medianAmihudIlliquidity48: number | null;
+  medianTopTraderNotionalShare48: number | null;
   wealthGini: number | null;
   annualizedM2GrowthPct: number | null;
   transactionalMoneyShare: number | null;
@@ -201,6 +202,8 @@ export interface MarketAccessMetrics {
   householdTransactionalVelocity48: number | null;
   householdSavingsVelocity48: number | null;
   savingsShareOfHouseholdBalances: number | null;
+  bankCashReservesAnchor: number | null;
+  ringFencedShareOfLiquid: number | null;
   measurementConfidence: string;
   reconciliationStatus: string;
 }
@@ -249,6 +252,8 @@ export function marketAccessMetricsFromSnapshot(
     medianFilledOrderExecutionHours:
       snapshot?.securities.medianFilledOrderExecutionHours.value ?? null,
     medianAmihudIlliquidity48: snapshot?.securities.medianAmihudIlliquidity48.value ?? null,
+    medianTopTraderNotionalShare48:
+      snapshot?.securities.medianTopTraderNotionalShare48?.value ?? null,
     wealthGini: snapshot?.households.wealthGini.value ?? null,
     annualizedM2GrowthPct: snapshot?.money.medianAnnualizedM2GrowthPct.value ?? null,
     transactionalMoneyShare: snapshot?.money.transactionalMoneyShare.value ?? null,
@@ -259,6 +264,8 @@ export function marketAccessMetricsFromSnapshot(
       snapshot?.money.householdTransactionalVelocity48?.value ?? null,
     householdSavingsVelocity48: snapshot?.money.householdSavingsVelocity48?.value ?? null,
     savingsShareOfHouseholdBalances: snapshot?.money.savingsShareOfHouseholdBalances?.value ?? null,
+    bankCashReservesAnchor: snapshot?.money.bankCashReservesAnchor?.value ?? null,
+    ringFencedShareOfLiquid: snapshot?.money.ringFencedShareOfLiquid?.value ?? null,
     measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
     reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
   };

@@ -43,6 +43,21 @@ export type ExecuteAgreedAcquisitionResult =
     };
 
 /**
+ * Thrown when the bank-charter transfer refuses the merge AFTER the acquirer
+ * debit has applied. Caught below so the debit (and any shell-cash credit)
+ * is refunded first; then reported with the transfer's original 500 message
+ * so the pre-existing status/error semantics and retry guidance ("Try
+ * again.") are unchanged.
+ */
+class BankCharterRaceError extends Error {
+  readonly status = 500 as const;
+  constructor(message: string) {
+    super(message);
+    this.name = "BankCharterRaceError";
+  }
+}
+
+/**
  * Execute an accepted agreed acquisition: the acquirer buys the whole target for
  * the agreed price. Reuses the fund-correct `payShareholders` payout and the
  * haircut-free `moveSectorToCorp` transfer.
@@ -139,69 +154,109 @@ export async function executeAgreedAcquisition(
         } to complete the acquisition.`,
         status: 400,
       };
+    // No refund owed on the !ok path above: the $gte-gated debit did not
+    // apply, so no money moved. This early return is before every mutation by
+    // construction; keep it that way — anything added after the debit below
+    // must run inside the try so the catch refund covers it.
   }
 
-  // 2. Pay the target's shareholders the agreed pool (fund-correct allocation).
-  //    Refund the acquirer if the payout throws before we mutate any assets.
+  // Shell-cash credit amount (acquirer-capital units), computed up front so the
+  // catch below can claw it back only when it landed.
+  const targetCashAnchor = corpLiquidCapitalToAnchor(
+    target.liquidCapital ?? 0,
+    target,
+    targetFxRate
+  );
+  const targetCashInAcquirerCapital =
+    targetCashAnchor > 0
+      ? Math.round(anchorToCorpLiquidCapital(targetCashAnchor, acquirer, acquirerFxRate))
+      : 0;
+  let shellCashCredited = 0;
+  let bankCharterTransferred = false;
+
   try {
+    // 2. Move a bank charter with the shell (ticket-1267) INSIDE this try,
+    //    right after the debit and before any payout: the loan book,
+    //    interbank sides, savings accounts and depositor pointers are re-keyed
+    //    to the acquirer before the shell is torn down. The guard above
+    //    guarantees a free slot modulo a race; the guarded claim inside the
+    //    transfer converts that race (acquirer chartered a bank in between,
+    //    or the target's charter changed under us) into a throw below instead
+    //    of a post-payout 500 with the debit unrefunded. The transfer helper
+    //    leaves no partial charter behind on its !ok paths (conflict returns
+    //    before any write; a lost release race rolls the claim back), so
+    //    refunding money here restores everything.
+    const bankTransfer = await transferBankCharterToAcquirer(db, target._id, acquirer._id, now);
+    if (!bankTransfer.ok) throw new BankCharterRaceError(bankTransfer.error);
+    bankCharterTransferred = bankTransfer.transferred;
+
+    // 3. Pay the target's shareholders the agreed pool (fund-correct allocation).
     if (offer.priceAnchor > 0) {
       await payShareholders(db, target, offer.priceAnchor, fxByCurrency, now, {
         turn: currentTurn,
         kind: "agreed_acquisition",
       });
     }
+
+    // 4. Fold the target's liquid cash into the acquirer (it now owns the company,
+    //    cash included). Conserves money: the price went to shareholders; the
+    //    target's own cash simply relocates to its new owner.
+    if (targetCashInAcquirerCapital > 0) {
+      await creditCorpLiquidCapital(db, acquirer._id, targetCashInAcquirerCapital);
+      shellCashCredited = targetCashInAcquirerCapital;
+    }
+
+    // 5. Move every sector into the acquirer (haircut-free, currency re-denominated).
+    for (const sector of targetSectors) {
+      await moveSectorToCorp(
+        db,
+        sector,
+        acquirer._id,
+        targetCurrency,
+        targetFxRate,
+        acquirerCurrency,
+        acquirerFxRate,
+        now
+      );
+    }
   } catch (err) {
-    if (priceInAcquirerCapital > 0)
-      await refundCorpLiquidCapital(db, acquirer._id, priceInAcquirerCapital);
+    // Single refund site for every post-debit failure (charter race, payout
+    // throw, cash-credit/sector crash): runs exactly once per failed attempt,
+    // before any error mapping below.
+    // Leg 1 reverses the price debit via the shared corp-cash primitive (pure
+    // $inc, idempotent, never balance-gated). Leg 2 claws back the shell-cash
+    // credit only when it landed, so the acquirer ends at exactly its
+    // pre-debit balance in every ordering. A refund write that itself fails is
+    // rethrown with context (never swallowed: silent success here would report
+    // a 500 while money is gone).
+    const failureLabel = err instanceof Error ? err.message : String(err);
+    try {
+      if (priceInAcquirerCapital > 0)
+        await refundCorpLiquidCapital(db, acquirer._id, priceInAcquirerCapital);
+      if (shellCashCredited > 0) {
+        await corps.updateOne(
+          { _id: acquirer._id },
+          {
+            $inc: { liquidCapital: -shellCashCredited },
+            $set: { updatedAt: new Date() },
+          }
+        );
+      }
+    } catch (refundError) {
+      throw new Error(
+        `Agreed acquisition rollback failed for acquirer ${acquirer._id.toString()} after '${failureLabel}': could not restore liquidCapital`,
+        { cause: refundError }
+      );
+    }
+    if (err instanceof BankCharterRaceError)
+      return { ok: false, error: err.message, status: err.status };
     throw err;
   }
 
-  // 3. Fold the target's liquid cash into the acquirer (it now owns the company,
-  //    cash included). Conserves money: the price went to shareholders; the
-  //    target's own cash simply relocates to its new owner.
-  const targetCashAnchor = corpLiquidCapitalToAnchor(
-    target.liquidCapital ?? 0,
-    target,
-    targetFxRate
-  );
-  if (targetCashAnchor > 0) {
-    await creditCorpLiquidCapital(
-      db,
-      acquirer._id,
-      Math.round(anchorToCorpLiquidCapital(targetCashAnchor, acquirer, acquirerFxRate))
-    );
-  }
-
-  // 4. Move every sector into the acquirer (haircut-free, currency re-denominated).
-  for (const sector of targetSectors) {
-    await moveSectorToCorp(
-      db,
-      sector,
-      acquirer._id,
-      targetCurrency,
-      targetFxRate,
-      acquirerCurrency,
-      acquirerFxRate,
-      now
-    );
-  }
-
-  // 4a. Move a bank charter with the shell (ticket-1267): the loan book,
-  //     interbank sides, savings accounts and depositor pointers are re-keyed
-  //     to the acquirer before the shell is torn down. The guard above
-  //     guarantees a free slot modulo a race; a failure aborts with the shell
-  //     (and its bank) still intact.
-  const bankTransfer = await transferBankCharterToAcquirer(db, target._id, acquirer._id, now);
-  if (!bankTransfer.ok) return { ok: false, error: bankTransfer.error, status: 500 };
-
-  // 4b. Ledger the two corporate-side legs. The holder credits were emitted by
-  //     `payShareholders`; these are the acquirer's outflow and the shell's cash
-  //     moving to its new owner. Emitted here, after every asset mutation has
-  //     succeeded, so a failure earlier (which refunds) logs nothing.
-  const targetCashInAcquirerCapital =
-    targetCashAnchor > 0
-      ? Math.round(anchorToCorpLiquidCapital(targetCashAnchor, acquirer, acquirerFxRate))
-      : 0;
+  // 6. Ledger the two corporate-side legs. The holder credits were emitted by
+  //    `payShareholders`; these are the acquirer's outflow and the shell's cash
+  //    moving to its new owner. Emitted here, after every asset mutation has
+  //    succeeded, so a failure earlier (which refunds) logs nothing.
   await Promise.all([
     priceInAcquirerCapital > 0
       ? emitTx(db, {
@@ -253,7 +308,7 @@ export async function executeAgreedAcquisition(
       : Promise.resolve(),
   ]);
 
-  // 5. Tear down the target shell.
+  // 7. Tear down the target shell.
   const forexEnabled = await isForexEnabled();
   await cleanupShareMarketActivityForCorporations(db, [target._id], now, forexEnabled);
   await stampSubjectDeleted(db, target._id, { sequentialId: target.sequentialId, deletedAt: now });
@@ -287,6 +342,6 @@ export async function executeAgreedAcquisition(
     priceAnchor: offer.priceAnchor,
     acquirerName: acquirer.name,
     targetName: target.name,
-    bankCharterTransferred: bankTransfer.transferred,
+    bankCharterTransferred,
   };
 }
