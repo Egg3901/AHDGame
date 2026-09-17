@@ -333,16 +333,21 @@ export interface ClearingBookDiagnostic {
  * Clearing book invariant (issue #2054): after normalization the offered book
  * and the lagged supply ledger MUST be in one canonical basis. The basis fix
  * (canonicalPlantsUnitsForCommodity on both sides) is what makes them
- * comparable; this tripwire is only the backstop that names a residual drift.
+ * comparable; this predicate is only the backstop that names a residual drift.
  *
- * Near-zero-safe: a book below MIN_ESTABLISHED_BOOK_SUPPLY has no baseline
- * (first landing, new production, sub-scale national book) and any ratio over
- * it is noise, so it never breaches. Above the floor, legitimate one-turn
- * growth cannot double an established book (builds land over many turns, the
- * policy output curve caps at +15%), so an excess past 2x with a material
- * absolute gap is a basis breach, not growth.
+ * Two gates, both required. First MATERIALITY: the absolute gap must reach
+ * MIN_MATERIAL_BOOK_GAP units. A sub-gap excess cannot move fills or prices:
+ * the pinned books run in the thousands, so a gap two orders below that is
+ * mix-rounding and scope noise (first landing, new production, sub-scale
+ * national books, near-zero denominators), never a defect. Second GROWTH: past
+ * the gap, legitimate one-turn growth cannot double an established book
+ * (builds land over many turns, the policy output curve caps at +15%), so an
+ * excess past 2x is a basis breach, not growth. A material book against a
+ * zero (or missing) lagged baseline has an infinite ratio and breaches: that
+ * is exactly the pinned pharmaceuticals/ordnance shape, and canonicalization
+ * leaves no legitimate way to offer thousands of units the ledger never saw.
  */
-export const CLEARING_BOOK_INVARIANT_MIN_LAGGED_SUPPLY = 250;
+export const CLEARING_BOOK_INVARIANT_MIN_MATERIAL_GAP = 250;
 export const CLEARING_BOOK_INVARIANT_MAX_GROWTH_FACTOR = 2;
 
 /** Pure predicate behind ClearingBookDiagnostic.invariantBreach. */
@@ -350,23 +355,19 @@ export function isClearingBookBreach(
   normalizedOfferedUnits: number,
   laggedSupply: number
 ): boolean {
-  if (
-    !(
-      typeof normalizedOfferedUnits === "number" &&
-      Number.isFinite(normalizedOfferedUnits) &&
-      typeof laggedSupply === "number" &&
-      Number.isFinite(laggedSupply)
-    )
-  ) {
+  if (!(
+    typeof normalizedOfferedUnits === "number" &&
+    Number.isFinite(normalizedOfferedUnits) &&
+    typeof laggedSupply === "number" &&
+    Number.isFinite(laggedSupply)
+  )) {
     return false;
   }
-  if (laggedSupply < CLEARING_BOOK_INVARIANT_MIN_LAGGED_SUPPLY) return false;
-  if (normalizedOfferedUnits <= laggedSupply * CLEARING_BOOK_INVARIANT_MAX_GROWTH_FACTOR) {
+  if (normalizedOfferedUnits - laggedSupply < CLEARING_BOOK_INVARIANT_MIN_MATERIAL_GAP) {
     return false;
   }
-  return (
-    normalizedOfferedUnits - laggedSupply >= CLEARING_BOOK_INVARIANT_MIN_LAGGED_SUPPLY
-  );
+  if (laggedSupply <= 0) return true;
+  return normalizedOfferedUnits > laggedSupply * CLEARING_BOOK_INVARIANT_MAX_GROWTH_FACTOR;
 }
 
 /**

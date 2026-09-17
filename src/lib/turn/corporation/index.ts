@@ -15,7 +15,11 @@ import { processSectors } from "./sectorCalculations";
 import { getLabourSystemMode, labourAtLeast } from "@/lib/labour/featureFlag";
 import { getMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { buildMarketContext } from "@/lib/market/marketContext";
-import { computeClearingFactors, type SectorClearingInput } from "@/lib/market/clearing";
+import {
+  computeClearingFactors,
+  describeClearingBookBreach,
+  type SectorClearingInput,
+} from "@/lib/market/clearing";
 import { computeBrandLoyaltyUpdates, type LoyaltySectorInput } from "./brandLoyaltyTurn";
 import { computeQualityUpdates } from "./brandQualityTurn";
 import {
@@ -30,7 +34,9 @@ import {
   commodityMixWeight,
   embargoSupplyFactorFor,
   plantsSupplyScaledUnits,
+  scaleMeasuredProducedUnits,
 } from "@/lib/constants/commodities";
+import { freshMilitaryDiversion } from "@/lib/military/arsenal";
 import {
   computeDemandCappedContractReservations,
   computeSupplyAgreementBuyerDemand,
@@ -338,6 +344,10 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     { corpId: string; revenueAnchor: number; commodities: string[] }
   >();
   const sectorCorpId = new Map<string, string>();
+  // Clearing book invariant breaches (issue #2054) for this turn's warning
+  // channel. Deterministic text per book, so a retried or replayed turn
+  // records each breach exactly once downstream.
+  const clearingInvariantBreaches: string[] = [];
   let brandLoyaltyUpdates: import("./brandLoyaltyTurn").CorpLoyaltyUpdate[] = [];
   if (market.clearingEnabled) {
     // Clearing pre-pass (Fix 2): needs every selling sector at once, so it
@@ -621,13 +631,23 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           // `producedUnits` carries the REVENUE-side production legs, so the
           // legs the supply ledger applies on top of the same units and
           // sectorTurn's productionFactor does not (natcorpScale ×
-          // outputMultiplier × embargoSupplyFactor) are applied here, through
-          // the SAME shared helper the ledger uses. Without them the offer is
-          // not ledger-consistent, and clearing exempts these units from the
-          // lagged-supply normalization precisely on the claim that it is: a
-          // high-output-policy sector would under-offer by up to 15%, and an
-          // embargoed one over-offered against a ledger that had already
-          // written those units off, with nothing left to reconcile it.
+          // outputMultiplier × embargoSupplyFactor, plus the arsenal-retention
+          // share for output shipped to a state arsenal under a defence
+          // contract) are applied here, through the SAME shared helper the
+          // ledger uses. Without them the offer is not ledger-consistent, and
+          // clearing exempts these units from the lagged-supply normalization
+          // precisely on the claim that it is: a high-output-policy sector
+          // would under-offer by up to 15%, an embargoed one over-offered
+          // against a ledger that had already written those units off, and a
+          // contracted one over-offered output the arsenal had already taken,
+          // with nothing left to reconcile any of it.
+          //
+          // The arsenal leg reads `freshMilitaryDiversion` exactly like the
+          // ledger's sector rows do (same staleness window, same turn), so a
+          // diversion cannot be fresh on one side and expired on the other.
+          // `producedUnits` itself is gross physical output in both places;
+          // the matching cash-side deduction lives in sectorTurn's revenue
+          // leg, so nothing here double-applies.
           //
           // EXTRACTION IS EXCLUDED, matching computeRawSupplyDemand's
           // deliberate `st !== "extraction"` exclusion. Under plants the
@@ -650,7 +670,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
           // exempt from the normalization that would otherwise catch it.
           producedUnits:
             market.plantsEnabled && sector.sectorType !== "extraction" && sector.mothballed !== true
-              ? plantsSupplyScaledUnits({
+              ? scaleMeasuredProducedUnits({
                   producedUnits: sector.producedUnits,
                   isNatcorp: !!lookups.corpById.get(corpId)?.countryOwnerId,
                   embargoSupplyFactor:
@@ -663,6 +683,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                         commandEconomyEnabled
                       )
                     ),
+                  // Arsenal-retention leg (issue #2054): the world supply
+                  // ledger multiplies this same share out of supply, so an
+                  // offer built without it sits in a larger basis and trips
+                  // the clearing invariant while depressing fills. Absent (no
+                  // fresh diversion) retains everything: non-contracted
+                  // sectors are byte-identical to before.
+                  militaryRetainedFraction: 1 - freshMilitaryDiversion(sector, turn ?? 0),
                 })
               : undefined,
         };
@@ -749,14 +776,17 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
         });
       }
     }
-    // Book-sanity invariant: the diagnostic reports the RAW revenue/base nameplate.
-    // A modest excess over lagged supply is EXPECTED and benign, the supply ledger
-    // applies scale/haircut factors the nameplate omits, and clearing now reconciles
-    // the book down to supply (so fills are not depressed). Only a unit-SCALE
-    // divergence (≥3×) signals a genuine bug like the t879 FX book (~100×). Warn
-    // loudly at that threshold; the benign haircut gap stays silent.
-    const BOOK_MISMATCH_TRIPWIRE = 3;
-    const bookViolations: string[] = [];
+    // Book-sanity invariant (issue #2054): the diagnostic reports the RAW
+    // revenue/base nameplate. A modest excess over lagged supply is EXPECTED
+    // and benign, the supply ledger applies scale/haircut factors the
+    // nameplate omits, and clearing reconciles the book down to supply (so
+    // fills are not depressed). Only a post-normalization breach of the
+    // canonical-basis invariant signals a genuine defect: both sides now
+    // build plants units through one basis, so a residual excess means the
+    // book and the ledger drifted apart and fills ARE depressed. Breaches go
+    // to the turn warning channel (and the health snapshot's warningCount),
+    // not just the worker log.
+    const bookViolations: string[] = clearingInvariantBreaches;
     // Telemetry only, and only while settlement is active: sectorTurn writes it
     // beside the fill it is NOT part of, so a player can read "nobody wanted it"
     // apart from "it could not get there". Carries the delivery-attributed
@@ -803,24 +833,12 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       producedUnitsOut: undefined,
       qualityPremiumEnabled: qualityPremiumPricingEnabled,
       plantsEnabled: market.plantsEnabled,
+      // One diagnostic per cleared book; the text is deterministic per book
+      // (see describeClearingBookBreach), so a retried turn cannot record the
+      // same breach twice downstream.
       onBookDiagnostic: (d) => {
-        if (
-          d.laggedSupply > 0 &&
-          d.normalizedOfferedUnits > d.laggedSupply * BOOK_MISMATCH_TRIPWIRE
-        ) {
-          const book = d.group ? d.commodity + "@" + d.group : d.commodity;
-          bookViolations.push(
-            book +
-              ": normalized " +
-              Math.round(d.normalizedOfferedUnits) +
-              " vs lagged supply " +
-              Math.round(d.laggedSupply) +
-              " (" +
-              (d.normalizedOfferedUnits / d.laggedSupply).toFixed(1) +
-              "×; raw " +
-              Math.round(d.rawOfferedUnits) +
-              ")"
-          );
+        if (d.invariantBreach) {
+          bookViolations.push("corporationTurn: " + describeClearingBookBreach(d));
         }
       },
     });
@@ -855,7 +873,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
       advertisingSellerDeliveredValueAnchorByCorpId;
     if (bookViolations.length > 0) {
       console.warn(
-        "[clearing] post-normalization order-book/ledger unit mismatch on " +
+        "[clearing] canonical-basis invariant breach on " +
           bookViolations.length +
           " market book" +
           (bookViolations.length === 1 ? "" : "s") +
@@ -1983,5 +2001,8 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     totalIncomeGenerated: Math.round(totalIncomeGenerated),
     currencyIncomeInternalByCharacterId,
     currencyIncomeFaceByCharacterId,
+    // Clearing book invariant breaches (issue #2054) for the turn warning
+    // channel. Empty unless market clearing ran and a book breached.
+    turnWarnings: clearingInvariantBreaches,
   };
 }
