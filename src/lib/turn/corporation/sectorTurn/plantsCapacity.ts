@@ -111,7 +111,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   // does not apply) surface under plants with source-basis stock and no
   // (or explicitly false) rescale flag: stamping the flag there without
   // converting the stock lets the blend ratio manufacture unsupported
-  // operating capacity (issue #2009 — 2,314.82 source units x ~390 blend =
+  // operating capacity (issue #2009 - 2,314.82 source units x ~390 blend =
   // 903,166 operating units on an oil_gas to rare_earth_mining retool).
   // Heal on the next sector-turn write while transitionFromStrategyId
   // evidence remains; no mongo script.
@@ -138,7 +138,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
   // The capacity the advance starts from is on the destination basis: either
   // it was converted at the retool boundary, or the heal above converted it
   // just now. Running the advance off unconverted stock is what mints the
-  // unsupported capacity, so the working stock — not just the stamp — moves.
+  // unsupported capacity, so the working stock - not just the stamp - moves.
   const storedCapacity =
     typeof sector.capitalStock === "number" && sector.capitalStock > 0 ? sector.capitalStock : 0;
   const workingCapacity =

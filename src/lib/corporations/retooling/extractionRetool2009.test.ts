@@ -22,7 +22,7 @@ import { healRetoolStockBasis } from "../retoolRescale";
 import { computePlantsCapacity } from "@/lib/turn/corporation/sectorTurn/plantsCapacity";
 
 /**
- * Issue #2009 — extraction auto-retool unit-basis collapse.
+ * Issue #2009 - extraction auto-retool unit-basis collapse.
  *
  * A transition committed pre-rescale (or under capital mode) surfaces under
  * plants with source-basis capitalStock and no rescale flag. Applying the
@@ -71,7 +71,7 @@ const STEPS = Array.from({ length: STRATEGY_TRANSITION_TURNS + 2 }, (_, i) => i)
 /** Pairs exercised by the table tests below; the completeness test pins this. */
 const exercisedPairs: Pair[] = [];
 
-describe("issue #2009 — the pair matrix is complete and registry-derived", () => {
+describe("issue #2009 - the pair matrix is complete and registry-derived", () => {
   it("derives every ordered extraction pair from SECTOR_STRATEGIES", () => {
     const ids = extractionIds();
     expect(ids.length).toBeGreaterThanOrEqual(2);
@@ -309,7 +309,7 @@ describe.each(extractionPairs())("extraction retool %s -> %s (issue #2009)", (fr
   });
 });
 
-describe("issue #2009 — exact oil_gas to rare_earth_mining reproduction", () => {
+describe("issue #2009 - exact oil_gas to rare_earth_mining reproduction", () => {
   const FROM = "oil_gas";
   const TO = "rare_earth_mining";
   const OWNED = 2314.82;
@@ -371,7 +371,7 @@ describe("issue #2009 — exact oil_gas to rare_earth_mining reproduction", () =
   });
 });
 
-describe("issue #2009 — legacy document shapes", () => {
+describe("issue #2009 - legacy document shapes", () => {
   const shape = {
     plantsEnabled: true,
     sectorType: SECTOR_TYPE as CorporationType,
@@ -471,7 +471,7 @@ describe("issue #2009 — legacy document shapes", () => {
     // Committed under plants (both turns set, start at or after plants start)
     // with no flag: the fix's model is that pre-flag writers converted the
     // stock but recorded nothing, so only the anchor leg is owed. This test
-    // pins that assumption — weakening it must confront the double-conversion
+    // pins that assumption - weakening it must confront the double-conversion
     // hazard on genuinely converted pre-flag rows documented in
     // healRetoolStockBasis.
     const heal = healRetoolStockBasis({
@@ -503,7 +503,7 @@ describe("issue #2009 — legacy document shapes", () => {
   });
 });
 
-describe("issue #2009 — bounded production-path multi-turn (computePlantsCapacity)", () => {
+describe("issue #2009 - bounded production-path multi-turn (computePlantsCapacity)", () => {
   const FROM = "oil_gas";
   const TO = "rare_earth_mining";
   const OWNED = 2314.82;
@@ -520,7 +520,7 @@ describe("issue #2009 — bounded production-path multi-turn (computePlantsCapac
   function legacyInput(turn: number, persisted: { stock: number; flag?: boolean; anchor: number }) {
     // Production passes the EFFECTIVE blended supply (sectorTurn resolves
     // getEffectiveStrategyRates once and threads it in), so the mix price is
-    // the transitional mix price — that is what keeps the nameplate invariant.
+    // the transitional mix price - that is what keeps the nameplate invariant.
     const effective = getEffectiveStrategyRates(SECTOR_TYPE, TO, FROM, T0, turn);
     return {
       sector: {
@@ -579,7 +579,7 @@ describe("issue #2009 — bounded production-path multi-turn (computePlantsCapac
       // discontinuity between adjacent turns. Raw operating UNITS are
       // continuous only while the blend runs; at completion they change
       // basis to destination units by design, so across that boundary only
-      // VALUE (nameplate) and the input bill must be continuous — and they
+      // VALUE (nameplate) and the input bill must be continuous - and they
       // are, by the invariant.
       const completing = turn >= T0 + STRATEGY_TRANSITION_TURNS;
       if (!completing) {
@@ -607,13 +607,13 @@ describe("issue #2009 — bounded production-path multi-turn (computePlantsCapac
   it("keeps the healed nameplate on the pre-retool basis (no grant, no haircut)", () => {
     const first = computePlantsCapacity(legacyInput(FIRST_TURN, { stock: OWNED, anchor: ANCHOR }));
     // Nameplate continuity modulo depreciation: the plant is worth what it
-    // was worth, re-aimed — within a few percent, not orders of magnitude.
+    // was worth, re-aimed - within a few percent, not orders of magnitude.
     expect(first.plantsNameplateRevenue / preRetoolNameplate).toBeGreaterThan(0.9);
     expect(first.plantsNameplateRevenue / preRetoolNameplate).toBeLessThan(1.1);
   });
 });
 
-describe("issue #2009 — every derived pair is exercised", () => {
+describe("issue #2009 - every derived pair is exercised", () => {
   it("leaves no registry pair without table coverage", () => {
     const expected = new Set(extractionPairs().map(([f, t]) => `${f}->${t}`));
     const tested = new Set(exercisedPairs.map(([f, t]) => `${f}->${t}`));

@@ -101,7 +101,7 @@ export function transitionalOperatingCapacity(args: {
  * True exactly when no plants-gated writer could have converted the stock:
  * the rescale flag is absent (legacy row) or explicitly false (committed
  * under capital mode, where the RPU basis does not apply), AND the
- * transition was committed before this sector ran under plants — evidenced
+ * transition was committed before this sector ran under plants - evidenced
  * by `transitionStartTurn` predating the sector's first plants turn. A
  * missing start or a missing plants anchor cannot prove a plants-era commit,
  * so both read as pre-plants: converting then is the coherent direction
