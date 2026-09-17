@@ -72,6 +72,36 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
   // strict: a file that forwards AND declares something of its own is not a shim
   // and still has to be justified below.
 
+  // ---- SHARED MODULES THAT CONTAIN one country's data without BEING it. ----
+  //
+  // ⚠️ "HOLDS US DATA" AND "IS US DATA" ARE DIFFERENT THINGS, AND THIS GUARD
+  // CANNOT TELL THEM APART. Its rule is ownership by declaration, which cannot
+  // see that a module's other half is machinery every country uses. The old
+  // roster drew this line as bucket A (the country's VALUES move, the file
+  // stays) against bucket D (the FILE moves), and made the same point about
+  // `currencies.ts`, which holds currency identity that moves beside exchange
+  // rates that must not.
+  //
+  // Each of these is bucket A. Relocating the file would drag shared machinery
+  // into `us/`; the fix is to extract the US slice, which is real work and not
+  // a move. The reason is checkable: name the shared exports, and the entry
+  // stops being true the day they leave.
+  {
+    file: "src/lib/seeds/demographicCategories.ts",
+    country: "US",
+    why: "Shared, not American. It defines DemographicTurnoutRates, VoterGroupCompositionEntry and EraComposition, plus DEMOGRAPHIC_TURNOUT_RATES, DEMOGRAPHIC_LABELS, ERA_COMPOSITIONS and demographicCategories itself, which countryDemographics.ts, the poll panels, the seed runner and the seed diagnostics all read for every country. Only DEMOGRAPHIC_POSITIONS carries US state overrides. Bucket A: extract that slice into us/data/, do not move the file.",
+  },
+  {
+    file: "src/lib/constants/primaryCalendar.ts",
+    country: "US",
+    why: "Mixed. DEM_2020_DELEGATES, GOP_2020_DELEGATES, EV_2020_BASELINE and GOP_HYBRID_STATES are United States tables; PRIMARY_WAVES, getPrimaryWaveSchedule, getWaveForTurnsRemaining and resolvePartyFamily are the generic staggered-primary machinery that campaignQueries and conventionResolution use. Bucket A: the delegate tables move, the scheduler stays.",
+  },
+  {
+    file: "src/lib/seeds/reference/politicalParties.ts",
+    country: "US",
+    why: "62 lines carrying the generic PartySeed type beside the US default party rows. The type is read by the wiki StartingStateDashboard widgets and finalizeResetGameWorld. Bucket A: the rows move once us/data has a party roster, the type stays put.",
+  },
+
   // ---- Client surfaces. Bucket E: these RENDER the country, they do not own it. ----
   {
     file: "src/app/country/[code]/legislature/JPDietPage.tsx",
