@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { recordIdentityObservation, recordIdentitySignals } from "./recordObservation";
@@ -190,6 +190,49 @@ describe("recordIdentitySignals", () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(rows).toHaveLength(1);
     expect(rows[0].track).toBe("ip");
+  });
+
+  it("records nothing in singleplayer", async () => {
+    // One account on one machine has nothing to correlate against. Mirrors
+    // SINGLEPLAYER_SKIP_PHASES dropping `suspiciousDetection`.
+    const { db, rows } = fakeDb();
+    vi.stubEnv("SINGLEPLAYER", "1");
+    try {
+      recordIdentitySignals(db, {
+        userId: USER,
+        ip: "1.1.1.1",
+        fingerprint: "abc123",
+        observedAt: at(1),
+        source: "login",
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(rows).toHaveLength(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("does not throw when the singleplayer check itself throws", async () => {
+    // SINGLEPLAYER set on a host that looks like a deployment makes
+    // `assertSingleplayerAllowed` throw. A login must not 500 over that.
+    const { db, rows } = fakeDb();
+    vi.stubEnv("SINGLEPLAYER", "1");
+    vi.stubEnv("RAILWAY_ENVIRONMENT_NAME", "production");
+    try {
+      expect(() =>
+        recordIdentitySignals(db, {
+          userId: USER,
+          ip: "1.1.1.1",
+          fingerprint: "abc123",
+          observedAt: at(1),
+          source: "login",
+        })
+      ).not.toThrow();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(rows).toHaveLength(0);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("never throws or rejects when the database is broken", async () => {

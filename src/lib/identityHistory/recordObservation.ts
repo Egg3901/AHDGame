@@ -6,6 +6,7 @@ import {
   type IdentityTrack,
 } from "@/lib/db/types/identityObservation";
 import { isGroupableIdentityValue } from "./guards";
+import { isSingleplayer } from "@/lib/singleplayer";
 
 export interface RecordObservationInput {
   userId: ObjectId;
@@ -115,6 +116,26 @@ export function recordIdentitySignals(
   db: Db,
   { userId, ip, fingerprint, observedAt, source }: RecordIdentitySignalsInput
 ): void {
+  // Singleplayer is one account on one machine. There is no second account to
+  // correlate against, so every run written here is evidence of nothing and the
+  // admin panel that reads it has nothing to show. AGENTS.md: "Anti-abuse
+  // scans, alt detection and similar have nothing to detect in singleplayer and
+  // are skipped there." Matches `SINGLEPLAYER_SKIP_PHASES`, which already drops
+  // `suspiciousDetection` for the same reason.
+  //
+  // Gated HERE rather than at the six call sites so a future observation point
+  // cannot forget it.
+  //
+  // Wrapped because `isSingleplayer` can THROW (`assertSingleplayerAllowed`
+  // fails loudly on a host that looks like a deployment). Login, registration
+  // and the OAuth callbacks call this bare, so an uncaught throw here would
+  // turn a misconfiguration into a 500 on sign-in. This function promises never
+  // to throw; that promise is kept by construction rather than by inspection.
+  try {
+    if (isSingleplayer()) return;
+  } catch {
+    return;
+  }
   void recordIdentityObservation(db, {
     userId,
     track: "ip",
