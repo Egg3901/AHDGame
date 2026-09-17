@@ -22,6 +22,7 @@ import {
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -441,6 +442,36 @@ async function executeSingleTransfer(
       },
       sessionOpts
     );
+
+    // 6b. (#992 tranche 4) Exactly one fund_transfer row for the cash leg,
+    // after the atomic buyer→seller move above: subject is the buyer fund in
+    // its own anchor currency, the seller rides in meta. The shadow ledger
+    // mirrors the seller side off that meta (one mirror only) — no second row
+    // is emitted for the seller, and the internal cross_fund_sell/buy log rows
+    // above are not ledger rows. Same-anchor plans only (see planFundCross-
+    // Rebalancing), so the mirror's currency gate always passes here.
+    await emitTx(db, {
+      type: "fund_transfer",
+      turn: currentTurn,
+      createdAt: new Date(),
+      subjectType: "fund",
+      subjectId: plan.buyerFundId,
+      subjectName: buyerFund.name,
+      amount: -plan.valueAnchor,
+      anchorAmount: -plan.valueAnchor,
+      currencyCode: buyerFund.anchorCurrencyCode,
+      counterpartyType: "fund",
+      counterpartyId: plan.sellerFundId,
+      counterpartyName: sellerFund.name,
+      meta: {
+        fundId: plan.sellerFundId.toString(),
+        fundCurrency: buyerFund.anchorCurrencyCode,
+        corporationId: plan.corporationId.toString(),
+        shares: plan.shares,
+        pricePerShareAnchor: plan.pricePerShareAnchor,
+        source: "cross-fund-rebalancing",
+      },
+    });
 
     // 7. Record public trade history (the cross-fund market is still a trade).
     void recordShareTrade(db, {
