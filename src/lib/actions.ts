@@ -14,6 +14,9 @@ import {
   quoteAdvertiseAction,
   getBuildDonorBaseActionCost,
   quoteBuildDonorBaseAction,
+  CONVERT_CASH_ACTION_COST,
+  calculateConvertCashInfamy,
+  convertCashConversion,
 } from "./actions/rules";
 
 export {
@@ -50,6 +53,13 @@ export {
   type BuildDonorBaseQuoteActor,
   type BuildDonorBaseQuoteTarget,
   type BuildDonorBaseQuote,
+  CONVERT_CASH_ACTION_COST,
+  CONVERT_CASH_RATE,
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  quoteConvertCashAction,
+  type ConvertCashQuoteActor,
+  type ConvertCashQuote,
 } from "./actions/rules";
 
 /**
@@ -116,17 +126,6 @@ export interface ActionResult {
   donorBaseLevelChange?: number;
   cashOnHandChange?: number;
   message: string;
-}
-
-/**
- * Infamy gained from converting personal cash to campaign funds.
- * Power curve: 15 × (amount / $1M) ^ 0.564
- * ~4 at $100K, ~15 at $1M, ~55 at $10M, capped at 100.
- */
-export function calculateConvertCashInfamy(amount: number): number {
-  if (amount <= 0) return 0;
-  const raw = 15 * Math.pow(amount / 1_000_000, 0.564);
-  return Math.min(100, Math.round(raw));
 }
 
 /**
@@ -405,15 +404,21 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Personal Campaign Donation",
     description:
       "Convert personal cash on hand into campaign funds at a 50% rate (infamy scales with amount)",
-    baseCost: 2,
+    baseCost: CONVERT_CASH_ACTION_COST,
     requiresState: false,
     effect: (character: Character) => {
       // Default effect uses all cash; execute route overrides with convertAmount.
       // Post-Phase-8: prefer the per-currency personal balance in the home
       // currency; fall back to the legacy cashOnHand for un-migrated fixtures.
+      // Single source of truth: the shared conversion and infamy legs (the
+      // same legs quoteConvertCashAction prices) so the credited conversion
+      // can never drift from the debited one. The legs — not the full quote —
+      // because a zero home-bucket balance is not a quotable amount but must
+      // still price (canPerformAction probes this effect for its funds check
+      // after the zero-wealth gate).
       const homeCode = getHomeCurrency(character);
       const cash = character.currencyBalances?.personal?.[homeCode] ?? character.cashOnHand ?? 0;
-      const converted = Math.floor(cash * 0.5);
+      const converted = convertCashConversion(cash);
       const infamy = calculateConvertCashInfamy(cash);
       // `cash`/`converted` are already in LOCAL home currency, so format with the
       // home symbol directly (no anchor→local conversion).

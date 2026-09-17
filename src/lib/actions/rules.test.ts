@@ -29,6 +29,11 @@ import {
   getBuildDonorBaseActionCost,
   getBuildDonorBaseFundCost,
   quoteBuildDonorBaseAction,
+  CONVERT_CASH_ACTION_COST,
+  CONVERT_CASH_RATE,
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  quoteConvertCashAction,
 } from "./rules";
 import {
   ACTIONS,
@@ -726,5 +731,134 @@ describe("donor failure agreement", () => {
     expect(() => ACTIONS.buildDonorBase.effect(donorCharacter(10), undefined)).toThrow(
       /home-state/
     );
+  });
+});
+
+// ── ConvertCash (Game1724 slice) ────────────────────────────────────────────
+// quoteConvertCashAction owns the flat AP cost, the 50% conversion and the
+// amount-scaled infamy. The default effect (result), the execute shell
+// (debit), the AI advisor and the UI previews all route through the same
+// conversion and infamy legs, so the numbers below prove agreement instead of
+// re-stating the formula. The one behavior fix: the advisor's old inline
+// infamy omitted the 100 cap the execution applies.
+
+function cashCharacter(cashOnHand: number, overrides: Partial<Character> = {}): Character {
+  return makeCharacter({
+    actions: 100,
+    funds: 0,
+    cashOnHand,
+    savingsOnHand: 0,
+    ...overrides,
+  });
+}
+
+describe("convert cash cost is single-sourced", () => {
+  it("pins the flat 2 AP cost and the 50% rate the conversion uses", () => {
+    expect(CONVERT_CASH_ACTION_COST).toBe(2);
+    expect(CONVERT_CASH_RATE).toBe(0.5);
+    expect(ACTIONS.convertCash.baseCost).toBe(CONVERT_CASH_ACTION_COST);
+    expect(getActionPointCost(cashCharacter(500_000), "convertCash")).toBe(2);
+  });
+});
+
+describe("convertCashConversion independent literals", () => {
+  it("credits half the amount, floored", () => {
+    expect(convertCashConversion(100_000)).toBe(50_000);
+    expect(convertCashConversion(1_000_000)).toBe(500_000);
+    expect(convertCashConversion(999_999)).toBe(499_999);
+    expect(convertCashConversion(1)).toBe(0);
+    expect(convertCashConversion(0)).toBe(0);
+  });
+});
+
+describe("calculateConvertCashInfamy independent literals", () => {
+  it("matches the historical curve anchors", () => {
+    expect(calculateConvertCashInfamy(100_000)).toBe(4);
+    expect(calculateConvertCashInfamy(1_000_000)).toBe(15);
+    expect(calculateConvertCashInfamy(10_000_000)).toBe(55);
+  });
+  it("prices nothing at or below zero", () => {
+    expect(calculateConvertCashInfamy(0)).toBe(0);
+    expect(calculateConvertCashInfamy(-50)).toBe(0);
+  });
+  it("caps at 100 where the raw curve keeps climbing", () => {
+    expect(Math.round(15 * Math.pow(100_000_000 / 1_000_000, 0.564))).toBeGreaterThan(100);
+    expect(calculateConvertCashInfamy(100_000_000)).toBe(100);
+    expect(calculateConvertCashInfamy(50_000_000)).toBe(100);
+  });
+});
+
+describe("convert cash quote prices debit and result through one source", () => {
+  it("pins the baseline quote ($1M converts to $500K at +15 infamy)", () => {
+    expect(quoteConvertCashAction({ amount: 1_000_000 })).toEqual({
+      ok: true,
+      apCost: 2,
+      cashDebitLocal: 1_000_000,
+      convertedLocal: 500_000,
+      infamy: 15,
+    });
+  });
+  it("floors odd amounts on the credit leg", () => {
+    const quote = quoteConvertCashAction({ amount: 999_999 });
+    expect(quote).toEqual({
+      ok: true,
+      apCost: 2,
+      cashDebitLocal: 999_999,
+      convertedLocal: 499_999,
+      infamy: calculateConvertCashInfamy(999_999),
+    });
+  });
+  it("agrees with the conversion and infamy legs at every scale", () => {
+    for (const amount of [1, 100_000, 500_000, 1_000_000, 28_000_000, 100_000_000]) {
+      const quote = quoteConvertCashAction({ amount });
+      expect(quote).toEqual({
+        ok: true,
+        apCost: CONVERT_CASH_ACTION_COST,
+        cashDebitLocal: amount,
+        convertedLocal: convertCashConversion(amount),
+        infamy: calculateConvertCashInfamy(amount),
+      });
+    }
+  });
+});
+
+describe("convert cash quote strictness", () => {
+  it("rejects a missing, zero or negative amount with the typed reason", () => {
+    for (const actor of [{}, { amount: null }, { amount: 0 }, { amount: -100 }]) {
+      const quote = quoteConvertCashAction(actor);
+      expect(quote.ok).toBe(false);
+      if (quote.ok) continue;
+      expect(quote.error).toBe("You must specify an amount to convert.");
+    }
+  });
+  it("rejects non-finite and non-numeric amounts", () => {
+    for (const amount of [NaN, Infinity, "500" as unknown as number]) {
+      const quote = quoteConvertCashAction({ amount });
+      expect(quote.ok).toBe(false);
+    }
+  });
+});
+
+describe("convert cash effect/debit agreement", () => {
+  it("the default all-cash effect debits and credits the quoted legs", () => {
+    const effect = ACTIONS.convertCash.effect(cashCharacter(500_000));
+    expect(effect.cashOnHandChange).toBe(-500_000);
+    expect(effect.fundsChange).toBe(convertCashConversion(500_000));
+    expect(effect.infamyChange).toBe(calculateConvertCashInfamy(500_000));
+    expect(effect.infamyChange).toBe(10);
+    expect(effect.message).toContain("+10 Infamy");
+  });
+  it("a zero home-bucket balance still prices zeros for the funds probe", () => {
+    // canPerformAction calls this effect for its funds check after the
+    // zero-wealth gate; pricing (not throwing) preserves the legacy probe.
+    const effect = ACTIONS.convertCash.effect(cashCharacter(0));
+    expect(effect.cashOnHandChange === 0).toBe(true);
+    expect(effect.fundsChange).toBe(0);
+    expect(effect.infamyChange).toBe(0);
+  });
+  it("a funded character can perform convertCash", () => {
+    expect(canPerformAction(cashCharacter(500_000), "convertCash")).toEqual({
+      canPerform: true,
+    });
   });
 });

@@ -21,6 +21,12 @@
  * quoteBuildDonorBaseAction is the single source of truth both the UI quote
  * and execution call; missing stats or missing home-state economics reject
  * instead of falling back to neutral values.
+ *
+ * ConvertCash costs flat action points and converts personal cash to campaign
+ * funds at a fixed rate with amount-scaled infamy. quoteConvertCashAction is
+ * the single source of truth the default effect, the execute shell, the AI
+ * advisor and the UI previews call; a missing or non-positive amount rejects
+ * with a typed reason instead of pricing zero.
  */
 import { statMultiplier } from "../stats/statMultiplier";
 import { NEUTRAL_STAT } from "../stats/statsConstants";
@@ -521,5 +527,81 @@ export function quoteBuildDonorBaseAction(
     apCost: getBuildDonorBaseActionCost(level),
     fundCostAnchor,
     donorGain: BUILD_DONOR_BASE_LEVEL_GAIN,
+  };
+}
+
+// ── ConvertCash (Game1724 slice) ────────────────────────────────────────────
+// Conversion, infamy and quote math moved verbatim from `../actions`, the
+// execute shell and the AI advisor so the default effect, the atomic debit,
+// the recommendation preview and the UI previews share one implementation.
+// Balance is unchanged: the numbers below are the historical formulas, only
+// the owner moved. The strict entry point is quoteConvertCashAction; the
+// lenient helpers (calculateConvertCashInfamy/convertCashConversion) stay for
+// callers that only need one leg. Host-currency balance selection (which
+// personal bucket the debit targets, forex conversion at the write boundary)
+// stays with the host shell: the quote prices LOCAL amounts and never touches
+// persistence.
+
+/** Action points charged per ConvertCash use: flat, independent of amount. */
+export const CONVERT_CASH_ACTION_COST = 2;
+
+/** Share of personal cash that lands in the campaign treasury. */
+export const CONVERT_CASH_RATE = 0.5;
+
+/**
+ * Infamy gained from converting personal cash to campaign funds.
+ * Power curve: 15 × (amount / $1M) ^ 0.564
+ * ~4 at $100K, ~15 at $1M, ~55 at $10M, capped at 100.
+ */
+export function calculateConvertCashInfamy(amount: number): number {
+  if (amount <= 0) return 0;
+  const raw = 15 * Math.pow(amount / 1_000_000, 0.564);
+  return Math.min(100, Math.round(raw));
+}
+
+/**
+ * Campaign funds credited for a ConvertCash amount, in the same (LOCAL home
+ * currency) units as the input. The remainder is lost to the transfer.
+ */
+export function convertCashConversion(amount: number): number {
+  return Math.floor(amount * CONVERT_CASH_RATE);
+}
+
+/**
+ * Raw ConvertCash actor inputs, preserved explicitly. The amount arrives in
+ * the player's LOCAL home currency, matching the debit the execute shell
+ * applies; the rules own the rate and infamy interpretation.
+ */
+export interface ConvertCashQuoteActor {
+  amount?: number | null;
+}
+
+/**
+ * Authoritative ConvertCash quote: flat AP cost, the LOCAL cash debit and
+ * campaign credit, and the amount-scaled infamy. A missing or non-positive
+ * amount rejects with a typed error the shell surfaces; it never silently
+ * prices a zero conversion.
+ */
+export type ConvertCashQuote =
+  | {
+      ok: true;
+      apCost: number;
+      cashDebitLocal: number;
+      convertedLocal: number;
+      infamy: number;
+    }
+  | { ok: false; error: string };
+
+export function quoteConvertCashAction(actor: ConvertCashQuoteActor): ConvertCashQuote {
+  const { amount } = actor;
+  if (typeof amount !== "number" || !Number.isFinite(amount) || amount <= 0) {
+    return { ok: false, error: "You must specify an amount to convert." };
+  }
+  return {
+    ok: true,
+    apCost: CONVERT_CASH_ACTION_COST,
+    cashDebitLocal: amount,
+    convertedLocal: convertCashConversion(amount),
+    infamy: calculateConvertCashInfamy(amount),
   };
 }

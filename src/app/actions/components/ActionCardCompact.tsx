@@ -5,7 +5,7 @@ import Link from "next/link";
 import { campaignAnchorToLocal } from "@/lib/campaigns/rules/currency";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { formatCurrencyFaceAmount } from "@/lib/currency/formatCurrencyFaceAmount";
-import { calculateConvertCashInfamy } from "@/lib/actions";
+import { calculateConvertCashInfamy, convertCashConversion } from "@/lib/actions";
 import { CATEGORY_ACCENTS, CATEGORY_LABELS } from "../actionsConstants";
 import type { ActionCardProps } from "../actionsTypes";
 import ActionExecuteRow from "./ActionExecuteRow";
@@ -291,7 +291,8 @@ const ActionCardCompact = memo(function ActionCardCompact({
                   const parsed = Number(convertCashAmount) || 0;
                   const valid = parsed > 0 && parsed <= cash;
                   const previewInfamy = valid ? calculateConvertCashInfamy(parsed) : 0;
-                  const previewFunds = valid ? Math.floor(parsed * 0.5) : 0;
+                  // Shared conversion leg: the preview credits exactly what execution debits.
+                  const previewFunds = valid ? convertCashConversion(parsed) : 0;
                   return (
                     <div className="flex items-center gap-1 animate-in slide-in-from-right-2 duration-200 flex-wrap sm:flex-nowrap">
                       <div className="relative flex-1 sm:flex-none">

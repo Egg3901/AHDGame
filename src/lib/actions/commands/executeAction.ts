@@ -26,7 +26,7 @@ import {
   ACTIONS,
   canPerformAction,
   getActionPointCost,
-  calculateConvertCashInfamy,
+  quoteConvertCashAction,
   makeFundsFormatter,
   formatLocalFunds,
   buildBatchResultMessage,
@@ -221,10 +221,17 @@ export async function executeCharacterAction(
       // `campaignRate` (see `fundsChangeLocal` below), so we pre-divide here
       // to keep it expressed in anchor units — `fundsChange × rate` then
       // round-trips back to the intended LOCAL credit.
-      const convertedLocal = Math.floor(convertAmount * 0.5);
+      // Single source of truth: the shared quote owns the rate and infamy,
+      // so the credited conversion can never drift from the debited one. A
+      // non-quotable amount rejects with the typed quote reason.
+      const quote = quoteConvertCashAction({ amount: convertAmount });
+      if (!quote.ok) {
+        return { ok: false, error: quote.error, status: 400 };
+      }
+      const convertedLocal = quote.convertedLocal;
       const fundsChangeAnchor =
         forexEnabled && campaignRate > 0 ? convertedLocal / campaignRate : convertedLocal;
-      const infamy = calculateConvertCashInfamy(convertAmount);
+      const infamy = quote.infamy;
       // `convertAmount`/`convertedLocal` are already in LOCAL home currency.
       effect = {
         cashOnHandChange: -convertAmount,
