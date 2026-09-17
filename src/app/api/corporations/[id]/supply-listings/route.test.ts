@@ -92,3 +92,46 @@ it("filters expired advertisements and does not cache private CEO context", asyn
   });
   expect(db.collectionMocks.supplyAgreements).toBeUndefined();
 });
+
+it("removes advertisements authored by a former CEO and serializes only public terms", async () => {
+  const otherId = new ObjectId();
+  const listings = db.collection("supplyListings").find();
+  listings.toArray
+    .mockResolvedValueOnce([
+      {
+        _id: "other:0",
+        corporationId: otherId,
+        publishedByUserId: "former-owner",
+        slot: 0,
+        side: "sell",
+        commodity: "energy",
+        volumeCap: 20,
+        pricePremium: 0,
+        expiresAtTurn: 150,
+      },
+      {
+        _id: "other:1",
+        corporationId: otherId,
+        publishedByUserId: "current-owner",
+        slot: 1,
+        side: "buy",
+        commodity: "energy",
+        volumeCap: 30,
+        pricePremium: 0,
+        expiresAtTurn: 150,
+      },
+    ])
+    .mockResolvedValueOnce([]);
+  db.collection("corporations")
+    .find()
+    .toArray.mockResolvedValue([{ _id: otherId, name: "Other Co", userId: "current-owner" }]);
+  const response = await GET(request(), context);
+  const data = await response.json();
+  expect(data.listings).toHaveLength(1);
+  expect(data.listings[0]).toMatchObject({
+    id: "other:1",
+    corporationName: "Other Co",
+    own: false,
+  });
+  expect(data.listings[0]).not.toHaveProperty("publishedByUserId");
+});

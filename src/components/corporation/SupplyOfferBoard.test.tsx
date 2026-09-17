@@ -21,12 +21,10 @@ it("hands a selected public offer to negotiation without accepting a contract", 
     pricePremium: 0.05,
     expiresAtTurn: 200,
   };
-  const fetcher = vi
-    .fn()
-    .mockResolvedValue({
-      ok: true,
-      json: async () => ({ listings: [listing], ownListings: [], hasMore: false }),
-    });
+  const fetcher = vi.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({ listings: [listing], ownListings: [], hasMore: false }),
+  });
   vi.stubGlobal("fetch", fetcher);
   const respond = vi.fn();
   render(
@@ -40,20 +38,18 @@ it("hands a selected public offer to negotiation without accepting a contract", 
   expect(fetcher.mock.calls.every((call) => call[1]?.method !== "POST")).toBe(true);
 });
 it("publishes an offer in an unused slot and exposes failures", async () => {
-  const fetcher = vi
-    .fn()
-    .mockImplementation(async (_url, options) =>
-      options?.method === "POST"
-        ? { ok: false, json: async () => ({ error: "Offer rejected" }) }
-        : {
-            ok: true,
-            json: async () => ({
-              listings: [],
-              ownListings: [{ id: "self:0", slot: 0, side: "sell", commodity: "energy" }],
-              hasMore: false,
-            }),
-          }
-    );
+  const fetcher = vi.fn().mockImplementation(async (_url, options) =>
+    options?.method === "POST"
+      ? { ok: false, json: async () => ({ error: "Offer rejected" }) }
+      : {
+          ok: true,
+          json: async () => ({
+            listings: [],
+            ownListings: [{ id: "self:0", slot: 0, side: "sell", commodity: "energy" }],
+            hasMore: false,
+          }),
+        }
+  );
   vi.stubGlobal("fetch", fetcher);
   render(
     <NextIntlClientProvider locale="en" messages={messages}>

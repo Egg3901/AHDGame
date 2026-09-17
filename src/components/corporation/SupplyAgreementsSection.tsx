@@ -730,6 +730,7 @@ export default function SupplyAgreementsSection({
       </div>
 
       <SupplyOfferBoard
+        key={corpId}
         corpId={corpId}
         onRespond={(listing) => {
           setProposalRole(listing.side === "sell" ? "buyer" : "supplier");

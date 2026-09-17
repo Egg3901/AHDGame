@@ -126,7 +126,7 @@ export function SupplyOfferBoard({
         </div>
         <button
           type="button"
-          disabled={loading || busy || own.length >= 10}
+          disabled={loading || busy || !!error || own.length >= 10}
           onClick={() => setForm((v) => !v)}
           className="rounded border border-primary/40 px-3 py-2 text-sm disabled:opacity-50"
         >
