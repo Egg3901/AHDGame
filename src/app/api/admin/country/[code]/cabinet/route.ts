@@ -34,10 +34,7 @@ import { getUKCabinetCooldownsCollection } from "@/lib/db/collections/ukGovernme
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { cabinetOfficeTypeForCountry } from "@/lib/actions/officeActionBonus";
 import { resetCabinetSettingCooldowns } from "@/lib/db/collections/cabinetSettings";
-import {
-  canHoldAdditionalAppointment,
-  roleSlotForPosition,
-} from "@/lib/uk/dualMinistry/rules";
+import { canHoldAdditionalAppointment, roleSlotForPosition } from "@/lib/uk/dualMinistry/rules";
 import { reconcileUkSharedPool } from "@/lib/cabinet/ministerialActionPool";
 import { preserveSurvivingCabinetRow } from "@/lib/uk/dualMinistry/survivor";
 
@@ -219,6 +216,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const heldSlots = heldRows
       .map((row) => row.roleSlot ?? roleSlotForPosition(countryId, row.positionId))
       .filter((slot): slot is NonNullable<typeof slot> => slot != null);
+    // Outside the UK rows carry no slot, so the slot check below is vacuous
+    // there: any other held seat blocks the appointment (the pre-#2049
+    // one-seat rule, with its same-seat refresh carve-out).
+    if (targetSlot == null && heldRows.some((row) => row.positionId !== positionId)) {
+      return NextResponse.json(
+        { error: "This character already holds another cabinet position" },
+        { status: 409 }
+      );
+    }
     const holdCheck = canHoldAdditionalAppointment(countryId, heldSlots, targetSlot);
     if (!holdCheck.ok && heldRows.every((row) => row.positionId !== positionId)) {
       return NextResponse.json({ error: holdCheck.reason }, { status: 409 });
@@ -242,7 +248,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       { countryId, positionId },
       {
         $set: {
-          ...(countryId === "UK" && targetSlot ? { roleSlot: targetSlot } : {}),
+          ...(countryId === ("UK" as CountryId) && targetSlot ? { roleSlot: targetSlot } : {}),
           characterId: targetChar._id,
           characterName: targetChar.name,
           party,
@@ -280,7 +286,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
     // Shared pool (issue #2049): recompute from all holder rows and mirror it,
     // so a fresh cap row cannot lift the surviving balance on a second title.
-    if (countryId === "UK") {
+    if (countryId === ("UK" as CountryId)) {
       await reconcileUkSharedPool(db, targetChar._id, now);
     }
 

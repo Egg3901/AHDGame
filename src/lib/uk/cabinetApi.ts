@@ -38,10 +38,7 @@ import {
   getEligibleCabinetCharacters,
   requireCurrentPrimeMinister,
 } from "./cabinetEligibility";
-import {
-  canHoldAdditionalAppointment,
-  roleSlotForPosition,
-} from "@/lib/uk/dualMinistry/rules";
+import { canHoldAdditionalAppointment, roleSlotForPosition } from "@/lib/uk/dualMinistry/rules";
 import { reconcileUkSharedPool } from "@/lib/cabinet/ministerialActionPool";
 import { preserveSurvivingCabinetRow } from "@/lib/uk/dualMinistry/survivor";
 import { applyConfidenceEventToGov } from "./confidence/confidenceGaugeStore";
@@ -264,6 +261,12 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
     const heldSlots = heldRows
       .map((row) => row.roleSlot ?? roleSlotForPosition(countryId, row.positionId))
       .filter((slot): slot is NonNullable<typeof slot> => slot != null);
+    // Outside the UK rows carry no slot, so the slot check below is vacuous
+    // there: any held row blocks a second seat (the pre-#2049 one-seat rule,
+    // previously an explicit findOne guard with this same message).
+    if (targetSlot == null && heldRows.length > 0) {
+      throw forbidden("This character already holds a cabinet position");
+    }
     const holdCheck = canHoldAdditionalAppointment(countryId, heldSlots, targetSlot);
     if (!holdCheck.ok) {
       throw forbidden(holdCheck.reason);
