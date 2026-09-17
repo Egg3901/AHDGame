@@ -1,6 +1,7 @@
 import { ensureProviderIdentityIndexes } from "@/lib/auth/providerIdentityIndexes";
 import type { Db } from "mongodb";
 import { normalizeAndMergeCorporateSectors } from "@/lib/corporations/repairDuplicateSectors";
+import { assertUniqueCorporationSequentialIds } from "./assertUniqueCorporationIds";
 import { ensureIndex } from "./helpers";
 
 const CORPORATE_SECTOR_IDENTITY_INDEX_NAME = "corporateSectors_corporationId_stateId_sectorType";
@@ -149,13 +150,27 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
-  await ensureIndex(
-    db,
-    "corporations",
-    { sequentialId: 1 },
-    { unique: true, sparse: true, name: "corporations_sequentialId" },
-    log
-  );
+  // Pre-index invariant (issue #2028): enumerate every seeded corporation and
+  // fail with ALL colliding ids + holder names before attempting index
+  // creation, so one seed fix can close every duplicate at once instead of
+  // tripping over a bare E11000 one key at a time.
+  await assertUniqueCorporationSequentialIds(db);
+  // Created directly (not via the tolerant ensureIndex helper), so a failure
+  // stays fatal and visible instead of degrading to a log line that leaves
+  // the collection unprotected against later collisions. createIndex with the
+  // same name/key/options is idempotent, so re-runs are safe.
+  try {
+    await db
+      .collection("corporations")
+      .createIndex(
+        { sequentialId: 1 },
+        { unique: true, sparse: true, name: "corporations_sequentialId" }
+      );
+    log("  ✓ corporations.corporations_sequentialId");
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`corporations_sequentialId unique index creation failed: ${msg}`);
+  }
   await ensureIndex(db, "corporations", { ceoId: 1 }, { name: "corporations_ceoId" }, log);
   // Supports sellNppStockSurplus's per-cycle scan (nppActionProcessing.ts) for
   // corps with an NPP shareholder — a full collection scan without this,
