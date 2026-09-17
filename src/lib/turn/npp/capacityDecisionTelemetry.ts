@@ -66,10 +66,7 @@ export function makeCapacityCompetitorCounter(index: CapacityCompetitorIndex) {
 
 /** Management cohort for the observation vocabulary, never an id. */
 export function resolveCapacityCohort(
-  corp: Pick<
-    Corporation,
-    "ceoType" | "ceoVacant" | "countryOwnerId" | "ownershipState" | "userId"
-  >
+  corp: Pick<Corporation, "ceoType" | "ceoVacant" | "countryOwnerId" | "ownershipState" | "userId">
 ): CorporationManagementCohort {
   return classifyCorporationManagement({
     ceoType: corp.ceoType ?? null,
@@ -347,4 +344,23 @@ export function createReinvestCapacityObserver(deps: {
       });
     },
   };
+}
+
+/**
+ * Append the one founding observation for a corp turn. The caller maps its
+ * decision facts into gate inputs; the builder applies
+ * FOUNDING_GATE_PRECEDENCE so the recorded gate is the same first-rejecting
+ * gate the branch took.
+ */
+export function pushFoundingCapacityObservation(
+  target: CapacityDecisionObservation[],
+  args: {
+    cohort: CorporationManagementCohort;
+    competitorCount: number;
+    outcome: FoundingCapacityOutcome;
+    fallbackCashHeadroomAnchor: number;
+    gates: FoundingCapacityGateInputs;
+  }
+): void {
+  target.push(buildFoundingCapacityObservation(args));
 }

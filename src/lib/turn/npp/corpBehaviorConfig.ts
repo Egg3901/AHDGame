@@ -1,10 +1,13 @@
-import type { Corporation } from "@/lib/db/types";
+import type { ObjectId } from "mongodb";
+import type { Corporation, CorporateSector } from "@/lib/db/types";
 import {
   canUnlock,
   getTreeForType,
+  sumStrengthGrants,
   techNodeCashCost,
   type TechTreeNode,
 } from "@/lib/constants/techTree";
+import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 
 /**
  * Pick one deterministic, affordable node per turn. Sector-lane nodes win ties
@@ -28,4 +31,57 @@ export function pickBestNppTechNode(
       return b.node.cost - a.node.cost;
     });
   return candidates[0] ?? null;
+}
+
+/** One corp bulkWrite entry for the NPP sector-tech-tree auto-unlock. */
+export interface NppTechCorpUpdate {
+  filter: { _id: ObjectId; unlockedTechNodeIds?: { $ne: string } };
+  update: {
+    $set?: Record<string, unknown>;
+    $inc?: Record<string, number>;
+    $addToSet?: { unlockedTechNodeIds: string };
+  };
+}
+
+/**
+ * Sector tech tree: auto-unlock one node per turn when affordable. A separate
+ * op from the budget decision (same _id); bulkWrite applies both. The
+ * $addToSet plus not-already-owned filter mirror the player unlock's atomic
+ * guard: a concurrent write can no longer resurrect a stale
+ * unlockedTechNodeIds array or double-add the node.
+ */
+export function maybePushNppTechUnlock(args: {
+  corp: Corporation;
+  sectors: CorporateSector[];
+  techCurrentYear: number;
+  turn: number;
+  now: Date;
+  corpUpdates: NppTechCorpUpdate[];
+}): void {
+  const { corp, sectors, techCurrentYear, turn, now } = args;
+  const dailyGrossRevenue = sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0) * TURNS_PER_DAY;
+  const pick = pickBestNppTechNode(corp, techCurrentYear, dailyGrossRevenue);
+  if (!pick) return;
+  const { node: techNode, cashCost } = pick;
+  const grants = sumStrengthGrants(techNode.effects);
+  const techInc: Record<string, number> = {
+    rdScore: -techNode.cost,
+    liquidCapital: -cashCost,
+  };
+  if (grants.marketingStrength > 0) techInc.marketingStrength = grants.marketingStrength;
+  if (grants.logisticsStrength > 0) techInc.logisticsStrength = grants.logisticsStrength;
+  const committing = !(corp.techDecadeLane ?? {})[techNode.decadeId];
+  const techSet: Record<string, unknown> = { updatedAt: now };
+  if (committing) {
+    techSet[`techDecadeLane.${techNode.decadeId}`] = techNode.lane;
+    techSet[`techDecadeChosenTurn.${techNode.decadeId}`] = turn;
+  }
+  args.corpUpdates.push({
+    filter: { _id: corp._id, unlockedTechNodeIds: { $ne: techNode.id } },
+    update: {
+      $set: techSet,
+      $inc: techInc,
+      $addToSet: { unlockedTechNodeIds: techNode.id },
+    },
+  });
 }
