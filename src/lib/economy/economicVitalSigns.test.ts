@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import { describe, expect, it } from "vitest";
+import type { Bond } from "@/lib/db/types";
 import { computeEconomicVitalSigns, summarizeLedgerTurnover } from "./economicVitalSigns";
 import type { VitalSignsHistoryRow } from "./economicVitalSigns";
 import type { LedgerReconciliation } from "@/lib/ledger/types";
@@ -689,6 +690,62 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.reconciliation.stockVsFlowDivergentCount).toBeNull();
     expect(snapshot.reconciliation.stockVsFlowSkipped).toBe(true);
     expect(snapshot.measurement.reasons).toContain("stock_vs_flow_skipped");
+  });
+});
+
+describe("sovereign demand gaps", () => {
+  const gapBonds = (): Bond[] => [
+    {
+      _id: new ObjectId(),
+      issuerType: "sovereign",
+      countryId: "US",
+      corporationId: new ObjectId(),
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 10,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      currencyCode: "USD",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ];
+
+  it("attaches demandGapByReason when sovereign demand inputs are present", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      bonds: gapBonds(),
+      sovereignDemand: {
+        funds: [],
+        fundIdToKey: new Map(),
+        tradableCurrencies: ["USD"],
+        controlledCurrencies: [],
+        ratingByCountry: new Map(),
+        crossBorderEnabled: false,
+      },
+    });
+    expect(snapshot.securities.sovereignIssuanceByCountry).toEqual([
+      expect.objectContaining({
+        countryId: "US",
+        unheldIssueCount: 1,
+        demandGapByReason: { no_domestic_fund: 1 },
+      }),
+    ]);
+  });
+
+  it("omits demandGapByReason without sovereign demand inputs", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, bonds: gapBonds() });
+    expect(snapshot.securities.sovereignIssuanceByCountry).toEqual([
+      expect.objectContaining({ countryId: "US", unheldIssueCount: 1 }),
+    ]);
+    expect(snapshot.securities.sovereignIssuanceByCountry?.[0]?.demandGapByReason).toBeUndefined();
   });
 });
 

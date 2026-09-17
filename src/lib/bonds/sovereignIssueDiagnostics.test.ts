@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { Bond } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import {
+  classifySovereignDemandGap,
   consolidateSovereignTranches,
   planSovereignTranches,
   SOVEREIGN_MIN_TRANCHE_UNITS,
+  summarizeSovereignDemandGapsByCountry,
   summarizeSovereignIssuanceByCountry,
   summarizeSovereignIssue,
 } from "./sovereignIssueDiagnostics";
+import type { SovereignDemandGapFund, SovereignDemandGapFx } from "./sovereignIssueDiagnostics";
 import { SOVEREIGN_RECONCILE_DISTRIBUTION } from "./sovereign";
 
 function bond(input: {
@@ -145,6 +148,257 @@ describe("planSovereignTranches", () => {
   it("skips dust rungs below one face unit and empty fractions", () => {
     const tranches = planSovereignTranches({ 48: 0.99, 96: 0, 240: 0.01 }, 1500);
     expect(tranches).toEqual([{ maturityTurns: 48, amount: 1000 }]);
+  });
+});
+
+describe("classifySovereignDemandGap", () => {
+  const fx: SovereignDemandGapFx = {
+    tradableCurrencies: ["USD", "GBP", "CNY"],
+    controlledCurrencies: [],
+  };
+  const noRatings = new Map<string, string | undefined>();
+
+  function gapFund(overrides: Partial<SovereignDemandGapFund> = {}): SovereignDemandGapFund {
+    return {
+      key: "us_top_25",
+      homeCountryId: "US",
+      scope: "country",
+      kind: "broad",
+      active: true,
+      deployableCashAnchor: 1_000_000_000,
+      cashAboveBufferAnchor: 1_000_000_000,
+      ...overrides,
+    };
+  }
+
+  function issue(
+    overrides: {
+      countryId?: string | null;
+      currencyCode?: string | null;
+      totalIssued?: number;
+      publicFloat?: number;
+      heldUnitsByFundKey?: Map<string, number>;
+    } = {}
+  ) {
+    return {
+      countryId: overrides.countryId ?? "US",
+      currencyCode: overrides.currencyCode ?? "USD",
+      totalIssued: overrides.totalIssued ?? 2_000 * BOND_UNIT_FACE_VALUE,
+      publicFloat: overrides.publicFloat ?? 500,
+      heldUnitsByFundKey: overrides.heldUnitsByFundKey,
+    };
+  }
+
+  it("reports no_float when nothing is left in public float", () => {
+    expect(
+      classifySovereignDemandGap(issue({ publicFloat: 0 }), [gapFund()], fx, noRatings, false)
+    ).toBe("no_float");
+  });
+
+  it("reports no_domestic_fund for a country with no homed fund and no foreign channel", () => {
+    // The only fund is a US country fund: it never buys foreign paper, and no
+    // global fund exists to be blocked, so the honest reason is coverage.
+    expect(
+      classifySovereignDemandGap(
+        issue({ countryId: "FR", currencyCode: "EUR" }),
+        [gapFund()],
+        fx,
+        noRatings,
+        false
+      )
+    ).toBe("no_domestic_fund");
+  });
+
+  it("reports cross_border_disabled when opening the flag alone would reach the issue", () => {
+    const globalEquity = gapFund({
+      key: "global_sector_energy",
+      homeCountryId: "US",
+      scope: "global",
+      kind: "sector",
+    });
+    expect(
+      classifySovereignDemandGap(
+        issue({ countryId: "FR", currencyCode: "EUR" }),
+        [globalEquity],
+        { tradableCurrencies: ["USD", "EUR"], controlledCurrencies: [] },
+        noRatings,
+        false
+      )
+    ).toBe("cross_border_disabled");
+    expect(
+      classifySovereignDemandGap(
+        issue({ countryId: "FR", currencyCode: "EUR" }),
+        [globalEquity],
+        { tradableCurrencies: ["USD", "EUR"], controlledCurrencies: [] },
+        noRatings,
+        true
+      )
+    ).toBe("awaiting_demand");
+  });
+
+  it("reports capital_controls when a waiting global bond fund is locked out by controls", () => {
+    const globalGov = gapFund({
+      key: "global_sovereign_ig",
+      homeCountryId: "US",
+      scope: "global",
+      kind: "bond",
+      bondUniverse: { issuerType: "sovereign", minRating: "BBB" },
+    });
+    expect(
+      classifySovereignDemandGap(
+        issue({ countryId: "CN", currencyCode: "CNY" }),
+        [globalGov],
+        { tradableCurrencies: ["USD", "CNY"], controlledCurrencies: ["CNY"] },
+        new Map([["CN", "A"]]),
+        false
+      )
+    ).toBe("capital_controls");
+  });
+
+  it("reports currency_mismatch when no live rate lets a foreign fund price the issue", () => {
+    const globalGov = gapFund({
+      key: "global_sovereign_ig",
+      homeCountryId: "US",
+      scope: "global",
+      kind: "bond",
+      bondUniverse: { issuerType: "sovereign", minRating: "BBB" },
+    });
+    expect(
+      classifySovereignDemandGap(
+        issue({ countryId: "XX", currencyCode: "XYZ" }),
+        [globalGov],
+        { tradableCurrencies: ["USD"], controlledCurrencies: [] },
+        noRatings,
+        false
+      )
+    ).toBe("currency_mismatch");
+  });
+
+  it("reports ineligible when homed funds hold only a corporate mandate", () => {
+    const corpBondFund = gapFund({
+      key: "us_corporate_ig",
+      kind: "bond",
+      bondUniverse: { issuerType: "corporation", minRating: "BBB" },
+    });
+    expect(classifySovereignDemandGap(issue(), [corpBondFund], fx, noRatings, false)).toBe(
+      "ineligible"
+    );
+  });
+
+  it("reports ineligible when the rating band excludes the issuer", () => {
+    const pickyBondFund = gapFund({
+      key: "us_sovereign_bonds",
+      kind: "bond",
+      bondUniverse: { issuerType: "sovereign", homeOnly: true, minRating: "BBB" },
+    });
+    expect(
+      classifySovereignDemandGap(issue(), [pickyBondFund], fx, new Map([["US", "B"]]), false)
+    ).toBe("ineligible");
+  });
+
+  it("reports cash_buffer when candidate funds keep only the 5% buffer", () => {
+    const broke = gapFund({ deployableCashAnchor: 0, cashAboveBufferAnchor: 0 });
+    expect(classifySovereignDemandGap(issue(), [broke], fx, noRatings, false)).toBe("cash_buffer");
+  });
+
+  it("reports reserve_target_met when funds hold cash above the buffer but want no more bonds", () => {
+    const full = gapFund({ deployableCashAnchor: 0, cashAboveBufferAnchor: 500_000 });
+    expect(classifySovereignDemandGap(issue(), [full], fx, noRatings, false)).toBe(
+      "reserve_target_met"
+    );
+  });
+
+  it("reports position_limit when every candidate fund is at the holder cap", () => {
+    const capped = gapFund({ key: "us_top_25" });
+    // 4 units issued: the 25% cap is 1 unit, already held.
+    const cappedIssue = issue({
+      totalIssued: 4 * BOND_UNIT_FACE_VALUE,
+      publicFloat: 3,
+      heldUnitsByFundKey: new Map([["us_top_25", 1]]),
+    });
+    expect(classifySovereignDemandGap(cappedIssue, [capped], fx, noRatings, false)).toBe(
+      "position_limit"
+    );
+  });
+
+  it("reports awaiting_demand when mandate, cash, cap, and float all allow a purchase", () => {
+    expect(classifySovereignDemandGap(issue(), [gapFund()], fx, noRatings, false)).toBe(
+      "awaiting_demand"
+    );
+  });
+
+  it("ignores inactive funds when assigning coverage", () => {
+    const paused = gapFund({ active: false });
+    expect(
+      classifySovereignDemandGap(
+        issue({ countryId: "FR", currencyCode: "EUR" }),
+        [paused],
+        fx,
+        noRatings,
+        false
+      )
+    ).toBe("no_domestic_fund");
+  });
+
+  it("assigns the same reason regardless of fund order", () => {
+    const funds = [
+      gapFund({ key: "b", homeCountryId: "UK", scope: "country" }),
+      gapFund({ key: "a", homeCountryId: "US", scope: "country" }),
+    ];
+    const usIssue = issue();
+    const forward = classifySovereignDemandGap(usIssue, funds, fx, noRatings, false);
+    const reversed = classifySovereignDemandGap(
+      usIssue,
+      [...funds].reverse(),
+      fx,
+      noRatings,
+      false
+    );
+    expect(forward).toBe("awaiting_demand");
+    expect(reversed).toBe(forward);
+  });
+});
+
+describe("summarizeSovereignDemandGapsByCountry", () => {
+  it("counts unheld issues by reason, skipping held ones, in country order", () => {
+    expect(
+      summarizeSovereignDemandGapsByCountry([
+        { countryId: "US", holderCount: 0, gap: "no_domestic_fund" },
+        { countryId: "US", holderCount: 0, gap: "cash_buffer" },
+        { countryId: "US", holderCount: 2, gap: "awaiting_demand" },
+        { countryId: "FR", holderCount: 0, gap: "no_domestic_fund" },
+      ])
+    ).toEqual([
+      { countryId: "FR", unheldIssueCount: 1, byReason: { no_domestic_fund: 1 } },
+      {
+        countryId: "US",
+        unheldIssueCount: 2,
+        byReason: { cash_buffer: 1, no_domestic_fund: 1 },
+      },
+    ]);
+  });
+});
+
+describe("summarizeSovereignIssuanceByCountry demand gaps", () => {
+  it("attaches per-reason counts that sum to the unheld count", () => {
+    const rows = summarizeSovereignIssuanceByCountry(
+      [
+        bond({ countryId: "US", holders: [], publicFloat: 500 }),
+        bond({ countryId: "US", holders: [holder(10)], publicFloat: 10 }),
+      ],
+      () => "no_domestic_fund"
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.unheldIssueCount).toBe(1);
+    expect(rows[0]!.demandGapByReason).toEqual({ no_domestic_fund: 1 });
+  });
+
+  it("leaves demandGapByReason absent without a classifier", () => {
+    const rows = summarizeSovereignIssuanceByCountry([
+      bond({ countryId: "US", holders: [], publicFloat: 500 }),
+    ]);
+    expect(rows[0]!.unheldIssueCount).toBe(1);
+    expect(rows[0]!.demandGapByReason).toBeUndefined();
   });
 });
 

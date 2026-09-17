@@ -1,5 +1,6 @@
 import type { ReconcileStatus } from "@/lib/ledger/types";
 import type { MarketFormationSnapshot } from "./marketFormation";
+import type { SovereignDemandGapReason } from "@/lib/bonds/sovereignIssueDiagnostics";
 
 export interface EconomicMetric {
   value: number | null;
@@ -23,6 +24,13 @@ export interface SovereignCountryIssuanceSnapshot {
   medianSpreadToParPct: number;
   maturityHhi: number;
   thinIssueCount: number;
+  /**
+   * Demand-gap cross-section (#1001): unheld issues by primary exclusion
+   * reason (`no_domestic_fund`, `capital_controls`, `cash_buffer`, ...).
+   * Counts sum to `unheldIssueCount`. Absent when the snapshot was computed
+   * without fund demand inputs, so older snapshots keep reading identically.
+   */
+  demandGapByReason?: Partial<Record<SovereignDemandGapReason, number>>;
 }
 
 export interface RelevantMarketVitalSign {
