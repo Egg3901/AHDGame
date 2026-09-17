@@ -177,6 +177,22 @@ export interface Corporation {
     to: ObjectId;
     /** Charter currency, for the legacy savingsHolder pointer path. */
     currency: CurrencyCode;
+    /**
+     * Unique token of the attempt that stamped this plan (PR #2016). Created
+     * once, claimed atomically, and required by every resume, release,
+     * cleanup, re-key, and plan-clear decision so concurrent transfers of one
+     * shell to different acquirers cannot mistake each other's writes for
+     * their own. Absent on plans stamped before tokens existed: those are
+     * never resumed once the charter has left the shell.
+     */
+    attemptId?: string;
+    /**
+     * Ownership fingerprint of the charter being moved
+     * (`charterFingerprint` in transferCharter.ts): identity plus economic
+     * fields, so a genuinely different bank sharing currency/turn/type/status
+     * never reads as this attempt's claimed copy.
+     */
+    fingerprint?: string;
     /** When the plan was stamped. */
     startedAt: Date;
   };
