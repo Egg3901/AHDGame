@@ -1,6 +1,12 @@
 import { formatFundsCompact } from "@/lib/utils/formatters";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { getPollActionCost, getPollBaseFundCost } from "@/lib/actions";
+import {
+  DEBATE_PREP_ACTION_COST,
+  describeDebatePrepEffect,
+  FUNDRAISE_ACTION_COST,
+  fundraiseYieldAnchor,
+} from "@/lib/actions/rules";
 import type { ActionCard } from "./actionsTypes";
 
 export const CARDS: ActionCard[] = [
@@ -40,9 +46,12 @@ export const CARDS: ActionCard[] = [
     tagline: "Work the room",
     flavor:
       "Your network picks up the telephone. The cheques follow. A formidable war chest doesn't just fund campaigns — it keeps opponents from running.",
-    actionCost: 3,
+    // Single source of truth: the same rules quote the execute shell credits,
+    // so the advertised yield (influence + fundraising-stat scaled) can never
+    // drift from the credited result.
+    actionCost: FUNDRAISE_ACTION_COST,
     fundCost: () => null,
-    fundLabel: (c) => `+${formatFundsCompact(50_000 + (c.donorBaseLevel ?? 0) * 2_000)}`,
+    fundLabel: (c) => `+${formatFundsCompact(fundraiseYieldAnchor(c))}`,
     effect: "Earn campaign funds",
     imageSlug: "fundraise",
     imageAlt: "Political fundraising dinner",
@@ -170,10 +179,13 @@ export const CARDS: ActionCard[] = [
     tagline: "Study the briefing books",
     flavor:
       "Briefing binders, mock questions, and rehearsal. No war chest required — just focus. A sharp performance on stage starts here, one quiet evening at a time.",
-    actionCost: 1,
+    // Single source of truth: the same rules quote the execute shell gates
+    // on, so the advertised cost and odds can never drift from the resolved
+    // roll (the label previously advertised 10% while the roll resolved 15%).
+    actionCost: DEBATE_PREP_ACTION_COST,
     fundCost: () => null,
     fundLabel: () => "Free",
-    effect: "10% chance: +1 Debate",
+    effect: describeDebatePrepEffect(),
     imageSlug: "debatePrep",
     imageAlt: "A private study set out for briefing work",
     category: "research",
