@@ -144,26 +144,51 @@ describe("placeFundShareSellOrder", () => {
 });
 
 describe("cancelFundShareOrder", () => {
-  it("refunds remaining escrowAnchor to cashAnchor and marks cancelled", async () => {
-    const { cancelFundShareOrder } = await import("./fundShareOrders");
+  function fundOrder(overrides: Record<string, unknown> = {}) {
     const f = fund();
+    const c = corp();
     const orderId = new ObjectId();
-    // Claim returns the pre-image with remaining escrowAnchor.
-    (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>).mockResolvedValue({
-      _id: orderId,
-      placerFundId: f._id,
-      escrowAnchor: 300,
-      status: "open",
+    return {
+      f,
+      orderId,
+      order: {
+        _id: orderId,
+        corporationId: c._id,
+        placerFundId: f._id,
+        type: "buy",
+        shares: 100,
+        sharesRemaining: 100,
+        pricePerShare: 50,
+        escrowAmount: 5000,
+        escrowAnchor: 300,
+        status: "open",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        ...overrides,
+      },
+    };
+  }
+
+  it("refunds the stored anchor remainder through the keyed flow", async () => {
+    // escrowAmount (5000) deliberately differs from escrowAnchor (300) so a
+    // recompute-from-local regression would credit 5000, not 300.
+    const { cancelFundShareOrder } = await import("./fundShareOrders");
+    const { f, orderId, order } = fundOrder();
+    (db.collection("shareOrders").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(order);
+    (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: f._id,
     });
 
     await cancelFundShareOrder(db as unknown as Db, orderId);
 
-    // Marked cancelled atomically.
-    const claimCall = (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>)
-      .mock.calls[0];
-    expect(claimCall[1].$set.status).toBe("cancelled");
+    // CAS claim stamps the order cancelled.
+    const claimCall = (db.collection("shareOrders").updateOne as ReturnType<typeof vi.fn>).mock
+      .calls[0];
+    expect(claimCall[0]).toMatchObject({ _id: orderId, status: "open" });
+    expect(claimCall[1].$set).toMatchObject({ status: "cancelled" });
 
-    // Refund 300 to cashAnchor.
+    // Refund 300 (stored anchor) to cashAnchor under the legacy subkey so a
+    // legacy-applied refund converges instead of double-applying.
     const refundCall = (db.collection("indexFunds").updateOne as ReturnType<typeof vi.fn>).mock
       .calls[0];
     expect(refundCall[0]).toMatchObject({ _id: f._id });
@@ -171,25 +196,20 @@ describe("cancelFundShareOrder", () => {
   });
 
   it("refunds exactly the post-partial-fill residual escrowAnchor (no over-refund)", async () => {
-    // Post-partial-fill state: order had 100 sh @ limit 600, 40 filled at market 500.
-    // Matcher left sharesRemaining=60, escrowAnchor = 60*600 = 36000.
-    // Cancel must refund EXACTLY 36000 (the reserved residual), not the original 60000.
+    // Post-partial-fill state: sharesRemaining=60 with residual anchor 36000
+    // while escrowAmount drifted to 40000. Cancel must refund EXACTLY 36000.
     const { cancelFundShareOrder } = await import("./fundShareOrders");
-    const f = fund();
-    const orderId = new ObjectId();
-    (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>).mockResolvedValue({
-      _id: orderId,
-      placerFundId: f._id,
+    const { f, orderId, order } = fundOrder({
       sharesRemaining: 60,
+      escrowAmount: 40000,
       escrowAnchor: 36000,
-      status: "open",
+    });
+    (db.collection("shareOrders").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(order);
+    (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: f._id,
     });
 
     await cancelFundShareOrder(db as unknown as Db, orderId);
-
-    const claimCall = (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>)
-      .mock.calls[0];
-    expect(claimCall[1].$set.status).toBe("cancelled");
 
     const refundCall = (db.collection("indexFunds").updateOne as ReturnType<typeof vi.fn>).mock
       .calls[0];
@@ -199,12 +219,34 @@ describe("cancelFundShareOrder", () => {
 
   it("is a no-op when the order is already closed / missing", async () => {
     const { cancelFundShareOrder } = await import("./fundShareOrders");
-    (db.collection("shareOrders").findOneAndUpdate as ReturnType<typeof vi.fn>).mockResolvedValue(
-      null
-    );
+    (db.collection("shareOrders").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(null);
 
     await cancelFundShareOrder(db as unknown as Db, new ObjectId());
 
+    expect(db.collection("indexFunds").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("nonAtomicMoneyFlowReceipts").insertOne).not.toHaveBeenCalled();
+  });
+
+  it("leaves non-fund orders untouched", async () => {
+    const { cancelFundShareOrder } = await import("./fundShareOrders");
+    const orderId = new ObjectId();
+    (db.collection("shareOrders").findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: orderId,
+      corporationId: new ObjectId(),
+      characterId: new ObjectId(),
+      type: "buy",
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: 5,
+      escrowAmount: 50,
+      status: "open",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await cancelFundShareOrder(db as unknown as Db, orderId);
+
+    expect(db.collection("shareOrders").updateOne).not.toHaveBeenCalled();
     expect(db.collection("indexFunds").updateOne).not.toHaveBeenCalled();
   });
 });

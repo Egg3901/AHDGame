@@ -3,6 +3,7 @@ import { ObjectId, type Db, type Filter } from "mongodb";
 import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
+import { executeShareOrderRefundFlow } from "@/lib/corporations/shareOrderRefund";
 import {
   applyKeyedUpdate,
   deriveMoneyFlowKey,
@@ -281,39 +282,29 @@ export async function placeFundShareSellOrder(
  * The matcher decrements `escrowAnchor` proportionally on each partial fill, so
  * the stored value is exactly the un-filled escrow at cancel time — refund it
  * verbatim. No-op if the order is missing, not a fund order, or already closed.
+ *
+ * Crash-safe keyed flow (issue #1672): delegates to the shared
+ * `executeShareOrderRefundFlow`, which CAS-claims the order, pins the
+ * post-claim remainder on a receipt, and refunds exactly once with keyed
+ * inverses. A fresh key is minted per call (the established convention for
+ * internal callers), so competing cancels serialize on the CAS claim and the
+ * loser keeps the legacy no-op surface. A crash mid-cancel converges via
+ * key recovery or the bounded turn-driver orphan scan.
  */
-export async function cancelFundShareOrder(db: Db, orderId: ObjectId): Promise<void> {
-  // Atomically claim the order so a concurrent fill/cancel can't double-refund.
-  const claimed = await db
-    .collection<ShareOrder>("shareOrders")
-    .findOneAndUpdate(
-      { _id: orderId, status: "open" },
-      { $set: { status: "cancelled", updatedAt: new Date() } },
-      { returnDocument: "before" }
-    );
-
-  if (!claimed) return;
-  if (!claimed.placerFundId) {
-    // Not a fund order — restore status; this helper only handles fund orders.
-    await db
-      .collection<ShareOrder>("shareOrders")
-      .updateOne({ _id: orderId, status: "cancelled" }, { $set: { status: "open" } });
-    return;
-  }
-
-  const refundAnchor = claimed.escrowAnchor ?? 0;
-  if (refundAnchor > 0) {
-    // Keyed refund (issue #1672): a crash between the claim above and the
-    // refund used to strand escrow forever (a retry finds the order already
-    // `cancelled` and no-ops). The refund carries a key derived from the
-    // order id, so a resumed cancel refunds exactly once.
-    await applyKeyedUpdate(`indexfund-bid-cancel:${orderId.toHexString()}`, {
-      collection: db.collection<MoneyFlowAccount>("indexFunds"),
-      filter: { _id: claimed.placerFundId } as Filter<MoneyFlowAccount>,
-      update: {
-        $inc: { cashAnchor: refundAnchor },
-        $set: { updatedAt: new Date() },
-      },
-    });
-  }
+export async function cancelFundShareOrder(
+  db: Db,
+  orderId: ObjectId,
+  opts: { idempotencyKey?: string } = {}
+): Promise<void> {
+  const order = await db.collection<ShareOrder>("shareOrders").findOne({ _id: orderId });
+  if (!order || order.status !== "open") return;
+  if (!order.placerFundId) return;
+  const result = await executeShareOrderRefundFlow(db, order, {
+    ...(opts.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+  });
+  if (result.ok) return;
+  // A lost race (already filled/cancelled between the read and the claim)
+  // keeps the legacy no-op surface. Anything else is a real failure.
+  if (result.error === "Order is not open" || result.error === "Order not found") return;
+  throw new Error(result.error);
 }

@@ -73,10 +73,12 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
  * Legacy economics and API behavior are preserved: identical refund math
  * (anchor-normalized escrow, same rounding, same tx shape), identical
  * orphan-buyer fallbacks (cancel without refund when the placer document
- * is gone), identical error strings (including the 503-eligible FX
- * message), and fund escrow refunds reuse the historical
- * `indexfund-bid-cancel:<orderId>` subkey so an already-applied legacy
- * refund converges as `already-applied`.
+ * is gone, including a dissolved fund), identical error strings (including
+ * the 503-eligible FX message), and fund escrow refunds reuse the
+ * historical `indexfund-bid-cancel:<orderId>` subkey so an already-applied
+ * legacy refund converges as `already-applied`. Fund refunds credit the
+ * stored `escrowAnchor` remainder verbatim (never recomputed via live FX),
+ * matching the legacy verbatim refund under FX drift and partial fills.
  */
 
 export type ShareOrderRefundResult = { ok: true } | { ok: false; error: string };
@@ -129,7 +131,8 @@ export interface ShareOrderRefundPlan {
     imperial: boolean;
   } | null;
   /** Set when the cancel completes without moving money (legacy fallback). */
-  noRefundReason?: "placer-character-missing" | "placer-corp-missing" | "sell-no-reserve";
+  noRefundReason?:
+    "placer-character-missing" | "placer-corp-missing" | "placer-fund-missing" | "sell-no-reserve";
   outcome?: ShareOrderRefundOutcome;
 }
 
@@ -434,6 +437,76 @@ async function buildRefundPlan(
     };
   }
 
+  // Index-fund-owned buy orders refund the stored anchor remainder
+  // verbatim. The matcher decrements `escrowAnchor` proportionally on each
+  // partial fill, so the stored value is exactly the unfilled escrow at
+  // cancel time. Recomputing from `escrowAmount` via live FX would over- or
+  // under-refund after FX drift, so this branch never touches FX. A missing
+  // fund document cancels without refund, mirroring the orphan-placer
+  // fallbacks below (legacy cleanup semantics).
+  if (claimed.placerFundId) {
+    const fundDoc = await db
+      .collection("indexFunds")
+      .findOne({ _id: claimed.placerFundId }, { projection: { _id: 1 } });
+    if (!fundDoc) {
+      const plan: ShareOrderRefundPlan = {
+        ...base,
+        cashKind: "none",
+        cashLeg: null,
+        fundRefund: null,
+        restoreLeg: null,
+        tx: null,
+        noRefundReason: "placer-fund-missing",
+      };
+      return {
+        plan,
+        fingerprint: buildShareOrderRefundFingerprint({
+          orderId: claimed._id,
+          orderType: "buy",
+          sharesRemaining: claimed.sharesRemaining,
+          escrowAmount: claimed.escrowAmount,
+          cashKind: "none",
+          cashIdHex: claimed.placerFundId.toHexString(),
+        }),
+      };
+    }
+    let fundRefundAnchor = claimed.escrowAnchor;
+    if (fundRefundAnchor === undefined) {
+      const legacyTarget = await db
+        .collection<Corporation>("corporations")
+        .findOne({ _id: claimed.corporationId });
+      if (!legacyTarget) {
+        throw new Error("Target corporation not found");
+      }
+      const legacyFxRate = await getCorpFxRate(db, legacyTarget);
+      fundRefundAnchor = corpLiquidCapitalToAnchor(
+        claimed.escrowAmount,
+        legacyTarget,
+        legacyFxRate
+      );
+    }
+    const plan: ShareOrderRefundPlan = {
+      ...base,
+      cashKind: "fund-cash",
+      cashLeg: null,
+      fundRefund: { fundIdHex: claimed.placerFundId.toHexString(), amountAnchor: fundRefundAnchor },
+      restoreLeg: null,
+      tx: null,
+    };
+    return {
+      plan,
+      fingerprint: buildShareOrderRefundFingerprint({
+        orderId: claimed._id,
+        orderType: "buy",
+        sharesRemaining: claimed.sharesRemaining,
+        escrowAmount: claimed.escrowAmount,
+        cashKind: "fund-cash",
+        cashIdHex: claimed.placerFundId.toHexString(),
+        amount: fundRefundAnchor,
+      }),
+    };
+  }
+
   const targetCorp = await db
     .collection<Corporation>("corporations")
     .findOne({ _id: claimed.corporationId });
@@ -503,29 +576,6 @@ async function buildRefundPlan(
         cashKind: "corp-capital",
         cashIdHex: claimed.placerCorporationId.toHexString(),
         amount: refundInPlacerCapital,
-      }),
-    };
-  }
-
-  if (claimed.placerFundId) {
-    const plan: ShareOrderRefundPlan = {
-      ...base,
-      cashKind: "fund-cash",
-      cashLeg: null,
-      fundRefund: { fundIdHex: claimed.placerFundId.toHexString(), amountAnchor: refundAnchor },
-      restoreLeg: null,
-      tx: null,
-    };
-    return {
-      plan,
-      fingerprint: buildShareOrderRefundFingerprint({
-        orderId: claimed._id,
-        orderType: "buy",
-        sharesRemaining: claimed.sharesRemaining,
-        escrowAmount: claimed.escrowAmount,
-        cashKind: "fund-cash",
-        cashIdHex: claimed.placerFundId.toHexString(),
-        amount: refundAnchor,
       }),
     };
   }

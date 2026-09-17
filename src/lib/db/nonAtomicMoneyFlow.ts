@@ -391,9 +391,31 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * for buy/sell to exactly-once or pristine, multi-match pool-batch
  * conservation and fixpoint, and per-match receipt completion in the
  * matcher suite.
+ * Order-cancel refunds are migrated
+ * (src/lib/corporations/shareOrderRefund.ts, issue #1672): every cancel
+ * path (player DELETE route with forwarded Idempotency-Key, market
+ * cleanup, currency conversion, and both fund bid-cancel callers via
+ * cancelFundShareOrder) runs one keyed flow per attempt. The CAS order
+ * claim (`open` to `cancelled`, stamped with the flow key) runs before the
+ * resume plan is pinned, so the plan records the exact post-claim
+ * remainder; character/corp buy refunds, sell share-restores, and the
+ * orphan-placer fallbacks (cancel without refund, now including a
+ * dissolved fund) run as exactly-once keyed steps with keyed inverses and
+ * a deterministic post-commit tx row. Fund bid cancels refund the stored
+ * `escrowAnchor` remainder verbatim (never recomputed via live FX) under
+ * the historical `indexfund-bid-cancel:<orderId>` subkey, so
+ * already-applied legacy refunds converge. Recovery is by key plus a
+ * bounded orphan scan (default 50) re-driven every turn by
+ * fillPendingShareOrders alongside the fill scans, so fund cancels add no
+ * new per-turn scan: the empty-turn cost stays four bounded scans (five
+ * finds, ~5 commands against the 2000-command corporationTurn budget).
+ * A crash-heavy turn recovers at most 50 receipts per scan before the
+ * matcher proceeds. Tested:
+ * crash-after-every-write convergence for the fund path, partial-fill
+ * residuals, same-key replay, competing keys, orphan-scan recovery, and
+ * wrapper no-op boundaries.
  * Open seams for the next pass (all sighted, none audited here). (1)
- * Order-placement escrow and refunds (placeShareOrder.ts,
- * cancelShareOrder.ts, cleanupShareMarketActivity.ts,
+ * Order-placement escrow (placeShareOrder.ts,
  * shareEscrowSettlement.ts, cancelShareListing.ts), direct market
  * buy/sell legs outside the order flow (buyPublicShares.ts,
  * sellPublicShares.ts), share offers (submitShareOffer.ts,
