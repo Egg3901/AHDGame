@@ -35,10 +35,15 @@ import {
   assertCopiedBaselineMatches,
   assertPairedBaselineShape,
   assertSafeToken,
-  fingerprintBaselineState,
+  assertSourceManifestStableAcrossCopy,
+  BASELINE_MARKER_COLLECTION,
+  buildBaselineManifest,
   isBaselineDbName,
+  isBaselineManifestCollection,
   planBaselineCopy,
+  type BaselineManifest,
   type BaselineMarkerDoc,
+  type BaselineObservation,
 } from "./simJobArgs";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 
@@ -224,47 +229,83 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
   }
 }
 
+/** Batch size for the one-time baseline manifest scans (capture/claim only). */
+const BASELINE_OBSERVE_BATCH = 2000;
+
 /**
- * Fail-closed baseline seal check (issue #1470 marker-race closure): the
- * snapshot db must carry the sealed marker stamped at capture time
- * (stampBaseline.ts) for exactly this baseline id, AND the marker must still
- * describe the db as observed RIGHT NOW (gameState turn, doc count, content
- * hash recomputed immediately before the sandbox-to-sandbox copy). A missing
- * marker means never captured; an id mismatch means overwritten; turn/count
- * or seal drift means something mutated the snapshot after stamping
- * (including a same-id recapture). The arm fails rather than running on a
- * forked start. Reads the SANDBOX Mongo only, never the live game database.
- * Returns the verified source marker for the post-copy check.
+ * Full-snapshot observation of a baseline or arm db: gameState turn plus the
+ * v1 manifest over every covered collection. Same method as stampBaseline.ts
+ * (batched cursors over the shared coverage list), so stamp, claim, and
+ * post-copy checks cannot disagree on method. Runs ONLY on the baselined
+ * arm-claim path: ordinary unpaired turns never pay this scan.
+ */
+async function observeBaselineDb(db: Db, baselineId: string): Promise<BaselineObservation> {
+  const gameStateDoc = await db.collection("gameState").findOne({ _id: "current" as never });
+  const sourceTurn = Number((gameStateDoc as { currentTurn?: unknown } | null)?.currentTurn ?? 0);
+  const collections = (await db.listCollections({}, { nameOnly: true }).toArray())
+    .map((c) => c.name)
+    .filter(isBaselineManifestCollection)
+    .sort();
+  const docsByCollection: Record<string, unknown[]> = {};
+  for (const name of collections) {
+    const docs: unknown[] = [];
+    const cursor = db.collection(name).find({}, { batchSize: BASELINE_OBSERVE_BATCH });
+    for await (const doc of cursor) docs.push(doc);
+    docsByCollection[name] = docs;
+  }
+  return { baselineId, sourceTurn, manifest: buildBaselineManifest(baselineId, docsByCollection) };
+}
+
+/**
+ * Fail-closed baseline seal check (issue #1470 experiment-integrity
+ * closure): the snapshot db must carry the sealed v1 marker stamped at
+ * capture time (stampBaseline.ts) for exactly this baseline id, AND the
+ * marker's full manifest must still describe the db as observed RIGHT NOW
+ * (re-observed immediately before the sandbox-to-sandbox copy, per
+ * collection). A missing marker means never captured; capturing means the
+ * clone/seal crashed or is still running; a legacy weak seal means
+ * re-stamp; an id mismatch means overwritten; turn or manifest drift (named
+ * per collection) means something mutated the snapshot after stamping. The
+ * arm fails rather than running on a forked start. Reads the SANDBOX Mongo
+ * only, never the live game database. Returns the verified source marker
+ * plus its sealed manifest for the post-copy checks.
  */
 async function verifyBaselineSealForClaim(
   baselineDb: string,
   baselineId: string
-): Promise<BaselineMarkerDoc> {
+): Promise<{ marker: BaselineMarkerDoc; sealed: BaselineManifest }> {
   const client = new MongoClient(SIM_MONGODB_URI as string);
   try {
     await client.connect();
     const db = client.db(baselineDb);
-    const gameStateDoc = await db.collection("gameState").findOne({ _id: "current" as never });
-    const sourceTurn = Number((gameStateDoc as { currentTurn?: unknown } | null)?.currentTurn ?? 0);
-    // Same observation method as stampBaseline.ts (estimated counts over
-    // non-system collections), so stamp and claim cannot disagree on method.
-    const collections = await db.listCollections({}, { nameOnly: true }).toArray();
-    let docCount = 0;
-    for (const { name } of collections) {
-      if (name.startsWith("system.")) continue;
-      docCount += await db.collection(name).estimatedDocumentCount();
-    }
-    const observed = {
-      baselineId,
-      sourceTurn,
-      docCount,
-      stateHash: fingerprintBaselineState(gameStateDoc ?? {}),
-    };
+    const observed = await observeBaselineDb(db, baselineId);
     const marker = (await db
-      .collection("simBaselines")
+      .collection(BASELINE_MARKER_COLLECTION)
       .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
-    assertBaselineMarkerForClaim(marker, observed);
-    return marker as BaselineMarkerDoc;
+    const sealed = assertBaselineMarkerForClaim(marker, observed);
+    return { marker: marker as BaselineMarkerDoc, sealed };
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Claim-to-copy race narrowing: after the copy, the SOURCE is re-observed
+ * and must still equal the sealed manifest the pre-copy check verified. A
+ * source mutation during the copy fails closed even when the dest faithfully
+ * copied the mutated state (which marker travel alone would accept).
+ * Sandbox Mongo only.
+ */
+async function verifySourceStableAcrossCopy(
+  baselineDb: string,
+  sealed: BaselineManifest,
+  baselineId: string
+): Promise<void> {
+  const client = new MongoClient(SIM_MONGODB_URI as string);
+  try {
+    await client.connect();
+    const postCopyObserved = await observeBaselineDb(client.db(baselineDb), baselineId);
+    assertSourceManifestStableAcrossCopy(sealed, postCopyObserved, baselineId);
   } finally {
     await client.close();
   }
@@ -273,13 +314,10 @@ async function verifyBaselineSealForClaim(
 /**
  * Post-copy gate: the arm db must carry the same sealed marker the source
  * check just verified (the marker collection copies with the snapshot), AND
- * the state the copy actually landed must still satisfy that seal. Marker
- * equality alone cannot catch a source mutation between the pre-copy seal
- * check and the copy (mutated state copies with the unchanged marker
- * collection), so the destination db is re-observed here (gameState turn,
- * doc count, content hash, same method as stamp/claim) and matched against
- * the copied marker. A divergence means the copy raced a mutation or copied
- * the wrong source: fail before running turns. Sandbox Mongo only.
+ * the state the copy actually landed must still satisfy that seal
+ * (re-observed dest manifest matched against the copied marker, per
+ * collection). A divergence means the copy raced a mutation or copied the
+ * wrong source: fail before running turns. Sandbox Mongo only.
  */
 async function verifyCopiedBaselineMarker(
   armDb: string,
@@ -290,22 +328,9 @@ async function verifyCopiedBaselineMarker(
   try {
     await client.connect();
     const db = client.db(armDb);
-    const destGameState = await db.collection("gameState").findOne({ _id: "current" as never });
-    const destTurn = Number((destGameState as { currentTurn?: unknown } | null)?.currentTurn ?? 0);
-    const collections = await db.listCollections({}, { nameOnly: true }).toArray();
-    let destDocCount = 0;
-    for (const { name } of collections) {
-      if (name.startsWith("system.")) continue;
-      destDocCount += await db.collection(name).estimatedDocumentCount();
-    }
-    const destObserved = {
-      baselineId,
-      sourceTurn: destTurn,
-      docCount: destDocCount,
-      stateHash: fingerprintBaselineState(destGameState ?? {}),
-    };
+    const destObserved = await observeBaselineDb(db, baselineId);
     const destMarker = (await db
-      .collection("simBaselines")
+      .collection(BASELINE_MARKER_COLLECTION)
       .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
     assertCopiedBaselineMatches(sourceMarker, destMarker, destObserved, baselineId);
   } finally {
@@ -390,8 +415,14 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         `Copying paired baseline ${provenance.baselineId} (${copy.sourceDb} -> ${copy.destDb}) ...`
       );
       // Revalidate the immutable seal immediately before the copy, then
-      // verify the copied marker before running turns (marker-race closure).
-      const sourceMarker = await verifyBaselineSealForClaim(copy.sourceDb, provenance.baselineId);
+      // narrow the claim-to-copy race after it: the source must still match
+      // the verified seal once the copy lands (a mutation mid-copy fails
+      // closed), and the dest must carry both the traveled marker and
+      // state matching it (experiment-integrity closure).
+      const { marker: sourceMarker, sealed } = await verifyBaselineSealForClaim(
+        copy.sourceDb,
+        provenance.baselineId
+      );
       const copyEnv = {
         ...baseChildEnv(),
         SOURCE_MONGODB_URI: SIM_MONGODB_URI as string,
@@ -408,6 +439,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
           `baseline copy (cloneWorld ${copy.sourceDb} -> ${copy.destDb}) exited with code ${copyResult.code}`
         );
       }
+      await verifySourceStableAcrossCopy(copy.sourceDb, sealed, provenance.baselineId);
       await verifyCopiedBaselineMarker(copy.destDb, sourceMarker, provenance.baselineId);
       log(`Baseline copy verified; running ${job.turns} turn(s) in clone mode`);
     }

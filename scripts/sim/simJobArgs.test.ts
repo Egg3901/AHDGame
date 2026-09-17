@@ -9,9 +9,11 @@ import {
   assertSafeToken,
   baselineDbNameFor,
   baselineProvenanceFlags,
+  buildBaselineManifest,
   buildPairedBaselinePair,
   buildRealOutputShadowPinnedPair,
   buildRunWorldArgs,
+  buildSealedMarkerDoc,
   isBaselineDbName,
   normalizeSimCountries,
   normalizeSimJobRequestedConfig,
@@ -652,29 +654,24 @@ describe("sim worker runWorld argument emission", () => {
   });
 
   it("refuses to re-stamp a mutated baseline snapshot", () => {
-    // First stamp and identical re-stamp pass.
-    expect(() =>
-      assertBaselineStampCompatible(null, { baselineId: "b", sourceTurn: 10, docCount: 5 })
-    ).not.toThrow();
-    expect(() =>
-      assertBaselineStampCompatible(
-        { baselineId: "b", sourceTurn: 10, docCount: 5 },
-        { baselineId: "b", sourceTurn: 10, docCount: 5 }
-      )
-    ).not.toThrow();
-    // A turn advance or doc change means something ran against the snapshot.
-    expect(() =>
-      assertBaselineStampCompatible(
-        { baselineId: "b", sourceTurn: 10, docCount: 5 },
-        { baselineId: "b", sourceTurn: 11, docCount: 5 }
-      )
-    ).toThrow("refusing to re-stamp a mutated snapshot");
-    expect(() =>
-      assertBaselineStampCompatible(
-        { baselineId: "b", sourceTurn: 10, docCount: 5 },
-        { baselineId: "b", sourceTurn: 10, docCount: 6 }
-      )
-    ).toThrow("refusing to re-stamp a mutated snapshot");
+    // First stamp (no marker yet) and an identical sealed re-stamp pass.
+    const manifest = buildBaselineManifest("b", { gameState: [{ _id: "current" }] });
+    const observed = { baselineId: "b", sourceTurn: 10, manifest };
+    expect(() => assertBaselineStampCompatible(null, observed)).not.toThrow();
+    const sealed = buildSealedMarkerDoc("b", 10, manifest, new Date(0));
+    expect(() => assertBaselineStampCompatible(sealed, observed)).not.toThrow();
+    // A turn advance means something ran against the snapshot.
+    expect(() => assertBaselineStampCompatible(sealed, { ...observed, sourceTurn: 11 })).toThrow(
+      "refusing to re-stamp a mutated snapshot"
+    );
+    // Manifest drift (here: an added collection) refuses with the drift named.
+    const grown = buildBaselineManifest("b", {
+      gameState: [{ _id: "current" }],
+      countries: [{ _id: "US" }],
+    });
+    expect(() => assertBaselineStampCompatible(sealed, { ...observed, manifest: grown })).toThrow(
+      'collection "countries" added'
+    );
   });
 
   it("validates pair and baseline ids strictly", () => {

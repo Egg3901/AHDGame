@@ -1,18 +1,35 @@
 /**
- * Stamp the paired-baseline marker on an immutable sandbox snapshot (issue
- * #1470 experiment-validity audit).
+ * Seal a paired-baseline snapshot with its v1 full-snapshot manifest (issue
+ * #1470 experiment-integrity closure).
  *
  * The supervisor captures a baseline ONCE from live into the sandbox db
  * baselineDbNameFor(baselineId) with cloneWorld.ts (SOURCE at the live DB:
- * the only paired-baseline step that ever reads live), then runs this script
- * to record what was captured. The sim worker refuses to claim a baselined
- * arm whose snapshot db carries no marker for its baseline id (and
- * revalidates the seal immediately before copying, plus the copied marker
- * before running), and this script refuses to re-stamp a snapshot whose
- * turn, doc count, or content hash moved (which means something ran against
- * the baseline db, so it is no longer immutable). A second capture under the
- * same baselineId is refused even earlier, by cloneWorld.ts, so a stamped
- * snapshot can never be recaptured out from under referenced arms.
+ * the only paired-baseline step that ever reads the live game database),
+ * then runs this script to seal what was captured. The sim worker refuses to
+ * claim a baselined arm unless the snapshot db carries a `sealed` v1 marker
+ * for its baseline id whose manifest still matches the db as observed
+ * immediately before the copy (plus a post-copy source/dest re-check), so a
+ * mutated, half-captured, or legacy-sealed snapshot fails closed instead of
+ * forking arm starts.
+ *
+ * What the seal covers: every cloned collection and document (the same
+ * coverage list cloneWorld.ts copies, owned by ./baselineManifest), hashed
+ * per collection plus one overall versioned digest. Key order, document
+ * order, collection order, and driver BSON representations never count as
+ * drift; an in-place edit, a collection add/drop, or a count change always
+ * does, and the claim check names the exact collection.
+ *
+ * Cost: one O(total cloned docs) scan of the snapshot db, in batches of
+ * 2000 per collection. One-time per capture (plus the worker's claim-time
+ * scans); unpaired turns and fresh-bootstrap pairs never pay it.
+ *
+ * Crash recovery: a capture interrupted before this script leaves the
+ * cloneWorld `capturing` reservation (or no marker at all). This script
+ * completes either into a `sealed` marker; a re-run after a crash simply
+ * re-seals the resumed capture. A legacy weak marker (turn/count/hash only)
+ * upgrades to v1 here. An already `sealed` marker re-stamps idempotently on
+ * the identical observation and refuses on any drift (something ran against
+ * the baseline db, so it is no longer immutable).
  *
  * Sandbox only: SIM_MONGODB_URI must point at the sandbox Mongo, never the
  * live game database. The destination db is derived from --baseline-id, so a
@@ -25,11 +42,16 @@
 import { MongoClient } from "mongodb";
 import {
   assertBaselineStampCompatible,
+  BASELINE_MARKER_COLLECTION,
+  BASELINE_SEAL_VERSION,
   baselineDbNameFor,
-  fingerprintBaselineState,
+  buildBaselineManifest,
+  isBaselineManifestCollection,
+  type BaselineMarkerDoc,
 } from "./simJobArgs";
 
 const SIM_MONGODB_URI = process.env.SIM_MONGODB_URI;
+const BATCH = 2000;
 
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -48,7 +70,7 @@ async function main() {
     await client.connect();
     const db = client.db(dbName);
 
-    // Same world-likeness guard as cloneWorld.ts: refuse to stamp a db that
+    // Same world-likeness guard as cloneWorld.ts: refuse to seal a db that
     // is not a captured game world (e.g. an empty or metadata-only db).
     const gameState = await db.collection("gameState").findOne({ _id: "current" as never });
     const corpCount = await db.collection("corporations").countDocuments();
@@ -59,45 +81,62 @@ async function main() {
       );
     }
     const sourceTurn = Number((gameState as { currentTurn?: unknown }).currentTurn ?? 0);
-    const collections = await db.listCollections({}, { nameOnly: true }).toArray();
-    let docCount = 0;
-    for (const { name } of collections) {
-      if (name.startsWith("system.")) continue;
-      docCount += await db.collection(name).estimatedDocumentCount();
-    }
-    // Sealed marker (issue #1470 marker-race closure): the content hash lets
-    // the worker claim check detect in-place edits that preserve turn and
-    // doc count. Same observation method as the worker's pre-copy check.
-    const stateHash = fingerprintBaselineState(gameState);
-    const observed = { baselineId, sourceTurn, docCount, stateHash };
 
-    const existing = await db.collection("simBaselines").findOne({ _id: baselineId as never });
-    assertBaselineStampCompatible(
-      existing
-        ? {
-            baselineId,
-            sourceTurn: Number((existing as { sourceTurn?: unknown }).sourceTurn ?? -1),
-            docCount: Number((existing as { docCount?: unknown }).docCount ?? -1),
-            stateHash:
-              typeof (existing as { stateHash?: unknown }).stateHash === "string"
-                ? ((existing as { stateHash?: string }).stateHash as string)
-                : undefined,
-          }
-        : null,
-      observed
-    );
+    // Full-snapshot observation: every covered collection, every document,
+    // batched cursors (one-time capture cost, never on unpaired turns).
+    const started = Date.now();
+    const collections = (await db.listCollections({}, { nameOnly: true }).toArray())
+      .map((c) => c.name)
+      .filter(isBaselineManifestCollection)
+      .sort();
+    const docsByCollection: Record<string, unknown[]> = {};
+    for (const name of collections) {
+      const docs: unknown[] = [];
+      const cursor = db.collection(name).find({}, { batchSize: BATCH });
+      for await (const doc of cursor) docs.push(doc);
+      docsByCollection[name] = docs;
+    }
+    const manifest = buildBaselineManifest(baselineId, docsByCollection);
+    const observed = { baselineId, sourceTurn, manifest };
+
+    const existing = (await db
+      .collection(BASELINE_MARKER_COLLECTION)
+      .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
+    const upgradingLegacy =
+      existing !== null &&
+      (existing.sealVersion !== BASELINE_SEAL_VERSION || existing.status !== "sealed");
+    assertBaselineStampCompatible(existing, observed);
 
     const now = new Date();
-    await db.collection("simBaselines").updateOne(
+    const captureId =
+      typeof existing?.captureId === "string" ? (existing.captureId as string) : undefined;
+    await db.collection(BASELINE_MARKER_COLLECTION).updateOne(
       { _id: baselineId as never },
       {
+        $set: {
+          baselineId,
+          sealVersion: BASELINE_SEAL_VERSION,
+          status: "sealed",
+          sourceTurn,
+          manifest,
+          totalDocs: manifest.totalDocs,
+          digest: manifest.digest,
+          ...(captureId !== undefined ? { captureId } : {}),
+          checkedAt: now,
+        },
         $setOnInsert: { _id: baselineId, stampedAt: now },
-        $set: { sourceTurn, docCount, stateHash, checkedAt: now },
+        // Legacy weak-seal fields must not survive beside the manifest:
+        // claim reads the manifest only, and a stale stateHash beside a
+        // fresh digest would invite exactly the confusion this seal removes.
+        $unset: { docCount: "", stateHash: "" },
       },
       { upsert: true }
     );
+    const secs = ((Date.now() - started) / 1000).toFixed(1);
     console.log(
-      `[baseline:${baselineId}] stamped ${dbName} (turn=${sourceTurn}, docs~${docCount})`
+      `[baseline:${baselineId}] sealed ${dbName} v${BASELINE_SEAL_VERSION} ` +
+        `(turn=${sourceTurn}, docs=${manifest.totalDocs} in ${manifest.collections.length} collections, ` +
+        `digest=${manifest.digest.slice(0, 12)}.., scan=${secs}s${upgradingLegacy ? ", upgraded capture reservation/legacy seal" : ""})`
     );
   } finally {
     await client.close();

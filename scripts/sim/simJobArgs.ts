@@ -2,7 +2,6 @@
 // every tier added after it was written (it stopped at "capital", so a
 // "plants" job was rejected as invalid). Pure constant modules: no Mongo, no
 // env, safe to import eagerly.
-import { createHash } from "crypto";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { REAL_OUTPUT_SHADOW_CLI_FLAG } from "@/lib/economy/realOutputShadow";
@@ -469,208 +468,46 @@ export function baselineProvenanceFlags(job: SimJobExperimentFields): string[] {
 }
 
 /**
- * Immutability guard for the baseline snapshot marker (stampBaseline.ts).
- * The marker records the live gameState turn (and doc count) seen at capture;
- * a re-stamp observing a different turn or count means something ran against
- * the baseline db, so the snapshot is no longer immutable and stamping must
- * refuse. Same observation re-stamps idempotently. Pure so the refusal is
- * unit-testable without Mongo.
+ * Baseline snapshot seal, v1 full-snapshot manifest (issue #1470
+ * experiment-integrity closure). The previous gameState-turn-plus-doc-count
+ * seal lives here no longer: it could not see in-place edits outside
+ * gameState, count-preserving collection add/drop, or estimate drift. The
+ * canonical implementation is ./baselineManifest (pure, versioned
+ * per-collection counts/hashes plus an overall digest, durable exclusive
+ * first-capture reservation, pre/post source comparison at claim); this
+ * module re-exports that API so existing import sites keep one address.
+ * Legacy weak markers (no manifest) fail closed at claim with a re-stamp
+ * recovery and upgrade on the next stamp.
  */
-export interface BaselineObservation {
-  baselineId: string;
-  sourceTurn: number;
-  docCount: number;
-  /**
-   * Sealed content hash of the captured gameState/current doc
-   * (fingerprintBaselineState). Optional so pre-seal observations still
-   * typecheck: when the stored marker already carries a hash, a re-stamp
-   * observing a different (or missing) hash refuses; when the stored marker
-   * predates the seal, a matching turn/count re-stamp upgrades it.
-   */
-  stateHash?: string;
-}
-
-export function assertBaselineStampCompatible(
-  existing: BaselineObservation | null,
-  observed: BaselineObservation
-): void {
-  if (!existing) return;
-  if (existing.sourceTurn !== observed.sourceTurn || existing.docCount !== observed.docCount) {
-    throw new Error(
-      `baseline "${observed.baselineId}" changed since capture (turn ${existing.sourceTurn}->${observed.sourceTurn}, docs ${existing.docCount}->${observed.docCount}): refusing to re-stamp a mutated snapshot`
-    );
-  }
-  if (existing.stateHash !== undefined && existing.stateHash !== observed.stateHash) {
-    throw new Error(
-      `baseline "${observed.baselineId}" content hash changed since capture: refusing to re-stamp a mutated snapshot`
-    );
-  }
-}
-
-/**
- * Deterministic JSON with sorted object keys, so the same stored document
- * always fingerprints identically. BSON extras canonicalize too: Dates by
- * ISO string, ObjectIds by hex (duck-typed, no bson import), Buffers by
- * base64. Anything else falls back to JSON's own serialization.
- */
-export function stableStringify(value: unknown): string {
-  return JSON.stringify(canonicalizeBaselineValue(value));
-}
-
-function canonicalizeBaselineValue(value: unknown): unknown {
-  if (value === null || value === undefined) return value;
-  if (value instanceof Date) return `date:${value.toISOString()}`;
-  if (Array.isArray(value)) return value.map(canonicalizeBaselineValue);
-  if (typeof value === "object") {
-    const rec = value as Record<string, unknown>;
-    if (typeof rec.toHexString === "function") {
-      try {
-        return `oid:${String((rec.toHexString as () => unknown)())}`;
-      } catch {
-        return "oid:unreadable";
-      }
-    }
-    if (typeof (value as Buffer).toString === "function" && Buffer.isBuffer(value)) {
-      return `buffer:${(value as Buffer).toString("base64")}`;
-    }
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(rec).sort()) out[key] = canonicalizeBaselineValue(rec[key]);
-    return out;
-  }
-  return value;
-}
-
-/** Sealed content hash of a baseline's gameState/current doc. Same stored doc
- * always yields the same hash; any in-place edit (even one preserving turn
- * and doc count) changes it, so the worker claim check trips. */
-export function fingerprintBaselineState(gameStateDoc: unknown): string {
-  return createHash("sha256").update(stableStringify(gameStateDoc)).digest("hex");
-}
-
-/** Loose shape of a stored simBaselines marker doc (real Mongo doc or fake). */
-export interface BaselineMarkerDoc {
-  _id?: unknown;
-  baselineId?: unknown;
-  sourceTurn?: unknown;
-  docCount?: unknown;
-  stateHash?: unknown;
-}
-
-function baselineMarkerIdentity(marker: BaselineMarkerDoc): unknown {
-  return marker._id ?? marker.baselineId;
-}
-
-/**
- * Fail-closed claim gate (worker.ts): the baseline db must carry the sealed
- * marker stamped at capture, and the marker must still describe the db as
- * observed RIGHT NOW (gameState turn, doc count, content hash recomputed
- * immediately before the sandbox-to-sandbox copy). A missing marker means
- * never captured; an id mismatch means overwritten; turn/count/hash drift
- * means something mutated the snapshot after stamping (including a same-id
- * recapture the clone guard missed); an unsealed (pre-hash) marker means
- * re-stamp with the current stamper before any arm may claim. Returns the
- * verified seal for the post-copy check. Pure so the whole race is
- * unit-testable without Mongo.
- */
-export function assertBaselineMarkerForClaim(
-  marker: BaselineMarkerDoc | null | undefined,
-  observed: BaselineObservation & { stateHash: string }
-): { sourceTurn: number; docCount: number; stateHash: string } {
-  if (!marker) {
-    throw new Error(
-      `baseline "${observed.baselineId}" has no simBaselines marker: capture it with cloneWorld.ts + stampBaseline.ts before claiming arms`
-    );
-  }
-  if (baselineMarkerIdentity(marker) !== observed.baselineId) {
-    throw new Error(
-      `baseline marker identity mismatch (marker ${JSON.stringify(baselineMarkerIdentity(marker))} != ${JSON.stringify(observed.baselineId)}): refusing to claim from an overwritten snapshot`
-    );
-  }
-  if (marker.sourceTurn !== observed.sourceTurn || marker.docCount !== observed.docCount) {
-    throw new Error(
-      `baseline "${observed.baselineId}" changed since capture (turn ${String(marker.sourceTurn)}->${observed.sourceTurn}, docs ${String(marker.docCount)}->${observed.docCount}): refusing to claim a mutated snapshot`
-    );
-  }
-  if (typeof marker.stateHash !== "string" || marker.stateHash !== observed.stateHash) {
-    throw new Error(
-      `baseline "${observed.baselineId}" seal mismatch (marker hash ${JSON.stringify(marker.stateHash)} != observed ${JSON.stringify(observed.stateHash)}): refusing to claim a mutated or unsealed snapshot`
-    );
-  }
-  return {
-    sourceTurn: observed.sourceTurn,
-    docCount: observed.docCount,
-    stateHash: observed.stateHash,
-  };
-}
-
-/**
- * Post-copy gate (worker.ts): after the sandbox-to-sandbox copy, the arm db
- * must carry the same sealed marker the source check just verified (the
- * marker collection copies with the snapshot). A divergence means the copy
- * raced a mutation or copied the wrong source: fail before running turns.
- */
-export function assertCopiedMarkerMatches(
-  source: BaselineMarkerDoc | null | undefined,
-  dest: BaselineMarkerDoc | null | undefined,
-  baselineId: string
-): void {
-  if (!dest) {
-    throw new Error(
-      `baseline "${baselineId}" copy landed without its simBaselines marker: refusing to run an unverified start`
-    );
-  }
-  if (
-    baselineMarkerIdentity(dest) !== baselineMarkerIdentity(source ?? {}) ||
-    dest.sourceTurn !== source?.sourceTurn ||
-    dest.docCount !== source?.docCount ||
-    dest.stateHash !== source?.stateHash
-  ) {
-    throw new Error(
-      `baseline "${baselineId}" copied marker diverges from the verified source seal: refusing to run a forked start`
-    );
-  }
-}
-
-/**
- * Full post-copy gate (worker.ts): the marker-travel check above proves the
- * copy landed with the verified seal, and the dest-state check proves the
- * state the copy actually landed still matches that seal. Marker equality
- * alone cannot catch a source mutation between the pre-copy seal validation
- * and the copy (the mutated state copies with the unchanged marker
- * collection), so the worker re-observes the DESTINATION db (gameState turn,
- * doc count, content hash, same method as stamp/claim) and that observation
- * must satisfy the seal too. Transitivity closes it: source check proved
- * marker == source state, travel check proves dest marker == source marker,
- * this proves dest marker == dest state, so dest state == source state.
- * Pure so the whole race is unit-testable without Mongo.
- */
-export function assertCopiedBaselineMatches(
-  source: BaselineMarkerDoc | null | undefined,
-  dest: BaselineMarkerDoc | null | undefined,
-  destObserved: BaselineObservation & { stateHash: string },
-  baselineId: string
-): void {
-  assertCopiedMarkerMatches(source, dest, baselineId);
-  assertBaselineMarkerForClaim(dest, destObserved);
-}
-
-/**
- * Same-id recapture guard (cloneWorld.ts): once a baseline-named sandbox db
- * carries a stamped marker it is frozen. Re-cloning live into it (a second
- * capture under the same baselineId, e.g. between arm claims) would mutate
- * an already referenced snapshot and fork arm starts, so the clone refuses.
- * A marker-free baseline db is a first capture (or a pre-stamp retry) and
- * passes; a non-baseline dest (arm dbs, including their copied markers)
- * never trips this guard, so idempotent worker re-copies are unaffected.
- */
-export function assertCloneDestNotStamped(destDbName: string, markerPresent: boolean): void {
-  if (markerPresent && isBaselineDbName(destDbName)) {
-    throw new Error(
-      `refusing to clone into "${destDbName}": it already carries a stamped baseline marker ` +
-        `(same-id recapture would mutate an already referenced snapshot; capture under a new baselineId instead)`
-    );
-  }
-}
+export {
+  assertBaselineMarkerForClaim,
+  assertBaselineStampCompatible,
+  assertCopiedBaselineMatches,
+  assertCopiedMarkerMatches,
+  assertSourceManifestStableAcrossCopy,
+  BASELINE_CLONE_EXCLUDED_COLLECTIONS,
+  BASELINE_MANIFEST_MAX_DOCS,
+  BASELINE_MARKER_COLLECTION,
+  BASELINE_SEAL_VERSION,
+  buildBaselineManifest,
+  buildCaptureReservationDoc,
+  buildSealedMarkerDoc,
+  baselineMarkerIdentity,
+  canonicalizeBaselineValue,
+  diffBaselineManifests,
+  hashBaselineDocument,
+  isBaselineManifestCollection,
+  isLegacyBaselineMarker,
+  isSealedBaselineMarker,
+  readSealedBaselineManifest,
+  resolveBaselineCapture,
+  stableStringifyBaseline as stableStringify,
+  type BaselineCaptureStatus,
+  type BaselineCollectionManifest,
+  type BaselineManifest,
+  type BaselineMarkerDoc,
+  type BaselineObservation,
+} from "./baselineManifest";
 
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before
  * it is used as a Mongo db name or passed as a child-process CLI arg. */

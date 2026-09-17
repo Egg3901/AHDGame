@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertCloneDestNotStamped,
   assertCopiedBaselineMatches,
   assertCopiedMarkerMatches,
   assertBaselineMarkerForClaim,
   assertBaselineStampCompatible,
-  fingerprintBaselineState,
+  buildBaselineManifest,
+  buildSealedMarkerDoc,
+  hashBaselineDocument,
+  resolveBaselineCapture,
   stableStringify,
+  type BaselineManifest,
+  type BaselineObservation,
 } from "./simJobArgs";
 import {
   PAIRED_BASELINE_TOOL_DESCRIPTION,
@@ -69,43 +73,47 @@ function fakeDb(jobs: FakeJobs): PairedBaselineToolDb {
   };
 }
 
-/** Minimal fake baseline snapshot: gameState turn + doc count + marker, with
- * stamp/observe/claim helpers mirroring the production scripts' method. */
+/** Minimal fake baseline snapshot: covered collections + marker, with
+ * stamp/observe/claim helpers mirroring the production scripts' method
+ * (v1 full-snapshot manifest over every collection, not just gameState). */
 interface FakeBaselineDb {
-  gameState: Record<string, unknown>;
-  docCount: number;
+  collections: Record<string, Array<Record<string, unknown>>>;
   marker: Record<string, unknown> | null;
 }
 
-function stampFakeBaseline(db: FakeBaselineDb, baselineId: string): void {
-  const sourceTurn = Number(db.gameState.currentTurn ?? 0);
-  const observed = {
+function observeFakeBaseline(db: FakeBaselineDb, baselineId: string): BaselineObservation {
+  const docsByCollection: Record<string, unknown[]> = {};
+  for (const name of Object.keys(db.collections).sort()) {
+    docsByCollection[name] = db.collections[name].map((d) => ({ ...d }));
+  }
+  const gameState = (db.collections.gameState ?? []).find((d) => d._id === "current");
+  return {
     baselineId,
-    sourceTurn,
-    docCount: db.docCount,
-    stateHash: fingerprintBaselineState(db.gameState),
+    sourceTurn: Number((gameState as { currentTurn?: unknown } | undefined)?.currentTurn ?? 0),
+    manifest: buildBaselineManifest(baselineId, docsByCollection),
   };
-  const existing = db.marker
-    ? {
-        baselineId,
-        sourceTurn: Number(db.marker.sourceTurn ?? -1),
-        docCount: Number(db.marker.docCount ?? -1),
-        stateHash:
-          typeof db.marker.stateHash === "string" ? (db.marker.stateHash as string) : undefined,
-      }
-    : null;
-  assertBaselineStampCompatible(existing, observed);
-  db.marker = { _id: baselineId, ...observed, stampedAt: new Date(0) };
 }
 
-function claimFakeBaseline(db: FakeBaselineDb, baselineId: string): void {
-  const observed = {
+function stampFakeBaseline(db: FakeBaselineDb, baselineId: string): void {
+  const observed = observeFakeBaseline(db, baselineId);
+  assertBaselineStampCompatible(db.marker, observed);
+  db.marker = buildSealedMarkerDoc(
     baselineId,
-    sourceTurn: Number(db.gameState.currentTurn ?? 0),
-    docCount: db.docCount,
-    stateHash: fingerprintBaselineState(db.gameState),
+    observed.sourceTurn,
+    observed.manifest,
+    new Date(0)
+  ) as Record<string, unknown>;
+}
+
+function claimFakeBaseline(db: FakeBaselineDb, baselineId: string): BaselineManifest {
+  return assertBaselineMarkerForClaim(db.marker, observeFakeBaseline(db, baselineId));
+}
+
+function fakeWorld(turn: number, treasury: number): Record<string, Array<Record<string, unknown>>> {
+  return {
+    gameState: [{ _id: "current", currentTurn: turn, treasury }],
+    corporations: [{ _id: "c1", output: 100 }],
   };
-  assertBaselineMarkerForClaim(db.marker, observed);
 }
 
 describe("paired-baseline creation surface (issue #1470 runtime caller)", () => {
@@ -338,95 +346,88 @@ describe("paired-baseline repair and convergence", () => {
 });
 
 describe("baseline marker races (stamp, claim, copy)", () => {
-  it("refuses same-id recapture once the snapshot is stamped", () => {
-    // First capture (or pre-stamp retry): no marker, passes.
-    expect(() => assertCloneDestNotStamped("ahd_sim_baseline_live-20260917", false)).not.toThrow();
-    // Same-id recapture after stamping: refuses before any --drop.
-    expect(() => assertCloneDestNotStamped("ahd_sim_baseline_live-20260917", true)).toThrow(
-      "same-id recapture"
-    );
-    // Worker re-copies land in arm dbs (never baseline-named): unaffected
-    // even though the copied marker travels with the snapshot.
-    expect(() => assertCloneDestNotStamped("ahd_sim_rs1470-control", true)).not.toThrow();
-    expect(() => assertCloneDestNotStamped("ahd_sim_clone_foo", true)).not.toThrow();
+  it("serializes same-baselineId captures: proceed, resume, refuse sealed/concurrent", () => {
+    // First capture (or pre-stamp retry): no marker, proceeds.
+    expect(resolveBaselineCapture(null, "cap-A")).toBe("proceed");
+    // Same-id recapture after sealing: refuses before any destructive work.
+    const db: FakeBaselineDb = { collections: fakeWorld(10, 500), marker: null };
+    stampFakeBaseline(db, "snap-sealed");
+    expect(() => resolveBaselineCapture(db.marker, "cap-A")).toThrow(/already sealed/);
+    expect(() => resolveBaselineCapture(db.marker, "cap-B")).toThrow(/already sealed/);
+    // Capture in progress under another id: the competitor refuses.
+    const racing: FakeBaselineDb = { collections: fakeWorld(10, 500), marker: null };
+    racing.marker = {
+      _id: "snap-race",
+      baselineId: "snap-race",
+      status: "capturing",
+      captureId: "cap-A",
+    };
+    expect(() => resolveBaselineCapture(racing.marker, "cap-B")).toThrow(/already in progress/);
+    // Same captureId (crashed capturer retrying): resumes.
+    expect(resolveBaselineCapture(racing.marker, "cap-A")).toBe("resume");
   });
 
-  it("claims a clean stamped snapshot and refuses post-stamp mutation", () => {
-    const db: FakeBaselineDb = {
-      gameState: { _id: "current", currentTurn: 10, treasury: 500 },
-      docCount: 120,
-      marker: null,
-    };
+  it("claims a clean sealed snapshot and refuses post-stamp mutation", () => {
+    const db: FakeBaselineDb = { collections: fakeWorld(10, 500), marker: null };
     stampFakeBaseline(db, "snap1");
     expect(() => claimFakeBaseline(db, "snap1")).not.toThrow();
 
     // Turn advance after stamping (something ran against the snapshot).
-    const advanced: FakeBaselineDb = {
-      gameState: { _id: "current", currentTurn: 11, treasury: 500 },
-      docCount: 120,
-      marker: db.marker,
-    };
+    const advanced: FakeBaselineDb = { collections: fakeWorld(11, 500), marker: db.marker };
     expect(() => claimFakeBaseline(advanced, "snap1")).toThrow(/changed since capture/);
 
-    // Doc-count drift with the turn untouched.
-    const grown: FakeBaselineDb = {
-      gameState: { _id: "current", currentTurn: 10, treasury: 500 },
-      docCount: 121,
-      marker: db.marker,
-    };
-    expect(() => claimFakeBaseline(grown, "snap1")).toThrow(/changed since capture/);
+    // In-place edit in ANY covered collection, turn and counts untouched:
+    // the old turn+count seal (and the gameState-only hash) passed this.
+    const edited: FakeBaselineDb = { collections: fakeWorld(10, 500), marker: db.marker };
+    edited.collections.corporations[0].output = 999999;
+    expect(() => claimFakeBaseline(edited, "snap1")).toThrow(/corporations/);
 
-    // In-place edit preserving turn AND count: the seal still trips.
-    const edited: FakeBaselineDb = {
-      gameState: { _id: "current", currentTurn: 10, treasury: 999999 },
-      docCount: 120,
-      marker: db.marker,
-    };
-    expect(() => claimFakeBaseline(edited, "snap1")).toThrow(/seal mismatch/);
-
-    // Never stamped, unsealed legacy marker, and overwritten marker all fail.
+    // Never stamped, capturing (crashed capture), legacy weak, and
+    // overwritten markers all fail closed with their recovery.
     expect(() => claimFakeBaseline({ ...db, marker: null }, "snap1")).toThrow(/no simBaselines/);
     expect(() =>
-      claimFakeBaseline({ ...db, marker: { _id: "snap1", sourceTurn: 10, docCount: 120 } }, "snap1")
-    ).toThrow(/unsealed/);
-    expect(() =>
       claimFakeBaseline(
-        {
-          ...db,
-          marker: {
-            _id: "snap1",
-            sourceTurn: 10,
-            docCount: 120,
-            stateHash: "0".repeat(64),
-          },
-        },
+        { ...db, marker: { _id: "snap1", status: "capturing", captureId: "cap-A" } },
         "snap1"
       )
-    ).toThrow(/seal mismatch/);
+    ).toThrow(/capture is incomplete/);
+    expect(() =>
+      claimFakeBaseline(
+        { ...db, marker: { _id: "snap1", sourceTurn: 10, docCount: 2, stateHash: "h" } },
+        "snap1"
+      )
+    ).toThrow(/legacy weak seal/);
+    expect(() =>
+      claimFakeBaseline({ ...db, marker: { ...(db.marker as object), _id: "other" } }, "snap1")
+    ).toThrow(/identity mismatch/);
   });
 
   it("re-stamps identical observations and refuses mutated ones", () => {
-    const seen = { baselineId: "b", sourceTurn: 10, docCount: 5, stateHash: "h1" };
+    const manifest = buildBaselineManifest("b", { gameState: [{ _id: "current" }] });
+    const seen = { baselineId: "b", sourceTurn: 10, manifest };
+    const sealed = buildSealedMarkerDoc("b", 10, manifest, new Date(0));
     expect(() => assertBaselineStampCompatible(null, seen)).not.toThrow();
-    expect(() => assertBaselineStampCompatible(seen, { ...seen })).not.toThrow();
-    expect(() => assertBaselineStampCompatible(seen, { ...seen, sourceTurn: 11 })).toThrow(
+    expect(() => assertBaselineStampCompatible(sealed, { ...seen })).not.toThrow();
+    expect(() => assertBaselineStampCompatible(sealed, { ...seen, sourceTurn: 11 })).toThrow(
       "mutated snapshot"
     );
-    expect(() => assertBaselineStampCompatible(seen, { ...seen, stateHash: "h2" })).toThrow(
-      "content hash changed"
-    );
-    // Pre-seal marker upgrades on a matching re-stamp.
+    // Capture reservations and legacy weak markers upgrade on first v1 seal.
     expect(() =>
-      assertBaselineStampCompatible({ baselineId: "b", sourceTurn: 10, docCount: 5 }, { ...seen })
+      assertBaselineStampCompatible(
+        { _id: "b", status: "capturing", captureId: "cap-A" },
+        { ...seen }
+      )
+    ).not.toThrow();
+    expect(() =>
+      assertBaselineStampCompatible(
+        { _id: "b", sourceTurn: 10, docCount: 1, stateHash: "h" },
+        { ...seen }
+      )
     ).not.toThrow();
   });
 
   it("verifies the copied marker before the run and refuses divergence", () => {
-    const db: FakeBaselineDb = {
-      gameState: { _id: "current", currentTurn: 7, treasury: 42 },
-      docCount: 64,
-      marker: null,
-    };
+    const db: FakeBaselineDb = { collections: fakeWorld(7, 42), marker: null };
     stampFakeBaseline(db, "snap9");
     const source = { ...(db.marker as Record<string, unknown>) };
     // Faithful copy: the marker travels with the snapshot, verification passes.
@@ -438,40 +439,31 @@ describe("baseline marker races (stamp, claim, copy)", () => {
     );
     expect(() => assertCopiedMarkerMatches(source, null, "snap9")).toThrow(/without its/);
     expect(() =>
-      assertCopiedMarkerMatches(source, { ...copied, stateHash: "1".repeat(64) }, "snap9")
+      assertCopiedMarkerMatches(
+        source,
+        { ...copied, manifest: { ...(copied.manifest as object), digest: "1".repeat(64) } },
+        "snap9"
+      )
     ).toThrow(/diverges|forked/);
   });
 
   it("post-copy gate re-observes dest state: mid-copy mutation fails", () => {
-    const sealed = { _id: "current", currentTurn: 7, treasury: 42 };
-    const source = {
-      _id: "snap9",
-      sourceTurn: 7,
-      docCount: 64,
-      stateHash: fingerprintBaselineState(sealed),
-    };
+    const db: FakeBaselineDb = { collections: fakeWorld(7, 42), marker: null };
+    stampFakeBaseline(db, "snap9");
+    const source = { ...(db.marker as Record<string, unknown>) };
     const copied = { ...source };
-    const cleanObserved = {
-      baselineId: "snap9",
-      sourceTurn: 7,
-      docCount: 64,
-      stateHash: fingerprintBaselineState(sealed),
-    };
+    const cleanObserved = observeFakeBaseline(db, "snap9");
     // Faithful copy passes the full gate.
     expect(() => assertCopiedBaselineMatches(source, copied, cleanObserved, "snap9")).not.toThrow();
     // Source mutated between seal validation and copy: the mutated state
     // copies with the unchanged marker collection, so marker equality alone
     // passes while the landed state no longer matches the seal. The full
-    // gate must refuse.
-    const mutatedObserved = {
-      baselineId: "snap9",
-      sourceTurn: 7,
-      docCount: 64,
-      stateHash: fingerprintBaselineState({ _id: "current", currentTurn: 7, treasury: 999999 }),
-    };
+    // gate must refuse, naming the collection.
+    const mutated: FakeBaselineDb = { collections: fakeWorld(7, 999999), marker: db.marker };
+    const mutatedObserved = observeFakeBaseline(mutated, "snap9");
     expect(() => assertCopiedMarkerMatches(source, copied, "snap9")).not.toThrow();
     expect(() => assertCopiedBaselineMatches(source, copied, mutatedObserved, "snap9")).toThrow(
-      /seal mismatch/
+      /gameState/
     );
   });
 
@@ -479,11 +471,9 @@ describe("baseline marker races (stamp, claim, copy)", () => {
     const a = { _id: "current", currentTurn: 10, nested: { x: 1, y: [1, 2] } };
     const reordered = { nested: { y: [1, 2], x: 1 }, currentTurn: 10, _id: "current" };
     expect(stableStringify(a)).toBe(stableStringify(reordered));
-    expect(fingerprintBaselineState(a)).toBe(fingerprintBaselineState(reordered));
-    expect(fingerprintBaselineState({ ...a, currentTurn: 11 })).not.toBe(
-      fingerprintBaselineState(a)
-    );
-    expect(fingerprintBaselineState(a)).toMatch(/^[0-9a-f]{64}$/);
+    expect(hashBaselineDocument(a)).toBe(hashBaselineDocument(reordered));
+    expect(hashBaselineDocument({ ...a, currentTurn: 11 })).not.toBe(hashBaselineDocument(a));
+    expect(hashBaselineDocument(a)).toMatch(/^[0-9a-f]{64}$/);
   });
 });
 

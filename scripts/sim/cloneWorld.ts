@@ -10,13 +10,33 @@
  *   SIM_MONGODB_URI     — sandbox MongoDB (the copy destination)
  *
  * Usage: npx tsx scripts/sim/cloneWorld.ts --db=ahd_sim_clone_foo [--drop]
+ *        npx tsx scripts/sim/cloneWorld.ts --db=ahd_sim_baseline_<id> [--capture-id=<id>]
+ *
+ * Baseline captures (dest ahd_sim_baseline_<id>) hold a durable exclusive
+ * `capturing` reservation in the destination's simBaselines collection BEFORE
+ * any destructive work: concurrent first captures under the same baselineId
+ * serialize on the reservation _id (losers refuse, same --capture-id
+ * resumes a crashed capture), and a sealed snapshot refuses recapture. The
+ * reservation survives the capture because baseline dests are cleared
+ * collection-by-collection (simBaselines kept), never dropDatabase'd. Seal
+ * with stampBaseline.ts afterwards; arms may only claim sealed snapshots.
  *
  * The destination name MUST start with "ahd_sim_" — the same convention the
  * sim worker enforces — so a mistyped flag can never bulldoze a real DB.
  */
 
+import { randomUUID } from "crypto";
 import { MongoClient } from "mongodb";
-import { assertCloneDestNotStamped, isBaselineDbName } from "./simJobArgs";
+import {
+  assertBaselineId,
+  assertSafeToken,
+  BASELINE_CLONE_EXCLUDED_COLLECTIONS,
+  BASELINE_MARKER_COLLECTION,
+  buildCaptureReservationDoc,
+  isBaselineDbName,
+  resolveBaselineCapture,
+  type BaselineMarkerDoc,
+} from "./simJobArgs";
 
 const SOURCE_MONGODB_URI = process.env.SOURCE_MONGODB_URI;
 const SOURCE_DB_NAME = process.env.SOURCE_DB_NAME || "a-house-divided";
@@ -26,57 +46,10 @@ const SIM_MONGODB_URI = process.env.SIM_MONGODB_URI;
  * Append-only history, telemetry, audit and ops collections the engine never
  * reads during a turn. Everything NOT listed here is copied. When in doubt a
  * collection is copied: a stale extra collection is inert, a missing one can
- * break the engine mid-run.
+ * break the engine mid-run. Owned by ./baselineManifest (shared with the
+ * seal) so copy coverage and seal coverage can never disagree.
  */
-const EXCLUDED_COLLECTIONS = new Set([
-  "actionAuditLog",
-  "actionLogs",
-  "activityLog",
-  "adminLog",
-  "adminLogs",
-  "apiAbuseScans",
-  "apiAccessLog",
-  "bondHistory",
-  "botApiRequestLog",
-  "capitalActionLogs",
-  "code_sessions",
-  "corporationHistory",
-  "corporationPortfolioHistory",
-  "daily_reports",
-  "discord_ideas",
-  "discord_ingest_state",
-  "discord_messages",
-  "discord_themes",
-  "financialTxLog",
-  "fix_sessions",
-  "healBackups",
-  "healRuns",
-  "indexFundSnapshots",
-  "indexFundTransactions",
-  "knowledge_query_log",
-  "ledgerEntries",
-  "ledgerReconciliations",
-  "modAuditLog",
-  "moneySupplySnapshots",
-  "notifications",
-  "ops_knowledge",
-  "ops_qa_log",
-  "orgRegLedger",
-  "partyHistory",
-  "partyPoliticalStrengthLedger",
-  "playerMail",
-  "portfolioHistory",
-  "pr_reviews",
-  "primarySnapshots",
-  "qa_memory",
-  "shareTradeHistory",
-  "siteTrafficPageviews",
-  "statePartyElections",
-  "tradeHistory",
-  "treasuryTransactions",
-  "wealthListHistory",
-  "wireEvents",
-]);
+const EXCLUDED_COLLECTIONS = BASELINE_CLONE_EXCLUDED_COLLECTIONS;
 
 const BATCH = 2000;
 
@@ -102,16 +75,56 @@ async function main() {
   const sdb = src.db(SOURCE_DB_NAME);
   const ddb = dst.db(destName);
 
-  // Same-id recapture guard (issue #1470 marker-race closure): a stamped
-  // baseline snapshot is frozen. Checked BEFORE --drop so a refused recapture
-  // leaves the referenced snapshot untouched. Arm dbs (never baseline-named)
-  // always pass, so idempotent worker re-copies are unaffected.
+  // Durable exclusive first-capture gate (issue #1470 experiment-integrity
+  // closure): a baseline-named dest holds a `capturing` reservation in its
+  // own simBaselines collection BEFORE any destructive work, so concurrent
+  // same-baselineId first captures serialize on the reservation _id instead
+  // of overwriting each other. A sealed snapshot refuses recapture; a
+  // competing captureId refuses; the same captureId resumes a crashed
+  // capture. Refusals happen before any write, leaving the referenced
+  // snapshot untouched. Arm dbs (never baseline-named) skip this entirely,
+  // so idempotent worker re-copies are unaffected.
   if (isBaselineDbName(destName)) {
-    const markerCount = await ddb.collection("simBaselines").countDocuments({}, { limit: 1 });
-    assertCloneDestNotStamped(destName, markerCount > 0);
-  }
-
-  if (drop) {
+    const baselineId = assertBaselineId(destName.slice("ahd_sim_baseline_".length));
+    const captureId = arg("capture-id") ?? `capture-${Date.now()}-${randomUUID().slice(0, 8)}`;
+    assertSafeToken(captureId, "capture-id");
+    try {
+      await ddb
+        .collection(BASELINE_MARKER_COLLECTION)
+        .insertOne(buildCaptureReservationDoc(baselineId, captureId, new Date()) as never);
+      console.log(
+        `[clone] capture reservation acquired for baseline "${baselineId}" (captureId=${captureId})`
+      );
+    } catch (err) {
+      if (typeof err !== "object" || err === null || (err as { code?: unknown }).code !== 11000) {
+        throw err;
+      }
+      const existing = (await ddb
+        .collection(BASELINE_MARKER_COLLECTION)
+        .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
+      const verdict = resolveBaselineCapture(existing, captureId);
+      if (verdict === "resume") {
+        console.log(
+          `[clone] resuming crashed capture of baseline "${baselineId}" (captureId=${captureId})`
+        );
+        await ddb
+          .collection(BASELINE_MARKER_COLLECTION)
+          .updateOne({ _id: baselineId as never }, { $set: { checkedAt: new Date() } });
+      }
+    }
+    // Baseline dests are cleared collection-by-collection (simBaselines kept)
+    // instead of dropDatabase, so the reservation above survives the capture
+    // it serializes. A crashed capture therefore always leaves either no
+    // marker (retry proceeds as a first capture) or its reservation
+    // (retry resumes with the same --capture-id) — never a half-dropped db
+    // another capturer can mistake for a clean target.
+    const destCollections = await ddb.listCollections({}, { nameOnly: true }).toArray();
+    for (const { name } of destCollections) {
+      if (name.startsWith("system.") || name === BASELINE_MARKER_COLLECTION) continue;
+      await ddb.collection(name).deleteMany({});
+    }
+    console.log(`[clone] cleared ${destName} (reservation kept)`);
+  } else if (drop) {
     await ddb.dropDatabase();
     console.log(`[clone] dropped ${destName}`);
   }
@@ -158,7 +171,10 @@ async function main() {
   const secs = ((Date.now() - started) / 1000).toFixed(1);
   console.log(
     `[clone] done: ${collections.length} collections, ${totalDocs} docs -> ${destName} in ${secs}s ` +
-      `(${EXCLUDED_COLLECTIONS.size} history/log collections excluded)`
+      `(${EXCLUDED_COLLECTIONS.size} history/log collections excluded)` +
+      (isBaselineDbName(destName)
+        ? ` — seal it next: stampBaseline.ts --baseline-id=${destName.slice("ahd_sim_baseline_".length)}`
+        : "")
   );
   await src.close();
   await dst.close();

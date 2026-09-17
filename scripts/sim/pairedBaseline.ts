@@ -26,18 +26,24 @@
  *
  * Safe queue procedure (supervisor):
  *   1. cloneWorld.ts live -> baselineDbNameFor(baselineId) (the ONLY step
- *      that reads the live game database),
- *   2. stampBaseline.ts --baseline-id=<id> (seals the snapshot),
+ *      that reads the live game database; holds a durable exclusive
+ *      `capturing` reservation first — pass an explicit
+ *      --capture-id=<id> so a crashed capture resumes with the same id),
+ *   2. stampBaseline.ts --baseline-id=<id> (seals the v1 full-snapshot
+ *      manifest; upgrades a capture reservation or legacy weak seal,
+ *      refuses to re-seal drifted state),
  *   3. sim_create_paired_baseline (this tool; validates + inserts both arms),
- *   4. the sim worker claims each arm: revalidates the seal immediately
- *      before the sandbox-to-sandbox copy and verifies the copied marker
- *      before running turns.
+ *   4. the sim worker claims each arm: revalidates the sealed manifest
+ *      immediately before the sandbox-to-sandbox copy, re-checks the source
+ *      manifest after the copy (mid-copy mutation fails closed), and
+ *      verifies the traveled marker plus the landed dest state before
+ *      running turns.
  *
- * Stamp existence is enforced fail-closed at worker claim time, not here:
- * this surface only sees the control-plane queue, never the sandbox Mongo,
- * so it validates provenance shape/identity while the worker validates the
- * actual seal. Unpaired jobs and fresh-bootstrap pairs are untouched by
- * everything here (no provenance in, no provenance out).
+ * Sealed-marker existence is enforced fail-closed at worker claim time, not
+ * here: this surface only sees the control-plane queue, never the sandbox
+ * Mongo, so it validates provenance shape/identity while the worker
+ * validates the actual seal. Unpaired jobs and fresh-bootstrap pairs are
+ * untouched by everything here (no provenance in, no provenance out).
  */
 
 import {
