@@ -108,19 +108,38 @@ export function wouldCreateOwnershipCycle(
 
 /**
  * One-person rule: a subsidiary must be operated by a different human than the
- * parent's owner, the parent's sitting CEO, or the operator of any sibling
- * subsidiary of the same parent. Keys on the human behind the CEO seat — never
- * on `corp.userId` of the subsidiary itself.
+ * parent's owner, the parent's sitting CEO, or the sitting human CEO of any
+ * sibling subsidiary of the same parent. An NPP caretaker does not occupy the
+ * seat; reclaim is the gate that keeps a stashed human from restoring a second
+ * one. Keys on the human, not on `corp.userId` of an NPP-run subsidiary.
  */
+export type SubsidiaryCeoBlockReason = "parent" | "sibling";
+
+export function subsidiaryCeoBlockReason(params: {
+  candidateUserId: ObjectId;
+  parentOwnerUserId: ObjectId;
+  parentCeoUserId: ObjectId;
+  siblingSubsidiaryCeoUserIds: ObjectId[];
+}): SubsidiaryCeoBlockReason | null {
+  const { candidateUserId, parentOwnerUserId, parentCeoUserId, siblingSubsidiaryCeoUserIds } =
+    params;
+  if (candidateUserId.equals(parentOwnerUserId)) return "parent";
+  if (candidateUserId.equals(parentCeoUserId)) return "parent";
+  if (siblingSubsidiaryCeoUserIds.some((uid) => candidateUserId.equals(uid))) return "sibling";
+  return null;
+}
+
 export function humanBlockedFromSubsidiaryCeo(params: {
   candidateUserId: ObjectId;
   parentOwnerUserId: ObjectId;
   parentCeoUserId: ObjectId;
   siblingSubsidiaryCeoUserIds: ObjectId[];
 }): boolean {
-  const { candidateUserId, parentOwnerUserId, parentCeoUserId, siblingSubsidiaryCeoUserIds } =
-    params;
-  if (candidateUserId.equals(parentOwnerUserId)) return true;
-  if (candidateUserId.equals(parentCeoUserId)) return true;
-  return siblingSubsidiaryCeoUserIds.some((uid) => candidateUserId.equals(uid));
+  return subsidiaryCeoBlockReason(params) != null;
+}
+
+export function subsidiaryCeoBlockMessage(reason: SubsidiaryCeoBlockReason): string {
+  return reason === "sibling"
+    ? "This player already operates another subsidiary of the same parent."
+    : "A subsidiary must be run by a different player than the parent.";
 }
