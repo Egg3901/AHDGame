@@ -607,6 +607,14 @@ export interface Corporation {
    * every turn and bars it from opening new acquisitions.
    */
   pendingDivestiture?: import("./mergerReview").PendingDivestiture;
+  /**
+   * Offer id currently executing an agreed acquisition against this
+   * corporation as the target. Atomic claim: only the owning offer's executor
+   * may move money or sectors, which is what stops two concurrently accepted
+   * offers for one corporation from both paying out. Dies with the shell on
+   * success; released on terminal compensation.
+   */
+  acquisitionSettlementId?: ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
