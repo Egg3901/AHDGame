@@ -26,6 +26,7 @@ import {
   projectNppGeneration,
 } from "@/lib/utils/fundGeneration";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { isUserActive } from "@/lib/players/playerActivity";
 import { DEFAULT_LEGACY_COUNTRY_ID } from "@/lib/constants/countries";
@@ -156,6 +157,9 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
   const toLocal = (anchor: number) => campaignAnchorToLocal(anchor, partyCountry, campaignRates);
 
   const nationalTaxRate = party.nationalTaxRate ?? 0;
+  // GDP-baseline era for income math: the world's reset preset, so historical
+  // worlds estimate in their own denomination (issue #798).
+  const preset = await getGameStatePresetOrDefault(db);
   let expectedHourlyIncome = 0;
   for (const member of members) {
     const statePop = statePopMap.get(member.homeState) ?? 0;
@@ -166,6 +170,7 @@ export async function getPartyDetail(db: Db, party: PoliticalParty): Promise<Par
       stateGdpMillions: stateGdpMap.get(member.homeState),
       countryId: member.countryId,
       politicalInfluence: member.politicalInfluence ?? 0,
+      preset,
     });
     expectedHourlyIncome += calculateTaxAmount(toLocal(totalFundRate), nationalTaxRate);
   }

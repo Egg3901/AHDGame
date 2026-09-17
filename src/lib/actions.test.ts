@@ -95,6 +95,41 @@ describe("getFundMultiplier", () => {
   });
 });
 
+describe("getFundMultiplier era parameter (issue #798)", () => {
+  it("resolves 1.0 for a 1953-scale JP region under its own era", () => {
+    // JP 1953 seeds are USD-anchored: per-capita $277 vs the 1953 baseline.
+    const pop = 10_000_000;
+    const gdpMillions1953 = (277 * pop) / 1_000_000;
+    expect(getFundMultiplier(0, gdpMillions1953, pop, "JP", "1953-default")).toBeCloseTo(1.0);
+  });
+
+  it("pins the same 1953-scale JP region to the floor under the modern default", () => {
+    // $277 USD-anchored per-capita against the ¥4.17M modern baseline: the era
+    // parameter is load-bearing, not cosmetic.
+    const pop = 10_000_000;
+    const gdpMillions1953 = (277 * pop) / 1_000_000;
+    expect(getFundMultiplier(0, gdpMillions1953, pop, "JP")).toBeCloseTo(0.85);
+    expect(getFundMultiplier(0, gdpMillions1953, pop, "JP", "2019-default")).toBeCloseTo(0.85);
+  });
+
+  it("resolves 1.0 for an average NG region in both 1953 and 2019 eras", () => {
+    const pop = 10_000_000;
+    expect(getFundMultiplier(0, (113 * pop) / 1_000_000, pop, "NG", "1953-default")).toBeCloseTo(
+      1.0
+    );
+    expect(
+      getFundMultiplier(0, (3_669_401 * pop) / 1_000_000, pop, "NG", "2019-default")
+    ).toBeCloseTo(1.0);
+  });
+
+  it("throws for countries without an explicit baseline", () => {
+    expect(() => getFundMultiplier(0, 100_000, 1_000_000, "XX")).toThrow(/no GDP baseline/);
+    expect(() => getFundMultiplier(0, 100_000, 1_000_000, "BR", "1953-default")).toThrow(
+      /no GDP baseline/
+    );
+  });
+});
+
 function makeCharacter(overrides: {
   actions?: number;
   funds?: number;

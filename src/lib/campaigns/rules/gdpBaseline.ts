@@ -158,33 +158,30 @@ function bundlePresetFor(country: GdpBaselineCountry, era: EraId): string {
  */
 export function resolveCampaignGdpBaseline(
   countryId: string,
-  preset: string = DEFAULT_SEED_PRESET
+  // Optional (never defaulted): callers with no world pass nothing and get the
+  // modern era; runtime money paths pass the world's gameState.preset.
+  preset?: string
 ): GdpBaselineResolution {
-  const row = (GDP_BASELINE_TABLE as Record<string, Record<EraId, number> | undefined>)[
-    countryId
-  ];
+  const eraPreset = preset ?? DEFAULT_SEED_PRESET;
+  const row = (GDP_BASELINE_TABLE as Record<string, Record<EraId, number> | undefined>)[countryId];
   if (!row) {
     throw new Error(
       `resolveCampaignGdpBaseline: no GDP baseline for country "${countryId}" ` +
-        `(preset "${preset}"). Add an explicit per-era row before activating this country; ` +
+        `(preset "${eraPreset}"). Add an explicit per-era row before activating this country; ` +
         `falling back to a US-denominated value would misprice campaign income and costs.`
     );
   }
-  const era = eraForPreset(preset);
+  const era = eraForPreset(eraPreset);
   return {
     baseline: row[era],
     era,
     bundlePreset: bundlePresetFor(countryId as GdpBaselineCountry, era),
-    unit:
-      era === "1953" ? (GDP_DENOMINATION_1953[countryId] ?? "local") : "local",
+    unit: era === "1953" ? (GDP_DENOMINATION_1953[countryId] ?? "local") : "local",
   };
 }
 
 /** Baseline value only — compat entry point for income/cost math. */
-export function gdpBaselinePerCapita(
-  countryId: string,
-  preset?: string
-): number {
+export function gdpBaselinePerCapita(countryId: string, preset?: string): number {
   return resolveCampaignGdpBaseline(countryId, preset ?? DEFAULT_SEED_PRESET).baseline;
 }
 

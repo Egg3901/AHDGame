@@ -7,6 +7,7 @@ import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { calculateFundraisingAmount } from "@/lib/actions";
 import { calculateFullFundDistribution, getPopulationTier } from "@/lib/utils/fundGeneration";
+import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth, getHomeCurrency } from "@/lib/currency/characterFunds";
@@ -455,6 +456,9 @@ export async function GET(request: Request) {
     const statePopulation = homeState?.population ?? 0;
     const stateTaxRate = statePartyOrg?.stateTaxRate ?? 0;
     const nationalTaxRate = partyDoc?.nationalTaxRate ?? 0;
+    // GDP-baseline era for income math: the world's reset preset, so
+    // historical worlds project in their own denomination (issue #798).
+    const preset = await getGameStatePresetOrDefault(db);
     const fundDistribution = calculateFullFundDistribution(
       statePopulation,
       character.donorBaseLevel ?? 0,
@@ -463,7 +467,8 @@ export async function GET(request: Request) {
       nationalTaxRate,
       homeState?.gdp,
       character.countryId,
-      character.politicalInfluence ?? 0
+      character.politicalInfluence ?? 0,
+      preset
     );
     const populationTier = getPopulationTier(statePopulation);
     // fundDistribution is anchor; campaign funds display in LOCAL at the frozen

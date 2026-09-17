@@ -132,7 +132,7 @@ export function getOfficeFundBonus(currentOffice: OfficeType | null): number {
  * Throws for countries without an explicit baseline row — by design, so an
  * unknown country can never silently inherit a mismatched US denomination.
  */
-export function getGdpBaseline(countryId: string, preset: string = DEFAULT_SEED_PRESET): number {
+export function getGdpBaseline(countryId: string, preset?: string): number {
   return gdpBaselinePerCapita(countryId, preset);
 }
 
@@ -149,7 +149,7 @@ export function getIncomeGdpScalar(
   gdpMillions: number,
   population: number,
   countryId = "US",
-  preset: string = DEFAULT_SEED_PRESET
+  preset?: string
 ): number {
   const baseline = getGdpBaseline(countryId, preset);
   const gdpPerCapita = (gdpMillions * 1_000_000) / population;
@@ -168,7 +168,7 @@ export function getTotalFundGeneration(
   stateGdpMillions?: number,
   countryId = "US",
   stateInfluence?: number,
-  preset: string = DEFAULT_SEED_PRESET
+  preset?: string
 ): number {
   const gdpScalar =
     stateGdpMillions !== undefined
@@ -244,7 +244,7 @@ export function calculateFullFundDistribution(
   stateGdpMillions?: number,
   countryId = "US",
   stateInfluence?: number,
-  preset: string = DEFAULT_SEED_PRESET
+  preset?: string
 ): FundDistribution {
   const gdpScalar =
     stateGdpMillions !== undefined
