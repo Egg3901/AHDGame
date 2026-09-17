@@ -442,9 +442,9 @@ export async function GET(request: Request) {
       .split(/\s+/)
       .map((token) => token.trim())
       .filter((token) => token.length >= 2);
-    const legislationTokenRegexes = (legislationTokens.length > 0 ? legislationTokens : [query]).map(
-      (token) => new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
-    );
+    const legislationTokenRegexes = (
+      legislationTokens.length > 0 ? legislationTokens : [query]
+    ).map((token) => new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
     const legislationTokenBranches = legislationTokenRegexes.map((tokenRegex) => ({
       $or: [
         { name: tokenRegex },
@@ -453,14 +453,17 @@ export async function GET(request: Request) {
         { "policyOptions.explanation": tokenRegex },
       ],
     }));
+    const enabledLegislationScopes = (enabledCountries ?? []).map(
+      (country) => String(country).toLowerCase() as NonNullable<LegislationType["countryScope"]>
+    );
     const legislationScopeOr =
       enabledCountries === undefined
         ? null
         : [
-            { countryScope: { $in: enabledCountries.map((c) => String(c).toLowerCase()) } },
+            { countryScope: { $in: enabledLegislationScopes } },
             // Legacy types carry no countryScope and read as US law in the
             // legislation-types API; mirror that here.
-            ...(enabledCountries.map((c) => String(c).toLowerCase()).includes("us")
+            ...(enabledLegislationScopes.includes("us")
               ? [{ countryScope: { $exists: false } }]
               : []),
           ];
@@ -501,7 +504,9 @@ export async function GET(request: Request) {
         );
       results.push({
         type: "bill",
-        id: matchedOption ? `${String(legislation._id)}:${matchedOption.id}` : String(legislation._id),
+        id: matchedOption
+          ? `${String(legislation._id)}:${matchedOption.id}`
+          : String(legislation._id),
         title: matchedOption?.name ?? legislation.name,
         subtitle: matchedOption
           ? `${legislation.name} option · ${countryName} · propose in the legislature`
