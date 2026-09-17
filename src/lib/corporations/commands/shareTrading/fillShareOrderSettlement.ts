@@ -19,7 +19,13 @@ import {
   debitSharesFromImperial,
 } from "@/lib/corporations/shareholderOps";
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
-import { emitTx } from "@/lib/financialTxLog/emit";
+import {
+  collectShareFillAuditRows,
+  insertShareFillAuditRows,
+  markShareFillMoneyCommitted,
+  settleShareFillAttempt,
+  type ShareFillAuditPlan,
+} from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import { computeAccountedShares } from "@/lib/corporations/shareInvariant";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { debitFundHoldingShares, upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
@@ -68,6 +74,13 @@ export async function settleBuyOrderFill(args: {
   currentTurn: number;
   now: Date;
   restoreClaimedOrder: () => Promise<void>;
+  /**
+   * Keyed-audit attempt claimed by the caller (issue #1672). The plan carries
+   * the pinned buyer name and amounts; money below stays untouched, and the
+   * audit rows are written convergently after the commit.
+   */
+  fillKey: string;
+  plan: ShareFillAuditPlan;
 }): Promise<NextResponse | null> {
   const {
     db,
@@ -87,6 +100,8 @@ export async function settleBuyOrderFill(args: {
     currentTurn,
     now,
     restoreClaimedOrder,
+    fillKey,
+    plan,
   } = args;
 
   const fillerAvgCost =
@@ -124,6 +139,7 @@ export async function settleBuyOrderFill(args: {
       const remaining = await debitFillerShares();
       if (remaining < 0) {
         await restoreClaimedOrder();
+        await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
         return NextResponse.json(
           { error: "You no longer have enough shares to fill this order" },
           { status: 409 }
@@ -148,6 +164,7 @@ export async function settleBuyOrderFill(args: {
       const remaining = await debitFillerShares();
       if (remaining < 0) {
         await restoreClaimedOrder();
+        await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
         return NextResponse.json(
           { error: "You no longer have enough shares to fill this order" },
           { status: 409 }
@@ -168,6 +185,7 @@ export async function settleBuyOrderFill(args: {
       const remaining = await debitFillerShares();
       if (remaining < 0) {
         await restoreClaimedOrder();
+        await settleShareFillAttempt(db, fillKey, "failed", "share-fill:claim-restored");
         return NextResponse.json(
           { error: "You no longer have enough shares to fill this order" },
           { status: 409 }
@@ -194,37 +212,19 @@ export async function settleBuyOrderFill(args: {
       }
     );
     fillerEscrowReleased = true;
-    await emitTx(db, {
-      type: "stock_trade_sell",
-      turn: currentTurn,
-      createdAt: now,
-      subjectType: "character",
-      subjectId: fillerId,
-      subjectName: fillerName,
-      amount: totalInFillerHome,
-      currencyCode: fillerHomeCurrency,
-      counterpartyType: order.placerFundId
-        ? "system"
-        : order.placerCorporationId
-          ? "corporation"
-          : "character",
-      counterpartyId: order.placerFundId
-        ? undefined
-        : (order.placerCorporationId ?? orderCharacterId),
-      counterpartyName: order.placerFundId
-        ? "Index fund"
-        : order.placerCorporationId
-          ? (buyOrderBuyerCorp?.name ?? "Unknown corporation")
-          : await resolveCharName(db, orderCharacterId!, false),
-      meta: {
-        corporationId: corporation._id.toString(),
-        orderId: order._id.toString(),
-        shares,
-        pricePerShare: order.pricePerShare,
-        source: "order_fill_buy_order",
-        imperial: isImperialFiller || undefined,
-      },
-    });
+    // Money committed. The sell-tx and history rows are rebuilt from the
+    // pinned plan (buyer name included) and inserted convergently: a crash
+    // from here on is repaired by recovery, and an audit failure leaves the
+    // receipt in_progress instead of rolling back moved money.
+    await markShareFillMoneyCommitted(db, fillKey);
+    const auditOutcome = await insertShareFillAuditRows(
+      db,
+      fillKey,
+      collectShareFillAuditRows(plan)
+    );
+    if (auditOutcome !== "failed") {
+      await settleShareFillAttempt(db, fillKey, "completed");
+    }
   } catch (err) {
     if (fillerEscrowReleased) {
       await db.collection(fillerCollectionName).updateOne(
@@ -296,6 +296,12 @@ export async function settleBuyOrderFill(args: {
       }
     }
     await restoreClaimedOrder();
+    await settleShareFillAttempt(
+      db,
+      fillKey,
+      "failed",
+      err instanceof Error ? err.message : "share-fill:settlement-failed"
+    );
     throw err;
   }
   return null;

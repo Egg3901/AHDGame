@@ -24,7 +24,14 @@ import type {
   ActionAuditSubject,
 } from "@/lib/db/types/actionAuditLog";
 
-type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
+export type TxInput = Omit<FinancialTxLogEntry, "_id" | "expiresAt" | "flagged">;
+
+/** Convergent-insert outcome for one ledger audit row (issue #1672). */
+export type EmitTxOutcome = "applied" | "already-applied" | "failed";
+
+function isDuplicateKeyError(error: unknown): boolean {
+  return !!error && typeof error === "object" && (error as { code?: unknown }).code === 11000;
+}
 
 function amountToAnchor(
   amount: number,
@@ -264,7 +271,16 @@ function buildAuditEnvelope(doc: FinancialTxLogEntry): ActionAuditInput {
 }
 
 // Fire-and-forget single emission. Failures are sent to Sentry, never thrown.
-export async function emitTx(db: Db, entry: TxInput, thresholds?: TxThresholds): Promise<void> {
+// Accepts a caller-supplied `_id` so keyed flows (issue #1672) can re-insert
+// the same row convergently after a crash: a duplicate `_id` means the row
+// already landed, so the shadow ledger and audit spine (which fired on the
+// first apply) are skipped and `already-applied` is reported.
+export async function emitTx(
+  db: Db,
+  entry: TxInput,
+  thresholds?: TxThresholds,
+  options?: { _id?: ObjectId }
+): Promise<EmitTxOutcome> {
   try {
     const resolvedThresholds = thresholds ?? (await loadTxThresholds(db));
     const ratesByCurrency = await loadAnchorRateMap(db, [entry]);
@@ -272,16 +288,23 @@ export async function emitTx(db: Db, entry: TxInput, thresholds?: TxThresholds):
     const flags = evaluateTier1Flags(entryWithAnchor, resolvedThresholds);
     const doc: FinancialTxLogEntry = {
       ...entryWithAnchor,
-      _id: new ObjectId(),
+      _id: options?._id ?? new ObjectId(),
       expiresAt: await computeExpiresAt(db, entryWithAnchor.createdAt),
       suspectFlags: flags.length > 0 ? flags : undefined,
       flagged: flags.length > 0,
     };
-    await db.collection<FinancialTxLogEntry>("financialTxLog").insertOne(doc);
+    try {
+      await db.collection<FinancialTxLogEntry>("financialTxLog").insertOne(doc);
+    } catch (insertErr) {
+      if (isDuplicateKeyError(insertErr)) return "already-applied";
+      throw insertErr;
+    }
     await shadowLedgerFromTx(db, [doc]);
     recordAudit(buildAuditEnvelope(doc));
+    return "applied";
   } catch (err) {
     Sentry.captureException(err, { extra: { phase: "emitTx", type: entry.type } });
+    return "failed";
   }
 }
 

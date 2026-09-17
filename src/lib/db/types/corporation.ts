@@ -67,6 +67,13 @@ export interface ShareOrder {
    */
   escrowAnchor?: number;
   status: "open" | "filled" | "cancelled";
+  /**
+   * Idempotency key of the latest fill attempt stamped atomically by the
+   * order-claim write (issue #1672). Lets the next fill on this order resume
+   * a crashed attempt's audit rows instead of leaving them missing. Restored
+   * alongside the claim snapshot when a live attempt compensates.
+   */
+  lastShareFillKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
