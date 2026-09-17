@@ -100,6 +100,7 @@ import {
   remainingRedemptionUnits,
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
+import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -367,6 +368,8 @@ export interface FundShareBuyBatch {
   pools?: Map<CurrencyCode, EquityMarketPool>;
   /** Post-loop evidence for completed buys. The caller inserts the batch once. */
   txSink?: Omit<IndexFundTransaction, "_id">[];
+  /** Fund-subject ledger rows collected per buy and flushed after the pass. */
+  ledgerSink?: Parameters<typeof emitTxBulk>[1];
 }
 
 async function reverseFloatBuyCredit(
@@ -536,6 +539,7 @@ export async function executeFundShareBuy(
       await updateFundHoldings(db, fund._id, purchasedHoldings, sessionOpts);
       holdingsUpdated = true;
 
+      const now = new Date();
       const tx = {
         fundId: fund._id,
         kind: "public_float_buy" as const,
@@ -543,10 +547,32 @@ export async function executeFundShareBuy(
         shares,
         navAnchor: executionPriceAnchor,
         amountAnchor: actualCost,
-        createdAt: new Date(),
+        createdAt: now,
       };
       if (batch?.txSink) batch.txSink.push(tx);
       else await insertFundTransaction(db, tx, sessionOpts);
+
+      const ledgerRow = {
+        type: "stock_trade_buy" as const,
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "fund" as const,
+        subjectId: fund._id,
+        subjectName: fund.name,
+        amount: -actualCost,
+        anchorAmount: -actualCost,
+        currencyCode: fund.anchorCurrencyCode,
+        counterpartyType: "system" as const,
+        counterpartyName: "Public float",
+        meta: {
+          corporationId: corp._id.toString(),
+          shares,
+          pricePerShareAnchor: executionPriceAnchor,
+          source: "fund-cron-float-buy",
+        },
+      };
+      if (batch) (batch.ledgerSink ??= []).push(ledgerRow);
+      else await emitTx(db, ledgerRow);
 
       return true;
     } catch (error) {
@@ -681,6 +707,9 @@ export async function rebalanceFundToTarget(
     if (res.ok) buys++;
   }
   await insertFundTransactionsBulk(db, buyBatch.txSink ?? []);
+  if (buyBatch.ledgerSink && buyBatch.ledgerSink.length > 0) {
+    await emitTxBulk(db, buyBatch.ledgerSink, await loadTxThresholds(db));
+  }
 
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
