@@ -42,6 +42,12 @@ export interface SectorRevenueTax {
       hostRevenue: number;
       /** Host-currency realized revenue when the sector has one. */
       hostRealizedRevenue?: number;
+      /**
+       * Physical output units when the sector turn wrote the telemetry
+       * (issue #1470 shadow). Optional: sectors reprocessed before the field
+       * shipped carry nothing, and the shadow treats that as skip, not zero.
+       */
+      producedUnits?: number;
     }>
   >;
   /** Per-state unowned-sector revenue (₳-native). */
@@ -89,6 +95,7 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
           | "stateId"
           | "revenue"
           | "realizedRevenue"
+          | "producedUnits"
           | "currentGrowthRate"
           | "growthRate"
           | "corporationId"
@@ -105,6 +112,10 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
         // capacity only depreciates, so a nameplate-based delta reads a
         // permanent ~-2.4%/yr recession that no player action caused.
         realizedRevenue: 1,
+        // Issue #1470 shadow: currency-free physical output for the
+        // constant-price print. One projected scalar on the existing batched
+        // read — no new round trip, no fat-field load.
+        producedUnits: 1,
         currentGrowthRate: 1,
         // P3c: the environment tier derives the carbon mix from sector types.
         sectorType: 1,
@@ -174,6 +185,7 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
       realizedRevenue?: number;
       hostRevenue: number;
       hostRealizedRevenue?: number;
+      producedUnits?: number;
       currentGrowthRate: number;
       sectorType?: CorporationType;
     }>
@@ -202,11 +214,16 @@ export async function sectorRevenueTaxProvider(db: Db): Promise<SectorRevenueTax
     const list = ownedByState.get(sector.stateId) ?? [];
     // Fallback chain: new field → legacy field → 0 (undefined would propagate NaN).
     const growth = sector.currentGrowthRate ?? sector.growthRate ?? 0;
+    const producedUnits =
+      typeof sector.producedUnits === "number" && Number.isFinite(sector.producedUnits)
+        ? sector.producedUnits
+        : undefined;
     list.push({
       revenue: revenueAnchor,
       ...(realizedAnchor !== undefined ? { realizedRevenue: realizedAnchor } : {}),
       hostRevenue,
       ...(hostRealized !== undefined ? { hostRealizedRevenue: hostRealized } : {}),
+      ...(producedUnits !== undefined ? { producedUnits } : {}),
       currentGrowthRate: growth,
       sectorType: sector.sectorType,
     });

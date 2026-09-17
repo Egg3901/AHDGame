@@ -8,6 +8,7 @@ import {
   computeWeightedGrowthRate,
   realOutputShadowDivergence,
   resolveRealOutputShadowBaseline,
+  resolveRealOutputShadowTurnWrite,
   selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
   sumPhysicalOutputUnits,
@@ -463,5 +464,133 @@ describe("resolveRealOutputShadowBaseline (cold-start/migration plan)", () => {
       { units: 1050, turn: 10 }
     );
     expect(out).toEqual({ baseline: 1050, baselineTurn: 10, mature: false });
+  });
+});
+
+describe("resolveRealOutputShadowTurnWrite (flag-gated shadow-only turn write)", () => {
+  it("returns null with the flag off, whatever the inputs", () => {
+    expect(
+      resolveRealOutputShadowTurnWrite({
+        flagEnabled: false,
+        unitsNow: 1050,
+        turn: 10,
+        turnsPerYear: 48,
+      })
+    ).toBeNull();
+    expect(
+      resolveRealOutputShadowTurnWrite({
+        flagEnabled: false,
+        unitsNow: 1050,
+        turn: 10,
+        turnsPerYear: 48,
+        existingUnits: 1000,
+        existingTurn: 9,
+        existingGrowth: 5,
+      })
+    ).toBeNull();
+  });
+
+  it("cold-starts by seeding at the measured level with a null print", () => {
+    expect(
+      resolveRealOutputShadowTurnWrite({
+        flagEnabled: true,
+        unitsNow: 1050,
+        turn: 10,
+        turnsPerYear: 48,
+      })
+    ).toEqual({
+      sectorRealOutputUnits: 1050,
+      sectorRealOutputUnitsTurn: 10,
+      sectorRealOutputShadowGrowth: null,
+    });
+  });
+
+  it("prints the constant-price growth once mature and rolls the baseline forward", () => {
+    // 1000 -> 1010 over 4 turns = +1% x 12 = +12%/yr.
+    const out = resolveRealOutputShadowTurnWrite({
+      flagEnabled: true,
+      unitsNow: 1010,
+      turn: 10,
+      turnsPerYear: 48,
+      existingUnits: 1000,
+      existingTurn: 6,
+    })!;
+    expect(out.sectorRealOutputUnits).toBe(1010);
+    expect(out.sectorRealOutputUnitsTurn).toBe(10);
+    expect(out.sectorRealOutputShadowGrowth).toBeCloseTo(12, 10);
+  });
+
+  it("a same-turn retry keeps the persisted triple verbatim (idempotent)", () => {
+    const first = resolveRealOutputShadowTurnWrite({
+      flagEnabled: true,
+      unitsNow: 1010,
+      turn: 10,
+      turnsPerYear: 48,
+      existingUnits: 1000,
+      existingTurn: 6,
+    })!;
+    const retry = resolveRealOutputShadowTurnWrite({
+      flagEnabled: true,
+      unitsNow: 1010,
+      turn: 10,
+      turnsPerYear: 48,
+      existingUnits: first.sectorRealOutputUnits,
+      existingTurn: first.sectorRealOutputUnitsTurn,
+      existingGrowth: first.sectorRealOutputShadowGrowth,
+    });
+    expect(retry).toEqual(first);
+  });
+
+  it("a same-turn retry of a cold-start seed keeps the null print, not a recompute", () => {
+    const retry = resolveRealOutputShadowTurnWrite({
+      flagEnabled: true,
+      unitsNow: 1050,
+      turn: 10,
+      turnsPerYear: 48,
+      existingUnits: 1050,
+      existingTurn: 10,
+      existingGrowth: null,
+    });
+    expect(retry).toEqual({
+      sectorRealOutputUnits: 1050,
+      sectorRealOutputUnitsTurn: 10,
+      sectorRealOutputShadowGrowth: null,
+    });
+  });
+
+  it("holds a standing baseline untouched when the current level is corrupt", () => {
+    expect(
+      resolveRealOutputShadowTurnWrite({
+        flagEnabled: true,
+        unitsNow: NaN,
+        turn: 10,
+        turnsPerYear: 48,
+        existingUnits: 1000,
+        existingTurn: 9,
+        existingGrowth: 2,
+      })
+    ).toEqual({
+      sectorRealOutputUnits: 1000,
+      sectorRealOutputUnitsTurn: 9,
+      sectorRealOutputShadowGrowth: null,
+    });
+  });
+
+  it("reseeds a corrupt persisted baseline at the measured level with no signal", () => {
+    expect(
+      resolveRealOutputShadowTurnWrite({
+        flagEnabled: true,
+        unitsNow: 1050,
+        turn: 10,
+        turnsPerYear: 48,
+        existingUnits: -4,
+        existingTurn: 9,
+        existingGrowth: 2,
+      })
+    ).toEqual({
+      sectorRealOutputUnits: 1050,
+      sectorRealOutputUnitsTurn: 10,
+      sectorRealOutputShadowGrowth: null,
+    });
   });
 });

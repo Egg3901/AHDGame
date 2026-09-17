@@ -143,6 +143,23 @@ describe("sectorRevenueTaxProvider", () => {
     expect(row.realizedRevenue).toBe(1000);
   });
 
+  it("carries producedUnits telemetry when present, omits the key when absent (issue #1470)", async () => {
+    setupCollection("corporateSectors", [
+      { _id: "sec1", stateId: "s1", revenue: 100, currentGrowthRate: 2, producedUnits: 450 },
+      { _id: "sec2", stateId: "s1", revenue: 100, currentGrowthRate: 2 },
+      { _id: "sec3", stateId: "s1", revenue: 100, currentGrowthRate: 2, producedUnits: NaN },
+    ]);
+    setupCollection("unownedSectors", []);
+    setupCollection("federalBudget", []);
+    setupCollection("stateBudgets", []);
+
+    const { sectorRevenueTaxProvider } = await import("./providers");
+    const rows = (await sectorRevenueTaxProvider(db as unknown as Db)).ownedByState.get("s1")!;
+    expect(rows[0]!.producedUnits).toBe(450);
+    expect("producedUnits" in rows[1]!).toBe(false);
+    expect("producedUnits" in rows[2]!).toBe(false);
+  });
+
   it("uses the authored host rate when a country has no live forex row", async () => {
     setupCollection("corporateSectors", [
       {

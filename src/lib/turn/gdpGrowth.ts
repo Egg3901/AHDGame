@@ -534,3 +534,92 @@ export function resolveRealOutputShadowBaseline(
     mature: measured.turn - existing.baselineTurn >= 1,
   };
 }
+
+/**
+ * Persisted shadow triple written by the turn loop (`State.sectorRealOutputUnits`
+ * plus `sectorRealOutputUnitsTurn` plus `sectorRealOutputShadowGrowth`).
+ */
+export interface RealOutputShadowTurnWrite {
+  sectorRealOutputUnits: number;
+  sectorRealOutputUnitsTurn: number;
+  sectorRealOutputShadowGrowth: number | null;
+}
+
+/**
+ * Per-turn shadow write policy (issue #1470 acceptance item 1, SHADOW ONLY).
+ *
+ * Pure: the caller threads the flag it already resolved (via
+ * `isRealOutputShadowEnabled`), the summed physical units for the region, the
+ * current turn, and the region's persisted triple. Returns `null` when the
+ * flag is off so the caller spreads nothing and its writes stay byte-identical
+ * (no shadow fields, not even an `$unset`).
+ *
+ * Flag on:
+ * - Retry of an already-written turn (`existingTurn === turn` with a
+ *   well-formed triple): keep the persisted triple verbatim, so a retried turn
+ *   cannot clobber the printed growth with a recomputed null.
+ * - Otherwise resolve the cold-start/idempotent baseline from the persisted
+ *   pair, print the constant-price growth when mature (else null), and ROLL
+ *   the baseline forward to this turn's measured level (the same per-region
+ *   prior-value pattern as `sectorRealizedRevenue`). A corrupt current level
+ *   with a standing baseline holds that baseline untouched and prints null.
+ *
+ * Never touches live GDP, nominal sector growth, unemployment, inflation,
+ * approval, or taxes: the return value feeds only the three shadow fields.
+ */
+export function resolveRealOutputShadowTurnWrite(input: {
+  flagEnabled: boolean;
+  unitsNow: number;
+  turn: number;
+  turnsPerYear: number;
+  existingUnits?: number;
+  existingTurn?: number;
+  existingGrowth?: number | null;
+}): RealOutputShadowTurnWrite | null {
+  if (!input.flagEnabled) return null;
+  const wellFormedRetry =
+    input.existingTurn === input.turn &&
+    typeof input.existingUnits === "number" &&
+    Number.isFinite(input.existingUnits) &&
+    (input.existingGrowth === null ||
+      (typeof input.existingGrowth === "number" && Number.isFinite(input.existingGrowth)));
+  if (wellFormedRetry) {
+    return {
+      sectorRealOutputUnits: input.existingUnits as number,
+      sectorRealOutputUnitsTurn: input.turn,
+      sectorRealOutputShadowGrowth: (input.existingGrowth as number | null) ?? null,
+    };
+  }
+  const resolved = resolveRealOutputShadowBaseline(
+    input.existingUnits !== undefined && input.existingTurn !== undefined
+      ? { baseline: input.existingUnits, baselineTurn: input.existingTurn, mature: false }
+      : undefined,
+    { units: input.unitsNow, turn: input.turn }
+  );
+  const usableNow = Number.isFinite(input.unitsNow) && input.unitsNow >= 0;
+  if (!usableNow && resolved.baselineTurn !== input.turn) {
+    // Current level unusable but a prior baseline stands: hold it untouched
+    // and print nothing, rather than persisting a corrupt level or inventing
+    // a print across the gap.
+    return {
+      sectorRealOutputUnits: resolved.baseline,
+      sectorRealOutputUnitsTurn: resolved.baselineTurn,
+      sectorRealOutputShadowGrowth: null,
+    };
+  }
+  const seededThisTurn = resolved.baselineTurn === input.turn;
+  const growth =
+    resolved.mature && !seededThisTurn
+      ? computeConstantPriceOutputGrowthRate(
+          input.unitsNow,
+          resolved.baseline,
+          input.turn - resolved.baselineTurn,
+          input.turnsPerYear
+        )
+      : null;
+  return {
+    sectorRealOutputUnits: seededThisTurn ? resolved.baseline : input.unitsNow,
+    sectorRealOutputUnitsTurn: input.turn,
+    sectorRealOutputShadowGrowth: growth,
+  };
+}

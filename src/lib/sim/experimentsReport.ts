@@ -12,6 +12,10 @@ import {
   computeNppWarChestAnchorMap,
   type BalanceReport,
 } from "@/lib/sim/metrics";
+import {
+  collectRealOutputShadowEvidence,
+  type RealOutputShadowEvidenceReport,
+} from "@/lib/sim/realOutputShadowEvidence";
 import { NPP_FUND_INVESTMENT_INTERVAL } from "@/lib/indexFunds/nppInvesting";
 import {
   corpLiquidCapitalToAnchor,
@@ -226,6 +230,14 @@ export interface ExperimentsReport {
   wealthLeaders: WealthLeader[];
   topCorporations: TopCorporation[];
   finalMetrics: BalanceReport;
+  /**
+   * Issue-#1470 nominal-vs-shadow evidence (control/treatment comparison).
+   * Null on control runs (flag off): no shadow section at all. On treatment
+   * runs, one row per real region with nominal sector growth beside the
+   * persisted constant-price print and explicit ready/cold-start/missing
+   * status, so a missing print is never read as a zero gap.
+   */
+  realOutputShadow: RealOutputShadowEvidenceReport | null;
 }
 
 const WEALTH_LEADER_COUNT = 25;
@@ -501,10 +513,13 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
   );
 
   // Wealth leaders + top corporations read live end-state (not history) — run
-  // concurrently, independent of the timeline reshaping above.
-  const [wealthLeaders, topCorporations] = await Promise.all([
+  // concurrently, independent of the timeline reshaping above. The shadow
+  // evidence rides along: null on control runs, per-region nominal-vs-shadow
+  // rows on treatment runs.
+  const [wealthLeaders, topCorporations, realOutputShadow] = await Promise.all([
     collectWealthLeaders(db, parties),
     collectTopCorporations(db),
+    collectRealOutputShadowEvidence(db, finalMetrics.turn),
   ]);
 
   return {
@@ -518,5 +533,6 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
     wealthLeaders,
     topCorporations,
     finalMetrics,
+    realOutputShadow,
   };
 }

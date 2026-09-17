@@ -910,3 +910,242 @@ describe("runMetricEngine — P2/D7 plants-mode realized-revenue sector signal",
     expect(stateOps[0].updateOne.update.$set.sectorRealizedRevenueUnit).toBe("host");
   });
 });
+
+describe("runMetricEngine — issue #1470 real-output shadow turn integration", () => {
+  let db: MockDb;
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resetCorpFxRateCacheForTests();
+    db = createMockDb();
+  });
+
+  function setupCollection<T>(name: string, data: T[]) {
+    db.collection(name);
+    db.collectionMocks[name]!.find = vi.fn().mockReturnValue({
+      project: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue(data) }),
+      toArray: vi.fn().mockResolvedValue(data),
+    });
+  }
+
+  type ShadowState = {
+    id: string;
+    units?: number;
+    turn?: number;
+    growth?: number | null;
+  };
+
+  function seedShadowWorld(opts: {
+    shadowEnabled?: boolean;
+    states: ShadowState[];
+    producedByState: Record<string, number[]>;
+  }) {
+    setupCollection(
+      "states",
+      opts.states.map((s) => ({
+        _id: s.id,
+        name: s.id,
+        countryId: "US",
+        population: 100,
+        gdp: 1000,
+        ...(s.units !== undefined
+          ? {
+              sectorRealOutputUnits: s.units,
+              sectorRealOutputUnitsTurn: s.turn ?? 9,
+              ...(s.growth !== undefined ? { sectorRealOutputShadowGrowth: s.growth } : {}),
+            }
+          : {}),
+      }))
+    );
+    setupCollection(
+      "corporateSectors",
+      Object.entries(opts.producedByState).flatMap(([stateId, units], i) =>
+        units.map((producedUnits, j) => ({
+          _id: `sec-${stateId}-${i}-${j}`,
+          stateId,
+          revenue: 100,
+          currentGrowthRate: 1,
+          producedUnits,
+        }))
+      )
+    );
+    setupCollection("unownedSectors", []);
+    setupCollection("stateMetrics", []);
+    db.collectionMocks.macroMetrics = db.collectionMocks.stateMetrics!;
+    setupCollection("corporations", []);
+    setupCollection("exchangeRates", []);
+    setupCollection("federalBudget", [
+      { _id: "federal", countryId: "US", taxRates: { salesTax: 0 } },
+    ]);
+    setupCollection("stateBudgets", [{ _id: "s1", taxRates: { salesTax: 6 } }]);
+    // Always re-stub: a reseed without the flag must read flag-absent (off),
+    // never inherit a previous seed's stub on the shared mock db.
+    db.collection("gameConfig");
+    db.collectionMocks.gameConfig!.findOne = vi
+      .fn()
+      .mockResolvedValue(
+        opts.shadowEnabled === undefined
+          ? null
+          : { _id: "default", realOutputShadowEnabled: opts.shadowEnabled }
+      );
+  }
+
+  type StateOp = {
+    updateOne: {
+      filter: { _id: string };
+      update: { $set: Record<string, unknown>; $unset?: Record<string, unknown> };
+    };
+  };
+
+  async function runShadowTurn(): Promise<{
+    metricSets: Record<string, unknown>[];
+    stateOps: StateOp[];
+  }> {
+    const metricSets: Record<string, unknown>[] = [];
+    const stateOps: StateOp[] = [];
+    db.collectionMocks.stateMetrics!.bulkWrite = vi.fn().mockImplementation((o: StateOp[]) => {
+      // Drop lastUpdated (a wall-clock Date): cross-run equality below must
+      // compare turn-computed numbers, not timestamps.
+      for (const op of o) {
+        const { lastUpdated, ...rest } = op.updateOne.update.$set as Record<string, unknown> & {
+          lastUpdated?: unknown;
+        };
+        void lastUpdated;
+        metricSets.push(rest);
+      }
+      return Promise.resolve({ ok: 1 });
+    });
+    db.collectionMocks.states!.bulkWrite = vi.fn().mockImplementation((o: StateOp[]) => {
+      stateOps.push(...o);
+      return Promise.resolve({ ok: 1 });
+    });
+    await runMetricEngine(db as unknown as Db, 10);
+    return { metricSets, stateOps };
+  }
+
+  const SHADOW_KEYS = [
+    "sectorRealOutputUnits",
+    "sectorRealOutputUnitsTurn",
+    "sectorRealOutputShadowGrowth",
+  ];
+
+  it("writes no shadow fields with the flag absent (byte-identical writes)", async () => {
+    seedShadowWorld({ states: [{ id: "s1" }], producedByState: { s1: [450] } });
+    const { stateOps } = await runShadowTurn();
+    expect(stateOps).toHaveLength(1);
+    for (const key of SHADOW_KEYS) {
+      expect(stateOps[0].updateOne.update.$set).not.toHaveProperty(key);
+    }
+    expect(stateOps[0].updateOne.update.$unset ?? {}).toEqual(
+      expect.not.objectContaining({ sectorRealOutputUnits: expect.anything() })
+    );
+  });
+
+  it("explicit false matches flag-absent writes exactly", async () => {
+    seedShadowWorld({ states: [{ id: "s1" }], producedByState: { s1: [450] } });
+    const absent = await runShadowTurn();
+    // Reseed identically with the flag explicitly false (fresh mock db reads).
+    seedShadowWorld({
+      shadowEnabled: false,
+      states: [{ id: "s1" }],
+      producedByState: { s1: [450] },
+    });
+    const explicit = await runShadowTurn();
+    expect(explicit.stateOps).toEqual(absent.stateOps);
+    expect(explicit.metricSets).toEqual(absent.metricSets);
+  });
+
+  it("cold-starts the shadow baseline flag-on with no live-number change", async () => {
+    seedShadowWorld({
+      shadowEnabled: true,
+      states: [{ id: "s1" }],
+      producedByState: { s1: [300, 150] },
+    });
+    const { metricSets, stateOps } = await runShadowTurn();
+    const set = stateOps[0].updateOne.update.$set;
+    expect(set.sectorRealOutputUnits).toBe(450);
+    expect(set.sectorRealOutputUnitsTurn).toBe(10);
+    expect(set.sectorRealOutputShadowGrowth).toBeNull();
+
+    // Same world flag-off: live prints identical, shadow keys absent.
+    seedShadowWorld({ states: [{ id: "s1" }], producedByState: { s1: [300, 150] } });
+    const off = await runShadowTurn();
+    expect(off.metricSets).toEqual(metricSets);
+    const {
+      sectorRealOutputUnits,
+      sectorRealOutputUnitsTurn,
+      sectorRealOutputShadowGrowth,
+      ...liveSet
+    } = set as Record<string, unknown>;
+    expect(liveSet).toEqual(off.stateOps[0].updateOne.update.$set);
+    expect(sectorRealOutputUnits).toBe(450);
+    expect(sectorRealOutputUnitsTurn).toBe(10);
+    expect(sectorRealOutputShadowGrowth).toBeNull();
+  });
+
+  it("prints mature growth and rolls the baseline forward flag-on", async () => {
+    // 1000 -> 1010 over 4 turns = +1% x 12 = +12%/yr.
+    seedShadowWorld({
+      shadowEnabled: true,
+      states: [{ id: "s1", units: 1000, turn: 6, growth: 2 }],
+      producedByState: { s1: [1010] },
+    });
+    const { stateOps } = await runShadowTurn();
+    const set = stateOps[0].updateOne.update.$set;
+    expect(set.sectorRealOutputUnits).toBe(1010);
+    expect(set.sectorRealOutputUnitsTurn).toBe(10);
+    expect(set.sectorRealOutputShadowGrowth as number).toBeCloseTo(12, 10);
+  });
+
+  it("a same-turn retry keeps the printed growth (idempotent)", async () => {
+    // State already carries this turn's print: the retry must not recompute
+    // it to null.
+    seedShadowWorld({
+      shadowEnabled: true,
+      states: [{ id: "s1", units: 1010, turn: 10, growth: 12 }],
+      producedByState: { s1: [1010] },
+    });
+    const { stateOps } = await runShadowTurn();
+    const set = stateOps[0].updateOne.update.$set;
+    expect(set.sectorRealOutputUnits).toBe(1010);
+    expect(set.sectorRealOutputUnitsTurn).toBe(10);
+    expect(set.sectorRealOutputShadowGrowth).toBe(12);
+  });
+
+  it("issues no per-state reads: read counts do not grow with state count", async () => {
+    // Two states first: every collection read must stay batched (the states
+    // collection is read twice per turn at baseline — the phase batch plus
+    // the spending-provider batch — so the pin is constancy, not oneness).
+    seedShadowWorld({
+      shadowEnabled: true,
+      states: [{ id: "s1" }, { id: "s2" }],
+      producedByState: { s1: [400], s2: [600] },
+    });
+    const { stateOps } = await runShadowTurn();
+    expect(stateOps).toHaveLength(2);
+    const twoStateCounts = {
+      sectors: (db.collectionMocks.corporateSectors!.find as ReturnType<typeof vi.fn>).mock.calls
+        .length,
+      states: (db.collectionMocks.states!.find as ReturnType<typeof vi.fn>).mock.calls.length,
+      config: (db.collectionMocks.gameConfig!.findOne as ReturnType<typeof vi.fn>).mock.calls
+        .length,
+    };
+    // Same turn with one state: identical read counts (one gameConfig read
+    // serves the provider market mode and the phase labour/shadow gates).
+    seedShadowWorld({
+      shadowEnabled: true,
+      states: [{ id: "s1" }],
+      producedByState: { s1: [400] },
+    });
+    await runShadowTurn();
+    expect(
+      (db.collectionMocks.corporateSectors!.find as ReturnType<typeof vi.fn>).mock.calls.length
+    ).toBe(twoStateCounts.sectors);
+    expect((db.collectionMocks.states!.find as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      twoStateCounts.states
+    );
+    expect(
+      (db.collectionMocks.gameConfig!.findOne as ReturnType<typeof vi.fn>).mock.calls.length
+    ).toBe(twoStateCounts.config);
+    expect(twoStateCounts.config).toBe(2);
+  });
+});

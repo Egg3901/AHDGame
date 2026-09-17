@@ -16,12 +16,15 @@ import {
   advanceRevenueEma,
   getNeutralFederalSalesTaxRate,
   getNeutralStateSalesTaxRate,
+  resolveRealOutputShadowTurnWrite,
   selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
+  sumPhysicalOutputUnits,
   sumRealizedRevenue,
   updateRevenueSnapshots,
   type RevenueSnapshot,
 } from "@/lib/turn/gdpGrowth";
+import { isRealOutputShadowEnabled } from "@/lib/economy/realOutputShadow";
 import { evaluateRegistry } from "./evaluate";
 import { compoundGdpLevel } from "./gdpLevel";
 import { advanceCapitalStock, seedCapitalStock } from "./capitalStock";
@@ -286,7 +289,13 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     // medianIncome at labourSystemMode ≥ "macro".
     db
       .collection<GameConfig>("gameConfig")
-      .findOne({ _id: "default" }, { projection: { labourSystemMode: 1 } })
+      // One gameConfig read serves both gates: the labour mode and the
+      // issue-#1470 real-output shadow flag. Extending the projection (not a
+      // second read) keeps the phase inside its round-trip budget.
+      .findOne(
+        { _id: "default" },
+        { projection: { labourSystemMode: 1, realOutputShadowEnabled: 1 } }
+      )
       .catch(() => null),
     // Bridge A: 4 of the 6 TFP basket inputs live on demolished stateMetrics
     // categories, so playable regions resolved them all to TFP_REFERENCE_INPUTS
@@ -304,6 +313,10 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
   ]);
 
   const labourMacroEnabled = await isLabourMacroEnabled(labourConfig ?? null);
+  // Issue #1470 acceptance item 1: constant-price real-output shadow. Explicit
+  // `true` only (absent/false ⇒ off); resolved once per turn from the same
+  // gameConfig doc as the labour gate, never per state.
+  const realOutputShadowEnabled = isRealOutputShadowEnabled(labourConfig ?? null);
 
   // Resolve a country's prime rate: live central-bank doc → config default.
   const primeRateByBankId = new Map<string, number>();
@@ -360,7 +373,9 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
     updateOne: {
       filter: { _id: string };
       update: {
-        $set: Record<string, number | string | RevenueSnapshot[]>;
+        // `null` covers the shadow growth print while its baseline is
+        // immature (flag on only; flag off spreads nothing).
+        $set: Record<string, number | string | RevenueSnapshot[] | null>;
         $unset?: Record<string, "">;
       };
     };
@@ -525,6 +540,19 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
       trendActive && revenueEmaNow !== undefined
         ? updateRevenueSnapshots(priorSnapshots, turn, revenueEmaNow)
         : undefined;
+    // Issue #1470 shadow: per-state physical output from the provider-loaded
+    // sectors (already in memory — no per-state read), resolved through the
+    // cold-start/idempotent baseline. Null with the flag off so the $set
+    // spread below adds nothing and flag-off writes stay byte-identical.
+    const shadowWrite = resolveRealOutputShadowTurnWrite({
+      flagEnabled: realOutputShadowEnabled,
+      unitsNow: realOutputShadowEnabled ? sumPhysicalOutputUnits(ownedForState) : 0,
+      turn,
+      turnsPerYear: TURNS_PER_YEAR,
+      existingUnits: finite(state.sectorRealOutputUnits),
+      existingTurn: finite(state.sectorRealOutputUnitsTurn),
+      existingGrowth: state.sectorRealOutputShadowGrowth ?? undefined,
+    });
     const payload: SectorRevenueTaxPayload = {
       owned: ownedForState,
       plantsEnabled: sectorTax.plantsEnabled,
@@ -901,6 +929,16 @@ export async function runMetricEngine(db: Db, turn: number): Promise<number> {
             // a clean host-only series.
             ...(revenueEmaNow !== undefined ? { sectorRevenueEma: revenueEmaNow } : {}),
             ...(nextSnapshots !== undefined ? { sectorRevenueSnapshots: nextSnapshots } : {}),
+            // Issue #1470 shadow triple (flag on ONLY). Shadow-only: the live
+            // GDP, nominal sector signal, unemployment, inflation, approval,
+            // and tax writes above never read this. Flag off spreads nothing.
+            ...(shadowWrite
+              ? {
+                  sectorRealOutputUnits: shadowWrite.sectorRealOutputUnits,
+                  sectorRealOutputUnitsTurn: shadowWrite.sectorRealOutputUnitsTurn,
+                  sectorRealOutputShadowGrowth: shadowWrite.sectorRealOutputShadowGrowth,
+                }
+              : {}),
           },
           // Dropping below plants returns the stored one-turn baseline to the
           // legacy unit. Remove the host tag and trend state so a later flip
