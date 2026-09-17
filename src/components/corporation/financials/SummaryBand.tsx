@@ -7,7 +7,7 @@ import {
 } from "@/lib/constants/moneyTimescale";
 
 import { EstChip } from "../market/MarketPrimitives";
-import { corpIncomeBasis, netMarginPct, valuation } from "./financialsModel";
+import { cashAfterContracts, corpIncomeBasis, netMarginPct, valuation } from "./financialsModel";
 import type { CorporationDetail, Financials, BalanceSheet } from "../CorporationPageTypes";
 
 type View = "income_statement" | "balance_sheet";
@@ -116,6 +116,9 @@ export function SummaryBand({
     (Math.sign(totalIncome) !== Math.sign(financials.income) ||
       Math.abs(totalIncome - financials.income) > Math.max(1, Math.abs(totalIncome) * 0.1));
   const retained = basis.retained;
+  const contractCash = financials.supplyAgreementSettlementDaily ?? 0;
+  const cashAfter = cashAfterContracts(financials);
+  const contractsMaterial = Math.abs(contractCash) > 0;
 
   return (
     <div className="rounded-xl border border-card-border bg-background/60 p-4 space-y-4">
@@ -174,10 +177,15 @@ export function SummaryBand({
                 {val.ratio > 0 ? `${val.ratio.toFixed(2)}x` : "—"}
               </span>
             </Tile>
-            <Tile label="Retained / period">
-              <span className={retained >= 0 ? "text-foreground" : "text-error"}>
-                {fmt(period(retained))}
+            <Tile label={contractsMaterial ? "Cash after contracts" : "Retained / period"}>
+              <span className={cashAfter >= 0 ? "text-foreground" : "text-error"}>
+                {fmt(period(cashAfter))}
               </span>
+              {contractsMaterial ? (
+                <div className="text-[11px] font-normal tabular-nums text-muted">
+                  P&L retained {fmt(period(retained))}
+                </div>
+              ) : null}
             </Tile>
           </>
         ) : (

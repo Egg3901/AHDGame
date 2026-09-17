@@ -16,6 +16,7 @@ import { perTurnCouponPayment, BOND_UNIT_FACE_VALUE } from "@/lib/constants/bond
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { roundMarketingStrength } from "@/lib/utils/formatters";
+import { finitePriceChange } from "@/lib/stockExchange/listingEligibility";
 import { normalizeStatusBarLayout } from "@/lib/statusBar/clientStatusRequest";
 import { energyActionLimits } from "@/lib/stats/statDrift";
 import { STAT_MIN } from "@/lib/stats/statsConstants";
@@ -288,7 +289,7 @@ export async function GET(request: Request) {
           : [[], null];
         historyDocs.reverse();
         const priceChange1h = includeCorpMarket
-          ? (snapshotListing?.listings?.[0]?.priceChange1h ?? 0)
+          ? finitePriceChange(snapshotListing?.listings?.[0]?.priceChange1h)
           : 0;
         corpNav = {
           sequentialId: ceoCorp.sequentialId,
@@ -609,7 +610,7 @@ export async function GET(request: Request) {
         : [[], null];
       historyDocs.reverse();
       const priceChange1h = includeCorpMarket
-        ? (snapshotListing?.listings?.[0]?.priceChange1h ?? 0)
+        ? finitePriceChange(snapshotListing?.listings?.[0]?.priceChange1h)
         : 0;
       corpNav = {
         sequentialId: ceoCorp.sequentialId,

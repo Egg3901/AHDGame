@@ -109,8 +109,11 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     //    always meant to compose with, not race, the policy recompute).
     // Write mechanics ($set vs $inc) are deliberately unchanged in this fix.
     const serializedStateMetricsWriters = (async () => {
+      // Pass the authoritative turn-context year: the persisted
+      // gameState.currentYear is only stamped at turn end, so reloading it
+      // inside would gate year-boundary openings one turn late (#2059).
       const crisisResult = await runtime.runPhase("crisisTurn", () =>
-        processCrisisTurn(db, newTurn)
+        processCrisisTurn(db, newTurn, currentYear)
       );
       // Intelligence upkeep resolves before navair, so a later phase's sabotage
       // lands on the dispositions this turn actually fights on. Note the honest
@@ -337,7 +340,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // to be counted. No-op for every preset whose apportionment map already
     // carries Alaska and Hawaii (1979 onward).
     const statehoodResult = await runtime.runPhase("statehood", () =>
-      runStatehoodAdmission(db, newTurn)
+      runStatehoodAdmission(db, newTurn, currentYear)
     );
     phaseResults.statehood = {
       ran: statehoodResult?.ran ?? false,
@@ -349,7 +352,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // reapportions US House seats from the now-updated populations; no-op
     // otherwise. Runs after demographicFlows (reads state.population) and
     // before elections consume the new state.houseDistricts.
-    const censusResult = await runtime.runPhase("census", () => runCensus(db, newTurn));
+    const censusResult = await runtime.runPhase("census", () =>
+      runCensus(db, newTurn, currentYear)
+    );
     phaseResults.census = {
       ran: censusResult?.ran ?? false,
       ...(censusResult?.year !== undefined ? { year: censusResult.year } : {}),
@@ -361,7 +366,9 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // the decade rolls over once, both fire). Whole phase is gated on
     // eraSystemEnabled; on mid-decade enable it self-heals the marker
     // quietly (healed: true, no news).
-    const eraCrossingResult = await runtime.runPhase("eraCrossing", () => runEraCrossing(db));
+    const eraCrossingResult = await runtime.runPhase("eraCrossing", () =>
+      runEraCrossing(db, currentYear)
+    );
     phaseResults.eraCrossing = {
       ran: eraCrossingResult?.ran ?? false,
       ...(eraCrossingResult?.eraId ? { eraId: eraCrossingResult.eraId } : {}),
@@ -372,7 +379,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // news-channel webhook when the live year crosses a metric's window.
     // Flag-gated inside; quiet self-heal on first flag-on run (no burst).
     const metricActivationResult = await runtime.runPhase("metricActivation", () =>
-      runMetricActivation(db)
+      runMetricActivation(db, currentYear)
     );
     phaseResults.metricActivation = {
       posted: metricActivationResult?.posted.length ?? 0,
@@ -384,7 +391,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // data exists; news is gated on eraSystemEnabled inside. First run
     // self-heals quietly (no news burst).
     const cabinetYearResult = await runtime.runPhase("cabinetYearCrossing", () =>
-      runCabinetYearCrossing(db)
+      runCabinetYearCrossing(db, currentYear)
     );
     phaseResults.cabinetYearCrossing = {
       ran: cabinetYearResult?.ran ?? false,
@@ -399,7 +406,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
     // never gets an army at all. First run stands up active-but-empty branches
     // silently; later runs post one item per service raised.
     const militaryBranchResult = await runtime.runPhase("militaryBranchYearCrossing", () =>
-      runMilitaryBranchYearCrossing(db)
+      runMilitaryBranchYearCrossing(db, currentYear)
     );
     phaseResults.militaryBranchYearCrossing = {
       ran: militaryBranchResult?.ran ?? false,

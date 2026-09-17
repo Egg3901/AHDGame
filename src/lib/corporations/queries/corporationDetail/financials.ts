@@ -45,7 +45,13 @@ export interface FinancialsInputs {
   sectors: CorporateSector[];
   income: IncomeStatementResult;
   totals: SectorFinancialTotals;
-  portfolio: Pick<PortfolioHoldings, "latestCorpIncomeRow" | "dividendIncomeReceivedDaily">;
+  portfolio: Pick<
+    PortfolioHoldings,
+    | "latestCorpIncomeRow"
+    | "dividendIncomeReceivedDaily"
+    | "supplyAgreementSettlementDaily"
+    | "supplyAgreementUnpaidAnchor"
+  >;
   activeFloorPct: number;
   realizedGrowthRate: number | null;
 }
@@ -106,6 +112,8 @@ export function buildFinancials(inputs: FinancialsInputs) {
     governmentBondSubsidy: Math.round(inc.governmentBondSubsidyLocal),
     imfFacilityPaymentDaily: Math.round(inc.imfFacilityPaymentDailyLocal),
     imfFacilityReceiptsDaily: Math.round(inc.imfFacilityReceiptsDailyLocal),
+    supplyAgreementSettlementDaily: portfolio.supplyAgreementSettlementDaily,
+    supplyAgreementUnpaidAnchor: portfolio.supplyAgreementUnpaidAnchor,
     totalCosts: Math.round(inc.totalCostsLocal),
     income: Math.round(inc.income),
     // A bank's cash is ring-fenced, so its realized earnings are reported as

@@ -1,3 +1,9 @@
+/** Bulk sector operations apply CEO policies to a country or sector group, with optional cost previews. */
+import { isLabourWagesEnabled, isLabourUnionsEnabled } from "@/lib/labour/featureFlag";
+import { loadCollectiveAgreementEffects } from "@/lib/unions/collectiveAgreementEffects";
+import { estimateWageChange } from "@/lib/corporations/rules/bulkWagePreview";
+import { loadValuationFxRates } from "@/lib/currency/corporationCapital";
+import { buildSectorCurrencyRestatement } from "@/lib/corporations/queries/corporationDetail/currencyRestatement";
 import { NextResponse } from "next/server";
 import type { AnyBulkWriteOperation } from "mongodb";
 import { getDb } from "@/lib/mongodb";
@@ -52,7 +58,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
     const body = parsed.data;
     const { countryId, sectorType, targetGrowthRate, preview } = body;
     const productionPolicy = body.productionPolicy; // pragma: allowlist secret
-    const { pricingPosture } = body;
+    const { pricingPosture, wageLevel } = body;
 
     const db = await getDb();
     const corpGuard = await requireCorporationActionsEnabled(db);
@@ -64,6 +70,10 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
 
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
+
+    if (wageLevel !== undefined && !(await isLabourWagesEnabled())) {
+      return NextResponse.json({ error: "The labour system is not enabled." }, { status: 403 });
+    }
 
     const bulkMode =
       pricingPosture !== undefined || targetGrowthRate !== undefined
@@ -175,6 +185,47 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       };
     }
 
+    let wages:
+      | {
+          wageLevel: number;
+          currentTotalCostPerTurn: number;
+          projectedTotalCostPerTurn: number;
+          costDeltaPerTurn: number;
+          missingCostCount: number;
+          protectedCount: number;
+        }
+      | undefined;
+    if (wageLevel !== undefined) {
+      const floors = (await isLabourUnionsEnabled())
+        ? (await loadCollectiveAgreementEffects(db, await getCurrentTurn(db))).wageFloorBySectorId
+        : new Map<string, number>();
+      const fx = await loadValuationFxRates(db);
+      const { toCorpCurrency } = buildSectorCurrencyRestatement(corporation, fx);
+      let current = 0,
+        projected = 0,
+        missingCostCount = 0,
+        protectedCount = 0;
+      for (const sector of sectors) {
+        const floor = floors.get(sector._id.toString()) ?? 0;
+        if (floor > wageLevel) protectedCount++;
+        const estimate = estimateWageChange(sector.laborCost, sector.wageLevel, wageLevel, floor);
+        if (!estimate) {
+          missingCostCount++;
+          continue;
+        }
+        current += toCorpCurrency(estimate.current, sector);
+        projected += toCorpCurrency(estimate.projected, sector);
+      }
+      wages = {
+        wageLevel,
+        currentTotalCostPerTurn: current,
+        projectedTotalCostPerTurn: projected,
+        costDeltaPerTurn: projected - current,
+        missingCostCount,
+        protectedCount,
+      };
+    }
+
     const stateIds = sectors.map((s) => s.stateId);
 
     if (preview) {
@@ -184,6 +235,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
         matchedCount: sectors.length,
         stateIds,
         ...(growthBlock ? { growth: growthBlock } : {}),
+        ...(wages ? { wages } : {}),
         ...(clampedPolicy !== undefined ? { production: { productionPolicy: clampedPolicy } } : {}),
         ...(clampedPosture !== undefined ? { pricing: { pricingPosture: clampedPosture } } : {}),
       });
@@ -196,6 +248,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
         set.targetGrowthRate = targetGrowthRate;
         set.currentGrowthCost = persistedCostBySector.get(s._id.toString());
       }
+      if (wageLevel !== undefined) set.wageLevel = wageLevel;
       if (clampedPolicy !== undefined) set.productionPolicy = clampedPolicy;
       if (clampedPosture !== undefined) set.pricingPosture = clampedPosture;
       return { updateOne: { filter: { _id: s._id }, update: { $set: set } } };
@@ -204,6 +257,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
 
     const typeLabel = sectorType ? CORPORATION_TYPE_LABELS[sectorType] : "all sectors";
     const parts: string[] = [];
+    if (wageLevel !== undefined) parts.push(`wages ${wageLevel}x`);
     if (targetGrowthRate !== undefined) parts.push(`growth ${targetGrowthRate}%`);
     if (clampedPolicy !== undefined) parts.push(`production ${clampedPolicy}`);
     if (clampedPosture !== undefined) {
@@ -233,6 +287,7 @@ export async function bulkSetSectorOperations(request: Request, { params }: Rout
       matchedCount: sectors.length,
       stateIds,
       ...(growthBlock ? { growth: growthBlock } : {}),
+      ...(wages ? { wages } : {}),
       ...(clampedPolicy !== undefined ? { production: { productionPolicy: clampedPolicy } } : {}),
       ...(clampedPosture !== undefined ? { pricing: { pricingPosture: clampedPosture } } : {}),
     });

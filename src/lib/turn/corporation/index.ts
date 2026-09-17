@@ -84,6 +84,10 @@ import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
 import { processNationalizationAuctions } from "@/lib/nationalization/privatizationAuction";
 import { processNppCorporationDecisions } from "@/lib/turn/nppCorporationBehavior";
+import {
+  buildTechUnlockFlushAudit,
+  flushNppTechUnlockLedger,
+} from "@/lib/corporations/techTree/techUnlockLedger";
 import { processNppSupplyAgreements } from "@/lib/turn/npp/nppSupplyAgreements";
 import { processNppProspecting } from "@/lib/turn/npp/nppProspecting";
 import { processNppCorpTreasury } from "@/lib/turn/npp/nppCorpTreasury";
@@ -1090,6 +1094,7 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     sectorUpdates: nppSectorUpdates,
     newSectors: nppNewSectors,
     divestedSectorIds: nppDivestedSectorIds,
+    techLedger: nppTechLedger,
   } = await processNppCorporationDecisions(db, turn ?? 0, now, techTreesEnabled);
   mark("nppCorpDecisions");
 
@@ -1175,6 +1180,13 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
     // bulkWrite op array type doesn't satisfy AnyBulkWriteOperation narrowing, runtime shape is valid
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.collection("corporations").bulkWrite(corpOps as any[]);
+  }
+  // Emit only for NPP unlocks proven applied above; the flush dedupes and
+  // refunds any debit whose ledger row cannot be persisted (ticket #1998).
+  if (nppTechLedger.length > 0) {
+    const techFlush = await flushNppTechUnlockLedger(db, nppTechLedger);
+    const techAudit = buildTechUnlockFlushAudit(techFlush);
+    if (techAudit) corpAuditEntries.push(techAudit);
   }
   // One read plus one bulk write, instead of two serial round trips per
   // accrual against a collection holding one document per currency. Missing
