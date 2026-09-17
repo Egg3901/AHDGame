@@ -44,6 +44,79 @@ export const resolveCorpName = async (db: Db, id: ObjectId): Promise<string> => 
 };
 
 /**
+ * Credit a liquidity-provider fund's `cashAnchor` for a filled fund sell
+ * order and evidence it with the single fund-subject `stock_trade_sell`
+ * ledger row. Extracted from fillShareOrder so both seller-leg sites (the
+ * corporation-buyer and character-buyer fills) share one committed-path-only
+ * implementation: the row is emitted after the cash credit lands, so a fill
+ * that fails before the credit emits nothing, and a committed fill emits
+ * exactly one row. Fund-subject rows never mirror, so this is the only
+ * ledger row for the credit (the contra is the buyer's shares, an asset
+ * account the shadow ledger does not carry).
+ */
+export async function creditSellerFundProceeds(args: {
+  db: Db;
+  fundId: ObjectId;
+  fundName: string;
+  fundAnchorCurrency: CurrencyCode;
+  /** Fill proceeds in anchor (₳): `shares × order.pricePerShare` converted once. */
+  total: number;
+  buyer: {
+    type: "corporation" | "character";
+    id: ObjectId;
+    name: string;
+  };
+  corporationId: ObjectId;
+  orderId: ObjectId;
+  shares: number;
+  pricePerShare: number;
+  currentTurn: number;
+  now: Date;
+}): Promise<void> {
+  const {
+    db,
+    fundId,
+    fundName,
+    fundAnchorCurrency,
+    total,
+    buyer,
+    corporationId,
+    orderId,
+    shares,
+    pricePerShare,
+    currentTurn,
+    now,
+  } = args;
+  const cashCredit = await db
+    .collection("indexFunds")
+    .updateOne({ _id: fundId }, { $inc: { cashAnchor: total }, $set: { updatedAt: now } });
+  if (cashCredit.matchedCount === 0) {
+    throw new Error("Liquidity-provider fund disappeared during settlement");
+  }
+  await emitTx(db, {
+    type: "stock_trade_sell",
+    turn: currentTurn,
+    createdAt: now,
+    subjectType: "fund",
+    subjectId: fundId,
+    subjectName: fundName,
+    amount: total,
+    anchorAmount: total,
+    currencyCode: fundAnchorCurrency,
+    counterpartyType: buyer.type,
+    counterpartyId: buyer.id,
+    counterpartyName: buyer.name,
+    meta: {
+      corporationId: corporationId.toString(),
+      orderId: orderId.toString(),
+      shares,
+      pricePerShare,
+      source: "order_fill_sell_order",
+    },
+  });
+}
+
+/**
  * Settle a fill against a BUY order — the filler is selling; the buyer's
  * money is already in escrow. Transfers shares from the filler to the buyer
  * (fund, corp, or character) and releases escrow to the filler, with full
@@ -121,6 +194,17 @@ export async function settleBuyOrderFill(args: {
     };
 
     if (order.placerFundId) {
+      // #992 audit: a buy-order fill moves NO fund cash. The fund's cashAnchor
+      // was debited up front at placement — placeFundShareBuyOrder holds the
+      // full anchor escrow on the order as escrowAnchor, and the peer-fill
+      // claim (in fillShareOrder / fillBestBuyOrderForMarketSell) only
+      // decrements the order's escrowAmount/escrowAnchor. The filler here is
+      // paid out of that already-moved escrow, and the fund side of this fill
+      // is shares in. So the only ledger row below is the filler's
+      // stock_trade_sell (counterparty system / the fund name) — there is
+      // deliberately no fund-subject row at fill. Proven by the
+      // no-fund-cash-movement characterization test in
+      // fillShareOrderSettlement.test.ts.
       const remaining = await debitFillerShares();
       if (remaining < 0) {
         await restoreClaimedOrder();

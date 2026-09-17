@@ -72,9 +72,7 @@ export async function sellFundBondHoldingsForCash(
 
   // One thresholds read for the whole sale pass; every row below shares it.
   const thresholds =
-    options?.turn !== undefined
-      ? (options?.thresholds ?? (await loadTxThresholds(db)))
-      : undefined;
+    options?.turn !== undefined ? (options?.thresholds ?? (await loadTxThresholds(db))) : undefined;
 
   let remainingAnchor = neededAnchor;
   for (const { bond, units: held } of positions) {
