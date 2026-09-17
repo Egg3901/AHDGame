@@ -12,6 +12,7 @@ import { processSubsidyBudget } from "@/lib/turn/subsidyBudgetTurn";
 import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { checkFederalBudgetInvariants } from "@/lib/budget/budgetInvariants";
 import { resetCorpFxRateCacheForTests } from "@/lib/currency/corporationCapital";
+import type { FederalBudget } from "@/lib/db/types/budget";
 import {
   getInitialNationalBudgetsForPreset,
   generateDefaultEnactedLaws,
@@ -201,7 +202,9 @@ function makeFakeDb(seed: Record<string, Doc[]>): Db {
       countDocuments: async (filter: Doc = {}) => docs.filter((d) => matches(d, filter)).length,
     };
   };
-  return { collection: ((name: string) => coll(name)) as Db["collection"] } as unknown as Db;
+  return {
+    collection: ((name: string) => coll(name)) as unknown as Db["collection"],
+  } as unknown as Db;
 }
 
 describe("fiscalBaseGrowth surplus seam (#1975)", () => {
@@ -245,7 +248,9 @@ describe("fiscalBaseGrowth surplus seam (#1975)", () => {
     const { getDb } = await import("@/lib/mongodb");
     vi.mocked(getDb).mockResolvedValue(db);
 
-    const initial = (await db.collection("federalBudget").findOne({ _id: "GR" })) as unknown as {
+    const initial = (await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: "GR" })) as unknown as {
       revenue: { total: number };
     };
     const initialRevenue = initial.revenue.total;
@@ -254,7 +259,9 @@ describe("fiscalBaseGrowth surplus seam (#1975)", () => {
       await refreshNationalBudgetRevenue(db);
       await processSubsidyBudget(db);
       await processFiscalBaseGrowth(turn);
-      const doc = (await db.collection("federalBudget").findOne({ _id: "GR" })) as unknown as {
+      const doc = (await db
+        .collection<FederalBudget>("federalBudget")
+        .findOne({ _id: "GR" })) as unknown as {
         revenue: { total: number };
         spending: { total: number };
         surplus: number;
@@ -262,7 +269,9 @@ describe("fiscalBaseGrowth surplus seam (#1975)", () => {
       expect(checkFederalBudgetInvariants(doc)).toEqual([]);
       expect(doc.surplus).toBe(doc.revenue.total - doc.spending.total);
     }
-    const final = (await db.collection("federalBudget").findOne({ _id: "GR" })) as unknown as {
+    const final = (await db
+      .collection<FederalBudget>("federalBudget")
+      .findOne({ _id: "GR" })) as unknown as {
       revenue: { total: number };
     };
     // Growth still occurs: revenue moves up off the 1953 seed.
