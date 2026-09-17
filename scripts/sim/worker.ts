@@ -30,7 +30,8 @@ import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
-import { assertSafeToken, buildRunWorldArgs } from "./simJobArgs";
+import { assertSafeToken } from "./simJobArgs";
+import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
 const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
@@ -112,6 +113,13 @@ interface SimJob {
   /** Clone the LIVE world into the sandbox db first, then run --clone-mode.
    * Quick before/after validation of deployed code on real state. */
   cloneFromLive?: boolean;
+  /** Pinned source revision (issue #1966). Both set or both absent; when set,
+   * runWorld executes from the verified worktree at exactly this commit. */
+  sourceWorktree?: string;
+  sourceCommit?: string;
+  /** Executed source identity, stamped by the worker after verification. */
+  sourceRepoDir?: string;
+  sourceCommitVerified?: string;
   createdAt: Date;
   updatedAt: Date;
   workerStartedAt?: Date;
@@ -153,11 +161,12 @@ const NPX_PATH = join(dirname(process.execPath), "npx");
 function run(
   script: string,
   args: string[],
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  cwd: string = GAME_REPO_DIR
 ): Promise<{ code: number | null }> {
   return new Promise((resolve, reject) => {
     const child = spawn(NPX_PATH, ["tsx", script, ...args], {
-      cwd: GAME_REPO_DIR,
+      cwd,
       env,
       stdio: "inherit",
     });
@@ -212,6 +221,22 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
   if (!Number.isInteger(job.turns) || job.turns <= 0 || job.turns > 5000) {
     throw new Error(`Job turns must be a positive integer <= 5000, got ${job.turns}`);
   }
+  // Pinned source (#1966): fail fast on an invalid pin before any clone or
+  // spawn work. Read-only git checks only - the worker never fetches,
+  // checks out, resets, or otherwise mutates the shared worktree.
+  const verifiedSource = verifySimSource(job, defaultSimSourceDeps());
+  if (verifiedSource) {
+    await jobsCol.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          sourceRepoDir: verifiedSource.repoDir,
+          sourceCommitVerified: verifiedSource.commit,
+          updatedAt: new Date(),
+        },
+      }
+    );
+  }
 
   log(`Claimed job ${job._id} (preset=${job.preset}, turns=${job.turns}, db=${job.dbName})`);
 
@@ -256,18 +281,36 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       }
       log(`Clone complete; running ${job.turns} turn(s) in clone mode`);
     }
-    const runWorldArgs = [
-      `--seed=${job.seed}`,
-      `--preset=${job.preset}`,
-      `--turns=${job.turns}`,
-      `--db=${job.dbName}`,
-      `--run-id=${job._id}`,
-      ...(job.cloneFromLive ? ["--clone-mode"] : []),
-      // Conditional experiment overrides (see simJobArgs.ts). Explicit true
-      // AND false are both emitted so control arms stay explicit.
-      ...buildRunWorldArgs(job),
-    ];
-    const { code } = await run("scripts/sim/runWorld.ts", runWorldArgs, runWorldEnv);
+    // Re-verify immediately before spawn: the worktree is shared, so HEAD
+    // may have moved or dirtied since the claim-time check. Fail closed.
+    const spawnSource = verifySimSource(job, defaultSimSourceDeps());
+    if (verifiedSource && (!spawnSource || spawnSource.commit !== verifiedSource.commit)) {
+      throw new Error(
+        `Pinned source moved between validation and spawn for job ${job._id} - refusing to run`
+      );
+    }
+    const spawnPlan = planRunWorldSpawn(
+      job,
+      [
+        `--seed=${job.seed}`,
+        `--preset=${job.preset}`,
+        `--turns=${job.turns}`,
+        `--db=${job.dbName}`,
+        `--run-id=${job._id}`,
+        ...(job.cloneFromLive ? ["--clone-mode"] : []),
+      ],
+      GAME_REPO_DIR,
+      spawnSource
+    );
+    if (spawnSource) {
+      log(`Running from pinned source ${spawnSource.repoDir} @ ${spawnSource.commit}`);
+    }
+    const { code } = await run(
+      "scripts/sim/runWorld.ts",
+      spawnPlan.args,
+      runWorldEnv,
+      spawnPlan.cwd
+    );
 
     clearInterval(statusMirror);
     await mirrorSandboxStatus(jobsCol, job);

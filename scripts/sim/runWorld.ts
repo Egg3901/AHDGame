@@ -65,6 +65,14 @@ interface SimRunDoc {
   error: string | null;
   lastMessage?: string;
   lastWarnings?: string[];
+  /** Pinned-source identity (#1966): requested pin plus the exact code that
+   * executed this run. Proves the SHA in the experiment report. */
+  source?: {
+    worktree?: string | null;
+    requestedCommit?: string | null;
+    executedPath: string;
+    executedCommit?: string | null;
+  };
   // Elections-only run metadata (sim-only).
   simTurnPhaseMode?: "full" | "elections-only" | "economy-only" | "macro-only";
   electionScope?: string[] | null;
@@ -319,6 +327,19 @@ const isColdWarPreset = preset === "1953-default" || preset === "1979-default";
 const inSimScope = (countryId: string) =>
   (isColdWarPreset || SIM_HARNESS_COUNTRIES.has(countryId)) &&
   (!electionScope || electionScope.has(countryId));
+/** Pinned source requested by the worker (#1966). The child re-checks HEAD
+ * itself and fails closed on mismatch, so the report proves executed code. */
+const sourceWorktree = arg("source-worktree");
+const sourceCommit = arg("source-commit");
+if ((sourceWorktree === undefined) !== (sourceCommit === undefined)) {
+  throw new Error("--source-worktree and --source-commit must both be set (got only one)");
+}
+if (sourceCommit !== undefined && !/^[0-9a-f]{40}$/.test(sourceCommit)) {
+  throw new Error(
+    `--source-commit must be a full 40-hex commit SHA (got ${JSON.stringify(sourceCommit)})`
+  );
+}
+
 const dbName = arg("db") ?? `ahd_sim_${seed}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 const checkpointEvery = Number(arg("checkpoint-every") ?? "10");
 const runId = arg("run-id") ?? `${seed}-${dbName}`;
@@ -391,6 +412,35 @@ async function main() {
   const { snapshotCorporationsByCountry } = await import("@/lib/turn/corporationCountrySnapshot");
 
   const db = await getDb();
+
+  // Executed source identity (#1966): this process's own cwd + git HEAD.
+  // Best-effort SHA, but fails closed when a pin was requested and disagrees,
+  // so the report always proves the exact code that ran. Stamped into simRuns
+  // on every upsert below.
+  const { execFileSync } = await import("child_process");
+  const executedPath = process.cwd();
+  let executedCommit: string | null = null;
+  try {
+    executedCommit = (
+      execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: executedPath,
+        encoding: "utf8",
+      }) as string
+    ).trim();
+  } catch {
+    executedCommit = null;
+  }
+  if (sourceCommit !== undefined && executedCommit !== null && executedCommit !== sourceCommit) {
+    throw new Error(
+      `Pinned source mismatch: requested ${sourceCommit} but executing ${executedCommit} in ${executedPath}`
+    );
+  }
+  const source: NonNullable<SimRunDoc["source"]> = {
+    worktree: sourceWorktree ?? null,
+    requestedCommit: sourceCommit ?? null,
+    executedPath,
+    executedCommit,
+  };
 
   // Guardrail: refuse to run against a DB that looks like a real world — a
   // misconfigured SIM_MONGODB_URI/--db combo would otherwise get bulldozed by
@@ -669,6 +719,7 @@ async function main() {
           status: "running",
           currentTurn: 0,
           error: null,
+          source,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
@@ -688,6 +739,7 @@ async function main() {
         $set: {
           status: "running",
           error: null,
+          source,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
