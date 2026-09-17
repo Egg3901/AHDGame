@@ -1,0 +1,62 @@
+// GET /api/admin/players/[userId]/identity-history — paged IP / fingerprint runs
+// Auth: requireModerator (moderators see masked IPs; admins see raw)
+// Query: ?track=ip|fingerprint (required), ?page (default 1)
+// Errors: 400, 403
+import { NextResponse } from "next/server";
+import { ObjectId } from "mongodb";
+import { z } from "zod";
+import { getDb } from "@/lib/mongodb";
+import { requireModerator } from "@/lib/api/requireModerator";
+import { handleRouteError } from "@/lib/api/errors";
+import { schemas } from "@/lib/api/validate";
+import { loadIdentityHistory } from "@/lib/identityHistory/loadHistory";
+
+interface RouteParams {
+  params: Promise<{ userId: string }>;
+}
+
+const querySchema = z.object({
+  track: z.enum(["ip", "fingerprint"]),
+  // `.catch(1)` rather than a hard failure: a bad page number is a navigation
+  // artefact, not an attack, and falling back to the first page is friendlier
+  // than a 400. An unknown `track` DOES fail, because guessing a track would
+  // silently show a moderator the wrong evidence.
+  page: z.coerce.number().int().positive().catch(1),
+});
+
+export async function GET(request: Request, { params }: RouteParams) {
+  try {
+    const auth = await requireModerator();
+    if (!auth.ok) return auth.response;
+
+    const { userId: userIdParam } = await params;
+    const parsedId = schemas.objectId.safeParse(userIdParam);
+    if (!parsedId.success) {
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const parsedQuery = querySchema.safeParse({
+      track: searchParams.get("track"),
+      page: searchParams.get("page") ?? 1,
+    });
+    if (!parsedQuery.success) {
+      return NextResponse.json({ error: "Invalid track" }, { status: 400 });
+    }
+
+    const db = await getDb();
+    const result = await loadIdentityHistory(
+      db,
+      new ObjectId(parsedId.data),
+      parsedQuery.data.track,
+      parsedQuery.data.page,
+      // Derived from the authenticated role only. A moderator must never be
+      // able to widen this from the request.
+      { revealNetwork: auth.user.isAdmin === true }
+    );
+
+    return NextResponse.json(result);
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
