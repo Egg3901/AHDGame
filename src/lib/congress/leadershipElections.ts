@@ -781,9 +781,11 @@ export async function vacateLeadershipForLostSeats(db: Db): Promise<number> {
 
   const leaderRoleToDoc = new Map(leaderDocs.map((d) => [d.role, d]));
 
-  // Only the seat rows of the thirteen people in question. This runs every
-  // turn, and reading every official of every chamber to answer that would be
-  // thousands of documents an hour — CN alone seats ~2,980 delegates.
+  // Only the seat rows of the thirteen people in question. This runs every turn
+  // now, so reading every official of all four chambers to answer it (264 rows
+  // on live today, unprojected, and unbounded as the world grows) is work worth
+  // not doing hourly. Note a row can carry many seats — CN's 14 npcDelegate rows
+  // stand for ~2,980 delegates — so row counts understate what a scan reads.
   // `nppId` is checked too: an NPP-held chair stores the NPP id in
   // `congressLeaders.characterId`, and its seat row keys that id under `nppId`.
   const seatedByChamber = new Map<string, Set<string>>();
