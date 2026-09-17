@@ -12,6 +12,7 @@
 // Incident response scripts (heal-*, inspect-*, audit-*, fix-*) live in
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
+import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -247,6 +248,7 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1269: persisted sovereign fields must follow the current debt/GDP
   // ladder after historical seed anchors stop rescaling live risk.
   repriceCurrentSovereignRisk,
+  supplyListingIndexes,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
