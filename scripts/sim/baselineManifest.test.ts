@@ -435,3 +435,64 @@ describe("legacy weak markers", () => {
     expect(() => db.claim("snap1")).toThrow(/identity mismatch/);
   });
 });
+
+describe("canonicalization across driver forms (review #1968)", () => {
+  it("hashes non-finite numbers and -0 identically across native, BSON, and EJSON forms", () => {
+    for (const raw of ["NaN", "Infinity", "-Infinity"]) {
+      const ejson = stableStringifyBaseline({ n: { $numberDouble: raw } });
+      expect(stableStringifyBaseline({ n: Number(raw) })).toBe(ejson);
+      expect(stableStringifyBaseline({ n: { _bsontype: "Double", toString: () => raw } })).toBe(
+        ejson
+      );
+    }
+    expect(stableStringifyBaseline({ n: { $numberDouble: "-0" } })).toBe(
+      stableStringifyBaseline({ n: -0 })
+    );
+    expect(stableStringifyBaseline({ n: { _bsontype: "Decimal128", toString: () => "NaN" } })).toBe(
+      stableStringifyBaseline({ n: NaN })
+    );
+  });
+
+  it("tags native RegExp by source+flags instead of conflating with {}", () => {
+    expect(stableStringifyBaseline({ r: /abc/i })).toBe(
+      stableStringifyBaseline({ r: { _bsontype: "BSONRegExp", pattern: "abc", options: "i" } })
+    );
+    expect(stableStringifyBaseline({ r: /abc/i })).not.toBe(stableStringifyBaseline({ r: /xyz/ }));
+    expect(stableStringifyBaseline({ r: /abc/i })).not.toBe(stableStringifyBaseline({ r: {} }));
+  });
+
+  it("distinguishes Binary subtypes while keeping Buffer == subtype-0 == EJSON 00", () => {
+    const hello = Buffer.from("hello");
+    const b64 = hello.toString("base64");
+    // Same bytes, generic binary: all three forms agree.
+    expect(
+      stableStringifyBaseline({ b: { _bsontype: "Binary", buffer: hello, sub_type: 0 } })
+    ).toBe(stableStringifyBaseline({ b: hello }));
+    expect(stableStringifyBaseline({ b: { $binary: { base64: b64, subType: "00" } } })).toBe(
+      stableStringifyBaseline({ b: hello })
+    );
+    // UUID bytes (subtype 4) never conflate with generic binary.
+    expect(
+      stableStringifyBaseline({ b: { _bsontype: "Binary", buffer: hello, sub_type: 4 } })
+    ).not.toBe(stableStringifyBaseline({ b: hello }));
+    // EJSON hex subtype agrees with the driver integer subtype.
+    expect(stableStringifyBaseline({ b: { $binary: { base64: b64, subType: "04" } } })).toBe(
+      stableStringifyBaseline({ b: { _bsontype: "Binary", buffer: hello, sub_type: 4 } })
+    );
+  });
+
+  it("refuses a legacy-marker recapture with upgrade guidance (not resume guidance)", () => {
+    expect(() =>
+      resolveBaselineCapture({ _id: "legacy", sourceTurn: 3, docCount: 9, stateHash: "x" }, "cap-X")
+    ).toThrow(/legacy weak seal.*re-stamp/);
+  });
+
+  it("names an unknown capture holder instead of printing undefined", () => {
+    expect(() => resolveBaselineCapture({ _id: "b", status: "capturing" }, "cap-X")).toThrow(
+      /an unknown holder/
+    );
+    expect(() => readSealedBaselineManifest({ _id: "b", status: "capturing" }, "b")).toThrow(
+      /an unknown holder/
+    );
+  });
+});

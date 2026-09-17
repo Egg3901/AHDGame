@@ -14,8 +14,9 @@
  *   copy and seal can never disagree on what "the snapshot" is.
  * - Stability: objects hash with sorted keys, documents hash sorted within
  *   each collection, collections sort by name, and BSON extras canonicalize
- *   (Date/ObjectId/Binary/Long/Decimal/Timestamp/etc. by value, including
- *   EJSON forms), so key order, doc order, collection order, and driver
+ *   (Date/ObjectId/Binary+subtype/Long/Decimal/Timestamp/RegExp/etc. by value,
+ *   non-finite numbers kind-agnostically, including EJSON forms), so key order,
+ *   doc order, collection order, and driver
  *   representation never count as drift.
  * - Diagnosis: per-collection {name, count, hash} plus one overall versioned
  *   digest. Claim and post-copy checks report exactly which collection
@@ -139,11 +140,41 @@ function hexOfBytes(bytes: Uint8Array): string {
 /** Canonical scalar tag for one BSON numeric value held as a decimal string. */
 function canonicalNumberToken(raw: string, kind: string): string {
   const n = Number(raw);
+  // Non-finite values and -0 carry no kind-distinguishing payload worth
+  // keeping: Double(NaN), Decimal128(NaN), and EJSON $numberDouble "NaN" are
+  // the same logical value as native NaN (likewise infinities and -0), so
+  // they share one kind-agnostic tag and never read as drift across forms.
+  if (Object.is(n, -0)) return "number:0";
+  if (Number.isNaN(n)) return "number:NaN";
+  if (n === Infinity) return "number:Infinity";
+  if (n === -Infinity) return "number:-Infinity";
   if (Number.isSafeInteger(n) && String(n) === raw.replace(/^\+/, "").replace(/\.0+$/, "")) {
     return `number:${n}`;
   }
   if (Number.isFinite(n) && String(n) === raw) return `number:${raw}`;
   return `${kind}:${raw}`;
+}
+
+/**
+ * Normalized Binary subtype: driver integer sub_type values pass through,
+ * EJSON hex strings (e.g. "04") parse as hex, everything else defaults to
+ * generic-binary 0 so a plain Buffer and a subtype-0 Binary stay the same
+ * value while a UUID (subtype 4) never conflates with one.
+ */
+function canonicalBinarySubType(value: unknown): number {
+  if (typeof value === "number" && Number.isInteger(value)) return value;
+  if (typeof value === "string" && value.length > 0) {
+    const parsed = Number.parseInt(value, 16);
+    if (Number.isInteger(parsed)) return parsed;
+  }
+  return 0;
+}
+
+/** Owner label for refusal messages: a missing holder prints as unknown
+ * instead of the literal "undefined" (a capturing marker without a captureId
+ * is hand-written or pre-reservation, not resumable). */
+function formatCaptureHolder(holder: unknown): string {
+  return typeof holder === "string" ? JSON.stringify(holder) : "an unknown holder";
 }
 
 /**
@@ -164,11 +195,15 @@ export function canonicalizeBaselineValue(value: unknown): unknown {
   if (typeof value === "string" || typeof value === "boolean") return value;
   if (value instanceof Date) return `date:${value.toISOString()}`;
   if (Array.isArray(value)) return value.map(canonicalizeBaselineValue);
+  // Native RegExp (in-process construction only; the driver decodes BSON
+  // regex as BSONRegExp): tag source+flags so distinct patterns never
+  // conflate with each other or with an empty object.
+  if (value instanceof RegExp) return `regexp:${value.source}:${value.flags}`;
   if (typeof value === "object") {
     const rec = value as Record<string, unknown>;
     // Node Buffer / Uint8Array: raw bytes by base64.
-    if (Buffer.isBuffer(value)) return `buffer:${(value as Buffer).toString("base64")}`;
-    if (value instanceof Uint8Array) return `buffer:${base64OfBytes(value)}`;
+    if (Buffer.isBuffer(value)) return `buffer:0:${(value as Buffer).toString("base64")}`;
+    if (value instanceof Uint8Array) return `buffer:0:${base64OfBytes(value)}`;
     // ObjectId instances (duck-typed: no bson import in the rules zone).
     if (typeof rec.toHexString === "function") {
       try {
@@ -198,11 +233,16 @@ export function canonicalizeBaselineValue(value: unknown): unknown {
             if (typeof rec.toString === "function" && rec.toString !== Object.prototype.toString)
               return canonicalNumberToken(String(rec.toString()), "decimal");
             break;
-          case "Binary":
-            if (rec.buffer instanceof Uint8Array) return `buffer:${base64OfBytes(rec.buffer)}`;
+          case "Binary": {
+            const sub = canonicalBinarySubType(
+              (rec.sub_type as unknown) ?? (rec.subtype as unknown)
+            );
+            if (rec.buffer instanceof Uint8Array)
+              return `buffer:${sub}:${base64OfBytes(rec.buffer)}`;
             if (Buffer.isBuffer(rec.buffer))
-              return `buffer:${(rec.buffer as Buffer).toString("base64")}`;
+              return `buffer:${sub}:${(rec.buffer as Buffer).toString("base64")}`;
             break;
+          }
           case "UUID":
             if (typeof rec.toString === "function" && rec.toString !== Object.prototype.toString)
               return `uuid:${String(rec.toString())}`;
@@ -255,7 +295,8 @@ export function canonicalizeBaselineValue(value: unknown): unknown {
         return canonicalNumberToken(inner, "double");
       if (only === "$binary" && typeof inner === "object" && inner !== null) {
         const b64 = (inner as { base64?: unknown }).base64;
-        if (typeof b64 === "string") return `buffer:${b64}`;
+        const subType = (inner as { subType?: unknown }).subType;
+        if (typeof b64 === "string") return `buffer:${canonicalBinarySubType(subType)}:${b64}`;
       }
       if (only === "$uuid" && typeof inner === "string") return `uuid:${inner}`;
       if (only === "$timestamp" && typeof inner === "object" && inner !== null) {
@@ -460,7 +501,7 @@ export function readSealedBaselineManifest(
     (!isSealedBaselineMarker(marker) && typeof marker.captureId === "string")
   ) {
     throw new Error(
-      `baseline "${baselineId}" capture is incomplete (reservation held by ${JSON.stringify(marker.captureId)}): ` +
+      `baseline "${baselineId}" capture is incomplete (reservation held by ${formatCaptureHolder(marker.captureId)}): ` +
         `the clone or seal crashed or is still running; resume the capture with the same --capture-id, then seal with stampBaseline.ts before claiming arms`
     );
   }
@@ -499,11 +540,22 @@ export function resolveBaselineCapture(
         `(same-id recapture would mutate an already referenced snapshot; capture under a new baselineId instead)`
     );
   }
+  // A non-sealed, non-capturing marker is a legacy weak seal: it has no
+  // captureId to resume with, so the generic in-progress guidance would be
+  // impossible to follow. Refuse just the same (the snapshot may already be
+  // referenced), but point at the real recoveries: upgrade or a new id.
+  if (existing.status !== "capturing") {
+    throw new Error(
+      `refusing to capture baseline "${String(baselineMarkerIdentity(existing))}": it carries a legacy weak seal ` +
+        `(turn/count/gameState-hash only, no full-snapshot manifest; re-stamp it with the current stampBaseline.ts to upgrade, ` +
+        `or capture under a new baselineId instead)`
+    );
+  }
   const holder = existing.captureId;
   if (typeof holder === "string" && holder === captureId) return "resume";
   throw new Error(
     `refusing to capture baseline "${String(baselineMarkerIdentity(existing))}": a capture is already ` +
-      `in progress (reservation held by ${JSON.stringify(holder)}); resume it with the same --capture-id or clear the stale reservation first`
+      `in progress (reservation held by ${formatCaptureHolder(holder)}); resume it with the same --capture-id or clear the stale reservation first`
   );
 }
 
