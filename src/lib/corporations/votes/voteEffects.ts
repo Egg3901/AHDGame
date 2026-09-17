@@ -2,7 +2,10 @@ import type { Db } from "mongodb";
 import type { Corporation } from "@/lib/db/types/corporation";
 import type { CorporationVote } from "@/lib/db/types/corporationVote";
 import { getDefaultLegalStructureId } from "@/lib/corporations/legalStructure";
-import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
+import {
+  bondDissolutionKeyForVote,
+  executeCorporationBondDefaultDissolution,
+} from "@/lib/bonds/executeCorporationBondDefaultDissolution";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { isValidSuperShareMultiplier } from "@/lib/corporations/superShares";
@@ -231,9 +234,13 @@ export async function applyPassedVoteEffects(opts: {
     }
 
     case "dissolution": {
+      // Crash-safe settlement (issue #1672): the vote id is the event
+      // identity, so a re-driven vote resumes the stored plan instead of
+      // paying twice.
       await withCorporationSettlementLock(db, corporation._id, "dissolutionInProgressAt", now, () =>
         executeCorporationBondDefaultDissolution(db, corporation, {
           requireDefaultedBonds: false,
+          idempotencyKey: bondDissolutionKeyForVote(vote._id),
         })
       );
       break;

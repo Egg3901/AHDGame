@@ -141,7 +141,7 @@ export async function cascadeCharacterDeletion(
   // to leaving it vacated (it can still be admin force-liquidated later).
   let corpsDissolvedOnAbandonment = 0;
   if (dissolveCorps.length > 0) {
-    const { executeCorporationBondDefaultDissolution } =
+    const { bondDissolutionKeyForCascade, executeCorporationBondDefaultDissolution } =
       await import("@/lib/bonds/executeCorporationBondDefaultDissolution");
     for (const corp of dissolveCorps) {
       try {
@@ -153,6 +153,9 @@ export async function cascadeCharacterDeletion(
           () =>
             executeCorporationBondDefaultDissolution(db, corp, {
               requireDefaultedBonds: false,
+              // Crash-safe settlement (issue #1672): one stable key per
+              // corp, so a repeated cascade replays instead of paying twice.
+              idempotencyKey: bondDissolutionKeyForCascade(corp._id),
             })
         );
         if (result) {

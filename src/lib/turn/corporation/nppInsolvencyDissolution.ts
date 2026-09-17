@@ -10,7 +10,10 @@ import {
   loadFxRatesByCurrency,
 } from "@/lib/currency/corporationCapital";
 import { withCorporationSettlementLock } from "@/lib/corporations/settlementLock";
-import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
+import {
+  bondDissolutionKeyForNpp,
+  executeCorporationBondDefaultDissolution,
+} from "@/lib/bonds/executeCorporationBondDefaultDissolution";
 import { recordAuditBulk } from "@/lib/audit/recordAudit";
 import type { ActionAuditInput } from "@/lib/db/types/actionAuditLog";
 
@@ -230,7 +233,14 @@ export async function processNppInsolventCorpDissolution(
         corp._id,
         "bondSettlementInProgressAt",
         now,
-        () => executeCorporationBondDefaultDissolution(db, corp, { requireDefaultedBonds: false })
+        // Crash-safe settlement (issue #1672): the key is stable across
+        // turns, so a post-crash re-scan resumes the stored plan instead of
+        // paying every holder a second time under a fresh key.
+        () =>
+          executeCorporationBondDefaultDissolution(db, corp, {
+            requireDefaultedBonds: false,
+            idempotencyKey: bondDissolutionKeyForNpp(corp._id),
+          })
       );
       // null → settlement already in progress elsewhere; skip, it'll be retried
       // next turn if still insolvent.

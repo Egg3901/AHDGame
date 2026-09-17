@@ -15,6 +15,10 @@ vi.mock("@/lib/corporations/settlementLock", () => ({
 }));
 vi.mock("@/lib/bonds/executeCorporationBondDefaultDissolution", () => ({
   executeCorporationBondDefaultDissolution: vi.fn().mockResolvedValue({ ok: true }),
+  // Mirrors the production builder format (pinned by the executor's own key
+  // tests); the assertions below use the literal key string.
+  bondDissolutionKeyForNpp: (corpId: { toHexString(): string }) =>
+    `bond-dissolution:npp:${corpId.toHexString()}`,
 }));
 
 import { executeCorporationBondDefaultDissolution } from "@/lib/bonds/executeCorporationBondDefaultDissolution";
@@ -96,6 +100,24 @@ describe("processNppInsolventCorpDissolution", () => {
     expect(vi.mocked(executeCorporationBondDefaultDissolution).mock.calls[0][1]).toMatchObject({
       _id: deep._id,
     });
+  });
+
+  it("passes a turn-stable deterministic key so a post-crash re-scan resumes instead of double-paying", async () => {
+    // Issue #1672: unlike the refinance/restructure per-turn keys, the NPP
+    // dissolution key carries no turn — a crash mid-dissolution leaves the
+    // corp for next turn's scan, and a fresh key there would pay every
+    // holder a second time.
+    const deep = corp({ liquidCapital: -2_000_000 });
+
+    await processNppInsolventCorpDissolution(makeDb([deep]).db, TURN);
+    await processNppInsolventCorpDissolution(makeDb([deep]).db, TURN + 1);
+
+    const calls = vi.mocked(executeCorporationBondDefaultDissolution).mock.calls;
+    expect(calls).toHaveLength(2);
+    const expected = `bond-dissolution:npp:${(deep._id as ObjectId).toHexString()}`;
+    expect(calls[0][2]).toMatchObject({ requireDefaultedBonds: false });
+    expect((calls[0][2] as { idempotencyKey: string }).idempotencyKey).toBe(expected);
+    expect((calls[1][2] as { idempotencyKey: string }).idempotencyKey).toBe(expected);
   });
 
   it("caps dissolutions per turn and does the deepest holes first", async () => {

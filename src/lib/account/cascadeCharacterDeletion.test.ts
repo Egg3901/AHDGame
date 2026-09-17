@@ -37,6 +37,10 @@ vi.mock("@/lib/bonds/executeCorporationBondDefaultDissolution", () => ({
     publicFloatPayout: null,
     totalPayoutToPeople: 0,
   }),
+  // Deterministic key builders stay real so the assertions below pin the
+  // production key contract without importing the heavy executor graph.
+  bondDissolutionKeyForCascade: (corpId: { toHexString(): string }) =>
+    `bond-dissolution:cascade:${corpId.toHexString()}`,
 }));
 
 vi.mock("@/lib/corporations/settlementLock", () => ({
@@ -136,7 +140,14 @@ describe("cascadeCharacterDeletion", () => {
     expect(executeCorporationBondDefaultDissolution).toHaveBeenCalledWith(
       db,
       { _id: bondedCorpId },
-      { requireDefaultedBonds: false }
+      {
+        requireDefaultedBonds: false,
+        // Deterministic cascade key (issue #1672): a repeated cascade for
+        // the same corp replays instead of paying twice. Asserted literally
+        // (the mock builder above mirrors the format); the real builder's
+        // format is pinned by the executor's own key tests.
+        idempotencyKey: `bond-dissolution:cascade:${bondedCorpId.toHexString()}`,
+      }
     );
     // ...and is NOT dumped to public float; only the clean corp releases shares.
     expect(releaseCorporationHeldSharesToFloat).toHaveBeenCalledTimes(1);
