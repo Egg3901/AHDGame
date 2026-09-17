@@ -449,19 +449,22 @@ export async function compensateAcquisitionSettlement(
     notes.push("landed shell cash stays with the acquirer; the target shell is gone");
   }
 
+  // Persist the failure notes with the reason: a refund that could not land
+  // (its owner is gone) must stay visible on the record, not just in memory.
+  const error = notes.length > 0 ? `${opts.reason} (${notes.join("; ")})` : opts.reason;
   await settlements(db).updateOne(
     { _id: settlement._id },
     {
       $set: {
         status: "compensated",
-        error: opts.reason,
+        error,
         completedAt: new Date(),
         updatedAt: new Date(),
       },
     }
   );
   settlement.status = "compensated";
-  settlement.error = opts.reason;
+  settlement.error = error;
   return { refunded, shellCashReversed, notes };
 }
 

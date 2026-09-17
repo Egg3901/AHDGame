@@ -81,9 +81,20 @@ export async function executeAgreedAcquisition(
 ): Promise<ExecuteAgreedAcquisitionResult> {
   // A completed settlement returns its recorded result without touching the
   // world: this is the crash-after-commit path (teardown done, response lost).
+  // A compensated settlement is terminal the other way: withdraw/reject or a
+  // terminal failure already refunded the undelivered remainder, so execution
+  // must NOT resume and pay holders past the closure.
   const completed = await loadAcquisitionSettlement(params.db, params.offer._id);
   if (completed?.status === "applied" && completed.completedResult) {
     return { ok: true, ...completed.completedResult };
+  }
+  if (completed?.status === "compensated") {
+    return {
+      ok: false,
+      error: "This acquisition was closed and compensated; open a new offer to try again.",
+      status: 409,
+      terminal: true,
+    };
   }
   // Serialize same-acquirer executions in-process (the hostile path does the
   // same); cross-instance races are still closed by the per-leg stamps.
@@ -132,9 +143,17 @@ async function runAgreedAcquisition(
 
   // Banked target (ticket-1267): the charter is a sub-document on the target,
   // so deleting the shell would delete its bank with it. Blocked up front,
-  // before any money moves.
+  // before any money moves. Exception: a retry whose earlier attempt claimed
+  // the slot and then crashed before releasing the target (dual-charter
+  // state). That window belongs to the transfer recovery protocol in #2016;
+  // this pre-check must not veto its resume, so it stands aside exactly when
+  // the slot charter is this target's own charter by identity and a live
+  // settlement for this offer owns the run. (Identity compare mirrors
+  // #2016's; the protocol itself is not duplicated here.)
   const bankConflict = bankTransferConflict(target, acquirer);
-  if (bankConflict) return { ok: false, error: bankConflict, status: 400 };
+  if (bankConflict && !(await isOwnInterruptedCharterClaim(db, offer, target, acquirer))) {
+    return { ok: false, error: bankConflict, status: 400 };
+  }
 
   // Merger review (C3). Runs BEFORE any money moves: a referral must leave the
   // two corporations exactly as it found them. A cleared review returns here
@@ -290,7 +309,16 @@ async function runAgreedAcquisition(
   });
 
   // A pinned plan from an earlier attempt rules: on replay the recorded legs
-  // are the only amounts ever applied, never the recomputed plan above.
+  // are the only amounts ever applied, never the recomputed plan above. A
+  // compensated record (withdraw/reject raced the retry) closes the run here.
+  if (!fresh && settlement.status === "compensated") {
+    return {
+      ok: false,
+      error: "This acquisition was closed and compensated; open a new offer to try again.",
+      status: 409,
+      terminal: true,
+    };
+  }
   if (fresh && plan.unpayable.length > 0) {
     const first = plan.unpayable[0];
     const reason = `holder ${first.key} is gone (${first.reason})`;
@@ -343,9 +371,14 @@ async function runAgreedAcquisition(
     }
 
     // 3. Move the bank charter BEFORE any payout: a conflict still unwinds
-    // cleanly (nothing paid yet), and the transfer's own claim/release guards
-    // make a retried transfer resume instead of double-moving the bank.
-    const bankTransfer = await transferBankCharterToAcquirer(db, target._id, acquirer._id, now);
+    // cleanly (nothing paid yet). A retry that already completed the transfer
+    // (persisted flag) skips the call outright, so the recorded result keeps
+    // reporting the transfer and no second move is ever attempted. Crash
+    // windows INSIDE the transfer (claim/release, satellite re-keys) belong
+    // to its own recovery protocol in #2016; this caller only depends on it.
+    const bankTransfer = settlement.bankCharterTransferred
+      ? { ok: true as const, transferred: true }
+      : await transferBankCharterToAcquirer(db, target._id, acquirer._id, now);
     if (!bankTransfer.ok) return { ok: false, error: bankTransfer.error, status: 500 };
     await markAcquisitionProgress(db, offer._id, {
       bankCharterTransferred: bankTransfer.transferred,
@@ -463,6 +496,37 @@ class UnpayableAcquisitionLeg extends Error {
   }
 }
 
+/**
+ * True when the bank conflict above is our own interrupted charter move: the
+ * slot holds the target's charter by identity and a live settlement for this
+ * offer owns the run. Anything else (genuinely different bank, no settlement)
+ * stays blocked.
+ */
+async function isOwnInterruptedCharterClaim(
+  db: Db,
+  offer: AcquisitionOffer,
+  target: Corporation,
+  acquirer: Corporation
+): Promise<boolean> {
+  const targetCharter = target.bankCharter;
+  const slotCharter = acquirer.bankCharter;
+  if (!targetCharter || !slotCharter) return false;
+  const sameIdentity =
+    slotCharter.currency === targetCharter.currency &&
+    slotCharter.charteredTurn === targetCharter.charteredTurn &&
+    slotCharter.type === targetCharter.type &&
+    slotCharter.status === targetCharter.status;
+  if (!sameIdentity) return false;
+  const settlement = await loadAcquisitionSettlement(db, offer._id);
+  return (
+    settlement != null &&
+    settlement.status === "in_progress" &&
+    !settlement.bankCharterTransferred &&
+    settlement.targetCorporationId.equals(target._id) &&
+    settlement.acquirerCorporationId.equals(acquirer._id)
+  );
+}
+
 async function releaseAcquisitionTarget(db: Db, targetId: ObjectId, offerId: ObjectId): Promise<void> {
   await db.collection<Corporation>("corporations").updateOne(
     { _id: targetId, acquisitionSettlementId: offerId },
@@ -485,6 +549,16 @@ async function handleMissingParty(
   const settlement = await loadAcquisitionSettlement(db, offer._id);
   if (settlement?.status === "applied" && settlement.completedResult) {
     return { ok: true, ...settlement.completedResult };
+  }
+  // Closed by compensation (withdraw/reject/terminal failure): report the
+  // closure instead of compensating twice or resuming past it.
+  if (settlement?.status === "compensated") {
+    return {
+      ok: false,
+      error: "This acquisition was closed and compensated; open a new offer to try again.",
+      status: 409,
+      terminal: true,
+    };
   }
   if (settlement && settlement.status === "in_progress") {
     if (settlement.shellDeleted) {

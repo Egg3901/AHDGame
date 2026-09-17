@@ -103,29 +103,10 @@ export async function transferBankCharterToAcquirer(
     { $set: { bankCharter: charter, updatedAt: now } }
   );
   if (claim.modifiedCount !== 1) {
-    // Resume window: a previous attempt claimed the slot and then crashed
-    // before releasing the target, so the same charter sits on both corps.
-    // Identity-guarded (currency, turn, type, status): a genuinely different
-    // bank in the slot is still a conflict, but our own interrupted move
-    // proceeds to the release and re-key below instead of stranding a
-    // dual-charter state every retry trips over.
-    const slot = await corps.findOne(
-      { _id: acquirerId },
-      { projection: { bankCharter: 1 } }
-    );
-    const slotCharter = slot?.bankCharter ?? null;
-    const sameCharter =
-      slotCharter != null &&
-      slotCharter.currency === charter.currency &&
-      slotCharter.charteredTurn === charter.charteredTurn &&
-      slotCharter.type === charter.type &&
-      slotCharter.status === charter.status;
-    if (!sameCharter) {
-      return {
-        ok: false,
-        error: `Cannot merge ${target.name}: ${acquirer.name} gained a bank charter during the merge. Try again.`,
-      };
-    }
+    return {
+      ok: false,
+      error: `Cannot merge ${target.name}: ${acquirer.name} gained a bank charter during the merge. Try again.`,
+    };
   }
 
   // Release the charter from the target, guarded on identity: if the target
