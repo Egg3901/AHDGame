@@ -853,7 +853,7 @@ describe("resolution: survival, removal, immunity", () => {
   });
 
   it("a carried ballot is moot when the leadership already changed hands", async () => {
-    const { db, party, partySeq, mps, challengeId } = await openBallot();
+    const { db, party, mps, challengeId } = await openBallot();
     await castLeadershipBallotVote(db, "UK", challengeId, mps[0].actor, "aye", 101, NOW());
     const successor = new ObjectId();
     await db
@@ -873,7 +873,7 @@ describe("resolution: survival, removal, immunity", () => {
   });
 
   it("resolution is idempotent: a second resolve is a no-op", async () => {
-    const { db, partySeq, mps, challengeId } = await openBallot();
+    const { db, mps, challengeId } = await openBallot();
     await castLeadershipBallotVote(db, "UK", challengeId, mps[0].actor, "nay", 101, NOW());
     const close = 100 + LEADERSHIP_BALLOT_DURATION_TURNS;
     const first = await resolveLeadershipChallenge(

@@ -295,6 +295,69 @@ describe("turn phase registry", () => {
   });
 });
 
+describe("uk leadership challenges (#861) registration", () => {
+  it("registers ukLeadershipChallenges immediately after ukJrSurpriseTurn", () => {
+    const phaseIndex = new Map(TURN_PHASE_NAMES.map((name, index) => [name, index]));
+    expect(phaseIndex.get("ukJrSurpriseTurn"), "ukJrSurpriseTurn must be registered").not.toBe(
+      undefined
+    );
+    expect(
+      phaseIndex.get("ukLeadershipChallenges"),
+      "ukLeadershipChallenges must be registered"
+    ).toBe((phaseIndex.get("ukJrSurpriseTurn") ?? -1) + 1);
+  });
+
+  it("billsCampaignsAndActivity invokes ukLeadershipChallenges after the confirmation lifecycles", async () => {
+    const adapter = getTurnPhaseRegistry().find((a) => a.key === "billsCampaignsAndActivity");
+    expect(adapter).toBeDefined();
+
+    const calledPhases: string[] = [];
+    const runPhase = vi.fn(async (name: string, _fn: () => unknown) => {
+      calledPhases.push(name);
+      return undefined;
+    });
+    const markPhaseSkipped = vi.fn(async () => undefined);
+
+    const phaseResults = {} as Record<string, unknown>;
+    const context = {
+      realNow: new Date(),
+      gameNow: new Date(),
+      newTurn: 2,
+      db: {
+        collection: () => ({ find: () => ({ toArray: async () => [] }) }),
+      } as never,
+      config: {} as never,
+      gameState: { playerRandomEventsEnabled: false },
+      phaseResults,
+    } as never;
+    const runtime = { runPhase, markPhaseSkipped } as never;
+
+    await adapter!.execute(context, runtime);
+
+    const indexOf = (phase: string) => {
+      const i = calledPhases.indexOf(phase);
+      expect(i, `phase '${phase}' should have been invoked`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+
+    // Appended last in the parallel confirmation group so the result-index
+    // math above it is unchanged; the registry comment says as much. It is
+    // not last overall: the adapter keeps running sequential phases
+    // (socialAxisDrift first) after the parallel group settles.
+    expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("fomcNominations"));
+    expect(indexOf("ukLeadershipChallenges")).toBeGreaterThan(indexOf("ukJrSurpriseTurn"));
+    expect(indexOf("ukLeadershipChallenges")).toBe(indexOf("fomcNominations") + 1);
+    expect(calledPhases[indexOf("ukLeadershipChallenges") + 1]).toBe("socialAxisDrift");
+    // The recording stub returns undefined, so the adapter records the
+    // documented zero default rather than leaving the key absent.
+    expect(phaseResults.ukLeadershipChallenges).toEqual({
+      expired: 0,
+      resolved: 0,
+      removed: 0,
+    });
+  });
+});
+
 describe("settlement phase registration", () => {
   it("registers a settlement phase name immediately after alignment", async () => {
     const { BASE_TURN_PHASE_NAMES } = await import("./turnPhaseNames");
