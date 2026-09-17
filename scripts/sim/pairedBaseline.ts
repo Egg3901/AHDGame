@@ -29,7 +29,7 @@
  *      that reads the live game database; holds a durable exclusive
  *      `capturing` reservation first — pass an explicit
  *      --capture-id=<id> so a crashed capture resumes with the same id),
- *   2. stampBaseline.ts --baseline-id=<id> (seals the v1 full-snapshot
+ *   2. stampBaseline.ts --baseline-id=<id> (seals the v2 streaming full-snapshot
  *      manifest; upgrades a capture reservation or legacy weak seal,
  *      refuses to re-seal drifted state),
  *   3. sim_create_paired_baseline (this tool; validates + inserts both arms),

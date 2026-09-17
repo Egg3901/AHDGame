@@ -630,7 +630,7 @@ export function baselineMarkerIdentity(marker: BaselineMarkerDoc): unknown {
   return marker._id ?? marker.baselineId;
 }
 
-/** True only for a complete v1 sealed marker (clone + manifest succeeded). */
+/** True only for a complete v2 sealed marker (clone + manifest succeeded). */
 export function isSealedBaselineMarker(marker: BaselineMarkerDoc): boolean {
   if (marker.sealVersion !== BASELINE_SEAL_VERSION) return false;
   if (marker.status !== "sealed") return false;
@@ -819,7 +819,7 @@ export function assertBaselineStampCompatible(
     );
   }
   // Completing a capture reservation or upgrading a legacy weak marker: the
-  // first v1 seal always lands (there is no trustworthy prior seal to drift
+  // first v2 seal always lands (there is no trustworthy prior seal to drift
   // from; the new manifest becomes ground truth).
   if (!isSealedBaselineMarker(existing)) return;
   const sealedTurn = existing.sourceTurn;
@@ -943,17 +943,29 @@ export function assertBaselineDigestFlag(value: string): string {
  * Final pre-spawn fence (runWorld.ts, baselined arms only): after the
  * worker's post-copy dest observation, and immediately before the first
  * turn write, the child re-reads the ONE simBaselines marker doc in its arm
- * db and compares it to the digest the worker verified. A write to the arm
- * db between the worker's dest observation and this spawn (stale re-copy,
- * supervisor poke, second arm sharing the db) fails closed here instead of
- * running turns on an unverified start. Single-doc read, never a scan, and
- * unpaired runs never pay it (the flag is refused there).
+ * db and compares it to the digest the worker verified. Marker-class writes
+ * in the worker-observation-to-spawn gap fail closed here instead of running
+ * turns on an unverified start: a dropped marker (stale re-copy mid-flight),
+ * a marker from the wrong baseline (miscopied source), a removed seal, or a
+ * re-seal over different state. Single-doc read, never a scan, and unpaired
+ * runs never pay it (the flag is refused there).
+ *
+ * Boundary, explicit: this is marker continuity, not state re-verification.
+ * The fence takes no state input, so a state-only write that preserves the
+ * marker (supervisor poke into a state collection, second arm sharing the
+ * db writing state but not the seal) passes by design. The irreducible
+ * window for an undetected state-only mutation therefore still runs from
+ * the worker's post-copy dest observation to the first turn write; this
+ * fence closes the marker-substitution class inside that window, not state
+ * drift. Closing state drift fully needs a full re-observation at spawn (a
+ * scan per arm start) or a fencing token on every write, which the turn
+ * engine does not have.
  *
  * Residual race, explicit: a writer landing between THIS read and the
- * first turn write still slips through; that window is one document read
- * inside child startup, down from the whole copy-plus-spawn gap. Closing
- * it fully needs a Mongo transaction or a fencing token on every write,
- * which the turn engine does not have.
+ * first turn write still slips through, marker-class or state-only alike;
+ * that window is one document read inside child startup. Closing it fully
+ * needs a Mongo transaction or a fencing token on every write, which the
+ * turn engine does not have.
  */
 export function assertArmFenceMarker(
   marker: BaselineMarkerDoc | null | undefined,

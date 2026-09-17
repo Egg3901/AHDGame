@@ -255,7 +255,7 @@ async function observeBaselineDb(db: Db, baselineId: string): Promise<BaselineOb
 
 /**
  * Fail-closed baseline seal check (issue #1470 experiment-integrity
- * closure): the snapshot db must carry the sealed v1 marker stamped at
+ * closure): the snapshot db must carry the sealed v2 marker stamped at
  * capture time (stampBaseline.ts) for exactly this baseline id, AND the
  * marker's full manifest must still describe the db as observed RIGHT NOW
  * (re-observed immediately before the sandbox-to-sandbox copy, per

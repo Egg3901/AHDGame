@@ -472,9 +472,11 @@ async function main() {
 
   // R3 narrowing fence (issue #1470): on a baselined arm, re-read the ONE
   // simBaselines marker doc and compare it to the worker-verified digest
-  // BEFORE any bootstrap/turn write. Catches an arm-db write that landed
-  // between the worker's post-copy dest observation and this spawn. One
-  // findOne; unpaired runs skip it entirely.
+  // BEFORE any bootstrap/turn write. Catches marker-class writes that landed
+  // between the worker's post-copy dest observation and this spawn (dropped,
+  // swapped, or re-sealed marker); a state-only write preserving the marker
+  // passes by design (marker continuity, not a state re-scan). One findOne;
+  // unpaired runs skip it entirely.
   if (baselinedRun) {
     const { assertArmFenceMarker, BASELINE_MARKER_COLLECTION } = await import("./baselineManifest");
     const armMarker = (await db

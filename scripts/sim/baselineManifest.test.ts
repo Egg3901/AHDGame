@@ -717,7 +717,7 @@ describe("canonicalization across driver forms (review #1968)", () => {
       expect(() => assertBaselineDigestFlag("")).toThrow(/64-hex/);
     });
 
-    it("refuses a final pre-spawn mutation of the arm db", () => {
+    it("refuses a final pre-spawn marker mutation of the arm db", () => {
       const { marker, digest } = sealedMarkerFor("arm1");
       // The worker verified `digest`; then a write lands in the arm db and the
       // copy's marker is re-sealed over mutated state (or the wrong marker
@@ -733,6 +733,28 @@ describe("canonicalization across driver forms (review #1968)", () => {
       expect(() => assertArmFenceMarker(mutatedMarker, "arm1", digest)).toThrow(
         /changed after the verified copy/
       );
+    });
+
+    it("documents the marker-only boundary: state drift with an intact marker passes the fence", () => {
+      const { marker, digest } = sealedMarkerFor("arm1");
+      // The fence takes no state input: it proves the worker-verified seal is
+      // still the seal the arm carries, not that arm state still matches the
+      // seal. A state-only write preserving the marker (supervisor poke into
+      // a state collection, second arm sharing the db writing state but not
+      // the seal) is invisible here by design; only a full re-observation
+      // (the worker's pre/post-copy checks) sees state drift. The irreducible
+      // window for such a mutation runs from the worker's post-copy dest
+      // observation to the first turn write.
+      expect(() => assertArmFenceMarker(marker, "arm1", digest)).not.toThrow();
+      // The digest string IS the seal: even a marker whose embedded
+      // collection list no longer describes anything passes while the digest
+      // matches (the list is diagnosis, compared by the full checks only).
+      const gutted = {
+        ...marker,
+        manifest: { ...(marker.manifest as object), collections: [] },
+      } as BaselineMarkerDoc;
+      expect(isSealedBaselineMarker(gutted)).toBe(true);
+      expect(() => assertArmFenceMarker(gutted, "arm1", digest)).not.toThrow();
     });
 
     it("refuses a missing, unsealed, or foreign marker at spawn", () => {

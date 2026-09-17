@@ -1,12 +1,12 @@
 /**
- * Seal a paired-baseline snapshot with its v1 full-snapshot manifest (issue
+ * Seal a paired-baseline snapshot with its v2 streaming full-snapshot manifest (issue
  * #1470 experiment-integrity closure).
  *
  * The supervisor captures a baseline ONCE from live into the sandbox db
  * baselineDbNameFor(baselineId) with cloneWorld.ts (SOURCE at the live DB:
  * the only paired-baseline step that ever reads the live game database),
  * then runs this script to seal what was captured. The sim worker refuses to
- * claim a baselined arm unless the snapshot db carries a `sealed` v1 marker
+ * claim a baselined arm unless the snapshot db carries a `sealed` v2 marker
  * for its baseline id whose manifest still matches the db as observed
  * immediately before the copy (plus a post-copy source/dest re-check), so a
  * mutated, half-captured, or legacy-sealed snapshot fails closed instead of
