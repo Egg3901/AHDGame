@@ -16,6 +16,8 @@ import {
 } from "@/lib/api/errors";
 import { assertSameCountry } from "@/lib/api/sameCountry";
 import { checkRateLimit, CONGRESS_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
+import { createNotification } from "@/lib/notifications";
+import type { Db } from "mongodb";
 import { getCabinetPositions } from "@/lib/constants/cabinetMechanics";
 import { isSeatActive } from "@/lib/cabinet/rosterEra";
 import { getLiveGameYear } from "@/lib/cabinet/liveGameYear";
@@ -40,6 +42,12 @@ import {
 } from "./cabinetEligibility";
 import { applyConfidenceEventToGov } from "./confidence/confidenceGaugeStore";
 import { GREAT_OFFICE_POSITION_IDS } from "./confidence/confidenceGauge";
+import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
+import {
+  canReshuffle,
+  getReshuffleIdentity,
+  recordReshuffle,
+} from "./cabinet/reshuffleLimit";
 
 const appointSchema = z.object({
   positionId: z.string(),
@@ -48,6 +56,23 @@ const appointSchema = z.object({
 
 const fireSchema = z.object({
   positionId: z.string(),
+});
+
+const resignSchema = z.object({
+  positionId: z.string(),
+});
+
+const whipTargetSchema = z.object({
+  characterId: z.string().regex(/^[a-f0-9]{24}$/, "Invalid character ID"),
+});
+
+const reshuffleAppointmentSchema = z.object({
+  positionId: z.string(),
+  characterId: z.string().regex(/^[a-f0-9]{24}$/, "Invalid character ID"),
+});
+
+const reshuffleSchema = z.object({
+  appointments: z.array(reshuffleAppointmentSchema).min(1),
 });
 
 // A cabinet seat can only be (re)appointed once every COOLDOWN_TURNS turns. The
@@ -59,6 +84,46 @@ const COOLDOWN_TURNS = 24;
 const TERRITORIAL_POSITIONS_BY_COUNTRY: Partial<Record<CountryId, string[]>> = {
   UK: ["northern_ireland", "scotland", "wales"],
 };
+
+/**
+ * Restore a departing minister's character office after they leave cabinet
+ * (fire, resignation, reshuffle): back to their legislative seat so they keep
+ * receiving MP action bonuses and NPI, or to private-citizen status when they
+ * hold no seat (One Party State appointees). Shared by every vacate path so a
+ * departure never strands a character in a cabinet office they no longer hold.
+ */
+export async function restoreCharacterOfficeAfterCabinet(
+  db: Db,
+  countryId: CountryId,
+  holderCharacterId: ObjectId,
+  now: Date
+): Promise<void> {
+  const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
+  const lowerOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    characterId: holderCharacterId,
+    officeType: { $in: eligibleOfficeTypes },
+    countryId,
+  });
+  if (lowerOfficial) {
+    const restoreOffice: OfficeType =
+      lowerOfficial.officeType === "commons"
+        ? { type: "commons", state: lowerOfficial.state! }
+        : { type: lowerOfficial.officeType, state: lowerOfficial.state! };
+    await db
+      .collection<Character>("characters")
+      .updateOne(
+        { _id: holderCharacterId },
+        { $set: { currentOffice: restoreOffice, updatedAt: now } }
+      );
+  } else {
+    await db
+      .collection<Character>("characters")
+      .updateOne(
+        { _id: holderCharacterId },
+        { $unset: { currentOffice: "" }, $set: { updatedAt: now } }
+      );
+  }
+}
 
 export async function getCabinetCharactersHandler(_request: Request, countryId: CountryId) {
   try {
@@ -183,6 +248,15 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       if (isBannedParty({ governmentType: runtime.governmentType }, appointeeParty)) {
         throw forbidden("Members of banned parties cannot be appointed to cabinet.");
       }
+    }
+
+    // Party suspension teeth (issue #859): an MP serving a whip withdrawal
+    // sits as an independent and cannot serve in the party's government until
+    // the whip is restored.
+    if (lowerOfficial?.whipWithdrawn) {
+      throw forbidden(
+        "This MP is suspended from the parliamentary party (whip withdrawn) and cannot be appointed to cabinet."
+      );
     }
 
     if (targetChar._id.equals(pmCharacterId)) {
@@ -394,39 +468,10 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
 
     const now = new Date();
 
-    // Restore the character's currentOffice to their legislative seat so they
-    // continue receiving MP action bonuses and NPI after leaving cabinet. An
-    // NPP-held seat has a null characterId — there is no player office to
-    // restore, so this is skipped.
+    // Restore the holder's office. An NPP-held seat has a null characterId —
+    // there is no player office to restore, so this is skipped.
     if (member.characterId) {
-      const holderCharacterId = member.characterId;
-      const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
-      const lowerOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-        characterId: holderCharacterId,
-        officeType: { $in: eligibleOfficeTypes },
-        countryId,
-      });
-      if (lowerOfficial) {
-        const restoreOffice: OfficeType =
-          lowerOfficial.officeType === "commons"
-            ? { type: "commons", state: lowerOfficial.state! }
-            : { type: lowerOfficial.officeType, state: lowerOfficial.state! };
-        await db
-          .collection<Character>("characters")
-          .updateOne(
-            { _id: holderCharacterId },
-            { $set: { currentOffice: restoreOffice, updatedAt: now } }
-          );
-      } else {
-        // Non-legislator appointee (One Party State): no seat to return to —
-        // restore private-citizen status so they stop receiving office bonuses.
-        await db
-          .collection<Character>("characters")
-          .updateOne(
-            { _id: holderCharacterId },
-            { $unset: { currentOffice: "" }, $set: { updatedAt: now } }
-          );
-      }
+      await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
     }
 
     await getCabinetMembersCollection(db).deleteOne({ _id: member._id });
@@ -448,6 +493,633 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
     return NextResponse.json({
       success: true,
       message: `${member.characterName} removed from ${position.name}`,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+/**
+ * A minister resigns their own seat (epic #856, ticket #859).
+ *
+ * Authority is the holder, not the PM: the caller must own the character that
+ * holds `positionId`. The seat is vacated (office restored via the shared
+ * helper) and the confidence gauge takes the flat `ministerResigned` hit —
+ * heavier for a Great Office of State, matching the fire flow's weighting.
+ * The head-of-government seat cannot be resigned here; the PM leaves through
+ * the Appoint-Premier / no-confidence flow. NPP-held seats have no player to
+ * resign them; NPP resignations are decided by the turn runner
+ * (`resignNppCaretakerMinister`).
+ */
+export async function resignCabinetMemberHandler(request: Request, countryId: CountryId) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(
+      auth.user.userId,
+      CONGRESS_LIMITS.maxRequests,
+      CONGRESS_LIMITS.windowMs
+    );
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    const parsed = await parseJsonBody(request, resignSchema);
+    if (!parsed.success) {
+      throw badRequest(parsed.error);
+    }
+    const { positionId } = parsed.data;
+
+    const db = await getDb();
+    const caller = await db
+      .collection<Character>("characters")
+      .findOne({ userId: new ObjectId(auth.user.userId) });
+    if (!caller) {
+      throw forbidden("Only a sitting minister can resign from cabinet");
+    }
+
+    const positions = getCabinetPositions(countryId);
+    const position = positions.find((candidate) => candidate.id === positionId);
+    if (!position) {
+      throw badRequest("Invalid cabinet position");
+    }
+    if (position.isHeadOfGovernment) {
+      throw forbidden(
+        "The head of government leaves through the Appoint Premier flow, not resignation."
+      );
+    }
+
+    const member = await getCabinetMembersCollection(db).findOne({
+      countryId,
+      positionId,
+    });
+    if (!member || !member.characterId || !member.characterId.equals(caller._id)) {
+      throw notFound("You do not hold this cabinet seat");
+    }
+
+    const now = new Date();
+    await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
+    // Atomic by _id: a concurrent fire/resignation wins, the loser re-reads an
+    // empty seat above and reports 404 rather than double-vacating.
+    const removed = await getCabinetMembersCollection(db).deleteOne({ _id: member._id });
+    if (removed.deletedCount === 0) {
+      throw notFound("You do not hold this cabinet seat");
+    }
+
+    // Confidence gauge (epic #856): a resignation is a flat hit each — waves
+    // sum to destabilise — heavier for a Great Office of State. Same UK-only
+    // persistence as the fire flow; no consequence until
+    // UK_CONFIDENCE_GAUGE_DISSOLUTION is enabled.
+    // eslint-disable-next-line local/no-country-literals -- the confidence gauge and Great Offices are UK-specific structures (ukGovernment singleton)
+    if (countryId === "UK") {
+      const greatOffice = GREAT_OFFICE_POSITION_IDS.has(positionId);
+      await applyConfidenceEventToGov(db, { kind: "ministerResigned", greatOffice }, now);
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: `You have resigned as ${position.name}`,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+// ── Whip withdrawal (party suspension + reselection risk) ────────────────────
+
+/** Player-facing reselection standing derived from whip state. */
+export type ReselectionRisk = "standard" | "elevated";
+
+export function reselectionRiskFor(official: {
+  whipWithdrawn?: boolean | null;
+}): ReselectionRisk {
+  return official.whipWithdrawn ? "elevated" : "standard";
+}
+
+interface WhipTarget {
+  targetChar: Character;
+  official: ElectedOfficial;
+}
+
+/**
+ * Resolve and validate a whip-withdrawal target. Shared by withdraw/restore so
+ * both agree on who the PM may suspend: a player MP of the governing party
+ * holding a lower-chamber seat, who is neither the PM nor a serving minister
+ * (ministers leave via fire/resignation, not suspension).
+ */
+async function resolveWhipTarget(
+  db: Db,
+  countryId: CountryId,
+  characterIdStr: string
+): Promise<WhipTarget> {
+  const targetChar = await db
+    .collection<Character>("characters")
+    .findOne({ _id: new ObjectId(characterIdStr) });
+  if (!targetChar) {
+    throw notFound("Character");
+  }
+  if (!targetChar.userId) {
+    throw forbidden("The whip can only be withdrawn from player MPs");
+  }
+  assertSameCountry(
+    targetChar,
+    { countryId },
+    { message: "The whip can only be withdrawn from MPs of this country" }
+  );
+
+  const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
+  const official = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+    characterId: targetChar._id,
+    officeType: { $in: eligibleOfficeTypes },
+    countryId,
+  });
+  if (!official) {
+    throw forbidden(
+      `The whip can only be withdrawn from MPs holding a seat in the ${getCabinetEligibleChamberLabel(countryId)}`
+    );
+  }
+
+  const govFormation = await getGovernmentFormationsCollection(db).findOne({
+    _id: countryId,
+  });
+  if (!govFormation) {
+    throw forbidden("No active government");
+  }
+  if (
+    govFormation.pmCharacterId &&
+    targetChar._id.equals(govFormation.pmCharacterId)
+  ) {
+    throw forbidden("The whip cannot be withdrawn from the Prime Minister");
+  }
+  // The PM suspends rebels from their own parliamentary party, not the opposition.
+  const pmChar = await db
+    .collection<Character>("characters")
+    .findOne({ _id: govFormation.pmCharacterId });
+  const governingParty = govFormation.governingPartyId ?? pmChar?.party ?? null;
+  const targetParty = official.party ?? targetChar.party ?? null;
+  if (!governingParty || targetParty !== governingParty) {
+    throw forbidden("The whip can only be withdrawn from MPs of the governing party");
+  }
+
+  const ministerSeat = await getCabinetMembersCollection(db).findOne({
+    countryId,
+    characterId: targetChar._id,
+  });
+  if (ministerSeat) {
+    throw forbidden(
+      "Serving ministers leave through the cabinet fire flow, not whip withdrawal. Fire or await resignation first."
+    );
+  }
+
+  return { targetChar, official };
+}
+
+/**
+ * Withdraw the whip (epic #856, ticket #859): PM-only party suspension.
+ *
+ * The MP keeps their seat but sits as an independent with elevated reselection
+ * risk, and is barred from cabinet appointment until restored. The guarded
+ * `updateOne` filter is the concurrency lock: a repeat or raced withdrawal
+ * matches nothing and resolves to a 409, never a double write.
+ */
+export async function withdrawWhipHandler(request: Request, countryId: CountryId) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(
+      auth.user.userId,
+      CONGRESS_LIMITS.maxRequests,
+      CONGRESS_LIMITS.windowMs
+    );
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    const parsed = await parseJsonBody(request, whipTargetSchema);
+    if (!parsed.success) {
+      throw badRequest(parsed.error);
+    }
+
+    const db = await getDb();
+    const { pmCharacter } = await requireCurrentPrimeMinister(
+      db,
+      countryId,
+      auth.user.userId,
+      "Only the Prime Minister can withdraw the whip"
+    );
+    const { targetChar, official } = await resolveWhipTarget(
+      db,
+      countryId,
+      parsed.data.characterId
+    );
+
+    const now = new Date();
+    const updated = await db.collection<ElectedOfficial>("electedOfficials").updateOne(
+      { _id: official._id, whipWithdrawn: { $ne: true } },
+      {
+        $set: {
+          whipWithdrawn: true,
+          whipWithdrawnAt: now,
+          whipWithdrawnByCharacterId: pmCharacter._id,
+          updatedAt: now,
+        },
+      }
+    );
+    if (updated.matchedCount === 0) {
+      const current = await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .findOne({ _id: official._id });
+      if (current?.whipWithdrawn) {
+        throw conflict("The whip has already been withdrawn from this MP");
+      }
+      throw notFound("This MP no longer holds a seat");
+    }
+
+    if (targetChar.userId) {
+      await createNotification({
+        userId: targetChar.userId.toString(),
+        title: "Whip withdrawn",
+        message:
+          "The Prime Minister has withdrawn the whip. You sit as an independent with elevated reselection risk until it is restored.",
+        type: "system",
+        metadata: { recipientCharacterId: targetChar._id.toString() },
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      reselectionRisk: "elevated" as ReselectionRisk,
+      message: `The whip has been withdrawn from ${targetChar.name}`,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+/**
+ * Restore a withdrawn whip. PM-only; mirrors the withdraw lock so a repeat or
+ * raced restore resolves to a 409.
+ */
+export async function restoreWhipHandler(request: Request, countryId: CountryId) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(
+      auth.user.userId,
+      CONGRESS_LIMITS.maxRequests,
+      CONGRESS_LIMITS.windowMs
+    );
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    const parsed = await parseJsonBody(request, whipTargetSchema);
+    if (!parsed.success) {
+      throw badRequest(parsed.error);
+    }
+
+    const db = await getDb();
+    await requireCurrentPrimeMinister(
+      db,
+      countryId,
+      auth.user.userId,
+      "Only the Prime Minister can restore the whip"
+    );
+    const { targetChar, official } = await resolveWhipTarget(
+      db,
+      countryId,
+      parsed.data.characterId
+    );
+
+    const now = new Date();
+    const updated = await db.collection<ElectedOfficial>("electedOfficials").updateOne(
+      { _id: official._id, whipWithdrawn: true },
+      {
+        $set: { updatedAt: now },
+        $unset: { whipWithdrawn: "", whipWithdrawnAt: "", whipWithdrawnByCharacterId: "" },
+      }
+    );
+    if (updated.matchedCount === 0) {
+      const current = await db
+        .collection<ElectedOfficial>("electedOfficials")
+        .findOne({ _id: official._id });
+      if (current && !current.whipWithdrawn) {
+        throw conflict("This MP currently holds the whip");
+      }
+      throw notFound("This MP no longer holds a seat");
+    }
+
+    if (targetChar.userId) {
+      await createNotification({
+        userId: targetChar.userId.toString(),
+        title: "Whip restored",
+        message: "The Prime Minister has restored the whip. You sit with the parliamentary party again.",
+        type: "system",
+        metadata: { recipientCharacterId: targetChar._id.toString() },
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      reselectionRisk: "standard" as ReselectionRisk,
+      message: `The whip has been restored to ${targetChar.name}`,
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+/**
+ * List MPs currently serving a whip withdrawal. PM-only; drives the
+ * player-facing whip panel on the cabinet page.
+ */
+export async function getWhipWithdrawnHandler(_request: Request, countryId: CountryId) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const db = await getDb();
+    await requireCurrentPrimeMinister(
+      db,
+      countryId,
+      auth.user.userId,
+      "Only the Prime Minister can view whip suspensions"
+    );
+
+    const withdrawn = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .find({ countryId, whipWithdrawn: true })
+      .toArray();
+
+    return NextResponse.json({
+      success: true,
+      withdrawn: withdrawn.map((official) => ({
+        characterId: official.characterId?.toString() ?? null,
+        characterName: official.characterName ?? "Unknown",
+        constituency: official.constituency ?? official.state ?? null,
+        party: official.party ?? null,
+        whipWithdrawnAt: official.whipWithdrawnAt?.toISOString() ?? null,
+        reselectionRisk: reselectionRiskFor(official),
+      })),
+    });
+  } catch (error) {
+    return handleRouteError(error);
+  }
+}
+
+/**
+ * Reshuffle the entire cabinet in one action (epic #856, ticket #859).
+ *
+ * The PM submits the complete new roster. Every player-held seat is vacated
+ * and the listed appointments are seated atomically. Enforces the
+ * once-per-parliament-per-government limit from `reshuffleLimit.ts`, persisted
+ * as an additive `reshuffleLog` on the `governmentFormations` document (a
+ * runtime collection, so it is wiped on world reset like the rest of cabinet
+ * state — no seed-manifest change needed).
+ *
+ * Deliberate divergences from the single-seat appoint flow:
+ * - Per-seat appointment cooldowns are NOT checked: the spent reshuffle token
+ *   is the throttle for bulk churn. Fresh cooldowns ARE set on the incoming
+ *   ministers so later individual churn stays gated.
+ * - NPP-held seats (null characterId) are preserved untouched: they are not
+ *   the PM's to re-decide and the reshuffle body cannot name them (it only
+ *   accepts player characters).
+ * - No confidence-gauge event is emitted. Individual firings each dent the
+ *   gauge via `ministerFired`; applying that per seat here would bottom the
+ *   gauge out on every reshuffle. The token limit is the reshuffle's cost.
+ */
+export async function reshuffleCabinetHandler(request: Request, countryId: CountryId) {
+  try {
+    const auth = await requireAuth();
+    if (!auth.ok) return auth.response;
+
+    const rateLimit = checkRateLimit(
+      auth.user.userId,
+      CONGRESS_LIMITS.maxRequests,
+      CONGRESS_LIMITS.windowMs
+    );
+    if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
+
+    const parsed = await parseJsonBody(request, reshuffleSchema);
+    if (!parsed.success) {
+      throw badRequest(parsed.error);
+    }
+
+    const db = await getDb();
+    const { pmCharacterId, pmCharacter } = await requireCurrentPrimeMinister(
+      db,
+      countryId,
+      auth.user.userId,
+      "Only the Prime Minister can reshuffle the cabinet"
+    );
+
+    const govFormation = await getGovernmentFormationsCollection(db).findOne({
+      _id: countryId,
+    });
+    if (!govFormation) {
+      throw forbidden("No active government");
+    }
+    const { governmentId, parliamentId } = getReshuffleIdentity(govFormation);
+    const reshuffleLog = govFormation.reshuffleLog ?? [];
+
+    // Limit first: a refused reshuffle consumes nothing, so the check runs
+    // before any validation or mutation. Refused with 409 + the limiter's
+    // reason, never a generic 400.
+    const decision = canReshuffle(reshuffleLog, governmentId, parliamentId);
+    if (!decision.allowed) {
+      throw conflict(
+        `Cabinet reshuffle already used for this parliament (${decision.reason}). A new parliament or a new government restores it.`
+      );
+    }
+
+    const positions = getCabinetPositions(countryId);
+    const liveYear = await getLiveGameYear(db);
+    const seenPositions = new Set<string>();
+    const seenCharacters = new Set<string>();
+
+    interface ValidatedAppointment {
+      positionId: string;
+      targetChar: Character;
+      lowerOfficial: ElectedOfficial | null;
+    }
+    const validated: ValidatedAppointment[] = [];
+
+    const runtime = await getCountryState(db, countryId);
+    const isOps = runtime.governmentType === "onePartyState";
+    const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
+
+    for (const { positionId, characterId: characterIdStr } of parsed.data.appointments) {
+      if (seenPositions.has(positionId)) {
+        throw badRequest(`Duplicate cabinet position in reshuffle: ${positionId}`);
+      }
+      seenPositions.add(positionId);
+
+      const position = positions.find((candidate) => candidate.id === positionId);
+      if (!position) {
+        throw badRequest("Invalid cabinet position");
+      }
+      if (!isSeatActive(position, liveYear)) {
+        throw badRequest("This cabinet position does not exist in the current era");
+      }
+      if (position.isHeadOfGovernment) {
+        throw forbidden(
+          "The head of government is seated through the Appoint Premier/Prime Minister flow, not cabinet appointments."
+        );
+      }
+
+      const characterId = new ObjectId(characterIdStr);
+      if (seenCharacters.has(characterIdStr)) {
+        throw forbidden("This character already holds a cabinet position");
+      }
+      seenCharacters.add(characterIdStr);
+
+      const targetChar = await db.collection<Character>("characters").findOne({ _id: characterId });
+      if (!targetChar) {
+        throw notFound("Character");
+      }
+      if (!targetChar.userId) {
+        throw forbidden("Can only appoint player characters to cabinet");
+      }
+      assertSameCountry(
+        targetChar,
+        { countryId },
+        {
+          message: "Cabinet ministers must be from the same country as the government",
+        }
+      );
+
+      const lowerOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
+        characterId: targetChar._id,
+        officeType: { $in: eligibleOfficeTypes },
+        countryId,
+      });
+      if (!isOps && !lowerOfficial) {
+        throw forbidden(
+          `Cabinet ministers must hold a seat in the ${getCabinetEligibleChamberLabel(countryId)}`
+        );
+      }
+      if (isOps) {
+        const appointeePartySeqId = parseInt(targetChar.party ?? "0", 10);
+        const appointeeParty = await db
+          .collection<PoliticalParty>("politicalParties")
+          .findOne({ sequentialId: appointeePartySeqId, countryId });
+        if (isBannedParty({ governmentType: runtime.governmentType }, appointeeParty)) {
+          throw forbidden("Members of banned parties cannot be appointed to cabinet.");
+        }
+      }
+      // Party suspension teeth (issue #859): matches the single-seat flow.
+      if (lowerOfficial?.whipWithdrawn) {
+        throw forbidden(
+          "This MP is suspended from the parliamentary party (whip withdrawn) and cannot be appointed to cabinet."
+        );
+      }
+      if (targetChar._id.equals(pmCharacterId)) {
+        throw forbidden("The Prime Minister cannot appoint themselves to a cabinet position");
+      }
+
+      validated.push({ positionId, targetChar, lowerOfficial });
+    }
+
+    // All validation passed: vacate every player-held seat, then seat the new
+    // roster. NPP-held seats (null characterId) are preserved.
+    const now = new Date();
+    const outgoing = await getCabinetMembersCollection(db).find({ countryId }).toArray();
+    for (const member of outgoing) {
+      if (!member.characterId) continue;
+      await restoreCharacterOfficeAfterCabinet(db, countryId, member.characterId, now);
+    }
+    await getCabinetMembersCollection(db).deleteMany({
+      countryId,
+      characterId: { $ne: null },
+    });
+
+    const cabinetType = countryId === ("UK" as CountryId) ? "ukCabinet" : "parliamentaryCabinet";
+    const { currentTurn: reshuffleTurn } = await getGameTime();
+    const turnLengthMinutes = await loadTurnLengthMinutes(db);
+    const territorialPositions = TERRITORIAL_POSITIONS_BY_COUNTRY[countryId];
+
+    let appointed = 0;
+    for (const { positionId, targetChar, lowerOfficial } of validated) {
+      try {
+        await getCabinetMembersCollection(db).insertOne({
+          countryId,
+          positionId,
+          characterId: targetChar._id,
+          characterName: targetChar.name,
+          party: lowerOfficial?.party ?? targetChar.party,
+          appointedByCharacterId: pmCharacter._id,
+          appointedAt: now,
+          confirmedAt: now,
+          ...initialMinisterialActionFields(now),
+          createdAt: now,
+          updatedAt: now,
+        } as never);
+      } catch (error) {
+        if (isDuplicateKeyError(error)) {
+          throw conflict(
+            "A conflicting appointment was just made. Refresh the cabinet and try again."
+          );
+        }
+        throw error;
+      }
+
+      const cabinetOffice: OfficeType = { type: cabinetType, positionId };
+      const careerEvent: CareerEvent = {
+        type: "appointed",
+        office: cabinetOffice,
+        officeLabel: getOfficeLabel(cabinetOffice, countryId),
+        party: lowerOfficial?.party ?? targetChar.party,
+        partyCountryId: countryId,
+        date: now,
+      };
+      await db
+        .collection<Character>("characters")
+        .updateOne({ _id: targetChar._id }, { $push: { careerHistory: careerEvent } });
+      await db
+        .collection<Character>("characters")
+        .updateOne(
+          { _id: targetChar._id },
+          { $set: { currentOffice: cabinetOffice, updatedAt: now } }
+        );
+
+      // Fresh appointment cooldown (checked on the NEXT single-seat
+      // appointment, not on this reshuffle) plus the same setting-cooldown
+      // reset and territorial advocacy reset as the appoint flow.
+      await getUKCabinetCooldownsCollection(db).updateOne(
+        { countryId, positionId },
+        {
+          $set: {
+            countryId,
+            positionId,
+            appointedCharacterId: targetChar._id,
+            appointedByPmCharacterId: pmCharacter._id,
+            appointedAt: now,
+            cooldownUntil: new Date(
+              now.getTime() + COOLDOWN_TURNS * turnLengthMinutes * 60_000
+            ),
+            cooldownUntilTurn: reshuffleTurn + COOLDOWN_TURNS,
+          },
+        },
+        { upsert: true }
+      );
+      await resetCabinetSettingCooldowns(db, countryId, positionId);
+      if (territorialPositions?.includes(positionId)) {
+        await getCabinetSettingsCollection(db).updateOne(
+          { _id: `${countryId}_${positionId}` },
+          { $set: { advocacyActive: false, updatedAt: new Date() } }
+        );
+      }
+      appointed += 1;
+    }
+
+    // Persist the spent token last: only a fully applied reshuffle is recorded.
+    const { log: nextLog } = recordReshuffle(reshuffleLog, governmentId, parliamentId, now);
+    await getGovernmentFormationsCollection(db).updateOne(
+      { _id: countryId },
+      { $set: { reshuffleLog: nextLog, updatedAt: now } }
+    );
+
+    return NextResponse.json({
+      success: true,
+      appointed,
+      message: `Cabinet reshuffled: ${appointed} minister${appointed === 1 ? "" : "s"} appointed`,
     });
   } catch (error) {
     return handleRouteError(error);

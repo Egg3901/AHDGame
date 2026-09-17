@@ -24,6 +24,39 @@ export interface ReshuffleDecision {
 }
 
 /**
+ * The (governmentId, parliamentId) pair the limiter keys on, derived from the
+ * canonical `governmentFormations` document:
+ * - parliamentId tracks `cycle`, which increments after every lower-chamber
+ *   election (see `resetParliamentaryGovernmentAfterElection`), so a general
+ *   election restores the allowance.
+ * - governmentId tracks the seated PM plus when they were seated
+ *   (`formedTurn`, falling back to `formedAt`), so a mid-parliament change of
+ *   government restores the allowance while the same PM in the same parliament
+ *   keeps the spent token.
+ */
+export interface ReshuffleIdentity {
+  governmentId: string;
+  parliamentId: string;
+}
+
+export function getReshuffleIdentity(formation: {
+  countryId: string;
+  pmCharacterId: { toString(): string } | null;
+  formedTurn?: number | null;
+  formedAt?: Date | string | null;
+  cycle?: number | null;
+}): ReshuffleIdentity {
+  const pm = formation.pmCharacterId?.toString() ?? "vacant";
+  const formed =
+    formation.formedTurn ??
+    (formation.formedAt ? new Date(formation.formedAt).getTime() : "unformed");
+  return {
+    governmentId: `${formation.countryId}:gov:${pm}:${formed}`,
+    parliamentId: `${formation.countryId}:parliament:${formation.cycle ?? 0}`,
+  };
+}
+
+/**
  * May this government reshuffle in this parliament? Allowed unless a reshuffle is
  * already recorded for the same (governmentId, parliamentId).
  */

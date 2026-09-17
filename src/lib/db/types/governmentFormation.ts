@@ -1,5 +1,6 @@
 import { ObjectId } from "mongodb";
 import type { CountryId } from "@/lib/constants/countries";
+import type { ReshuffleRecord } from "@/lib/uk/cabinet/reshuffleLimit";
 import type { WhippedFromVoteMap } from "./legislation";
 import type { GoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedCommandStance, PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
@@ -54,6 +55,14 @@ export interface GovernmentFormation {
   collapsedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+
+  // Cabinet reshuffle log (epic #856, ticket #859). Additive record of used
+  // once-per-parliament-per-government reshuffle tokens, read by
+  // `canReshuffle` in `src/lib/uk/cabinet/reshuffleLimit.ts`. Election-reset
+  // and vacate paths `$set` specific fields, so entries survive across
+  // parliaments and governments and are told apart by their ids. Runtime —
+  // wiped on world reset with the rest of this collection.
+  reshuffleLog?: ReshuffleRecord[];
 
   // Snap election tracking — applies to any parliamentary country
   // (resets on PM appointment).

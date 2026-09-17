@@ -198,6 +198,13 @@ export async function getEligibleCabinetCharacters(
   return characters
     .filter((character) => !character._id.equals(pmCharacterId))
     .filter((character) => !existingCharacterIds.has(character._id.toString()))
+    // Party suspension (issue #859): a whip-withdrawn MP sits as an
+    // independent and is not offered for cabinet until restored. The appoint
+    // and reshuffle handlers enforce the same rule server-side.
+    .filter(
+      (character) =>
+        officialByCharacterId.get(character._id.toString())?.whipWithdrawn !== true
+    )
     .filter((character) => {
       if (!isOps) return true;
       const party = partyBySeqId.get(String(character.party));
