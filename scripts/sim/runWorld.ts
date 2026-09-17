@@ -45,6 +45,8 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
   economicExperimentConfigSet,
+  isGameplayOverrideArg,
+  parseEquityLiquidityFacilityEnabled,
   parseOptionalBoolean,
   type FreightSettlementExperimentMode,
 } from "@/lib/sim/economicExperiment";
@@ -72,6 +74,7 @@ interface SimRunDoc {
     canonicalFreightBillingEnabled?: boolean;
     shortageResponsiveSourcingEnabled?: boolean;
     indexFundBondLiquidityEnabled?: boolean;
+    equityLiquidityFacilityEnabled?: boolean;
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
   };
@@ -208,10 +211,9 @@ const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
 );
-const equityLiquidityFacilityEnabled = parseOptionalBoolean(
-  arg("equity-liquidity"),
-  "equity-liquidity"
-);
+// Canonical flag is --equity-liquidity-facility; the deprecated
+// --equity-liquidity alias still parses so older scripts keep working.
+const equityLiquidityFacilityEnabled = parseEquityLiquidityFacilityEnabled(arg);
 const nppMarketCoverageEnabled = parseOptionalBoolean(
   arg("npp-market-coverage"),
   "npp-market-coverage"
@@ -326,14 +328,7 @@ const quiet = hasFlag("quiet");
 // sandbox can run unattended.
 const preservePlayerRail = preserveLiveConfig || hasFlag("preserve-player-rail");
 
-if (
-  preserveLiveConfig &&
-  process.argv.some((value) =>
-    /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
-      value
-    )
-  )
-) {
+if (preserveLiveConfig && process.argv.some(isGameplayOverrideArg)) {
   throw new Error("--preserve-live-config cannot be combined with gameplay overrides");
 }
 

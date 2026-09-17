@@ -17,6 +17,34 @@ export function parseOptionalBoolean(value: string | undefined, flag: string): b
   throw new Error(`--${flag} must be true or false (got "${value}")`);
 }
 
+/** Canonical CLI flag for the equity liquidity facility experiment. Matches
+ * the simJobs field (equityLiquidityFacilityEnabled) and the sibling
+ * --index-fund-bond-liquidity naming pattern. */
+export const EQUITY_LIQUIDITY_FACILITY_CLI_FLAG = "equity-liquidity-facility";
+/** Deprecated alias kept so older scripts keep working. Reads (never writes). */
+export const DEPRECATED_EQUITY_LIQUIDITY_CLI_FLAG = "equity-liquidity";
+
+export function parseEquityLiquidityFacilityEnabled(
+  readArg: (flag: string) => string | undefined
+): boolean | undefined {
+  const canonical = readArg(EQUITY_LIQUIDITY_FACILITY_CLI_FLAG);
+  if (canonical !== undefined)
+    return parseOptionalBoolean(canonical, EQUITY_LIQUIDITY_FACILITY_CLI_FLAG);
+  return parseOptionalBoolean(
+    readArg(DEPRECATED_EQUITY_LIQUIDITY_CLI_FLAG),
+    DEPRECATED_EQUITY_LIQUIDITY_CLI_FLAG
+  );
+}
+
+/** True when one argv entry is a gameplay override, which
+ * --preserve-live-config refuses to run alongside. Covers both the canonical
+ * equity liquidity facility flag and its deprecated alias. */
+export function isGameplayOverrideArg(value: string): boolean {
+  return /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility|equity-liquidity)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
+    value
+  );
+}
+
 export function economicExperimentConfigSet(
   config: EconomicExperimentConfig
 ): Record<string, boolean | FreightSettlementExperimentMode> {
@@ -59,7 +87,7 @@ export function economicExperimentCliArgs(config: EconomicExperimentConfig): str
       ? [`--index-fund-bond-liquidity=${String(set.indexFundBondLiquidityEnabled)}`]
       : []),
     ...(set.equityLiquidityFacilityEnabled !== undefined
-      ? [`--equity-liquidity=${String(set.equityLiquidityFacilityEnabled)}`]
+      ? [`--${EQUITY_LIQUIDITY_FACILITY_CLI_FLAG}=${String(set.equityLiquidityFacilityEnabled)}`]
       : []),
     ...(set.nppMarketCoverageEnabled !== undefined
       ? [`--npp-market-coverage=${String(set.nppMarketCoverageEnabled)}`]
