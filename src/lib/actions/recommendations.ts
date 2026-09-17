@@ -10,6 +10,9 @@ import {
   getAdvertiseActionCost,
   getDonorActionCost,
   calculateFundraisingAmount,
+  CONVERT_CASH_ACTION_COST,
+  calculateConvertCashInfamy,
+  convertCashConversion,
 } from "../actions";
 import {
   ACTION_HOARDING_THRESHOLD,
@@ -315,8 +318,11 @@ export function checkStatThresholds(
   // ── Cash on Hand: High (Convert Cash opportunity) ─────────────────────────
   const cashOnHand = getTotalPersonalLiquidWealth(character, forexEnabled);
   if (cashOnHand > 100_000 && funds < 200_000) {
-    const converted = Math.floor(cashOnHand * 0.5);
-    const infamy = Math.round(15 * Math.pow(cashOnHand / 1_000_000, 0.564));
+    // Single source of truth: the shared conversion and infamy legs, so the
+    // preview can never drift from the debited result. The old inline infamy
+    // omitted the 100 cap the execution applies.
+    const converted = convertCashConversion(cashOnHand);
+    const infamy = calculateConvertCashInfamy(cashOnHand);
     recommendations.push({
       id: `convert-cash-${character._id.toString()}`,
       priority: "medium",
@@ -325,7 +331,7 @@ export function checkStatThresholds(
       why: `You have $${cashOnHand.toLocaleString()} personal cash. Convert to campaign funds at 50% rate (+$${converted.toLocaleString()}, +${infamy} infamy).`,
       action: {
         type: "convertCash",
-        estimatedCost: { ap: 2, funds: 0 },
+        estimatedCost: { ap: CONVERT_CASH_ACTION_COST, funds: 0 },
         estimatedBenefit: `+$${converted.toLocaleString()} campaign funds`,
       },
       link: "/actions",
