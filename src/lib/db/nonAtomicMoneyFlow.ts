@@ -406,19 +406,53 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * the historical `indexfund-bid-cancel:<orderId>` subkey, so
  * already-applied legacy refunds converge. Recovery is by key plus a
  * bounded orphan scan (default 50) re-driven every turn by
- * fillPendingShareOrders alongside the fill scans, so fund cancels add no
- * new per-turn scan: the empty-turn cost stays four bounded scans (five
- * finds, ~5 commands against the 2000-command corporationTurn budget).
+ * fillPendingShareOrders alongside the fill scans (see the placement
+ * paragraph below for the current scan budget after this pass added the
+ * fifth scan).
  * A crash-heavy turn recovers at most 50 receipts per scan before the
  * matcher proceeds. Tested:
  * crash-after-every-write convergence for the fund path, partial-fill
  * residuals, same-key replay, competing keys, orphan-scan recovery, and
  * wrapper no-op boundaries.
+ * Order-placement escrow is migrated
+ * (src/lib/corporations/shareOrderPlacement.ts, issue #1672): all eight
+ * placement paths (character/corporation placer by buy/sell by
+ * immediate/pending) run one keyed flow per attempt. The route keeps every
+ * read-only guard with byte-identical validation order and error strings
+ * (auth, rate limit, band, CEO cap, cycle, FX 503s, availability 400s,
+ * pool-depth pre-check) and pins every amount, currency field, dealer
+ * routing decision, escrow-mode split, guard error string, and response
+ * body on an immutable plan before the first step; the flow claims the
+ * receipt, stores the plan, and runs the steps. Buyer/escrow debits gate
+ * `$gte` like the legacy atomic debits, cap moves reuse the keyed cap
+ * debit/credit steps, the float/order-flow `$inc` is its own guarded step,
+ * pool/treasury dealer legs reuse the matcher shapes, and the escrow-mode
+ * sell split runs as one atomic pipeline update (the exact legacy floored
+ * expressions) with a keyed exact inverse. Guard failures keep the legacy
+ * surface (funds 400s, float/reserve 409s, dealer-depth 400s) with the
+ * applied prefix compensated. The order insert carries a deterministic
+ * `_id`, so a crash between the escrow debit and the insert converges on
+ * retry instead of stranding debited-with-no-order rows; the tx row is
+ * post-commit best effort with a deterministic `_id`, while the
+ * trade-history row is the terminal money step (a crash there stays
+ * `in_progress` and the retry converges instead of compensating the
+ * fill). The FX spread rides post-commit (terminal by construction,
+ * matching the legacy keep-on-rollback), and `recordAudit` fires only on
+ * the fresh attempt.
+ * Same-key retries short-circuit at the route (the first attempt already
+ * validated) and return the stored body; competing keys race on the keyed
+ * guards with truthful 400/409s. Recovery is by key plus a bounded orphan
+ * scan (default 50) re-driven every turn by fillPendingShareOrders, so the
+ * empty-turn cost stays five bounded scans (seven finds, ~7 commands
+ * against the 2000-command corporationTurn budget). Tested:
+ * crash-after-every-write convergence for all eight paths, partial
+ * placement failures with new-key retry, same-key replay identity,
+ * competing-key races, key-conflict/terminal semantics, and orphan-scan
+ * recovery including plan-less settle-failed.
  * Open seams for the next pass (all sighted, none audited here). (1)
- * Order-placement escrow (placeShareOrder.ts,
- * shareEscrowSettlement.ts, cancelShareListing.ts), direct market
- * buy/sell legs outside the order flow (buyPublicShares.ts,
- * sellPublicShares.ts), share offers (submitShareOffer.ts,
+ * Remaining escrow settlement callers outside the order flow
+ * (shareEscrowSettlement.ts via buyPublicShares.ts, sellPublicShares.ts,
+ * cancelShareListing.ts), share offers (submitShareOffer.ts,
  * acceptShareOffer.ts), and corp-level money (takeovers, spin-offs,
  * capital injections, acquisitions, privatization). (2) Plan-less receipt
  * coverage in the route/audit orphan scans: recoverShareFillMoneyOrphans

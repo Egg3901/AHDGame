@@ -1,6 +1,20 @@
 import { NextResponse } from "next/server";
-import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/mongodb";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+  keyedInsertId,
+} from "@/lib/db/nonAtomicMoneyFlow";
+import {
+  SHARE_ORDER_PLACEMENT_ORDER_DOMAIN,
+  executeShareOrderPlacementFlow,
+  getStoredPlacementResponse,
+  recoverShareOrderPlacementByKey,
+  type ShareOrderPlacementDealer,
+  type ShareOrderPlacementPlan,
+} from "@/lib/corporations/shareOrderPlacement";
+import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -12,21 +26,11 @@ import {
   corpPurchaseWouldCycle,
   OWNERSHIP_CYCLE_ERROR,
 } from "@/lib/corporations/subsidiaries/cycleGuard";
-import type { Character, Corporation, ShareOrder } from "@/lib/db/types";
+import type { Corporation, ShareOrder } from "@/lib/db/types";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
-import {
-  creditShares,
-  debitShares,
-  creditSharesToCorp,
-  debitSharesFromCorp,
-} from "@/lib/corporations/shareholderOps";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import {
-  buildPersonalBalanceInc,
-  getHomeCurrency,
-  loadCharacterFxRate,
-} from "@/lib/currency/characterFunds";
+import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   anchorToCorpLiquidCapital,
@@ -37,36 +41,52 @@ import {
   resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
-import { distributeConversionSpread } from "@/lib/currency/marketMaker";
 import { notifyHostileTakeoverThresholdIfEligible } from "@/lib/corporations/hostileTakeoverNotifications";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
-import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-  atomicallyDebitCorpLiquidCapital,
-  refundCorpLiquidCapital,
-} from "@/lib/financialTxLog/atomicCashGuard";
-import {
-  applyFloatBuyCredit,
-  settleFloatSellDebit,
-  reverseFloatSellDebit,
-  onFloatSellCommitted,
-  type EscrowDebitSplit,
-} from "@/lib/corporations/shareEscrowSettlement";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
-import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   isOrderFlowPriceEligible,
   isWithinShareExecutionBand,
 } from "@/lib/corporations/marketExecution";
 import { equityPoolDepthMessage, loadEquityQuote } from "@/lib/equities/marketPool";
-import { recordAudit } from "@/lib/audit/recordAudit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
+import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+/** Maps keyed-flow claim failures onto the legacy 409 surface. */
+function mapPlacementKeyError(error: unknown): NextResponse {
+  if (error instanceof MoneyFlowTerminalError) {
+    return NextResponse.json(
+      { error: "Placement already settled; start a new attempt with a new key." },
+      { status: 409 }
+    );
+  }
+  if (error instanceof MoneyFlowKeyConflictError) {
+    return NextResponse.json(
+      { error: "Idempotency key was reused for a different transfer." },
+      { status: 409 }
+    );
+  }
+  throw error;
+}
+
+async function runPlacementKeyRecovery(
+  db: import("mongodb").Db,
+  placementKey: string
+): Promise<NextResponse> {
+  try {
+    const recovered = await recoverShareOrderPlacementByKey(db, placementKey);
+    if (!recovered.ok) {
+      return NextResponse.json({ error: recovered.error }, { status: recovered.status });
+    }
+    return NextResponse.json(recovered.body);
+  } catch (error) {
+    return mapPlacementKeyError(error);
+  }
 }
 
 /**
@@ -89,6 +109,15 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
+    // Crash-safe placement (issue #1672): the escrow debit, the share
+    // reserve, the immediate-fill legs, and the order insert run as keyed
+    // idempotent steps. `Idempotency-Key` replays the stored outcome
+    // without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const { id } = await params;
     const parsed = await parseJsonBody(request, placeOrderSchema);
     if (!parsed.success) {
@@ -97,6 +126,18 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
 
     const { type, shares, pricePerShare, placeAsCorporation } = parsed.data;
     const db = await getDb();
+
+    // Same-key retry: the first attempt already validated, so reconcile
+    // through the stored plan instead of re-running the guards (which
+    // post-debit reads would fail). Runs before the action/turn guards so
+    // crash recovery converges even while fresh placements are blocked.
+    if (headerKey !== null) {
+      const prior = await getStoredPlacementResponse(db, headerKey);
+      if (prior) {
+        return runPlacementKeyRecovery(db, headerKey);
+      }
+    }
+
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
     const turnGuard = await rejectDuringTurn(db);
@@ -165,12 +206,30 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
     // capped at what the treasury holds. Mirrors the market-order sell route so
     // a limit order can't bypass the cap. (Pending orders that don't fill now
     // are filled later peer-to-peer or by the turn processor.)
+    //
+    // Crash-safe placement (issue #1672) pins the dealer routing and the
+    // escrow-mode split here, before the keyed flow starts, so a retry
+    // replays the same figures instead of re-reading post-debit state. The
+    // pool-depth pre-check below stays in the route (read-only); the flow
+    // re-guards the same message for a pool race at step time.
     const issuerBuyback = shares * executionPrice;
     const issuerCurrency = resolveCorpLiquidCurrencyCode(corporation) ?? "USD";
-    // Hoisted so the outer-scope rollback paths can reverse the exact escrow/
-    // treasury split recorded when the issuer buyback was settled.
-    let issuerBuybackSplit: EscrowDebitSplit | undefined;
-    async function gateIssuerBuyback(): Promise<NextResponse | null> {
+    const buybackMode = getShareBuybackMode(corporation);
+    function poolDepthError(): { message: string; status: number } {
+      return {
+        message: equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
+        status: 400,
+      };
+    }
+    function treasuryCoverError(): { message: string; status: number } {
+      const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
+      return {
+        message: `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
+        status: 400,
+      };
+    }
+    /** Pool-depth gate shared by every immediate sell (legacy pre-check). */
+    function gatePoolDepth(): NextResponse | null {
       if (marketQuote.active && shares > marketQuote.bidDepthShares) {
         return NextResponse.json(
           {
@@ -180,21 +239,85 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           { status: 400 }
         );
       }
-      const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
-      issuerBuybackSplit = settle.split;
-      if (!settle.ok) {
-        const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
-        return NextResponse.json(
-          {
-            error: marketQuote.active
-              ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
-              : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
-            ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
-          },
-          { status: 400 }
-        );
-      }
       return null;
+    }
+    function pinBuyDealer(): ShareOrderPlacementDealer {
+      if (marketQuote.active) {
+        return {
+          kind: "pool",
+          currency: marketQuote.currency,
+          amountLocal: issuerBuyback,
+          flowKind: "purchasesIn",
+        };
+      }
+      if (buybackMode === "escrow") return { kind: "escrow-credit", amountLocal: issuerBuyback };
+      return { kind: "treasury", amountLocal: issuerBuyback };
+    }
+    /** Pins the sell dealer leg; reads the issuer escrow pot for the split. */
+    async function pinSellDealer(): Promise<ShareOrderPlacementDealer> {
+      if (marketQuote.active) {
+        // Signed matcher convention: a pool sell debits pool cash, so the
+        // pinned movement is negative with the salesOut counter side.
+        return {
+          kind: "pool",
+          currency: marketQuote.currency,
+          amountLocal: -issuerBuyback,
+          flowKind: "salesOut",
+        };
+      }
+      if (buybackMode === "escrow") {
+        const issuerRow = await db
+          .collection<Corporation>("corporations")
+          .findOne({ _id: corporation._id }, { projection: { shareEscrowBalance: 1 } });
+        const escrowBalance = issuerRow?.shareEscrowBalance ?? 0;
+        const escrowPart = Math.min(issuerBuyback, Math.max(0, escrowBalance));
+        return {
+          kind: "escrow-split",
+          amountLocal: issuerBuyback,
+          escrowPart,
+          treasuryPart: issuerBuyback - escrowPart,
+        };
+      }
+      return { kind: "treasury", amountLocal: -issuerBuyback };
+    }
+    function sellDealerError(dealer: ShareOrderPlacementDealer): {
+      message: string;
+      status: number;
+    } {
+      if (dealer.kind === "pool") return poolDepthError();
+      if (dealer.kind === "treasury") return treasuryCoverError();
+      return { message: "Failed to place order", status: 500 };
+    }
+    const placementKey = headerKey ?? randomUUID();
+    const orderIdHex = keyedInsertId(
+      placementKey,
+      SHARE_ORDER_PLACEMENT_ORDER_DOMAIN
+    ).toHexString();
+    /**
+     * Run one fully-pinned placement plan. Fresh attempts settle the keyed
+     * steps and return the legacy body; same-key retries converge on the
+     * stored plan and return the stored body.
+     */
+    async function runPlacement(
+      plan: Omit<ShareOrderPlacementPlan, "placementKey" | "orderIdHex">,
+      immediate: boolean
+    ): Promise<NextResponse> {
+      try {
+        const result = await executeShareOrderPlacementFlow(
+          db,
+          { ...plan, placementKey, orderIdHex },
+          { idempotencyKey: placementKey }
+        );
+        if (!result.ok) {
+          return NextResponse.json({ error: result.error }, { status: result.status });
+        }
+        if (immediate && !result.replayed) {
+          void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
+        }
+        return NextResponse.json(result.body);
+      } catch (error) {
+        return mapPlacementKeyError(error);
+      }
     }
 
     if (placeAsCorporation) {
@@ -258,141 +381,106 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             placerCurrency !== targetCurrency
               ? corpPurchaseEstimate.spendAmount
               : anchorToCorpLiquidCapital(cost, placerCorp, placerFxRate);
-          // Atomic balance-gated debit on the placer corp's liquidCapital.
-          // Same race-fix as bond-buy/share-buy: read-then-write check on
-          // placerCapitalAnchor would let concurrent buys both pass the
-          // staleness check and silently overspend or split-debit.
-          const corpDebit = await atomicallyDebitCorpLiquidCapital(
-            db,
-            placerCorp._id,
-            costInPlacerCapital
-          );
-          if (!corpDebit.ok) {
-            return NextResponse.json({ error: "Insufficient corporation funds" }, { status: 400 });
-          }
-          let sharesCredited = false;
-          try {
-            const credited = await creditSharesToCorp(
-              db,
-              corporation._id,
-              placerCorp._id,
+          // Keyed placement (issue #1672): the balance-gated debit, the
+          // float-guarded cap credit, the dealer credit, and the history
+          // row run as exactly-once steps; the prefix compensates on a
+          // guard failure so the legacy 400/409 surface is preserved.
+          return runPlacement(
+            {
+              version: 1,
+              kind: "buy-immediate",
+              corpIdHex: corporation._id.toHexString(),
+              corpName: corporation.name,
               shares,
+              limitPrice: pricePerShare,
               executionPrice,
-              {
-                $inc: {
-                  publicFloat: -shares,
-                  ...(orderFlowEligible
-                    ? { orderFlowWindowBuyValue: shares * executionPrice }
-                    : {}),
-                },
-                $set: { updatedAt: now },
+              turn: currentTurn,
+              nowIso: now.toISOString(),
+              orderFlowEligible,
+              placerKind: "corporation",
+              placerIdHex: placerCorp._id.toHexString(),
+              placerName: placerCorp.name,
+              characterIdHex: character._id.toHexString(),
+              debitLeg: {
+                collection: "corporations",
+                idHex: placerCorp._id.toHexString(),
+                field: "liquidCapital",
+                amount: costInPlacerCapital,
               },
-              { guardFilter: { publicFloat: { $gte: shares } } }
-            );
-            if (!credited) {
-              await refundCorpLiquidCapital(db, placerCorp._id, costInPlacerCapital);
-              return NextResponse.json(
-                { error: "Not enough shares remain in public float" },
-                { status: 409 }
-              );
-            }
-            sharesCredited = true;
-            void recordShareTrade(db, {
-              corporationId: corporation._id,
-              kind: "limit_fill",
-              turn: currentTurn,
-              shares,
-              pricePerShareAnchor: cost / shares,
-              from: null,
-              to: { corporationId: placerCorp._id, name: placerCorp.name },
-              corpCurrencyCode: corporation.liquidCurrencyCode,
-            });
-            void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
-            await emitTx(db, {
-              type: "stock_trade_buy",
-              turn: currentTurn,
-              createdAt: now,
-              subjectType: "corporation",
-              subjectId: placerCorp._id,
-              subjectName: placerCorp.name,
-              amount: -costInPlacerCapital,
-              balanceAfter: corpDebit.newBalance,
-              currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
-              counterpartyType: "corporation",
-              counterpartyId: corporation._id,
-              counterpartyName: corporation.name,
-              meta: {
-                corporationId: corporation._id.toString(),
+              proceedsLeg: null,
+              capDebit: null,
+              capCredit: {
+                field: "corporationId",
+                idHex: placerCorp._id.toHexString(),
+                pricePerShare: executionPrice,
+              },
+              floatDelta: -shares,
+              dealer: pinBuyDealer(),
+              orderDoc: null,
+              tx: {
+                type: "stock_trade_buy",
+                subjectType: "corporation",
+                subjectIdHex: placerCorp._id.toHexString(),
+                subjectName: placerCorp.name,
+                amount: -costInPlacerCapital,
+                includeBalanceAfter: true,
+                currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
+                counterpartyType: "corporation",
+                counterpartyName: corporation.name,
+                counterpartyIdHex: corporation._id.toHexString(),
+                meta: {
+                  corporationId: corporation._id.toString(),
+                  shares,
+                  pricePerShare: executionPrice,
+                  source: "limit_order_immediate_fill",
+                },
+              },
+              history: {
+                shares,
+                pricePerShareAnchor: cost / shares,
+                from: null,
+                to: { corporationId: placerCorp._id, name: placerCorp.name },
+                corpCurrencyCode: corporation.liquidCurrencyCode ?? undefined,
+              },
+              spread:
+                placerCurrency !== targetCurrency
+                  ? {
+                      fee: corpPurchaseEstimate.spreadFee,
+                      from: placerCurrency,
+                      to: targetCurrency,
+                    }
+                  : null,
+              audit: {
+                counterpartyType: "corporation",
+                counterpartyIdHex: placerCorp._id.toHexString(),
+                counterpartyName: placerCorp.name,
+                amount: -costInPlacerCapital,
+                currencyCode: placerCurrency,
+                orderType: "buy",
+                status: "filled",
                 shares,
                 pricePerShare: executionPrice,
-                source: "limit_order_immediate_fill",
               },
-            });
-
-            // Treasury-backed market maker: inject the buyer's payment into the
-            // issuer treasury. Last in the try — a throw rolls back via the catch.
-            await applyFloatBuyCredit(db, corporation, shares * executionPrice);
-
-            // Cross-currency immediate fill realizes the spread now — route it to
-            // the CB system. (Resting-order escrow defers its spread to fill time.)
-            if (placerCurrency !== targetCurrency) {
-              await distributeConversionSpread(
-                db,
-                corpPurchaseEstimate.spreadFee,
-                placerCurrency,
-                targetCurrency
-              );
-            }
-          } catch (err) {
-            if (sharesCredited) {
-              await debitSharesFromCorp(
-                db,
-                corporation._id,
-                placerCorp._id,
-                shares,
-                {
-                  $inc: {
-                    publicFloat: shares,
-                    ...(orderFlowEligible
-                      ? { orderFlowWindowBuyValue: -(shares * executionPrice) }
-                      : {}),
-                  },
-                  $set: { updatedAt: new Date() },
-                },
-                { requireSufficient: true }
-              );
-            }
-            await refundCorpLiquidCapital(db, placerCorp._id, costInPlacerCapital);
-            throw err;
-          }
-          recordAudit({
-            source: "api",
-            action: "share.order",
-            category: "market",
-            subject: { type: "corporation", id: corporation._id, name: corporation.name },
-            counterparty: { type: "corporation", id: placerCorp._id, name: placerCorp.name },
-            amount: -costInPlacerCapital,
-            currencyCode: placerCurrency,
-            refs: { corporationId: corporation._id },
-            delta: [
-              { field: "orderType", before: null, after: "buy" },
-              { field: "status", before: null, after: "filled" },
-              { field: "shares", before: null, after: shares },
-              { field: "pricePerShare", before: null, after: executionPrice },
-            ],
-            outcome: "ok",
-          });
-          return NextResponse.json({
-            success: true,
-            filled: true,
-            sharesBought: shares,
-            cost: Math.round(cost * 100) / 100,
-            spreadPaid:
-              placerCurrency !== targetCurrency
-                ? Math.round(corpPurchaseEstimate.spreadFee * 100) / 100
-                : 0,
-            spreadCurrency: placerCurrency,
-          });
+              errors: {
+                debit: { message: "Insufficient corporation funds", status: 400 },
+                float: { message: "Not enough shares remain in public float", status: 409 },
+                reserve: { message: "Not enough shares remain in public float", status: 409 },
+                dealer: { message: "Failed to place order", status: 500 },
+              },
+              response: {
+                success: true,
+                filled: true,
+                sharesBought: shares,
+                cost: Math.round(cost * 100) / 100,
+                spreadPaid:
+                  placerCurrency !== targetCurrency
+                    ? Math.round(corpPurchaseEstimate.spreadFee * 100) / 100
+                    : 0,
+                spreadCurrency: placerCurrency,
+              },
+            },
+            true
+          );
         }
 
         // pricePerShare is specified by the user in the target corp's local
@@ -418,94 +506,110 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           placerCurrency !== targetCurrency
             ? escrowEstimate.spendAmount
             : anchorToCorpLiquidCapital(escrowAnchor, placerCorp, placerFxRate);
-        const escrowDebit = await atomicallyDebitCorpLiquidCapital(
-          db,
-          placerCorp._id,
-          escrowInPlacerCapital
-        );
-        if (!escrowDebit.ok) {
-          return NextResponse.json(
-            { error: "Insufficient corporation funds for escrow" },
-            { status: 400 }
-          );
-        }
-        try {
-          await db.collection<ShareOrder>("shareOrders").insertOne({
-            _id: new ObjectId(),
-            corporationId: corporation._id,
-            characterId: character._id,
-            placerCorporationId: placerCorp._id,
-            type: "buy",
+        // Keyed placement (issue #1672): the escrow debit and the order
+        // insert run as exactly-once steps under the deterministic order
+        // id, so a crash lands debited-with-no-order only until the retry
+        // converges instead of forever.
+        return runPlacement(
+          {
+            version: 1,
+            kind: "buy-pending",
+            corpIdHex: corporation._id.toHexString(),
+            corpName: corporation.name,
             shares,
-            sharesRemaining: shares,
-            pricePerShare,
-            escrowAmount,
-            status: "open",
-            createdAt: now,
-            updatedAt: now,
-          });
-          await emitTx(db, {
-            type: "stock_order_escrow",
+            limitPrice: pricePerShare,
+            executionPrice,
             turn: currentTurn,
-            createdAt: now,
-            subjectType: "corporation",
-            subjectId: placerCorp._id,
-            subjectName: placerCorp.name,
-            amount: -escrowInPlacerCapital,
-            balanceAfter: escrowDebit.newBalance,
-            currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
-            counterpartyType: "system",
-            counterpartyName: "Order book escrow",
-            meta: {
-              corporationId: corporation._id.toString(),
+            nowIso: now.toISOString(),
+            orderFlowEligible,
+            placerKind: "corporation",
+            placerIdHex: placerCorp._id.toHexString(),
+            placerName: placerCorp.name,
+            characterIdHex: character._id.toHexString(),
+            debitLeg: {
+              collection: "corporations",
+              idHex: placerCorp._id.toHexString(),
+              field: "liquidCapital",
+              amount: escrowInPlacerCapital,
+            },
+            proceedsLeg: null,
+            capDebit: null,
+            capCredit: null,
+            floatDelta: 0,
+            dealer: null,
+            orderDoc: {
+              _id: keyedInsertId(placementKey, SHARE_ORDER_PLACEMENT_ORDER_DOMAIN),
+              corporationId: corporation._id,
+              characterId: character._id,
+              placerCorporationId: placerCorp._id,
+              type: "buy",
+              shares,
+              sharesRemaining: shares,
+              pricePerShare,
+              escrowAmount,
+              status: "open",
+              createdAt: now,
+              updatedAt: now,
+            } as ShareOrder,
+            tx: {
+              type: "stock_order_escrow",
+              subjectType: "corporation",
+              subjectIdHex: placerCorp._id.toHexString(),
+              subjectName: placerCorp.name,
+              amount: -escrowInPlacerCapital,
+              includeBalanceAfter: true,
+              currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
+              counterpartyType: "system",
+              counterpartyName: "Order book escrow",
+              meta: {
+                corporationId: corporation._id.toString(),
+                shares,
+                pricePerShare,
+              },
+            },
+            history: null,
+            // The placer's FX spread is consumed at placement: cancel
+            // refunds only the share value, not the spread markup, so it
+            // rides post-commit. A compensated placement distributes
+            // nothing, matching the legacy insert-failure refund.
+            spread:
+              placerCurrency !== targetCurrency
+                ? {
+                    fee: escrowEstimate.spreadFee,
+                    from: placerCurrency,
+                    to: targetCurrency,
+                  }
+                : null,
+            audit: {
+              counterpartyType: "corporation",
+              counterpartyIdHex: placerCorp._id.toHexString(),
+              counterpartyName: placerCorp.name,
+              amount: -escrowInPlacerCapital,
+              currencyCode: placerCurrency,
+              orderType: "buy",
+              status: "open",
               shares,
               pricePerShare,
             },
-          });
-        } catch (err) {
-          await refundCorpLiquidCapital(db, placerCorp._id, escrowInPlacerCapital);
-          throw err;
-        }
-        // The placer's FX spread is consumed at placement — cancel refunds only
-        // the share value (escrowAmount), not the spread markup — so route it to
-        // the CB system now. Correct for both eventual fill and cancel, and
-        // placed after the try so an insert failure (which fully refunds) can't
-        // leave the spread distributed.
-        if (placerCurrency !== targetCurrency) {
-          await distributeConversionSpread(
-            db,
-            escrowEstimate.spreadFee,
-            placerCurrency,
-            targetCurrency
-          );
-        }
-        recordAudit({
-          source: "api",
-          action: "share.order",
-          category: "market",
-          subject: { type: "corporation", id: corporation._id, name: corporation.name },
-          counterparty: { type: "corporation", id: placerCorp._id, name: placerCorp.name },
-          amount: -escrowInPlacerCapital,
-          currencyCode: placerCurrency,
-          refs: { corporationId: corporation._id },
-          delta: [
-            { field: "orderType", before: null, after: "buy" },
-            { field: "status", before: null, after: "open" },
-            { field: "shares", before: null, after: shares },
-            { field: "pricePerShare", before: null, after: pricePerShare },
-          ],
-          outcome: "ok",
-        });
-        return NextResponse.json({
-          success: true,
-          filled: false,
-          escrowAmount,
-          spreadPaid:
-            placerCurrency !== targetCurrency
-              ? Math.round(escrowEstimate.spreadFee * 100) / 100
-              : 0,
-          spreadCurrency: placerCurrency,
-        });
+            errors: {
+              debit: { message: "Insufficient corporation funds for escrow", status: 400 },
+              float: { message: "Failed to place order", status: 500 },
+              reserve: { message: "Failed to place order", status: 500 },
+              dealer: { message: "Failed to place order", status: 500 },
+            },
+            response: {
+              success: true,
+              filled: false,
+              escrowAmount,
+              spreadPaid:
+                placerCurrency !== targetCurrency
+                  ? Math.round(escrowEstimate.spreadFee * 100) / 100
+                  : 0,
+              spreadCurrency: placerCurrency,
+            },
+          },
+          false
+        );
       } else {
         // Corp sell limit order
         const shareholderEntry = corporation.shareholders?.find(
@@ -547,185 +651,165 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
             placerCorp,
             placerFxRate
           );
-          const buybackGate = await gateIssuerBuyback();
-          if (buybackGate) return buybackGate;
-          const remainingAfterSale = await debitSharesFromCorp(
-            db,
-            corporation._id,
-            placerCorp._id,
-            shares,
+          const poolGate = gatePoolDepth();
+          if (poolGate) return poolGate;
+          const sellDealer = await pinSellDealer();
+          // Keyed placement (issue #1672): the dealer debit, the seller
+          // share debit, the proceeds credit, and the history row run as
+          // exactly-once steps; the prefix compensates on a guard failure
+          // so the legacy 400/409 surface is preserved.
+          return runPlacement(
             {
-              $inc: {
-                publicFloat: shares,
-                ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
-              },
-              $set: { updatedAt: now },
-            },
-            { requireSufficient: true }
-          );
-          if (remainingAfterSale < 0) {
-            await reverseFloatSellDebit(db, corporation, issuerBuyback, {
-              split: issuerBuybackSplit,
-            });
-            return NextResponse.json(
-              { error: "Shares were already sold or reserved by another action" },
-              { status: 409 }
-            );
-          }
-          let sellerCredited = false;
-          try {
-            const sellerCredit = await db
-              .collection<Corporation>("corporations")
-              .updateOne(
-                { _id: placerCorp._id },
-                { $inc: { liquidCapital: proceedsInPlacerCapital }, $set: { updatedAt: now } }
-              );
-            if (sellerCredit.matchedCount === 0) {
-              throw new Error("Seller corporation not found");
-            }
-            sellerCredited = true;
-            void recordShareTrade(db, {
-              corporationId: corporation._id,
-              kind: "limit_fill",
-              turn: currentTurn,
+              version: 1,
+              kind: "sell-immediate",
+              corpIdHex: corporation._id.toHexString(),
+              corpName: corporation.name,
               shares,
-              pricePerShareAnchor: proceeds / shares,
-              from: { corporationId: placerCorp._id, name: placerCorp.name },
-              to: null,
-              corpCurrencyCode: corporation.liquidCurrencyCode,
-            });
-            await emitTx(db, {
-              type: "stock_trade_sell",
+              limitPrice: pricePerShare,
+              executionPrice,
               turn: currentTurn,
-              createdAt: now,
-              subjectType: "corporation",
-              subjectId: placerCorp._id,
-              subjectName: placerCorp.name,
-              amount: proceedsInPlacerCapital,
-              currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
-              counterpartyType: "corporation",
-              counterpartyId: corporation._id,
-              counterpartyName: corporation.name,
-              meta: {
-                corporationId: corporation._id.toString(),
+              nowIso: now.toISOString(),
+              orderFlowEligible,
+              placerKind: "corporation",
+              placerIdHex: placerCorp._id.toHexString(),
+              placerName: placerCorp.name,
+              characterIdHex: character._id.toHexString(),
+              debitLeg: null,
+              proceedsLeg: {
+                collection: "corporations",
+                idHex: placerCorp._id.toHexString(),
+                field: "liquidCapital",
+                amount: proceedsInPlacerCapital,
+              },
+              capDebit: {
+                field: "corporationId",
+                idHex: placerCorp._id.toHexString(),
+                pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice,
+              },
+              capCredit: null,
+              floatDelta: shares,
+              dealer: sellDealer,
+              orderDoc: null,
+              tx: {
+                type: "stock_trade_sell",
+                subjectType: "corporation",
+                subjectIdHex: placerCorp._id.toHexString(),
+                subjectName: placerCorp.name,
+                amount: proceedsInPlacerCapital,
+                includeBalanceAfter: false,
+                currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
+                counterpartyType: "corporation",
+                counterpartyName: corporation.name,
+                counterpartyIdHex: corporation._id.toHexString(),
+                meta: {
+                  corporationId: corporation._id.toString(),
+                  shares,
+                  pricePerShare: executionPrice,
+                  source: "limit_order_immediate_fill",
+                },
+              },
+              history: {
+                shares,
+                pricePerShareAnchor: proceeds / shares,
+                from: { corporationId: placerCorp._id, name: placerCorp.name },
+                to: null,
+                corpCurrencyCode: corporation.liquidCurrencyCode ?? undefined,
+              },
+              spread: null,
+              audit: {
+                counterpartyType: "corporation",
+                counterpartyIdHex: placerCorp._id.toHexString(),
+                counterpartyName: placerCorp.name,
+                amount: proceedsInPlacerCapital,
+                currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
+                orderType: "sell",
+                status: "filled",
                 shares,
                 pricePerShare: executionPrice,
-                source: "limit_order_immediate_fill",
               },
-            });
-          } catch (err) {
-            if (sellerCredited) {
-              await db.collection<Corporation>("corporations").updateOne(
-                { _id: placerCorp._id },
-                {
-                  $inc: { liquidCapital: -proceedsInPlacerCapital },
-                  $set: { updatedAt: new Date() },
-                }
-              );
-            }
-            await creditSharesToCorp(
-              db,
-              corporation._id,
-              placerCorp._id,
-              shares,
-              shareholderEntry?.avgCostPerShare ?? executionPrice,
-              {
-                $inc: {
-                  publicFloat: -shares,
-                  ...(orderFlowEligible
-                    ? { orderFlowWindowSellValue: -(shares * executionPrice) }
-                    : {}),
+              errors: {
+                debit: { message: "Failed to place order", status: 500 },
+                float: { message: "Failed to place order", status: 500 },
+                reserve: {
+                  message: "Shares were already sold or reserved by another action",
+                  status: 409,
                 },
-                $set: { updatedAt: new Date() },
-              }
-            );
-            await reverseFloatSellDebit(db, corporation, issuerBuyback, {
-              split: issuerBuybackSplit,
-            });
-            throw err;
-          }
-          // Sell-fill committed: back out realized issuance proceeds to match the
-          // float shrinking (mirrors the buy-side credit). Best-effort/terminal.
-          void onFloatSellCommitted(db, corporation, issuerBuyback);
-          recordAudit({
-            source: "api",
-            action: "share.order",
-            category: "market",
-            subject: { type: "corporation", id: corporation._id, name: corporation.name },
-            counterparty: { type: "corporation", id: placerCorp._id, name: placerCorp.name },
-            amount: proceedsInPlacerCapital,
-            currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
-            refs: { corporationId: corporation._id },
-            delta: [
-              { field: "orderType", before: null, after: "sell" },
-              { field: "status", before: null, after: "filled" },
-              { field: "shares", before: null, after: shares },
-              { field: "pricePerShare", before: null, after: executionPrice },
-            ],
-            outcome: "ok",
-          });
-          return NextResponse.json({ success: true, filled: true, sharesSold: shares, proceeds });
+                dealer: sellDealerError(sellDealer),
+              },
+              response: { success: true, filled: true, sharesSold: shares, proceeds },
+            },
+            true
+          );
         }
-        // Reserve shares by debiting from corp position
-        const reservedCorpShares = await debitSharesFromCorp(
-          db,
-          corporation._id,
-          placerCorp._id,
-          shares,
+        // Reserve shares by debiting from corp position (keyed, issue #1672):
+        // the reserve and the order insert converge on retry instead of
+        // stranding reserved shares when the insert throws.
+        return runPlacement(
           {
-            $set: { updatedAt: now },
+            version: 1,
+            kind: "sell-pending",
+            corpIdHex: corporation._id.toHexString(),
+            corpName: corporation.name,
+            shares,
+            limitPrice: pricePerShare,
+            executionPrice,
+            turn: currentTurn,
+            nowIso: now.toISOString(),
+            orderFlowEligible,
+            placerKind: "corporation",
+            placerIdHex: placerCorp._id.toHexString(),
+            placerName: placerCorp.name,
+            characterIdHex: character._id.toHexString(),
+            debitLeg: null,
+            proceedsLeg: null,
+            capDebit: {
+              field: "corporationId",
+              idHex: placerCorp._id.toHexString(),
+              pricePerShare: shareholderEntry?.avgCostPerShare ?? corporation.sharePrice,
+            },
+            capCredit: null,
+            floatDelta: 0,
+            dealer: null,
+            orderDoc: {
+              _id: keyedInsertId(placementKey, SHARE_ORDER_PLACEMENT_ORDER_DOMAIN),
+              corporationId: corporation._id,
+              characterId: character._id,
+              placerCorporationId: placerCorp._id,
+              type: "sell",
+              shares,
+              sharesRemaining: shares,
+              sharesDebitedAtCreation: true,
+              pricePerShare,
+              escrowAmount: 0,
+              status: "open",
+              createdAt: now,
+              updatedAt: now,
+            } as ShareOrder,
+            tx: null,
+            history: null,
+            spread: null,
+            audit: {
+              counterpartyType: "corporation",
+              counterpartyIdHex: placerCorp._id.toHexString(),
+              counterpartyName: placerCorp.name,
+              orderType: "sell",
+              status: "open",
+              shares,
+              pricePerShare,
+            },
+            errors: {
+              debit: { message: "Failed to place order", status: 500 },
+              float: { message: "Failed to place order", status: 500 },
+              reserve: {
+                message: "Shares were already sold or reserved by another action",
+                status: 409,
+              },
+              dealer: { message: "Failed to place order", status: 500 },
+            },
+            response: { success: true, filled: false, sharesReserved: shares },
           },
-          { requireSufficient: true }
+          false
         );
-        if (reservedCorpShares < 0) {
-          return NextResponse.json(
-            { error: "Shares were already sold or reserved by another action" },
-            { status: 409 }
-          );
-        }
-        try {
-          await db.collection<ShareOrder>("shareOrders").insertOne({
-            _id: new ObjectId(),
-            corporationId: corporation._id,
-            characterId: character._id,
-            placerCorporationId: placerCorp._id,
-            type: "sell",
-            shares,
-            sharesRemaining: shares,
-            sharesDebitedAtCreation: true,
-            pricePerShare,
-            escrowAmount: 0,
-            status: "open",
-            createdAt: now,
-            updatedAt: now,
-          });
-        } catch (error) {
-          await creditSharesToCorp(
-            db,
-            corporation._id,
-            placerCorp._id,
-            shares,
-            shareholderEntry?.avgCostPerShare ?? corporation.sharePrice,
-            { $set: { updatedAt: new Date() } }
-          );
-          throw error;
-        }
-        recordAudit({
-          source: "api",
-          action: "share.order",
-          category: "market",
-          subject: { type: "corporation", id: corporation._id, name: corporation.name },
-          counterparty: { type: "corporation", id: placerCorp._id, name: placerCorp.name },
-          refs: { corporationId: corporation._id },
-          delta: [
-            { field: "orderType", before: null, after: "sell" },
-            { field: "status", before: null, after: "open" },
-            { field: "shares", before: null, after: shares },
-            { field: "pricePerShare", before: null, after: pricePerShare },
-          ],
-          outcome: "ok",
-        });
-        return NextResponse.json({ success: true, filled: false, sharesReserved: shares });
       }
     }
 
@@ -757,128 +841,93 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
           targetFxRate
         );
         const costInHome = cost * charFxRate;
-        // Atomic balance-gated debit on the buyer's wallet so concurrent
-        // limit buys cannot both pass a stale balance check and overspend.
-        const debitResult = await atomicallyDebitCharacterCash(
-          db,
-          character._id,
-          homeCurrency,
-          costInHome,
-          forexEnabled
+        // Keyed placement (issue #1672): the wallet debit, the
+        // float-guarded cap credit, the dealer credit, and the history row
+        // run as exactly-once steps with the legacy 400/409 surface.
+        return runPlacement(
+          {
+            version: 1,
+            kind: "buy-immediate",
+            corpIdHex: corporation._id.toHexString(),
+            corpName: corporation.name,
+            shares,
+            limitPrice: pricePerShare,
+            executionPrice,
+            turn: currentTurn,
+            nowIso: now.toISOString(),
+            orderFlowEligible,
+            placerKind: "character",
+            placerIdHex: character._id.toHexString(),
+            placerName: character.name,
+            characterIdHex: character._id.toHexString(),
+            debitLeg: {
+              collection: "characters",
+              idHex: character._id.toHexString(),
+              field: personalBalanceField(homeCurrency, forexEnabled),
+              amount: costInHome,
+            },
+            proceedsLeg: null,
+            capDebit: null,
+            capCredit: {
+              field: "characterId",
+              idHex: character._id.toHexString(),
+              pricePerShare: executionPrice,
+            },
+            floatDelta: -shares,
+            dealer: pinBuyDealer(),
+            orderDoc: null,
+            tx: {
+              type: "stock_trade_buy",
+              subjectType: "character",
+              subjectIdHex: character._id.toHexString(),
+              subjectName: character.name,
+              amount: -costInHome,
+              includeBalanceAfter: true,
+              currencyCode: homeCurrency,
+              counterpartyType: "corporation",
+              counterpartyName: corporation.name,
+              counterpartyIdHex: corporation._id.toHexString(),
+              meta: {
+                corporationId: corporation._id.toString(),
+                shares,
+                pricePerShare: executionPrice,
+                source: "limit_order_immediate_fill",
+              },
+            },
+            history: {
+              shares,
+              pricePerShareAnchor: cost / shares,
+              from: null,
+              to: { characterId: character._id, name: character.name },
+              corpCurrencyCode: corporation.liquidCurrencyCode ?? undefined,
+            },
+            spread: null,
+            audit: {
+              counterpartyType: "character",
+              counterpartyIdHex: character._id.toHexString(),
+              counterpartyName: character.name,
+              amount: -costInHome,
+              currencyCode: homeCurrency,
+              orderType: "buy",
+              status: "filled",
+              shares,
+              pricePerShare: executionPrice,
+            },
+            errors: {
+              debit: { message: "Insufficient funds for immediate fill", status: 400 },
+              float: { message: "Not enough shares remain in public float", status: 409 },
+              reserve: { message: "Not enough shares remain in public float", status: 409 },
+              dealer: { message: "Failed to place order", status: 500 },
+            },
+            response: {
+              success: true,
+              filled: true,
+              sharesBought: shares,
+              cost: Math.round(cost * 100) / 100,
+            },
+          },
+          true
         );
-        if (!debitResult.ok) {
-          return NextResponse.json(
-            { error: "Insufficient funds for immediate fill" },
-            { status: 400 }
-          );
-        }
-        let sharesCredited = false;
-        try {
-          const credited = await creditShares(
-            db,
-            corporation._id,
-            character._id,
-            shares,
-            {
-              $inc: {
-                publicFloat: -shares,
-                ...(orderFlowEligible ? { orderFlowWindowBuyValue: shares * executionPrice } : {}),
-              },
-              $set: { updatedAt: now },
-            },
-            {
-              pricePerShare: executionPrice,
-              guardFilter: { publicFloat: { $gte: shares } },
-            }
-          );
-          if (!credited) {
-            await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
-            return NextResponse.json(
-              { error: "Not enough shares remain in public float" },
-              { status: 409 }
-            );
-          }
-          sharesCredited = true;
-          void recordShareTrade(db, {
-            corporationId: corporation._id,
-            kind: "limit_fill",
-            turn: currentTurn,
-            shares,
-            pricePerShareAnchor: cost / shares,
-            from: null,
-            to: { characterId: character._id, name: character.name },
-            corpCurrencyCode: corporation.liquidCurrencyCode,
-          });
-          await emitTx(db, {
-            type: "stock_trade_buy",
-            turn: currentTurn,
-            createdAt: now,
-            subjectType: "character",
-            subjectId: character._id,
-            subjectName: character.name,
-            amount: -costInHome,
-            balanceAfter: debitResult.newBalance,
-            currencyCode: homeCurrency,
-            counterpartyType: "corporation",
-            counterpartyId: corporation._id,
-            counterpartyName: corporation.name,
-            meta: {
-              corporationId: corporation._id.toString(),
-              shares,
-              pricePerShare: executionPrice,
-              source: "limit_order_immediate_fill",
-            },
-          });
-
-          // Treasury-backed market maker: inject the buyer's payment into the
-          // issuer treasury. Last in the try — a throw rolls back via the catch.
-          await applyFloatBuyCredit(db, corporation, shares * executionPrice);
-        } catch (err) {
-          if (sharesCredited) {
-            await debitShares(
-              db,
-              corporation._id,
-              character._id,
-              shares,
-              {
-                $inc: {
-                  publicFloat: shares,
-                  ...(orderFlowEligible
-                    ? { orderFlowWindowBuyValue: -(shares * executionPrice) }
-                    : {}),
-                },
-                $set: { updatedAt: new Date() },
-              },
-              { requireSufficient: true }
-            );
-          }
-          await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
-          throw err;
-        }
-
-        recordAudit({
-          source: "api",
-          action: "share.order",
-          category: "market",
-          subject: { type: "corporation", id: corporation._id, name: corporation.name },
-          counterparty: { type: "character", id: character._id, name: character.name },
-          amount: -costInHome,
-          currencyCode: homeCurrency,
-          refs: { corporationId: corporation._id },
-          delta: [
-            { field: "orderType", before: null, after: "buy" },
-            { field: "status", before: null, after: "filled" },
-            { field: "shares", before: null, after: shares },
-            { field: "pricePerShare", before: null, after: executionPrice },
-          ],
-          outcome: "ok",
-        });
-        return NextResponse.json({
-          success: true,
-          filled: true,
-          sharesBought: shares,
-          cost: Math.round(cost * 100) / 100,
-        });
       }
 
       // Pending buy order — escrow stored in target corp's local currency
@@ -888,76 +937,90 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
       const escrowAmount = shares * pricePerShare;
       const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corporation, targetFxRate);
       const escrowInHome = escrowAnchor * charFxRate;
-      const escrowDebit = await atomicallyDebitCharacterCash(
-        db,
-        character._id,
-        homeCurrency,
-        escrowInHome,
-        forexEnabled
-      );
-      if (!escrowDebit.ok) {
-        return NextResponse.json(
-          {
-            error: `Insufficient funds. Need ${escrowInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency} in escrow`,
-          },
-          { status: 400 }
-        );
-      }
-      try {
-        await db.collection<ShareOrder>("shareOrders").insertOne({
-          _id: new ObjectId(),
-          corporationId: corporation._id,
-          characterId: character._id,
-          type: "buy",
+      // Keyed placement (issue #1672): the escrow debit and the order
+      // insert run as exactly-once steps under the deterministic order id.
+      return runPlacement(
+        {
+          version: 1,
+          kind: "buy-pending",
+          corpIdHex: corporation._id.toHexString(),
+          corpName: corporation.name,
           shares,
-          sharesRemaining: shares,
-          pricePerShare,
-          escrowAmount,
-          status: "open",
-          createdAt: now,
-          updatedAt: now,
-        });
-        await emitTx(db, {
-          type: "stock_order_escrow",
+          limitPrice: pricePerShare,
+          executionPrice,
           turn: currentTurn,
-          createdAt: now,
-          subjectType: "character",
-          subjectId: character._id,
-          subjectName: character.name,
-          amount: -escrowInHome,
-          balanceAfter: escrowDebit.newBalance,
-          currencyCode: homeCurrency,
-          counterpartyType: "system",
-          counterpartyName: "Order book escrow",
-          meta: {
-            corporationId: corporation._id.toString(),
+          nowIso: now.toISOString(),
+          orderFlowEligible,
+          placerKind: "character",
+          placerIdHex: character._id.toHexString(),
+          placerName: character.name,
+          characterIdHex: character._id.toHexString(),
+          debitLeg: {
+            collection: "characters",
+            idHex: character._id.toHexString(),
+            field: personalBalanceField(homeCurrency, forexEnabled),
+            amount: escrowInHome,
+          },
+          proceedsLeg: null,
+          capDebit: null,
+          capCredit: null,
+          floatDelta: 0,
+          dealer: null,
+          orderDoc: {
+            _id: keyedInsertId(placementKey, SHARE_ORDER_PLACEMENT_ORDER_DOMAIN),
+            corporationId: corporation._id,
+            characterId: character._id,
+            type: "buy",
+            shares,
+            sharesRemaining: shares,
+            pricePerShare,
+            escrowAmount,
+            status: "open",
+            createdAt: now,
+            updatedAt: now,
+          } as ShareOrder,
+          tx: {
+            type: "stock_order_escrow",
+            subjectType: "character",
+            subjectIdHex: character._id.toHexString(),
+            subjectName: character.name,
+            amount: -escrowInHome,
+            includeBalanceAfter: true,
+            currencyCode: homeCurrency,
+            counterpartyType: "system",
+            counterpartyName: "Order book escrow",
+            meta: {
+              corporationId: corporation._id.toString(),
+              shares,
+              pricePerShare,
+            },
+          },
+          history: null,
+          spread: null,
+          audit: {
+            counterpartyType: "character",
+            counterpartyIdHex: character._id.toHexString(),
+            counterpartyName: character.name,
+            amount: -escrowInHome,
+            currencyCode: homeCurrency,
+            orderType: "buy",
+            status: "open",
             shares,
             pricePerShare,
           },
-        });
-      } catch (err) {
-        await refundCharacterCash(db, character._id, homeCurrency, escrowInHome, forexEnabled);
-        throw err;
-      }
-
-      recordAudit({
-        source: "api",
-        action: "share.order",
-        category: "market",
-        subject: { type: "corporation", id: corporation._id, name: corporation.name },
-        counterparty: { type: "character", id: character._id, name: character.name },
-        amount: -escrowInHome,
-        currencyCode: homeCurrency,
-        refs: { corporationId: corporation._id },
-        delta: [
-          { field: "orderType", before: null, after: "buy" },
-          { field: "status", before: null, after: "open" },
-          { field: "shares", before: null, after: shares },
-          { field: "pricePerShare", before: null, after: pricePerShare },
-        ],
-        outcome: "ok",
-      });
-      return NextResponse.json({ success: true, filled: false, escrowAmount });
+          errors: {
+            debit: {
+              message: `Insufficient funds. Need ${escrowInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency} in escrow`,
+              status: 400,
+            },
+            float: { message: "Failed to place order", status: 500 },
+            reserve: { message: "Failed to place order", status: 500 },
+            dealer: { message: "Failed to place order", status: 500 },
+          },
+          response: { success: true, filled: false, escrowAmount },
+        },
+        false
+      );
     } else {
       // Sell order — validate and reserve shares
       const shareholderEntry = corporation.shareholders?.find(
@@ -1002,195 +1065,169 @@ export async function placeShareOrder(request: Request, { params }: RouteParams)
         );
         const proceedsInHome = proceeds * charFxRate;
 
-        const buybackGate = await gateIssuerBuyback();
-        if (buybackGate) return buybackGate;
-
-        // Atomically debit shares from seller and increment public float
-        const remainingAfterSale = await debitShares(
-          db,
-          corporation._id,
-          character._id,
-          shares,
+        const poolGate = gatePoolDepth();
+        if (poolGate) return poolGate;
+        const sellDealer = await pinSellDealer();
+        // Keyed placement (issue #1672): the dealer debit, the seller
+        // share debit, the proceeds credit, and the history row run as
+        // exactly-once steps with the legacy 400/409 surface.
+        return runPlacement(
           {
-            $inc: {
-              publicFloat: shares,
-              ...(orderFlowEligible ? { orderFlowWindowSellValue: shares * executionPrice } : {}),
-            },
-            $set: { updatedAt: now },
-          },
-          { requireSufficient: true }
-        );
-        if (remainingAfterSale < 0) {
-          await reverseFloatSellDebit(db, corporation, issuerBuyback, {
-            split: issuerBuybackSplit,
-          });
-          return NextResponse.json(
-            { error: "Shares were already sold or reserved by another action" },
-            { status: 409 }
-          );
-        }
-        let sellerCredited = false;
-        try {
-          const sellerCredit = await db.collection<Character>("characters").updateOne(
-            { _id: character._id },
-            {
-              $inc: buildPersonalBalanceInc(proceedsInHome, homeCurrency, forexEnabled),
-              $set: { updatedAt: now },
-            }
-          );
-          if (sellerCredit.matchedCount === 0) {
-            throw new Error("Seller character not found");
-          }
-          sellerCredited = true;
-
-          void recordShareTrade(db, {
-            corporationId: corporation._id,
-            kind: "limit_fill",
-            turn: currentTurn,
+            version: 1,
+            kind: "sell-immediate",
+            corpIdHex: corporation._id.toHexString(),
+            corpName: corporation.name,
             shares,
-            pricePerShareAnchor: proceeds / shares,
-            from: { characterId: character._id, name: character.name },
-            to: null,
-            corpCurrencyCode: corporation.liquidCurrencyCode,
-          });
-          await emitTx(db, {
-            type: "stock_trade_sell",
+            limitPrice: pricePerShare,
+            executionPrice,
             turn: currentTurn,
-            createdAt: now,
-            subjectType: "character",
-            subjectId: character._id,
-            subjectName: character.name,
-            amount: proceedsInHome,
-            currencyCode: homeCurrency,
-            counterpartyType: "corporation",
-            counterpartyId: corporation._id,
-            counterpartyName: corporation.name,
-            meta: {
-              corporationId: corporation._id.toString(),
+            nowIso: now.toISOString(),
+            orderFlowEligible,
+            placerKind: "character",
+            placerIdHex: character._id.toHexString(),
+            placerName: character.name,
+            characterIdHex: character._id.toHexString(),
+            debitLeg: null,
+            proceedsLeg: {
+              collection: "characters",
+              idHex: character._id.toHexString(),
+              field: personalBalanceField(homeCurrency, forexEnabled),
+              amount: proceedsInHome,
+            },
+            capDebit: {
+              field: "characterId",
+              idHex: character._id.toHexString(),
+              pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice,
+            },
+            capCredit: null,
+            floatDelta: shares,
+            dealer: sellDealer,
+            orderDoc: null,
+            tx: {
+              type: "stock_trade_sell",
+              subjectType: "character",
+              subjectIdHex: character._id.toHexString(),
+              subjectName: character.name,
+              amount: proceedsInHome,
+              includeBalanceAfter: false,
+              currencyCode: homeCurrency,
+              counterpartyType: "corporation",
+              counterpartyName: corporation.name,
+              counterpartyIdHex: corporation._id.toHexString(),
+              meta: {
+                corporationId: corporation._id.toString(),
+                shares,
+                pricePerShare: executionPrice,
+                source: "limit_order_immediate_fill",
+              },
+            },
+            history: {
+              shares,
+              pricePerShareAnchor: proceeds / shares,
+              from: { characterId: character._id, name: character.name },
+              to: null,
+              corpCurrencyCode: corporation.liquidCurrencyCode ?? undefined,
+            },
+            spread: null,
+            audit: {
+              counterpartyType: "character",
+              counterpartyIdHex: character._id.toHexString(),
+              counterpartyName: character.name,
+              amount: proceedsInHome,
+              currencyCode: homeCurrency,
+              orderType: "sell",
+              status: "filled",
               shares,
               pricePerShare: executionPrice,
-              source: "limit_order_immediate_fill",
             },
-          });
-        } catch (err) {
-          if (sellerCredited) {
-            await db.collection<Character>("characters").updateOne(
-              { _id: character._id },
-              {
-                $inc: buildPersonalBalanceInc(-proceedsInHome, homeCurrency, forexEnabled),
-                $set: { updatedAt: new Date() },
-              }
-            );
-          }
-          await creditShares(
-            db,
-            corporation._id,
-            character._id,
-            shares,
-            {
-              $inc: {
-                publicFloat: -shares,
-                ...(orderFlowEligible
-                  ? { orderFlowWindowSellValue: -(shares * executionPrice) }
-                  : {}),
+            errors: {
+              debit: { message: "Failed to place order", status: 500 },
+              float: { message: "Failed to place order", status: 500 },
+              reserve: {
+                message: "Shares were already sold or reserved by another action",
+                status: 409,
               },
-              $set: { updatedAt: new Date() },
+              dealer: sellDealerError(sellDealer),
             },
-            { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
-          );
-          await reverseFloatSellDebit(db, corporation, issuerBuyback, {
-            split: issuerBuybackSplit,
-          });
-          throw err;
-        }
-
-        // Sell-fill committed (character): back out realized issuance proceeds to
-        // match the float shrinking (mirrors the buy-side credit). Best-effort/terminal.
-        void onFloatSellCommitted(db, corporation, issuerBuyback);
-        recordAudit({
-          source: "api",
-          action: "share.order",
-          category: "market",
-          subject: { type: "corporation", id: corporation._id, name: corporation.name },
-          counterparty: { type: "character", id: character._id, name: character.name },
-          amount: proceedsInHome,
-          currencyCode: homeCurrency,
-          refs: { corporationId: corporation._id },
-          delta: [
-            { field: "orderType", before: null, after: "sell" },
-            { field: "status", before: null, after: "filled" },
-            { field: "shares", before: null, after: shares },
-            { field: "pricePerShare", before: null, after: executionPrice },
-          ],
-          outcome: "ok",
-        });
-        return NextResponse.json({
-          success: true,
-          filled: true,
-          sharesSold: shares,
-          proceeds: Math.round(proceeds * 100) / 100,
-        });
+            response: {
+              success: true,
+              filled: true,
+              sharesSold: shares,
+              proceeds: Math.round(proceeds * 100) / 100,
+            },
+          },
+          true
+        );
       }
 
       // Pending sell: debit holdings now and set sharesDebitedAtCreation so
-      // fill does not debit again. Cancel restores the shares.
-      const reservedShares = await debitShares(
-        db,
-        corporation._id,
-        character._id,
-        shares,
-        { $set: { updatedAt: now } },
-        { requireSufficient: true }
+      // fill does not debit again. Cancel restores the shares. Keyed
+      // (issue #1672): the reserve and the order insert converge on retry.
+      return runPlacement(
+        {
+          version: 1,
+          kind: "sell-pending",
+          corpIdHex: corporation._id.toHexString(),
+          corpName: corporation.name,
+          shares,
+          limitPrice: pricePerShare,
+          executionPrice,
+          turn: currentTurn,
+          nowIso: now.toISOString(),
+          orderFlowEligible,
+          placerKind: "character",
+          placerIdHex: character._id.toHexString(),
+          placerName: character.name,
+          characterIdHex: character._id.toHexString(),
+          debitLeg: null,
+          proceedsLeg: null,
+          capDebit: {
+            field: "characterId",
+            idHex: character._id.toHexString(),
+            pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice,
+          },
+          capCredit: null,
+          floatDelta: 0,
+          dealer: null,
+          orderDoc: {
+            _id: keyedInsertId(placementKey, SHARE_ORDER_PLACEMENT_ORDER_DOMAIN),
+            corporationId: corporation._id,
+            characterId: character._id,
+            type: "sell",
+            shares,
+            sharesRemaining: shares,
+            sharesDebitedAtCreation: true,
+            pricePerShare,
+            escrowAmount: 0,
+            status: "open",
+            createdAt: now,
+            updatedAt: now,
+          } as ShareOrder,
+          tx: null,
+          history: null,
+          spread: null,
+          audit: {
+            counterpartyType: "character",
+            counterpartyIdHex: character._id.toHexString(),
+            counterpartyName: character.name,
+            orderType: "sell",
+            status: "open",
+            shares,
+            pricePerShare,
+          },
+          errors: {
+            debit: { message: "Failed to place order", status: 500 },
+            float: { message: "Failed to place order", status: 500 },
+            reserve: {
+              message: "Shares were already sold or reserved by another action",
+              status: 409,
+            },
+            dealer: { message: "Failed to place order", status: 500 },
+          },
+          response: { success: true, filled: false, sharesReserved: shares },
+        },
+        false
       );
-      if (reservedShares < 0) {
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
-      }
-      try {
-        await db.collection<ShareOrder>("shareOrders").insertOne({
-          _id: new ObjectId(),
-          corporationId: corporation._id,
-          characterId: character._id,
-          type: "sell",
-          shares,
-          sharesRemaining: shares,
-          sharesDebitedAtCreation: true,
-          pricePerShare,
-          escrowAmount: 0,
-          status: "open",
-          createdAt: now,
-          updatedAt: now,
-        });
-      } catch (error) {
-        await creditShares(
-          db,
-          corporation._id,
-          character._id,
-          shares,
-          { $set: { updatedAt: new Date() } },
-          { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
-        );
-        throw error;
-      }
-
-      recordAudit({
-        source: "api",
-        action: "share.order",
-        category: "market",
-        subject: { type: "corporation", id: corporation._id, name: corporation.name },
-        counterparty: { type: "character", id: character._id, name: character.name },
-        refs: { corporationId: corporation._id },
-        delta: [
-          { field: "orderType", before: null, after: "sell" },
-          { field: "status", before: null, after: "open" },
-          { field: "shares", before: null, after: shares },
-          { field: "pricePerShare", before: null, after: pricePerShare },
-        ],
-        outcome: "ok",
-      });
-      return NextResponse.json({ success: true, filled: false, sharesReserved: shares });
     }
   } catch (error) {
     return handleRouteError(error);

@@ -62,9 +62,10 @@ vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn() }));
 vi.mock("@/lib/corporations/hostileTakeoverNotifications", () => ({
   notifyHostileTakeoverThresholdIfEligible: vi.fn(),
 }));
-vi.mock("@/lib/corporations/shareTradeHistory", () => ({
-  recordShareTrade: vi.fn(),
-}));
+vi.mock("@/lib/corporations/shareTradeHistory", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/corporations/shareTradeHistory")>();
+  return { ...actual, recordShareTrade: vi.fn() };
+});
 
 let db: MockDb;
 
@@ -76,7 +77,7 @@ beforeEach(async () => {
 });
 
 describe("POST /api/corporations/[id]/shares/orders", () => {
-  it("rolls back an immediate character buy fill if settlement fails after shares credit", async () => {
+  it("treats a failed trade-log emit as best effort on an immediate character buy fill", async () => {
     const userId = new ObjectId();
     const charId = new ObjectId();
     const corpId = new ObjectId();
@@ -110,8 +111,12 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
     const { emitTx } = await import("@/lib/financialTxLog/emit");
     vi.mocked(emitTx).mockRejectedValueOnce(new Error("ledger failed"));
 
-    const { debitShares } = await import("@/lib/corporations/shareholderOps");
-    const { refundCharacterCash } = await import("@/lib/financialTxLog/atomicCashGuard");
+    // Keyed cap credit reads the buyer row before incrementing it.
+    db.collection("corporations");
+    db.collectionMocks["corporations"].findOne.mockResolvedValue({
+      _id: corpId,
+      shareholders: [{ characterId: charId, shares: 20, avgCostPerShare: 9 }],
+    });
 
     const { POST } = await import("./route");
     const req = new Request("http://localhost/api/corporations/abc/shares/orders", {
@@ -126,19 +131,20 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
     });
     const res = await POST(req, { params: Promise.resolve({ id: "abc" }) });
 
-    expect(res.status).toBe(500);
-    expect(debitShares).toHaveBeenCalledWith(
+    // The trade-log row is post-commit best effort: the fill still settles
+    // and nothing is refunded when the emit throws.
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, filled: true, sharesBought: 5, cost: 50 });
+    const { refundCharacterCash } = await import("@/lib/financialTxLog/atomicCashGuard");
+    expect(refundCharacterCash).not.toHaveBeenCalled();
+    expect(emitTx).toHaveBeenCalledWith(
       expect.anything(),
-      corpId,
-      charId,
-      5,
-      {
-        $inc: { publicFloat: 5, orderFlowWindowBuyValue: -50 },
-        $set: expect.any(Object),
-      },
-      { requireSufficient: true }
+      expect.objectContaining({
+        meta: expect.objectContaining({ pricePerShare: 10 }),
+      }),
+      undefined,
+      expect.objectContaining({ _id: expect.anything() })
     );
-    expect(refundCharacterCash).toHaveBeenCalledWith(expect.anything(), charId, "USD", 50, false);
   });
 
   it("uses the fundamental execution price for low-float immediate buy fills", async () => {
@@ -178,6 +184,13 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
     const { atomicallyDebitCharacterCash } = await import("@/lib/financialTxLog/atomicCashGuard");
     const { emitTx } = await import("@/lib/financialTxLog/emit");
 
+    // Keyed cap credit reads the buyer row before incrementing it.
+    db.collection("corporations");
+    db.collectionMocks["corporations"].findOne.mockResolvedValue({
+      _id: corpId,
+      shareholders: [{ characterId: charId, shares: 20, avgCostPerShare: 9 }],
+    });
+
     const { POST } = await import("./route");
     const req = new Request("http://localhost/api/corporations/abc/shares/orders", {
       method: "POST",
@@ -192,22 +205,19 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
     const res = await POST(req, { params: Promise.resolve({ id: "abc" }) });
 
     expect(res.status).toBe(200);
-    expect(atomicallyDebitCharacterCash).toHaveBeenCalledWith(
-      expect.anything(),
-      charId,
-      "USD",
-      50,
-      false
-    );
+    // The wallet debit runs as a keyed money-flow leg, not the legacy helper.
+    expect(atomicallyDebitCharacterCash).not.toHaveBeenCalled();
     expect(emitTx).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
         meta: expect.objectContaining({ pricePerShare: 10 }),
-      })
+      }),
+      undefined,
+      expect.objectContaining({ _id: expect.anything() })
     );
   });
 
-  it("restores reserved shares if a pending sell order insert fails", async () => {
+  it("leaves reserved shares for key recovery when a pending sell order insert fails", async () => {
     const userId = new ObjectId();
     const charId = new ObjectId();
     const corpId = new ObjectId();
@@ -256,16 +266,13 @@ describe("POST /api/corporations/[id]/shares/orders", () => {
         placeAsCorporation: false,
       }),
     });
-    const res = await POST(req, { params: Promise.resolve({ id: "abc" }) });
-
-    expect(res.status).toBe(500);
-    expect(creditShares).toHaveBeenCalledWith(
-      expect.anything(),
-      corpId,
-      charId,
-      5,
-      { $set: expect.any(Object) },
-      { pricePerShare: 7 }
+    // The terminal order insert propagates instead of compensating: the
+    // receipt stays in progress and the same-key retry converges, so the
+    // route must not restore the reserved shares out from under recovery.
+    await expect(POST(req, { params: Promise.resolve({ id: "abc" }) })).rejects.toThrow(
+      "insert failed"
     );
+    expect(creditShares).not.toHaveBeenCalled();
+    expect(db.collectionMocks["shareOrders"].insertOne).toHaveBeenCalledTimes(1);
   });
 });

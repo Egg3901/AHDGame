@@ -13,6 +13,7 @@ import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currenc
 import { recoverShareFillOrphans } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import { recoverShareFillMoneyOrphans } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import { recoverShareOrderRefundOrphans } from "@/lib/corporations/shareOrderRefund";
+import { recoverShareOrderPlacementOrphans } from "@/lib/corporations/shareOrderPlacement";
 import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import type { ShareFillCashLeg } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
@@ -91,10 +92,13 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
   // bounded recovery every turn before the fresh scan, money first so the
   // audit pass observes settled money: a crash between two money legs
   // converges the balances here, a crash between money and audit lands the
-  // missing rows there. Fills are rejected during the turn so no live attempt
-  // races this, and lonely orphans (order already filled) are covered by the
-  // receipt scans rather than the per-order stamp hook. Best-effort:
-  // recovery never fails the matcher.
+  // missing rows there. Placement receipts (a crash between the escrow debit
+  // and the order insert, or mid-fill) converge here too, so a dead placer
+  // route never strands debited-with-no-order rows past this turn. Fills
+  // are rejected during the turn so no live attempt races this, and lonely
+  // orphans (order already filled) are covered by the receipt scans rather
+  // than the per-order stamp hook. Best-effort: recovery never fails the
+  // matcher.
   try {
     await recoverShareMatchOrphans(db, 50);
   } catch {
@@ -114,6 +118,11 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     await recoverShareOrderRefundOrphans(db, 50);
   } catch {
     // Cancel receipts stay `in_progress` for the next turn.
+  }
+  try {
+    await recoverShareOrderPlacementOrphans(db, 50);
+  } catch {
+    // Placement receipts stay `in_progress` for the next turn.
   }
 
   const openOrders = await db.collection("shareOrders").find({ status: "open" }).toArray();

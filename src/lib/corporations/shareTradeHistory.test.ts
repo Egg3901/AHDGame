@@ -92,7 +92,7 @@ describe("recordShareTrade", () => {
         from: null,
         to: null,
       })
-    ).resolves.toBeUndefined();
+    ).resolves.toBe("failed");
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
   });
 });
