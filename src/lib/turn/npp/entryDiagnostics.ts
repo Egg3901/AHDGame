@@ -17,8 +17,11 @@ export type {
   NppMarketEntryReason,
 } from "@/lib/db/types/marketFormation";
 
-export const NPP_MARKET_ENTRY_FUNNEL_COLLECTION = "nppMarketEntryFunnels";
-export const NPP_MARKET_ENTRY_FUNNEL_RETENTION_TURNS = 48;
+export {
+  NPP_MARKET_ENTRY_FUNNEL_COLLECTION,
+  NPP_MARKET_ENTRY_FUNNEL_RETENTION_TURNS,
+  normalizeNppMarketEntryFunnel,
+} from "./entryFunnelSnapshot";
 
 /**
  * Counts of candidate pools excluded by each `findBestUnownedSector` filter,

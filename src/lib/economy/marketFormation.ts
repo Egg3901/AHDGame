@@ -465,3 +465,5 @@ export function computeMarketFormationSnapshot(args: {
       "active corporate sectors plus unowned pools; facility headroom; state demand, local supply, delivered supply, and placed output; current-turn NPP entry outcomes",
   };
 }
+
+export { normalizeMarketFormationSnapshot } from "./marketFormationSnapshot";
