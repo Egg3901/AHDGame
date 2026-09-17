@@ -34,9 +34,23 @@
  * and canPerformAction all call; a missing intellect stat rejects instead of
  * falling back to the unscaled base. Hosts own currency conversion, atomic
  * resource checks and persistence.
+ *
+ * Debate Prep costs flat action points for a fixed chance to +1 the Debate
+ * skill. quoteDebatePrepAction is the single source of truth the execute
+ * shell (eligibility gate), canPerformAction, the action definition and the
+ * UI card all call; a disabled stat system or missing stat block rejects
+ * instead of charging for a roll that cannot land. The roll itself stays in
+ * `../stats/debatePrep` (injected rng, already pure); the quote owns the
+ * chance constant both sides compare against. Hosts own the rng, the flag
+ * read and persistence.
  */
 import { statMultiplier } from "../stats/statMultiplier";
-import { NEUTRAL_STAT } from "../stats/statsConstants";
+import {
+  NEUTRAL_STAT,
+  DEBATE_PREP_ACTION_COST,
+  DEBATE_PREP_SUCCESS_CHANCE,
+  STAT_MAX,
+} from "../stats/statsConstants";
 import { getGdpBaseline } from "../utils/fundGeneration";
 
 /** Action points charged per Fundraise use: flat at every donor level. */
@@ -693,4 +707,122 @@ export function quotePollAction(actor: PollQuoteActor, tier: PollTier): PollQuot
     apCost: getPollActionCost(tier),
     fundCostAnchor: getPollFundCost(tier, intellect),
   };
+}
+
+// ── DebatePrep (Game1724 slice) ───────────────────────────────────────────────
+// Cost, chance and eligibility math moved verbatim from `../actions` (base
+// cost, description), `../stats/statsConstants` (cost and chance constants)
+// and the execute shell (flag + stat-block gates) so the UI card, the action
+// definition, canPerformAction and the execute gate share one implementation.
+// Balance is unchanged: flat 1 AP and the fixed success chance are the
+// historical numbers, only the owner moved. The strict entry point is
+// quoteDebatePrepAction. The attempt roll itself stays in
+// `../stats/debatePrep` (injected rng, deterministically testable); the quote
+// re-exports the chance constant the roll compares against so the advertised
+// odds and the resolved odds cannot drift (the card previously advertised
+// 10% while the roll resolved 15%).
+
+/** Action points charged per Debate Prep attempt: flat, win or lose. */
+export { DEBATE_PREP_ACTION_COST };
+
+/** Fixed chance one Debate Prep attempt raises Debate by 1 (0–1). */
+export { DEBATE_PREP_SUCCESS_CHANCE };
+
+/** Debate skill points gained on a successful Debate Prep attempt. */
+export const DEBATE_PREP_DEBATE_GAIN = 1;
+
+/** Rejection when the RPG stat system flag is off. Mirrors the execute gate. */
+export const DEBATE_PREP_DISABLED_ERROR = "The stat system is not currently enabled.";
+
+/** Rejection when the character has no allocated stat block. Mirrors the execute gate. */
+export const DEBATE_PREP_UNALLOCATED_ERROR = "Allocate your stats before using Debate Prep.";
+
+/**
+ * Raw DebatePrep actor inputs, preserved explicitly. `hasStats` carries
+ * whether the character has an allocated stat block (Debate lives in stats);
+ * `debate` is the stored raw value. Missing either rejects instead of
+ * charging for a roll that cannot land.
+ */
+export interface DebatePrepQuoteActor {
+  debate?: number | null;
+  hasStats?: boolean;
+}
+
+/**
+ * Host-supplied context the rules cannot read themselves: the async RPG-stats
+ * feature flag. Omitted (or true) skips the flag leg for callers that cannot
+ * know it (canPerformAction, UI quotes); the execute shell always passes the
+ * resolved value. Explicit false rejects, mirroring the execute gate.
+ */
+export interface DebatePrepQuoteOptions {
+  rpgStatsEnabled?: boolean;
+}
+
+/**
+ * Authoritative Debate Prep quote: flat AP cost, the fixed success chance,
+ * and the Debate gain (0 when already at the stat cap). At-cap attempts stay
+ * quotable — execution historically still charges the AP and rolls — so the
+ * quote reports `capped` instead of rejecting; callers render the maxed state
+ * from it.
+ */
+export type DebatePrepQuote =
+  | {
+      ok: true;
+      apCost: number;
+      successChance: number;
+      debateGain: number;
+      capped: boolean;
+    }
+  | { ok: false; error: string };
+
+export function quoteDebatePrepAction(
+  actor: DebatePrepQuoteActor,
+  options?: DebatePrepQuoteOptions
+): DebatePrepQuote {
+  if (options?.rpgStatsEnabled === false) {
+    return { ok: false, error: DEBATE_PREP_DISABLED_ERROR };
+  }
+  if (!actor.hasStats) {
+    return { ok: false, error: DEBATE_PREP_UNALLOCATED_ERROR };
+  }
+  const { debate } = actor;
+  if (typeof debate !== "number" || !Number.isFinite(debate)) {
+    return { ok: false, error: DEBATE_PREP_UNALLOCATED_ERROR };
+  }
+  if (debate >= STAT_MAX) {
+    return {
+      ok: true,
+      apCost: DEBATE_PREP_ACTION_COST,
+      successChance: DEBATE_PREP_SUCCESS_CHANCE,
+      debateGain: 0,
+      capped: true,
+    };
+  }
+  return {
+    ok: true,
+    apCost: DEBATE_PREP_ACTION_COST,
+    successChance: DEBATE_PREP_SUCCESS_CHANCE,
+    debateGain: DEBATE_PREP_DEBATE_GAIN,
+    capped: false,
+  };
+}
+
+/**
+ * Card effect label for Debate Prep, derived from the resolved chance
+ * constant so the advertised odds cannot drift from the roll.
+ */
+export function describeDebatePrepEffect(): string {
+  return `${Math.round(DEBATE_PREP_SUCCESS_CHANCE * 100)}% chance: +1 Debate`;
+}
+
+/**
+ * Action definition description for Debate Prep, derived from the resolved
+ * chance constant so the definition cannot drift from the roll.
+ */
+export function describeDebatePrepAction(): string {
+  return (
+    "Study briefing books and rehearse. " +
+    `${Math.round(DEBATE_PREP_SUCCESS_CHANCE * 100)}% chance to raise your Debate skill by 1. ` +
+    "No fund cost."
+  );
 }
