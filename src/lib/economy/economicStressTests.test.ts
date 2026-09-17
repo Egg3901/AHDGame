@@ -81,7 +81,7 @@ describe("runEconomicStressTests", () => {
   it("reports null largest-supplier unmet share when ownership is unmeasured", () => {
     const unmeasured = {
       ...snapshot,
-      competition: { markets: [] },
+      competition: { ...snapshot.competition, markets: [] },
     } as EconomicVitalSigns;
     const finding = runEconomicStressTests(unmeasured)[0]!;
     expect(finding.firstFailure).toBe("unavailable");
