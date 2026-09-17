@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertCloneDestNotStamped,
+  assertCopiedBaselineMatches,
   assertCopiedMarkerMatches,
   assertBaselineMarkerForClaim,
   assertBaselineStampCompatible,
@@ -319,6 +320,14 @@ describe("paired-baseline repair and convergence", () => {
     await expect(createPairedBaselinePair({ ...BASE_INPUT }, jobs)).rejects.toThrow(
       "unexpected job"
     );
+    // A non-string _id tagged with the pairId is the same surgery and must
+    // not slip past the guard (listByPairId returns it either way).
+    const nonString: Array<Record<string, unknown>> = [
+      { ...planned.control.doc },
+      { ...planned.treatment.doc },
+      { _id: 12345, pairId: "rs1470-01", baselineId: "live-20260917" },
+    ];
+    expect(() => resolvePairedBaselineWrites(nonString, planned)).toThrow("unexpected job");
     expect(
       resolvePairedBaselineWrites(
         [{ ...planned.control.doc }, { ...planned.treatment.doc }],
@@ -431,6 +440,39 @@ describe("baseline marker races (stamp, claim, copy)", () => {
     expect(() =>
       assertCopiedMarkerMatches(source, { ...copied, stateHash: "1".repeat(64) }, "snap9")
     ).toThrow(/diverges|forked/);
+  });
+
+  it("post-copy gate re-observes dest state: mid-copy mutation fails", () => {
+    const sealed = { _id: "current", currentTurn: 7, treasury: 42 };
+    const source = {
+      _id: "snap9",
+      sourceTurn: 7,
+      docCount: 64,
+      stateHash: fingerprintBaselineState(sealed),
+    };
+    const copied = { ...source };
+    const cleanObserved = {
+      baselineId: "snap9",
+      sourceTurn: 7,
+      docCount: 64,
+      stateHash: fingerprintBaselineState(sealed),
+    };
+    // Faithful copy passes the full gate.
+    expect(() => assertCopiedBaselineMatches(source, copied, cleanObserved, "snap9")).not.toThrow();
+    // Source mutated between seal validation and copy: the mutated state
+    // copies with the unchanged marker collection, so marker equality alone
+    // passes while the landed state no longer matches the seal. The full
+    // gate must refuse.
+    const mutatedObserved = {
+      baselineId: "snap9",
+      sourceTurn: 7,
+      docCount: 64,
+      stateHash: fingerprintBaselineState({ _id: "current", currentTurn: 7, treasury: 999999 }),
+    };
+    expect(() => assertCopiedMarkerMatches(source, copied, "snap9")).not.toThrow();
+    expect(() => assertCopiedBaselineMatches(source, copied, mutatedObserved, "snap9")).toThrow(
+      /seal mismatch/
+    );
   });
 
   it("seals deterministically: key order never matters, edits always do", () => {

@@ -287,9 +287,12 @@ export function resolvePairedBaselineWrites(
   }
   const known = new Set([planned.control.runId, planned.treatment.runId]);
   for (const doc of existing) {
-    if (typeof doc._id === "string" && !known.has(doc._id)) {
+    // Every doc here came from listByPairId, so every one is pairId-tagged:
+    // any _id outside the two deterministic arm ids is manual surgery,
+    // whatever its type (a non-string _id must not slip past the guard).
+    if (!known.has(doc._id as string)) {
       throw new Error(
-        `pair "${planned.pairId}" has an unexpected job "${doc._id}" outside the two deterministic arm ids: refusing to create beside manual surgery`
+        `pair "${planned.pairId}" has an unexpected job "${String(doc._id)}" outside the two deterministic arm ids: refusing to create beside manual surgery`
       );
     }
   }

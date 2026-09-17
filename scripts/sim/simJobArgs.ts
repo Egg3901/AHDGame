@@ -632,6 +632,29 @@ export function assertCopiedMarkerMatches(
 }
 
 /**
+ * Full post-copy gate (worker.ts): the marker-travel check above proves the
+ * copy landed with the verified seal, and the dest-state check proves the
+ * state the copy actually landed still matches that seal. Marker equality
+ * alone cannot catch a source mutation between the pre-copy seal validation
+ * and the copy (the mutated state copies with the unchanged marker
+ * collection), so the worker re-observes the DESTINATION db (gameState turn,
+ * doc count, content hash, same method as stamp/claim) and that observation
+ * must satisfy the seal too. Transitivity closes it: source check proved
+ * marker == source state, travel check proves dest marker == source marker,
+ * this proves dest marker == dest state, so dest state == source state.
+ * Pure so the whole race is unit-testable without Mongo.
+ */
+export function assertCopiedBaselineMatches(
+  source: BaselineMarkerDoc | null | undefined,
+  dest: BaselineMarkerDoc | null | undefined,
+  destObserved: BaselineObservation & { stateHash: string },
+  baselineId: string
+): void {
+  assertCopiedMarkerMatches(source, dest, baselineId);
+  assertBaselineMarkerForClaim(dest, destObserved);
+}
+
+/**
  * Same-id recapture guard (cloneWorld.ts): once a baseline-named sandbox db
  * carries a stamped marker it is frozen. Re-cloning live into it (a second
  * capture under the same baselineId, e.g. between arm claims) would mutate

@@ -32,7 +32,7 @@ import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import {
   assertBaselineMarkerForClaim,
-  assertCopiedMarkerMatches,
+  assertCopiedBaselineMatches,
   assertPairedBaselineShape,
   assertSafeToken,
   fingerprintBaselineState,
@@ -272,9 +272,14 @@ async function verifyBaselineSealForClaim(
 
 /**
  * Post-copy gate: the arm db must carry the same sealed marker the source
- * check just verified (the marker collection copies with the snapshot). A
- * divergence means the copy raced a mutation or copied the wrong source:
- * fail before running turns. Sandbox Mongo only.
+ * check just verified (the marker collection copies with the snapshot), AND
+ * the state the copy actually landed must still satisfy that seal. Marker
+ * equality alone cannot catch a source mutation between the pre-copy seal
+ * check and the copy (mutated state copies with the unchanged marker
+ * collection), so the destination db is re-observed here (gameState turn,
+ * doc count, content hash, same method as stamp/claim) and matched against
+ * the copied marker. A divergence means the copy raced a mutation or copied
+ * the wrong source: fail before running turns. Sandbox Mongo only.
  */
 async function verifyCopiedBaselineMarker(
   armDb: string,
@@ -284,11 +289,25 @@ async function verifyCopiedBaselineMarker(
   const client = new MongoClient(SIM_MONGODB_URI as string);
   try {
     await client.connect();
-    const destMarker = (await client
-      .db(armDb)
+    const db = client.db(armDb);
+    const destGameState = await db.collection("gameState").findOne({ _id: "current" as never });
+    const destTurn = Number((destGameState as { currentTurn?: unknown } | null)?.currentTurn ?? 0);
+    const collections = await db.listCollections({}, { nameOnly: true }).toArray();
+    let destDocCount = 0;
+    for (const { name } of collections) {
+      if (name.startsWith("system.")) continue;
+      destDocCount += await db.collection(name).estimatedDocumentCount();
+    }
+    const destObserved = {
+      baselineId,
+      sourceTurn: destTurn,
+      docCount: destDocCount,
+      stateHash: fingerprintBaselineState(destGameState ?? {}),
+    };
+    const destMarker = (await db
       .collection("simBaselines")
       .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
-    assertCopiedMarkerMatches(sourceMarker, destMarker, baselineId);
+    assertCopiedBaselineMatches(sourceMarker, destMarker, destObserved, baselineId);
   } finally {
     await client.close();
   }
