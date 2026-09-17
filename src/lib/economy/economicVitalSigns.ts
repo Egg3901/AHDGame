@@ -27,6 +27,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { computeMarketFormationSnapshot } from "@/lib/economy/marketFormation";
+import { summarizeSovereignIssuanceByCountry } from "@/lib/bonds/sovereignIssueDiagnostics";
 import { NPP_MARKET_ENTRY_FUNNEL_COLLECTION } from "@/lib/turn/npp/entryDiagnostics";
 
 export const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
@@ -974,6 +975,7 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         sovereignBonds.length,
         "unmatured_sovereign_issue_count"
       ),
+      sovereignIssuanceByCountry: summarizeSovereignIssuanceByCountry(activeBonds),
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,
       twoSidedListingShare: metric(

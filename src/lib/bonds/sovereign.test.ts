@@ -840,6 +840,68 @@ describe("issueScheduledSovereignBondSeries", () => {
     expect(maturities).toEqual([48, 96]);
   });
 
+  describe("tranche consolidation gate (#1001)", () => {
+    // $12M annual deficit = $3M quarterly = 750k / 1.05M / 1.2M face legs.
+    // The 750-unit 1yr leg sits below the consolidation floor.
+    function setupConsolidationMocks(enabled: boolean | null) {
+      const budget = makeBudget({ surplus: -12_000_000 });
+      const { db } = setupScheduledMocks({ budget });
+      db.collectionMocks["gameConfig"] = db.collection("gameConfig") as ReturnType<
+        typeof db.collection
+      >;
+      db.collectionMocks["gameConfig"]!.findOne.mockResolvedValue(
+        enabled === null ? null : { sovereignIssuanceConsolidationEnabled: enabled }
+      );
+      return { db };
+    }
+
+    function issuedDocs(db: ReturnType<typeof createMockDb>): Omit<Bond, "_id">[] {
+      return db.collectionMocks["bonds"]!.insertMany.mock.calls.flatMap(
+        ([docs]) => docs as Omit<Bond, "_id">[]
+      );
+    }
+
+    it("keeps the historical ladder when the gate is absent", async () => {
+      const { db } = setupConsolidationMocks(null);
+      const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+      expect(count).toBe(3);
+      expect(
+        issuedDocs(db)
+          .map((b) => b.maturityTurns)
+          .sort((a, b) => a - b)
+      ).toEqual([48, 96, 240]);
+    });
+
+    it("keeps the historical ladder when the gate is explicitly false", async () => {
+      const { db } = setupConsolidationMocks(false);
+      const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+      expect(count).toBe(3);
+      expect(issuedDocs(db)).toHaveLength(3);
+    });
+
+    it("folds dust legs into one rung with the same total when enabled", async () => {
+      const { db } = setupConsolidationMocks(true);
+      const count = await issueScheduledSovereignBondSeries(db as unknown as Db, TURN, new Date());
+      expect(count).toBe(1);
+      const docs = issuedDocs(db);
+      expect(docs).toHaveLength(1);
+      expect(docs[0]!.maturityTurns).toBe(240);
+      expect(docs[0]!.totalIssued).toBe(3_000_000);
+    });
+
+    it("preserves total issuance with and without the gate", async () => {
+      const { db: offDb } = setupConsolidationMocks(false);
+      await issueScheduledSovereignBondSeries(offDb as unknown as Db, TURN, new Date());
+      const offTotal = issuedDocs(offDb).reduce((sum, b) => sum + b.totalIssued, 0);
+
+      const { db: onDb } = setupConsolidationMocks(true);
+      await issueScheduledSovereignBondSeries(onDb as unknown as Db, TURN, new Date());
+      const onTotal = issuedDocs(onDb).reduce((sum, b) => sum + b.totalIssued, 0);
+
+      expect(onTotal).toBe(offTotal);
+    });
+  });
+
   it("never issues for a dissolved country, even with its budget doc present", async () => {
     // A merged country keeps its budget as a stamped husk; the scheduler must
     // not keep rolling a dead state's debt over into fresh paper.

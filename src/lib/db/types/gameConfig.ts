@@ -388,6 +388,14 @@ export interface GameConfig {
   shortageResponsiveSourcingEnabled?: boolean;
   /** Governance record required when shortage-responsive sourcing is enabled. */
   shortageResponsiveSourcingIntervention?: EconomicInterventionPlan;
+  /**
+   * Dark gate for sovereign tranche consolidation (#1001): folds below-floor
+   * quarterly issuance rungs into the largest rung so small deficit quarters
+   * stop minting sliver issues nobody holds. Default off until worldsim
+   * evidence lands; ENABLING IS A BALANCE CHANGE and merges only with a
+   * simulation report from scripts/sim/ per CONTRIBUTING.md.
+   */
+  sovereignIssuanceConsolidationEnabled?: boolean;
   /** Dark gate for the index-fund 20 percent sovereign-bond allocation target. */
   indexFundBondLiquidityEnabled?: boolean;
   /** Governance record required when the sovereign-bond allocation target is enabled. */

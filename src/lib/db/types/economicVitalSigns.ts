@@ -7,6 +7,24 @@ export interface EconomicMetric {
   basis: string;
 }
 
+/**
+ * Per-country sovereign issuance rollup (#1001): the issue-level diagnostics
+ * grouped so a country-local allocator gap shows up as a cross-section.
+ * Plain data, computed from the same bond inputs as the aggregate securities
+ * section; additive and safe for older snapshots to omit.
+ */
+export interface SovereignCountryIssuanceSnapshot {
+  countryId: string;
+  issueCount: number;
+  unheldIssueCount: number;
+  noHolderShare: number;
+  subscriptionRate: number;
+  medianHolders: number;
+  medianSpreadToParPct: number;
+  maturityHhi: number;
+  thinIssueCount: number;
+}
+
 export interface RelevantMarketVitalSign {
   commodity: string;
   pooledFillRate: number | null;
@@ -94,6 +112,7 @@ export interface EconomicVitalSigns {
     corporateSubscriptionRate: EconomicMetric;
     sovereignMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
+    sovereignIssuanceByCountry?: SovereignCountryIssuanceSnapshot[];
     openBuyOrders: number;
     openSellOrders: number;
     twoSidedListingShare: EconomicMetric;

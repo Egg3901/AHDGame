@@ -447,6 +447,19 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.sovereignSubscriptionRate.value).toBe(0);
     expect(snapshot.securities.sovereignMaturityHhi.value).toBe(10_000);
     expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBe(0);
+    expect(snapshot.securities.sovereignIssuanceByCountry).toEqual([
+      {
+        countryId: "US",
+        issueCount: 1,
+        unheldIssueCount: 1,
+        noHolderShare: 1,
+        subscriptionRate: 0,
+        medianHolders: 0,
+        medianSpreadToParPct: 0,
+        maturityHhi: 10_000,
+        thinIssueCount: 1,
+      },
+    ]);
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
     expect(snapshot.securities.openOrderDepthAnchor).toBe(50);
