@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
 import {
   freightShockUnmetIntentShare,
+  largestSupplierUnmetShare,
   liquidationUnabsorbedShare,
   runEconomicStressTests,
 } from "./economicStressTests";
@@ -64,6 +65,30 @@ describe("runEconomicStressTests", () => {
     expect(finding.unmetDemandUnits).toBeCloseTo(84);
     expect(finding.balanceSheetLossAnchor).toBeCloseTo(840);
     expect(finding.severity).toBe("critical");
+  });
+
+  it("reports largest-supplier unmet demand as the implied unmet supply share", () => {
+    const finding = runEconomicStressTests(snapshot)[0]!;
+    expect(finding.scenario).toBe("largest_supplier_failure");
+    expect(finding.indicators.stressedFillRate).toBeCloseTo(0.16);
+    expect(finding.indicators.stressedUnmetSupplyShare).toBeCloseTo(0.84);
+    // Absolute unmet units stay on the finding; the share is the rate complement.
+    expect(finding.unmetDemandUnits).toBeCloseTo(84);
+    expect(finding.firstFailure).toBe("commodity:steel");
+    expect(finding.recoveryTurns).toBe(24);
+  });
+
+  it("reports null largest-supplier unmet share when ownership is unmeasured", () => {
+    const unmeasured = {
+      ...snapshot,
+      competition: { markets: [] },
+    } as EconomicVitalSigns;
+    const finding = runEconomicStressTests(unmeasured)[0]!;
+    expect(finding.firstFailure).toBe("unavailable");
+    expect(finding.indicators.stressedFillRate).toBeNull();
+    expect(finding.indicators.stressedUnmetSupplyShare).toBeNull();
+    expect(finding.severity).toBe("moderate");
+    expect(largestSupplierUnmetShare(unmeasured)).toBeNull();
   });
 
   it("reports freight-shock unmet demand as the implied unmet intent share", () => {

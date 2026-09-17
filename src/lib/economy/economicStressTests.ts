@@ -47,7 +47,16 @@ function severityForFill(fill: number | null): EconomicStressFinding["severity"]
   return "low";
 }
 
-function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFinding {
+type SupplierRemoval = {
+  commodity: string;
+  fill: number;
+  unmet: number;
+  removedSupply: number;
+  removedSupplyShare: number | null;
+  priceAnchorPerUnit: number | null;
+};
+
+function worstSupplierRemoval(snapshot: EconomicVitalSigns): SupplierRemoval | null {
   const stressed = snapshot.competition.markets
     .filter(
       (market) => market.demandUnits > 0 && market.largestOwnershipAdjustedSellerShare != null
@@ -64,10 +73,33 @@ function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFin
       const remainingSupply = market.supplyUnits - removedSupply;
       const fill = clamp01(remainingSupply / market.demandUnits);
       const unmet = Math.max(0, market.demandUnits - remainingSupply);
-      return { market, fill, unmet, removedSupply };
+      return {
+        commodity: market.commodity,
+        fill,
+        unmet,
+        removedSupply,
+        removedSupplyShare: market.largestOwnershipAdjustedSellerShare,
+        priceAnchorPerUnit: market.priceAnchorPerUnit,
+      };
     })
     .sort((a, b) => a.fill - b.fill || b.unmet - a.unmet);
-  const worst = stressed[0];
+  return stressed[0] ?? null;
+}
+
+/**
+ * Pure reporting helper for the largest-supplier-failure stress scenario: the
+ * implied share of demand left unmet after removing the largest common-control
+ * seller (1 - stressed fill rate). Null when no ownership-adjusted commodity
+ * sample is measurable. Absolute unmet units are reported on the finding
+ * itself; this is the rate complement beside the stressed fill rate.
+ */
+export function largestSupplierUnmetShare(snapshot: EconomicVitalSigns): number | null {
+  const worst = worstSupplierRemoval(snapshot);
+  return worst == null ? null : clamp01(1 - worst.fill);
+}
+
+function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFinding {
+  const worst = worstSupplierRemoval(snapshot);
   if (!worst) {
     return {
       scenario: "largest_supplier_failure",
@@ -77,33 +109,36 @@ function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFin
       unmetDemandUnits: null,
       balanceSheetLossAnchor: null,
       recoveryTurns: 24,
-      indicators: { stressedFillRate: null, removedSupplyShare: null },
+      indicators: {
+        stressedFillRate: null,
+        stressedUnmetSupplyShare: null,
+        removedSupplyShare: null,
+      },
       basis: "No ownership-adjusted commodity sample was available.",
     };
   }
   return {
     scenario: "largest_supplier_failure",
     severity: severityForFill(worst.fill),
-    firstFailure: `commodity:${worst.market.commodity}`,
+    firstFailure: `commodity:${worst.commodity}`,
     propagationPath: [
       "largest formalized ownership group",
-      `commodity:${worst.market.commodity}`,
+      `commodity:${worst.commodity}`,
       "input-buying sectors",
       "downstream output",
     ],
     unmetDemandUnits: worst.unmet,
     balanceSheetLossAnchor:
-      worst.market.priceAnchorPerUnit == null
-        ? null
-        : worst.unmet * worst.market.priceAnchorPerUnit,
+      worst.priceAnchorPerUnit == null ? null : worst.unmet * worst.priceAnchorPerUnit,
     recoveryTurns: 24,
     indicators: {
       stressedFillRate: worst.fill,
-      removedSupplyShare: worst.market.largestOwnershipAdjustedSellerShare,
+      stressedUnmetSupplyShare: largestSupplierUnmetShare(snapshot),
+      removedSupplyShare: worst.removedSupplyShare,
       removedSupplyUnits: worst.removedSupply,
     },
     basis:
-      "Static removal of the largest common-control seller; 24 turns is the declared replacement-capacity review horizon.",
+      "Static removal of the largest common-control seller; unmet share is the implied 1 - stressed fill rate, null when no ownership-adjusted sample is measurable. 24 turns is the declared replacement-capacity review horizon.",
   };
 }
 
