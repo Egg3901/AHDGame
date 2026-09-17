@@ -8,6 +8,7 @@ import {
   deriveMoneyFlowKey,
   insertKeyedDoc,
   keyedInsertId,
+  MAX_APPLIED_MONEY_FLOW_KEYS,
   type MoneyFlowAccount,
 } from "@/lib/db/nonAtomicMoneyFlow";
 
@@ -50,6 +51,13 @@ export interface PlaceFundShareBuyOrderInput {
    * atomic debit, but a retry mints a new key and is treated as a new bid.
    */
   keyOptions?: { idempotencyKey?: string };
+  /**
+   * When true, skip the escrow audit row (no txSink push, no direct insert).
+   * The rebalance pass sets this and writes its own pinned row under a
+   * deterministic id, so a crash between placement and the audit write still
+   * converges on retry instead of stranding the row.
+   */
+  skipTx?: boolean;
 }
 
 export interface PlaceFundShareBuyOrderResult {
@@ -78,7 +86,11 @@ export interface PlaceFundShareBuyOrderResult {
  * same-key retry with the SAME amounts converges; a same-key retry with
  * different amounts debits and inserts separately (money-conserved, never
  * confused with the first attempt) because both the subkey and the order id
- * bind the amounts.
+ * bind the amounts. A failed order insert refunds the escrow AND releases
+ * the debit subkey in one atomic update guarded on the debit still being
+ * outstanding, so the retry re-debits exactly once instead of placing a free
+ * order; a repeated compensation converges because only one outstanding
+ * debit is ever refunded once.
  */
 export async function placeFundShareBuyOrder(
   db: Db,
@@ -98,9 +110,8 @@ export async function placeFundShareBuyOrder(
   const escrowAmount = shares * limitPriceLocal;
   const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corp, fxRate);
 
-  const key = input.keyOptions?.idempotencyKey !== undefined
-    ? input.keyOptions.idempotencyKey
-    : randomUUID();
+  const key =
+    input.keyOptions?.idempotencyKey !== undefined ? input.keyOptions.idempotencyKey : randomUUID();
   if (key.length === 0 || key.length > 128) {
     throw new RangeError("Fund bid idempotency key must be 1-128 characters");
   }
@@ -108,17 +119,14 @@ export async function placeFundShareBuyOrder(
   const debitSubkey = deriveMoneyFlowKey(key, "escrow", escrowCents);
   const funds = db.collection<MoneyFlowAccount>("indexFunds");
 
-  const debitOutcome = await applyKeyedUpdate(
-    debitSubkey,
-    {
-      collection: funds,
-      filter: { _id: fund._id, cashAnchor: { $gte: escrowAnchor } } as Filter<MoneyFlowAccount>,
-      update: {
-        $inc: { cashAnchor: -escrowAnchor },
-        $set: { updatedAt: new Date() },
-      },
-    }
-  );
+  const debitOutcome = await applyKeyedUpdate(debitSubkey, {
+    collection: funds,
+    filter: { _id: fund._id, cashAnchor: { $gte: escrowAnchor } } as Filter<MoneyFlowAccount>,
+    update: {
+      $inc: { cashAnchor: -escrowAnchor },
+      $set: { updatedAt: new Date() },
+    },
+  });
   if (debitOutcome !== "applied" && debitOutcome !== "already-applied") {
     return { ok: false, reason: "Insufficient fund cash for escrow" };
   }
@@ -149,24 +157,39 @@ export async function placeFundShareBuyOrder(
         updatedAt: now,
       });
     } catch (err) {
-      // Roll the escrow back if we couldn't persist the order. The
-      // compensation carries its own key so a retried refund converges.
-      await applyKeyedUpdate(
-        deriveMoneyFlowKey(debitSubkey, "compensate", "escrow"),
-        {
-          collection: funds,
-          filter: { _id: fund._id } as Filter<MoneyFlowAccount>,
-          update: {
+      // Roll the escrow back if we couldn't persist the order, and release
+      // the debit subkey in the SAME atomic update, guarded on the debit
+      // still being outstanding. A retry then re-debits exactly once: without
+      // the release the debit key would read already-applied and the retry
+      // would insert the order with no debit behind it. The guard keeps a
+      // repeated compensation convergent (one outstanding debit refunded
+      // once), and the order-absence check keeps a concurrent same-key
+      // attempt that already landed the order from being refunded out from
+      // under it.
+      const existing = await db
+        .collection<ShareOrder>("shareOrders")
+        .findOne({ _id: orderId } as Filter<ShareOrder>);
+      if (!existing) {
+        await funds.updateOne(
+          { _id: fund._id, appliedMoneyFlowKeys: debitSubkey } as Filter<MoneyFlowAccount>,
+          {
             $inc: { cashAnchor: escrowAnchor },
             $set: { updatedAt: new Date() },
-          },
-        }
-      );
+            $pull: { appliedMoneyFlowKeys: debitSubkey },
+            $push: {
+              appliedMoneyFlowKeys: {
+                $each: [deriveMoneyFlowKey(debitSubkey, "compensate", "escrow")],
+                $slice: -MAX_APPLIED_MONEY_FLOW_KEYS,
+              },
+            },
+          }
+        );
+      }
       throw err;
     }
   })();
 
-  if (insertOutcome === "applied") {
+  if (insertOutcome === "applied" && !input.skipTx) {
     const escrowTx = {
       fundId: fund._id,
       kind: "public_float_buy" as const,
@@ -284,16 +307,13 @@ export async function cancelFundShareOrder(db: Db, orderId: ObjectId): Promise<v
     // refund used to strand escrow forever (a retry finds the order already
     // `cancelled` and no-ops). The refund carries a key derived from the
     // order id, so a resumed cancel refunds exactly once.
-    await applyKeyedUpdate(
-      `indexfund-bid-cancel:${orderId.toHexString()}`,
-      {
-        collection: db.collection<MoneyFlowAccount>("indexFunds"),
-        filter: { _id: claimed.placerFundId } as Filter<MoneyFlowAccount>,
-        update: {
-          $inc: { cashAnchor: refundAnchor },
-          $set: { updatedAt: new Date() },
-        },
-      }
-    );
+    await applyKeyedUpdate(`indexfund-bid-cancel:${orderId.toHexString()}`, {
+      collection: db.collection<MoneyFlowAccount>("indexFunds"),
+      filter: { _id: claimed.placerFundId } as Filter<MoneyFlowAccount>,
+      update: {
+        $inc: { cashAnchor: refundAnchor },
+        $set: { updatedAt: new Date() },
+      },
+    });
   }
 }

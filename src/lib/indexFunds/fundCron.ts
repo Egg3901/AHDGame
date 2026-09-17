@@ -16,7 +16,7 @@
  */
 
 import { ObjectId } from "mongodb";
-import type { Db } from "mongodb";
+import type { ClientSession, Collection, Db } from "mongodb";
 import type {
   Corporation,
   ExchangeRate,
@@ -38,7 +38,7 @@ import {
   insertFundSnapshot,
   setFundStatus,
   FUND_REDEMPTION_QUEUE_COLLECTION,
-  insertFundTransactionsBulk,
+  FUND_TRANSACTION_COLLECTION,
 } from "@/lib/indexFunds/fundQueries";
 import {
   INDEX_FUND_INITIAL_NAV,
@@ -59,9 +59,12 @@ import {
 import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import {
+  quoteFundHoldingSaleFigures,
   sellFundHoldingsForRedemptionCash,
   sellFundHoldingShares,
+  type SellPassLeg,
 } from "@/lib/indexFunds/fundRedemptionLiquidity";
+import { buildFundShareSellKey } from "@/lib/indexFunds/fundShareSellSpend";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
 import {
@@ -101,14 +104,25 @@ import {
   QUEUED_REDEMPTION_QUEUE,
   QUEUED_REDEMPTION_TX,
 } from "@/lib/indexFunds/queuedRedemptionSpend";
-import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
+import {
+  claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
+  failMoneyFlowReceipt,
+  insertKeyedDoc,
+  keyedInsertId,
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+  type MoneyFlowReceipt,
+} from "@/lib/db/nonAtomicMoneyFlow";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
 import {
   fundBidLimitPriceLocal,
   INDEX_FUND_BID_MAX_OPEN_TURNS,
 } from "@/lib/indexFunds/fundBidPolicy";
-import { fxRateForCorpFromMap } from "@/lib/currency/corporationCapital";
+import { fxRateForCorpFromMap, loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { EquityMarketPool, IndexFundTransaction } from "@/lib/db/types";
 import type { ShareOrder } from "@/lib/db/types";
@@ -122,6 +136,7 @@ import {
   loadEquityPoolsByCurrency,
   loadEquityQuote,
   readEquityPool,
+  type LoadedEquityQuote,
 } from "@/lib/equities/marketPool";
 import {
   applyFundShareBuySpend,
@@ -129,6 +144,7 @@ import {
   buildFundShareBuyKey,
   FUND_SHARE_BUY_CORP,
   FUND_SHARE_BUY_FUNDS,
+  type FundShareBuyIssuerRoute,
 } from "@/lib/indexFunds/fundShareBuySpend";
 
 // ── Types ─────────────────────────────────────────────────────────────
@@ -337,20 +353,37 @@ export interface FundShareBuyBatch {
   pools?: Map<CurrencyCode, EquityMarketPool>;
 }
 
-export async function executeFundShareBuy(
-  db: Db,
-  fund: IndexFund,
-  corp: EligibleCorpRow,
-  shares: number,
-  referencePriceAnchor: number,
-  currentTurn: number,
-  batch?: FundShareBuyBatch,
-  keyOptions?: { idempotencyKey?: string }
-): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
-  if (!Number.isInteger(shares) || shares <= 0) {
-    return { ok: false, sharesBought: 0, anchorSpent: 0 };
-  }
-  const quote = await loadEquityQuote(db, corp, { pools: batch?.pools });
+/**
+ * Pinned buy figures for one public-float purchase. A pass driver quotes
+ * these before the first mutable write and replays them under a pinned child
+ * key, so the child fingerprint stays stable even when pools, prices, or FX
+ * moved after the crash.
+ */
+export type FundShareBuyQuote = {
+  executionPriceLocal: number;
+  executionPriceAnchor: number;
+  actualCost: number;
+  actualIssuerCreditLocal: number;
+  orderFlowEligible: boolean;
+  currency: CurrencyCode;
+  issuerRoute: FundShareBuyIssuerRoute;
+  poolExists: boolean;
+};
+
+/**
+ * Pure buy-figure quoter (issue #1672): the exact figure assembly
+ * `executeFundShareBuy` always used, factored out so a pass driver can pin
+ * every figure before the first mutable write. Returns `null` exactly where
+ * the shell historically reported `ok: false`.
+ */
+export function quoteFundShareBuyFigures(input: {
+  corp: EligibleCorpRow;
+  shares: number;
+  referencePriceAnchor: number;
+  quote: LoadedEquityQuote;
+  poolExists: boolean;
+}): FundShareBuyQuote | null {
+  const { corp, shares, referencePriceAnchor, quote, poolExists } = input;
   const executionPrice = quote.askPriceLocal;
   // The caller already loaded the fund's anchor-currency reference price in a
   // batch. Preserve that FX conversion and apply only the market-maker spread.
@@ -359,7 +392,7 @@ export async function executeFundShareBuy(
   const actualCost = shares * executionPriceAnchor;
   const actualIssuerCreditLocal = shares * executionPrice;
   if (!Number.isFinite(actualCost) || actualCost <= 0) {
-    return { ok: false, sharesBought: 0, anchorSpent: 0 };
+    return null;
   }
   const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat ?? 0, corp.totalShares);
   const currency = equityPoolCurrency({
@@ -368,14 +401,74 @@ export async function executeFundShareBuy(
   });
   // Only pool EXISTENCE is decided here; the credit itself runs inside the
   // flow. Mirrors the legacy issuer-credit routing exactly.
-  const poolExists = batch?.pools
-    ? batch.pools.has(currency)
-    : (await readEquityPool(db, currency)) !== null;
-  const issuerRoute = poolExists
-    ? ("pool" as const)
+  const issuerRoute: FundShareBuyIssuerRoute = poolExists
+    ? "pool"
     : getShareBuybackMode(corp) === "escrow"
-      ? ("escrow" as const)
-      : ("liquid" as const);
+      ? "escrow"
+      : "liquid";
+  return {
+    executionPriceLocal: executionPrice,
+    executionPriceAnchor,
+    actualCost,
+    actualIssuerCreditLocal,
+    orderFlowEligible,
+    currency,
+    issuerRoute,
+    poolExists,
+  };
+}
+
+export async function executeFundShareBuy(
+  db: Db,
+  fund: IndexFund,
+  corp: EligibleCorpRow,
+  shares: number,
+  referencePriceAnchor: number,
+  currentTurn: number,
+  batch?: FundShareBuyBatch,
+  keyOptions?: { idempotencyKey?: string; quoted?: FundShareBuyQuote }
+): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
+  if (!Number.isInteger(shares) || shares <= 0) {
+    return { ok: false, sharesBought: 0, anchorSpent: 0 };
+  }
+  let quoted = keyOptions?.quoted;
+  if (!quoted) {
+    const quote = await loadEquityQuote(db, corp, { pools: batch?.pools });
+    const poolExists = batch?.pools
+      ? batch.pools.has(
+          equityPoolCurrency({
+            countryId: corp.countryId,
+            liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+          })
+        )
+      : (await readEquityPool(
+          db,
+          equityPoolCurrency({
+            countryId: corp.countryId,
+            liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+          })
+        )) !== null;
+    const live = quoteFundShareBuyFigures({
+      corp,
+      shares,
+      referencePriceAnchor,
+      quote,
+      poolExists,
+    });
+    if (!live) {
+      return { ok: false, sharesBought: 0, anchorSpent: 0 };
+    }
+    quoted = live;
+  }
+  const {
+    executionPriceLocal: executionPrice,
+    executionPriceAnchor,
+    actualCost,
+    actualIssuerCreditLocal,
+    orderFlowEligible,
+    currency,
+    issuerRoute,
+  } = quoted;
 
   const idempotencyKey =
     keyOptions?.idempotencyKey ?? buildFundShareBuyKey(fund._id, corp._id, currentTurn, shares);
@@ -442,115 +535,155 @@ export async function executeFundShareBuy(
 
 // ── Pass 3: Two-sided drift rebalance ─────────────────────────────────────────
 
+/**
+ * Deterministic parent key for one fund's target-rebalance pass in a turn:
+ * the cron rebalances a fund at most once per turn, so fund + turn names the
+ * attempt. A same-turn retry (crash recovery, same-turn double-fire) reuses
+ * it and resumes instead of rebalancing twice.
+ */
+export function buildFundTargetRebalancePassKey(fundId: ObjectId, turn: number): string {
+  return `indexfund-target-rebalance:fund:${fundId.toHexString()}:turn:${turn}`;
+}
+
+/** What one fund's target-rebalance pass did, for turn telemetry. */
+export type TargetRebalanceOutcome = {
+  buys: number;
+  sells: number;
+  bidsPlaced: number;
+  bidsCancelled: number;
+};
+
+export type TargetRebalanceLegStatus = "pending" | "completed" | "skipped" | "failed";
+
+type StoredSellFigures = Omit<SellPassLeg, "corporationId"> & { corporationIdHex: string };
+
+interface TargetRebalanceSellLeg {
+  kind: "sell";
+  corporationIdHex: string;
+  /** Plan shares requested (maxShares); the pinned figures carry the quote. */
+  shares: number;
+  figures?: StoredSellFigures;
+  childKey?: string;
+  status: TargetRebalanceLegStatus;
+  error?: string;
+  outcome?: { cashRaisedAnchor: number; sharesSold: number; salesExecuted: number };
+}
+
+interface TargetRebalanceBuyLeg {
+  kind: "buy";
+  corporationIdHex: string;
+  shares: number;
+  referencePriceAnchor: number;
+  quoted?: FundShareBuyQuote;
+  childKey?: string;
+  status: TargetRebalanceLegStatus;
+  error?: string;
+  outcome?: { ok: boolean; sharesBought: number; anchorSpent: number };
+}
+
+interface TargetRebalanceCancelLeg {
+  kind: "cancel";
+  orderIdHex: string;
+  corporationIdHex: string;
+  status: TargetRebalanceLegStatus;
+  error?: string;
+}
+
+interface TargetRebalanceBidLeg {
+  kind: "bid";
+  corporationIdHex: string;
+  shares: number;
+  limitPriceLocal: number;
+  fxRate: number;
+  escrowAmount: number;
+  escrowAnchor: number;
+  childKey?: string;
+  status: TargetRebalanceLegStatus;
+  error?: string;
+  orderIdHex?: string;
+}
+
+interface TargetRebalanceStoredPlan {
+  version: 1;
+  fundIdHex: string;
+  turn: number;
+  nowIso: string;
+  /** Pinned basket: the in-basket verdicts and cancel pins derive from this. */
+  targets: Array<{ corporationIdHex: string; targetWeight: number }>;
+  exchangeRates: Record<string, number>;
+  bondPrincipalAnchor: number;
+  sells: TargetRebalanceSellLeg[];
+  buys: TargetRebalanceBuyLeg[];
+  cancels: TargetRebalanceCancelLeg[];
+  bids: TargetRebalanceBidLeg[];
+  outcome?: TargetRebalanceOutcome;
+}
+
+/** Receipt rows carry the pass resume plan under this field (never in the shared type). */
+type TargetRebalancePassReceipt = MoneyFlowReceipt & { fundTargetRebalancePassPlan?: unknown };
+
+function isTargetRebalanceOutcome(value: unknown): value is TargetRebalanceOutcome {
+  if (!value || typeof value !== "object") return false;
+  const outcome = value as Record<string, unknown>;
+  return (
+    typeof outcome.buys === "number" &&
+    typeof outcome.sells === "number" &&
+    typeof outcome.bidsPlaced === "number" &&
+    typeof outcome.bidsCancelled === "number"
+  );
+}
+
+function isTargetRebalancePlan(value: unknown): value is TargetRebalanceStoredPlan {
+  if (!value || typeof value !== "object") return false;
+  const plan = value as Record<string, unknown>;
+  return (
+    plan.version === 1 &&
+    typeof plan.fundIdHex === "string" &&
+    typeof plan.turn === "number" &&
+    Array.isArray(plan.sells) &&
+    Array.isArray(plan.buys) &&
+    Array.isArray(plan.cancels) &&
+    Array.isArray(plan.bids)
+  );
+}
+
+/**
+ * Deterministic fingerprint for one fund's target-rebalance pass. Covers the
+ * fund and the turn — the identity of the pass — but NOT the legs: the legs
+ * are the stored payload, and each sell/buy still carries its own fingerprint
+ * under its child key, so a child key reused for different figures fails
+ * closed there. A parent key reused for a different fund or turn is a
+ * different pass and stays a `MoneyFlowKeyConflictError`.
+ */
+function buildTargetRebalancePassFingerprint(fundId: ObjectId, turn: number): string {
+  return `fund-target-rebalance-pass:fund:${fundId.toHexString()}:turn:${turn}`;
+}
+
+function sellLegToStored(figures: SellPassLeg): StoredSellFigures {
+  const { corporationId, ...rest } = figures;
+  return { ...rest, corporationIdHex: corporationId.toHexString() };
+}
+
+function sellLegFromStored(stored: StoredSellFigures): SellPassLeg {
+  const { corporationIdHex, ...rest } = stored;
+  return { ...rest, corporationId: new ObjectId(corporationIdHex) };
+}
+
 export async function rebalanceFundToTarget(
   db: Db,
   fund: IndexFund,
   corps: EligibleCorpRow[],
   exchangeRates: Partial<Record<string, number>>,
   capRemainingByCorpId: Map<string, number>,
-  currentTurn: number
-): Promise<{ buys: number; sells: number; bidsPlaced: number; bidsCancelled: number }> {
-  const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
-  const plan = planFundTargetRebalance({
-    fund,
-    corps,
-    exchangeRates,
-    bondPrincipalAnchor,
-    capRemainingByCorpId,
-  });
-
-  let sells = 0;
-  // Sells first so freed cash funds the buys.
-  for (const leg of plan.sells) {
-    const refreshed = (await getFundById(db, fund._id)) ?? fund;
-    // A settled key reused for a different leg fails closed and is skipped,
-    // never sold twice: same convention as the buy loop below.
-    let res;
-    try {
-      res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
-        note: "Rebalance: trim overweight",
-      });
-    } catch (err) {
-      if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
-        continue;
-      }
-      throw err;
-    }
-    if (res.sharesSold > 0) sells++;
+  currentTurn: number,
+  options?: { session?: ClientSession }
+): Promise<TargetRebalanceOutcome> {
+  const parentKey = buildFundTargetRebalancePassKey(fund._id, currentTurn);
+  if (parentKey.length === 0 || parentKey.length > 128) {
+    throw new RangeError("Target-rebalance pass idempotency key must be 1-128 characters");
   }
-
-  let buys = 0;
+  const fingerprint = buildTargetRebalancePassFingerprint(fund._id, currentTurn);
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
-  // One pool read for the whole buy pass. The buy reads the fund's live cash
-  // and holdings from its own atomic debit, so the per-buy fund re-read this
-  // loop used to do bought nothing: on the rebalance day (every 24 turns)
-  // that was ~550 of ~5,000 round trips. Each buy writes its own audit row
-  // inside its keyed flow (crash-safe), so there is no pass-level tx sink.
-  const buyBatch: FundShareBuyBatch = {
-    pools: plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined,
-  };
-  for (const leg of plan.buys) {
-    const corp = corpMap.get(leg.corporationId.toString());
-    if (!corp) continue;
-    // One deterministic key per buy leg: a same-turn retry (crash recovery,
-    // same-turn double-fire) reconciles under the stored plan instead of
-    // double-buying. A settled key reused for a different leg fails closed
-    // and is skipped, never paid twice.
-    let res;
-    try {
-      res = await executeFundShareBuy(
-        db,
-        fund,
-        corp,
-        leg.shares,
-        leg.sharePriceAnchor,
-        currentTurn,
-        buyBatch,
-        { idempotencyKey: buildFundShareBuyKey(fund._id, corp._id, currentTurn, leg.shares) }
-      );
-    } catch (err) {
-      if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
-        continue;
-      }
-      throw err;
-    }
-    if (res.ok) buys++;
-  }
-
-  // Place/refresh standing premium bids for residual deficit not satisfiable from float.
-  let bidsPlaced = 0;
-  let bidsCancelled = 0;
-
-  // Build the canonical in-basket set from targetConstituents (not from plan.bids,
-  // which only contains corps with a residual deficit this turn and would wrongly
-  // classify float-covered in-basket corps as off-basket).
-  const inBasketIds = new Set(fund.targetConstituents.map((t) => t.corporationId.toString()));
-
-  // Cancel stale or off-basket open bids for this fund before placing new ones.
-  const allOpenFundBids = await db
-    .collection<ShareOrder>("shareOrders")
-    .find({ placerFundId: fund._id, type: "buy", status: "open" })
-    .toArray();
-
-  const now = Date.now();
-  for (const order of allOpenFundBids) {
-    const ageInTurns = Math.floor((now - order.createdAt.getTime()) / MS_PER_TURN);
-    const corpIdStr = order.corporationId.toString();
-    const isOffBasket = !inBasketIds.has(corpIdStr);
-    const isStale = ageInTurns >= INDEX_FUND_BID_MAX_OPEN_TURNS;
-
-    if (isOffBasket || isStale) {
-      try {
-        await cancelFundShareOrder(db, order._id);
-        bidsCancelled++;
-      } catch (err) {
-        console.error(
-          `[IndexFund] Failed to cancel stale/off-basket bid ${order._id.toString()}:`,
-          err instanceof Error ? err.message : err
-        );
-      }
-    }
-  }
 
   // A4 perf: one FX map for the whole bid loop instead of a findOne per bid.
   // `getCorpFxRate` hits `exchangeRates` (plus an era-fallback read) every call,
@@ -565,52 +698,566 @@ export async function rebalanceFundToTarget(
       .map(([code, rate]) => [code as CurrencyCode, rate as number])
   );
 
-  // Determine which corps still have open bids after cancellation (to avoid stacking).
-  const remainingOpenBids = await db
-    .collection<ShareOrder>("shareOrders")
-    .find({ placerFundId: fund._id, type: "buy", status: "open" })
-    .toArray();
-  const openBidCorpIds = new Set(remainingOpenBids.map((o) => o.corporationId.toString()));
+  // Pin every leg figure once, before any mutable write. Quotes, FX, the pool
+  // snapshot, the basket, and the child keys are all read here; a same-key
+  // retry replays these pins (never a fresh plan over post-trade state).
+  const pinLegs = async (): Promise<TargetRebalanceStoredPlan> => {
+    const nowIso = new Date().toISOString();
+    const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
+    const plan = planFundTargetRebalance({
+      fund,
+      corps,
+      exchangeRates,
+      bondPrincipalAnchor,
+      capRemainingByCorpId,
+    });
 
-  const bidTxSink: Omit<IndexFundTransaction, "_id">[] = [];
-  for (const leg of plan.bids) {
-    const corpIdStr = leg.corporationId.toString();
-    // Never stack: skip if an open bid already exists for this (fund, corp).
-    if (openBidCorpIds.has(corpIdStr)) continue;
+    const sells: TargetRebalanceSellLeg[] = [];
+    if (plan.sells.length > 0) {
+      const fxLive = await loadFxRatesByCurrency(db);
+      for (const planLeg of plan.sells) {
+        const corporationIdHex = planLeg.corporationId.toString();
+        const skipped: TargetRebalanceSellLeg = {
+          kind: "sell",
+          corporationIdHex,
+          shares: planLeg.shares,
+          status: "skipped",
+        };
+        const corpRow = (await db.collection("corporations").findOne(
+          { _id: planLeg.corporationId },
+          {
+            projection: {
+              _id: 1,
+              name: 1,
+              sharePrice: 1,
+              fundamentalSharePrice: 1,
+              publicFloat: 1,
+              totalShares: 1,
+              liquidCurrencyCode: 1,
+              countryId: 1,
+              shareBuybackMode: 1,
+              shareEscrowBalance: 1,
+            },
+          }
+        )) as unknown as
+          | (Pick<
+              EligibleCorpRow,
+              | "_id"
+              | "sharePrice"
+              | "fundamentalSharePrice"
+              | "publicFloat"
+              | "totalShares"
+              | "liquidCurrencyCode"
+              | "countryId"
+              | "shareBuybackMode"
+            > & { name?: string; shareEscrowBalance?: number | null })
+          | null;
+        const holding = fund.holdings.find((h) => h.corporationId.toString() === corporationIdHex);
+        if (!corpRow || !holding || holding.shares <= 0) {
+          sells.push(skipped);
+          continue;
+        }
+        const quote = await loadEquityQuote(db, corpRow);
+        const figures = quoteFundHoldingSaleFigures({
+          holding,
+          corp: corpRow,
+          quote,
+          fxRate: fxRateForCorpFromMap(corpRow, fxLive),
+          maxShares: planLeg.shares,
+          note: "Rebalance: trim overweight",
+          turn: currentTurn,
+        });
+        if (!figures) {
+          sells.push(skipped);
+          continue;
+        }
+        sells.push({
+          kind: "sell",
+          corporationIdHex,
+          shares: planLeg.shares,
+          figures: sellLegToStored(figures),
+          childKey: buildFundShareSellKey(
+            fund._id,
+            planLeg.corporationId,
+            currentTurn,
+            figures.sharesToSell
+          ),
+          status: "pending",
+        });
+      }
+    }
 
-    const corp = corpMap.get(corpIdStr);
-    if (!corp) continue;
+    // One pool read for the whole buy pass. The buy reads the fund's live cash
+    // and holdings from its own atomic debit, so the per-buy fund re-read this
+    // loop used to do bought nothing: on the rebalance day (every 24 turns)
+    // that was ~550 of ~5,000 round trips. Each buy writes its own audit row
+    // inside its keyed flow (crash-safe), so there is no pass-level tx sink.
+    // The snapshot advances as legs quote (mirroring the primitive's
+    // caller-snapshot advance on pool-route applies) so later legs quote the
+    // same post-buy skew the legacy sequential pass saw; execution never
+    // re-quotes, so the extra advance there touches only discarded state.
+    const pools = plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined;
+    const buys: TargetRebalanceBuyLeg[] = [];
+    for (const planLeg of plan.buys) {
+      const corporationIdHex = planLeg.corporationId.toString();
+      const skipped: TargetRebalanceBuyLeg = {
+        kind: "buy",
+        corporationIdHex,
+        shares: planLeg.shares,
+        referencePriceAnchor: planLeg.sharePriceAnchor,
+        status: "skipped",
+      };
+      const corp = corpMap.get(corporationIdHex);
+      if (!corp) {
+        buys.push(skipped);
+        continue;
+      }
+      const quote = await loadEquityQuote(db, corp, pools ? { pools } : undefined);
+      const currency = equityPoolCurrency({
+        countryId: corp.countryId,
+        liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+      });
+      const poolExists = pools
+        ? pools.has(currency)
+        : (await readEquityPool(db, currency)) !== null;
+      const quoted = quoteFundShareBuyFigures({
+        corp,
+        shares: planLeg.shares,
+        referencePriceAnchor: planLeg.sharePriceAnchor,
+        quote,
+        poolExists,
+      });
+      if (!quoted) {
+        buys.push(skipped);
+        continue;
+      }
+      if (quoted.issuerRoute === "pool") {
+        const snapshot = pools?.get(quoted.currency);
+        if (snapshot) {
+          const stepped =
+            Math.round(
+              ((snapshot.cashLocal ?? 0) + Math.round(quoted.actualIssuerCreditLocal * 100) / 100) *
+                100
+            ) / 100;
+          if (Number.isFinite(stepped) && stepped >= 0) snapshot.cashLocal = stepped;
+        }
+      }
+      buys.push({
+        kind: "buy",
+        corporationIdHex,
+        shares: planLeg.shares,
+        referencePriceAnchor: planLeg.sharePriceAnchor,
+        quoted,
+        childKey: buildFundShareBuyKey(fund._id, corp._id, currentTurn, planLeg.shares),
+        status: "pending",
+      });
+    }
 
-    try {
+    // Build the canonical in-basket set from targetConstituents (not from plan.bids,
+    // which only contains corps with a residual deficit this turn and would wrongly
+    // classify float-covered in-basket corps as off-basket).
+    const inBasketIds = new Set(fund.targetConstituents.map((t) => t.corporationId.toString()));
+
+    // Cancel stale or off-basket open bids for this fund before placing new ones.
+    // The cancel list pins here; execution runs exactly these ids (the cancel
+    // itself is idempotent, so a resumed pass converges).
+    const now = Date.now();
+    const allOpenFundBids = await db
+      .collection<ShareOrder>("shareOrders")
+      .find({ placerFundId: fund._id, type: "buy", status: "open" })
+      .toArray();
+    const cancels: TargetRebalanceCancelLeg[] = [];
+    for (const order of allOpenFundBids) {
+      const ageInTurns = Math.floor((now - order.createdAt.getTime()) / MS_PER_TURN);
+      const corpIdStr = order.corporationId.toString();
+      if (!inBasketIds.has(corpIdStr) || ageInTurns >= INDEX_FUND_BID_MAX_OPEN_TURNS) {
+        cancels.push({
+          kind: "cancel",
+          orderIdHex: order._id.toString(),
+          corporationIdHex: corpIdStr,
+          status: "pending",
+        });
+      }
+    }
+
+    // Standing premium bids for residual deficit not satisfiable from float.
+    // Figures pin here; the never-stack guard stays a live read at execution
+    // (a guard, not a figure), so a resumed pass still cannot stack on a bid
+    // the crashed attempt already placed.
+    const bids: TargetRebalanceBidLeg[] = [];
+    for (const planLeg of plan.bids) {
+      const corporationIdHex = planLeg.corporationId.toString();
+      const corp = corpMap.get(corporationIdHex);
+      if (!corp) {
+        bids.push({
+          kind: "bid",
+          corporationIdHex,
+          shares: planLeg.shares,
+          limitPriceLocal: 0,
+          fxRate: 0,
+          escrowAmount: 0,
+          escrowAnchor: 0,
+          status: "skipped",
+        });
+        continue;
+      }
       const executionPriceLocal = resolveShareExecutionPrice(corp);
       const limitPriceLocal = fundBidLimitPriceLocal(executionPriceLocal);
       const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
-
-      // The order debits cashAnchor atomically against the live document, so
-      // the fund re-read this loop used to do per bid was never consulted.
-      const result = await placeFundShareBuyOrder(db, {
-        fund,
-        corp,
-        shares: leg.shares,
+      const escrowAmount = planLeg.shares * limitPriceLocal;
+      const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corp, fxRate);
+      bids.push({
+        kind: "bid",
+        corporationIdHex,
+        shares: planLeg.shares,
         limitPriceLocal,
         fxRate,
-        txSink: bidTxSink,
+        escrowAmount,
+        escrowAnchor,
+        childKey: deriveMoneyFlowKey(parentKey, "bid", corporationIdHex, String(planLeg.shares)),
+        status: "pending",
       });
-
-      if (result.ok) {
-        openBidCorpIds.add(corpIdStr); // prevent a second bid within this loop
-        bidsPlaced++;
-      }
-    } catch (err) {
-      console.error(
-        `[IndexFund] Failed to place bid for corp ${corpIdStr}:`,
-        err instanceof Error ? err.message : err
-      );
     }
-  }
-  await insertFundTransactionsBulk(db, bidTxSink);
 
-  return { buys, sells, bidsPlaced, bidsCancelled };
+    return {
+      version: 1,
+      fundIdHex: fund._id.toHexString(),
+      turn: currentTurn,
+      nowIso,
+      targets: fund.targetConstituents.map((t) => ({
+        corporationIdHex: t.corporationId.toString(),
+        targetWeight: t.targetWeight,
+      })),
+      exchangeRates: Object.fromEntries(
+        Object.entries(exchangeRates).filter(([, rate]) => typeof rate === "number")
+      ) as Record<string, number>,
+      bondPrincipalAnchor,
+      sells,
+      buys,
+      cancels,
+      bids,
+    };
+  };
+
+  const runPass = async (session?: ClientSession): Promise<TargetRebalanceOutcome> => {
+    const sessionOpts = session ? { session } : {};
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const receiptCollection = receipts as unknown as Collection<TargetRebalancePassReceipt>;
+    let claim: Awaited<ReturnType<typeof claimMoneyFlowReceipt>>;
+    try {
+      claim = await claimMoneyFlowReceipt(receipts, parentKey, fingerprint, sessionOpts);
+    } catch (err) {
+      if (!(err instanceof MoneyFlowKeyConflictError)) throw err;
+      // Same key, different fund or turn: a genuinely different pass reusing
+      // the key, not a post-crash remainder. Fail closed.
+      throw err;
+    }
+    if (claim === "duplicate") {
+      const existing = await receiptCollection.findOne({ _id: parentKey }, sessionOpts);
+      const stored = existing?.fundTargetRebalancePassPlan;
+      if (!isTargetRebalancePlan(stored) || !isTargetRebalanceOutcome(stored.outcome)) {
+        throw new Error("MONEY_FLOW_RECEIPT_LOST");
+      }
+      return { ...stored.outcome };
+    }
+    let stored: TargetRebalanceStoredPlan;
+    if (claim === "in-progress") {
+      // Same fingerprint, so the live attempt names the same pass, but the
+      // pass runs the STORED legs when they exist: post-trade state would
+      // replan different sizes and strand the landed legs' cash outside the
+      // remaining pass. No stored plan means the crash landed between the
+      // claim insert and the plan write below (nothing applied yet), so fresh
+      // pins are exact.
+      const existing = await receiptCollection.findOne({ _id: parentKey }, sessionOpts);
+      const resume = existing?.fundTargetRebalancePassPlan;
+      if (isTargetRebalancePlan(resume) && isTargetRebalanceOutcome(resume.outcome)) {
+        return { ...resume.outcome };
+      }
+      if (isTargetRebalancePlan(resume)) {
+        stored = resume;
+      } else {
+        stored = await pinLegs();
+        try {
+          await receiptCollection.updateOne(
+            { _id: parentKey },
+            { $set: { fundTargetRebalancePassPlan: stored, updatedAt: new Date() } },
+            sessionOpts
+          );
+        } catch (planError) {
+          await failMoneyFlowReceipt(
+            receipts,
+            parentKey,
+            "fund-target-rebalance:pass-plan-store",
+            sessionOpts
+          );
+          throw planError;
+        }
+      }
+    } else {
+      // A fresh claim owns the pass. Persist the leg sequence before the
+      // first trade: a crash from here on replays this exact sequence
+      // under the same key.
+      stored = await pinLegs();
+      try {
+        await receiptCollection.updateOne(
+          { _id: parentKey },
+          { $set: { fundTargetRebalancePassPlan: stored, updatedAt: new Date() } },
+          sessionOpts
+        );
+      } catch (planError) {
+        await failMoneyFlowReceipt(
+          receipts,
+          parentKey,
+          "fund-target-rebalance:pass-plan-store",
+          sessionOpts
+        );
+        throw planError;
+      }
+    }
+
+    const settleLeg = async (
+      section: "sells" | "buys" | "cancels" | "bids",
+      index: number,
+      patch: Record<string, unknown>
+    ): Promise<void> => {
+      const legs = stored[section] as Array<Record<string, unknown>>;
+      const leg = legs[index] as Record<string, unknown> | undefined;
+      if (!leg) return;
+      Object.assign(leg, patch);
+      const set: Record<string, unknown> = { updatedAt: new Date() };
+      for (const [key, value] of Object.entries(patch)) {
+        set[`fundTargetRebalancePassPlan.${section}.${index}.${key}`] = value;
+      }
+      await receiptCollection.updateOne({ _id: parentKey }, { $set: set }, sessionOpts);
+    };
+
+    // Sells first so freed cash funds the buys.
+    let sells = 0;
+    for (let index = 0; index < stored.sells.length; index += 1) {
+      const leg = stored.sells[index]!;
+      if (leg.status === "completed") {
+        if ((leg.outcome?.sharesSold ?? 0) > 0) sells++;
+        continue;
+      }
+      if (leg.status === "skipped" || leg.figures === undefined || leg.childKey === undefined) {
+        continue;
+      }
+      const refreshed = (await getFundById(db, fund._id)) ?? fund;
+      // A settled key reused for a different leg fails closed and is skipped,
+      // never sold twice: same convention as the buy loop below.
+      let res;
+      try {
+        res = await sellFundHoldingShares(
+          db,
+          refreshed,
+          new ObjectId(leg.corporationIdHex),
+          leg.shares,
+          {
+            note: "Rebalance: trim overweight",
+            keyOptions: { idempotencyKey: leg.childKey },
+            pinnedLeg: sellLegFromStored(leg.figures),
+          }
+        );
+      } catch (err) {
+        if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+          await settleLeg("sells", index, { status: "skipped" });
+          continue;
+        }
+        await settleLeg("sells", index, {
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+      await settleLeg("sells", index, {
+        status: "completed",
+        outcome: {
+          cashRaisedAnchor: res.cashRaisedAnchor,
+          sharesSold: res.sharesSold,
+          salesExecuted: res.salesExecuted,
+        },
+      });
+      if (res.sharesSold > 0) sells++;
+    }
+
+    let buys = 0;
+    for (let index = 0; index < stored.buys.length; index += 1) {
+      const leg = stored.buys[index]!;
+      if (leg.status === "completed") {
+        if (leg.outcome?.ok === true) buys++;
+        continue;
+      }
+      if (leg.status === "skipped" || leg.quoted === undefined || leg.childKey === undefined) {
+        continue;
+      }
+      const corp = corpMap.get(leg.corporationIdHex);
+      if (!corp) {
+        await settleLeg("buys", index, { status: "skipped" });
+        continue;
+      }
+      // One deterministic key per buy leg: a same-turn retry (crash recovery,
+      // same-turn double-fire) reconciles under the stored plan instead of
+      // double-buying. A settled key reused for a different leg fails closed
+      // and is skipped, never paid twice.
+      let res;
+      try {
+        res = await executeFundShareBuy(
+          db,
+          fund,
+          corp,
+          leg.shares,
+          leg.referencePriceAnchor,
+          currentTurn,
+          undefined,
+          { idempotencyKey: leg.childKey, quoted: leg.quoted }
+        );
+      } catch (err) {
+        if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+          await settleLeg("buys", index, { status: "skipped" });
+          continue;
+        }
+        await settleLeg("buys", index, {
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+      await settleLeg("buys", index, {
+        status: "completed",
+        outcome: { ok: res.ok, sharesBought: res.sharesBought, anchorSpent: res.anchorSpent },
+      });
+      if (res.ok) buys++;
+    }
+
+    // Cancel stale or off-basket open bids for this fund before placing new ones.
+    let bidsCancelled = 0;
+    for (let index = 0; index < stored.cancels.length; index += 1) {
+      const leg = stored.cancels[index]!;
+      if (leg.status === "completed") {
+        bidsCancelled++;
+        continue;
+      }
+      try {
+        await cancelFundShareOrder(db, new ObjectId(leg.orderIdHex));
+        await settleLeg("cancels", index, { status: "completed" });
+        bidsCancelled++;
+      } catch (err) {
+        console.error(
+          `[IndexFund] Failed to cancel stale/off-basket bid ${leg.orderIdHex}:`,
+          err instanceof Error ? err.message : err
+        );
+        await settleLeg("cancels", index, {
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // Place standing premium bids for residual deficit not satisfiable from float.
+    // Determine which corps still have open bids after cancellation (to avoid stacking).
+    const remainingOpenBids = await db
+      .collection<ShareOrder>("shareOrders")
+      .find({ placerFundId: fund._id, type: "buy", status: "open" })
+      .toArray();
+    const openBidCorpIds = new Set(remainingOpenBids.map((o) => o.corporationId.toString()));
+
+    let bidsPlaced = 0;
+    const txs = db.collection<IndexFundTransaction>(FUND_TRANSACTION_COLLECTION);
+    for (let index = 0; index < stored.bids.length; index += 1) {
+      const leg = stored.bids[index]!;
+      if (leg.status === "completed") {
+        bidsPlaced++;
+        continue;
+      }
+      if (leg.status === "skipped" || leg.childKey === undefined) {
+        continue;
+      }
+      const corpIdStr = leg.corporationIdHex;
+      // Never stack: skip if an open bid already exists for this (fund, corp).
+      if (openBidCorpIds.has(corpIdStr)) {
+        await settleLeg("bids", index, { status: "skipped" });
+        continue;
+      }
+
+      const corp = corpMap.get(corpIdStr);
+      if (!corp) {
+        await settleLeg("bids", index, { status: "skipped" });
+        continue;
+      }
+
+      try {
+        // The order debits cashAnchor atomically against the live document, so
+        // the fund re-read this loop used to do per bid was never consulted.
+        // Figures replay pinned (never requoted), the audit row lands under a
+        // deterministic id right after placement so a crash between the two
+        // still converges, and a duplicate placement (the crashed attempt
+        // already landed it) rewrites the same row instead of stranding it.
+        const result = await placeFundShareBuyOrder(db, {
+          fund,
+          corp,
+          shares: leg.shares,
+          limitPriceLocal: leg.limitPriceLocal,
+          fxRate: leg.fxRate,
+          skipTx: true,
+          keyOptions: { idempotencyKey: leg.childKey },
+        });
+
+        if (result.ok) {
+          await insertKeyedDoc(txs, {
+            _id: keyedInsertId(leg.childKey, "rebalance-bid-escrow-tx"),
+            fundId: fund._id,
+            kind: "public_float_buy",
+            corporationId: new ObjectId(leg.corporationIdHex),
+            shares: leg.shares,
+            amountAnchor: leg.escrowAnchor,
+            note: "limit_buy_order_escrow",
+            createdAt: new Date(stored.nowIso),
+          });
+          await settleLeg("bids", index, {
+            status: "completed",
+            ...(result.orderId !== undefined ? { orderIdHex: result.orderId.toHexString() } : {}),
+          });
+          openBidCorpIds.add(corpIdStr); // prevent a second bid within this loop
+          bidsPlaced++;
+        } else {
+          await settleLeg("bids", index, { status: "completed" });
+        }
+      } catch (err) {
+        console.error(
+          `[IndexFund] Failed to place bid for corp ${corpIdStr}:`,
+          err instanceof Error ? err.message : err
+        );
+        await settleLeg("bids", index, {
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    // One atomic settle: the outcome lands with the `completed` status, so
+    // no crash window separates them.
+    const outcome: TargetRebalanceOutcome = { buys, sells, bidsPlaced, bidsCancelled };
+    await receiptCollection.updateOne(
+      { _id: parentKey },
+      {
+        $set: {
+          status: "completed",
+          fundTargetRebalancePassPlan: { ...stored, outcome },
+          updatedAt: new Date(),
+        },
+      },
+      sessionOpts
+    );
+    return outcome;
+  };
+
+  // Join the caller's transaction when one is in flight; otherwise manage our
+  // own. Never open a nested transaction around an outer session.
+  if (options?.session) return runPass(options.session);
+  return runWithOptionalTransaction(
+    async (session) => runPass(session ?? undefined),
+    async () => runPass()
+  );
 }
 
 // ── Pass 2: Rebalance constituents (financial-day boundaries) ──────────

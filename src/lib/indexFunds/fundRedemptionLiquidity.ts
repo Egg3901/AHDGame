@@ -23,6 +23,7 @@ import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { equityPoolCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
+import type { LoadedEquityQuote } from "@/lib/equities/marketPool";
 import {
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
@@ -185,7 +186,7 @@ type CorpQuoteRow = Pick<
 };
 
 /** One pinned sale leg of a redemption-liquidity pass. */
-interface SellPassLeg {
+export interface SellPassLeg {
   corporationId: ObjectId;
   sharesToSell: number;
   executionPriceLocal: number;
@@ -709,6 +710,95 @@ export async function sellFundHoldingsForRedemptionCash(
   );
 }
 
+// ── Pure sale-figure quoter ───────────────────────────────────────────────────
+
+/** Everything ambient the sale figures derive from, read by the caller. */
+export type FundHoldingSaleQuoteInput = {
+  holding: Pick<IndexFund["holdings"][number], "shares" | "avgCostPerShareAnchor">;
+  corp: CorpQuoteRow;
+  quote: LoadedEquityQuote;
+  fxRate: number;
+  maxShares: number;
+  note: string;
+  turn: number;
+  settlementCounterparty?: "market" | "issuer";
+};
+
+/**
+ * Pure sale-figure quoter (issue #1672): the exact figure assembly
+ * `sellFundHoldingShares` always used, factored out so a pass driver can pin
+ * every figure (shares, prices, proceeds, issuer split, route, counterparty,
+ * average) before the first mutable write. A same-key retry replays the
+ * pinned leg instead of repricing from post-sale pool state, so the child
+ * fingerprint stays stable even when holdings, prices, or FX moved. Returns
+ * `null` exactly where the shell historically returned zeros.
+ */
+export function quoteFundHoldingSaleFigures(input: FundHoldingSaleQuoteInput): SellPassLeg | null {
+  const { holding, corp, quote, fxRate, maxShares, note, turn } = input;
+  const issuerFunded = input.settlementCounterparty === "issuer";
+  const sharesToSell = Math.min(
+    maxShares,
+    Math.floor(holding.shares),
+    issuerFunded || !quote.active ? Number.MAX_SAFE_INTEGER : quote.bidDepthShares
+  );
+  if (sharesToSell <= 0) {
+    return null;
+  }
+
+  const executionPrice = issuerFunded ? resolveShareExecutionPrice(corp) : quote.bidPriceLocal;
+  if (!Number.isFinite(executionPrice) || executionPrice <= 0) {
+    return null;
+  }
+
+  const pricePerShareAnchor = shareTradeAnchorValue(
+    1,
+    { ...corp, sharePrice: executionPrice },
+    fxRate
+  );
+  if (pricePerShareAnchor <= 0) {
+    return null;
+  }
+
+  const issuerRoute: FundShareSellIssuerRoute =
+    !issuerFunded && quote.active
+      ? "pool"
+      : getShareBuybackMode(corp) === "escrow"
+        ? "escrow"
+        : "liquid";
+  const issuerDebitLocal = sharesToSell * executionPrice;
+  const escrowDebited =
+    issuerRoute === "escrow"
+      ? Math.min(issuerDebitLocal, Math.max(0, corp.shareEscrowBalance ?? 0))
+      : 0;
+  const treasuryDebited = issuerRoute === "escrow" ? issuerDebitLocal - escrowDebited : 0;
+  const proceedsAnchor =
+    Math.round(
+      shareTradeAnchorValue(sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) * 100
+    ) / 100;
+  return {
+    corporationId: corp._id,
+    sharesToSell,
+    executionPriceLocal: executionPrice,
+    pricePerShareAnchor,
+    proceedsAnchor,
+    issuerDebitLocal,
+    escrowDebited,
+    treasuryDebited,
+    orderFlowEligible: isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares),
+    currency: equityPoolCurrency({
+      countryId: corp.countryId,
+      liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
+    }),
+    issuerRoute,
+    counterparty: issuerFunded ? "issuer" : "market",
+    corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp),
+    holdingAvgCostAnchor: holding.avgCostPerShareAnchor ?? null,
+    emptiedHolding: holding.shares - sharesToSell <= 0,
+    note,
+    turn,
+  };
+}
+
 // ── sellFundHoldingShares ─────────────────────────────────────────────────────
 
 /**
@@ -737,6 +827,12 @@ export async function sellFundHoldingShares(
     note?: string;
     settlementCounterparty?: "market" | "issuer";
     keyOptions?: { idempotencyKey?: string };
+    /**
+     * Pre-quoted leg pinned by a pass driver (issue #1672). Skips every
+     * ambient read above so a same-key retry replays the stored figures
+     * instead of repricing from post-sale state.
+     */
+    pinnedLeg?: SellPassLeg;
   }
 ): Promise<SellHoldingsForRedemptionResult> {
   const zeros: SellHoldingsForRedemptionResult = {
@@ -744,108 +840,66 @@ export async function sellFundHoldingShares(
     sharesSold: 0,
     salesExecuted: 0,
   };
-  const holding = fund.holdings.find(
-    (h) => h.corporationId.toString() === corporationId.toString()
-  );
-  if (!holding || holding.shares <= 0) {
-    return zeros;
+  let leg: SellPassLeg;
+  const pinned = options?.pinnedLeg;
+  if (pinned) {
+    leg = pinned;
+  } else {
+    const holding = fund.holdings.find(
+      (h) => h.corporationId.toString() === corporationId.toString()
+    );
+    if (!holding || holding.shares <= 0) {
+      return zeros;
+    }
+
+    const corps = (await db
+      .collection<CorpQuoteRow>("corporations")
+      .find({ _id: corporationId })
+      .project({
+        _id: 1,
+        name: 1,
+        sharePrice: 1,
+        fundamentalSharePrice: 1,
+        publicFloat: 1,
+        totalShares: 1,
+        liquidCurrencyCode: 1,
+        countryId: 1,
+        shareBuybackMode: 1,
+        shareEscrowBalance: 1,
+      })
+      .toArray()) as CorpQuoteRow[];
+
+    const corp = corps[0];
+    if (!corp) {
+      return zeros;
+    }
+
+    const quote = await loadEquityQuote(db, corp);
+    const fxRate = fxRateForCorpFromMap(corp, await loadFxRatesByCurrency(db));
+    const turn = await getCurrentTurn(db);
+    const note = options?.note ?? "Redemption liquidity";
+    const quoted = quoteFundHoldingSaleFigures({
+      holding,
+      corp,
+      quote,
+      fxRate,
+      maxShares,
+      note,
+      turn,
+      settlementCounterparty: options?.settlementCounterparty,
+    });
+    if (!quoted) {
+      return zeros;
+    }
+    leg = quoted;
   }
-
-  const corps = (await db
-    .collection<CorpQuoteRow>("corporations")
-    .find({ _id: corporationId })
-    .project({
-      _id: 1,
-      name: 1,
-      sharePrice: 1,
-      fundamentalSharePrice: 1,
-      publicFloat: 1,
-      totalShares: 1,
-      liquidCurrencyCode: 1,
-      countryId: 1,
-      shareBuybackMode: 1,
-      shareEscrowBalance: 1,
-    })
-    .toArray()) as CorpQuoteRow[];
-
-  const corp = corps[0];
-  if (!corp) {
-    return zeros;
-  }
-
-  const quote = await loadEquityQuote(db, corp);
-  const issuerFunded = options?.settlementCounterparty === "issuer";
-  const sharesToSell = Math.min(
-    maxShares,
-    Math.floor(holding.shares),
-    issuerFunded || !quote.active ? Number.MAX_SAFE_INTEGER : quote.bidDepthShares
-  );
-  if (sharesToSell <= 0) {
-    return zeros;
-  }
-
-  const executionPrice = issuerFunded ? resolveShareExecutionPrice(corp) : quote.bidPriceLocal;
-  if (!Number.isFinite(executionPrice) || executionPrice <= 0) {
-    return zeros;
-  }
-
-  const fxRate = fxRateForCorpFromMap(corp, await loadFxRatesByCurrency(db));
-  const pricePerShareAnchor = shareTradeAnchorValue(
-    1,
-    { ...corp, sharePrice: executionPrice },
-    fxRate
-  );
-  if (pricePerShareAnchor <= 0) {
-    return zeros;
-  }
-
-  const issuerRoute: FundShareSellIssuerRoute =
-    !issuerFunded && quote.active
-      ? "pool"
-      : getShareBuybackMode(corp) === "escrow"
-        ? "escrow"
-        : "liquid";
-  const issuerDebitLocal = sharesToSell * executionPrice;
-  const escrowDebited =
-    issuerRoute === "escrow"
-      ? Math.min(issuerDebitLocal, Math.max(0, corp.shareEscrowBalance ?? 0))
-      : 0;
-  const treasuryDebited = issuerRoute === "escrow" ? issuerDebitLocal - escrowDebited : 0;
-  const proceedsAnchor =
-    Math.round(
-      shareTradeAnchorValue(sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) * 100
-    ) / 100;
-  const turn = await getCurrentTurn(db);
-  const note = options?.note ?? "Redemption liquidity";
-  const leg: SellPassLeg = {
-    corporationId,
-    sharesToSell,
-    executionPriceLocal: executionPrice,
-    pricePerShareAnchor,
-    proceedsAnchor,
-    issuerDebitLocal,
-    escrowDebited,
-    treasuryDebited,
-    orderFlowEligible: isOrderFlowPriceEligible(corp.publicFloat, corp.totalShares),
-    currency: equityPoolCurrency({
-      countryId: corp.countryId,
-      liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
-    }),
-    issuerRoute,
-    counterparty: issuerFunded ? "issuer" : "market",
-    corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp),
-    holdingAvgCostAnchor: holding.avgCostPerShareAnchor ?? null,
-    emptiedHolding: holding.shares - sharesToSell <= 0,
-    note,
-    turn,
-  };
   // A deterministic key per fund, corp, turn, and share count: a same-turn
   // retry (crash recovery, same-turn double-fire) reconciles under the
   // stored plan instead of double-selling. The pass overrides this with its
   // own per-leg sub-key.
   const parentKey =
     options?.keyOptions?.idempotencyKey ??
-    buildFundShareSellKey(fund._id, corporationId, turn, sharesToSell);
+    buildFundShareSellKey(fund._id, corporationId, leg.turn, leg.sharesToSell);
 
   const sessionOpts = options?.session ? { session: options.session } : {};
   let result: Awaited<ReturnType<typeof applySellLeg>>;
