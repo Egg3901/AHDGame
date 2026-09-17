@@ -9,6 +9,7 @@
  * had to fix twice.
  */
 
+import { presenceBuiltThisTurn } from "@/lib/campaigns/presenceBuiltThisTurn";
 import type { Db } from "mongodb";
 import type {
   Character,
@@ -107,6 +108,7 @@ export async function buildStateOperations(
       name: stateNameById[r.stateId] ?? r.stateId,
       level: r.level,
       nextCost: statePresenceNextCost(r.level, rate),
+      builtThisTurn: presenceBuiltThisTurn(r.updatedAt, gameTime.lastTurnProcessed),
     }));
 
   // ── The field ─────────────────────────────────────────────────────────────

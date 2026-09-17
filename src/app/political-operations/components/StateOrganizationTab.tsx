@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useGameClock } from "@/contexts/useGameClock";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import { PrimaryElectoralMap, type PrimaryStateData } from "@/components/PrimaryElectoralMap";
 import { US_STATE_ID_NAME_PAIRS } from "@/lib/constants/usStateNames";
@@ -17,6 +18,7 @@ import {
 import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 
 interface StateOrgRow {
+  builtThisTurn?: boolean;
   stateId: string;
   /** Cost of the next level here, priced and converted by the list route. */
   nextCost: number;
@@ -100,6 +102,7 @@ export function StateOrganizationTab({
    */
   showHeading?: boolean;
 } = {}) {
+  const { currentTurn } = useGameClock();
   const [rows, setRows] = useState<StateOrgRow[]>([]);
   const [homeState, setHomeState] = useState<string | null>(null);
   const [partyHex, setPartyHex] = useState<string>("#3B82F6");
@@ -139,7 +142,7 @@ export function StateOrganizationTab({
         setLoading(false);
         setError("Failed to load campaign presence");
       });
-  }, []);
+  }, [currentTurn]);
 
   const rowByState = useMemo(() => new Map(rows.map((r) => [r.stateId, r])), [rows]);
 
@@ -201,7 +204,13 @@ export function StateOrganizationTab({
         setRows((prev) =>
           prev.map((r) =>
             r.stateId === stateId
-              ? { ...r, level: body.level, totalInvested: body.totalInvested }
+              ? {
+                  ...r,
+                  level: body.level,
+                  totalInvested: body.totalInvested,
+                  builtThisTurn: true,
+                  nextCost: statePresenceNextCost(body.level, fxRate),
+                }
               : r
           )
         );
@@ -225,6 +234,7 @@ export function StateOrganizationTab({
           level: viewedCandidate.levelsByState[selectedState] ?? 0,
           totalInvested: 0,
           updatedAt: null,
+          builtThisTurn: false,
           // Another candidate's level, priced through the same helper the route
           // uses, so the ladder reads identically whoever you are looking at.
           nextCost: statePresenceNextCost(
@@ -304,6 +314,15 @@ export function StateOrganizationTab({
         </p>
       </div>
 
+      {rows.some((row) => row.builtThisTurn) && (
+        <p className="mb-3 text-sm text-success">
+          Built this turn:{" "}
+          {rows
+            .filter((row) => row.builtThisTurn)
+            .map((row) => row.stateId)
+            .join(", ")}
+        </p>
+      )}
       {error && (
         <div className="mb-3 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger">
           {error}
@@ -329,6 +348,11 @@ export function StateOrganizationTab({
                 )}
               </div>
 
+              {!viewingOther && selectedRow.builtThisTurn && (
+                <p className="mt-2 text-sm text-success">
+                  Built this turn. Available again next turn.
+                </p>
+              )}
               <dl className="mt-3 space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <dt className="text-muted">Level</dt>
@@ -354,7 +378,7 @@ export function StateOrganizationTab({
 
               <button
                 type="button"
-                disabled={busy === selectedState || viewingOther}
+                disabled={busy === selectedState || viewingOther || selectedRow.builtThisTurn}
                 onClick={() => build(selectedState)}
                 className="mt-4 w-full rounded border border-primary/60 px-3 py-2 text-sm text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
                 title={

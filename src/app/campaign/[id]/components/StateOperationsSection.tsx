@@ -5,7 +5,7 @@ import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendScopeInline } from "@/components/blend/BlendScope";
 import { PrimaryCampaignControls } from "@/components/elections/primary/PrimaryCampaignControls";
 import { StatePickerModal } from "@/components/elections/primary/StatePickerModal";
-import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
+import { statePresenceNextCost } from "@/lib/campaigns/statePresenceCost";
 import { trackAction } from "@/lib/observability/actionBreadcrumb";
 import type { PrimaryStateActionKind } from "@/lib/db/types";
 import type {
@@ -103,6 +103,9 @@ export function StateOperationsSection({
   const [presenceBusy, setPresenceBusy] = useState(false);
   const [presenceMessage, setPresenceMessage] = useState("");
 
+  const builtStates = new Set(
+    presence.filter((row) => row.builtThisTurn).map((row) => row.stateId)
+  );
   const levelByState = new Map(presence.map((p) => [p.stateId, p.level]));
 
   // Priced by the same helper every other presence screen uses, per state, so
@@ -230,6 +233,15 @@ export function StateOperationsSection({
             Build presence
           </button>
         </div>
+        {builtStates.size > 0 && (
+          <p className="mt-2 text-xs text-success">
+            Built this turn:{" "}
+            {presence
+              .filter((row) => row.builtThisTurn)
+              .map((row) => row.name)
+              .join(", ")}
+          </p>
+        )}
         {presenceMessage ? (
           <div
             style={{
@@ -431,9 +443,11 @@ export function StateOperationsSection({
           footnote="Paid from the campaign, not from you. Each level in a state costs more than the last."
           trailingFor={(s) => {
             const level = levelByState.get(s.id) ?? 0;
-            return `L${level} · ${money(presenceCost(s.id))}`;
+            return builtStates.has(s.id)
+              ? `L${level} · Built this turn`
+              : `L${level} · ${money(presenceCost(s.id))}`;
           }}
-          unaffordable={() => false}
+          unaffordable={(state) => builtStates.has(state.id)}
           onPick={buildPresence}
           onClose={() => setPresenceOpen(false)}
         />
