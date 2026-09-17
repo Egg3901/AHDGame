@@ -949,7 +949,153 @@ describe("processForexTurn", () => {
       // Reserves still drained
       expect(inc["spreadFeeReserveBalances.GBP"]).toBeLessThan(0);
     });
-  });
+
+    describe("keyed persistence", () => {
+      const interventionKey = "forex-intervention:50:US";
+
+      function storedInterventionPlan() {
+        return {
+          version: 1,
+          countryId: "US",
+          bankId: "US",
+          turn: 50,
+          rate: 1.12,
+          macroTarget: 1.1,
+          rateSet: { rate: 1.12, macroTarget: 1.1 },
+          rateUnset: {},
+          priorRate: 1.15,
+          priorMacroTarget: 1.16,
+          priorBuyVolume24: 0,
+          priorSellVolume24: 0,
+          priorCyclePressureRegime: null,
+          priorCyclePressureUntilTurn: null,
+          priorPolicy: { floor: 0.95, ceiling: 1.05, recentInterventions: [] },
+          priorHardPeg: null,
+          priorUpdatedAtIso: new Date().toISOString(),
+          priorChairInfamy: 0,
+          forexRevenueDelta: 0,
+          reserveBalanceDelta: 0,
+          spreadDeltas: { GBP: -750_000 },
+          infamyCharged: false,
+          chairCharacterIdHex: null,
+          record: {
+            turn: 50,
+            direction: "buy",
+            reservesSpent: 750_000,
+            fundingSource: "spreadFeeReserves",
+            resultingRate: 1.12,
+          },
+        };
+      }
+
+      it("claims a deterministic per-turn receipt for an engaged intervention", async () => {
+        await setupIntervention({
+          rate: 1.15,
+          floor: 0.95,
+          ceiling: 1.05,
+          forexRevenue: 0,
+          reserveBalance: 0,
+          spreadFeeReserveBalances: { GBP: 750_000 },
+        });
+
+        await processForexTurn(db as unknown as Db, 50);
+
+        const claim = db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mock.calls.find(
+          (call: Array<{ _id: string }>) => call[0]._id === interventionKey
+        );
+        expect(claim).toBeDefined();
+        expect(claim![0].fingerprint).toBe(interventionKey);
+      });
+
+      it("mints no receipt when the rate is in band", async () => {
+        await setupIntervention({
+          rate: 1.0,
+          floor: 0.95,
+          ceiling: 1.05,
+          forexRevenue: 10_000,
+          reserveBalance: 0,
+        });
+
+        await processForexTurn(db as unknown as Db, 50);
+
+        expect(db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne).not.toHaveBeenCalled();
+      });
+
+      it("replays a completed attempt on retry instead of rewriting the row", async () => {
+        await setupIntervention({
+          rate: 1.15,
+          floor: 0.95,
+          ceiling: 1.05,
+          forexRevenue: 0,
+          reserveBalance: 0,
+          spreadFeeReserveBalances: { GBP: 750_000 },
+        });
+        db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockResolvedValue({
+          _id: interventionKey,
+          status: "completed",
+          fingerprint: interventionKey,
+          forexInterventionPlan: storedInterventionPlan(),
+        });
+
+        const result = await processForexTurn(db as unknown as Db, 50);
+
+        // The replayed country converges with no rate or bank writes, while the
+        // turn still counts it and processes the other currencies.
+        const usRateWrites = db.collectionMocks.exchangeRates.updateOne.mock.calls.filter(
+          (call: Array<{ _id: string }>) => call[0]._id === "US"
+        );
+        expect(usRateWrites).toHaveLength(0);
+        expect(usBankUpdateCalls()).toHaveLength(0);
+        expect(result.countriesUpdated).toBe(3);
+      });
+
+      it("resumes a crashed intervention before the country loop", async () => {
+        await setupIntervention({
+          rate: 1.15,
+          floor: 0.95,
+          ceiling: 1.05,
+          forexRevenue: 0,
+          reserveBalance: 0,
+          spreadFeeReserveBalances: { GBP: 750_000 },
+        });
+        const inProgress = {
+          _id: interventionKey,
+          status: "in_progress",
+          fingerprint: interventionKey,
+          forexInterventionPlan: storedInterventionPlan(),
+        };
+        const completed = { ...inProgress, status: "completed" };
+        let receiptReads = 0;
+        db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockImplementation(async () =>
+          ++receiptReads === 1 ? inProgress : completed
+        );
+        db.collectionMocks.nonAtomicMoneyFlowReceipts.find.mockReturnValue({
+          toArray: vi.fn().mockResolvedValue([inProgress]),
+          sort: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          skip: vi.fn().mockReturnThis(),
+          project: vi.fn().mockReturnThis(),
+        });
+
+        await processForexTurn(db as unknown as Db, 50);
+
+        // The sweep drove the stored plan (rate writeback + reserve draw), and
+        // the loop's re-reach replayed it instead of writing twice.
+        const usRateWrites = db.collectionMocks.exchangeRates.updateOne.mock.calls.filter(
+          (call: Array<{ _id: string }>) => call[0]._id === "US"
+        );
+        expect(usRateWrites).toHaveLength(1);
+        expect((usRateWrites[0]![1] as { $set: { rate: number } }).$set.rate).toBe(1.12);
+        const bankInc = usBankUpdateCalls().find(
+          (call: Array<Record<string, unknown>>) => call[1].$inc !== undefined
+        );
+        expect(bankInc).toBeDefined();
+        expect((bankInc![1].$inc as Record<string, number>)["spreadFeeReserveBalances.GBP"]).toBe(
+          -750_000
+        );
+      });
+    }); // keyed persistence
+  }); // intervention integration
 
   it("honors hardPeg and skips macro drift for that currency", async () => {
     db.collectionMocks.exchangeRates.find.mockReturnValue({

@@ -8,7 +8,7 @@
  * See docs/design/currency-exchange.md "Rate Update Formula" and "Turn Processing Placement".
  */
 
-import type { Db, ObjectId } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import type { CentralBank, TurnSnapshot } from "@/lib/db/types/centralBank";
 import type {
   ExchangeRate,
@@ -25,7 +25,6 @@ import {
   getInitialRates,
   COUNTRY_CURRENCY_MAP,
   CURRENCY_SYMBOLS,
-  INTERVENTION_FAILURE_INFAMY,
   INTERVENTION_HISTORY_MAX,
   FOREX_ACTIVE_CURRENCIES,
   reserveCurrencyVolatilityMultiplier,
@@ -45,17 +44,22 @@ import { getBankId } from "@/lib/centralBank/helpers";
 import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
 import {
   applyForexExpireSpend,
+  applyForexInterventionSpend,
   applyForexTurnFillSpend,
   forexExpireFingerprint,
   forexExpireKey,
+  forexInterventionFingerprint,
+  forexInterventionKey,
   forexTurnFillFingerprint,
   forexTurnFillKey,
   resumeForexExpireByKey,
+  resumeForexInterventionByKey,
   resumeForexTurnFillByKey,
   FOREX_EXPIRE_ORDER_MISSING,
   FOREX_EXPIRE_UNAVAILABLE,
   FOREX_TURN_FILL_RACED,
 } from "@/lib/forex/forexSpend";
+import { MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 export interface ForexTurnResult {
@@ -172,6 +176,35 @@ export async function processForexTurn(
       entry.currencyCode,
       reserveCurrencyVolatilityMultiplier(entry.rank)
     );
+  }
+
+  // ── Keyed-intervention recovery ─────────────────────────────────────────
+  // Re-drive `in_progress` intervention receipts through their stored plans
+  // BEFORE the country loop, so a crash between one currency's rate
+  // writeback and its reserve draw converges now instead of stranding a
+  // defended rate with undrawn reserves. Resumed rows carry their own mail
+  // signal; the loop below converges on the same key if it re-reaches them.
+  const resumedInterventionChairIds: ObjectId[] = [];
+  try {
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const orphans = await receipts
+      .find({ _id: { $regex: "^forex-intervention:" }, status: "in_progress" })
+      .limit(50)
+      .toArray();
+    for (const orphan of orphans) {
+      try {
+        const resumed = await resumeForexInterventionByKey(db, orphan._id);
+        if (!resumed) continue;
+        if (resumed.completedNow && resumed.infamyCharged && resumed.chairCharacterIdHex) {
+          resumedInterventionChairIds.push(new ObjectId(resumed.chairCharacterIdHex));
+        }
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Recovery is best effort: a receipt-store wobble must never block the
+    // live rate loop — unsettled orphans keep until the next turn.
   }
 
   // Update rates for each active country
@@ -344,22 +377,88 @@ export async function processForexTurn(
       }
     }
 
-    await db.collection<ExchangeRate>("exchangeRates").updateOne(
-      { _id: countryId },
-      {
-        $set: setFields,
-        ...(Object.keys(unsetFields).length > 0 ? { $unset: unsetFields } : {}),
+    // ── Intervention persistence ──────────────────────────────────────────
+    // A computed outcome with a reserve draw or an infamy charge settles
+    // through the keyed intervention command (rate writeback + reserve $inc
+    // + infamy $set converge exactly once under
+    // `forex-intervention:<turn>:<country>`); anything else keeps the legacy
+    // bare rate write with no receipt. Routing every policy row through the
+    // command (even an in-band recompute) is what makes a same-turn retry
+    // replay a completed attempt instead of bare-clobbering it.
+    const policyPresent = (existingRate.interventionPolicy ?? null) !== null;
+    if (policyPresent && !hardPegActive) {
+      let intervention;
+      try {
+        intervention = await applyForexInterventionSpend(db, {
+          countryId,
+          bankId: getBankId(countryId as Parameters<typeof getBankId>[0]),
+          turn: currentTurn,
+          fingerprint: forexInterventionFingerprint(currentTurn, countryId),
+          idempotencyKey: forexInterventionKey(currentTurn, countryId),
+          outcome: interventionOutcome
+            ? {
+                rate: interventionOutcome.rate,
+                macroTarget: interventionOutcome.macroTarget,
+                record: interventionOutcome.record,
+                forexRevenueDelta: interventionOutcome.forexRevenueDelta,
+                reserveBalanceDelta: interventionOutcome.reserveBalanceDelta,
+                spreadFeeReserveDeltas: interventionOutcome.spreadFeeReserveDeltas,
+                infamyCharged: interventionOutcome.infamyCharged,
+                chairCharacterIdHex: bank.chairCharacterId?.toHexString() ?? null,
+              }
+            : null,
+          rateSet: setFields,
+          ...(Object.keys(unsetFields).length > 0 ? { rateUnset: unsetFields } : {}),
+          prior: {
+            rate: existingRate.rate,
+            macroTarget: existingRate.macroTarget,
+            buyVolume24: existingRate.buyVolume24,
+            sellVolume24: existingRate.sellVolume24,
+            cyclePressureRegime: existingRate.cyclePressureRegime ?? null,
+            cyclePressureUntilTurn: existingRate.cyclePressureUntilTurn ?? null,
+            policy: existingRate.interventionPolicy!,
+            hardPeg: existingRate.hardPeg ?? null,
+            updatedAtIso: existingRate.updatedAt.toISOString(),
+            chairInfamy: finiteOr(bank.chairInfamy, 0),
+          },
+        });
+      } catch (err) {
+        // A terminal receipt means this event already settled without effect
+        // (practically unreachable — the steps cannot guard-reject); the
+        // receipt holds the sentinel for ops, so skip the country.
+        if (err instanceof MoneyFlowTerminalError) continue;
+        throw err;
       }
-    );
-
-    // Persist reserve draw, infamy, and trade audit row. All post-rate-write so
-    // that a partial failure here leaves exchange rates intact rather than
-    // half-updated.
-    if (interventionOutcome) {
-      await persistInterventionSideEffects(db, countryId, bank, interventionOutcome);
+      if (intervention.outcome === "applied") {
+        if (intervention.completedNow && intervention.infamyCharged && bank.chairCharacterId) {
+          await sendInterventionFailureMail(db, bank.chairCharacterId);
+        }
+      } else {
+        await db.collection<ExchangeRate>("exchangeRates").updateOne(
+          { _id: countryId },
+          {
+            $set: setFields,
+            ...(Object.keys(unsetFields).length > 0 ? { $unset: unsetFields } : {}),
+          }
+        );
+      }
+    } else {
+      await db.collection<ExchangeRate>("exchangeRates").updateOne(
+        { _id: countryId },
+        {
+          $set: setFields,
+          ...(Object.keys(unsetFields).length > 0 ? { $unset: unsetFields } : {}),
+        }
+      );
     }
 
     countriesUpdated++;
+  }
+
+  // Failure mail for interventions resumed from a prior crash (live ones go
+  // out inline in the country loop above).
+  for (const chairId of resumedInterventionChairIds) {
+    await sendInterventionFailureMail(db, chairId);
   }
 
   // Process triggered limit orders
@@ -659,59 +758,27 @@ async function applyIntervention(args: {
 }
 
 /**
- * Apply the reserve deltas, infamy tick, audit trade row, and chair
- * notification after the exchange rate has been persisted.
+ * Chair notification for a failed defense, sent post-commit (outside the
+ * keyed flow, like the fill notifications): the reserve draw and infamy
+ * charge already converged under the intervention key, so mail is best
+ * effort and never gates the turn.
  */
-async function persistInterventionSideEffects(
-  db: Db,
-  countryId: string,
-  bank: CentralBank,
-  outcome: InterventionOutcome
-): Promise<void> {
-  const inc: Record<string, number> = {};
-  if (outcome.forexRevenueDelta !== 0) inc.forexRevenue = outcome.forexRevenueDelta;
-  if (outcome.reserveBalanceDelta !== 0) inc.reserveBalance = outcome.reserveBalanceDelta;
-  for (const [currency, delta] of Object.entries(outcome.spreadFeeReserveDeltas) as Array<
-    [CurrencyCode, number]
-  >) {
-    if (delta !== 0) inc[`spreadFeeReserveBalances.${currency}`] = delta;
-  }
-  const set: Partial<Pick<CentralBank, "chairInfamy">> = {};
-  if (outcome.infamyCharged) {
-    set.chairInfamy = Math.min(100, finiteOr(bank.chairInfamy, 0) + INTERVENTION_FAILURE_INFAMY);
-  }
-
-  if (Object.keys(inc).length > 0 || Object.keys(set).length > 0) {
-    // Use getBankId so shared-bank countries (e.g. eurozone members) update the
-    // correct central bank document rather than a per-country phantom document.
-    const bankId = getBankId(countryId as Parameters<typeof getBankId>[0]);
-    await db.collection<CentralBank>("centralBanks").updateOne(
-      { _id: bankId },
-      {
-        ...(Object.keys(inc).length > 0 ? { $inc: inc } : {}),
-        ...(Object.keys(set).length > 0 ? { $set: set } : {}),
-      },
-      { upsert: true }
+async function sendInterventionFailureMail(db: Db, chairCharacterId: ObjectId): Promise<void> {
+  const chair = await db
+    .collection<Character>("characters")
+    .findOne(
+      { _id: chairCharacterId },
+      { projection: { _id: 1, userId: 1, name: 1, sequentialId: 1 } }
     );
-  }
-
-  if (outcome.infamyCharged && bank.chairCharacterId) {
-    const chair = await db
-      .collection<Character>("characters")
-      .findOne(
-        { _id: bank.chairCharacterId },
-        { projection: { _id: 1, userId: 1, name: 1, sequentialId: 1 } }
-      );
-    if (chair) {
-      await sendSystemMail(db, {
-        toCharacterId: chair._id,
-        toCharacterName: chair.name,
-        toCharacterSequentialId: chair.sequentialId ?? 0,
-        toUserId: chair.userId,
-        subject: "FX Intervention Failure",
-        body: "The FX band could not be defended this turn — reserves are depleted. Your infamy has risen. The band remains posted; restore reserves or widen the band to recover.",
-      });
-    }
+  if (chair) {
+    await sendSystemMail(db, {
+      toCharacterId: chair._id,
+      toCharacterName: chair.name,
+      toCharacterSequentialId: chair.sequentialId ?? 0,
+      toUserId: chair.userId,
+      subject: "FX Intervention Failure",
+      body: "The FX band could not be defended this turn — reserves are depleted. Your infamy has risen. The band remains posted; restore reserves or widen the band to recover.",
+    });
   }
 }
 

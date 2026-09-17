@@ -124,12 +124,19 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * order, same-key replay/resume/terminal semantics, key-only orphan
  * recovery re-driven by the turn driver before its scan; the driver tallies
  * guarded transitions, mirroring the legacy modifiedCount).
- * The intervention path DOES mutate money and remains legacy
- * (BEWARE): the intervention side effects draw reserves with bare writes
- * (in src/lib/turn/forexTurn.ts, run from the stateEffectsPhase forexTurn
- * phase). A crash between the rate write and the reserve writes there can
- * still strand value; migrating it means expressing each draw as keyed
- * steps here.
+ * Forex turn chair interventions are migrated
+ * (applyForexInterventionSpend: deterministic per-turn key, resume plan
+ * persisted on the receipt at claim, keyed rate-writeback + combined
+ * reserve-draw/infamy bank steps with legacy-exact amounts, phase order,
+ * and single-update write shape, same-key replay/resume/terminal
+ * semantics, key-only orphan recovery re-driven by the turn driver before
+ * its country loop; the failure mail stays post-commit best effort like
+ * the fill notifications). All forex monetary paths are now migrated:
+ * request surfaces, market-maker exchange, turn fills, expiry refunds, and
+ * interventions. What remains unkeyed in the forex turn is not money:
+ * per-currency rate/history/policy writebacks for in-band or policy-less
+ * rows are bare `$set`s with no balance effect, and a same-turn retry of a
+ * completed intervention replays instead of clobbering.
  * Still on the legacy debit-first-plus-compensation fallback: bond
  * default dissolution (bare bulkWrite holder/equity/central-bank writes),
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs

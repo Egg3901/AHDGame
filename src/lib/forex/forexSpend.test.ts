@@ -4,16 +4,23 @@ import {
   applyForexCancelSpend,
   applyForexExpireSpend,
   applyForexFillSpend,
+  applyForexInterventionSpend,
   applyForexOrderCreateSpend,
   applyForexTurnFillSpend,
   forexExpireFingerprint,
   forexExpireKey,
+  forexInterventionFingerprint,
+  forexInterventionKey,
   forexTurnFillFingerprint,
   forexTurnFillKey,
   resumeForexExpireByKey,
+  resumeForexInterventionByKey,
   resumeForexTurnFillByKey,
   FOREX_EXPIRE_ORDER_MISSING,
   FOREX_EXPIRE_UNAVAILABLE,
+  FOREX_INTERVENTION_RATE,
+  FOREX_INTERVENTION_RECEIPT_ORPHANED,
+  FOREX_INTERVENTION_RESERVE,
   FOREX_TURN_FILL_RACED,
   FOREX_CANCEL_ORDER_MISSING,
   FOREX_CANCEL_UNAVAILABLE,
@@ -26,6 +33,7 @@ import {
   FOREX_FILL_RACED,
   FOREX_FILL_UNAVAILABLE,
   FOREX_ORDER_INSUFFICIENT,
+  type ForexInterventionInput,
 } from "./forexSpend";
 import {
   claimMoneyFlowReceipt,
@@ -56,7 +64,7 @@ vi.mock("@/lib/mongodb", () => ({
 
 // ---------------------------------------------------------------------------
 // Stateful in-memory fakes. They honor exactly the operators the forex
-// primitives emit ($inc / $set / $unset / $push+$each+$slice writes; _id
+// primitives emit ($inc / $set / $unset / $pop / $push+$each+$slice writes; _id
 // equality, $ne-on-keys, $gte-on-balance, $in-on-status guards;
 // duplicate-key errors on insert), so an injected crash between any two
 // writes models a real process death between the corresponding sequential
@@ -227,6 +235,13 @@ class FakeCollection {
     const unset = (update.$unset ?? {}) as Record<string, unknown>;
     for (const field of Object.keys(unset)) {
       deletePath(doc, field);
+    }
+    const pop = (update.$pop ?? {}) as Record<string, number>;
+    for (const [field, direction] of Object.entries(pop)) {
+      const current = getPath(doc, field);
+      if (!Array.isArray(current) || current.length === 0) continue;
+      if (direction === 1) current.pop();
+      else if (direction === -1) current.shift();
     }
     return { matchedCount: 1, modifiedCount: 1 };
   }
@@ -2076,5 +2091,654 @@ describe("applyForexExpireSpend (turn expiry refunds)", () => {
     await expect(resumeForexExpireByKey(db as unknown as Db, key)).rejects.toThrow(
       MoneyFlowTerminalError
     );
+  });
+});
+
+// ── Intervention command ────────────────────────────────────────────────────
+
+const interventionChairId = new ObjectId();
+const interventionSetById = new ObjectId();
+const INTERVENTION_BANK = "US";
+const INTERVENTION_TURN = 50;
+
+function baseInterventionPolicy(): Record<string, unknown> {
+  return {
+    floor: 0.95,
+    ceiling: 1.05,
+    setByCharacterId: interventionSetById,
+    setByCharacterName: "Prior Chair",
+    setAtTurn: 40,
+    lastAdjustedAtTurn: 40,
+    recentInterventions: [],
+  };
+}
+
+function seedIntervention(
+  db: FakeDb,
+  opts: { bank?: Record<string, unknown>; rate?: Record<string, unknown>; seedBank?: boolean } = {}
+): void {
+  if (opts.seedBank !== false) {
+    db.collection("centralBanks").docs.set(INTERVENTION_BANK, {
+      _id: INTERVENTION_BANK,
+      forexRevenue: 0,
+      reserveBalance: 0,
+      spreadFeeReserveBalances: { GBP: 750_000 },
+      chairInfamy: 0,
+      appliedMoneyFlowKeys: [],
+      ...opts.bank,
+    });
+  }
+  db.collection("exchangeRates").docs.set("US", {
+    _id: "US",
+    rate: 1.15,
+    macroTarget: 1.16,
+    baseRate: 1.0,
+    rateHistory: [{ turn: 49, rate: 1.14 }],
+    buyVolume24: 0,
+    sellVolume24: 0,
+    cyclePressureRegime: "steady",
+    cyclePressureUntilTurn: 62,
+    interventionPolicy: baseInterventionPolicy(),
+    updatedAt: now,
+    appliedMoneyFlowKeys: [],
+    ...opts.rate,
+  });
+}
+
+function interventionInput(db: FakeDb): ForexInterventionInput {
+  const bankDoc = db.collection("centralBanks").docs.get(INTERVENTION_BANK) ?? {};
+  const nextPolicy = {
+    ...baseInterventionPolicy(),
+    recentInterventions: [
+      {
+        turn: INTERVENTION_TURN,
+        direction: "buy" as const,
+        reservesSpent: 750_000,
+        fundingSource: "spreadFeeReserves" as const,
+        resultingRate: 1.12,
+      },
+    ],
+  };
+  return {
+    countryId: "US",
+    bankId: INTERVENTION_BANK,
+    turn: INTERVENTION_TURN,
+    fingerprint: forexInterventionFingerprint(INTERVENTION_TURN, "US"),
+    idempotencyKey: forexInterventionKey(INTERVENTION_TURN, "US"),
+    outcome: {
+      rate: 1.12,
+      macroTarget: 1.1,
+      record: {
+        turn: INTERVENTION_TURN,
+        direction: "buy",
+        reservesSpent: 750_000,
+        fundingSource: "spreadFeeReserves",
+        resultingRate: 1.12,
+      },
+      forexRevenueDelta: 0,
+      reserveBalanceDelta: 0,
+      spreadFeeReserveDeltas: { GBP: -750_000, USD: 840_000 },
+      infamyCharged: false,
+      chairCharacterIdHex: interventionChairId.toHexString(),
+    },
+    rateSet: {
+      rate: 1.12,
+      macroTarget: 1.1,
+      rateHistory: [
+        { turn: 49, rate: 1.14 },
+        { turn: INTERVENTION_TURN, rate: 1.12 },
+      ],
+      buyVolume24: 0,
+      sellVolume24: 0,
+      cyclePressureRegime: "steady",
+      cyclePressureUntilTurn: 62,
+      interventionPolicy: nextPolicy,
+      updatedAt: now,
+    },
+    prior: {
+      rate: 1.15,
+      macroTarget: 1.16,
+      buyVolume24: 0,
+      sellVolume24: 0,
+      cyclePressureRegime: "steady",
+      cyclePressureUntilTurn: 62,
+      policy: baseInterventionPolicy() as unknown as ForexInterventionInput["prior"]["policy"],
+      hardPeg: null,
+      updatedAtIso: now.toISOString(),
+      chairInfamy: Number(bankDoc.chairInfamy ?? 0),
+    },
+  };
+}
+
+function interventionRateDoc(db: FakeDb): Record<string, unknown> {
+  const doc = db.collection("exchangeRates").docs.get("US");
+  if (!doc) throw new Error("missing US exchange rate");
+  return doc;
+}
+
+function interventionBankDoc(db: FakeDb): Record<string, unknown> {
+  return db.collection("centralBanks").docs.get(INTERVENTION_BANK) ?? {};
+}
+
+function interventionKey(): string {
+  return forexInterventionKey(INTERVENTION_TURN, "US");
+}
+
+describe("applyForexInterventionSpend", () => {
+  it("applies a buy intervention exactly once across rate, reserves, and policy", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      completedNow: true,
+      outcome: "applied",
+      rate: 1.12,
+      macroTarget: 1.1,
+      infamyCharged: false,
+    });
+    expect(result.record).toMatchObject({ direction: "buy", fundingSource: "spreadFeeReserves" });
+    // Reserve draw: foreign spread reserves spent, home leg credited.
+    expect(interventionBankDoc(db)).toMatchObject({
+      forexRevenue: 0,
+      reserveBalance: 0,
+      spreadFeeReserveBalances: { GBP: 0, USD: 840_000 },
+      chairInfamy: 0,
+    });
+    // Rate writeback: new rate, one appended snapshot, one audit record.
+    const rate = interventionRateDoc(db);
+    expect(rate.rate).toBe(1.12);
+    expect(rate.rateHistory).toEqual([
+      { turn: 49, rate: 1.14 },
+      { turn: INTERVENTION_TURN, rate: 1.12 },
+    ]);
+    const policy = rate.interventionPolicy as { recentInterventions: unknown[] };
+    expect(policy.recentInterventions).toHaveLength(1);
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+  });
+
+  it("draws mixed sell funding (home spread, forexRevenue, reserveBalance) in one bank write", async () => {
+    const db = new FakeDb();
+    seedIntervention(db, {
+      bank: { forexRevenue: 50, reserveBalance: 10_000, spreadFeeReserveBalances: { USD: 50 } },
+    });
+    const input = interventionInput(db);
+    input.outcome = {
+      rate: 0.9,
+      macroTarget: 0.92,
+      record: {
+        turn: INTERVENTION_TURN,
+        direction: "sell",
+        reservesSpent: 200,
+        fundingSource: "mixed",
+        resultingRate: 0.9,
+      },
+      forexRevenueDelta: -50,
+      reserveBalanceDelta: -100,
+      spreadFeeReserveDeltas: { USD: -50, GBP: 150 },
+      infamyCharged: false,
+      chairCharacterIdHex: interventionChairId.toHexString(),
+    };
+
+    const bankUpdates: unknown[] = [];
+    const banks = db.collection("centralBanks");
+    const realUpdate = banks.updateOne.bind(banks);
+    banks.updateOne = (async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
+      bankUpdates.push(update);
+      return realUpdate(filter, update);
+    }) as typeof banks.updateOne;
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result.outcome).toBe("applied");
+    expect(interventionBankDoc(db)).toMatchObject({
+      forexRevenue: 0,
+      reserveBalance: 9_900,
+      spreadFeeReserveBalances: { USD: 0, GBP: 150 },
+    });
+    // One $inc (the legacy single-update shape), not one write per slice.
+    const incUpdates = bankUpdates.filter(
+      (update) => (update as { $inc?: unknown }).$inc !== undefined
+    );
+    expect(incUpdates).toHaveLength(1);
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+  });
+
+  it("keys an infamy-only outcome with no reserve slices", async () => {
+    const db = new FakeDb();
+    seedIntervention(db, { bank: { spreadFeeReserveBalances: {} } });
+    const input = interventionInput(db);
+    input.outcome = {
+      rate: 1.15,
+      macroTarget: 1.16,
+      record: null,
+      forexRevenueDelta: 0,
+      reserveBalanceDelta: 0,
+      spreadFeeReserveDeltas: {},
+      infamyCharged: true,
+      chairCharacterIdHex: interventionChairId.toHexString(),
+    };
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result).toMatchObject({
+      outcome: "applied",
+      completedNow: true,
+      infamyCharged: true,
+      chairCharacterIdHex: interventionChairId.toHexString(),
+    });
+    expect(interventionBankDoc(db)).toMatchObject({
+      forexRevenue: 0,
+      reserveBalance: 0,
+      chairInfamy: 15,
+    });
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+  });
+
+  it("stays writeless on a null outcome (no receipt, no writes)", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    input.outcome = null;
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result).toMatchObject({ duplicate: false, completedNow: false, outcome: "noop" });
+    expect(db.writeCount).toBe(0);
+    expect(
+      db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.has(interventionKey())
+    ).toBe(false);
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({ GBP: 750_000 });
+  });
+
+  it("stays writeless on a record-less chargeless outcome", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    input.outcome!.record = null;
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result.outcome).toBe("noop");
+    expect(db.writeCount).toBe(0);
+    expect(
+      db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.has(interventionKey())
+    ).toBe(false);
+  });
+
+  it.each([1, 2, 3, 4])(
+    "converges exactly once after a crash following write %i",
+    async (after) => {
+      const db = new FakeDb();
+      seedIntervention(db);
+      const input = interventionInput(db);
+      // Writes: 1 claim insert + 1 plan store + 1 rate write + 1 bank ensure +
+      // 1 bank write. Crashing after any prefix must converge on retry.
+      db.crashAfterWrites = after;
+      await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+        "INJECTED_CRASH"
+      );
+      expect(receipt(db, interventionKey()).status).toBe("in_progress");
+
+      db.crashAfterWrites = Number.POSITIVE_INFINITY;
+      const retry = await applyForexInterventionSpend(db as unknown as Db, input);
+
+      expect(retry).toMatchObject({ duplicate: true, completedNow: true, outcome: "applied" });
+      expect(interventionBankDoc(db)).toMatchObject({
+        spreadFeeReserveBalances: { GBP: 0, USD: 840_000 },
+      });
+      expect(interventionRateDoc(db).rate).toBe(1.12);
+      expect(interventionRateDoc(db).rateHistory).toEqual([
+        { turn: 49, rate: 1.14 },
+        { turn: INTERVENTION_TURN, rate: 1.12 },
+      ]);
+      const policy = interventionRateDoc(db).interventionPolicy as {
+        recentInterventions: unknown[];
+      };
+      expect(policy.recentInterventions).toHaveLength(1);
+      expect(receipt(db, interventionKey()).status).toBe("completed");
+    }
+  );
+
+  it("reconciles a same-key retry through the stored plan, not the live recompute", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    // Crash after the plan store: nothing applied, plan durable.
+    db.crashAfterWrites = 2;
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      "INJECTED_CRASH"
+    );
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+
+    // The retry recomputes with fresh jitter — drifted rate, doubled deltas.
+    // The stored plan must win, or reserves double-draw.
+    const drifted = interventionInput(db);
+    drifted.outcome!.rate = 9.99;
+    drifted.outcome!.spreadFeeReserveDeltas = { GBP: -1_500_000, USD: 1_680_000 };
+    const retry = await applyForexInterventionSpend(db as unknown as Db, drifted);
+
+    expect(retry).toMatchObject({ duplicate: true, rate: 1.12 });
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({
+      GBP: 0,
+      USD: 840_000,
+    });
+    expect(interventionRateDoc(db).rate).toBe(1.12);
+  });
+
+  it("converges two concurrent workers on a single draw", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+
+    const [first, second] = await Promise.all([
+      applyForexInterventionSpend(db as unknown as Db, input),
+      applyForexInterventionSpend(db as unknown as Db, { ...input }),
+    ]);
+
+    expect(first.outcome).toBe("applied");
+    expect(second.outcome).toBe("applied");
+    // One draw, one snapshot, one audit record — never two.
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({
+      GBP: 0,
+      USD: 840_000,
+    });
+    expect(interventionRateDoc(db).rateHistory).toEqual([
+      { turn: 49, rate: 1.14 },
+      { turn: INTERVENTION_TURN, rate: 1.12 },
+    ]);
+    expect(
+      (interventionRateDoc(db).interventionPolicy as { recentInterventions: unknown[] })
+        .recentInterventions
+    ).toHaveLength(1);
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+  });
+
+  it("recreates a deleted bank document before drawing (legacy upsert parity)", async () => {
+    const db = new FakeDb();
+    seedIntervention(db, { seedBank: false });
+    const input = interventionInput(db);
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result.outcome).toBe("applied");
+    // Legacy-upsert parity: only the drawn slices exist on the recreated row
+    // (undrawn pools stay absent, exactly as `$inc` + `upsert: true` left them).
+    expect(interventionBankDoc(db)).toMatchObject({
+      spreadFeeReserveBalances: { GBP: -750_000, USD: 840_000 },
+    });
+    expect(interventionBankDoc(db).forexRevenue).toBeUndefined();
+    expect(interventionBankDoc(db).reserveBalance).toBeUndefined();
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+  });
+
+  it("applies fixed deltas when reserves changed mid-flight", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    // A concurrent spend drains half the foreign reserves before this flow
+    // runs: the plan's fixed deltas still apply exactly once (legacy
+    // unguarded-$inc parity), they do not re-derive from the new balances.
+    interventionBankDoc(db).spreadFeeReserveBalances = { GBP: 375_000 };
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(result.outcome).toBe("applied");
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({
+      GBP: -375_000,
+      USD: 840_000,
+    });
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+  });
+
+  it("settles failed when the rate row vanished mid-turn", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    db.collection("exchangeRates").docs.delete("US");
+
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      `${FOREX_INTERVENTION_RATE}:missing`
+    );
+
+    // Nothing moved: the bank draw never ran, the receipt holds the sentinel.
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({ GBP: 750_000 });
+    const settled = receipt(db, interventionKey());
+    expect(settled.status).toBe("failed");
+    expect(settled.error).toBe(`${FOREX_INTERVENTION_RATE}:missing`);
+  });
+
+  it("compensates the rate write when the bank write rejects, then fails closed", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    const banks = db.collection("centralBanks");
+    const realUpdate = banks.updateOne.bind(banks);
+    let calls = 0;
+    banks.updateOne = (async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
+      calls += 1;
+      // First bank write misses while the document exists: disambiguation
+      // reports guard-rejected, so the applied rate prefix must unwind.
+      if (calls === 1) return { matchedCount: 0, modifiedCount: 0 };
+      return realUpdate(filter, update);
+    }) as typeof banks.updateOne;
+
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      FOREX_INTERVENTION_RESERVE
+    );
+
+    // The rate row is restored exactly: scalars, policy, and history popped.
+    const rate = interventionRateDoc(db);
+    expect(rate.rate).toBe(1.15);
+    expect(rate.rateHistory).toEqual([{ turn: 49, rate: 1.14 }]);
+    expect(rate.interventionPolicy).toMatchObject({ floor: 0.95, recentInterventions: [] });
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({ GBP: 750_000 });
+    expect(receipt(db, interventionKey()).status).toBe("compensated");
+
+    // The compensated key stays fail-closed: a new attempt needs a new key.
+    banks.updateOne = realUpdate;
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      MoneyFlowTerminalError
+    );
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({ GBP: 750_000 });
+  });
+
+  it("fails closed on a failed receipt", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    const receipts = db.collection(
+      NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
+    ) as unknown as Collection<MoneyFlowReceipt>;
+    expect(await claimMoneyFlowReceipt(receipts, interventionKey(), input.fingerprint)).toBe(
+      "fresh"
+    );
+    await failMoneyFlowReceipt(receipts, interventionKey(), `${FOREX_INTERVENTION_RATE}:missing`);
+
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      MoneyFlowTerminalError
+    );
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({ GBP: 750_000 });
+  });
+
+  it("rejects a same-key retry with a different fingerprint", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    await applyForexInterventionSpend(db as unknown as Db, input);
+
+    await expect(
+      applyForexInterventionSpend(db as unknown as Db, { ...input, fingerprint: "other-event" })
+    ).rejects.toThrow(MoneyFlowKeyConflictError);
+    // The conflict attempt moved nothing.
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({
+      GBP: 0,
+      USD: 840_000,
+    });
+  });
+
+  it("rejects a conflicting fingerprint on an in-progress attempt", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    db.crashAfterWrites = 2;
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      "INJECTED_CRASH"
+    );
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+
+    await expect(
+      applyForexInterventionSpend(db as unknown as Db, { ...input, fingerprint: "other-event" })
+    ).rejects.toThrow(MoneyFlowKeyConflictError);
+  });
+
+  it("replays a completed attempt without writing again", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    await applyForexInterventionSpend(db as unknown as Db, input);
+
+    const writesBefore = db.writeCount;
+    const replay = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    expect(replay).toMatchObject({
+      duplicate: true,
+      completedNow: false,
+      outcome: "applied",
+      rate: 1.12,
+      infamyCharged: false,
+    });
+    expect(replay.record).toMatchObject({ direction: "buy" });
+    expect(db.writeCount).toBe(writesBefore);
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({
+      GBP: 0,
+      USD: 840_000,
+    });
+  });
+
+  it("throws orphaned when a completed receipt carries no usable plan", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.set(interventionKey(), {
+      _id: interventionKey(),
+      status: "completed",
+      fingerprint: input.fingerprint,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      FOREX_INTERVENTION_RECEIPT_ORPHANED
+    );
+  });
+
+  it("resume completes orphans and ignores settled or unrelated keys", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    // Crash after the rate write: reserves not yet drawn.
+    db.crashAfterWrites = 3;
+    await expect(applyForexInterventionSpend(db as unknown as Db, input)).rejects.toThrow(
+      "INJECTED_CRASH"
+    );
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    expect(interventionRateDoc(db).rate).toBe(1.12);
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({ GBP: 750_000 });
+
+    const resumed = await resumeForexInterventionByKey(db as unknown as Db, interventionKey());
+
+    expect(resumed).toMatchObject({
+      countryId: "US",
+      duplicate: true,
+      completedNow: true,
+      outcome: "applied",
+      rate: 1.12,
+    });
+    expect(interventionBankDoc(db).spreadFeeReserveBalances).toMatchObject({
+      GBP: 0,
+      USD: 840_000,
+    });
+    expect(receipt(db, interventionKey()).status).toBe("completed");
+
+    // Settled and unrelated keys have nothing to resume.
+    expect(await resumeForexInterventionByKey(db as unknown as Db, interventionKey())).toBeNull();
+    expect(
+      await resumeForexInterventionByKey(db as unknown as Db, "forex-turn-fill:50:ab")
+    ).toBeNull();
+    expect(await resumeForexInterventionByKey(db as unknown as Db, "bogus")).toBeNull();
+    // A key naming a different event than the stored plan is refused.
+    expect(
+      await resumeForexInterventionByKey(db as unknown as Db, forexInterventionKey(50, "UK"))
+    ).toBeNull();
+    await expect(resumeForexInterventionByKey(db as unknown as Db, "")).rejects.toThrow(RangeError);
+  });
+
+  it("resume fails closed on terminal receipts", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    const receipts = db.collection(
+      NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
+    ) as unknown as Collection<MoneyFlowReceipt>;
+    expect(await claimMoneyFlowReceipt(receipts, interventionKey(), input.fingerprint)).toBe(
+      "fresh"
+    );
+    await failMoneyFlowReceipt(receipts, interventionKey(), `${FOREX_INTERVENTION_RESERVE}:x`);
+
+    await expect(
+      resumeForexInterventionByKey(db as unknown as Db, interventionKey())
+    ).rejects.toThrow(MoneyFlowTerminalError);
+  });
+
+  it("keys are stable per event and collision-safe across turn and country", () => {
+    expect(forexInterventionKey(50, "US")).toBe("forex-intervention:50:US");
+    expect(forexInterventionFingerprint(50, "US")).toBe("forex-intervention:50:US");
+    expect(forexInterventionKey(51, "US")).not.toBe(forexInterventionKey(50, "US"));
+    expect(forexInterventionKey(50, "UK")).not.toBe(forexInterventionKey(50, "US"));
+  });
+
+  it("validates its inputs", async () => {
+    const db = new FakeDb();
+    seedIntervention(db);
+    const input = interventionInput(db);
+    await expect(
+      applyForexInterventionSpend(db as unknown as Db, { ...input, countryId: "" })
+    ).rejects.toThrow(TypeError);
+    await expect(
+      applyForexInterventionSpend(db as unknown as Db, { ...input, bankId: "" })
+    ).rejects.toThrow(TypeError);
+    await expect(
+      applyForexInterventionSpend(db as unknown as Db, { ...input, turn: Number.NaN })
+    ).rejects.toThrow(TypeError);
+    await expect(
+      resumeForexInterventionByKey(db as unknown as Db, "x".repeat(129))
+    ).rejects.toThrow(RangeError);
+  });
+
+  it("charges the capped infamy the legacy formula produces", async () => {
+    const db = new FakeDb();
+    seedIntervention(db, { bank: { chairInfamy: 95, spreadFeeReserveBalances: {} } });
+    const input = interventionInput(db);
+    input.outcome = {
+      rate: 1.15,
+      macroTarget: 1.16,
+      record: null,
+      forexRevenueDelta: 0,
+      reserveBalanceDelta: 0,
+      spreadFeeReserveDeltas: {},
+      infamyCharged: true,
+      chairCharacterIdHex: interventionChairId.toHexString(),
+    };
+    input.prior = { ...input.prior, chairInfamy: 95 };
+
+    const result = await applyForexInterventionSpend(db as unknown as Db, input);
+
+    // min(100, 95 + 15): capped, never hidden over-cap scrutiny.
+    expect(result.infamyCharged).toBe(true);
+    expect(interventionBankDoc(db).chairInfamy).toBe(100);
   });
 });

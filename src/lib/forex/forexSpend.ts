@@ -3,11 +3,14 @@ import { ObjectId, type ClientSession, type Collection, type Db } from "mongodb"
 import type { CountryId } from "@/lib/constants/countries";
 import {
   DIRECT_TRADE_SPREAD,
+  INTERVENTION_FAILURE_INFAMY,
   LIMIT_ORDER_SPREAD,
   SPREAD_FEE_CENTRAL_BANK_RATIO,
   SPREAD_FEE_RESERVE_RATIO,
   type CurrencyCode,
+  type CurrencyCyclePressureRegime,
 } from "@/lib/constants/currencies";
+import type { InterventionPolicy, InterventionRecord } from "@/lib/db/types/exchangeRate";
 import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
 import {
   applyIdempotentLeg,
@@ -1893,4 +1896,597 @@ export async function resumeForexExpireByKey(
     async () => runResume()
   );
   return { ...result, orderId };
+}
+
+// ── Turn intervention (chair standing policy) ───────────────────────────────
+
+/** Intervention cannot run: the rate writeback lost its document. */
+export const FOREX_INTERVENTION_RATE = "FOREX_INTERVENTION_RATE";
+/** Intervention cannot run: the reserve draw lost its bank document. */
+export const FOREX_INTERVENTION_RESERVE = "FOREX_INTERVENTION_RESERVE";
+/** Intervention cannot run: the infamy write lost its bank document. */
+export const FOREX_INTERVENTION_INFAMY = "FOREX_INTERVENTION_INFAMY";
+/** Completed intervention receipt without a usable stored plan. */
+export const FOREX_INTERVENTION_RECEIPT_ORPHANED = "FOREX_INTERVENTION_RECEIPT_ORPHANED";
+
+/**
+ * Deterministic key for one currency's intervention in one turn, so retries
+ * of the same turn converge under the key guards instead of drawing reserves
+ * twice. Per (turn, country) there is exactly one intervention event, so the
+ * key carries nothing else — economics live in the stored plan, never in the
+ * key, because a same-turn retry recomputes them with fresh jitter.
+ */
+export function forexInterventionKey(turn: number, countryId: string): string {
+  return `forex-intervention:${turn}:${countryId}`;
+}
+
+/**
+ * Fingerprint for an intervention: the operation identity (turn + country).
+ * Derived amounts re-derive with jitter on every computation, so they stay
+ * out of the fingerprint — a same-key retry always matches and reconciles
+ * through the stored plan instead of failing closed on recompute drift.
+ */
+export function forexInterventionFingerprint(turn: number, countryId: string): string {
+  return `forex-intervention:${turn}:${countryId}`;
+}
+
+/**
+ * The turn driver's pure intervention computation, as plain data. Null when
+ * the rate is in band (or no policy ran): a writeless no-op unless a receipt
+ * already exists for this key, in which case the stored attempt replays.
+ */
+export interface ForexInterventionSpendOutcome {
+  rate: number;
+  macroTarget: number;
+  /** Audit record for recentInterventions — null when no spend happened. */
+  record: InterventionRecord | null;
+  /** Reserve draw deltas (negative numbers, legacy funding-plan values). */
+  forexRevenueDelta: number;
+  reserveBalanceDelta: number;
+  spreadFeeReserveDeltas: Partial<Record<CurrencyCode, number>>;
+  /** True when a failure-infamy charge applies to the seated chair. */
+  infamyCharged: boolean;
+  /** Hex of the seated chair, or null during a vacancy (no mail). */
+  chairCharacterIdHex: string | null;
+}
+
+export interface ForexInterventionPrior {
+  rate: number;
+  macroTarget: number;
+  buyVolume24: number;
+  sellVolume24: number;
+  cyclePressureRegime: CurrencyCyclePressureRegime | null;
+  cyclePressureUntilTurn: number | null;
+  /** Policy row as read before this turn's write (always present when engaged). */
+  policy: InterventionPolicy;
+  hardPeg: number | null;
+  updatedAtIso: string;
+  chairInfamy: number;
+}
+
+export interface ForexInterventionInput {
+  countryId: string;
+  /** Central-bank document id (getBankId — shared-bank countries share one doc). */
+  bankId: string;
+  turn: number;
+  fingerprint: string;
+  /**
+   * Deterministic key from {@link forexInterventionKey} when called from the
+   * turn. Omit to mint one (tests / one-off callers).
+   */
+  idempotencyKey?: string;
+  outcome: ForexInterventionSpendOutcome | null;
+  /**
+   * The full legacy rate writeback, built by the driver (single construction
+   * site for the bare and keyed paths, so observable rate/history semantics
+   * cannot drift between them).
+   */
+  rateSet: Record<string, unknown>;
+  rateUnset?: Record<string, "">;
+  prior: ForexInterventionPrior;
+}
+
+export type ForexInterventionFlowOutcome = "applied" | "noop";
+
+export interface ForexInterventionResult {
+  duplicate: boolean;
+  /**
+   * True when this call completed the keyed flow (fresh or resumed). The
+   * driver sends the failure mail exactly then — never on a writeless noop
+   * and never on a duplicate replay (mail already went out or was lost in
+   * the same crash window the fill notifications accept).
+   */
+  completedNow: boolean;
+  /**
+   * `applied`: the keyed flow completed (fresh, resumed, or replayed) — the
+   * rate write converged, no bare write needed. `noop`: nothing written, no
+   * receipt — the driver does the legacy bare rate write.
+   */
+  outcome: ForexInterventionFlowOutcome;
+  /** Post-intervention rate (stored plan value on resume/replay). */
+  rate: number;
+  macroTarget: number;
+  record: InterventionRecord | null;
+  infamyCharged: boolean;
+  chairCharacterIdHex: string | null;
+}
+
+/**
+ * Crash-resume plan persisted on the flow receipt right after the fresh
+ * claim, before any money moves. A same-key retry rebuilds its steps from
+ * THIS plan, never from the caller's live input: post-crash input is a
+ * jittered recompute, and running it would double-draw reserves or strand a
+ * second policy record.
+ *
+ * The full post-write rate document is NOT stored (rateHistory alone is ~240
+ * snapshots): the revert restores the small prior scalars and pops the one
+ * appended snapshot, which is exact because this flow is the only writer
+ * that appends to this row between its own apply and its own revert.
+ */
+interface ForexInterventionStoredPlan {
+  version: 1;
+  countryId: string;
+  bankId: string;
+  turn: number;
+  rate: number;
+  macroTarget: number;
+  rateSet: Record<string, unknown>;
+  rateUnset: Record<string, "">;
+  priorRate: number;
+  priorMacroTarget: number;
+  priorBuyVolume24: number;
+  priorSellVolume24: number;
+  priorCyclePressureRegime: CurrencyCyclePressureRegime | null;
+  priorCyclePressureUntilTurn: number | null;
+  priorPolicy: InterventionPolicy;
+  priorHardPeg: number | null;
+  priorUpdatedAtIso: string;
+  priorChairInfamy: number;
+  forexRevenueDelta: number;
+  reserveBalanceDelta: number;
+  /** Nonzero spread-fee reserve deltas only ($inc by zero is a no-op). */
+  spreadDeltas: Record<string, number>;
+  infamyCharged: boolean;
+  chairCharacterIdHex: string | null;
+  record: InterventionRecord | null;
+}
+
+function isInterventionPlan(value: unknown): value is ForexInterventionStoredPlan {
+  if (!value || typeof value !== "object") return false;
+  const plan = value as Record<string, unknown>;
+  return (
+    plan.version === 1 &&
+    typeof plan.countryId === "string" &&
+    typeof plan.bankId === "string" &&
+    typeof plan.turn === "number" &&
+    typeof plan.rate === "number" &&
+    typeof plan.macroTarget === "number" &&
+    plan.rateSet !== null &&
+    typeof plan.rateSet === "object" &&
+    plan.priorPolicy !== null &&
+    typeof plan.priorPolicy === "object" &&
+    typeof plan.forexRevenueDelta === "number" &&
+    typeof plan.reserveBalanceDelta === "number" &&
+    plan.spreadDeltas !== null &&
+    typeof plan.spreadDeltas === "object" &&
+    typeof plan.infamyCharged === "boolean" &&
+    (plan.chairCharacterIdHex === null || typeof plan.chairCharacterIdHex === "string") &&
+    (plan.record === null || (typeof plan.record === "object" && plan.record !== null))
+  );
+}
+
+/** Receipt rows carry the resume plan under this field (never in the shared type). */
+type ForexInterventionReceipt = MoneyFlowReceipt & { forexInterventionPlan?: unknown };
+
+function planFromInput(input: ForexInterventionInput): ForexInterventionStoredPlan {
+  const outcome = input.outcome!;
+  const spreadDeltas: Record<string, number> = {};
+  for (const [currency, delta] of Object.entries(outcome.spreadFeeReserveDeltas)) {
+    if (typeof delta === "number" && delta !== 0) spreadDeltas[currency] = delta;
+  }
+  return {
+    version: 1,
+    countryId: input.countryId,
+    bankId: input.bankId,
+    turn: input.turn,
+    rate: outcome.rate,
+    macroTarget: outcome.macroTarget,
+    rateSet: input.rateSet,
+    rateUnset: input.rateUnset ?? {},
+    priorRate: input.prior.rate,
+    priorMacroTarget: input.prior.macroTarget,
+    priorBuyVolume24: input.prior.buyVolume24,
+    priorSellVolume24: input.prior.sellVolume24,
+    priorCyclePressureRegime: input.prior.cyclePressureRegime,
+    priorCyclePressureUntilTurn: input.prior.cyclePressureUntilTurn,
+    priorPolicy: input.prior.policy,
+    priorHardPeg: input.prior.hardPeg,
+    priorUpdatedAtIso: input.prior.updatedAtIso,
+    priorChairInfamy: input.prior.chairInfamy,
+    forexRevenueDelta: outcome.forexRevenueDelta,
+    reserveBalanceDelta: outcome.reserveBalanceDelta,
+    spreadDeltas,
+    infamyCharged: outcome.infamyCharged,
+    chairCharacterIdHex: outcome.chairCharacterIdHex,
+    record: outcome.record,
+  };
+}
+
+function resultFromPlan(
+  plan: ForexInterventionStoredPlan,
+  duplicate: boolean,
+  completedNow: boolean
+): ForexInterventionResult {
+  return {
+    duplicate,
+    completedNow,
+    outcome: "applied",
+    rate: plan.rate,
+    macroTarget: plan.macroTarget,
+    record: plan.record,
+    infamyCharged: plan.infamyCharged,
+    chairCharacterIdHex: plan.chairCharacterIdHex,
+  };
+}
+
+function mapInterventionError(step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error {
+  // The rate write is the first step, so an empty prefix means the rate row
+  // vanished mid-turn (legacy ignored the miss and kept spending — here it
+  // settles `failed`, fail closed, with the sentinel on the receipt for ops).
+  // Anything after money moved compensates the prefix instead of stranding a
+  // defended rate with undrawn reserves.
+  if (step.name === "rate-write") return new Error(`${FOREX_INTERVENTION_RATE}:${outcome}`);
+  if (step.name === "reserve-draw") return new Error(`${FOREX_INTERVENTION_RESERVE}:${outcome}`);
+  return new Error(`${FOREX_INTERVENTION_INFAMY}:${outcome}`);
+}
+
+/**
+ * Steps for one intervention, in legacy phase order: rate writeback first
+ * (so a partial failure leaves exchange rates intact rather than
+ * half-updated), then the combined reserve-draw/infamy bank write. The bank
+ * write ensures its document first (legacy `upsert: true` parity).
+ */
+function buildInterventionSteps(
+  db: Db,
+  key: string,
+  plan: ForexInterventionStoredPlan
+): MoneyFlowStep[] {
+  const rates = db.collection<{ _id: string }>("exchangeRates");
+  const banks = db.collection<{ _id: string }>("centralBanks");
+  const steps: MoneyFlowStep[] = [];
+
+  const revertSet: Record<string, unknown> = {
+    rate: plan.priorRate,
+    macroTarget: plan.priorMacroTarget,
+    buyVolume24: plan.priorBuyVolume24,
+    sellVolume24: plan.priorSellVolume24,
+    interventionPolicy: plan.priorPolicy,
+    updatedAt: new Date(plan.priorUpdatedAtIso),
+  };
+  const revertUnset: Record<string, ""> = {};
+  if (plan.priorCyclePressureRegime == null) revertUnset.cyclePressureRegime = "";
+  else revertSet.cyclePressureRegime = plan.priorCyclePressureRegime;
+  if (plan.priorCyclePressureUntilTurn == null) revertUnset.cyclePressureUntilTurn = "";
+  else revertSet.cyclePressureUntilTurn = plan.priorCyclePressureUntilTurn;
+  if (plan.priorHardPeg == null) revertUnset.hardPeg = "";
+  else revertSet.hardPeg = plan.priorHardPeg;
+
+  steps.push({
+    name: "rate-write",
+    apply: (stepOpts) =>
+      applyKeyedUpdate(
+        key,
+        {
+          collection: rates,
+          filter: { _id: plan.countryId },
+          update: {
+            $set: plan.rateSet,
+            ...(Object.keys(plan.rateUnset).length > 0 ? { $unset: plan.rateUnset } : {}),
+          },
+        },
+        stepOpts ?? {}
+      ),
+    revert: (stepOpts) =>
+      applyKeyedUpdate(
+        `${key}:compensate:rate-write`,
+        {
+          collection: rates,
+          filter: { _id: plan.countryId },
+          update: {
+            $set: revertSet,
+            // The forward write appends exactly one snapshot (and drops the
+            // oldest only when already at cap), so popping restores the prior
+            // array exactly without storing ~240 snapshots on the receipt.
+            $pop: { rateHistory: 1 },
+            ...(Object.keys(revertUnset).length > 0 ? { $unset: revertUnset } : {}),
+          },
+        },
+        stepOpts ?? {}
+      ),
+  } satisfies MoneyFlowStep);
+
+  // One bank write mirroring the legacy single updateOne exactly: the nonzero
+  // reserve $inc slices plus the infamy $set ride in the same atomic write,
+  // so the observable write shape (and the crash surface) is unchanged.
+  const bankInc: Record<string, number> = {};
+  if (plan.forexRevenueDelta !== 0) bankInc.forexRevenue = plan.forexRevenueDelta;
+  if (plan.reserveBalanceDelta !== 0) bankInc.reserveBalance = plan.reserveBalanceDelta;
+  for (const [currency, delta] of Object.entries(plan.spreadDeltas)) {
+    bankInc[`spreadFeeReserveBalances.${currency}`] = delta;
+  }
+  const hasInc = Object.keys(bankInc).length > 0;
+  const hasSet = plan.infamyCharged;
+  if (hasInc || hasSet) {
+    const infamyAfter = Math.min(100, plan.priorChairInfamy + INTERVENTION_FAILURE_INFAMY);
+    const bankNegInc = Object.fromEntries(
+      Object.entries(bankInc).map(([name, amount]) => [name, -amount])
+    );
+    // Money primary: the combined write keeps the legacy `reserve-draw`
+    // sentinel; the infamy-only write keeps `infamy-set`.
+    const stepName = hasInc ? "reserve-draw" : "infamy-set";
+    steps.push({
+      name: stepName,
+      apply: async (stepOpts) => {
+        const opts = stepOpts ?? {};
+        // Legacy `upsert: true` parity: a bank row deleted mid-turn is
+        // recreated before the write instead of failing the turn on it.
+        await insertKeyedDoc(banks, { _id: plan.bankId }, opts);
+        return applyKeyedUpdate(
+          key,
+          {
+            collection: banks,
+            filter: { _id: plan.bankId },
+            update: {
+              ...(hasInc ? { $inc: bankInc } : {}),
+              ...(hasSet ? { $set: { chairInfamy: infamyAfter } } : {}),
+            },
+          },
+          opts
+        );
+      },
+      revert: (stepOpts) =>
+        applyKeyedUpdate(
+          `${key}:compensate:${stepName}`,
+          {
+            collection: banks,
+            filter: { _id: plan.bankId },
+            update: {
+              ...(hasInc ? { $inc: bankNegInc } : {}),
+              ...(hasSet ? { $set: { chairInfamy: plan.priorChairInfamy } } : {}),
+            },
+          },
+          stepOpts ?? {}
+        ),
+    } satisfies MoneyFlowStep);
+  }
+
+  return steps;
+}
+
+/**
+ * Persist one currency's intervention (rate writeback + reserve draw + infamy
+ * charge) so standalone Mongo retries converge exactly once (issue #1672).
+ *
+ * Engagement: a computed outcome with an audit record or an infamy charge
+ * runs the keyed steps under a deterministic per-turn key, with the resume
+ * plan persisted on the receipt at claim time. Anything else (null outcome,
+ * or a breached-but-broke bank with no record and no charge) is a writeless
+ * no-op with no receipt — the driver does the legacy bare rate write.
+ *
+ * A same-key retry never runs the live input: the stored plan wins, because
+ * the live input is a jittered recompute of the same event. Pre-claim skips
+ * stay writeless exactly like the legacy scan continuing past in-band
+ * currencies.
+ */
+export async function applyForexInterventionSpend(
+  db: Db,
+  input: ForexInterventionInput
+): Promise<ForexInterventionResult> {
+  if (!input.countryId) throw new TypeError("Forex intervention spend needs countryId");
+  if (!input.bankId) throw new TypeError("Forex intervention spend needs bankId");
+  if (!Number.isFinite(input.turn)) throw new TypeError("Forex intervention spend needs turn");
+  const key =
+    input.idempotencyKey !== undefined
+      ? resolveKey(input.idempotencyKey, "Forex intervention")
+      : forexInterventionKey(input.turn, input.countryId);
+
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const receiptCollection = receipts as unknown as Collection<ForexInterventionReceipt>;
+
+  const engaged =
+    input.outcome !== null && (input.outcome.record !== null || input.outcome.infamyCharged);
+  const noop = (duplicate: boolean): ForexInterventionResult => ({
+    duplicate,
+    completedNow: false,
+    outcome: "noop",
+    rate: input.outcome?.rate ?? 0,
+    macroTarget: input.outcome?.macroTarget ?? 0,
+    record: null,
+    infamyCharged: false,
+    chairCharacterIdHex: null,
+  });
+
+  const runSpend = async (session?: ClientSession) => {
+    const opts = session ? { session } : {};
+
+    const runPlan = async (
+      plan: ForexInterventionStoredPlan,
+      duplicate: boolean
+    ): Promise<ForexInterventionResult> => {
+      await runMoneyFlowSteps(
+        receipts,
+        key,
+        buildInterventionSteps(db, key, plan),
+        mapInterventionError,
+        opts
+      );
+      return resultFromPlan(plan, duplicate, true);
+    };
+
+    // Pre-claim live read: an existing receipt owns this event, so reconcile
+    // it — a same-key retry after the writeback landed re-reads nothing
+    // usable, and running the live jittered recompute would double-draw.
+    const existing = await receiptCollection.findOne({ _id: key }, opts);
+    if (existing) {
+      if (existing.fingerprint !== input.fingerprint) throw new MoneyFlowKeyConflictError(key);
+      if (existing.status === "completed") {
+        return replayInterventionOutcome(db, key, opts);
+      }
+      if (existing.status === "failed" || existing.status === "compensated") {
+        throw new MoneyFlowTerminalError(key, existing.status);
+      }
+      const stored = existing.forexInterventionPlan;
+      const claim = await claimMoneyFlowReceipt(receipts, key, input.fingerprint, opts);
+      if (claim === "duplicate") {
+        return replayInterventionOutcome(db, key, opts);
+      }
+      if (isInterventionPlan(stored)) {
+        return runPlan(stored, true);
+      }
+      // Crashed between the claim insert and the plan write: nothing applied
+      // yet (the plan lands before the first step), so reconcile the live
+      // input under the stored fingerprint — or stay writeless when the live
+      // input is a no-op, leaving the orphan to TTL away.
+      if (!engaged) return noop(true);
+      const freshPlan = planFromInput(input);
+      await receiptCollection.updateOne(
+        { _id: key },
+        { $set: { forexInterventionPlan: freshPlan, updatedAt: new Date() } },
+        opts
+      );
+      return runPlan(freshPlan, true);
+    }
+
+    // No receipt and no engagement: writeless, exactly like the legacy path
+    // writing only the bare rate row (which the driver still does).
+    if (!engaged) return noop(false);
+
+    // A fresh claim owns the attempt. A concurrent worker racing between the
+    // pre-claim read and here loses the insert and reconciles above on its
+    // own retry — both converge on one plan because the stored plan wins.
+    const claim = await claimMoneyFlowReceipt(receipts, key, input.fingerprint, opts);
+    if (claim !== "fresh") {
+      const raced = await receiptCollection.findOne({ _id: key }, opts);
+      if (!raced) throw new Error("MONEY_FLOW_RECEIPT_LOST");
+      if (raced.fingerprint !== input.fingerprint) throw new MoneyFlowKeyConflictError(key);
+      if (raced.status === "completed") {
+        return replayInterventionOutcome(db, key, opts);
+      }
+      if (raced.status === "failed" || raced.status === "compensated") {
+        throw new MoneyFlowTerminalError(key, raced.status);
+      }
+      const stored = raced.forexInterventionPlan;
+      if (isInterventionPlan(stored)) {
+        return runPlan(stored, true);
+      }
+      if (!engaged) return noop(true);
+      const freshPlan = planFromInput(input);
+      await receiptCollection.updateOne(
+        { _id: key },
+        { $set: { forexInterventionPlan: freshPlan, updatedAt: new Date() } },
+        opts
+      );
+      return runPlan(freshPlan, true);
+    }
+
+    const storedPlan = planFromInput(input);
+    // Persist the resume plan before the first step: a crash from here on
+    // resumes this exact plan under the same key.
+    try {
+      await receiptCollection.updateOne(
+        { _id: key },
+        { $set: { forexInterventionPlan: storedPlan, updatedAt: new Date() } },
+        opts
+      );
+    } catch (planError) {
+      await failMoneyFlowReceipt(receipts, key, `${FOREX_INTERVENTION_RATE}:plan-store`, opts);
+      throw planError;
+    }
+
+    return runPlan(storedPlan, false);
+  };
+
+  return runWithOptionalTransaction(
+    async (session) => runSpend(session),
+    async () => runSpend()
+  );
+}
+
+/**
+ * Replay the stored outcome of a completed intervention without touching
+ * balances or live state: every amount comes from the stored plan. Throws
+ * when the stored plan is unusable (fail closed) or when the receipt settled
+ * `failed`/`compensated`.
+ */
+async function replayInterventionOutcome(
+  db: Db,
+  key: string,
+  opts: { session?: ClientSession }
+): Promise<ForexInterventionResult> {
+  const receiptCollection = (await getMoneyFlowReceiptsCollection(
+    db
+  )) as unknown as Collection<ForexInterventionReceipt>;
+  const existing = await receiptCollection.findOne({ _id: key }, opts);
+  const stored = existing?.forexInterventionPlan;
+  if (!isInterventionPlan(stored)) throw new Error(FOREX_INTERVENTION_RECEIPT_ORPHANED);
+  return resultFromPlan(stored, true, false);
+}
+
+/**
+ * Key-only crash recovery for interventions (issue #1672): the turn driver
+ * re-drives `in_progress` intervention receipts through their stored plans
+ * before its country loop, so a crash between the rate writeback and the
+ * reserve draw converges on the next turn instead of stranding a defended
+ * rate with undrawn reserves (free defense) or double-drawing on a naive
+ * recompute.
+ *
+ * Returns null when there is nothing to resume (an unrelated key, no
+ * receipt, an already-`completed` receipt, or an `in_progress` receipt with
+ * no usable stored plan — the loop then adopts the live input under the same
+ * key). Throws `MoneyFlowTerminalError` when the receipt settled
+ * `failed`/`compensated`.
+ */
+export async function resumeForexInterventionByKey(
+  db: Db,
+  key: string
+): Promise<(ForexInterventionResult & { countryId: string }) | null> {
+  if (key.length === 0 || key.length > 128) {
+    throw new RangeError("Forex intervention idempotency key must be 1-128 characters");
+  }
+  const prefix = "forex-intervention:";
+  if (!key.startsWith(prefix)) return null;
+  const rest = key.slice(prefix.length);
+  const separator = rest.indexOf(":");
+  if (separator < 0) return null;
+  const turn = Number(rest.slice(0, separator));
+  const countryId = rest.slice(separator + 1);
+  if (!Number.isFinite(turn) || countryId.length === 0) return null;
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const receiptCollection = receipts as unknown as Collection<ForexInterventionReceipt>;
+  const existing = await receiptCollection.findOne({ _id: key });
+  if (!existing) return null;
+  if (existing.status === "completed") return null;
+  if (existing.status === "failed" || existing.status === "compensated") {
+    throw new MoneyFlowTerminalError(key, existing.status);
+  }
+  if (existing.status !== "in_progress") return null;
+  const stored = existing.forexInterventionPlan;
+  if (!isInterventionPlan(stored)) return null;
+  if (stored.countryId !== countryId || stored.turn !== turn) return null;
+  const runResume = async (session?: ClientSession): Promise<ForexInterventionResult> => {
+    const opts = session ? { session } : {};
+    await runMoneyFlowSteps(
+      receipts,
+      key,
+      buildInterventionSteps(db, key, stored),
+      mapInterventionError,
+      opts
+    );
+    return resultFromPlan(stored, true, true);
+  };
+  const result = await runWithOptionalTransaction(
+    async (session) => runResume(session),
+    async () => runResume()
+  );
+  return { ...result, countryId };
 }
