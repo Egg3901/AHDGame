@@ -64,7 +64,11 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * + v1 market-maker exchange via executeMarketMakerTrade, all with
  * Idempotency-Key validation/forwarding and route-level replay/invalid/
  * conflict tests; merged per-bank spread steps via
- * makeSpreadDistributionStepsForFees).
+ * makeSpreadDistributionStepsForFees), bond sales (positional holder claim
+ * + gated pool debit + character/imperial/corporation payout via the
+ * bondSellSpend primitive, with Idempotency-Key validation/forwarding and
+ * route-level compensation/replay/invalid-key tests; zero-unit holder
+ * cleanup stays post-commit best effort).
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
@@ -80,7 +84,7 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * status transition and the money writes there can still strand or double
  * value; migrating them means expressing each as keyed steps here.
  * Still on the legacy debit-first-plus-compensation fallback: bond
- * sell/default/payoff, index-fund cron/rebalancing, directAction,
+ * default/payoff/buyback/buy, index-fund cron/rebalancing, directAction,
  * state-org build — multi-write status machines, positional holder
  * claims, and bulkWrite batches that need reserve/order/history support
  * beyond keyed single-document writes.
