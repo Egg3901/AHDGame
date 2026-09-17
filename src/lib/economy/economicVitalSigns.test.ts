@@ -671,7 +671,10 @@ describe("computeEconomicVitalSigns", () => {
       turn: 30,
       globalExchange: {
         _id: "global",
-        listings: [{ _id: concentratedId }, { _id: sharedId }],
+        listings: [
+          { _id: concentratedId, totalShares: 1_000, publicFloat: 500 },
+          { _id: sharedId, totalShares: 1_000, publicFloat: 500 },
+        ],
         updatedAt: new Date(),
       } as never,
       trades: [
@@ -744,7 +747,7 @@ describe("computeEconomicVitalSigns", () => {
       turn: 30,
       globalExchange: {
         _id: "global",
-        listings: [{ _id: corpId }],
+        listings: [{ _id: corpId, totalShares: 1_000, publicFloat: 500 }],
         updatedAt: new Date(),
       } as never,
       trades: [
