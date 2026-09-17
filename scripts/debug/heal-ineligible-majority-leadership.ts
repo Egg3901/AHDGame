@@ -46,7 +46,7 @@ import {
   POLICY_BY_ROLE,
   type ChamberLeadershipContext,
 } from "@/lib/congress/leadership/rolePolicy";
-import { openElectionsForVacatedMajorityRoles } from "@/lib/congress/leadership/reconcilePartyEligibility";
+import { openElectionsForVacatedRoles } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { resolveSeatHolderParty } from "@/lib/congress/leadership/openElection";
 import type { Character, CongressLeader, ElectedOfficial, LeadershipRole } from "@/lib/db/types";
 
@@ -160,7 +160,7 @@ async function main(): Promise<void> {
     // The shipped opener, so the races these vacancies create are identical to
     // the ones a party switch produces — same window, same both-anchor write,
     // same feed notice.
-    const opened = await openElectionsForVacatedMajorityRoles(
+    const opened = await openElectionsForVacatedRoles(
       db,
       ineligible.map((e) => ({ leaderRole: e.leaderRole, formerHolderName: e.name })),
       contexts,

@@ -115,8 +115,8 @@ export async function reconcileLeadershipPartyEligibility(
   const roles = MAJORITY_GATED_ROLES[chamber];
 
   // Three queries total, not three per role: this runs on the congress page
-  // GETs, right beside `vacateLeadershipBulkIfLostSeat`, which exists in bulk
-  // form for exactly this reason.
+  // GETs, right beside `vacateLeadershipForLostSeats`, which is batched for
+  // exactly this reason.
   const leaders = await db
     .collection<CongressLeader>("congressLeaders")
     .find({ role: { $in: roles.map((r) => r.leaderRole) } })
@@ -431,9 +431,19 @@ export async function vacateRolesLostToPartySwitch(
 
   const contexts = await buildContextsSafely(db, heldRoles);
 
+  // The holder sits in the chamber, so the party they are joining has a seat in
+  // it by definition. Saying so explicitly is what makes the answer the same
+  // whichever caller this is: the party `leave` route relabels the seat row
+  // before running the cleanup, while `performRelocation` deliberately runs the
+  // cleanup first (see its comment at the call site), so the composition read
+  // here may or may not have caught up yet. Only the gate sees this; the opener
+  // still gets the real composition.
+  const withHolderSeat = (ctx: ChamberLeadershipContext | null) =>
+    ctx ? { ...ctx, allChamberPartySlugs: new Set([...ctx.allChamberPartySlugs, newParty]) } : null;
+
   const lost = heldRoles.filter(({ leaderRole }) => {
     const chamber = chamberForLeaderRole(leaderRole);
-    const ctx = chamber ? contexts[chamber] : null;
+    const ctx = chamber ? withHolderSeat(contexts[chamber]) : null;
     return !qualifiesAfterPartySwitch(POLICY_BY_ROLE[leaderRole], newParty, ctx);
   });
 

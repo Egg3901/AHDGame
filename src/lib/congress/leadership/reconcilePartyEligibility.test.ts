@@ -267,7 +267,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
   });
 
   it("leaves a holder who has lost their seat to the seat-loss sweep", async () => {
-    // No electedOfficials row: `vacateLeadershipBulkIfLostSeat` owns that case,
+    // No electedOfficials row: `vacateLeadershipForLostSeats` owns that case,
     // and a de-seated member must not trigger a party-switch election here.
     const holder = new ObjectId();
     seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
@@ -660,6 +660,26 @@ describe("vacateRolesLostToPartySwitch", () => {
       expect.objectContaining({ $set: expect.objectContaining({ status: "voting" }) }),
       { upsert: true }
     );
+  });
+
+  it("counts the holder's own seat toward the party they are joining", async () => {
+    // Whether the chamber composition already shows the new party depends on
+    // which caller this is: the party `leave` route relabels the seat row before
+    // running the cleanup, while `performRelocation` deliberately runs it first.
+    // Without this the same defection keeps the post down one path and loses it
+    // down the other. The holder holds a seat, so their new party has one.
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "minority_leader_house", holderId: holder }],
+      // "independent" is not in the mocked composition — the seat row has not
+      // been relabelled yet.
+      "independent",
+      NOW
+    );
+
+    expect(vacated).toEqual([]);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).not.toHaveBeenCalled();
   });
 
   it("vacates a party-gated role it has no way to evaluate", async () => {

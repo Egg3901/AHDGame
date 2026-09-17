@@ -91,101 +91,6 @@ export async function vacateCongressLeadershipRole(
 }
 
 /**
- * Checks if current leader still holds their seat. If not, vacates the position.
- */
-export async function vacateLeadershipIfLostSeat(
-  db: Db,
-  leaderRole: LeadershipRole,
-  chamber: ChamberKind
-): Promise<void> {
-  const leaderDoc = await db
-    .collection<CongressLeader>("congressLeaders")
-    .findOne({ role: leaderRole });
-  if (!leaderDoc?.characterId) return;
-
-  const officeType = chamber;
-  const stillHasSeat = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-    officeType,
-    $or: [{ characterId: leaderDoc.characterId }, { nppId: leaderDoc.characterId }],
-  });
-
-  if (stillHasSeat) return;
-
-  const now = new Date();
-  await db
-    .collection<CongressLeader>("congressLeaders")
-    .updateOne(
-      { role: leaderRole },
-      { $set: { characterId: null, characterName: "Vacant", updatedAt: now } }
-    );
-}
-
-/**
- * Batch version of vacateLeadershipIfLostSeat.
- * Fetches all leader docs in one query and all seat checks in one query per
- * office type, avoiding the N+1 pattern of calling vacateLeadershipIfLostSeat
- * sequentially for multiple roles.
- */
-export async function vacateLeadershipBulkIfLostSeat(
-  db: Db,
-  roles: Array<{ leaderRole: LeadershipRole; chamber: ChamberKind }>
-): Promise<void> {
-  const leaderRoleNames = roles.map((r) => r.leaderRole);
-
-  const leaderDocs = await db
-    .collection<CongressLeader>("congressLeaders")
-    .find({ role: { $in: leaderRoleNames } })
-    .toArray();
-
-  const docsWithLeader = leaderDocs.filter((doc: CongressLeader) => doc.characterId);
-  if (docsWithLeader.length === 0) return;
-
-  const roleToOfficeType = new Map(roles.map((r) => [r.leaderRole, r.chamber] as const));
-
-  // Group by officeType so we can do one electedOfficials query per office type
-  const byOfficeType = new Map<string, CongressLeader[]>();
-  for (const doc of docsWithLeader) {
-    const officeType = roleToOfficeType.get(doc.role) ?? "senate";
-    if (!byOfficeType.has(officeType)) byOfficeType.set(officeType, []);
-    byOfficeType.get(officeType)!.push(doc);
-  }
-
-  const hasSeats = new Set<string>();
-  await Promise.all(
-    [...byOfficeType.entries()].map(async ([officeType, docs]) => {
-      const orClauses = docs.flatMap((doc) =>
-        doc.characterId ? [{ characterId: doc.characterId }, { nppId: doc.characterId }] : []
-      );
-      const seats = await db
-        .collection<ElectedOfficial>("electedOfficials")
-        .find({ officeType, $or: orClauses }, { projection: { characterId: 1, nppId: 1 } })
-        .toArray();
-      for (const seat of seats) {
-        if (seat.characterId) hasSeats.add(seat.characterId.toString());
-        if (seat.nppId) hasSeats.add(seat.nppId.toString());
-      }
-    })
-  );
-
-  const now = new Date();
-  const toVacate = docsWithLeader.filter(
-    (doc: CongressLeader) => !hasSeats.has(doc.characterId!.toString())
-  );
-  if (toVacate.length > 0) {
-    await Promise.all(
-      toVacate.map((doc: CongressLeader) =>
-        db
-          .collection<CongressLeader>("congressLeaders")
-          .updateOne(
-            { role: doc.role },
-            { $set: { characterId: null, characterName: "Vacant", updatedAt: now } }
-          )
-      )
-    );
-  }
-}
-
-/**
  * Resolves a leadership election when voting ends.
  * Handles both cases: with candidates (declares winner) and without (vacates the role).
  */
@@ -876,32 +781,51 @@ export async function vacateLeadershipForLostSeats(db: Db): Promise<number> {
 
   const leaderRoleToDoc = new Map(leaderDocs.map((d) => [d.role, d]));
 
-  // Fetch all current officials across every relevant chamber.
-  const allOfficials = await db
+  // Only the seat rows of the thirteen people in question. This runs every
+  // turn, and reading every official of every chamber to answer that would be
+  // thousands of documents an hour — CN alone seats ~2,980 delegates.
+  // `nppId` is checked too: an NPP-held chair stores the NPP id in
+  // `congressLeaders.characterId`, and its seat row keys that id under `nppId`.
+  const seatedByChamber = new Map<string, Set<string>>();
+  const holderIds = leaderDocs.flatMap((doc) => (doc.characterId ? [doc.characterId] : []));
+  if (holderIds.length === 0) return 0;
+
+  const seats = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .find({ officeType: { $in: ["house", "senate", "bundestag", "npcDelegate"] } })
+    .find(
+      {
+        officeType: { $in: ["house", "senate", "bundestag", "npcDelegate"] },
+        $or: [{ characterId: { $in: holderIds } }, { nppId: { $in: holderIds } }],
+      },
+      { projection: { characterId: 1, nppId: 1, officeType: 1 } }
+    )
     .toArray();
-
-  // Build sets of character IDs who currently hold each chamber seat
-  const houseCharacterIds = new Set<string>();
-  const senateCharacterIds = new Set<string>();
-  const bundestagCharacterIds = new Set<string>();
-  const npcDelegateCharacterIds = new Set<string>();
-
-  for (const official of allOfficials) {
-    const charId = official.characterId?.toString() ?? official.nppId?.toString();
-    if (!charId) continue;
-
-    if (official.officeType === "house") {
-      houseCharacterIds.add(charId);
-    } else if (official.officeType === "senate") {
-      senateCharacterIds.add(charId);
-    } else if (official.officeType === "bundestag") {
-      bundestagCharacterIds.add(charId);
-    } else if (official.officeType === "npcDelegate") {
-      npcDelegateCharacterIds.add(charId);
-    }
+  for (const seat of seats) {
+    if (!seat.officeType) continue;
+    const set = seatedByChamber.get(seat.officeType) ?? new Set<string>();
+    // Both ids, not whichever is set first: a row can carry a character and an
+    // NPP, and reading only one of them would leave a seated holder looking
+    // seatless and vacate a chair that is filled.
+    if (seat.characterId) set.add(seat.characterId.toString());
+    if (seat.nppId) set.add(seat.nppId.toString());
+    seatedByChamber.set(seat.officeType, set);
   }
+
+  // A chamber with no seats at all is a failed or not-yet-seeded read, not a
+  // chamber that lost every member. Without this one bad read would empty a
+  // whole leadership slate and announce a race for every seat. Counted lazily
+  // and once per chamber, so a normal turn — where every holder is still seated
+  // — never issues it at all.
+  const chamberSeatCounts = new Map<string, number>();
+  const chamberHasSeats = async (chamber: string): Promise<boolean> => {
+    const cached = chamberSeatCounts.get(chamber);
+    if (cached !== undefined) return cached > 0;
+    const count = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .countDocuments({ officeType: chamber });
+    chamberSeatCounts.set(chamber, count);
+    return count > 0;
+  };
 
   const lostSeats: Array<{
     leaderRole: LeadershipRole;
@@ -918,20 +842,8 @@ export async function vacateLeadershipForLostSeats(db: Db): Promise<number> {
     if (!leaderDoc?.characterId) continue;
 
     const charId = leaderDoc.characterId.toString();
-    const requiredSet =
-      chamber === "house"
-        ? houseCharacterIds
-        : chamber === "senate"
-          ? senateCharacterIds
-          : chamber === "bundestag"
-            ? bundestagCharacterIds
-            : npcDelegateCharacterIds;
-
-    // No seats at all is a failed or not-yet-seeded read, not a chamber that
-    // lost every member. Without this the sweep would empty an entire
-    // leadership slate, and now announce a race for each seat, on one bad read.
-    if (requiredSet.size === 0) continue;
-    if (requiredSet.has(charId)) continue;
+    if (seatedByChamber.get(chamber)?.has(charId)) continue;
+    if (!(await chamberHasSeats(chamber))) continue;
 
     console.log(
       `[Turn] Vacating ${role}: ${leaderDoc.characterName} no longer holds a ${chamber} seat`
