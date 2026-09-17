@@ -809,6 +809,35 @@ describe("worker lease fencing", () => {
     ).toEqual({ ok: false, reason: "denied" });
   });
 
+  it("replays a checkpoint retry by the same holder while cascading", async () => {
+    // A crashed-then-resumed worker that re-sends its checkpoint must observe
+    // success, not a conflict: `cascading` retries by the exact holder match.
+    const user = makeUser();
+    const { store } = seedStore(user);
+    await reserveOk(store, user, T0, rid("res-replay"));
+    const claimed = await claimCommand(store, {
+      userId: user._id,
+      reservationId: rid("res-replay"),
+      workerId: "worker-a",
+      now: T0,
+      onInvalidate: () => {},
+    });
+    expect(claimed.ok).toBe(true);
+    const holder = {
+      userId: user._id,
+      reservationId: rid("res-replay"),
+      workerId: "worker-a",
+      generation: 0,
+      now: T0,
+      onInvalidate: () => {},
+    };
+    expect(await checkpointDeletion(store, holder)).toEqual({ ok: true });
+    expect(await checkpointDeletion(store, holder)).toEqual({ ok: true });
+    expect(readDeletionCommand((await store.findOne({ _id: user._id })) as User)?.state).toBe(
+      "cascading"
+    );
+  });
+
   it("reclaims an expired lease at generation + 1 and freezes out the stale holder", async () => {
     const user = makeUser();
     const { store } = seedStore(user);
@@ -1715,6 +1744,21 @@ describe.skipIf(!RUN_REAL_MONGO)("deletion command on real mongo (ephemeral)", (
           onInvalidate: () => {},
         })
       ).toEqual({ ok: true });
+      // Same-holder checkpoint replay succeeds on the real driver too.
+      expect(
+        await checkpointDeletion(store, {
+          userId: user._id,
+          reservationId: winnerId,
+          workerId: "real-worker",
+          generation: 0,
+          now: workerNow,
+          onInvalidate: () => {},
+        })
+      ).toEqual({ ok: true });
+      // Index assumption: the kernel keys every write off `_id` plus field
+      // predicates, so the default index is the only one it ever needs.
+      const indexNames = (await col.listIndexes().toArray()).map((i) => i.name).sort();
+      expect(indexNames).toEqual(["_id_"]);
       expect(
         await confirmDeletionCompleted(store, {
           userId: user._id,
@@ -1819,6 +1863,23 @@ describe.skipIf(!RUN_REAL_MONGO)("deletion command on real mongo (ephemeral)", (
       });
       expect(reclaim.ok).toBe(true);
       if (reclaim.ok) expect(reclaim.generation).toBe(1);
+      // Crash resume on the real clock: the new holder checkpoints, replays
+      // the checkpoint, and completes with the original identity intact.
+      const resumed = {
+        userId: user._id,
+        reservationId: rid("res-real-expiry"),
+        workerId: "real-worker-b",
+        generation: 1,
+        now: new Date(),
+        onInvalidate: () => {},
+      };
+      expect(await checkpointDeletion(store, resumed)).toEqual({ ok: true });
+      expect(await checkpointDeletion(store, resumed)).toEqual({ ok: true });
+      expect(await confirmDeletionCompleted(store, resumed)).toEqual({ ok: true });
+      const terminal = await col.findOne({ _id: user._id });
+      expect(terminal?.accountDeletion?.state).toBe("complete");
+      expect(terminal?.accountDeletion?.reservationId).toBe(rid("res-real-expiry"));
+      expect(readDeletionCommand(terminal)?.workerGeneration).toBe(1);
       await col.db.dropDatabase();
     } finally {
       await cleanup();
