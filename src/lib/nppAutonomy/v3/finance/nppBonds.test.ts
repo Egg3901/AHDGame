@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
+import { BOND_BUY_FUNDS, BOND_BUY_RESERVE } from "@/lib/bonds/bondBuySpend";
 
-vi.mock("@/lib/bonds/bondHolderOps", () => ({ reserveBondUnitsForHolder: vi.fn() }));
+vi.mock("@/lib/bonds/bondBuySpend", () => ({
+  applyBondBuySpend: vi.fn(),
+  BOND_BUY_FUNDS: "BOND_BUY_FUNDS",
+  BOND_BUY_RESERVE: "BOND_BUY_RESERVE",
+  BOND_BUY_POOL: "BOND_BUY_POOL",
+  BOND_BUY_SPREAD: "BOND_BUY_SPREAD",
+}));
 vi.mock("@/lib/bonds/marketPool", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/bonds/marketPool")>();
   return {
@@ -11,7 +18,7 @@ vi.mock("@/lib/bonds/marketPool", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
-import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
+import { applyBondBuySpend } from "@/lib/bonds/bondBuySpend";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { nppBuyBond } from "./nppBonds";
 
@@ -24,9 +31,7 @@ describe("nppBuyBond", () => {
   const EXPECTED_COST = Math.round(UNITS * BOND_UNIT_FACE_VALUE * MARKET * 100) / 100;
 
   let bondsFindOne: ReturnType<typeof vi.fn>;
-  let nppFindOneAndUpdate: ReturnType<typeof vi.fn>;
-  let poolUpdateOne: ReturnType<typeof vi.fn>;
-  let nppUpdateOne: ReturnType<typeof vi.fn>;
+  let nppsFindOne: ReturnType<typeof vi.fn>;
   let db: Db;
 
   beforeEach(() => {
@@ -38,23 +43,20 @@ describe("nppBuyBond", () => {
       maturityTurn: 100,
       currencyCode: "USD",
     });
-    nppFindOneAndUpdate = vi
-      .fn()
-      .mockResolvedValue({ _id: nppId, nppInvestmentCashAnchor: 500_000 });
-    nppUpdateOne = vi.fn().mockResolvedValue({});
-    poolUpdateOne = vi.fn().mockResolvedValue({});
+    // Post-commit balance re-read (the keyed flow reports no newBalance).
+    nppsFindOne = vi.fn().mockResolvedValue({ _id: nppId, nppInvestmentCashAnchor: 500_000 });
     db = {
       collection: (name: string) =>
         name === "bonds"
           ? { findOne: bondsFindOne }
-          : name === "bondMarketPools"
-            ? { updateOne: poolUpdateOne }
-            : { findOneAndUpdate: nppFindOneAndUpdate, updateOne: nppUpdateOne },
+          : name === "npps"
+            ? { findOne: nppsFindOne }
+            : {},
     } as unknown as Db;
+    vi.mocked(applyBondBuySpend).mockResolvedValue({ duplicate: false });
   });
 
-  it("buys units: deducts cost (guarded) then reserves to the nppId holder", async () => {
-    vi.mocked(reserveBondUnitsForHolder).mockResolvedValue(true);
+  it("buys units through one keyed flow keyed to the nppId holder", async () => {
     const res = await nppBuyBond(db, npp, bondId, UNITS, 4, 1);
 
     expect(res).toEqual({
@@ -65,22 +67,22 @@ describe("nppBuyBond", () => {
       costAnchor: EXPECTED_COST, // homeRate=1 → anchor == local
       investmentCashAnchor: 500_000,
     });
-    // investment account deducted with a >= guard (NOT campaign funds)
-    const [filter, update] = nppFindOneAndUpdate.mock.calls[0];
-    expect(filter).toEqual({ _id: nppId, nppInvestmentCashAnchor: { $gte: EXPECTED_COST } });
-    expect(update.$inc).toEqual({ nppInvestmentCashAnchor: -EXPECTED_COST });
-    // reserved to the nppId holder variant
-    const reserveArgs = vi.mocked(reserveBondUnitsForHolder).mock.calls[0];
-    expect(reserveArgs[2]).toEqual({ field: "nppId", id: nppId });
-    expect(reserveArgs[3]).toBe(UNITS);
-    expect(nppUpdateOne).not.toHaveBeenCalled(); // no refund on success
-    // The cash went to the bond market pool, in the bond's currency.
-    expect(poolUpdateOne).toHaveBeenCalledWith(
-      { _id: "USD" },
+    // Investment account debited with a guard (NOT campaign funds), holder
+    // reserved to the nppId variant with avg cost, pool credited in the
+    // bond's currency — one flow, one fingerprint.
+    expect(applyBondBuySpend).toHaveBeenCalledWith(
+      db,
       expect.objectContaining({
-        $inc: expect.objectContaining({ cashLocal: UNITS * 1000 * MARKET }),
-      }),
-      expect.objectContaining({ upsert: true })
+        bondId,
+        buyerKind: "npp",
+        buyerId: nppId,
+        units: UNITS,
+        debitAmount: EXPECTED_COST,
+        costLocal: EXPECTED_COST,
+        bondCurrency: "USD",
+        avgCostPerUnit: 950,
+        fingerprint: `bond-buy:${bondId.toHexString()}:npp:${nppId.toHexString()}:${UNITS}:${EXPECTED_COST}`,
+      })
     );
     expect(emitTx).toHaveBeenCalledWith(
       db,
@@ -95,16 +97,28 @@ describe("nppBuyBond", () => {
     );
   });
 
-  it("refunds funds if the float was taken before the reserve", async () => {
-    vi.mocked(reserveBondUnitsForHolder).mockResolvedValue(false);
+  it("maps a lost funds race to insufficient capital", async () => {
+    vi.mocked(applyBondBuySpend).mockRejectedValue(new Error(`${BOND_BUY_FUNDS}:guard-rejected`));
+
     const res = await nppBuyBond(db, npp, bondId, UNITS, 4, 1);
 
-    expect(res.ok).toBe(false);
-    // refund: investment account incremented back by cost
-    expect(nppUpdateOne).toHaveBeenCalledWith(
-      { _id: nppId },
-      expect.objectContaining({ $inc: { nppInvestmentCashAnchor: EXPECTED_COST } })
-    );
+    expect(res).toEqual({
+      ok: false,
+      reason: "Insufficient investment capital for bond purchase.",
+    });
+    expect(emitTx).not.toHaveBeenCalled();
+  });
+
+  it("maps a lost float race to the refunded reason", async () => {
+    vi.mocked(applyBondBuySpend).mockRejectedValue(new Error(`${BOND_BUY_RESERVE}:guard-rejected`));
+
+    const res = await nppBuyBond(db, npp, bondId, UNITS, 4, 1);
+
+    expect(res).toEqual({
+      ok: false,
+      reason: "Bond units no longer available; purchase refunded.",
+    });
+    expect(emitTx).not.toHaveBeenCalled();
   });
 
   it("keeps non-unit RU/SUR local and anchor amounts distinct", async () => {
@@ -117,13 +131,16 @@ describe("nppBuyBond", () => {
       maturityTurn: 100,
       currencyCode: "SUR",
     });
-    nppFindOneAndUpdate.mockResolvedValue({ _id: ruNppId, nppInvestmentCashAnchor: 10_000 });
-    vi.mocked(reserveBondUnitsForHolder).mockResolvedValue(true);
+    nppsFindOne.mockResolvedValue({ _id: ruNppId, nppInvestmentCashAnchor: 10_000 });
 
     const result = await nppBuyBond(db, { _id: ruNppId, countryId: "RU" }, ruBondId, UNITS, 4, 9);
 
     const expectedAnchorCost = Math.round((EXPECTED_COST / 9) * 100) / 100;
     expect(result).toMatchObject({ ok: true, cost: EXPECTED_COST, costAnchor: expectedAnchorCost });
+    expect(applyBondBuySpend).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ debitAmount: expectedAnchorCost, costLocal: EXPECTED_COST })
+    );
     expect(emitTx).toHaveBeenCalledWith(
       db,
       expect.objectContaining({
@@ -136,16 +153,6 @@ describe("nppBuyBond", () => {
     );
   });
 
-  it("rejects when funds are insufficient (guard returns null), no reserve attempted", async () => {
-    nppFindOneAndUpdate.mockResolvedValue(null);
-    const res = await nppBuyBond(db, npp, bondId, UNITS, 4, 1);
-    expect(res).toEqual({
-      ok: false,
-      reason: "Insufficient investment capital for bond purchase.",
-    });
-    expect(reserveBondUnitsForHolder).not.toHaveBeenCalled();
-  });
-
   it("rejects bonds outside the NPP's home currency (no FX)", async () => {
     bondsFindOne.mockResolvedValue({
       _id: bondId,
@@ -156,6 +163,7 @@ describe("nppBuyBond", () => {
     });
     const res = await nppBuyBond(db, npp, bondId, UNITS, 4, 1);
     expect(res).toEqual({ ok: false, reason: "NPPs only buy bonds in their home currency." });
+    expect(applyBondBuySpend).not.toHaveBeenCalled();
   });
 
   it("rejects matured bonds and insufficient float", async () => {
@@ -176,5 +184,6 @@ describe("nppBuyBond", () => {
       currencyCode: "USD",
     });
     expect((await nppBuyBond(db, npp, bondId, UNITS, 4, 1)).ok).toBe(false);
+    expect(applyBondBuySpend).not.toHaveBeenCalled();
   });
 });

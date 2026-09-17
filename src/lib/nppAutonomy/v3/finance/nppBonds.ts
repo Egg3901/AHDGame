@@ -11,15 +11,16 @@
  * cost in bond-local equals NPP funds units. Keeps the first finance core simple
  * and correct; cross-currency bond buys can come later.
  *
- * Atomicity: deduct funds first (guarded findOneAndUpdate), then reserve units.
- * If the float was taken between read and reserve, the funds are refunded — no
- * partial state. The bondTurn coupon phase pays the nppId holder.
+ * Atomicity (issue #1672): the guarded funds debit, the keyed holder
+ * reservation, and the pool credit settle as one flow. If the float was taken
+ * between read and reserve, the debit is compensated — no partial state. The
+ * bondTurn coupon phase pays the nppId holder.
  */
 
 import type { Db, ObjectId } from "mongodb";
 import type { Bond, NPP } from "@/lib/db/types";
-import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
-import { bondPoolCurrency, creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
+import { applyBondBuySpend, BOND_BUY_FUNDS, BOND_BUY_RESERVE } from "@/lib/bonds/bondBuySpend";
+import { bondPoolCurrency, loadBondQuote } from "@/lib/bonds/marketPool";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { nppHomeFxRate, localToAnchor } from "./nppEconomicAccount";
 import { emitTx } from "@/lib/financialTxLog/emit";
@@ -71,39 +72,41 @@ export async function nppBuyBond(
   const costAnchor = localToAnchor(cost, rate);
   const now = new Date();
 
-  // Deduct from the personal forex account first (atomic guard), then reserve
-  // units. NOT campaign `funds` — investing is real-economy, not political.
-  const deducted = await db
+  // Debit the personal forex account with a balance guard, then reserve
+  // units, then credit the pool — one keyed flow. NOT campaign `funds` —
+  // investing is real-economy, not political. A lost float race compensates
+  // the debit instead of refund-and-bail; the reason strings are unchanged.
+  try {
+    await applyBondBuySpend(db, {
+      bondId,
+      buyerKind: "npp",
+      buyerId: npp._id,
+      units,
+      debitAmount: costAnchor,
+      costLocal: cost,
+      bondCurrency: bondPoolCurrency(bond),
+      forexEnabled: false,
+      avgCostPerUnit: Math.round(pricePerUnit * 100) / 100,
+      now,
+      fingerprint: `bond-buy:${bondId.toHexString()}:npp:${npp._id.toHexString()}:${units}:${cost}`,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.startsWith(BOND_BUY_FUNDS)) {
+      return { ok: false, reason: "Insufficient investment capital for bond purchase." };
+    }
+    if (message.startsWith(BOND_BUY_RESERVE)) {
+      return { ok: false, reason: "Bond units no longer available; purchase refunded." };
+    }
+    throw error;
+  }
+
+  // The keyed flow reports no post-debit balance, so re-read it for the
+  // audit row and the result contract (projected: no BSON-heavy full read).
+  const refreshed = await db
     .collection<NPP>("npps")
-    .findOneAndUpdate(
-      { _id: npp._id, nppInvestmentCashAnchor: { $gte: costAnchor } },
-      { $inc: { nppInvestmentCashAnchor: -costAnchor }, $set: { updatedAt: now } },
-      { returnDocument: "after" }
-    );
-  if (!deducted) {
-    return { ok: false, reason: "Insufficient investment capital for bond purchase." };
-  }
-
-  const reserved = await reserveBondUnitsForHolder(
-    db,
-    bondId,
-    { field: "nppId", id: npp._id },
-    units,
-    now,
-    { avgCostPerUnit: Math.round(pricePerUnit * 100) / 100 }
-  );
-  if (!reserved) {
-    // Float was taken between read and reserve — refund and bail, no partial state.
-    await db
-      .collection<NPP>("npps")
-      .updateOne(
-        { _id: npp._id },
-        { $inc: { nppInvestmentCashAnchor: costAnchor }, $set: { updatedAt: new Date() } }
-      );
-    return { ok: false, reason: "Bond units no longer available; purchase refunded." };
-  }
-
-  await creditBondPool(db, bondPoolCurrency(bond), cost, "purchasesIn", now);
+    .findOne({ _id: npp._id }, { projection: { nppInvestmentCashAnchor: 1 } });
+  const investmentCashAnchor = refreshed?.nppInvestmentCashAnchor ?? 0;
 
   // NPP investment cash is a first-class financial subject. Keep this row
   // separate from character/corporation activity so the shadow ledger can
@@ -118,7 +121,7 @@ export async function nppBuyBond(
     // The financial transaction is denominated in the bond's home currency;
     // the NPP wallet's authoritative balance remains anchor-denominated.
     amount: -cost,
-    balanceAfter: (deducted.nppInvestmentCashAnchor ?? 0) * rate,
+    balanceAfter: investmentCashAnchor * rate,
     currencyCode: bondPoolCurrency(bond),
     anchorAmount: -costAnchor,
     counterpartyType: "system",
@@ -139,6 +142,6 @@ export async function nppBuyBond(
     units,
     cost,
     costAnchor,
-    investmentCashAnchor: deducted.nppInvestmentCashAnchor ?? 0,
+    investmentCashAnchor,
   };
 }

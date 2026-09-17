@@ -26,12 +26,8 @@ import {
   resolveSectorHostCurrencyCode,
 } from "@/lib/currency/corporationCapital";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
-import {
-  atomicallyDebitCorpLiquidCapital,
-  refundCorpLiquidCapital,
-} from "@/lib/financialTxLog/atomicCashGuard";
-import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
-import { bondPoolCurrency, creditBondPool } from "@/lib/bonds/marketPool";
+import { applyBondBuySpend, BOND_BUY_FUNDS, BOND_BUY_RESERVE } from "@/lib/bonds/bondBuySpend";
+import { bondPoolCurrency } from "@/lib/bonds/marketPool";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
 import { emitTx } from "@/lib/financialTxLog/emit";
 
@@ -250,49 +246,55 @@ export async function processNppCorpTreasury(db: Db, turn: number, now: Date): P
     const capErr = sovereignBondCapError(bond, "corporationId", corp._id, pick.units);
     if (capErr) continue;
 
-    const debit = await atomicallyDebitCorpLiquidCapital(db, corp._id, pick.costLocal);
-    if (!debit.ok) continue;
+    // One keyed flow (guarded debit, keyed reserve, pool credit). A lost
+    // funds or float race compensates its own prefix inside the primitive,
+    // so the loop just skips the bond — same outcome as the legacy
+    // refund-and-continue, without the crash window between debit and
+    // reserve. Unexpected failures still abort the pass loudly.
     try {
-      const reserved = await reserveBondUnitsForHolder(
-        db,
-        bond._id,
-        { field: "corporationId", id: corp._id },
-        pick.units,
-        now
-      );
-      if (!reserved) {
-        await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
+      await applyBondBuySpend(db, {
+        bondId: bond._id,
+        buyerKind: "corporation",
+        buyerId: corp._id,
+        units: pick.units,
+        debitAmount: pick.costLocal,
+        costLocal: pick.costLocal,
+        bondCurrency: bondPoolCurrency(bond),
+        forexEnabled: false,
+        corpCurrency: currencyCode,
+        now,
+        fingerprint: `bond-buy:${bond._id.toHexString()}:corporation:${corp._id.toHexString()}:${pick.units}:${pick.costLocal}:${pick.costLocal}`,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith(BOND_BUY_FUNDS) || message.startsWith(BOND_BUY_RESERVE)) {
         continue;
       }
-      await creditBondPool(db, bondPoolCurrency(bond), pick.costLocal, "purchasesIn", now);
-      await emitTx(db, {
-        type: "bond_purchase",
-        turn,
-        createdAt: now,
-        subjectType: "corporation",
-        subjectId: corp._id,
-        subjectName: corp.name,
-        amount: -pick.costLocal,
-        balanceAfter: debit.newBalance,
-        currencyCode,
-        counterpartyType: "system",
-        counterpartyName: bond.issuerName ?? "Bond market",
-        meta: {
-          bondId: bond._id.toString(),
-          units: pick.units,
-          pricePerUnit: bond.marketPrice,
-          nppTreasury: true,
-        },
-      });
-      bought += 1;
-      const book = bondsByCurrency.get(currencyCode);
-      const row = book?.find((b) => b.id === pick.bondId);
-      if (row) row.publicFloat = Math.max(0, row.publicFloat - pick.units);
-      bond.publicFloat = Math.max(0, (bond.publicFloat ?? 0) - pick.units);
-    } catch (err) {
-      await refundCorpLiquidCapital(db, corp._id, pick.costLocal);
-      throw err;
+      throw error;
     }
+    await emitTx(db, {
+      type: "bond_purchase",
+      turn,
+      createdAt: now,
+      subjectType: "corporation",
+      subjectId: corp._id,
+      subjectName: corp.name,
+      amount: -pick.costLocal,
+      currencyCode,
+      counterpartyType: "system",
+      counterpartyName: bond.issuerName ?? "Bond market",
+      meta: {
+        bondId: bond._id.toString(),
+        units: pick.units,
+        pricePerUnit: bond.marketPrice,
+        nppTreasury: true,
+      },
+    });
+    bought += 1;
+    const book = bondsByCurrency.get(currencyCode);
+    const row = book?.find((b) => b.id === pick.bondId);
+    if (row) row.publicFloat = Math.max(0, row.publicFloat - pick.units);
+    bond.publicFloat = Math.max(0, (bond.publicFloat ?? 0) - pick.units);
   }
   return bought;
 }

@@ -6,22 +6,12 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { parseJsonBody } from "@/lib/api/validate";
 import { buyBondSchema } from "@/lib/api/schemas/bonds";
 import { handleRouteError } from "@/lib/api/errors";
-import { refundOrCapture } from "@/lib/observability/context";
 import type { Bond, Character, Corporation, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { emitTx } from "@/lib/financialTxLog/emit";
-import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-  atomicallyDebitImperialCash,
-  refundImperialCash,
-  atomicallyDebitCorpLiquidCapital,
-  refundCorpLiquidCapital,
-} from "@/lib/financialTxLog/atomicCashGuard";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { autoConvertForPurchase, convertForExplicitPay } from "@/lib/currency/autoConvert";
-import { distributeConversionSpread } from "@/lib/currency/marketMaker";
 import {
   anchorToCorpLiquidCapital,
   corpCapitalToAnchor,
@@ -34,9 +24,10 @@ import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { GameState } from "@/lib/db/types";
 import { wasCeoWithinTurns } from "@/lib/corporations/ceoHistory";
 import { EX_CEO_BOND_PURCHASE_BLOCK_TURNS } from "@/lib/constants/bonds";
-import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
-import { creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
+import { loadBondQuote } from "@/lib/bonds/marketPool";
+import { applyBondBuySpend, BOND_BUY_FUNDS, BOND_BUY_RESERVE } from "@/lib/bonds/bondBuySpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
@@ -64,6 +55,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const { units, payCurrency } = parsed.data;
+
+    // Crash-safe settlement (issue #1672): a client retry with the same key
+    // replays the stored purchase outcome instead of buying again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const db = await getDb();
 
     // Bond trading is a corporate-market action: blocked for both corporations
@@ -146,11 +145,9 @@ export async function POST(request: Request, { params }: RouteParams) {
         return NextResponse.json({ error: "Cannot buy your own bonds" }, { status: 400 });
       }
 
-      // Atomic balance-gated debit on the corp's liquidCapital. The pre-fix
-      // path read corp.liquidCapital, did a non-atomic compare, then ran a
-      // separate $inc with no balance filter — same race vector as the
-      // character path. costInCorpCapital is computed via anchor normalization
-      // to handle cross-currency buys (A19).
+      // costInCorpCapital is computed via anchor normalization to handle
+      // cross-currency buys (A19). The keyed flow below debits it with a
+      // balance guard, so the compare-and-deduct is one atomic step.
       const corpPurchaseEstimate = estimateCorpWalletSpend({
         requiredAmount: costLocal,
         availableBalance: corp.liquidCapital ?? 0,
@@ -172,37 +169,64 @@ export async function POST(request: Request, { params }: RouteParams) {
       if (corpCapErr) {
         return NextResponse.json({ error: corpCapErr }, { status: 400 });
       }
-      const corpDebit = await atomicallyDebitCorpLiquidCapital(db, corp._id, costInCorpCapital);
-      if (!corpDebit.ok) {
-        const corpSym = CURRENCY_SYMBOLS[corpCurrency ?? "USD"] ?? "$";
-        const corpNeed = corpPurchaseEstimate.requiredFromAmount.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-        });
-        const corpHave = (corp.liquidCapital ?? 0).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-        });
-        const corpNote =
-          corpCurrency && corpCurrency !== bondCurrency
-            ? ` (~${corpSym}${corpNeed} ${corpCurrency} incl. FX, corp has ${corpSym}${corpHave} ${corpCurrency})`
-            : "";
-        return NextResponse.json(
-          {
-            error: `Insufficient corporate funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}${corpNote}`,
-          },
-          { status: 400 }
-        );
-      }
-
+      // Map a keyed-settlement failure back onto the historical surface: a
+      // lost corp-funds race is the 400 insufficient-funds refusal, a lost
+      // float race the 409 float refusal with the refreshed float. The
+      // primitive already compensated any applied prefix, and the FX spread
+      // routing runs inside the flow (same split as the legacy
+      // `distributeConversionSpread`: reserve slice to the bond-currency CB
+      // as a foreign reserve, forexRevenue to the corp's CB).
       try {
-        const reserved = await reserveBondUnitsForHolder(
-          db,
-          bond._id,
-          { field: "corporationId", id: corp._id },
+        await applyBondBuySpend(db, {
+          bondId: bond._id,
+          buyerKind: "corporation",
+          buyerId: corp._id,
           units,
-          now
-        );
-        if (!reserved) {
-          await refundCorpLiquidCapital(db, corp._id, costInCorpCapital);
+          debitAmount: costInCorpCapital,
+          costLocal,
+          bondCurrency,
+          forexEnabled,
+          corpCurrency: corpCurrency ?? bondCurrency,
+          spreadFee:
+            corpCurrency && corpCurrency !== bondCurrency ? corpPurchaseEstimate.spreadFee : 0,
+          now,
+          fingerprint: `bond-buy:${bond._id.toHexString()}:corporation:${corp._id.toHexString()}:${units}:${costLocal}:${costInCorpCapital}`,
+          ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+        });
+      } catch (error) {
+        if (error instanceof MoneyFlowTerminalError) {
+          return NextResponse.json(
+            { error: "Purchase already settled; start a new attempt with a new key." },
+            { status: 409 }
+          );
+        }
+        if (error instanceof MoneyFlowKeyConflictError) {
+          return NextResponse.json(
+            { error: "Idempotency key was reused for a different purchase." },
+            { status: 409 }
+          );
+        }
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith(BOND_BUY_FUNDS)) {
+          const corpSym = CURRENCY_SYMBOLS[corpCurrency ?? "USD"] ?? "$";
+          const corpNeed = corpPurchaseEstimate.requiredFromAmount.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+          });
+          const corpHave = (corp.liquidCapital ?? 0).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+          });
+          const corpNote =
+            corpCurrency && corpCurrency !== bondCurrency
+              ? ` (~${corpSym}${corpNeed} ${corpCurrency} incl. FX, corp has ${corpSym}${corpHave} ${corpCurrency})`
+              : "";
+          return NextResponse.json(
+            {
+              error: `Insufficient corporate funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}${corpNote}`,
+            },
+            { status: 400 }
+          );
+        }
+        if (message.startsWith(BOND_BUY_RESERVE)) {
           const latestBond = await db
             .collection<Bond>("bonds")
             .findOne({ _id: bond._id }, { projection: { publicFloat: 1 } });
@@ -211,58 +235,37 @@ export async function POST(request: Request, { params }: RouteParams) {
             { status: 409 }
           );
         }
-
-        // The float has a counterparty now: the units came out of the currency's
-
-        // bond market pool, so the cash goes into it instead of vanishing.
-
-        await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
-
-        await emitTx(db, {
-          type: "bond_purchase",
-          turn: currentTurn,
-          createdAt: now,
-          subjectType: "corporation",
-          subjectId: corp._id,
-          subjectName: corp.name,
-          amount: -costInCorpCapital,
-          balanceAfter: corpDebit.newBalance,
-          currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? "USD",
-          counterpartyType: "system",
-          counterpartyName: bond.issuerName ?? "Bond market",
-          meta: {
-            bondId: bond._id.toString(),
-            units,
-            pricePerUnit: quote.ask,
-            // `currencyCode`/`amount` reflect the corp's actual lc movement
-            // (corp's home currency, FX-converted from the bond's price).
-            // `bondCurrency`/`bondAmount` carry the bond-side magnitude in
-            // its own denomination so the cross-currency relationship is
-            // explicit on the row — no need to mentally multiply
-            // pricePerUnit × units × face to recover it.
-            bondCurrency,
-            bondAmount: -Math.round(costLocal * 100) / 100,
-          },
-        });
-      } catch (err) {
-        await refundOrCapture(() => refundCorpLiquidCapital(db, corp._id, costInCorpCapital), {
-          tags: { component: "bonds.buy", buyer: "corp" },
-          extra: { corpId: corp._id.toString(), bondId, costInCorpCapital },
-        });
-        throw err;
+        throw error;
       }
 
-      // Route the FX spread the corp already paid on a cross-currency bond buy
-      // into the CB system (reserve slice → bond-currency CB as a foreign reserve;
-      // forexRevenue → corp's CB). Previously this spread was simply destroyed.
-      if (corpCurrency && corpCurrency !== bondCurrency) {
-        await distributeConversionSpread(
-          db,
-          corpPurchaseEstimate.spreadFee,
-          corpCurrency,
-          bondCurrency
-        );
-      }
+      // Audit only: the keyed flow above already moved the money exactly
+      // once. `emitTx` never throws, so a ledger failure cannot fail a
+      // purchase whose money already moved.
+      void emitTx(db, {
+        type: "bond_purchase",
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "corporation",
+        subjectId: corp._id,
+        subjectName: corp.name,
+        amount: -costInCorpCapital,
+        currencyCode: resolveCorpLiquidCurrencyCode(corp) ?? "USD",
+        counterpartyType: "system",
+        counterpartyName: bond.issuerName ?? "Bond market",
+        meta: {
+          bondId: bond._id.toString(),
+          units,
+          pricePerUnit: quote.ask,
+          // `currencyCode`/`amount` reflect the corp's actual lc movement
+          // (corp's home currency, FX-converted from the bond's price).
+          // `bondCurrency`/`bondAmount` carry the bond-side magnitude in
+          // its own denomination so the cross-currency relationship is
+          // explicit on the row — no need to mentally multiply
+          // pricePerUnit × units × face to recover it.
+          bondCurrency,
+          bondAmount: -Math.round(costLocal * 100) / 100,
+        },
+      });
 
       return NextResponse.json({
         success: true,
@@ -361,11 +364,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           }
         }
 
-        // Atomic balance-gated debit on the imperial wallet (same race-fix as
-        // regular character path). The pre-check + naïve $inc was identical to
-        // the regular character bug; convertForExplicitPay / autoConvert above
-        // may have already consolidated FX into the bondCurrency, but the
-        // final spend must still be guarded.
+        // convertForExplicitPay / autoConvert above may have already
+        // consolidated FX into the bondCurrency; the keyed flow below still
+        // debits with a balance guard, so the final spend is atomic.
         const imperialCapErr = sovereignBondCapError(
           bond,
           "imperialCharacterId",
@@ -375,32 +376,47 @@ export async function POST(request: Request, { params }: RouteParams) {
         if (imperialCapErr) {
           return NextResponse.json({ error: imperialCapErr }, { status: 400 });
         }
-        const debitResult = await atomicallyDebitImperialCash(
-          db,
-          imperial._id,
-          bondCurrency,
-          costLocal,
-          forexEnabled
-        );
-        if (!debitResult.ok) {
-          return NextResponse.json(
-            {
-              error: `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`,
-            },
-            { status: 400 }
-          );
-        }
-
+        // Map a keyed-settlement failure back onto the historical surface: a
+        // lost funds race is the 400 insufficient-funds refusal, a lost float
+        // race the 409 float refusal with the refreshed float. The primitive
+        // already compensated any applied prefix.
         try {
-          const reserved = await reserveBondUnitsForHolder(
-            db,
-            bond._id,
-            { field: "imperialCharacterId", id: imperial._id },
+          await applyBondBuySpend(db, {
+            bondId: bond._id,
+            buyerKind: "imperial",
+            buyerId: imperial._id,
             units,
-            now
-          );
-          if (!reserved) {
-            await refundImperialCash(db, imperial._id, bondCurrency, costLocal, forexEnabled);
+            debitAmount: costLocal,
+            costLocal,
+            bondCurrency,
+            forexEnabled,
+            now,
+            fingerprint: `bond-buy:${bond._id.toHexString()}:imperial:${imperial._id.toHexString()}:${units}:${costLocal}`,
+            ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+          });
+        } catch (error) {
+          if (error instanceof MoneyFlowTerminalError) {
+            return NextResponse.json(
+              { error: "Purchase already settled; start a new attempt with a new key." },
+              { status: 409 }
+            );
+          }
+          if (error instanceof MoneyFlowKeyConflictError) {
+            return NextResponse.json(
+              { error: "Idempotency key was reused for a different purchase." },
+              { status: 409 }
+            );
+          }
+          const message = error instanceof Error ? error.message : "";
+          if (message.startsWith(BOND_BUY_FUNDS)) {
+            return NextResponse.json(
+              {
+                error: `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`,
+              },
+              { status: 400 }
+            );
+          }
+          if (message.startsWith(BOND_BUY_RESERVE)) {
             const latestBond = await db
               .collection<Bond>("bonds")
               .findOne({ _id: bond._id }, { projection: { publicFloat: 1 } });
@@ -409,42 +425,30 @@ export async function POST(request: Request, { params }: RouteParams) {
               { status: 409 }
             );
           }
-
-          // The float has a counterparty now: the units came out of the currency's
-
-          // bond market pool, so the cash goes into it instead of vanishing.
-
-          await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
-
-          await emitTx(db, {
-            type: "bond_purchase",
-            turn: currentTurn,
-            createdAt: now,
-            subjectType: "character",
-            subjectId: imperial._id,
-            subjectName: imperial.name,
-            amount: -costLocal,
-            balanceAfter: debitResult.newBalance,
-            currencyCode: bondCurrency,
-            counterpartyType: "system",
-            counterpartyName: bond.issuerName ?? "Bond market",
-            meta: {
-              bondId: bond._id.toString(),
-              units,
-              pricePerUnit: quote.ask,
-              imperial: true,
-            },
-          });
-        } catch (err) {
-          await refundOrCapture(
-            () => refundImperialCash(db, imperial._id, bondCurrency, costLocal, forexEnabled),
-            {
-              tags: { component: "bonds.buy", buyer: "imperial" },
-              extra: { imperialId: imperial._id.toString(), bondId, bondCurrency, costLocal },
-            }
-          );
-          throw err;
+          throw error;
         }
+
+        // Audit only: the keyed flow above already moved the money exactly
+        // once. `emitTx` never throws, so a ledger failure cannot fail a
+        // purchase whose money already moved.
+        void emitTx(db, {
+          type: "bond_purchase",
+          turn: currentTurn,
+          createdAt: now,
+          subjectType: "character",
+          subjectId: imperial._id,
+          subjectName: imperial.name,
+          amount: -costLocal,
+          currencyCode: bondCurrency,
+          counterpartyType: "system",
+          counterpartyName: bond.issuerName ?? "Bond market",
+          meta: {
+            bondId: bond._id.toString(),
+            units,
+            pricePerUnit: quote.ask,
+            imperial: true,
+          },
+        });
 
         return NextResponse.json({
           success: true,
@@ -525,43 +529,53 @@ export async function POST(request: Request, { params }: RouteParams) {
         }
       }
 
-      // Atomic balance-gated debit: single-document findOneAndUpdate with $gte
-      // filter. Replaces the pre-fix read-then-write (line 379-394) which let
-      // concurrent buys both pass the check on stale data and silently dropped
-      // cash deductions while bond holdings still credited. See
-      // src/lib/financialTxLog/atomicCashGuard.ts for the full rationale.
+      // The keyed flow below debits with a balance guard, so concurrent buys
+      // cannot both pass the check on stale data.
       const charCapErr = sovereignBondCapError(bond, "characterId", character._id, units);
       if (charCapErr) {
         return NextResponse.json({ error: charCapErr }, { status: 400 });
       }
-      const debitResult = await atomicallyDebitCharacterCash(
-        db,
-        character._id,
-        bondCurrency,
-        costLocal,
-        forexEnabled
-      );
-      if (!debitResult.ok) {
-        return NextResponse.json(
-          {
-            error: `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      // From here, cash is debited. Any failure on the holder-side write must
-      // refund — otherwise the player has paid for bonds they don't hold.
+      // Map a keyed-settlement failure back onto the historical surface: a
+      // lost funds race is the 400 insufficient-funds refusal, a lost float
+      // race the 409 float refusal with the refreshed float. The primitive
+      // already compensated any applied prefix, so no refund-and-rethrow.
       try {
-        const reserved = await reserveBondUnitsForHolder(
-          db,
-          bond._id,
-          { field: "characterId", id: character._id },
+        await applyBondBuySpend(db, {
+          bondId: bond._id,
+          buyerKind: "character",
+          buyerId: character._id,
           units,
-          now
-        );
-        if (!reserved) {
-          await refundCharacterCash(db, character._id, bondCurrency, costLocal, forexEnabled);
+          debitAmount: costLocal,
+          costLocal,
+          bondCurrency,
+          forexEnabled,
+          now,
+          fingerprint: `bond-buy:${bond._id.toHexString()}:character:${character._id.toHexString()}:${units}:${costLocal}`,
+          ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+        });
+      } catch (error) {
+        if (error instanceof MoneyFlowTerminalError) {
+          return NextResponse.json(
+            { error: "Purchase already settled; start a new attempt with a new key." },
+            { status: 409 }
+          );
+        }
+        if (error instanceof MoneyFlowKeyConflictError) {
+          return NextResponse.json(
+            { error: "Idempotency key was reused for a different purchase." },
+            { status: 409 }
+          );
+        }
+        const message = error instanceof Error ? error.message : "";
+        if (message.startsWith(BOND_BUY_FUNDS)) {
+          return NextResponse.json(
+            {
+              error: `Insufficient funds. Need ${costLocal.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${bondCurrency}.`,
+            },
+            { status: 400 }
+          );
+        }
+        if (message.startsWith(BOND_BUY_RESERVE)) {
           const latestBond = await db
             .collection<Bond>("bonds")
             .findOne({ _id: bond._id }, { projection: { publicFloat: 1 } });
@@ -570,39 +584,25 @@ export async function POST(request: Request, { params }: RouteParams) {
             { status: 409 }
           );
         }
-
-        // The float has a counterparty now: the units came out of the currency's
-
-        // bond market pool, so the cash goes into it instead of vanishing.
-
-        await creditBondPool(db, bondCurrency, costLocal, "purchasesIn", now);
-
-        await emitTx(db, {
-          type: "bond_purchase",
-          turn: currentTurn,
-          createdAt: now,
-          subjectType: "character",
-          subjectId: character._id,
-          subjectName: character.name,
-          amount: -costLocal,
-          balanceAfter: debitResult.newBalance,
-          currencyCode: bondCurrency,
-          counterpartyType: "system",
-          counterpartyName: bond.issuerName ?? "Bond market",
-          meta: { bondId: bond._id.toString(), units, pricePerUnit: bond.marketPrice },
-        });
-      } catch (err) {
-        // Refund the already-committed debit; if the refund itself fails, that
-        // dual-failure is a money-loss event and is captured at fatal level.
-        await refundOrCapture(
-          () => refundCharacterCash(db, character._id, bondCurrency, costLocal, forexEnabled),
-          {
-            tags: { component: "bonds.buy", buyer: "character" },
-            extra: { characterId: character._id.toString(), bondId, bondCurrency, costLocal },
-          }
-        );
-        throw err;
+        throw error;
       }
+
+      // Audit only: the keyed flow above already moved the money exactly
+      // once. `emitTx` never throws, so a ledger failure cannot fail a
+      // purchase whose money already moved.
+      void emitTx(db, {
+        type: "bond_purchase",
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "character",
+        subjectId: character._id,
+        subjectName: character.name,
+        amount: -costLocal,
+        currencyCode: bondCurrency,
+        counterpartyType: "system",
+        counterpartyName: bond.issuerName ?? "Bond market",
+        meta: { bondId: bond._id.toString(), units, pricePerUnit: bond.marketPrice },
+      });
 
       return NextResponse.json({
         success: true,
