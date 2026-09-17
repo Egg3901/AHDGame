@@ -16,6 +16,8 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { CentralBank } from "@/lib/db/types/centralBank";
+import type { StatePartyOrg } from "@/lib/db/types/statePartyOrg";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { materializeSyntheticActors } from "./materializeSyntheticActors";
 import { buildSyntheticActorPlan } from "./syntheticActors";
@@ -49,6 +51,13 @@ vi.mock("@/lib/centralBankChairEvents", async (importOriginal) => ({
 
 type Doc = Record<string, unknown>;
 
+/** String-keyed centralBanks rows; tests plant partial bank docs. */
+type BankDoc = { _id: string } & Record<string, unknown>;
+
+function isUnsafeKey(key: string): boolean {
+  return key === "__proto__" || key === "constructor" || key === "prototype";
+}
+
 function isOid(value: unknown): value is ObjectId {
   return value instanceof ObjectId;
 }
@@ -70,13 +79,16 @@ function setPath(doc: Doc, path: string, value: unknown): void {
   const parts = path.split(".");
   let current = doc;
   for (let i = 0; i < parts.length - 1; i++) {
+    if (isUnsafeKey(parts[i])) return;
     const next = current[parts[i]];
     if (next === null || typeof next !== "object" || Array.isArray(next)) {
       current[parts[i]] = {};
     }
     current = current[parts[i]] as Doc;
   }
-  current[parts[parts.length - 1]] = value;
+  const leaf = parts[parts.length - 1];
+  if (isUnsafeKey(leaf)) return;
+  current[leaf] = value;
 }
 
 function valuesEqual(a: unknown, b: unknown): boolean {
@@ -556,7 +568,7 @@ describe("connected state-party resolution (real processCompletedElections)", ()
       expect(election?.status).toBe("completed");
       expect(election?.winnerId).toEqual(member.characterId);
     }
-    const org = await db.collection("statePartyOrg").findOne({ _id: "CA_1" });
+    const org = await db.collection<StatePartyOrg>("statePartyOrg").findOne({ _id: "CA_1" });
     expect(org?.chairId).toEqual(member.characterId);
     expect(org?.viceChairId).toEqual(member.characterId);
     expect(org?.treasurerId).toEqual(member.characterId);
@@ -575,7 +587,7 @@ describe("connected state-party resolution (real processCompletedElections)", ()
     (db as unknown as FakeDb).store.set("statePartyVotes", new Map());
     const resolved = await processCompletedElections(24, NOW);
     expect(resolved).toBe(3);
-    const org = await db.collection("statePartyOrg").findOne({ _id: "CA_1" });
+    const org = await db.collection<StatePartyOrg>("statePartyOrg").findOne({ _id: "CA_1" });
     expect(org?.chairId).toBeNull();
     expect(org?.viceChairId).toBeNull();
     expect(org?.treasurerId).toBeNull();
@@ -664,7 +676,7 @@ async function plantSurveyWorld(db: Db): Promise<void> {
 async function plantPendingChair(db: Db, seed: string): Promise<void> {
   const nominee = roleIds(seed, "us-fed-nominee");
   const executive = roleIds(seed, "us-president");
-  await db.collection("centralBanks").insertOne({
+  await db.collection<BankDoc>("centralBanks").insertOne({
     _id: getBankId("US"),
     chairCharacterId: null,
     chairSelectionPending: {
@@ -767,7 +779,7 @@ describe("connected chair seam (real acceptCentralBankChairSelection)", () => {
     const result = await acceptCentralBankChairSelection(db, "US", nominee.characterId, NOW, 0);
     expect(result.ok).toBe(true);
 
-    const bank = await db.collection("centralBanks").findOne({ _id: getBankId("US") });
+    const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId("US") });
     expect(bank?.chairCharacterId).toEqual(nominee.characterId);
     expect(bank?.chairSelectionPending).toBeNull();
     expect(bank?.chairMode).toBe("character");
@@ -776,7 +788,7 @@ describe("connected chair seam (real acceptCentralBankChairSelection)", () => {
   it("rejects an acceptance with no pending appointment", async () => {
     const db = fakeDb();
     await materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW });
-    await db.collection("centralBanks").insertOne({ _id: getBankId("US") });
+    await db.collection<BankDoc>("centralBanks").insertOne({ _id: getBankId("US") });
     const nominee = roleIds(SEED, "us-fed-nominee");
 
     const result = await acceptCentralBankChairSelection(db, "US", nominee.characterId, NOW, 0);
@@ -806,7 +818,7 @@ describe("bounded per-turn driver (real driveSyntheticActors)", () => {
         .countDocuments({ resolutionPath: { $exists: true, $ne: [] } })
     ).toBe(1);
     expect(await db.collection("prospectingSurveys").countDocuments({ status: "active" })).toBe(1);
-    const bank = await db.collection("centralBanks").findOne({ _id: getBankId("US") });
+    const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId("US") });
     expect(bank?.chairSelectionPending).toBeNull();
   });
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId, type Db } from "mongodb";
+import type { CentralBank } from "@/lib/db/types/centralBank";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
 import {
@@ -426,7 +427,7 @@ describe("materializeSyntheticActors", () => {
       now: NOW,
     });
     expect(second.fedNominations).toBe(0);
-    const bank = await db.collection("centralBanks").findOne({ _id: "US" });
+    const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: "US" });
     expect((bank?.nominations ?? []) as unknown[]).toHaveLength(1);
   });
 

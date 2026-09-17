@@ -4,7 +4,8 @@
 // env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
-import { SIM_ACTOR_MODES, type SimActorMode } from "@/lib/sim/syntheticActors";
+import { SIM_ACTOR_MODES } from "@/lib/sim/syntheticActors";
+import type { SimActorMode } from "@/lib/sim/actorCoverage";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {

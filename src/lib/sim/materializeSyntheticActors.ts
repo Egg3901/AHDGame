@@ -49,6 +49,7 @@ import { ALL_POSITIONS } from "@/lib/statePartyElections";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
 import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import type { CentralBank } from "@/lib/db/types/centralBank";
 import { isNominationWindowOpen } from "@/lib/turn/centralBankChairSelection";
 import {
   fnv1aHex,
@@ -109,6 +110,11 @@ function objectIdFor(seed: string, key: string): ObjectId {
   return new ObjectId(syntheticObjectIdHex(seed, key));
 }
 
+/** Escape every regex metacharacter so a constant prefix can anchor a $regex. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 /** Throw unless the target is a marked sandbox sim database. No overrides. */
 export async function assertSandboxDb(db: Db): Promise<void> {
   const name = db.databaseName ?? "";
@@ -118,8 +124,10 @@ export async function assertSandboxDb(db: Db): Promise<void> {
         `database (expected prefix "${SIM_SANDBOX_DB_PREFIX}").`
     );
   }
-  const config = await db.collection("gameConfig").findOne({ _id: "default" });
-  if ((config as { simSandbox?: boolean } | null)?.simSandbox !== true) {
+  const config = await db
+    .collection<{ _id: string; simSandbox?: boolean }>("gameConfig")
+    .findOne({ _id: "default" });
+  if (config?.simSandbox !== true) {
     throw new Error(
       `Refusing to seed synthetic actors into database "${name}": gameConfig.simSandbox ` +
         "is not true. Seed only worlds the sim harness marked as sandbox."
@@ -379,7 +387,10 @@ export async function materializeSyntheticActors(
   const livePartyKeys = new Set(
     persistedParties.map((p) => `${p.countryId ?? "US"}:${String(p.sequentialId)}`)
   );
-  const persistedOrgs = (await db.collection("statePartyOrg").find({}).toArray()) as Array<{
+  const persistedOrgs = (await db
+    .collection("statePartyOrg")
+    .find({})
+    .toArray()) as unknown as Array<{
     _id: string;
     stateId: string;
     partyId: string;
@@ -664,7 +675,7 @@ async function queueSyntheticFedNomination(
 ): Promise<number> {
   const { turn, now, nominator, nominee } = args;
   const { bankId, memberCountries } = await getCentralBankScope(db, "US");
-  const bank = await db.collection("centralBanks").findOne({ _id: bankId });
+  const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
   if (!bank) return 0;
   const nomineeId = new ObjectId(nominee.characterIdHex);
   const nominations = (bank.nominations ?? []) as Array<{
@@ -722,7 +733,7 @@ export async function readActorPopulation(
   db: Db,
   args: { mode: SimActorMode; preset: string }
 ): Promise<ActorPopulationSnapshot> {
-  const simUsernamePrefix = SIM_ACTOR_USERNAME_PREFIX.replace(/\./g, "\\.");
+  const simUsernamePrefix = escapeRegExp(SIM_ACTOR_USERNAME_PREFIX);
   const [characters, users, syntheticCharacters, syntheticUsers] = await Promise.all([
     db.collection("characters").countDocuments({}),
     db.collection("users").countDocuments({}),

@@ -23,6 +23,7 @@
 
 import { ObjectId, type Db } from "mongodb";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { acceptCentralBankChairSelection } from "@/lib/turn/centralBankChairSelection";
 import {
@@ -127,7 +128,7 @@ async function driveDdSurvey(
   const caps = (await db
     .collection("stateResourceCapacity")
     .find({ countryId: "DD" })
-    .toArray()) as Array<{
+    .toArray()) as unknown as Array<{
     stateId: string;
     resources?: Record<string, number>;
   }>;
@@ -175,7 +176,7 @@ async function driveChairAccept(
   const plan = buildSyntheticActorPlan(seed);
   const nominee = plan.actors.find((a) => a.role === "us-fed-nominee");
   if (!nominee) return;
-  const bank = await db.collection("centralBanks").findOne({ _id: getBankId("US") });
+  const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: getBankId("US") });
   const pending = bank?.chairSelectionPending as { characterId?: ObjectId } | undefined;
   if (!pending?.characterId?.equals(new ObjectId(nominee.characterIdHex))) return;
   const result = await acceptCentralBankChairSelection(
