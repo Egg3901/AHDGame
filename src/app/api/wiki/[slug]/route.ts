@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { revalidatePath } from "next/cache";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser()
@@ -19,7 +20,7 @@ interface RouteContext {
 // GET /api/wiki/[slug] — Returns a single wiki page by slug; drafts and pending pages are only visible to their author or admins.
 // Auth: public; blocked when wiki is disabled
 // Errors: 403, 404
-export async function GET(request: Request, context: RouteContext) {
+async function handleGET(request: Request, context: RouteContext) {
   try {
     const blocked = await checkWikiDisabled();
     if (blocked) return blocked;
@@ -67,6 +68,8 @@ export async function GET(request: Request, context: RouteContext) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // PATCH /api/wiki/[slug] — Author edits their own page. Publication status,
 // featured flag, and admin-only toggles are ignored; edits to a published page

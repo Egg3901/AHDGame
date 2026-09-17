@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
 import { handleRouteError } from "@/lib/api/errors";
@@ -138,7 +139,7 @@ function resolveOfficialSearchTarget(
 // GET /api/search/universal — Searches across politicians, NPPs, elected seats, and active elections by query string.
 // Auth: public
 // Errors: 400 when q exceeds 200 characters
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const query = searchParams.get("q")?.trim() || "";
@@ -1012,3 +1013,5 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

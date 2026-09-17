@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
@@ -48,7 +49,7 @@ function draftCharterErrorMessage(reason: string): string {
  *
  * Auth: requireAuthWithCharacter
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -116,6 +117,8 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 /**
  * POST /api/charters

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser() in GET
@@ -11,7 +12,7 @@ import { getCharacterByUserId } from "@/lib/db/characterLookup";
 // GET /api/characters/[id]/subscribe — Returns the authenticated user's subscription status and subscriber count for a character
 // Auth: public
 // Errors: 400
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function handleGET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return NextResponse.json({ subscribed: false });
@@ -44,6 +45,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return handleRouteError(err);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/characters/[id]/subscribe — Subscribes the authenticated character to the target character
 // Auth: requireBasicAuth
