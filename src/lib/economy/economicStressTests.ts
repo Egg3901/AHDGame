@@ -186,6 +186,24 @@ function exchangeClosure(
   };
 }
 
+/**
+ * Pure reporting helper for the synchronized-liquidation stress scenario: the share of
+ * offered sell notional left without bid depth (1 - absorption rate). Null when nothing
+ * is offered, since absorption is then unmeasurable. Absolute unmet demand units stay
+ * unavailable because the securities snapshot carries notional and depth, never demand
+ * units.
+ */
+export function liquidationUnabsorbedShare(
+  snapshot: EconomicVitalSigns,
+  assumptions: EconomicStressAssumptions
+): number | null {
+  const offered =
+    snapshot.firms.marketCapitalizationAnchor * assumptions.liquidationShareOfMarketCap;
+  if (offered <= 0) return null;
+  const absorbed = Math.min(offered, snapshot.securities.openOrderDepthAnchor);
+  return clamp01(1 - absorbed / offered);
+}
+
 function synchronizedLiquidation(
   snapshot: EconomicVitalSigns,
   assumptions: EconomicStressAssumptions
@@ -203,9 +221,13 @@ function synchronizedLiquidation(
     unmetDemandUnits: null,
     balanceSheetLossAnchor: unabsorbed,
     recoveryTurns: 24,
-    indicators: { absorptionRate, unabsorbedNotionalAnchor: unabsorbed },
+    indicators: {
+      absorptionRate,
+      unabsorbedNotionalAnchor: unabsorbed,
+      unabsorbedShare: liquidationUnabsorbedShare(snapshot, assumptions),
+    },
     basis:
-      "Unabsorbed offered notional is liquidity exposure, not a forecast realized loss; 24 turns is the declared order-book recovery horizon.",
+      "Unabsorbed offered notional is liquidity exposure, not a forecast realized loss; unabsorbed share is the implied 1 - absorption rate, null when nothing is offered. 24 turns is the declared order-book recovery horizon.",
   };
 }
 
