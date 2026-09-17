@@ -1209,7 +1209,7 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           countryElectionPhasePromises = Object.entries(COUNTRY_ELECTION_PHASES)
             .filter(([id]) => registeredForElections.has(id as CountryId))
             .flatMap(([, entries]) =>
-              entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow)))
+              entries.map(({ name, fn }) => runtime.runPhase(name, () => fn(gameNow, newTurn)))
             );
         }
 
