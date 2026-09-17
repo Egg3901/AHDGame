@@ -138,6 +138,8 @@ export interface RunConfig {
   gitCommit?: string;
   gitDirty?: boolean;
   mcpVersion?: string;
+  requestedConfig?: Record<string, unknown>;
+  effectiveConfigInitial?: Record<string, unknown>;
   // Captured from the sandbox world / app by the collector below.
   appVersion: string;
   preset: string;
@@ -145,6 +147,10 @@ export interface RunConfig {
   turnRange: { from: number; to: number };
   crisisSpawnMultiplier: number;
   featureFlags: Record<string, boolean>;
+  effectiveConfigEnd: {
+    gameState: Record<string, boolean | number | string | null>;
+    gameConfig: Record<string, boolean | number | string | null>;
+  };
   // Static harness parameters (the conditions we specified).
   countries: string[];
   corpsPerSector: number;
@@ -164,18 +170,24 @@ function readAppVersion(): string {
 
 function collectRunConfig(
   gs: GameState | null,
+  cfg: Record<string, unknown> | null,
   turnRange: { from: number; to: number }
 ): RunConfig {
-  const flagKeys = [
-    "autoDisastersEnabled",
-    "crisisAidBillsEnabled",
-    "conflictsEnabled",
-    "coldWarEnabled",
-    "autoSectorSeedEnabled",
-    "sectorTechTreesEnabled",
-  ] as const;
+  const scalarConfig = (doc: Record<string, unknown> | null) =>
+    Object.fromEntries(
+      Object.entries(doc ?? {}).filter(
+        ([key, value]) =>
+          key !== "_id" &&
+          (value === null || ["boolean", "number", "string"].includes(typeof value))
+      )
+    ) as Record<string, boolean | number | string | null>;
   const featureFlags: Record<string, boolean> = {};
-  for (const k of flagKeys) featureFlags[k] = Boolean((gs as Record<string, unknown> | null)?.[k]);
+  for (const [key, value] of Object.entries((gs ?? {}) as Record<string, unknown>)) {
+    if (typeof value === "boolean") featureFlags[key] = value;
+  }
+  for (const [key, value] of Object.entries(cfg ?? {})) {
+    if (typeof value === "boolean") featureFlags[`gameConfig.${key}`] = value;
+  }
   return {
     appVersion: readAppVersion(),
     preset: gs?.preset ?? "unknown",
@@ -184,6 +196,10 @@ function collectRunConfig(
     crisisSpawnMultiplier:
       typeof gs?.crisisSpawnChanceMultiplier === "number" ? gs.crisisSpawnChanceMultiplier : 1,
     featureFlags,
+    effectiveConfigEnd: {
+      gameState: scalarConfig((gs ?? null) as Record<string, unknown> | null),
+      gameConfig: scalarConfig(cfg),
+    },
     countries: HARNESS.countries,
     corpsPerSector: HARNESS.corpsPerSector,
     fundInvestmentInterval: HARNESS.fundInvestmentInterval,
@@ -425,7 +441,7 @@ async function collectTopCorporations(db: Db): Promise<TopCorporation[]> {
 }
 
 export async function collectExperimentsReport(db: Db): Promise<ExperimentsReport> {
-  const [seatsRows, partyOrgRows, corpRows, partyRows, finalMetrics, gameStateDoc] =
+  const [seatsRows, partyOrgRows, corpRows, partyRows, finalMetrics, gameStateDoc, gameConfigDoc] =
     await Promise.all([
       db
         .collection("parliamentSeatsHistory")
@@ -451,6 +467,7 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
         .toArray(),
       collectBalanceMetrics(db),
       db.collection<GameState>("gameState").findOne({ _id: "current" }),
+      db.collection("gameConfig").findOne({ _id: "default" as never }),
     ]);
 
   const parties: PartyInfo[] = partyRows.map((p) => ({
@@ -469,7 +486,11 @@ export async function collectExperimentsReport(db: Db): Promise<ExperimentsRepor
     from: turnNums.length ? Math.min(...turnNums) : finalMetrics.turn,
     to: finalMetrics.turn,
   };
-  const runConfig = collectRunConfig(gameStateDoc, turnRange);
+  const runConfig = collectRunConfig(
+    gameStateDoc,
+    gameConfigDoc as Record<string, unknown> | null,
+    turnRange
+  );
 
   // Wealth leaders + top corporations read live end-state (not history) — run
   // concurrently, independent of the timeline reshaping above.

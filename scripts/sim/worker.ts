@@ -34,7 +34,7 @@ import { MongoClient, type Db, type Collection } from "mongodb";
 // as invalid). Pure constant module: no Mongo, no env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
-import { canClaimAt, parseClaimWindow } from "./claimWindow";
+import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
 const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
@@ -112,6 +112,7 @@ interface SimJob {
   turns: number;
   seed: string;
   dbName: string;
+  startPolicy?: "immediate" | "window";
   marketSystemMode?: string;
   labourSystemMode?: string;
   freightSettlementMode?: "shadow" | "active";
@@ -121,6 +122,7 @@ interface SimJob {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  allFeatureFlags?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
@@ -331,7 +333,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       if (typeof job.equityLiquidityFacilityEnabled !== "boolean") {
         throw new Error("equityLiquidityFacilityEnabled must be boolean");
       }
-      runWorldArgs.push(`--equity-liquidity=${String(job.equityLiquidityFacilityEnabled)}`);
+      runWorldArgs.push(
+        `--equity-liquidity-facility=${String(job.equityLiquidityFacilityEnabled)}`
+      );
     }
     if (job.nppMarketCoverageEnabled !== undefined) {
       if (typeof job.nppMarketCoverageEnabled !== "boolean") {
@@ -345,10 +349,16 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       }
       runWorldArgs.push(`--npp-fragile-market-supply=${String(job.nppFragileMarketSupplyEnabled)}`);
     }
+    if (job.allFeatureFlags !== undefined) {
+      if (typeof job.allFeatureFlags !== "boolean") {
+        throw new Error("allFeatureFlags must be boolean");
+      }
+      if (job.allFeatureFlags) runWorldArgs.push("--all-feature-flags");
+    }
     // NPP autonomy tier. Without this an MCP-launched run silently used the
     // harness default (v3) while hand-launched runs used v4, so the two were not
     // comparable and the MCP could not reproduce a long full-world run.
-    const AUTONOMY_LEVELS = ["off", "v0", "v1", "v2", "v3", "v4"];
+    const AUTONOMY_LEVELS = ["v3", "v4", "v5"];
     if (job.autonomyLevel) {
       if (!AUTONOMY_LEVELS.includes(job.autonomyLevel)) {
         throw new Error(`invalid autonomyLevel "${job.autonomyLevel}"`);
@@ -497,9 +507,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
 async function tick(jobsCol: Collection<SimJob>) {
   // A running simulation is never interrupted at the window boundary. The
   // window controls admission of the next queued job only.
-  if (!canClaimAt(new Date(), CLAIM_WINDOW)) return;
+  const claimFilter = claimFilterAt(new Date(), CLAIM_WINDOW);
   const job = await jobsCol.findOneAndUpdate(
-    { status: "queued" },
+    claimFilter,
     { $set: { status: "running", workerStartedAt: new Date(), updatedAt: new Date() } },
     { sort: { createdAt: 1 }, returnDocument: "after" }
   );
