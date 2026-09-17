@@ -3,17 +3,9 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { PoliticalParty } from "@/lib/db/types";
 import { getUKPartyConferencesCollection } from "@/lib/db/collections/ukPartyConferences";
 import { CONFERENCE_HISTORY_CAP } from "./rules";
-import type {
-  ConferenceHistoryEntry,
-  ConferenceHistoryKind,
-  UKPartyConference,
-} from "./types";
+import type { ConferenceHistoryEntry, ConferenceHistoryKind, UKPartyConference } from "./types";
 
-export function conferenceDocId(
-  countryId: CountryId,
-  partySeqId: string,
-  year: number
-): string {
+export function conferenceDocId(countryId: CountryId, partySeqId: string, year: number): string {
   return `${countryId}:${partySeqId}:${year}`;
 }
 

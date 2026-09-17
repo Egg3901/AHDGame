@@ -181,9 +181,9 @@ export function ConferencePanel({
           </p>
         ) : data.status === "open" ? (
           <p className="mt-1 text-body-sm text-muted">
-            Open now. Voting closes in {data.turnsUntilClose} turn(s) (turn{" "}
-            {data.votingClosesTurn}). Ratified platforms lock the standing platform between
-            elections; the leader finalises the election manifesto from it at dissolution.
+            Open now. Voting closes in {data.turnsUntilClose} turn(s) (turn {data.votingClosesTurn}
+            ). Ratified platforms lock the standing platform between elections; the leader finalises
+            the election manifesto from it at dissolution.
           </p>
         ) : data.status === "completed" ? (
           <p className="mt-1 text-body-sm text-muted">
@@ -227,9 +227,9 @@ export function ConferencePanel({
           <div className="mt-2 text-body-sm">
             <p className="text-muted">
               Proposed by {data.proposal.proposedByName} (turn {data.proposal.proposedAtTurn}):{" "}
-              {data.proposal.status}. {data.proposal.votesFor} ratify,{" "}
-              {data.proposal.votesAgainst} reject (quorum {data.proposal.quorumNeeded} of{" "}
-              {data.proposal.eligibleVoters} members).
+              {data.proposal.status}. {data.proposal.votesFor} ratify, {data.proposal.votesAgainst}{" "}
+              reject (quorum {data.proposal.quorumNeeded} of {data.proposal.eligibleVoters}{" "}
+              members).
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5">
               {data.proposal.pledgeIds.map((id) => (
@@ -311,8 +311,8 @@ export function ConferencePanel({
               ))}
             </div>
             <p className="mt-1 text-body-xs text-muted">
-              Selected {selected.length}. The platform needs exactly the manifesto pledge count
-              with no duplicates; replacing resets the vote.
+              Selected {selected.length}. The platform needs exactly the manifesto pledge count with
+              no duplicates; replacing resets the vote.
             </p>
             <button
               type="button"
@@ -349,17 +349,20 @@ export function ConferencePanel({
         ) : (
           <ul className="mt-2 space-y-3">
             {data.motions.map((motion) => (
-              <li key={motion.motionId} className="rounded-md border border-card-border p-3 text-body-sm">
+              <li
+                key={motion.motionId}
+                className="rounded-md border border-card-border p-3 text-body-sm"
+              >
                 <p>
-                  <span className="font-semibold">{motion.status}</span> by{" "}
-                  {motion.proposedByName} (turn {motion.createdAtTurn}):{" "}
+                  <span className="font-semibold">{motion.status}</span> by {motion.proposedByName}{" "}
+                  (turn {motion.createdAtTurn}):{" "}
                   {Object.entries(motion.patch)
                     .map(([k, v]) => `${k} = ${String(v)}`)
                     .join("; ")}
                 </p>
                 <p className="text-muted">
-                  {motion.votesFor} for, {motion.votesAgainst} against (quorum{" "}
-                  {motion.quorumNeeded} of {motion.eligibleVoters} committee).
+                  {motion.votesFor} for, {motion.votesAgainst} against (quorum {motion.quorumNeeded}{" "}
+                  of {motion.eligibleVoters} committee).
                   {motion.voidReason ? ` ${motion.voidReason}.` : ""}
                 </p>
                 {data.status === "open" && motion.status === "voting" && (
@@ -369,9 +372,7 @@ export function ConferencePanel({
                         key={vote}
                         type="button"
                         disabled={busy || !data.capabilities.isCommitteeMember}
-                        title={
-                          data.capabilities.isCommitteeMember ? undefined : "Committee only"
-                        }
+                        title={data.capabilities.isCommitteeMember ? undefined : "Committee only"}
                         onClick={() =>
                           void runAction(
                             `motion-${motion.motionId}-${vote}`,

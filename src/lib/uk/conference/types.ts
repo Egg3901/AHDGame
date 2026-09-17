@@ -3,21 +3,14 @@ import type { CountryId } from "@/lib/constants/countries";
 import type { RulesetAmendmentPatch } from "../leadership/rules";
 
 /** Lifecycle of one annual party conference. */
-export type ConferenceStatus =
-  | "scheduled"
-  | "open"
-  | "completed"
-  | "expired";
+export type ConferenceStatus = "scheduled" | "open" | "completed" | "expired";
 
 export type ConferenceProposalStatus = "voting" | "ratified" | "rejected";
 
 export type ConferenceMotionStatus = "voting" | "passed" | "failed" | "void";
 
 /** How a conference reached its terminal state. */
-export type ConferenceOutcomeKind =
-  | "ratified"
-  | "closedWithoutRatification"
-  | "missed";
+export type ConferenceOutcomeKind = "ratified" | "closedWithoutRatification" | "missed";
 
 /**
  * The standing-platform proposal before the conference: pledge catalog ids

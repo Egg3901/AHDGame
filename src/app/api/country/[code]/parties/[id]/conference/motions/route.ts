@@ -37,10 +37,7 @@ async function postHandler(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Invalid country code" }, { status: 400 });
     }
     if (countryId !== "UK") {
-      return NextResponse.json(
-        { error: "Party conferences are a UK mechanic" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Party conferences are a UK mechanic" }, { status: 400 });
     }
 
     const authResult = await requireAuthWithCharacter();
