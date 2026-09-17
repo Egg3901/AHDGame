@@ -13,6 +13,7 @@ import { getOfficeLabel } from "@/lib/utils/politics";
 import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
 import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
+import { vacateNonExecutiveOfficesForExecutive } from "@/lib/elections/vacateOfficesForExecutive";
 import { incrementExecutiveTermsServedUpdate } from "@/lib/elections/executiveTermLimits";
 import { initialVpActionFields } from "@/lib/constants/vicePresidentActions";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
@@ -112,21 +113,19 @@ export async function seatPresidentialExecutive(
     }
   );
 
+  // A newly-seated executive holds no other office (#2038). The shared vacancy
+  // helper reduces each incompatible row to an unheld vacancy record and runs
+  // the succession side effects (governor notify, leadership re-trigger,
+  // presence recount). It matches on non-executive office keys only, so the
+  // executive rows written below are never touched, and it is a no-op when
+  // the holder keeps no other office (including seating retries).
+  // Character currentOffice is cleared here and restamped with the executive
+  // office below; NPP currentOffice is stamped with the executive office below.
   if (!winnerCandidate.isNPP && winnerCandidate.characterId) {
-    await db.collection<ElectedOfficial>("electedOfficials").updateMany(
-      {
-        characterId: winnerCandidate.characterId,
-        officeType: { $nin: ["president", "vicePresident"] },
-      },
-      {
-        $set: {
-          characterId: null,
-          characterName: null,
-          party: null,
-          isNPP: false,
-          updatedAt: now,
-        } as Record<string, unknown>,
-      }
+    await vacateNonExecutiveOfficesForExecutive(
+      db,
+      { characterId: winnerCandidate.characterId },
+      now
     );
     await db
       .collection<Character>("characters")
@@ -135,26 +134,18 @@ export async function seatPresidentialExecutive(
         { $set: { currentOffice: null, updatedAt: now } }
       );
   }
+  if (winnerCandidate.isNPP && winnerCandidate.nppId) {
+    await vacateNonExecutiveOfficesForExecutive(db, { nppId: winnerCandidate.nppId }, now);
+  }
 
   if (vpCharId) {
-    await db.collection<ElectedOfficial>("electedOfficials").updateMany(
-      {
-        characterId: vpCharId,
-        officeType: { $nin: ["president", "vicePresident"] },
-      },
-      {
-        $set: {
-          characterId: null,
-          characterName: null,
-          party: null,
-          isNPP: false,
-          updatedAt: now,
-        } as Record<string, unknown>,
-      }
-    );
+    await vacateNonExecutiveOfficesForExecutive(db, { characterId: vpCharId }, now);
     await db
       .collection<Character>("characters")
       .updateOne({ _id: vpCharId }, { $set: { currentOffice: null, updatedAt: now } });
+  }
+  if (vpNppId) {
+    await vacateNonExecutiveOfficesForExecutive(db, { nppId: vpNppId }, now);
   }
 
   await db.collection<ElectedOfficial>("electedOfficials").updateOne(
