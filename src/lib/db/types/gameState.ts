@@ -1,5 +1,6 @@
 import type { ObjectId } from "mongodb";
 import type { CountryId, CountryStatus } from "../../constants/countries";
+import type { MonetaryRegime } from "../../monetary/brettonWoods";
 import type { TurnPhaseTelemetryMap } from "./turnPhaseTelemetry";
 
 export type NppEntryViabilityMode = "off" | "observe" | "enforce";
@@ -94,6 +95,21 @@ export interface GameState {
   coldWarEndedTurn?: number | null;
   currentTurn: number;
   currentYear: number;
+  /**
+   * Bretton Woods exit state (see src/lib/monetary/brettonWoods.ts, advanced
+   * by src/lib/turn/brettonWoodsTurn.ts). All absent-legacy: a world that never
+   * ran the phase reads as full cover under the peg, byte-identical to before.
+   *
+   * - `bwGoldCover`: US gold cover 0..1 (absent ⇒ 1, full cover).
+   * - `bwForeignClaims`: cumulative foreign dollar-claims overhang as a
+   *   coverage ratio against a unit gold stock (absent ⇒ 0, i.e. no overhang).
+   * - `bwRegime`: world monetary regime (absent ⇒ "pegged").
+   * - `bwRegimeChangedAtTurn`: turn the current regime was entered.
+   */
+  bwGoldCover?: number;
+  bwForeignClaims?: number;
+  bwRegime?: MonetaryRegime;
+  bwRegimeChangedAtTurn?: number;
   /**
    * Calendar year of turn 1 for the active reset preset (1991, 2019, etc.).
    * Set by `resetGameWorld` at bootstrap from the preset's mapping in

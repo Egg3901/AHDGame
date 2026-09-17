@@ -3,6 +3,7 @@ import type { Character, GameState } from "@/lib/db/types";
 import type { GameIteration } from "@/lib/db/types/gameState";
 import type { CharacterRecap } from "./types";
 import { buildSoloRecap } from "./buildSeasonRecaps";
+import { isSeasonRecapEnabled } from "./featureFlag";
 
 /**
  * Build the `retireCharacter` opts ({ iteration, recap }) for a single
@@ -24,7 +25,7 @@ export async function buildRetireRecapOpts(
         { _id: "current" },
         { projection: { iteration: 1, currentTurn: 1, seasonRecapEnabled: 1 } }
       );
-    if (gs?.seasonRecapEnabled !== true) return {};
+    if (!isSeasonRecapEnabled(gs)) return {};
     const recap = await buildSoloRecap(db, character, {
       iteration: gs.iteration,
       currentTurn: gs.currentTurn ?? 1,

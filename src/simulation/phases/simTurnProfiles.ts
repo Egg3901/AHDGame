@@ -183,6 +183,7 @@ export const ELECTIONS_SKIP_PHASES: ReadonlySet<string> = new Set<string>([
   "fiscalBaseGrowth",
   "economicModel",
   "tradeGrowthMirror",
+  "brettonWoods",
   "inflationRecalc",
   "ledgerPreForexSnapshot",
   "forexTurn",

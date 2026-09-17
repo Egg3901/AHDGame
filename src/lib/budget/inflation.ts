@@ -45,6 +45,7 @@ import { computeCountryTariffPressure } from "@/lib/tariffs/tariffEffects";
 import { buildFtaCoverageLookup, loadActiveFtaPairs } from "@/lib/tariffs/ftaOverrides";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { isMoneySupplyEnabledFromConfig } from "@/lib/moneySupply/featureFlag";
+import { moneyGrowthCoefficient } from "@/lib/monetary/brettonWoods";
 
 // ── Tuning constants ─────────────────────────────────────────────────────────
 
@@ -85,6 +86,14 @@ const MONETARY_LAG_TURNS = 12;
  *  Surpluses are mildly deflationary (weaker coefficient). */
 const FISCAL_COEFF_DEFICIT = 0.15;
 const FISCAL_COEFF_SURPLUS = 0.08;
+
+/**
+ * Pegged-era money-growth → CPI coefficient: each 1 pp of excess M2 growth →
+ * this much inflation. Money growth was disciplined by convertibility; the
+ * post-Bretton-Woods-exit value lives in monetary/brettonWoods.ts
+ * (BW_POST_EXIT_MONEY_COEFF) and arrives via `moneyGrowthCoeff`.
+ */
+const PEGGED_MONEY_GROWTH_COEFF = 0.08;
 
 /**
  * Deficit/GDP clamp (percentage points), applied BEFORE the FISCAL_COEFF
@@ -318,6 +327,12 @@ export interface InflationInputs {
   /** Annualized M2 growth. Converted to bounded excess-money-growth pressure. */
   moneySupplyGrowthPct?: number;
   /**
+   * Money-growth → CPI coefficient. Defaults to the pegged-era 0.08; the
+   * Bretton Woods float passes `moneyGrowthCoefficient` for the active regime
+   * (post-exit money growth is no longer disciplined by convertibility).
+   */
+  moneyGrowthCoeff?: number;
+  /**
    * Central-bank scrutiny (0-100). Dampens the MONETARY term only: a bank the
    * market does not believe has to move further for the same effect on
    * expectations. Loan rates, cost of capital and bond pricing are deliberately
@@ -499,9 +514,10 @@ export function calculateInflationWithBreakdown(inputs: InflationInputs): {
   const housing = housingCostPressureInput * HOUSING_PRESSURE_COEFF;
 
   const policy = policyStancePressureInput;
+  const moneyGrowthCoeffInput = finiteOr(inputs.moneyGrowthCoeff, PEGGED_MONEY_GROWTH_COEFF);
   const moneySupply = Math.max(
     -1.5,
-    Math.min(2.5, (moneySupplyGrowthInput - gdpGrowthInput) * 0.08)
+    Math.min(2.5, (moneySupplyGrowthInput - gdpGrowthInput) * moneyGrowthCoeffInput)
   );
 
   const base = targetInflationInput;
@@ -673,7 +689,10 @@ export async function calculateCountryInflation(
   const [gameState, gc] = await Promise.all([
     db
       .collection<GameState>("gameState")
-      .findOne({ _id: "current" }, { projection: { currentYear: 1, startingYear: 1 } }),
+      .findOne(
+        { _id: "current" },
+        { projection: { currentYear: 1, startingYear: 1, bwRegime: 1 } }
+      ),
     // Command-economy CPI is administered (held at the era target), not market-driven.
     db
       .collection<GameConfig>("gameConfig")
@@ -790,6 +809,13 @@ export async function calculateCountryInflation(
     moneySupplyGrowthPct: isMoneySupplyEnabledFromConfig(gc)
       ? finiteOr(moneySupplyGrowthPct, gdpGrowth)
       : gdpGrowth,
+    // Bretton Woods exit: post-float money growth is no longer disciplined by
+    // convertibility. Absent/pegged resolves to the pegged default, so
+    // flag-off worlds compute byte-identically.
+    moneyGrowthCoeff: moneyGrowthCoefficient(
+      gameState?.bwRegime ?? "pegged",
+      PEGGED_MONEY_GROWTH_COEFF
+    ),
     centralBankScrutiny,
     housingCostPressure,
     previousInflation,

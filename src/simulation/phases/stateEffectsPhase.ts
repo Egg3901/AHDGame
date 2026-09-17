@@ -40,6 +40,7 @@ import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { processEconomicModelTurn } from "@/lib/turn/economicModelTurn";
 import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
+import { processBrettonWoodsTurn } from "@/lib/turn/brettonWoodsTurn";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
@@ -453,6 +454,25 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       );
     }
 
+    // Bretton Woods exit tracker (gameConfig `brettonWoodsExitEnabled`). Self-gates:
+    // flag off is a single config read and zero writes. Runs ahead of
+    // inflationRecalc (which reads the regime for the money-growth coefficient
+    // off its own gameState load) and forexTurn (which takes the regime below
+    // as a parameter, so no extra query on the hot path).
+    const brettonWoodsResult = await runtime.runPhase("brettonWoods", () =>
+      processBrettonWoodsTurn(db, newTurn, currentYear)
+    );
+    if (brettonWoodsResult) {
+      phaseResults.brettonWoods = {
+        ran: brettonWoodsResult.ran,
+        regime: brettonWoodsResult.regime,
+        goldCover: brettonWoodsResult.goldCover,
+        foreignClaims: brettonWoodsResult.foreignClaims,
+        suspended: brettonWoodsResult.suspended,
+        floated: brettonWoodsResult.floated,
+      };
+    }
+
     await runtime.runPhase("inflationRecalc", () => recalculateInflationPerTurn(db, newTurn));
 
     // Command-economy macro state (monetary overhang, shortage, black-market
@@ -482,7 +502,7 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // prime-rate deviations are judged against the era monetary baselines
       // the world has graduated into (monetaryEra.ts).
       const forexResult = await runtime.runPhase("forexTurn", () =>
-        processForexTurn(db, newTurn, gameState.preset, currentYear)
+        processForexTurn(db, newTurn, gameState.preset, currentYear, brettonWoodsResult)
       );
       if (forexResult) {
         phaseResults.forexTurn = {

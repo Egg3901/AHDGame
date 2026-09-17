@@ -23,8 +23,6 @@ import { getEraMonetaryBaseline } from "@/lib/constants/monetaryEra";
 import {
   DRIFT_SPEED,
   RATE_NOISE_MAX,
-  RATE_FLOOR_MULTIPLIER,
-  RATE_CEILING_MULTIPLIER,
   PRIME_RATE_SENSITIVITY,
   INFLATION_SENSITIVITY,
   ABSOLUTE_INFLATION_DEPRECIATION_THRESHOLD,
@@ -145,9 +143,13 @@ export function computeMacroTarget(
  *
  * At DRIFT_SPEED = 0.05, a rate shock takes ~48 turns (~1 game year) to converge 90%.
  * This creates multi-month currency trends that give players time to notice and act.
+ *
+ * `speedMultiplier` scales the drift (default 1 = unchanged). The Bretton Woods
+ * float passes BW_FLOATING_DRIFT_MULTIPLIER so fundamentals bite faster once
+ * the peg is gone.
  */
-export function applyDrift(currentRate: number, macroTarget: number): number {
-  return currentRate + (macroTarget - currentRate) * DRIFT_SPEED;
+export function applyDrift(currentRate: number, macroTarget: number, speedMultiplier = 1): number {
+  return currentRate + (macroTarget - currentRate) * DRIFT_SPEED * speedMultiplier;
 }
 
 // ── 3. Volume pressure ──────────────────────────────────────────────────────
@@ -217,10 +219,16 @@ export function applyCyclePressure(rate: number, cyclePressure: number): number 
  *
  * Prevents runaway devaluation or appreciation. When a rate hits the guardrail,
  * trades still execute but the rate cannot move further in that direction.
+ *
+ * `bandMultiplier` widens the guardrail to base*(1+/-band) (default
+ * BW_PEGGED_BAND = 0.5, which reproduces the +/-50% guardrails exactly). The
+ * Bretton Woods float passes the regime band from `bandMultiplierFor`, so the
+ * float arrives as a widening band rather than a one-turn revaluation.
  */
-export function clampRate(rate: number, baseRate: number): number {
-  const floor = baseRate * RATE_FLOOR_MULTIPLIER;
-  const ceiling = baseRate * RATE_CEILING_MULTIPLIER;
+export function clampRate(rate: number, baseRate: number, bandMultiplier = 0.5): number {
+  const band = Number.isFinite(bandMultiplier) && bandMultiplier > 0 ? bandMultiplier : 0.5;
+  const floor = baseRate * (1 - band);
+  const ceiling = baseRate * (1 + band);
   return Math.max(floor, Math.min(ceiling, rate));
 }
 
@@ -257,17 +265,18 @@ export function computeRateUpdate(
   noise?: number,
   volatilityMultiplier = 1,
   cyclePressure = 0,
-  currentYear?: number | null
+  currentYear?: number | null,
+  bw?: { driftMultiplier?: number; bandMultiplier?: number }
 ): RateUpdateResult {
   const macroTarget = computeMacroTarget(baseRate, macro, countryId, currentYear);
-  const drifted = applyDrift(currentRate, macroTarget);
+  const drifted = applyDrift(currentRate, macroTarget, bw?.driftMultiplier ?? 1);
   const volumePressure = computeVolumePressure(volumes);
   // Blend 80% macro direction + 20% trade volume direction.
   // Positive pressure = net buying → strengthens currency (lowers rate), hence 1 - pressure.
   const withVolume = drifted * (1 - volumePressure * VOLUME_DIRECTION_WEIGHT);
   const withCycle = applyCyclePressure(withVolume, cyclePressure);
   const withNoise = applyNoise(withCycle, noise, volatilityMultiplier);
-  const clamped = clampRate(withNoise, baseRate);
+  const clamped = clampRate(withNoise, baseRate, bw?.bandMultiplier ?? 0.5);
 
   return {
     rate: clamped,

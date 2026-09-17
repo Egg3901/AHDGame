@@ -642,6 +642,16 @@ export interface TurnLog {
       totalSpreadRevenue: number;
     } | null;
 
+    /** Bretton Woods exit tracker. Zeroes (pegged, full cover) when the gate is off. */
+    brettonWoods?: {
+      ran: boolean;
+      regime: string;
+      goldCover: number;
+      foreignClaims: number;
+      suspended: boolean;
+      floated: boolean;
+    } | null;
+
     internationalOrganizations?: {
       proposalsResolved: number;
       legislationResolved: number;

@@ -38,6 +38,11 @@ import {
   rollCyclePressureRegime,
 } from "@/lib/constants/currencies";
 import { computeRateUpdate, type MacroInputs } from "@/lib/currency/rateCalculation";
+import {
+  bandMultiplierFor,
+  BW_FLOATING_DRIFT_MULTIPLIER,
+  participatesInFloat,
+} from "@/lib/monetary/brettonWoods";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { isCommandEconomy, MARKETIZATION_SCHEDULE } from "@/lib/constants/commandEconomy";
 import { rankReserveCurrencies } from "@/lib/centralBank/reserveCurrencyRanking";
@@ -119,7 +124,8 @@ export async function processForexTurn(
   db: Db,
   currentTurn: number,
   preset?: string,
-  currentYear?: number | null
+  currentYear?: number | null,
+  brettonWoods?: { regime?: string | null; regimeChangedAtTurn?: number | null } | null
 ): Promise<ForexTurnResult> {
   const now = new Date();
   let countriesUpdated = 0;
@@ -245,6 +251,21 @@ export async function processForexTurn(
     }
     const cyclePressure = hardPegActive ? 0 : CYCLE_PRESSURE_BY_REGIME[cycleRegime];
 
+    // Bretton Woods float: once the world regime leaves the peg, participating
+    // currencies drift faster and their guardrail band widens gradually across
+    // the suspension instead of snapping. Command economies never participate
+    // (`participatesInFloat` is the single gate) — they stay on the hard peg
+    // above — and an absent/pegged regime resolves to the current constants,
+    // so flag-off worlds compute byte-identically.
+    const bwRegime = brettonWoods?.regime ?? "pegged";
+    const bwFloats =
+      !hardPegActive &&
+      bwRegime !== "pegged" &&
+      participatesInFloat(countryId, commandActive);
+    const bwTurns =
+      brettonWoods?.regimeChangedAtTurn != null
+        ? currentTurn - brettonWoods.regimeChangedAtTurn
+        : 0;
     const update = hardPegActive
       ? {
           rate: peggedRate as number,
@@ -261,7 +282,16 @@ export async function processForexTurn(
           undefined,
           volatilityMultiplier,
           cyclePressure,
-          currentYear
+          currentYear,
+          bwFloats
+            ? {
+                driftMultiplier: BW_FLOATING_DRIFT_MULTIPLIER,
+                bandMultiplier: bandMultiplierFor({
+                  regime: bwRegime === "floating" ? "floating" : "suspended",
+                  turnsSinceRegimeChange: Math.max(0, bwTurns),
+                }),
+              }
+            : undefined
         );
 
     // Final sanity: if the pipeline still somehow produced NaN, fall back to the
