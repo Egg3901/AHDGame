@@ -6,8 +6,10 @@ import { realWageIndex } from "@/lib/labour/unionization";
 import {
   actOnBargainingCampaignAsEmployer,
   actOnBargainingCampaignAsUnion,
+  bargainingMacroInputs,
   proposeBargainingCampaign,
 } from "./bargaining";
+import { laborTightnessFromUnemployment } from "@/lib/unions/bargaining";
 
 vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
   runWithOptionalTransaction: vi
@@ -135,6 +137,7 @@ describe("bargaining commands", () => {
         if (name === "collectiveAgreements") return { findOne: vi.fn().mockResolvedValue(null) };
         if (name === "bargainingCampaigns")
           return { insertOne, findOne: vi.fn().mockResolvedValue(null) };
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -224,6 +227,7 @@ describe("bargaining commands", () => {
           };
         }
         if (name === "corporateSectors") return { updateMany: wageUpdate };
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -266,6 +270,7 @@ describe("bargaining commands", () => {
           return { findOne: vi.fn().mockResolvedValue(campaign) };
         }
         if (name === "unions") return { findOne: unionLookup };
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -343,6 +348,7 @@ describe("bargaining commands", () => {
             bulkWrite: sectorBulkWrite,
           };
         }
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -409,6 +415,7 @@ describe("bargaining commands", () => {
             findOne: vi.fn().mockResolvedValue({ userId, ceoVacant: false }),
           };
         }
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -489,6 +496,7 @@ describe("bargaining commands", () => {
             }),
             bulkWrite: sectorBulkWrite,
           };
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -546,6 +554,7 @@ describe("bargaining commands", () => {
         if (name === "collectiveAgreements") return { findOne: vi.fn().mockResolvedValue(null) };
         if (name === "bargainingCampaigns")
           return { insertOne, findOne: vi.fn().mockResolvedValue({ endedAtTurn: 118 }) };
+        if (name === "states") return { find: () => ({ toArray: () => Promise.resolve([]) }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;
@@ -565,5 +574,84 @@ describe("bargaining commands", () => {
       error: "Bargaining with this employer can reopen on turn 126.",
     });
     expect(insertOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("bargainingMacroInputs (#791)", () => {
+  function macroDb(args: {
+    states: Array<{ _id: string }>;
+    metricsDocs: unknown[];
+    unemployment?: number;
+  }) {
+    return {
+      collection: (name: string) => {
+        if (name === "states")
+          return { find: () => ({ toArray: () => Promise.resolve(args.states) }) };
+        if (name === "macroMetrics")
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              economic: { unemploymentRate: { value: args.unemployment ?? 5 } },
+            }),
+            find: () => ({ toArray: () => Promise.resolve(args.metricsDocs) }),
+          };
+        if (name === "federalBudget")
+          return { findOne: vi.fn().mockResolvedValue({ unionLawBias: 10 }) };
+        throw new Error(`unexpected collection ${name}`);
+      },
+    } as unknown as Db;
+  }
+
+  const doc = (id: string, tightness: number | undefined, laborForce: number | undefined) => ({
+    _id: id,
+    economic: {
+      ...(tightness !== undefined ? { labourTightness: { value: tightness } } : {}),
+      ...(laborForce !== undefined ? { laborForce: { value: laborForce } } : {}),
+    },
+  });
+
+  it("scores the worker-weighted national tightness, not a flat state mean", async () => {
+    const db = macroDb({
+      states: [{ _id: "BIG" }, { _id: "SMALL" }],
+      metricsDocs: [doc("BIG", 1.0, 900), doc("SMALL", 8.0, 100)],
+      unemployment: 5,
+    });
+    const macro = await bargainingMacroInputs(db, "US");
+    // Worker-weighted national tightness is 1.7 → 63.3; a flat mean (4.5)
+    // would score 87.6. The tiny state's 8x reading must not dominate.
+    expect(macro.laborTightness).toBe(63.3);
+  });
+
+  it("responds to state tightness directly at fixed unemployment", async () => {
+    const world = (tightness: number) =>
+      macroDb({
+        states: [{ _id: "A" }, { _id: "B" }],
+        metricsDocs: [doc("A", tightness, 500), doc("B", tightness, 500)],
+        unemployment: 5,
+      });
+    const tight = await bargainingMacroInputs(world(2), "US");
+    const slack = await bargainingMacroInputs(world(0.5), "US");
+    // Same 5% unemployment in both worlds, yet opposite scores: the
+    // unemployment round-trip is broken.
+    expect(tight.laborTightness).toBe(67.3);
+    expect(slack.laborTightness).toBe(32.7);
+    expect(tight.laborTightness).not.toBe(laborTightnessFromUnemployment(5));
+  });
+
+  it("cold start with no measured tightness matches today's behaviour exactly", async () => {
+    const empty = await bargainingMacroInputs(
+      macroDb({ states: [], metricsDocs: [], unemployment: 4 }),
+      "US"
+    );
+    expect(empty.laborTightness).toBe(laborTightnessFromUnemployment(4));
+
+    const unmeasured = await bargainingMacroInputs(
+      macroDb({
+        states: [{ _id: "A" }],
+        metricsDocs: [doc("A", undefined, 500)],
+        unemployment: 4,
+      }),
+      "US"
+    );
+    expect(unmeasured.laborTightness).toBe(laborTightnessFromUnemployment(4));
   });
 });
