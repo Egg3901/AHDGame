@@ -86,11 +86,61 @@ const AMBIGUOUS = new Set([...COUNTRY_IDS].filter((c) => US_STATE_CODES.has(c)))
  * UK, FR, RU) is always a country no matter what else the file contains, and
  * `countryId:` fields and `xx_` slugs are never in doubt either way.
  */
-function hasUsStateKeys(keys: Set<string>): boolean {
+function countUsStateKeys(keys: Set<string>): number {
+  let n = 0;
   for (const key of keys) {
-    if (US_STATE_CODES.has(key) && !COUNTRY_IDS.has(key)) return true;
+    if (US_STATE_CODES.has(key) && !COUNTRY_IDS.has(key)) n++;
   }
-  return false;
+  return n;
+}
+
+function hasUsStateKeys(keys: Set<string>): boolean {
+  return countUsStateKeys(keys) > 0;
+}
+
+/**
+ * How many unambiguous state codes make a file a US STATE TABLE.
+ *
+ * ⚠️ A HANDFUL OF THEM PROVES NOTHING, BECAUSE ISO COUNTRY CODES COLLIDE WITH US
+ * STATE CODES TOO. `constants/alignmentRoster.ts` is the 233-entity world
+ * alignment table, and it carries `MA: 1956`, `TN: 1956`, `GA: 1960`,
+ * `MT: 1964` -- UN accession years for Morocco, Tunisia, Georgia and Malta, not
+ * Massachusetts, Tennessee, Georgia and Montana. Claiming a 2,002-line world
+ * table as United States data would have been a far worse error than the gap
+ * this rule closes.
+ *
+ * Measured, that file has 8 colliding codes; a genuine US table has 48 or more,
+ * because it enumerates every state. The threshold sits between them with room
+ * on both sides, and the count is of state-ONLY codes so CA/DE/IN never inflate
+ * it.
+ */
+const US_STATE_TABLE_MIN_KEYS = 20;
+
+/**
+ * ⚠️ US STATE KEYS ARE POSITIVE EVIDENCE OF US OWNERSHIP, NOT JUST A REASON TO
+ * DISCOUNT CA/DE/IN.
+ *
+ * `seeds/reference/stateMetrics.ts` is 724 lines of US data with a generic name,
+ * keyed purely by state code, and containing the string "US" exactly nowhere --
+ * no `countryId:` field, no country key, no slug. Nothing identified it, so it
+ * was invisible to every rule above. `stateMetrics1991.ts`, `stateBaselines*.ts`
+ * and `stateMetricsEra1953.ts` are the same. That is not a detector bug so much
+ * as the file genuinely not saying what it is.
+ *
+ * But the KEYS say it. Checked against every country's region ids in
+ * `STATE_ADJACENCY`, the United States is the only one using bare two-letter
+ * codes that are US state abbreviations. Everyone else uses three or more
+ * letters (UK `LON`/`SEE`, IE `DUB`, BR `NORTE`, RU `CEN`) or a country prefix
+ * (`PL_MAZ`, `FR_IDF`, `HU_BUD`), and the two-letter sets that do exist --
+ * Germany's `SH`/`HH`/`NI`/`MV`/`BB` and East Germany's `MV`/`BB`/`ST`/`SN`/`TH`
+ * -- collide with no US state code at all.
+ *
+ * So `AL:`/`AK:`/`AZ:` in a data file means the United States. A file that also
+ * declares other countries is still multi-country: `STATE_ADJACENCY` and
+ * `sectorSeedWeights` nest state keys under a US country key and keep their 23.
+ */
+function ownedByStateKeys(keys: Set<string>, declared: Set<string>): boolean {
+  return declared.size === 0 && countUsStateKeys(keys) >= US_STATE_TABLE_MIN_KEYS;
 }
 
 /**
@@ -283,12 +333,20 @@ function singleCountryFiles(): Owned[] {
       if (isCountryFolderShim(source)) continue;
       const named = nameCountry(file);
       const declared = declaredCountries(source);
+      const keys = new Set([...stripComments(source).matchAll(REGISTRY_KEY)].map(([, cc]) => cc));
+      const inDataDir = DATA_DIRS.some((d) => file.startsWith(d));
       let country: string | null = null;
       let by: "name" | "content" = "name";
       if (named && (declared.size === 0 || (declared.size === 1 && declared.has(named)))) {
         country = named;
-      } else if (declared.size === 1 && DATA_DIRS.some((d) => file.startsWith(d))) {
+      } else if (declared.size === 1 && inDataDir) {
         country = [...declared][0];
+        by = "content";
+      } else if (inDataDir && ownedByStateKeys(keys, declared)) {
+        // Keyed by US state and saying nothing else about itself. See
+        // `ownedByStateKeys`: 724-line `stateMetrics.ts` contains the string
+        // "US" nowhere at all, and only its keys give it away.
+        country = "US";
         by = "content";
       }
       if (country) out.push({ file, country, by, lines: source.split("\n").length });

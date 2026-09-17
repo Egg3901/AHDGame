@@ -169,6 +169,21 @@ const SIZE_CAP_EXEMPT = [
   // contract.ts, institutions.ts, economy.ts and every logic module the
   // folder ever gains -- uncapping the whole thing from day one.
   "src/lib/countries/jp/data/",
+  // The United States' relocated authored data and cabinet, added BEFORE the
+  // move for the same reason Japan's was. Two separate exemptions are being
+  // stripped here at once, and both would block the gate:
+  //
+  //   - `src/lib/seeds/` is in this list as a bare prefix, so the eight
+  //     states*.ts and eight stateMetrics*.ts files are exempt only while they
+  //     sit under it;
+  //   - `usLaws.ts` (5,321 LOC) and `usCabinetMechanics.ts` (1,915 LOC) are
+  //     exempt by EXACT path further down, so moving them exempts nothing.
+  //
+  // Scoped to data/ and cabinet/ deliberately, not a bare "src/lib/countries/us/":
+  // that would exempt institutions.ts, economy.ts and every logic module the
+  // folder ever gains, uncapping it from day one.
+  "src/lib/countries/us/data/",
+  "src/lib/countries/us/cabinet/",
   "src/lib/constants/cnCabinetMechanics.ts",
   "src/lib/constants/historicalSeats.ts",
   "src/lib/constants/metricDefinitions.ts",
