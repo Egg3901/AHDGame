@@ -96,6 +96,11 @@ describe("GET /api/admin/economy/vital-signs", () => {
           observations: 2,
           basis: "unmatured_corporate_units",
         },
+        corporateMaturityHhi: {
+          value: 5000,
+          observations: 2,
+          basis: "corporate_face_by_maturity_turn",
+        },
         medianTopTraderNotionalShare48: {
           value: 0.7,
           observations: 2,
@@ -118,6 +123,7 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(body.snapshot.money.ringFencedShareOfLiquid.value).toBe(0.4);
     expect(body.snapshot.securities.corporateMedianHolders.value).toBe(1);
     expect(body.snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
+    expect(body.snapshot.securities.corporateMaturityHhi.value).toBe(5000);
     expect(body.snapshot.securities.medianTopTraderNotionalShare48.value).toBe(0.7);
   });
 

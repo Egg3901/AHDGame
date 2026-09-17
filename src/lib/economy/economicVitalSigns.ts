@@ -850,6 +850,15 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   }
   const sovereignMaturityValues = [...sovereignFaceByMaturity.values()];
   const sovereignMaturityConcentration = concentration(sovereignMaturityValues);
+  const corporateFaceByMaturity = new Map<number, number>();
+  for (const bond of corporateBonds) {
+    corporateFaceByMaturity.set(
+      bond.maturityTurn,
+      (corporateFaceByMaturity.get(bond.maturityTurn) ?? 0) + nonnegative(bond.totalIssued)
+    );
+  }
+  const corporateMaturityValues = [...corporateFaceByMaturity.values()];
+  const corporateMaturityConcentration = concentration(corporateMaturityValues);
 
   const wealth = input.globalWealth?.entries.map((entry) => Math.max(0, entry.totalWealth)) ?? [];
   const aggregateWealth = wealth.reduce((sum, value) => sum + value, 0);
@@ -1119,6 +1128,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         sovereignMaturityConcentration.hhi,
         sovereignMaturityValues.length,
         "sovereign_face_by_maturity_turn"
+      ),
+      corporateMaturityHhi: metric(
+        corporateMaturityConcentration.hhi,
+        corporateMaturityValues.length,
+        "corporate_face_by_maturity_turn"
       ),
       sovereignMedianPriceToParSpreadPct: metric(
         median(sovereignBonds.map((bond) => (1 - bond.marketPrice) * 100)),

@@ -446,6 +446,8 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.sovereignMedianHolders.value).toBe(0);
     expect(snapshot.securities.sovereignSubscriptionRate.value).toBe(0);
     expect(snapshot.securities.sovereignMaturityHhi.value).toBe(10_000);
+    expect(snapshot.securities.corporateMaturityHhi.value).toBeNull();
+    expect(snapshot.securities.corporateMaturityHhi.observations).toBe(0);
     expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBe(0);
     expect(snapshot.securities.twoSidedListingShare.value).toBe(0.25);
     expect(snapshot.securities.medianQuotedSpreadPct.value).toBe(40);
@@ -657,6 +659,57 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateMedianHolders.observations).toBe(0);
     expect(snapshot.securities.corporateSubscriptionRate.value).toBeNull();
     expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
+    expect(snapshot.securities.corporateMaturityHhi.value).toBeNull();
+    expect(snapshot.securities.corporateMaturityHhi.observations).toBe(0);
+  });
+
+  it("concentrates corporate refinancing by maturity turn, excluding sovereign face", () => {
+    const corpId = new ObjectId();
+    const bond = (overrides: object) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    });
+    // Two equal corporate buckets across two maturity turns: HHI 5,000.
+    // The sovereign leg shares a maturity turn but must not move the read.
+    const split = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        bond({ maturityTurn: 97, totalIssued: 10_000 }),
+        bond({ maturityTurn: 98, totalIssued: 10_000 }),
+        bond({ issuerType: "sovereign", maturityTurn: 97, totalIssued: 1_000_000 }),
+      ] as never,
+    });
+    expect(split.securities.corporateMaturityHhi.value).toBe(5_000);
+    expect(split.securities.corporateMaturityHhi.observations).toBe(2);
+    expect(split.securities.corporateMaturityHhi.basis).toBe("corporate_face_by_maturity_turn");
+
+    // One maturity turn holds all corporate face: a full refinancing cliff.
+    const cliff = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        bond({ maturityTurn: 97, totalIssued: 10_000 }),
+        bond({ maturityTurn: 97, totalIssued: 30_000 }),
+      ] as never,
+    });
+    expect(cliff.securities.corporateMaturityHhi.value).toBe(10_000);
+    expect(cliff.securities.corporateMaturityHhi.observations).toBe(1);
   });
 
   it("splits household velocity into transactional and savings activity", () => {

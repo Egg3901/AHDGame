@@ -93,6 +93,7 @@ export interface EconomicVitalSigns {
     corporateMedianHolders: EconomicMetric;
     corporateSubscriptionRate: EconomicMetric;
     sovereignMaturityHhi: EconomicMetric;
+    corporateMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
     openBuyOrders: number;
     openSellOrders: number;
