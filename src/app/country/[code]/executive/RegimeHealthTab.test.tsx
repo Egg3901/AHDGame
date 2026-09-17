@@ -9,7 +9,7 @@ import profile from "@/../messages/en/profile.json";
 
 function render(ui: ReactElement) {
   return rtlRender(
-    <NextIntlClientProvider locale="en" messages={{ profile }}>
+    <NextIntlClientProvider locale="en" messages={profile}>
       {ui}
     </NextIntlClientProvider>
   );

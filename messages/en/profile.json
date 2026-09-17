@@ -238,13 +238,48 @@
       "title": "Copy profile link",
       "copied": "Copied!",
       "share": "Share"
+    },
+    "views": {
+      "label": "Profile views",
+      "political": "Political",
+      "military": "Military",
+      "business": "CEO / Investor",
+      "militaryLocked": "No military service record is available.",
+      "militaryDisabled": "Military is disabled in this world.",
+      "businessLocked": "No current CEO role or investment holdings.",
+      "locked": "Locked",
+      "active": "Active commission",
+      "retired": "Former military service",
+      "service": "Military service record",
+      "commission": "Commissioned in turn {turn}",
+      "dismissal": "Dismissed in turn {turn}",
+      "unknownDates": "Historical service dates were not recorded.",
+      "currentPosting": "Current posting",
+      "reserve": "Reserve / unassigned",
+      "command": "Command: {name}",
+      "theater": "Deployment: {name}",
+      "units": "{count, plural, one {# assigned unit} other {# assigned units}}",
+      "awaiting": "Commission recorded. A military specialization has not yet been recorded.",
+      "recordHint": "Recorded service milestones and current assignment. Earlier deployments without retained records are not reconstructed.",
+      "businessTitle": "Business and investments",
+      "ceo": "Chief executive",
+      "investor": "Investor",
+      "private": "Detailed holdings and portfolio values are visible only to the owner.",
+      "portfolio": "Open portfolio",
+      "equityValue": "Equity portfolio value",
+      "dividends": "Dividend income per turn",
+      "coupons": "Bond coupon income per turn",
+      "stocks": "{count, plural, one {# equity holding} other {# equity holdings}}",
+      "bonds": "{count, plural, one {# bond holding} other {# bond holdings}}",
+      "funds": "Investment fund holdings",
+      "corporation": "View corporation"
+    },
+    "regimeChanges": {
+      "title": "Why this changed",
+      "description": "Recent recorded changes, newest first. Each entry shows the change and its cause. Projections above are estimates, not recorded events.",
+      "empty": "No changes have been recorded yet.",
+      "unknown": "No reason was recorded.",
+      "turn": "Turn {turn}"
     }
-  },
-  "regimeChanges": {
-    "title": "Why this changed",
-    "description": "Recent recorded changes, newest first. Each entry shows the change and its cause. Projections above are estimates, not recorded events.",
-    "empty": "No changes have been recorded yet.",
-    "unknown": "No reason was recorded.",
-    "turn": "Turn {turn}"
   }
 }
