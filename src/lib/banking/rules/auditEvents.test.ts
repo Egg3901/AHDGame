@@ -122,3 +122,50 @@ describe("banking audit event contract", () => {
     expect(isStaleRejection(undefined)).toBe(false);
   });
 });
+
+describe("issue #1328 commit 6 required coverage", () => {
+  it("keeps every event kind the issue requires", () => {
+    const required: BankingAuditEvent["kind"][] = [
+      "charter.issued",
+      "charter.revoked",
+      "account.holder_changed",
+      "account.deposited",
+      "account.withdrawn",
+      "loan.originated",
+      "loan.approved",
+      "loan.disbursed",
+      "loan.paid",
+      "loan.delinquent",
+      "loan.defaulted",
+      "bank.resolved",
+      "meeting.transitioned",
+      "meeting.voted",
+      "policy.rate_changed",
+    ];
+    for (const kind of required) {
+      expect(BANKING_AUDIT_EVENT_KINDS).toContain(kind);
+    }
+  });
+
+  it("carries every required envelope field through the spine projection", () => {
+    const envelope = toAuditEnvelope(BASE);
+    expect(envelope.traceId).toBe(BASE.correlationId);
+    expect(envelope.meta.command).toBe(BASE.command);
+    expect(envelope.turn).toBe(BASE.turn);
+    expect(envelope.actor).toEqual({ kind: BASE.actorClass });
+    expect(envelope.currencyCode).toBe(BASE.currency);
+    expect(envelope.meta.statusBefore).toBe(BASE.statusBefore);
+    expect(envelope.meta.statusAfter).toBe(BASE.statusAfter);
+    expect(envelope.meta.settlementId).toBe(BASE.settlementId);
+  });
+
+  it("refuses game-adjacent player-identifying key shapes", () => {
+    expect(privateDataKeys({ playerName: "x" })).toEqual(["playerName"]);
+    expect(privateDataKeys({ emailAddress: "x" })).toEqual(["emailAddress"]);
+    expect(privateDataKeys({ phoneNumber: "x" })).toEqual(["phoneNumber"]);
+    expect(privateDataKeys({ ipAddress: "x" })).toEqual(["ipAddress"]);
+    expect(() => assertNoPrivateData({ ...BASE, meta: { playerName: "x" } })).toThrow(
+      /private data/
+    );
+  });
+});
