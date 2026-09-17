@@ -36,7 +36,8 @@ export interface SimJobExperimentFields {
  * `effectiveConfigInitial` for what the run actually saw). Single source of
  * truth shared by simJobArgs consumers and collectExperimentReport.ts, so a
  * new queueable field cannot be emitted by the worker yet dropped from the
- * report.
+ * report. Consumers project through normalizeSimJobRequestedConfig, never by
+ * filtering on this list directly, so normalization stays in one place.
  */
 export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   "preset",
@@ -55,6 +56,12 @@ export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   "nppMarketCoverageEnabled",
   "nppFragileMarketSupplyEnabled",
   "realOutputShadowEnabled",
+  // Run-profile fields: the worker emits both as runWorld argv (--mode,
+  // --countries), so a pair differing here is NOT a clean comparison and a
+  // report dropping them misstates run identity. Appended (never reordered)
+  // so older readers see a stable prefix.
+  "mode",
+  "countries",
 ] as const;
 
 /**
@@ -84,12 +91,62 @@ export function buildRealOutputShadowPinnedPair(base: SimJobExperimentFields): {
 }
 
 /**
+ * Canonical form of a queued `countries` scope string. runWorld parses the
+ * scope as trim + UPPERCASE into a Set (order-insensitive), so "us, UK " and
+ * "UK,US" are the same run. Normalize the same way (sorted, so order never
+ * counts as drift) for identity and comparison. Non-strings pass through
+ * untouched so a wrong-typed value still fails loudly downstream instead of
+ * being laundered into a string. Whitespace-only normalizes to undefined
+ * (unset): the worker emits no --countries flag for it, so the run is global.
+ */
+export function normalizeSimCountries(value: unknown): string | undefined {
+  if (typeof value !== "string") return value as string | undefined;
+  const ids = value
+    .split(",")
+    .map((c) => c.trim().toUpperCase())
+    .filter(Boolean)
+    .sort();
+  return ids.length ? ids.join(",") : undefined;
+}
+
+/**
+ * Authoritative requested configuration: the SIM_JOB_REQUESTED_CONFIG_KEYS
+ * projection of a job doc (or reported requestedConfig map) with run-profile
+ * values normalized. collectExperimentReport.ts builds `requestedConfig`
+ * through this, and the pinned-pair assert compares through it, so the
+ * report and the comparison can never disagree on what run identity is.
+ *
+ * Compatibility: absent and undefined stay absent (no defaults injected), so
+ * older jobs without mode/countries project exactly as before.
+ */
+export function normalizeSimJobRequestedConfig(
+  job: Record<string, unknown>
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of SIM_JOB_REQUESTED_CONFIG_KEYS) {
+    if (!(key in job)) continue;
+    const raw = job[key];
+    if (raw === undefined) continue;
+    if (key === "countries") {
+      const normalized = normalizeSimCountries(raw);
+      if (normalized === undefined) continue;
+      out[key] = normalized;
+      continue;
+    }
+    out[key] = raw;
+  }
+  return out;
+}
+
+/**
  * Validates a queued (or reported) control/treatment pair as pinned: the
  * control carries explicit false, the treatment explicit true, and every
- * other SIM_JOB_REQUESTED_CONFIG_KEYS entry is identical (absent and
- * undefined count as the same unset). Accepts full job docs or
- * `requestedConfig` maps, not just experiment fragments, so preset, turns,
- * and seed drift are caught too. Throws on the first mismatch so the caller
+ * other SIM_JOB_REQUESTED_CONFIG_KEYS entry is identical under
+ * normalizeSimJobRequestedConfig (absent and undefined count as the same
+ * unset; countries compare case-, spacing-, and order-insensitively, matching
+ * what runWorld actually sees). Accepts full job docs or `requestedConfig`
+ * maps, not just experiment fragments, so preset, turns, seed, mode, and
+ * countries drift are caught too. Throws on the first mismatch so the caller
  * knows exactly what unpinned the comparison.
  */
 export function assertRealOutputShadowPinnedPair(
@@ -110,14 +167,16 @@ export function assertRealOutputShadowPinnedPair(
       )})`
     );
   }
+  const a = normalizeSimJobRequestedConfig(control);
+  const b = normalizeSimJobRequestedConfig(treatment);
   for (const key of SIM_JOB_REQUESTED_CONFIG_KEYS) {
     if (key === "realOutputShadowEnabled") continue;
-    const a = key in control ? control[key] : undefined;
-    const b = key in treatment ? treatment[key] : undefined;
-    if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) {
+    const va = key in a ? a[key] : undefined;
+    const vb = key in b ? b[key] : undefined;
+    if (JSON.stringify(va ?? null) !== JSON.stringify(vb ?? null)) {
       throw new Error(
-        `pinned pair drifted on "${key}": control=${JSON.stringify(a)} treatment=${JSON.stringify(
-          b
+        `pinned pair drifted on "${key}": control=${JSON.stringify(va)} treatment=${JSON.stringify(
+          vb
         )}`
       );
     }

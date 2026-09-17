@@ -16,12 +16,12 @@
  */
 
 // Static import of a pure args module only (no Mongo, no env, no side
-// effects): the requestedConfig key list is shared with simJobArgs.ts so a
+// effects): the requestedConfig projection is shared with simJobArgs.ts so a
 // queueable field cannot be emitted by the worker yet dropped from the
 // report. Everything else stays dynamically imported inside main() to avoid
 // colliding with collectMetrics.ts's identical top-level names (same issue
 // hit earlier with runWorld.ts).
-import { SIM_JOB_REQUESTED_CONFIG_KEYS } from "./simJobArgs";
+import { normalizeSimJobRequestedConfig } from "./simJobArgs";
 
 function arg(flag: string): string | undefined {
   const prefix = `--${flag}=`;
@@ -114,15 +114,13 @@ async function main() {
         executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
           ?.executedCommit ?? null) as string | null,
       },
-      // Run identity: what the queue asked for (shared key list with
-      // simJobArgs.ts, so newly queueable fields appear here automatically),
-      // beside effectiveConfigInitial for what the sandbox run actually saw.
+      // Run identity: what the queue asked for (authoritative projection
+      // with run-profile normalization in simJobArgs.ts, so newly queueable
+      // fields appear here automatically and countries spellings that run
+      // identically report identically), beside effectiveConfigInitial for
+      // what the sandbox run actually saw.
       requestedConfig: job
-        ? Object.fromEntries(
-            Object.entries(job).filter(([key]) =>
-              (SIM_JOB_REQUESTED_CONFIG_KEYS as readonly string[]).includes(key)
-            )
-          )
+        ? normalizeSimJobRequestedConfig(job as Record<string, unknown>)
         : undefined,
       effectiveConfigInitial: (
         sandboxRun as { effectiveConfigInitial?: Record<string, unknown> } | null

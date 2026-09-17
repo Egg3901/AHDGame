@@ -5,6 +5,8 @@ import {
   assertSafeToken,
   buildRealOutputShadowPinnedPair,
   buildRunWorldArgs,
+  normalizeSimCountries,
+  normalizeSimJobRequestedConfig,
   type SimJobExperimentFields,
 } from "./simJobArgs";
 import { REAL_OUTPUT_SHADOW_CLI_FLAG } from "@/lib/economy/realOutputShadow";
@@ -174,8 +176,84 @@ describe("sim worker runWorld argument emission", () => {
       "realOutputShadowEnabled",
       "allFeatureFlags",
       "autonomyLevel",
+      "mode",
+      "countries",
     ]) {
       expect(keys).toContain(field);
     }
+  });
+
+  it("normalizes countries the way runWorld sees them: trim, uppercase, order-insensitive", () => {
+    expect(normalizeSimCountries("us, UK ")).toBe("UK,US");
+    expect(normalizeSimCountries("UK,US")).toBe(normalizeSimCountries("uk,us"));
+    expect(normalizeSimCountries("  ")).toBeUndefined();
+    expect(normalizeSimCountries(undefined)).toBeUndefined();
+  });
+
+  it("projects the authoritative requested config with normalized countries", () => {
+    expect(
+      normalizeSimJobRequestedConfig({
+        _id: "run1",
+        dbName: "ahd_sim_s1",
+        preset: "default",
+        turns: 48,
+        seed: "s1",
+        mode: "elections-only",
+        countries: "uk, us",
+        realOutputShadowEnabled: true,
+      })
+    ).toEqual({
+      preset: "default",
+      turns: 48,
+      seed: "s1",
+      mode: "elections-only",
+      countries: "UK,US",
+      realOutputShadowEnabled: true,
+    });
+  });
+
+  it("keeps older jobs without run-profile fields projecting exactly as before", () => {
+    expect(normalizeSimJobRequestedConfig({ preset: "default", turns: 48, seed: "s1" })).toEqual({
+      preset: "default",
+      turns: 48,
+      seed: "s1",
+    });
+    // Whitespace-only scope emits no flag, so it reports as unset, not empty.
+    expect(normalizeSimJobRequestedConfig({ preset: "default", countries: "  " })).toEqual({
+      preset: "default",
+    });
+  });
+
+  it("treats spelling-only countries differences as the same run, real drift as drift", () => {
+    const { control, treatment } = buildRealOutputShadowPinnedPair({
+      mode: "elections-only",
+      countries: "US,UK",
+    });
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, { ...treatment, countries: "uk, us" })
+    ).not.toThrow();
+    expect(() => assertRealOutputShadowPinnedPair(control, { ...treatment, mode: "full" })).toThrow(
+      'drifted on "mode"'
+    );
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, { ...treatment, countries: "US,UK,DE" })
+    ).toThrow('drifted on "countries"');
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, { ...treatment, countries: "  " })
+    ).toThrow('drifted on "countries"');
+  });
+
+  it("emits argv for a mode- and country-scoped pinned pair differing only in the shadow flag", () => {
+    const { control, treatment } = buildRealOutputShadowPinnedPair({
+      mode: "elections-only",
+      countries: "US,UK",
+    });
+    const controlArgs = buildRunWorldArgs(control);
+    const treatmentArgs = buildRunWorldArgs(treatment);
+    expect(controlArgs).toContain("--mode=elections-only");
+    expect(controlArgs).toContain("--countries=US,UK");
+    expect(treatmentArgs.filter((a) => a !== "--real-output-shadow=true")).toEqual(
+      controlArgs.filter((a) => a !== "--real-output-shadow=false")
+    );
   });
 });
