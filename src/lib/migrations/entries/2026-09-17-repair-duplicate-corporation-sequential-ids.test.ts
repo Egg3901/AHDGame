@@ -112,7 +112,7 @@ describe("repairDuplicateCorporationSequentialIds", () => {
       { sequentialId: 1 },
       { unique: true, sparse: true, name: "corporations_sequentialId" }
     );
-    expect(result.notes.join("\n")).toContain("8 renumbered");
+    expect(result.notes?.join("\n")).toContain("8 renumbered");
   });
 
   it("is a no-op for updates on an already-fixed world but still ensures the index", async () => {
@@ -136,10 +136,10 @@ describe("repairDuplicateCorporationSequentialIds", () => {
     expect(corps.updateOne).not.toHaveBeenCalled();
     expect(corps.createIndex).not.toHaveBeenCalled();
     expect(store.get(DUPLICATE_SOVEREIGN_ISSUER_REPAIRS[0]!.oidHex)?.sequentialId).toBe(900_009);
-    expect(result.notes.join("\n")).toContain("DRY RUN");
+    expect(result.notes?.join("\n")).toContain("DRY RUN");
     // The residual scan projects the planned renumbers, so a dry run reports
     // convergence instead of tripping over the duplicates it would fix.
-    expect(result.notes.join("\n")).toContain("8 renumbered");
+    expect(result.notes?.join("\n")).toContain("8 renumbered");
   });
 
   it("fails loudly when an unexpected extra claimant survives the repair", async () => {
@@ -152,7 +152,7 @@ describe("repairDuplicateCorporationSequentialIds", () => {
     });
     const { db, corps } = setupInMemory(docs);
 
-    await expect(run(db)).rejects.toThrow(/900019.*Squatter Corp|Squatter Corp.*900019/s);
+    await expect(run(db)).rejects.toThrow(/900019[\s\S]*Squatter Corp|Squatter Corp[\s\S]*900019/);
     expect(corps.createIndex).not.toHaveBeenCalled();
   });
 
@@ -169,6 +169,6 @@ describe("repairDuplicateCorporationSequentialIds", () => {
 
     expect(result.documentsUpdated).toBe(0);
     expect(corps.createIndex).toHaveBeenCalledTimes(1);
-    expect(result.notes.join("\n")).toContain("8 absent");
+    expect(result.notes?.join("\n")).toContain("8 absent");
   });
 });

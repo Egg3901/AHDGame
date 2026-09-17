@@ -54,9 +54,9 @@ function statesForAll() {
 const SUPPORTED_CORP_SEED_PRESETS: readonly string[] = SEED_PRESET_IDS;
 
 function seqIdsOf(preset: string, commandEconomyEnabled: boolean) {
-  return generateCountryOwnedSeedData(statesForAll(), preset, commandEconomyEnabled).map(
-    (entry) => entry.corporation.sequentialId
-  );
+  return generateCountryOwnedSeedData(statesForAll(), preset, commandEconomyEnabled)
+    .map((entry) => entry.corporation.sequentialId)
+    .filter((sequentialId): sequentialId is number => sequentialId !== undefined);
 }
 
 describe("seeded corporation sequentialIds (issue #2028)", () => {
