@@ -74,6 +74,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "parliamentaryVacancyWatcher",
   "perpetualElections",
   "byElectionWatcher",
+  "commonsByElectionWatcher",
   "leadershipElections",
   "leadershipPartyEligibility",
   "staleCandidateCleanup",

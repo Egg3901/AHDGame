@@ -114,6 +114,7 @@ function createInitialTurnLogPhases(): TurnLog["phases"] {
     ukGovernment: null,
     ukLeadershipChallenges: null,
     perpetualElections: null,
+    commonsByElectionWatcher: null,
     leadershipElections: null,
     leadershipVacated: null,
     staleCandidateCleanup: null,
