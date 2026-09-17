@@ -224,7 +224,7 @@ interface HoldingAccount {
  * between the two converges on retry: the debit reports `already-applied`
  * and the pull runs again.
  */
-function makeCapDebitStep(
+export function makeCapDebitStep(
   db: Db,
   subkey: string,
   corpId: ObjectId,
@@ -433,7 +433,7 @@ async function revertCapCreditKeyed(
   );
 }
 
-function makeCapCreditStep(
+export function makeCapCreditStep(
   db: Db,
   name: string,
   subkey: string,
@@ -624,7 +624,7 @@ export async function applyHoldingsCreditKeyed(
   return attemptInc();
 }
 
-async function revertHoldingsCreditKeyed(
+export async function revertHoldingsCreditKeyed(
   db: Db,
   subkey: string,
   fundId: ObjectId,
@@ -685,7 +685,7 @@ async function revertHoldingsCreditKeyed(
 }
 
 /** Plain wallet/treasury `$inc` as a revertible keyed step (debits gate `$gte`). */
-function makeCashStep(
+export function makeCashStep(
   db: Db,
   name: string,
   key: string,
