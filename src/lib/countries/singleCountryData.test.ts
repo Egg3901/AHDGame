@@ -37,6 +37,45 @@ const REGISTRY_KEY = /(?:^|[{,[(])\s*"?([A-Z]{2})"?\s*:/gm;
 /** `jp_ldp`, `us_democratic`, `uk_labour`. Unambiguous by construction. */
 const SLUG = /"([a-z]{2})_[a-z0-9_]+"/g;
 
+/**
+ * A DECLARATION named for a country: `export const JP_SHUGIIN_SEATS = ...`.
+ *
+ * ⚠️ THIS RULE WAS DROPPED FROM THE OLD ROSTER WHEN THIS GUARD REPLACED IT, AND
+ * ITS ABSENCE IMMEDIATELY CAUSED THE FAILURE IT EXISTED TO PREVENT.
+ *
+ * `constants/states.ts` is 955 lines of seat tables for SEVEN countries --
+ * `JP_SHUGIIN_SEATS`, `JP_SANGIIN_SEATS`, `JP_GOVERNOR_SEATS`,
+ * `UK_COMMONS_SEATS`, `CN_NPC_SEATS`, `DE_WAHLKREIS_SEATS`,
+ * `NG_REGIONAL_COUNCIL_SEATS`, `RU_REGION_NAMES` -- and not one of those
+ * countries appears as a key, a `countryId:` field or a slug anywhere in it.
+ * They exist only in SYMBOL NAMES. With 48 US state keys and no other country
+ * visible, the state-key rule claimed the whole file for the United States, and
+ * relocating it would have carried six other countries' canonical chamber seat
+ * counts into `us/`.
+ *
+ * The retired `jpCoverage.test.ts` carried this as "rule 5", added because the
+ * same file had already slipped past four other heuristics; its comment records
+ * that this was "the third recurrence of the same failure". Rebuilding the
+ * detector without it made that the fourth.
+ *
+ * CONSUMERS ARE DELIBERATELY NOT MATCHED -- only declarations. A file that
+ * merely imports `JP_SANGIIN_SEATS` needs its import path updated and typecheck
+ * says so loudly; a file that DECLARES it gets no such warning.
+ */
+const COUNTRY_DECLARATION =
+  /\b(?:export\s+)?(?:const|let|var|function|class|type|interface|enum)\s+([A-Z]{2})_[A-Z0-9_]/g;
+
+/**
+ * Prefixes that look like a country id and are not one.
+ *
+ * ⚠️ USSR IS RUSSIA. It is the only entry here that names a real country, so
+ * matching it would file another country's data under the United States rather
+ * than merely adding noise. JPY is a currency, JPEG and JPG are image formats,
+ * USD is a currency, and matching those pulled 130-plus irrelevant files into
+ * Japan's coverage set when the old rule was first written.
+ */
+const NOT_A_COUNTRY_PREFIX = /^(JPY|JPEG|JPG|USD|USE|USSR)([_A-Z]|$)/;
+
 /** Every country id the game knows, so a match can be told from a state code. */
 const COUNTRY_IDS = new Set(
   "US UK JP DE FR IT RU CN BR PL CS YU DD AT BG FI GR HU IE NG RO SE ES TR CA IN".split(" ")
@@ -273,6 +312,13 @@ function declaredCountries(raw: string): Set<string> {
   }
   for (const [, cc] of source.matchAll(SLUG)) {
     if (COUNTRY_IDS.has(cc.toUpperCase())) found.add(cc.toUpperCase());
+  }
+  // A symbol NAMED for a country is that country's data, wherever it sits.
+  for (const match of source.matchAll(COUNTRY_DECLARATION)) {
+    const cc = match[1];
+    if (!COUNTRY_IDS.has(cc)) continue;
+    if (NOT_A_COUNTRY_PREFIX.test(match[0].slice(match[0].indexOf(cc)))) continue;
+    found.add(cc);
   }
   return found;
 }
