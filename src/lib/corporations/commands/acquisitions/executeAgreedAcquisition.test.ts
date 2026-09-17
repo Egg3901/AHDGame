@@ -115,9 +115,9 @@ describe("executeAgreedAcquisition", () => {
     // Each sector re-parented, and the shell deleted.
     expect(b.acquirerSectors).toBe(2);
     expect(b.targetGone).toBe(true);
-    const settlement = await w.memory
-      .collection<AcquisitionSettlement>("acquisitionSettlements")
-      .findOne({ _id: w.offerId });
+    const settlement = (await w.memory
+      .collection("acquisitionSettlements")
+      .findOne({ _id: w.offerId })) as unknown as AcquisitionSettlement | null;
     expect(settlement?.status).toBe("applied");
     expect(settlement?.legs.every((leg) => leg.applied)).toBe(true);
   });
