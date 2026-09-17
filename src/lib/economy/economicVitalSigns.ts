@@ -974,6 +974,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         sovereignBonds.length,
         "unmatured_sovereign_issue_count"
       ),
+      corporateMedianPriceToParSpreadPct: metric(
+        median(corporateBonds.map((bond) => (1 - bond.marketPrice) * 100)),
+        corporateBonds.length,
+        "unmatured_corporate_issue_count"
+      ),
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,
       twoSidedListingShare: metric(

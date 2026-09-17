@@ -71,6 +71,11 @@ describe("GET /api/admin/economy/vital-signs", () => {
           observations: 2,
           basis: "unmatured_corporate_units",
         },
+        corporateMedianPriceToParSpreadPct: {
+          value: 2.5,
+          observations: 2,
+          basis: "unmatured_corporate_issue_count",
+        },
       },
     };
     db.collectionMocks.economicVitalSigns.findOne.mockResolvedValue(snapshot);
@@ -83,6 +88,7 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(body.snapshot.money.intermediatedGrossVelocity48.value).toBe(0.5);
     expect(body.snapshot.securities.corporateMedianHolders.value).toBe(1);
     expect(body.snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
+    expect(body.snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBe(2.5);
   });
 
   it("rejects an invalid turn", async () => {
