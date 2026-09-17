@@ -73,4 +73,25 @@ describe("stateEffectsAndNationalAggregation phase ordering", () => {
     expect(demoStart).toBeGreaterThanOrEqual(0);
     expect(demoStart).toBeLessThan(crisisEnd);
   });
+
+  // Issue #7: the Bretton Woods exit is built, tested and flagged on, but the
+  // turn never reaches it — no phase in this sequence invokes the mechanic, so
+  // a flagged-on world can never suspend convertibility. The exit must run on
+  // the real player-facing entry path: after inflationRecalc (which settles
+  // the US inflation gap the gold-cover drain reads) and before forexTurn
+  // (which applies the regime's band and drift the same turn).
+  it("reaches the Bretton Woods exit between inflationRecalc and forexTurn", async () => {
+    const { events, runtime, context } = makeHarness();
+
+    await stateEffectsAndNationalAggregationPhase.execute(context as never, runtime as never);
+
+    const idx = (event: string) => {
+      const i = events.indexOf(event);
+      expect(i, `${event} must be recorded`).toBeGreaterThanOrEqual(0);
+      return i;
+    };
+
+    expect(idx("end:inflationRecalc")).toBeLessThan(idx("start:brettonWoodsTurn"));
+    expect(idx("end:brettonWoodsTurn")).toBeLessThan(idx("start:forexTurn"));
+  });
 });
