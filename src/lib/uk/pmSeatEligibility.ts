@@ -16,29 +16,25 @@ export async function hasRequiredPrimeMinisterSeat(
 ): Promise<boolean> {
   if (countryId !== "UK") return true;
   if (characterId && isSingleplayer()) {
-    const pinned = await db
-      .collection<Character>("characters")
-      .findOne(
-        {
-          _id: characterId,
-          countryId,
-          singleplayerHeadOfState: true,
-          retiredAt: { $exists: false },
-        },
-        { projection: { _id: 1 } }
-      );
-    if (pinned) return true;
-  }
-  if (!characterId && !nppId) return false;
-  const seat = await db
-    .collection<ElectedOfficial>("electedOfficials")
-    .findOne(
+    const pinned = await db.collection<Character>("characters").findOne(
       {
+        _id: characterId,
         countryId,
-        officeType: "commons",
-        ...(characterId ? { characterId } : { nppId, isNPP: true }),
+        singleplayerHeadOfState: true,
+        retiredAt: { $exists: false },
       },
       { projection: { _id: 1 } }
     );
+    if (pinned) return true;
+  }
+  if (!characterId && !nppId) return false;
+  const seat = await db.collection<ElectedOfficial>("electedOfficials").findOne(
+    {
+      countryId,
+      officeType: "commons",
+      ...(characterId ? { characterId } : { nppId, isNPP: true }),
+    },
+    { projection: { _id: 1 } }
+  );
   return seat !== null;
 }
