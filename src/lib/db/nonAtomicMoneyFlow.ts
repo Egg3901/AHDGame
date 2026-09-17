@@ -162,6 +162,20 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * (unlike the historical rollback, which deleted every row for the
  * election). Reporting always follows the stored docs, so a retry returns
  * the first attempt's exact result.
+ * Military recruitment is migrated (ministerial-action + manpower +
+ * defence-appropriation + arsenal-lots debits plus the deterministic unit
+ * insert via the militaryRecruitSpend primitive, driven by the
+ * applyMilitaryRecruit command shell: the resume plan is persisted on the
+ * receipt at claim time, so a same-key retry after a crash rebuilds its
+ * steps from the stored plan instead of post-debit live reads; the degraded
+ * arsenal fill resolves once and pins `drawnLots`; the manpower revert
+ * refunds under the live ceiling clamp (bounded by the drawn amount,
+ * exactly once per compensation key, so the live read cannot over-credit
+ * under crash or concurrency); a failed revert settles `failed` with an
+ * UNCOMPENSATED marker while the caller still sees the original step error,
+ * with command-level validation-order/key-path/fresh-vs-replay/stored-
+ * outcome/degraded-plan/error-parity tests and Idempotency-Key
+ * validation/forwarding/minting plus settled/conflict route tests).
  * Forex turn chair interventions are migrated
  * (applyForexInterventionSpend: deterministic per-turn key, resume plan
  * persisted on the receipt at claim, keyed rate-writeback + combined
@@ -183,11 +197,6 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
  * are keyed; surrounding equity/dividend/cross-fund writes are not).
- * Military recruitment sits outside even that: manual unwind (ministerial
- * action, manpower pool, defence appropriation, arsenal lots, unit insert)
- * with no transaction wrapper at all. Migrating one of those means
- * expressing its writes as steps here, with an explicit inverse per step
- * that mutates prior state.
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in

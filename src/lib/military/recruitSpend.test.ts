@@ -887,6 +887,75 @@ describe("applyMilitaryRecruitSpend (standalone fallback)", () => {
       10_000_000_000 - 100.6
     );
   });
+
+  it("keeps the step error externally compatible when a revert double-faults", async () => {
+    const db = new FakeDb();
+    seedDb(db, { balance: 1_000 });
+    // The manpower row vanishes after the draw applied: its revert reports
+    // `missing`, so the receipt settles `failed` with an UNCOMPENSATED marker
+    // for ops — but the caller still sees the original appropriation
+    // shortfall, exactly the refusal the legacy unwind-and-throw produced.
+    // The draw path never reads (single atomic updateOne), so nulling findOne
+    // only affects the revert.
+    const manpower = db.collection("nationalManpower");
+    manpower.findOne = (async () => null) as unknown as FakeCollection["findOne"];
+    const input = spendInput({ idempotencyKey: "recruit-double-fault" });
+
+    await expect(applyMilitaryRecruitSpend(db as unknown as Db, input)).rejects.toThrow(
+      new RegExp(`^${MILITARY_RECRUIT_APPROPRIATION}:`)
+    );
+    expect(receipt(db, "recruit-double-fault").status).toBe("failed");
+    expect(receipt(db, "recruit-double-fault").error).toBe("UNCOMPENSATED:manpower-draw:missing");
+    expect(units(db)).toHaveLength(0);
+  });
+
+  it("converges a tight-ceiling refund exactly once across a crash mid-revert", async () => {
+    // Pool starts above the live ceiling; the draw succeeds but the revert
+    // must refund only the headroom, exactly once, even when the crash lands
+    // inside the compensation window. A double credit would leave 602k; the
+    // clamped exactly-once refund leaves exactly the ceiling.
+    vi.mocked(manpowerCeilingFor).mockResolvedValue(595_000);
+    const failingUnits = (collection: FakeCollection): void => {
+      collection.insertOne = (async () => {
+        throw new Error("insert exploded");
+      }) as unknown as FakeCollection["insertOne"];
+    };
+    const probe = new FakeDb();
+    seedDb(probe, { pool: 600_000 });
+    failingUnits(probe.collection("militaryUnits"));
+    try {
+      await applyMilitaryRecruitSpend(
+        probe as unknown as Db,
+        spendInput({ idempotencyKey: "p", poolBefore: 600_000 })
+      );
+    } catch {
+      // Expected unit-insert failure; the probe only calibrates write counts.
+    }
+
+    const db = new FakeDb();
+    seedDb(db, { pool: 600_000 });
+    failingUnits(db.collection("militaryUnits"));
+    const input = spendInput({ idempotencyKey: "recruit-tight-crash", poolBefore: 600_000 });
+    db.crashAfterWrites = probe.writeCount - 2;
+    await expect(applyMilitaryRecruitSpend(db as unknown as Db, input)).rejects.toThrow(
+      /INJECTED_CRASH/
+    );
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    await expect(applyMilitaryRecruitSpend(db as unknown as Db, input)).rejects.toThrow(
+      new RegExp(`^${MILITARY_RECRUIT_UNIT}:`)
+    );
+    expect(receipt(db, "recruit-tight-crash").status).toBe("compensated");
+    // Drew 12k (588k), refunded only the 7k of headroom: back at the ceiling,
+    // never above it, never double-credited.
+    expect(num(db, "nationalManpower", manpowerId, "pool")).toBe(595_000);
+    expect(num(db, "cabinetMembers", memberId, "ministerialActions")).toBe(2);
+    expect(num(db, "federalBudget", BUDGET_ID, "defenseAppropriation.balance")).toBe(
+      10_000_000_000
+    );
+    expect(num(db, "nationalArsenal", arsenalId, "stock.ground")).toBe(9_999);
+    expect(units(db)).toHaveLength(0);
+  });
 });
 
 describe("buildMilitaryRecruitFingerprint", () => {
