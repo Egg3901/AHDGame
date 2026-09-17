@@ -118,13 +118,19 @@ function isOperatorObject(value: unknown): value is Record<string, unknown> {
 export function matchesFilter(doc: Doc, filter: Record<string, unknown>): boolean {
   for (const [key, expected] of Object.entries(filter)) {
     if (key === "$or") {
-      if (!Array.isArray(expected) || !expected.some((f) => matchesFilter(doc, f as Record<string, unknown>))) {
+      if (
+        !Array.isArray(expected) ||
+        !expected.some((f) => matchesFilter(doc, f as Record<string, unknown>))
+      ) {
         return false;
       }
       continue;
     }
     if (key === "$and") {
-      if (!Array.isArray(expected) || !expected.every((f) => matchesFilter(doc, f as Record<string, unknown>))) {
+      if (
+        !Array.isArray(expected) ||
+        !expected.every((f) => matchesFilter(doc, f as Record<string, unknown>))
+      ) {
         return false;
       }
       continue;
@@ -143,7 +149,12 @@ export function matchesFilter(doc: Doc, filter: Record<string, unknown>): boolea
 
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) return value.map((v) => cloneValue(v)) as unknown as T;
-  if (typeof value === "object" && value !== null && !isObjectId(value) && !(value instanceof Date)) {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    !isObjectId(value) &&
+    !(value instanceof Date)
+  ) {
     const out: Doc = {};
     for (const [k, v] of Object.entries(value as Doc)) out[k] = cloneValue(v);
     return out as T;
@@ -234,8 +245,8 @@ class FakeCursor {
           const av = getPath(a, path);
           const bv = getPath(b, path);
           if (av === bv) continue;
-          if (av === undefined) return 1;
-          if (bv === undefined) return -1;
+          if (av == null) return 1;
+          if (bv == null) return -1;
           return (av < bv ? -1 : 1) * (dir as number);
         }
         return 0;
@@ -265,7 +276,9 @@ class FakeCursor {
 class FakeCollection {
   readonly docs: Doc[] = [];
 
-  find = vi.fn((filter: Record<string, unknown> = {}): FakeCursor => new FakeCursor(this.docs, filter));
+  find = vi.fn(
+    (filter: Record<string, unknown> = {}): FakeCursor => new FakeCursor(this.docs, filter)
+  );
 
   findOne = vi.fn(async (filter: Record<string, unknown> = {}): Promise<Doc | null> => {
     return this.docs.find((d) => matchesFilter(d, filter)) ?? null;
@@ -290,7 +303,10 @@ class FakeCollection {
   });
 
   updateOne = vi.fn(
-    async (filter: Record<string, unknown>, update: Record<string, unknown>): Promise<{ matchedCount: number; modifiedCount: number }> => {
+    async (
+      filter: Record<string, unknown>,
+      update: Record<string, unknown>
+    ): Promise<{ matchedCount: number; modifiedCount: number }> => {
       const doc = this.docs.find((d) => matchesFilter(d, filter));
       if (!doc) return { matchedCount: 0, modifiedCount: 0 };
       const changed = applyUpdate(doc, update);
@@ -299,7 +315,10 @@ class FakeCollection {
   );
 
   updateMany = vi.fn(
-    async (filter: Record<string, unknown>, update: Record<string, unknown>): Promise<{ matchedCount: number; modifiedCount: number }> => {
+    async (
+      filter: Record<string, unknown>,
+      update: Record<string, unknown>
+    ): Promise<{ matchedCount: number; modifiedCount: number }> => {
       let matched = 0;
       let modified = 0;
       for (const doc of this.docs) {
@@ -376,7 +395,7 @@ export function createFakeCommonsDb(): FakeCommonsDb {
     return coll;
   };
   return {
-    db: { collection: ((name: string) => collection(name)) as Db["collection"] } as Db,
+    db: { collection: ((name: string) => collection(name)) as unknown as Db["collection"] } as Db,
     collections,
     collection,
     seed(name: string, rows: Doc[]): void {

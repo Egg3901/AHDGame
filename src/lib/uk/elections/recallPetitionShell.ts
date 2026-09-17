@@ -269,6 +269,10 @@ export async function advanceRecallPetition(
       ? ((await petitions.findOne({ _id: petition._id })) ?? petition)
       : petition;
 
+  if (fresh.status !== "watch" && fresh.status !== "open" && fresh.status !== "check") {
+    return { action: "wait", petition: fresh };
+  }
+
   const step = nextPetitionStep({
     status: fresh.status,
     currentTurn,

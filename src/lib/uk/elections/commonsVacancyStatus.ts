@@ -10,12 +10,7 @@
 
 import { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
-import type {
-  Character,
-  ElectedOfficial,
-  Election,
-  ElectionCandidate,
-} from "@/lib/db/types";
+import type { Character, ElectedOfficial, Election, ElectionCandidate } from "@/lib/db/types";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import {
   getUkCommonsVacanciesCollection,
@@ -88,9 +83,7 @@ export async function loadCommonsVacancyStatus(
 ): Promise<CommonsVacancyStatus> {
   const currentTurn = await getCurrentTurn(db);
   const stateFilter =
-    typeof options?.state === "string" && options.state.length > 0
-      ? { state: options.state }
-      : {};
+    typeof options?.state === "string" && options.state.length > 0 ? { state: options.state } : {};
 
   const vacancies = await getUkCommonsVacanciesCollection(db)
     .find({ countryId: "UK", status: { $in: ["open", "scheduled"] }, ...stateFilter })
@@ -104,7 +97,11 @@ export async function loadCommonsVacancyStatus(
     states.length > 0
       ? await db
           .collection<Election>("elections")
-          .find({ countryId: "UK", electionType: SPECIAL_COMMONS_ELECTION_TYPE, state: { $in: states } })
+          .find({
+            countryId: "UK",
+            electionType: SPECIAL_COMMONS_ELECTION_TYPE,
+            state: { $in: states },
+          })
           .toArray()
       : [];
   const electionIds = elections.map((e) => e._id);

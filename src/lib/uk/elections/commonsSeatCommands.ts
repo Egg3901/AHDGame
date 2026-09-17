@@ -18,10 +18,7 @@ export type CommonsSeatCommandResult =
   | { ok: true; officialId: ObjectId; vacancyId: ObjectId; label: string }
   | { ok: false; status: 400 | 404 | 409; error: string };
 
-async function findHeldCommonsSeat(
-  db: Db,
-  character: Character
-): Promise<ElectedOfficial | null> {
+async function findHeldCommonsSeat(db: Db, character: Character): Promise<ElectedOfficial | null> {
   return await db.collection<ElectedOfficial>("electedOfficials").findOne({
     officeType: "commons",
     countryId: "UK",
@@ -39,10 +36,9 @@ async function hasActiveCandidacy(db: Db, characterId: ObjectId): Promise<boolea
 
 async function clearCommonsCurrentOffice(db: Db, character: Character, now: Date): Promise<void> {
   if (character.currentOffice?.type !== "commons") return;
-  await db.collection<Character>("characters").updateOne(
-    { _id: character._id },
-    { $set: { currentOffice: null, updatedAt: now } }
-  );
+  await db
+    .collection<Character>("characters")
+    .updateOne({ _id: character._id }, { $set: { currentOffice: null, updatedAt: now } });
 }
 
 /**
@@ -60,7 +56,11 @@ export async function resignCommonsSeat(
     return { ok: false, status: 404, error: "You do not hold a Commons seat." };
   }
   if (await hasActiveCandidacy(db, character._id)) {
-    return { ok: false, status: 400, error: "Cannot resign while actively running in an election." };
+    return {
+      ok: false,
+      status: 400,
+      error: "Cannot resign while actively running in an election.",
+    };
   }
   const currentTurn = await getCurrentTurn(db);
   const vacancy = await vacateCommonsSeat(db, official, "resignation", currentTurn, now);
@@ -68,7 +68,12 @@ export async function resignCommonsSeat(
     return { ok: false, status: 409, error: "That seat changed. Refresh and try again." };
   }
   await clearCommonsCurrentOffice(db, character, now);
-  return { ok: true, officialId: official._id, vacancyId: vacancy._id, label: "Member of Parliament" };
+  return {
+    ok: true,
+    officialId: official._id,
+    vacancyId: vacancy._id,
+    label: "Member of Parliament",
+  };
 }
 
 /**
@@ -89,17 +94,28 @@ export async function defectCommonsSeat(
     return { ok: false, status: 400, error: "Choose a different party to defect to." };
   }
   if (await hasActiveCandidacy(db, character._id)) {
-    return { ok: false, status: 400, error: "Cannot defect while actively running in an election." };
+    return {
+      ok: false,
+      status: 400,
+      error: "Cannot defect while actively running in an election.",
+    };
   }
   const currentTurn = await getCurrentTurn(db);
-  await db.collection<Character>("characters").updateOne(
-    { _id: character._id },
-    { $set: { party: toParty, partyInfluence: 0, updatedAt: now } }
-  );
+  await db
+    .collection<Character>("characters")
+    .updateOne(
+      { _id: character._id },
+      { $set: { party: toParty, partyInfluence: 0, updatedAt: now } }
+    );
   const vacancy = await vacateCommonsSeat(db, official, "defection", currentTurn, now);
   if (!vacancy) {
     return { ok: false, status: 409, error: "That seat changed. Refresh and try again." };
   }
   await clearCommonsCurrentOffice(db, character, now);
-  return { ok: true, officialId: official._id, vacancyId: vacancy._id, label: "Member of Parliament" };
+  return {
+    ok: true,
+    officialId: official._id,
+    vacancyId: vacancy._id,
+    label: "Member of Parliament",
+  };
 }

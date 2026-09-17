@@ -23,7 +23,10 @@ export async function POST() {
     const db = await getDb();
     const result = await resignCommonsSeat(db, auth.user.character);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status, headers: NO_STORE }
+      );
     }
     return NextResponse.json(
       {

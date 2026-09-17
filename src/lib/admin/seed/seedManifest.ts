@@ -329,6 +329,8 @@ const RUNTIME: CollectionEntry[] = [
   { name: "elections", category: "runtime" },
   { name: "electionCandidates", category: "runtime" },
   { name: "electionVoteTallies", category: "runtime" },
+  { name: "ukCommonsVacancies", category: "runtime" },
+  { name: "ukRecallPetitions", category: "runtime" },
   {
     name: "electedOfficials",
     category: "runtime",

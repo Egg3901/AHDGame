@@ -31,7 +31,7 @@ export interface ElectedOfficial {
   characterName?: string;
   party?: string;
   isNPP?: boolean;
-  nppId?: ObjectId;
+  nppId?: ObjectId | null;
   electedAt?: Date;
   termEnds?: Date;
   /** True if appointed (Senate only), false if elected */

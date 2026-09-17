@@ -124,9 +124,7 @@ export function resolveOfficeKeyForElectionType(
 
   const type =
     SPECIAL_TO_REGULAR[electionType] ??
-    (electionType.startsWith(SNAP_PREFIX)
-      ? electionType.slice(SNAP_PREFIX.length)
-      : electionType);
+    (electionType.startsWith(SNAP_PREFIX) ? electionType.slice(SNAP_PREFIX.length) : electionType);
 
   const byOfficeKey = config.officeTypes.find((o) => o.key === type);
   if (byOfficeKey) return byOfficeKey.key;

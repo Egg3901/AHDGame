@@ -17,12 +17,7 @@ import type { CountryId } from "@/lib/constants/countries";
  * death, account deletion, admin removal); hooked paths write a precise
  * reason instead. */
 export type CommonsVacancyReason =
-  | "death"
-  | "retirement"
-  | "defection"
-  | "resignation"
-  | "recall"
-  | "removal";
+  "death" | "retirement" | "defection" | "resignation" | "recall" | "removal";
 
 /** Lifecycle of a vacancy doc. `scheduled` means a live `special_commons`
  * election claims it; `filled` means the by-election seated a winner;
@@ -61,13 +56,7 @@ export interface UkCommonsVacancy {
 /** Lifecycle of a recall petition. `watch` is a pre-petition tracker holding
  * the sustained-low-approval streak; `open` collects signatures; `check`
  * runs the constituency support window; `retained` / `vacated` are terminal. */
-export type RecallPetitionStatus =
-  | "watch"
-  | "open"
-  | "check"
-  | "retained"
-  | "vacated"
-  | "expired";
+export type RecallPetitionStatus = "watch" | "open" | "check" | "retained" | "vacated" | "expired";
 
 export type RecallTrigger = "infamy" | "lowApproval" | "petition";
 

@@ -39,7 +39,10 @@ function electionForVacancy(vacancy: CommonsVacancyDto, elections: CommonsElecti
   return elections.find((e) => e.id === vacancy.electionId) ?? null;
 }
 
-async function postJson(url: string, body: unknown): Promise<{ ok: boolean; data: Record<string, unknown>; status: number }> {
+async function postJson(
+  url: string,
+  body: unknown
+): Promise<{ ok: boolean; data: Record<string, unknown>; status: number }> {
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -55,13 +58,20 @@ async function postJson(url: string, body: unknown): Promise<{ ok: boolean; data
   return { ok: res.ok, data, status: res.status };
 }
 
-function VacancyCard({ vacancy, elections }: { vacancy: CommonsVacancyDto; elections: CommonsElectionDto[] }) {
+function VacancyCard({
+  vacancy,
+  elections,
+}: {
+  vacancy: CommonsVacancyDto;
+  elections: CommonsElectionDto[];
+}) {
   const election = electionForVacancy(vacancy, elections);
   return (
     <li className="rounded-xl border border-card-border/60 bg-card px-4 py-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-sm font-medium text-foreground">
-          {vacancy.constituency ?? vacancy.state} · {vacancy.seats} seat{vacancy.seats === 1 ? "" : "s"}
+          {vacancy.constituency ?? vacancy.state} · {vacancy.seats} seat
+          {vacancy.seats === 1 ? "" : "s"}
         </p>
         <span className="text-xs text-muted">
           {VACANCY_STATUS_LABELS[vacancy.status] ?? vacancy.status}
@@ -81,14 +91,20 @@ function VacancyCard({ vacancy, elections }: { vacancy: CommonsVacancyDto; elect
               : election.status === "cancelled"
                 ? "By-election cancelled, a new race will be scheduled"
                 : `By-election ${election.status}, closed turn ${election.endTurn ?? "unknown"}`}
-            {typeof election.carve === "number" ? ` · electorate ${(election.carve * 100).toFixed(1)}% of the region` : ""}
+            {typeof election.carve === "number"
+              ? ` · electorate ${(election.carve * 100).toFixed(1)}% of the region`
+              : ""}
           </p>
           {election.candidates.length > 0 ? (
             <ul className="mt-1 space-y-0.5">
               {election.candidates.map((c) => (
                 <li key={c.id} className="text-foreground">
                   {c.characterName} · {c.party}
-                  {election.status !== "active" && election.status !== "upcoming" && c.status === "active" ? " · seated" : ""}
+                  {election.status !== "active" &&
+                  election.status !== "upcoming" &&
+                  c.status === "active"
+                    ? " · seated"
+                    : ""}
                 </li>
               ))}
             </ul>
@@ -97,7 +113,9 @@ function VacancyCard({ vacancy, elections }: { vacancy: CommonsVacancyDto; elect
           )}
         </div>
       ) : (
-        <p className="mt-2 text-xs text-muted">No by-election scheduled yet. One spawns automatically.</p>
+        <p className="mt-2 text-xs text-muted">
+          No by-election scheduled yet. One spawns automatically.
+        </p>
       )}
     </li>
   );
@@ -213,7 +231,10 @@ export function CommonsVacancyPanel({ countryId }: { countryId: CountryId }) {
     await load();
   }
 
-  async function handlePetitionAction(petition: RecallPetitionDto, action: "sign" | "retain" | "remove") {
+  async function handlePetitionAction(
+    petition: RecallPetitionDto,
+    action: "sign" | "retain" | "remove"
+  ) {
     setPending(petition.id);
     setFeedback(null);
     try {
@@ -320,9 +341,7 @@ export function CommonsVacancyPanel({ countryId }: { countryId: CountryId }) {
 
       {holdsSeat && (
         <div className="mb-4 rounded-xl border border-card-border/60 bg-card px-4 py-3">
-          <p className="text-sm font-medium text-foreground">
-            Your seat · {status?.viewer.state}
-          </p>
+          <p className="text-sm font-medium text-foreground">Your seat · {status?.viewer.state}</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -374,7 +393,12 @@ export function CommonsVacancyPanel({ countryId }: { countryId: CountryId }) {
           <h3 className="mb-2 text-sm font-semibold text-foreground">Recall petitions</h3>
           <ul className="space-y-2">
             {status?.petitions.map((p) => (
-              <PetitionCard key={p.id} petition={p} onAction={(pet, act) => void handlePetitionAction(pet, act)} pending={pending} />
+              <PetitionCard
+                key={p.id}
+                petition={p}
+                onAction={(pet, act) => void handlePetitionAction(pet, act)}
+                pending={pending}
+              />
             ))}
           </ul>
         </>

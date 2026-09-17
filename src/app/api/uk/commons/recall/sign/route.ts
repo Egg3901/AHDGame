@@ -58,10 +58,10 @@ export async function POST(request: Request) {
       });
     }
     if (petition.status !== "open") {
-      return NextResponse.json(
-        conflict("That petition is not collecting signatures").toJson(),
-        { status: 409, headers: NO_STORE }
-      );
+      return NextResponse.json(conflict("That petition is not collecting signatures").toJson(), {
+        status: 409,
+        headers: NO_STORE,
+      });
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -78,9 +78,7 @@ export async function POST(request: Request) {
         added: result.added,
         signatures: result.signatures,
         signaturesRequired: RECALL_SIGNATURES_REQUIRED,
-        message: result.added
-          ? "Signature recorded."
-          : "You have already signed this petition.",
+        message: result.added ? "Signature recorded." : "You have already signed this petition.",
       },
       { headers: NO_STORE }
     );

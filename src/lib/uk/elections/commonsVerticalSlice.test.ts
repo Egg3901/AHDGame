@@ -82,9 +82,8 @@ describe("commons vacancy shell idempotency", () => {
   });
 
   it("reopens scheduled vacancies for retry but never touches filled ones", async () => {
-    const { reopenCommonsVacanciesForRetry, markVacanciesFilled } = await import(
-      "./commonsVacancyShell"
-    );
+    const { reopenCommonsVacanciesForRetry, markVacanciesFilled } =
+      await import("./commonsVacancyShell");
     const fake = createFakeCommonsDb();
     const electionId = new ObjectId();
     const otherId = new ObjectId();
@@ -172,7 +171,11 @@ describe("lifecycle hooks", () => {
     fake.seed("characters", [character]);
     fake.seed("electedOfficials", [seat]);
     fake.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
-    const result = await resignPosition(fake.db, character as never, `official:${(seat._id as ObjectId).toString()}`);
+    const result = await resignPosition(
+      fake.db,
+      character as never,
+      `official:${(seat._id as ObjectId).toString()}`
+    );
     expect(result.ok).toBe(true);
     const rows = fake.read<Record<string, unknown>>("electedOfficials");
     expect(rows).toHaveLength(1);
@@ -200,7 +203,11 @@ describe("lifecycle hooks", () => {
     fake.seed("characters", [character]);
     fake.seed("electedOfficials", [seat]);
     fake.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
-    const result = await resignPosition(fake.db, character as never, `official:${(seat._id as ObjectId).toString()}`);
+    const result = await resignPosition(
+      fake.db,
+      character as never,
+      `official:${(seat._id as ObjectId).toString()}`
+    );
     expect(result.ok).toBe(true);
     expect(fake.read("electedOfficials")).toHaveLength(0);
     expect(fake.read("ukCommonsVacancies")).toHaveLength(0);
@@ -214,20 +221,41 @@ describe("lifecycle hooks", () => {
     fake.seed("characters", [character]);
     fake.seed("electedOfficials", [seat]);
     fake.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
-    await retireCharacter(fake.db, character as never, character.userId as ObjectId, "retired" as never);
+    await retireCharacter(
+      fake.db,
+      character as never,
+      character.userId as ObjectId,
+      "retired" as never
+    );
     const vacancies = fake.read<Record<string, unknown>>("ukCommonsVacancies");
     expect(vacancies).toHaveLength(1);
     expect(vacancies[0].reason).toBe("retirement");
     expect(vacancies[0].priorCharacterName).toBe("Test MP");
 
     const usFake = createFakeCommonsDb();
-    const usCharacter = mpCharacter({ countryId: "US", homeState: "CA", party: "independent", currentOffice: null });
+    const usCharacter = mpCharacter({
+      countryId: "US",
+      homeState: "CA",
+      party: "independent",
+      currentOffice: null,
+    });
     usFake.seed("characters", [usCharacter]);
     usFake.seed("electedOfficials", [
-      { _id: new ObjectId(), officeType: "house", countryId: "US", state: "CA", characterId: usCharacter._id },
+      {
+        _id: new ObjectId(),
+        officeType: "house",
+        countryId: "US",
+        state: "CA",
+        characterId: usCharacter._id,
+      },
     ]);
     usFake.seed("gameState", [{ _id: "current", currentTurn: TURN }]);
-    await retireCharacter(usFake.db, usCharacter as never, usCharacter.userId as ObjectId, "retired" as never);
+    await retireCharacter(
+      usFake.db,
+      usCharacter as never,
+      usCharacter.userId as ObjectId,
+      "retired" as never
+    );
     expect(usFake.read("ukCommonsVacancies")).toHaveLength(0);
   });
 });
@@ -250,8 +278,12 @@ describe("special_commons static coverage", () => {
   it("shares the commons method position, office key, labels, and NPP priority", async () => {
     const { POSITION_BY_ELECTION_TYPE } = await import("@/lib/elections/electionMethod");
     expect(POSITION_BY_ELECTION_TYPE.special_commons).toBe(POSITION_BY_ELECTION_TYPE.commons);
-    const { officeKeyForElectionType, MULTI_SEAT_TYPES, isSpecialCommonsElection, formatElectionTypeLabel } =
-      await import("@/lib/utils/electionLabels");
+    const {
+      officeKeyForElectionType,
+      MULTI_SEAT_TYPES,
+      isSpecialCommonsElection,
+      formatElectionTypeLabel,
+    } = await import("@/lib/utils/electionLabels");
     expect(officeKeyForElectionType("special_commons")).toBe("commons");
     expect(MULTI_SEAT_TYPES.has("special_commons")).toBe(true);
     expect(isSpecialCommonsElection("special_commons")).toBe(true);

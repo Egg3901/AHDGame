@@ -33,7 +33,10 @@ export async function POST(request: Request) {
     const db = await getDb();
     const result = await defectCommonsSeat(db, auth.user.character, parsed.data.toParty);
     if (!result.ok) {
-      return NextResponse.json({ error: result.error }, { status: result.status, headers: NO_STORE });
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status, headers: NO_STORE }
+      );
     }
     return NextResponse.json(
       {

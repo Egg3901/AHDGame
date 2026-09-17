@@ -50,13 +50,22 @@ import type { UkCommonsVacancy } from "@/lib/db/types/ukByElection";
 export const SPECIAL_COMMONS_ELECTION_TYPE = "special_commons";
 
 /** Regular Commons races whose live presence suppresses a by-election. */
-const REGULAR_COMMONS_TYPES = ["commons", "snap_commons"];
+const REGULAR_COMMONS_TYPES = [
+  "commons",
+  "snap_commons",
+] as const satisfies readonly Election["electionType"][];
 
 /** Election statuses that count as a live, seat-filling race. */
-const LIVE_ELECTION_STATUSES = ["active", "upcoming"];
+const LIVE_ELECTION_STATUSES = [
+  "active",
+  "upcoming",
+] as const satisfies readonly Election["status"][];
 
 /** Election statuses that count as a finished race for reconciliation. */
-const FINISHED_ELECTION_STATUSES = ["completed", "resolved"];
+const FINISHED_ELECTION_STATUSES = [
+  "completed",
+  "resolved",
+] as const satisfies readonly Election["status"][];
 
 export interface SpawnSpecialCommonsInput {
   state: string;
@@ -155,9 +164,7 @@ export async function processCommonsByElectionWatcher(
   // reason; hooked paths (retirement, resignation, recall) write a precise
   // reason instead, so this only fires for unhooked paths (`removal`).
   const commonsRows = await officials.find({ officeType: "commons", ...scope }).toArray();
-  const tombstones = commonsRows.filter(
-    (o) => o.state && o.characterId == null && o.nppId == null
-  );
+  const tombstones = commonsRows.filter((o) => o.state && o.characterId == null && o.nppId == null);
   for (const row of tombstones) {
     const live = await findLiveVacancyForOfficial(db, row._id);
     if (live) continue;
@@ -176,12 +183,8 @@ export async function processCommonsByElectionWatcher(
 
   // ── 2. Recall pipeline: ensure watches for seated MPs, evaluate triggers,
   // advance open/check petitions. Favorability + infamy load in one batch. ──
-  const seated = commonsRows.filter(
-    (o) => o.state && (o.characterId != null || o.nppId != null)
-  );
-  const characterIds = seated
-    .map((o) => o.characterId)
-    .filter((id): id is ObjectId => id != null);
+  const seated = commonsRows.filter((o) => o.state && (o.characterId != null || o.nppId != null));
+  const characterIds = seated.map((o) => o.characterId).filter((id): id is ObjectId => id != null);
   const characters =
     characterIds.length > 0
       ? await db
@@ -199,10 +202,7 @@ export async function processCommonsByElectionWatcher(
     if (!character) continue;
     const petition =
       (await getActivePetitionForOfficial(db, row._id)) ??
-      (await ensureRecallWatch(
-        db,
-        { official: row, target: character, currentTurn, now }
-      ));
+      (await ensureRecallWatch(db, { official: row, target: character, currentTurn, now }));
     if (petition.status === "watch") {
       const { action } = await evaluatePetitionTriggers(
         db,
@@ -229,14 +229,10 @@ export async function processCommonsByElectionWatcher(
   const liveVacancies = await vacancies
     .find({ countryId: "UK", status: { $in: ["open", "scheduled"] } })
     .toArray();
-  const scheduled = liveVacancies.filter(
-    (v) => v.status === "scheduled" && v.electionId
-  );
+  const scheduled = liveVacancies.filter((v) => v.status === "scheduled" && v.electionId);
   const electionIds = [...new Set(scheduled.map((v) => v.electionId as ObjectId))];
   const scheduledElections =
-    electionIds.length > 0
-      ? await elections.find({ _id: { $in: electionIds } }).toArray()
-      : [];
+    electionIds.length > 0 ? await elections.find({ _id: { $in: electionIds } }).toArray() : [];
   const electionById = new Map(scheduledElections.map((e) => [e._id.toString(), e]));
   const statesWithVacancies = [...new Set(liveVacancies.map((v) => v.state))];
   const finishedRegular =
@@ -296,12 +292,7 @@ export async function processCommonsByElectionWatcher(
     }
   }
   for (const [electionId] of filledByElection) {
-    result.reconciled += await markVacanciesFilled(
-      db,
-      new ObjectId(electionId),
-      currentTurn,
-      now
-    );
+    result.reconciled += await markVacanciesFilled(db, new ObjectId(electionId), currentTurn, now);
   }
   if (reopenIds.length > 0) {
     const reopened = await vacancies.updateMany(
