@@ -2,6 +2,7 @@ import { formatFundsCompact } from "@/lib/utils/formatters";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { getPollActionCost, getPollBaseFundCost } from "@/lib/actions";
 import {
+  CONVERT_CASH_ACTION_COST,
   DEBATE_PREP_ACTION_COST,
   describeDebatePrepEffect,
   FUNDRAISE_ACTION_COST,
@@ -78,7 +79,12 @@ export const CARDS: ActionCard[] = [
     tagline: "Write yourself a cheque",
     flavor:
       "Funnel your personal fortune into the campaign war chest. The ethics board won't love it, and the press will have questions — but money talks louder than headlines.",
-    actionCost: 2,
+    // Canonical ConvertCash owner: the flat AP cost the shared rules quote
+    // execution debits (quoteConvertCashAction). This card's actionCost
+    // renders live (no page-level prop shadows it, unlike the
+    // state-dependent campaign/advertise/buildDonorBase costs), so it reads
+    // the const directly.
+    actionCost: CONVERT_CASH_ACTION_COST,
     fundCost: () => null,
     fundLabel: (c) => {
       // Post-Phase-8 (cashOnHand removed): read the home-currency personal
