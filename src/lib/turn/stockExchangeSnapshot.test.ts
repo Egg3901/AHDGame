@@ -691,27 +691,33 @@ describe("stockExchangeSnapshot", () => {
 
       const updateCall = mockUpdateOne.mock.calls.find((c) => c[0]?._id === "global");
       expect(updateCall).toBeDefined();
-      const byName = new Map(
-        updateCall[1]?.$set?.listings?.map((l: { name: string } & Record<string, any>) => [
-          l.name,
-          l,
-        ])
+      type ListingResult = {
+        name: string;
+        isTradable: boolean;
+        priceChange1h: number;
+        priceChange24h: number;
+        priceChange48h: number;
+      };
+      const listings = (updateCall![1] as unknown as { $set: { listings: ListingResult[] } }).$set
+        .listings;
+      const byName = new Map<string, ListingResult>(
+        listings.map((listing) => [listing.name, listing])
       );
       for (const listing of byName.values()) {
         for (const field of ["priceChange1h", "priceChange24h", "priceChange48h"] as const) {
           expect(Number.isFinite(listing[field]), `${listing.name}.${field}`).toBe(true);
         }
       }
-      expect(byName.get("Pub Co").isTradable).toBe(true);
-      expect(byName.get("Pub Co").priceChange1h).toBe(11.11);
-      expect(byName.get("Zero SoE").isTradable).toBe(false);
-      expect(byName.get("Zero SoE").priceChange1h).toBe(0);
-      expect(byName.get("Zero SoE").priceChange24h).toBe(0);
-      expect(byName.get("Zero SoE").priceChange48h).toBe(0);
-      expect(byName.get("Legacy NaN").isTradable).toBe(true);
-      expect(byName.get("Legacy NaN").priceChange1h).toBe(0);
-      expect(byName.get("No Hist").isTradable).toBe(true);
-      expect(byName.get("No Hist").priceChange1h).toBe(0);
+      expect(byName.get("Pub Co")?.isTradable).toBe(true);
+      expect(byName.get("Pub Co")?.priceChange1h).toBe(11.11);
+      expect(byName.get("Zero SoE")?.isTradable).toBe(false);
+      expect(byName.get("Zero SoE")?.priceChange1h).toBe(0);
+      expect(byName.get("Zero SoE")?.priceChange24h).toBe(0);
+      expect(byName.get("Zero SoE")?.priceChange48h).toBe(0);
+      expect(byName.get("Legacy NaN")?.isTradable).toBe(true);
+      expect(byName.get("Legacy NaN")?.priceChange1h).toBe(0);
+      expect(byName.get("No Hist")?.isTradable).toBe(true);
+      expect(byName.get("No Hist")?.priceChange1h).toBe(0);
     });
 
     it("calculates average sector growth correctly", async () => {
