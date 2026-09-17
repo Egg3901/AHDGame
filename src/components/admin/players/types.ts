@@ -22,6 +22,15 @@ export interface UserData {
   registrationFingerprintKey?: string | null;
   lastFingerprintKey?: string | null;
   fingerprintCount: number;
+  /** Values observed in the last 90 days (`identityObservations`), including
+   * ones the account has since rotated away from. Raw on the admin route,
+   * sha256-truncated into the `*Keys` pair on the moderator route, exactly like
+   * the scalar signals above. Optional so a stale client bundle degrades to
+   * "no historical signals" rather than throwing. */
+  historicalIps?: string[] | null;
+  historicalFingerprints?: string[] | null;
+  historicalIpKeys?: string[];
+  historicalFingerprintKeys?: string[];
   trackingId: string | null;
   trackingIdKey?: string | null;
   deviceKey: string | null;
