@@ -73,6 +73,7 @@ export async function fillBestBuyOrderForMarketSell(input: {
     if (!Number.isFinite(proceedsAnchor) || proceedsAnchor <= 0) continue;
     const remainingEscrowAnchor = order.escrowAnchor - proceedsAnchor;
     const remainingEscrowLocal = Math.max(0, order.escrowAmount - shares * order.pricePerShare);
+    const proceedsInHomeCurrency = forexEnabled ? proceedsAnchor * sellerFxRate : proceedsAnchor;
     const fillPlan: ShareFillAuditPlan = {
       version: 1,
       orderIdHex: order._id.toHexString(),
@@ -150,11 +151,8 @@ export async function fillBestBuyOrderForMarketSell(input: {
       if (order.lastShareFillKey === undefined) {
         restoreUpdate.$unset = { lastShareFillKey: "" };
       }
-      await db
-        .collection<ShareOrder>("shareOrders")
-        .updateOne({ _id: order._id }, restoreUpdate);
+      await db.collection<ShareOrder>("shareOrders").updateOne({ _id: order._id }, restoreUpdate);
     };
-    const proceedsInHomeCurrency = forexEnabled ? proceedsAnchor * sellerFxRate : proceedsAnchor;
     const settlementError = await settleBuyOrderFill({
       db,
       corporation,

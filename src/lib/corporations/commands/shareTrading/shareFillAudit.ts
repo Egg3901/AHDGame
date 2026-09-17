@@ -135,7 +135,10 @@ export function buildShareFillFingerprint(input: {
 }
 
 /** Claim filter shared by both fill paths: open order with enough remaining. */
-export function buildShareFillClaimFilter(orderId: ObjectId, shares: number): {
+export function buildShareFillClaimFilter(
+  orderId: ObjectId,
+  shares: number
+): {
   _id: ObjectId;
   status: "open";
   sharesRemaining: { $gte: number };
@@ -300,8 +303,7 @@ export function collectShareFillAuditRows(plan: ShareFillAuditPlan): ShareFillAu
       balanceAfter: plan.fillerBalanceAfter,
       currencyCode: plan.filler.homeCurrency,
       counterpartyType: counterpartyType(plan.placerKind) as TxInput["counterpartyType"],
-      counterpartyId:
-        plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
+      counterpartyId: plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
       counterpartyName: plan.placerName,
       meta: txMeta(plan),
     });
@@ -317,8 +319,7 @@ export function collectShareFillAuditRows(plan: ShareFillAuditPlan): ShareFillAu
       amount: plan.fillerAmount,
       currencyCode: plan.filler.homeCurrency,
       counterpartyType: counterpartyType(plan.placerKind) as TxInput["counterpartyType"],
-      counterpartyId:
-        plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
+      counterpartyId: plan.placerKind === "fund" ? undefined : new ObjectId(plan.placerIdHex!),
       counterpartyName: plan.placerName,
       meta: txMeta(plan),
     });
@@ -432,9 +433,13 @@ function foldOutcome(
   current: ShareFillAuditOutcome,
   next: EmitTxOutcome | RecordShareTradeOutcome
 ): ShareFillAuditOutcome {
-  if (next === "failed") return "failed";
-  if (next === "already-applied" && current === "applied") return "already-applied";
-  return current;
+  // Any failure dominates: the receipt stays `in_progress` for another pass.
+  // Otherwise a freshly inserted row dominates a duplicate: recovery that
+  // lands even one missing row reports `applied` (`audit-recovered`), and
+  // only a pass where every row already existed reports `already-applied`.
+  if (next === "failed" || current === "failed") return "failed";
+  if (next === "applied" || current === "applied") return "applied";
+  return "already-applied";
 }
 
 /**
@@ -448,7 +453,7 @@ export async function insertShareFillAuditRows(
   key: string,
   rows: ShareFillAuditRows
 ): Promise<ShareFillAuditOutcome> {
-  let outcome: ShareFillAuditOutcome = "applied";
+  let outcome: ShareFillAuditOutcome = "already-applied";
   for (let index = 0; index < rows.txs.length; index += 1) {
     outcome = foldOutcome(
       outcome,

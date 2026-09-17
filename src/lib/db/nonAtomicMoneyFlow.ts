@@ -319,10 +319,66 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * settle the leg skipped, like the legacy guarded writes.
  * Still on the legacy debit-first-plus-compensation fallback: none known
  * in the index-fund cron/rebalancing orchestration (all legs keyed).
- * Open seams for the next pass: pension scheme investing
- * (src/lib/pensions/schemeInvesting.ts), holding write-offs
- * (src/lib/indexFunds/fundHoldingWriteOff.ts), and the share-order fill
- * audit path (fillShareOrder.ts) were sighted but not audited here.
+ * Pension scheme investing is migrated (one budget investment per scheme
+ * per turn via the pensionSchemeInvestSpend primitive, driven by
+ * schemeInvesting: deterministic per-scheme-per-turn key, scheme debit +
+ * fund credit + position + deterministic tx steps, same-key replay/
+ * fingerprint-conflict/terminal semantics, resume-by-key and orphan
+ * recovery, with crash-after-every-write tests; the pass re-drives
+ * orphans before its fresh roster loads). Holding write-offs are migrated
+ * (one pull per flagged holding via the fundHoldingWriteOffSpend
+ * primitive, driven by fundHoldingWriteOff: deterministic per-fund-per-
+ * corp-per-turn key, keyed pull + deterministic tx row, same-key replay/
+ * conflict/terminal semantics with crash tests).
+ * Share-fill audit durability is migrated while the fill money legs stay
+ * legacy-compensated (deliberate split, issue #1672). Every peer fill on
+ * the route path (fillShareOrder, sell fills for character/corporation/
+ * filler-as-corporation placers and fund placers) and the market-sell path
+ * (fillBestBuyOrderForMarketSell via settleBuyOrderFill) mints one attempt
+ * key, stamps it on the order inside the atomic claim write, and persists
+ * a resume plan on a money-flow receipt before money moves. The route
+ * claim is conditional (`filled` only at zero remaining, matching the turn
+ * matcher) so a crash can never strand a partial fill as `filled`; fund-tx
+ * and all emitTx/trade-history rows moved out of the money compensation
+ * blocks into convergent deterministic-_id post-commit inserts. Recovery
+ * is audit-only and never re-runs money: it settles `failed` when the
+ * claim provably never landed (or the plan/order is gone), re-inserts the
+ * planned rows and settles `completed` once money committed, and otherwise
+ * stays `in_progress` (TTL-visible) for ops instead of guessing — a mid-
+ * money crash prefix is the keyed-money seam below, never guessed at. The
+ * per-order stamp hook repairs the legacy stranded `filled`-with-remaining
+ * claim and recovers the stamped prior attempt; the receipt orphan scan
+ * (recoverShareFillOrphans, bounded default 50) is re-driven every turn by
+ * fillPendingShareOrders before its fresh scan, covering lonely orphans
+ * whose order already filled. Tested: crash-after-every-audit-write for
+ * sell/buy and character/fund/corporation variants, retry convergence (no
+ * double audit), every recovery boundary, stranded repair, partial/final
+ * conditional status on both paths, and the turn-driver wiring. The money
+ * legs themselves (filler debit, seller share debit, buyer credit, seller
+ * proceeds, escrow release, fund inventory dual-ledger) keep their legacy
+ * compensation: a crash between two money writes still settles
+ * `in_progress` for ops, exactly as before, only now the audit cannot go
+ * missing underneath it.
+ * Open seams for the next pass (all sighted, none audited here). (1) The
+ * share-fill money legs named above
+ * (src/lib/corporations/commands/shareTrading/fillShareOrder.ts,
+ * fillShareOrderSettlement.ts, fillBestBuyOrder.ts): filler-debited-then-
+ * crash-before-seller-credit leaves the filler down with the seller
+ * unpaid; seller-shares-debited-then-crash-before-buyer-credit strands
+ * shares until ops intervene; buy-fill escrow release has the same window.
+ * Migrating these to keyed legs is the natural next slice. (2) The turn
+ * limit-order matcher (fillPendingShareOrders in
+ * src/lib/turn/corporation/shareOrders.ts):
+ * pool-leg, corp float/shareholder, character-cash, corp-payout, treasury,
+ * and fund-credit bulkWrites commit in sequence with no receipt or resume
+ * plan, so a crash between any two leaves partial fills; the largest
+ * remaining window, likely more than one pass. (3) Order-placement escrow
+ * and refunds (placeShareOrder.ts, cancelShareOrder.ts,
+ * cleanupShareMarketActivity.ts, shareEscrowSettlement.ts,
+ * cancelShareListing.ts), direct market buy/sell legs outside the order
+ * flow (buyPublicShares.ts, sellPublicShares.ts), share offers
+ * (submitShareOffer.ts, acceptShareOffer.ts), and corp-level money (take-
+ * overs, spin-offs, capital injections, acquisitions, privatization).
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in
