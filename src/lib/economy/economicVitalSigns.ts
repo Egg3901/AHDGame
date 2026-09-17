@@ -1337,7 +1337,18 @@ function assembleSovereignFundDemand(
             INDEX_FUND_RESERVE_CASH_BUFFER_FRACTION * breakdown.totalBackingAnchor
           )
       ),
-      bondUniverse: fund.kind === "bond" ? universeBySlug.get(fund.slug) : undefined,
+      // Coverage funds ensured under the #1001 domestic gate carry no standing
+      // definition entry; like the deploy path (`deployBondReserveFromCash`),
+      // a country bond fund with a home country means its home-sovereign
+      // mandate. Without this the classifier skips the fund and reports its
+      // home issues as `no_domestic_fund` after coverage ensured it.
+      bondUniverse:
+        fund.kind === "bond"
+          ? (universeBySlug.get(fund.slug) ??
+            (fund.countryId
+              ? ({ issuerType: "sovereign", homeOnly: true } as const)
+              : undefined))
+          : undefined,
     });
   }
   return {
