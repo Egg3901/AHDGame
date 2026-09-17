@@ -54,11 +54,11 @@ import { markShareFillMoneyCommitted } from "@/lib/corporations/commands/shareTr
 
 /** Cap-table entry discriminator inside `corporations.shareholders`. */
 export type ShareFillCapEntryField =
-  "characterId" | "imperialCharacterId" | "corporationId" | "fundId";
+  "characterId" | "imperialCharacterId" | "corporationId" | "fundId" | "nppId";
 
 /** Wallet/treasury collections a cash leg can target. */
 export type ShareFillCashCollection =
-  "characters" | "imperialCharacters" | "corporations" | "indexFunds";
+  "characters" | "imperialCharacters" | "corporations" | "indexFunds" | "npps";
 
 export interface ShareFillCashLeg {
   collection: ShareFillCashCollection;

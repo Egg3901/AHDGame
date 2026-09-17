@@ -755,8 +755,6 @@ async function investNppStockSurplus(
   currentTurn: number,
   countryScope: CountryId[] | null = null
 ): Promise<void> {
-  void currentTurn; // kept for signature symmetry with the bond sweep; not needed by nppBuyShares.
-
   const cursor = db.collection<NPP>("npps").find(
     {
       retiredAt: null,
@@ -870,9 +868,12 @@ async function investNppStockSurplus(
     );
     if (shares < 1) continue;
 
-    // nppBuyShares debits nppInvestmentCashAnchor atomically (guarded); a failed
-    // float race leaves the ₳ untouched — no plumbing move needed here anymore.
-    const result = await nppBuyShares(db, npp, corp._id, shares, homeRate);
+    // nppBuyShares runs the buy as a keyed money flow under a deterministic
+    // per-action key; a failed float race compensates the debit, and a
+    // same-turn retry converges on the stored plan. No plumbing needed here.
+    const result = await nppBuyShares(db, npp, corp._id, shares, homeRate, {
+      turn: currentTurn,
+    });
     if (result.ok) {
       corp.publicFloat = (corp.publicFloat ?? 0) - shares;
     }

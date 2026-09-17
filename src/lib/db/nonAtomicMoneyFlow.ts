@@ -449,6 +449,28 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * placement failures with new-key retry, same-key replay identity,
  * competing-key races, key-conflict/terminal semantics, and orphan-scan
  * recovery including plan-less settle-failed.
+ * NPP float buys and sells are migrated (one public-float trade via the
+ * nppShareTradeSpend primitive, driven by the nppBuyShares/nppSellShares
+ * command shells: the shell keeps every read-only guard with byte-identical
+ * validation order and error strings plus the quote, FX, depth, and
+ * issuer-route reads, and pins every computed figure (execution price,
+ * cost/proceeds, anchor amounts, dealer routing with the escrow split,
+ * eligibility, CEO-vacate snapshot) on the receipt resume plan at claim
+ * time, so a same-key retry replays the stored amounts instead of
+ * repricing from post-debit state; NPP cash debit/credit + guarded float
+ * step (legacy order-flow record verbatim, no wash exclusion) + NPP
+ * cap-table credit/debit via the shared keyed cap steps extended to the
+ * `nppId` holder field + issuer dealer via the shared placement dealer
+ * shapes run as keyed steps under deterministic
+ * per-direction-per-turn-per-NPP-per-corp-per-shares caller keys, with
+ * same-key replay, fingerprint-conflict, terminal, crash-after-every-write,
+ * guard-compensation, CEO-vacate/restore, and orphan-recovery tests; the
+ * fire-and-forget issuance writeback stays post-commit best effort and
+ * there are no history/tx/audit/notification writes on this path, same as
+ * the legacy. There is no turn-driver orphan wiring (like the index-fund
+ * float buys/sells, no intent row exists to strand); same-turn retries
+ * converge by key and ops can re-drive the bounded scan, which skips
+ * foreign-domain receipts via the fingerprint prefix.
  * Open seams for the next pass (all sighted, none audited here). (1)
  * Remaining escrow settlement callers outside the order flow
  * (shareEscrowSettlement.ts via buyPublicShares.ts, sellPublicShares.ts,
