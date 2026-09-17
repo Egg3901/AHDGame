@@ -28,13 +28,10 @@ export async function hasRequiredPrimeMinisterSeat(
     if (pinned) return true;
   }
   if (!characterId && !nppId) return false;
-  const seat = await db.collection<ElectedOfficial>("electedOfficials").findOne(
-    {
-      countryId,
-      officeType: "commons",
-      ...(characterId ? { characterId } : { nppId, isNPP: true }),
-    },
-    { projection: { _id: 1 } }
-  );
+  const officials = db.collection<ElectedOfficial>("electedOfficials");
+  const projection = { projection: { _id: 1 } } as const;
+  const seat = characterId
+    ? await officials.findOne({ countryId, officeType: "commons", characterId }, projection)
+    : await officials.findOne({ countryId, officeType: "commons", nppId, isNPP: true }, projection);
   return seat !== null;
 }
