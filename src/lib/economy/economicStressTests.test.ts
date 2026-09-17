@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
-import { freightShockUnmetIntentShare, runEconomicStressTests } from "./economicStressTests";
+import {
+  freightShockUnmetIntentShare,
+  liquidationUnabsorbedShare,
+  runEconomicStressTests,
+} from "./economicStressTests";
 
 const value = (number: number) => ({ value: number, observations: 1, basis: "test" });
 
@@ -102,5 +106,47 @@ describe("runEconomicStressTests", () => {
     expect(finding.indicators.absorptionRate).toBe(0.2);
     expect(finding.balanceSheetLossAnchor).toBe(80);
     expect(finding.basis).toContain("liquidity exposure");
+  });
+
+  it("reports liquidation unmet demand as the implied unabsorbed share", () => {
+    const finding = runEconomicStressTests(snapshot)[3]!;
+    expect(finding.scenario).toBe("synchronized_liquidation");
+    expect(finding.indicators.unabsorbedShare).toBeCloseTo(0.8);
+    // Absolute units stay unavailable: the securities snapshot carries notional and
+    // depth, never demand units.
+    expect(finding.unmetDemandUnits).toBeNull();
+    expect(finding.firstFailure).toBe("open equity order-book depth");
+    expect(finding.recoveryTurns).toBe(24);
+  });
+
+  it("reports null liquidation unabsorbed share when nothing is offered", () => {
+    const empty = {
+      ...snapshot,
+      firms: { marketCapitalizationAnchor: 0 },
+    } as EconomicVitalSigns;
+    const finding = runEconomicStressTests(empty)[3]!;
+    expect(finding.indicators.absorptionRate).toBeNull();
+    expect(finding.indicators.unabsorbedShare).toBeNull();
+    expect(finding.severity).toBe("moderate");
+    expect(
+      liquidationUnabsorbedShare(empty, {
+        freightCapacityLossShare: 0.5,
+        freightShockTurns: 12,
+        exchangeClosureTurns: 12,
+        liquidationShareOfMarketCap: 0.1,
+        dormantBalanceReactivationShare: 0.5,
+      })
+    ).toBeNull();
+  });
+
+  it("reports zero liquidation unabsorbed share when depth absorbs the offer", () => {
+    const deep = {
+      ...snapshot,
+      securities: { ...snapshot.securities, openOrderDepthAnchor: 10_000 },
+    } as EconomicVitalSigns;
+    const finding = runEconomicStressTests(deep)[3]!;
+    expect(finding.indicators.absorptionRate).toBe(1);
+    expect(finding.indicators.unabsorbedShare).toBe(0);
+    expect(finding.balanceSheetLossAnchor).toBe(0);
   });
 });
