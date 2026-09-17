@@ -31,9 +31,7 @@ it("marks only the viewer's current-turn investments and clears them next turn",
     user: { character: { _id: characterId, countryId: "US", party: "independent" } },
   } as never);
   const { GET } = await import("./route");
-  const response = await GET(
-    new Request("http://localhost/api/political-operations/state-org/list")
-  );
+  const response = await GET();
   expect(response.status).toBe(200);
   expect(
     (await response.json()).states.map((row: { stateId: string; builtThisTurn: boolean }) => [
@@ -49,7 +47,7 @@ it("marks only the viewer's current-turn investments and clears them next turn",
   vi.mocked((await import("@/lib/time/gameTime")).getGameTime).mockResolvedValue({
     lastTurnProcessed: new Date("2026-01-01T13:00:00Z"),
   } as never);
-  const next = await GET(new Request("http://localhost/api/political-operations/state-org/list"));
+  const next = await GET();
   expect(
     (await next.json()).states.every((row: { builtThisTurn: boolean }) => !row.builtThisTurn)
   ).toBe(true);
