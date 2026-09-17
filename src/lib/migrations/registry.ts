@@ -79,6 +79,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
+import { migration as playableRegionTextureResiduals } from "./entries/2026-09-17-playable-region-texture-residuals";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -247,6 +248,10 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1269: persisted sovereign fields must follow the current debt/GDP
   // ladder after historical seed anchors stop rescaling live risk.
   repriceCurrentSovereignRisk,
+  // Issue #704: live 1953 worlds seeded flat playable boards (baseline +
+  // sparse modifiers). Fold the generated regional texture into residuals so
+  // regions glide to their textured equilibrium instead of lurching.
+  playableRegionTextureResiduals,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
