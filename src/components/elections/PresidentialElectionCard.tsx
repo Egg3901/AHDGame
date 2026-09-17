@@ -1,5 +1,6 @@
 "use client";
 
+import { MoreCandidatesLink } from "./MoreCandidatesLink";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { getPartyColor } from "@/lib/utils/politics";
@@ -100,6 +101,16 @@ export function PresidentialElectionCard({
           <p className="text-xs text-muted italic">{t("presidentialCard.awaitingResults")}</p>
         ) : (
           <p className="text-xs text-muted italic">{t("presidentialCard.noCandidatesYet")}</p>
+        )}
+        {stateEntries && stateEntries.length > 0 && (
+          <MoreCandidatesLink
+            candidateIds={[
+              ...election.candidates.map((c) => c.id),
+              ...Object.keys(stateData?.votes ?? {}),
+            ]}
+            visibleIds={stateEntries.map(([id]) => id)}
+            href={buildElectionHref(election)}
+          />
         )}
         {/* Timers */}
         {election.endTime && (

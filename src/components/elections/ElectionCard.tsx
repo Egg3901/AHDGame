@@ -1,5 +1,6 @@
 "use client";
 
+import { MoreCandidatesLink } from "./MoreCandidatesLink";
 import { memo } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
@@ -587,6 +588,17 @@ export const ElectionCard = memo(function ElectionCard({
         )}
 
         {/* ── Candidates + action ── */}
+        {!effectiveInPrimary && generalEntries && (
+          <MoreCandidatesLink
+            candidateIds={[
+              ...election.candidates.map((c) => c.id),
+              ...Object.keys(election.polling?.sharesPct ?? {}),
+              ...Object.keys(election.generalTally?.totalVotes ?? {}),
+            ]}
+            visibleIds={generalEntries.map(([id]) => id)}
+            href={buildElectionHref(election)}
+          />
+        )}
         <div className="flex items-end justify-between gap-3 pt-1">
           {/* Hide candidate badges when already shown in polling/tally rows above */}
           {!effectiveInPrimary && !(hasPolling && !isPrimaryPolling) && (
