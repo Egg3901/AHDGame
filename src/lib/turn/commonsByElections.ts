@@ -50,22 +50,13 @@ import type { UkCommonsVacancy } from "@/lib/db/types/ukByElection";
 export const SPECIAL_COMMONS_ELECTION_TYPE = "special_commons";
 
 /** Regular Commons races whose live presence suppresses a by-election. */
-const REGULAR_COMMONS_TYPES = [
-  "commons",
-  "snap_commons",
-] as const satisfies readonly Election["electionType"][];
+const REGULAR_COMMONS_TYPES: readonly Election["electionType"][] = ["commons", "snap_commons"];
 
 /** Election statuses that count as a live, seat-filling race. */
-const LIVE_ELECTION_STATUSES = [
-  "active",
-  "upcoming",
-] as const satisfies readonly Election["status"][];
+const LIVE_ELECTION_STATUSES: readonly Election["status"][] = ["active", "upcoming"];
 
 /** Election statuses that count as a finished race for reconciliation. */
-const FINISHED_ELECTION_STATUSES = [
-  "completed",
-  "resolved",
-] as const satisfies readonly Election["status"][];
+const FINISHED_ELECTION_STATUSES: readonly Election["status"][] = ["completed", "resolved"];
 
 export interface SpawnSpecialCommonsInput {
   state: string;
