@@ -36,6 +36,15 @@ export interface SimJobExperimentFields {
    * typing; the worker remains the only --clone-mode emitter.
    */
   cloneFromLive?: boolean;
+  /**
+   * Pinned source (#1966). NOT emitted by buildRunWorldArgs: the worker
+   * consumes it directly (verifySimSource + planRunWorldSpawn in simSource.ts
+   * select the checkout the run executes from). Kept on this interface so
+   * the pinned-pair builder carries source parity through its spread with
+   * full typing; the worker remains the only consumer.
+   */
+  sourceWorktree?: string;
+  sourceCommit?: string;
 }
 
 /**
@@ -83,6 +92,12 @@ export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   // and the live-source env (LIVE_MONGODB_URI/LIVE_DB_NAME are process env,
   // not per-job requested fields).
   "cloneFromLive",
+  // Pinned source (#1966): the worker executes the run from the pinned
+  // worktree checkout, so arms pinned to different commits run different
+  // code. Appended last so older readers see a stable prefix; older jobs
+  // without it project exactly as before (absent stays absent).
+  "sourceWorktree",
+  "sourceCommit",
 ] as const;
 
 /**
@@ -138,9 +153,9 @@ export function normalizeSimCountries(value: unknown): string | undefined {
  * report and the comparison can never disagree on what run identity is.
  *
  * Compatibility: absent and undefined stay absent (no defaults injected), so
- * older jobs without mode/countries/cloneFromLive project exactly as before,
- * and scheduling metadata (startPolicy) passes through dropped on both old
- * and new docs alike.
+ * older jobs without mode/countries/cloneFromLive/pinned-source project
+ * exactly as before, and scheduling metadata (startPolicy) passes through
+ * dropped on both old and new docs alike.
  */
 export function normalizeSimJobRequestedConfig(
   job: Record<string, unknown>

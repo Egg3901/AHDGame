@@ -182,6 +182,12 @@ describe("sim worker runWorld argument emission", () => {
       // --clone-mode, so a clone arm and a fresh arm start from different
       // initial state. Missing here would hide that behind identical reports.
       "cloneFromLive",
+      // Pinned source (#1966): the worker executes the run from the pinned
+      // worktree checkout, so arms pinned to different commits run different
+      // code. Missing here would pass a code-mismatched pair as pinned and
+      // drop the pin from the report's requestedConfig.
+      "sourceWorktree",
+      "sourceCommit",
     ]) {
       expect(keys).toContain(field);
     }
@@ -272,6 +278,50 @@ describe("sim worker runWorld argument emission", () => {
         { preset: "p", turns: 4, seed: "s", ...cloneBase.treatment }
       )
     ).not.toThrow();
+  });
+
+  it("rejects pinned-source drift while accepting source-parity pairs", () => {
+    // The worker executes the run from the pinned worktree checkout: arms
+    // pinned to different commits run different code, so that pair is not a
+    // clean comparison even with the shadow flag as the only other difference.
+    const unpinned = buildRealOutputShadowPinnedPair({});
+    expect(() =>
+      assertRealOutputShadowPinnedPair(unpinned.control, {
+        ...unpinned.treatment,
+        sourceWorktree: "muse-1470",
+        sourceCommit: "a".repeat(40),
+      })
+    ).toThrow('drifted on "sourceWorktree"');
+    const pinned = buildRealOutputShadowPinnedPair({
+      sourceWorktree: "muse-1470",
+      sourceCommit: "a".repeat(40),
+    });
+    expect(pinned.control.sourceWorktree).toBe("muse-1470");
+    expect(pinned.treatment.sourceCommit).toBe("a".repeat(40));
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { preset: "p", turns: 4, seed: "s", ...pinned.control },
+        { preset: "p", turns: 4, seed: "s", ...pinned.treatment }
+      )
+    ).not.toThrow();
+    expect(() =>
+      assertRealOutputShadowPinnedPair(pinned.control, {
+        ...pinned.treatment,
+        sourceCommit: "b".repeat(40),
+      })
+    ).toThrow('drifted on "sourceCommit"');
+  });
+
+  it("projects the pinned source through the authoritative requested config", () => {
+    // collectExperimentReport.ts builds requestedConfig through this, so the
+    // pin must survive the projection instead of being silently dropped.
+    expect(
+      normalizeSimJobRequestedConfig({
+        preset: "p",
+        sourceWorktree: "muse-1470",
+        sourceCommit: "a".repeat(40),
+      })
+    ).toEqual({ preset: "p", sourceWorktree: "muse-1470", sourceCommit: "a".repeat(40) });
   });
 
   it("leaves --clone-mode to the worker: the args builder never emits it", () => {

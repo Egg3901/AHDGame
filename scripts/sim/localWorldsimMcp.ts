@@ -207,7 +207,6 @@ const TOOLS: ToolDef[] = [
         realOutputShadowEnabled: bool(
           "Whether this sandbox run additionally persists the constant-price real-output shadow diagnostic beside the live nominal signal (issue #1470). Sandbox-only; explicit false is retained for control runs. Never enabled in production or admin gameplay."
         ),
-        ),
       },
       ["preset", "turns", "seed"]
     ),
