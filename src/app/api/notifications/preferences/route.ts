@@ -40,6 +40,7 @@ export const GET = withNoStore(async () => {
     }
 
     return NextResponse.json({
+      muteMail: prefs.muteMail ?? false,
       mutedTypes: prefs.mutedTypes ?? [],
       snoozedTypes: activeSnoozed.map((s) => ({
         type: s.type,
@@ -67,7 +68,6 @@ export async function PUT(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
     }
-    const { action, type } = parsed.data;
 
     const db = await getDb();
     const userId = new ObjectId(user.userId);
@@ -75,6 +75,22 @@ export async function PUT(request: Request) {
     if (!dbUser) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     const prefs = dbUser.notificationPreferences ?? {};
+    if (parsed.data.action === "mail") {
+      await db
+        .collection<User>("users")
+        .updateOne(
+          { _id: userId },
+          { $set: { "notificationPreferences.muteMail": parsed.data.muted } }
+        );
+      return NextResponse.json({
+        success: true,
+        muteMail: parsed.data.muted,
+        mutedTypes: prefs.mutedTypes ?? [],
+        snoozedTypes: prefs.snoozedTypes ?? [],
+      });
+    }
+    const { action, type } = parsed.data;
+
     let mutedTypes: NotificationType[] = prefs.mutedTypes ?? [];
     let snoozedTypes: NotificationSnoozedEntry[] = (prefs.snoozedTypes ?? []).filter(
       (s) => new Date(s.until) > new Date()
@@ -98,10 +114,20 @@ export async function PUT(request: Request) {
       .collection<User>("users")
       .updateOne(
         { _id: userId },
-        { $set: { notificationPreferences: { mutedTypes, snoozedTypes } } }
+        {
+          $set: {
+            "notificationPreferences.mutedTypes": mutedTypes,
+            "notificationPreferences.snoozedTypes": snoozedTypes,
+          },
+        }
       );
 
-    return NextResponse.json({ success: true, mutedTypes, snoozedTypes });
+    return NextResponse.json({
+      success: true,
+      muteMail: prefs.muteMail ?? false,
+      mutedTypes,
+      snoozedTypes,
+    });
   } catch (err) {
     return handleRouteError(err, { request, route: "/api/notifications/preferences PUT" });
   }
