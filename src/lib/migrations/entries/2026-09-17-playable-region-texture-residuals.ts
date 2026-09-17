@@ -3,10 +3,7 @@ import type { AnyBulkWriteOperation } from "mongodb";
 import type { Migration, MigrationResult } from "../types";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
 import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalTexture1953";
-import {
-  POLITICAL_METRIC_COUNTRY_IDS,
-  type PoliticalMetricId,
-} from "@/lib/politicalMetrics/types";
+import { POLITICAL_METRIC_COUNTRY_IDS, type PoliticalMetricId } from "@/lib/politicalMetrics/types";
 
 const PRESET = "1953-default";
 const STARTING_YEAR = 1953;
@@ -36,16 +33,15 @@ const MIGRATION_ID = "2026-09-17-playable-region-texture-residuals";
  * - docs WITHOUT a residuals map are skipped, never invented: the dynamics
  *   phase's lazy self-heal owns those, and fabricating equilibrium here would
  *   fork its derivation.
- * - updates are per-family dot-notation $sets on the existing map ($set
- *   "residuals.<family>"), never a whole-map overwrite and never $unset, so
- *   event-driven movement in other families survives the backfill.
+ * - updates $set the WHOLE residuals map, never a dotted per-family path and
+ *   never $unset. Board maps are keyed by literal dotted strings
+ *   ("economy.stability"), so "residuals.<family>" would nest instead of
+ *   landing (local/no-dotted-board-path). Siblings are preserved by spreading
+ *   the read doc, so event-driven movement in other families survives.
  * - idempotent via the playableTexture1953MigrationId stamp: a re-run skips
  *   stamped docs instead of adding the delta twice. Dry runs read only.
  */
-async function backfillPlayableTextureResiduals(
-  db: Db,
-  dryRun: boolean
-): Promise<MigrationResult> {
+async function backfillPlayableTextureResiduals(db: Db, dryRun: boolean): Promise<MigrationResult> {
   const gameState = await db
     .collection<{ _id: string; preset?: string; startingYear?: number }>("gameState")
     .findOne({ _id: "current" }, { projection: { preset: 1, startingYear: 1 } });
@@ -81,7 +77,8 @@ async function backfillPlayableTextureResiduals(
       noTexture++;
       continue;
     }
-    if (!doc.residuals) {
+    const prior = doc.residuals;
+    if (!prior) {
       withoutResiduals++;
       continue;
     }
@@ -89,13 +86,18 @@ async function backfillPlayableTextureResiduals(
       alreadyApplied++;
       continue;
     }
-    const set: Record<string, number | string | Date> = {};
+    // Whole-map rewrite with the delta folded in: dotted per-family $set
+    // paths would nest under "residuals" instead of landing on the literal
+    // dotted key. Siblings spread forward untouched.
+    const residuals: Record<PoliticalMetricId, number> = { ...prior };
+    let touched = 0;
     for (const [familyId, delta] of Object.entries(texture)) {
       if (typeof delta !== "number" || delta === 0) continue;
       const id = familyId as PoliticalMetricId;
-      set[`residuals.${id}`] = (doc.residuals[id] ?? 0) + delta;
+      residuals[id] = (prior[id] ?? 0) + delta;
+      touched++;
     }
-    if (Object.keys(set).length === 0) {
+    if (touched === 0) {
       noTexture++;
       continue;
     }
@@ -106,7 +108,7 @@ async function backfillPlayableTextureResiduals(
         filter: { _id: doc._id },
         update: {
           $set: {
-            ...set,
+            residuals,
             playableTexture1953MigrationId: MIGRATION_ID,
             lastUpdated: new Date(),
           },
@@ -117,9 +119,7 @@ async function backfillPlayableTextureResiduals(
 
   const wouldWrite = perCountry.values().reduce((n, c) => n + c, 0);
   for (const [countryId, count] of [...perCountry.entries()].sort()) {
-    notes.push(
-      `${countryId}: ${dryRun ? "would texture" : "textured"} ${count} region(s)`
-    );
+    notes.push(`${countryId}: ${dryRun ? "would texture" : "textured"} ${count} region(s)`);
   }
   if (withoutResiduals > 0) {
     notes.push(

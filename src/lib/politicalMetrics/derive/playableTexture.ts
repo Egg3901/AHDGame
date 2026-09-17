@@ -43,10 +43,7 @@
  */
 import { deriveCountryBoard } from "./deriveFamilies";
 import { countryLeanFromParties, type CountryLean } from "./countryLean";
-import {
-  applyMetricPresetToMetrics,
-  getRegionMetricPresets,
-} from "@/lib/seeds/metricPresets";
+import { applyMetricPresetToMetrics, getRegionMetricPresets } from "@/lib/seeds/metricPresets";
 import { applyEra1953Adjustments } from "@/lib/seeds/reference/stateMetricsEra1953";
 import { stateMetrics1953 } from "@/lib/seeds/reference/stateMetrics1953";
 import { states1953 } from "@/lib/seeds/reference/states1953";
@@ -61,10 +58,7 @@ import { ukParties } from "@/lib/seeds/uk/ukParties";
 import { ruParties } from "@/lib/seeds/ru/ruParties";
 import { ddParties } from "@/lib/seeds/dd/ddParties";
 import { REGIONAL_MODIFIERS_1953 } from "../seeds/regionalModifiers1953";
-import type {
-  PoliticalMetricId,
-  PoliticalMetricsCountryId,
-} from "../types";
+import type { PoliticalMetricId, PoliticalMetricsCountryId } from "../types";
 
 /** The only preset this texture is derived for (single-1953-anchor table). */
 export const PLAYABLE_TEXTURE_PRESET = "1953-default";
@@ -74,10 +68,7 @@ export const PLAYABLE_TEXTURE_YEAR = 1953;
 export const PLAYABLE_TEXTURE_BOUND = 12;
 
 export type RegionTexture = Partial<Record<PoliticalMetricId, number>>;
-export type PlayableTexture = Record<
-  PoliticalMetricsCountryId,
-  Record<string, RegionTexture>
->;
+export type PlayableTexture = Record<PoliticalMetricsCountryId, Record<string, RegionTexture>>;
 
 export interface TextureFamilyDiagnostic {
   familyId: PoliticalMetricId;
@@ -128,11 +119,29 @@ const PARTY_ROSTERS: Record<PoliticalMetricsCountryId, readonly unknown[]> = {
   DD: ddParties,
 };
 
-const REGION_SEEDS: Record<PoliticalMetricsCountryId, ReadonlyArray<{ _id: string; population?: number }>> = {
+const REGION_SEEDS: Record<
+  PoliticalMetricsCountryId,
+  ReadonlyArray<{ _id: string; population?: number }>
+> = {
   US: states1953,
   UK: ukRegions1953,
   RU: ruRegions1953,
   DD: ddRegions1953,
+};
+
+/**
+ * Per-country legacy-doc constructors. The UK base bundle needs the seeder's
+ * era adjustments applied (as seedUKStateMetrics does); the other bundles
+ * already carry them. Keyed record, not a country-literal branch.
+ */
+const LEGACY_DOC_BUILDERS: Record<
+  PoliticalMetricsCountryId,
+  (raw: Record<string, unknown>) => Record<string, unknown>
+> = {
+  US: (raw) => raw,
+  UK: (raw) => applyEra1953Adjustments(raw as never) as unknown as Record<string, unknown>,
+  RU: (raw) => raw,
+  DD: (raw) => raw,
 };
 
 /**
@@ -145,9 +154,7 @@ function legacyFlatFor(
   countryId: PoliticalMetricsCountryId,
   raw: Record<string, unknown>
 ): Record<string, number> {
-  let doc = countryId === "UK"
-    ? (applyEra1953Adjustments(raw as never) as unknown as Record<string, unknown>)
-    : raw;
+  let doc = LEGACY_DOC_BUILDERS[countryId](raw);
   const overlay = getRegionMetricPresets(countryId, String(raw._id), PLAYABLE_TEXTURE_PRESET);
   if (overlay) {
     doc = applyMetricPresetToMetrics(doc as never, overlay) as unknown as Record<string, unknown>;
@@ -165,9 +172,7 @@ function deriveOneCountry(countryId: PoliticalMetricsCountryId): {
     PARTY_ROSTERS[countryId] as Parameters<typeof countryLeanFromParties>[0],
     PLAYABLE_TEXTURE_PRESET
   );
-  const populations = new Map(
-    REGION_SEEDS[countryId].map((s) => [s._id, s.population ?? 0])
-  );
+  const populations = new Map(REGION_SEEDS[countryId].map((s) => [s._id, s.population ?? 0]));
 
   // region -> family -> derived board value (only families with a source).
   const derived = new Map<string, Map<PoliticalMetricId, number>>();
