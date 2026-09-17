@@ -10,6 +10,10 @@ import type {
   NppMarketEntryFunnel,
   NppMarketEntryReason,
 } from "@/lib/db/types/marketFormation";
+import {
+  NPP_MARKET_ENTRY_FUNNEL_COLLECTION,
+  NPP_MARKET_ENTRY_FUNNEL_RETENTION_TURNS,
+} from "./entryFunnelSnapshot";
 
 export type {
   NppMarketEntryDiagnostic,
