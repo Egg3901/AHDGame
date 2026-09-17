@@ -106,7 +106,19 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * same key contract and route tests; the bond_maturity rows stay
  * post-commit best effort). Refinance and restructure both run through
  * executeCorporationBondRefinance/Restructure on the routes and on the
- * bondTurn auto-resolver with deterministic per-turn keys.
+ * bondTurn auto-resolver with deterministic per-turn keys, and bond-default
+ * dissolution (per-bond market-pool recovery shares plus one resumable
+ * credit per character/imperial/corp-creditor/corp-equity/central-bank/
+ * index-fund payee via the bondDissolutionSpend primitive, with a stored
+ * resume plan, remainder resume, terminal semantics, and route replay
+ * helpers; the creditor-bond liquidation pull and in-kind cross-equity move
+ * stay convergent caller pre-steps, the financial-tx rows stay post-commit
+ * best effort, and the terminal ownership cleanup re-runs as a naturally
+ * idempotent pass). Dissolution runs through
+ * executeCorporationBondDefaultDissolution on the CEO dissolve and admin
+ * force-liquidate routes (client Idempotency-Key, minted when absent) and
+ * on the vote/cascade/NPP callers with deterministic per-event keys
+ * (per-vote, per-corp, NPP stable across turns).
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
