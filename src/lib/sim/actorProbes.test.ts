@@ -14,10 +14,11 @@ import {
   IPO_PROBE_PRICE_PER_SHARE,
   PRIVATE_PROBE_FOUNDING_CAPITAL,
   PROBE_1953_NOW_ISO,
-  PROBE_ACTIONS_PER_ACTOR,
+  PROBE_BASE_ACTIONS_PER_TURN,
   PROBE_FOUNDER_CASH,
   STATE_PARTY_PROBE_POSITIONS,
   probeCampaignsAndActions,
+  syntheticCampaignActionsPerActor,
   probeCharacterWealth,
   probeCorpFounding,
   probeCountryOffices,
@@ -139,11 +140,15 @@ describe("probeCampaignsAndActions", () => {
     expect(result.playerActions).toBe(0);
   });
 
-  it("runs one campaign per distinct synthetic campaigner at the fixed budget", () => {
+  it("accrues the production-rule budget per synthetic campaigner, unspent", () => {
+    // The seed default baseActionsPerTurn is 4 and an unendorsed player
+    // candidate accrues exactly the baseline through the production rule.
+    expect(PROBE_BASE_ACTIONS_PER_TURN).toBe(4);
+    expect(syntheticCampaignActionsPerActor()).toBe(4);
     const result = probeCampaignsAndActions("synthetic", SEED);
     expect(result.campaigns).toBe(4);
-    expect(result.playerActions).toBe(4 * PROBE_ACTIONS_PER_ACTOR);
-    expect(result.result).toContain("4 synthetic campaigns");
+    expect(result.playerActions).toBe(4 * syntheticCampaignActionsPerActor());
+    expect(result.result).toContain("no entry/spend driver");
   });
 });
 

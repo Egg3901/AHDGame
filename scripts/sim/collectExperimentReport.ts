@@ -151,13 +151,20 @@ async function main() {
     const actorManifest = (
       sandboxRun as { actorCoverage?: import("@/lib/sim/actorCoverage").ActorCoverageManifest } | null
     )?.actorCoverage;
-    if (actorManifest) {
-      const { buildActorCoverageSection } = await import("@/lib/sim/actorReport");
-      const section = buildActorCoverageSection(actorManifest);
+    {
+      const { buildActorCoverageSection, summarizeActorCoverageForVerdict } = await import(
+        "@/lib/sim/actorReport"
+      );
+      // A run with no stamped manifest (predates coverage) must read UNKNOWN,
+      // never silently drop the section: vacancies are then indistinguishable
+      // from representative behavior.
+      const verdict = summarizeActorCoverageForVerdict(actorManifest ?? null);
+      const section = actorManifest ? buildActorCoverageSection(actorManifest) : null;
       (report as { actorCoverage?: unknown }).actorCoverage = {
-        manifest: actorManifest,
-        warnings: section.warnings,
-        lines: section.lines,
+        manifest: actorManifest ?? null,
+        verdict,
+        warnings: section?.warnings ?? [],
+        lines: section?.lines ?? [verdict.title, verdict.detail],
       };
     }
 

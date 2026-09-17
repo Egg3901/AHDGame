@@ -142,6 +142,32 @@ function fakeDb(): Db {
   return new FakeDb() as unknown as Db;
 }
 
+/** Plant one real persisted org (plus its party row) for the seeder to target. */
+function plantRealOrg(db: Db): void {
+  const fake = db as unknown as FakeDb;
+  fake.store.set(
+    "politicalParties",
+    new Map([["party-1", { _id: "party-1", countryId: "US", sequentialId: 1 }]])
+  );
+  fake.store.set(
+    "statePartyOrg",
+    new Map([
+      [
+        "CA_1",
+        {
+          _id: "CA_1",
+          countryId: "US",
+          stateId: "CA",
+          partyId: "1",
+          chairId: null,
+          viceChairId: null,
+          treasurerId: null,
+        },
+      ],
+    ])
+  );
+}
+
 describe("assertSandboxDb (no-live-DB guard)", () => {
   it("accepts a marked sandbox sim database", async () => {
     await expect(assertSandboxDb(fakeDb())).resolves.toBeUndefined();
@@ -251,20 +277,50 @@ describe("materializeSyntheticActors", () => {
     expect(member?.characterId).toEqual(new ObjectId(plan.actors[6].characterIdHex));
   });
 
-  it("declares one candidacy per state-party office in a matching election", async () => {
+  it("declares one candidacy plus one self-vote per office against the real org", async () => {
     const db = fakeDb();
-    await materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW });
+    plantRealOrg(db);
+    const result = await materializeSyntheticActors(db, {
+      seed: SEED,
+      runId: "run-1",
+      turn: 0,
+      now: NOW,
+    });
+    expect(result.statePartyVotes).toBe(3);
     const plan = buildSyntheticActorPlan(SEED);
     expect(await db.collection("statePartyCandidates").countDocuments({})).toBe(3);
     expect(await db.collection("statePartyElections").countDocuments({})).toBe(3);
+    expect(await db.collection("statePartyVotes").countDocuments({})).toBe(3);
     for (const position of ["chair", "viceChair", "treasurer"]) {
       const election = await db.collection("statePartyElections").findOne({ position });
+      // Real persisted org keys, never a synthetic partyId.
+      expect(election?.stateId).toBe("CA");
+      expect(election?.partyId).toBe("1");
       expect(election?.status).toBe("voting");
       const candidacy = await db.collection("statePartyCandidates").findOne({ position });
       expect(candidacy?.characterId).toEqual(new ObjectId(plan.actors[2].characterIdHex));
       expect(candidacy?.electionId).toEqual(election?._id);
       expect(candidacy?.status).toBe("active");
+      const votes = await db
+        .collection("statePartyVotes")
+        .find({ electionId: election?._id })
+        .toArray();
+      expect(votes).toHaveLength(1);
+      expect(votes[0]?.candidateId).toEqual(new ObjectId(plan.actors[2].characterIdHex));
     }
+  });
+
+  it("skips state-party seating when no persisted org exists", async () => {
+    const db = fakeDb();
+    const result = await materializeSyntheticActors(db, {
+      seed: SEED,
+      runId: "run-1",
+      turn: 0,
+      now: NOW,
+    });
+    expect(result.statePartyElections).toBe(0);
+    expect(result.statePartyCandidates).toBe(0);
+    expect(result.statePartyVotes).toBe(0);
   });
 
   it("founds a private corp and a founding IPO with deterministic tickers", async () => {
@@ -324,6 +380,7 @@ describe("readActorPopulation (persisted manifest input)", () => {
 
   it("reads the materialized population back after seeding (never the plan)", async () => {
     const db = fakeDb();
+    plantRealOrg(db);
     await materializeSyntheticActors(db, { seed: SEED, runId: "run-1", turn: 0, now: NOW });
     const snapshot = await readActorPopulation(db, { mode: "synthetic", preset: "1953-default" });
     expect(snapshot.characters).toBe(SYNTHETIC_ACTOR_ROLES.length);

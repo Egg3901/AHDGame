@@ -177,7 +177,10 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
     id: "campaigns-player-actions",
     label: "Campaigns and player actions",
     requires: "player characters running campaigns and spending action points",
-    seams: [seam("src/lib/db/types/campaign.ts", "One lever's branch-tree state")],
+    seams: [
+      seam("src/lib/db/types/campaign.ts", "One lever's branch-tree state"),
+      seam("src/lib/campaigns/actions.ts", "The whole per-turn accrual rule, in one place."),
+    ],
     pureNpp: {
       status: "unreachable",
       reason:
@@ -185,8 +188,11 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
         "zero player actions because no actor exists to run them.",
     },
     synthetic: {
-      status: "covered",
-      reason: "synthetic actors run campaigns and take player actions each turn.",
+      status: "partial",
+      reason:
+        "synthetic actors accrue per-turn campaign actions through the production " +
+        "accrual rule, but no campaign-entry or action-spend driver exists, so no " +
+        "campaign is entered and no action is spent in a turned world.",
     },
   },
   {
@@ -478,8 +484,10 @@ export function actorCoverageWarnings(manifest: ActorCoverageManifest): string[]
 }
 
 /** FNV-1a hex digest (32 bits, 8 hex chars) of seed + role. Deterministic
- * across processes; the same routine the harness uses for seeded RNG. */
-function fnv1aHex(text: string): string {
+ * across processes; the same routine the harness uses for seeded RNG. Exported
+ * so seeders can derive other deterministic per-seed values (e.g. corporation
+ * sequential ids) from the same stream without inventing a second hash. */
+export function fnv1aHex(text: string): string {
   let state = 2_166_136_261;
   for (let index = 0; index < text.length; index++) {
     state ^= text.charCodeAt(index);

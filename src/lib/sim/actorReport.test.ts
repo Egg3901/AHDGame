@@ -32,7 +32,7 @@ describe("buildActorCoverageSection", () => {
     expect(section.lines.slice(1)).toEqual(section.warnings);
   });
 
-  it("renders no warnings when every mechanic is covered", () => {
+  it("renders one partial warning for campaigns in synthetic mode", () => {
     const manifest = evaluateActorCoverage(
       snapshotActorPopulation({
         mode: "synthetic",
@@ -49,9 +49,12 @@ describe("buildActorCoverageSection", () => {
       "1953-01-01T00:00:00.000Z"
     );
     const section = buildActorCoverageSection(manifest);
-    expect(section.coveredCount).toBe(12);
-    expect(section.warnings).toHaveLength(0);
-    expect(section.lines).toHaveLength(1);
+    // 11 covered + 1 partial (campaigns: accrual without an entry/spend
+    // driver), so the section warns exactly once instead of reading clean.
+    expect(section.coveredCount).toBe(11);
+    expect(section.uncoveredCount).toBe(1);
+    expect(section.warnings).toHaveLength(1);
+    expect(section.warnings[0]).toContain("Campaigns and player actions");
   });
 
   it("passes the synthetic-unseeded degradation through to reports", () => {
@@ -80,7 +83,7 @@ describe("summarizeActorCoverageForVerdict", () => {
     expect(verdict.title).toContain("predates manifest stamping");
   });
 
-  it("reads good only when every mechanic is covered", () => {
+  it("reads warn while campaigns stay partial in synthetic mode", () => {
     const manifest = evaluateActorCoverage(
       snapshotActorPopulation({
         mode: "synthetic",
@@ -92,7 +95,10 @@ describe("summarizeActorCoverageForVerdict", () => {
       }),
       "1953-01-01T00:00:00.000Z"
     );
-    expect(summarizeActorCoverageForVerdict(manifest).status).toBe("good");
+    const verdict = summarizeActorCoverageForVerdict(manifest);
+    expect(verdict.status).toBe("warn");
+    expect(verdict.title).toContain("1 mechanic(s) partial or unreachable");
+    expect(verdict.detail).toContain("Campaigns and player actions");
   });
 
   it("reads warn (never bad) for partial/unreachable mechanics: harness limits, not engine defects", () => {

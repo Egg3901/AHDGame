@@ -18,6 +18,7 @@
  */
 
 import { resolveNominationForParty } from "@/lib/turn/election/conventionResolution";
+import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { FOMC_COMMITTEE_COUNTRY_IDS, FOMC_TERM_TURNS } from "@/lib/db/types/centralBank";
 import { canCharacterInteract, deriveCharacterRoles } from "@/lib/crises/interactionEngine";
 import type { CrisisDecisionNode } from "@/lib/db/types/crisis";
@@ -46,8 +47,12 @@ export const PRIVATE_PROBE_FOUNDING_CAPITAL = 1_000_000;
 export const IPO_PROBE_PRICE_PER_SHARE = 10;
 export const IPO_PROBE_FLOAT_PCT = 20;
 export const PROBE_FOUNDER_CASH = 250_000;
-/** Fixed player-action budget per campaigning synthetic actor per turn. */
-export const PROBE_ACTIONS_PER_ACTOR = 10;
+/**
+ * Seed default for `gameConfig.baseActionsPerTurn` in preset worlds. The probe
+ * passes it explicitly so the per-actor accrual below is the production rule's
+ * answer for an unendorsed player candidate, not an asserted budget.
+ */
+export const PROBE_BASE_ACTIONS_PER_TURN = 4;
 
 // ─── Presidential nomination ────────────────────────────────────────────────
 
@@ -275,9 +280,25 @@ export interface CampaignProbeResult {
   playerActions: number;
 }
 
-/** Deterministic harness schedule: each synthetic campaigning actor runs one
- * campaign and spends a fixed action budget per turn. Pure NPP runs report
- * zero campaigns and zero player actions. */
+/** Per-turn accrual for one unendorsed synthetic player candidate, through the
+ * REAL production rule (`campaignActionsPerTurn`). No entry/action driver
+ * exists, so this is accrued capacity, not spent actions — the registry reads
+ * this mechanic `partial` in synthetic mode for exactly that reason. */
+export function syntheticCampaignActionsPerActor(): number {
+  return campaignActionsPerTurn({
+    nppEndorsements: 0,
+    playerEndorsements: 0,
+    governorEndorsements: 0,
+    executiveEndorsements: 0,
+    isPresidential: false,
+    candidateIsNPP: false,
+    baseActionsPerTurn: PROBE_BASE_ACTIONS_PER_TURN,
+  });
+}
+
+/** Deterministic harness schedule: each synthetic campaigning actor accrues
+ * the production-rule action budget per turn. Pure NPP runs report zero
+ * campaigns and zero player actions. */
 export function probeCampaignsAndActions(mode: SimActorMode, seed: string): CampaignProbeResult {
   const mechanicId = assertKnownActorMechanic("campaigns-player-actions");
   if (mode === "pure-npp") {
@@ -299,12 +320,15 @@ export function probeCampaignsAndActions(mode: SimActorMode, seed: string): Camp
   if (holderIds.size !== campaigners.length) {
     throw new Error("synthetic campaign probe: campaigner identities are not distinct");
   }
+  const perActor = syntheticCampaignActionsPerActor();
   const campaigns = campaigners.length;
-  const playerActions = campaigners.length * PROBE_ACTIONS_PER_ACTOR;
+  const playerActions = campaigners.length * perActor;
   return {
     mechanicId,
     mode,
-    result: `${campaigns} synthetic campaigns, ${playerActions} player actions per turn`,
+    result:
+      `${campaigns} synthetic campaigners accrue ${perActor} actions each ` +
+      `(${playerActions}/turn unspent: no entry/spend driver)`,
     campaigns,
     playerActions,
   };

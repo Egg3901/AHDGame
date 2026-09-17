@@ -1008,6 +1008,7 @@ async function main() {
         `Seeded synthetic actors (seed=${seed}): ${seeded.characters} characters, ` +
           `${seeded.users} users, ${seeded.officials} official(s), ` +
           `${seeded.cabinetSeats} cabinet seat(s), ${seeded.statePartyCandidates} candidacies, ` +
+          `${seeded.statePartyVotes} state-party votes, ${seeded.fedNominations} Fed nomination(s), ` +
           `${seeded.corporations} corporations`
       );
     }
@@ -1132,6 +1133,14 @@ async function main() {
       // call needed for that one.
       await snapshotParliamentSeats(db, lastTurn);
       await snapshotCorporationsByCountry(db, lastTurn);
+
+      // Synthetic-actor per-turn driver (#1993): crisis decisions, DD survey,
+      // and Fed-chair acceptance through the production seams. Synthetic mode
+      // only, bounded, and never throwing — a driver skip never fails a turn.
+      if (actorMode === "synthetic") {
+        const { driveSyntheticActors } = await import("@/lib/sim/driveSyntheticActors");
+        await driveSyntheticActors(db, { seed, turn: lastTurn, now: new Date() });
+      }
 
       if (iterations % checkpointEvery === 0 || lastTurn >= targetTurn) {
         log(

@@ -113,10 +113,16 @@ describe("evaluateActorCoverage", () => {
     expect(chair?.reason).toContain(UNCOVERED_PRESIDENTIAL_NOMINATION);
   });
 
-  it("covers every mechanic once synthetic actors are materialized", () => {
+  it("covers every mechanic but campaigns once synthetic actors are materialized", () => {
     const manifest = evaluateActorCoverage(syntheticSnapshot(), "1953-01-01T00:00:00.000Z");
-    expect(uncoveredEntries(manifest)).toHaveLength(0);
-    expect(actorCoverageWarnings(manifest)).toHaveLength(0);
+    // 11 covered + 1 partial: campaigns accrue through the production rule
+    // but no entry/spend driver exists, so the manifest stays honest.
+    expect(manifest.entries.filter((e) => e.status === "covered")).toHaveLength(11);
+    expect(uncoveredEntries(manifest)).toHaveLength(1);
+    const campaigns = manifest.entries.find((e) => e.id === "campaigns-player-actions");
+    expect(campaigns?.status).toBe("partial");
+    expect(campaigns?.reason).toContain("no campaign-entry or action-spend driver exists");
+    expect(actorCoverageWarnings(manifest)).toHaveLength(1);
   });
 
   it("degrades synthetic mode without materialized actors to unreachable, never covered", () => {

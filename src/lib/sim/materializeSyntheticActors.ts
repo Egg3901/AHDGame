@@ -28,8 +28,13 @@
  * - DD finance minister: `cabinetMembers` row whose `positionId` equals
  *   `COUNTRY_CONFIGS.DD.financeMinisterCabinetId` (the key the national-issuer
  *   gate looks up).
- * - State-party member: one `statePartyCandidates` row per ALL_POSITIONS plus
- *   the matching `statePartyElections` rows they stand in.
+ * - State-party member: candidacy plus one self-vote per office against ONE
+ *   real persisted `statePartyOrg` (attaching to its live voting elections,
+ *   creating only missing offices), so `processCompletedElections` seats
+ *   through the representative path.
+ * - Fed nominee: one nomination queued into the US `centralBanks` nominations
+ *   array through the production route checks, so the turn's chair selection
+ *   finds a pool.
  * - Founders: two player-CEO corporations (private unlisted + founding IPO
  *   with placed float from the real issuance math) plus one minimal sector
  *   each, mirroring the NPP spawn shape with a character CEO.
@@ -39,11 +44,14 @@
  */
 
 import { ObjectId, type Db } from "mongodb";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { ALL_POSITIONS } from "@/lib/statePartyElections";
 import { computeIpoIssuance } from "@/lib/corporations/ipoIssuance";
 import { CEO_INITIAL_SHARES } from "@/lib/constants/corporations";
+import { getCentralBankScope } from "@/lib/centralBank/helpers";
+import { isNominationWindowOpen } from "@/lib/turn/centralBankChairSelection";
 import {
+  fnv1aHex,
   syntheticObjectIdHex,
   type ActorPopulationSnapshot,
   type SimActorMode,
@@ -90,8 +98,11 @@ export interface MaterializeSyntheticActorsResult {
   cabinetSeats: number;
   statePartyElections: number;
   statePartyCandidates: number;
+  statePartyVotes: number;
   corporations: number;
   corporateSectors: number;
+  /** 1 when this run queued the synthetic Fed-chair nomination, else 0. */
+  fedNominations: number;
 }
 
 function objectIdFor(seed: string, key: string): ObjectId {
@@ -157,6 +168,94 @@ const ROLE_HOME_STATE: Record<SyntheticActorRole, string> = {
 };
 
 /**
+ * Deterministic per-seed corporation sequential ids. Fixed ids collided on the
+ * unique index when two seeds materialized into the same db, so each seed
+ * owns a derived odd/even pair inside a high range real counters never reach.
+ * Index 0 is the private corp, 1 the IPO corp.
+ */
+export function syntheticCorporateSequentialId(seed: string, index: 0 | 1): number {
+  const slot = parseInt(fnv1aHex(`${seed}:corp-seq`), 16) % 40_000;
+  return 900_001 + slot * 2 + index;
+}
+
+/**
+ * Refuse to overwrite real documents. Every doc this seeder writes carries
+ * `isSynthetic: true`; any pre-existing doc under one of our deterministic
+ * `_id`s without that marker is real world state (including a `--clone-mode`
+ * live restore) and seeding must fail loudly instead of hijacking it.
+ */
+async function refuseNonSyntheticCollisions(
+  db: Db,
+  seed: string,
+  planned: Array<{ collection: string; ids: ObjectId[] }>
+): Promise<void> {
+  for (const { collection, ids } of planned) {
+    if (ids.length === 0) continue;
+    const existing = await db
+      .collection(collection)
+      .find({ _id: { $in: ids } })
+      .toArray();
+    const offending = (existing as Array<Record<string, unknown>>).filter(
+      (doc) => doc.isSynthetic !== true
+    );
+    if (offending.length > 0) {
+      const sample = offending
+        .slice(0, 3)
+        .map((doc) => String(doc._id))
+        .join(", ");
+      throw new Error(
+        `Refusing to seed synthetic actors (seed=${seed}): ${offending.length} ` +
+          `non-synthetic document(s) already own _id(s) in "${collection}" ` +
+          `(e.g. ${sample}). This looks like real world state, not a fresh sandbox.`
+      );
+    }
+  }
+}
+
+/**
+ * Refuse ticker/sequentialId collisions with real corporations. Our `_id`s are
+ * seed-derived, but tickers and sequential ids live under their own unique
+ * indexes, so a same-db second seed (or a live restore in clone-mode) that
+ * already owns one of our derived values must fail instead of violating the
+ * index or, worse, overwriting the upsert-matched doc.
+ */
+async function refuseCorporateIndexCollisions(
+  db: Db,
+  seed: string,
+  corps: Array<{ _id: ObjectId; tickerSymbol: string; sequentialId: number }>
+): Promise<void> {
+  const tickers = corps.map((c) => c.tickerSymbol);
+  const seqs = corps.map((c) => c.sequentialId);
+  const ownIds = new Set(corps.map((c) => c._id.toHexString()));
+  const [tickerHits, seqHits] = await Promise.all([
+    db
+      .collection("corporations")
+      .find({ tickerSymbol: { $in: tickers } })
+      .toArray(),
+    db
+      .collection("corporations")
+      .find({ sequentialId: { $in: seqs } })
+      .toArray(),
+  ]);
+  const offending = [...tickerHits, ...seqHits].filter(
+    (doc) =>
+      !ownIds.has(String((doc as { _id: ObjectId })._id)) &&
+      (doc as Record<string, unknown>).isSynthetic !== true
+  );
+  if (offending.length > 0) {
+    const sample = offending
+      .slice(0, 3)
+      .map((doc) => String((doc as { _id: unknown })._id))
+      .join(", ");
+    throw new Error(
+      `Refusing to seed synthetic actors (seed=${seed}): ${offending.length} ` +
+        `non-synthetic corporation(s) already own a seeded ticker/sequentialId ` +
+        `(e.g. ${sample}). Use a fresh sandbox db.`
+    );
+  }
+}
+
+/**
  * Materialize the deterministic synthetic population into the sandbox db.
  * Idempotent: safe to retry after a crash, and re-running with the same seed
  * rewrites the same documents.
@@ -178,19 +277,23 @@ export async function materializeSyntheticActors(
     return found;
   };
 
+  const syntheticMarker = { isSynthetic: true, syntheticRunId: runId };
   const users = plan.actors.map((a) => ({
     _id: new ObjectId(a.userIdHex),
     email: `${a.username}@sim.local`,
     username: a.username,
     displayName: a.displayName,
-    // Sandbox-only marker: this credential is never valid for auth. The value
-    // is a sentinel, not a hash, so it cannot be mistaken for a real login.
-    password: "sim-only-disabled",
+    // Sandbox-only marker: the empty string is not a usable password
+    // (`hasUsablePassword` requires non-empty), so this credential can never
+    // authenticate. Never store a lookalike sentinel here: any non-empty
+    // string reads as a login method.
+    password: "",
     role: "player",
     hasCompletedSetup: true,
     activeCharacterId: new ObjectId(a.characterIdHex),
     createdAt: now,
     updatedAt: now,
+    ...syntheticMarker,
   }));
 
   const characters = plan.actors.map((a) => ({
@@ -205,11 +308,10 @@ export async function materializeSyntheticActors(
     infamy: 0,
     cashOnHand: PROBE_FOUNDER_CASH,
     currencyBalances: { personal: { USD: PROBE_FOUNDER_CASH } },
-    isSynthetic: true,
-    syntheticRunId: runId,
     createdTurn: turn,
     createdAt: now,
     updatedAt: now,
+    ...syntheticMarker,
   }));
 
   // US president: the presidential HoG chain resolves electedOfficials
@@ -222,9 +324,11 @@ export async function materializeSyntheticActors(
       officeType: "president",
       characterId: new ObjectId(president.characterIdHex),
       characterName: president.displayName,
-      party: null,
       isNPP: false,
       electedAt: now,
+      createdAt: now,
+      updatedAt: now,
+      ...syntheticMarker,
     },
   ];
 
@@ -244,42 +348,104 @@ export async function materializeSyntheticActors(
       appointedByCharacterId: new ObjectId(president.characterIdHex),
       createdAt: now,
       updatedAt: now,
+      ...syntheticMarker,
     },
   ];
 
-  // State-party candidacy: one election plus one candidacy per office, so the
-  // turn's state-party phase has real candidates to resolve instead of the
-  // universal no-candidate branch.
+  // State-party candidacy against a REAL persisted organization. The resolver
+  // (`processCompletedElections`) seats winners by writing the org row keyed
+  // `${stateId}_${partyId}`, and the creation pass only opens elections for
+  // orgs whose party still exists in `politicalParties` — so a synthetic
+  // partyId matches neither and can never seat an office. Read one live org
+  // (same party join, US preferred), attach the member's candidacy to its
+  // existing voting elections where present, create only the missing offices,
+  // and seed one self-vote per election: without `statePartyVotes` rows the
+  // tally is empty and every office resolves through the no-candidate branch.
+  // No org in the db (bare unit-test worlds) means no seating target: skip
+  // rather than fabricate an unresolvable party.
   const member = actor("us-state-party-member");
+  const memberCharacterId = new ObjectId(member.characterIdHex);
   const electionWindow = 24;
-  const statePartyElections = ALL_POSITIONS.map((position) => ({
-    _id: objectIdFor(seed, `state-party-election:${position}`),
-    stateId: "CA",
-    partyId: "sim-dem",
-    countryId: "US",
-    position,
-    status: "voting",
-    startTime: now,
-    endTime: now,
-    startTurn: turn,
-    endTurn: turn + electionWindow,
-    durationTurns: electionWindow,
-    winnerId: null,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  const statePartyCandidates = ALL_POSITIONS.map((position) => ({
-    _id: objectIdFor(seed, `state-party-candidate:${position}`),
-    electionId: objectIdFor(seed, `state-party-election:${position}`),
-    characterId: new ObjectId(member.characterIdHex),
-    characterName: member.displayName,
-    stateId: "CA",
-    partyId: "sim-dem",
-    countryId: "US",
-    position,
-    enteredAt: now,
-    status: "active",
-  }));
+  const persistedParties = (await db
+    .collection("politicalParties")
+    .find({})
+    .toArray()) as Array<{ countryId?: string; sequentialId?: number | string }>;
+  const livePartyKeys = new Set(
+    persistedParties.map((p) => `${p.countryId ?? "US"}:${String(p.sequentialId)}`)
+  );
+  const persistedOrgs = (await db.collection("statePartyOrg").find({}).toArray()) as Array<{
+    _id: string;
+    stateId: string;
+    partyId: string;
+    countryId?: string;
+  }>;
+  const seatedOrgs = persistedOrgs
+    .filter(
+      (org) =>
+        livePartyKeys.size === 0 ||
+        livePartyKeys.has(`${org.countryId ?? "US"}:${org.partyId}`)
+    )
+    .sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
+  const targetOrg =
+    seatedOrgs.find((org) => (org.countryId ?? "US") === "US") ?? seatedOrgs[0] ?? null;
+
+  const statePartyElections: Array<Record<string, unknown>> = [];
+  const statePartyCandidates: Array<Record<string, unknown>> = [];
+  const statePartyVotes: Array<Record<string, unknown>> = [];
+  if (targetOrg) {
+    const orgCountryId = (targetOrg.countryId ?? "US") as CountryId;
+    for (const position of ALL_POSITIONS) {
+      const existing = await db.collection("statePartyElections").findOne({
+        stateId: targetOrg.stateId,
+        partyId: targetOrg.partyId,
+        countryId: orgCountryId,
+        position,
+        status: "voting",
+      });
+      const electionId =
+        (existing?._id as ObjectId | undefined) ?? objectIdFor(seed, `state-party-election:${position}`);
+      if (!existing) {
+        statePartyElections.push({
+          _id: electionId,
+          stateId: targetOrg.stateId,
+          partyId: targetOrg.partyId,
+          countryId: orgCountryId,
+          position,
+          status: "voting",
+          startTime: now,
+          endTime: now,
+          startTurn: turn,
+          endTurn: turn + electionWindow,
+          durationTurns: electionWindow,
+          winnerId: null,
+          createdAt: now,
+          updatedAt: now,
+          ...syntheticMarker,
+        });
+      }
+      statePartyCandidates.push({
+        _id: objectIdFor(seed, `state-party-candidate:${position}`),
+        electionId,
+        characterId: memberCharacterId,
+        characterName: member.displayName,
+        stateId: targetOrg.stateId,
+        partyId: targetOrg.partyId,
+        countryId: orgCountryId,
+        position,
+        enteredAt: now,
+        status: "active",
+        ...syntheticMarker,
+      });
+      statePartyVotes.push({
+        _id: objectIdFor(seed, `state-party-vote:${position}`),
+        electionId,
+        voterId: memberCharacterId,
+        candidateId: memberCharacterId,
+        votedAt: now,
+        ...syntheticMarker,
+      });
+    }
+  }
 
   // Player-founded corporations: mirror the NPP spawn document shape with a
   // character CEO, so corporationTurn sees structurally complete corps. The
@@ -322,7 +488,7 @@ export async function materializeSyntheticActors(
       ceoVacant: false,
       userId: new ObjectId(privateFounder.userIdHex),
       liquidCapital: PRIVATE_PROBE_FOUNDING_CAPITAL,
-      sequentialId: 900001,
+      sequentialId: syntheticCorporateSequentialId(seed, 0),
       totalShares: CEO_INITIAL_SHARES,
       sharePrice: 0,
       shareholders: [
@@ -330,6 +496,7 @@ export async function materializeSyntheticActors(
       ],
       isPrivate: true,
       ...corpCommon,
+      ...syntheticMarker,
     },
     {
       _id: objectIdFor(seed, "corp:ipo"),
@@ -341,7 +508,7 @@ export async function materializeSyntheticActors(
       ceoVacant: false,
       userId: new ObjectId(ipoFounder.userIdHex),
       liquidCapital: PRIVATE_PROBE_FOUNDING_CAPITAL + ipo.proceeds,
-      sequentialId: 900002,
+      sequentialId: syntheticCorporateSequentialId(seed, 1),
       totalShares: ipo.totalSharesAfter,
       sharePrice: IPO_PROBE_PRICE_PER_SHARE,
       shareholders: [
@@ -350,6 +517,7 @@ export async function materializeSyntheticActors(
       publicFloat: ipo.newShares,
       isPrivate: false,
       ...corpCommon,
+      ...syntheticMarker,
     },
   ];
   const corporateSectors = [
@@ -367,6 +535,7 @@ export async function materializeSyntheticActors(
       workers: 10,
       createdAt: now,
       updatedAt: now,
+      ...syntheticMarker,
     },
     {
       _id: objectIdFor(seed, "corp-sector:ipo"),
@@ -382,8 +551,42 @@ export async function materializeSyntheticActors(
       workers: 10,
       createdAt: now,
       updatedAt: now,
+      ...syntheticMarker,
     },
   ];
+
+  const idOf = (doc: { _id: ObjectId }): ObjectId => doc._id;
+  // Refuse before writing anything: a deterministic _id (or corp index value)
+  // owned by a real document means this is not a fresh sandbox.
+  await refuseNonSyntheticCollisions(db, seed, [
+    { collection: "users", ids: users.map(idOf) },
+    { collection: "characters", ids: characters.map(idOf) },
+    { collection: "electedOfficials", ids: officials.map(idOf) },
+    { collection: "cabinetMembers", ids: cabinetSeats.map(idOf) },
+    {
+      collection: "statePartyElections",
+      ids: statePartyElections.map((d) => d._id as ObjectId),
+    },
+    {
+      collection: "statePartyCandidates",
+      ids: statePartyCandidates.map((d) => d._id as ObjectId),
+    },
+    {
+      collection: "statePartyVotes",
+      ids: statePartyVotes.map((d) => d._id as ObjectId),
+    },
+    { collection: "corporations", ids: corporations.map(idOf) },
+    { collection: "corporateSectors", ids: corporateSectors.map(idOf) },
+  ]);
+  await refuseCorporateIndexCollisions(
+    db,
+    seed,
+    corporations.map((c) => ({
+      _id: c._id,
+      tickerSymbol: c.tickerSymbol,
+      sequentialId: c.sequentialId,
+    }))
+  );
 
   const [
     userCount,
@@ -392,6 +595,7 @@ export async function materializeSyntheticActors(
     cabinetCount,
     electionCount,
     candidateCount,
+    voteCount,
     corpCount,
     sectorCount,
   ] = await Promise.all([
@@ -401,9 +605,24 @@ export async function materializeSyntheticActors(
     upserts(db, "cabinetMembers", cabinetSeats),
     upserts(db, "statePartyElections", statePartyElections),
     upserts(db, "statePartyCandidates", statePartyCandidates),
+    upserts(db, "statePartyVotes", statePartyVotes),
     upserts(db, "corporations", corporations),
     upserts(db, "corporateSectors", corporateSectors),
   ]);
+
+  // Queue the synthetic Fed-chair nomination through the same checks the
+  // production nominate route enforces, so the turn's `selectChairCandidate`
+  // finds a nomination pool instead of logging a permanent vacancy. The
+  // per-turn driver (`driveSyntheticActors`) performs the best-effort accept
+  // once the turn seats the nominee as pending.
+  const fedNominations = await queueSyntheticFedNomination(db, {
+    seed,
+    turn,
+    now,
+    nominator: president,
+    nominee: actor("us-fed-nominee"),
+  });
+
   return {
     users: userCount,
     characters: characterCount,
@@ -411,9 +630,75 @@ export async function materializeSyntheticActors(
     cabinetSeats: cabinetCount,
     statePartyElections: electionCount,
     statePartyCandidates: candidateCount,
+    statePartyVotes: voteCount,
     corporations: corpCount,
     corporateSectors: sectorCount,
+    fedNominations,
   };
+}
+
+/**
+ * Mirror of the production nominate-route gate
+ * (`src/app/api/country/[code]/central-bank/nominate/route.ts`) for the
+ * synthetic US pair: the seated synthetic executive nominates the synthetic
+ * nominee. Returns 1 when a nomination was queued, 0 when the bank is absent,
+ * the nominee is already queued, or any route check fails (window closed,
+ * pool full, target ineligible). Idempotent: re-running with the same seed
+ * finds the existing nomination and queues nothing.
+ */
+async function queueSyntheticFedNomination(
+  db: Db,
+  args: {
+    seed: string;
+    turn: number;
+    now: Date;
+    nominator: { characterIdHex: string; displayName: string };
+    nominee: { characterIdHex: string; displayName: string };
+  }
+): Promise<number> {
+  const { turn, now, nominator, nominee } = args;
+  const { bankId, memberCountries } = await getCentralBankScope(db, "US");
+  const bank = await db.collection("centralBanks").findOne({ _id: bankId });
+  if (!bank) return 0;
+  const nomineeId = new ObjectId(nominee.characterIdHex);
+  const nominations = (bank.nominations ?? []) as Array<{
+    characterId: ObjectId;
+  }>;
+  if (nominations.some((n) => n.characterId?.toString() === nominee.characterIdHex)) return 0;
+  // Route checks: window open, at most 3 nominations, target is a player
+  // character in a member country who does not hold the executive office.
+  if (!isNominationWindowOpen(bank, turn)) return 0;
+  if (nominations.length >= 3) return 0;
+  const target = await db.collection("characters").findOne({ _id: nomineeId });
+  if (!target?.userId) return 0;
+  if (!memberCountries.includes((target.countryId ?? "US") as CountryId)) return 0;
+  const execOffice = COUNTRY_CONFIGS.US?.officeTypes.find((o) => o.isExecutive);
+  const targetOfficeType = (target.currentOffice as { type?: string } | undefined)?.type;
+  if (execOffice && targetOfficeType === execOffice.key) return 0;
+  await db.collection("centralBanks").bulkWrite([
+    {
+      updateOne: {
+        filter: { _id: bankId },
+        update: {
+          $set: {
+            nominations: [
+              ...nominations,
+              {
+                characterId: nomineeId,
+                characterName: nominee.displayName,
+                nominatedBy: new ObjectId(nominator.characterIdHex),
+                nominatedByName: nominator.displayName,
+                nominatedAt: now,
+              },
+            ],
+          },
+        },
+        upsert: false,
+      },
+    },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ] as any);
+  return 1;
 }
 
 /**
