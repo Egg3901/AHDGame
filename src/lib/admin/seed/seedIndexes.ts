@@ -26,6 +26,7 @@ import { seedNavairIndexes } from "./indexes/navair";
 import { seedBankingIndexes } from "./indexes/banking";
 import { seedSettlementIndexes } from "./indexes/settlement";
 import { seedIntelligenceIndexes } from "./indexes/intelligence";
+import { seedIdentityHistoryIndexes } from "./indexes/identityHistory";
 import { INDEX_TARGETS, type IndexTargetId, type IndexTargetMeta } from "./indexTargets";
 
 export { INDEX_TARGETS, INDEX_TARGET_IDS } from "./indexTargets";
@@ -76,6 +77,7 @@ const INDEX_RUNNERS: Record<IndexTargetId, IndexModule> = {
   indexesBanking: seedBankingIndexes,
   indexesSettlement: seedSettlementIndexes,
   indexesIntelligence: seedIntelligenceIndexes,
+  indexesIdentityHistory: seedIdentityHistoryIndexes,
 };
 
 export interface IndexModuleEntry extends Omit<IndexTargetMeta, "id"> {

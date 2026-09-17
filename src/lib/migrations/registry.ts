@@ -81,6 +81,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
+import { migration as identityObservationsBackfill } from "./entries/2026-09-16-identity-observations-backfill";
 import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 
 export const MIGRATIONS: Migration[] = [
@@ -250,6 +251,10 @@ export const MIGRATIONS: Migration[] = [
   // Ticket #1269: persisted sovereign fields must follow the current debt/GDP
   // ladder after historical seed anchors stop rescaling live risk.
   repriceCurrentSovereignRisk,
+  // Seed identityObservations from the scalar identity fields and
+  // fingerprintHistory, so values a player has rotated away from stay visible
+  // to the admin panel and keep grouping accounts.
+  identityObservationsBackfill,
   supplyListingIndexes,
   // Issue #2028: worlds seeded while the FR/IT/ES/SE/TR/GR/AT/FI sovereign
   // issuers reused 900_009-900_016 keep ambiguous corporation URLs and an

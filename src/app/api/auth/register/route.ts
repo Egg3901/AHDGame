@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { createHash, randomUUID } from "crypto";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import { cookies } from "next/headers";
 import { createAdminLog } from "@/lib/adminLog";
 import { getClientIp } from "@/lib/utils/network";
@@ -376,6 +377,16 @@ export async function POST(request: Request) {
         details: `Allowed despite IP collision (${sa.device}) — shared IP ${sa.sharedIp} already used by ${sa.existingCount} account${sa.existingCount === 1 ? "" : "s"}.`,
       });
     }
+
+    // Identity history runs. Recorded after the insert so the run carries the
+    // real user id. Fire-and-forget, like the IP detection below.
+    recordIdentitySignals(db, {
+      userId: result.insertedId as ObjectId,
+      ip: clientIp,
+      fingerprint,
+      observedAt,
+      source: "register",
+    });
 
     // Fire-and-forget: IP/VPN detection via ipapi.co.
     // Non-blocking — if it fails, registration still succeeds.
