@@ -57,6 +57,73 @@ export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   "realOutputShadowEnabled",
 ] as const;
 
+/**
+ * Pinned control/treatment pair for the issue-#1470 real-output comparison
+ * (acceptance item 4 readiness). A rigorous comparison needs two queued jobs
+ * that are IDENTICAL except the shadow flag: same preset, turns, seed, and
+ * every other experiment field, with the control explicitly false and the
+ * treatment explicitly true. Explicit (not absent) on both arms so run
+ * identity stays unambiguous in `requestedConfig`.
+ *
+ * Pure: builds job-spec fragments only. Enqueues nothing, enables nothing,
+ * touches no live config.
+ */
+export function buildRealOutputShadowPinnedPair(base: SimJobExperimentFields): {
+  control: SimJobExperimentFields;
+  treatment: SimJobExperimentFields;
+} {
+  if (base.realOutputShadowEnabled !== undefined) {
+    throw new Error(
+      "buildRealOutputShadowPinnedPair: base must not set realOutputShadowEnabled (the pair sets it)"
+    );
+  }
+  return {
+    control: { ...base, realOutputShadowEnabled: false },
+    treatment: { ...base, realOutputShadowEnabled: true },
+  };
+}
+
+/**
+ * Validates a queued (or reported) control/treatment pair as pinned: the
+ * control carries explicit false, the treatment explicit true, and every
+ * other SIM_JOB_REQUESTED_CONFIG_KEYS entry is identical (absent and
+ * undefined count as the same unset). Accepts full job docs or
+ * `requestedConfig` maps, not just experiment fragments, so preset, turns,
+ * and seed drift are caught too. Throws on the first mismatch so the caller
+ * knows exactly what unpinned the comparison.
+ */
+export function assertRealOutputShadowPinnedPair(
+  control: Record<string, unknown>,
+  treatment: Record<string, unknown>
+): void {
+  if (control.realOutputShadowEnabled !== false) {
+    throw new Error(
+      `pinned pair control must carry realOutputShadowEnabled: false (got ${JSON.stringify(
+        control.realOutputShadowEnabled
+      )})`
+    );
+  }
+  if (treatment.realOutputShadowEnabled !== true) {
+    throw new Error(
+      `pinned pair treatment must carry realOutputShadowEnabled: true (got ${JSON.stringify(
+        treatment.realOutputShadowEnabled
+      )})`
+    );
+  }
+  for (const key of SIM_JOB_REQUESTED_CONFIG_KEYS) {
+    if (key === "realOutputShadowEnabled") continue;
+    const a = key in control ? control[key] : undefined;
+    const b = key in treatment ? treatment[key] : undefined;
+    if (JSON.stringify(a ?? null) !== JSON.stringify(b ?? null)) {
+      throw new Error(
+        `pinned pair drifted on "${key}": control=${JSON.stringify(a)} treatment=${JSON.stringify(
+          b
+        )}`
+      );
+    }
+  }
+}
+
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before
  * it is used as a Mongo db name or passed as a child-process CLI arg. */
 const SAFE_TOKEN = /^[a-zA-Z0-9_-]{1,64}$/;

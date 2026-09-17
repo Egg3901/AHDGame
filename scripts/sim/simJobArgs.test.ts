@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   SIM_JOB_REQUESTED_CONFIG_KEYS,
+  assertRealOutputShadowPinnedPair,
   assertSafeToken,
+  buildRealOutputShadowPinnedPair,
   buildRunWorldArgs,
   type SimJobExperimentFields,
 } from "./simJobArgs";
@@ -96,6 +98,62 @@ describe("sim worker runWorld argument emission", () => {
   it("rejects non-boolean shadow values instead of stringifying them", () => {
     const job = { realOutputShadowEnabled: "true" } as unknown as SimJobExperimentFields;
     expect(() => buildRunWorldArgs(job)).toThrow("realOutputShadowEnabled must be boolean");
+  });
+
+  it("builds a pinned pair differing only in the shadow flag", () => {
+    const base: SimJobExperimentFields = {
+      marketSystemMode: "capital",
+      autonomyLevel: "v4",
+    };
+    const { control, treatment } = buildRealOutputShadowPinnedPair(base);
+    expect(control).toEqual({ ...base, realOutputShadowEnabled: false });
+    expect(treatment).toEqual({ ...base, realOutputShadowEnabled: true });
+    expect(() => buildRealOutputShadowPinnedPair({ realOutputShadowEnabled: true })).toThrow(
+      "must not set realOutputShadowEnabled"
+    );
+  });
+
+  it("accepts a built pair as pinned, including preset/turns/seed identity", () => {
+    const { control, treatment } = buildRealOutputShadowPinnedPair({
+      marketSystemMode: "capital",
+    });
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { preset: "default", turns: 48, seed: "s1", ...control },
+        { preset: "default", turns: 48, seed: "s1", ...treatment }
+      )
+    ).not.toThrow();
+  });
+
+  it("rejects an unpinned pair: seed drift, field drift, or implicit arms", () => {
+    const { control, treatment } = buildRealOutputShadowPinnedPair({});
+    expect(() =>
+      assertRealOutputShadowPinnedPair({ seed: "s1", ...control }, { seed: "s2", ...treatment })
+    ).toThrow('drifted on "seed"');
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, {
+        ...treatment,
+        marketSystemMode: "capital",
+      })
+    ).toThrow('drifted on "marketSystemMode"');
+    expect(() => assertRealOutputShadowPinnedPair({}, treatment)).toThrow("control must carry");
+    expect(() => assertRealOutputShadowPinnedPair(control, control)).toThrow(
+      "treatment must carry"
+    );
+  });
+
+  it("emits argv for a pinned pair that differs only in the shadow flag", () => {
+    const { control, treatment } = buildRealOutputShadowPinnedPair({
+      marketSystemMode: "capital",
+      autonomyLevel: "v4",
+    });
+    const controlArgs = buildRunWorldArgs(control);
+    const treatmentArgs = buildRunWorldArgs(treatment);
+    expect(controlArgs).toContain("--real-output-shadow=false");
+    expect(treatmentArgs).toContain("--real-output-shadow=true");
+    expect(treatmentArgs.filter((a) => a !== "--real-output-shadow=true")).toEqual(
+      controlArgs.filter((a) => a !== "--real-output-shadow=false")
+    );
   });
 
   it("keeps the report requestedConfig keys covering every emitted experiment field", () => {
