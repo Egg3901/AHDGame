@@ -17,6 +17,7 @@ const { atLeastMock } = vi.hoisted(() => ({ atLeastMock: vi.fn() }));
 vi.mock("../featureFlag", () => ({ nppAutonomyAtLeast: (...a: unknown[]) => atLeastMock(...a) }));
 
 import { runMinisterialGovernance, runCaretakerMinisters } from "../ministerialGovernance";
+import { RESHUFFLE_GUARD_CONFIG } from "../rules/reshuffleGuard";
 
 const now = new Date("2026-06-24T12:00:00Z");
 const TURN = 100;
@@ -363,6 +364,88 @@ describe("runMinisterialGovernance reshuffle guard (I/O)", () => {
     const second = await runMinisterialGovernance(db as unknown as Db, "IE", TURN + 1, now);
     expect(second.reshuffled).toBe(0);
     expect(deleteOne(db)).toHaveBeenCalledTimes(1);
+  });
+
+  it("player-appointed seats are excluded from dismissal (mixed cabinet)", async () => {
+    // A caretaker NPP stranded in a non-player country: tenured, failing, and
+    // threshold-met, but appointed by a human head — the guard must not vacate
+    // it. Dismissal stays on the cabinet surface (`dismissCaretakerMinister`).
+    const db = setup({
+      gov: failingGov(),
+      ministers: [
+        {
+          ...minister("minister_for_finance", finNppId, { appointedTurn: TURN - 40 }),
+          appointedByCharacterId: new ObjectId(),
+        },
+      ],
+      stateMetrics: FAILING_HEALTH,
+    });
+    const res = await runMinisterialGovernance(db as unknown as Db, "IE", TURN, now);
+    expect(res.ran).toBe(true);
+    expect(res.reshuffled).toBe(0);
+    expect(deleteOne(db)).not.toHaveBeenCalled();
+    expect(govUpdateOne(db)).not.toHaveBeenCalled();
+  });
+
+  it("same-turn retry after a reshuffle does not replace twice", async () => {
+    // Crash/duplicate-execution safety: the first call's delete + guard write
+    // are both visible to the retry, which must no-op on both the tenure and
+    // the government-cooldown gates.
+    const govDoc = failingGov();
+    const db = setup({
+      gov: govDoc,
+      ministers: [minister("minister_for_finance", finNppId, { appointedTurn: TURN - 30 })],
+      stateMetrics: FAILING_HEALTH,
+    });
+    govUpdateOne(db).mockImplementation(async (_filter: unknown, update: never) => {
+      Object.assign(govDoc, (update as { $set: Record<string, unknown> }).$set);
+      return { matchedCount: 1, modifiedCount: 1 };
+    });
+    const first = await runMinisterialGovernance(db as unknown as Db, "IE", TURN, now);
+    expect(first.reshuffled).toBe(1);
+
+    // The vacated seat is refilled before the retry (fresh tenure stamp).
+    const membersFind = db.collectionMocks["cabinetMembers"].find as ReturnType<typeof vi.fn>;
+    membersFind.mockReturnValue(
+      createAsyncIterableCursor([
+        minister("minister_for_finance", new ObjectId(), { appointedTurn: TURN }),
+      ])
+    );
+    const retry = await runMinisterialGovernance(db as unknown as Db, "IE", TURN, now);
+    expect(retry.reshuffled).toBe(0);
+    expect(deleteOne(db)).toHaveBeenCalledTimes(1);
+    expect(govUpdateOne(db)).toHaveBeenCalledTimes(1);
+  });
+
+  it("guard-state write is scoped to the seated government", async () => {
+    const db = setup({
+      gov: failingGov(),
+      ministers: [minister("minister_for_finance", finNppId, { appointedTurn: TURN - 30 })],
+      stateMetrics: FAILING_HEALTH,
+    });
+    const res = await runMinisterialGovernance(db as unknown as Db, "IE", TURN, now);
+    expect(res.reshuffled).toBe(1);
+    // A mid-turn transition must not have its fresh state clobbered: the
+    // write carries the (cycle, formedTurn) continuity identity.
+    expect(govUpdateOne(db).mock.calls[0][0]).toMatchObject({
+      _id: "IE",
+      cycle: 3,
+      formedTurn: 10,
+    });
+  });
+
+  it("guardConfig override retunes the shell without mutating shared state", async () => {
+    const db = setup({
+      gov: failingGov(),
+      ministers: [minister("minister_for_finance", finNppId, { appointedTurn: TURN - 24 })],
+      stateMetrics: FAILING_HEALTH,
+    });
+    const res = await runMinisterialGovernance(db as unknown as Db, "IE", TURN, now, {
+      ...RESHUFFLE_GUARD_CONFIG,
+      minMinisterTenureTurns: 100,
+    });
+    expect(res.reshuffled).toBe(0);
+    expect(deleteOne(db)).not.toHaveBeenCalled();
   });
 
   it("player-controlled exclusion: below the v1 gate nothing is touched", async () => {

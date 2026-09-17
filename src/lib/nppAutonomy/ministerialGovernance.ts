@@ -60,9 +60,11 @@ import {
   ministerTenureTurns,
   nextPortfolioRecordOnReshuffle,
   readReshuffleGuardState,
+  RESHUFFLE_GUARD_CONFIG,
   type LastReplacementRecord,
   type PortfolioReshuffleRecord,
-} from "./reshuffleGuard";
+  type ReshuffleGuardConfig,
+} from "./rules/reshuffleGuard";
 import { loadNppBehaviorPolicy } from "@/lib/singleplayerDifficulty/loadBehaviorPolicy";
 import type { NppBehaviorPolicy } from "@/lib/singleplayerDifficulty/rules/behavior";
 
@@ -445,7 +447,13 @@ export async function runMinisterialGovernance(
   db: Db,
   countryId: CountryId,
   currentTurn: number,
-  now: Date
+  now: Date,
+  /**
+   * Guard tuning override (#1994). Defaults to `RESHUFFLE_GUARD_CONFIG` so
+   * production runs the centralized constants; worldsim sensitivity sweeps
+   * and focused tests pass alternates without mutating shared state.
+   */
+  guardConfig: ReshuffleGuardConfig = RESHUFFLE_GUARD_CONFIG
 ): Promise<MinisterialGovernanceResult> {
   if (!(await nppAutonomyAtLeast(db, countryId, "v1"))) return INACTIVE;
 
@@ -494,8 +502,9 @@ export async function runMinisterialGovernance(
   // Reshuffle guard (#1994): tenure, government/portfolio cooldowns, and the
   // bounded structural-escalation path. Persisted on the governmentFormation
   // doc, so it survives restarts; scoped by government key, so a transition
-  // starts clean. Caretaker and player-controlled paths never reach this
-  // function, so they are unaffected by construction.
+  // starts clean. Player-country cabinets never reach this function
+  // (`processNppGovernment` routes them to `runCaretakerMinisters`), and a
+  // player-appointed seat that does reach it is excluded from dismissal below.
   const governmentKey = governmentKeyForReshuffle({
     cycle: gov.cycle,
     formedTurn: gov.formedTurn,
@@ -525,6 +534,14 @@ export async function runMinisterialGovernance(
       survivors.push(minister);
       continue;
     }
+    if (minister.appointedByCharacterId != null) {
+      // Player-appointed (caretaker) seat stranded in a non-player country:
+      // the appointing player dismisses or replaces it via the cabinet
+      // surface (`dismissCaretakerMinister`), never the autonomous guard.
+      // Steering below still applies; only dismissal is excluded.
+      survivors.push(minister);
+      continue;
+    }
     const tenureTurns = ministerTenureTurns(
       (minister as { appointedTurn?: unknown }).appointedTurn,
       currentTurn
@@ -537,6 +554,7 @@ export async function runMinisterialGovernance(
       portfolio: portfolios[minister.positionId] ?? null,
       shortfall,
       currentTurn,
+      config: guardConfig,
     });
     if (!eligibility.eligible) {
       if (eligibility.reason === "escalated-structural") {
@@ -555,6 +573,7 @@ export async function runMinisterialGovernance(
       prior: portfolios[minister.positionId] ?? null,
       shortfall,
       currentTurn,
+      config: guardConfig,
     });
     portfolios[minister.positionId] = record;
     govLastReshuffleTurn = currentTurn;
@@ -577,20 +596,37 @@ export async function runMinisterialGovernance(
   ministers = survivors;
 
   if (guardStateDirty) {
-    await getGovernmentFormationsCollection(db).updateOne(
-      { _id: countryId },
-      {
-        $set: {
-          ministerialReshuffle: {
-            governmentKey,
-            lastReshuffleTurn: govLastReshuffleTurn,
-            portfolios,
-            lastReplacement,
-          },
-          updatedAt: now,
+    // Stale-government guard: only persist against the government this call
+    // read. A transition (or a duplicate turn worker) that landed in between
+    // must not have its fresh state clobbered by this call's older view — a
+    // missed filter surfaces as matchedCount 0 and the state is dropped, not
+    // misattributed. `formedTurn` is rewritten on every genuine NPP formation
+    // and preserved on confidence-motion survival (same government), so
+    // (cycle, formedTurn) is the continuity identity; absent parts degrade to
+    // an _id-only filter, matching the key's sentinel behavior.
+    const guardWriteFilter: Record<string, unknown> = { _id: countryId };
+    if (typeof gov.cycle === "number" && Number.isFinite(gov.cycle)) {
+      guardWriteFilter.cycle = gov.cycle;
+    }
+    if (typeof gov.formedTurn === "number" && Number.isFinite(gov.formedTurn)) {
+      guardWriteFilter.formedTurn = gov.formedTurn;
+    }
+    const guardWrite = await getGovernmentFormationsCollection(db).updateOne(guardWriteFilter, {
+      $set: {
+        ministerialReshuffle: {
+          governmentKey,
+          lastReshuffleTurn: govLastReshuffleTurn,
+          portfolios,
+          lastReplacement,
         },
-      }
-    );
+        updatedAt: now,
+      },
+    });
+    if (guardWrite.matchedCount === 0) {
+      console.warn(
+        `[nppAutonomy] ${countryId}: reshuffle-guard state dropped (government changed mid-turn)`
+      );
+    }
   }
 
   // Expire stale orders once before reading active sets / issuing new ones.

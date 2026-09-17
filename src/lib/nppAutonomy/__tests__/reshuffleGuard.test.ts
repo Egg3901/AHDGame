@@ -19,9 +19,10 @@ import {
   MAX_CONSECUTIVE_PORTFOLIO_RESHUFFLES,
   MIN_MINISTER_TENURE_TURNS,
   PORTFOLIO_RESHUFFLE_COOLDOWN_TURNS,
+  RESHUFFLE_GUARD_CONFIG,
   SHORTFALL_STABILITY_EPSILON,
   type PortfolioReshuffleRecord,
-} from "../reshuffleGuard";
+} from "../rules/reshuffleGuard";
 import { shouldReshuffleMinister } from "../ministerialGovernance";
 
 const TURN = 100;
@@ -80,6 +81,17 @@ describe("governmentKeyForReshuffle", () => {
     );
     expect(governmentKeyForReshuffle({ cycle: 4, formedTurn: 10, headNppId: head })).not.toBe(
       governmentKeyForReshuffle({ cycle: 3, formedTurn: 10, headNppId: head })
+    );
+  });
+
+  it("legacy docs without cycle/turn/head still key deterministically", () => {
+    expect(governmentKeyForReshuffle({})).toBe("?:?:?");
+    expect(governmentKeyForReshuffle({ cycle: null, formedTurn: null, headNppId: null })).toBe(
+      "?:?:?"
+    );
+    // A new head discriminates even when the turn parts are absent.
+    expect(governmentKeyForReshuffle({ headNppId: { toString: () => "headB" } })).not.toBe(
+      governmentKeyForReshuffle({})
     );
   });
 });
@@ -232,14 +244,70 @@ describe("nextPortfolioRecordOnReshuffle / markPortfolioEscalated", () => {
     });
   });
 
-  it("increments consecutive for an unchanged shortfall", () => {
+  it("increments consecutive for an unchanged shortfall and marks escalation at the cap", () => {
     const next = nextPortfolioRecordOnReshuffle({
       prior: record({ consecutiveReshuffles: 1, lastShortfallAtReshuffle: 0.9 }),
       shortfall: 0.88,
       currentTurn: TURN,
     });
     expect(next.consecutiveReshuffles).toBe(2);
+    // The cap-hitting replacement reports exhaustion immediately; the state
+    // (and lastReplacement built from it) must not claim room is left.
+    expect(next.escalated).toBe(true);
+  });
+
+  it("below-cap replacements are not marked escalated", () => {
+    const next = nextPortfolioRecordOnReshuffle({
+      prior: record({ consecutiveReshuffles: 1, lastShortfallAtReshuffle: 0.9 }),
+      shortfall: 0.88,
+      currentTurn: TURN,
+      config: { ...RESHUFFLE_GUARD_CONFIG, maxConsecutivePortfolioReshuffles: 3 },
+    });
+    expect(next.consecutiveReshuffles).toBe(2);
     expect(next.escalated).toBe(false);
+  });
+
+  it("the escalated flag refuses on its own when the counter is corrupted low", () => {
+    const portfolio = record({
+      lastReshuffleTurn: 0,
+      consecutiveReshuffles: 1,
+      lastShortfallAtReshuffle: 0.9,
+      escalated: true,
+    });
+    expect(
+      evaluateReshuffleEligibility({
+        thresholdMet: true,
+        tenureTurns: MIN_MINISTER_TENURE_TURNS,
+        turnsSinceGovernmentReshuffle: null,
+        portfolio,
+        shortfall: 0.9,
+        currentTurn: TURN,
+      })
+    ).toEqual({ eligible: false, reason: "escalated-structural" });
+  });
+
+  it("custom config retunes the cap (worldsim sweep threading)", () => {
+    const portfolio = record({
+      lastReshuffleTurn: 0,
+      consecutiveReshuffles: 1,
+      lastShortfallAtReshuffle: 0.9,
+    });
+    const config = { ...RESHUFFLE_GUARD_CONFIG, maxConsecutivePortfolioReshuffles: 1 };
+    expect(
+      evaluateReshuffleEligibility({
+        thresholdMet: true,
+        tenureTurns: MIN_MINISTER_TENURE_TURNS,
+        turnsSinceGovernmentReshuffle: null,
+        portfolio,
+        shortfall: 0.9,
+        currentTurn: TURN,
+        config,
+      }).eligible
+    ).toBe(false);
+    expect(
+      nextPortfolioRecordOnReshuffle({ prior: null, shortfall: 0.9, currentTurn: TURN, config })
+        .escalated
+    ).toBe(true);
   });
 
   it("resets to 1 and clears escalation on a materially changed shortfall", () => {

@@ -4,7 +4,7 @@ import type { WhippedFromVoteMap } from "./legislation";
 import type { GoverningAgenda } from "@/lib/nppAutonomy/governingAgenda";
 import type { PersistedCommandStance, PersistedFiscalStance } from "@/lib/nppAutonomy/fiscalStance";
 import type { GoverningGoalState } from "@/lib/nppAutonomy/v5/rules/governingGoals";
-import type { PersistedReshuffleGuardState } from "@/lib/nppAutonomy/reshuffleGuard";
+import type { PersistedReshuffleGuardState } from "@/lib/nppAutonomy/rules/reshuffleGuard";
 
 // --- GovernmentFormation ---
 

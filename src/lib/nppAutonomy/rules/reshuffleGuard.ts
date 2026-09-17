@@ -68,8 +68,9 @@ export interface PortfolioReshuffleRecord {
   lastShortfallAtReshuffle: number;
   /**
    * True once the portfolio exhausted its bounded replacements for an
-   * unchanged shortfall. Cleared only by a materially changed shortfall or a
-   * government transition.
+   * unchanged shortfall — set by the replacement that reaches the cap, or by
+   * the refusal marking when the cap was reached earlier. Cleared only by a
+   * materially changed shortfall or a government transition.
    */
   escalated: boolean;
 }
@@ -242,13 +243,15 @@ export function evaluateReshuffleEligibility(params: {
     if (turnsSincePortfolio < config.portfolioReshuffleCooldownTurns) {
       return { eligible: false, reason: "portfolio-cooldown" };
     }
+    const unchanged = isUnchangedShortfall(
+      shortfall,
+      portfolio.lastShortfallAtReshuffle,
+      config.shortfallStabilityEpsilon
+    );
     if (
-      portfolio.consecutiveReshuffles >= config.maxConsecutivePortfolioReshuffles &&
-      isUnchangedShortfall(
-        shortfall,
-        portfolio.lastShortfallAtReshuffle,
-        config.shortfallStabilityEpsilon
-      )
+      unchanged &&
+      (portfolio.escalated ||
+        portfolio.consecutiveReshuffles >= config.maxConsecutivePortfolioReshuffles)
     ) {
       return { eligible: false, reason: "escalated-structural" };
     }
@@ -260,7 +263,10 @@ export function evaluateReshuffleEligibility(params: {
  * Portfolio record after a reshuffle at `currentTurn` acted on `shortfall`.
  * An unchanged shortfall increments the consecutive counter; a materially
  * changed one restarts it at 1 with escalation cleared (new information, new
- * bounded run). Pure.
+ * bounded run). The replacement that reaches the consecutive cap marks the
+ * portfolio escalated immediately, so the persisted state — and the
+ * `lastReplacement` observability record built from it — reports the
+ * exhaustion without waiting for the next refused evaluation. Pure.
  */
 export function nextPortfolioRecordOnReshuffle(params: {
   prior: PortfolioReshuffleRecord | null;
@@ -276,11 +282,12 @@ export function nextPortfolioRecordOnReshuffle(params: {
       prior.lastShortfallAtReshuffle,
       config.shortfallStabilityEpsilon
     );
+  const consecutiveReshuffles = unchanged ? prior.consecutiveReshuffles + 1 : 1;
   return {
     lastReshuffleTurn: currentTurn,
-    consecutiveReshuffles: unchanged ? prior.consecutiveReshuffles + 1 : 1,
+    consecutiveReshuffles,
     lastShortfallAtReshuffle: shortfall,
-    escalated: false,
+    escalated: consecutiveReshuffles >= config.maxConsecutivePortfolioReshuffles,
   };
 }
 
