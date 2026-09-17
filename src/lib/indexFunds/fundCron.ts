@@ -96,6 +96,7 @@ import {
   remainingRedemptionUnits,
 } from "@/lib/indexFunds/fundRedemptionQueue";
 import { logIndexFundRedeem, resolveIndexFundHolder } from "@/lib/indexFunds/fundTxLog";
+import { emitTx, emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
@@ -355,6 +356,11 @@ export interface FundShareBuyBatch {
   /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
   pools?: Map<CurrencyCode, EquityMarketPool>;
   txSink?: Omit<IndexFundTransaction, "_id">[];
+  /**
+   * #992 tranche 5: fund-subject ledger rows collected per buy and flushed
+   * with one emitTxBulk after the pass (same batching as txSink).
+   */
+  ledgerSink?: Parameters<typeof emitTxBulk>[1];
 }
 
 export async function executeFundShareBuy(
@@ -421,6 +427,7 @@ export async function executeFundShareBuy(
     );
     await updateFundHoldings(db, fund._id, updatedHoldings, sessionOpts);
 
+    const now = new Date();
     const tx = {
       fundId: fund._id,
       kind: "public_float_buy" as const,
@@ -428,12 +435,40 @@ export async function executeFundShareBuy(
       shares,
       navAnchor: executionPriceAnchor,
       amountAnchor: actualCost,
-      createdAt: new Date(),
+      createdAt: now,
     };
     // The transaction row is a log, not a balance: a batching caller writes
     // the pass's rows in one insertMany after the loop.
     if (batch?.txSink) batch.txSink.push(tx);
     else await insertFundTransaction(db, tx, sessionOpts);
+
+    // #992 tranche 5: fund-subject ledger leg for the cashAnchor debit above.
+    // The contra is the unmodeled public float (single-sided under the shared
+    // equity_transfer reason, same as character/corporation stock_trade_buy
+    // rows). Fund-subject rows never mirror, so this is the only ledger row
+    // for the debit. Batched callers flush the sink with one emitTxBulk after
+    // the loop; a standalone buy emits immediately.
+    const ledgerRow = {
+      type: "stock_trade_buy" as const,
+      turn: currentTurn,
+      createdAt: now,
+      subjectType: "fund" as const,
+      subjectId: fund._id,
+      subjectName: fund.name,
+      amount: -actualCost,
+      anchorAmount: -actualCost,
+      currencyCode: fund.anchorCurrencyCode,
+      counterpartyType: "system" as const,
+      counterpartyName: "Public float",
+      meta: {
+        corporationId: corp._id.toString(),
+        shares,
+        pricePerShareAnchor: executionPriceAnchor,
+        source: "fund-cron-float-buy",
+      },
+    };
+    if (batch) (batch.ledgerSink ??= []).push(ledgerRow);
+    else await emitTx(db, ledgerRow);
 
     return true;
   };
@@ -516,6 +551,10 @@ export async function rebalanceFundToTarget(
     if (res.ok) buys++;
   }
   await insertFundTransactionsBulk(db, buyBatch.txSink ?? []);
+  // #992 tranche 5: one bulk flush for the pass's fund-subject buy rows.
+  if (buyBatch.ledgerSink && buyBatch.ledgerSink.length > 0) {
+    await emitTxBulk(db, buyBatch.ledgerSink, await loadTxThresholds(db));
+  }
 
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
