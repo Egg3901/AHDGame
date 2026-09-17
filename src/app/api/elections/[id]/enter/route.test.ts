@@ -356,4 +356,50 @@ describe("POST /api/elections/[id]/enter — UK regional party geography", () =>
       expect(body.error).not.toMatch(/home nation/i);
     }
   });
+
+  it("returns 403 when a sitting Commons MP files for a by-election in their own region", async () => {
+    setupScenario({
+      electionCountry: "US",
+      characterCountry: "US",
+      characterParty: "3",
+      partyDocReturn: { regimeStatus: null },
+    });
+    vi.mocked(resolveElectionRouteParam).mockResolvedValue({
+      ok: true,
+      election: {
+        _id: electionOid,
+        countryId: "UK",
+        electionType: "special_commons",
+        state: "LON",
+        status: "active",
+        primaryEndTime: new Date(Date.now() + 86_400_000),
+        durationHours: 96,
+      },
+    } as never);
+    vi.mocked(requireAuthWithCharacter).mockResolvedValue({
+      ok: true,
+      user: {
+        userId: "u1",
+        character: {
+          _id: characterOid,
+          countryId: "UK",
+          homeState: "LON",
+          party: "3",
+          policies: { economic: -2, social: -2 },
+          favorability: 50,
+          politicalInfluence: 10,
+          careerHistory: [],
+          executiveTermsServed: 0,
+          currentOffice: { type: "commons", state: "LON" },
+        },
+      },
+    } as never);
+
+    const res = await POST(makeReq(), {
+      params: Promise.resolve({ id: electionOid.toString() }),
+    });
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/already hold a Commons seat/);
+  });
 });
