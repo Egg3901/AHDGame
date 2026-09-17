@@ -165,12 +165,12 @@ function makeCharacter(overrides: {
 
 // Average-GDP home state (scalar 1.0) and neutral charisma (multiplier 1.0):
 // the advertise quote requires both, rejecting neutral fallbacks instead.
-const AVG_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+const AVG_STATE = { gdp: 69_618, population: 1_000_000, name: "Test State" } as State;
 const NEUTRAL_STATS = { charisma: 5.5 } as Character["stats"];
 
 // Average-GDP home state (scalar 1.0): the donor quote requires home-state
 // economics, rejecting neutral fallbacks instead.
-const AVG_GDP_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+const AVG_GDP_STATE = { gdp: 69_618, population: 1_000_000, name: "Test State" } as State;
 
 describe("canPerformAction — tiered costs", () => {
   it("advertise blocked when actions < tiered cost (high fav)", () => {

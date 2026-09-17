@@ -14,7 +14,7 @@
  *
  * Bundle selection mirrors each country's seeder dispatch (`seedStates`,
  * `seedUKRegions`, `seedDERegions`, `seedJPRegions`, `seedIERegions`,
- * `seedNGRegions`): a missing era bundle falls back to the 2019 bundle, and
+ * `seedNGRegions`, `seedCNRegions`): a missing era bundle falls back to the 2019 bundle, and
  * that fallback is written out explicitly here (IE/NG 2027), matching the
  * table's explicit cells. If a seeder wires a new era bundle, update the map
  * below — the recompute loop will fail until the table is recalibrated.
@@ -69,6 +69,14 @@ import { ngRegions1991 } from "@/lib/seeds/ng/ngRegions1991";
 import { ngRegions1999 } from "@/lib/seeds/ng/ngRegions1999";
 import { ngRegions2007 } from "@/lib/seeds/ng/ngRegions2007";
 import { ngRegions2023 } from "@/lib/seeds/ng/ngRegions2023";
+import { cnRegions } from "@/lib/seeds/cn/cnRegions";
+import { cnRegions1953 } from "@/lib/seeds/cn/cnRegions1953";
+import { cnRegions1979 } from "@/lib/seeds/cn/cnRegions1979";
+import { cnRegions1991 } from "@/lib/seeds/cn/cnRegions1991";
+import { cnRegions1999 } from "@/lib/seeds/cn/cnRegions1999";
+import { cnRegions2007 } from "@/lib/seeds/cn/cnRegions2007";
+import { cnRegions2023 } from "@/lib/seeds/cn/cnRegions2023";
+import { cnRegions2027 } from "@/lib/seeds/cn/cnRegions2027";
 import { ukRegions } from "@/lib/seeds/uk/ukRegions";
 import { ukRegions1953 } from "@/lib/seeds/uk/ukRegions1953";
 import { ukRegions1979 } from "@/lib/seeds/uk/ukRegions1979";
@@ -90,9 +98,10 @@ type RegionRow = Pick<State, "_id" | "countryId" | "gdp" | "population">;
 const ERAS: EraId[] = ["1953", "1979", "1991", "1999", "2007", "2019", "2023", "2027"];
 
 /**
- * Era bundle per country, mirroring seeder dispatch. IE and NG seed no 2027
- * bundle, so their seeders fall back to the 2019 bundle — repeated here as an
- * explicit cell, exactly as the baseline table does.
+ * Era bundle per country, mirroring seeder dispatch (`seedCNRegions` wires an
+ * explicit 2027 bundle, so CN is bundle-native in every era). IE and NG seed
+ * no 2027 bundle, so their seeders fall back to the 2019 bundle — repeated
+ * here as an explicit cell, exactly as the baseline table does.
  */
 const BUNDLES: Record<GdpBaselineCountry, Record<EraId, RegionRow[]>> = {
   US: {
@@ -157,6 +166,17 @@ const BUNDLES: Record<GdpBaselineCountry, Record<EraId, RegionRow[]>> = {
     // No 2027 bundle: seeder falls back to 2019 (see module doc).
     "2027": ngRegions,
   },
+  CN: {
+    "1953": cnRegions1953,
+    "1979": cnRegions1979,
+    "1991": cnRegions1991,
+    "1999": cnRegions1999,
+    "2007": cnRegions2007,
+    "2019": cnRegions,
+    "2023": cnRegions2023,
+    // Unlike IE/NG, CN seeds an explicit 2027 bundle (see `seedCNRegions`).
+    "2027": cnRegions2027,
+  },
 };
 
 interface RecomputedCell {
@@ -217,14 +237,41 @@ describe("gdpBaseline table derivation (issue #798)", () => {
     expect(table.UK["2019"]).toBe(29_734);
     expect(table.JP["2019"]).toBe(4_172_222);
     expect(table.NG["2019"]).toBe(3_669_401);
-    // 1953 anchors: JP/NG seeds are USD-anchored, so single/double-digit dollars.
+    expect(table.CN["2019"]).toBe(98_268);
+    // 1953 anchors: JP/NG/CN seeds are USD-anchored, so double-digit dollars.
     expect(table.JP["1953"]).toBe(277);
     expect(table.NG["1953"]).toBe(113);
+    expect(table.CN["1953"]).toBe(57);
     expect(table.US["1953"]).toBe(2_557);
     // Post-reconcile crush cells: oversized regional authoring scaled down to
     // the authored national GDP (calibration review required on any reseed).
     expect(table.NG["1979"]).toBe(324);
     expect(table.NG["1991"]).toBe(20_226);
+    // Post-reconcile uplift cell: undersized CN regional authoring scaled up
+    // to the authored national GDP (calibration review required on any reseed).
+    expect(table.CN["1979"]).toBe(568);
+  });
+
+  it("pins CN absolute values and scale across eras", () => {
+    const table = getGdpBaselineTable();
+    // Bundle-native cells: 2023 repeats the 2019-era authoring scale, and the
+    // explicit 2027 bundle is bundle-native (not a 2019 fallback repeat).
+    expect(table.CN["1991"]).toBe(1_931);
+    expect(table.CN["1999"]).toBe(7_341);
+    expect(table.CN["2007"]).toBe(21_028);
+    expect(table.CN["2023"]).toBe(98_268);
+    expect(table.CN["2027"]).toBe(110_339);
+    // Scale assertion: the 1953 USD-anchored cell is three orders of magnitude
+    // below the modern yuan cells — mixing the denominations would pin every
+    // CN scalar to a clamp.
+    expect(table.CN["2019"] / table.CN["1953"]).toBeGreaterThan(1_000);
+    expect(table.CN["2027"] / table.CN["1953"]).toBeGreaterThan(1_000);
+    // Currency assertion: 1953 resolves the USD unit, everything modern is local.
+    expect(resolveCampaignGdpBaseline("CN", "1953-default").unit).toBe("usd");
+    expect(resolveCampaignGdpBaseline("CN", "2019-default").unit).toBe("local");
+    expect(resolveCampaignGdpBaseline("CN", "2027-default").unit).toBe("local");
+    // CN wires an explicit 2027 bundle, so its bundle preset is era-native.
+    expect(resolveCampaignGdpBaseline("CN", "2027-default").bundlePreset).toBe("2027-default");
   });
 
   it("keeps the average region at a neutral scalar in every era", () => {

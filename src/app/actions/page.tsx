@@ -426,6 +426,9 @@ export default function ActionsPage() {
             gdpMillions: homeState.gdp,
             population: homeState.population,
             countryId: character.countryId,
+            // Same era baseline the server executes with (see executeAction):
+            // without this a 1953-world card would quote modern-era costs.
+            preset: worldFlags.preset,
           }
         : undefined
     );
@@ -448,6 +451,8 @@ export default function ActionsPage() {
             gdpMillions: homeState.gdp,
             population: homeState.population,
             countryId: character.countryId,
+            // Same era baseline the server executes with (see executeAction).
+            preset: worldFlags.preset,
           }
         : undefined
     );
@@ -467,6 +472,8 @@ export default function ActionsPage() {
             gdpMillions: homeState.gdp,
             population: homeState.population,
             countryId: character.countryId,
+            // Same era baseline the server executes with (see executeAction).
+            preset: worldFlags.preset,
           }
         : undefined
     );
@@ -495,7 +502,7 @@ export default function ActionsPage() {
       buildDonorBaseActionCost,
       buildDonorBaseFundCost,
     };
-  }, [character, influence, homeState, campaignRates]);
+  }, [character, influence, homeState, campaignRates, worldFlags.preset]);
 
   const forexEnabled = !!character?.currencyBalances;
   // LOCAL home-currency balance — canonical source of truth.
