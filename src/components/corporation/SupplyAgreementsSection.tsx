@@ -1,5 +1,6 @@
 "use client";
 
+import { SupplyOfferBoard } from "./SupplyOfferBoard";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
@@ -728,8 +729,36 @@ export default function SupplyAgreementsSection({
         </button>
       </div>
 
+      <SupplyOfferBoard
+        corpId={corpId}
+        onRespond={(listing) => {
+          setProposalRole(listing.side === "sell" ? "buyer" : "supplier");
+          setSelectedBuyer({
+            id: listing.corporationId,
+            name: listing.corporationName,
+            ticker: null,
+            countryId: null,
+          });
+          setCommodity(listing.commodity);
+          setStateId(listing.stateId ?? "");
+          setVolumeCap(String(listing.volumeCap));
+          setPremiumPct(listing.pricePremium * 100);
+          setDurationTurns(listing.durationTurns != null ? String(listing.durationTurns) : "");
+          setExclusive(false);
+          setShowForm(true);
+          window.setTimeout(
+            () =>
+              document
+                .getElementById(`supply-proposal-${corpId}`)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            0
+          );
+        }}
+      />
+
       {showForm && (
         <form
+          id={`supply-proposal-${corpId}`}
           onSubmit={handlePropose}
           className="rounded-xl border border-card-border bg-card p-4 space-y-4"
         >

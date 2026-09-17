@@ -155,6 +155,38 @@
         "otherCharges": "Deposit-insurance premium and defaulted principal written off, last banking pass. Both reduce the bottom line below net interest.",
         "takeProfits": "Earnings stay in the bank until moved. Withdraw cash under Funding, limited by withdrawable reserves."
       }
+    },
+    "supplyBoard": {
+      "title": "Open supply offers",
+      "intro": "Find a trading partner or advertise what you want to buy or sell. These are non-binding offers. Respond to review the terms in a private negotiation; both CEOs must agree before a contract starts.",
+      "failed": "Could not load or save supply offers.",
+      "retry": "Retry",
+      "full": "Withdraw an offer before publishing another. Each corporation has ten slots.",
+      "publish": "Post an offer",
+      "close": "Close form",
+      "submit": "Publish offer",
+      "side": "Offer type",
+      "sell": "Sell",
+      "buy": "Buy",
+      "commodity": "Commodity",
+      "state": "Fulfillment state code",
+      "volume": "Quantity per turn ({unit})",
+      "premium": "Price above or below market (%)",
+      "duration": "Contract duration in turns (optional)",
+      "openEnded": "Open-ended contract",
+      "expiry": "Advertisements expire after 168 turns. Posting does not reserve capacity or create a contract. You can withdraw an advertisement at any time.",
+      "own": "Your offers ({count}/10)",
+      "withdraw": "Withdraw",
+      "filter": "Filter commodity",
+      "all": "All commodities",
+      "loading": "Loading offers...",
+      "empty": "No matching open offers.",
+      "terms": "{volume} {unit} per turn at {premium}% relative to market price.",
+      "term": "{count, plural, one {# turn} other {# turns}}",
+      "expires": "Offer expires at turn {turn}",
+      "respond": "Review and negotiate",
+      "previous": "Previous",
+      "next": "Next"
     }
   }
 }

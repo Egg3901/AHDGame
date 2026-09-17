@@ -7,6 +7,8 @@ import { NextIntlClientProvider } from "next-intl";
 import SupplyAgreementsSection from "./SupplyAgreementsSection";
 import enCorporations from "../../../messages/en/corporations.json";
 
+vi.mock("./SupplyOfferBoard", () => ({ SupplyOfferBoard: () => null }));
+
 vi.mock("@/contexts/ToastContext", () => ({
   useToast: () => ({ showToast: vi.fn() }),
 }));
