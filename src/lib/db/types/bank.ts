@@ -127,6 +127,27 @@ export interface BankCharter {
   /** Turn represented by `lastBankingIncome`. */
   lastBankingIncomeTurn?: number;
   /**
+   * Per-turn earnings split behind `lastBankingIncome`, in the charter
+   * currency. Stamped by the same banking pass (same turn as
+   * `lastBankingIncomeTurn`) so the console can show interest paid vs earned
+   * without re-deriving them. All are magnitudes (>= 0); the sign lives in
+   * the label (paid = expense, collected/received = income).
+   */
+  /** Deposit interest credited to player + NPC depositors this pass (expense). */
+  lastBankingDepositInterest?: number;
+  /** Loan interest collected from the named + household books (income). */
+  lastBankingLoanInterest?: number;
+  /** Interbank interest paid as borrower (expense). Landed after the main pass. */
+  lastBankingInterbankInterestPaid?: number;
+  /** Interbank interest received as lender (income). Landed after the main pass. */
+  lastBankingInterbankInterestReceived?: number;
+  /** CB margin + discount-window interest due this pass (expense). */
+  lastBankingFacilityInterest?: number;
+  /** Deposit-insurance premium paid this pass (expense). */
+  lastBankingInsurancePremium?: number;
+  /** Loan principal written off as defaults this pass (charge). */
+  lastBankingWriteoffs?: number;
+  /**
    * Idempotency key for depositor resolution after failure. Set when
    * resolveFailedBankDepositors finishes (insurance payouts / haircuts / holder flips).
    */

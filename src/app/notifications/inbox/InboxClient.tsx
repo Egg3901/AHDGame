@@ -117,6 +117,8 @@ export function InboxClient() {
   // Mobile: false = rail visible, true = reading pane visible (full-screen).
   // Ignored at lg+ where both columns always show.
   const [mobileReader, setMobileReader] = useState(false);
+  const [markAllError, setMarkAllError] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   // Fetch character eyebrow info from /api/auth/me
   useEffect(() => {
@@ -246,32 +248,52 @@ export function InboxClient() {
     }
   }, []);
 
-  // Mark all read
+  // Mark all read — optimistic update, then await the batch. Any item the
+  // server rejects is rolled back so the client never silently diverges,
+  // the player sees an error, and refetch() reconciles with server state.
   const handleMarkAllRead = useCallback(async () => {
     const unreadItems = visibleItems.filter((item) => item.unread && !state.readIds.has(item.id));
-    if (unreadItems.length === 0) return;
+    if (unreadItems.length === 0 || markingAll) return;
+    setMarkAllError(null);
+    setMarkingAll(true);
     dispatch({
       type: "MARK_ALL_READ",
       ids: unreadItems.map((item) => item.id),
     });
-    // Best-effort batch, fire and forget
-    for (const item of unreadItems) {
-      if (item.kind === "mail") {
-        for (const id of receivedMailIds(item)) {
-          fetch(`/api/mail/${id}`, { method: "PATCH" }).catch((error) => {
-            console.error("[inbox] Failed to mark mail read", error);
+    const outcomes = await Promise.allSettled(
+      unreadItems.map(async (item) => {
+        if (item.kind === "mail") {
+          const responses = await Promise.all(
+            receivedMailIds(item).map((id) => fetch(`/api/mail/${id}`, { method: "PATCH" }))
+          );
+          if (responses.some((res) => !res.ok)) {
+            throw new Error(`mark read failed for mail thread ${item.id}`);
+          }
+        } else {
+          await fetchJson("/api/notifications", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: item.id, action: "read" }),
+            feature: "inbox-mark-all-read",
           });
         }
-      } else {
-        fetchJson("/api/notifications", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: item.id, action: "read" }),
-          feature: "inbox-mark-all-read",
-        }).catch(() => {});
-      }
+      })
+    );
+    const failedIds = unreadItems
+      .filter((_, index) => outcomes[index].status === "rejected")
+      .map((item) => item.id);
+    if (failedIds.length > 0) {
+      dispatch({ type: "UNMARK_READ", ids: failedIds });
+      console.error("[inbox] Failed to mark all read", { failed: failedIds.length });
+      setMarkAllError(
+        failedIds.length === unreadItems.length
+          ? "Couldn't mark everything as read. Please try again."
+          : "Some items couldn't be marked as read. Please try again."
+      );
+      refetch();
     }
-  }, [visibleItems, state.readIds]);
+    setMarkingAll(false);
+  }, [visibleItems, state.readIds, markingAll, refetch]);
 
   // Loading state — mirrors header + segment chips + rail/reading-pane grid
   if (loading) {
@@ -365,13 +387,30 @@ export function InboxClient() {
         {/* Mark all read */}
         <button
           type="button"
-          onClick={handleMarkAllRead}
-          disabled={counts.all === 0}
+          onClick={() => void handleMarkAllRead()}
+          disabled={counts.all === 0 || markingAll}
           className="shrink-0 rounded-lg border border-card-border bg-card px-3.5 py-1.5 text-sm font-medium text-muted transition-colors hover:border-primary/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none"
         >
-          Mark all read
+          {markingAll ? "Marking…" : "Mark all read"}
         </button>
       </div>
+
+      {/* Mark-all-read failure — rolled back to server state, player can retry */}
+      {markAllError && (
+        <div
+          role="alert"
+          className="mb-5 flex items-center gap-3 rounded-xl border border-error/30 bg-error/10 px-4 py-3"
+        >
+          <p className="flex-1 text-sm text-error">{markAllError}</p>
+          <button
+            type="button"
+            onClick={() => void handleMarkAllRead()}
+            className="shrink-0 text-sm font-medium text-error underline underline-offset-2"
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Priority lane — active event needing inline input (renders null when none) */}
       <PriorityLane onResolved={refetch} />

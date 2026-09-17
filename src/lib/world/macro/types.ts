@@ -73,6 +73,17 @@ export interface MacroCountryState {
   lastMacroTickTurn: number | null;
   createdAt: Date;
   updatedAt: Date;
+  /**
+   * Set when a sovereignty transition dissolves this dependency's macro
+   * representation. The document is preserved for history but excluded from
+   * world-economic and sphere processing. Absent on all pre-retirement
+   * documents — missing counts as active (migration-safe).
+   */
+  retiredAt?: Date | null;
+  /** Transition rule that retired this document, when retired. */
+  retiredByRuleId?: string;
+  /** Successor entity that replaced this representation, when retired. */
+  successorEntityId?: WorldEntityId;
 }
 
 export interface MacroCountryDiagnostics {

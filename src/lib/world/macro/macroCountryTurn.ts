@@ -1,6 +1,7 @@
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { computeMacroContribution } from "./kernel";
+import { ACTIVE_MACRO_COUNTRY_FILTER, isActiveMacroCountry } from "./retirement";
 import { isMacroTickTurn, MACRO_TICK_INTERVAL } from "./schedule";
 
 export interface MacroCountryTurnResult {
@@ -19,17 +20,20 @@ export async function processMacroCountryTurn(
 ): Promise<MacroCountryTurnResult> {
   const collection = await getMacroCountriesCollection(db);
   const tickBucket = (turn - 1) % MACRO_TICK_INTERVAL;
-  const countries = await collection.find({ tickBucket }).toArray();
+  const countries = await collection.find({ tickBucket, ...ACTIVE_MACRO_COUNTRY_FILTER }).toArray();
   const updatedEntityIds: string[] = [];
   const now = new Date();
 
   for (const country of countries) {
     // Retained as an invariant check and for simple test/in-memory adapters
     // that do not implement Mongo filters.
+    if (!isActiveMacroCountry(country)) continue;
     if (!isMacroTickTurn(turn, country.entityId)) continue;
     updatedEntityIds.push(country.entityId);
   }
-  const due = countries.filter((country) => isMacroTickTurn(turn, country.entityId));
+  const due = countries.filter(
+    (country) => isActiveMacroCountry(country) && isMacroTickTurn(turn, country.entityId)
+  );
   if (due.length > 0) {
     await collection.bulkWrite(
       due.map((country) => ({
