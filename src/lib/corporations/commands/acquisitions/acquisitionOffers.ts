@@ -224,10 +224,12 @@ export async function resolveAcquisitionOfferStatus(
       now: new Date(),
       reason: `offer ${status} while a settlement held funds`,
     });
-    await db.collection<Corporation>("corporations").updateOne(
-      { _id: offer.targetCorporationId, acquisitionSettlementId: offer._id },
-      { $unset: { acquisitionSettlementId: "" }, $set: { updatedAt: new Date() } }
-    );
+    await db
+      .collection<Corporation>("corporations")
+      .updateOne(
+        { _id: offer.targetCorporationId, acquisitionSettlementId: offer._id },
+        { $unset: { acquisitionSettlementId: "" }, $set: { updatedAt: new Date() } }
+      );
   }
   const claim = await db
     .collection<AcquisitionOffer>(OFFERS)

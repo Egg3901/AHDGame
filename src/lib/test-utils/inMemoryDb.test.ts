@@ -22,7 +22,9 @@ describe("inMemoryDb document paths", () => {
       { _id: "plain", shareholders: [{ corporationId: "other", shares: 5 }] },
     ]);
 
-    expect(await db.collection("corps").countDocuments({ "shareholders.corporationId": "tgt" })).toBe(1);
+    expect(
+      await db.collection("corps").countDocuments({ "shareholders.corporationId": "tgt" })
+    ).toBe(1);
     expect(
       await db.collection("corps").countDocuments({ "shareholders.corporationId": "missing" })
     ).toBe(0);
@@ -30,7 +32,9 @@ describe("inMemoryDb document paths", () => {
 
   it("pulls array elements by selector and treats a missing element as a no-op", async () => {
     const db = createInMemoryDb();
-    db.seed("funds", [{ _id: "f", holdings: [{ corporationId: "tgt" }, { corporationId: "kept" }] }]);
+    db.seed("funds", [
+      { _id: "f", holdings: [{ corporationId: "tgt" }, { corporationId: "kept" }] },
+    ]);
 
     const pulled = await db
       .collection("funds")

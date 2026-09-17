@@ -28,10 +28,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { AcquisitionLegKind } from "@/lib/db/types/acquisitionSettlement";
 
 export interface PlannedLedger {
-  type:
-    | "share_buyout_payout"
-    | "share_buyout_outflow"
-    | "corp_dissolution_distribution";
+  type: "share_buyout_payout" | "share_buyout_outflow" | "corp_dissolution_distribution";
   amount: number;
   currencyCode: string;
   subjectType: "character" | "corporation" | "government";
@@ -112,7 +109,11 @@ export function acquisitionSettlementKey(offerHex: string): string {
   return `agreed_acquisition:${offerHex}`;
 }
 
-function anchorToLocal(payoutAnchor: number, currency: string, fxByCurrency: Record<string, number>): number {
+function anchorToLocal(
+  payoutAnchor: number,
+  currency: string,
+  fxByCurrency: Record<string, number>
+): number {
   const rate = fxByCurrency[currency];
   return Number.isFinite(rate) && rate && rate > 0 ? payoutAnchor * rate : payoutAnchor;
 }
@@ -124,9 +125,15 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
   const { allocation, acquirerHex, acquirerName, targetHex, targetName } = input;
 
   const costOfAnchor = (payoutAnchor: number): number =>
-    Math.round(anchorToCorpLiquidCapital(payoutAnchor, input.acquirerForCost, input.acquirerFxRate));
+    Math.round(
+      anchorToCorpLiquidCapital(payoutAnchor, input.acquirerForCost, input.acquirerFxRate)
+    );
 
-  const counterparty = { counterpartyType: "corporation" as const, counterpartyId: targetHex, counterpartyName: targetName };
+  const counterparty = {
+    counterpartyType: "corporation" as const,
+    counterpartyId: targetHex,
+    counterpartyName: targetName,
+  };
 
   if (input.priceInAcquirerCapital > 0) {
     legs.push({
@@ -166,7 +173,9 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
       });
       continue;
     }
-    const amt = input.forexEnabled ? anchorToLocal(row.payout, currency, input.fxByCurrency) : row.payout;
+    const amt = input.forexEnabled
+      ? anchorToLocal(row.payout, currency, input.fxByCurrency)
+      : row.payout;
     const imperial = row.isImperial === true;
     legs.push({
       key: `holder:${imperial ? "imperial" : "character"}:${row.characterId}`,
@@ -241,7 +250,9 @@ export function buildAcquisitionPayoutPlan(input: PayoutPlanInput): PayoutPlan {
         COUNTRY_CURRENCY_MAP[input.targetCountryId as CountryId] ??
         "USD") as CurrencyCode;
       const rate = input.fxByCurrency[floatCurrency] ?? 1;
-      const floatLocal = Math.round(writeGovBudgetLocal(allocation.publicFloatRow.payout, floatCurrency, rate));
+      const floatLocal = Math.round(
+        writeGovBudgetLocal(allocation.publicFloatRow.payout, floatCurrency, rate)
+      );
       legs.push({
         key: "holder:treasury",
         kind: "holder_credit",

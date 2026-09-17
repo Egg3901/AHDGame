@@ -26,11 +26,7 @@
 
 import { ObjectId, type Db, type Document, type Filter, type UpdateFilter } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import {
-  legStamp,
-  SETTLED_KEYS_CAP,
-  SETTLED_KEYS_FIELD,
-} from "@/lib/banking/moneyMove";
+import { legStamp, SETTLED_KEYS_CAP, SETTLED_KEYS_FIELD } from "@/lib/banking/moneyMove";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import type {
   AcquisitionSettlement,
@@ -183,7 +179,8 @@ export async function claimAcquisitionSettlement(
     if (code !== 11000) throw error;
   }
   const existing = await loadAcquisitionSettlement(db, spec.offerId);
-  if (!existing) throw new AcquisitionSettlementConflictError("settlement claim lost but no record found");
+  if (!existing)
+    throw new AcquisitionSettlementConflictError("settlement claim lost but no record found");
   // Identity is pinned; amounts are not re-verified: FX drift between attempts
   // must never invalidate the pinned legs, which are the only amounts applied.
   if (
@@ -218,15 +215,20 @@ export async function applyAcquisitionLeg(
   const collection = db.collection(leg.collection);
 
   if (leg.pull) {
-    const pulled = await collection.updateOne(leg.filter as Filter<Document>, {
-      $pull: { [leg.pull.path]: leg.pull.selector },
-    } as unknown as UpdateFilter<Document>);
+    const pulled = await collection.updateOne(
+      leg.filter as Filter<Document>,
+      {
+        $pull: { [leg.pull.path]: leg.pull.selector },
+      } as unknown as UpdateFilter<Document>
+    );
     if (pulled.matchedCount !== 1) return "unpayable";
   }
 
   const filter = {
     ...leg.filter,
-    ...(leg.guardPath && leg.guardGte !== undefined ? { [leg.guardPath]: { $gte: leg.guardGte } } : {}),
+    ...(leg.guardPath && leg.guardGte !== undefined
+      ? { [leg.guardPath]: { $gte: leg.guardGte } }
+      : {}),
     [SETTLED_KEYS_FIELD]: { $ne: stamp },
   } as Filter<Document>;
   const update = {
@@ -302,8 +304,7 @@ export async function emitAcquisitionLegLedger(
 export function deliveredCostInAcquirerCapital(settlement: AcquisitionSettlement): number {
   return settlement.legs
     .filter(
-      (leg) =>
-        leg.applied && (leg.kind === "holder_credit" || leg.kind === "shell_cash_credit")
+      (leg) => leg.applied && (leg.kind === "holder_credit" || leg.kind === "shell_cash_credit")
     )
     .reduce((sum, leg) => sum + leg.costInAcquirerCapital, 0);
 }
@@ -335,10 +336,10 @@ async function appendLeg(
   const existing = findLegIndex(settlement, leg.key);
   if (existing >= 0) return existing;
   const index = settlement.legs.length;
-  await settlements(db).updateOne(
-    { _id: settlement._id },
-    { $push: { legs: leg }, $set: { updatedAt: new Date() } } as UpdateFilter<AcquisitionSettlement>
-  );
+  await settlements(db).updateOne({ _id: settlement._id }, {
+    $push: { legs: leg },
+    $set: { updatedAt: new Date() },
+  } as UpdateFilter<AcquisitionSettlement>);
   settlement.legs.push(leg);
   return index;
 }
@@ -388,7 +389,11 @@ export async function compensateAcquisitionSettlement(
           counterpartyType: "corporation",
           counterpartyId: settlement.targetCorporationId,
           counterpartyName: settlement.targetName,
-          meta: { kind: "agreed_acquisition", side: "acquirer_refund", offerId: settlement._id.toString() },
+          meta: {
+            kind: "agreed_acquisition",
+            side: "acquirer_refund",
+            offerId: settlement._id.toString(),
+          },
         },
       ],
     });
@@ -405,7 +410,9 @@ export async function compensateAcquisitionSettlement(
       settlement.refundTotal = alreadyCounted + refund;
       refunded = refund;
     } else {
-      notes.push(`refund of ${refund} could not be applied (${outcome}); the debit died with the acquirer`);
+      notes.push(
+        `refund of ${refund} could not be applied (${outcome}); the debit died with the acquirer`
+      );
     }
   }
 
@@ -471,7 +478,9 @@ export async function compensateAcquisitionSettlement(
 export async function markAcquisitionProgress(
   db: Db,
   offerId: ObjectId,
-  progress: Partial<Pick<AcquisitionSettlement, "sectorsMoved" | "bankCharterTransferred" | "shellDeleted">>
+  progress: Partial<
+    Pick<AcquisitionSettlement, "sectorsMoved" | "bankCharterTransferred" | "shellDeleted">
+  >
 ): Promise<void> {
   await settlements(db).updateOne(
     { _id: offerId },

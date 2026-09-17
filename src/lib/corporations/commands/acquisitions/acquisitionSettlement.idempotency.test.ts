@@ -57,10 +57,16 @@ function crashAfter(index: number): FaultPlan {
   return { onCall: index + 1, afterWrite: true };
 }
 
-async function referenceLog(opts: Parameters<typeof buildAcquisitionWorld>[0]): Promise<WriteEntry[]> {
+async function referenceLog(
+  opts: Parameters<typeof buildAcquisitionWorld>[0]
+): Promise<WriteEntry[]> {
   const w = buildAcquisitionWorld(opts);
   const faulty = withInjectedCrash(w.memory, { onCall: Number.MAX_SAFE_INTEGER });
-  const r = await executeAgreedAcquisition({ db: faulty.db, offer: w.offer as never, currentTurn: 200 });
+  const r = await executeAgreedAcquisition({
+    db: faulty.db,
+    offer: w.offer as never,
+    currentTurn: 200,
+  });
   expect(r.ok).toBe(true);
   return faulty.log;
 }
@@ -119,7 +125,9 @@ describe("settlement crash recovery", () => {
         expect(second).toMatchObject({ ok: true });
         await expectExactlyOnceSuccess(world, 1);
       } catch (err) {
-        failures.push(`crash-after #${n} (${log[n].collection}.${log[n].op}): ${(err as Error).message}`);
+        failures.push(
+          `crash-after #${n} (${log[n].collection}.${log[n].op}): ${(err as Error).message}`
+        );
       }
     }
     expect(failures).toEqual([]);
@@ -155,7 +163,9 @@ describe("settlement crash recovery", () => {
         expect(second).toMatchObject({ ok: true });
         await expectExactlyOnceSuccess(world, 1);
         if (!transferWindow.has(n)) {
-          const acquirer = await world.memory.collection("corporations").findOne({ _id: world.acq });
+          const acquirer = await world.memory
+            .collection("corporations")
+            .findOne({ _id: world.acq });
           expect(acquirer?.bankCharter).toMatchObject({ charteredTurn: 150 });
           expect(
             await world.memory
@@ -164,7 +174,9 @@ describe("settlement crash recovery", () => {
           ).toBe(0);
         }
       } catch (err) {
-        failures.push(`crash-after #${n} (${log[n].collection}.${log[n].op}): ${(err as Error).message}`);
+        failures.push(
+          `crash-after #${n} (${log[n].collection}.${log[n].op}): ${(err as Error).message}`
+        );
       }
     }
     expect(failures).toEqual([]);
@@ -188,15 +200,95 @@ describe("settlement crash recovery", () => {
     expect(firstBalances.acquirer).toBe(ACQUIRER_CASH - world.price);
     expect(firstBalances.charA).toBe(0);
     // A further retry reports the same error and moves no more money.
-    const again = await executeAgreedAcquisition({ db: world.db, offer: world.offer as never, currentTurn: 200 });
+    const again = await executeAgreedAcquisition({
+      db: world.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
     expect(again).toMatchObject({ ok: false, status: 500 });
     expect(await readBalances(world)).toEqual(firstBalances);
     const settlement = await loadAcquisitionSettlement(world.db, world.offerId);
     expect(settlement?.status).toBe("in_progress");
   });
 
+  it("refuses the bypass for a genuinely new bank conflict on a live settlement", async () => {
+    // Companion to the degraded test above: the pre-check stands aside ONLY
+    // for the run's own interrupted handoff (slot charter identical to the
+    // target's). A different bank landing on the acquirer mid-flight keeps the
+    // 400, moves nothing, and the original run resumes once it leaves.
+    const log = await referenceLog({ charter: true });
+    const debitMark = log.findIndex(
+      (e) => e.collection === "acquisitionSettlements" && e.op === "updateOne"
+    );
+    expect(debitMark).toBeGreaterThan(0);
+    expect(log[debitMark - 1]).toMatchObject({ collection: "corporations", op: "updateOne" });
+    const world = buildAcquisitionWorld({ charter: true });
+    const faulty = withInjectedCrash(world.memory, crashAfter(debitMark));
+    const crashed = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    }).catch((err) => err);
+    expect(crashed).toBeInstanceOf(InjectedCrash);
+    // A genuinely different bank (charteredTurn 999, not the target's 150)
+    // lands on the acquirer while the debit is down and holders unpaid.
+    await world.memory.collection("corporations").updateOne(
+      { _id: world.acq },
+      {
+        $set: {
+          bankCharter: {
+            type: "retail",
+            status: "active",
+            currency: "USD",
+            charteredTurn: 999,
+            postedCapital: 1,
+            depositOffset: 0,
+            lendingOffset: 0,
+            cashReserves: 1,
+            npcDeposits: 0,
+          },
+        },
+      }
+    );
+    const blocked = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
+    expect(blocked).toMatchObject({ ok: false, status: 400 });
+    expect((blocked as { error: string }).error).toMatch(/already operates a bank/);
+    // Fail-safe: only the debit landed, nobody was paid, the record is live.
+    const stuck = await readBalances(world);
+    expect(stuck.acquirer).toBe(ACQUIRER_CASH - world.price);
+    expect(stuck.charA).toBe(0);
+    expect(stuck.imperial).toBe(0);
+    expect((await loadAcquisitionSettlement(world.db, world.offerId))?.status).toBe("in_progress");
+    // A further retry is identically blocked and moves nothing.
+    const again = await executeAgreedAcquisition({
+      db: world.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
+    expect(again).toMatchObject({ ok: false, status: 400 });
+    expect(await readBalances(world)).toEqual(stuck);
+    // The foreign bank leaves: the original run resumes to exactly-once success.
+    await world.memory
+      .collection("corporations")
+      .updateOne({ _id: world.acq }, { $unset: { bankCharter: "" } });
+    const retry = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
+    expect(retry).toMatchObject({ ok: true });
+    await expectExactlyOnceSuccess(world, 1);
+  });
+
   it("survives a crash before the settlement claim is even written", async () => {
-    const { world, second } = await crashThenRetry({}, { collection: "acquisitionSettlements", op: "insertOne", onCall: 1 });
+    const { world, second } = await crashThenRetry(
+      {},
+      { collection: "acquisitionSettlements", op: "insertOne", onCall: 1 }
+    );
     expect(second).toMatchObject({ ok: true });
     await expectExactlyOnceSuccess(world, 1);
   });
@@ -227,7 +319,11 @@ describe("settlement crash recovery", () => {
     // ledger leg re-emits.
     const before = await readBalances(world);
     vi.mocked(emitTx).mockClear();
-    const again = await executeAgreedAcquisition({ db: world.db, offer: world.offer as never, currentTurn: 200 });
+    const again = await executeAgreedAcquisition({
+      db: world.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
     expect(again).toEqual(second);
     expect(await readBalances(world)).toEqual(before);
     expect(vi.mocked(emitTx)).not.toHaveBeenCalled();
@@ -242,21 +338,52 @@ describe("partial-holder payout recovery", () => {
     const holderMoney = log
       .map((e, i) => ({ ...e, i }))
       .filter(
-        (e) => e.op === "updateOne" && (e.collection === "characters" || e.collection === "imperialCharacters")
+        (e) =>
+          e.op === "updateOne" &&
+          (e.collection === "characters" || e.collection === "imperialCharacters")
       );
     expect(holderMoney.length).toBeGreaterThanOrEqual(2);
     // Crash right after the mark that follows the second holder money write:
-    // two holders paid, everything else pending. (The reference run above
-    // also emits ledgers through the shared mock, so clear it first.)
+    // two holders paid, everything else pending. The two runs below share the
+    // module-level emit mock, so each run's emissions are snapshotted
+    // separately: per-run counts prove which run emitted what, and the union
+    // proves no leg's ledger emitted twice.
     vi.mocked(emitTx).mockClear();
-    const { world, second } = await crashThenRetry({}, crashAfter(holderMoney[1].i + 1));
+    const world = buildAcquisitionWorld({});
+    const faulty = withInjectedCrash(world.memory, crashAfter(holderMoney[1].i + 1));
+    const first = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    }).catch((err) => err);
+    expect(first).toBeInstanceOf(InjectedCrash);
+    const run1 = vi.mocked(emitTx).mock.calls.map((c) => c[1]);
+    vi.mocked(emitTx).mockClear();
+    const second = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
     expect(second).toMatchObject({ ok: true });
     await expectExactlyOnceSuccess(world, 1);
-    // Ledgers still emitted exactly once per leg across the crash and retry.
-    const calls = vi.mocked(emitTx).mock.calls.map((c) => c[1]);
-    expect(calls.filter((l) => l.type === "share_buyout_payout")).toHaveLength(5);
-    expect(calls.filter((l) => l.type === "share_buyout_outflow")).toHaveLength(1);
-    expect(calls.filter((l) => l.type === "corp_dissolution_distribution")).toHaveLength(2);
+    const run2 = vi.mocked(emitTx).mock.calls.map((c) => c[1]);
+    // Run 1 landed the debit plus two holder legs, but the crash hit after the
+    // second leg's mark and before its ledger emit, so run 1 emitted only the
+    // first holder payout; run 2 emits the remaining four payouts and shell cash.
+    expect(run1.filter((l) => l.type === "share_buyout_outflow")).toHaveLength(1);
+    expect(run1.filter((l) => l.type === "share_buyout_payout")).toHaveLength(1);
+    expect(run1.filter((l) => l.type === "corp_dissolution_distribution")).toHaveLength(0);
+    expect(run2.filter((l) => l.type === "share_buyout_outflow")).toHaveLength(0);
+    expect(run2.filter((l) => l.type === "share_buyout_payout")).toHaveLength(4);
+    expect(run2.filter((l) => l.type === "corp_dissolution_distribution")).toHaveLength(2);
+    // Union: every leg's ledger exactly once, keyed per recipient so a
+    // same-amount double-emit cannot hide behind the type counts above.
+    const keyOf = (l: (typeof run1)[number]) =>
+      `${l.type}:${l.subjectId != null ? String(l.subjectId) : (l.subjectName ?? "?")}:${l.amount}`;
+    const union = [...run1.map(keyOf), ...run2.map(keyOf)];
+    expect(union).toHaveLength(8);
+    expect(new Set(union).size).toBe(8);
+    expect(run1.map(keyOf).filter((k) => run2.map(keyOf).includes(k))).toEqual([]);
   });
 });
 
@@ -285,10 +412,18 @@ describe("concurrent execution", () => {
     expect(crashed).toBeInstanceOf(InjectedCrash);
 
     const rivalOffer = { ...w.offer, _id: new ObjectId() };
-    const rival = await executeAgreedAcquisition({ db: faulty.db, offer: rivalOffer as never, currentTurn: 200 });
+    const rival = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: rivalOffer as never,
+      currentTurn: 200,
+    });
     expect(rival).toMatchObject({ ok: false, status: 409 });
 
-    const retry = await executeAgreedAcquisition({ db: faulty.db, offer: w.offer as never, currentTurn: 200 });
+    const retry = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(retry).toMatchObject({ ok: true });
     await expectExactlyOnceSuccess(w, 1);
   });
@@ -302,7 +437,9 @@ describe("terminal failure and compensation", () => {
     const holderMoney = log
       .map((e, i) => ({ ...e, i }))
       .filter(
-        (e) => e.op === "updateOne" && (e.collection === "characters" || e.collection === "imperialCharacters")
+        (e) =>
+          e.op === "updateOne" &&
+          (e.collection === "characters" || e.collection === "imperialCharacters")
       );
     const slices = defaultSlices(1_000_000);
     const { world, second } = await crashThenRetry(
@@ -345,11 +482,20 @@ describe("terminal failure and compensation", () => {
       currentTurn: 200,
     }).catch((err) => err);
     expect(crashed).toBeInstanceOf(InjectedCrash);
-    const withdrawn = await resolveAcquisitionOfferStatus(world.db, world.offer as never, "withdrawn", 200);
+    const withdrawn = await resolveAcquisitionOfferStatus(
+      world.db,
+      world.offer as never,
+      "withdrawn",
+      200
+    );
     expect(withdrawn).toMatchObject({ ok: true });
     // The debit was refunded by the withdrawal; execution past the closure is
     // terminal and moves nothing further.
-    const retry = await executeAgreedAcquisition({ db: faulty.db, offer: world.offer as never, currentTurn: 200 });
+    const retry = await executeAgreedAcquisition({
+      db: faulty.db,
+      offer: world.offer as never,
+      currentTurn: 200,
+    });
     expect(retry).toMatchObject({ ok: false, status: 409, terminal: true });
     const b = await readBalances(world);
     expect(b.charA).toBe(0);
@@ -391,7 +537,11 @@ describe("pinned payout math", () => {
     const w = buildAcquisitionWorld({});
     const target = await w.memory.collection("corporations").findOne({ _id: w.tgt });
     const allocation = allocateShareholderPool(target as never, w.price, new Map());
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(r.ok).toBe(true);
     const settlement = await loadAcquisitionSettlement(w.db, w.offerId);
     const anchorByKey = new Map((settlement?.legs ?? []).map((leg) => [leg.key, leg.payoutAnchor]));
@@ -412,10 +562,15 @@ describe("pinned payout math", () => {
 
   it("replicates the floor-dust quirk instead of fixing it", async () => {
     const w = buildAcquisitionWorld({ price: 1_000_007 });
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(r.ok).toBe(true);
     const b = await readBalances(w);
-    const delivered = b.charA + b.charB + b.imperial + (b.corpHolder - 1_000) + b.fundCash + b.treasury;
+    const delivered =
+      b.charA + b.charB + b.imperial + (b.corpHolder - 1_000) + b.fundCash + b.treasury;
     // Per-row Math.floor leaves dust with no recipient, exactly as the legacy
     // payout did: the acquirer paid the full price, holders share the rest.
     expect(delivered).toBeLessThan(w.price);

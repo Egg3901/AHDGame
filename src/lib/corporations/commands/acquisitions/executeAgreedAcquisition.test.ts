@@ -8,11 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
-import {
-  buildAcquisitionWorld,
-  readBalances,
-  ACQUIRER_CASH,
-} from "./acquisitionSettlementWorld";
+import { buildAcquisitionWorld, readBalances, ACQUIRER_CASH } from "./acquisitionSettlementWorld";
 
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
 vi.mock("@/lib/currency/corporationCapital", async (importOriginal) => {
@@ -43,7 +39,11 @@ describe("executeAgreedAcquisition", () => {
   it("blocks acquiring a target with outstanding bonds", async () => {
     const w = buildAcquisitionWorld();
     w.memory.seed("bonds", [{ _id: new ObjectId(), corporationId: w.tgt, matured: false }]);
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/outstanding bonds/i);
     const balances = await readBalances(w);
@@ -65,14 +65,22 @@ describe("executeAgreedAcquisition", () => {
         shareholders: [{ corporationId: w.tgt, shares: 10 }],
       },
     ]);
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/equity in other corporations/i);
   });
 
   it("blocks when the acquirer cannot afford the price (no assets moved)", async () => {
     const w = buildAcquisitionWorld({ acquirerCash: 100 });
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error).toMatch(/insufficient corporate funds/i);
     const balances = await readBalances(w);
@@ -84,7 +92,11 @@ describe("executeAgreedAcquisition", () => {
 
   it("happy path: debits acquirer, pays every holder bucket, moves sectors, deletes the target shell", async () => {
     const w = buildAcquisitionWorld({ sectorCount: 2 });
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
 
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.sectorsMoved).toBe(2);
@@ -111,7 +123,11 @@ describe("executeAgreedAcquisition", () => {
 
   it("ledgers the acquirer outflow and both shell-cash legs", async () => {
     const w = buildAcquisitionWorld();
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
     expect(r.ok).toBe(true);
 
     const legs = vi.mocked(emitTx).mock.calls.map((c) => c[1]);
@@ -142,7 +158,11 @@ describe("executeAgreedAcquisition", () => {
 
   it("moves the target bank to the acquirer instead of deleting it (ticket-1267)", async () => {
     const w = buildAcquisitionWorld({ charter: true });
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
 
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.bankCharterTransferred).toBe(true);
@@ -164,12 +184,8 @@ describe("executeAgreedAcquisition", () => {
         $or: [{ lenderCorporationId: w.tgt }, { borrowerCorporationId: w.tgt }],
       })
     ).toBe(0);
-    expect(
-      await w.memory.collection("savingsAccounts").countDocuments({ holder: tgtHex })
-    ).toBe(0);
-    expect(
-      await w.memory.collection("savingsAccounts").countDocuments({ holder: acqHex })
-    ).toBe(1);
+    expect(await w.memory.collection("savingsAccounts").countDocuments({ holder: tgtHex })).toBe(0);
+    expect(await w.memory.collection("savingsAccounts").countDocuments({ holder: acqHex })).toBe(1);
     expect(
       await w.memory
         .collection("characters")
@@ -179,7 +195,11 @@ describe("executeAgreedAcquisition", () => {
 
   it("blocks acquiring a banked target when the acquirer already operates a bank", async () => {
     const w = buildAcquisitionWorld({ charter: true, acquirerCharter: true });
-    const r = await executeAgreedAcquisition({ db: w.db, offer: w.offer as never, currentTurn: 200 });
+    const r = await executeAgreedAcquisition({
+      db: w.db,
+      offer: w.offer as never,
+      currentTurn: 200,
+    });
 
     expect(r.ok).toBe(false);
     if (!r.ok) {

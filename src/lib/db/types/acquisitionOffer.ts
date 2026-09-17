@@ -1,12 +1,7 @@
 import type { ObjectId } from "mongodb";
 
 export type AcquisitionOfferStatus =
-  | "pending"
-  | "accepted"
-  | "rejected"
-  | "withdrawn"
-  | "expired"
-  | "failed";
+  "pending" | "accepted" | "rejected" | "withdrawn" | "expired" | "failed";
 
 /**
  * Terminal money-safe state: execution moved money and then hit a failure it
@@ -15,7 +10,6 @@ export type AcquisitionOfferStatus =
  * and the offer must NOT return to `pending`: a retry would re-debit and
  * re-pay. CEOs open a new offer instead.
  */
-
 
 /**
  * An agreed corp-to-corp acquisition offer: the acquirer's CEO offers to buy the

@@ -1,6 +1,12 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import type { Bond, Character, Corporation, CorporateSector, ImperialCharacter } from "@/lib/db/types";
+import type {
+  Bond,
+  Character,
+  Corporation,
+  CorporateSector,
+  ImperialCharacter,
+} from "@/lib/db/types";
 import type { IndexFund } from "@/lib/db/types";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import type { AcquisitionOffer } from "@/lib/db/types/acquisitionOffer";
@@ -98,9 +104,7 @@ export async function executeAgreedAcquisition(
   }
   // Serialize same-acquirer executions in-process (the hostile path does the
   // same); cross-instance races are still closed by the per-leg stamps.
-  return withCorpLock(params.offer.acquirerCorporationId, () =>
-    runAgreedAcquisition(params)
-  );
+  return withCorpLock(params.offer.acquirerCorporationId, () => runAgreedAcquisition(params));
 }
 
 async function runAgreedAcquisition(
@@ -173,7 +177,10 @@ async function runAgreedAcquisition(
   const targetClaim = await corps.updateOne(
     {
       _id: target._id,
-      $or: [{ acquisitionSettlementId: { $exists: false } }, { acquisitionSettlementId: offer._id }],
+      $or: [
+        { acquisitionSettlementId: { $exists: false } },
+        { acquisitionSettlementId: offer._id },
+      ],
     },
     { $set: { acquisitionSettlementId: offer._id, updatedAt: new Date() } }
   );
@@ -223,16 +230,28 @@ async function runAgreedAcquisition(
     .map((r) => new ObjectId(r.fundId));
   const [chars, imperials, creditors, funds, treasury] = await Promise.all([
     charIds.length > 0
-      ? db.collection<Character>("characters").find({ _id: { $in: charIds } }).toArray()
+      ? db
+          .collection<Character>("characters")
+          .find({ _id: { $in: charIds } })
+          .toArray()
       : [],
     imperialIds.length > 0
-      ? db.collection<ImperialCharacter>("imperialCharacters").find({ _id: { $in: imperialIds } }).toArray()
+      ? db
+          .collection<ImperialCharacter>("imperialCharacters")
+          .find({ _id: { $in: imperialIds } })
+          .toArray()
       : [],
     creditorIds.length > 0
-      ? db.collection<Corporation>("corporations").find({ _id: { $in: creditorIds } }).toArray()
+      ? db
+          .collection<Corporation>("corporations")
+          .find({ _id: { $in: creditorIds } })
+          .toArray()
       : [],
     fundIds.length > 0
-      ? db.collection<IndexFund>("indexFunds").find({ _id: { $in: fundIds } }).toArray()
+      ? db
+          .collection<IndexFund>("indexFunds")
+          .find({ _id: { $in: fundIds } })
+          .toArray()
       : [],
     allocation?.publicFloatRow && allocation.publicFloatRow.payout > 0
       ? db
@@ -241,8 +260,12 @@ async function runAgreedAcquisition(
       : null,
   ]);
   const currencyByHolderHex: Record<string, string> = {};
-  for (const c of [...chars, ...imperials]) currencyByHolderHex[c._id.toString()] = getHomeCurrency(c);
-  const creditorByHolderHex: Record<string, { liquidCurrencyCode?: string | null; countryId?: string | null }> = {};
+  for (const c of [...chars, ...imperials])
+    currencyByHolderHex[c._id.toString()] = getHomeCurrency(c);
+  const creditorByHolderHex: Record<
+    string,
+    { liquidCurrencyCode?: string | null; countryId?: string | null }
+  > = {};
   for (const c of creditors) {
     creditorByHolderHex[c._id.toString()] = {
       liquidCurrencyCode: c.liquidCurrencyCode ?? null,
@@ -280,7 +303,12 @@ async function runAgreedAcquisition(
     targetName: target.name,
     targetCountryId: target.countryId as string,
     targetLiquidCurrencyCode: target.liquidCurrencyCode ?? null,
-    allocation: allocation ?? { characterRows: [], corporationRows: [], fundRows: [], publicFloatRow: null },
+    allocation: allocation ?? {
+      characterRows: [],
+      corporationRows: [],
+      fundRows: [],
+      publicFloatRow: null,
+    },
     currencyByHolderHex,
     creditorByHolderHex,
     fundsPresentHex: funds.map((f) => f._id.toString()),
@@ -419,7 +447,10 @@ async function runAgreedAcquisition(
     // 7. Tear down the target shell.
     const forexEnabledNow = await isForexEnabled();
     await cleanupShareMarketActivityForCorporations(db, [target._id], now, forexEnabledNow);
-    await stampSubjectDeleted(db, target._id, { sequentialId: target.sequentialId, deletedAt: now });
+    await stampSubjectDeleted(db, target._id, {
+      sequentialId: target.sequentialId,
+      deletedAt: now,
+    });
     await corps.deleteOne({ _id: target._id });
     await markAcquisitionProgress(db, offer._id, { shellDeleted: true });
     settlement.shellDeleted = true;
@@ -527,11 +558,17 @@ async function isOwnInterruptedCharterClaim(
   );
 }
 
-async function releaseAcquisitionTarget(db: Db, targetId: ObjectId, offerId: ObjectId): Promise<void> {
-  await db.collection<Corporation>("corporations").updateOne(
-    { _id: targetId, acquisitionSettlementId: offerId },
-    { $unset: { acquisitionSettlementId: "" }, $set: { updatedAt: new Date() } }
-  );
+async function releaseAcquisitionTarget(
+  db: Db,
+  targetId: ObjectId,
+  offerId: ObjectId
+): Promise<void> {
+  await db
+    .collection<Corporation>("corporations")
+    .updateOne(
+      { _id: targetId, acquisitionSettlementId: offerId },
+      { $unset: { acquisitionSettlementId: "" }, $set: { updatedAt: new Date() } }
+    );
 }
 
 /**
@@ -566,7 +603,9 @@ async function handleMissingParty(
     }
     const moneyLegs = settlement.legs.filter(
       (leg) =>
-        leg.kind === "acquirer_debit" || leg.kind === "holder_credit" || leg.kind === "shell_cash_credit"
+        leg.kind === "acquirer_debit" ||
+        leg.kind === "holder_credit" ||
+        leg.kind === "shell_cash_credit"
     );
     const moneyDone = moneyLegs.every((leg) => leg.applied);
     const sectorsRemain = target
