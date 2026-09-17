@@ -248,6 +248,37 @@ describe("reshuffleCabinetHandler", () => {
     expect(res.status).toBe(200);
   });
 
+  it("refuses a roster naming a caretaker-held seat before claiming or vacating", async () => {
+    const { appointees, body } = ROSTER();
+    seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);
+    // The named chancellor seat is held by an NPP caretaker: it still owns
+    // the (countryId, positionId) unique slot, so seating a player there
+    // would fail on insert after the old roster was vacated.
+    db.collectionMocks.cabinetMembers.find.mockReturnValue({
+      toArray: async () => [
+        {
+          _id: new ObjectId(),
+          countryId: "UK",
+          positionId: "chancellor",
+          characterId: null,
+          isNPP: true,
+          characterName: "Caretaker",
+        },
+      ],
+    });
+
+    const res = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toMatch(/held by a caretaker/);
+    // Nothing claimed, nothing vacated, nothing seated.
+    expect(db.collectionMocks.governmentFormations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.cabinetMembers.deleteMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.cabinetMembers.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+  });
+
   it("vacates outgoing ministers and restores their Commons office", async () => {
     const { appointees, body } = ROSTER();
     seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);

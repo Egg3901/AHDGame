@@ -1030,6 +1030,27 @@ export async function reshuffleCabinetHandler(request: Request, countryId: Count
       validated.push({ positionId, targetChar, lowerOfficial });
     }
 
+    // Caretaker guard: an NPP-held seat still occupies its (countryId,
+    // positionId) unique slot, so seating a player there would fail on insert
+    // AFTER the old roster was vacated — a refused roster must never wipe the
+    // cabinet. Refuse upfront: the PM dismisses the caretaker first, then
+    // reshuffles, matching the single-seat appoint contract.
+    const namedPositionIds = validated.map((appointment) => appointment.positionId);
+    const namedOccupants = await getCabinetMembersCollection(db)
+      .find({ countryId, positionId: { $in: namedPositionIds } })
+      .toArray();
+    const caretakerSeat = namedOccupants.find(
+      (occupant) => occupant.characterId == null || occupant.isNPP === true
+    );
+    if (caretakerSeat) {
+      const caretakerPosition = positions.find(
+        (candidate) => candidate.id === caretakerSeat.positionId
+      );
+      throw conflict(
+        `The ${caretakerPosition?.name ?? caretakerSeat.positionId} is held by a caretaker. Dismiss the caretaker first, then reshuffle.`
+      );
+    }
+
     // All validation passed: claim the token BEFORE touching any cabinet row.
     // The filter only matches while no entry for this pair exists, so this
     // single atomic write is the whole lock — no in-process mutex could span

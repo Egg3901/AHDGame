@@ -127,7 +127,6 @@ export async function getEligibleCabinetCharacters(
 ): Promise<CabinetEligibleCharacter[]> {
   const runtime = await getCountryState(db, countryId);
   const isOps = runtime.governmentType === "onePartyState";
-  const config = getCountryConfig(countryId);
   const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
 
   // Eligible-chamber officials drive the non-OPS candidate set and supply
@@ -208,7 +207,11 @@ export async function getEligibleCabinetCharacters(
       .filter((character) => {
         if (!isOps) return true;
         const party = partyBySeqId.get(String(character.party));
-        return !isBannedParty(config, party ?? null);
+        // RUNTIME shape, not `config`: `isOps` above is already read from
+        // runtime, and a converted country keeps its seed config — the static
+        // config would never report banned here while the appoint and
+        // reshuffle handlers (correctly) refuse the same character.
+        return !isBannedParty({ governmentType: runtime.governmentType }, party ?? null);
       })
       .map((character) => {
         const official = officialByCharacterId.get(character._id.toString());
