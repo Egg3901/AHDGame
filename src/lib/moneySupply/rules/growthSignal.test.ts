@@ -9,7 +9,10 @@ describe("comparable money-growth signal", () => {
   it("preserves warmup and missing observations while accepting actual zero growth", () => {
     expect(currentMoneyGrowth(null)).toBeNull();
     expect(
-      currentMoneyGrowth({ accountingVersion: MONEY_ACCOUNTING_VERSION, annualizedM2GrowthPct: null })
+      currentMoneyGrowth({
+        accountingVersion: MONEY_ACCOUNTING_VERSION,
+        annualizedM2GrowthPct: null,
+      })
     ).toBeNull();
     expect(
       currentMoneyGrowth({ accountingVersion: MONEY_ACCOUNTING_VERSION, annualizedM2GrowthPct: 0 })

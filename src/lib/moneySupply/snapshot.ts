@@ -142,9 +142,11 @@ export async function snapshotMoneySupply(db: Db, turn: number): Promise<number>
       .find({}, { projection: { currencyCode: 1, rate: 1 } })
       .toArray(),
     db
-      .collection<{ _id: string; cashLocal?: number; lifetime?: { qeIn?: number; qtOut?: number } }>(
-        "bondMarketPools"
-      )
+      .collection<{
+        _id: string;
+        cashLocal?: number;
+        lifetime?: { qeIn?: number; qtOut?: number };
+      }>("bondMarketPools")
       .find({}, { projection: { cashLocal: 1, lifetime: 1 } })
       .toArray(),
     db

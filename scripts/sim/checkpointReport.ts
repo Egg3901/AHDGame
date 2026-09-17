@@ -1224,7 +1224,7 @@ async function main(): Promise<void> {
     const n = t.turn.length;
     if (n <= MAX_MONEY_POINTS) continue;
     const stride = Math.ceil(n / MAX_MONEY_POINTS);
-    const keep = <T,>(arr: T[]): T[] => {
+    const keep = <T>(arr: T[]): T[] => {
       const out = arr.filter((_, i) => i % stride === 0);
       if (arr.length && out[out.length - 1] !== arr[arr.length - 1]) out.push(arr[arr.length - 1]);
       return out;
