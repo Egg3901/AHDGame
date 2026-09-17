@@ -21,6 +21,7 @@ import {
   debitSharesFromImperial,
 } from "@/lib/corporations/shareholderOps";
 import {
+  creditSellerFundProceeds,
   reconcileTotalSharesAfterFill,
   resolveCharName,
   resolveCorpName,
@@ -452,51 +453,32 @@ export async function fillShareOrder(request: Request, { params }: RouteParams) 
       return true;
     };
 
+    // Both seller-leg sites (corporation-buyer below, character-buyer further
+    // down) settle the fund proceeds through one shared helper so the
+    // committed-path-only ledger row is identical at both: emitted after the
+    // cash credit lands, inside the guarded fill that rolls the cash back on
+    // any later failure.
     const creditSellerFund = async (buyer: {
       type: "corporation" | "character";
       id: ObjectId;
       name: string;
     }): Promise<void> => {
       if (!order.placerFundId) return;
-      const cashCredit = await db
-        .collection<IndexFund>("indexFunds")
-        .updateOne(
-          { _id: order.placerFundId },
-          { $inc: { cashAnchor: total }, $set: { updatedAt: now } }
-        );
-      if (cashCredit.matchedCount === 0) {
-        throw new Error("Liquidity-provider fund disappeared during settlement");
-      }
-      sellerFundCashCredited = true;
-      // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit
-      // above. The contra is the buyer's shares (an asset account the shadow
-      // ledger does not carry), so the row is single-sided under the shared
-      // equity_transfer reason, same as the redemption-liquidity sale rows.
-      // Fund-subject rows never mirror, so this is the only ledger row for
-      // the credit. Emitted after the credit lands, inside the guarded fill
-      // that rolls the cash back on any later failure — a failed fill emits
-      // nothing, a committed fill emits exactly one row.
-      await emitTx(db, {
-        type: "stock_trade_sell",
-        turn: currentTurn,
-        createdAt: now,
-        subjectType: "fund",
-        subjectId: order.placerFundId,
-        subjectName: sellerFund?.name ?? "Index fund",
-        amount: total,
-        anchorAmount: total,
-        currencyCode: sellerFund?.anchorCurrencyCode ?? "USD",
-        counterpartyType: buyer.type,
-        counterpartyId: buyer.id,
-        counterpartyName: buyer.name,
-        meta: {
-          corporationId: corporation._id.toString(),
-          orderId: order._id.toString(),
-          shares,
-          pricePerShare: order.pricePerShare,
-          source: "order_fill_sell_order",
-        },
+      await creditSellerFundProceeds({
+        db,
+        fundId: order.placerFundId,
+        fundName: sellerFund?.name ?? "Index fund",
+        fundAnchorCurrency: sellerFund?.anchorCurrencyCode ?? "USD",
+        total,
+        buyer,
+        corporationId: corporation._id,
+        orderId: order._id,
+        shares,
+        pricePerShare: order.pricePerShare,
+        currentTurn,
+        now,
       });
+      sellerFundCashCredited = true;
     };
 
     const recordSellerFundSale = async (): Promise<void> => {

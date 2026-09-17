@@ -244,7 +244,11 @@ describe("deployBondReserveFromCash ledger threading (#992 tranche 6)", () => {
     const { db, systemSettingsFindOne } = deployDb(issues);
     const thresholds = { fund: {} };
 
-    await deployBondReserveFromCash(db, fund, 0, { liquidityTargetEnabled: true, turn: 7, thresholds: thresholds as never });
+    await deployBondReserveFromCash(db, fund, 0, {
+      liquidityTargetEnabled: true,
+      turn: 7,
+      thresholds: thresholds as never,
+    });
 
     expect(purchaseMock).toHaveBeenCalledTimes(2);
     for (const call of purchaseMock.mock.calls) {

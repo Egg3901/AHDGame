@@ -992,8 +992,7 @@ export async function processQueuedRedemptions(
       .project({ countryId: 1 })
       .toArray();
     for (const doc of nppDocs) {
-      const cur =
-        COUNTRY_CURRENCY_MAP[doc.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
+      const cur = COUNTRY_CURRENCY_MAP[doc.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
       nppCurrencyById.set(doc._id.toString(), cur);
     }
   }
