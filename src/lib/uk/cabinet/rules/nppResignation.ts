@@ -2,8 +2,8 @@
  * NPP minister resignation rule (epic #856, ticket #859).
  *
  * Rules core: plain data in, decision out. Randomness arrives as an injected
- * rng and time arrives as turns in post — no database, wall clock,
- * `Math.random()`, or ambient reads, so the headless harness can run this
+ * rng and time arrives as turns in post, with no database, wall clock,
+ * or ambient reads, so the headless harness can run this
  * unchanged. The shell (`../nppResignation.ts`) loads the seat, applies the
  * outcome, and writes the confidence event.
  *
