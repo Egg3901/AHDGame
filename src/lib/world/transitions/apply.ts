@@ -10,6 +10,7 @@ import {
 } from "@/lib/world/spheres/relationships";
 import type { SphereMembership } from "@/lib/world/spheres/types";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { buildDependencyRetirement } from "@/lib/world/macro/retirement";
 import { evaluateTransition, evaluateTransitionWithDefaults } from "./evaluate";
 import { getTransitionMacroCountry } from "./rosterMacros";
 import {
@@ -184,10 +185,37 @@ export async function applySovereigntyTransition(
 
   if (options.db && macroSeed) {
     const collection = await getMacroCountriesCollection(options.db);
-    await collection.updateOne(
-      { _id: macroSeed._id },
-      { $set: { ...macroSeed, updatedAt: now } },
-      { upsert: true }
+    // One ordered batch pairs successor activation with source retirement:
+    // the retire op runs only after the successor upsert succeeds, and a
+    // retry re-applies the same idempotent writes. The retire filter matches
+    // only a live source document, so a retry never rewrites retirement
+    // history and a missing source (the usual case — dependencies hold no
+    // macro document until sovereignty) is a clean no-op. The source document
+    // is never deleted; its sectors and contributions stay for history.
+    await collection.bulkWrite(
+      [
+        {
+          updateOne: {
+            filter: { _id: macroSeed._id },
+            update: { $set: { ...macroSeed, updatedAt: now } },
+            upsert: true,
+          },
+        },
+        {
+          updateOne: {
+            filter: { _id: rule.sourceEntityId, retiredAt: null },
+            update: {
+              $set: buildDependencyRetirement({
+                ruleId: rule.ruleId,
+                successorEntityId: rule.targetEntityId,
+                now,
+              }),
+            },
+            upsert: false,
+          },
+        },
+      ],
+      { ordered: true }
     );
   }
 

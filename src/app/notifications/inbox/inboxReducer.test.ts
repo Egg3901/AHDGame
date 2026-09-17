@@ -7,6 +7,14 @@ describe("inboxReducer", () => {
     expect(s.seg).toBe("mail");
     expect(s.selId).toBeNull();
   });
+  it("MARK_ALL_READ then UNMARK_READ rolls back only the failed ids", () => {
+    let s = inboxReducer(initialInboxState, { type: "MARK_ALL_READ", ids: ["n1", "n2"] });
+    expect(s.readIds.has("n1")).toBe(true);
+    expect(s.readIds.has("n2")).toBe(true);
+    s = inboxReducer(s, { type: "UNMARK_READ", ids: ["n2"] });
+    expect(s.readIds.has("n1")).toBe(true);
+    expect(s.readIds.has("n2")).toBe(false);
+  });
   it("MARK_READ adds to readIds; ARCHIVE adds to archivedIds and clears selection", () => {
     let s = inboxReducer(initialInboxState, { type: "MARK_READ", id: "n1" });
     expect(s.readIds.has("n1")).toBe(true);

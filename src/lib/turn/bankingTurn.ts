@@ -913,6 +913,17 @@ async function processOneBank(
           result.insurancePremiumPaid -
           result.defaultsWrittenOff,
         "bankCharter.lastBankingIncomeTurn": turn,
+        // The per-turn split behind the net above, so the console can show
+        // interest paid vs earned from the ledger instead of estimating.
+        // Interbank / facility legs land after this stamp and $inc both the
+        // net and their own lines below, starting from zero here.
+        "bankCharter.lastBankingDepositInterest": result.depositInterestPaid,
+        "bankCharter.lastBankingLoanInterest": result.loanInterestCollected,
+        "bankCharter.lastBankingInterbankInterestPaid": 0,
+        "bankCharter.lastBankingInterbankInterestReceived": 0,
+        "bankCharter.lastBankingFacilityInterest": 0,
+        "bankCharter.lastBankingInsurancePremium": result.insurancePremiumPaid,
+        "bankCharter.lastBankingWriteoffs": result.defaultsWrittenOff,
         updatedAt: new Date(),
       },
     }
@@ -1033,6 +1044,15 @@ async function processLoanBookOnlyBank(
         "bankCharter.lastBankingTurn": turn,
         "bankCharter.lastBankingIncome": serviced.interestCollected - serviced.writtenOff,
         "bankCharter.lastBankingIncomeTurn": turn,
+        // No deposit base, so no deposit interest and no premium; the loan
+        // split still applies for the console breakdown.
+        "bankCharter.lastBankingDepositInterest": 0,
+        "bankCharter.lastBankingLoanInterest": serviced.interestCollected,
+        "bankCharter.lastBankingInterbankInterestPaid": 0,
+        "bankCharter.lastBankingInterbankInterestReceived": 0,
+        "bankCharter.lastBankingFacilityInterest": 0,
+        "bankCharter.lastBankingInsurancePremium": 0,
+        "bankCharter.lastBankingWriteoffs": serviced.writtenOff,
         updatedAt: new Date(),
       },
     }
@@ -1554,14 +1574,20 @@ async function serviceInterbankAndCbMargin(
         db.collection<Corporation>("corporations").updateOne(
           { _id: loan.borrowerCorporationId, "bankCharter.status": "active" },
           {
-            $inc: { "bankCharter.lastBankingIncome": -result.interestPaid },
+            $inc: {
+              "bankCharter.lastBankingIncome": -result.interestPaid,
+              "bankCharter.lastBankingInterbankInterestPaid": result.interestPaid,
+            },
             $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
           }
         ),
         db.collection<Corporation>("corporations").updateOne(
           { _id: loan.lenderCorporationId, "bankCharter.status": "active" },
           {
-            $inc: { "bankCharter.lastBankingIncome": result.interestPaid },
+            $inc: {
+              "bankCharter.lastBankingIncome": result.interestPaid,
+              "bankCharter.lastBankingInterbankInterestReceived": result.interestPaid,
+            },
             $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
           }
         ),
@@ -1768,7 +1794,10 @@ async function serviceInterbankAndCbMargin(
       await db.collection<Corporation>("corporations").updateOne(
         { _id: corp._id, "bankCharter.status": "active" },
         {
-          $inc: { "bankCharter.lastBankingIncome": -facilityInterestDue },
+          $inc: {
+            "bankCharter.lastBankingIncome": -facilityInterestDue,
+            "bankCharter.lastBankingFacilityInterest": facilityInterestDue,
+          },
           $set: { "bankCharter.lastBankingIncomeTurn": turn, updatedAt: new Date() },
         }
       );

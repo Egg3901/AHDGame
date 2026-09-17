@@ -1,5 +1,6 @@
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { ACTIVE_MACRO_COUNTRY_FILTER, isActiveMacroCountry } from "@/lib/world/macro/retirement";
 import type { WorldEntityId } from "@/lib/world/worldEntityManifest";
 import { recordSphereSponsorDecisions } from "./ledger";
 import { ensureSphereMembership, saveSphereMembership } from "./membershipStore";
@@ -22,11 +23,15 @@ export async function processSphereSponsorTurn(
   const macros = await (
     await getMacroCountriesCollection(db)
   )
-    .find({ simulationTier: "sphere-macro" }, { projection: { entityId: 1, presetId: 1 } })
+    .find(
+      { simulationTier: "sphere-macro", ...ACTIVE_MACRO_COUNTRY_FILTER },
+      { projection: { entityId: 1, presetId: 1, retiredAt: 1 } }
+    )
     .toArray();
 
   const memberships = [];
   for (const macro of macros) {
+    if (!isActiveMacroCountry(macro)) continue;
     if (!macro.entityId || !macro.presetId) continue;
     memberships.push(await ensureSphereMembership(db, macro.presetId, macro.entityId));
   }

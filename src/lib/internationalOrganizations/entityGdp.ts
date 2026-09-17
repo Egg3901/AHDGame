@@ -14,6 +14,7 @@
  */
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { ACTIVE_MACRO_COUNTRY_FILTER, isActiveMacroCountry } from "@/lib/world/macro/retirement";
 import type { CountryId } from "@/lib/constants/countries";
 import type { OrgMemberId } from "@/lib/db/types/internationalOrganization";
 import { MACRO_TURNS_PER_YEAR } from "@/lib/world/macro/seedBuilder";
@@ -37,9 +38,11 @@ export async function loadGdpUsdMillionsByEntity(
   const macros = await (
     await getMacroCountriesCollection(db)
   )
-    .find({ entityId: { $in: [...entityIds] } })
+    .find({ entityId: { $in: [...entityIds] }, ...ACTIVE_MACRO_COUNTRY_FILTER })
     .toArray();
   for (const macro of macros) {
+    // Retired dependency representations stay for history but no longer price.
+    if (!isActiveMacroCountry(macro)) continue;
     // A playable figure always wins: if an entity somehow has both, `states` is
     // the one the game simulates and shows.
     if (out.has(macro.entityId)) continue;
