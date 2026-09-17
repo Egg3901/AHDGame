@@ -187,6 +187,7 @@ export interface MarketAccessMetrics {
   bondSubscriptionRate: number | null;
   corporateMedianHolders: number | null;
   corporateSubscriptionRate: number | null;
+  corporateMedianPriceToParSpreadPct: number | null;
   corporateMaturityHhi: number | null;
   twoSidedListingShare: number | null;
   medianQuotedSpreadPct: number | null;
@@ -247,6 +248,8 @@ export function marketAccessMetricsFromSnapshot(
     bondSubscriptionRate: snapshot?.securities.bondSubscriptionRate.value ?? null,
     corporateMedianHolders: snapshot?.securities.corporateMedianHolders?.value ?? null,
     corporateSubscriptionRate: snapshot?.securities.corporateSubscriptionRate?.value ?? null,
+    corporateMedianPriceToParSpreadPct:
+      snapshot?.securities.corporateMedianPriceToParSpreadPct?.value ?? null,
     corporateMaturityHhi: snapshot?.securities.corporateMaturityHhi?.value ?? null,
     twoSidedListingShare: snapshot?.securities.twoSidedListingShare.value ?? null,
     medianQuotedSpreadPct: snapshot?.securities.medianQuotedSpreadPct.value ?? null,

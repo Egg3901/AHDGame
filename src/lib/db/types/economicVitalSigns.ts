@@ -95,6 +95,8 @@ export interface EconomicVitalSigns {
     sovereignMaturityHhi: EconomicMetric;
     corporateMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
+    /** Median discount to par across unmatured corporate issues; the corporate mirror of the sovereign spread. */
+    corporateMedianPriceToParSpreadPct: EconomicMetric;
     openBuyOrders: number;
     openSellOrders: number;
     twoSidedListingShare: EconomicMetric;

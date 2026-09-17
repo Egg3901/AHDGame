@@ -659,8 +659,124 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateMedianHolders.observations).toBe(0);
     expect(snapshot.securities.corporateSubscriptionRate.value).toBeNull();
     expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBeNull();
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.observations).toBe(0);
     expect(snapshot.securities.corporateMaturityHhi.value).toBeNull();
     expect(snapshot.securities.corporateMaturityHhi.observations).toBe(0);
+  });
+
+  it("prices corporate credit with the same spread basis as sovereign issues", () => {
+    const corpId = new ObjectId();
+    const bond = (overrides: object) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    });
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        // 10pp discount, 5pp premium, par: median spread is 0.
+        bond({ marketPrice: 0.9 }),
+        bond({ marketPrice: 1.05 }),
+        // Legacy corporate rows omit issuerType and still count as corporate.
+        bond({ marketPrice: 1.0 }),
+        bond({ issuerType: "sovereign", marketPrice: 0.8 }),
+      ] as never,
+    });
+
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBe(0);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.observations).toBe(3);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.basis).toBe(
+      "unmatured_corporate_issue_count"
+    );
+    // The sovereign leg is excluded from the corporate read and priced on its own basis.
+    expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.value).toBeCloseTo(20, 10);
+    expect(snapshot.securities.sovereignMedianPriceToParSpreadPct.observations).toBe(1);
+  });
+
+  it("medians an even corporate spread sample instead of picking a side", () => {
+    const corpId = new ObjectId();
+    const bond = (marketPrice: number) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [bond(0.9), bond(1.05)] as never,
+    });
+
+    // Spreads [10, -5] median to 2.5; a premium reads as a negative discount, not zero.
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBeCloseTo(2.5, 10);
+    expect(snapshot.securities.corporateMedianPriceToParSpreadPct.observations).toBe(2);
+  });
+
+  it("narrows the corporate spread sample to finite prices, never to zero", () => {
+    const corpId = new ObjectId();
+    const bond = (marketPrice: number) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const partial = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [bond(Number.NaN), bond(0.9)] as never,
+    });
+
+    expect(partial.securities.corporateMedianPriceToParSpreadPct.value).toBeCloseTo(10, 10);
+    expect(partial.securities.corporateMedianPriceToParSpreadPct.observations).toBe(2);
+
+    const unpriced = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [bond(Number.NaN)] as never,
+    });
+
+    expect(unpriced.securities.corporateMedianPriceToParSpreadPct.value).toBeNull();
+    expect(unpriced.securities.corporateMedianPriceToParSpreadPct.observations).toBe(1);
   });
 
   it("concentrates corporate refinancing by maturity turn, excluding sovereign face", () => {
