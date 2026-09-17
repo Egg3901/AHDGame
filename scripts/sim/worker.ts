@@ -31,10 +31,14 @@ import { dirname, join } from "path";
 import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
 import {
+  assertBaselineMarkerForClaim,
+  assertCopiedMarkerMatches,
   assertPairedBaselineShape,
   assertSafeToken,
+  fingerprintBaselineState,
   isBaselineDbName,
   planBaselineCopy,
+  type BaselineMarkerDoc,
 } from "./simJobArgs";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 
@@ -221,25 +225,70 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
 }
 
 /**
- * Fail-closed baseline check: the snapshot db must carry the marker stamped
- * at capture time (stampBaseline.ts) for exactly this baseline id. A missing
- * or mismatched marker means the baseline was never captured (or was
- * overwritten), so the arm must fail rather than run on a guessed start.
- * Reads the SANDBOX Mongo only, never the live game database.
+ * Fail-closed baseline seal check (issue #1470 marker-race closure): the
+ * snapshot db must carry the sealed marker stamped at capture time
+ * (stampBaseline.ts) for exactly this baseline id, AND the marker must still
+ * describe the db as observed RIGHT NOW (gameState turn, doc count, content
+ * hash recomputed immediately before the sandbox-to-sandbox copy). A missing
+ * marker means never captured; an id mismatch means overwritten; turn/count
+ * or seal drift means something mutated the snapshot after stamping
+ * (including a same-id recapture). The arm fails rather than running on a
+ * forked start. Reads the SANDBOX Mongo only, never the live game database.
+ * Returns the verified source marker for the post-copy check.
  */
-async function verifyBaselineMarker(baselineDb: string, baselineId: string): Promise<void> {
+async function verifyBaselineSealForClaim(
+  baselineDb: string,
+  baselineId: string
+): Promise<BaselineMarkerDoc> {
   const client = new MongoClient(SIM_MONGODB_URI as string);
   try {
     await client.connect();
-    const marker = await client
-      .db(baselineDb)
-      .collection("simBaselines")
-      .findOne({ _id: baselineId as never });
-    if (!marker) {
-      throw new Error(
-        `baseline "${baselineId}" has no simBaselines marker in sandbox db "${baselineDb}": capture it with cloneWorld.ts + stampBaseline.ts before claiming arms`
-      );
+    const db = client.db(baselineDb);
+    const gameStateDoc = await db.collection("gameState").findOne({ _id: "current" as never });
+    const sourceTurn = Number((gameStateDoc as { currentTurn?: unknown } | null)?.currentTurn ?? 0);
+    // Same observation method as stampBaseline.ts (estimated counts over
+    // non-system collections), so stamp and claim cannot disagree on method.
+    const collections = await db.listCollections({}, { nameOnly: true }).toArray();
+    let docCount = 0;
+    for (const { name } of collections) {
+      if (name.startsWith("system.")) continue;
+      docCount += await db.collection(name).estimatedDocumentCount();
     }
+    const observed = {
+      baselineId,
+      sourceTurn,
+      docCount,
+      stateHash: fingerprintBaselineState(gameStateDoc ?? {}),
+    };
+    const marker = (await db
+      .collection("simBaselines")
+      .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
+    assertBaselineMarkerForClaim(marker, observed);
+    return marker as BaselineMarkerDoc;
+  } finally {
+    await client.close();
+  }
+}
+
+/**
+ * Post-copy gate: the arm db must carry the same sealed marker the source
+ * check just verified (the marker collection copies with the snapshot). A
+ * divergence means the copy raced a mutation or copied the wrong source:
+ * fail before running turns. Sandbox Mongo only.
+ */
+async function verifyCopiedBaselineMarker(
+  armDb: string,
+  sourceMarker: BaselineMarkerDoc,
+  baselineId: string
+): Promise<void> {
+  const client = new MongoClient(SIM_MONGODB_URI as string);
+  try {
+    await client.connect();
+    const destMarker = (await client
+      .db(armDb)
+      .collection("simBaselines")
+      .findOne({ _id: baselineId as never })) as BaselineMarkerDoc | null;
+    assertCopiedMarkerMatches(sourceMarker, destMarker, baselineId);
   } finally {
     await client.close();
   }
@@ -299,10 +348,11 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
     // Paired-baseline arms (issue #1470 experiment-validity audit): copy the
     // shared immutable snapshot sandbox-to-sandbox. This branch never reads
     // the live game database: SOURCE points at the SANDBOX Mongo holding the
-    // baseline db, and the marker check below fails the job when the baseline
-    // was never captured. Re-copying with --drop is idempotent, so a
-    // worker restart re-queuing a running arm (see main()) converges instead
-    // of forking a mismatched start.
+    // baseline db, the seal check below fails the job when the baseline was
+    // never captured or mutated after stamping, and the post-copy check
+    // fails it when the copy raced or landed unverified. Re-copying with
+    // --drop is idempotent, so a worker restart re-queuing a running arm
+    // (see main()) converges instead of forking a mismatched start.
     const baselined = job.pairId !== undefined || job.baselineId !== undefined;
     if (baselined) {
       if (job.cloneFromLive) {
@@ -320,7 +370,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       log(
         `Copying paired baseline ${provenance.baselineId} (${copy.sourceDb} -> ${copy.destDb}) ...`
       );
-      await verifyBaselineMarker(copy.sourceDb, provenance.baselineId);
+      // Revalidate the immutable seal immediately before the copy, then
+      // verify the copied marker before running turns (marker-race closure).
+      const sourceMarker = await verifyBaselineSealForClaim(copy.sourceDb, provenance.baselineId);
       const copyEnv = {
         ...baseChildEnv(),
         SOURCE_MONGODB_URI: SIM_MONGODB_URI as string,
@@ -337,7 +389,8 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
           `baseline copy (cloneWorld ${copy.sourceDb} -> ${copy.destDb}) exited with code ${copyResult.code}`
         );
       }
-      log(`Baseline copy complete; running ${job.turns} turn(s) in clone mode`);
+      await verifyCopiedBaselineMarker(copy.destDb, sourceMarker, provenance.baselineId);
+      log(`Baseline copy verified; running ${job.turns} turn(s) in clone mode`);
     }
     if (job.cloneFromLive) {
       // Copy the live world's STATE into the sandbox db (history/log

@@ -6,9 +6,13 @@
  * baselineDbNameFor(baselineId) with cloneWorld.ts (SOURCE at the live DB:
  * the only paired-baseline step that ever reads live), then runs this script
  * to record what was captured. The sim worker refuses to claim a baselined
- * arm whose snapshot db carries no marker for its baseline id, and this
- * script refuses to re-stamp a snapshot whose turn or doc count moved (which
- * means something ran against the baseline db, so it is no longer immutable).
+ * arm whose snapshot db carries no marker for its baseline id (and
+ * revalidates the seal immediately before copying, plus the copied marker
+ * before running), and this script refuses to re-stamp a snapshot whose
+ * turn, doc count, or content hash moved (which means something ran against
+ * the baseline db, so it is no longer immutable). A second capture under the
+ * same baselineId is refused even earlier, by cloneWorld.ts, so a stamped
+ * snapshot can never be recaptured out from under referenced arms.
  *
  * Sandbox only: SIM_MONGODB_URI must point at the sandbox Mongo, never the
  * live game database. The destination db is derived from --baseline-id, so a
@@ -19,7 +23,11 @@
  */
 
 import { MongoClient } from "mongodb";
-import { assertBaselineStampCompatible, baselineDbNameFor } from "./simJobArgs";
+import {
+  assertBaselineStampCompatible,
+  baselineDbNameFor,
+  fingerprintBaselineState,
+} from "./simJobArgs";
 
 const SIM_MONGODB_URI = process.env.SIM_MONGODB_URI;
 
@@ -57,7 +65,11 @@ async function main() {
       if (name.startsWith("system.")) continue;
       docCount += await db.collection(name).estimatedDocumentCount();
     }
-    const observed = { baselineId, sourceTurn, docCount };
+    // Sealed marker (issue #1470 marker-race closure): the content hash lets
+    // the worker claim check detect in-place edits that preserve turn and
+    // doc count. Same observation method as the worker's pre-copy check.
+    const stateHash = fingerprintBaselineState(gameState);
+    const observed = { baselineId, sourceTurn, docCount, stateHash };
 
     const existing = await db.collection("simBaselines").findOne({ _id: baselineId as never });
     assertBaselineStampCompatible(
@@ -66,6 +78,10 @@ async function main() {
             baselineId,
             sourceTurn: Number((existing as { sourceTurn?: unknown }).sourceTurn ?? -1),
             docCount: Number((existing as { docCount?: unknown }).docCount ?? -1),
+            stateHash:
+              typeof (existing as { stateHash?: unknown }).stateHash === "string"
+                ? ((existing as { stateHash?: string }).stateHash as string)
+                : undefined,
           }
         : null,
       observed
@@ -76,7 +92,7 @@ async function main() {
       { _id: baselineId as never },
       {
         $setOnInsert: { _id: baselineId, stampedAt: now },
-        $set: { sourceTurn, docCount, checkedAt: now },
+        $set: { sourceTurn, docCount, stateHash, checkedAt: now },
       },
       { upsert: true }
     );

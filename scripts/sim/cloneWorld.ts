@@ -16,6 +16,7 @@
  */
 
 import { MongoClient } from "mongodb";
+import { assertCloneDestNotStamped, isBaselineDbName } from "./simJobArgs";
 
 const SOURCE_MONGODB_URI = process.env.SOURCE_MONGODB_URI;
 const SOURCE_DB_NAME = process.env.SOURCE_DB_NAME || "a-house-divided";
@@ -100,6 +101,15 @@ async function main() {
   await dst.connect();
   const sdb = src.db(SOURCE_DB_NAME);
   const ddb = dst.db(destName);
+
+  // Same-id recapture guard (issue #1470 marker-race closure): a stamped
+  // baseline snapshot is frozen. Checked BEFORE --drop so a refused recapture
+  // leaves the referenced snapshot untouched. Arm dbs (never baseline-named)
+  // always pass, so idempotent worker re-copies are unaffected.
+  if (isBaselineDbName(destName)) {
+    const markerCount = await ddb.collection("simBaselines").countDocuments({}, { limit: 1 });
+    assertCloneDestNotStamped(destName, markerCount > 0);
+  }
 
   if (drop) {
     await ddb.dropDatabase();

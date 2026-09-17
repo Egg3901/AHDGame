@@ -56,6 +56,12 @@ import { createInterface } from "readline";
 import { randomUUID } from "crypto";
 import { MongoClient, type Db } from "mongodb";
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
+import {
+  PAIRED_BASELINE_TOOL_DESCRIPTION,
+  PAIRED_BASELINE_TOOL_NAME,
+  PAIRED_BASELINE_TOOL_SCHEMA,
+  runPairedBaselineTool,
+} from "./pairedBaseline";
 import { assertSimSourceShape } from "./simSource";
 
 const SIM_CONTROL_URI = process.env.SIM_CONTROL_URI || "mongodb://127.0.0.1:27018";
@@ -328,6 +334,18 @@ const TOOLS: ToolDef[] = [
         note: 'Poll with sim_run_status. The local worker claims queued jobs within ~15s — if status stays "queued" for minutes, the worker is not running (check sim_worker_health).',
       };
     },
+  },
+  // Paired-baseline creation (issue #1470): the production caller for
+  // buildPairedBaselinePair/planPairedBaselineRepair. Narrow by construction:
+  // arm ids, arm sandbox dbs, and provenance all derive from validated
+  // pairId/baselineId/seed, and the worker revalidates the baseline seal at
+  // claim time. Control-plane db name is bound here so an arm db colliding
+  // with the queue itself is refused at plan time.
+  {
+    name: PAIRED_BASELINE_TOOL_NAME,
+    description: PAIRED_BASELINE_TOOL_DESCRIPTION,
+    inputSchema: PAIRED_BASELINE_TOOL_SCHEMA,
+    handler: async (a, db) => runPairedBaselineTool(a, db, { controlDbName: SIM_CONTROL_DB }),
   },
   {
     name: "sim_run_election",
