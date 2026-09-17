@@ -304,4 +304,97 @@ describe("processUkPartyConferenceTurn", () => {
     const retry = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
     expect(retry).toMatchObject({ completed: 0, payoffs: 0 });
   });
+
+  it("heals a receipt-covered race void on the next tick with no explicit resolve", async () => {
+    const db = createFakeLeadershipDb();
+    const world = await seedParty(db, { seq: 2, name: "Conservative Party", members: 5 });
+    await processUkPartyConferenceTurn(db, YEAR1_START, NOW());
+    await processUkPartyConferenceTurn(db, YEAR1_OPEN, NOW());
+
+    // Seat the committee before the first agenda touch freezes the roll.
+    const committeeIds: ObjectId[] = [];
+    for (let i = 0; i < 3; i++) {
+      const id = new ObjectId();
+      committeeIds.push(id);
+      await db.collection("characters").insertOne({
+        _id: id,
+        name: `Committee ${i}`,
+        party: world.partySeq,
+        userId: new ObjectId(),
+      });
+    }
+    await db
+      .collection("politicalParties")
+      .updateOne({ _id: world.party._id }, { $set: { committeeIds } });
+    await castAyes(db, world.partySeq, world.memberIds.slice(0, 4), YEAR1_OPEN);
+
+    // Committee business: table a motion, carry it.
+    const { proposeRulesMotion, voteOnMotion, CONFERENCE_RACE_VOID_REASON } =
+      await import("@/lib/uk/conference/conferenceCommands");
+    const { getUKPartyLeadershipCollection } =
+      await import("@/lib/db/collections/ukPartyLeadership");
+    const committeeActor = (id: ObjectId) => ({
+      _id: id,
+      name: "Committee",
+      party: world.partySeq,
+    });
+    const { motionId } = await proposeRulesMotion(
+      db,
+      "UK",
+      world.partySeq,
+      committeeActor(committeeIds[0]!),
+      { triggerThresholdPct: 0.2 },
+      YEAR1_OPEN,
+      NOW()
+    );
+    for (const id of committeeIds) {
+      await voteOnMotion(
+        db,
+        "UK",
+        world.partySeq,
+        motionId,
+        committeeActor(id),
+        "aye",
+        YEAR1_OPEN,
+        NOW()
+      );
+    }
+
+    // Close cleanly through the driver: motion applied + receipted, payoff settled.
+    const closed = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
+    expect(closed).toMatchObject({ completed: 1, ratified: 1, payoffs: 1 });
+
+    // The micro-window's durable footprint, as if a racing reconciler voided
+    // the motion after the winner's receipt landed and the winner crashed
+    // before marking: void label + live receipt, no applied mark.
+    const decided = (await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" }))!;
+    const voidedMotions = (decided.motions as Array<Record<string, unknown>>).map((motion) =>
+      motion.motionId === motionId
+        ? { ...motion, status: "void", voidReason: CONFERENCE_RACE_VOID_REASON }
+        : motion
+    );
+    await getUKPartyConferencesCollection(db).updateOne(
+      { _id: "UK:2:1" },
+      { $set: { motions: voidedMotions, appliedMotionIds: [] } }
+    );
+
+    // The next driver tick heals from persisted evidence alone: the motion
+    // is passed and marked, the receipt is not double-applied, and the
+    // already-settled payoff is untouched.
+    const healedTick = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
+    expect(healedTick).toMatchObject({ completed: 0, payoffs: 0 });
+    const healed = await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" });
+    expect(healed?.motions.find((m) => m.motionId === motionId)?.status).toBe("passed");
+    expect(healed?.appliedMotionIds).toEqual([motionId]);
+    const leadership = await getUKPartyLeadershipCollection(db).findOne({ _id: "UK:2" });
+    expect(leadership?.appliedConferenceMotionIds).toEqual([motionId]);
+    expect(
+      leadership?.history?.filter((h) => (h.detail as string).includes(motionId))
+    ).toHaveLength(1);
+    const party = await db.collection("politicalParties").findOne({ _id: world.party._id });
+    expect(party?.politicalStrength).toBe(30);
+
+    const quiet = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
+    expect(quiet).toMatchObject({ completed: 0, payoffs: 0 });
+  });
 });

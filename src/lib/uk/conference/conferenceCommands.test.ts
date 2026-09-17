@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
   applyConferencePayoff,
+  CONFERENCE_RACE_VOID_CONFIRMED,
+  CONFERENCE_RACE_VOID_REASON,
   conferencePayoffNeedsSettle,
   conferenceResolutionNeedsHeal,
   ensureNppPlatformProposal,
@@ -3357,5 +3359,362 @@ describe("conference leadership-cooldown serialization", () => {
       expect(leadership?.ruleset?.triggerThresholdPct).toBe(0.15);
       expect(leadership?.appliedConferenceMotionIds ?? []).toHaveLength(0);
     }
+  });
+});
+
+describe("receipt/void crash-concurrency micro-window", () => {
+  const RACE_PATCH = { triggerThresholdPct: 0.2 };
+
+  async function seedRatifiedWithMotion(world: SeedWorld) {
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    await proposePlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      validPledgeIds(),
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const voters = [...world.members, ...world.committee, world.leader];
+    for (let i = 0; i < 5; i++) {
+      await voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        voters[i].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    const { motionId } = await proposeRulesMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[0].actor,
+      RACE_PATCH,
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    for (const member of world.committee) {
+      await voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        member.actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    return { doc: (await getConference(world.db, "UK", world.partySeq, 1))!, motionId };
+  }
+
+  async function readMotionLeadership(world: SeedWorld) {
+    return getUKPartyLeadershipCollection(world.db).findOne({ _id: `UK:${world.partySeq}` });
+  }
+
+  /**
+   * Gate the loser's reconcile pass through the exact micro-window: its
+   * first receipt write parks until the first concurrent mover lands, its
+   * second receipt write parks until the second mover lands (so both
+   * conditional writes miss while every read stays pre-winner), and its
+   * conference mark write parks until the winner has crashed. Progress is
+   * signaled with promises, never sleeps, so the interleaving is
+   * deterministic however microtasks interleave.
+   */
+  function gateReceiptVoidWindow(db: Db) {
+    let pushes = 0;
+    let markReleased = false;
+    let resolveW0!: () => void;
+    let resolveW0Parked!: () => void;
+    let resolveW1!: () => void;
+    let resolveW1Parked!: () => void;
+    let resolveMark!: () => void;
+    let resolveMarkParked!: () => void;
+    const w0Gate = new Promise<void>((r) => {
+      resolveW0 = r;
+    });
+    const w0Parked = new Promise<void>((r) => {
+      resolveW0Parked = r;
+    });
+    const w1Gate = new Promise<void>((r) => {
+      resolveW1 = r;
+    });
+    const w1Parked = new Promise<void>((r) => {
+      resolveW1Parked = r;
+    });
+    const markGate = new Promise<void>((r) => {
+      resolveMark = r;
+    });
+    const markParked = new Promise<void>((r) => {
+      resolveMarkParked = r;
+    });
+    const innerCollection = (name: string) =>
+      db.collection(name) as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>;
+    const gated = {
+      ...db,
+      collection: (name: string) => {
+        const inner = innerCollection(name);
+        if (name === "ukPartyLeadership") {
+          return {
+            ...inner,
+            updateOne: async (...args: unknown[]) => {
+              if ("$push" in (args[1] as Record<string, unknown>)) {
+                pushes += 1;
+                if (pushes === 1) {
+                  resolveW0Parked();
+                  await w0Gate;
+                } else if (pushes === 2) {
+                  resolveW1Parked();
+                  await w1Gate;
+                }
+              }
+              return (inner.updateOne as (...a: unknown[]) => Promise<unknown>)(...args);
+            },
+          };
+        }
+        if (name === "ukPartyConferences") {
+          return {
+            ...inner,
+            updateOne: async (...args: unknown[]) => {
+              const set = ((args[1] as Record<string, unknown>).$set ?? {}) as Record<
+                string,
+                unknown
+              >;
+              if ("appliedMotionIds" in set && !markReleased) {
+                resolveMarkParked();
+                await markGate;
+              }
+              return (inner.updateOne as (...a: unknown[]) => Promise<unknown>)(...args);
+            },
+          };
+        }
+        return inner;
+      },
+    } as unknown as Db;
+    return {
+      db: gated,
+      parked: { w0: w0Parked, w1: w1Parked, mark: markParked },
+      releaseW0: () => {
+        resolveW0();
+      },
+      releaseW1: () => {
+        resolveW1();
+      },
+      releaseMark: () => {
+        markReleased = true;
+        resolveMark();
+      },
+    };
+  }
+
+  it("never leaves a void label over a completed receipt across a crash", async () => {
+    const world = await seedWorld();
+    const { doc, motionId } = await seedRatifiedWithMotion(world);
+    const closeTurn = doc.votingClosesTurn;
+    const moverTurn = closeTurn - LEADERSHIP_AMENDMENT_COOLDOWN_TURNS;
+
+    // Setup: drive claim + fill, crashing only the leadership receipt
+    // write, so the row is decided with the motion merely passed.
+    const setupFaultDb = withCollectionFaults(world.db, [
+      {
+        collection: "ukPartyLeadership",
+        method: "updateOne",
+        match: (args) => "$push" in (args[1] as Record<string, unknown>),
+      },
+    ]);
+    await expect(
+      resolveConference(setupFaultDb, "UK", world.party, doc, closeTurn, NOW())
+    ).rejects.toThrow("injected");
+    const decided = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(decided.outcome).not.toBeNull();
+    expect(decided.motions.find((m) => m.motionId === motionId)?.status).toBe("passed");
+
+    // Park the cooldown far outside the window; the first mover below then
+    // moves it to the boundary without tripping it.
+    await getUKPartyLeadershipCollection(world.db).updateOne(
+      { _id: `UK:${world.partySeq}` },
+      { $set: { lastAmendedTurn: moverTurn - LEADERSHIP_AMENDMENT_COOLDOWN_TURNS - 1 } }
+    );
+
+    // The loser starts its reconcile pass and parks at its first receipt
+    // write, holding a stale pre-mover snapshot.
+    const gate = gateReceiptVoidWindow(world.db);
+    const loser = resolveConference(gate.db, "UK", world.party, decided, closeTurn, NOW());
+    await gate.parked.w0;
+
+    // First concurrent mover: a real direct amendment to the cooldown
+    // boundary. The loser's first write now misses on the moved cooldown.
+    const { amendLeadershipRules } = await import("../leadership/leadershipCommands");
+    await amendLeadershipRules(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[0].actor,
+      { survivalImmunityTurns: 10 },
+      moverTurn,
+      NOW()
+    );
+    gate.releaseW0();
+    // The loser's second attempt re-reads pre-winner (boundary, no
+    // cooldown) and parks at its second receipt write.
+    await gate.parked.w1;
+
+    // Second concurrent mover: the cooldown moves again (same shape as a
+    // racing amendment with a stale read), so the loser's second write
+    // misses too and its final confirmation read still sees no receipt.
+    await getUKPartyLeadershipCollection(world.db).updateOne(
+      { _id: `UK:${world.partySeq}` },
+      { $set: { lastAmendedTurn: moverTurn - 1 } }
+    );
+    gate.releaseW1();
+    // The loser now computes its void and parks at the conference mark.
+    await gate.parked.mark;
+
+    // The winner applies the same motion for real (cooldown is clear at its
+    // stale-but-valid snapshot) and crashes on its conference mark write:
+    // the receipt is durable, the row is unmarked.
+    const winnerFaultDb = withCollectionFaults(world.db, [
+      {
+        collection: "ukPartyConferences",
+        method: "updateOne",
+        match: (args) =>
+          "appliedMotionIds" in
+          ((args[1] as Record<string, unknown>).$set as Record<string, unknown>),
+      },
+    ]);
+    await expect(
+      resolveConference(winnerFaultDb, "UK", world.party, decided, closeTurn, NOW())
+    ).rejects.toThrow("injected");
+    gate.releaseMark();
+    await expect(loser).resolves.toMatchObject({ completed: false });
+
+    // The exact window footprint: a durable void label over a completed
+    // receipt, with no applied mark.
+    const mislabeled = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    const mislabeledMotion = mislabeled.motions.find((m) => m.motionId === motionId)!;
+    expect(mislabeledMotion.status).toBe("void");
+    expect(mislabeledMotion.voidReason).toBe(CONFERENCE_RACE_VOID_REASON);
+    expect(mislabeled.appliedMotionIds ?? []).toEqual([]);
+    const leadership = await readMotionLeadership(world);
+    expect(leadership?.appliedConferenceMotionIds).toEqual([motionId]);
+    expect(leadership?.ruleset?.triggerThresholdPct).toBe(0.2);
+    expect(leadership?.history?.filter((h) => h.detail.includes(motionId))).toHaveLength(1);
+
+    // The row stays heal-owed from persisted evidence alone: no explicit
+    // resolve call is needed for the driver to revisit it.
+    expect(conferenceResolutionNeedsHeal(mislabeled)).toBe(true);
+
+    // The heal adopts the receipt: passed + marked, without re-applying.
+    const heal = await resolveConference(world.db, "UK", world.party, mislabeled, closeTurn, NOW());
+    expect(heal).toMatchObject({ completed: false });
+    const healed = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(healed.motions.find((m) => m.motionId === motionId)?.status).toBe("passed");
+    expect(healed.motions.find((m) => m.motionId === motionId)?.voidReason).toBeNull();
+    expect(healed.appliedMotionIds).toEqual([motionId]);
+    expect(conferenceResolutionNeedsHeal(healed)).toBe(false);
+    const leadershipAfter = await readMotionLeadership(world);
+    expect(leadershipAfter?.ruleset?.triggerThresholdPct).toBe(0.2);
+    expect(leadershipAfter?.appliedConferenceMotionIds).toEqual([motionId]);
+    expect(leadershipAfter?.history?.filter((h) => h.detail.includes(motionId))).toHaveLength(1);
+
+    // Bounded: a further pass is a quiet no-op.
+    const quiet = await resolveConference(world.db, "UK", world.party, healed, closeTurn, NOW());
+    expect(quiet).toMatchObject({ completed: false, motionsPassed: 0, motionsVoided: 0 });
+    expect((await getConference(world.db, "UK", world.partySeq, 1))?.appliedMotionIds).toEqual([
+      motionId,
+    ]);
+    expect(JSON.stringify(await readMotionLeadership(world))).toBe(JSON.stringify(leadershipAfter));
+
+    // No extra payoff from any heal: still owed, nothing credited, then the
+    // payoff settles exactly once through its own receipted path.
+    expect(conferencePayoffNeedsSettle(healed)).toBe(true);
+    expect(await world.db.collection("partyGroupFavorability").find({}).toArray()).toHaveLength(0);
+    // findOne returns a live reference in the fake db, so snapshot the
+    // number before the payoff mutates the stored row in place.
+    const psBefore = (
+      await world.db.collection("politicalParties").findOne({ _id: world.party._id })
+    )?.politicalStrength as number;
+    const payoff = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      healed,
+      closeTurn,
+      NOW()
+    );
+    expect(payoff.applied).toBe(true);
+    const paidOnce = await world.db
+      .collection("politicalParties")
+      .findOne({ _id: world.party._id });
+    expect(paidOnce?.politicalStrength).toBeGreaterThan(psBefore);
+    const payoffAgain = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      (await getConference(world.db, "UK", world.partySeq, 1))!,
+      closeTurn,
+      NOW()
+    );
+    expect(payoffAgain.applied).toBe(false);
+    expect(
+      (await world.db.collection("politicalParties").findOne({ _id: world.party._id }))
+        ?.politicalStrength
+    ).toBe(paidOnce?.politicalStrength);
+  });
+
+  it("confirms an unreceipted pending race void terminal on one revisit, then goes quiet", async () => {
+    const world = await seedWorld();
+    const { doc, motionId } = await seedRatifiedWithMotion(world);
+    const closeTurn = doc.votingClosesTurn;
+    // A direct amendment voids the motion on the cooldown path first.
+    const { amendLeadershipRules } = await import("../leadership/leadershipCommands");
+    await amendLeadershipRules(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[0].actor,
+      { survivalImmunityTurns: 10 },
+      closeTurn,
+      NOW()
+    );
+    const first = await resolveConference(world.db, "UK", world.party, doc, closeTurn, NOW());
+    expect(first).toMatchObject({ motionsPassed: 0, motionsVoided: 1 });
+    // A legacy pending row carries the same race string with no receipt
+    // behind it (written before confirmation existed).
+    await getUKPartyConferencesCollection(world.db).updateOne(
+      { _id: doc._id },
+      { $set: { "motions.0.status": "void", "motions.0.voidReason": CONFERENCE_RACE_VOID_REASON } }
+    );
+    const legacy = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(legacy.motions.find((m) => m.motionId === motionId)?.voidReason).toBe(
+      CONFERENCE_RACE_VOID_REASON
+    );
+    expect((await readMotionLeadership(world))?.appliedConferenceMotionIds ?? []).toHaveLength(0);
+
+    // The legacy row recovers through the heal gate: one revisit confirms
+    // it terminal, and the row goes quiet afterwards.
+    expect(conferenceResolutionNeedsHeal(legacy)).toBe(true);
+    const heal = await resolveConference(world.db, "UK", world.party, legacy, closeTurn, NOW());
+    expect(heal).toMatchObject({ completed: false });
+    const confirmed = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(confirmed.motions.find((m) => m.motionId === motionId)?.status).toBe("void");
+    expect(confirmed.motions.find((m) => m.motionId === motionId)?.voidReason).toBe(
+      CONFERENCE_RACE_VOID_CONFIRMED
+    );
+    expect(conferenceResolutionNeedsHeal(confirmed)).toBe(false);
+
+    const leadershipBefore = JSON.stringify(await readMotionLeadership(world));
+    const quiet = await resolveConference(world.db, "UK", world.party, confirmed, closeTurn, NOW());
+    expect(quiet).toMatchObject({ completed: false, motionsPassed: 0, motionsVoided: 0 });
+    expect(
+      (await getConference(world.db, "UK", world.partySeq, 1))?.motions.find(
+        (m) => m.motionId === motionId
+      )?.voidReason
+    ).toBe(CONFERENCE_RACE_VOID_CONFIRMED);
+    expect(JSON.stringify(await readMotionLeadership(world))).toBe(leadershipBefore);
   });
 });

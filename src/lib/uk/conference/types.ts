@@ -118,6 +118,13 @@ export interface UKPartyConference {
    * - After the fill, platform + leadership side effects reconcile against
    *   the receipts below; `appliedMotionIds` / `platformAppliedTurn` make
    *   replays skip completed effects instead of double-applying them.
+   * - A race-path void (`void: concurrent leadership-rules amendment won
+   *   the cooldown race`) is receipt-pending, not terminal: the winning
+   *   applier may have created the receipt after the voiding pass's last
+   *   confirmation read and crashed before marking. The row stays heal-owed
+   *   until a revisit adopts the receipt (motion back to passed) or confirms
+   *   the void terminal (`... (confirmed: no effect applied)`), so a void
+   *   label never durably covers a completed effect and retries terminate.
    * - Payoff intent (`payoffCohesionPs`, `payoffApprovalGroups`) is fixed at
    *   claim time so resumes replay the SAME intent instead of recomputing
    *   it from drifted state. `payoffSettledTurn` is the driver gate: payoff

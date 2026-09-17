@@ -55,7 +55,7 @@ import {
   getOrSeedConference,
   pushConferenceHistory,
 } from "./conferenceStore";
-import type { ConferenceRulesMotion, UKPartyConference } from "./types";
+import type { ConferenceHistoryEntry, ConferenceRulesMotion, UKPartyConference } from "./types";
 import type { Character, PoliticalParty } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -755,6 +755,32 @@ export async function ensureNppPlatformProposal(
   return updated != null;
 }
 
+/**
+ * Receipt/void crash-concurrency contract (ticket #862 follow-up). A motion
+ * marked void while its leadership receipt exists is a mislabel: the winning
+ * applier created the receipt after this pass's last confirmation read and
+ * crashed before marking. Completed receipts dominate voids
+ * deterministically:
+ *
+ * - the mark-time recheck in computeReconcileDecisions flips any void whose
+ *   receipt landed during the pass, so the mark write never stamps void over
+ *   a receipt it could have seen;
+ * - a race-path void (CONFERENCE_RACE_VOID_REASON) stays heal-owed through
+ *   conferenceResolutionNeedsHeal, so the turn driver self-revisits the row
+ *   on the next tick without an explicit resolve call;
+ * - the revisit confirms the void terminal (CONFERENCE_RACE_VOID_CONFIRMED)
+ *   when the receipt is still absent, so retries are bounded: at most one
+ *   follow-up pass per race void, then the row is quiet.
+ *
+ * Cooldown and validation voids are terminal at mark time. A cooldown void
+ * implies the receipt was absent at the final check and no concurrent
+ * same-motion apply could have succeeded under the active cooldown; a
+ * validation void's patch could never have landed a receipt.
+ */
+export const CONFERENCE_RACE_VOID_REASON =
+  "void: concurrent leadership-rules amendment won the cooldown race";
+export const CONFERENCE_RACE_VOID_CONFIRMED = `${CONFERENCE_RACE_VOID_REASON} (confirmed: no effect applied)`;
+
 async function applyPassedMotion(
   db: Db,
   countryId: CountryId,
@@ -876,7 +902,7 @@ async function applyPassedMotion(
   }
   return {
     applied: false,
-    voidReason: "void: concurrent leadership-rules amendment won the cooldown race",
+    voidReason: CONFERENCE_RACE_VOID_REASON,
   };
 }
 
@@ -896,9 +922,23 @@ export function conferenceResolutionNeedsHeal(doc: UKPartyConference): boolean {
   if (doc.status !== "completed" || doc.outcome == null) return false;
   if (doc.ratified && doc.platformAppliedTurn == null) return true;
   const applied = new Set(doc.appliedMotionIds ?? []);
+  if (
+    (doc.motions ?? []).some(
+      (motion) =>
+        motion.status === "voting" || (motion.status === "passed" && !applied.has(motion.motionId))
+    )
+  ) {
+    return true;
+  }
+  // A pending race-path void still owes one receipt-confirming revisit: the
+  // winning applier may have created the receipt after this row's last
+  // confirmation read and crashed before marking. The revisit adopts the
+  // receipt (passed) or confirms the void terminal, so it runs at most once.
   return (doc.motions ?? []).some(
     (motion) =>
-      motion.status === "voting" || (motion.status === "passed" && !applied.has(motion.motionId))
+      motion.status === "void" &&
+      motion.voidReason === CONFERENCE_RACE_VOID_REASON &&
+      !applied.has(motion.motionId)
   );
 }
 
@@ -1082,8 +1122,9 @@ interface ReconcileDecisions {
  * Compute one reconcile pass over a decided row: the standing-platform
  * upsert (idempotent by key, confirmed via the platform receipt) and each
  * passed motion's leadership write (exactly-once via the motion receipt in
- * the conditional apply). Pure computation plus receipt-guarded side
- * effects; the caller persists the marks.
+ * the conditional apply). Motion votes are decided first; counts and history
+ * are built after the mark-time receipt recheck below, so a receipt that
+ * landed mid-pass dominates the void it raced. The caller persists the marks.
  */
 async function computeReconcileDecisions(
   db: Db,
@@ -1100,9 +1141,6 @@ async function computeReconcileDecisions(
   const frozen = frozenRollOf(working);
   const committeeSize =
     frozen != null ? frozen.committeeIds.length : getEligibleVoterSet(party).size;
-  let motionsPassed = 0;
-  let motionsVoided = 0;
-  const newEntries: ConferenceHistoryEntry[] = [];
 
   let platformAppliedTurn = working.platformAppliedTurn ?? null;
   if (working.ratified && platformAppliedTurn == null) {
@@ -1138,29 +1176,30 @@ async function computeReconcileDecisions(
   }
 
   const applied = new Set(working.appliedMotionIds ?? []);
-  const motions = await Promise.all(
-    (working.motions ?? []).map(async (motion) => {
+  type MotionOutcome =
+    | { kind: "carried"; motion: ConferenceRulesMotion }
+    | { kind: "replayed"; motion: ConferenceRulesMotion }
+    | { kind: "failed"; motion: ConferenceRulesMotion; reason: string }
+    | { kind: "applied"; motion: ConferenceRulesMotion }
+    | { kind: "voided"; motion: ConferenceRulesMotion; voidReason: string };
+  const outcomes: MotionOutcome[] = await Promise.all(
+    (working.motions ?? []).map(async (motion): Promise<MotionOutcome> => {
       let current = motion;
       if (current.status === "voting") {
         // Leftover from a row decided before vote outcomes were persisted:
         // decide it now from the frozen votes instead of stranding it.
         const decided = decideMotionVote(current, committeeSize, isNpp);
         if (!decided.passed) {
-          newEntries.push(
-            conferenceHistoryEntry(
-              currentTurn,
-              "motionFailed",
-              `Conference motion ${current.motionId} failed: ${decided.reason}`,
-              undefined,
-              now
-            )
-          );
           return {
-            ...current,
-            votesFor: decided.votesFor,
-            votesAgainst: decided.votesAgainst,
-            status: "failed" as const,
-            resolvedAtTurn: currentTurn,
+            kind: "failed",
+            motion: {
+              ...current,
+              votesFor: decided.votesFor,
+              votesAgainst: decided.votesAgainst,
+              status: "failed" as const,
+              resolvedAtTurn: currentTurn,
+            },
+            reason: decided.reason,
           };
         }
         current = {
@@ -1171,11 +1210,8 @@ async function computeReconcileDecisions(
           resolvedAtTurn: currentTurn,
         };
       }
-      if (current.status !== "passed") return current;
-      if (applied.has(current.motionId)) {
-        motionsPassed += 1;
-        return current;
-      }
+      if (current.status !== "passed") return { kind: "carried", motion: current };
+      if (applied.has(current.motionId)) return { kind: "replayed", motion: current };
       const result = await applyPassedMotion(
         db,
         countryId,
@@ -1185,39 +1221,145 @@ async function computeReconcileDecisions(
         currentTurn,
         now
       );
-      if (result.applied) {
-        motionsPassed += 1;
-        applied.add(current.motionId);
-        newEntries.push(
-          conferenceHistoryEntry(
-            currentTurn,
-            "motionPassed",
-            `Conference motion ${current.motionId} passed and amended leadership rules ` +
-              `(${current.votesFor} for, ${current.votesAgainst} against)`,
-            { characterId: current.proposedByCharacterId, actorName: current.proposedByName },
-            now
-          )
-        );
-        return current;
+      if (result.applied) return { kind: "applied", motion: current };
+      return {
+        kind: "voided",
+        motion: {
+          ...current,
+          status: "void" as const,
+          voidReason: result.voidReason,
+          resolvedAtTurn: currentTurn,
+        },
+        voidReason: result.voidReason ?? "void: unknown reason",
+      };
+    })
+  );
+
+  // Mark-time receipt recheck: a winning applier may have created a receipt
+  // after this pass's last confirmation read (and crashed before marking).
+  // Re-read the receipts once, before the caller stamps the marks, so a
+  // completed receipt dominates the void it raced instead of being cemented
+  // under it. Voids already pending from a previous pass get their one
+  // bounded revisit here: receipted ones flip to passed, still-absent ones
+  // confirm terminal. Skipped entirely when no void is in play.
+  const pendingBefore = new Set(
+    (working.motions ?? [])
+      .filter(
+        (motion) => motion.status === "void" && motion.voidReason === CONFERENCE_RACE_VOID_REASON
+      )
+      .map((motion) => motion.motionId)
+  );
+  const needsRecheck =
+    pendingBefore.size > 0 ||
+    outcomes.some(
+      (outcome) =>
+        outcome.kind === "voided" ||
+        (outcome.kind === "carried" &&
+          outcome.motion.status === "void" &&
+          outcome.motion.voidReason === CONFERENCE_RACE_VOID_REASON)
+    );
+  let receipts = new Set<string>();
+  if (needsRecheck) {
+    const leadership = await getUKPartyLeadershipCollection(db).findOne({
+      _id: `${countryId}:${partySeqId}`,
+    });
+    receipts = new Set(leadership?.appliedConferenceMotionIds ?? []);
+  }
+
+  let motionsPassed = 0;
+  let motionsVoided = 0;
+  const newEntries: ConferenceHistoryEntry[] = [];
+  const passedEntry = (motion: ConferenceRulesMotion): ConferenceHistoryEntry =>
+    conferenceHistoryEntry(
+      currentTurn,
+      "motionPassed",
+      `Conference motion ${motion.motionId} passed and amended leadership rules ` +
+        `(${motion.votesFor} for, ${motion.votesAgainst} against)`,
+      { characterId: motion.proposedByCharacterId, actorName: motion.proposedByName },
+      now
+    );
+  const motions: ConferenceRulesMotion[] = [];
+  // A void dominated by a completed receipt: adopt the receipt and mark the
+  // motion passed so the mark write converges instead of mislabeling.
+  const adoptVoid = (motion: ConferenceRulesMotion): ConferenceRulesMotion => ({
+    ...motion,
+    status: "passed" as const,
+    voidReason: null,
+  });
+  for (const outcome of outcomes) {
+    if (outcome.kind === "carried") {
+      const motion = outcome.motion;
+      if (motion.status === "void" && motion.voidReason === CONFERENCE_RACE_VOID_REASON) {
+        if (receipts.has(motion.motionId)) {
+          motionsPassed += 1;
+          applied.add(motion.motionId);
+          newEntries.push(passedEntry(adoptVoid(motion)));
+          motions.push(adoptVoid(motion));
+        } else {
+          // A carried pending void is always in pendingBefore (it came from
+          // the durable row), so this is its one bounded revisit: still no
+          // receipt, confirm it terminal. The row goes quiet afterwards.
+          motionsVoided += 1;
+          newEntries.push(
+            conferenceHistoryEntry(
+              currentTurn,
+              "motionVoided",
+              `Conference motion ${motion.motionId} confirmed ${CONFERENCE_RACE_VOID_CONFIRMED}`,
+              undefined,
+              now
+            )
+          );
+          motions.push({ ...motion, voidReason: CONFERENCE_RACE_VOID_CONFIRMED });
+        }
+      } else {
+        motions.push(motion);
       }
-      motionsVoided += 1;
+      continue;
+    }
+    if (outcome.kind === "replayed") {
+      motionsPassed += 1;
+      motions.push(outcome.motion);
+      continue;
+    }
+    if (outcome.kind === "failed") {
       newEntries.push(
         conferenceHistoryEntry(
           currentTurn,
-          "motionVoided",
-          `Conference motion ${current.motionId} passed its vote but ${result.voidReason}`,
+          "motionFailed",
+          `Conference motion ${outcome.motion.motionId} failed: ${outcome.reason}`,
           undefined,
           now
         )
       );
-      return {
-        ...current,
-        status: "void" as const,
-        voidReason: result.voidReason,
-        resolvedAtTurn: currentTurn,
-      };
-    })
-  );
+      motions.push(outcome.motion);
+      continue;
+    }
+    if (outcome.kind === "applied") {
+      motionsPassed += 1;
+      applied.add(outcome.motion.motionId);
+      newEntries.push(passedEntry(outcome.motion));
+      motions.push(outcome.motion);
+      continue;
+    }
+    if (receipts.has(outcome.motion.motionId)) {
+      motionsPassed += 1;
+      applied.add(outcome.motion.motionId);
+      newEntries.push(passedEntry(adoptVoid(outcome.motion)));
+      motions.push(adoptVoid(outcome.motion));
+      continue;
+    }
+    motionsVoided += 1;
+    newEntries.push(
+      conferenceHistoryEntry(
+        currentTurn,
+        "motionVoided",
+        `Conference motion ${outcome.motion.motionId} passed its vote but ${outcome.voidReason}`,
+        undefined,
+        now
+      )
+    );
+    motions.push(outcome.motion);
+  }
 
   return { platformAppliedTurn, motions, applied, newEntries, motionsPassed, motionsVoided };
 }
@@ -1228,10 +1370,14 @@ async function computeReconcileDecisions(
  * a compare-and-swap on the row's updatedAt: concurrent reconcilers of the
  * same row converge instead of clobbering each other's marks. The CAS loser
  * re-reads fresh and recomputes (receipts make the re-apply a no-op and
- * receipted voids adopt passed), so a void label can never durably cover a
- * completed effect. Attempts are bounded; if contention outlasts them this
- * call stands down and a heal resumes the marks. A crash anywhere before the
- * mark simply reconciles again.
+ * receipted voids adopt passed). The mark-time receipt recheck plus the
+ * pending-race-void heal invariant mean a void label can never durably cover
+ * a completed effect, even when the winning applier's receipt lands after
+ * another pass's final confirmation read and the winner crashes before
+ * marking: the next driver tick revisits the row from persisted evidence and
+ * adopts the receipt (or confirms the void terminal). Attempts are bounded;
+ * if contention outlasts them this call stands down and a heal resumes the
+ * marks. A crash anywhere before the mark simply reconciles again.
  */
 async function reconcileConferenceEffects(
   db: Db,
