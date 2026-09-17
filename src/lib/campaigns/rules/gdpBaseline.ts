@@ -45,10 +45,12 @@ export type GdpBaselineUnit = "local" | "usd";
 
 /**
  * Playable countries with an explicit baseline. Matches the `status: "active"`
- * country configs. Coming-soon countries (BR, CN, …) are intentionally absent:
- * resolving one throws (see below) instead of silently pricing in USD.
+ * country configs (US/UK/DE/JP/IE/CN), plus coming-soon NG so its calibration
+ * lands before activation. Other coming-soon countries (BR, …) are
+ * intentionally absent: resolving one throws (see below) instead of silently
+ * pricing in USD.
  */
-export type GdpBaselineCountry = "US" | "UK" | "DE" | "JP" | "IE" | "NG";
+export type GdpBaselineCountry = "US" | "UK" | "DE" | "JP" | "IE" | "NG" | "CN";
 
 export interface GdpBaselineResolution {
   /** National GDP per capita in the same unit as the era's `State.gdp`. */
@@ -135,6 +137,21 @@ const GDP_BASELINE_TABLE: Record<GdpBaselineCountry, Record<EraId, number>> = {
     "2023": 3_677_130,
     "2027": 3_669_401,
   },
+  CN: {
+    // Modern cells are yuan (local); 1953 is USD-anchored (unit "usd").
+    // 1979 inherits the seed-time reconcile uplift (scalar ~1.38) of
+    // undersized regional authoring against the authored national GDP —
+    // calibration review required on any reseed. Unlike IE/NG, CN seeds an
+    // explicit 2027 bundle, so every cell below is bundle-native.
+    "1953": 57,
+    "1979": 568,
+    "1991": 1_931,
+    "1999": 7_341,
+    "2007": 21_028,
+    "2019": 98_268,
+    "2023": 98_268,
+    "2027": 110_339,
+  },
 };
 
 /** Preset id of the region bundle behind each (country, era) cell. */
@@ -146,7 +163,7 @@ function bundlePresetFor(country: GdpBaselineCountry, era: EraId): string {
 /**
  * Resolve the campaign GDP-per-capita baseline for a country in a world's era.
  *
- * @param countryId playable country id (US/UK/DE/JP/IE/NG).
+ * @param countryId playable country id (US/UK/DE/JP/IE/NG/CN).
  * @param preset world reset preset (e.g. "1953-default"); defaults to
  *   `DEFAULT_SEED_PRESET` ("2019-default"). Callers without a world to ask
  *   (client previews, unit tests) get modern-era behavior — the same scale
