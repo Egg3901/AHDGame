@@ -71,4 +71,17 @@ describe("StockList non-tradable state", () => {
     expect(screen.getAllByText("Non-tradable").length).toBeGreaterThanOrEqual(2);
     expect(document.body.textContent).not.toContain("NaN%");
   });
+
+  it("falls back to the canonical predicate for pre-flag legacy rows", () => {
+    // Pre-#2033 snapshots persist no isTradable flag and can carry NaN
+    // returns on zero-share rows. The UI must still classify them as
+    // non-tradable from shares/float alone, never rendering NaN%.
+    const { isTradable: _dropped, ...legacySoe } = soe("legacy", "Legacy SoE");
+    void _dropped;
+    expect("isTradable" in legacySoe).toBe(false);
+    render(<StockList listings={[tradable, legacySoe]} />);
+
+    expect(document.body.textContent).not.toContain("NaN%");
+    expect(screen.getByText("Non-tradable")).toBeDefined();
+  });
 });

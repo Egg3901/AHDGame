@@ -874,6 +874,9 @@ it("measures securities breadth over tradable listings, intersecting the trade w
   expect(snapshot.securities.twoSidedListingShare.value).toBeCloseTo(1 / 3, 10);
   expect(snapshot.securities.twoSidedListingShare.observations).toBe(3);
   expect(snapshot.securities.organicTwoSidedListingShare.value).toBeCloseTo(1 / 3, 10);
+  // Rolling medians use the same eligible denominator with empty history.
+  expect(snapshot.securitiesRecent12.activeTradedListingShareMedian.value).toBeCloseTo(2 / 3, 10);
+  expect(snapshot.securitiesRecent12.twoSidedListingShareMedian.value).toBeCloseTo(1 / 3, 10);
   for (const metric of [
     snapshot.securities.activeTradedListingShare,
     snapshot.securities.twoSidedListingShare,
