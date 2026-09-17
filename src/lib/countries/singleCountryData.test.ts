@@ -452,11 +452,25 @@ describe("single-country data lives in that country's folder", () => {
   /**
    * Not an assertion -- a report. The unconverted countries are a backlog, not a
    * failure, and a backlog nobody can see is one nobody schedules.
+   *
+   * ⚠️ IT COUNTS ONLY WHAT IS STILL OUTSIDE THE FOLDER. The first version counted
+   * every single-country file, including the ones already relocated, so moving
+   * 42 files and 30,315 lines of United States data into `us/` left the number
+   * completely unchanged. A progress metric that cannot move is worse than none:
+   * it invites the reading that the work did nothing.
+   *
+   * This is the same mistake the plan already recorded once, in a different
+   * shape. Japan's file COUNT went 120 -> 121 across the whole conversion,
+   * because the registries keep their keys and gain forwarders; only literal
+   * lines outside the folder ever moved (1,191 -> 10). Both times the fix was to
+   * measure what is still in the wrong place, not what exists.
    */
   it("reports the backlog for countries not yet converted", () => {
     const byCountry = new Map<string, { files: number; lines: number }>();
     for (const f of singleCountryFiles()) {
       if (CONVERTED.includes(f.country)) continue;
+      // Already in its own folder: relocated, not outstanding.
+      if (f.file.startsWith(`src/lib/countries/${f.country.toLowerCase()}/`)) continue;
       const row = byCountry.get(f.country) ?? { files: 0, lines: 0 };
       row.files++;
       row.lines += f.lines;
@@ -465,7 +479,7 @@ describe("single-country data lives in that country's folder", () => {
     const ranked = [...byCountry].sort((a, b) => b[1].lines - a[1].lines);
     const total = ranked.reduce((sum, [, r]) => sum + r.lines, 0);
     console.log(
-      `\ncountry folders remaining: ${ranked.length} countries, ${total} lines of single-country data\n` +
+      `\nstill outside a country folder: ${ranked.length} countries, ${total} lines\n` +
         ranked
           .map(
             ([cc, r]) =>
