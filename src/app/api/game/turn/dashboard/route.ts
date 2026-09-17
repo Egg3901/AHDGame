@@ -8,7 +8,12 @@ import { getGameState } from "@/lib/gameState";
 import { getGameTime, type GameTimeContext } from "@/lib/time/gameTime";
 import { isPrimaryEnded } from "@/lib/elections/phases";
 import { calculateFullFundDistribution, type FundDistribution } from "@/lib/utils/fundGeneration";
-import { getCampaignActionCost, getAdvertiseActionCost, getDonorActionCost } from "@/lib/actions";
+import {
+  getCampaignActionCost,
+  getAdvertiseActionCost,
+  getDonorActionCost,
+  REST_ACTION_COST,
+} from "@/lib/actions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { FAVORABILITY_NATURAL_DECAY_THRESHOLD } from "@shared/constants/formulas";
@@ -149,7 +154,7 @@ async function handleGET() {
       buildDonorBase: getDonorActionCost(donor, "buildDonorBase"),
       poll: 2,
       pollLarge: 6,
-      rest: 0,
+      rest: REST_ACTION_COST,
     };
 
     // --- Fund income projection ---

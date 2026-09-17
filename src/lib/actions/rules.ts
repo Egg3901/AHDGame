@@ -34,6 +34,12 @@
  * and canPerformAction all call; a missing intellect stat rejects instead of
  * falling back to the unscaled base. Hosts own currency conversion, atomic
  * resource checks and persistence.
+ *
+ * Rest costs zero action points, spends no funds and is always eligible.
+ * quoteRestAction is the single source of truth the action effect,
+ * canPerformAction, the turn dashboard cost map and the AI advisor call;
+ * it has no actor, target, flag, cap, rounding or error cases. Hosts own
+ * AP charging and persistence.
  */
 import { statMultiplier } from "../stats/statMultiplier";
 import { NEUTRAL_STAT } from "../stats/statsConstants";
@@ -693,4 +699,30 @@ export function quotePollAction(actor: PollQuoteActor, tier: PollTier): PollQuot
     apCost: getPollActionCost(tier),
     fundCostAnchor: getPollFundCost(tier, intellect),
   };
+}
+
+// ── Rest (Game1724 slice) ─────────────────────────────────────────────────────
+// Cost math moved verbatim from `../actions` so the action effect,
+// canPerformAction, the turn dashboard cost map and the AI advisor share one
+// implementation. Balance is unchanged: rest has always been free and always
+// eligible, only the owner moved. quoteRestAction takes no actor because rest
+// has no stat, target or world context to interpret.
+
+/** Action-point cost for Rest: always free. */
+export const REST_ACTION_COST = 0;
+
+/** Rest result message, shared by the effect and any UI preview. */
+export const REST_RESULT_MESSAGE = "You took a well-deserved break.";
+
+/**
+ * Authoritative rest quote: zero AP cost and zero fund cost in ANCHOR units.
+ * Rest never rejects: no flags, caps, targets, funds, rounding or error
+ * cases. The `ok: false` arm keeps the shared quote shape so every consumer
+ * validates through the same narrow-then-read path as the other actions.
+ */
+export type RestQuote =
+  { ok: true; apCost: number; fundCostAnchor: number } | { ok: false; error: string };
+
+export function quoteRestAction(): RestQuote {
+  return { ok: true, apCost: REST_ACTION_COST, fundCostAnchor: 0 };
 }

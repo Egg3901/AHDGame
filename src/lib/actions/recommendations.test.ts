@@ -1,6 +1,7 @@
 // src/lib/actions/recommendations.test.ts
 import { describe, it, expect } from "vitest";
 import { ObjectId } from "mongodb";
+import { REST_ACTION_COST } from "@/lib/actions";
 import type { Character, PartyBudget, PoliticalParty, StatePartyOrg } from "@/lib/db/types";
 import { orgBuildCashPrice } from "@/lib/politicalStrength/buildOrgFunding";
 import { BUILD_ORG_BASE_PS_COST } from "@/lib/politicalStrength/strengthConstants";
@@ -66,6 +67,9 @@ describe("checkStatThresholds", () => {
     const lowRec = recs.find((r) => r.id.includes("actions-low"));
     expect(lowRec).toBeDefined();
     expect(lowRec?.priority).toBe("critical");
+    // The advisor quotes the same zero rest cost the effect charges.
+    expect(lowRec?.action.type).toBe("rest");
+    expect(lowRec?.action.estimatedCost).toEqual({ ap: REST_ACTION_COST, funds: 0 });
   });
 
   it("flags low favorability", () => {

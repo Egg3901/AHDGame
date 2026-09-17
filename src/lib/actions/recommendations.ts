@@ -13,6 +13,7 @@ import {
   CONVERT_CASH_ACTION_COST,
   calculateConvertCashInfamy,
   convertCashConversion,
+  REST_ACTION_COST,
 } from "../actions";
 import {
   ACTION_HOARDING_THRESHOLD,
@@ -212,7 +213,7 @@ export function checkStatThresholds(
       why: `You have only ${character.actions} AP. Focus on free or low-cost actions and save your AP for next turn.`,
       action: {
         type: "rest",
-        estimatedCost: { ap: 0, funds: 0 },
+        estimatedCost: { ap: REST_ACTION_COST, funds: 0 },
         estimatedBenefit: "Save AP for next turn",
       },
       link: "/actions",
