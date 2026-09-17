@@ -37,9 +37,9 @@ import {
   assertSafeToken,
   assertSourceManifestStableAcrossCopy,
   BASELINE_MARKER_COLLECTION,
-  buildBaselineManifest,
   isBaselineDbName,
   isBaselineManifestCollection,
+  observeBaselineSnapshot,
   planBaselineCopy,
   type BaselineManifest,
   type BaselineMarkerDoc,
@@ -234,10 +234,11 @@ const BASELINE_OBSERVE_BATCH = 2000;
 
 /**
  * Full-snapshot observation of a baseline or arm db: gameState turn plus the
- * v1 manifest over every covered collection. Same method as stampBaseline.ts
- * (batched cursors over the shared coverage list), so stamp, claim, and
- * post-copy checks cannot disagree on method. Runs ONLY on the baselined
- * arm-claim path: ordinary unpaired turns never pay this scan.
+ * v2 manifest streamed over every covered collection. Same cursor driver as
+ * stampBaseline.ts (observeBaselineSnapshot over the shared coverage list),
+ * so stamp, claim, and post-copy checks cannot disagree on method. Memory
+ * is O(batch), never O(snapshot). Runs ONLY on the baselined arm-claim
+ * path: ordinary unpaired turns never pay this scan.
  */
 async function observeBaselineDb(db: Db, baselineId: string): Promise<BaselineObservation> {
   const gameStateDoc = await db.collection("gameState").findOne({ _id: "current" as never });
@@ -246,14 +247,10 @@ async function observeBaselineDb(db: Db, baselineId: string): Promise<BaselineOb
     .map((c) => c.name)
     .filter(isBaselineManifestCollection)
     .sort();
-  const docsByCollection: Record<string, unknown[]> = {};
-  for (const name of collections) {
-    const docs: unknown[] = [];
-    const cursor = db.collection(name).find({}, { batchSize: BASELINE_OBSERVE_BATCH });
-    for await (const doc of cursor) docs.push(doc);
-    docsByCollection[name] = docs;
-  }
-  return { baselineId, sourceTurn, manifest: buildBaselineManifest(baselineId, docsByCollection) };
+  const manifest = await observeBaselineSnapshot(baselineId, collections, (name) =>
+    db.collection(name).find({}, { batchSize: BASELINE_OBSERVE_BATCH })
+  );
+  return { baselineId, sourceTurn, manifest };
 }
 
 /**
@@ -398,6 +395,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
     // --drop is idempotent, so a worker restart re-queuing a running arm
     // (see main()) converges instead of forking a mismatched start.
     const baselined = job.pairId !== undefined || job.baselineId !== undefined;
+    // Verified seal digest for the runWorld pre-spawn fence (R3 narrowing):
+    // set only on the baselined path below, after the post-copy dest check.
+    let verifiedBaselineDigest: string | null = null;
     if (baselined) {
       if (job.cloneFromLive) {
         throw new Error(
@@ -441,6 +441,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       }
       await verifySourceStableAcrossCopy(copy.sourceDb, sealed, provenance.baselineId);
       await verifyCopiedBaselineMarker(copy.destDb, sourceMarker, provenance.baselineId);
+      verifiedBaselineDigest = sealed.digest;
       log(`Baseline copy verified; running ${job.turns} turn(s) in clone mode`);
     }
     if (job.cloneFromLive) {
@@ -482,6 +483,14 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         `Pinned source moved between validation and spawn for job ${job._id} - refusing to run`
       );
     }
+    // R3 narrowing: a baselined arm hands runWorld the digest this worker
+    // just verified, so the child re-checks its ONE marker doc at spawn and
+    // fails closed on any arm-db write that landed after the dest
+    // observation. Unpaired jobs carry no fence flag and pay nothing.
+    const fenceFlags =
+      verifiedBaselineDigest !== null
+        ? [`--expected-baseline-digest=${verifiedBaselineDigest}`]
+        : [];
     const spawnPlan = planRunWorldSpawn(
       job,
       [
@@ -494,6 +503,7 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         // snapshot), so they need clone mode exactly like live clones do:
         // skip fresh bootstrap and the real-world users guardrail.
         ...(job.cloneFromLive || baselined ? ["--clone-mode"] : []),
+        ...fenceFlags,
       ],
       GAME_REPO_DIR,
       spawnSource

@@ -468,7 +468,7 @@ export function baselineProvenanceFlags(job: SimJobExperimentFields): string[] {
 }
 
 /**
- * Baseline snapshot seal, v1 full-snapshot manifest (issue #1470
+ * Baseline snapshot seal, v2 streaming full-snapshot manifest (issue #1470
  * experiment-integrity closure). The previous gameState-turn-plus-doc-count
  * seal lives here no longer: it could not see in-place edits outside
  * gameState, count-preserving collection add/drop, or estimate drift. The
@@ -480,6 +480,8 @@ export function baselineProvenanceFlags(job: SimJobExperimentFields): string[] {
  * recovery and upgrade on the next stamp.
  */
 export {
+  assertArmFenceMarker,
+  assertBaselineDigestFlag,
   assertBaselineMarkerForClaim,
   assertBaselineStampCompatible,
   assertCopiedBaselineMatches,
@@ -487,6 +489,7 @@ export {
   assertSourceManifestStableAcrossCopy,
   BASELINE_CLONE_EXCLUDED_COLLECTIONS,
   BASELINE_MANIFEST_MAX_DOCS,
+  BASELINE_MANIFEST_MAX_DOCS_PER_COLLECTION,
   BASELINE_MARKER_COLLECTION,
   BASELINE_SEAL_VERSION,
   buildBaselineManifest,
@@ -494,19 +497,23 @@ export {
   buildSealedMarkerDoc,
   baselineMarkerIdentity,
   canonicalizeBaselineValue,
+  createStreamingManifestBuilder,
   diffBaselineManifests,
   hashBaselineDocument,
   isBaselineManifestCollection,
   isLegacyBaselineMarker,
   isSealedBaselineMarker,
+  observeBaselineSnapshot,
   readSealedBaselineManifest,
   resolveBaselineCapture,
   stableStringifyBaseline as stableStringify,
   type BaselineCaptureStatus,
   type BaselineCollectionManifest,
   type BaselineManifest,
+  type BaselineManifestLimits,
   type BaselineMarkerDoc,
   type BaselineObservation,
+  type StreamingManifestBuilder,
 } from "./baselineManifest";
 
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before

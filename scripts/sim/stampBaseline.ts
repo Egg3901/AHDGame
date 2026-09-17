@@ -19,8 +19,9 @@
  * drift; an in-place edit, a collection add/drop, or a count change always
  * does, and the claim check names the exact collection.
  *
- * Cost: one O(total cloned docs) scan of the snapshot db, in batches of
- * 2000 per collection. One-time per capture (plus the worker's claim-time
+ * Cost: one streaming scan of the snapshot db in batches of 2000 per
+ * collection (O(batch) memory via the v2 builder; ceilings abort
+ * mid-iteration). One-time per capture (plus the worker's claim-time
  * scans); unpaired turns and fresh-bootstrap pairs never pay it.
  *
  * Crash recovery: a capture interrupted before this script leaves the
@@ -45,8 +46,8 @@ import {
   BASELINE_MARKER_COLLECTION,
   BASELINE_SEAL_VERSION,
   baselineDbNameFor,
-  buildBaselineManifest,
   isBaselineManifestCollection,
+  observeBaselineSnapshot,
   type BaselineMarkerDoc,
 } from "./simJobArgs";
 
@@ -82,21 +83,17 @@ async function main() {
     }
     const sourceTurn = Number((gameState as { currentTurn?: unknown }).currentTurn ?? 0);
 
-    // Full-snapshot observation: every covered collection, every document,
-    // batched cursors (one-time capture cost, never on unpaired turns).
+    // Full-snapshot observation: every covered collection streamed doc by
+    // doc through the v2 builder (O(batch) memory, ceilings enforced
+    // mid-iteration). One-time capture cost, never on unpaired turns.
     const started = Date.now();
     const collections = (await db.listCollections({}, { nameOnly: true }).toArray())
       .map((c) => c.name)
       .filter(isBaselineManifestCollection)
       .sort();
-    const docsByCollection: Record<string, unknown[]> = {};
-    for (const name of collections) {
-      const docs: unknown[] = [];
-      const cursor = db.collection(name).find({}, { batchSize: BATCH });
-      for await (const doc of cursor) docs.push(doc);
-      docsByCollection[name] = docs;
-    }
-    const manifest = buildBaselineManifest(baselineId, docsByCollection);
+    const manifest = await observeBaselineSnapshot(baselineId, collections, (name) =>
+      db.collection(name).find({}, { batchSize: BATCH })
+    );
     const observed = { baselineId, sourceTurn, manifest };
 
     const existing = (await db

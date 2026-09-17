@@ -75,7 +75,7 @@ function fakeDb(jobs: FakeJobs): PairedBaselineToolDb {
 
 /** Minimal fake baseline snapshot: covered collections + marker, with
  * stamp/observe/claim helpers mirroring the production scripts' method
- * (v1 full-snapshot manifest over every collection, not just gameState). */
+ * (v2 streaming full-snapshot manifest over every collection, not just gameState). */
 interface FakeBaselineDb {
   collections: Record<string, Array<Record<string, unknown>>>;
   marker: Record<string, unknown> | null;

@@ -11,19 +11,25 @@
  */
 import { describe, expect, it } from "vitest";
 import {
+  assertArmFenceMarker,
+  assertBaselineDigestFlag,
   assertBaselineMarkerForClaim,
   assertBaselineStampCompatible,
   assertCopiedBaselineMatches,
   assertCopiedMarkerMatches,
   assertSourceManifestStableAcrossCopy,
+  BASELINE_MANIFEST_MAX_DOCS,
+  BASELINE_MANIFEST_MAX_DOCS_PER_COLLECTION,
   BASELINE_SEAL_VERSION,
   buildBaselineManifest,
   buildCaptureReservationDoc,
   buildSealedMarkerDoc,
+  createStreamingManifestBuilder,
   diffBaselineManifests,
   hashBaselineDocument,
   isBaselineManifestCollection,
   isSealedBaselineMarker,
+  observeBaselineSnapshot,
   readSealedBaselineManifest,
   resolveBaselineCapture,
   stableStringifyBaseline,
@@ -485,6 +491,266 @@ describe("canonicalization across driver forms (review #1968)", () => {
     expect(() =>
       resolveBaselineCapture({ _id: "legacy", sourceTurn: 3, docCount: 9, stateHash: "x" }, "cap-X")
     ).toThrow(/legacy weak seal.*re-stamp/);
+  });
+
+  describe("streaming v2 observation (scalability closure)", () => {
+    /** Batched async-iterable cursor over an array (production shape, tiny). */
+    async function* batched(docs: unknown[], batch: number): AsyncIterable<unknown> {
+      for (let i = 0; i < docs.length; i += batch) yield* docs.slice(i, i + batch);
+    }
+
+    function doc(i: number): Record<string, unknown> {
+      return { _id: `d${i}`, n: i, payload: `value-${i}` };
+    }
+
+    it("aborts on the exact doc that trips the per-collection ceiling mid-iteration", () => {
+      const builder = createStreamingManifestBuilder("s", {
+        maxDocsPerCollection: 3,
+        maxDocs: 100,
+      });
+      builder.add("corporations", doc(1));
+      builder.add("corporations", doc(2));
+      builder.add("corporations", doc(3));
+      expect(builder.countFor("corporations")).toBe(3);
+      // The 4th doc trips DURING iteration: nothing was buffered past it, and
+      // the builder refuses to finish or continue afterwards.
+      expect(() => builder.add("corporations", doc(4))).toThrow(
+        /collection "corporations" holds more than 3 docs \(4 and counting\)/
+      );
+      expect(() => builder.finish()).toThrow(/refusing to finish a failed build/);
+      expect(() => builder.add("corporations", doc(5))).toThrow(/already failed/);
+    });
+
+    it("aborts on the exact doc that trips the global ceiling across collections", () => {
+      const builder = createStreamingManifestBuilder("s", {
+        maxDocsPerCollection: 100,
+        maxDocs: 4,
+      });
+      builder.add("a", doc(1));
+      builder.add("a", doc(2));
+      builder.add("b", doc(3));
+      builder.add("b", doc(4));
+      expect(builder.totalDocs()).toBe(4);
+      // 2+2 fits each collection cap but the 5th doc trips the global bound.
+      expect(() => builder.add("c", doc(5))).toThrow(/holds more than 4 docs \(5 and counting\)/);
+      expect(() => builder.finish()).toThrow(/refusing to finish a failed build/);
+    });
+
+    it("streams large batched input with O(batch) retention and matches the one-shot build", async () => {
+      const big = Array.from({ length: 5000 }, (_, i) => doc(i));
+      const small = Array.from({ length: 700 }, (_, i) => ({ _id: `s${i}`, v: i % 7 }));
+      const names = ["corporations", "gameState"];
+      // Forward order, small batches, interleaved differently per collection.
+      const streamed = await observeBaselineSnapshot("s", names, (name) =>
+        batched(name === "corporations" ? big : small, 64)
+      );
+      const oneShot = buildBaselineManifest("s", { corporations: big, gameState: small });
+      expect(streamed.digest).toBe(oneShot.digest);
+      expect(streamed.totalDocs).toBe(5700);
+      // Reverse arrival order and reversed collection order: identical digest,
+      // so no DB-side sort is needed for determinism.
+      const reversed = await observeBaselineSnapshot("s", [...names].reverse(), (name) =>
+        batched([...(name === "corporations" ? big : small)].reverse(), 37)
+      );
+      expect(reversed.digest).toBe(oneShot.digest);
+      expect(reversed.collections).toEqual(streamed.collections);
+    });
+
+    it("is order-independent under arbitrary interleaving, not just reversal", () => {
+      const docs = Array.from({ length: 200 }, (_, i) => doc(i));
+      const builderA = createStreamingManifestBuilder("s");
+      for (const d of docs) builderA.add("c", d);
+      // Deterministic shuffle (FNV-style, no Math.random: the manifest must
+      // never depend on ambient randomness).
+      const shuffled = [...docs];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = (i * 2654435761 + 97) % (i + 1);
+        const tmp = shuffled[i] as Record<string, unknown>;
+        shuffled[i] = shuffled[j] as Record<string, unknown>;
+        shuffled[j] = tmp;
+      }
+      const builderB = createStreamingManifestBuilder("s");
+      for (const d of shuffled) builderB.add("c", d);
+      expect(builderB.finish().digest).toBe(builderA.finish().digest);
+    });
+
+    it("handles mixed _id types deterministically (no BSON sort needed)", async () => {
+      const docs: unknown[] = [
+        { _id: 3, v: "num" },
+        { _id: "3", v: "str" },
+        { _id: null, v: "nil" },
+        { v: "missing" },
+        { _id: { toHexString: () => "68c8f2a1b3d44e5f9012abcd" }, v: "oid" },
+        {
+          _id: { _bsontype: "ObjectId", id: Buffer.from("68c8f2a1b3d44e5f9012abcd", "hex") },
+          v: "oid-duck",
+        },
+        { _id: true, v: "bool" },
+        { _id: new Date("2026-09-17T00:00:00.000Z"), v: "date" },
+        { _id: { nested: [1, { x: 2 }] }, v: "obj" },
+      ];
+      const first = await observeBaselineSnapshot("mix", ["c"], (name) =>
+        batched(name === "c" ? docs : [], 3)
+      );
+      const second = await observeBaselineSnapshot("mix", ["c"], (name) =>
+        batched(name === "c" ? [...docs].reverse() : [], 4)
+      );
+      expect(first.digest).toBe(second.digest);
+      expect(first.totalDocs).toBe(docs.length);
+      // The ObjectId instance and its duck form canonicalize identically, so
+      // they MUST both count even though they hash the same: count binding
+      // (not digest uniqueness) is what distinguishes them from one copy.
+      expect(first.collections).toHaveLength(1);
+      expect(first.collections[0]?.count).toBe(docs.length);
+    });
+
+    it("counts duplicate canonical docs (additive, no XOR cancellation)", () => {
+      const a = { _id: "x", out: { p: 1, q: [1, 2] } };
+      const aReordered = { out: { q: [1, 2], p: 1 }, _id: "x" };
+      const single = buildBaselineManifest("s", { c: [a] });
+      const doubled = buildBaselineManifest("s", { c: [a, aReordered] });
+      // Same canonical content twice: count 2, and a DIFFERENT digest than
+      // one copy (an XOR-fold would cancel to the empty digest here).
+      expect(doubled.totalDocs).toBe(2);
+      expect(doubled.digest).not.toBe(single.digest);
+      const empty = buildBaselineManifest("s", { c: [] });
+      expect(doubled.digest).not.toBe(empty.digest);
+      // And the pair still hashes order-independently.
+      expect(buildBaselineManifest("s", { c: [aReordered, a] }).digest).toBe(doubled.digest);
+    });
+
+    it("propagates a mid-iteration cursor failure with no partial manifest", async () => {
+      async function* failing(): AsyncIterable<unknown> {
+        yield doc(1);
+        yield doc(2);
+        throw new Error("cursor died at batch 2");
+      }
+      await expect(observeBaselineSnapshot("s", ["c"], () => failing())).rejects.toThrow(
+        "cursor died at batch 2"
+      );
+      // A cursor that fails on open aborts before any doc is hashed.
+      await expect(
+        observeBaselineSnapshot("s", ["c"], () => {
+          throw new Error("open failed");
+        })
+      ).rejects.toThrow("open failed");
+    });
+  });
+
+  describe("v1 to v2 compatibility (fail closed, upgrade on re-stamp)", () => {
+    // Hand-built sealed v1 marker: what a pre-streaming stamper wrote.
+    function v1SealedMarker(): BaselineMarkerDoc {
+      const v1 = { ...buildBaselineManifest("v1snap", { gameState: [{ _id: "current" }] }) };
+      return {
+        _id: "v1snap",
+        baselineId: "v1snap",
+        sealVersion: 1,
+        status: "sealed",
+        sourceTurn: 10,
+        manifest: { ...v1, version: 1 as never },
+        totalDocs: v1.totalDocs,
+        digest: v1.digest,
+      };
+    }
+
+    it("refuses claim on a sealed v1 marker with re-stamp (not legacy) guidance", () => {
+      const db = new FakeSnapshotDb();
+      seedWorld(db);
+      db.marker = v1SealedMarker();
+      expect(() => db.claim("v1snap")).toThrow(/sealed v1 manifest.*re-stamp/);
+      expect(() => readSealedBaselineManifest(db.marker, "v1snap")).toThrow(/sealed v1 manifest/);
+      expect(isSealedBaselineMarker(db.marker)).toBe(false);
+    });
+
+    it("upgrades a sealed v1 marker on the next stamp and claims afterwards", () => {
+      const db = new FakeSnapshotDb();
+      seedWorld(db);
+      db.marker = v1SealedMarker();
+      // The first v2 seal always lands (no drift check against v1 digests,
+      // which can never compare equal); ground truth becomes the fresh seal.
+      db.stamp("v1snap");
+      expect(isSealedBaselineMarker(db.marker as BaselineMarkerDoc)).toBe(true);
+      expect((db.marker as { sealVersion?: unknown }).sealVersion).toBe(BASELINE_SEAL_VERSION);
+      expect(() => db.claim("v1snap")).not.toThrow();
+    });
+
+    it("names the version drift when a v1 and a v2 manifest are diffed", () => {
+      const v1 = {
+        ...buildBaselineManifest("s", { c: [{ _id: 1 }] }),
+        version: 1 as never,
+      };
+      const v2 = buildBaselineManifest("s", { c: [{ _id: 1 }] });
+      expect(diffBaselineManifests(v1, v2)).toContainEqual(
+        expect.stringMatching(/seal version 1->2.*re-stamp/)
+      );
+    });
+
+    it("refuses a sealed-v1 recapture as already sealed", () => {
+      expect(() => resolveBaselineCapture(v1SealedMarker(), "cap-X")).toThrow(/already sealed/);
+    });
+
+    it("exposes the production ceilings as constants", () => {
+      expect(BASELINE_MANIFEST_MAX_DOCS).toBe(5_000_000);
+      expect(BASELINE_MANIFEST_MAX_DOCS_PER_COLLECTION).toBe(1_000_000);
+    });
+  });
+
+  describe("pre-spawn arm fence (R3 narrowing)", () => {
+    function sealedMarkerFor(baselineId: string): { marker: BaselineMarkerDoc; digest: string } {
+      const manifest = buildBaselineManifest(baselineId, {
+        gameState: [{ _id: "current", currentTurn: 10 }],
+      });
+      const marker = buildSealedMarkerDoc(
+        baselineId,
+        10,
+        manifest,
+        new Date(0)
+      ) as BaselineMarkerDoc;
+      return { marker, digest: manifest.digest };
+    }
+
+    it("accepts the worker-verified digest and validates the flag shape", () => {
+      const { marker, digest } = sealedMarkerFor("arm1");
+      expect(() => assertArmFenceMarker(marker, "arm1", digest)).not.toThrow();
+      expect(assertBaselineDigestFlag(digest)).toBe(digest);
+      expect(() => assertBaselineDigestFlag("xyz")).toThrow(/64-hex/);
+      expect(() => assertBaselineDigestFlag("")).toThrow(/64-hex/);
+    });
+
+    it("refuses a final pre-spawn mutation of the arm db", () => {
+      const { marker, digest } = sealedMarkerFor("arm1");
+      // The worker verified `digest`; then a write lands in the arm db and the
+      // copy's marker is re-sealed over mutated state (or the wrong marker
+      // travels): the fence sees a digest it never verified.
+      const mutated = buildBaselineManifest("arm1", {
+        gameState: [{ _id: "current", currentTurn: 10, treasury: 1 }],
+      });
+      const mutatedMarker = {
+        ...marker,
+        manifest: mutated,
+        digest: mutated.digest,
+      } as BaselineMarkerDoc;
+      expect(() => assertArmFenceMarker(mutatedMarker, "arm1", digest)).toThrow(
+        /changed after the verified copy/
+      );
+    });
+
+    it("refuses a missing, unsealed, or foreign marker at spawn", () => {
+      const { marker, digest } = sealedMarkerFor("arm1");
+      expect(() => assertArmFenceMarker(null, "arm1", digest)).toThrow(/no simBaselines marker/);
+      expect(() => assertArmFenceMarker(undefined, "arm1", digest)).toThrow(
+        /no simBaselines marker/
+      );
+      expect(() =>
+        assertArmFenceMarker({ ...marker, status: "capturing" }, "arm1", digest)
+      ).toThrow(/not a sealed v2 seal/);
+      expect(() => assertArmFenceMarker({ ...marker, _id: "other" }, "arm1", digest)).toThrow(
+        /identity mismatch/
+      );
+      expect(() => assertArmFenceMarker({ ...marker, sealVersion: 1 }, "arm1", digest)).toThrow(
+        /not a sealed v2 seal/
+      );
+    });
   });
 
   it("names an unknown capture holder instead of printing undefined", () => {

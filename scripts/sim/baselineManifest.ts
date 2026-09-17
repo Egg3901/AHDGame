@@ -12,23 +12,33 @@
  *   except the append-only history/log set below and the simBaselines seal
  *   metadata itself). cloneWorld.ts imports the exclusion set from here so
  *   copy and seal can never disagree on what "the snapshot" is.
- * - Stability: objects hash with sorted keys, documents hash sorted within
- *   each collection, collections sort by name, and BSON extras canonicalize
- *   (Date/ObjectId/Binary+subtype/Long/Decimal/Timestamp/RegExp/etc. by value,
- *   non-finite numbers kind-agnostically, including EJSON forms), so key order,
- *   doc order, collection order, and driver
+ * - Stability: objects hash with sorted keys, documents fold commutatively
+ *   within each collection (arrival order never counts, no DB sort needed),
+ *   collections sort by name in the final digest, and BSON extras
+ *   canonicalize (Date/ObjectId/Binary+subtype/Long/Decimal/Timestamp/
+ *   RegExp/etc. by value, non-finite numbers kind-agnostically, including
+ *   EJSON forms), so key order, doc order, collection order, and driver
  *   representation never count as drift.
  * - Diagnosis: per-collection {name, count, hash} plus one overall versioned
  *   digest. Claim and post-copy checks report exactly which collection
  *   drifted (added/removed/count/hash) instead of a bare mismatch.
  *
- * Cost (explicit and bounded): building a manifest is O(total cloned docs)
- * with one batch cursor per covered collection. It runs ONLY on the
- * one-time baseline capture path (stampBaseline.ts: one scan) and the
- * baselined arm-claim path (worker.ts: pre-copy source scan, post-copy
- * source re-scan, post-copy dest scan). Ordinary unpaired turns and
- * fresh-bootstrap pairs never build a manifest. A hard doc ceiling
- * (BASELINE_MANIFEST_MAX_DOCS) fails closed instead of scanning unbounded.
+ * Cost (explicit and bounded): building a manifest streams one batch cursor
+ * per covered collection through a per-collection 32-byte additive digest,
+ * so memory is O(batch + covered collections), never O(snapshot docs).
+ * Observers must feed docs through createStreamingManifestBuilder (or the
+ * observeBaselineSnapshot cursor driver), never accumulate a
+ * docsByCollection array: buildBaselineManifest exists only as a thin
+ * small-input wrapper over the same builder. It runs ONLY on the one-time
+ * baseline capture path (stampBaseline.ts: one scan) and the baselined
+ * arm-claim path (worker.ts: pre-copy source scan, post-copy source
+ * re-scan, post-copy dest scan). Ordinary unpaired turns and
+ * fresh-bootstrap pairs never build a manifest. The global doc ceiling
+ * (BASELINE_MANIFEST_MAX_DOCS) and the per-collection ceiling
+ * (BASELINE_MANIFEST_MAX_DOCS_PER_COLLECTION) are enforced inside the
+ * builder DURING iteration, so a pathological collection aborts on the
+ * doc that trips the bound instead of after the worker buffered millions
+ * of docs.
  *
  * Capture exclusivity: the first capture of a baselineId writes a durable
  * `capturing` reservation into the destination db's simBaselines collection
@@ -44,8 +54,19 @@
 
 import { createHash } from "crypto";
 
-/** Seal representation version. Claim rejects any other version fail-closed. */
-export const BASELINE_SEAL_VERSION = 1;
+/**
+ * Seal representation version. Claim rejects any other version fail-closed.
+ *
+ * v2 replaces the v1 per-collection digest (sha256 over the SORTED doc-hash
+ * list, which forced observers to buffer every doc hash before hashing)
+ * with an incremental commutative digest: each doc hash adds into a
+ * per-collection 256-bit sum (mod 2^256), and the collection hash binds
+ * name + count + sum. Any arrival order yields the identical digest, so
+ * observers stream with O(batch) memory. Sealed v1 markers fail closed at
+ * claim with re-stamp guidance and upgrade on the next stamp; v1 digests
+ * never compare equal to v2 digests (distinct domain separators).
+ */
+export const BASELINE_SEAL_VERSION = 2;
 
 /** Marker collection inside a baseline snapshot db. Seal metadata, not world
  * state: excluded from the manifest so stamping never perturbs the seal. */
@@ -122,8 +143,19 @@ export function isBaselineManifestCollection(name: string): boolean {
  * Hard ceiling on total sealed docs. A live-world snapshot is far below this;
  * tripping it means the coverage list is wrong (or the world grew past the
  * audited bound), and failing closed beats scanning unbounded on the box.
+ * Enforced inside the streaming builder DURING iteration.
  */
 export const BASELINE_MANIFEST_MAX_DOCS = 5_000_000;
+
+/**
+ * Hard ceiling on docs in any ONE collection. A single pathological
+ * collection (unbounded log leaking into the coverage list, runaway
+ * duplication) must abort on its own before it can exhaust the worker even
+ * when the global ceiling is still far away. A live-world snapshot holds
+ * tens of thousands of docs in its largest covered collection; a million is
+ * already two orders of magnitude of headroom. Enforced during iteration.
+ */
+export const BASELINE_MANIFEST_MAX_DOCS_PER_COLLECTION = 1_000_000;
 
 function sha256Hex(text: string): string {
   return createHash("sha256").update(text, "utf8").digest("hex");
@@ -345,37 +377,178 @@ export interface BaselineManifest {
   digest: string;
 }
 
+/** Bounds for one streaming build; production callers omit both (module caps). */
+export interface BaselineManifestLimits {
+  maxDocs?: number;
+  maxDocsPerCollection?: number;
+}
+
 /**
- * Builds the manifest from already-read docs (scripts own the cursors).
- * Collection entries sort by name; doc hashes sort within a collection, so
- * read order never counts. Throws past BASELINE_MANIFEST_MAX_DOCS.
+ * Incremental v2 manifest builder. Feed every doc exactly once, in ANY
+ * order (cursor order, interleaved collections, shuffled replays all give
+ * the identical digest); call finish() once iteration completes. Memory is
+ * one 32-byte sum plus a counter per touched collection: the builder never
+ * retains docs or doc hashes.
+ *
+ * Commutative digest, explicitly: each doc's sha256 content hash adds into
+ * its collection sum as a 256-bit integer (mod 2^256). Addition commutes,
+ * so order cannot count and no deterministic DB sort (with its BSON
+ * mixed-type ordering pitfalls) is needed. Collision properties:
+ * - Count binding: the doc count is hashed into the collection hash AND
+ *   compared separately by diffBaselineManifests, so padding/truncation
+ *   always trips both.
+ * - Duplicates: identical doc hashes ADD (no XOR cancellation), so the
+ *   multiset {A, A} differs from {A} in sum and in count. Every doc ever
+ *   read still moves the digest.
+ * - Second preimage: forging a different multiset with the same sum and
+ *   count is a subset-sum search (~2^128 meet-in-the-middle over large
+ *   multisets); accidental collision sits at ~2^-256 per collection.
+ *   This is an integrity tripwire against mutation, not a commitment
+ *   scheme against an adversary choosing the snapshot content.
+ *
+ * Ceilings bind DURING iteration: add() throws on the exact doc that
+ * pushes a collection past maxDocsPerCollection or the snapshot past
+ * maxDocs, before pathological growth can exhaust the observer. A builder
+ * that threw is finished: finish() after a throw refuses.
+ */
+export interface StreamingManifestBuilder {
+  add(collection: string, doc: unknown): void;
+  finish(): BaselineManifest;
+  totalDocs(): number;
+  countFor(collection: string): number;
+}
+
+function addIntoSum(sum: Uint8Array, hash: Uint8Array): void {
+  let carry = 0;
+  for (let i = sum.length - 1; i >= 0; i--) {
+    const step = sum[i] + (hash[i] ?? 0) + carry;
+    sum[i] = step & 0xff;
+    carry = step >>> 8;
+  }
+}
+
+function hexOfSum(sum: Uint8Array): string {
+  return Buffer.from(sum.buffer, sum.byteOffset, sum.byteLength).toString("hex");
+}
+
+function hashOfBytes(bytes: Uint8Array): Uint8Array {
+  return new Uint8Array(createHash("sha256").update(bytes).digest());
+}
+
+export function createStreamingManifestBuilder(
+  baselineId: string,
+  limits?: BaselineManifestLimits
+): StreamingManifestBuilder {
+  const maxDocs = limits?.maxDocs ?? BASELINE_MANIFEST_MAX_DOCS;
+  const maxPerCollection =
+    limits?.maxDocsPerCollection ?? BASELINE_MANIFEST_MAX_DOCS_PER_COLLECTION;
+  const sums = new Map<string, { sum: Uint8Array; count: number }>();
+  let total = 0;
+  let failed = false;
+  return {
+    add(collection: string, doc: unknown): void {
+      if (failed) {
+        throw new Error(
+          `baseline "${baselineId}" manifest builder already failed: refusing to continue a tripped observation`
+        );
+      }
+      const entry = sums.get(collection) ?? { sum: new Uint8Array(32), count: 0 };
+      const nextCount = entry.count + 1;
+      if (nextCount > maxPerCollection) {
+        failed = true;
+        throw new Error(
+          `baseline "${baselineId}" collection "${collection}" holds more than ${maxPerCollection} docs ` +
+            `(${nextCount} and counting): refusing to seal an unbounded collection mid-iteration`
+        );
+      }
+      if (total + 1 > maxDocs) {
+        failed = true;
+        throw new Error(
+          `baseline "${baselineId}" holds more than ${maxDocs} docs (${total + 1} and counting): ` +
+            `refusing to seal an unbounded snapshot mid-iteration`
+        );
+      }
+      addIntoSum(entry.sum, hashOfBytes(Buffer.from(hashBaselineDocument(doc), "hex")));
+      entry.count = nextCount;
+      sums.set(collection, entry);
+      total += 1;
+    },
+    finish(): BaselineManifest {
+      if (failed) {
+        throw new Error(
+          `baseline "${baselineId}" manifest observation tripped a ceiling: refusing to finish a failed build`
+        );
+      }
+      const collections: BaselineCollectionManifest[] = [...sums.keys()].sort().map((name) => {
+        const entry = sums.get(name) as { sum: Uint8Array; count: number };
+        return {
+          name,
+          count: entry.count,
+          hash: sha256Hex(
+            [
+              "baseline-manifest/v2/collection",
+              name,
+              `count:${entry.count}`,
+              `sum:${hexOfSum(entry.sum)}`,
+            ].join("\n")
+          ),
+        };
+      });
+      const digest = sha256Hex(
+        [
+          "baseline-manifest/v2",
+          baselineId,
+          ...collections.map((c) => `${c.name}:${c.count}:${c.hash}`),
+        ].join("\n")
+      );
+      return { version: BASELINE_SEAL_VERSION, baselineId, collections, totalDocs: total, digest };
+    },
+    totalDocs(): number {
+      return total;
+    },
+    countFor(collection: string): number {
+      return sums.get(collection)?.count ?? 0;
+    },
+  };
+}
+
+/**
+ * Builds the manifest from already-read docs. Thin small-input wrapper over
+ * the streaming builder (same digest as a streamed observation of the same
+ * docs); production observers with real cursors must use
+ * observeBaselineSnapshot instead so nothing buffers the snapshot.
  */
 export function buildBaselineManifest(
   baselineId: string,
   docsByCollection: Record<string, unknown[]>
 ): BaselineManifest {
-  const collections: BaselineCollectionManifest[] = Object.keys(docsByCollection)
-    .sort()
-    .map((name) => {
-      const docs = docsByCollection[name] ?? [];
-      const hashes = docs.map(hashBaselineDocument).sort();
-      return { name, count: docs.length, hash: sha256Hex(hashes.join("\n")) };
-    });
-  const totalDocs = collections.reduce((sum, c) => sum + c.count, 0);
-  if (totalDocs > BASELINE_MANIFEST_MAX_DOCS) {
-    throw new Error(
-      `baseline "${baselineId}" holds ${totalDocs} docs past the audited seal bound ` +
-        `(${BASELINE_MANIFEST_MAX_DOCS}): refusing to seal an unbounded snapshot`
-    );
+  const builder = createStreamingManifestBuilder(baselineId);
+  for (const name of Object.keys(docsByCollection).sort()) {
+    for (const doc of docsByCollection[name] ?? []) builder.add(name, doc);
   }
-  const digest = sha256Hex(
-    [
-      "baseline-manifest/v1",
-      baselineId,
-      ...collections.map((c) => `${c.name}:${c.count}:${c.hash}`),
-    ].join("\n")
-  );
-  return { version: BASELINE_SEAL_VERSION, baselineId, collections, totalDocs, digest };
+  return builder.finish();
+}
+
+/**
+ * Cursor-driven observation shared by every production scan (capture stamp,
+ * pre-copy source check, post-copy source re-check, post-copy dest check).
+ * collectionNames arrives pre-sorted by the caller; openCursor streams one
+ * collection's docs in whatever order the cursor yields (order never
+ * counts). A cursor that throws aborts the observation with the cursor's
+ * own error: no partial manifest is ever returned. Pure over injected
+ * cursors (no Mongo import); scripts pass real batch cursors.
+ */
+export async function observeBaselineSnapshot(
+  baselineId: string,
+  collectionNames: string[],
+  openCursor: (name: string) => AsyncIterable<unknown>,
+  limits?: BaselineManifestLimits
+): Promise<BaselineManifest> {
+  const builder = createStreamingManifestBuilder(baselineId, limits);
+  for (const name of collectionNames) {
+    for await (const doc of openCursor(name)) builder.add(name, doc);
+  }
+  return builder.finish();
 }
 
 /**
@@ -505,6 +678,16 @@ export function readSealedBaselineManifest(
         `the clone or seal crashed or is still running; resume the capture with the same --capture-id, then seal with stampBaseline.ts before claiming arms`
     );
   }
+  // A sealed v1 marker is NOT a legacy weak seal (it carries a manifest),
+  // but its per-collection digests are hash-sorted v1 values that never
+  // compare equal to v2 streaming digests. Upgrading is the only recovery:
+  // re-stamp, never claim.
+  if (marker.sealVersion === 1 && marker.status === "sealed") {
+    throw new Error(
+      `baseline "${baselineId}" carries a sealed v1 manifest (pre-streaming digest): ` +
+        `re-stamp it with the current stampBaseline.ts before claiming arms`
+    );
+  }
   if (!isSealedBaselineMarker(marker)) {
     throw new Error(
       `baseline "${baselineId}" carries a legacy weak seal (turn/count/gameState-hash only, no full-snapshot manifest): ` +
@@ -538,6 +721,17 @@ export function resolveBaselineCapture(
     throw new Error(
       `refusing to capture baseline "${String(baselineMarkerIdentity(existing))}": it is already sealed ` +
         `(same-id recapture would mutate an already referenced snapshot; capture under a new baselineId instead)`
+    );
+  }
+  // A sealed v1 marker is a real seal (not a legacy weak one), so a
+  // same-id recapture refuses as already-sealed, exactly like v2: the
+  // snapshot may already be referenced by arms. Upgrading happens through
+  // stampBaseline.ts, never through a fresh capture.
+  if (existing.sealVersion === 1 && existing.status === "sealed") {
+    throw new Error(
+      `refusing to capture baseline "${String(baselineMarkerIdentity(existing))}": it is already sealed ` +
+        `(v1 seal; same-id recapture would mutate an already referenced snapshot; ` +
+        `re-stamp it with the current stampBaseline.ts to upgrade, or capture under a new baselineId instead)`
     );
   }
   // A non-sealed, non-capturing marker is a legacy weak seal: it has no
@@ -608,9 +802,11 @@ export interface BaselineObservation {
 /**
  * Stamp gate: same sealed observation re-stamps idempotently; any drift in
  * turn or manifest refuses (something ran against the snapshot). A
- * capturing reservation (no manifest yet) and a legacy weak marker both
- * accept the first v1 seal: the former completes the capture, the latter
- * upgrades the seal. Pure so the refusal is unit-testable without Mongo.
+ * capturing reservation (no manifest yet), a legacy weak marker, and a
+ * sealed v1 marker all accept the first v2 seal: the former completes the
+ * capture, the latter two upgrade the seal (v1 digests never compare equal
+ * to v2, so there is no drift to check against: the fresh manifest becomes
+ * ground truth). Pure so the refusal is unit-testable without Mongo.
  */
 export function assertBaselineStampCompatible(
   existing: BaselineMarkerDoc | null,
@@ -731,4 +927,60 @@ export function assertSourceManifestStableAcrossCopy(
     postCopyObserved.manifest,
     `baseline "${baselineId}" source changed during the copy`
   );
+}
+
+/** Expected-baseline-digest fence flag: exactly one 64-hex sha256 digest. */
+export function assertBaselineDigestFlag(value: string): string {
+  if (!/^[0-9a-f]{64}$/.test(value)) {
+    throw new Error(
+      `--expected-baseline-digest must be a 64-hex sha256 digest (got ${JSON.stringify(value)})`
+    );
+  }
+  return value;
+}
+
+/**
+ * Final pre-spawn fence (runWorld.ts, baselined arms only): after the
+ * worker's post-copy dest observation, and immediately before the first
+ * turn write, the child re-reads the ONE simBaselines marker doc in its arm
+ * db and compares it to the digest the worker verified. A write to the arm
+ * db between the worker's dest observation and this spawn (stale re-copy,
+ * supervisor poke, second arm sharing the db) fails closed here instead of
+ * running turns on an unverified start. Single-doc read, never a scan, and
+ * unpaired runs never pay it (the flag is refused there).
+ *
+ * Residual race, explicit: a writer landing between THIS read and the
+ * first turn write still slips through; that window is one document read
+ * inside child startup, down from the whole copy-plus-spawn gap. Closing
+ * it fully needs a Mongo transaction or a fencing token on every write,
+ * which the turn engine does not have.
+ */
+export function assertArmFenceMarker(
+  marker: BaselineMarkerDoc | null | undefined,
+  baselineId: string,
+  expectedDigest: string
+): void {
+  if (!marker) {
+    throw new Error(
+      `baseline "${baselineId}" arm db carries no simBaselines marker at spawn: ` +
+        `the copy did not land or something dropped it; refusing to run`
+    );
+  }
+  if (baselineMarkerIdentity(marker) !== baselineId) {
+    throw new Error(
+      `baseline arm marker identity mismatch at spawn (marker ${JSON.stringify(baselineMarkerIdentity(marker))} != ${JSON.stringify(baselineId)}): refusing to run`
+    );
+  }
+  if (!isSealedBaselineMarker(marker)) {
+    throw new Error(
+      `baseline "${baselineId}" arm marker is not a sealed v${BASELINE_SEAL_VERSION} seal at spawn: refusing to run`
+    );
+  }
+  const digest = (marker.manifest as BaselineManifest | undefined)?.digest;
+  if (digest !== expectedDigest) {
+    throw new Error(
+      `baseline "${baselineId}" arm db changed after the verified copy ` +
+        `(seal ${String(digest).slice(0, 12)}.. != verified ${expectedDigest.slice(0, 12)}..): refusing to run`
+    );
+  }
 }

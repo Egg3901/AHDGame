@@ -372,6 +372,30 @@ for (const [flag, value] of [
     throw new Error(`${flag} must match ${SAFE_ID} (got ${JSON.stringify(value)})`);
   }
 }
+/** R3 narrowing fence (issue #1470): the worker-verified seal digest this
+ * arm must still carry at spawn. Required on baselined arms, refused on
+ * unpaired runs (which pay no fence read). Validated as 64-hex here so a
+ * malformed flag fails before any DB touch; compared against the live
+ * marker doc inside main(), after getDb() and before any bootstrap/turn
+ * write. */
+const expectedBaselineDigestRaw = arg("expected-baseline-digest");
+if (expectedBaselineDigestRaw !== undefined && !/^[0-9a-f]{64}$/.test(expectedBaselineDigestRaw)) {
+  throw new Error(
+    `--expected-baseline-digest must be a 64-hex sha256 digest (got ${JSON.stringify(expectedBaselineDigestRaw)})`
+  );
+}
+const expectedBaselineDigest = expectedBaselineDigestRaw;
+const baselinedRun = pairId !== undefined || baselineId !== undefined;
+if (baselinedRun && expectedBaselineDigest === undefined) {
+  throw new Error(
+    "baselined run requires --expected-baseline-digest (worker-verified seal): refusing to run an unfenced start"
+  );
+}
+if (!baselinedRun && expectedBaselineDigest !== undefined) {
+  throw new Error(
+    "--expected-baseline-digest without --pair-id/--baseline-id: refusing a fenced unpaired run"
+  );
+}
 
 const dbName = arg("db") ?? `ahd_sim_${seed}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 const checkpointEvery = Number(arg("checkpoint-every") ?? "10");
@@ -445,6 +469,23 @@ async function main() {
   const { snapshotCorporationsByCountry } = await import("@/lib/turn/corporationCountrySnapshot");
 
   const db = await getDb();
+
+  // R3 narrowing fence (issue #1470): on a baselined arm, re-read the ONE
+  // simBaselines marker doc and compare it to the worker-verified digest
+  // BEFORE any bootstrap/turn write. Catches an arm-db write that landed
+  // between the worker's post-copy dest observation and this spawn. One
+  // findOne; unpaired runs skip it entirely.
+  if (baselinedRun) {
+    const { assertArmFenceMarker, BASELINE_MARKER_COLLECTION } = await import("./baselineManifest");
+    const armMarker = (await db
+      .collection(BASELINE_MARKER_COLLECTION)
+      .findOne({ _id: baselineId as never })) as Parameters<typeof assertArmFenceMarker>[0];
+    assertArmFenceMarker(armMarker, baselineId as string, expectedBaselineDigest as string);
+    log(
+      `baseline fence: arm db still carries the verified seal ` +
+        `(${(expectedBaselineDigest as string).slice(0, 12)}..)`
+    );
+  }
 
   // Executed source identity (#1966): this process's own cwd + git HEAD.
   // Best-effort SHA, but fails closed when a pin was requested and disagrees,
