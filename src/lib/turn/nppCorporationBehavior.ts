@@ -142,7 +142,9 @@ import {
   resolveFragileEntryTreatment,
 } from "@/lib/turn/npp/fragileMarketSupply";
 import {
+  blankNppCandidateExclusions,
   buildNppMarketEntryDiagnostic,
+  resolveFoundingShortfallReason,
   resolveNppMarketEntryCredit,
   setNppMarketEntryReason,
   type NppMarketEntryDiagnostic,
@@ -1215,6 +1217,7 @@ export function makeNppCorpDecision(
   const surplusCash = liquidCapital - effectiveCashFloor;
   const existingBuckets = new Set(sectors.map((s) => bucketKey(s.stateId, s.sectorType)));
   const frontierStates = expansionFrontierStates(corp.countryId, corp.headquartersState, sectors);
+  const candidateExclusions = blankNppCandidateExclusions();
   const entryCandidate = findBestUnownedSector(
     corp.countryId,
     corp.headquartersState,
@@ -1227,7 +1230,8 @@ export function makeNppCorpDecision(
     plants?.enabled === true,
     plants?.eraUnitScale ?? 1,
     placementSignals,
-    frontierStates
+    frontierStates,
+    candidateExclusions
   );
   const expansion =
     levers.allowExpansion &&
@@ -1275,6 +1279,10 @@ export function makeNppCorpDecision(
     marketEntryEligible &&
     !ordinaryEntryTargetGlutted &&
     (plants?.enabled === true || surplusCash > effectiveExpansionMinCash);
+  // Funnel inputs mirror the founding-gate order in
+  // capacityDecisionTelemetry: retail pause and glut are evaluated on the
+  // candidate (not the null expansion), so the diagnostic names the gate that
+  // actually bound instead of falling through to the cash floor.
   entryDiagnostic = buildNppMarketEntryDiagnostic({
     corporation: corp,
     sectorCount: effectiveSectors,
@@ -1288,6 +1296,10 @@ export function makeNppCorpDecision(
     target: entryCandidate,
     shortageScore: entryCandidateShortageScore,
     frontierStates,
+    retailBlocked: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
+    targetGlutted: ordinaryEntryTargetGlutted && !exceptionalShortageEntry,
+    entryCapReached: newSectors.length >= NPP_SHORTAGE_ENTRIES_PER_TURN,
+    candidateExclusions,
   });
   if (interventionTargetCommodity) {
     entryDiagnostic = { ...entryDiagnostic, interventionTargetCommodity };
@@ -1457,16 +1469,25 @@ export function makeNppCorpDecision(
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
-      } else if (foundingOutcome.creditPath) {
-        shortageCreditRequest = {
-          amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
-          sectorType: expansion.sectorType as CorporationType,
-        };
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
-      } else if (foundingOutcome.sizeBlocked) {
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "facility_size");
-      } else if (exceptionalShortageEntry) {
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
+      } else {
+        if (foundingOutcome.creditPath) {
+          shortageCreditRequest = {
+            amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
+            sectorType: expansion.sectorType as CorporationType,
+          };
+        }
+        // Names the priced shortfall explicitly. Previously an
+        // unaffordable candidate with no credit, size, or exceptional path
+        // kept its pre-pricing reason (usually the cash floor), so the
+        // funnel understated real founding-cost rejections.
+        entryDiagnostic = setNppMarketEntryReason(
+          entryDiagnostic,
+          resolveFoundingShortfallReason({
+            creditPath: foundingOutcome.creditPath,
+            sizeBlocked: foundingOutcome.sizeBlocked,
+            exceptionalShortageEntry,
+          })
+        );
       }
     } else {
       const foundingCost = toCorpLocal(EXPANSION_COST);
@@ -1496,14 +1517,21 @@ export function makeNppCorpDecision(
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
-      } else if (foundingOutcome.creditPath) {
-        shortageCreditRequest = {
-          amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
-          sectorType: expansion.sectorType as CorporationType,
-        };
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
-      } else if (exceptionalShortageEntry) {
-        entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
+      } else {
+        if (foundingOutcome.creditPath) {
+          shortageCreditRequest = {
+            amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
+            sectorType: expansion.sectorType as CorporationType,
+          };
+        }
+        entryDiagnostic = setNppMarketEntryReason(
+          entryDiagnostic,
+          resolveFoundingShortfallReason({
+            creditPath: foundingOutcome.creditPath,
+            sizeBlocked: foundingOutcome.sizeBlocked,
+            exceptionalShortageEntry,
+          })
+        );
       }
     }
   }
