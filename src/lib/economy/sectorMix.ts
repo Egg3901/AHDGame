@@ -128,20 +128,24 @@ function stateCommodityBalance(price: CommodityPrice, stateId: string): Commodit
 /**
  * Demand that has no current supply. The persisted truncation leg is allocated
  * by the scope's share of visible global demand because the price document
- * records that hidden demand globally, not by country or state.
+ * records that hidden demand globally, not by country or state. The top-up
+ * stays INSIDE the max(0, demand - supply) floor, matching
+ * `commodityDemandGap`: a scope whose capped demand already clears against
+ * its supply has no latent market even when the commodity is truncated
+ * globally. Adding the share outside the floor would book phantom demand in
+ * every surplus scope of a capped commodity.
  */
 function latentDemandUnits(
   price: CommodityPrice,
   balance: CommodityBalance,
   demandShareDenominator: number
 ): number {
-  const visibleGap = Math.max(0, balance.demand - balance.supply);
   const truncated = finiteNonNegative(price.demandTruncatedUnits) ?? 0;
   const share =
     demandShareDenominator > 0
       ? Math.max(0, Math.min(1, balance.demand / demandShareDenominator))
       : 0;
-  return visibleGap + truncated * share;
+  return Math.max(0, balance.demand + truncated * share - balance.supply);
 }
 
 function outputRatesForSector(

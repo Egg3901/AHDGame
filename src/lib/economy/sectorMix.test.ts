@@ -198,4 +198,55 @@ describe("aggregateCountrySectorMix", () => {
     // claim a measured contraction/expansion that did not occur.
     expect(automobiles.avgGrowth).toBeNull();
   });
+
+  it("books no latent market in a surplus scope of a truncated commodity", async () => {
+    mockFind("states", [{ _id: "CA", countryId: "US", name: "California", gdp: 0 }]);
+    mockFind("corporateSectors", [
+      {
+        _id: new ObjectId(),
+        corporationId: new ObjectId(),
+        countryId: "US",
+        stateId: "CA",
+        sectorType: "automobiles",
+        revenue: 10_000,
+        realizedRevenue: 0,
+        capitalStock: 2,
+        operatingCapacityUnits: 2,
+        strategyId: "standard",
+        mothballed: false,
+        currentGrowthRate: 0,
+      },
+    ]);
+    mockFind("unownedSectors", []);
+    // Globally capped (60 units truncated) but locally clearing: true uncapped
+    // demand is 10 + 60 = 70 against 100 supply, so the market has no latent
+    // leg. Restoring the truncated share outside the max(0, demand - supply)
+    // floor would book 60 phantom vehicle units ($3M) here instead.
+    mockFind("commodityPrices", [
+      {
+        commodity: "vehicles",
+        basePrice: 25_000,
+        globalPrice: 25_000,
+        globalSupply: 100,
+        globalDemand: 10,
+        demandTruncatedUnits: 60,
+        nationalSupply: { US: 100 },
+        nationalDemand: { US: 10 },
+        stateSupply: { CA: 100 },
+        stateDemand: { CA: 10 },
+        turn: 1,
+      },
+    ]);
+    mockFind("corporations", []);
+    mockFind("exchangeRates", []);
+    db.collectionMocks.gameConfig!.findOne.mockResolvedValue({ marketSystemMode: "plants" });
+
+    const { aggregateCountrySectorMix } = await import("./sectorMix");
+    const mix = await aggregateCountrySectorMix(db as unknown as Db, "US");
+    const automobiles = mix.find((s) => s.type === "automobiles")!;
+
+    // Owned nameplate only: two built units are $100,000 of plant.
+    expect(automobiles.totalMarketAnchor).toBe(100_000);
+    expect(automobiles.ownedPercent).toBe(100);
+  });
 });
