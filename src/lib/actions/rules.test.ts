@@ -7,6 +7,11 @@ import { describe, it, expect } from "vitest";
 import type { Character, State } from "@/lib/db/types";
 import type { CharacterStats } from "@/lib/stats/statsConstants";
 import { statMultiplier } from "@/lib/stats/statMultiplier";
+import { rollDebatePrep } from "../stats/debatePrep";
+import {
+  DEBATE_PREP_SUCCESS_CHANCE as RESOLVED_DEBATE_CHANCE,
+  STAT_MAX,
+} from "../stats/statsConstants";
 import {
   FUNDRAISE_ACTION_COST,
   calculateFundraisingAmount,
@@ -42,6 +47,14 @@ import {
   getPollBaseFundCost,
   getPollFundCost,
   quotePollAction,
+  DEBATE_PREP_ACTION_COST,
+  DEBATE_PREP_SUCCESS_CHANCE,
+  DEBATE_PREP_DEBATE_GAIN,
+  DEBATE_PREP_DISABLED_ERROR,
+  DEBATE_PREP_UNALLOCATED_ERROR,
+  quoteDebatePrepAction,
+  describeDebatePrepAction,
+  describeDebatePrepEffect,
 } from "./rules";
 import {
   ACTIONS,
@@ -999,5 +1012,170 @@ describe("poll failure agreement", () => {
     if (!batch.ok) return;
     expect(batch.totalActionPoints).toBe(10);
     expect(batch.netFundsChange).toBe(-125_000);
+  });
+});
+
+function debateCharacter(debate: number | null): Character {
+  return makeCharacter({
+    stats: debate === null ? undefined : ({ debate } as Character["stats"]),
+  });
+}
+
+describe("debate prep cost is single-sourced", () => {
+  it("costs a flat 1 AP through the constant, the definition and the charger", () => {
+    expect(DEBATE_PREP_ACTION_COST).toBe(1);
+    expect(ACTIONS.debatePrep.baseCost).toBe(DEBATE_PREP_ACTION_COST);
+    expect(getActionPointCost(debateCharacter(5), "debatePrep")).toBe(DEBATE_PREP_ACTION_COST);
+    const quote = quoteDebatePrepAction({ debate: 5, hasStats: true });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(quote.apCost).toBe(DEBATE_PREP_ACTION_COST);
+  });
+});
+
+describe("quoteDebatePrepAction happy path", () => {
+  it("quotes flat AP, the fixed chance and +1 gain", () => {
+    for (const debate of [0, 1, 5, 9]) {
+      const quote = quoteDebatePrepAction({ debate, hasStats: true });
+      expect(quote).toEqual({
+        ok: true,
+        apCost: 1,
+        successChance: 0.15,
+        debateGain: 1,
+        capped: false,
+      });
+    }
+  });
+  it("an explicit enabled flag and an omitted flag both skip the flag leg", () => {
+    for (const options of [undefined, {}, { rpgStatsEnabled: true }]) {
+      const quote = quoteDebatePrepAction({ debate: 5, hasStats: true }, options);
+      expect(quote.ok).toBe(true);
+    }
+  });
+  it("the quoted chance is the constant the roll resolves against", () => {
+    expect(DEBATE_PREP_SUCCESS_CHANCE).toBe(0.15);
+    expect(DEBATE_PREP_SUCCESS_CHANCE).toBe(RESOLVED_DEBATE_CHANCE);
+    expect(DEBATE_PREP_DEBATE_GAIN).toBe(1);
+  });
+});
+
+describe("quoteDebatePrepAction strictness", () => {
+  it("pins the execute-gate rejection strings as independent literals", () => {
+    expect(DEBATE_PREP_DISABLED_ERROR).toBe("The stat system is not currently enabled.");
+    expect(DEBATE_PREP_UNALLOCATED_ERROR).toBe("Allocate your stats before using Debate Prep.");
+  });
+  it("a disabled flag rejects before the stat check, mirroring gate order", () => {
+    expect(
+      quoteDebatePrepAction({ debate: 5, hasStats: true }, { rpgStatsEnabled: false })
+    ).toEqual({ ok: false, error: DEBATE_PREP_DISABLED_ERROR });
+    expect(quoteDebatePrepAction({}, { rpgStatsEnabled: false })).toEqual({
+      ok: false,
+      error: DEBATE_PREP_DISABLED_ERROR,
+    });
+  });
+  it("a missing stat block or debate rejects with the allocate reason", () => {
+    for (const actor of [
+      {},
+      { hasStats: false },
+      { hasStats: false, debate: 5 },
+      { hasStats: true },
+      { hasStats: true, debate: null },
+      { hasStats: true, debate: NaN },
+      { hasStats: true, debate: Infinity },
+    ]) {
+      expect(quoteDebatePrepAction(actor)).toEqual({
+        ok: false,
+        error: DEBATE_PREP_UNALLOCATED_ERROR,
+      });
+    }
+  });
+});
+
+describe("quoteDebatePrepAction cap", () => {
+  it("at-cap attempts stay quotable with zero gain (execution still charges)", () => {
+    for (const debate of [STAT_MAX, STAT_MAX + 1]) {
+      expect(quoteDebatePrepAction({ debate, hasStats: true })).toEqual({
+        ok: true,
+        apCost: 1,
+        successChance: 0.15,
+        debateGain: 0,
+        capped: true,
+      });
+    }
+  });
+  it("one below the cap still gains, and negatives quote without validation", () => {
+    expect(quoteDebatePrepAction({ debate: STAT_MAX - 1, hasStats: true })).toEqual({
+      ok: true,
+      apCost: 1,
+      successChance: 0.15,
+      debateGain: 1,
+      capped: false,
+    });
+    const negative = quoteDebatePrepAction({ debate: -2, hasStats: true });
+    expect(negative).toEqual({
+      ok: true,
+      apCost: 1,
+      successChance: 0.15,
+      debateGain: 1,
+      capped: false,
+    });
+  });
+});
+
+describe("advertised debate odds match the resolved roll", () => {
+  it("the roll succeeds just under the quoted chance and fails on it", () => {
+    const quote = quoteDebatePrepAction({ debate: 5, hasStats: true });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(rollDebatePrep(() => quote.successChance - 1e-9, 5)).toEqual({
+      success: true,
+      debate: 6,
+    });
+    expect(rollDebatePrep(() => quote.successChance, 5)).toEqual({
+      success: false,
+      debate: 5,
+    });
+  });
+  it("a successful roll at the cap clamps, matching the zero-gain quote", () => {
+    expect(rollDebatePrep(() => 0, STAT_MAX)).toEqual({ success: true, debate: STAT_MAX });
+  });
+  it("definition and card text derive the resolved chance, not a stale literal", () => {
+    expect(describeDebatePrepEffect()).toBe("15% chance: +1 Debate");
+    expect(ACTIONS.debatePrep.description).toBe(describeDebatePrepAction());
+    expect(ACTIONS.debatePrep.description).toContain("15% chance");
+    expect(ACTIONS.debatePrep.description).not.toContain("10%");
+    expect(describeDebatePrepEffect()).not.toContain("10%");
+  });
+});
+
+describe("debate prep failure agreement", () => {
+  it("missing stats reject quote, validation and batch with one reason", () => {
+    const reason = DEBATE_PREP_UNALLOCATED_ERROR;
+    expect(quoteDebatePrepAction({})).toEqual({ ok: false, error: reason });
+    const noStats = debateCharacter(null);
+    expect(canPerformAction(noStats, "debatePrep")).toEqual({ canPerform: false, reason });
+    expect(simulateActionBatch(noStats, undefined, "debatePrep", 5)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+  it("a resolved-disabled flag rejects validation with the gate reason", () => {
+    expect(
+      canPerformAction(debateCharacter(5), "debatePrep", undefined, { rpgStatsEnabled: false })
+    ).toEqual({ canPerform: false, reason: DEBATE_PREP_DISABLED_ERROR });
+  });
+  it("validation passes and batch simulates for allocated stats", () => {
+    const char = debateCharacter(5);
+    expect(canPerformAction(char, "debatePrep")).toEqual({ canPerform: true });
+    const batch = simulateActionBatch(char, undefined, "debatePrep", 5);
+    expect(batch.ok).toBe(true);
+    if (!batch.ok) return;
+    expect(batch.totalActionPoints).toBe(5);
+    expect(batch.netFundsChange).toBe(0);
+  });
+  it("a capped character still validates (execution charges the AP)", () => {
+    expect(canPerformAction(debateCharacter(STAT_MAX), "debatePrep")).toEqual({
+      canPerform: true,
+    });
   });
 });
