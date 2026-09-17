@@ -9,6 +9,22 @@ function entry(input: Omit<LedgerEntryInput, "turn" | "createdAt">): LedgerEntry
 }
 
 describe("reconcileLedger", () => {
+  it("echoes the turn's banking mode onto the report (per-turn activation history)", () => {
+    const forMode = (bankingMode?: string | null) =>
+      reconcileLedger({
+        turn: 10,
+        entries: [],
+        openingBalances: {},
+        closingBalances: {},
+        bankingMode,
+      });
+    expect(forMode("authoritative").bankingMode).toBe("authoritative");
+    expect(forMode("shadow").bankingMode).toBe("shadow");
+    // Absent means unknown, never authoritative: legacy docs fail closed downstream.
+    expect(forMode().bankingMode).toBeNull();
+    expect(forMode(null).bankingMode).toBeNull();
+  });
+
   it("is green on a clean, fully-balanced, fully-instrumented turn", () => {
     const donor = new ObjectId().toString();
     const recipient = new ObjectId().toString();

@@ -2,10 +2,15 @@
  * #992 stock-flow evidence collector (read-only).
  *
  * Reads per-turn ledgerReconciliations from ONE sandbox sim DB, attaches run
- * provenance (simRuns + gameConfig banking mode + machine-recorded
- * pinned-source identity from control-plane simExperimentReports when
- * reachable), and runs the deterministic gate in
- * src/lib/ledger/stockFlowEvidence.ts.
+ * provenance (simRuns + machine-recorded pinned-source identity from
+ * control-plane simExperimentReports when reachable), and runs the
+ * deterministic gate in src/lib/ledger/stockFlowEvidence.ts.
+ *
+ * Post-activation proof is per-turn and machine-recorded: reconcileTurn
+ * stamps each turn's gameConfig.savingsAccountsMode onto its persisted
+ * ledgerReconciliation doc, and the gate requires every accepted turn to
+ * carry authoritative there. No operator activation number exists: legacy
+ * docs that predate the stamp fail closed as unstamped.
  *
  * The code revision comes from runConfig.source.executedCommit (the full SHA
  * runWorld re-checked in the child on the pinned worktree), never from the
@@ -24,7 +29,7 @@
  *     OPS_MONGODB_URI=mongodb://... \
  *     npx tsx scripts/ledger/collectStockFlowEvidence.ts \
  *       --db=ahd_sim_992 --run-id=<runId> \
- *       --expected-revision=<full-sha> --banking-activation-turn=<turn> \
+ *       --expected-revision=<full-sha> \
  *       [--lookback=30] [--out=/tmp/evidence.json]
  *
  * Exit 0 on PASS, 1 on FAIL, 2 on collection error.
@@ -45,24 +50,18 @@ const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
 const dbName = arg("db");
 const runId = arg("run-id");
 const expectedRevision = arg("expected-revision");
-const activationTurnRaw = arg("banking-activation-turn");
 const lookbackRaw = arg("lookback") ?? "30";
 const outPath = arg("out");
 
-if (!SIM_MONGODB_URI || !dbName || !runId || !expectedRevision || !activationTurnRaw) {
+if (!SIM_MONGODB_URI || !dbName || !runId || !expectedRevision) {
   console.error(
     "Usage: SIM_MONGODB_URI=... npx tsx scripts/ledger/collectStockFlowEvidence.ts " +
       "--db=<sandboxDb> --run-id=<runId> --expected-revision=<full-sha> " +
-      "--banking-activation-turn=<turn> [--lookback=30] [--out=path]"
+      "[--lookback=30] [--out=path]"
   );
   process.exit(2);
 }
-const bankingActivationTurn = Number(activationTurnRaw);
 const lookback = Number(lookbackRaw);
-if (!Number.isInteger(bankingActivationTurn) || bankingActivationTurn < 0) {
-  console.error("--banking-activation-turn must be a non-negative integer");
-  process.exit(2);
-}
 if (!Number.isInteger(lookback) || lookback < 12 || lookback > 500) {
   console.error("--lookback must be an integer 12..500");
   process.exit(2);
@@ -95,10 +94,6 @@ async function main() {
     console.error(`No simRuns doc for runId ${runId} in ${dbName}: cannot pin evidence to a run.`);
     process.exit(2);
   }
-  const gameConfig = await db
-    .collection<{ _id: string; savingsAccountsMode?: string }>("gameConfig")
-    .findOne({ _id: "default" });
-
   // Machine-recorded pinned-source identity lives in the control-plane
   // experiment report (runConfig.source, written by collectExperimentReport.ts
   // from the simRuns.source stamp the worker/runWorld recorded on the pinned
@@ -225,8 +220,6 @@ async function main() {
       codeRevision,
       codeRevisionSource,
       gitDirty,
-      bankingMode: gameConfig?.savingsAccountsMode ?? null,
-      bankingActivationTurn,
       sourceWorktree,
       sourceRequestedCommit,
       sourceExecutedPath,
@@ -235,6 +228,9 @@ async function main() {
     expectedCodeRevision: expectedRevision,
     turns: ordered.map((doc) => ({
       turn: doc.turn,
+      // Per-turn post-activation proof, machine-stamped by reconcileTurn.
+      // Docs that predate the stamp carry undefined -> null -> gate rejects.
+      bankingMode: (doc as { bankingMode?: string | null }).bankingMode ?? null,
       trialBalanceStatus: doc.trialBalance.status,
       trialBalanceUnbalancedCount: doc.trialBalance.unbalancedCount,
       stockVsFlowSkipped: doc.stockVsFlow.skipped,

@@ -148,6 +148,14 @@ export interface StockVsFlowByKind {
 export interface ReconcileReport {
   turn: number;
   generatedAt: Date;
+  /**
+   * `gameConfig.savingsAccountsMode` the turn ran under, echoed from the
+   * reconcile input by the shell. Per-turn banking history for #992: the
+   * evidence gate requires every accepted turn to carry `authoritative`
+   * here, so post-activation proof is machine-recorded, never an operator
+   * number. Null on docs that predate the stamp (unknown, not off).
+   */
+  bankingMode: string | null;
   status: ReconcileStatus;
   entriesChecked: number;
   trialBalance: {
