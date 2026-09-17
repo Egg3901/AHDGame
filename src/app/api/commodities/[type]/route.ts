@@ -853,7 +853,7 @@ export async function getCommodityDetailData(
       // geographic scope; per-corp volumes round to
       // REALIZED_COMMODITY_ROUNDING_DECIMALS decimals.
       volumeBasis: {
-        basis: "realized_physical_units",
+        basis: "realized_physical_units" as const,
         turn: currentTurn,
         roundingDecimals: REALIZED_COMMODITY_ROUNDING_DECIMALS,
         roundingTolerance: REALIZED_COMMODITY_ROUNDING_UNIT,
