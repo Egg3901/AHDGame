@@ -36,9 +36,7 @@ async function put(body: object) {
 describe("notification preferences", () => {
   it("loads saved mail and alert preferences", async () => {
     const { GET } = await import("./route");
-    expect(
-      await (await GET(new Request("http://localhost/api/notifications/preferences"))).json()
-    ).toMatchObject({ muteMail: true, mutedTypes: ["crisis"] });
+    expect(await (await GET()).json()).toMatchObject({ muteMail: true, mutedTypes: ["crisis"] });
   });
   it("changes message alerts without replacing other preferences", async () => {
     const response = await put({ action: "mail", muted: false });
