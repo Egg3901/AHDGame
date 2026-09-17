@@ -180,6 +180,18 @@ describe("settleTransition", () => {
     expect(fixed.status).toBe("applied");
   });
 
+  it("rejects a malformed leg with no target before claiming its key", async () => {
+    const malformed = loanTransition();
+    delete malformed.legs[0].collection;
+    const result = await settleTransition(db as unknown as Db, malformed);
+    expect(result.status).toBe("rejected");
+    expect(result.error).toMatch(/missing a target/);
+    expect(db.collection(MONEY_MOVE_COLLECTION).docs).toHaveLength(0);
+    // The corrected transition with the same key still applies.
+    const fixed = await settleTransition(db as unknown as Db, loanTransition());
+    expect(fixed.status).toBe("applied");
+  });
+
   it("rejects legs whose currency context does not match the transition", async () => {
     const mixed = loanTransition();
     mixed.legs[0].filter = { ...mixed.legs[0].filter, "bankCharter.currency": "GBP" };
