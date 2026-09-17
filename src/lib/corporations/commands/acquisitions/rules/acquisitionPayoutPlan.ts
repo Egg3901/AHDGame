@@ -34,7 +34,7 @@ export interface PlannedLedger {
   subjectType: "character" | "corporation" | "government";
   /** Holder hex. Absent for government subjects (keyed by `countryId` instead). */
   subjectId?: string;
-  subjectName?: string;
+  subjectName: string;
   countryId?: string;
   counterpartyType: "character" | "corporation" | "government";
   counterpartyId: string;

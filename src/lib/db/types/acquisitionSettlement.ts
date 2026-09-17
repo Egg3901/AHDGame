@@ -59,8 +59,8 @@ export interface AcquisitionSettlementLeg {
     amount: number;
     currencyCode: string;
     subjectType: "character" | "corporation" | "government";
-    subjectId: ObjectId;
-    subjectName?: string;
+    subjectId?: ObjectId;
+    subjectName: string;
     countryId?: string;
     counterpartyType: "character" | "corporation" | "government";
     counterpartyId: ObjectId;

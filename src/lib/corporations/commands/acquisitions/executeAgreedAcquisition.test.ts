@@ -8,6 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
+import type { AcquisitionSettlement } from "@/lib/db/types/acquisitionSettlement";
 import { buildAcquisitionWorld, readBalances, ACQUIRER_CASH } from "./acquisitionSettlementWorld";
 
 vi.mock("@/lib/currency/featureFlag", () => ({ isForexEnabled: vi.fn().mockResolvedValue(false) }));
@@ -115,10 +116,10 @@ describe("executeAgreedAcquisition", () => {
     expect(b.acquirerSectors).toBe(2);
     expect(b.targetGone).toBe(true);
     const settlement = await w.memory
-      .collection("acquisitionSettlements")
+      .collection<AcquisitionSettlement>("acquisitionSettlements")
       .findOne({ _id: w.offerId });
     expect(settlement?.status).toBe("applied");
-    expect(settlement?.legs.every((leg: { applied: boolean }) => leg.applied)).toBe(true);
+    expect(settlement?.legs.every((leg) => leg.applied)).toBe(true);
   });
 
   it("ledgers the acquirer outflow and both shell-cash legs", async () => {
