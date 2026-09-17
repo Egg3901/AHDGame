@@ -465,7 +465,9 @@ describe("processNppBillSponsorship validity — active-duplicate steering, caps
     const npp = makeNpp();
     const official = makeOfficial(npp._id as ObjectId);
     const nppMap = new Map([[(npp._id as ObjectId).toString(), npp]]);
-    const insertSpy = vi.fn(async () => ({ insertedId: new ObjectId() }));
+    const insertSpy = vi.fn(async (_bill: Record<string, unknown>) => ({
+      insertedId: new ObjectId(),
+    }));
     const { db } = makeMockDb({
       legTypes: [typeA, typeB],
       billsEntries,
