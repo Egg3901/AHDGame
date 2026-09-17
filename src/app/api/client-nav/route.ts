@@ -1,3 +1,4 @@
+import { notificationTypeFilter } from "@/lib/notifications/visibility";
 import { isSingleplayer } from "@/lib/singleplayer";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
@@ -193,6 +194,7 @@ export async function GET() {
         { _id: userOid },
         {
           projection: {
+            notificationPreferences: 1,
             role: 1,
             isAdmin: 1,
             activeCharacterId: 1,
@@ -326,6 +328,7 @@ export async function GET() {
             : null,
           db.collection<Notification>("notifications").countDocuments({
             userId: userOid,
+            ...notificationTypeFilter(user?.notificationPreferences, new Date()),
             read: false,
           }),
           db.collection("playerMail").countDocuments({
@@ -702,7 +705,7 @@ export async function GET() {
         characterName:
           (isImperialMode && activeImperialCharacterForUser?.name) || (character?.name ?? null),
         unreadCount,
-        unreadMailCount,
+        unreadMailCount: user?.notificationPreferences?.muteMail ? 0 : unreadMailCount,
         myCorporationId,
         myCorporationType,
         myCorporationCountryId,

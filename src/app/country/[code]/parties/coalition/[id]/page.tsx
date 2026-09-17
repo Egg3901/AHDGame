@@ -2,6 +2,7 @@
 
 import { Suspense, useState, useEffect, useCallback, use } from "react";
 import Link from "next/link";
+import { CoalitionIdentityForm } from "./CoalitionIdentityForm";
 import { CoalitionLogo } from "@/components/CoalitionLogo";
 import { DiscordInviteButton } from "@/components/DiscordInviteButton";
 import { LocalTime } from "@/components/time/LocalTime";
@@ -822,6 +823,11 @@ function CoalitionDetailContent({ params }: { params: Promise<{ code: string; id
         {/* ── Chair's Office Tab ── */}
         {activeTab === "chair-office" && isCoalitionChair && (
           <div className="space-y-6">
+            <CoalitionIdentityForm
+              coalition={coalition}
+              endpoint={`${coalitionApiUrl(effectiveCountry, id)}/settings`}
+              onSaved={fetchCoalition}
+            />
             <div className="rounded-xl border border-card-border bg-card p-6">
               <h2 className="text-lg font-semibold mb-1">Coalition Discord</h2>
               <p className="text-sm text-muted mb-4">
