@@ -35,6 +35,14 @@
  * falling back to the unscaled base. Hosts own currency conversion, atomic
  * resource checks and persistence.
  *
+ * Fundraise costs flat action points and credits the stat-scaled donor yield
+ * with no fund cost. quoteFundraiseAction is the single source of truth the
+ * action effect, canPerformAction, the UI card, the AI advisor and the
+ * client-status projection call; a zero donor base rejects with the execute
+ * reason instead of pricing a yield that cannot be earned. Missing influence
+ * or stats keep the historical neutral fallbacks the effect always applied,
+ * so pre-stat characters quote exactly what they are credited.
+ *
  * Debate Prep costs flat action points for a fixed chance to +1 the Debate
  * skill. quoteDebatePrepAction is the single source of truth the execute
  * shell (eligibility gate), canPerformAction, the action definition and the
@@ -692,6 +700,59 @@ export interface PollQuoteActor {
  */
 export type PollQuote =
   { ok: true; apCost: number; fundCostAnchor: number } | { ok: false; error: string };
+
+// ── Fundraise (Game1724 slice) ──────────────────────────────────────────────
+// Eligibility, AP cost and yield math moved verbatim from `../actions` (the
+// effect, the donor gate and the flat cost) so the UI card, the action
+// effect, canPerformAction, the AI advisor and the client-status projection
+// share one implementation. Balance is unchanged: flat 3 AP, the $50K +
+// $2K/level base with the influence multiplier, and the fundraising-stat
+// scaling are the historical numbers, only the owner moved. The strict entry
+// point is quoteFundraiseAction; fundraiseYieldAnchor stays for the
+// anchor→local converters and isFundraiseEligible stays for UI blocked-state
+// probes that never had yield context. Unlike the GDP-scaled slices there is
+// no target, no cap and no rounding beyond the yield's own Math.round: the
+// quote prices ANCHOR units and hosts own the anchor→local conversion.
+
+/** Rejection when the character has no donor base. Mirrors the execute gate. */
+export const FUNDRAISE_NO_DONOR_ERROR =
+  "You have no donor base. Use 'Build Donor Network' first to establish one before fundraising.";
+
+/**
+ * Raw fundraise actor inputs, preserved explicitly. Stats arrive as the
+ * stored raw values (or missing for characters that predate the stat
+ * system); the rules own the statMultiplier interpretation and keep the
+ * neutral fallback the effect always applied, so the quote matches the
+ * credit for pre-stat characters.
+ */
+export interface FundraiseQuoteActor {
+  donorBaseLevel?: number | null;
+  politicalInfluence?: number | null;
+  fundraising?: number | null;
+}
+
+/**
+ * Authoritative fundraise quote: flat AP cost and the stat-scaled yield in
+ * ANCHOR units. A zero donor base rejects with a typed error the shell
+ * surfaces; it never silently prices a yield that cannot be earned.
+ */
+export type FundraiseQuote =
+  { ok: true; apCost: number; yieldAnchor: number } | { ok: false; error: string };
+
+export function quoteFundraiseAction(actor: FundraiseQuoteActor): FundraiseQuote {
+  const { donorBaseLevel } = actor;
+  if (!isFundraiseEligible(donorBaseLevel ?? undefined)) {
+    return { ok: false, error: FUNDRAISE_NO_DONOR_ERROR };
+  }
+  // Eligible ⟹ non-zero; the mapping below preserves the effect's historical
+  // neutral fallbacks exactly (missing influence → 0, missing stat → neutral).
+  const yieldAnchor = fundraiseYieldAnchor({
+    donorBaseLevel: donorBaseLevel as number,
+    politicalInfluence: actor.politicalInfluence ?? undefined,
+    stats: actor.fundraising == null ? undefined : { fundraising: actor.fundraising },
+  });
+  return { ok: true, apCost: FUNDRAISE_ACTION_COST, yieldAnchor };
+}
 
 export function quotePollAction(actor: PollQuoteActor, tier: PollTier): PollQuote {
   const { intellect } = actor;

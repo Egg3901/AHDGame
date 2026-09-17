@@ -14,9 +14,11 @@ import {
 } from "../stats/statsConstants";
 import {
   FUNDRAISE_ACTION_COST,
+  FUNDRAISE_NO_DONOR_ERROR,
   calculateFundraisingAmount,
   fundraiseYieldAnchor,
   isFundraiseEligible,
+  quoteFundraiseAction,
   CAMPAIGN_BASE_FUND_COST,
   getCampaignActionCost,
   getCampaignFundCost,
@@ -1012,6 +1014,139 @@ describe("poll failure agreement", () => {
     if (!batch.ok) return;
     expect(batch.totalActionPoints).toBe(10);
     expect(batch.netFundsChange).toBe(-125_000);
+  });
+});
+
+// ── Fundraise (Game1724 slice) ──────────────────────────────────────────────
+// quoteFundraiseAction owns the flat AP cost, the stat-scaled yield and the
+// donor-base eligibility. The action effect (result), canPerformAction
+// (failure), the UI card, the batch simulator and the AI advisor all route
+// through it, so the numbers below prove agreement instead of re-stating the
+// formula.
+
+function fundraiseCharacter(
+  donorBaseLevel: number | null | undefined,
+  fundraising?: number | null,
+  overrides: Partial<Character> = {}
+): Character {
+  return makeCharacter({
+    actions: 100,
+    funds: 1_000_000,
+    donorBaseLevel: donorBaseLevel ?? 0,
+    politicalInfluence: 40,
+    ...(fundraising === undefined
+      ? { stats: undefined }
+      : { stats: { fundraising } as Character["stats"] }),
+    ...overrides,
+  });
+}
+
+describe("quoteFundraiseAction happy path", () => {
+  it("quotes flat AP and the shared stat-scaled yield", () => {
+    for (const [level, influence, fundraising] of [
+      [10, 0, undefined],
+      [50, 40, undefined],
+      [50, 40, 10],
+      [50, 40, 1],
+      [75, 100, 5.5],
+    ] as const) {
+      const quote = quoteFundraiseAction({
+        donorBaseLevel: level,
+        politicalInfluence: influence,
+        fundraising,
+      });
+      expect(quote.ok).toBe(true);
+      if (!quote.ok) continue;
+      expect(quote.apCost).toBe(FUNDRAISE_ACTION_COST);
+      expect(quote.yieldAnchor).toBe(
+        fundraiseYieldAnchor({
+          donorBaseLevel: level,
+          politicalInfluence: influence,
+          stats: fundraising == null ? undefined : { fundraising },
+        })
+      );
+    }
+  });
+  it("missing influence and stats keep the historical neutral fallbacks", () => {
+    expect(quoteFundraiseAction({ donorBaseLevel: 50 })).toEqual({
+      ok: true,
+      apCost: 3,
+      yieldAnchor: 150_000,
+    });
+  });
+  it("the quoted AP matches every charger", () => {
+    const quote = quoteFundraiseAction({ donorBaseLevel: 10 });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    expect(quote.apCost).toBe(ACTIONS.fundraise.baseCost);
+    expect(quote.apCost).toBe(getDonorActionCost(10, "fundraise"));
+    expect(getActionPointCost(fundraiseCharacter(10), "fundraise")).toBe(quote.apCost);
+  });
+});
+
+describe("quoteFundraiseAction strictness", () => {
+  it("pins the execute-gate rejection string as an independent literal", () => {
+    expect(FUNDRAISE_NO_DONOR_ERROR).toBe(
+      "You have no donor base. Use 'Build Donor Network' first to establish one before fundraising."
+    );
+  });
+  it("a zero donor base rejects instead of pricing an unearned yield", () => {
+    for (const donorBaseLevel of [0, null, undefined]) {
+      expect(quoteFundraiseAction({ donorBaseLevel })).toEqual({
+        ok: false,
+        error: FUNDRAISE_NO_DONOR_ERROR,
+      });
+    }
+  });
+});
+
+describe("fundraise effect parity", () => {
+  it("the effect credits exactly the quoted yield", () => {
+    for (const fundraising of [undefined, 1, 5.5, 10]) {
+      const char = fundraiseCharacter(50, fundraising);
+      const quote = quoteFundraiseAction({
+        donorBaseLevel: 50,
+        politicalInfluence: 40,
+        fundraising,
+      });
+      expect(quote.ok).toBe(true);
+      if (!quote.ok) continue;
+      const effect = ACTIONS.fundraise.effect(char);
+      expect(effect.fundsChange).toBe(quote.yieldAnchor);
+      expect(effect.message).toContain(Math.round(quote.yieldAnchor).toLocaleString());
+    }
+  });
+  it("the effect throws the quote reason for a zero donor base", () => {
+    expect(() => ACTIONS.fundraise.effect(fundraiseCharacter(0))).toThrow(FUNDRAISE_NO_DONOR_ERROR);
+  });
+});
+
+describe("fundraise failure agreement", () => {
+  it("zero donor base rejects quote, validation and batch with one reason", () => {
+    const reason = FUNDRAISE_NO_DONOR_ERROR;
+    expect(quoteFundraiseAction({ donorBaseLevel: 0 })).toEqual({ ok: false, error: reason });
+    const noDonors = fundraiseCharacter(0);
+    expect(canPerformAction(noDonors, "fundraise")).toEqual({ canPerform: false, reason });
+    expect(simulateActionBatch(noDonors, undefined, "fundraise", 5)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+  it("validation passes and batch simulates at the quoted yield", () => {
+    const char = fundraiseCharacter(50, 10);
+    expect(canPerformAction(char, "fundraise")).toEqual({ canPerform: true });
+    const quote = quoteFundraiseAction({
+      donorBaseLevel: 50,
+      politicalInfluence: 40,
+      fundraising: 10,
+    });
+    expect(quote.ok).toBe(true);
+    if (!quote.ok) return;
+    const batch = simulateActionBatch(char, undefined, "fundraise", 5);
+    expect(batch.ok).toBe(true);
+    if (!batch.ok) return;
+    expect(batch.totalActionPoints).toBe(5 * FUNDRAISE_ACTION_COST);
+    expect(batch.netFundsChange).toBe(5 * quote.yieldAnchor);
   });
 });
 
