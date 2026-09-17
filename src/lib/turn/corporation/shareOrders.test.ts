@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import { NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION } from "@/lib/db/nonAtomicMoneyFlow";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
@@ -14,12 +15,6 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
   fxRateForCorpFromMap: () => 1,
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
   resolveCorpLiquidCurrencyCode: () => "USD",
-}));
-vi.mock("@/lib/corporations/shareholderOps", () => ({
-  creditSharesToFund: vi.fn().mockResolvedValue(true),
-}));
-vi.mock("@/lib/indexFunds/fundQueries", () => ({
-  upsertFundHoldingShares: vi.fn().mockResolvedValue(undefined),
 }));
 
 let db: MockDb;
@@ -108,6 +103,9 @@ function setupOpenBuyOrder(opts: {
       skip: vi.fn().mockReturnThis(),
     })),
   });
+  // Per-match settlement reads the live cap table through findOne before
+  // choosing the positional increment vs push variant.
+  (corpsColl.findOne as ReturnType<typeof vi.fn>).mockResolvedValue(corpDoc);
 }
 
 function setupOpenSellOrder(opts: {
@@ -158,6 +156,41 @@ function setupOpenSellOrder(opts: {
   });
 }
 
+/** updateOne calls on a collection as { filter, update } pairs. */
+function updateCalls(
+  name: string
+): Array<{ filter: Record<string, unknown>; update: Record<string, unknown> }> {
+  return db.collectionMocks[name]!.updateOne.mock.calls.map((call) => ({
+    filter: call[0] as Record<string, unknown>,
+    update: call[1] as Record<string, unknown>,
+  }));
+}
+
+function incOf(update: Record<string, unknown>): Record<string, number> {
+  return (update.$inc as Record<string, number> | undefined) ?? {};
+}
+
+function setOf(update: Record<string, unknown>): Record<string, unknown> {
+  return (update.$set as Record<string, unknown> | undefined) ?? {};
+}
+
+function pushOf(update: Record<string, unknown>): Record<string, unknown> {
+  return (update.$push as Record<string, unknown> | undefined) ?? {};
+}
+
+/** Match receipt ids claimed during the run (one durable receipt per match). */
+function claimedMatchKeys(): string[] {
+  const receipts = db.collectionMocks[NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION]!;
+  return receipts.insertOne.mock.calls.map((call) => (call[0] as { _id: string })._id);
+}
+
+function completedMatchKeys(): string[] {
+  const receipts = db.collectionMocks[NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION]!;
+  return receipts.updateOne.mock.calls
+    .filter((call) => (call[1] as { $set?: { status?: string } }).$set?.status === "completed")
+    .map((call) => (call[0] as { _id: string })._id);
+}
+
 /**
  * The fill loop reads every pool once up front (`find({})`) rather than one
  * `findOne` per corporation; mock both so either read path sees the pool.
@@ -197,15 +230,16 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
 
-    expect(pool.updateOne).toHaveBeenCalledWith(
-      { _id: "USD" },
-      expect.objectContaining({
-        $inc: expect.objectContaining({
-          cashLocal: 1_020,
-          "lifetime.purchasesIn": 1_020,
-        }),
-      })
+    // One durable receipt per match, settled completed.
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    // Pool dealer leg carries the same economics as the legacy batch commit,
+    // now as a keyed updateOne instead of a bulkWrite entry.
+    const dealer = updateCalls("equityMarketPools").find(
+      (call) => call.filter._id === "USD" && incOf(call.update).cashLocal === 1_020
     );
+    expect(dealer).toBeDefined();
+    expect(incOf(dealer!.update)["lifetime.purchasesIn"]).toBe(1_020);
   });
 
   it("partially fills queued sells at the pool's bid and finite cash depth", async () => {
@@ -231,29 +265,23 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 258);
 
     // Bid is $98, so $245 of cash can absorb two whole shares.
-    expect(pool.updateOne).toHaveBeenCalledWith(
-      { _id: "USD", cashLocal: { $gte: 196 } },
-      expect.objectContaining({
-        $inc: expect.objectContaining({ cashLocal: -196, "lifetime.salesOut": 196 }),
-      })
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    const dealer = updateCalls("equityMarketPools").find(
+      (call) => call.filter._id === "USD" && incOf(call.update).cashLocal === -196
     );
-    const orderUpdate = db.collection("shareOrders").bulkWrite.mock.calls[0][0][0];
-    expect(orderUpdate.updateOne.update.$set).toMatchObject({
-      status: "open",
-      sharesRemaining: 8,
-    });
-    const corpOps = db.collection("corporations").bulkWrite.mock.calls[0][0];
-    expect(corpOps).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          updateOne: expect.objectContaining({
-            update: expect.objectContaining({
-              $inc: expect.objectContaining({ "shareholders.$.shares": -2 }),
-            }),
-          }),
-        }),
-      ])
+    expect(dealer).toBeDefined();
+    expect((dealer!.filter as { cashLocal?: { $gte?: number } }).cashLocal?.$gte).toBe(196);
+    expect(incOf(dealer!.update)["lifetime.salesOut"]).toBe(196);
+    const orderClaim = updateCalls("shareOrders").find(
+      (call) => setOf(call.update).sharesRemaining === 8
     );
+    expect(orderClaim).toBeDefined();
+    expect(setOf(orderClaim!.update)).toMatchObject({ status: "open", sharesRemaining: 8 });
+    const debit = updateCalls("corporations").find(
+      (call) => incOf(call.update)["shareholders.$.shares"] === -2
+    );
+    expect(debit).toBeDefined();
   });
 
   it("stamps avgCostPerShare on newly-pushed shareholder entries at current market price", async () => {
@@ -273,19 +301,14 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
 
-    // Find the push call on corporations.bulkWrite
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const bulkCalls = corpsColl.bulkWrite.mock.calls;
-    const pushCall = bulkCalls.find((call) =>
-      (call[0] as { updateOne?: { update?: { $push?: unknown } } }[]).some(
-        (op) => op.updateOne?.update?.$push
-      )
+    // New cap-table entry arrives as a keyed $push on corporations.updateOne.
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    const pushCall = updateCalls("corporations").find(
+      (call) => pushOf(call.update).shareholders !== undefined
     );
     expect(pushCall).toBeDefined();
-    const pushOps = pushCall![0] as Array<{
-      updateOne: { update: { $push: { shareholders: { avgCostPerShare?: number } } } };
-    }>;
-    const pushed = pushOps[0].updateOne.update.$push.shareholders;
+    const pushed = pushOf(pushCall!.update).shareholders as { avgCostPerShare?: number };
     expect(pushed.avgCostPerShare).toBe(585.04);
   });
 
@@ -351,11 +374,8 @@ describe("fillPendingShareOrders", () => {
     await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
 
     // No $push should occur; the seller already had an existing entry decremented via $inc.
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const pushAnywhere = corpsColl.bulkWrite.mock.calls.some((call) =>
-      (call[0] as { updateOne?: { update?: { $push?: unknown } } }[]).some(
-        (op) => op.updateOne?.update?.$push
-      )
+    const pushAnywhere = updateCalls("corporations").some(
+      (call) => pushOf(call.update).shareholders !== undefined
     );
     expect(pushAnywhere).toBe(false);
   });
@@ -422,22 +442,20 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
 
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const incOps = corpsColl.bulkWrite.mock.calls.flatMap(
-      (call) => call[0] as Array<{ updateOne?: { update?: { $inc?: Record<string, number> } } }>
-    );
-    const shareInc = incOps.find(
-      (op) => op.updateOne?.update?.$inc?.["shareholders.$.shares"] != null
-    );
-    expect(shareInc?.updateOne?.update?.$inc?.["shareholders.$.shares"]).toBe(-10);
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    const corpCalls = updateCalls("corporations");
+    const shareInc = corpCalls.find((call) => incOf(call.update)["shareholders.$.shares"] === -10);
+    expect(shareInc).toBeDefined();
 
-    const floatInc = incOps.find((op) => op.updateOne?.update?.$inc?.publicFloat != null);
-    expect(floatInc?.updateOne?.update?.$inc?.publicFloat).toBe(10);
+    const floatInc = corpCalls.find((call) => incOf(call.update).publicFloat === 10);
+    expect(floatInc).toBeDefined();
 
-    const ordersColl = db.collectionMocks["shareOrders"]!;
-    const orderUpdate = ordersColl.bulkWrite.mock.calls[0][0][0];
-    expect(orderUpdate.updateOne.update.$set.sharesRemaining).toBe(999_990);
-    expect(orderUpdate.updateOne.update.$set.status).toBe("open");
+    const orderClaim = updateCalls("shareOrders").find(
+      (call) => setOf(call.update).sharesRemaining === 999_990
+    );
+    expect(orderClaim).toBeDefined();
+    expect(setOf(orderClaim!.update).status).toBe("open");
   });
 
   it("emits a limit_fill shareTradeHistory entry per fill", async () => {
@@ -470,10 +488,12 @@ describe("fillPendingShareOrders", () => {
 
   it("fills a fund-owned buy order: credits the fund, refunds escrow, applies treasury delta", async () => {
     const { fillPendingShareOrders } = await import("./shareOrders");
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    const { upsertFundHoldingShares } = await import("@/lib/indexFunds/fundQueries");
     const corpId = new ObjectId();
     const fundId = new ObjectId();
+    (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: fundId,
+      holdings: [],
+    });
 
     const fundOrder = {
       _id: new ObjectId(),
@@ -517,38 +537,39 @@ describe("fillPendingShareOrders", () => {
         skip: vi.fn().mockReturnThis(),
       })),
     }));
+    (db.collection("corporations").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(corpDoc);
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 300);
 
-    // Fund cap-table credited with 10 shares at the ₳ fill price (500).
-    expect(creditSharesToFund).toHaveBeenCalledTimes(1);
-    const credArgs = vi.mocked(creditSharesToFund).mock.calls[0];
-    expect(credArgs[1]).toEqual(corpId); // targetCorpId
-    expect(credArgs[2]).toEqual(fundId); // fundId
-    expect(credArgs[3]).toBe(10); // shares
-    expect(credArgs[4]).toBe(500); // fillPriceAnchor
-    expect(upsertFundHoldingShares).toHaveBeenCalledWith(db, fundId, corpId, 10, 500);
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    // Fund cap-table credited with 10 shares at the fill price (500) via a
+    // keyed $push carrying the fund entry.
+    const capPush = updateCalls("corporations").find(
+      (call) => pushOf(call.update).shareholders !== undefined
+    );
+    expect(capPush).toBeDefined();
+    expect(pushOf(capPush!.update).shareholders).toMatchObject({ shares: 10 });
+
+    // Fund holdings ledger credited alongside the cap table.
+    const holdingsPush = updateCalls("indexFunds").find(
+      (call) => pushOf(call.update).holdings !== undefined
+    );
+    expect(holdingsPush).toBeDefined();
 
     // Unused escrow refunded to fund cashAnchor (6000 - 5000 = 1000).
-    const fundsColl = db.collectionMocks["indexFunds"]!;
-    const refundCall = fundsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(refundCall[0].updateOne.update.$inc.cashAnchor).toBe(1000);
+    const refund = updateCalls("indexFunds").find((call) => incOf(call.update).cashAnchor === 1000);
+    expect(refund).toBeDefined();
 
     // Order marked filled.
-    const ordersColl = db.collectionMocks["shareOrders"]!;
-    const fillOps = ordersColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $set: { status: string } } };
-    }>;
-    expect(fillOps[0].updateOne.update.$set.status).toBe("filled");
+    const orderClaim = updateCalls("shareOrders").find(
+      (call) => setOf(call.update).status === "filled"
+    );
+    expect(orderClaim).toBeDefined();
 
     // Issuer treasury credited with the buyer payment (10 * 500 = 5000).
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const treasuryCall = corpsColl.bulkWrite.mock.calls.find((call) =>
-      (call[0] as Array<{ updateOne?: { update?: { $inc?: { liquidCapital?: number } } } }>).some(
-        (op) => op.updateOne?.update?.$inc?.liquidCapital === 5000
-      )
+    const treasuryCall = updateCalls("corporations").find(
+      (call) => incOf(call.update).liquidCapital === 5000
     );
     expect(treasuryCall).toBeDefined();
   });
@@ -591,6 +612,10 @@ describe("fillPendingShareOrders", () => {
     expect(db.collection("shareOrders").bulkWrite).not.toHaveBeenCalled();
     expect(db.collection("corporations").bulkWrite).not.toHaveBeenCalled();
     expect(db.collection("indexFunds").bulkWrite).not.toHaveBeenCalled();
+    expect(db.collection("shareOrders").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+    expect(db.collection("indexFunds").updateOne).not.toHaveBeenCalled();
+    expect(claimedMatchKeys()).toHaveLength(0);
   });
 
   it("partial char buy fill refunds only filled shares' below-limit savings and reserves unfilled escrow", async () => {
@@ -614,33 +639,24 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
 
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
     // Char refund credit = 4000 (filled shares' savings), not 40000.
-    const charsColl = db.collectionMocks["characters"]!;
-    const charBulk = charsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc?: Record<string, number> } };
-    }>;
-    // buildPersonalBalanceBulkOp (forex off) writes a flat $inc on the legacy field.
-    const incVals = charBulk
-      .map((op) => op.updateOne.update.$inc ?? {})
-      .flatMap((inc) => Object.values(inc));
-    expect(incVals).toContain(4000);
-    expect(incVals).not.toContain(40000);
+    const charIncs = updateCalls("characters").flatMap((call) => Object.values(incOf(call.update)));
+    expect(charIncs).toContain(4000);
+    expect(charIncs).not.toContain(40000);
 
     // Order stays open with sharesRemaining=60, escrowAmount=36000.
-    const ordersColl = db.collectionMocks["shareOrders"]!;
-    const fillOps = ordersColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $set: Record<string, unknown> } };
-    }>;
-    expect(fillOps[0].updateOne.update.$set.status).toBe("open");
-    expect(fillOps[0].updateOne.update.$set.sharesRemaining).toBe(60);
-    expect(fillOps[0].updateOne.update.$set.escrowAmount).toBe(36000);
+    const orderClaim = updateCalls("shareOrders").find(
+      (call) => setOf(call.update).sharesRemaining === 60
+    );
+    expect(orderClaim).toBeDefined();
+    expect(setOf(orderClaim!.update).status).toBe("open");
+    expect(setOf(orderClaim!.update).escrowAmount).toBe(36000);
 
     // Issuer treasury credited 40 * 500 = 20000.
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const treasuryCall = corpsColl.bulkWrite.mock.calls.find((call) =>
-      (call[0] as Array<{ updateOne?: { update?: { $inc?: { liquidCapital?: number } } } }>).some(
-        (op) => op.updateOne?.update?.$inc?.liquidCapital === 20000
-      )
+    const treasuryCall = updateCalls("corporations").find(
+      (call) => incOf(call.update).liquidCapital === 20000
     );
     expect(treasuryCall).toBeDefined();
   });
@@ -695,32 +711,32 @@ describe("fillPendingShareOrders", () => {
         skip: vi.fn().mockReturnThis(),
       })),
     }));
+    (db.collection("corporations").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(corpDoc);
+    (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: fundId,
+      holdings: [],
+    });
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 300);
 
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
     // Fund cash refund = 4000 (not 40000).
-    const fundsColl = db.collectionMocks["indexFunds"]!;
-    const refundCall = fundsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(refundCall[0].updateOne.update.$inc.cashAnchor).toBe(4000);
+    const refund = updateCalls("indexFunds").find((call) => incOf(call.update).cashAnchor === 4000);
+    expect(refund).toBeDefined();
 
     // Residual escrow on the open order: local 36000, anchor 36000, sharesRemaining 60.
-    const ordersColl = db.collectionMocks["shareOrders"]!;
-    const fillOps = ordersColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $set: Record<string, unknown> } };
-    }>;
-    expect(fillOps[0].updateOne.update.$set.status).toBe("open");
-    expect(fillOps[0].updateOne.update.$set.sharesRemaining).toBe(60);
-    expect(fillOps[0].updateOne.update.$set.escrowAmount).toBe(36000);
-    expect(fillOps[0].updateOne.update.$set.escrowAnchor).toBe(36000);
+    const orderClaim = updateCalls("shareOrders").find(
+      (call) => setOf(call.update).sharesRemaining === 60
+    );
+    expect(orderClaim).toBeDefined();
+    expect(setOf(orderClaim!.update).status).toBe("open");
+    expect(setOf(orderClaim!.update).escrowAmount).toBe(36000);
+    expect(setOf(orderClaim!.update).escrowAnchor).toBe(36000);
 
     // Issuer treasury credited 40 * 500 = 20000.
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const treasuryCall = corpsColl.bulkWrite.mock.calls.find((call) =>
-      (call[0] as Array<{ updateOne?: { update?: { $inc?: { liquidCapital?: number } } } }>).some(
-        (op) => op.updateOne?.update?.$inc?.liquidCapital === 20000
-      )
+    const treasuryCall = updateCalls("corporations").find(
+      (call) => incOf(call.update).liquidCapital === 20000
     );
     expect(treasuryCall).toBeDefined();
   });
@@ -774,23 +790,26 @@ describe("fillPendingShareOrders", () => {
         skip: vi.fn().mockReturnThis(),
       })),
     }));
+    (db.collection("corporations").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(corpDoc);
+    (db.collection("indexFunds").findOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      _id: fundId,
+      holdings: [],
+    });
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 300);
 
-    const fundsColl = db.collectionMocks["indexFunds"]!;
-    const refundCall = fundsColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $inc: { cashAnchor: number } } };
-    }>;
-    expect(refundCall[0].updateOne.update.$inc.cashAnchor).toBe(1000);
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    const refund = updateCalls("indexFunds").find((call) => incOf(call.update).cashAnchor === 1000);
+    expect(refund).toBeDefined();
 
-    const ordersColl = db.collectionMocks["shareOrders"]!;
-    const fillOps = ordersColl.bulkWrite.mock.calls[0][0] as Array<{
-      updateOne: { update: { $set: Record<string, unknown> } };
-    }>;
-    expect(fillOps[0].updateOne.update.$set.status).toBe("filled");
-    expect(fillOps[0].updateOne.update.$set.sharesRemaining).toBe(0);
-    expect(fillOps[0].updateOne.update.$set.escrowAmount).toBe(0);
-    expect(fillOps[0].updateOne.update.$set.escrowAnchor).toBe(0);
+    const orderClaim = updateCalls("shareOrders").find(
+      (call) => setOf(call.update).status === "filled"
+    );
+    expect(orderClaim).toBeDefined();
+    expect(setOf(orderClaim!.update).sharesRemaining).toBe(0);
+    expect(setOf(orderClaim!.update).escrowAmount).toBe(0);
+    expect(setOf(orderClaim!.update).escrowAnchor).toBe(0);
   });
 
   it("uses the guarded fundamental execution price for low-float buy fills", async () => {
@@ -812,20 +831,115 @@ describe("fillPendingShareOrders", () => {
 
     await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
 
-    const corpsColl = db.collectionMocks["corporations"]!;
-    const pushCall = corpsColl.bulkWrite.mock.calls.find((call) =>
-      (call[0] as { updateOne?: { update?: { $push?: unknown } } }[]).some(
-        (op) => op.updateOne?.update?.$push
-      )
+    expect(claimedMatchKeys()).toHaveLength(1);
+    expect(completedMatchKeys()).toEqual(claimedMatchKeys());
+    const pushCall = updateCalls("corporations").find(
+      (call) => pushOf(call.update).shareholders !== undefined
     );
     expect(pushCall).toBeDefined();
-    const pushOps = pushCall![0] as Array<{
-      updateOne: { update: { $push: { shareholders: { avgCostPerShare?: number } } } };
-    }>;
-    expect(pushOps[0].updateOne.update.$push.shareholders.avgCostPerShare).toBe(10);
+    const pushed = pushOf(pushCall!.update).shareholders as { avgCostPerShare?: number };
+    expect(pushed.avgCostPerShare).toBe(10);
 
     const historyColl = db.collectionMocks["shareTradeHistory"]!;
     const doc = historyColl.insertOne.mock.calls[0][0];
     expect(doc.pricePerShareAnchor).toBe(10);
+  });
+
+  it("settles two matches sequentially in resolution order with one receipt each", async () => {
+    const { fillPendingShareOrders } = await import("./shareOrders");
+    const corpId = new ObjectId();
+    const buyerA = new ObjectId();
+    const buyerB = new ObjectId();
+    const orderA = {
+      _id: new ObjectId(),
+      corporationId: corpId,
+      characterId: buyerA,
+      type: "buy",
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: 600,
+      escrowAmount: 6000,
+      status: "open",
+    };
+    const orderB = {
+      _id: new ObjectId(),
+      corporationId: corpId,
+      characterId: buyerB,
+      type: "buy",
+      shares: 5,
+      sharesRemaining: 5,
+      pricePerShare: 600,
+      escrowAmount: 3000,
+      status: "open",
+    };
+    (db.collection("shareOrders").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([orderA, orderB]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+    const corpDoc = {
+      _id: corpId,
+      name: "Test Corp",
+      sharePrice: 500,
+      fundamentalSharePrice: 500,
+      publicFloat: 50,
+      totalShares: 1_000,
+      shareholders: [],
+      liquidCapital: 0,
+      liquidCurrencyCode: "USD",
+      countryId: "US",
+    };
+    (db.collection("corporations").find as ReturnType<typeof vi.fn>).mockImplementation(() => ({
+      toArray: vi.fn().mockResolvedValue([corpDoc]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockImplementation(() => ({
+        toArray: vi.fn().mockResolvedValue([{ _id: corpId, name: "Test Corp" }]),
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+      })),
+    }));
+    (db.collection("corporations").findOne as ReturnType<typeof vi.fn>).mockResolvedValue(corpDoc);
+    (db.collection("characters").find as ReturnType<typeof vi.fn>).mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+      sort: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockImplementation(() => ({
+        toArray: vi.fn().mockResolvedValue([
+          { _id: buyerA, name: "Buyer A", countryId: "US" },
+          { _id: buyerB, name: "Buyer B", countryId: "US" },
+        ]),
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        skip: vi.fn().mockReturnThis(),
+      })),
+    });
+
+    await fillPendingShareOrders(db as unknown as Db, new Date(), 257);
+
+    // One receipt per match, both completed, keyed by pre-fill remainder.
+    const claimed = claimedMatchKeys();
+    expect(claimed).toHaveLength(2);
+    expect(completedMatchKeys().sort()).toEqual(claimed.sort());
+    expect(claimed).toContain(`turn-share-match:257:${orderA._id.toHexString()}:10`);
+    expect(claimed).toContain(`turn-share-match:257:${orderB._id.toHexString()}:5`);
+
+    // Resolution order preserved: the first order's claim lands first.
+    const orderIds = updateCalls("shareOrders").map((call) =>
+      (call.filter._id as ObjectId).toHexString()
+    );
+    expect(orderIds[0]).toBe(orderA._id.toHexString());
+    expect(orderIds[1]).toBe(orderB._id.toHexString());
+
+    // Combined treasury effect of both fills (10 + 5 shares at 500).
+    const treasuryTotal = updateCalls("corporations")
+      .map((call) => incOf(call.update).liquidCapital ?? 0)
+      .reduce((sum, delta) => sum + delta, 0);
+    expect(treasuryTotal).toBe(7500);
   });
 });

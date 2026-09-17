@@ -374,19 +374,37 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * corp-filler FX spread routing on the routes and the deterministic-_id
  * fund-tx/emitTx/trade-history inserts (convergent post-commit, never part
  * of the money prefix).
- * Open seams for the next pass (all sighted, none audited here). (1) The
- * turn limit-order matcher (fillPendingShareOrders in
- * src/lib/turn/corporation/shareOrders.ts):
- * pool-leg, corp float/shareholder, character-cash, corp-payout, treasury,
- * and fund-credit bulkWrites commit in sequence with no receipt or resume
- * plan, so a crash between any two leaves partial fills; the largest
- * remaining window, likely more than one pass. (2) Order-placement escrow
- * and refunds (placeShareOrder.ts, cancelShareOrder.ts,
- * cleanupShareMarketActivity.ts, shareEscrowSettlement.ts,
- * cancelShareListing.ts), direct market buy/sell legs outside the order
- * flow (buyPublicShares.ts, sellPublicShares.ts), share offers
- * (submitShareOffer.ts, acceptShareOffer.ts), and corp-level money (take-
- * overs, spin-offs, capital injections, acquisitions, privatization).
+ * The turn limit-order matcher is migrated
+ * (src/lib/turn/corporation/shareMatchSettlement.ts, issue #1672): the
+ * six-bulkWrite batch commit in fillPendingShareOrders is now one durable
+ * per-match flow per fill, settled sequentially in resolution order. Each
+ * match mints a receipt keyed `turn-share-match:<turn>:<orderIdHex>:
+ * <preFillRemaining>`, persists the immutable resume plan (every id,
+ * amount, conversion, remainder, and display number) before any match
+ * write, then runs the match-only order claim plus the shared shareFill
+ * Money cap/cash builders, the pool/treasury dealer leg, the float `$inc`,
+ * and the deterministic-_id history insert as keyed steps with keyed
+ * inverses. Guard failures skip that match and continue the batch; a
+ * plan-store crash settles `failed` via the match orphan scan (which owns
+ * plan-less receipts, since the fresh scan would otherwise recompute the
+ * same key and strand it). Tested: crash-after-every-write convergence
+ * for buy/sell to exactly-once or pristine, multi-match pool-batch
+ * conservation and fixpoint, and per-match receipt completion in the
+ * matcher suite.
+ * Open seams for the next pass (all sighted, none audited here). (1)
+ * Order-placement escrow and refunds (placeShareOrder.ts,
+ * cancelShareOrder.ts, cleanupShareMarketActivity.ts,
+ * shareEscrowSettlement.ts, cancelShareListing.ts), direct market
+ * buy/sell legs outside the order flow (buyPublicShares.ts,
+ * sellPublicShares.ts), share offers (submitShareOffer.ts,
+ * acceptShareOffer.ts), and corp-level money (takeovers, spin-offs,
+ * capital injections, acquisitions, privatization). (2) Plan-less receipt
+ * coverage in the route/audit orphan scans: recoverShareFillMoneyOrphans
+ * and recoverShareFillOrphans only scan receipts that already carry a
+ * stored plan, so a claim-inserted but plan-less money/audit receipt is
+ * invisible to the turn-driver sweep (key recovery still owns it on the
+ * route path via the fill key, same shape as the matcher gap fixed in
+ * recoverShareMatchOrphans).
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in

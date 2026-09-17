@@ -387,7 +387,11 @@ function makeHistoryStep(db: Db, matchKey: string, plan: ShareMatchPlan): MoneyF
 }
 
 /** Step build shared by first attempt and crash recovery (from the stored plan). */
-export function buildShareMatchSteps(db: Db, matchKey: string, plan: ShareMatchPlan): MoneyFlowStep[] {
+export function buildShareMatchSteps(
+  db: Db,
+  matchKey: string,
+  plan: ShareMatchPlan
+): MoneyFlowStep[] {
   const now = new Date(plan.nowIso);
   const corpId = new ObjectId(plan.corpIdHex);
   const steps: MoneyFlowStep[] = [makeOrderClaimStep(db, matchKey, plan)];
@@ -440,7 +444,14 @@ export function buildShareMatchSteps(db: Db, matchKey: string, plan: ShareMatchP
   }
   if (plan.cashLeg) {
     steps.push(
-      makeCashStep(db, "match-cash", deriveMoneyFlowKey(matchKey, "match-cash"), plan.cashLeg, false, now)
+      makeCashStep(
+        db,
+        "match-cash",
+        deriveMoneyFlowKey(matchKey, "match-cash"),
+        plan.cashLeg,
+        false,
+        now
+      )
     );
   }
   if (plan.dealerLeg) {
@@ -563,6 +574,12 @@ export async function recoverShareMatchByKey(
  * converge before the fresh scan computes new fills. Returns per-receipt
  * results; a receipt whose steps throw stays `in_progress` (TTL-visible)
  * for the next pass instead of being guessed at.
+ *
+ * Plan-less receipts (claim insert landed, plan store never did, so no
+ * match write ran) settle `failed` here too: otherwise the fresh scan in
+ * the same pass recomputes the same key, hits the plan-less receipt, and
+ * strands it `in_progress` forever. Failing is truthful because the
+ * prefix is provably empty, and the order reopens for a later turn.
  */
 export async function recoverShareMatchOrphans(
   db: Db,
@@ -574,6 +591,17 @@ export async function recoverShareMatchOrphans(
     .toArray();
   const results: ShareMatchRecoveryResult[] = [];
   for (const receipt of stuck) {
+    results.push(await recoverShareMatchByKey(db, receipt._id));
+  }
+  if (results.length >= limit) return results;
+  const planless = await receiptsEx(db)
+    .find({ status: "in_progress", shareMatchPlan: { $exists: false } })
+    .limit(limit - results.length)
+    .toArray();
+  for (const receipt of planless) {
+    if (typeof receipt._id !== "string" || !receipt._id.startsWith("turn-share-match:")) {
+      continue;
+    }
     results.push(await recoverShareMatchByKey(db, receipt._id));
   }
   return results;
