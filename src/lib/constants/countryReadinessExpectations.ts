@@ -134,7 +134,9 @@ export const COUNTRY_READINESS_EXPECTATIONS: Partial<
     stateMetricsFilter: { countryId: "UK" },
     stateMetricsCount: 12,
     legislationTypesMin: 0,
-    extras: [(db) => checkGovernmentFormation("UK", db)],
+    // The UK row is written by `updateGovernmentSeats` on the first processed
+    // turn, not at seed time, so a turn-1 world legitimately has none yet.
+    extras: [(db) => checkGovernmentFormation("UK", db, { createdOnFirstTurn: true })],
   },
   DE: {
     regionCount: 16,

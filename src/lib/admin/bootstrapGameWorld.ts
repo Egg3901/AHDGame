@@ -184,6 +184,7 @@ import {
   seedNGGovernmentFormation,
   seedNGGovernors,
   seedNgBudgets,
+  seedUSGovernmentFormation,
   seedForex,
   seedCommodityPrices,
   seedRegistrationLanes,
@@ -488,6 +489,17 @@ export async function seedAllCountryData(
       await seedNGBaselines(db, resetReference, log, preset);
       await seedNGGovernmentFormation(db, log);
     })(),
+
+    // ⚠ THE US GETS ONE TOO, and needs its own step to get it. Brazil and
+    // Nigeria are presidential and both seed a formation row; the US was the
+    // only seeded country without one. Nothing creates it lazily either --
+    // `runParliamentaryCountry` seeds a missing row on the first processed turn,
+    // which is how the UK gets its, but that loop skips presidential countries.
+    //
+    // It does NOT seat a President: for a presidential system head-of-government
+    // resolves from `electedOfficials`, and the executive seats come from
+    // `getPresetSeats`. This row is the legislature's majority arithmetic.
+    seedUSGovernmentFormation(db, log),
 
     // Warsaw-Pact one-party states. Seeded HERE, alongside the other country
     // packs, rather than after `seedAllCountryData` returns — they are countries
