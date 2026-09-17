@@ -5,6 +5,7 @@ import { formatDate } from "@/lib/utils/formatters";
 import { Pagination } from "@/components/admin/Pagination";
 import { ACTION_BTN, getLatestNoteText, type DuplicateGroup, type UserData } from "./types";
 import { LocalTime } from "@/components/time/LocalTime";
+import { IdentityHistoryPanel } from "./IdentityHistoryPanel";
 
 interface DuplicateGroupsViewProps {
   duplicateGroups: DuplicateGroup[];
@@ -60,15 +61,18 @@ export function DuplicateGroupsView({
         </div>
       )}
       <p className="text-sm text-muted">
-        Matches drop off after 30 days without the signal being re-observed, so a pair of dormant
-        accounts disappears from this list even if they really are linked. No confidence scoring is
-        applied here — one shared signal groups two accounts. For ranked confidence with weighted
-        evidence, and for rings that persist regardless of age, see the Alts tab.
+        An account&apos;s CURRENT IP, cookie, device key and fingerprint stop matching 30 days after
+        they were last observed. Values the account has since rotated away from keep matching for 90
+        days, and are labelled &quot;(past)&quot;, so changing a fingerprint no longer removes an
+        account from this list. Expand a row to see its full IP and fingerprint history. No
+        confidence scoring is applied here — one shared signal groups two accounts, so check the
+        per-account badges rather than the group header. For ranked confidence with weighted
+        evidence, see the Alts tab.
       </p>
       {duplicateGroups.length === 0 && (
         <div className="rounded-xl border border-card-border bg-card p-12 text-center text-muted shadow-sm">
-          No duplicate accounts detected by shared IP, browser cookie, device key, or fingerprint in
-          the last 30 days.
+          No duplicate accounts detected by shared IP, browser cookie, device key, or fingerprint,
+          current or within the last 90 days.
         </div>
       )}
       {pagedGroups.map((group, gi) => (
@@ -188,6 +192,30 @@ export function DuplicateGroupsView({
                           Fingerprint
                         </span>
                       )}
+                      {user.matchReasons.includes("fingerprint-past") && (
+                        <span
+                          className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-300 border border-red-500/20"
+                          title="Shared a browser fingerprint with another account in this group within the last 90 days, but has since rotated away from it"
+                        >
+                          Fingerprint (past)
+                        </span>
+                      )}
+                      {user.matchReasons.includes("ip-past") && (
+                        <span
+                          className="rounded bg-orange-500/10 px-1.5 py-0.5 text-xs font-medium text-orange-300 border border-orange-500/20"
+                          title="Shared an IP with another account in this group within the last 90 days, but is not on it now"
+                        >
+                          IP (past)
+                        </span>
+                      )}
+                      {user.weakMatch && (
+                        <span
+                          className="rounded bg-yellow-500/15 px-1.5 py-0.5 text-xs font-medium text-yellow-400 border border-yellow-500/30"
+                          title="A shared IP is the ONLY thing linking this account to the group. Shared IPs are routinely reused by carrier NAT, VPNs, DHCP reassignment and household networks. Confirm with fingerprint, device-key or behavioural evidence before treating this account as an alt."
+                        >
+                          Weak match
+                        </span>
+                      )}
                       {user.matchReasons.includes("tracking") && (
                         <span
                           className="rounded bg-purple-500/15 px-1.5 py-0.5 text-xs font-medium text-purple-400 border border-purple-500/30"
@@ -277,8 +305,14 @@ export function DuplicateGroupsView({
                     {/* IP Details panel (admin only) */}
                     {!isModeratorContext && user.ipDetails && (
                       <div className="w-full rounded-lg border border-card-border bg-background/50 p-3 text-xs space-y-1.5">
+                        {/* The address is named explicitly, and flagged when it
+                            is not the account's current one or not what links
+                            this group. Without that, a moderator reads the city
+                            and ISP of an address the account stopped using
+                            weeks ago and concludes the members are in different
+                            places, which the evidence does not say. */}
                         <div className="font-medium text-foreground mb-1">
-                          IP Intelligence{" "}
+                          IP Intelligence for <span className="font-mono">{user.ipDetails.ip}</span>{" "}
                           <span className="text-muted font-normal">
                             (
                             <LocalTime
@@ -287,6 +321,22 @@ export function DuplicateGroupsView({
                             />
                             )
                           </span>
+                          {user.ipDetails.ip !== user.lastKnownIp && (
+                            <span
+                              className="ml-2 rounded bg-yellow-500/15 px-1.5 py-0.5 text-xs font-normal text-yellow-400"
+                              title="This describes an address the account is no longer using, so it does not describe where this account connects from now."
+                            >
+                              not the current IP
+                            </span>
+                          )}
+                          {!group.sharedIps.includes(user.ipDetails.ip) && (
+                            <span
+                              className="ml-2 rounded bg-yellow-500/15 px-1.5 py-0.5 text-xs font-normal text-yellow-400"
+                              title="This is not one of the addresses linking the accounts in this group."
+                            >
+                              not a group link
+                            </span>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1">
                           <div>
@@ -363,6 +413,9 @@ export function DuplicateGroupsView({
                       </span>
                     )}
                   </div>
+
+                  {/* Rotation history — collapsed by default, fetched on open */}
+                  <IdentityHistoryPanel userId={user.id} />
 
                   {/* Actions */}
                   <div className="flex flex-wrap gap-2">
