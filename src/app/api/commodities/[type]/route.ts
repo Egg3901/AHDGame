@@ -553,7 +553,7 @@ export async function getCommodityDetailData(
       demandDriver = {
         type: "corporate",
         label: "Corporate Demand",
-        description: `Driven by marketing spending. Corporations allocate marketing budgets that convert to advertising commodity demand at a ${(MARKETING_ADVERTISING_DEMAND_RATE * 100).toFixed(0)}% rate. That budget demand is market-level demand reported separately below — Top Consumers shows plant input demand only, on the same realized basis as corporation commodity pages.`,
+        description: `Driven by marketing spending. Corporations allocate marketing budgets that convert to advertising commodity demand at a ${(MARKETING_ADVERTISING_DEMAND_RATE * 100).toFixed(0)}% rate. That budget demand is market-level demand reported separately below. Top Consumers shows plant input demand only, on the same realized basis as corporation commodity pages.`,
         ...(includeHeavy && advertisingBudgetTotal > 0
           ? {
               sourceLabel: "Marketing-budget demand (separate from corporate consumption)",
@@ -612,7 +612,7 @@ export async function getCommodityDetailData(
         type: "system",
         units: Math.round(advertisingBudgetTotal * 100) / 100,
         description:
-          "Market-level advertising demand generated from corporation marketing budgets. Reported separately — it is not plant input consumption and never appears in a corporation's Top Consumers figure.",
+          "Market-level advertising demand generated from corporation marketing budgets. Reported separately: it is not plant input consumption and never appears in a corporation's Top Consumers figure.",
       });
     }
 

@@ -6,7 +6,7 @@
  * `GET /api/commodities/[type]`) must report the same realized physical units
  * as the corporation tab aggregation (`computeCorpCommodityFlows`, behind
  * `GET /api/corporations/[id]/commodities`) for the same turn and geographic
- * scope — for energy and for one intermediate input (steel).
+ * scope, for energy and for one intermediate input (steel).
  *
  * Covered: producer totals, consumer totals, rankings, geographic scope,
  * synthetic/advertising labels, the extraction exception, and rounding. The
@@ -405,7 +405,7 @@ describe("realized basis reconciles market and corporation surfaces", () => {
   it("negative control: the old revenue/price nameplate diverges at low utilization", () => {
     // The pre-fix market path reported revenue x rate / price with no
     // utilization leg. For corp A at 60% utilization that overstates realized
-    // output — the shape of the 59x-class gaps in the issue (wider still with
+    // output: the shape of the 59x-class gaps in the issue (wider still with
     // the era-scale gap layered on).
     const oldNameplate = dollarsToUnits(
       1_000_000 * strategyRate("energy", "supply", "energy"),
