@@ -133,6 +133,16 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   index_fund_subscribe: "fund_subscription",
   index_fund_dividend: "fund_distribution",
   npp_investment_income: "npp_investment_income",
+  // #992 tranche 3: the fund's retained dividend slice. Single-sided by
+  // construction (the corp evidences net-of-dividend revenue), so this is an
+  // attributed mint completing earnings to gross — never `unattributed`.
+  dividend_reinvest: "fund_dividend_retained",
+  // #992 tranche 3: cross-fund moves mirror via meta, so the reason is only
+  // the fail-closed fallback (cross-currency pair or missing meta).
+  fund_transfer: "fund_transfer",
+  // A bond sale is the reverse of a purchase (cash from the bond position
+  // asset). Share one reason so sales net against purchases per currency.
+  bond_sell: "bond_principal_investment",
   corp_escrow_funding: "escrow_transfer",
   corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",
@@ -163,6 +173,16 @@ export function reasonForTxType(txType: FinancialTxLogEntry["type"]): string {
 const FUND_MIRROR_TX_TYPES: ReadonlySet<string> = new Set([
   "index_fund_subscribe",
   "index_fund_redeem",
+  // #992 tranche 3: cross-fund buyer rows carry the seller in meta; the
+  // sponsor fee receipt and the wind-up seed return carry the fund in meta.
+  // Each fires only with matching meta.fundId + meta.fundCurrency, so genuine
+  // sector-revenue corp_revenue rows and the charter corp_capital_seed row
+  // (which carries fundId but deliberately no fundCurrency: the corp debit
+  // covers seed + charter fee while the fund receives seed alone) never
+  // mirror.
+  "fund_transfer",
+  "corp_revenue",
+  "corp_capital_seed",
 ]);
 // index_fund_dividend is deliberately excluded: the holder payout never leaves
 // fund cash (the corp dividend splits 75% retained / 25% pass-through, and the
