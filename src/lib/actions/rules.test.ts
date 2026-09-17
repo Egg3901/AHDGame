@@ -772,9 +772,10 @@ describe("poll quote matches debit and result through one source", () => {
     expect(getActionPointCost(pollCharacter(10), "poll")).toBe(strong.apCost);
     expect(ACTIONS.poll.effect(pollCharacter(1)).fundsChange).toBe(-weak.fundCostAnchor);
     expect(ACTIONS.poll.effect(pollCharacter(10)).fundsChange).toBe(-strong.fundCostAnchor);
-    expect(ACTIONS.pollLarge.effect(pollCharacter(10)).fundsChange).toBe(
-      -quotePollAction({ intellect: 10 }, "large").fundCostAnchor
-    );
+    const large = quotePollAction({ intellect: 10 }, "large");
+    expect(large.ok).toBe(true);
+    if (!large.ok) return;
+    expect(ACTIONS.pollLarge.effect(pollCharacter(10)).fundsChange).toBe(-large.fundCostAnchor);
   });
 });
 
