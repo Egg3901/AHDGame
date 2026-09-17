@@ -1102,6 +1102,50 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(1);
   });
 
+  it("medians the corporate no-holder share so one spiky turn cannot anchor a baseline", () => {
+    const history: VitalSignsHistoryRow[] = [];
+    for (let turn = 19; turn <= 29; turn += 1) {
+      // One turn where every corporate issue sits holderless; the rest sit at 0.4.
+      history.push(historyRow(turn, 0.1, turn === 25 ? 1 : 0.4));
+    }
+
+    // No bonds this turn, so the median comes from the 11 history rows alone:
+    // ten at 0.4 plus one spike at 1 medians to 0.4.
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, history });
+
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.value).toBe(0.4);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(11);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.basis).toBe(
+      "unmatured_corporate_issue_count_median_12"
+    );
+    // The sovereign leg keeps its own baseline from the same history rows.
+    expect(snapshot.securitiesRecent12.sovereignNoHolderBondShareMedian.value).toBe(0.1);
+  });
+
+  it("reports an absent corporate no-holder baseline as unknown, not as zero", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+
+    expect(snapshot.securities.corporateNoHolderBondShare.value).toBeNull();
+    expect(snapshot.securities.corporateNoHolderBondShare.observations).toBe(0);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.value).toBeNull();
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(0);
+  });
+
+  it("skips pre-field history rows instead of reading them as dispersed holders", () => {
+    // Snapshots persisted before the corporate leg existed carry no value.
+    const history: VitalSignsHistoryRow[] = [];
+    for (let turn = 27; turn <= 29; turn += 1) {
+      history.push(historyRow(turn, 0.1, turn === 29 ? 0.6 : null));
+    }
+
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30, history });
+
+    // Only turn 29 contributes; the null rows narrow the sample instead of
+    // reading as zero holderless issues.
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.value).toBe(0.6);
+    expect(snapshot.securitiesRecent12.corporateNoHolderBondShareMedian.observations).toBe(1);
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),
