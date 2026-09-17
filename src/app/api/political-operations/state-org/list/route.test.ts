@@ -21,7 +21,13 @@ it("marks only the viewer's current-turn investments and clears them next turn",
   const characterId = new ObjectId();
   db.collection("characterStateOrg").find.mockReturnValue({
     toArray: async () => [
-      { stateId: "IA", level: 2, updatedAt: new Date("2026-01-01T12:00:00Z") },
+      {
+        stateId: "IA",
+        level: 2,
+        updatedAt: new Date("2026-01-01T12:00:00Z"),
+        lastBuildAt: new Date("2026-01-01T12:00:00Z"),
+        lastBuildFunds: 123_456,
+      },
       { stateId: "NH", level: 3, updatedAt: new Date("2026-01-01T11:59:59Z") },
     ],
   });
@@ -33,8 +39,15 @@ it("marks only the viewer's current-turn investments and clears them next turn",
   const { GET } = await import("./route");
   const response = await GET();
   expect(response.status).toBe(200);
+  const payload = await response.json();
   expect(
-    (await response.json()).states.map((row: { stateId: string; builtThisTurn: boolean }) => [
+    payload.states.find((row: { stateId: string }) => row.stateId === "IA").spentThisTurn
+  ).toBe(123_456);
+  expect(
+    payload.states.find((row: { stateId: string }) => row.stateId === "NH").spentThisTurn
+  ).toBeNull();
+  expect(
+    payload.states.map((row: { stateId: string; builtThisTurn: boolean }) => [
       row.stateId,
       row.builtThisTurn,
     ])
@@ -48,7 +61,11 @@ it("marks only the viewer's current-turn investments and clears them next turn",
     lastTurnProcessed: new Date("2026-01-01T13:00:00Z"),
   } as never);
   const next = await GET();
+  const nextPayload = await next.json();
   expect(
-    (await next.json()).states.every((row: { builtThisTurn: boolean }) => !row.builtThisTurn)
+    nextPayload.states.every(
+      (row: { builtThisTurn: boolean; spentThisTurn: number | null }) =>
+        !row.builtThisTurn && row.spentThisTurn === null
+    )
   ).toBe(true);
 });

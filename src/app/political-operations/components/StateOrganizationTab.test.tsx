@@ -23,6 +23,7 @@ const data = {
       nextCost: 100_000,
       updatedAt: "2026-01-01T12:00:00Z",
       builtThisTurn: true,
+      spentThisTurn: 123_456,
     },
   ],
   racePresence: [
@@ -39,6 +40,8 @@ it("keeps the build disabled when selecting your own candidate's presence", asyn
   fireEvent.click(await screen.findByRole("button", { name: "Candidate (you)" }));
   fireEvent.click(screen.getByRole("button", { name: "Select Iowa" }));
   expect(screen.getByText("Built this turn. Available again next turn.")).toBeTruthy();
+  expect(screen.getByText("Spent this turn")).toBeTruthy();
+  expect(screen.getByText("$123,456")).toBeTruthy();
   expect(screen.getByRole("button", { name: /Build \(\+1\)/ }).hasAttribute("disabled")).toBe(true);
 });
 it("refreshes the marker at the next turn boundary", async () => {

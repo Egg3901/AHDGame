@@ -19,6 +19,7 @@ import { formatStatePresenceCost, statePresenceNextCost } from "@/lib/campaigns/
 
 interface StateOrgRow {
   builtThisTurn?: boolean;
+  spentThisTurn?: number | null;
   stateId: string;
   /** Cost of the next level here, priced and converted by the list route. */
   nextCost: number;
@@ -213,6 +214,7 @@ export function StateOrganizationTab({
                   level: body.level,
                   totalInvested: body.totalInvested,
                   builtThisTurn: true,
+                  spentThisTurn: body.spentThisTurn,
                   nextCost: statePresenceNextCost(body.level, fxRate),
                 }
               : r
@@ -239,6 +241,7 @@ export function StateOrganizationTab({
           totalInvested: 0,
           updatedAt: null,
           builtThisTurn: false,
+          spentThisTurn: null,
           // Another candidate's level, priced through the same helper the route
           // uses, so the ladder reads identically whoever you are looking at.
           nextCost: statePresenceNextCost(
@@ -374,6 +377,16 @@ export function StateOrganizationTab({
                   <dt className="text-muted">Next level costs</dt>
                   <dd className="font-mono">{formatStatePresenceCost(selectedRow.nextCost)}</dd>
                 </div>
+                {!viewingOther &&
+                  selectedRow.builtThisTurn &&
+                  selectedRow.spentThisTurn != null && (
+                    <div className="flex items-center justify-between">
+                      <dt className="text-muted">Spent this turn</dt>
+                      <dd className="font-mono">
+                        {formatStatePresenceCost(selectedRow.spentThisTurn)}
+                      </dd>
+                    </div>
+                  )}
                 <div className="flex items-center justify-between">
                   <dt className="text-muted">Career investment</dt>
                   <dd className="font-mono">{selectedRow.totalInvested} actions</dd>

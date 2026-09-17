@@ -238,7 +238,9 @@ export function StateOperationsSection({
             Built this turn:{" "}
             {presence
               .filter((row) => row.builtThisTurn)
-              .map((row) => row.name)
+              .map((row) =>
+                row.spentThisTurn != null ? `${row.name} (${money(row.spentThisTurn)})` : row.name
+              )
               .join(", ")}
           </p>
         )}
@@ -443,8 +445,9 @@ export function StateOperationsSection({
           footnote="Paid from the campaign, not from you. Each level in a state costs more than the last."
           trailingFor={(s) => {
             const level = levelByState.get(s.id) ?? 0;
+            const spent = presence.find((row) => row.stateId === s.id)?.spentThisTurn;
             return builtStates.has(s.id)
-              ? `L${level} · Built this turn`
+              ? `L${level} · Built this turn${spent != null ? ` · ${money(spent)}` : ""}`
               : `L${level} · ${money(presenceCost(s.id))}`;
           }}
           unaffordable={(state) => builtStates.has(state.id)}
