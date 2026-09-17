@@ -2,6 +2,7 @@ import type { CommodityType } from "@/lib/constants/commodities";
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
 import { applyMacroContributionsToGlobal } from "@/lib/world/macro/contributions";
+import { ACTIVE_MACRO_COUNTRY_FILTER, isActiveMacroCountry } from "@/lib/world/macro/retirement";
 import type { MacroMarketContribution } from "@/lib/world/macro/types";
 import { DEFAULT_SPHERE_BOUNDS } from "./bounds";
 import { computeSphereFlows } from "./flows";
@@ -39,10 +40,13 @@ export async function loadTaggedMacroContributions(db: Db): Promise<TaggedMacroC
   const docs = await (
     await getMacroCountriesCollection(db)
   )
-    .find({}, { projection: { entityId: 1, presetId: 1, contribution: 1, simulationTier: 1 } })
+    .find(
+      { ...ACTIVE_MACRO_COUNTRY_FILTER },
+      { projection: { entityId: 1, presetId: 1, contribution: 1, simulationTier: 1, retiredAt: 1 } }
+    )
     .toArray();
   return docs
-    .filter((doc) => doc.contribution && doc.entityId && doc.presetId)
+    .filter((doc) => isActiveMacroCountry(doc) && doc.contribution && doc.entityId && doc.presetId)
     .map((doc) => ({
       entityId: doc.entityId,
       presetId: doc.presetId,

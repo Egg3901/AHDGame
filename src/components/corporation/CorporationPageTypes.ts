@@ -127,6 +127,7 @@ export interface CorporationDetail {
    * capacity one. Absent/false everywhere else.
    */
   plantsMode?: boolean;
+  labourEnabled?: boolean;
   /** Corp-wide physical rollups; null/absent outside plants. */
   physical?: CorporationPhysicalRollup | null;
   _id: string;
@@ -232,6 +233,8 @@ export interface CorporationDetail {
   ceoCharacterId?: string | null;
   /** Underlying owner character while an NPP caretaker runs the corp (absent otherwise). Keeps the CEO tab reachable for reclaim. */
   caretakerUnderlyingCharacterId?: string | null;
+  /** Owner-selected caretaker operating mandate. */
+  caretakerMandate?: "active" | "passive";
   /** Turns left on the post-reclaim cooldown before a new caretaker may be installed (0 = none). */
   caretakerReappointCooldownTurnsRemaining?: number;
   pendingCeoCharacterId: string | null;
@@ -495,6 +498,14 @@ export interface Financials {
   imfFacilityPaymentDaily: number;
   /** IMF facility cash in to the lender corp (daily display units) */
   imfFacilityReceiptsDaily: number;
+  /**
+   * Last-turn supply-agreement CFD net cash, in daily display units (local).
+   * Not inside `income` / `realizedIncome` — those are P&L. This is the cash
+   * bridge a CEO needs when income is green and liquid capital is flat (#2019).
+   */
+  supplyAgreementSettlementDaily?: number;
+  /** Last-turn unpaid solvency remainder on those contracts, in anchor. */
+  supplyAgreementUnpaidAnchor?: number;
   totalCosts: number;
   /**
    * PROJECTED per-turn net income (daily display units, local currency),

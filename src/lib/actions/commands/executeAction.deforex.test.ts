@@ -28,6 +28,7 @@ vi.mock("@/lib/currency/characterFunds", async (importActual) => {
 });
 
 import { executeCharacterAction } from "./executeAction";
+import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 
 describe("executeCharacterAction — campaign-fund de-forex", () => {
   let findOneAndUpdate: ReturnType<typeof vi.fn>;
@@ -44,8 +45,17 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
             }),
           };
         if (name === "states") {
-          // Null state → advertise cost is country-independent (100,000 anchor at fav 0).
-          return { findOne: vi.fn().mockResolvedValue(null) };
+          // Average-GDP home state: per-capita GDP hits the country baseline
+          // exactly, so the GDP scalar is 1.0 and the advertise cost is the
+          // unscaled tier price (100,000 anchor at fav 0). The advertise quote
+          // requires home-state economics instead of a null-state fallback.
+          const countryId = character.countryId ?? "US";
+          return {
+            findOne: vi.fn().mockResolvedValue({
+              gdp: getGdpBaseline(countryId),
+              population: 1_000_000,
+            }),
+          };
         }
         if (name === "characters") {
           return { findOne: vi.fn().mockResolvedValue(character), findOneAndUpdate };
@@ -69,6 +79,9 @@ describe("executeCharacterAction — campaign-fund de-forex", () => {
       actions: 100,
       donorBaseLevel: 0,
       funds: 0,
+      // Neutral charisma (pivot 5.5 → 1.0x): the advertise quote requires an
+      // allocated stat and owns the multiplier interpretation.
+      stats: { charisma: 5.5 },
       currencyBalances: { campaign: 1_000_000_000_000, personal: {} },
     }) as unknown as Character;
 

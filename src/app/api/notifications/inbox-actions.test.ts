@@ -197,3 +197,28 @@ describe("GET /api/notifications — archive/snooze filtering", () => {
     expect(snoozeClause).toBeDefined();
   });
 });
+
+describe("GET notification preferences", () => {
+  it("applies muted types to inbox results and every unread count", async () => {
+    db.collectionMocks.users!.findOne.mockResolvedValue({
+      _id: testUserId,
+      notificationPreferences: { mutedTypes: ["crisis"] },
+    });
+    db.collectionMocks.notifications!.aggregate.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks.notifications!.countDocuments.mockResolvedValue(0);
+    const { GET } = await import("./route");
+    const response = await GET(new Request("http://localhost/api/notifications?type=crisis"));
+    expect(response.status).toBe(200);
+    const matches = db.collectionMocks.notifications!.aggregate.mock.calls.map(
+      ([pipeline]) => pipeline[0].$match
+    );
+    expect(matches).toHaveLength(3);
+    for (const match of matches) expect(match.type.$nin).toEqual(["crisis"]);
+    expect(matches[2].type.$eq).toBe("crisis");
+    expect(db.collectionMocks.notifications!.countDocuments).toHaveBeenCalledWith(
+      expect.objectContaining({ type: { $nin: ["crisis"], $eq: "crisis" }, read: false })
+    );
+  });
+});

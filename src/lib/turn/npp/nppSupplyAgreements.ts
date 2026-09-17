@@ -57,6 +57,8 @@ export type NppAgreementParty = {
   corpId: string;
   countryId: string;
   isNatcorp: boolean;
+  /** Character/imperial CEO. NPP matching must never bind these as counterparties. */
+  isPlayer?: boolean;
   sectors: Array<{
     sectorType: CorporationType;
     capitalStock?: number | null;
@@ -332,6 +334,7 @@ export function decideNppSupplyAgreements(args: {
   // 3. Propose NPP-NPP same-country contracts into starved buyers.
   for (const supplier of parties) {
     if (supplier.isNatcorp) continue;
+    if (supplier.isPlayer) continue;
     if (!staggerEligible(supplier.corpId)) continue;
     if (proposedSupplier.has(supplier.corpId)) continue;
 
@@ -392,6 +395,7 @@ export function decideNppSupplyAgreements(args: {
       for (const buyer of parties) {
         if (buyer.corpId === supplier.corpId) continue;
         if (buyer.isNatcorp) continue;
+        if (buyer.isPlayer) continue;
         if (buyer.countryId !== supplier.countryId) continue;
         if (proposedBuyer.has(buyer.corpId) || acceptedBuyer.has(buyer.corpId)) continue;
         if (pairExists(agreements, supplier.corpId, buyer.corpId, commodity, stateId)) continue;
@@ -426,6 +430,7 @@ function toParty(corp: Corporation, sectors: CorporateSector[]): NppAgreementPar
     corpId: corp._id.toString(),
     countryId: corp.countryId,
     isNatcorp: isStateOwned(corp),
+    isPlayer: corp.ceoType != null && corp.ceoType !== "npp",
     sectors: sectors.map((s) => ({
       sectorType: s.sectorType,
       capitalStock: s.capitalStock,
@@ -470,7 +475,7 @@ export async function processNppSupplyAgreements(
     .collection<Corporation>("corporations")
     .find(
       { ceoType: "npp", suspended: { $ne: true } },
-      { projection: { countryId: 1, countryOwnerId: 1, ownershipState: 1 } }
+      { projection: { countryId: 1, countryOwnerId: 1, ownershipState: 1, ceoType: 1 } }
     )
     .toArray();
   if (nppCorps.length === 0) return { accepted: 0, cancelled: 0, proposed: 0 };
@@ -517,6 +522,7 @@ export async function processNppSupplyAgreements(
   }
 
   const parties = nppCorps.map((c) => toParty(c, sectorsByCorp.get(c._id.toString()) ?? []));
+  const nppIds = new Set(nppCorps.map((c) => c._id.toString()));
 
   const agreements: ExistingNppAgreement[] = rawAgreements.map((a) => ({
     id: a._id!.toString(),
@@ -582,6 +588,7 @@ export async function processNppSupplyAgreements(
 
   for (const d of decisions) {
     if (d.action === "propose") {
+      if (!nppIds.has(d.supplierCorpId) || !nppIds.has(d.buyerCorpId)) continue;
       inserts.push({
         volumeCapBasis: "scaledCapacity",
         supplierCorpId: new ObjectId(d.supplierCorpId),

@@ -16,7 +16,8 @@ import { readFileSync } from "node:fs";
  * behavioural test on a single module would catch.
  */
 const DISPLAY_PATHS = [
-  "src/lib/corporations/queries/corporationDetail.ts",
+  "src/lib/corporations/queries/corporationDetail/portfolioHoldings.ts",
+  "src/lib/corporations/queries/corporationDetail/subsidiaryContext.ts",
   "src/app/api/stock-exchange/wealth-list/route.ts",
   "src/lib/turn/investorWealthSnapshots.ts",
   "src/app/api/character/[id]/portfolio/route.ts",

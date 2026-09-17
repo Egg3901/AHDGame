@@ -169,12 +169,14 @@ describe("Gold Coast → Ghana historical transition (#3726)", () => {
     it("persists the Ghana macro document when a db is provided", async () => {
       const db = createMockDb();
       db.collection("macroCountries");
-      db.collectionMocks.macroCountries!.updateOne.mockResolvedValue({
+      db.collectionMocks.macroCountries!.bulkWrite.mockResolvedValue({
         acknowledged: true,
         matchedCount: 0,
         modifiedCount: 0,
         upsertedCount: 1,
-        upsertedId: GHANA_ENTITY_ID,
+        upsertedIds: { 0: GHANA_ENTITY_ID },
+        insertedCount: 0,
+        deletedCount: 0,
       });
 
       const { evaluation, application } = await runGoldCoastTransition(
@@ -186,11 +188,22 @@ describe("Gold Coast → Ghana historical transition (#3726)", () => {
 
       expect(evaluation.outcome).toBe("sovereignty");
       expect(application).not.toBeNull();
-      expect(db.collectionMocks.macroCountries!.updateOne).toHaveBeenCalledTimes(1);
-      const [, update] = db.collectionMocks.macroCountries!.updateOne.mock.calls[0]!;
-      expect(update.$set.entityId).toBe(GHANA_ENTITY_ID);
-      expect(update.$set.simulationTier).toBe("sphere-macro");
-      expect(update.$set.displayName).toBe("Ghana");
+      expect(db.collectionMocks.macroCountries!.bulkWrite).toHaveBeenCalledTimes(1);
+      const [ops, options] = db.collectionMocks.macroCountries!.bulkWrite.mock.calls[0]!;
+      expect(options).toMatchObject({ ordered: true });
+      expect(ops).toHaveLength(2);
+      // Successor activation first: a failure here must not retire the source.
+      expect(ops[0].updateOne.filter).toEqual({ _id: GHANA_ENTITY_ID });
+      expect(ops[0].updateOne.upsert).toBe(true);
+      expect(ops[0].updateOne.update.$set.entityId).toBe(GHANA_ENTITY_ID);
+      expect(ops[0].updateOne.update.$set.simulationTier).toBe("sphere-macro");
+      expect(ops[0].updateOne.update.$set.displayName).toBe("Ghana");
+      // Source retirement second: live source only, never an upsert, never a delete.
+      expect(ops[1].updateOne.filter).toEqual({ _id: GOLD_COAST_ENTITY_ID, retiredAt: null });
+      expect(ops[1].updateOne.upsert).toBe(false);
+      expect(ops[1].updateOne.update.$set.retiredByRuleId).toBe(GOLD_COAST_TO_GHANA_RULE_ID);
+      expect(ops[1].updateOne.update.$set.successorEntityId).toBe(GHANA_ENTITY_ID);
+      expect(ops[1].updateOne.update.$set.retiredAt).toBeInstanceOf(Date);
     });
 
     it("does not apply when the evaluation holds or prevents", async () => {

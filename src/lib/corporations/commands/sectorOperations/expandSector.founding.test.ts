@@ -254,6 +254,33 @@ describe("expandSector — founding build (plants)", () => {
     expect(chargedAnchor()).toBeCloseTo(ENTRY_FEE_ANCHOR + STARTER_BUILD_ANCHOR, 2);
   });
 
+  it("rejects an owner plant expansion while an NPP operates the corporation", async () => {
+    await wireMocks(true);
+    db.collectionMocks.gameState.findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: CURRENT_TURN,
+      currentYear: CAPACITY_ANCHOR_YEAR,
+      preset: "1953-default",
+    });
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        ...corporation,
+        ceoType: "npp",
+      },
+    } as never);
+
+    const { expandSector } = await import("./expandSector");
+    const res = await expandSector(request(), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toContain("Resume player control");
+    expect(db.collectionMocks.corporateSectors.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+  });
+
   it("sizes the starter to one manufacturing facility, not a $1M/day nameplate", async () => {
     await wireMocks(true);
     const { expandSector } = await import("./expandSector");

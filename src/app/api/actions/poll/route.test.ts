@@ -3,6 +3,7 @@ import { NextRequest } from "next/server";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import { makeCharacter } from "@/lib/test-utils/factories";
+import type { Character } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { requireHumanSession } from "@/lib/api/requireAuth";
 import { getElectionOpponents } from "@/lib/actions/electionOpponents";
@@ -49,7 +50,11 @@ describe("commissioning a campaign-aware poll", () => {
     vi.clearAllMocks();
     db = createMockDb();
     vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
-    const character = makeCharacter({ funds: 100_000, actions: 10 });
+    const character = makeCharacter({
+      funds: 100_000,
+      actions: 10,
+      stats: { intellect: 5.5 } as Character["stats"],
+    });
     vi.mocked(requireHumanSession).mockResolvedValue({
       ok: true,
       user: { userId: character.userId.toString() },
@@ -108,6 +113,30 @@ describe("commissioning a campaign-aware poll", () => {
   it("does not record a successful poll when the resource debit loses a race", async () => {
     db.collection("characters").updateOne.mockResolvedValue({ modifiedCount: 0 });
     expect((await POST(request())).status).toBe(409);
+    expect(db.collection("actionLogs").insertOne).not.toHaveBeenCalled();
+  });
+
+  it("debits the intellect-scaled quote, not the unscaled base", async () => {
+    // Intellect 10 → 1.18x divisor → round(25,000 / 1.18) = 21,186 anchor.
+    const character = makeCharacter({
+      funds: 100_000,
+      actions: 10,
+      stats: { intellect: 10 } as Character["stats"],
+    });
+    db.collection("characters").findOne.mockResolvedValue(character);
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    const write = db.collection("characters").updateOne.mock.calls[0];
+    expect(write[1].$inc).toEqual({ actions: -2, funds: -21186 });
+  });
+
+  it("rejects a character with no allocated intellect before charging", async () => {
+    const character = makeCharacter({ funds: 100_000, actions: 10, stats: undefined });
+    db.collection("characters").findOne.mockResolvedValue(character);
+    const response = await POST(request());
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toContain("intellect");
+    expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
     expect(db.collection("actionLogs").insertOne).not.toHaveBeenCalled();
   });
 });

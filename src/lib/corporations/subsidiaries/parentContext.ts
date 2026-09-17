@@ -1,6 +1,11 @@
 import type { Db, ObjectId } from "mongodb";
 import type { Character, Corporation } from "@/lib/db/types";
 import { getControllingCorporateParent } from "@/lib/corporations/corporateOwnership";
+import {
+  isFormalizedSubsidiary,
+  subsidiaryCeoBlockReason,
+  type SubsidiaryCeoBlockReason,
+} from "./helpers";
 
 const SYSTEM_USER_ID = "000000000000000000000000";
 
@@ -25,10 +30,10 @@ export async function resolveParentCeoUserId(
 }
 
 /**
- * User ids of the humans operating every OTHER formalized subsidiary controlled
- * (>50% voting) by `parentId`. Used to enforce the one-person rule across
- * sibling subsidiaries. NPP-run subsidiaries (system-placeholder `userId`) are
- * skipped since no human operates them.
+ * User ids of the humans currently sitting as CEO of every OTHER formalized
+ * subsidiary controlled (>50% voting) by `parentId`. NPP-run subsidiaries,
+ * including NPP caretakers, are skipped: the computer is the operator. The
+ * displaced human stays in `caretakerCeo` for reclaim, which is gated separately.
  */
 export async function collectSiblingSubsidiaryCeoUserIds(
   db: Db,
@@ -47,7 +52,7 @@ export async function collectSiblingSubsidiaryCeoUserIds(
           superShareMultiplier: 1,
           userId: 1,
           ceoType: 1,
-          caretakerCeo: 1,
+          ceoVacant: 1,
         },
       }
     )
@@ -58,12 +63,41 @@ export async function collectSiblingSubsidiaryCeoUserIds(
     if (corp._id.equals(excludeSubId)) continue;
     const controller = getControllingCorporateParent(corp);
     if (!controller || !controller.corporationId.equals(parentId)) continue;
-    // A caretaker-run subsidiary keeps a human behind the seat (the appointer).
-    const humanUserId = corp.caretakerCeo?.underlyingUserId ?? corp.userId;
+    if (corp.ceoType === "npp") continue;
+    if (corp.ceoVacant === true) continue;
+    const humanUserId = corp.userId;
     if (!humanUserId) continue;
     if (humanUserId.toString() === SYSTEM_USER_ID) continue;
-    if (corp.ceoType === "npp" && !corp.caretakerCeo) continue;
     out.push(humanUserId);
   }
   return out;
+}
+
+/**
+ * Whether restoring `candidateUserId` as the sitting CEO of `corp` would break
+ * the subsidiary one-person rule. Null when the corp is not a managed
+ * subsidiary or the candidate is allowed.
+ */
+export async function subsidiaryReclaimBlocked(
+  db: Db,
+  corp: Corporation,
+  candidateUserId: ObjectId
+): Promise<SubsidiaryCeoBlockReason | null> {
+  const controllingParent = getControllingCorporateParent(corp);
+  if (!isFormalizedSubsidiary(corp, controllingParent)) return null;
+  if (!controllingParent) return null;
+
+  const parent = await db
+    .collection<Corporation>("corporations")
+    .findOne({ _id: controllingParent.corporationId });
+  if (!parent?.userId) return null;
+
+  const parentCeoUserId = await resolveParentCeoUserId(db, parent);
+  const siblingCeoUserIds = await collectSiblingSubsidiaryCeoUserIds(db, parent._id, corp._id);
+  return subsidiaryCeoBlockReason({
+    candidateUserId,
+    parentOwnerUserId: parent.userId,
+    parentCeoUserId,
+    siblingSubsidiaryCeoUserIds: siblingCeoUserIds,
+  });
 }

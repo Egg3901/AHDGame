@@ -35,6 +35,7 @@ import {
   chooseNppCorpCeo,
   type NppCorpCeoAffiliation,
 } from "@/lib/admin/nppCorpCeoSelection";
+import { subsidiaryReclaimBlocked } from "@/lib/corporations/subsidiaries/parentContext";
 
 /** Reason a caretaker appointment was rejected (pure, before any I/O). */
 export type CaretakerAppointmentError =
@@ -163,6 +164,7 @@ export async function appointCaretakerCeo(
           underlyingUserId: corp.userId,
           appointedTurn: turn,
           appointmentSource: "owner",
+          mandate: "active",
         },
         updatedAt: now,
       },
@@ -179,7 +181,7 @@ export async function appointCaretakerCeo(
 
 export interface DismissCaretakerCeoResult {
   ok: boolean;
-  error?: "not-caretaker";
+  error?: "not-caretaker" | "one-person-rule";
   restoredCharacterId?: string;
 }
 
@@ -196,6 +198,10 @@ export async function dismissCaretakerCeo(
   if (!corp.caretakerCeo) return { ok: false, error: "not-caretaker" };
 
   const { underlyingCharacterId, underlyingUserId, appointmentSource } = corp.caretakerCeo;
+  if (underlyingCharacterId) {
+    const blocked = await subsidiaryReclaimBlocked(db, corp, underlyingUserId);
+    if (blocked) return { ok: false, error: "one-person-rule" };
+  }
   // Only an owner-initiated handoff can be cycled for an advantage. An NPP that
   // filled a resignation vacancy must be immediately recoverable and must not
   // leave a blanket reappointment ban behind. Missing provenance predates this
@@ -291,6 +297,7 @@ export function buildVacantCaretakerCeoUpdate(
       underlyingUserId: corp.userId,
       appointedTurn: turn,
       appointmentSource: "vacancy",
+      mandate: "active",
     };
   }
   return { set, unset };

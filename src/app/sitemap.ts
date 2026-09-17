@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { headers } from "next/headers";
 import { getDb } from "@/lib/mongodb";
 import { getGameStateCollection } from "@/lib/db/collections";
-import { getSiteUrl } from "@/lib/siteMetadata";
+import { getSiteUrl, getWikiCanonicalUrl } from "@/lib/siteMetadata";
 import { getAllWikiPagesForDisplay } from "@/lib/wiki/getWikiPageData";
 import { getCategoryById } from "@/lib/wiki/categories";
 import { getRedirectTarget } from "@/lib/wiki/redirects";
@@ -58,6 +59,7 @@ const STATIC_PUBLIC_ROUTES: Array<{
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = getSiteUrl();
+  const wikiHost = (await headers()).get("host")?.startsWith("wiki.") ?? false;
   const communityCategoryIds = new Set(["characters", "corporations", "player-parties", "events"]);
 
   // Check if wiki is disabled to exclude it from the sitemap
@@ -113,9 +115,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }))
   );
 
+  if (!wikiHost) return entries;
+
+  // Each host lists only its own canonical URLs.
+  entries.length = 0;
   if (!wikiDisabled) {
     entries.push({
-      url: `${baseUrl}/wiki`,
+      url: getWikiCanonicalUrl("/wiki"),
       lastModified: new Date(),
       changeFrequency: "weekly",
       priority: 0.9,
@@ -144,7 +150,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         const category = getCategoryById(categoryId);
         if (!category) continue;
         wikiCategoryEntries.push({
-          url: `${baseUrl}/wiki/category/${category.slug}`,
+          url: getWikiCanonicalUrl(`/wiki/category/${category.slug}`),
           lastModified,
           changeFrequency: "weekly",
           priority: categoryId === "getting-started" ? 0.9 : 0.72,
@@ -152,7 +158,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
 
       wikiEntries = wikiPages.map((page) => ({
-        url: `${baseUrl}/wiki/${page.slug}`,
+        url: getWikiCanonicalUrl(`/wiki/${page.slug}`),
         lastModified: page.updatedAt ?? new Date(),
         changeFrequency: "monthly" as const,
         priority:

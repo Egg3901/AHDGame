@@ -216,6 +216,77 @@ describe("hostile takeover with a banked subsidiary (ticket-1267)", () => {
     );
   });
 
+  it("refunds the parent debit when the charter transfer loses a mid-merge race", async () => {
+    // Pre-lock check sees a charter-free parent, but the in-lock transfer
+    // re-reads and finds the parent chartered a bank in between. The debit
+    // already applied, so the merge must unwind: same 400 as the pre-check,
+    // money conserved, shell and charter untouched.
+    const parentId = new ObjectId();
+    const targetId = new ObjectId();
+    const minorityId = new ObjectId();
+    const cleanParent = {
+      _id: parentId,
+      name: "Holding Co",
+      liquidCapital: 1_000_000,
+      shareholders: [],
+    };
+    const charteredParent = { ...cleanParent, bankCharter: makeCharter(100) };
+    const target = {
+      _id: targetId,
+      name: "Vermont Finance",
+      liquidCapital: 0,
+      sharePrice: 10,
+      shareholders: [
+        { corporationId: parentId, shares: 964 },
+        { characterId: minorityId, shares: 36 },
+      ],
+      liquidCurrencyCode: "USD",
+      bankCharter: makeCharter(150),
+    };
+    await setupMocks({ parentId, targetId, parent: cleanParent, target });
+
+    let parentReads = 0;
+    db.collectionMocks.corporations.findOne.mockImplementation((filter: { _id: ObjectId }) => {
+      if ((filter._id as ObjectId).equals(targetId)) return Promise.resolve(target as never);
+      parentReads += 1;
+      return Promise.resolve((parentReads <= 1 ? cleanParent : charteredParent) as never);
+    });
+
+    const response = await postTakeover(targetId, parentId);
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.error).toMatch(/already operates a bank/);
+
+    // Money conservation: the squeeze-out debit (36 shares at 125% of 10 = 450)
+    // is followed by exactly one matching refund, netting to zero.
+    const parentCashDeltas = db.collectionMocks.corporations.updateOne.mock.calls
+      .filter(([filter]) => (filter as { _id: ObjectId })._id.toString() === parentId.toString())
+      .map(([, update]) => (update as { $inc?: { liquidCapital?: unknown } }).$inc?.liquidCapital)
+      .filter((d): d is number => typeof d === "number");
+    expect(parentCashDeltas).toEqual([-450, 450]);
+    expect(parentCashDeltas.reduce((a, b) => a + b, 0)).toBe(0);
+
+    // No partial ownership/charter mutation: no charter write of any kind, no
+    // payouts, no market cleanup, and the shell is not deleted.
+    for (const [, update] of db.collectionMocks.corporations.updateOne.mock.calls) {
+      expect((update as { $unset?: unknown }).$unset).toBeUndefined();
+      expect((update as { $set?: { bankCharter?: unknown } }).$set).not.toHaveProperty(
+        "bankCharter"
+      );
+    }
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.shareOrders.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.shareListings.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bonds.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.bankLoans.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.interbankLoans.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.savingsAccounts.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporations.deleteOne).not.toHaveBeenCalled();
+    // The hostile-takeover route graph is heavy (full server module import plus
+    // the whole merge path); allow 60s per test on a shared host.
+  }, 60_000);
+
   it("refuses the merge when the parent already operates a bank, before any money moves", async () => {
     const parentId = new ObjectId();
     const targetId = new ObjectId();

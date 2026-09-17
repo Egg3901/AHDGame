@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -16,7 +17,7 @@ const querySchema = z.object({
 // GET /api/character/savings/ledger — Transaction history for high-yield savings
 // Auth: requireBasicAuth
 // Errors: 401, 404
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -46,3 +47,5 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

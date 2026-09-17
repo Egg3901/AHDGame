@@ -1,4 +1,10 @@
+import { getGameTime } from "@/lib/time/gameTime";
+import {
+  presenceBuiltThisTurn,
+  presenceSpendThisTurn,
+} from "@/lib/campaigns/presenceBuiltThisTurn";
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, forbidden } from "@/lib/api/errors";
@@ -19,7 +25,7 @@ import type { CharacterStateOrg, PoliticalParty } from "@/lib/db/types";
  * Auth: requireAuthWithCharacter (US-only)
  * Errors: 401, 403
  */
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -54,6 +60,7 @@ export async function GET() {
       // that `stateOrgLevelCost` is anchor-denominated.
       loadCampaignFxRate(db, character),
     ]);
+    const gameTime = await getGameTime();
     const byState = new Map(rows.map((r) => [r.stateId, r]));
 
     const states = [...residentPoliticalIds].sort();
@@ -65,6 +72,11 @@ export async function GET() {
         level,
         totalInvested: row?.totalInvested ?? 0,
         updatedAt: row?.updatedAt ?? null,
+        spentThisTurn: presenceSpendThisTurn(row, gameTime.lastTurnProcessed),
+        builtThisTurn: presenceBuiltThisTurn(
+          row?.lastBuildAt ?? row?.updatedAt,
+          gameTime.lastTurnProcessed
+        ),
         /** Cost of the NEXT level here, in the campaign's own currency. */
         nextCost: statePresenceNextCost(level, fxRate),
       };
@@ -92,3 +104,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

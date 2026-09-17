@@ -10,6 +10,14 @@ import {
 } from "@/lib/constants/capacityEconomy";
 import { DOMINANCE_DENSITY_CROWDED_COMPETITORS } from "@/lib/constants/corporations";
 
+// Hoisted to collection: awaiting a dynamic import inside each test charged
+// the whole route-module graph load to the first tests' timeout budgets, so
+// host load arrived as cascading per-test timeouts. `vi.mock` is hoisted
+// above these imports, and no test resets the module registry, so one shared
+// import is behavior-identical to the per-test awaits it replaces.
+import { buildCapacity } from "./buildCapacity";
+import { POST } from "@/app/api/corporations/[id]/sectors/[sectorId]/build/route";
+
 /**
  * P3a: the capacity command surface — build, cancel (partial refund),
  * mothball/reactivate — plus the plants gate that fences all of it off below
@@ -159,7 +167,6 @@ describe("buildCapacity — build", () => {
 
   it("draws the ordered units down from the unowned pool", async () => {
     await wireMocks(sectorDoc());
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 1_000 }), { params });
 
     const call = db.collectionMocks.unownedSectors.updateOne.mock.calls[0];
@@ -179,7 +186,6 @@ describe("buildCapacity — build", () => {
       retailDemandTransitionStartTurn: CURRENT_TURN - 48,
       retailDemandTransitionTurns: 192,
     });
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     const body = await res.json();
 
@@ -197,7 +203,6 @@ describe("buildCapacity — build", () => {
       matchedCount: 0,
       modifiedCount: 0,
     });
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     expect(res.status).toBe(409);
     expect(db.collectionMocks.unownedSectors.updateOne).not.toHaveBeenCalled();
@@ -205,7 +210,6 @@ describe("buildCapacity — build", () => {
 
   it("previews without drawing the pool down", async () => {
     await wireMocks(sectorDoc());
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 500, preview: true }), { params });
     expect(db.collectionMocks.unownedSectors.updateOne).not.toHaveBeenCalled();
   });
@@ -215,14 +219,12 @@ describe("buildCapacity — build", () => {
     // a pool failure must not 500 the caller into re-ordering.
     await wireMocks(sectorDoc());
     db.collectionMocks.unownedSectors.updateOne.mockRejectedValue(new Error("pool down"));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     expect(res.status).toBe(201);
   });
 
   it("queues an order, charges computeBuildCost and tracks CIP", async () => {
     await wireMocks(sectorDoc());
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     expect(res.status).toBe(201);
 
@@ -255,7 +257,6 @@ describe("buildCapacity — build", () => {
 
   it("stamps the priced strategy on the order it queues", async () => {
     await wireMocks(sectorDoc({ sectorType: "extraction", strategyId: "rare_earth_mining" }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
     expect(res.status).toBe(201);
 
@@ -265,7 +266,6 @@ describe("buildCapacity — build", () => {
 
   it("charges a rare-earth build at the rare-earth price, not the diversified one", async () => {
     await wireMocks(sectorDoc({ sectorType: "extraction", strategyId: "rare_earth_mining" }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
     const rareBody = (await res.json()) as Record<string, number>;
 
@@ -285,7 +285,6 @@ describe("buildCapacity — build", () => {
 
   it("previews without charging or queueing", async () => {
     await wireMocks(sectorDoc());
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 500, preview: true }), {
       params,
     });
@@ -313,7 +312,6 @@ describe("buildCapacity — build", () => {
       ok: true,
       corporation: { ...corporation, liquidCapital: 1 },
     } as never);
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 1_000 }), { params });
     expect(res.status).toBe(400);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
@@ -326,9 +324,29 @@ describe("buildCapacity — build", () => {
     );
   });
 
+  it("rejects an owner build while an NPP operates the corporation", async () => {
+    await wireMocks(sectorDoc());
+    const { resolveCorporation } = await import("@/lib/api/corporations/resolveQuery");
+    vi.mocked(resolveCorporation).mockResolvedValue({
+      ok: true,
+      corporation: {
+        ...corporation,
+        ceoType: "npp",
+      },
+    } as never);
+
+    const { buildCapacity } = await import("./buildCapacity");
+    const res = await buildCapacity(request({ action: "build", units: 1 }), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.error).toContain("Resume player control");
+    expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
+  });
+
   it("rejects non-positive and absurd unit counts", async () => {
     await wireMocks(sectorDoc());
-    const { buildCapacity } = await import("./buildCapacity");
     expect((await buildCapacity(request({ action: "build", units: 0 }), { params })).status).toBe(
       400
     );
@@ -341,7 +359,6 @@ describe("buildCapacity — build", () => {
     await wireMocks(sectorDoc());
     const { marketAtLeast } = await import("@/lib/market/featureFlag");
     vi.mocked(marketAtLeast).mockReturnValue(false);
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "build", units: 10 }), { params });
     expect(res.status).toBe(400);
     expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
@@ -370,7 +387,6 @@ describe("buildCapacity — cancel", () => {
     await wireMocks(
       sectorDoc({ buildQueue: [outstanding], constructionInProgressAnchor: 400_000 })
     );
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
 
     // A legacy (non-smooth) order has delivered nothing, so the whole claim
@@ -390,7 +406,6 @@ describe("buildCapacity — cancel", () => {
         constructionInProgressAnchor: 400_000,
       })
     );
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
     expect(JSON.stringify(poolPipeline()[0].$set.headroomUnits)).toContain("500");
   });
@@ -399,7 +414,6 @@ describe("buildCapacity — cancel", () => {
     await wireMocks(
       sectorDoc({ buildQueue: [outstanding], constructionInProgressAnchor: 400_000 })
     );
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
     expect(res.status).toBe(200);
 
@@ -426,7 +440,6 @@ describe("buildCapacity — cancel", () => {
       smooth: true,
     };
     await wireMocks(sectorDoc({ buildQueue: [halfBuilt], constructionInProgressAnchor: 200_000 }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
     expect(res.status).toBe(200);
 
@@ -443,7 +456,6 @@ describe("buildCapacity — cancel", () => {
 
   it("refuses to cancel a build that already landed", async () => {
     await wireMocks(sectorDoc({ buildQueue: [{ ...outstanding, onlineTurn: CURRENT_TURN - 1 }] }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
     expect(res.status).toBe(400);
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
@@ -451,14 +463,12 @@ describe("buildCapacity — cancel", () => {
 
   it("404s on an unknown order index", async () => {
     await wireMocks(sectorDoc({ buildQueue: [] }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "cancel", orderIndex: 3 }), { params });
     expect(res.status).toBe(404);
   });
 
   it("refunds nothing for the free flip-compensation order", async () => {
     await wireMocks(sectorDoc({ buildQueue: [{ ...outstanding, costPaidAnchor: 0 }] }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "cancel", orderIndex: 0 }), { params });
     expect(res.status).toBe(200);
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
@@ -477,7 +487,6 @@ describe("buildCapacity — mothball / reactivate", () => {
 
   it("mothballs an active sector", async () => {
     await wireMocks(sectorDoc());
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "mothball" }), { params });
     expect(res.status).toBe(200);
     expect(sectorSet().mothballed).toBe(true);
@@ -487,7 +496,6 @@ describe("buildCapacity — mothball / reactivate", () => {
 
   it("reactivates a mothballed sector for free, with no cooldown", async () => {
     await wireMocks(sectorDoc({ mothballed: true }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "reactivate" }), { params });
     expect(res.status).toBe(200);
     expect(sectorSet().mothballed).toBe(false);
@@ -495,7 +503,6 @@ describe("buildCapacity — mothball / reactivate", () => {
 
   it("rejects a no-op toggle", async () => {
     await wireMocks(sectorDoc({ mothballed: true }));
-    const { buildCapacity } = await import("./buildCapacity");
     const res = await buildCapacity(request({ action: "mothball" }), { params });
     expect(res.status).toBe(400);
   });
@@ -526,7 +533,6 @@ describe("buildCapacity — unowned pool country attribution", () => {
     await wireMocks(sectorDoc({ countryId: undefined, stateId: "UKR_WES" }));
     db.collectionMocks.states.findOne.mockResolvedValue({ _id: "UKR_WES", countryId: "UKR" });
 
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 100 }), { params });
 
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("UKR");
@@ -542,7 +548,6 @@ describe("buildCapacity — unowned pool country attribution", () => {
     await wireMocks(sectorDoc({ countryId: "US", stateId: "UKR_WES" }));
     db.collectionMocks.states.findOne.mockResolvedValue({ _id: "UKR_WES", countryId: "UKR" });
 
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 100 }), { params });
 
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).toContain("UKR");
@@ -561,7 +566,6 @@ describe("buildCapacity — unowned pool country attribution", () => {
     } as never);
     db.collectionMocks.states.findOne.mockResolvedValue(null);
 
-    const { buildCapacity } = await import("./buildCapacity");
     await buildCapacity(request({ action: "build", units: 100 }), { params });
 
     expect(JSON.stringify(poolPipeline()[0].$set.countryId)).not.toContain('"US"');
@@ -586,7 +590,6 @@ describe("capacity recovery route", () => {
 
   it("parks only the requested share, retains plants and paid builds, and moves no cash", async () => {
     await wireMocks(sectorDoc({ capitalStock: 10000, capacityBookAnchor: 500000 }));
-    const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
     const response = await POST(request({ action: "resize", activePercent: 25 }), { params });
     expect(response.status).toBe(200);
     expect(sectorSet()).toMatchObject({ activeCapacityPercent: 25, mothballed: false });
@@ -605,7 +608,6 @@ describe("capacity recovery route", () => {
     "rejects invalid active capacity %s",
     async (activePercent) => {
       await wireMocks(sectorDoc());
-      const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
       const response = await POST(request({ action: "resize", activePercent }), { params });
       expect(response.status).toBe(400);
       expect(db.collectionMocks.corporateSectors.updateOne).not.toHaveBeenCalled();
@@ -618,7 +620,6 @@ describe("capacity recovery route", () => {
       matchedCount: 0,
       modifiedCount: 0,
     });
-    const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
     const response = await POST(request({ action: "resize", activePercent: 25 }), { params });
     expect(response.status).toBe(409);
     expect(db.collectionMocks.corporations.updateOne).not.toHaveBeenCalled();
@@ -626,7 +627,6 @@ describe("capacity recovery route", () => {
 
   it("reactivation restores all parked capacity", async () => {
     await wireMocks(sectorDoc({ activeCapacityPercent: 25 }));
-    const { POST } = await import("@/app/api/corporations/[id]/sectors/[sectorId]/build/route");
     expect((await POST(request({ action: "reactivate" }), { params })).status).toBe(200);
     expect(sectorSet()).toMatchObject({ activeCapacityPercent: 100, mothballed: false });
   });

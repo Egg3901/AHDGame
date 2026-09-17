@@ -92,7 +92,11 @@ async function build(rows: Rows, character: unknown = CHARACTER) {
 beforeEach(async () => {
   vi.clearAllMocks();
   const { getGameTime } = await import("@/lib/time/gameTime");
-  vi.mocked(getGameTime).mockResolvedValue({ currentTurn: 12, effectiveNow: new Date() } as never);
+  vi.mocked(getGameTime).mockResolvedValue({
+    currentTurn: 12,
+    lastTurnProcessed: new Date("2026-01-01T12:00:00Z"),
+    effectiveNow: new Date(),
+  } as never);
 
   const { isPrimaryEnded } = await import("@/lib/elections/phases");
   vi.mocked(isPrimaryEnded).mockReturnValue(false);
@@ -237,6 +241,18 @@ describe("buildStateOperations", () => {
     expect(view?.liveAgainstYou[0].actorName).toBe("Rival Filer");
     expect(view?.liveAgainstYou[0].stateName).toBe("New Hampshire");
     expect(view?.opponents[0].liveAgainstThem).toHaveLength(0);
+  });
+
+  it("includes current-turn presence markers in the campaign hub", async () => {
+    const view = await build({
+      electionCandidates: ROSTER,
+      characterStateOrg: [
+        { stateId: "IA", level: 2, updatedAt: new Date("2026-01-01T12:00:00Z") },
+        { stateId: "NH", level: 3, updatedAt: new Date("2026-01-01T11:59:59Z") },
+      ],
+    });
+    expect(view?.positives.presence.find((row) => row.stateId === "IA")?.builtThisTurn).toBe(true);
+    expect(view?.positives.presence.find((row) => row.stateId === "NH")?.builtThisTurn).toBe(false);
   });
 
   it("lists the states the viewer has presence in, strongest first", async () => {

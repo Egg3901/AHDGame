@@ -457,6 +457,14 @@ export default function LoginPageClient({
                 onClick={beginLakesideLogin}
                 className="flex min-h-12 w-full items-center justify-center gap-2.5 rounded-lg border border-primary/40 bg-primary/10 px-4 py-3 text-body font-semibold text-primary shadow-card transition-colors hover:bg-primary/20"
               >
+                <Image
+                  src="/lakeside-mark.svg"
+                  alt=""
+                  aria-hidden="true"
+                  width={20}
+                  height={20}
+                  className="h-5 w-5 rounded object-contain"
+                />
                 {t("continueWithLakeside")}
               </button>
 

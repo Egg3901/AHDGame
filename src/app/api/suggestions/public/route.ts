@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
@@ -51,7 +52,7 @@ const GAME_SYSTEMS = [
 // GET /api/suggestions/public — Paginated player suggestions (public board).
 // Auth: public
 // Errors: 400
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const sort = searchParams.get("sort") ?? "recent";
@@ -129,6 +130,8 @@ export async function GET(request: Request) {
     return handleRouteError(err);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 function serializeListItem(
   s: Suggestion,

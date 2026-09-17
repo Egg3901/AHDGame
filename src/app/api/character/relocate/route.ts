@@ -17,6 +17,7 @@
  */
 
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { getDb } from "@/lib/mongodb";
 import type { State } from "@/lib/db/types";
@@ -176,7 +177,7 @@ export async function POST(request: Request) {
 // GET /api/character/relocate — Return cooldown status and a preview of the candidacies/roles that will be affected.
 // Auth: requireAuthWithCharacter
 // Errors: 401
-export async function GET() {
+async function handleGET() {
   try {
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
@@ -261,3 +262,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

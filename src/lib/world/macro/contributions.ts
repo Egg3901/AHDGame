@@ -1,19 +1,24 @@
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { Db } from "mongodb";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { ACTIVE_MACRO_COUNTRY_FILTER, isActiveMacroCountry } from "./retirement";
 import type { MacroMarketContribution } from "./types";
 
 /**
- * Load the held market contributions for every seeded macro country.
- * These remain active between six-turn kernel refreshes.
+ * Load the held market contributions for every live macro country.
+ * Retired dependency representations keep their documents for history but
+ * no longer contribute. These remain active between six-turn kernel refreshes.
  */
 export async function loadActiveMacroContributions(db: Db): Promise<MacroMarketContribution[]> {
   const docs = await (
     await getMacroCountriesCollection(db)
   )
-    .find({}, { projection: { contribution: 1 } })
+    .find({ ...ACTIVE_MACRO_COUNTRY_FILTER }, { projection: { contribution: 1, retiredAt: 1 } })
     .toArray();
-  return docs.map((doc) => doc.contribution).filter(Boolean);
+  return docs
+    .filter(isActiveMacroCountry)
+    .map((doc) => doc.contribution)
+    .filter(Boolean);
 }
 
 /**

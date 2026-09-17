@@ -21,6 +21,7 @@ import {
   getOrganizationPosturesCollection,
 } from "@/lib/db/collections";
 import { getMacroCountriesCollection } from "@/lib/db/collections/macroCountries";
+import { ACTIVE_MACRO_COUNTRY_FILTER, isActiveMacroCountry } from "@/lib/world/macro/retirement";
 import { DEFAULT_ALERT_POSTURE } from "@/lib/constants/orgPosture";
 import type { FederalBudget } from "@/lib/db/types";
 import { getAllCountryAccess } from "@/lib/countryAccess";
@@ -121,9 +122,10 @@ export async function loadWorldOrganizationsView(db: Db) {
     const macros = await (
       await getMacroCountriesCollection(db)
     )
-      .find({ entityId: { $in: unratedEntities } })
+      .find({ entityId: { $in: unratedEntities }, ...ACTIVE_MACRO_COUNTRY_FILTER })
       .toArray();
     for (const macro of macros) {
+      if (!isActiveMacroCountry(macro)) continue;
       if (defensePctByCountry.has(macro.entityId)) continue;
       const pct = defenseSharePctFromMacroSectors(macro.sectors);
       if (pct !== undefined) defensePctByCountry.set(macro.entityId, pct);

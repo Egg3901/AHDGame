@@ -9,15 +9,15 @@ import type { Character, State } from "@/lib/db/types";
 import { calculatePoliticalInfluenceDecay } from "@shared/constants/formulas";
 import {
   getCampaignActionCost,
-  getCampaignFundCost,
   getAdvertiseActionCost,
   getDonorActionCost,
-  getAdvertiseFundCost,
-  getBuildDonorBaseFundCost,
   fundraiseYieldLocal,
+  isCampaignEligible,
+  quoteCampaignAction,
+  quoteAdvertiseAction,
+  quoteBuildDonorBaseAction,
 } from "@/lib/actions";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
-import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 import { notifyCharacterStatsUpdated } from "@/lib/characterStatsSync";
 import { fetchJson } from "@/lib/observability/fetchJson";
 import { Skeleton } from "@/components/ui";
@@ -409,45 +409,80 @@ export default function ActionsPage() {
       !!character.currencyBalances,
       campaignRates
     );
-    const countryId = character.countryId ?? "US";
-    const buildDonorBaseFundCost = homeState
-      ? getBuildDonorBaseFundCost(
-          character?.donorBaseLevel ?? 0,
-          homeState.gdp,
-          homeState.population,
-          countryId
-        )
-      : getBuildDonorBaseFundCost(
-          character?.donorBaseLevel ?? 0,
-          getGdpBaseline(countryId),
-          1_000_000,
-          countryId
-        );
-    const donorUpgradeCost = buildDonorBaseFundCost;
-    const campaignActionCost = getCampaignActionCost(influence);
-    const campaignFundCost = homeState
-      ? getCampaignFundCost(influence, homeState.gdp, homeState.population, countryId)
-      : 20_000;
-    const campaignMaxed = influence >= 100;
-    const advertiseActionCost = getAdvertiseActionCost(character?.favorability ?? 0);
-    const advertiseFundCost = homeState
-      ? getAdvertiseFundCost(
-          character?.favorability ?? 0,
-          homeState.gdp,
-          homeState.population,
-          countryId
-        )
-      : getAdvertiseFundCost(
-          character?.favorability ?? 0,
-          getGdpBaseline(countryId),
-          1_000_000,
-          countryId
-        );
-    const fundraiseActionCost = getDonorActionCost(character?.donorBaseLevel ?? 0, "fundraise");
-    const buildDonorBaseActionCost = getDonorActionCost(
-      character?.donorBaseLevel ?? 0,
-      "buildDonorBase"
+    // Same rules quote the server executes: level-scaled AP cost, GDP-scaled
+    // fund cost with the fundraising discount, and the +1 level gain. When
+    // the quote rejects (unallocated stats or home-state economics still
+    // loading), the AP cost stays displayable from the donor level alone
+    // while the fund cost reports 0: GDP-scaled cards already block fund
+    // display until home-state data loads, and the server rejects execution
+    // with the quote reason.
+    const buildDonorBaseQuote = quoteBuildDonorBaseAction(
+      {
+        donorBaseLevel: character.donorBaseLevel,
+        fundraising: character.stats?.fundraising,
+      },
+      homeState
+        ? {
+            gdpMillions: homeState.gdp,
+            population: homeState.population,
+            countryId: character.countryId,
+          }
+        : undefined
     );
+    const buildDonorBaseFundCost = buildDonorBaseQuote.ok ? buildDonorBaseQuote.fundCostAnchor : 0;
+    const donorUpgradeCost = buildDonorBaseFundCost;
+    // Same rules quote the server executes: tiered AP cost, GDP-scaled fund
+    // cost and stat-scaled gain. When the quote rejects (maxed influence,
+    // unallocated stats, or home-state economics still loading), the AP tiers
+    // stay displayable from influence alone while the fund cost reports 0:
+    // GDP-scaled cards already block fund display until home-state data loads,
+    // and the server rejects execution with the quote reason.
+    const campaignQuote = quoteCampaignAction(
+      {
+        politicalInfluence: influence,
+        charisma: character.stats?.charisma,
+        intellect: character.stats?.intellect,
+      },
+      homeState
+        ? {
+            gdpMillions: homeState.gdp,
+            population: homeState.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    // Same rules quote the server executes: tiered AP cost, GDP-scaled fund
+    // cost and stat-scaled gain. When the quote rejects (unallocated stats or
+    // home-state economics still loading), the AP tiers stay displayable from
+    // favorability alone while the fund cost reports 0: GDP-scaled cards
+    // already block fund display until home-state data loads, and the server
+    // rejects execution with the quote reason.
+    const advertiseQuote = quoteAdvertiseAction(
+      {
+        favorability: character.favorability,
+        charisma: character.stats?.charisma,
+      },
+      homeState
+        ? {
+            gdpMillions: homeState.gdp,
+            population: homeState.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    const campaignActionCost = campaignQuote.ok
+      ? campaignQuote.apCost
+      : getCampaignActionCost(influence);
+    const campaignFundCost = campaignQuote.ok ? campaignQuote.fundCostAnchor : 0;
+    const campaignMaxed = !isCampaignEligible(influence);
+    const advertiseActionCost = advertiseQuote.ok
+      ? advertiseQuote.apCost
+      : getAdvertiseActionCost(character?.favorability ?? 0);
+    const advertiseFundCost = advertiseQuote.ok ? advertiseQuote.fundCostAnchor : 0;
+    const fundraiseActionCost = getDonorActionCost(character?.donorBaseLevel ?? 0, "fundraise");
+    const buildDonorBaseActionCost = buildDonorBaseQuote.ok
+      ? buildDonorBaseQuote.apCost
+      : getDonorActionCost(character?.donorBaseLevel ?? 0, "buildDonorBase");
     return {
       fundraiseAmount,
       donorUpgradeCost,

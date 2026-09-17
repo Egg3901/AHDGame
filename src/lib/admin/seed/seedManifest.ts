@@ -262,6 +262,17 @@ const REFERENCE: CollectionEntry[] = [
 
 const RUNTIME: CollectionEntry[] = [
   {
+    name: "ukPartyLeadership",
+    category: "runtime",
+    notes:
+      "Per-party Westminster leadership rules, committee history, and active challenge pointer.",
+  },
+  {
+    name: "ukLeadershipChallenges",
+    category: "runtime",
+    notes: "Westminster leadership challenge gathering, ballot, and resolution state.",
+  },
+  {
     name: "sentNewsDedup",
     category: "runtime",
     notes:
@@ -522,6 +533,11 @@ const RUNTIME: CollectionEntry[] = [
     category: "runtime",
     notes:
       "Per-commodity aggregate quality state (sector-quality system), recomputed in the corp turn.",
+  },
+  {
+    name: "supplyListings",
+    category: "runtime",
+    notes: "Nonbinding supply offers; tied to corporations, which are wiped on reset.",
   },
   {
     name: "supplyAgreements",
