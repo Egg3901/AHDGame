@@ -13,6 +13,7 @@ import { isPrivateBankingEnabled } from "@/lib/banking/featureFlag";
 import { getRateCorridors } from "@/lib/banking/regulationQ";
 import { setBankRates } from "@/lib/banking/rates";
 import { getLegalCharterTypes } from "@/lib/banking/separationLaw";
+import { loadPrivateEnterpriseBlockedCountries } from "@/lib/economy/queries/privateEnterpriseGate";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 
 /** Provisional: how many NPP retail banks each eligible country seeds. */
@@ -137,7 +138,21 @@ export async function seedNpcBanks(
   const eraUnitScale = await loadWorldEraUnitScale(db);
   const historicalEra = eraUnitScale > 1;
 
+  // Eligibility before attempts: a planned economy has no private banks to
+  // seed. `getLegalCharterTypes` below already returns [] there when the
+  // command-economy flag is on, but the creation gate deliberately ignores
+  // that flag (a flag flip must not mint private enterprise inside the USSR),
+  // so without this check a flag-off world attempts two doomed spawns per
+  // planned country and records them as charter failures. Resolved ONCE for
+  // the whole sweep against the same marketization-dial gate the spawn path
+  // enforces.
+  const blocked = await loadPrivateEnterpriseBlockedCountries(db);
+
   for (const countryId of ALL_COUNTRY_IDS) {
+    if (blocked.has(countryId)) {
+      result.skippedIneligible += NPC_BANKS_PER_COUNTRY;
+      continue;
+    }
     const hqState = NPP_CAPITAL_STATES[countryId];
     if (!hqState) {
       result.skippedIneligible += NPC_BANKS_PER_COUNTRY;
