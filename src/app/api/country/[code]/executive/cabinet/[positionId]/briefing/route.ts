@@ -177,7 +177,15 @@ export async function GET(_request: Request, { params }: RouteParams) {
                 .collection<Character>("characters")
                 .findOne(
                   { _id: member.characterId },
-                  { projection: { sequentialId: 1, avatarUrl: 1, borderKey: 1, tintColor: 1 } }
+                  {
+                    projection: {
+                      sequentialId: 1,
+                      avatarUrl: 1,
+                      borderKey: 1,
+                      tintColor: 1,
+                      sharedMinisterialActions: 1,
+                    },
+                  }
                 )
             : null,
         ])
@@ -195,6 +203,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
     // `includeActions` is false on a withheld office: the seat and its holder are
     // public, but how much of their turn a minister has left to spend is not.
+    // UK player holders share one pool across both offices (issue #2049), so
+    // both office pages report the same remaining balance.
+    const sharedRemaining =
+      countryId === "UK" && member?.characterId
+        ? (holderChar?.sharedMinisterialActions ?? null)
+        : null;
     const buildMemberView = ({ includeActions }: { includeActions: boolean }) =>
       member
         ? {
@@ -210,7 +224,9 @@ export async function GET(_request: Request, { params }: RouteParams) {
             partyName: partyDoc?.name ?? null,
             partyColor: partyDoc?.color ?? null,
             partyLogoUrl: partyDoc?.logoUrl ?? null,
-            ...(includeActions ? { ministerialActions: member.ministerialActions ?? 2 } : {}),
+            ...(includeActions
+              ? { ministerialActions: sharedRemaining ?? member.ministerialActions ?? 2 }
+              : {}),
             bannerImageUrl: member.bannerImageUrl ?? null,
             // Whether the seat is held in an acting capacity is a roster fact, so
             // it rides along even on a withheld office. `barredScopes` is derived

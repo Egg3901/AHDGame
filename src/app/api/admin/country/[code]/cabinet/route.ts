@@ -34,6 +34,12 @@ import { getUKCabinetCooldownsCollection } from "@/lib/db/collections/ukGovernme
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import { cabinetOfficeTypeForCountry } from "@/lib/actions/officeActionBonus";
 import { resetCabinetSettingCooldowns } from "@/lib/db/collections/cabinetSettings";
+import {
+  canHoldAdditionalAppointment,
+  roleSlotForPosition,
+} from "@/lib/uk/dualMinistry/rules";
+import { reconcileUkSharedPool } from "@/lib/cabinet/ministerialActionPool";
+import { preserveSurvivingCabinetRow } from "@/lib/uk/dualMinistry/survivor";
 
 const actionSchema = z
   .object({
@@ -83,6 +89,18 @@ async function vacateSeat(
 
   const now = new Date();
 
+  await getCabinetMembersCollection(db).deleteOne({ countryId, positionId });
+
+  // A surviving second row keeps a UK dual holder in cabinet (issue #2049):
+  // repoint at it and skip the restore below. An NPP-held seat has no
+  // character office to restore, so this is skipped for NPP members.
+  if (
+    member.characterId &&
+    (await preserveSurvivingCabinetRow(db, countryId, member.characterId, now))
+  ) {
+    return { characterId: member.characterId, characterName: member.characterName };
+  }
+
   // Restore the character's currentOffice to their legislative seat (if any)
   // so they keep the right bonuses after leaving cabinet — mirrors the
   // PM-facing fire flow in src/lib/uk/cabinetApi.ts. An NPP-held seat has no
@@ -111,8 +129,6 @@ async function vacateSeat(
         );
     }
   }
-
-  await getCabinetMembersCollection(db).deleteOne({ countryId, positionId });
 
   return { characterId: member.characterId, characterName: member.characterName };
 }
@@ -193,15 +209,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       throw forbidden("Cabinet members must be citizens of this country");
     }
 
-    const existingSeat = await getCabinetMembersCollection(db).findOne({
-      countryId,
-      characterId: targetChar._id,
-    });
-    if (existingSeat && existingSeat.positionId !== positionId) {
-      return NextResponse.json(
-        { error: "This character already holds another cabinet position" },
-        { status: 409 }
-      );
+    // Dual-ministry slot check (issue #2049): UK players may combine one
+    // department with one central title; other countries keep one seat each.
+    const targetSlot = roleSlotForPosition(countryId, positionId);
+    const heldRows = await getCabinetMembersCollection(db)
+      .find({ countryId, characterId: targetChar._id })
+      .project({ positionId: 1, roleSlot: 1 })
+      .toArray();
+    const heldSlots = heldRows
+      .map((row) => row.roleSlot ?? roleSlotForPosition(countryId, row.positionId))
+      .filter((slot): slot is NonNullable<typeof slot> => slot != null);
+    const holdCheck = canHoldAdditionalAppointment(countryId, heldSlots, targetSlot);
+    if (!holdCheck.ok && heldRows.every((row) => row.positionId !== positionId)) {
+      return NextResponse.json({ error: holdCheck.reason }, { status: 409 });
     }
 
     // Replace semantics: vacate the current holder (if any) first.
@@ -216,11 +236,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     const party = seat?.party ?? targetChar.party;
 
     // Unified collection — feeds the overview, office pages, orders, action
-    // regen, and foreign/trade-minister detection.
+    // regen, and foreign/trade-minister detection. UK rows carry their role
+    // slot for the dual-ministry unique index.
     await getCabinetMembersCollection(db).updateOne(
       { countryId, positionId },
       {
         $set: {
+          ...(countryId === "UK" && targetSlot ? { roleSlot: targetSlot } : {}),
           characterId: targetChar._id,
           characterName: targetChar.name,
           party,
@@ -255,6 +277,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     // the new holder can act immediately.
     await getUKCabinetCooldownsCollection(db).deleteOne({ countryId, positionId });
     await resetCabinetSettingCooldowns(db, countryId, positionId);
+
+    // Shared pool (issue #2049): recompute from all holder rows and mirror it,
+    // so a fresh cap row cannot lift the surviving balance on a second title.
+    if (countryId === "UK") {
+      await reconcileUkSharedPool(db, targetChar._id, now);
+    }
 
     // Presidential seats confirm via the Senate; close any open nomination for
     // this position so a direct admin appointment doesn't leave one dangling.

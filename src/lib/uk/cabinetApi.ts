@@ -38,6 +38,12 @@ import {
   getEligibleCabinetCharacters,
   requireCurrentPrimeMinister,
 } from "./cabinetEligibility";
+import {
+  canHoldAdditionalAppointment,
+  roleSlotForPosition,
+} from "@/lib/uk/dualMinistry/rules";
+import { reconcileUkSharedPool } from "@/lib/cabinet/ministerialActionPool";
+import { preserveSurvivingCabinetRow } from "@/lib/uk/dualMinistry/survivor";
 import { applyConfidenceEventToGov } from "./confidence/confidenceGaugeStore";
 import { GREAT_OFFICE_POSITION_IDS } from "./confidence/confidenceGauge";
 
@@ -60,7 +66,7 @@ const TERRITORIAL_POSITIONS_BY_COUNTRY: Partial<Record<CountryId, string[]>> = {
   UK: ["northern_ireland", "scotland", "wales"],
 };
 
-export async function getCabinetCharactersHandler(_request: Request, countryId: CountryId) {
+export async function getCabinetCharactersHandler(request: Request, countryId: CountryId) {
   try {
     const auth = await requireAuth();
     if (!auth.ok) return auth.response;
@@ -73,9 +79,28 @@ export async function getCabinetCharactersHandler(_request: Request, countryId: 
       "Only the Prime Minister can view eligible cabinet candidates"
     );
 
+    // Position-aware candidacy (issue #2049): when the caller names the vacant
+    // seat, complementary single-slot UK holders stay eligible. Unknown seats
+    // fall back to the legacy exclude-all-holders list.
+    let vacancyPositionId: string | null = null;
+    try {
+      const requested = new URL(request.url).searchParams.get("positionId");
+      if (requested) {
+        const seats = getCabinetPositions(countryId);
+        if (seats.some((seat) => seat.id === requested)) vacancyPositionId = requested;
+      }
+    } catch {
+      vacancyPositionId = null;
+    }
+
     return NextResponse.json({
       success: true,
-      characters: await getEligibleCabinetCharacters(db, countryId, pmCharacterId),
+      characters: await getEligibleCabinetCharacters(
+        db,
+        countryId,
+        pmCharacterId,
+        vacancyPositionId
+      ),
     });
   } catch (error) {
     return handleRouteError(error);
@@ -227,12 +252,21 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       );
     }
 
-    const existingAppointment = await getCabinetMembersCollection(db).findOne({
-      countryId,
-      characterId: targetChar._id,
-    });
-    if (existingAppointment) {
-      throw forbidden("This character already holds a cabinet position");
+    // Dual-ministry slot check (issue #2049): a UK player may add the
+    // complementary slot (one department plus one central title) but never two
+    // departments, both central titles, or a third seat. Other countries keep
+    // one seat per character. Stored `roleSlot` wins; legacy rows derive it.
+    const targetSlot = roleSlotForPosition(countryId, positionId);
+    const heldRows = await getCabinetMembersCollection(db)
+      .find({ countryId, characterId: targetChar._id })
+      .project({ positionId: 1, roleSlot: 1 })
+      .toArray();
+    const heldSlots = heldRows
+      .map((row) => row.roleSlot ?? roleSlotForPosition(countryId, row.positionId))
+      .filter((slot): slot is NonNullable<typeof slot> => slot != null);
+    const holdCheck = canHoldAdditionalAppointment(countryId, heldSlots, targetSlot);
+    if (!holdCheck.ok) {
+      throw forbidden(holdCheck.reason);
     }
 
     const now = new Date();
@@ -247,6 +281,8 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       member = await getCabinetMembersCollection(db).insertOne({
         countryId,
         positionId,
+        // UK rows carry their role slot for the dual-ministry unique index.
+        ...(countryId === ("UK" as CountryId) && targetSlot ? { roleSlot: targetSlot } : {}),
         characterId: targetChar._id,
         characterName: targetChar.name,
         party: lowerOfficial?.party ?? targetChar.party,
@@ -323,6 +359,12 @@ export async function appointCabinetMemberHandler(request: Request, countryId: C
       );
     }
 
+    // Shared pool (issue #2049): recompute from all holder rows and mirror it,
+    // so a fresh cap row cannot lift the surviving balance on a second title.
+    if (countryId === ("UK" as CountryId)) {
+      await reconcileUkSharedPool(db, targetChar._id, now);
+    }
+
     return NextResponse.json({
       success: true,
       member: {
@@ -394,11 +436,17 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
 
     const now = new Date();
 
-    // Restore the character's currentOffice to their legislative seat so they
-    // continue receiving MP action bonuses and NPI after leaving cabinet. An
+    await getCabinetMembersCollection(db).deleteOne({ _id: member._id });
+
+    // A surviving second row keeps the holder in cabinet (issue #2049): the
+    // helper repoints currentOffice at it and reports true. Only a fully
+    // departed holder falls through to the legislative-seat restore. An
     // NPP-held seat has a null characterId — there is no player office to
     // restore, so this is skipped.
-    if (member.characterId) {
+    const survivorKept =
+      member.characterId != null &&
+      (await preserveSurvivingCabinetRow(db, countryId, member.characterId, now));
+    if (!survivorKept && member.characterId) {
       const holderCharacterId = member.characterId;
       const eligibleOfficeTypes = getCabinetEligibleOfficeTypes(countryId);
       const lowerOfficial = await db.collection<ElectedOfficial>("electedOfficials").findOne({
@@ -428,8 +476,6 @@ export async function fireCabinetMemberHandler(request: Request, countryId: Coun
           );
       }
     }
-
-    await getCabinetMembersCollection(db).deleteOne({ _id: member._id });
 
     // Firing is unrestricted and imposes no cooldown of its own. Any existing
     // appointment cooldown on this seat (set when the minister was appointed) is

@@ -5,6 +5,11 @@ import { getCountryState } from "@/lib/countryState";
 import { isBannedParty } from "@/lib/turn/onePartyConstraints";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import {
+  isCandidateEligibleForVacancy,
+  roleSlotForPosition,
+  type UkMinisterialRoleSlot,
+} from "@/lib/uk/dualMinistry/rules";
+import {
   getCabinetEligibleChamberKeys as resolveCabinetEligibleChamberKeys,
   getCountryConfig,
   type CountryId,
@@ -119,11 +124,16 @@ export async function requireCurrentPrimeMinister(
 /**
  * Get eligible cabinet candidates for any parliamentary country.
  * Returns lower-chamber player-character MPs who are not the PM and not already in cabinet.
+ * With `vacancyPositionId` (UK dual-ministry rules, issue #2049), single-slot
+ * holders of the complementary slot stay eligible for the vacancy: a
+ * department-only minister may take a central title and vice versa. Without
+ * it, every cabinet holder is excluded, exactly as before.
  */
 export async function getEligibleCabinetCharacters(
   db: Db,
   countryId: CountryId,
-  pmCharacterId: ObjectId
+  pmCharacterId: ObjectId,
+  vacancyPositionId?: string | null
 ): Promise<CabinetEligibleCharacter[]> {
   const runtime = await getCountryState(db, countryId);
   const isOps = runtime.governmentType === "onePartyState";
@@ -149,11 +159,20 @@ export async function getEligibleCabinetCharacters(
 
   const existingMembers = await getCabinetMembersCollection(db).find({ countryId }).toArray();
   // NPP-held seats carry a null characterId — only player holders block re-appointment.
-  const existingCharacterIds = new Set(
-    existingMembers
-      .filter((member) => member.characterId)
-      .map((member) => member.characterId!.toString())
-  );
+  // Slots come from the stored `roleSlot`, falling back to the position
+  // derivation for legacy rows, so unmigrated rows still filter correctly.
+  const vacancySlot = vacancyPositionId
+    ? roleSlotForPosition(countryId, vacancyPositionId)
+    : null;
+  const heldSlotsByCharacterId = new Map<string, UkMinisterialRoleSlot[]>();
+  for (const member of existingMembers) {
+    if (!member.characterId) continue;
+    const slot = member.roleSlot ?? roleSlotForPosition(countryId, member.positionId);
+    const key = member.characterId.toString();
+    const held = heldSlotsByCharacterId.get(key) ?? [];
+    if (slot) held.push(slot);
+    heldSlotsByCharacterId.set(key, held);
+  }
 
   // Party lookup: name for display + regimeStatus for OPS banned-party filtering.
   const parties = await db
@@ -197,7 +216,12 @@ export async function getEligibleCabinetCharacters(
 
   return characters
     .filter((character) => !character._id.equals(pmCharacterId))
-    .filter((character) => !existingCharacterIds.has(character._id.toString()))
+    .filter((character) => {
+      const held = heldSlotsByCharacterId.get(character._id.toString());
+      // Outside the UK rows carry no slot, so any held row excludes.
+      if (countryId !== "UK") return held == null;
+      return isCandidateEligibleForVacancy(countryId, vacancySlot, held ?? []);
+    })
     .filter((character) => {
       if (!isOps) return true;
       const party = partyBySeqId.get(String(character.party));
