@@ -36,6 +36,7 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   updateRedemptionEntry: vi.fn(),
   insertFundSnapshot: vi.fn(),
   FUND_REDEMPTION_QUEUE_COLLECTION: "indexFundRedemptionQueue",
+  FUND_TRANSACTION_COLLECTION: "indexFundTransactions",
 }));
 
 const { applyBuyMock } = vi.hoisted(() => ({ applyBuyMock: vi.fn() }));
@@ -110,12 +111,18 @@ vi.mock("@/lib/indexFunds/fundCrossRebalancing", () => ({
   planFundCrossRebalancing: vi.fn().mockReturnValue([]),
 }));
 vi.mock("@/lib/indexFunds/nppInvesting", () => ({ processNPPFundInvestments: vi.fn() }));
-vi.mock("@/lib/indexFunds/fundRedemptionLiquidity", () => ({
-  sellFundHoldingsForRedemptionCash: vi.fn(),
-  sellFundHoldingShares: vi
-    .fn()
-    .mockResolvedValue({ cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 }),
-}));
+vi.mock("@/lib/indexFunds/fundRedemptionLiquidity", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    // The rebalance driver pins sell figures with the real quoter before the
+    // first mutable write; only the executing shell stays mocked.
+    sellFundHoldingsForRedemptionCash: vi.fn(),
+    sellFundHoldingShares: vi
+      .fn()
+      .mockResolvedValue({ cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 }),
+  };
+});
 vi.mock("@/lib/bonds/fundBondHoldings", () => ({
   sumFundBondHoldingsValueAnchor: vi.fn().mockResolvedValue(0),
 }));
@@ -127,6 +134,16 @@ vi.mock("@/lib/currency/corporationCapital", () => ({
   // findOne per bid, so the batch form is what the cron imports now.
   fxRateForCorpFromMap: vi.fn().mockReturnValue(1),
   corpLiquidCapitalToAnchor: vi.fn().mockImplementation((amount: number) => amount),
+  // The rebalance driver pins sell legs with the real quoter, which reads the
+  // rate table in batch and converts through the anchor helper. The batch form
+  // returns an empty table (fxRateForCorpFromMap above still yields 1) and the
+  // converter preserves the legacy test meaning: shares x local price.
+  loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
+  shareTradeAnchorValue: vi
+    .fn()
+    .mockImplementation(
+      (shares: number, corp: { sharePrice?: number }) => shares * (corp?.sharePrice ?? 0)
+    ),
 }));
 
 vi.mock("@/lib/indexFunds/fundShareOrders", () => ({
@@ -651,14 +668,36 @@ describe("fundCron — rebalanceFundToTarget", () => {
         ),
       updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
     };
+    // The driver pins sell legs with a per-corp read before quoting; serve the
+    // same candidate rows the pass was given so pins are non-null.
+    const corpsById = new Map(candidateCorps.map((c) => [c._id.toString(), c]));
+    const corporationsColl = {
+      findOne: vi.fn().mockImplementation((filter: { _id?: { toString(): string } }) => {
+        const corp = filter?._id ? corpsById.get(filter._id.toString()) : undefined;
+        return Promise.resolve(corp ? { ...corp, name: "Test Corp", shareEscrowBalance: 0 } : null);
+      }),
+    };
+    const receiptsColl = {
+      insertOne: vi.fn().mockResolvedValue({}),
+      findOne: vi.fn().mockResolvedValue(null),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+    };
     return {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "indexFunds") return indexFundsColl;
+        if (name === "corporations") return corporationsColl;
+        if (name === "nonAtomicMoneyFlowReceipts") return receiptsColl;
         if (name === "indexFundTransactions") return { insertOne: vi.fn().mockResolvedValue({}) };
         // shareOrders: return empty list for open bids so bid logic is a no-op in existing tests
         if (name === "shareOrders")
           return { find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }) };
-        return { findOneAndUpdate: vi.fn(), updateOne: vi.fn(), insertOne: vi.fn() };
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          findOneAndUpdate: vi.fn(),
+          updateOne: vi.fn(),
+          insertOne: vi.fn(),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        };
       }),
       _indexFundsColl: indexFundsColl,
     };
@@ -916,12 +955,36 @@ describe("fundCron — rebalanceFundToTarget bid logic", () => {
         }),
       updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
     };
+    const corporationsColl = {
+      findOne: vi
+        .fn()
+        .mockImplementation((filter: { _id?: { toString(): string } }) =>
+          Promise.resolve(
+            filter?._id?.toString() === inBasketCorpId.toString()
+              ? { ...inBasketCorp, name: "Test Corp", shareEscrowBalance: 0 }
+              : null
+          )
+        ),
+    };
+    const receiptsColl = {
+      insertOne: vi.fn().mockResolvedValue({}),
+      findOne: vi.fn().mockResolvedValue(null),
+      updateOne: vi.fn().mockResolvedValue({ matchedCount: 1 }),
+    };
     return {
       collection: vi.fn().mockImplementation((name: string) => {
         if (name === "indexFunds") return indexFundsColl;
+        if (name === "corporations") return corporationsColl;
+        if (name === "nonAtomicMoneyFlowReceipts") return receiptsColl;
         if (name === "shareOrders") return shareOrdersColl;
         if (name === "indexFundTransactions") return { insertOne: vi.fn().mockResolvedValue({}) };
-        return { findOneAndUpdate: vi.fn(), updateOne: vi.fn(), insertOne: vi.fn() };
+        return {
+          findOne: vi.fn().mockResolvedValue(null),
+          findOneAndUpdate: vi.fn(),
+          updateOne: vi.fn(),
+          insertOne: vi.fn(),
+          find: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
+        };
       }),
       _shareOrdersColl: shareOrdersColl,
       _setOpenOrders: (orders: import("mongodb").WithId<import("mongodb").Document>[]) => {

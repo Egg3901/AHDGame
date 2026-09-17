@@ -208,3 +208,120 @@ describe("cancelFundShareOrder", () => {
     expect(db.collection("indexFunds").updateOne).not.toHaveBeenCalled();
   });
 });
+
+describe("placeFundShareBuyOrder — insert-failure compensation (issue #1672)", () => {
+  const KEY = "test-bid-key-release";
+
+  it("refunds the escrow and releases the debit subkey so a retry re-debits exactly once", async () => {
+    const { placeFundShareBuyOrder } = await import("./fundShareOrders");
+    const { deriveMoneyFlowKey, keyedInsertId } = await import("@/lib/db/nonAtomicMoneyFlow");
+    const f = fund();
+    const c = corp();
+    const debitSubkey = deriveMoneyFlowKey(KEY, "escrow", "500");
+
+    const updateOne = db.collection("indexFunds").updateOne as ReturnType<typeof vi.fn>;
+    updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const insertOne = db.collection("shareOrders").insertOne as ReturnType<typeof vi.fn>;
+    insertOne.mockRejectedValueOnce(new Error("order insert failed"));
+    insertOne.mockResolvedValueOnce({ insertedId: keyedInsertId(KEY, "indexfund-bid-order:500") });
+
+    await expect(
+      placeFundShareBuyOrder(db as unknown as Db, {
+        fund: f,
+        corp: c,
+        shares: 10,
+        limitPriceLocal: 50,
+        fxRate: 1,
+        keyOptions: { idempotencyKey: KEY },
+      })
+    ).rejects.toThrow("order insert failed");
+
+    // Compensation refunds the full escrow in the same atomic update that
+    // releases the debit subkey, guarded on the debit still outstanding.
+    const refundCall = updateOne.mock.calls[1];
+    expect(refundCall[0]).toMatchObject({ _id: f._id, appliedMoneyFlowKeys: debitSubkey });
+    expect(refundCall[1].$inc.cashAnchor).toBe(500);
+    expect(refundCall[1].$pull).toMatchObject({ appliedMoneyFlowKeys: debitSubkey });
+    expect(JSON.stringify(refundCall[1].$push)).toContain("compensate");
+
+    // Retry re-debits (the released key no longer reads already-applied) and
+    // lands the order under the deterministic id: no free order, no double debit.
+    const result = await placeFundShareBuyOrder(db as unknown as Db, {
+      fund: f,
+      corp: c,
+      shares: 10,
+      limitPriceLocal: 50,
+      fxRate: 1,
+      keyOptions: { idempotencyKey: KEY },
+    });
+    expect(result.ok).toBe(true);
+    expect(result.orderId).toEqual(keyedInsertId(KEY, "indexfund-bid-order:500"));
+    expect(updateOne.mock.calls.filter((call) => call[1].$inc?.cashAnchor === -500)).toHaveLength(
+      2
+    );
+    expect(insertOne).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not refund under a concurrent same-key attempt that already landed the order", async () => {
+    const { placeFundShareBuyOrder } = await import("./fundShareOrders");
+    const f = fund();
+    const c = corp();
+
+    const updateOne = db.collection("indexFunds").updateOne as ReturnType<typeof vi.fn>;
+    updateOne.mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    (db.collection("shareOrders").insertOne as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new Error("E11000 duplicate key error")
+    );
+    // The order-absence check finds the concurrent attempt's row: no refund.
+    (db.collection("shareOrders").findOne as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      _id: new ObjectId(),
+      status: "open",
+    });
+
+    await expect(
+      placeFundShareBuyOrder(db as unknown as Db, {
+        fund: f,
+        corp: c,
+        shares: 10,
+        limitPriceLocal: 50,
+        fxRate: 1,
+        keyOptions: { idempotencyKey: KEY },
+      })
+    ).rejects.toThrow("E11000");
+
+    expect(updateOne).toHaveBeenCalledTimes(1);
+  });
+
+  it("skipTx suppresses the escrow audit row while the default path writes it", async () => {
+    const { placeFundShareBuyOrder } = await import("./fundShareOrders");
+    const { insertFundTransaction } = await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(insertFundTransaction).mockClear();
+
+    (db.collection("indexFunds").updateOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    (db.collection("shareOrders").insertOne as ReturnType<typeof vi.fn>).mockResolvedValue({
+      insertedId: new ObjectId(),
+    });
+
+    await placeFundShareBuyOrder(db as unknown as Db, {
+      fund: fund(),
+      corp: corp(),
+      shares: 10,
+      limitPriceLocal: 50,
+      fxRate: 1,
+      skipTx: true,
+    });
+    expect(insertFundTransaction).not.toHaveBeenCalled();
+
+    await placeFundShareBuyOrder(db as unknown as Db, {
+      fund: fund(),
+      corp: corp(),
+      shares: 10,
+      limitPriceLocal: 50,
+      fxRate: 1,
+    });
+    expect(insertFundTransaction).toHaveBeenCalledTimes(1);
+  });
+});
