@@ -171,10 +171,7 @@ export async function drawFoundedCapacityFromPools(
                   $max: [
                     0,
                     {
-                      $subtract: [
-                        unownedHeadroomBaseExpr(sectorType, args.eraUnitScale),
-                        units,
-                      ],
+                      $subtract: [unownedHeadroomBaseExpr(sectorType, args.eraUnitScale), units],
                     },
                   ],
                 },
