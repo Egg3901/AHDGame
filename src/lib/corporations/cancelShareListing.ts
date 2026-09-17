@@ -82,7 +82,9 @@ export interface CancelListingError {
  *   attempt reports the legacy `Listing is not open`. Each offer cancels
  *   through a claim step plus a keyed refund-credit step; an offer that
  *   resolved elsewhere (accepted/filled) between pin and claim converges as
- *   a skip, matching the legacy `continue`. The seller restore reuses the
+ *   a skip at both steps, matching the legacy `continue` (the refund checks
+ *   claim ownership, so a skipped offer is never credited and never
+ *   counted). The seller restore reuses the
  *   keyed cap-credit step. `runMoneyFlowSteps` reverses the applied prefix
  *   with keyed inverses before settling, so the flow ends `completed` or
  *   terminal without effect, never partial.
@@ -308,21 +310,69 @@ function makeOfferClaimStep(
   };
 }
 
-/** Keyed escrow refund credit for one claimed offer (unguarded, exactly once). */
+/**
+ * Keyed escrow refund credit for one claimed offer (unguarded, exactly once),
+ * conditional on this attempt owning the claim. An offer that resolved
+ * elsewhere between plan pin and claim (accepted, filled, or taken by a
+ * competing cancel) converges as a skip here too: without the ownership
+ * check the refund would still credit a buyer who no longer has escrow held
+ * (double pay on a filled offer, double refund on a raced cancel), and the
+ * compensating debit would then steal it back from an innocent balance. The
+ * revert is likewise conditional on the refund key being recorded, so
+ * compensating a later failure never debits a skipped buyer.
+ */
 function makeOfferRefundStep(
   db: Db,
   cancelKey: string,
   refund: ShareListingCancelOfferRefund,
   now: Date
 ): MoneyFlowStep {
-  return makeCashStep(
+  const offers = db.collection<OfferAccount>("shareOffers");
+  const offerId = new ObjectId(refund.offerIdHex);
+  const claimSub = deriveMoneyFlowKey(cancelKey, "offer-claim", refund.offerIdHex);
+  const refundSub = deriveMoneyFlowKey(cancelKey, "offer-refund", refund.offerIdHex);
+  const cash = makeCashStep(
     db,
     `offer-refund:${refund.offerIdHex}`,
-    deriveMoneyFlowKey(cancelKey, "offer-refund", refund.offerIdHex),
+    refundSub,
     refund.refundLeg,
     false,
     now
   );
+  const ownsClaim = async (): Promise<boolean> => {
+    const live = await offers.findOne({ _id: offerId } as Filter<OfferAccount>, {
+      projection: { appliedMoneyFlowKeys: 1 },
+    });
+    return (
+      (
+        live as unknown as { appliedMoneyFlowKeys?: string[] } | null
+      )?.appliedMoneyFlowKeys?.includes(claimSub) === true
+    );
+  };
+  const didRefund = async (): Promise<boolean> => {
+    const buyers = db.collection<OfferAccount>(refund.refundLeg.collection);
+    const live = await buyers.findOne(
+      { _id: new ObjectId(refund.refundLeg.idHex) } as Filter<OfferAccount>,
+      { projection: { appliedMoneyFlowKeys: 1 } }
+    );
+    return (
+      (
+        live as unknown as { appliedMoneyFlowKeys?: string[] } | null
+      )?.appliedMoneyFlowKeys?.includes(refundSub) === true
+    );
+  };
+  return {
+    name: `offer-refund:${refund.offerIdHex}`,
+    apply: async () => {
+      if (!(await ownsClaim())) return "already-applied" as MoneyFlowLegOutcome;
+      return cash.apply();
+    },
+    revert: async () => {
+      if (!(await didRefund())) return "already-applied" as MoneyFlowLegOutcome;
+      if (!cash.revert) return "guard-rejected" as MoneyFlowLegOutcome;
+      return cash.revert();
+    },
+  };
 }
 
 function mapCancelError(plan: ShareListingCancelPlan) {
