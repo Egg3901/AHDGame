@@ -24,9 +24,7 @@ function seed(opts: {
     opts.flag === true ? { _id: "default", brettonWoodsExitEnabled: true } : { _id: "default" }
   );
   db.collectionMocks["gameState"].findOne.mockResolvedValue(
-    opts.gameState !== undefined
-      ? { _id: "current", currentYear: 1960, ...opts.gameState }
-      : null
+    opts.gameState !== undefined ? { _id: "current", currentYear: 1960, ...opts.gameState } : null
   );
   db.collectionMocks["centralBanks"].findOne.mockResolvedValue(
     opts.bank !== undefined ? opts.bank : calmUsBank

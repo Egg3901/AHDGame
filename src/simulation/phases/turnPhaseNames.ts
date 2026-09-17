@@ -114,6 +114,7 @@ export const BASE_TURN_PHASE_NAMES = [
   "fiscalBaseGrowth",
   "economicModel",
   "tradeGrowthMirror",
+  "brettonWoods",
   "inflationRecalc",
   "commandEconomy",
   "ledgerPreForexSnapshot",

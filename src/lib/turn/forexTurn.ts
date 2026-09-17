@@ -259,9 +259,7 @@ export async function processForexTurn(
     // so flag-off worlds compute byte-identically.
     const bwRegime = brettonWoods?.regime ?? "pegged";
     const bwFloats =
-      !hardPegActive &&
-      bwRegime !== "pegged" &&
-      participatesInFloat(countryId, commandActive);
+      !hardPegActive && bwRegime !== "pegged" && participatesInFloat(countryId, commandActive);
     const bwTurns =
       brettonWoods?.regimeChangedAtTurn != null
         ? currentTurn - brettonWoods.regimeChangedAtTurn

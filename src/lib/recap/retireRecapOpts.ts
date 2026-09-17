@@ -25,7 +25,7 @@ export async function buildRetireRecapOpts(
         { _id: "current" },
         { projection: { iteration: 1, currentTurn: 1, seasonRecapEnabled: 1 } }
       );
-    if (!isSeasonRecapEnabled(gs)) return {};
+    if (!gs || !isSeasonRecapEnabled(gs)) return {};
     const recap = await buildSoloRecap(db, character, {
       iteration: gs.iteration,
       currentTurn: gs.currentTurn ?? 1,

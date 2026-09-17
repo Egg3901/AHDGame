@@ -123,10 +123,12 @@ export async function processBrettonWoodsTurn(
   const usTarget = resolveMonetaryBaseline("US", year)?.targetInflation ?? 2;
   const inflationGap = usInflation - usTarget;
 
-  const m2Row = await db.collection("moneySupplySnapshots").findOne(
-    { currencyCode: "USD", turn: { $lt: turn } },
-    { sort: { turn: -1 }, projection: { annualizedM2GrowthPct: 1, accountingVersion: 1 } }
-  );
+  const m2Row = await db
+    .collection("moneySupplySnapshots")
+    .findOne(
+      { currencyCode: "USD", turn: { $lt: turn } },
+      { sort: { turn: -1 }, projection: { annualizedM2GrowthPct: 1, accountingVersion: 1 } }
+    );
   const m2Growth = currentMoneyGrowth(
     m2Row as { accountingVersion?: number; annualizedM2GrowthPct: number | null } | null
   );
@@ -160,10 +162,19 @@ export async function processBrettonWoodsTurn(
     floated = true;
   }
 
-  await db.collection<GameState>("gameState").updateOne(
-    { _id: "current" },
-    { $set: { bwGoldCover: goldCover, bwForeignClaims: foreignClaims, bwRegime: regime, ...(regimeChangedAtTurn != null ? { bwRegimeChangedAtTurn: regimeChangedAtTurn } : {}) } }
-  );
+  await db
+    .collection<GameState>("gameState")
+    .updateOne(
+      { _id: "current" },
+      {
+        $set: {
+          bwGoldCover: goldCover,
+          bwForeignClaims: foreignClaims,
+          bwRegime: regime,
+          ...(regimeChangedAtTurn != null ? { bwRegimeChangedAtTurn: regimeChangedAtTurn } : {}),
+        },
+      }
+    );
 
   return { ran: true, regime, regimeChangedAtTurn, goldCover, foreignClaims, suspended, floated };
 }
