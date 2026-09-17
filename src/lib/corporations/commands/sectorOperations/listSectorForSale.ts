@@ -4,6 +4,7 @@
  * CEO only. Loss-making sectors (no positive base profit) cannot be listed.
  */
 import { NextResponse } from "next/server";
+import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
@@ -56,6 +57,17 @@ export async function listSectorForSale(_request: Request, { params }: RoutePara
 
     if (sector.forSale) {
       return NextResponse.json({ error: "Sector is already listed for sale" }, { status: 400 });
+    }
+
+    // State enterprises divest through the nationalization system (privatization),
+    // which is itself gated on the regime. Letting them list on the open sector
+    // market would route around that gate entirely. `requireCeo` above blocks most
+    // SOEs because they are ceoVacant, but several live RU SOEs do carry a ceoId.
+    if (isStateOwned(corporation)) {
+      return NextResponse.json(
+        { error: "State enterprises cannot list production for private sale." },
+        { status: 403 }
+      );
     }
 
     const hostFxRate = await getSectorHostFxRate(db, sector, corporation);

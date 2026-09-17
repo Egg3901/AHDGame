@@ -8,7 +8,7 @@
  * listening but silent, erroring, and not in singleplayer mode at all.
  */
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpServer, type Server } from "node:http";
 import { createServer as createTcpServer, type Server as TcpServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -166,6 +166,30 @@ describe("tailOfFile", () => {
   });
 });
 
+describe("publishMongoInstall", () => {
+  it("keeps the first complete runtime when two clients install concurrently", async () => {
+    const root = mkdtempSync(path.join(tmpdir(), "ahd-mongo-race-"));
+    const destination = path.join(root, "mongodb");
+    const first = path.join(root, "first");
+    const second = path.join(root, "second");
+    for (const [dir, marker] of [
+      [first, "first"],
+      [second, "second"],
+    ] as const) {
+      mkdirSync(dir);
+      writeFileSync(path.join(dir, "mongod"), marker);
+      writeFileSync(path.join(dir, ".complete-test"), "test");
+    }
+
+    await launcher.publishMongoInstall(first, destination, ".complete-test", "mongod");
+    await launcher.publishMongoInstall(second, destination, ".complete-test", "mongod");
+
+    expect(readFileSync(path.join(destination, "mongod"), "utf8")).toBe("first");
+    expect(existsSync(second)).toBe(false);
+    rmSync(root, { recursive: true, force: true });
+  });
+});
+
 /**
  * The whole launcher process against a stub server that listens but never
  * answers: the shape of the Windows first-start freeze. It must exit non-zero
@@ -313,4 +337,26 @@ describe("launcher process shutdown over the control channel", () => {
     expect(output).toContain("[ahd] shutting down");
     expect(output).toMatch(/startup took .*account \d/);
   }, 40_000);
+});
+
+describe("resolveBindHost", () => {
+  it("stays on loopback by default", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs"], {})).toBe("127.0.0.1");
+  });
+
+  it("binds all interfaces with --host", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs", "--host"], {})).toBe("0.0.0.0");
+  });
+
+  it("binds all interfaces with SINGLEPLAYER_HOST=1", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs"], { SINGLEPLAYER_HOST: "1" })).toBe(
+      "0.0.0.0"
+    );
+  });
+
+  it("ignores other SINGLEPLAYER_HOST values", () => {
+    expect(launcher.resolveBindHost(["node", "launch.mjs"], { SINGLEPLAYER_HOST: "0" })).toBe(
+      "127.0.0.1"
+    );
+  });
 });

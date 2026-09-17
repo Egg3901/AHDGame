@@ -3,6 +3,7 @@ import type { Db } from "mongodb";
 import { getCountryModifiersCollection } from "@/lib/db/collections/countryModifiers";
 import type {
   CountryModifier,
+  PresidentialHealthReliefModifier,
   SectorDemandCountryModifier,
   WarEmergencyMitigationModifier,
 } from "@/lib/db/types/events";
@@ -89,6 +90,38 @@ export async function writeWarEmergencyMitigation(
   await getCountryModifiersCollection(db).insertOne(doc);
 }
 
+export const DEMOCRATIC_HEALTH_RELIEF_CAP_PCT = 75;
+
+/** Write temporary relief for the sitting President's additional health drag. */
+export async function writePresidentialHealthRelief(
+  db: Db,
+  input: {
+    countryId: string;
+    partyId: string;
+    characterId: string;
+    pct: number;
+    durationTurns: number;
+    appliedAtTurn: number;
+    sourceInstanceId?: ObjectId;
+  }
+): Promise<void> {
+  const pct = Math.min(DEMOCRATIC_HEALTH_RELIEF_CAP_PCT, Math.max(0, input.pct));
+  if (pct === 0) return;
+  const doc: CountryModifier = {
+    _id: new ObjectId(),
+    countryId: input.countryId,
+    kind: "presidentialHealthRelief",
+    partyId: input.partyId,
+    characterId: input.characterId,
+    pct,
+    appliedAtTurn: input.appliedAtTurn,
+    expiresAtTurn: input.appliedAtTurn + Math.max(0, input.durationTurns),
+    sourceInstanceId: input.sourceInstanceId,
+    createdAt: new Date(),
+  };
+  await getCountryModifiersCollection(db).insertOne(doc);
+}
+
 /**
  * Sum of active `sectorDemandModifier` pct values for a country/sector at
  * `currentTurn`. Pure over the loaded docs so scheduling math is unit
@@ -114,6 +147,49 @@ export function sumActiveWarEmergencyMitigationPct(
     .filter((modifier) => modifier.expiresAtTurn > currentTurn)
     .reduce((sum, modifier) => sum + Math.max(0, modifier.pct), 0);
   return Math.min(WAR_EMERGENCY_MITIGATION_CAP_PCT, total);
+}
+
+export function sumActivePresidentialHealthReliefPct(
+  modifiers: Pick<
+    PresidentialHealthReliefModifier,
+    "partyId" | "characterId" | "pct" | "expiresAtTurn"
+  >[],
+  partyId: string,
+  characterId: string,
+  currentTurn: number
+): number {
+  const total = modifiers
+    .filter(
+      (modifier) =>
+        modifier.partyId === partyId &&
+        modifier.characterId === characterId &&
+        modifier.expiresAtTurn > currentTurn
+    )
+    .reduce((sum, modifier) => sum + Math.max(0, modifier.pct), 0);
+  return Math.min(DEMOCRATIC_HEALTH_RELIEF_CAP_PCT, total);
+}
+
+export async function loadActivePresidentialHealthReliefPct(
+  db: Db,
+  countryId: string,
+  partyId: string,
+  characterId: string,
+  currentTurn: number
+): Promise<number> {
+  const modifiers = await getCountryModifiersCollection(db)
+    .find({
+      countryId,
+      kind: "presidentialHealthRelief",
+      partyId,
+      characterId,
+      expiresAtTurn: { $gt: currentTurn },
+    })
+    .toArray();
+  const reliefModifiers = modifiers.filter(
+    (modifier): modifier is PresidentialHealthReliefModifier =>
+      modifier.kind === "presidentialHealthRelief"
+  );
+  return sumActivePresidentialHealthReliefPct(reliefModifiers, partyId, characterId, currentTurn);
 }
 
 /** One query for the scheduler's full country loop. */

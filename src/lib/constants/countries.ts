@@ -727,7 +727,6 @@ export interface CountryConfig {
    * /api/corporations guard rejects the request; the UI hides the
    * "Found Corp" button.
    */
-  disallowPrivateCorporationFounding?: boolean;
 }
 
 export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
@@ -2461,7 +2460,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
 
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors DD/RU)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors DD/RU/CN)
     status: "coming-soon",
     tagline:
@@ -2589,7 +2587,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     currencyCode: "PLZ",
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors DD/RU)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors DD/RU/CN)
     status: "coming-soon",
     tagline:
@@ -2717,7 +2714,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     currencyCode: "ROL",
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors DD/RU)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors DD/RU/CN)
     status: "coming-soon",
     tagline:
@@ -2836,7 +2832,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     currencyCode: "YUD",
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors DD/RU)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors DD/RU/CN)
     status: "coming-soon",
     tagline:
@@ -2964,7 +2959,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     currencyCode: "BGL",
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors DD/RU)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors DD/RU/CN)
     status: "coming-soon",
     tagline: "The Soviet bloc's most loyal member - a one-party People's Republic.",
@@ -3216,7 +3210,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     currencyCode: "CSK",
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors DD/RU)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors DD/RU/CN)
     status: "coming-soon",
     tagline:
@@ -3689,8 +3682,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     currencyCode: "SUR",
     fiscalYearStartTurnInYear: 40,
     financeMinisterCabinetId: "minister_of_finance",
-
-    disallowPrivateCorporationFounding: true,
 
     status: "coming-soon",
     tagline:
@@ -5010,7 +5001,6 @@ export const COUNTRY_CONFIGS: Record<CountryId, CountryConfig> = {
     financeMinisterCabinetId: "minister_of_finance",
     collapseTargetSystem: "parliamentaryRepublic", // reunification / democratisation path
 
-    disallowPrivateCorporationFounding: true, // command economy: no private corp founding (mirrors USSR)
     popularMoodProfile: CN_POPULAR_MOOD_PROFILE, // one-party legitimacy drift (mirrors USSR/China)
 
     /**

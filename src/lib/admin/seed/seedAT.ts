@@ -47,7 +47,7 @@ export async function seedATRegions(
 
 export async function seedATParties(db: Db, log: (msg: string) => void, preset?: string) {
   const { atParties } = await import("@/lib/seeds/at/atParties");
-  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+  const { selectPartyRosterForPreset, prunePresetMismatchedDefaultParties } =
     await import("@/lib/seeds/ensureDefaultParties");
 
   let activePreset = preset;
@@ -57,9 +57,7 @@ export async function seedATParties(db: Db, log: (msg: string) => void, preset?:
 
   await prunePresetMismatchedDefaultParties(db, atParties as PartySeed[], activePreset);
 
-  const filtered = (atParties as PartySeed[]).filter((seed) =>
-    isPartyValidForPreset(seed, activePreset)
-  );
+  const filtered = selectPartyRosterForPreset(atParties as PartySeed[], activePreset);
   const now = new Date();
   for (const party of filtered) {
     const { seedOrder: _seedOrder, validForPresets: _validForPresets, ...partyData } = party;

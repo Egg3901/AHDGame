@@ -1,3 +1,4 @@
+import { ensureProviderIdentityIndexes } from "@/lib/auth/providerIdentityIndexes";
 import type { Db } from "mongodb";
 import { normalizeAndMergeCorporateSectors } from "@/lib/corporations/repairDuplicateSectors";
 import { ensureIndex } from "./helpers";
@@ -22,6 +23,7 @@ function hasCorporateSectorIdentityIndex(
 // These are the bare-minimum indexes the app needs to function.
 export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
   log("Core indexes:");
+  for (const note of await ensureProviderIdentityIndexes(db)) log(note);
 
   await ensureIndex(db, "users", { email: 1 }, { unique: true, name: "users_email" }, log);
   await ensureIndex(db, "users", { username: 1 }, { unique: true, name: "users_username" }, log);

@@ -32,20 +32,28 @@ export async function seedCNRegions(
   const { cnRegions1999 } = await import("@/lib/seeds/cn/cnRegions1999");
   const { cnRegions2007 } = await import("@/lib/seeds/cn/cnRegions2007");
   const { cnRegions2023 } = await import("@/lib/seeds/cn/cnRegions2023");
+  const { cnRegions2027 } = await import("@/lib/seeds/cn/cnRegions2027");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
-  const bundle = selectPresetBundle(
-    preset,
-    {
-      "1953-default": cnRegions1953,
-      "2019-default": cnRegions,
-      "1979-default": cnRegions1979,
-      "1991-default": cnRegions1991,
-      "1999-default": cnRegions1999,
-      "2007-default": cnRegions2007,
-      "2023-default": cnRegions2023,
-    },
-    "seedCN:cnRegions1953"
-  );
+  // 2027-default is wired explicitly here so this country-local seeder does
+  // not depend on shared preset registry changes. `selectPresetBundle`
+  // has no 2027 entry for CN; without this branch a 2027 world would fall
+  // back to the 1953 bundle.
+  const bundle =
+    preset === "2027-default"
+      ? cnRegions2027
+      : selectPresetBundle(
+          preset,
+          {
+            "1953-default": cnRegions1953,
+            "2019-default": cnRegions,
+            "1979-default": cnRegions1979,
+            "1991-default": cnRegions1991,
+            "1999-default": cnRegions1999,
+            "2007-default": cnRegions2007,
+            "2023-default": cnRegions2023,
+          },
+          "seedCN:cnRegions1953"
+        );
   const regionOps = bundle.map((region) => {
     const { _id, ...regionData } = region;
     return { updateOne: { filter: { _id }, update: { $set: regionData }, upsert: true } };
@@ -178,7 +186,7 @@ export async function seedCNStateMetrics(
     const overlay = getRegionMetricPresets("CN", String(metric._id), preset);
     return overlay ? applyMetricPresetToMetrics(metric, overlay) : metric;
   });
-  // SP5: split write — macro slice -> macroMetrics (all countries), political
+  // SP5: split write - macro slice -> macroMetrics (all countries), political
   // remainder -> stateMetrics (non-playables). countryId stamped for routing.
   await writeSplitMetricsBulk(
     db,

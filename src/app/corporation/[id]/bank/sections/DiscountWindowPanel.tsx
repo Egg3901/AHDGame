@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Input, Skeleton } from "@/components/ui";
 import { formatBankMoney, formatRatePercent } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { DiscountWindowQuote, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
+import { Eyebrow } from "../components/BankSection";
 import { StatCell } from "../components/StatCell";
 
 export function DiscountWindowPanel({
@@ -21,6 +23,7 @@ export function DiscountWindowPanel({
   onChanged: () => Promise<void>;
   showToast: ShowToast;
 }) {
+  const t = useTranslations("corporations.bankConsole");
   const [{ quote, loading, error }, updateWindowState] = useReducer(
     mergeState<{ quote: DiscountWindowQuote | null; loading: boolean; error: string | null }>,
     { quote: null, loading: true, error: null }
@@ -86,6 +89,7 @@ export function DiscountWindowPanel({
   return (
     <section className="space-y-4">
       <div>
+        <Eyebrow kind="ceoControl" />
         <h3 className="text-base font-semibold text-foreground">Discount window</h3>
         <p className="text-sm text-muted">
           Emergency central bank liquidity for deposit-taking banks. Drawing carries a confidence
@@ -93,21 +97,28 @@ export function DiscountWindowPanel({
         </p>
       </div>
       <div className="rounded-xl border border-card-border bg-card grid grid-cols-2 sm:grid-cols-4 divide-x divide-card-border max-w-2xl">
-        <StatCell label="Outstanding" value={formatBankMoney(quote.outstanding, currency)} />
+        <StatCell
+          label="Outstanding"
+          value={formatBankMoney(quote.outstanding, currency)}
+          tooltip={t("tooltips.discountOutstanding")}
+        />
         <StatCell
           label="Rate"
           value={quote.ratePercent != null ? formatRatePercent(quote.ratePercent) : "-"}
           sub="penalty over prime"
+          tooltip={t("tooltips.discountRate")}
         />
         <StatCell
           label="Remaining capacity"
           value={formatBankMoney(quote.headroomAnchor ?? 0, currency)}
           sub={`cap ${formatBankMoney(quote.capAnchor ?? 0, currency)}`}
+          tooltip={t("tooltips.discountCapacity")}
         />
         <StatCell
           label="Stigma"
           value={`${(quote.currentStigma * 100).toFixed(1)}%`}
           sub={`confidence penalty, max ${(quote.maxStigma * 100).toFixed(0)}%`}
+          tooltip={t("tooltips.discountStigma")}
         />
       </div>
       {canMutate && (

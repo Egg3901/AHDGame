@@ -37,6 +37,7 @@ export async function queryCommodities(db: Db, params: { country?: string }) {
         nationalSupply,
         nationalDemand,
       }),
+      priceAttribution: data?.priceAttribution ?? null,
       turn: data?.turn ?? 0,
     };
   });
@@ -117,6 +118,7 @@ export async function queryCommodityDetail(db: Db, params: { key: string; countr
     stateDemand: filtered.demand,
     topProducers,
     topConsumers,
+    priceAttribution: data?.priceAttribution ?? null,
     turn: data?.turn ?? 0,
   };
 }

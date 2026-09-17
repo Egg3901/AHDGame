@@ -32,7 +32,7 @@ const JP_1953_PARTY_NAMES = jpParties
   .filter((p) => !p.validForPresets || p.validForPresets.includes("1953-default"))
   .map((p) => p.name);
 
-describe("calculateJPStatePartyOrgs — 1953 Shugiin", () => {
+describe("calculateJPStatePartyOrgs - 1953 Shugiin", () => {
   it("seeds presence for every (region × 1953 party) pair", async () => {
     seedParties(JP_1953_PARTY_NAMES);
     const rows = await calculateJPStatePartyOrgs(db as unknown as Db, "1953-default");
@@ -45,8 +45,8 @@ describe("calculateJPStatePartyOrgs — 1953 Shugiin", () => {
 
   it("regression: the 2021 table left every region Communist-only", async () => {
     // Of the 2021 slugs (ldp/cdp/komeito/jcp/ishin/dpfp) only `jcp` resolves
-    // under the 1953 roster, so the pre-fix world seeded the JCP — which polled
-    // 1.9% in 1953 — as the sole party with organization anywhere in Japan.
+    // under the 1953 roster, so the pre-fix world seeded the JCP - which polled
+    // 1.9% in 1953 - as the sole party with organization anywhere in Japan.
     seedParties(JP_1953_PARTY_NAMES);
     const wrongEra = await calculateJPStatePartyOrgs(db as unknown as Db, "2019-default");
     expect(wrongEra).toHaveLength(jpRegions1953.length);
@@ -63,13 +63,13 @@ describe("calculateJPStatePartyOrgs — 1953 Shugiin", () => {
       const inRegion = rows.filter((r) => r.stateId === id);
       const top = inRegion.reduce((a, b) => (b.organization > a.organization ? b : a));
       // #3873: Hokkaido is the one region where the Socialists' organisation
-      // genuinely leads (the era's strongest JSP regional base) — everywhere
+      // genuinely leads (the era's strongest JSP regional base) - everywhere
       // else the Liberal Party stays on top.
       const expectedTop = id === "HOK" ? "Japan Socialist Party" : "Liberal Party";
       expect(top.partyId, `${id} strongest party`).toBe(seqOf(expectedTop));
     }
     // The Liberal Party still leads nationally (aggregate across regions) even
-    // though Hokkaido flips — the seed keeps the real 1953 result intact.
+    // though Hokkaido flips - the seed keeps the real 1953 result intact.
     const org = (stateId: string, name: string) =>
       rows.find((r) => r.stateId === stateId && r.partyId === seqOf(name))!.organization;
     const sum = (name: string) =>
@@ -99,5 +99,58 @@ describe("calculateJPStatePartyOrgs — 1953 Shugiin", () => {
     const rows1991 = await calculateJPStatePartyOrgs(db as unknown as Db, "1991-default");
     expect(new Set(rows1991.map((r) => r.stateId)).size).toBe(8);
     expect(rows1991.length).toBeGreaterThan(8);
+  });
+});
+
+describe("calculateJPStatePartyOrgs - 2027 post-2024 anchor", () => {
+  const JP_2027_PARTY_NAMES = [
+    "Liberal Democratic Party",
+    "Constitutional Democratic Party",
+    "Komeito",
+    "Japanese Communist Party",
+    "Nippon Ishin no Kai",
+    "Democratic Party for the People",
+  ];
+
+  it("seeds presence for every (region x 2027 party) pair via explicit dispatch", async () => {
+    seedParties(JP_2027_PARTY_NAMES);
+    const rows = await calculateJPStatePartyOrgs(db as unknown as Db, "2027-default");
+    expect(rows).toHaveLength(8 * JP_2027_PARTY_NAMES.length);
+    expect(new Set(rows.map((r) => r.stateId)).size).toBe(8);
+    expect(rows.every((r) => r.countryId === "JP")).toBe(true);
+  });
+
+  it("does not fall through to the 2021 table for 2027", async () => {
+    seedParties(JP_2027_PARTY_NAMES);
+    const rows2027 = await calculateJPStatePartyOrgs(db as unknown as Db, "2027-default");
+    const rows2021 = await calculateJPStatePartyOrgs(db as unknown as Db, "2019-default");
+    const org = (rows: typeof rows2027, stateId: string, name: string) =>
+      rows.find(
+        (r) => r.stateId === stateId && r.partyId === String(JP_2027_PARTY_NAMES.indexOf(name) + 1)
+      )!.organization;
+    // LDP is weaker and the DPFP stronger in 2027 than in the 2021 table.
+    expect(org(rows2027, "KAN", "Liberal Democratic Party")).toBeLessThan(
+      org(rows2021, "KAN", "Liberal Democratic Party")
+    );
+    expect(org(rows2027, "KAN", "Democratic Party for the People")).toBeGreaterThan(
+      org(rows2021, "KAN", "Democratic Party for the People")
+    );
+  });
+
+  it("keeps the LDP first nationally with Ishin first in Kansai", async () => {
+    seedParties(JP_2027_PARTY_NAMES);
+    const rows = await calculateJPStatePartyOrgs(db as unknown as Db, "2027-default");
+    const seqOf = (name: string) => String(JP_2027_PARTY_NAMES.indexOf(name) + 1);
+    const org = (stateId: string, name: string) =>
+      rows.find((r) => r.stateId === stateId && r.partyId === seqOf(name))!.organization;
+    const sum = (name: string) =>
+      ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"].reduce(
+        (acc, id) => acc + org(id, name),
+        0
+      );
+    expect(sum("Liberal Democratic Party")).toBeGreaterThan(sum("Constitutional Democratic Party"));
+    const kns = rows.filter((r) => r.stateId === "KNS");
+    const topKns = kns.reduce((a, b) => (b.organization > a.organization ? b : a));
+    expect(topKns.partyId).toBe(seqOf("Nippon Ishin no Kai"));
   });
 });

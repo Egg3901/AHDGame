@@ -22,8 +22,12 @@ interface RecruitmentStatus {
   cooldownUntil: string | null;
   cooldownRemaining: number | null; // seconds
   partyNPPCount: number;
+  partyNPPMax?: number;
+  activeMemberCount?: number;
+  availablePartyNppSlots?: number;
   canRecruit: boolean;
   isLeadership: boolean;
+  blockedReason?: string | null;
   // Action Point pool (scope-appropriate)
   actionCost?: number;
   fundCost?: number;
@@ -59,6 +63,10 @@ interface StatesData {
   recruitFundCost: number;
   partyTreasury: number;
   partyNPPCount: number;
+  partyNPPMax?: number;
+  activeMemberCount?: number;
+  availablePartyNppSlots?: number;
+  blockedReason?: string | null;
 }
 
 export function NppRecruitmentPanel({
@@ -259,6 +267,25 @@ export function NppRecruitmentPanel({
           </p>
         </div>
       )}
+
+      <div className="rounded-xl border border-card-border bg-card p-4 space-y-1 text-sm">
+        <div className="flex justify-between">
+          <span className="text-muted">Party NPP capacity</span>
+          <span>
+            {status.partyNPPCount} / {status.partyNPPMax ?? 0}
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-muted">Active members</span>
+          <span>{status.activeMemberCount ?? 0}</span>
+        </div>
+        <p className="pt-1 text-xs text-muted">
+          5 NPPs per active member, up to 25. Members need 2 game actions in the last 14 days.
+        </p>
+        {status.blockedReason && !hasCooldown && (
+          <p className="pt-1 text-xs text-warning">{status.blockedReason}</p>
+        )}
+      </div>
 
       {/* State NPP info (state panel only) */}
       {!isNational && (

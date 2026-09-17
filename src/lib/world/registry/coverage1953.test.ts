@@ -78,7 +78,7 @@ describe("1953 Tier-3 world coverage registry (#3728)", () => {
       exceptionalStatus: "disputed-sovereignty",
       recognition: { status: "contested" },
       un: { state: "admitted" },
-      simulationTier: "historical-presence",
+      simulationTier: "background-macro",
     });
 
     const israel = getWorldEntityOrThrow("1953-default", "IL");
@@ -87,7 +87,7 @@ describe("1953 Tier-3 world coverage registry (#3728)", () => {
       status: "sovereign",
       recognition: { status: "partial" },
       un: { state: "admitted", memberSinceYear: 1949 },
-      simulationTier: "historical-presence",
+      simulationTier: "background-macro",
     });
   });
 
@@ -96,7 +96,9 @@ describe("1953 Tier-3 world coverage registry (#3728)", () => {
     expect(diagnostics.totalEntries).toBeGreaterThan(150);
     expect(diagnostics.byRegion.europe).toBeGreaterThan(20);
     expect(diagnostics.byRegion.africa).toBeGreaterThan(40);
-    expect(diagnostics.byTier["historical-presence"]).toBeGreaterThan(100);
+    expect(
+      diagnostics.byTier["historical-presence"] + diagnostics.byTier["background-macro"]
+    ).toBeGreaterThan(100);
     expect(diagnostics.missingFromManifest).toEqual([]);
     expect(diagnostics.unmappedEntityIds.length).toBeGreaterThan(0);
   });

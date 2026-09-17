@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateStatePartyOrg, marginsForPreset } from "./statePartyOrg";
 import { ELECTION_1988_MARGIN } from "@/lib/data/1988ElectionResults";
 import { ELECTION_2020_MARGIN } from "@/lib/data/2020ElectionResults";
+import { ELECTION_2024_MARGIN } from "@/lib/data/2024ElectionResults";
 
 describe("marginsForPreset", () => {
   it("1991-default → 1988 margins", () => {
@@ -10,6 +11,10 @@ describe("marginsForPreset", () => {
 
   it("2019-default → 2020 margins", () => {
     expect(marginsForPreset("2019-default")).toBe(ELECTION_2020_MARGIN);
+  });
+
+  it("draft 2027-default uses the latest certified presidential margins", () => {
+    expect(marginsForPreset("2027-default")).toBe(ELECTION_2024_MARGIN);
   });
 
   it("unknown preset → fallback to 2020 margins", () => {
@@ -70,6 +75,12 @@ describe("generateStatePartyOrg", () => {
     const entries = generateStatePartyOrg("2019-default");
     expect(entries.some((e) => e.stateId === "AK" && e.partyId === "1")).toBe(true);
     expect(entries.some((e) => e.stateId === "HI" && e.partyId === "2")).toBe(true);
+  });
+
+  it("covers all 50 electoral states under the draft 2027 preset", () => {
+    const entries = generateStatePartyOrg("2027-default");
+    expect(new Set(entries.map((entry) => entry.stateId)).size).toBe(50);
+    expect(entries).toHaveLength(100);
   });
 
   it("covers all 50 electoral states under the default (2019) preset", () => {

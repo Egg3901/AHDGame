@@ -654,6 +654,13 @@ export async function appointPrimeMinister(
   }
 
   const config = getCountryConfig(countryId, activePreset);
+  const appointedPerson = characterId
+    ? await db
+        .collection<Character>("characters")
+        .findOne({ _id: characterId }, { projection: { avatarUrl: 1 } })
+    : nppId
+      ? await db.collection<NPP>("npps").findOne({ _id: nppId }, { projection: { avatarUrl: 1 } })
+      : null;
 
   // Country history: record the head-of-government transition. Fetch PM's
   // party for the event (if a player character) — we don't already have it
@@ -698,6 +705,7 @@ export async function appointPrimeMinister(
       color: DISCORD_COLORS.govFormed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(appointedPerson?.avatarUrl ? { thumbnail: { url: appointedPerson.avatarUrl } } : {}),
     }).catch(() => {});
   }
 }
@@ -1014,9 +1022,10 @@ export async function resolveParliamentaryAppointmentVote(
 
     await db.collection("ukCabinetCooldowns").deleteMany({ countryId });
 
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: vote.nomineeCharacterId });
+    // PM appointment votes are character-only; the null arm is defensive.
+    const nomineeChar = vote.nomineeCharacterId
+      ? await db.collection<Character>("characters").findOne({ _id: vote.nomineeCharacterId })
+      : null;
     if (nomineeChar?.userId) {
       const config = getCountryConfig(countryId);
       await createNotifications([
@@ -1025,7 +1034,7 @@ export async function resolveParliamentaryAppointmentVote(
           title: `Appointed ${config.executiveTitle}`,
           message: `Your appointment as ${config.executiveTitle} has been confirmed (${vote.votesFor} ayes, ${vote.votesAgainst} nays).`,
           type: "system",
-          metadata: { recipientCharacterId: vote.nomineeCharacterId.toString() },
+          metadata: { recipientCharacterId: vote.nomineeCharacterId!.toString() },
         },
       ]);
     }
@@ -1041,9 +1050,14 @@ export async function resolveParliamentaryAppointmentVote(
       color: DISCORD_COLORS.govFormed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(nomineeChar?.avatarUrl ? { thumbnail: { url: nomineeChar.avatarUrl } } : {}),
     }).catch(() => {});
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });
+    // PM appointment votes are character-only; the null arm is defensive.
+    const nomineeChar = vote.nomineeCharacterId
+      ? await db.collection<Character>("characters").findOne({ _id: vote.nomineeCharacterId })
+      : null;
 
     // S#17: confidence motion failure semantics. If a failed confidence
     // motion has no alternative candidate whose appointment vote has
@@ -1065,13 +1079,11 @@ export async function resolveParliamentaryAppointmentVote(
           color: DISCORD_COLORS.govCollapsed,
           footer: { text: "A House Divided" },
           timestamp: now.toISOString(),
+          ...(nomineeChar?.avatarUrl ? { thumbnail: { url: nomineeChar.avatarUrl } } : {}),
         }).catch(() => {});
       }
     }
 
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne({ _id: vote.nomineeCharacterId });
     if (nomineeChar?.userId) {
       const config = getCountryConfig(countryId);
       const title = vote.isConfidenceMotion
@@ -1218,6 +1230,7 @@ export async function resolveParliamentaryNoConfidenceVote(
       color: DISCORD_COLORS.govCollapsed,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
+      ...(pmChar?.avatarUrl ? { thumbnail: { url: pmChar.avatarUrl } } : {}),
     }).catch(() => {});
   } else {
     await govColl.updateOne({ _id: countryId }, { $set: { activeVoteId: null, updatedAt: now } });
@@ -1245,9 +1258,10 @@ export async function resolveParliamentaryNoConfidenceVote(
         { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
       );
       for (const appt of activeAppointments) {
-        const nominee = await db
-          .collection<Character>("characters")
-          .findOne({ _id: appt.nomineeCharacterId });
+        // PM appointment votes are character-only; the null arm is defensive.
+        const nominee = appt.nomineeCharacterId
+          ? await db.collection<Character>("characters").findOne({ _id: appt.nomineeCharacterId })
+          : null;
         if (nominee?.userId) {
           notificationInputs.push({
             userId: nominee.userId,

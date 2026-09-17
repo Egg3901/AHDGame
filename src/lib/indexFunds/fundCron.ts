@@ -66,7 +66,10 @@ import {
 } from "@/lib/indexFunds/fundRedemptionLiquidity";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { deployBondReserveFromCash } from "@/lib/indexFunds/fundBondReserve";
-import { sumFundBondHoldingsValueAnchor } from "@/lib/bonds/fundBondHoldings";
+import {
+  sumFundBondHoldingsByFundId,
+  sumFundBondHoldingsValueAnchor,
+} from "@/lib/bonds/fundBondHoldings";
 import { sellFundBondHoldingsForCash } from "@/lib/bonds/sellFundBondUnits";
 import { getAllFundDefinitions } from "@/lib/indexFunds/fundDefinitions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -219,12 +222,6 @@ async function loadIndexFundCandidateCorporations(db: Db): Promise<EligibleCorpR
   return corps.filter(
     (c) => Number.isFinite(c.sharePrice) && c.sharePrice > 0
   ) as EligibleCorpRow[];
-}
-
-/** Corporations with issuer-side float available for passive absorption buys. */
-async function loadPublicFloatCorporations(db: Db): Promise<EligibleCorpRow[]> {
-  const corps = await loadIndexFundCandidateCorporations(db);
-  return corps.filter((c) => (c.publicFloat ?? 0) > 0);
 }
 
 async function applyMarkToMarketIfNeeded(
@@ -1161,7 +1158,7 @@ export async function runIndexFundCron(
   const forexEnabled = await isForexEnabled();
   const exchangeRates = await loadExchangeRates(db);
   const candidateCorps = await loadIndexFundCandidateCorporations(db);
-  const floatCorps = await loadPublicFloatCorporations(db);
+  const floatCorps = candidateCorps.filter((corp) => (corp.publicFloat ?? 0) > 0);
   const absorptionRemainingByCorpId = new Map(
     floatCorps.map((corp) => [
       corp._id.toString(),
@@ -1178,6 +1175,7 @@ export async function runIndexFundCron(
   const fundIds = funds.map((fund) => fund._id);
   const openOrdersEscrowByFundId = await loadOpenOrdersEscrowByFundId(db, fundIds);
   const queuedUnitsByFundId = await loadQueuedRedemptionUnitsByFundId(db, fundIds);
+  const initialBondPrincipalByFundId = await sumFundBondHoldingsByFundId(db, funds, exchangeRates);
 
   // Pass 1: mark holdings, recompute NAV, deploy bond reserve.
   const navReadyFundIds: IndexFund["_id"][] = [];
@@ -1185,11 +1183,7 @@ export async function runIndexFundCron(
     try {
       const workingFund = await applyMarkToMarketIfNeeded(db, fund, candidateCorps, exchangeRates);
 
-      const bondPrincipalAnchor = await sumFundBondHoldingsValueAnchor(
-        db,
-        workingFund,
-        exchangeRates
-      );
+      const bondPrincipalAnchor = initialBondPrincipalByFundId.get(workingFund._id.toString()) ?? 0;
       const openOrdersEscrowAnchor = openOrdersEscrowByFundId.get(workingFund._id.toString()) ?? 0;
       const queuedRedemptionUnits = queuedUnitsByFundId.get(workingFund._id.toString()) ?? 0;
 
@@ -1380,11 +1374,11 @@ export async function runIndexFundCron(
           navReadyFundIds.some((id) => id.toString() === fund._id.toString()) &&
           !queuedUnitsByFundId.has(fund._id.toString())
       );
-      const bondPrincipalByFundId = new Map<string, number>();
-      for (const fund of rebalFunds) {
-        const bondPrincipal = await sumFundBondHoldingsValueAnchor(db, fund, exchangeRates);
-        bondPrincipalByFundId.set(fund._id.toString(), bondPrincipal);
-      }
+      const bondPrincipalByFundId = await sumFundBondHoldingsByFundId(
+        db,
+        rebalFunds,
+        exchangeRates
+      );
 
       const crossPlans = planFundCrossRebalancing({
         funds: rebalFunds,

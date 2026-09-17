@@ -832,6 +832,43 @@ describe("distributeVotesBySwingFlow — presidential coattail (presidentialModi
   });
 });
 
+describe("distributeVotesBySwingFlow: democratic health pressure", () => {
+  it("reduces the ruling party's share when institutions begin to falter", () => {
+    const base = distributeVotesBySwingFlow(
+      fixtureCandidates(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      { isGeneralElection: true, countryId: "US", votingSystem: "fptp" }
+    );
+    const pressured = distributeVotesBySwingFlow(
+      fixtureCandidates(),
+      1_000_000,
+      1_000_000,
+      1_000_000,
+      fixtureDemographics(),
+      fixtureCategories(),
+      new Map(),
+      {
+        isGeneralElection: true,
+        countryId: "US",
+        votingSystem: "fptp",
+        democraticHealth: {
+          rulingPartyId: "dem",
+          partyPenalty: 0.1,
+          currentRulerPenalty: 0.15,
+        },
+      }
+    );
+
+    expect(pressured.sharesPct.c1).toBeLessThan(base.sharesPct.c1);
+    expect(pressured.sharesPct.c2).toBeGreaterThan(base.sharesPct.c2);
+  });
+});
+
 describe("distributeVotesBySwingFlow — midterm opposition modifier", () => {
   it("raises an opposition party's nominal share by the configured counterweight", () => {
     const base = distributeVotesBySwingFlow(

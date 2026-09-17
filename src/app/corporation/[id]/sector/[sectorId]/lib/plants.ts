@@ -55,6 +55,11 @@ export function idleCauseMeta(
       tone: "warning",
       help: `Your ${sites} could not buy enough of what they consume, so part of ${run} stopped. Check the Inputs list below for the item in short supply.`,
     },
+    demand: {
+      label: "Demand limited",
+      tone: "warning",
+      help: "Recent sales did not support a full run, so your plants are producing less to avoid making more unsold goods. Output rises as buyers take more.",
+    },
     strike: {
       label: "Strike",
       tone: "error",
@@ -83,7 +88,7 @@ export function idleCauseMeta(
     other: {
       label: "Other limits",
       tone: "muted",
-      help: "Capacity that did not run for reasons the engine did not name this turn, for example a spare run rate or a rounding gap.",
+      help: "Capacity that did not run for a reason the engine did not name this turn, for example a rounding gap.",
     },
   };
 }

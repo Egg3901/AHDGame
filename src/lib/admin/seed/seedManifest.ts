@@ -675,6 +675,11 @@ const RUNTIME: CollectionEntry[] = [
   { name: "actionLogs", category: "runtime" },
   { name: "activityLog", category: "runtime" },
   { name: "turnLogs", category: "runtime" },
+  {
+    name: "singleplayerRuntime",
+    category: "runtime",
+    notes: "Local pause state resets with the world.",
+  },
 
   // ── 2026-06 manifest-completeness backfill ─────────────────────────────────
   // Collections that existed in code but were never classified, so they
@@ -987,6 +992,18 @@ const RUNTIME: CollectionEntry[] = [
 // reset" mode that nukes them; that path is documented in resetGameWorld.
 
 const PRESERVED: CollectionEntry[] = [
+  {
+    name: "unifiedSessions",
+    category: "preserved",
+    notes:
+      "Durable unified identity sessions and revocation state. Account security data must survive game-world resets.",
+  },
+  {
+    name: "unifiedOidcFlows",
+    category: "preserved",
+    notes:
+      "Short-lived PKCE login transactions expire through a TTL index and remain independent of game-world resets.",
+  },
   {
     name: "nativePushDevices",
     category: "preserved",

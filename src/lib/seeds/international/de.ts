@@ -35,6 +35,7 @@ import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
 import { deRegionCensusData1999 } from "@/lib/seeds/de/deRegionCensusData1999";
 import { deRegionCensusData2007 } from "@/lib/seeds/de/deRegionCensusData2007";
 import { deRegionCensusData2023 } from "@/lib/seeds/de/deRegionCensusData2023";
+import { deRegionCensusData2027 } from "@/lib/seeds/de/deRegionCensusData2027";
 import type { DERegionLayer1 } from "@/lib/seeds/de/deRegionCensusData";
 import type { EraId } from "@/lib/seeds/presetSelector";
 
@@ -568,6 +569,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2007,
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2023,
+  "2027": POSITIONS_2023,
 };
 
 // ── Census conversion ─────────────────────────────────────────────────────────
@@ -598,6 +600,7 @@ const ERA_CENSUS: Record<EraId, Record<string, DERegionLayer1>> = {
   "2007": deRegionCensusData2007,
   "2019": deRegionCensusData, // Zensus 2022 base, used for 2019 era
   "2023": deRegionCensusData2023,
+  "2027": deRegionCensusData2027,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

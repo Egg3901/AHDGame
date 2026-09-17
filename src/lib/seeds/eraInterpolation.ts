@@ -39,6 +39,7 @@ export const ERA_ANCHOR_YEARS: Record<EraId, number> = {
   "2007": 2007,
   "2019": 2019,
   "2023": 2023,
+  "2027": 2027,
 };
 
 /** All era ids in ascending anchor-year order. */
@@ -50,6 +51,7 @@ export const ERA_IDS_ASC: readonly EraId[] = [
   "2007",
   "2019",
   "2023",
+  "2027",
 ];
 
 /**

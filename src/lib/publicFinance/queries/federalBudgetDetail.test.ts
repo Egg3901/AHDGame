@@ -7,6 +7,7 @@ import { buildFyHistory, projectSovereign } from "./federalBudgetDetail";
 // Revenue recompute is independent of the fiscal-year derivation under test.
 vi.mock("@/lib/budget/revenue", () => ({
   calculateFederalRevenue: vi.fn().mockResolvedValue({ total: 1_000_000 }),
+  computeTaxBaseGdpShareBaseline: vi.fn().mockReturnValue({}),
 }));
 
 describe("buildFyHistory", () => {
@@ -111,6 +112,33 @@ describe("projectSovereign", () => {
 
   it("treats an elapsed lock turn as open", () => {
     expect(projectSovereign({ marketAccessLockedUntilTurn: 50 }, 100).marketAccess).toBe("Open");
+  });
+
+  it("surfaces ceiling proximity from current headroom and deficit", () => {
+    expect(
+      projectSovereign(
+        {
+          debt: { principal: 892, ceiling: 1_000 },
+          revenue: { total: 1_000 },
+          spending: { total: 1_070 },
+        },
+        100
+      )
+    ).toMatchObject({
+      ceilingUseRatio: 0.892,
+      ceilingHeadroom: 108,
+      ceilingHeadroomYears: 108 / 70,
+      ceilingStatus: "warning",
+    });
+  });
+
+  it("marks a sovereign at or beyond the limit as critical or exceeded", () => {
+    expect(projectSovereign({ debt: { principal: 960, ceiling: 1_000 } }, 100).ceilingStatus).toBe(
+      "critical"
+    );
+    expect(
+      projectSovereign({ debt: { principal: 1_001, ceiling: 1_000 } }, 100).ceilingStatus
+    ).toBe("exceeded");
   });
 });
 

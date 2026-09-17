@@ -597,6 +597,33 @@ describe("resolveOneGeneralElection", () => {
     );
   });
 
+  it("does not seat an NPP retired after filing", async () => {
+    const election = makeElection({ electionType: "senate", state: "CA" });
+    const nppId = new ObjectId();
+    const candidate = makeCandidate(election._id, {
+      isNPP: true,
+      nppId,
+      characterName: "Retired Senator",
+    });
+    const tally = makeTally(election._id, { [candidate._id.toString()]: 1_000 });
+
+    db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([candidate]));
+    db.collectionMocks["npps"]!.find.mockReturnValue(makeCursor([]));
+
+    const { resolveOneGeneralElection } = await import("./generalResolution");
+    const result = await resolveOneGeneralElection(
+      db as unknown as Db,
+      election,
+      tally,
+      CURRENT_TURN,
+      NOW
+    );
+
+    expect(result.resolved).toBe(true);
+    expect(db.collectionMocks["npps"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["electedOfficials"]!.insertOne).not.toHaveBeenCalled();
+  });
+
   it("winner notification is sent to the winning character's user", async () => {
     const election = makeElection({ electionType: "senate", state: "FL" });
     const winnerId = new ObjectId();

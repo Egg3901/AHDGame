@@ -38,9 +38,28 @@ export const SEED_PRESET_IDS = [
   "2007-default",
   "2019-default",
   "2023-default",
+  "2027-default",
 ] as const;
 
 export type SeedPresetId = (typeof SEED_PRESET_IDS)[number];
+
+/**
+ * Presets currently being authored. Draft presets have a calendar identity but
+ * MUST NOT be offered to reset or singleplayer callers until their seed lanes,
+ * historical rosters, and election anchors are complete.
+ *
+ * Keeping drafts out of {@link SEED_PRESET_IDS} is deliberate. Several seed
+ * lanes search that production list for a nearest-era fallback, so adding an
+ * incomplete future preset there would make it look production-ready and could
+ * quietly seed older data into a new world.
+ */
+export const DRAFT_SEED_PRESET_IDS = [] as const;
+
+export type DraftSeedPresetId = (typeof DRAFT_SEED_PRESET_IDS)[number];
+
+export function isDraftSeedPreset(presetId: string): presetId is DraftSeedPresetId {
+  return DRAFT_SEED_PRESET_IDS.includes(presetId as DraftSeedPresetId);
+}
 
 /**
  * Map a reset-preset id to its calendar starting year. Used by
@@ -64,6 +83,7 @@ export function getStartingYearForPreset(presetId: string): number {
   if (presetId === "1999-default") return 1999;
   if (presetId === "2007-default") return 2007;
   if (presetId === "2023-default") return 2023;
+  if (presetId === "2027-default") return 2027;
   // 2019-default and any unknown / empty / "no-parties" variants default to 2019.
   return STARTING_YEAR;
 }

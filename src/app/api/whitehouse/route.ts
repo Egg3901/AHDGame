@@ -203,7 +203,7 @@ export async function GET(request: Request) {
           : null;
       vpNomination = {
         id: activeVpNomination._id.toString(),
-        nomineeCharacterId: activeVpNomination.nomineeCharacterId.toString(),
+        nomineeCharacterId: activeVpNomination.nomineeCharacterId?.toString() ?? null,
         nomineeCharacterName: activeVpNomination.nomineeCharacterName,
         nomineeParty: activeVpNomination.nomineeParty,
         status: activeVpNomination.status,

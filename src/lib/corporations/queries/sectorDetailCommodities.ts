@@ -152,6 +152,7 @@ export async function buildSectorCommoditySections(args: {
       nationalPrice,
       regionalPrice,
       marketPrice: regionalPrice,
+      priceAttribution: cpData?.priceAttribution,
     };
   };
 

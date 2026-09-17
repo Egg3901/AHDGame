@@ -305,7 +305,7 @@ export function UsersTab({ context = "admin" }: UsersTabProps) {
     const discordInfo = discordUsername ? ` (${discordUsername})` : "";
     if (
       !confirm(
-        `Reset Discord link for ${username}${discordInfo}?\n\nThis will unlink Discord from ALL accounts using this Discord ID, allowing the user to re-link.`
+        `Reset Discord link for ${username}${discordInfo}?\n\nThis will unlink Discord from this account and sign it out. Another login method must remain available.`
       )
     )
       return;

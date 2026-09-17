@@ -15,6 +15,7 @@ import { resolvePartyTier } from "@/lib/parties/partyTier";
 import type { NPP } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
+import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   recruitmentCooldownRemainingTurns,
@@ -91,11 +92,21 @@ export async function GET(
       isAdmin: auth.isAdmin,
       now,
     });
+    const partyNppCapacity = await getPartyNppCapacity(
+      db,
+      countryId,
+      String(party.sequentialId),
+      now
+    );
+    const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
 
     return NextResponse.json({
       cooldownUntil,
       cooldownRemaining,
       partyNPPCount,
+      partyNPPMax: partyNppCapacity.maxNpps,
+      activeMemberCount: partyNppCapacity.activeMemberCount,
+      availablePartyNppSlots: Math.max(0, partyNppCapacity.maxNpps - partyNPPCount),
       actionCost: NPP_RECRUITMENT_AP_COST,
       fundCost: recruitFund,
       treasury,
@@ -106,9 +117,10 @@ export async function GET(
         !cooldownRemaining &&
         isNationalLeadership &&
         nppControl.ok &&
+        !capacityError &&
         availableAp >= NPP_RECRUITMENT_AP_COST &&
         treasury >= recruitFund,
-      blockedReason: nppControl.ok ? null : nppControl.error,
+      blockedReason: nppControl.ok ? capacityError : nppControl.error,
       isNationalScope: isNationalLeadership,
       isLeadership: isNationalLeadership,
     });

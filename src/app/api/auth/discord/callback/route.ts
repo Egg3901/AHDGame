@@ -9,7 +9,18 @@ import {
   getJwtSecret,
   getAuthCookieOptions,
   getTrackingCookieOptions,
+  verifyAuth,
 } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser() for conditional link/login logic
+import { credentialSessionIsCurrent } from "@/lib/auth/credentialSession";
+import { invalidateCachedUser } from "@/lib/auth/userDocCache";
+import {
+  decideProviderLink,
+  providerWriteSnapshotFilter,
+} from "@/lib/auth/providerCredentialWrite";
+import {
+  providerLinkContextCookieName,
+  verifyProviderLinkContext,
+} from "@/lib/auth/providerLinkContext";
 import { needsCharacterHint } from "@/lib/auth/characterGate";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
@@ -37,6 +48,8 @@ import {
   loginDestination,
   takeOAuthReturnUrlCookie,
 } from "@/lib/auth/lakesideLoginReturn";
+import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 
 // GET /api/auth/discord/callback — Handles the Discord OAuth callback to log in or register a user via Discord.
 // Auth: public
@@ -67,12 +80,21 @@ export async function GET(request: Request) {
     return new URL(`/auth/discord/result?${params.toString()}`, baseUrl);
   }
 
+  // Link-mode outcomes are per-account: keep them out of caches. Login-mode
+  // outcomes stay untouched (no login refactor). An unknown mode defaults to
+  // the link target, so only an explicit login mode skips the stamp.
+  const linkRedirect = (url: URL) => {
+    const response = NextResponse.redirect(url);
+    if (mode !== "login") response.headers.set("Cache-Control", "no-store");
+    return response;
+  };
+
   if (isRateLimited) {
-    return NextResponse.redirect(resultUrl("error", "rate_limited"));
+    return linkRedirect(resultUrl("error", "rate_limited"));
   }
 
   if (!mode) {
-    return NextResponse.redirect(resultUrl("error", "session_expired"));
+    return linkRedirect(resultUrl("error", "session_expired"));
   }
 
   const isLoginMode = mode === "login";
@@ -86,20 +108,18 @@ export async function GET(request: Request) {
   ];
   if (error) {
     const safeReason = KNOWN_DISCORD_ERRORS.includes(error) ? error : "exchange_failed";
-    return NextResponse.redirect(resultUrl("error", safeReason));
+    return linkRedirect(resultUrl("error", safeReason));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(
-      resultUrl("error", "missing_params", isLoginMode ? "/login" : "/settings")
-    );
+    return linkRedirect(resultUrl("error", "missing_params", isLoginMode ? "/login" : "/settings"));
   }
 
   // Verify state token
   const storedState = cookieStore.get("discord_oauth_state")?.value;
 
   if (!storedState || storedState !== state) {
-    return NextResponse.redirect(resultUrl("error", "invalid_state"));
+    return linkRedirect(resultUrl("error", "invalid_state"));
   }
 
   cookieStore.delete("discord_oauth_state");
@@ -109,7 +129,7 @@ export async function GET(request: Request) {
   const redirectUri = process.env.DISCORD_REDIRECT_URI;
 
   if (!clientId || !clientSecret || !redirectUri) {
-    return NextResponse.redirect(resultUrl("error", "not_configured"));
+    return linkRedirect(resultUrl("error", "not_configured"));
   }
 
   try {
@@ -129,11 +149,14 @@ export async function GET(request: Request) {
     if (isLoginMode) {
       return handleDiscordLogin(db, discordUser, cookieStore, baseUrl, userAgent, cf);
     } else {
-      return handleDiscordLink(db, discordUser, cookieStore, baseUrl);
+      return await handleDiscordLink(db, discordUser, cookieStore, baseUrl, state);
     }
   } catch (err) {
-    console.error("Discord OAuth error:", err);
-    return NextResponse.redirect(resultUrl("error", "exchange_failed"));
+    if (isLoginMode) console.error("Discord OAuth error:", err);
+    else console.error("Discord account link is temporarily unavailable");
+    const failed = NextResponse.redirect(resultUrl("error", "exchange_failed"));
+    if (!isLoginMode) failed.headers.set("Cache-Control", "no-store");
+    return failed;
   }
 }
 
@@ -161,8 +184,36 @@ async function handleDiscordLogin(
       const reason = encodeURIComponent(existingUser.banReason || "Violation of rules");
       return NextResponse.redirect(new URL(`/banned?reason=${reason}`, baseUrl));
     }
+    // Fenced provider accounts never log in via legacy OAuth. Same
+    // session_expired redirect as a revocation race so fenced is not an oracle.
+    // This return sits before registration so a fenced alias never falls
+    // through to duplicate creation.
+    if (isAuthMigrationFenced(existingUser)) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/discord/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
 
-    // Issue JWT and log them in
+    const existingTrack = cookieStore.get("__ahd_track")?.value;
+    const trackingId = existingTrack || randomUUID();
+    const oauthDeviceKey = cookieStore.get(OAUTH_DEVICE_KEY_COOKIE)?.value;
+    cookieStore.delete(OAUTH_DEVICE_KEY_COOKIE);
+
+    const clientIp = await getClientIp();
+    const device = classifyDevice(userAgent);
+    const observedAt = new Date();
+    const issued = await resolveReauthIssuedAt(existingUser.authRevokedAt);
+    if (!issued.ok) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/discord/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
     const token = await new SignJWT({
       userId: existingUser._id.toString(),
       email: existingUser.email,
@@ -171,33 +222,18 @@ async function handleDiscordLogin(
       isAdmin: existingUser.isAdmin || false,
     })
       .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
+      .setIssuedAt(issued.iat)
       .setExpirationTime("7d")
       .sign(getJwtSecret());
 
-    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
-    await setCharacterGateCookie(
-      cookieStore,
-      needsCharacterHint({
-        role: existingUser.role,
-        isAdmin: existingUser.isAdmin === true,
-        hasCharacter: existingUser.hasCompletedSetup ?? true,
-      })
-    );
-    const existingTrack = cookieStore.get("__ahd_track")?.value;
-    const trackingId = existingTrack || randomUUID();
-    if (!existingTrack) {
-      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
-    }
-    const oauthDeviceKey = cookieStore.get(OAUTH_DEVICE_KEY_COOKIE)?.value;
-    cookieStore.delete(OAUTH_DEVICE_KEY_COOKIE);
-
-    // Update last login and Discord info
-    const clientIp = await getClientIp();
-    const device = classifyDevice(userAgent);
-    const observedAt = new Date();
-    await usersCollection.updateOne(
-      { _id: existingUser._id },
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: existingUser._id,
+        isBanned: { $ne: true },
+        discordId: discordUser.id,
+        ...issued.snapshotFilter,
+        ...authMigrationFenceAbsentFilter(),
+      },
       {
         $set: {
           lastLogin: observedAt,
@@ -219,9 +255,30 @@ async function handleDiscordLogin(
                 ...(existingUser.registrationCf == null ? { registrationCf: cf } : {}),
               }),
         },
-        $unset: { authRevokedAt: "" },
       }
     );
+
+    if (updateResult.matchedCount !== 1) {
+      return NextResponse.redirect(
+        new URL(
+          `/auth/discord/result?status=error&reason=session_expired&next=${encodeURIComponent("/login")}`,
+          baseUrl
+        )
+      );
+    }
+
+    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
+    await setCharacterGateCookie(
+      cookieStore,
+      needsCharacterHint({
+        role: existingUser.role,
+        isAdmin: existingUser.isAdmin === true,
+        hasCharacter: existingUser.hasCompletedSetup ?? true,
+      })
+    );
+    if (!existingTrack) {
+      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
+    }
 
     db.collection("activityLog")
       .insertOne({
@@ -481,7 +538,8 @@ async function handleDiscordLink(
   db: Awaited<ReturnType<typeof getDb>>,
   discordUser: { id: string; username: string; avatar: string | null },
   cookieStore: Awaited<ReturnType<typeof cookies>>,
-  baseUrl: string
+  baseUrl: string,
+  state: string
 ) {
   // Read the return URL stored by /api/auth/discord so callers outside
   // /settings (e.g. create-character) get redirected back to the right page.
@@ -489,41 +547,129 @@ async function handleDiscordLink(
   cookieStore.delete("discord_oauth_return_url");
   const returnUrl = returnUrlCookie ?? "/settings";
 
+  /** Link-flow redirects default to no-store: they carry per-account outcomes. */
+  const linkRedirect = (url: URL) => {
+    const response = NextResponse.redirect(url);
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  };
+  const errorUrl = (reason: string) =>
+    new URL(
+      `/auth/discord/result?status=error&reason=${reason}&next=${encodeURIComponent(returnUrl)}`,
+      baseUrl
+    );
+
   // Verify user is logged in
-  const user = await getAuthUser();
-  if (!user) {
-    return NextResponse.redirect(new URL("/login", baseUrl));
+  const grant = await getAuthUser();
+  if (!grant) {
+    return linkRedirect(new URL("/login", baseUrl));
+  }
+
+  const usersCollection = db.collection<User>("users");
+  // Credential writes require the uncached account state, never the cached grant.
+  const account = await usersCollection.findOne({ _id: new ObjectId(grant.userId) });
+  if (!account) {
+    return linkRedirect(new URL("/login", baseUrl));
+  }
+
+  // Verify the cryptographic cookie payload against the same fresh account so
+  // a signed-out, revoked, or banned session cannot link a provider.
+  const auth = await verifyAuth();
+  if (!credentialSessionIsCurrent(grant.userId, account, auth)) {
+    return linkRedirect(new URL("/login", baseUrl));
+  }
+  // Fenced accounts never mutate provider bindings via legacy link.
+  if (isAuthMigrationFenced(account)) {
+    return linkRedirect(errorUrl("session_expired"));
+  }
+
+  // The link flow started by one account/session must not complete for another:
+  // the sealed link context binds canonical userId plus the original session
+  // iat, provider, and CSRF state. Delete it from this browser jar so the
+  // callback cannot replay here, then verify the current session still matches
+  // the initiating binding before any link write. The delete is jar-local, not
+  // a durable server-side single-use marker; replay beyond this jar is stopped
+  // by the binding check itself, and provider OAuth code replay is prevented
+  // separately by the single-use code exchange with the provider.
+  const linkCtxCookie = providerLinkContextCookieName("discord");
+  const linkCtx = cookieStore.get(linkCtxCookie)?.value;
+  cookieStore.delete(linkCtxCookie);
+  if (
+    !verifyProviderLinkContext(linkCtx, {
+      provider: "discord",
+      userId: grant.userId,
+      iat: auth?.iat ?? -1,
+      state,
+    }).ok
+  ) {
+    return linkRedirect(errorUrl("session_expired"));
   }
 
   // Check if this Discord account is already linked to another user
-  const existingUser = await db.collection<User>("users").findOne({
+  const existingUser = await usersCollection.findOne({
     discordId: discordUser.id,
-    _id: { $ne: new ObjectId(user.userId) },
+    _id: { $ne: new ObjectId(grant.userId) },
   });
 
   if (existingUser) {
-    return NextResponse.redirect(
-      new URL(
-        `/auth/discord/result?status=error&reason=already_linked&next=${encodeURIComponent(returnUrl)}`,
-        baseUrl
-      )
+    return linkRedirect(errorUrl("already_linked"));
+  }
+
+  // Never silently replace a different existing provider link; the old link
+  // must be explicitly unlinked first.
+  const link = decideProviderLink(account, "discord", discordUser.id);
+  if (!link.ok) {
+    return linkRedirect(errorUrl("already_linked"));
+  }
+  if (link.mode === "idempotent") {
+    return linkRedirect(
+      new URL(`/auth/discord/result?status=success&next=${encodeURIComponent(returnUrl)}`, baseUrl)
     );
   }
 
-  // Update user with Discord info
-  await db.collection<User>("users").updateOne(
-    { _id: new ObjectId(user.userId) },
-    {
-      $set: {
-        discordId: discordUser.id,
-        discordUsername: discordUser.username,
-        discordAvatar: discordUser.avatar ?? undefined,
-        discordLinkedAt: new Date(),
+  // Evict before the write so parallel requests re-read the pre-link record.
+  // The key is canonical: the fresh account id, not the cached grant.
+  const cacheKey = account._id.toHexString();
+  invalidateCachedUser(cacheKey);
+  const linkedAt = new Date();
+  let write;
+  try {
+    write = await usersCollection.updateOne(
+      {
+        _id: new ObjectId(grant.userId),
+        ...providerWriteSnapshotFilter(account),
       },
-    }
-  );
+      {
+        $set: {
+          discordId: discordUser.id,
+          discordUsername: discordUser.username,
+          discordAvatar: discordUser.avatar ?? undefined,
+          discordLinkedAt: linkedAt,
+        },
+        // The credential relationship changed: revoke existing sessions so
+        // the caller reauthenticates before further credential writes.
+        $max: { authRevokedAt: linkedAt },
+      }
+    );
+  } catch {
+    return linkRedirect(errorUrl("exchange_failed"));
+  } finally {
+    // A concurrent read may have repopulated the cache while the write was
+    // pending; evict again after the settled write. A write can commit
+    // despite a network error, so this also runs when the write throws or
+    // goes unacknowledged.
+    invalidateCachedUser(cacheKey);
+  }
+  if (write.acknowledged !== true) {
+    return linkRedirect(errorUrl("exchange_failed"));
+  }
+  if (write.matchedCount !== 1) {
+    // A concurrent provider, password, ban, or revocation write won the
+    // snapshot race. Never report success without a confirmed write.
+    return linkRedirect(errorUrl("session_expired"));
+  }
 
-  return NextResponse.redirect(
+  return linkRedirect(
     new URL(`/auth/discord/result?status=success&next=${encodeURIComponent(returnUrl)}`, baseUrl)
   );
 }

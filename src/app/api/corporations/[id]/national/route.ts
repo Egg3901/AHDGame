@@ -3,8 +3,9 @@
 // `viewerIsOfficial` is true only when the logged-in viewer passes treasury authority.
 // Errors: 404 (not found / not state-owned).
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { handleRouteError } from "@/lib/api/errors";
@@ -15,7 +16,7 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: Request, { params }: RouteParams) {
+export const GET = withNoStore(async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const db = await getDb();
@@ -28,10 +29,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not a National Corporation." }, { status: 404 });
     }
 
-    const authUser = await verifyAuth().catch(() => null);
-    const viewerCharacter = authUser
-      ? await getCharacterByUserId(db, authUser.userId).catch(() => null)
-      : null;
+    const authUser = await getAuthUser();
+    const viewerCharacter = authUser ? await getCharacterByUserId(db, authUser.userId) : null;
 
     const viewModel = await buildNationalCorporationView(
       db,
@@ -42,4 +41,4 @@ export async function GET(_request: Request, { params }: RouteParams) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

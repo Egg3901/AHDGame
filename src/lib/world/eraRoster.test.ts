@@ -13,7 +13,11 @@ const ALL = Object.keys(COUNTRY_CONFIGS) as CountryId[];
 describe("S1 — era roster totality", () => {
   it("covers every CountryId across every shipping preset", () => {
     expect(ALL).toHaveLength(29);
-    expect(SHIPPING_PRESETS).toHaveLength(7);
+    // Deliberate tripwires, not incidental. Adding a preset or a country should
+    // fail here first, so whoever adds one is made to check that the roster
+    // covers it rather than letting `tierFor` quietly answer "absent" forever.
+    // 2027 took this from seven to eight.
+    expect(SHIPPING_PRESETS).toHaveLength(8);
     for (const preset of SHIPPING_PRESETS) {
       for (const country of ALL) {
         expect(["player", "econ", "npp", "latent", "absent"]).toContain(tierFor(preset, country));
@@ -165,6 +169,10 @@ describe("roster is a faithful replacement for the manifest", () => {
         // A country the manifest omits entirely is one of the gaps being
         // closed; the roster classifying it is the point.
         if (!entry) continue;
+        // A dissolved state is recorded by the manifest and absent from the
+        // roster on purpose: the row is history, the tier is playability. They
+        // are answering different questions, so this is not a divergence.
+        if (entry.status === "dissolved") continue;
 
         const tier = tierFor(preset, country);
         const expected =

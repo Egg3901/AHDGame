@@ -205,7 +205,11 @@ export async function POST(request: Request) {
     // create a character while the site was sealed. Mirrors the same guard on
     // `POST /api/auth/register`, and reads `gameConfig` directly so it agrees
     // with the admin panel and `/api/maintenance`.
-    if (!isAdmin && normalizeMaintenanceMode(gameConfig.maintenanceMode) !== "off") {
+    if (
+      !isSingleplayer() &&
+      !isAdmin &&
+      normalizeMaintenanceMode(gameConfig.maintenanceMode) !== "off"
+    ) {
       return NextResponse.json(
         { error: "Character creation is disabled during maintenance. Please try again later." },
         { status: 503 }

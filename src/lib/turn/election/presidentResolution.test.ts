@@ -243,6 +243,59 @@ describe("resolvePresidentElection", () => {
     expect(allocateArg.CA[withdrawnId.toString()]).toBeUndefined();
   });
 
+  it("filters withdrawn candidates from stored unit totals before allocating EVs", async () => {
+    const withdrawnId = new ObjectId();
+    const election = { _id: electionId, electionType: "president", countryId: "US" };
+    const tally = {
+      electionId,
+      candidateNames: {
+        [winnerId.toString()]: "Winner",
+        [loserId.toString()]: "Loser",
+      },
+      totalVotesByUnit: {
+        CA: {
+          [winnerId.toString()]: 800,
+          [loserId.toString()]: 600,
+          [withdrawnId.toString()]: 1_500,
+        },
+      },
+    };
+
+    const { allocateElectoralVotes, determinePresidentialWinner } =
+      await import("@/lib/turn/electionCalculations");
+    vi.mocked(allocateElectoralVotes).mockReturnValue({ [winnerId.toString()]: 538 });
+    vi.mocked(determinePresidentialWinner).mockReturnValue({
+      winnerId: winnerId.toString(),
+      winnerEV: 538,
+    });
+
+    const winnerCandidate = {
+      _id: winnerId,
+      electionId,
+      characterId: new ObjectId(),
+      characterName: "Winner",
+      party: "DEM",
+      isNPP: false,
+      runningMateId: null,
+    };
+    db.collectionMocks["electionCandidates"]!.find.mockReturnValue(makeCursor([winnerCandidate]));
+    db.collectionMocks["characters"]!.findOne.mockResolvedValue({
+      _id: winnerCandidate.characterId,
+      userId: new ObjectId(),
+      name: "Winner",
+    });
+    db.collectionMocks["politicalParties"]!.find.mockReturnValue(makeCursor([]));
+
+    const { resolvePresidentElection } = await import("./presidentResolution");
+    await resolvePresidentElection(db as unknown as Db, election as never, tally as never, NOW);
+
+    const allocateArg = vi.mocked(allocateElectoralVotes).mock.calls[0][0];
+    expect(allocateArg.CA).toEqual({
+      [winnerId.toString()]: 800,
+      [loserId.toString()]: 600,
+    });
+  });
+
   it("handles zero total electoral votes by finalizing", async () => {
     const election = { _id: electionId, electionType: "president" };
     const tally = { electionId, totalVotesByUnit: { CA: {} } };
@@ -693,6 +746,15 @@ describe("resolvePresidentElection", () => {
       eligibleVicePresidentCandidateIds: [],
       houseDelegationVotes: { TX: winnerId.toString() },
       houseVoteTotals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
+      houseBallots: [
+        {
+          ballot: 1,
+          activeCandidateIds: [winnerId.toString(), loserId.toString()],
+          delegationVotes: { TX: winnerId.toString() },
+          totals: { [winnerId.toString()]: 26, [loserId.toString()]: 24 },
+          reason: "Initial state-delegation ballot",
+        },
+      ],
       senateVotes: {},
       senateVoteTotals: {},
       presidentWinnerId: winnerId.toString(),
@@ -750,6 +812,12 @@ describe("resolvePresidentElection", () => {
           resolutionMode: "contingent",
           contingentResult: expect.objectContaining({
             presidentWinnerId: winnerId.toString(),
+            houseBallots: [
+              expect.objectContaining({
+                ballot: 1,
+                reason: "Initial state-delegation ballot",
+              }),
+            ],
           }),
         }),
       })

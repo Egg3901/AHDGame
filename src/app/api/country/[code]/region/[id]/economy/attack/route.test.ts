@@ -40,7 +40,7 @@ beforeEach(async () => {
     user: { userId: new ObjectId().toString() },
   } as never);
 
-  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current" });
+  db.collectionMocks.gameState.findOne.mockResolvedValue({ _id: "current", currentYear: 1970 });
 });
 
 describe("POST /api/country/[code]/region/[id]/economy/attack — command-economy gate", () => {

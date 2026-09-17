@@ -24,6 +24,7 @@ import type { State, StatePartyOrg, NPP, PoliticalParty } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
+import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   recruitmentCooldownRemainingTurns,
@@ -128,6 +129,14 @@ export async function POST(
     const currentNPPs = await db
       .collection<NPP>("npps")
       .countDocuments({ party: partyIdStr, homeState: stateId, retiredAt: null });
+    const partyNPPCount = await db
+      .collection<NPP>("npps")
+      .countDocuments({ party: partyIdStr, retiredAt: null });
+    const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr, now);
+    const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
+    if (capacityError) {
+      return NextResponse.json({ error: capacityError }, { status: 400 });
+    }
 
     const maxSlots = calculateRecruitmentSlots(stateOrg);
     if (currentNPPs >= maxSlots) {

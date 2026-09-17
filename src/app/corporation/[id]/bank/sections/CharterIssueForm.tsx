@@ -6,6 +6,7 @@ import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import type { ConsolePayload, ShowToast } from "../types";
 import { charterLabel, mergeState } from "../lib/helpers";
+import { Eyebrow } from "../components/BankSection";
 
 export function CharterIssueForm({
   data,
@@ -55,6 +56,7 @@ export function CharterIssueForm({
   return (
     <section className="rounded-xl border border-card-border bg-card p-5 space-y-4 max-w-xl">
       <div>
+        <Eyebrow kind="ceoControl" />
         <h2 className="text-lg font-semibold text-foreground">Issue bank charter</h2>
         <p className="mt-1 text-sm text-muted">
           Posts{" "}

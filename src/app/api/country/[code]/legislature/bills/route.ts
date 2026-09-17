@@ -21,6 +21,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { checkLegislationFreeze } from "@/lib/api/parliamentaryFreeze";
 import { getOfficeTypeForChamber } from "@/lib/legislature/chamberOfficeType";
 import { getGameState } from "@/lib/gameState";
+import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
 
 // GET /api/country/[code]/legislature/bills — List national legislature bills for a country.
 // Auth: public
@@ -95,8 +96,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
             officeType: { $in: allowedOriginOfficeTypes },
             countryId,
           });
+    const usingSovereignOverride = character ? mayRuleByDecree(character, countryId) : false;
 
-    if (!(auth.user.isAdmin === true && !official)) {
+    if (!(auth.user.isAdmin === true && !official) && !usingSovereignOverride) {
       const freezeCheck = await checkLegislationFreeze(countryId);
       if (!freezeCheck.ok) return freezeCheck.response;
     }

@@ -12,6 +12,7 @@ import { getCountrySectorWeights1999 } from "./sectorSeedWeights1999";
 import { getCountrySectorWeights2007 } from "./sectorSeedWeights2007";
 import { getCountrySectorWeights2023 } from "./sectorSeedWeights2023";
 import { JP_ECONOMY } from "@/lib/countries/jp/economy";
+import { getCountrySectorWeights2027 } from "./sectorSeedWeights2027";
 
 type SectorWeightMap = Partial<Record<CorporationType, number>>;
 
@@ -1110,6 +1111,9 @@ export function getStateSectorWeights(
     // 2023-era weights: technology/healthcare up, manufacturing down vs 2019.
     // US only; other countries fall back to even distribution until authored.
     return getCountrySectorWeights2023(countryId);
+  }
+  if (preset === "2027-default") {
+    return getCountrySectorWeights2027(countryId);
   }
   const countryRaw = COUNTRY_SECTOR_WEIGHTS[countryId] ?? COUNTRY_SECTOR_WEIGHTS.US;
   // Try countryId-prefixed key first (used where state IDs collide across

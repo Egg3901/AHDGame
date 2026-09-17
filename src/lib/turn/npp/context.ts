@@ -96,6 +96,8 @@ export interface NPPContext {
 // ─── Context Loader ────────────────────────────────────────────────────────────
 
 export interface NPPContextOptions {
+  /** Reuse a caller-owned database handle when earlier phases already loaded it. */
+  db?: Db;
   /** When true, include active elections even if primary phase has ended (for admin force-entry) */
   includeGeneralPhase?: boolean;
   /**
@@ -224,7 +226,7 @@ async function hydrateDomainPositions(
 }
 
 export async function loadNPPContext(now: Date, options?: NPPContextOptions): Promise<NPPContext> {
-  const db = await getDb();
+  const db = options?.db ?? (await getDb());
   const {
     includeGeneralPhase = false,
     billDeadlineNow = now,

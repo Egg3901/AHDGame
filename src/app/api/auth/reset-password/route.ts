@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
+import { authRevocationSnapshotFilter } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
+import type { User } from "@/lib/db/types";
 import { getDb } from "@/lib/mongodb";
 import { getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -42,20 +45,54 @@ export async function POST(request: Request) {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 12);
-
     const db = await getDb();
+    const user = await db.collection<User>("users").findOne({ _id: reset.userId });
+    // Fenced accounts never consume a reset token via legacy reset. Same
+    // generic 400 body as an expired token so fenced is not an oracle.
+    if (user && isAuthMigrationFenced(user)) {
+      return NextResponse.json(
+        { error: "This reset link is invalid or has expired. Please request a new one." },
+        { status: 400, headers: { "Cache-Control": "private, no-store" } }
+      );
+    }
+    if (
+      !user ||
+      !(reset.createdAt instanceof Date) ||
+      !Number.isFinite(reset.createdAt.getTime()) ||
+      (user.passwordChangedAt != null &&
+        (!(user.passwordChangedAt instanceof Date) ||
+          !Number.isFinite(user.passwordChangedAt.getTime()) ||
+          user.passwordChangedAt >= reset.createdAt))
+    ) {
+      return NextResponse.json(
+        { error: "This reset link is invalid or has expired. Please request a new one." },
+        { status: 400, headers: { "Cache-Control": "private, no-store" } }
+      );
+    }
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const changedAt = new Date();
     // Update password in database and invalidate all existing sessions
-    await db.collection("users").updateOne(
-      { _id: reset.userId },
+    const updated = await db.collection<User>("users").updateOne(
+      {
+        _id: reset.userId,
+        password: user.password ?? null,
+        ...authRevocationSnapshotFilter(user.authRevokedAt),
+        ...authMigrationFenceAbsentFilter(),
+      },
       {
         $set: {
           password: hashedPassword,
-          passwordChangedAt: new Date(),
-          authRevokedAt: new Date(),
         },
+        $max: { passwordChangedAt: changedAt, authRevokedAt: changedAt },
       }
     );
+
+    if (updated.matchedCount !== 1) {
+      return NextResponse.json(
+        { error: "Your account changed during this request. Please sign in and try again." },
+        { status: 409, headers: { "Cache-Control": "private, no-store" } }
+      );
+    }
 
     // Token revocation must bite immediately, not after the userDocCache TTL.
     invalidateCachedUser(reset.userId.toString());

@@ -33,7 +33,11 @@ export type Tier = {
 
 const PLAYER: Tier = { enabledForPlayers: true, economyPreview: false, status: "active" };
 const ECON: Tier = { enabledForPlayers: false, economyPreview: true, status: "beta" };
-const NPP: Tier = { enabledForPlayers: false, economyPreview: false, status: "coming-soon" };
+// NPP-only countries still participate in the turn engine. `coming-soon` is a
+// presentation state that getSimulatedCountryIds deliberately excludes, so it
+// cannot represent an autonomous NPC country. `beta` keeps the country in the
+// simulation while economyPreview=false keeps it out of expanded-economy UI.
+const NPP: Tier = { enabledForPlayers: false, economyPreview: false, status: "beta" };
 const GLOBAL_GAME_STATE_COUNTRY_ID = COUNTRY_CONFIGS.US.id;
 
 /** The row the roster says a country should carry in a given preset. */

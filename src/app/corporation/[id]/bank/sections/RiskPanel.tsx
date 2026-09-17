@@ -1,8 +1,10 @@
 "use client";
 
+import { Tooltip } from "@/components/ui";
 import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ConsolePayload } from "../types";
+import { Eyebrow } from "../components/BankSection";
 
 /**
  * The panel that names the number which kills banks.
@@ -87,7 +89,10 @@ export function RiskPanel({
       }`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-base font-semibold text-foreground">Run risk</h3>
+        <div className="space-y-1">
+          <Eyebrow kind="monitor" />
+          <h3 className="text-base font-semibold text-foreground">Run risk</h3>
+        </div>
         <span className={`text-sm font-semibold ${BAND_TONE[risk.band]}`}>
           {risk.band} · {risk.confidence.toFixed(2)}
         </span>
@@ -112,7 +117,10 @@ export function RiskPanel({
             return (
               <div key={term.key} className="space-y-1">
                 <div className="flex items-baseline justify-between text-xs">
-                  <span className="text-foreground">{term.label}</span>
+                  <span className="text-foreground">
+                    {term.label}
+                    <Tooltip content={term.lever} label={`How to move ${term.label}`} />
+                  </span>
                   <span className="font-mono tabular-nums text-muted">
                     {term.contribution.toFixed(2)} / {term.max.toFixed(2)}
                   </span>
@@ -123,9 +131,6 @@ export function RiskPanel({
                     style={{ width: `${Math.min(100, share * 100)}%` }}
                   />
                 </div>
-                {share < 0.85 && (
-                  <p className="text-[11px] leading-snug text-muted">{term.lever}</p>
-                )}
               </div>
             );
           })}

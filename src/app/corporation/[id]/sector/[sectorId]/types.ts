@@ -100,6 +100,8 @@ export interface CommodityFlow {
   nationalPrice: number;
   regionalPrice: number;
   marketPrice: number;
+  /** Exact explanation of the global leg used by this regional price. */
+  priceAttribution?: import("@/lib/market/priceAttribution").CommodityPriceAttribution;
   /**
    * Demand rows only: the per-unit price the engine actually bills for this
    * input (base price through the revenue realization function,
@@ -529,7 +531,7 @@ export interface ForSaleInfo {
 // `formatAmount` with no currency code. UNITS: output units per financial day.
 
 export type PlantIdleCauseKey =
-  "inputs" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
+  "inputs" | "demand" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
 
 export interface PlantIdleCause {
   cause: PlantIdleCauseKey;

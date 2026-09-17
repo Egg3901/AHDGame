@@ -10,6 +10,7 @@ import { stateCensusData1991 } from "./stateCensusData1991";
 import { stateCensusData1999 } from "./stateCensusData1999";
 import { stateCensusData2007 } from "./stateCensusData2007";
 import { stateCensusData2023 } from "./stateCensusData2023";
+import { stateCensusData2027 } from "./stateCensusData2027";
 import type { EraId } from "./presetSelector";
 
 const REDDISH: Layer1Config = {
@@ -228,6 +229,7 @@ describe("per-era position tables keep each era's blue/red ordering", () => {
     "2007": stateCensusData2007 as Record<string, Layer1Config>,
     "2019": stateCensusData as Record<string, Layer1Config>,
     "2023": stateCensusData2023 as Record<string, Layer1Config>,
+    "2027": stateCensusData2027 as Record<string, Layer1Config>,
   };
 
   function display(sd: ReturnType<typeof generateStateDemographicsForTest>): number {

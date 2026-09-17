@@ -73,11 +73,14 @@ export const DEMAND_THROTTLE_FLOOR = 0.1;
  * @param plannedUnits  what the plant would produce with no demand signal
  * @param priorSoldUnits    units the sector sold last turn (persisted)
  * @param priorProducedUnits units it made last turn (persisted)
+ * @param guaranteedDemandUnits named-buyer demand that must be met, in the
+ * same scalar output units as `plannedUnits`
  */
 export function demandThrottleFactor(
   plannedUnits: number,
   priorSoldUnits: number | null | undefined,
-  priorProducedUnits: number | null | undefined
+  priorProducedUnits: number | null | undefined,
+  guaranteedDemandUnits?: number | null
 ): number {
   if (!Number.isFinite(plannedUnits) || plannedUnits <= 0) return 1;
   // No usable history: nothing to infer demand from, so do not throttle. This
@@ -102,7 +105,15 @@ export function demandThrottleFactor(
   // its target then exceeds what it can physically make and the cap below
   // returns 1.
   const sold = Math.max(0, priorSoldUnits);
-  const target = sold * (1 + DEMAND_PROBE_MARGIN);
+  const marketTarget = sold * (1 + DEMAND_PROBE_MARGIN);
+  const contractTarget =
+    typeof guaranteedDemandUnits === "number" && Number.isFinite(guaranteedDemandUnits)
+      ? Math.max(0, guaranteedDemandUnits)
+      : 0;
+  // A named buyer is a real demand signal. It must lift a supplier above the
+  // open-market run rate, otherwise the contract reservation arrives only
+  // after production has already been throttled and can never fill promptly.
+  const target = Math.max(marketTarget, contractTarget);
   if (target >= plannedUnits) return 1;
   return Math.max(DEMAND_THROTTLE_FLOOR, target / plannedUnits);
 }

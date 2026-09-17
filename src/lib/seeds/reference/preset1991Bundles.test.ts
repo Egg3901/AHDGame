@@ -158,7 +158,24 @@ describe("1991-default seed bundles — coverage", () => {
     const configs = getNationalBudgetSeedConfigsForPreset("1991-default");
     const countries = new Set(configs.map((c) => c.countryId));
     expect(countries).toEqual(
-      new Set(["US", "UK", "JP", "DE", "IE", "BR", "CN", "NG", "FR", "IT", "ES", "SE", "TR"])
+      new Set([
+        "US",
+        "UK",
+        "JP",
+        "DE",
+        "IE",
+        "BR",
+        "CN",
+        "NG",
+        "FR",
+        "IT",
+        "ES",
+        "SE",
+        "TR",
+        "AT",
+        "FI",
+        "GR",
+      ])
     );
   });
 
@@ -415,7 +432,7 @@ describe("basePolicies — preset-aware (Gap #4)", () => {
   });
 
   it("seedStatePolicies threads preset into the upserted preset log line", async () => {
-    const { createMockDb, bulkOps } = await import("@/lib/test-utils/mockDb");
+    const { createMockDb } = await import("@/lib/test-utils/mockDb");
     const { seedStatePolicies } = await import("@/lib/admin/seed/seedStatePolicies");
     const db = createMockDb();
     const messages: string[] = [];
@@ -552,7 +569,7 @@ describe("applyEra1991BaselineAdjustments (Gap #3)", () => {
   });
 
   it("seedUKBaselines threads preset into the upserted preset log line", async () => {
-    const { createMockDb, bulkOps } = await import("@/lib/test-utils/mockDb");
+    const { createMockDb } = await import("@/lib/test-utils/mockDb");
     const { seedUKBaselines } = await import("@/lib/admin/seed/seedUK");
     const db = createMockDb();
     const messages: string[] = [];

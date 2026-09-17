@@ -9,6 +9,7 @@ import { handleRouteError } from "@/lib/api/errors";
 import { verifyTurnstileToken } from "@/lib/turnstile";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import { createPasswordReset, PASSWORD_RESETS_COLLECTION } from "@/lib/passwordReset";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import type { PasswordResetDoc } from "@/lib/passwordReset";
 import { sendEmail } from "@/lib/email";
 import type { User } from "@/lib/db/types";
@@ -86,6 +87,21 @@ export async function POST(request: Request) {
         reason: "user_not_found",
       });
       // Same body as the success path: no account enumeration.
+      return NextResponse.json(GENERIC_OK);
+    }
+
+    // Fenced accounts never mint a live reset token via legacy issuance. Same
+    // generic body as success so fenced is not an oracle. The consume CAS in
+    // reset-password remains the authority for pre-fence tokens.
+    if (isAuthMigrationFenced(user)) {
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.forgot_password",
+        subject: { type: "user", id: user._id, name: user.username },
+        outcome: "rejected",
+        reason: "source_fenced",
+      });
       return NextResponse.json(GENERIC_OK);
     }
 

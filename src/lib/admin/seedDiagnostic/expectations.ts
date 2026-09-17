@@ -47,6 +47,7 @@ import { stateMetrics1991 } from "@/lib/seeds/reference/stateMetrics1991";
 import { stateMetrics1999 } from "@/lib/seeds/reference/stateMetrics1999";
 import { stateMetrics2007 } from "@/lib/seeds/reference/stateMetrics2007";
 import { stateMetrics2023 } from "@/lib/seeds/reference/stateMetrics2023";
+import { stateMetrics2027 } from "@/lib/seeds/reference/stateMetrics2027";
 import { stateCensusData } from "@/lib/seeds/stateDemographics";
 import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
 import { stateCensusData1979 } from "@/lib/seeds/stateCensusData1979";
@@ -54,6 +55,8 @@ import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
 import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
 import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
 import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
+import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
+import { states2027 } from "@/lib/seeds/reference/states2027";
 
 // Per-country region seed bundles (same maps the country seeders use).
 
@@ -159,6 +162,7 @@ const STATES_BUNDLES = {
   "2007-default": states2007,
   "2019-default": states,
   "2023-default": states2023,
+  "2027-default": states2027,
 } as const;
 
 const STATE_METRICS_BUNDLES = {
@@ -169,6 +173,7 @@ const STATE_METRICS_BUNDLES = {
   "2007-default": stateMetrics2007,
   "2019-default": stateMetrics,
   "2023-default": stateMetrics2023,
+  "2027-default": stateMetrics2027,
 } as const;
 
 const CENSUS_BUNDLES = {
@@ -179,6 +184,7 @@ const CENSUS_BUNDLES = {
   "2007-default": stateCensusData2007,
   "2019-default": stateCensusData,
   "2023-default": stateCensusData2023,
+  "2027-default": stateCensusData2027,
 } as const;
 
 /**

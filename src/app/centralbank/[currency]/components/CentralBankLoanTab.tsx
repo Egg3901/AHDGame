@@ -55,6 +55,11 @@ interface Snapshot {
   homePrimePercent: number;
   debtToAssetsRatio: number;
   effectiveRatePercent: number;
+  policySpreadAdjustmentPercentPoints?: number;
+  policyDepositBonusPercentPoints?: number;
+  policyPricingProgress?: number;
+  policyPricingTurnsRemaining?: number;
+  policyPricingActive?: boolean;
   incomePerTurnFace: number;
   dtiLimitInternal: number;
   netWorthLimitInternal: number;
@@ -242,7 +247,8 @@ export function CentralBankLoanTab({ countryId }: Props) {
   // Equity-only mode: player has no income history but positive equity cap.
   // They can still borrow against equity; noIncome is informational only.
   const equityOnlyMode = noIncome && s.perPlayerAvailableInternal > 0;
-  // Rate at this CB = THIS bank's prime + the player's universal credit spread.
+  // Rate at this CB = THIS bank's prime + the player's credit spread + the
+  // shared central-bank pricing adjustment.
   // The snapshot ships its home-country prime as homePrimePercent; we recompose
   // with data.primeRate so a US character at the BoJ sees BoJ prime, not Fed prime.
   const cbPrime = data.primeRate;
@@ -253,10 +259,14 @@ export function CentralBankLoanTab({ countryId }: Props) {
   const onCooldown = turnsSinceChange < LOC_PAYMENT_MODE_COOLDOWN_TURNS;
   const turnsLeftOnCooldown = onCooldown ? LOC_PAYMENT_MODE_COOLDOWN_TURNS - turnsSinceChange : 0;
   const ioSurchargeActive = paymentMode === "io";
-  const baseRateHere = cbPrime + s.spreadPercentPoints;
+  const policySpreadAdjustment = s.policySpreadAdjustmentPercentPoints ?? 0;
+  const policyDepositBonus = s.policyDepositBonusPercentPoints ?? 0;
+  const baseRateHere = cbPrime + s.spreadPercentPoints + policySpreadAdjustment;
   const effectiveRateHere =
     baseRateHere + (ioSurchargeActive ? LOC_IO_SURCHARGE_PERCENT_POINTS : 0);
   const spreadSign = s.spreadPercentPoints >= 0 ? "+" : "";
+  const policySpreadSign = policySpreadAdjustment >= 0 ? "+" : "";
+  const policyPricingInProgress = (s.policyPricingProgress ?? 0) < 1;
   const usagePctText = (usedPct * 100).toFixed(0);
   const usageColor = usedPct >= 0.9 ? "bg-error" : usedPct >= 0.7 ? "bg-warning" : "bg-primary";
 
@@ -270,8 +280,8 @@ export function CentralBankLoanTab({ countryId }: Props) {
             value={`${effectiveRateHere.toFixed(2)}%`}
             sub={
               ioSurchargeActive
-                ? `prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + interest-only ${LOC_IO_SURCHARGE_PERCENT_POINTS.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
-                : `prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
+                ? `prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + central-bank adjustment ${policySpreadSign}${policySpreadAdjustment.toFixed(2)}% + interest-only ${LOC_IO_SURCHARGE_PERCENT_POINTS.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
+                : `prime ${cbPrime.toFixed(2)}% + your credit spread ${spreadSign}${s.spreadPercentPoints.toFixed(2)}% + central-bank adjustment ${policySpreadSign}${policySpreadAdjustment.toFixed(2)}% · credit score ${s.composite.toFixed(0)}/100`
             }
             tone="primary"
           />
@@ -300,6 +310,21 @@ export function CentralBankLoanTab({ countryId }: Props) {
           />
         </div>
       </div>
+
+      {s.policyPricingActive && (
+        <div className="rounded-xl border border-warning/30 bg-warning/10 p-4">
+          <p className="text-sm font-semibold text-warning">Central-bank pricing update</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            LOCs currently include a {policySpreadSign}
+            {policySpreadAdjustment.toFixed(2)} percentage-point central-bank adjustment. The target
+            is +2.00 points over prime. Central-bank deposits currently receive an extra +
+            {policyDepositBonus.toFixed(2)} points, targeting +0.25 points
+            {policyPricingInProgress && (s.policyPricingTurnsRemaining ?? 0) > 0
+              ? ` over the next ${s.policyPricingTurnsRemaining} turns.`
+              : "."}
+          </p>
+        </div>
+      )}
 
       {/* Frozen / income callouts */}
       {s.drawFrozen && (

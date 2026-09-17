@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
 import { handleRouteError } from "@/lib/api/errors";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import type { NPP, Election, ElectionCandidate } from "@/lib/db/types";
 
 /**
@@ -140,6 +141,18 @@ export async function POST() {
         },
       }
     );
+    // Withdrawn candidates' campaigns must leave active surfaces (ticket #1313).
+    await archiveCampaignsForCandidates({
+      db,
+      candidates: toWithdraw.map((c) => ({
+        electionId: c.electionId,
+        characterId: c.characterId,
+        isNPP: c.isNPP,
+        nppId: c.nppId,
+      })),
+      reason: "withdrawn",
+      now,
+    });
 
     return NextResponse.json({
       message: `Withdrew ${toWithdraw.length} cross-country candidate(s).`,

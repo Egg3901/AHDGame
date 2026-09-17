@@ -157,6 +157,7 @@ export const CATEGORY_OF: Record<NotificationType, InboxCategory> = {
   player_event_resolved: "system",
   extraction_capacity_bound: "treasury",
   corp_supply_agreement_damages: "treasury",
+  corp_supply_agreement_offer: "treasury",
   world_event_offered: "system",
   world_event_resolved: "system",
 };

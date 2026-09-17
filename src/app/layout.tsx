@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { isInAppWebViewUserAgent } from "@/lib/displayMode";
+import { isClientShellUserAgent, isInAppWebViewUserAgent } from "@/lib/displayMode";
 import { Geist, Geist_Mono, Lora, Fraunces, JetBrains_Mono } from "next/font/google";
 import { redirect } from "next/navigation";
 import Script from "next/script";
@@ -200,6 +200,7 @@ export default async function RootLayout({
   // Both the Capacitor app and the AHDClient mobile shell: no ad slots, no
   // consent prompts, no cookie banner inside an app webview.
   const isNativeApp = isInAppWebViewUserAgent(userAgent);
+  const isClientShell = isClientShellUserAgent(userAgent);
   const host = requestHeaders.get("host");
   const pathname = requestHeaders.get("x-pathname") ?? "/";
   const displayMode = cookieStore.get("ahd-display-mode")?.value as
@@ -234,7 +235,7 @@ export default async function RootLayout({
   } catch {
     // keep the COUNTRY_ORDER + 2019-default + no-override fallback
   }
-  if (!isMaintenanceBypassPath(pathname)) {
+  if (!isSingleplayer() && !isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws. The proxy is the primary
     // gate; this layout-level check is defense in depth, so a transient DB
     // blip here should render the page rather than 500 the whole layout.
@@ -360,6 +361,8 @@ export default async function RootLayout({
                         <CharacterStatsProvider>
                           {!isWikiSubdomain && (
                             <NavbarWrapper
+                              singleplayer={singleplayer}
+                              clientShell={isClientShell}
                               displayMode={displayMode}
                               initialPageCountry={initialPageCountry}
                             />
@@ -390,8 +393,8 @@ export default async function RootLayout({
                           {!isWikiSubdomain && !isNativeApp && <AdSlot />}
                           {!isWikiSubdomain && !isNativeApp && <AdSenseSlot />}
                           {!isWikiSubdomain && <SiteFooter displayMode={displayMode} />}
-                          {!isWikiSubdomain && <StatusBar />}
-                          {!isWikiSubdomain && <TurnProgressToast />}
+                          {!isWikiSubdomain && <StatusBar showOnlineStatus={!isClientShell} />}
+                          {!isWikiSubdomain && singleplayer && <TurnProgressToast />}
                           {!isWikiSubdomain && <TutorialCoachMount />}
                           {!isWikiSubdomain && <LiveRefreshBanner />}
                           {!isNativeApp && <CookieConsentBanner />}

@@ -171,6 +171,74 @@ export async function resolveNationalMedianIncome(
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
+/** A live annual charge for one active national law, in the country's own currency. */
+export interface FederalLawAnnualCost {
+  law: EnactedLaw;
+  amount: number;
+}
+
+/**
+ * Resolve the same per-law charges used to build the federal spending rows.
+ *
+ * The budget page uses this to explain aggregate rows such as "Other Spending"
+ * without inventing a second pricing rule in the UI. Keep this in lockstep with
+ * `calculateFederalSpending`: a law shown here is exactly a law counted there.
+ */
+export async function calculateFederalLawAnnualCosts(
+  db: Db,
+  budget: FederalBudget,
+  hoistedEraContext?: EraContext
+): Promise<{
+  items: FederalLawAnnualCost[];
+  eraYear: number | null;
+  commandEconomyEnabled: boolean;
+}> {
+  const budgetCountryId = (budget.countryId ||
+    (budget._id === COUNTRY_CONFIGS.UK.id
+      ? COUNTRY_CONFIGS.UK.id
+      : COUNTRY_CONFIGS.US.id)) as CountryId;
+  const nationalQuery: Record<string, unknown> = {
+    scope: "national",
+    ...nationalLawCountryQuery(budgetCountryId),
+    repealedAt: { $exists: false },
+  };
+  const [rawLaws, population, nationalMedianIncome, eraContext, v2Base, gameConfig] =
+    await Promise.all([
+      db.collection<EnactedLaw>("enactedLaws").find(nationalQuery).toArray(),
+      getCountryPopulation(db, budgetCountryId),
+      resolveNationalMedianIncome(db, budgetCountryId),
+      hoistedEraContext ? Promise.resolve(hoistedEraContext) : getEraContext(db),
+      budgetCountryId in COST_INCOME_ANCHORS
+        ? countryFiscalBase(db, budgetCountryId)
+        : Promise.resolve(undefined),
+      db
+        .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
+    ]);
+  const { year: eraYear, incomeBandIndexByCountry } = eraContext;
+  const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
+  const incomeBandIndex = incomeBandIndexByCountry?.[budgetCountryId] ?? null;
+  const items = keepLatestActiveLawPerType(rawLaws)
+    .filter((law) => isLegislationTypeActive(law.legislationTypeId, eraYear))
+    .map((law) => ({
+      law,
+      amount: calculateEnactedLawAnnualCost(law, {
+        budgetCapacity: budget.revenue.total,
+        gdp: budget.gdp,
+        population,
+        countryId: budgetCountryId,
+        nationalGdpPerCapita,
+        nationalMedianIncome,
+        year: eraYear,
+        v2Base,
+        incomeBandIndex,
+      }),
+    }))
+    .filter((item) => Number.isFinite(item.amount) && item.amount !== 0);
+
+  return { items, eraYear, commandEconomyEnabled: gameConfig?.commandEconomyEnabled === true };
+}
+
 export async function calculateFederalSpending(
   db: Db,
   budget: FederalBudget,
@@ -184,57 +252,15 @@ export async function calculateFederalSpending(
     (budget._id === COUNTRY_CONFIGS.UK.id
       ? COUNTRY_CONFIGS.UK.id
       : COUNTRY_CONFIGS.US.id)) as CountryId;
-  const nationalQuery: Record<string, unknown> = {
-    scope: "national",
-    ...nationalLawCountryQuery(budgetCountryId),
-    repealedAt: { $exists: false },
-  };
-  // These five reads are independent of one another — one round instead of a
-  // serial chain.
-  const [rawLaws, population, nationalMedianIncome, eraContext, v2Base, gameConfig] =
-    await Promise.all([
-      db.collection<EnactedLaw>("enactedLaws").find(nationalQuery).toArray(),
-      getCountryPopulation(db, budgetCountryId),
-      resolveNationalMedianIncome(db, budgetCountryId),
-      // Spec B: era cost forms apply when the flag is on (year non-null); null ⇒ legacy.
-      hoistedEraContext ? Promise.resolve(hoistedEraContext) : getEraContext(db),
-      // Political-legislation v2 (spec §5.1): countries with new-generation laws
-      // price them on the REGIONAL-ROLLUP base, not the budget-seed gdp. One read
-      // per sync; other countries skip it entirely.
-      budgetCountryId in COST_INCOME_ANCHORS
-        ? countryFiscalBase(db, budgetCountryId)
-        : Promise.resolve(undefined),
-      // Plan-economy allocations lapse rather than disburse (see the transfer
-      // block below); joins this batch so the gate costs no extra round trip.
-      db
-        .collection<{ _id: string; commandEconomyEnabled?: boolean }>("gameConfig")
-        .findOne({ _id: "default" }, { projection: { commandEconomyEnabled: 1 } }),
-    ]);
-  const enactedLaws = keepLatestActiveLawPerType(rawLaws);
-  const nationalGdpPerCapita = population > 0 ? budget.gdp / population : undefined;
-  const { year: eraYear, incomeBandIndexByCountry } = eraContext;
-  const incomeBandIndex = incomeBandIndexByCountry?.[budgetCountryId] ?? null;
+  const { items, eraYear, commandEconomyEnabled } = await calculateFederalLawAnnualCosts(
+    db,
+    budget,
+    hoistedEraContext
+  );
   const byCategory: Record<string, number> = {};
   let stateGrants = 0;
 
-  for (const law of enactedLaws) {
-    // Phantom-line gate (Spec B): an era-inactive law contributes no spending line
-    // while the flag is on. Null year (flag off) ⇒ every law counts, legacy.
-    if (!isLegislationTypeActive(law.legislationTypeId, eraYear)) continue;
-    const cost = calculateEnactedLawAnnualCost(law, {
-      budgetCapacity: budget.revenue.total,
-      gdp: budget.gdp,
-      population,
-      countryId: budgetCountryId,
-      nationalGdpPerCapita,
-      nationalMedianIncome,
-      year: eraYear,
-      v2Base,
-      incomeBandIndex,
-    });
-
-    if (!Number.isFinite(cost) || cost === 0) continue;
-
+  for (const { law, amount: cost } of items) {
     if (law.isGrant) {
       stateGrants += cost;
     } else {
@@ -284,11 +310,7 @@ export async function calculateFederalSpending(
     // anywhere, so booking it would charge the union for programmes that do not
     // exist. A MARKET economy's transfer is genuinely disbursed whether the
     // region spends it or not, so it still books in full.
-    const lapses = isPlannedEconomy(
-      budgetCountryId,
-      eraYear,
-      gameConfig?.commandEconomyEnabled === true
-    );
+    const lapses = isPlannedEconomy(budgetCountryId, eraYear, commandEconomyEnabled);
     stateGrants += regionalBudgets.reduce((sum, rb) => {
       const allocated = rb[transferGrantField] ?? 0;
       return sum + (lapses ? Math.min(allocated, rb.enactedBillCosts ?? 0) : allocated);

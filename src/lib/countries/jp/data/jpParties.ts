@@ -10,18 +10,26 @@ import type { PartySeed } from "@/lib/seeds/reference/politicalParties";
  *   JCP:      far-left economically, progressive socially
  *   Ishin:    right-leaning economically (neoliberal reform), mildly conservative socially (2019-only)
  *   DPFP:     centrist economically, mildly progressive socially (reformist centre; 2019-only)
- *   RYO:      Liberal Party / Jiyūtō — Yoshida's ruling conservatives in 1953
- *   JDP:      Japan Democratic Party / Hatoyama-Progressive lineage — 1953 opposition
- *   JSP:      left-economically, progressive socially (1953 + 1991 — main opposition pre-1996)
- *   DSP:      centrist economically, mildly conservative socially (1991-only — Sōhyō-aligned)
+ *   RYO:      Liberal Party / Jiyūtō - Yoshida's ruling conservatives in 1953
+ *   JDP:      Japan Democratic Party / Hatoyama-Progressive lineage - 1953 opposition
+ *   JSP:      left-economically, progressive socially (1953 + 1991 - main opposition pre-1996)
+ *   DSP:      centrist economically, mildly conservative socially (1991-only - Sōhyō-aligned)
  *
  * seedOrder determines the sequentialId assignment order within JP.
  * Abbreviations must match party IDs used in getMajorPartiesForRegion and majorPartyIds.
+ *
+ * 2027 note: the six continuing parties (LDP, CDP, Komeito, JCP, Ishin,
+ * DPFP) are all valid for 2027-default. Post-2024 newcomers (Reiwa, Sanseito,
+ * Conservative Party of Japan) are deliberately NOT added: their slugs,
+ * majorPartyIds entries, and polling anchors live in shared files outside
+ * the country-local scope, and seeding bare PartySeed rows with zero
+ * regional org would be worse than omitting them. Revisit when the shared
+ * party registry supports a 2027 roster.
  */
 export const jpParties: PartySeed[] = [
   // ─── 1953 pre-LDP merger ───────────────────────────────────────────────
   {
-    // Yoshida's Liberal Party (Jiyūtō) — ruling conservatives until the
+    // Yoshida's Liberal Party (Jiyūtō) - ruling conservatives until the
     // Nov 1955 Liberal + Democratic merger that created the LDP.
     seedOrder: 20,
     countryId: "JP",
@@ -43,7 +51,7 @@ export const jpParties: PartySeed[] = [
     validForPresets: ["1953-default"],
   },
   {
-    // Hatoyama / Progressive (Kaishintō) lineage — the other conservative
+    // Hatoyama / Progressive (Kaishintō) lineage - the other conservative
     // pole that becomes Japan Democratic Party (1954) then merges into LDP.
     seedOrder: 21,
     countryId: "JP",
@@ -65,7 +73,7 @@ export const jpParties: PartySeed[] = [
     validForPresets: ["1953-default"],
   },
   {
-    // Founded Nov 1955 via Liberal + Democratic merger — not present in 1953.
+    // Founded Nov 1955 via Liberal + Democratic merger - not present in 1953.
     seedOrder: 1,
     countryId: "JP",
     name: "Liberal Democratic Party",
@@ -90,6 +98,7 @@ export const jpParties: PartySeed[] = [
       "2007-default",
       "2019-default",
       "2023-default",
+      "2027-default",
     ],
   },
   {
@@ -113,10 +122,10 @@ export const jpParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default", "2023-default"],
+    validForPresets: ["2019-default", "2023-default", "2027-default"],
   },
   {
-    // Founded 1964 — not present in 1953.
+    // Founded 1964 - not present in 1953.
     seedOrder: 3,
     countryId: "JP",
     name: "Komeito",
@@ -141,6 +150,7 @@ export const jpParties: PartySeed[] = [
       "2007-default",
       "2019-default",
       "2023-default",
+      "2027-default",
     ],
   },
   {
@@ -183,7 +193,7 @@ export const jpParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default", "2023-default"],
+    validForPresets: ["2019-default", "2023-default", "2027-default"],
   },
   {
     // 2019-only: DPFP was founded in 2018. The 1991-era centrist /
@@ -205,10 +215,10 @@ export const jpParties: PartySeed[] = [
     treasurerId: null,
     committeeIds: [],
     createdBy: null,
-    validForPresets: ["2019-default", "2023-default"],
+    validForPresets: ["2019-default", "2023-default", "2027-default"],
   },
   {
-    // Japan Socialist Party (JSP / 日本社会党) — main opposition from
+    // Japan Socialist Party (JSP / 日本社会党) - main opposition from
     // occupation through mid-1990s. Valid in 1953 (pre-LDP system) and
     // 1991 (last years before SDPJ/DPJ succession). Held 136 Shugiin
     // seats after the 1990 general election.

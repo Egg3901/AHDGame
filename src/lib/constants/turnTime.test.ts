@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { STARTING_YEAR, getStartingYearForPreset } from "./turnTime";
+import {
+  DRAFT_SEED_PRESET_IDS,
+  SEED_PRESET_IDS,
+  STARTING_YEAR,
+  getStartingYearForPreset,
+  isDraftSeedPreset,
+} from "./turnTime";
 import { getCycleAnchors } from "@/lib/elections/cycleAnchorContext";
 
 describe("getStartingYearForPreset", () => {
@@ -14,6 +20,14 @@ describe("getStartingYearForPreset", () => {
     expect(getStartingYearForPreset("2007-default")).toBe(2007);
     expect(getStartingYearForPreset("2019-default")).toBe(2019);
     expect(getStartingYearForPreset("2023-default")).toBe(2023);
+  });
+
+  it("publishes the 2027 preset with its own calendar", () => {
+    expect(getStartingYearForPreset("2027-default")).toBe(2027);
+    expect(SEED_PRESET_IDS).toContain("2027-default");
+    expect(DRAFT_SEED_PRESET_IDS).not.toContain("2027-default");
+    expect(isDraftSeedPreset("2027-default")).toBe(false);
+    expect(isDraftSeedPreset("2023-default")).toBe(false);
   });
 
   it("1991-default → 1991", () => {
@@ -38,6 +52,17 @@ describe("getStartingYearForPreset", () => {
     for (const [key, turn] of Object.entries(anchors)) {
       if (turn == null) continue; // deliberate era-gates (esCongreso)
       expect(turn, `${key} anchor (${turn}) must be positive`).toBeGreaterThan(0);
+    }
+  });
+
+  it("2027-default cycle anchors are positive", () => {
+    const anchors = getCycleAnchors({
+      startingYear: getStartingYearForPreset("2027-default"),
+      preset: "2027-default",
+    });
+    for (const [key, turn] of Object.entries(anchors)) {
+      if (turn == null) continue;
+      expect(turn, key).toBeGreaterThan(0);
     }
   });
 

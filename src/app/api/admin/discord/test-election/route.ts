@@ -17,7 +17,8 @@ import {
 } from "@/lib/discordWebhooks";
 import { getCountryWebhookDescriptors } from "@/lib/discord/countryWebhooks";
 import { getDb } from "@/lib/mongodb";
-import { generateAndSaveChamberChart } from "@/lib/charts/parliamentChart";
+import { generateChamberDiagramSVG, getChamberComposition } from "@/lib/charts/parliamentChart";
+import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 import { ELECTION_TYPE_SHORT_LABEL } from "@/lib/utils/electionLabels";
 import {
   HOUSE_SEATS,
@@ -246,15 +247,34 @@ export async function POST(request: Request) {
     const chartTotal = chartSeatTotals[electionType];
     if (chartTotal) {
       const chartCountry = chartCountryMap[electionType] ?? "US";
-      chartUrl = await generateAndSaveChamberChart(db, electionType, chartTotal, chartCountry);
+      const composition = await getChamberComposition(db, electionType, chartCountry);
+      const chartSvg = generateChamberDiagramSVG(composition.seats, chartTotal, chartCountry, 1000);
+      chartUrl = await generateDiscordEventCard(
+        {
+          eyebrow: `${chartCountry} · Test preview`,
+          title: `${label} composition`,
+          summary: `${chartTotal} seats · ${Math.floor(chartTotal / 2) + 1} needed for a majority`,
+          chartSvg,
+          tone: "election",
+        },
+        `test-election-${chartCountry.toLowerCase()}-${electionType}`
+      );
     }
 
     // First embed: title and chart
     if (chartUrl) {
       embeds.push({
-        title: `[TEST] Election Results — ${label}`,
+        title: `[TEST PREVIEW] ${label} Composition`,
         color: DISCORD_COLORS.electionResult,
         image: { url: chartUrl },
+        url: `https://ahousedividedgame.com/country/${inferredCountryId}/legislature`,
+        fields: [
+          {
+            name: "Open chamber",
+            value: `[View in A House Divided](https://ahousedividedgame.com/country/${inferredCountryId}/legislature)`,
+            inline: true,
+          },
+        ],
         timestamp: now.toISOString(),
       });
     }
@@ -304,17 +324,20 @@ export async function POST(request: Request) {
       }
     }
 
-    // Second embed: party columns
-    embeds.push({
-      title: chartUrl ? undefined : `[TEST] Election Results — ${label}`,
-      description: "_This is a test using recent election data._",
-      color: DISCORD_COLORS.electionResult,
-      fields,
-      footer: {
-        text: `${outcomes.length} result${outcomes.length === 1 ? "" : "s"} shown (test)`,
-      },
-      timestamp: now.toISOString(),
-    });
+    // Non-chart election types retain a compact text fallback. National chamber
+    // charts stand alone so this test route mirrors the production no-wall layout.
+    if (!chartUrl) {
+      embeds.push({
+        title: `[TEST] Election Results — ${label}`,
+        description: "_This is a test using recent election data._",
+        color: DISCORD_COLORS.electionResult,
+        fields: fields.slice(0, 4),
+        footer: {
+          text: `${outcomes.length} result${outcomes.length === 1 ? "" : "s"} shown (test)`,
+        },
+        timestamp: now.toISOString(),
+      });
+    }
 
     // Route to the country's webhook (falls back to the global game webhook).
     await sendCountryGameEventMultiple(inferredCountryId, embeds);

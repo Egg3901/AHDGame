@@ -8,6 +8,7 @@ import { states1991 } from "@/lib/seeds/reference/states1991";
 import { states1999 } from "@/lib/seeds/reference/states1999";
 import { states2007 } from "@/lib/seeds/reference/states2007";
 import { states2023 } from "@/lib/seeds/reference/states2023";
+import { states2027 } from "@/lib/seeds/reference/states2027";
 import { selectPresetBundle } from "@/lib/seeds/presetSelector";
 
 /**
@@ -28,6 +29,7 @@ export function selectStatesBundleForPreset(preset: string): State[] {
       "2007-default": states2007,
       "2019-default": states,
       "2023-default": states2023,
+      "2027-default": states2027,
     },
     "seedStates:states1953"
   );

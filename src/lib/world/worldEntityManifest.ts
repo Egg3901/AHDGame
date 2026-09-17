@@ -24,10 +24,12 @@ import {
 } from "./registry/decolonization1953";
 import { isShippingPreset, tierFor } from "./eraRoster";
 import { JP_GEOGRAPHY } from "@/lib/countries/jp/geography";
+import { expandManifestWithBackgroundCountries } from "./backgroundCountryRoster";
 
 export type WorldEntityId = string;
 export type WorldEntityStatus = "sovereign" | "dependent" | "emergent" | "dissolved";
-export type WorldSimulationTier = "full-autonomous" | "sphere-macro" | "historical-presence";
+export type WorldSimulationTier =
+  "full-autonomous" | "sphere-macro" | "background-macro" | "historical-presence";
 export type WorldEconomicArchetype = "market" | "planned" | "mixed" | "macro" | "none";
 export type ReadinessResult = "ready" | "blocked";
 export type LegacyCountryAccess = "player" | "economy-preview" | "hidden" | "config-fallback";
@@ -286,8 +288,8 @@ const SPHERE_SPONSOR_ELIGIBILITY: Readonly<Partial<Record<string, ReadonlySet<Co
     // 2023 had NO entry, so isManifestSphereSponsor returned false for every
     // country in that preset and nothing could sponsor a sphere there.
     "2023-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
+    "2027-default": Object.freeze(new Set<CountryId>(["US", "UK", "RU", "FR", "CN", "DE", "JP"])),
   });
-
 /** True when the preset matrix lists this entity as a sphere sponsor. */
 export function isManifestSphereSponsor(presetId: string, entityId: WorldEntityId): boolean {
   const eligible = SPHERE_SPONSOR_ELIGIBILITY[presetId];
@@ -301,7 +303,6 @@ export function isManifestSphereSponsor(presetId: string, entityId: WorldEntityI
   }
   return true;
 }
-
 function buildCountryEntry(
   presetId: string,
   countryId: CountryId,
@@ -384,23 +385,7 @@ function historicalPresenceEntries(presetId: string): WorldEntityManifestEntry[]
   return [...decolonizationDependencyEntries(presetId), ...registry];
 }
 
-/**
- * Full-autonomous readiness override for AT/FI/GR/IE, applied on top of the base
- * `sphereMacroEntry(...)` result below (#3791). These countries were originally
- * authored as Tier-2 sphere-macro NPC entries (`legacyAccess: "hidden"`) but
- * `bootstrapGameWorld.ts` (`seedATRegions`/`seedATParties`/…,
- * mirroring `seedFRRegions`/`seedFRParties`/…) and `ECON_TIER_ROSTER_COUNTRIES`
- * in `seedEconTierRosters.ts` build them out with real states, parties, and
- * NPP incumbents — identically to FR/IT/ES/SE/TR — and `COUNTRY_ORDER`'s own
- * doc comment lists GR/AT/FI as "registered: real configs + seed data, gated
- * per-preset by countryGameStates" alongside FR/IT/ES/SE/TR.
- *
- * The sphere-macro classification never caught up: `explicitCountryEntries`
- * (seedCountryGameStates.ts) requires a country-backed economy-preview entry.
- * AT/FI/GR lacked a `countryId`, while IE remained hidden despite its investable
- * sector seed. This override brings their access tier in line with what is
- * actually seeded without touching their sphere, recognition, or UN flavor data.
- */
+/** Promote seeded AT/FI/GR/IE economies without changing their sphere/UN data. */
 function promoteEuropeanSphereMacroToFullAutonomous(
   entry: WorldEntityManifestEntry,
   countryId: CountryId
@@ -426,18 +411,7 @@ function promoteEuropeanSphereMacroToFullAutonomous(
   };
 }
 
-/**
- * European 1953 sphere-macro roster (#3719). AT/FI/GR/IE are promoted to
- * full-autonomous economy-preview entries (see
- * `promoteEuropeanSphereMacroToFullAutonomous` above). Their sphere
- * relationships/recognition/UN posture below are unchanged occupation-era
- * flavor data is not affected by the promotion. CS/YU/DD stay unmapped.
- * Warsaw Pact / Yugoslavia reuse existing CountryIds with hidden legacy access.
- * ES is the inverse: demoted from full-autonomous to sphere-macro for
- * 1953-default ONLY (owner decision, 2026-07-28) — Franco's Spain never holds
- * a legislative election in this preset, so it stays an abstract Tier-2
- * economy here while remaining full-autonomous in every later preset.
- */
+/** European 1953 macro roster; AT/FI/GR/IE promote, while ES remains aggregate. */
 function europeanSphereMacroEntries(presetId: string): WorldEntityManifestEntry[] {
   if (presetId !== "1953-default") return [];
   return [
@@ -987,10 +961,12 @@ function accessMap(
   economy: readonly CountryId[],
   hidden: readonly CountryId[] = []
 ): Partial<Record<CountryId, LegacyCountryAccess>> {
+  const classified = new Set<CountryId>([...player, ...economy, ...hidden]);
+  const remaining = COUNTRY_ORDER.filter((countryId) => !classified.has(countryId));
   return Object.fromEntries([
     ...player.map((countryId) => [countryId, "player"] as const),
     ...economy.map((countryId) => [countryId, "economy-preview"] as const),
-    ...hidden.map((countryId) => [countryId, "hidden"] as const),
+    ...[...hidden, ...remaining].map((countryId) => [countryId, "hidden"] as const),
   ]);
 }
 
@@ -1375,8 +1351,26 @@ function applyRosterAccess(
       continue;
     }
     const tier = tierFor(presetId, countryId);
-    // A country absent from this era is not a world entity in it at all.
-    if (tier === "absent") continue;
+    // A country absent from this era is not a PLAYABLE world entity in it. It
+    // may still be a historical one.
+    //
+    // ⚠ A DISSOLVED STATE IS KEPT, NOT DROPPED. Upstream's background
+    // expansion marks a state that has ceased to exist `status: "dissolved"`
+    // rather than deleting it, so the world still records that East Germany,
+    // Yugoslavia and Czechoslovakia existed and then did not. Dropping them
+    // here would undo that a line later, and `backgroundCountryRoster.test.ts`
+    // asserts 1999 still carries YU and CS as dissolved.
+    //
+    // This does NOT reopen "East Germany turns up in post-reunification
+    // worlds". Everything player-facing -- the landing rosters, the admin reset
+    // picker, seeding -- filters on `tierFor`, which still answers "absent".
+    // Only the historical record keeps the row.
+    if (tier === "absent") {
+      if (entry.status === "dissolved") {
+        out.push({ ...entry, legacyAccess: "hidden", legacyStatus: "coming-soon" });
+      }
+      continue;
+    }
     // `latent` cannot occur here: latent countries are unregistered by
     // definition, and `eraRoster.test.ts` asserts they stay out of COUNTRY_ORDER.
     const legacyAccess: LegacyCountryAccess =
@@ -1435,44 +1429,87 @@ export const WORLD_ENTITY_MANIFESTS: Readonly<Record<string, WorldEntityPresetMa
   Object.freeze({
     "1953-default": defineRosterManifest(
       "1953-default",
-      apply1953Tier1MatrixAdjustments([
-        ...entriesFromAccess("1953-default", accessMap(COLD_WAR_PLAYER, COLD_WAR_ECONOMY)),
-        ...europeanSphereMacroEntries("1953-default"),
-        ...asianMiddleEastSphereMacroEntries("1953-default"),
-        ...africaAmericasSphereMacroEntries("1953-default"),
-        ...emergentDecolonizationEntries("1953-default"),
-        ...historicalPresenceEntries("1953-default"),
-      ])
+      expandManifestWithBackgroundCountries({
+        presetId: "1953-default",
+        entries: apply1953Tier1MatrixAdjustments([
+          ...entriesFromAccess("1953-default", accessMap(COLD_WAR_PLAYER, COLD_WAR_ECONOMY)),
+          ...europeanSphereMacroEntries("1953-default"),
+          ...asianMiddleEastSphereMacroEntries("1953-default"),
+          ...africaAmericasSphereMacroEntries("1953-default"),
+          ...emergentDecolonizationEntries("1953-default"),
+          ...historicalPresenceEntries("1953-default"),
+        ]),
+      })
     ),
     "1979-default": defineRosterManifest(
       "1979-default",
-      entriesFromAccess(
-        "1979-default",
-        // NG is already in COLD_WAR_ECONOMY; IE remains economy-preview in 1979+.
-        // AT/FI/GR are full-autonomous in 1953 (promoted from sphere-macro by
-        // europeanSphereMacroEntries' promotion override this pass) and full
-        // country entries in every later preset (#3791).
-        accessMap(
-          COLD_WAR_PLAYER,
-          [...COLD_WAR_ECONOMY, "IE", "AT", "FI", "GR"],
-          COLD_WAR_HIDDEN_1979
-        )
-      )
+      expandManifestWithBackgroundCountries({
+        presetId: "1979-default",
+        entries: entriesFromAccess(
+          "1979-default",
+          // NG is already in COLD_WAR_ECONOMY; IE remains economy-preview in 1979+.
+          // AT/FI/GR are full-autonomous in 1953 (promoted from sphere-macro by
+          // europeanSphereMacroEntries' promotion override this pass) and full
+          // country entries in every later preset (#3791).
+          accessMap(
+            COLD_WAR_PLAYER,
+            [...COLD_WAR_ECONOMY, "IE", "AT", "FI", "GR"],
+            COLD_WAR_HIDDEN_1979
+          )
+        ),
+      })
     ),
     "1991-default": defineRosterManifest(
       "1991-default",
-      entriesFromAccess("1991-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "1991-default",
+        entries: entriesFromAccess(
+          "1991-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
     "1999-default": defineRosterManifest(
       "1999-default",
-      entriesFromAccess("1999-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "1999-default",
+        entries: entriesFromAccess(
+          "1999-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
     "2007-default": defineRosterManifest(
       "2007-default",
-      entriesFromAccess("2007-default", accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY))
+      expandManifestWithBackgroundCountries({
+        presetId: "2007-default",
+        entries: entriesFromAccess(
+          "2007-default",
+          accessMap(POST_COLD_WAR_PLAYER, POST_COLD_WAR_ECONOMY)
+        ),
+      })
     ),
-    "2019-default": defineRosterManifest("2019-default", configFallbackEntries("2019-default")),
-    "2023-default": defineRosterManifest("2023-default", configFallbackEntries("2023-default")),
+    "2019-default": defineRosterManifest(
+      "2019-default",
+      expandManifestWithBackgroundCountries({
+        presetId: "2019-default",
+        entries: configFallbackEntries("2019-default"),
+      })
+    ),
+    "2023-default": defineRosterManifest(
+      "2023-default",
+      expandManifestWithBackgroundCountries({
+        presetId: "2023-default",
+        entries: configFallbackEntries("2023-default"),
+      })
+    ),
+    "2027-default": defineRosterManifest(
+      "2027-default",
+      expandManifestWithBackgroundCountries({
+        presetId: "2027-default",
+        entries: configFallbackEntries("2027-default"),
+      })
+    ),
   });
 
 export function getWorldEntityPresetManifest(presetId: string): WorldEntityPresetManifest {

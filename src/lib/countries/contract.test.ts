@@ -79,9 +79,11 @@ describe("Japan satisfies the country contract", () => {
   });
 
   /**
-   * ⚠️ ALL SEVEN shipping presets, not the five an early revision listed. 1999
-   * and 2007 were dropped once already, and Japan carries real region, census
-   * and demographic data for both.
+   * ⚠️ EVERY shipping preset, counted from SHIPPING_PRESETS rather than a
+   * literal. An early revision listed five and dropped 1999 and 2007, for which
+   * Japan carries real region, census and demographic data; upstream then added
+   * 2027, taking it to eight. A hard-coded count would have to be chased each
+   * time, which is the failure this assertion exists to prevent.
    */
   it("has an era override for every shipping preset", () => {
     for (const preset of SHIPPING_PRESETS) {

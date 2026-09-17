@@ -49,6 +49,7 @@ describe("getScotusComposition", () => {
         seatNumber: 1,
         vacant: false,
         isDivergent: true,
+        originalRoster: false,
         deathChance: {
           chancePerTurn: DIVERGENT_TENURE_HAZARD_PER_TURN,
           turnsUntilActive: 0,
@@ -83,6 +84,20 @@ describe("getScotusComposition", () => {
           justiceParty: "1",
           economicLean: -1,
           socialLean: -1,
+          historicalOccupantIndex: 0,
+          divergentHazardStartsTurn: null,
+        },
+        {
+          seatNumber: 3,
+          isDivergent: false,
+          justiceMode: "historical",
+          justiceCharacterId: null,
+          justiceNppId: null,
+          justiceName: "Abe Fortas",
+          justiceParty: "1",
+          economicLean: -2,
+          socialLean: -3,
+          historicalOccupantIndex: 2,
           divergentHazardStartsTurn: null,
         },
       ]),
@@ -93,9 +108,23 @@ describe("getScotusComposition", () => {
     const { getScotusComposition } = await import("./queries");
     const seats = await getScotusComposition(db as unknown as Db, "US");
 
-    expect(seats[0]).toEqual(expect.objectContaining({ vacant: true, deathChance: null }));
+    expect(seats[0]).toEqual(
+      expect.objectContaining({ vacant: true, deathChance: null, originalRoster: false })
+    );
     expect(seats[1]).toEqual(
-      expect.objectContaining({ vacant: false, isDivergent: false, deathChance: null })
+      expect.objectContaining({
+        vacant: false,
+        isDivergent: false,
+        deathChance: null,
+        originalRoster: true,
+      })
+    );
+    expect(seats[2]).toEqual(
+      expect.objectContaining({
+        vacant: false,
+        originalRoster: false,
+        justiceName: "Abe Fortas",
+      })
     );
   });
 });

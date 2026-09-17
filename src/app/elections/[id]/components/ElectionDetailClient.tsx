@@ -377,6 +377,7 @@ export function ElectionDetailClient({ id, initialElection }: ElectionDetailClie
             onSuccess={fetchElection}
             showCollegeSummary={false}
             showNationalMood={false}
+            showDemocraticHealth={false}
             tabbedDetail
           />
 

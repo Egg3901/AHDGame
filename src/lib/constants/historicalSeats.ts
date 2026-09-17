@@ -16,6 +16,14 @@ import type { CountryId } from "./countries";
 import { recordPresetFallback } from "@/lib/seeds/presetSelector";
 import { tierFor, type ShippingPreset } from "@/lib/world/eraRoster";
 import { COUNTRY_ORDER } from "./countries";
+import { US_HOUSE_2027 } from "@/lib/seeds/reference/usHouse2027";
+import { US_SENATE_2027 } from "@/lib/seeds/reference/usSenate2027";
+import {
+  DE_BUNDESTAG_2027,
+  JP_SANGIIN_2027,
+  JP_SHUGIIN_2027,
+  UK_COMMONS_2027,
+} from "@/lib/seeds/reference/worldSeats2027";
 
 export interface HistoricalSeat {
   state: string;
@@ -220,7 +228,7 @@ export const US_HOUSE_2020: HistoricalSeat[] = [
 // Senate: Each entry = ONE NPP holding one Senate seat
 export const US_SENATE_2020: HistoricalSeat[] = [
   // Alabama: 2 GOP NPPs
-  { state: "AL", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "AL", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "AL", officeType: "senate", party: "republican", senateClass: 3 },
   // Alaska: 2 GOP NPPs
   { state: "AK", officeType: "senate", party: "republican", senateClass: 2 },
@@ -531,16 +539,16 @@ export const US_SENATE_1992: HistoricalSeat[] = [
   { state: "AZ", officeType: "senate", party: "republican", senateClass: 3 },
   { state: "AR", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "AR", officeType: "senate", party: "democrat", senateClass: 3 },
-  { state: "CA", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "CA", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "CO", officeType: "senate", party: "democrat", senateClass: 2 },
-  { state: "CO", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "CA", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "CA", officeType: "senate", party: "democrat", senateClass: 3 },
+  { state: "CO", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "CO", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "CT", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "CT", officeType: "senate", party: "democrat", senateClass: 3 },
-  { state: "DE", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "DE", officeType: "senate", party: "republican", senateClass: 2 },
-  { state: "FL", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "FL", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "DE", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "DE", officeType: "senate", party: "democrat", senateClass: 2 },
+  { state: "FL", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "FL", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "GA", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "GA", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "HI", officeType: "senate", party: "democrat", senateClass: 1 },
@@ -555,8 +563,8 @@ export const US_SENATE_1992: HistoricalSeat[] = [
   { state: "IA", officeType: "senate", party: "republican", senateClass: 3 },
   { state: "KS", officeType: "senate", party: "republican", senateClass: 2 },
   { state: "KS", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "KY", officeType: "senate", party: "democrat", senateClass: 2 },
-  { state: "KY", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "KY", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "KY", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "LA", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "LA", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "ME", officeType: "senate", party: "democrat", senateClass: 1 },
@@ -567,19 +575,19 @@ export const US_SENATE_1992: HistoricalSeat[] = [
   { state: "MA", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "MI", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "MI", officeType: "senate", party: "democrat", senateClass: 2 },
-  { state: "MN", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "MN", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "MN", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "MN", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "MS", officeType: "senate", party: "republican", senateClass: 1 },
   { state: "MS", officeType: "senate", party: "republican", senateClass: 2 },
   { state: "MO", officeType: "senate", party: "republican", senateClass: 1 },
   { state: "MO", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "MT", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "MT", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "MT", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "MT", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "NE", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "NE", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "NV", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "NV", officeType: "senate", party: "democrat", senateClass: 3 },
-  { state: "NH", officeType: "senate", party: "democrat", senateClass: 2 },
+  { state: "NH", officeType: "senate", party: "republican", senateClass: 2 },
   { state: "NH", officeType: "senate", party: "republican", senateClass: 3 },
   { state: "NJ", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "NJ", officeType: "senate", party: "democrat", senateClass: 2 },
@@ -587,41 +595,41 @@ export const US_SENATE_1992: HistoricalSeat[] = [
   { state: "NM", officeType: "senate", party: "republican", senateClass: 2 },
   { state: "NY", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "NY", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "NC", officeType: "senate", party: "democrat", senateClass: 2 },
-  { state: "NC", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "NC", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "NC", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "ND", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "ND", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "OH", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "OH", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "OH", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "OK", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "OK", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "OR", officeType: "senate", party: "democrat", senateClass: 2 },
+  { state: "OR", officeType: "senate", party: "republican", senateClass: 2 },
   { state: "OR", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "PA", officeType: "senate", party: "democrat", senateClass: 1 },
+  { state: "PA", officeType: "senate", party: "republican", senateClass: 1 },
   { state: "PA", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "RI", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "RI", officeType: "senate", party: "republican", senateClass: 2 },
-  { state: "SC", officeType: "senate", party: "democrat", senateClass: 2 },
-  { state: "SC", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "SD", officeType: "senate", party: "democrat", senateClass: 2 },
-  { state: "SD", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "RI", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "RI", officeType: "senate", party: "democrat", senateClass: 2 },
+  { state: "SC", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "SC", officeType: "senate", party: "democrat", senateClass: 3 },
+  { state: "SD", officeType: "senate", party: "republican", senateClass: 2 },
+  { state: "SD", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "TN", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "TN", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "TX", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "TX", officeType: "senate", party: "republican", senateClass: 2 },
   { state: "UT", officeType: "senate", party: "republican", senateClass: 1 },
   { state: "UT", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "VT", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "VT", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "VT", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "VT", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "VA", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "VA", officeType: "senate", party: "republican", senateClass: 2 },
-  { state: "WA", officeType: "senate", party: "democrat", senateClass: 1 },
-  { state: "WA", officeType: "senate", party: "republican", senateClass: 3 },
+  { state: "WA", officeType: "senate", party: "republican", senateClass: 1 },
+  { state: "WA", officeType: "senate", party: "democrat", senateClass: 3 },
   { state: "WV", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "WV", officeType: "senate", party: "democrat", senateClass: 2 },
   { state: "WI", officeType: "senate", party: "democrat", senateClass: 1 },
   { state: "WI", officeType: "senate", party: "republican", senateClass: 3 },
-  { state: "WY", officeType: "senate", party: "democrat", senateClass: 1 },
+  { state: "WY", officeType: "senate", party: "republican", senateClass: 1 },
   { state: "WY", officeType: "senate", party: "republican", senateClass: 2 },
 ];
 
@@ -3926,6 +3934,18 @@ export const RESET_PRESETS: ResetPreset[] = [
     countries: presetCountries("1953-default"),
   },
   {
+    id: "2027-default",
+    name: "2027 Start Date - Five-Country Modern World",
+    description:
+      "January 2027 projection with playable United States, United Kingdom, Japan, Germany, and China. Uses projected US congressional control and the latest completed national elections elsewhere.",
+    // Derived like every other preset. Upstream hard-coded the five PLAYER
+    // countries here, but this list is what the admin reset picker offers and
+    // what /api/admin/reset/presets returns, so it has to name every country the
+    // reset actually produces -- players, economy-preview and NPP-run alike.
+    // `eraContract.test.ts` S6 is what catches the two disagreeing.
+    countries: presetCountries("2027-default"),
+  },
+  {
     id: "2023-default",
     name: "2023 Start Date - Default Parties",
     description:
@@ -4046,6 +4066,42 @@ const SEAT_GROUPS_2020: SeatGroups = {
   IE: [...IE_DAIL_2020, ...IE_SEANAD_2020],
 };
 
+/**
+ * The 2027 preset, re-expressed in the country-owned grouping.
+ *
+ * Composed from the same arrays upstream's flat `2027-default` case used, so
+ * the seats are identical; only the shape differs. The 2027 roster is US, UK,
+ * DE, JP and CN, so IE has no entry here.
+ *
+ * ⚠ THE US EXECUTIVE IS SEATED FROM 2020, and upstream's flat case seated
+ * none at all. A presidential player country with no president is a broken
+ * world rather than an empty chair: the executive branch has no holder, and
+ * `eraContract.test.ts` S5 fails on exactly that. Reusing the 2020 holder is
+ * the same compromise 1999 and 2007 already make with the February 2020
+ * Congress, and it is the lesser of two wrongs.
+ *
+ * NOT the 1979 case. 1979 stays unseeded because its party slugs resolve to
+ * "independent", so seating it would invent a fake independent president --
+ * worse than the empty chair. Here the seat resolves correctly.
+ */
+const SEAT_GROUPS_2027: SeatGroups = {
+  US: [
+    ...US_EXECUTIVE_2020,
+    ...US_HOUSE_2027,
+    ...US_SENATE_2027,
+    ...US_STATE_SENATE_2020,
+    ...US_GOVERNORS_2020,
+  ],
+  UK: [...UK_COMMONS_2027, ...UK_REGIONAL_COUNCIL_2020, ...UK_FIRST_MINISTERS_2020],
+  JP: [...JP_SHUGIIN_2027, ...JP_SANGIIN_2027, ...JP_GOVERNORS_2020, ...JP_REGIONAL_COUNCIL_2020],
+  DE: [...DE_BUNDESTAG_2027, ...DE_LANDTAG_2020, ...DE_MINISTERPRAESIDENTEN_2020],
+  CN: [
+    ...splitCNNPCDelegates(CN_NPC_2020),
+    ...splitCNNPCDelegates(CN_PEOPLES_CONGRESS_2020),
+    ...CN_GOVERNORS_2020,
+  ],
+};
+
 const SEAT_GROUPS_1992: SeatGroups = {
   US: [
     ...US_EXECUTIVE_1992,
@@ -4095,7 +4151,13 @@ const SEAT_GROUPS_1979: SeatGroups = mergeGroups(
  * historical-data task.
  */
 /** Presets with their own seat groups; everything else takes the 2020 set. */
-const EXPLICIT_SEAT_PRESETS = new Set(["1991-default", "1953-default", "1979-default", "empty"]);
+const EXPLICIT_SEAT_PRESETS = new Set([
+  "1991-default",
+  "1953-default",
+  "1979-default",
+  "2027-default",
+  "empty",
+]);
 
 export function seatGroupsFor(presetId: string): SeatGroups {
   switch (presetId) {
@@ -4105,6 +4167,8 @@ export function seatGroupsFor(presetId: string): SeatGroups {
       return SEAT_GROUPS_1953;
     case "1979-default":
       return SEAT_GROUPS_1979;
+    case "2027-default":
+      return SEAT_GROUPS_2027;
     case "empty":
       return {};
     default:

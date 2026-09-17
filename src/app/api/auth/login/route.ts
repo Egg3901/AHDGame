@@ -7,6 +7,8 @@ import { cookies } from "next/headers";
 import { getJwtSecret, getAuthCookieOptions, getTrackingCookieOptions } from "@/lib/auth";
 import { needsCharacterHint } from "@/lib/auth/characterGate";
 import { setCharacterGateCookie } from "@/lib/auth/characterGateCookie";
+import { resolveReauthIssuedAt } from "@/lib/auth/sessionIssue";
+import { authMigrationFenceAbsentFilter, isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { getClientIp } from "@/lib/utils/network";
 import { AUTH_LIMITS, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -20,6 +22,11 @@ import { getCfFingerprint, isEmptyCfFingerprint } from "@/lib/utils/cfFingerprin
 import type { GameConfig } from "@/lib/db/types";
 import { recordAudit } from "@/lib/audit/recordAudit";
 import type { ActionAuditNet } from "@/lib/db/types/actionAuditLog";
+import {
+  isUnifiedMigrationCohort,
+  migratePasswordLoginToUnified,
+} from "@/lib/auth/unifiedMigration";
+import { issueUnifiedGameSession } from "@/lib/auth/unifiedGameSession";
 
 /** Partially redact an IP for display in forensic surfaces — never store the
  * raw address in `actionAuditLog.net` (plan §3.1 "net" doc-comment). */
@@ -111,6 +118,43 @@ export async function POST(request: Request) {
       );
     }
 
+    // Fenced accounts never authenticate via legacy password login. Same
+    // 401 body as a bad password so fenced vs unknown is indistinguishable.
+    // The exact migration cohort may use the retained digest only to redrive
+    // its already fenced operation. This path never grants a legacy session.
+    if (isAuthMigrationFenced(user)) {
+      const isRecoveryCohort =
+        process.env.AHD_UNIFIED_COHORT_ENABLED === "true" &&
+        isUnifiedMigrationCohort(user._id.toString());
+      const isRecoveryPassword =
+        isRecoveryCohort && user.password && (await bcrypt.compare(password, user.password));
+      if (isRecoveryPassword) {
+        const target = await migratePasswordLoginToUnified(user._id.toString(), password);
+        const cookieStore = await cookies();
+        const sessionUser = await issueUnifiedGameSession({
+          db,
+          cookieStore,
+          sourceId: user._id.toString(),
+          issuerSubject: target.userId,
+          user,
+        });
+        return NextResponse.json({
+          message: "Login successful",
+          user: sessionUser,
+        });
+      }
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.login",
+        subject: { type: "user", id: user._id, name: user.username },
+        net: netBase,
+        outcome: "rejected",
+        reason: "invalid_credentials",
+      });
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
     // Verify password — reject OAuth-only accounts that have no password set
     const isValidPassword = user.password && (await bcrypt.compare(password, user.password));
 
@@ -127,43 +171,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
     }
 
-    // Create JWT token
-    const token = await new SignJWT({
-      userId: user._id.toString(),
-      email: user.email,
-      username: user.username,
-      role: user.role,
-      isAdmin: user.isAdmin || false,
-    })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
-      .setExpirationTime("7d")
-      .sign(getJwtSecret());
-
-    // Set HTTP-only cookie
-    const cookieStore = await cookies();
-    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
-
-    // Seed the character-creation hint cookie so a player with no character is
-    // redirected to /create-character from their first navigation (the /api/auth/me
-    // self-healer reconciles it against DB truth thereafter). hasCompletedSetup is
-    // the existing proxy the post-login client redirect already keys off of.
-    await setCharacterGateCookie(
-      cookieStore,
-      needsCharacterHint({
-        role: user.role,
-        isAdmin: user.isAdmin === true,
-        hasCharacter: user.hasCompletedSetup ?? true,
-      })
-    );
+    if (
+      process.env.AHD_UNIFIED_COHORT_ENABLED === "true" &&
+      isUnifiedMigrationCohort(user._id.toString())
+    ) {
+      const target = await migratePasswordLoginToUnified(user._id.toString(), password);
+      const cookieStore = await cookies();
+      const sessionUser = await issueUnifiedGameSession({
+        db,
+        cookieStore,
+        sourceId: user._id.toString(),
+        issuerSubject: target.userId,
+        user,
+      });
+      return NextResponse.json({
+        message: "Login successful",
+        user: sessionUser,
+      });
+    }
 
     // Persistent tracking cookie for anti-fraud duplicate detection.
     // Re-use existing value so the ID survives across logins; generate a new one only on first visit.
+    const cookieStore = await cookies();
     const existingTrack = cookieStore.get("__ahd_track")?.value;
     const trackingId = existingTrack || randomUUID();
-    if (!existingTrack) {
-      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
-    }
 
     const device = classifyDevice(request.headers.get("user-agent"));
 
@@ -178,6 +209,31 @@ export async function POST(request: Request) {
     // judged per signal (src/lib/auth/identitySignals.ts) — `lastLogin` is not
     // a valid proxy for signals written conditionally below.
     const observedAt = new Date();
+    const issued = await resolveReauthIssuedAt(user.authRevokedAt);
+    if (!issued.ok) {
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.login",
+        subject: { type: "user", id: user._id, name: user.username },
+        net: netBase,
+        outcome: "rejected",
+        reason: "invalid_credentials",
+      });
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+    const token = await new SignJWT({
+      userId: user._id.toString(),
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      isAdmin: user.isAdmin || false,
+    })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt(issued.iat)
+      .setExpirationTime("7d")
+      .sign(getJwtSecret());
+
     const updateFields: Record<string, unknown> = {
       lastLogin: observedAt,
       lastKnownIp: clientIp,
@@ -211,17 +267,55 @@ export async function POST(request: Request) {
       updateFields.lastFingerprintComponents = fingerprintComponents;
     }
 
-    await usersCollection.updateOne(
-      { _id: user._id },
+    // Keep authRevokedAt. Conditional match on the snapshot plus current
+    // password/ban so a concurrent reset/logout/ban cannot be overwritten by
+    // a login that already verified the old credential.
+    const updateResult = await usersCollection.updateOne(
+      {
+        _id: user._id,
+        isBanned: { $ne: true },
+        password: user.password,
+        ...issued.snapshotFilter,
+        ...authMigrationFenceAbsentFilter(),
+      },
       {
         $set: updateFields,
-        // Successful re-auth invalidates prior session-revocation; otherwise a
-        // leftover authRevokedAt + stale sibling JWT breaks Lakeside/Ops SSO.
-        $unset: { authRevokedAt: "" },
         // Add fingerprint to history if it's new
         ...(fingerprint ? { $addToSet: { fingerprintHistory: fingerprint } } : {}),
       }
     );
+
+    if (updateResult.matchedCount !== 1) {
+      recordAudit({
+        source: "api",
+        category: "auth",
+        action: "auth.login",
+        subject: { type: "user", id: user._id, name: user.username },
+        net: netBase,
+        outcome: "rejected",
+        reason: "invalid_credentials",
+      });
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+    }
+
+    cookieStore.set(AUTH_COOKIE_NAME, token, await getAuthCookieOptions());
+
+    // Seed the character-creation hint cookie so a player with no character is
+    // redirected to /create-character from their first navigation (the /api/auth/me
+    // self-healer reconciles it against DB truth thereafter). hasCompletedSetup is
+    // the existing proxy the post-login client redirect already keys off of.
+    await setCharacterGateCookie(
+      cookieStore,
+      needsCharacterHint({
+        role: user.role,
+        isAdmin: user.isAdmin === true,
+        hasCharacter: user.hasCompletedSetup ?? true,
+      })
+    );
+
+    if (!existingTrack) {
+      cookieStore.set("__ahd_track", trackingId, await getTrackingCookieOptions());
+    }
 
     // Fire-and-forget: log the login event for admin activity tracking.
     // If this insert fails, the login itself is unaffected.

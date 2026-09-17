@@ -362,6 +362,8 @@ function clone<T>(value: T): T {
 }
 
 class InMemoryCollection {
+  private indexDescriptions: Doc[] = [];
+
   docs: Doc[] = [];
 
   constructor(public name: string) {}
@@ -505,9 +507,9 @@ class InMemoryCollection {
     return [...seen];
   }
 
-  /** No real indexes exist here; callers only ever enumerate them. */
+  /** Whatever `createIndex` has recorded; empty until something creates one. */
   async indexes(): Promise<Doc[]> {
-    return [];
+    return [...this.indexDescriptions];
   }
 
   async deleteOne(filter: Doc): Promise<{ deletedCount: number }> {
@@ -712,8 +714,48 @@ class InMemoryCollection {
     };
   }
 
-  async createIndex(): Promise<string> {
-    return "index";
+  /**
+   * Record the index so `indexes()` and `listIndexes()` can report it back.
+   *
+   * ⚠ IT USED TO RETURN A STRING AND KEEP NOTHING. That was fine while every
+   * caller only created indexes. `ensureProviderIdentityIndexes` both creates
+   * one AND reads it back to confirm it exists, so a stub that forgets makes
+   * the verification throw "Required provider identity index ... is
+   * unavailable" -- a failure that looks like a broken index and is really a
+   * gap in the double.
+   */
+  async createIndex(key: Doc = {}, options: Doc = {}): Promise<string> {
+    const name =
+      typeof options.name === "string"
+        ? options.name
+        : Object.keys(key)
+            .map((field) => `${field}_${key[field] as string}`)
+            .join("_") || "index";
+    this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
+    this.indexDescriptions.push({ ...options, name, key });
+    return name;
+  }
+
+  /** Mongo returns a cursor here, not an array. */
+  listIndexes(): { toArray: () => Promise<Doc[]> } {
+    return { toArray: async () => [...this.indexDescriptions] };
+  }
+
+  /**
+   * Drop a recorded index by name.
+   *
+   * Real Mongo throws when the index is absent, and the seeders rely on that:
+   * `indexes/helpers.ts` drops an existing index only after finding it in
+   * `listIndexes()`, and the migrations guard on a name they just read. A stub
+   * that silently succeeded would hide a seeder dropping something it never
+   * checked for.
+   */
+  async dropIndex(name: string): Promise<void> {
+    const before = this.indexDescriptions.length;
+    this.indexDescriptions = this.indexDescriptions.filter((index) => index.name !== name);
+    if (this.indexDescriptions.length === before) {
+      throw new Error(`index not found with name [${name}]`);
+    }
   }
 }
 

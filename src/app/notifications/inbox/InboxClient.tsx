@@ -36,12 +36,44 @@ function segmentLabel(seg: "all" | "action" | "notifs" | "mail"): string {
     case "all":
       return "All";
     case "action":
-      return "Priority";
+      return "Needs action";
     case "notifs":
       return "Notifications";
     case "mail":
       return "Mail";
   }
+}
+
+const FOCUS_LIMIT = 24;
+
+/**
+ * Keep the broad inbox views useful on busy accounts. Actionable unread items
+ * always win the first slots, then the remaining unread items, then recent
+ * history. Nothing is discarded: the rail exposes the rest through "Show
+ * older".
+ */
+function focusItems(items: InboxItem[], limit = FOCUS_LIMIT): InboxItem[] {
+  if (items.length <= limit) return items;
+
+  const selected = new Set<string>();
+  const focused: InboxItem[] = [];
+  const add = (candidate: InboxItem) => {
+    if (focused.length >= limit || selected.has(candidate.id)) return;
+    selected.add(candidate.id);
+    focused.push(candidate);
+  };
+
+  items.filter((item) => item.action && item.unread).forEach(add);
+  items.filter((item) => item.unread).forEach(add);
+  items.forEach(add);
+
+  return focused;
+}
+
+function receivedMailIds(item: InboxItem): string[] {
+  return (item.messages ?? [])
+    .filter((message) => message.from === "them" && message.id)
+    .map((message) => message.id as string);
 }
 
 function groupItems(items: InboxItem[]): { thisTurn: InboxItem[]; earlier: InboxItem[] } {
@@ -78,12 +110,15 @@ function MonoCount({ n }: { n: number }) {
 // ---------------------------------------------------------------------------
 
 export function InboxClient() {
-  const { items, loading, error, refetch, counts } = useInboxData();
+  const { items, loading, error, refetch } = useInboxData();
   const [state, dispatch] = useReducer(inboxReducer, initialInboxState);
   const [eyebrow, setEyebrow] = useState<EyebrowInfo | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   // Mobile: false = rail visible, true = reading pane visible (full-screen).
   // Ignored at lg+ where both columns always show.
   const [mobileReader, setMobileReader] = useState(false);
+  const [markAllError, setMarkAllError] = useState<string | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
   // Fetch character eyebrow info from /api/auth/me
   useEffect(() => {
@@ -104,7 +139,7 @@ export function InboxClient() {
 
   // Derive visible items for the active segment, hiding archived
   const visibleItems = useMemo(() => {
-    const base = items.filter((i) => !state.archivedIds.has(i.id));
+    const base = items.filter((i) => !state.archivedIds.has(i.id) && !state.snoozedIds.has(i.id));
     if (state.seg === "notifs") return base.filter((i) => i.kind === "notif");
     if (state.seg === "mail") return base.filter((i) => i.kind === "mail");
     if (state.seg === "action") {
@@ -114,19 +149,43 @@ export function InboxClient() {
       });
     }
     return base;
-  }, [items, state.seg, state.archivedIds, state.readIds]);
+  }, [items, state.seg, state.archivedIds, state.snoozedIds, state.readIds]);
 
-  // Derive effective selected item (default to first if none selected)
-  const selId = state.selId ?? visibleItems[0]?.id ?? null;
-  const sel = visibleItems.find((i) => i.id === selId) ?? null;
+  const counts = useMemo(() => {
+    const activeItems = items.filter(
+      (item) => !state.archivedIds.has(item.id) && !state.snoozedIds.has(item.id)
+    );
+    const unread = (item: InboxItem) => item.unread && !state.readIds.has(item.id);
+    return {
+      all: activeItems.filter(unread).length,
+      notifs: activeItems.filter((item) => item.kind === "notif" && unread(item)).length,
+      mail: activeItems.filter((item) => item.kind === "mail" && unread(item)).length,
+      action: activeItems.filter((item) => item.action && unread(item)).length,
+    };
+  }, [items, state.archivedIds, state.snoozedIds, state.readIds]);
 
-  // Apply optimistic read state
   const itemsWithReadState = useMemo(
-    () => visibleItems.map((i) => (state.readIds.has(i.id) ? { ...i, unread: false } : i)),
+    () =>
+      visibleItems.map((item) =>
+        state.readIds.has(item.id) ? { ...item, unread: false, action: false } : item
+      ),
     [visibleItems, state.readIds]
   );
 
-  const { thisTurn, earlier } = useMemo(() => groupItems(itemsWithReadState), [itemsWithReadState]);
+  const railItems = useMemo(
+    () => (showHistory ? itemsWithReadState : focusItems(itemsWithReadState)),
+    [itemsWithReadState, showHistory]
+  );
+
+  // Derive effective selected item (default to first if none selected)
+  const selId =
+    state.selId && railItems.some((item) => item.id === state.selId)
+      ? state.selId
+      : (railItems[0]?.id ?? null);
+  const sel = railItems.find((i) => i.id === selId) ?? null;
+
+  const { thisTurn, earlier } = useMemo(() => groupItems(railItems), [railItems]);
+  const hiddenCount = Math.max(0, visibleItems.length - railItems.length);
 
   // Select + mark read
   const handleSelect = useCallback(
@@ -143,7 +202,9 @@ export function InboxClient() {
               body: JSON.stringify({ id: item.id, action: "read" }),
             });
           } else {
-            await fetch(`/api/mail/${item.id}`, { method: "PATCH" });
+            await Promise.all(
+              receivedMailIds(item).map((id) => fetch(`/api/mail/${id}`, { method: "PATCH" }))
+            );
           }
         } catch {
           // Best-effort — UI is already updated optimistically
@@ -157,11 +218,17 @@ export function InboxClient() {
   const handleArchive = useCallback(async (item: InboxItem) => {
     dispatch({ type: "ARCHIVE", id: item.id });
     try {
-      await fetch("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: item.id, action: "archive" }),
-      });
+      if (item.kind === "mail") {
+        await Promise.all(
+          receivedMailIds(item).map((id) => fetch(`/api/mail/${id}`, { method: "DELETE" }))
+        );
+      } else {
+        await fetch("/api/notifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: item.id, action: "archive" }),
+        });
+      }
     } catch {
       // Best-effort
     }
@@ -181,21 +248,52 @@ export function InboxClient() {
     }
   }, []);
 
-  // Mark all read
+  // Mark all read — optimistic update, then await the batch. Any item the
+  // server rejects is rolled back so the client never silently diverges,
+  // the player sees an error, and refetch() reconciles with server state.
   const handleMarkAllRead = useCallback(async () => {
-    const unreadIds = visibleItems.filter((i) => i.unread).map((i) => i.id);
-    if (unreadIds.length === 0) return;
-    dispatch({ type: "MARK_ALL_READ", ids: unreadIds });
-    // Best-effort batch — fire and forget
-    for (const id of unreadIds) {
-      fetchJson("/api/notifications", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, action: "read" }),
-        feature: "inbox-mark-all-read",
-      }).catch(() => {});
+    const unreadItems = visibleItems.filter((item) => item.unread && !state.readIds.has(item.id));
+    if (unreadItems.length === 0 || markingAll) return;
+    setMarkAllError(null);
+    setMarkingAll(true);
+    dispatch({
+      type: "MARK_ALL_READ",
+      ids: unreadItems.map((item) => item.id),
+    });
+    const outcomes = await Promise.allSettled(
+      unreadItems.map(async (item) => {
+        if (item.kind === "mail") {
+          const responses = await Promise.all(
+            receivedMailIds(item).map((id) => fetch(`/api/mail/${id}`, { method: "PATCH" }))
+          );
+          if (responses.some((res) => !res.ok)) {
+            throw new Error(`mark read failed for mail thread ${item.id}`);
+          }
+        } else {
+          await fetchJson("/api/notifications", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: item.id, action: "read" }),
+            feature: "inbox-mark-all-read",
+          });
+        }
+      })
+    );
+    const failedIds = unreadItems
+      .filter((_, index) => outcomes[index].status === "rejected")
+      .map((item) => item.id);
+    if (failedIds.length > 0) {
+      dispatch({ type: "UNMARK_READ", ids: failedIds });
+      console.error("[inbox] Failed to mark all read", { failed: failedIds.length });
+      setMarkAllError(
+        failedIds.length === unreadItems.length
+          ? "Couldn't mark everything as read. Please try again."
+          : "Some items couldn't be marked as read. Please try again."
+      );
+      refetch();
     }
-  }, [visibleItems]);
+    setMarkingAll(false);
+  }, [visibleItems, state.readIds, markingAll, refetch]);
 
   // Loading state — mirrors header + segment chips + rail/reading-pane grid
   if (loading) {
@@ -289,13 +387,30 @@ export function InboxClient() {
         {/* Mark all read */}
         <button
           type="button"
-          onClick={handleMarkAllRead}
-          disabled={counts.all === 0}
+          onClick={() => void handleMarkAllRead()}
+          disabled={counts.all === 0 || markingAll}
           className="shrink-0 rounded-lg border border-card-border bg-card px-3.5 py-1.5 text-sm font-medium text-muted transition-colors hover:border-primary/30 hover:text-foreground disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none"
         >
-          Mark all read
+          {markingAll ? "Marking…" : "Mark all read"}
         </button>
       </div>
+
+      {/* Mark-all-read failure — rolled back to server state, player can retry */}
+      {markAllError && (
+        <div
+          role="alert"
+          className="mb-5 flex items-center gap-3 rounded-xl border border-error/30 bg-error/10 px-4 py-3"
+        >
+          <p className="flex-1 text-sm text-error">{markAllError}</p>
+          <button
+            type="button"
+            onClick={() => void handleMarkAllRead()}
+            className="shrink-0 text-sm font-medium text-error underline underline-offset-2"
+          >
+            Try again
+          </button>
+        </div>
+      )}
 
       {/* Priority lane — active event needing inline input (renders null when none) */}
       <PriorityLane onResolved={refetch} />
@@ -321,6 +436,7 @@ export function InboxClient() {
               onClick={() => {
                 dispatch({ type: "SET_SEG", seg });
                 setMobileReader(false);
+                setShowHistory(false);
               }}
               className={[
                 "flex items-center rounded-full border px-3.5 py-1 text-sm font-medium transition-colors motion-reduce:transition-none",
@@ -355,10 +471,43 @@ export function InboxClient() {
           <div
             className={`min-h-0 overflow-y-auto rounded-xl border border-card-border bg-card lg:block ${mobileReader ? "hidden" : "block"}`}
           >
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-card-border bg-card/95 px-4 py-3 backdrop-blur">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-muted">
+                  {showHistory ? "Full history" : "Working set"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted">
+                  <span className="font-mono tabular-nums text-foreground">{railItems.length}</span>{" "}
+                  {hiddenCount > 0 ? `of ${visibleItems.length} items` : "items"}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() =>
+                    dispatch({ type: "SET_DENSITY", density: compact ? "comfortable" : "compact" })
+                  }
+                  className="rounded-md border border-card-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted transition-colors hover:border-primary/30 hover:text-foreground"
+                  aria-label={compact ? "Use comfortable density" : "Use compact density"}
+                >
+                  {compact ? "Roomy" : "Compact"}
+                </button>
+                {hiddenCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowHistory((current) => !current)}
+                    className="rounded-md border border-primary/25 bg-primary/5 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-primary transition-colors hover:bg-primary/10"
+                  >
+                    {showHistory ? "Recent" : `Show older (${hiddenCount})`}
+                  </button>
+                )}
+              </div>
+            </div>
+
             {thisTurn.length > 0 && (
               <>
-                <div className="border-b border-card-border px-4 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+                <div className="border-b border-card-border bg-card-elevated/25 px-4 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-foreground/70">
                     This turn
                   </p>
                 </div>
@@ -376,8 +525,8 @@ export function InboxClient() {
 
             {earlier.length > 0 && (
               <>
-                <div className="border-b border-card-border px-4 py-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">
+                <div className="border-b border-card-border bg-card-elevated/25 px-4 py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-foreground/70">
                     Earlier
                   </p>
                 </div>

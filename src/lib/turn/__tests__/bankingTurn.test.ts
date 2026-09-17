@@ -213,6 +213,16 @@ describe("processBankingTurn", () => {
           if (typeof u.$set["bankCharter.lastBankingTurn"] === "number") {
             liveCorp.bankCharter!.lastBankingTurn = u.$set["bankCharter.lastBankingTurn"] as number;
           }
+          if (typeof u.$set["bankCharter.lastBankingIncome"] === "number") {
+            liveCorp.bankCharter!.lastBankingIncome = u.$set[
+              "bankCharter.lastBankingIncome"
+            ] as number;
+          }
+          if (typeof u.$set["bankCharter.lastBankingIncomeTurn"] === "number") {
+            liveCorp.bankCharter!.lastBankingIncomeTurn = u.$set[
+              "bankCharter.lastBankingIncomeTurn"
+            ] as number;
+          }
           if (typeof u.$set["bankCharter.depositCeiling"] === "number") {
             liveCorp.bankCharter!.depositCeiling = u.$set["bankCharter.depositCeiling"] as number;
           }
@@ -461,6 +471,8 @@ describe("processBankingTurn", () => {
     expect(summary.depositInterestPaid).toBeCloseTo(expectedInterest, 5);
     expect(characterCredit).toBeCloseTo(expectedInterest, 5);
     expect(liquidDebit).toBeCloseTo(expectedInterest + premiumPaid, 5);
+    expect(liveCorp.bankCharter!.lastBankingIncome).toBeCloseTo(-expectedInterest - premiumPaid, 5);
+    expect(liveCorp.bankCharter!.lastBankingIncomeTurn).toBe(TURN);
   });
 
   it("conserves insurance premium: fund gain == bank cash debit", async () => {

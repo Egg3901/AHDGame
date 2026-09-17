@@ -303,6 +303,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2019, // SCAFFOLD: replace with Yar'Adua/Jonathan positions
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2019, // SCAFFOLD: replace with Tinubu / LP-Obi realignment positions
+  "2027": POSITIONS_2019,
 };
 
 // ── Census conversion ──────────────────────────────────────────────────────────
@@ -334,6 +335,7 @@ const ERA_CENSUS: Record<EraId, Record<string, NGRegionLayer1>> = {
   "2007": ngRegionCensusData, // SCAFFOLD: replace with 2007-era census when authored
   "2019": ngRegionCensusData, // 2019 base (NPC/NBS estimates)
   "2023": ngRegionCensusData, // SCAFFOLD: replace with 2023-era census when authored
+  "2027": ngRegionCensusData,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

@@ -39,6 +39,8 @@ describe("GET /api/client/account", () => {
       patreonTier: "supporter",
       patreonExpiresAt: null,
       email: "private@example.com",
+      discordId: "123",
+      discordAvatar: "avatar-hash",
     });
     const { GET } = await import("./route");
 
@@ -50,6 +52,7 @@ describe("GET /api/client/account", () => {
     expect(body).toMatchObject({
       linked: true,
       displayName: "Ada Lovelace",
+      avatarUrl: "https://cdn.discordapp.com/avatars/123/avatar-hash.png?size=128",
       supporter: true,
       singleplayer: { entitled: false, expiresAt: null },
     });

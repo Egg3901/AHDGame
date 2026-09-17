@@ -203,6 +203,50 @@ describe("runSourcingPass", () => {
     expect(taxed.summaries.find((s) => s.commodity === "coal")!.tariffPaid).toBe(0);
   });
 
+  it("shares a scarce foreign pool independently of state ID ordering", () => {
+    const makeSharedForeignPoolInputs = (frStateId: string, usStateId: string): SourcingInputs => {
+      const buyerBalance = (): Map<CommodityType, Balance> =>
+        new Map([["chemicals", { supply: 0, demand: 100 }]]);
+
+      return {
+        states: [
+          { stateId: frStateId, countryId: "FR" as CountryId },
+          { stateId: usStateId, countryId: "US" as CountryId },
+        ],
+        byState: new Map([
+          [frStateId, buyerBalance()],
+          [usStateId, buyerBalance()],
+        ]),
+        byCountry: new Map([
+          ["FR", new Map<CommodityType, Balance>()],
+          ["US", new Map<CommodityType, Balance>()],
+          ["GR", new Map<CommodityType, Balance>([["chemicals", { supply: 100, demand: 0 }]])],
+        ]),
+        statePricesFor: () => ({ [frStateId]: 10, [usStateId]: 10 }),
+        nationalPricesFor: () => ({ GR: 1 }),
+        basePriceFor: () => 1,
+        freightPrice: 1,
+        hops: () => 6,
+        tariffRatePct: () => 0,
+        isBlocked: () => false,
+        shortageResponsiveSourcingEnabled: false,
+      };
+    };
+
+    const importedUnits = (result: ReturnType<typeof runSourcingPass>, stateId: string) =>
+      result.flows
+        .filter((flow) => flow.commodity === "chemicals" && flow.destStateId === stateId)
+        .reduce((total, flow) => total + flow.units, 0);
+
+    const usFirst = runSourcingPass(makeSharedForeignPoolInputs("ZZ_FR", "AA_US"));
+    const frFirst = runSourcingPass(makeSharedForeignPoolInputs("AA_FR", "ZZ_US"));
+
+    expect(importedUnits(usFirst, "ZZ_FR")).toBeCloseTo(50);
+    expect(importedUnits(usFirst, "AA_US")).toBeCloseTo(50);
+    expect(importedUnits(frFirst, "AA_FR")).toBeCloseTo(50);
+    expect(importedUnits(frFirst, "ZZ_US")).toBeCloseTo(50);
+  });
+
   it("books tariff paid on import flows", () => {
     // freightPrice 100 + 10% tariff: UK landed 60 + 6 + 2.4 = 68.4 < 90.4.
     const r = runSourcingPass(

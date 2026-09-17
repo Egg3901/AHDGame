@@ -16,6 +16,7 @@ import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
 import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
 import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
 import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
+import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
 import { loadEraFullOverride, loadFullOverride } from "@/lib/seeds/loadEraPositionOverride";
 import { getCountryLayer1Model } from "@/lib/seeds/international";
 import type { EraId } from "@/lib/seeds/presetSelector";
@@ -33,6 +34,7 @@ const ERA_CENSUS: Record<EraId, Record<string, Layer1Config>> = {
   "2007": stateCensusData2007 as unknown as Record<string, Layer1Config>,
   "2019": stateCensusData as unknown as Record<string, Layer1Config>,
   "2023": stateCensusData2023 as unknown as Record<string, Layer1Config>,
+  "2027": stateCensusData2027 as unknown as Record<string, Layer1Config>,
 };
 
 /** Dynamic import of country demographic categories by countryId. */

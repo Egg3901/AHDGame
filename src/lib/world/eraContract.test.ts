@@ -48,8 +48,18 @@ describe("S6 — every roster consumer agrees with tierFor", () => {
         const entry = manifest.entries.find((e) => e.countryId === country);
 
         if (tier === "absent") {
-          // Not a world entity in this era at all — omitted, not disabled.
-          expect(entry, `${preset}/${country}`).toBeUndefined();
+          // Not a LIVE world entity in this era. The one thing it may still be
+          // is a dissolved record: upstream's background roster keeps a state
+          // that has ceased to exist so the world remembers it did, and marks
+          // it `dissolved`/`hidden` rather than deleting the row.
+          //
+          // ⚠ A DISSOLVED ROW IS THE ONLY ALLOWED SURVIVOR. Anything else that
+          // the roster calls absent must be gone: a `sovereign` East Germany in
+          // a 2019 manifest is the exact defect this sub-project removed.
+          if (entry) {
+            expect(entry.status, `${preset}/${country}`).toBe("dissolved");
+            expect(entry.legacyAccess, `${preset}/${country}`).toBe("hidden");
+          }
           continue;
         }
         const expected =
@@ -193,13 +203,11 @@ describe("S2 — live countries meet their tier's capability contract", () => {
    * decaying into a permanently red test nobody reads.
    */
   const KNOWN_GAPS: Partial<Record<ShippingPreset, string[]>> = {
-    // Greece, Austria and Finland ship as economy-preview in 1991 with no 1991
-    // national budget seed, so their economies have nothing to run on.
-    "1991-default": [
-      "GR (econ): budgetsAuthored",
-      "AT (econ): budgetsAuthored",
-      "FI (econ): budgetsAuthored",
-    ],
+    // 1991 has NO recorded gaps any more. Greece, Austria and Finland used to
+    // ship as economy-preview with no 1991 national budget seed; upstream's
+    // "make every seed complete" (#1669) authored them, and this list is exact
+    // rather than a floor, so the fix had to be recorded here or the test would
+    // have stayed red for a problem that no longer exists.
     // Brazil and Nigeria are economy-preview in the roster but modelled
     // `historical-presence` in the manifest. Pre-existing: the Tier-1 promotion
     // that makes them full-autonomous lives in
@@ -216,61 +224,49 @@ describe("S2 — live countries meet their tier's capability contract", () => {
   );
 
   /**
-   * 1999, 2007 and 2023 were never authored past the United States. Their
-   * policy files (`basePolicies1999/2007/2023.ts`) carry a `us` block and
-   * nothing else, and S2 shows budgets and parties are missing to match.
+   * 1999, 2007 and 2023 were authored past the United States by upstream's
+   * "make every seed complete" (#1669). What remains is `partiesAuthored`, plus
+   * the 1953-gated full-autonomous promotion for Brazil and Nigeria.
    *
-   * ⚠️ The player-tier entries mean a reset to these presets ALREADY FAILS
-   * today: `seedCountryGameStates` calls `assertCanOpenCountryToPlayers` for
-   * every player country, and it throws on a hard blocker. Pre-existing, and
-   * not something Plan B introduced — `probeBudgets` has always read the preset.
+   * ⚠️ THE PLAYER-TIER BLOCK IS GONE, AND THAT IS THE HEADLINE. These lists
+   * used to carry "UK (player): budgetsAuthored" and "JP (player):
+   * budgetsAuthored", and `seedCountryGameStates` calls
+   * `assertCanOpenCountryToPlayers` for every player country and throws on a
+   * hard blocker -- so a reset to 1999, 2007 or 2023 FAILED OUTRIGHT. Upstream
+   * authoring those budgets is what unblocked it. No player-tier entry survives
+   * below; if one reappears, those resets are broken again.
    */
   const SKELETON_ERA_GAPS: Partial<Record<ShippingPreset, string[]>> = {
     "1999-default": [
-      "UK (player): budgetsAuthored",
-      "JP (player): budgetsAuthored",
-      "DE (econ): budgetsAuthored",
-      "IE (econ): budgetsAuthored",
-      "BR (econ): partiesAuthored, budgetsAuthored",
-      "CN (econ): budgetsAuthored",
-      "NG (econ): partiesAuthored, budgetsAuthored",
-      "FR (econ): partiesAuthored, budgetsAuthored",
-      "IT (econ): partiesAuthored, budgetsAuthored",
-      "ES (econ): partiesAuthored, budgetsAuthored",
-      "SE (econ): partiesAuthored, budgetsAuthored",
-      "TR (econ): partiesAuthored, budgetsAuthored",
-      "GR (econ): partiesAuthored, budgetsAuthored",
-      "AT (econ): partiesAuthored, budgetsAuthored",
-      "FI (econ): partiesAuthored, budgetsAuthored",
+      "BR (econ): partiesAuthored",
+      "NG (econ): partiesAuthored",
+      "FR (econ): partiesAuthored",
+      "IT (econ): partiesAuthored",
+      "ES (econ): partiesAuthored",
+      "SE (econ): partiesAuthored",
+      "TR (econ): partiesAuthored",
+      "GR (econ): partiesAuthored",
+      "AT (econ): partiesAuthored",
+      "FI (econ): partiesAuthored",
     ],
     "2007-default": [
-      "UK (player): budgetsAuthored",
-      "JP (player): budgetsAuthored",
-      "DE (econ): budgetsAuthored",
-      "IE (econ): budgetsAuthored",
-      "BR (econ): partiesAuthored, budgetsAuthored",
-      "CN (econ): budgetsAuthored",
-      "NG (econ): partiesAuthored, budgetsAuthored",
-      "FR (econ): partiesAuthored, budgetsAuthored",
-      "IT (econ): partiesAuthored, budgetsAuthored",
-      "ES (econ): partiesAuthored, budgetsAuthored",
-      "SE (econ): partiesAuthored, budgetsAuthored",
-      "TR (econ): partiesAuthored, budgetsAuthored",
-      "GR (econ): partiesAuthored, budgetsAuthored",
-      "AT (econ): partiesAuthored, budgetsAuthored",
-      "FI (econ): partiesAuthored, budgetsAuthored",
+      "BR (econ): partiesAuthored",
+      "NG (econ): partiesAuthored",
+      "FR (econ): partiesAuthored",
+      "IT (econ): partiesAuthored",
+      "ES (econ): partiesAuthored",
+      "SE (econ): partiesAuthored",
+      "TR (econ): partiesAuthored",
+      "GR (econ): partiesAuthored",
+      "AT (econ): partiesAuthored",
+      "FI (econ): partiesAuthored",
     ],
     // 2023 authors budgets for the western European economy-preview set but not
     // for the UK, Japan, Germany, Ireland or China, and Brazil and Nigeria carry
     // the same 1953-gated full-autonomous promotion gap as they do in 2019.
     "2023-default": [
-      "UK (player): budgetsAuthored",
-      "JP (player): budgetsAuthored",
-      "DE (econ): budgetsAuthored",
-      "IE (econ): budgetsAuthored",
-      "BR (econ): fullAutonomousTier, partiesAuthored, budgetsAuthored",
-      "CN (econ): budgetsAuthored",
-      "NG (econ): fullAutonomousTier, partiesAuthored, budgetsAuthored",
+      "BR (econ): fullAutonomousTier, partiesAuthored",
+      "NG (econ): fullAutonomousTier, partiesAuthored",
     ],
   };
 
@@ -570,8 +566,13 @@ describe("S4 — player chambers agree with their era config", () => {
     // prefecture), recorded rather than papered over by bending the config down
     // to match an incomplete roster.
     "1991-default": ["JP.sangiin: seeded 206 + vacant 0 != config 252"],
+    // 2027 arrived with upstream's preset and its Sangiin roster totals 247
+    // against a 248-seat config. Recorded, not papered over: the same choice as
+    // 1991 above. Bending the config to 247 would make the game agree with an
+    // incomplete roster, and adding a 48th seat would be inventing a result.
+    "2027-default": ["JP.sangiin: seeded 247 + vacant 0 != config 248"],
     // The US House (C4) and the Commons (C5) are both FIXED. Every player
-    // chamber now agrees with its era config except the one below.
+    // chamber now agrees with its era config except the two above.
   };
 
   it.each([...SHIPPING_PRESETS])("%s", (preset) => {
@@ -596,6 +597,10 @@ describe("S4 — player chambers agree with their era config", () => {
     "2007-default": 646,
     "2019-default": 650,
     "2023-default": 650,
+    // 2027 arrived with upstream's preset. Summed from ukRegions2027's twelve
+    // houseDistricts values, not assumed from 2023: the two agree at 650 here,
+    // but that is a fact about the authored bundle rather than a rule.
+    "2027-default": 650,
   };
 
   it.each([...SHIPPING_PRESETS])("%s UK region districts", (preset) => {

@@ -58,6 +58,28 @@ const BASE_ARGS = {
 };
 
 describe("buildSectorPlantsSection", () => {
+  it("does not attribute all idle output to an unquantified deposit constraint", () => {
+    const result = buildSectorPlantsSection({
+      ...BASE_ARGS,
+      eraUnitScale: 1,
+      sectorType: "extraction",
+      depositBound: true,
+      sector: sectorFixture({
+        sectorType: "extraction",
+        operatingCapacityUnits: 6_291_110,
+        producedUnits: 787_066,
+        soldUnits: 633_305,
+        throughputFactor: 0.965,
+      }),
+    });
+    expect(result.idleCauses.some((cause) => cause.cause === "deposits")).toBe(false);
+    expect(result.idleCauses.find((cause) => cause.cause === "other")?.units).toBeGreaterThan(0);
+    expect(result.idleCauses.reduce((sum, cause) => sum + cause.units, 0)).toBeCloseTo(
+      result.idleUnits!,
+      6
+    );
+  });
+
   it("splits capacity into produced, sold, unsold and idle without losing units", () => {
     const s = buildSectorPlantsSection({
       eraUnitScale: 1,
@@ -96,6 +118,19 @@ describe("buildSectorPlantsSection", () => {
     expect(total).toBeCloseTo(s.idleUnits as number, 6);
     expect(s.idleCauses.map((c) => c.cause)).toContain("inputs");
     expect(s.idleCauses.map((c) => c.cause)).toContain("strike");
+  });
+
+  it("names demand-throttled capacity instead of hiding it in other", () => {
+    const s = buildSectorPlantsSection({
+      eraUnitScale: 1,
+      ...BASE_ARGS,
+      sector: {
+        ...sectorFixture({ capitalStock: 1_000, producedUnits: 100, soldUnits: 80 }),
+        demandThrottleFactor: 0.1,
+      } as CorporateSector,
+    });
+
+    expect(s.idleCauses).toEqual([{ cause: "demand", units: 900 }]);
   });
 
   it("reports a mothballed sector's whole capacity as idle under one cause", () => {

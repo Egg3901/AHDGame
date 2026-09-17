@@ -135,6 +135,29 @@ export interface Union {
    * (`src/lib/labour/unionLaws.ts`).
    */
   suspended?: boolean;
+  /**
+   * Illicit unions under ban: shadow pool of organizing power built by
+   * underground drives while suspended. Converts to legal `strength` at a
+   * haircut on repeal (`REPEAL_UNDERGROUND_HAIRCUT`), never usable for
+   * leadership, strikes, or dues while the ban holds. Absent reads as zero.
+   */
+  undergroundStrength?: number;
+  /**
+   * Illicit unions under ban: server-side heat 0-100. Every underground
+   * drive adds heat, idle turns decay it, and the turn step rolls detection
+   * above threshold. Never sent to clients exactly; labor UI shows only the
+   * vague bracket (`undergroundHeatText`), govt sees brackets for exposed
+   * unions. Absent reads as zero.
+   */
+  heat?: number;
+  /**
+   * Illicit unions under ban: turn through which this union stays exposed
+   * after a detection hit. Exposure halves illicit efficiency and (with the
+   * govt pass) gates enforcement. Absent/null reads as dark.
+   */
+  exposedUntilTurn?: number | null;
+  /** Illicit unions under ban: turn this union last took an underground drive, for heat-decay idle checks. */
+  lastUndergroundDriveTurn?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -169,6 +192,14 @@ export interface UnionOrganizer {
   strength?: number;
   /** Anchor-equivalent ₳ spent across all organize actions. Legacy: organizing now costs action points, not cash. */
   totalSpent: number;
+  /**
+   * Illicit unions under ban: this organizer's banked underground weight
+   * (their share of the shadow pool). Future govt prosecution targets this;
+   * leadership votes never read it. Absent reads as zero.
+   */
+  undergroundStrength?: number;
+  /** Illicit unions under ban: turn this organizer last ran an underground drive (one drive per character per turn). */
+  lastUndergroundDriveTurn?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }

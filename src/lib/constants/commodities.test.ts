@@ -17,6 +17,7 @@ import {
   COMMODITY_TYPES,
   COMMODITY_AGGREGATE_INPUT_CAP,
   COMMODITY_AGGREGATE_SURPLUS_CAP,
+  BUILDING_MATERIALS_GDP_DEMAND_FRACTION,
   COMMODITY_PRESSURE_SOFT_KNEE,
   computeRawSupplyDemand,
   getCommodityStabilizer,
@@ -441,6 +442,28 @@ describe("computeRawSupplyDemand — state-owned (NatCorp) sectors", () => {
 
     expect(privDemand).toBeGreaterThan(0);
     expect(natDemand).toBeCloseTo(privDemand, 6);
+  });
+});
+
+describe("computeRawSupplyDemand — building materials macro buyer (demand audit step 3)", () => {
+  const gdpGrowth = { nationalAverage: 0, byState: new Map() } as GdpGrowthData;
+  const stab = getCommodityStabilizer("building_materials");
+
+  it("adds GDP-proportional macro demand to the global and state books", () => {
+    const res = computeRawSupplyDemand([], gdpGrowth, new Map([["TX", 1_000_000]]));
+    // 1,000,000 × 2e-4 ÷ $400 base × 1 (no era rescale) = 0.5 units.
+    const expected =
+      (1_000_000 * BUILDING_MATERIALS_GDP_DEMAND_FRACTION) /
+      COMMODITY_BASE_PRICES["building_materials"];
+    expect(BUILDING_MATERIALS_GDP_DEMAND_FRACTION).toBeGreaterThan(0);
+    expect(res.global.get("building_materials")!.demand).toBeCloseTo(stab + expected, 6);
+    expect(res.byState.get("TX")?.get("building_materials")?.demand).toBeCloseTo(expected, 6);
+  });
+
+  it("is inert without a state GDP book", () => {
+    const res = computeRawSupplyDemand([], gdpGrowth);
+    expect(res.global.get("building_materials")!.demand).toBe(stab);
+    expect(res.demandTruncated.get("building_materials") ?? 0).toBe(0);
   });
 });
 

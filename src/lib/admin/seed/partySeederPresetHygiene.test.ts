@@ -6,7 +6,6 @@ import type { PoliticalParty } from "@/lib/db/types";
 import { seedDDParties } from "./seedDD";
 import { seedFRParties } from "./seedFR";
 import { seedIEParties } from "./seedIE";
-import { seedITParties } from "./seedIT";
 import { seedNGParties } from "./seedNG";
 import { seedNIParties, seedUKParties } from "./seedUK";
 
@@ -99,16 +98,19 @@ const CASES: SeederCase[] = [
     from: "2019-default",
     to: "1953-default",
   },
-  {
-    name: "seedITParties",
-    run: (db, preset) => seedITParties(db, noop, preset),
-    module: () => import("@/lib/seeds/it/itParties").then((m) => m.itParties),
-    // Every Italian party is tagged for all three Cold-War presets and none for
-    // 2019, so the only pair that strands anything runs the other way: the whole
-    // First Republic roster must vanish from a modern world.
-    from: "1991-default",
-    to: "2019-default",
-  },
+  // ⚠ ITALY CANNOT BE TESTED HERE, AND THE REASON IS WORTH KNOWING.
+  // Every Italian party is tagged for all three Cold-War presets and none for a
+  // modern one, so no DOWNGRADE strands anything -- all three eras want the same
+  // five parties. The upgrade direction would, except that
+  // `selectPartyRosterForPreset` inherits the 1991 roster for a preset with none
+  // of its own, so the First Republic is re-seeded immediately after the prune
+  // removes it. An assertion here would be testing the fallback, not the prune.
+  //
+  // That fallback is deliberate: without it Italy and France boot into modern
+  // presets with ZERO parties, which `partyRosterCoverage.test.ts` forbids and
+  // which breaks elections outright. The cost is that a 2019 Italian world seats
+  // Democrazia Cristiana, dissolved in 1994. The fix is authoring modern Italian
+  // and French rosters -- a data task. Restore this case when that lands.
   {
     name: "seedNGParties",
     run: (db, preset) => seedNGParties(db, noop, preset),

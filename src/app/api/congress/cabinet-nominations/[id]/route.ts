@@ -2,9 +2,10 @@
  * GET /api/congress/cabinet-nominations/[id] — Single cabinet nomination for detail page
  */
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { CabinetNomination, ElectedOfficial, Character } from "@/lib/db/types";
 import { getCabinetPositionById } from "@/lib/constants";
@@ -13,7 +14,10 @@ import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBrea
 // GET /api/congress/cabinet-nominations/[id] — Returns full detail for a single cabinet nomination including vote tallies.
 // Auth: public
 // Errors: 400, 404
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withNoStore(async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     const { id } = await params;
     let nominationOid: ObjectId;
@@ -32,7 +36,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: "Nomination not found" }, { status: 404 });
     }
 
-    const authUser = await verifyAuth().catch(() => null);
+    const authUser = await getAuthUser();
     const myCharacter = authUser
       ? await db
           .collection<Character>("characters")
@@ -51,13 +55,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
     const pos = getCabinetPositionById(nomination.positionId);
 
-    // Fetch the nominee's sequentialId and countryId (fallback for legacy docs without countryId)
-    const nomineeChar = await db
-      .collection<Character>("characters")
-      .findOne(
-        { _id: nomination.nomineeCharacterId },
-        { projection: { sequentialId: 1, countryId: 1 } }
-      );
+    // Fetch the nominee's sequentialId and countryId (fallback for legacy docs without countryId).
+    // NPP nominees have no character doc, so skip the lookup for them.
+    const nomineeChar = nomination.nomineeCharacterId
+      ? await db
+          .collection<Character>("characters")
+          .findOne(
+            { _id: nomination.nomineeCharacterId },
+            { projection: { sequentialId: 1, countryId: 1 } }
+          )
+      : null;
     const nomineeSequentialId = nomineeChar?.sequentialId;
     const countryId = nomination.countryId ?? nomineeChar?.countryId ?? "US";
 
@@ -79,7 +86,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       countryId,
       positionId: nomination.positionId,
       positionName: pos?.name ?? nomination.positionId,
-      nomineeCharacterId: nomination.nomineeCharacterId.toString(),
+      nomineeCharacterId: nomination.nomineeCharacterId?.toString() ?? null,
+      nomineeNppId: nomination.nomineeNppId?.toString() ?? null,
+      nomineeMode: nomination.nomineeMode ?? "character",
       nomineeSequentialId,
       nomineeCharacterName: nomination.nomineeCharacterName,
       nomineeParty: nomination.nomineeParty,
@@ -97,4 +106,4 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

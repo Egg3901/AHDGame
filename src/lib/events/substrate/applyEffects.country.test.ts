@@ -231,6 +231,62 @@ describe("applyDeclarativeEffects — country scope (World Events v1 Phase 0)", 
     expect(db.collectionMocks.coldWarTension).toBeUndefined();
   });
 
+  it("democraticHealthDelta moves the institutional metric basket", async () => {
+    db.collection("politicalMetrics");
+    db.collectionMocks.politicalMetrics!.find().toArray.mockResolvedValue([
+      {
+        _id: "A",
+        countryId: "US",
+        values: { "governance.participation": 60 },
+      },
+    ]);
+    const instance = makeInstance({ kind: "worldEvents.constitutionalCrisis" });
+    const tier: OutcomeTier = {
+      minRoll: 1,
+      maxRoll: 100,
+      label: "institutional strain",
+      effects: [{ type: "democraticHealthDelta", delta: -3 }],
+    };
+
+    await applyDeclarativeEffects(makeCtx(db, instance, tier), tier.effects);
+
+    expect(db.collectionMocks.politicalMetrics!.bulkWrite).toHaveBeenCalledTimes(1);
+    const operations = db.collectionMocks.politicalMetrics!.bulkWrite.mock.calls[0][0];
+    expect(operations[0].updateOne.update.$set.values["governance.participation"]).toBe(57);
+  });
+
+  it("presidentialHealthRelief targets the currently seated President", async () => {
+    db.collection("electedOfficials");
+    db.collection("countryModifiers");
+    const characterId = new ObjectId();
+    db.collectionMocks.electedOfficials!.findOne.mockResolvedValue({
+      party: "ruling",
+      characterId,
+    });
+    const instance = makeInstance({ kind: "worldEvents.constitutionalCrisis" });
+    const tier: OutcomeTier = {
+      minRoll: 1,
+      maxRoll: 100,
+      label: "temporary continuity",
+      effects: [{ type: "presidentialHealthRelief", pct: 40, durationTurns: 12 }],
+    };
+
+    await applyDeclarativeEffects(makeCtx(db, instance, tier), tier.effects);
+
+    expect(db.collectionMocks.countryModifiers!.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({
+        countryId: "US",
+        kind: "presidentialHealthRelief",
+        partyId: "ruling",
+        characterId: characterId.toString(),
+        pct: 40,
+        appliedAtTurn: 100,
+        expiresAtTurn: 112,
+        sourceInstanceId: instance._id,
+      })
+    );
+  });
+
   it("wireOnly is a pure no-op — no collection writes", async () => {
     const instance = makeInstance();
     const tier: OutcomeTier = {

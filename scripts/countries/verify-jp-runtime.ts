@@ -64,6 +64,7 @@ import { RAW_BUNDLES } from "../../src/lib/states/conditions/seedMetricsLoader";
 import { METRIC_PRESET_BUNDLES } from "../../src/lib/seeds/metricPresets";
 import { CORE5_NORMALS } from "../../src/lib/era/metricCatalog";
 import { REGION_ROSTERS } from "../../src/lib/demographics/substrateCoverage";
+import { SHIPPING_PRESETS } from "../../src/lib/world/eraRoster";
 import { CONSCRIPTION_SEED } from "../../src/lib/demographics/conscription";
 
 type Check = [name: string, value: unknown, expectation?: (v: never) => boolean];
@@ -238,9 +239,9 @@ if (Object.keys(STATE_ADJACENCY.JP ?? {}).length !== 8) {
   );
   failed++;
 }
-if (Object.keys(REGION_ROSTERS.JP ?? {}).length !== 7) {
+if (Object.keys(REGION_ROSTERS.JP ?? {}).length !== SHIPPING_PRESETS.length) {
   console.log(
-    `FAIL  REGION_ROSTERS.JP has ${Object.keys(REGION_ROSTERS.JP ?? {}).length} eras, expected 7`
+    `FAIL  REGION_ROSTERS.JP has ${Object.keys(REGION_ROSTERS.JP ?? {}).length} eras, expected ${SHIPPING_PRESETS.length}`
   );
   failed++;
 }

@@ -334,7 +334,7 @@ describe("applyLegislationEffect — union ban (player suggestion #93)", () => {
     expect(unionUpdate.$set.suspended).toBe(true);
   });
 
-  it("enact → repeal round-trip clears unionsBanned and unsuspends unions", async () => {
+  it("enact → repeal round-trip clears unionsBanned and leaves no union state behind", async () => {
     await applyLegislationEffect(db as unknown as Db, {
       _id: new ObjectId(),
       countryId: "US",
@@ -354,12 +354,54 @@ describe("applyLegislationEffect — union ban (player suggestion #93)", () => {
     expect(budgetCalls).toHaveLength(2);
     expect(budgetCalls[1][1].$set.unionsBanned).toBe(false);
 
-    const unionCalls = db.collectionMocks["unions"]!.updateMany.mock.calls as Array<
-      [Record<string, unknown>, { $set: Record<string, unknown> }]
-    >;
-    expect(unionCalls).toHaveLength(2);
-    expect(unionCalls[1][0]).toMatchObject({ countryId: "US" });
-    expect(unionCalls[1][1].$set.suspended).toBe(false);
+    // The mock has no union documents, so repeal has no conversion batch to
+    // write. The ban's reset is still the only union update.
+    expect(db.collectionMocks["unions"]!.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("repeal converts the underground pool to legal strength at a haircut and clears shadow fields", async () => {
+    const suspendedId = new ObjectId();
+    // Touch the collection first: mocks are created lazily on access.
+    db.collection("unions");
+    db.collectionMocks["unions"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { _id: suspendedId, strength: 200, undergroundStrength: 100, suspended: true },
+        // Seeded while the budget ban was already active: no local flag, but
+        // its shadow pool still belongs in the repeal conversion.
+        { _id: new ObjectId(), strength: 100, undergroundStrength: 60, suspended: false },
+      ]),
+    });
+
+    await applyLegislationEffect(db as unknown as Db, {
+      _id: new ObjectId(),
+      countryId: "US",
+      stateId: "us_national",
+      provisions: [{ type: "union_law", bias: 0, banAction: "repeal_ban" }],
+    });
+
+    expect(db.collectionMocks["unions"]?.bulkWrite).toHaveBeenCalledTimes(1);
+    const ops = db.collectionMocks["unions"]!.bulkWrite.mock.calls[0][0] as Array<{
+      updateOne: {
+        filter: Record<string, unknown>;
+        update: { $set: Record<string, unknown>; $unset: Record<string, unknown> };
+      };
+    }>;
+    expect(ops).toHaveLength(2);
+    // Legal strength intact plus half the shadow pool; cell wiped clean.
+    expect(ops[0].updateOne.update.$set.strength).toBe(250);
+    expect(ops[0].updateOne.update.$set.suspended).toBe(false);
+    expect(ops[0].updateOne.update.$unset).toMatchObject({
+      undergroundStrength: "",
+      heat: "",
+      exposedUntilTurn: "",
+    });
+    expect(ops[1].updateOne.update.$set.strength).toBe(130);
+    expect(db.collectionMocks["unionOrganizers"]?.updateMany).toHaveBeenCalledWith(
+      { unionId: { $in: [suspendedId, ops[1].updateOne.filter._id] } },
+      expect.objectContaining({
+        $unset: { undergroundStrength: "", lastUndergroundDriveTurn: "" },
+      })
+    );
   });
 
   it("a bias-only union_law provision still writes unionLawBias and never touches the ban fields", async () => {

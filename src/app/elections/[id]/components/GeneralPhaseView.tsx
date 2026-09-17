@@ -20,6 +20,7 @@ import {
   type PersuasionDriverCandidate,
 } from "@/components/elections/general/PersuasionDrivers";
 import { NationalMoodGauge } from "@/components/elections/general/NationalMoodGauge";
+import { DemocraticHealthGauge } from "@/components/elections/general/DemocraticHealthGauge";
 import { FactorLedgerCard } from "@/components/elections/general/FactorLedgerCard";
 import { RaceDetailTabs, type RaceDetailPane } from "./RaceDetailTabs";
 import { StateOrganizationTab } from "@/app/political-operations/components/StateOrganizationTab";
@@ -102,6 +103,8 @@ interface GeneralPhaseViewProps {
    * same figure and the same components above it.
    */
   showNationalMood?: boolean;
+  /** Whether to draw the Democratic Health gauge. */
+  showDemocraticHealth?: boolean;
 }
 
 export function GeneralPhaseView({
@@ -113,6 +116,7 @@ export function GeneralPhaseView({
   showCollegeSummary = true,
   tabbedDetail = false,
   showNationalMood = true,
+  showDemocraticHealth = true,
   onSuccess,
 }: GeneralPhaseViewProps) {
   const resolveCountryName = useCountryDisplayName();
@@ -433,6 +437,13 @@ export function GeneralPhaseView({
             races have no field and the card returns null. */}
         {showNationalMood && election.electionType === "president" && !localInPrimary && (
           <NationalMoodGauge data={election.economicReferendum} />
+        )}
+
+        {/* Democratic Health: institutional strain affects the ruling party's
+            presidential candidates, with the larger personal drag shown for
+            the sitting President when they are in the race. */}
+        {showDemocraticHealth && election.electionType === "president" && !localInPrimary && (
+          <DemocraticHealthGauge data={election.democraticHealth} />
         )}
 
         {/* Factor Ledger — the read-only decomposition of each candidate's

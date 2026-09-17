@@ -293,6 +293,8 @@ describe("GET /api/banking/corporation/[id]", () => {
       "discountWindowArrears",
       "discountWindowDebt",
       "interbankDebt",
+      "lastBankingIncome",
+      "lastBankingIncomeTurn",
       "lendingOffset",
       "lendingProfile",
       "npcDeposits",

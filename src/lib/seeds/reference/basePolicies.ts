@@ -386,6 +386,10 @@ export async function getBasePolicies(preset: string): Promise<BasePolicyRecord[
     const { COUNTRY_POLICY_CONFIGS_2023 } = await import("./basePolicies2023");
     return buildBasePolicies(COUNTRY_POLICY_CONFIGS_2023, 2023);
   }
+  if (preset === "2027-default") {
+    const { COUNTRY_POLICY_CONFIGS_2027 } = await import("./basePolicies2027");
+    return buildBasePolicies(COUNTRY_POLICY_CONFIGS_2027, 2027);
+  }
   // 2019 and its deliberate aliases ("empty", "2019-no-parties"), plus any
   // unrecognised preset. Builds from COUNTRY_POLICY_CONFIGS_2019, NOT the legacy
   // union: the union still carries su/dd and the Warsaw-Pact blocks for

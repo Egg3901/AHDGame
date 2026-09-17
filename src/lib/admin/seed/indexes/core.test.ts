@@ -1,6 +1,10 @@
 import type { Db } from "mongodb";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@/lib/auth/providerIdentityIndexes", () => ({
+  ensureProviderIdentityIndexes: vi.fn().mockResolvedValue([]),
+}));
+
 const { ensureIndexMock, normalizeAndMergeCorporateSectorsMock } = vi.hoisted(() => ({
   ensureIndexMock: vi.fn(),
   normalizeAndMergeCorporateSectorsMock: vi.fn(),

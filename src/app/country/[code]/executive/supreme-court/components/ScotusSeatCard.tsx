@@ -21,6 +21,7 @@ export interface SeatCardData {
   economicLean: number | null;
   socialLean: number | null;
   isDivergent: boolean;
+  originalRoster: boolean;
   deathChance: DivergentDeathChance | null;
 }
 
@@ -139,7 +140,7 @@ export function ScotusSeatCard({
                   />
                 </div>
               )}
-              {seat.justiceMode === "historical" && (
+              {seat.originalRoster && (
                 <p className="mt-1 text-[10px] italic text-muted">Original Roster</p>
               )}
             </div>

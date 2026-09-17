@@ -85,6 +85,9 @@ export type ConsolePayload = {
     totalLoans: number;
     npcDeposits: number;
     cashReserves: number;
+    /** Realized net income from the most recent banking pass. */
+    lastBankingIncome: number;
+    lastBankingIncomeTurn: number | null;
     requiredReserves: number;
     upstreamCapacity: number;
     lendingProfile: LendingProfileId;

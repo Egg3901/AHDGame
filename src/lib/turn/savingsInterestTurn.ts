@@ -21,6 +21,7 @@ import { buildSavingsInterestAccrualBulkOp } from "@/lib/currency/characterFunds
 import { getNppAutonomyLevel, nppAutonomyLevelAtLeast } from "@/lib/nppAutonomy/featureFlag";
 import { processNppSavingsInterest } from "@/lib/turn/nppSavingsInterest";
 import { loadBankingPolicy } from "@/lib/banking/policy";
+import { ensureCentralBankPricingPhaseIn } from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -75,6 +76,7 @@ export async function processSavingsInterestTurn(
   db: Db,
   turn: number
 ): Promise<{ charactersProcessed: number; totalInterest: number }> {
+  const centralBankPricing = await ensureCentralBankPricingPhaseIn(db, turn);
   const forexEnabled = await isForexEnabled();
   // Once accounts are authoritative every accrual and credit below is
   // mirrored onto the account record; the character fields stay as the
@@ -169,7 +171,8 @@ export async function processSavingsInterestTurn(
           eligible,
           prime,
           currency,
-          resolveInflation(currency)
+          resolveInflation(currency),
+          centralBankPricing.depositBonusPercentPoints
         );
         if (interest <= 0) continue;
         perCharInc[`currencyBalances.pendingSavingsInterest.${currency}`] = interest;
@@ -361,7 +364,14 @@ export async function processSavingsInterestTurn(
     // v3 AND ABOVE — a strict `=== "v3"` here used to switch NPP savings
     // interest back off the moment the level was raised to v4.
     if (nppAutonomyLevelAtLeast(await getNppAutonomyLevel(db), "v3")) {
-      await processNppSavingsInterest(db, turn, resolvePrime, resolveInflation, resolvePoolTotal);
+      await processNppSavingsInterest(
+        db,
+        turn,
+        resolvePrime,
+        resolveInflation,
+        resolvePoolTotal,
+        centralBankPricing.depositBonusPercentPoints
+      );
     }
 
     return { charactersProcessed: accrualOps.length, totalInterest };
@@ -394,7 +404,13 @@ export async function processSavingsInterestTurn(
     const home = getHomeCurrency(char as Character);
     const prime = resolvePrime(home);
     const eligible = interestEligibleBalance(sav, resolvePoolTotal(home));
-    const interest = computeSavingsInterestForTurn(eligible, prime, home, resolveInflation(home));
+    const interest = computeSavingsInterestForTurn(
+      eligible,
+      prime,
+      home,
+      resolveInflation(home),
+      centralBankPricing.depositBonusPercentPoints
+    );
     if (interest <= 0) continue;
     totalInterest += interest;
     const payingCountry = getCountryIdForCurrency(home) as CountryId;

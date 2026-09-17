@@ -47,7 +47,7 @@ export async function seedGRRegions(
 
 export async function seedGRParties(db: Db, log: (msg: string) => void, preset?: string) {
   const { grParties } = await import("@/lib/seeds/gr/grParties");
-  const { isPartyValidForPreset, prunePresetMismatchedDefaultParties } =
+  const { selectPartyRosterForPreset, prunePresetMismatchedDefaultParties } =
     await import("@/lib/seeds/ensureDefaultParties");
 
   let activePreset = preset;
@@ -57,9 +57,7 @@ export async function seedGRParties(db: Db, log: (msg: string) => void, preset?:
 
   await prunePresetMismatchedDefaultParties(db, grParties as PartySeed[], activePreset);
 
-  const filtered = (grParties as PartySeed[]).filter((seed) =>
-    isPartyValidForPreset(seed, activePreset)
-  );
+  const filtered = selectPartyRosterForPreset(grParties as PartySeed[], activePreset);
   const now = new Date();
   for (const party of filtered) {
     const { seedOrder: _seedOrder, validForPresets: _validForPresets, ...partyData } = party;

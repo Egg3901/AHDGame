@@ -23,7 +23,11 @@ import {
   characterIncomeInLoanCurrency,
   listBorrowerFacingLoans,
 } from "@/lib/banking/lending";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+import {
+  fxRateMapToRecord,
+  loadFxRatesByCurrency,
+  resolveCorpLiquidCurrencyCode,
+} from "@/lib/currency/corporationCapital";
 import { getGameState } from "@/lib/gameState";
 import { loadCountryNameOverrides } from "@/lib/country/countryIdentity";
 import { corporationPathIdFromDoc } from "@/lib/api/corporations/resolveQuery";
@@ -32,6 +36,7 @@ import type { Corporation } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types";
 import type { BankCharterType } from "@/lib/db/types/bank";
 import { savingsApyPercent } from "@/lib/currency/savingsInterest";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 import type { ObjectId } from "mongodb";
 
 // GET /api/banking/hub - World banking hub payload (CBs, private banks, savings, loans).
@@ -65,6 +70,7 @@ type HubPrivateBank = {
   totalDeposits: number;
   cashReserves: number;
   lendableHeadroom: number;
+  requireApproval?: boolean;
   href: string;
 };
 
@@ -108,6 +114,8 @@ async function handleGET() {
     // Runtime renames, so the hub does not list a country under the name of a
     // state that has since been absorbed.
     const nameOverrides = await loadCountryNameOverrides(db);
+    const currentTurn = gameState?.currentTurn ?? 1;
+    const centralBankPricing = await loadCentralBankPricingAdjustment(db, currentTurn);
     const countryName = (id: CountryId) =>
       nameOverrides[id] ?? getCountryDisplayName(id, gameState?.preset);
 
@@ -150,7 +158,11 @@ async function handleGET() {
         countryName: countryName(anchor),
         href: currencyCentralBankUrl(currency),
         primeRate: prime,
-        savingsApyPercent: savingsApyPercent(prime, inflation),
+        savingsApyPercent: savingsApyPercent(
+          prime,
+          inflation,
+          centralBankPricing.depositBonusPercentPoints
+        ),
         isPrimary: currency === primaryCurrency,
       });
     }
@@ -172,6 +184,7 @@ async function handleGET() {
     const personalCash: Partial<Record<CurrencyCode, number>> = {
       ...(character?.currencyBalances?.personal ?? {}),
     };
+    let exchangeRates: Partial<Record<CurrencyCode, number>> = {};
     const isAdmin = auth.user.isAdmin === true;
 
     // Always load active charters for the private-bank table (flag on) and for
@@ -227,6 +240,7 @@ async function handleGET() {
             lendableHeadroom: getLendableHeadroom(charter, reserveRatio, {
               playerDepositsAreLiabilities: savingsReadsAuthoritative(policy, charter.currency),
             }),
+            requireApproval: charter.requireApproval === true,
             href: `/corporation/${corporationPathIdFromDoc({
               _id: corp._id as ObjectId,
               sequentialId: corp.sequentialId,
@@ -242,6 +256,7 @@ async function handleGET() {
     }
 
     if (privateEnabled && character) {
+      exchangeRates = fxRateMapToRecord(await loadFxRatesByCurrency(db));
       const balances = character.currencyBalances?.savings ?? {};
       const holders = character.currencyBalances?.savingsHolder ?? {};
       const depositTakers = privateBanks.filter(
@@ -294,7 +309,7 @@ async function handleGET() {
           id: c._id.toString(),
           name: c.name,
           liquidCapital: c.liquidCapital ?? 0,
-          incomePerTurn: await averageCorpIncomePerTurn(db, c._id, gameState?.currentTurn ?? 1),
+          incomePerTurn: await averageCorpIncomePerTurn(db, c._id, currentTurn),
           currency: (resolveCorpLiquidCurrencyCode(c) ?? "USD") as CurrencyCode,
         }))
       );
@@ -330,8 +345,9 @@ async function handleGET() {
       privateBanks,
       savings,
       personalCash,
+      exchangeRates,
       personalIncomeByCurrency,
-      currentTurn: gameState?.currentTurn ?? 1,
+      currentTurn,
       ceoCorporations,
       loans,
       lendingBanks: privateBanks.filter(

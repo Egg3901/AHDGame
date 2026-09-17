@@ -2,14 +2,15 @@ import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import { getAuthUser } from "@/lib/auth";
+import { requireBasicAuth } from "@/lib/api/requireAuth";
+import { requireCeo, resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { proposeSupplyAgreement } from "@/lib/corporations/commands/supplyAgreements";
-import { corporationQueryFromParamId } from "@/lib/api/corporations/resolveQuery";
 import {
   CONTRACT_OVERCOMMIT_TOLERANCE,
+  type SupplyAgreementOffer,
   type SupplyAgreement,
 } from "@/lib/db/types/supplyAgreement";
-import type { Corporation, CorporateSector } from "@/lib/db/types";
+import type { CorporateSector } from "@/lib/db/types";
 import type { GameState } from "@/lib/db/types/gameState";
 import type { GameConfig } from "@/lib/db/types/gameConfig";
 import { COMMODITY_TYPES, type CommodityType } from "@/lib/constants/commodities";
@@ -26,21 +27,37 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-/** GET — list this corp's supply agreements (as supplier or buyer). */
+function legacyOffer(agreement: SupplyAgreement): SupplyAgreementOffer {
+  return {
+    revision: 1,
+    proposedByCorpId: agreement.proposedByCorpId,
+    volumeCap: agreement.volumeCap,
+    pricePremium: agreement.pricePremium,
+    exclusive: agreement.exclusive ?? false,
+    ...(agreement.durationTurns !== undefined ? { durationTurns: agreement.durationTurns } : {}),
+    proposedAt: agreement.createdAt ?? new Date(0),
+  };
+}
+
+function serializeOffer(offer: SupplyAgreementOffer) {
+  return {
+    ...offer,
+    proposedByCorpId: offer.proposedByCorpId.toString(),
+  };
+}
+
+/** GET: list this corp's supply agreements (as supplier or buyer). */
 export async function GET(_request: Request, { params }: RouteParams) {
   try {
+    const auth = await requireBasicAuth();
+    if (!auth.ok) return auth.response;
     const { id } = await params;
-    const corpQuery = corporationQueryFromParamId(id);
-    if (!corpQuery) {
-      return NextResponse.json({ error: "Invalid corporation id" }, { status: 400 });
-    }
     const db = await getDb();
-    const corp = await db
-      .collection<Corporation>("corporations")
-      .findOne(corpQuery, { projection: { _id: 1, countryOwnerId: 1 } });
-    if (!corp) {
-      return NextResponse.json({ error: "Corporation not found" }, { status: 404 });
-    }
+    const resolved = await resolveCorporation(db, id);
+    if (!resolved.ok) return resolved.response;
+    const ceoError = requireCeo(resolved.corporation, auth.user.userId);
+    if (ceoError) return ceoError;
+    const corp = resolved.corporation;
     const corpId = corp._id;
     const agreements = await db
       .collection<SupplyAgreement>("supplyAgreements")
@@ -174,6 +191,12 @@ export async function GET(_request: Request, { params }: RouteParams) {
         supplierCorpId: a.supplierCorpId.toString(),
         buyerCorpId: a.buyerCorpId.toString(),
         proposedByCorpId: a.proposedByCorpId.toString(),
+        currentOffer: serializeOffer(
+          a.currentOffer ?? a.offers?.[a.offers.length - 1] ?? legacyOffer(a)
+        ),
+        offers: (a.offers?.length ? a.offers : [a.currentOffer ?? legacyOffer(a)]).map(
+          serializeOffer
+        ),
       })),
       capacityByCommodity,
       capacityByState,
@@ -183,10 +206,8 @@ export async function GET(_request: Request, { params }: RouteParams) {
   }
 }
 
-/** POST — propose a new supply agreement (supplier CEO). */
+/** POST: open a new supply-agreement negotiation. */
 export async function POST(request: Request, { params }: RouteParams) {
   const { id } = await params;
-  // Auth is enforced inside proposeSupplyAgreement (CEO check).
-  void getAuthUser;
   return proposeSupplyAgreement(request, id);
 }

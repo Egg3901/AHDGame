@@ -5,15 +5,19 @@ import { JP_REGION_VOTE_SHARES_1990 } from "./jpRegionVoteShares1990";
 /**
  * Calculate JP state party organization levels from estimated vote shares.
  * Picks the per-preset polling table:
- *   - `2019-default` (default) — 2021 Shugiin PR-bloc results
+ *   - `2019-default` (default) - 2021 Shugiin PR-bloc results
  *     (LDP/CDP/Komeito/JCP/Ishin/DPFP).
- *   - `1991-default` — 1990 Shugiin estimates by region
+ *   - `2027-default` - Oct 2024 Shugiin PR national shares regionalised
+ *     (LDP/CDP/Komeito/JCP/Ishin/DPFP), directionally confirmed by the
+ *     July 2025 Sangiin result (ruling coalition short of a majority;
+ *     DPFP and Sanseito gains).
+ *   - `1991-default` - 1990 Shugiin estimates by region
  *     (LDP/JSP/Komeito/JCP/DSP; no Ishin/CDP/DPFP).
- *   - `1953-default` — 1953 Shugiin estimates by region
+ *   - `1953-default` - 1953 Shugiin estimates by region
  *     (Liberal Party / Japan Democratic Party / JSP / JCP).
  *
  * Before the 1953 table existed, `1953-default` fell through to the 2021 table,
- * of whose slugs only `jcp` resolves under the 1953 roster — so every JP region
+ * of whose slugs only `jcp` resolves under the 1953 roster - so every JP region
  * seeded Communist-only party presence (the JCP polled 1.9% in 1953) and the
  * 1955 Shugiin race would have had a one-party field.
  *
@@ -32,7 +36,7 @@ const MAX_ORG = 70;
 
 // JP party slug → DB name. Used by `buildJPPartySlugToSeqId` to look up
 // live sequentialIds. Slugs match the polling tables in
-// `jpRegionVoteShares1990.ts` and the inlined 2021 table below.
+// `jpRegionVoteShares1990.ts` and the inlined 2021 and 2027 tables below.
 const JP_PARTY_SLUG_TO_NAME: Record<string, string> = {
   ldp: "Liberal Democratic Party",
   cdp: "Constitutional Democratic Party",
@@ -64,6 +68,43 @@ const JP_REGION_VOTE_SHARES_2021: Record<string, Record<string, number>> = {
 };
 
 /**
+ * Estimated vote share by region and party (%) for the 2027-default preset,
+ * anchored to the Oct 27 2024 Shugiin proportional-representation national
+ * result and regionalised on known strongholds.
+ *
+ * National PR anchor (MIC): LDP 26.73, CDP 21.20, DPFP 11.32, Komeito 10.93,
+ * Ishin 9.36, Reiwa 6.98, JCP 6.16, Sanseito 3.43, CPJ 2.10; turnout 53.8.
+ * Seats: LDP 191, CDP 148, Ishin 38, DPFP 28, Komeito 24 (of 465).
+ * Results portal: https://www.soumu.go.jp/senkyo/
+ *
+ * Only the six seeded continuing parties carry shares here; Reiwa, Sanseito,
+ * and CPJ (about 12 points combined) are unseeded and left out of the org
+ * denominator rather than smeared across seeded parties. Rows sum near 90,
+ * matching the 2021 table convention.
+ *
+ * Directional check: the July 20 2025 Sangiin election left the LDP-Komeito
+ * bloc at 122 of 248 (47 of 125 contested, short of a majority) while the
+ * DPFP rose to 22 seats and Sanseito to 15. That confirms the table shape:
+ * LDP down everywhere from 2021, CDP up, DPFP roughly doubled, JCP flat to
+ * soft, Ishin flat outside a softer Kansai.
+ *
+ * Movement from the 2021 table: LDP minus 4 to 7 everywhere; CDP plus 2 to
+ * 4 with Hokkaido and Kanto strongest; DPFP 11 to 13 (from 5 to 8) on its
+ * 2024 PR breakthrough; Komeito flat; Ishin flat except Kansai 28 to 25;
+ * JCP minus 1 in most regions.
+ */
+export const JP_REGION_VOTE_SHARES_2027: Record<string, Record<string, number>> = {
+  HOK: { ldp: 30, cdp: 28, komeito: 10, jcp: 7, ishin: 5, dpfp: 11 },
+  TOH: { ldp: 36, cdp: 24, komeito: 9, jcp: 5, ishin: 5, dpfp: 11 },
+  KAN: { ldp: 28, cdp: 24, komeito: 11, jcp: 7, ishin: 9, dpfp: 12 },
+  CHU: { ldp: 32, cdp: 21, komeito: 10, jcp: 5, ishin: 8, dpfp: 13 },
+  KNS: { ldp: 24, cdp: 17, komeito: 11, jcp: 6, ishin: 25, dpfp: 9 },
+  CGK: { ldp: 34, cdp: 23, komeito: 9, jcp: 6, ishin: 6, dpfp: 11 },
+  SHI: { ldp: 37, cdp: 21, komeito: 10, jcp: 5, ishin: 5, dpfp: 11 },
+  KYU: { ldp: 34, cdp: 21, komeito: 10, jcp: 6, ishin: 6, dpfp: 12 },
+};
+
+/**
  * Estimated vote share by region and party (%) for the April 1953 Shugiin
  * general election, simplified to game regions. National result: Yoshida's
  * Liberals ~39% plus the Hatoyama Liberal splinter ~9% (modeled together as
@@ -75,11 +116,11 @@ const JP_REGION_VOTE_SHARES_2021: Record<string, Record<string, number>> = {
  * industrial Kanto/Kansai belt and Hokkaido, JCP marginal everywhere.
  *
  * Hokkaido (#3873): the Left Socialists' single strongest regional base in
- * this era was Hokkaido's tenant-farmer cooperatives and coal-mining unions —
+ * this era was Hokkaido's tenant-farmer cooperatives and coal-mining unions -
  * the prefecture returned more JSP-aligned Diet members per seat than any
  * other region in the early-to-mid 1950s. HOK is seeded as the one region
  * where the Socialists' combined organisation actually leads the Liberals,
- * rather than merely narrowing the gap — every other region keeps `jiyuto`
+ * rather than merely narrowing the gap - every other region keeps `jiyuto`
  * on top, so the national aggregate stays Liberal-led as it was historically.
  */
 export const JP_REGION_VOTE_SHARES_1953: Record<string, Record<string, number>> = {
@@ -100,7 +141,7 @@ function calculateJPPartyOrg(voteShare: number): number {
 
 /**
  * Resolve each JP party slug to the matching `sequentialId` in the DB.
- * Robust to preset filtering — only returns mappings for parties that
+ * Robust to preset filtering - only returns mappings for parties that
  * actually exist under the active preset (e.g. `jsp` / `dsp` under
  * 1991, `cdp` / `ishin` / `dpfp` under 2019).
  */
@@ -123,7 +164,8 @@ export async function buildJPPartySlugToSeqId(db: Db): Promise<Record<string, st
  * Generate all JP state party org entries from vote share estimates.
  * `preset` selects the polling table: `1953-default` uses
  * `JP_REGION_VOTE_SHARES_1953`; `1991-default` uses
- * `JP_REGION_VOTE_SHARES_1990`; anything else (including the default
+ * `JP_REGION_VOTE_SHARES_1990`; `2027-default` uses
+ * `JP_REGION_VOTE_SHARES_2027`; anything else (including the default
  * `2019-default`) uses the 2021 dataset.
  */
 export async function calculateJPStatePartyOrgs(
@@ -137,7 +179,9 @@ export async function calculateJPStatePartyOrgs(
       ? JP_REGION_VOTE_SHARES_1953
       : preset === "1991-default"
         ? JP_REGION_VOTE_SHARES_1990
-        : JP_REGION_VOTE_SHARES_2021;
+        : preset === "2027-default"
+          ? JP_REGION_VOTE_SHARES_2027
+          : JP_REGION_VOTE_SHARES_2021;
 
   for (const [regionId, partyVotes] of Object.entries(voteShares)) {
     for (const [partySlug, voteShare] of Object.entries(partyVotes)) {

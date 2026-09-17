@@ -9,18 +9,22 @@ import { stateCensusData1991 } from "@/lib/seeds/stateCensusData1991";
 import { stateCensusData1999 } from "@/lib/seeds/stateCensusData1999";
 import { stateCensusData2007 } from "@/lib/seeds/stateCensusData2007";
 import { stateCensusData2023 } from "@/lib/seeds/stateCensusData2023";
+import { stateCensusData2027 } from "@/lib/seeds/stateCensusData2027";
 import { ukRegionCensusData } from "@/lib/seeds/uk/ukRegionCensusData";
 import { ukRegionCensusData1953 } from "@/lib/seeds/uk/ukRegionCensusData1953";
 import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
+import { ukRegionCensusData2027 } from "@/lib/seeds/uk/ukRegionCensusData2027";
 import { deRegionCensusData } from "@/lib/seeds/de/deRegionCensusData";
 import { deRegionCensusData1953 } from "@/lib/seeds/de/deRegionCensusData1953";
 import { deRegionCensusData1991 } from "@/lib/seeds/de/deRegionCensusData1991";
+import { deRegionCensusData2027 } from "@/lib/seeds/de/deRegionCensusData2027";
 import { ieRegionCensusData } from "@/lib/seeds/ie/ieRegionCensusData";
 import { ieRegionCensusData1953 } from "@/lib/seeds/ie/ieRegionCensusData1953";
 import { ieRegionCensusData1991 } from "@/lib/seeds/ie/ieRegionCensusData1991";
 import { cnRegionCensusData } from "@/lib/seeds/cn/cnRegionCensusData";
 import { cnRegionCensusData1953 } from "@/lib/seeds/cn/cnRegionCensusData1953";
 import { cnRegionCensusData1991 } from "@/lib/seeds/cn/cnRegionCensusData1991";
+import { cnRegionCensusData2027 } from "@/lib/seeds/cn/cnRegionCensusData2027";
 import { brRegionCensusData } from "@/lib/seeds/br/brRegionCensusData";
 import { brRegionCensusData1953 } from "@/lib/seeds/br/brRegionCensusData1953";
 import { brRegionCensusData1991 } from "@/lib/seeds/br/brRegionCensusData1991";
@@ -143,12 +147,14 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
     "2007-default": stateCensusData2007,
     "2019-default": stateCensusData,
     "2023-default": stateCensusData2023,
+    "2027-default": stateCensusData2027,
   },
   UK: {
     "1953-default": ukRegionCensusData1953,
     "1979-default": ukRegionCensusData1979,
     "2019-default": ukRegionCensusData,
     "1991-default": ukRegionCensusData1991,
+    "2027-default": ukRegionCensusData2027,
   },
   JP: JP_GEOGRAPHY.censusBundles,
   DE: {
@@ -156,6 +162,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
     "1979-default": deRegionCensusData1979,
     "2019-default": deRegionCensusData,
     "1991-default": deRegionCensusData1991,
+    "2027-default": deRegionCensusData2027,
   },
   IE: {
     "1953-default": ieRegionCensusData1953,
@@ -168,6 +175,7 @@ export const CENSUS_BUNDLES: Partial<Record<CountryId, PresetBundles>> = {
     "1979-default": cnRegionCensusData1979,
     "2019-default": cnRegionCensusData,
     "1991-default": cnRegionCensusData1991,
+    "2027-default": cnRegionCensusData2027,
   },
   BR: {
     "1953-default": brRegionCensusData1953,

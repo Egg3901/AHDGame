@@ -200,13 +200,13 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       description: "Balanced steel and building materials production from iron and coal inputs.",
       supply: { steel: 0.4, building_materials: 0.2 },
       demand: {
-        energy: 0.2,
-        iron: 0.15,
+        energy: 0.18,
+        iron: 0.13,
         coal: 0.1,
-        electronics: 0.1,
-        freight: 0.1,
+        electronics: 0.08,
+        freight: 0.08,
         real_estate_services: 0.03,
-        plastics: 0.08,
+        plastics: 0.07,
       },
     },
     {
@@ -217,7 +217,7 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       // Reduced iron 0.25→0.20 and coal 0.20→0.16 to ease pressure on two of the worst
       // shortages (iron D/S ~3.4×, coal ~2.1×) without removing the heavy-metals flavor.
       supply: { steel: 0.55 },
-      demand: { iron: 0.2, coal: 0.16, energy: 0.25, freight: 0.1, plastics: 0.03 },
+      demand: { iron: 0.19, coal: 0.15, energy: 0.23, freight: 0.1, plastics: 0.03 },
     },
     {
       id: "electronics_manufacturing",
@@ -438,14 +438,14 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
         "Large integrated hospital systems with more capacity and heavier staffing, technology, and facility needs.",
       supply: { healthcare_services: 0.6 },
       demand: {
-        pharmaceuticals: 0.18,
-        electronics: 0.2,
-        software: 0.15,
+        pharmaceuticals: 0.15,
+        electronics: 0.16,
+        software: 0.13,
         energy: 0.08,
         real_estate_services: 0.06,
         food: 0.06,
         vehicles: 0.03,
-        plastics: 0.08,
+        plastics: 0.06,
       },
     },
     {
@@ -485,13 +485,13 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       description: "Traditional automotive manufacturing with internal combustion focus.",
       supply: { vehicles: 0.5 },
       demand: {
-        steel: 0.25,
-        iron: 0.1,
-        electronics: 0.15,
+        steel: 0.21,
+        iron: 0.08,
+        electronics: 0.13,
         energy: 0.1,
         freight: 0.08,
         real_estate_services: 0.02,
-        plastics: 0.12,
+        plastics: 0.08,
       },
     },
     {
@@ -507,12 +507,12 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       // and reduces electronics D/S pressure from EV ramp-up.
       supply: { vehicles: 0.45 },
       demand: {
-        electronics: 0.22,
-        rare_earth: 0.14,
-        energy: 0.15,
-        software: 0.16,
+        electronics: 0.18,
+        rare_earth: 0.12,
+        energy: 0.13,
+        software: 0.13,
         steel: 0.1,
-        plastics: 0.1,
+        plastics: 0.08,
       },
     },
     {
@@ -522,9 +522,9 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
         "Industrial vehicles, trucks, and construction equipment. Steel-intensive, robust margins.",
       supply: { vehicles: 0.55 },
       demand: {
-        steel: 0.35,
-        iron: 0.15,
-        energy: 0.15,
+        steel: 0.29,
+        iron: 0.12,
+        energy: 0.13,
         freight: 0.1,
         plastics: 0.05,
         advertising: 0.05,
@@ -663,11 +663,11 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
         "Tanks, armored vehicles, and heavy weaponry. Steel-intensive traditional defense.",
       supply: { vehicles: 0.35 },
       demand: {
-        steel: 0.3,
-        iron: 0.15,
-        energy: 0.15,
+        steel: 0.25,
+        iron: 0.12,
+        energy: 0.13,
         freight: 0.1,
-        construction_services: 0.08,
+        construction_services: 0.05,
         vehicles: 0.03,
       },
     },
@@ -819,15 +819,15 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       // timber 0.10 to 0.08.
       supply: { construction_services: 0.45 },
       demand: {
-        building_materials: 0.15,
-        steel: 0.15,
+        building_materials: 0.13,
+        steel: 0.13,
         energy: 0.12,
-        vehicles: 0.1,
+        vehicles: 0.08,
         financial_services: 0.05,
         rare_earth: 0.04,
         natural_gas: 0.02,
-        timber: 0.08,
-        plastics: 0.07,
+        timber: 0.07,
+        plastics: 0.06,
       },
     },
     {
@@ -839,12 +839,12 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       // Reduced building_materials demand 0.30→0.22 and vehicles 0.12→0.10 to ease stacking.
       supply: { construction_services: 0.55, building_materials: 0.08 },
       demand: {
-        building_materials: 0.22,
-        steel: 0.2,
-        energy: 0.15,
-        vehicles: 0.1,
+        building_materials: 0.18,
+        steel: 0.17,
+        energy: 0.13,
+        vehicles: 0.08,
         consulting_services: 0.08,
-        plastics: 0.1,
+        plastics: 0.06,
       },
     },
     {
@@ -890,6 +890,28 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
         construction_services: 0.08,
         real_estate_services: 0.03,
         rare_earth: 0.09,
+      },
+    },
+    {
+      id: "wireline",
+      name: "Wireline Network",
+      description:
+        "Copper-wire telephony and exchanges. Lower scarce-component intensity: less electronics, rare earth and construction per unit of network output, substituting toward abundant building materials and steel. Smaller output than Standard, but cheaper to run when components are dear. Available in every era.",
+      // Demand audit step 5: the optional cheaper telecom recipe. Cuts the
+      // dearest inputs hardest (rare_earth 0.09→0.04, electronics 0.18→0.10,
+      // construction_services 0.08→0.04, energy 0.10→0.08) while holding
+      // output composition, so margin survives component shortages that sink
+      // Standard. Opt-in only: foundings still land on Standard, and NPP
+      // retool adopts it solely on price advantage like any other recipe.
+      supply: { software: 0.1, network_services: 0.35 },
+      demand: {
+        electronics: 0.1,
+        energy: 0.08,
+        building_materials: 0.07,
+        construction_services: 0.04,
+        steel: 0.05,
+        real_estate_services: 0.03,
+        rare_earth: 0.04,
       },
     },
     {
@@ -989,23 +1011,26 @@ export const SECTOR_STRATEGIES: Record<CorporationType, SectorStrategy[]> = {
       description: "Mixed online and physical retail operations.",
       supply: { retail: 0.5 },
       demand: {
-        food: 0.15,
-        electronics: 0.1,
-        energy: 0.08,
-        vehicles: 0.08,
-        freight: 0.07,
-        advertising: 0.12,
-        software: 0.06,
-        chemicals: 0.03,
-        pharmaceuticals: 0.03,
-        financial_services: 0.05,
-        consulting_services: 0.03,
-        building_materials: 0.04,
-        steel: 0.03,
-        oil: 0.03,
-        healthcare_services: 0.04,
-        real_estate_services: 0.05,
-        plastics: 0.06,
+        // Broad-basket rates sum to 0.735 rather than 1.05. Retail still creates
+        // the widest final-demand sink, but no longer buys more than its entire
+        // nameplate before payroll, occupancy and other operating costs.
+        food: 0.1,
+        electronics: 0.06,
+        energy: 0.05,
+        vehicles: 0.04,
+        freight: 0.06,
+        advertising: 0.08,
+        software: 0.05,
+        chemicals: 0.025,
+        pharmaceuticals: 0.025,
+        financial_services: 0.04,
+        consulting_services: 0.025,
+        building_materials: 0.03,
+        steel: 0.025,
+        oil: 0.025,
+        healthcare_services: 0.03,
+        real_estate_services: 0.035,
+        plastics: 0.035,
       },
     },
     {

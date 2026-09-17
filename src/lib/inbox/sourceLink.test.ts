@@ -140,6 +140,12 @@ describe("resolveSourceLink", () => {
     expect(s).toBeNull();
   });
 
+  it("links central-bank pricing notices to the banking hub", () => {
+    const s = resolveSourceLink("system", { type: "central_bank_pricing_change" });
+    expect(s?.href).toBe("/banking");
+    expect(s?.label).toBe("Open banking & credit");
+  });
+
   // ── Feedback ─────────────────────────────────────────────────────────────
   it("feedback_status_changed links to admin feedback tab", () => {
     const s = resolveSourceLink("feedback_status_changed", {
@@ -224,6 +230,14 @@ describe("resolveSourceLink", () => {
   it("corp_bond_repaid with bondId links to /bond/[id]", () => {
     const s = resolveSourceLink("corp_bond_repaid", { bondId: "b2" });
     expect(s?.href).toBe("/bond/b2");
+  });
+
+  it("supply agreement offers link to the corporation's Commodities tab", () => {
+    const s = resolveSourceLink("corp_supply_agreement_offer", {
+      corporationId: "65f000000000000000000001",
+    });
+    expect(s?.href).toBe("/corporation/65f000000000000000000001?tab=commodities#supply-agreements");
+    expect(s?.label).toBe("Review supply offer");
   });
 
   // ── Crisis ───────────────────────────────────────────────────────────────

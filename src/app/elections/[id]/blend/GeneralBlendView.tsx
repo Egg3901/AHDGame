@@ -2,11 +2,13 @@
 
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { Avatar } from "@/components/Avatar";
 import { BLEND, FONT } from "@/components/blend/tokens";
 import { BlendShell, BlendHeader, BlendSection } from "@/components/blend/BlendShell";
 import { BlendRail, BlendChipRail } from "@/components/blend/BlendRail";
 import { BlendTicker } from "@/components/blend/BlendTicker";
 import type { ElectionDetail } from "../components/ElectionDetailTypes";
+import { DemocraticHealthBlock } from "./DemocraticHealthBlock";
 import {
   buildGeneralBlendViewModel,
   type DriverRowVM,
@@ -92,7 +94,10 @@ function EvBar({
           color: BLEND.mutedDim,
         }}
       >
-        {vm.projectionNote}
+        {vm.projectionNote}{" "}
+        <Tip hint={vm.voteWeightHint}>
+          <span style={{ fontStyle: "normal" }}>Turn weighting.</span>
+        </Tip>
       </div>
       {error ? (
         <div
@@ -107,6 +112,29 @@ function EvBar({
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Dotted-underline tooltip. The explanations live here instead of as extra
+ * prose lines, so the cards stay compact. Native `title`, matching the
+ * PersuasionDrivers card's own hint pattern.
+ */
+function Tip({ hint, children }: { hint?: string | null; children: ReactNode }) {
+  if (!hint) return <>{children}</>;
+  return (
+    <span
+      title={hint}
+      aria-label={hint}
+      style={{
+        textDecoration: "underline",
+        textDecorationStyle: "dotted",
+        textUnderlineOffset: 3,
+        cursor: "help",
+      }}
+    >
+      {children}
+    </span>
   );
 }
 
@@ -126,7 +154,9 @@ function DriverRows({ rows }: { rows: DriverRowVM[] }) {
               gap: 10,
             }}
           >
-            <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>{d.label}</span>
+            <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>
+              <Tip hint={d.hint}>{d.label}</Tip>
+            </span>
             <span style={{ fontFamily: FONT.mono, fontSize: 12, color: d.color }}>
               {d.value}
               {d.unit === "%" ? "%" : ""}
@@ -157,13 +187,22 @@ function DriverRows({ rows }: { rows: DriverRowVM[] }) {
   );
 }
 
-function TileBoard({ vm, columns }: { vm: GeneralBlendVM; columns: number }) {
+function TileBoard({
+  vm,
+  columns,
+  electionId,
+}: {
+  vm: GeneralBlendVM;
+  columns: number;
+  electionId: string;
+}) {
   return (
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${columns}, 1fr)`, gap: 4 }}>
       {vm.tiles.map((t) => (
-        <div
+        <Link
           key={t.stateId}
-          title={t.title}
+          href={`/elections/${electionId}/state/${t.stateId}`}
+          title={`${t.title} (open state detail)`}
           style={{
             display: "flex",
             flexDirection: "column",
@@ -173,13 +212,14 @@ function TileBoard({ vm, columns }: { vm: GeneralBlendVM; columns: number }) {
             aspectRatio: "1",
             color: t.ink,
             background: t.background,
+            textDecoration: "none",
           }}
         >
           <span style={{ fontFamily: FONT.mono, fontSize: 10.5, fontWeight: 700 }}>
             {t.stateId}
           </span>
           <span style={{ fontFamily: FONT.mono, fontSize: 9, opacity: 0.75 }}>{t.ev}</span>
-        </div>
+        </Link>
       ))}
     </div>
   );
@@ -256,10 +296,10 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
     <>
       <div style={{ marginTop: 10, display: "flex", alignItems: "baseline", gap: 9 }}>
         <span style={{ fontFamily: FONT.mono, fontSize: 30, fontWeight: 500 }}>
-          {mood.approval}
+          {mood.signedApproval}
         </span>
         <span style={{ fontFamily: FONT.serif, fontSize: 14, color: BLEND.muted }}>
-          referendum points
+          <Tip hint={mood.pointsHint}>referendum points</Tip>
         </span>
       </div>
       <p
@@ -271,7 +311,25 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
           color: BLEND.muted,
         }}
       >
-        {mood.note}
+        {mood.effectNote}
+      </p>
+      <p
+        style={{
+          margin: "9px 0 0",
+          fontFamily: FONT.serif,
+          fontSize: 13.5,
+          lineHeight: 1.5,
+          color: BLEND.muted,
+        }}
+      >
+        <Tip hint={mood.miseryHint}>Misery index {mood.misery}</Tip>
+        {mood.median ? (
+          <>
+            {" · "}
+            <Tip hint={mood.medianHint}>Median voter sits at {mood.median}</Tip>
+          </>
+        ) : null}
+        .
       </p>
       {mood.components.length > 0 ? (
         <>
@@ -299,7 +357,9 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
                 borderBottom: "1px solid rgba(34,34,47,.7)",
               }}
             >
-              <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>{c.label}</span>
+              <span style={{ fontFamily: FONT.serif, fontSize: 13.5 }}>
+                <Tip hint={c.hint}>{c.label}</Tip>
+              </span>
               <span
                 style={{
                   fontFamily: FONT.mono,
@@ -313,9 +373,8 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
           ))}
         </>
       ) : null}
-      {[mood.credit, mood.fatigue, mood.readOn].filter(Boolean).map((line) => (
+      {mood.credit ? (
         <p
-          key={line as string}
           style={{
             margin: "8px 0 0",
             fontFamily: FONT.serif,
@@ -324,9 +383,33 @@ function NationalMoodBlock({ vm }: { vm: GeneralBlendVM }) {
             color: BLEND.mutedDim,
           }}
         >
-          {line}
+          <Tip hint={mood.creditHint}>{mood.credit}</Tip>
         </p>
-      ))}
+      ) : null}
+      {mood.fatigue ? (
+        <p
+          style={{
+            margin: "8px 0 0",
+            fontFamily: FONT.serif,
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            color: BLEND.mutedDim,
+          }}
+        >
+          <Tip hint={mood.fatigueHint}>{mood.fatigue}</Tip>
+        </p>
+      ) : null}
+      <p
+        style={{
+          margin: "8px 0 0",
+          fontFamily: FONT.serif,
+          fontSize: 12.5,
+          lineHeight: 1.45,
+          color: BLEND.mutedDim,
+        }}
+      >
+        {mood.readOn}
+      </p>
     </>
   );
 }
@@ -338,6 +421,19 @@ function WhyItMovedBlock({ vm }: { vm: GeneralBlendVM }) {
     <>
       <DriverRows rows={vm.drivers} />
       <DriverRows rows={vm.coattailDrivers} />
+      {vm.driversNote ? (
+        <p
+          style={{
+            margin: "10px 0 0",
+            fontFamily: FONT.serif,
+            fontSize: 12.5,
+            lineHeight: 1.45,
+            color: BLEND.mutedDim,
+          }}
+        >
+          {vm.driversNote}
+        </p>
+      ) : null}
     </>
   );
 }
@@ -379,6 +475,93 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
     () => buildGeneralBlendViewModel({ election, wire, rail }),
     [election, wire, rail]
   );
+
+  /**
+   * The hero shows two tickets at a time. A third ticket (or more) pages
+   * through instead of squeezing in: page two shows 3rd (and 4th), and so on.
+   */
+  const heroPages = Math.max(1, Math.ceil(vm.tickets.length / 2));
+  const [heroPage, setHeroPage] = useState(0);
+  const safeHeroPage = Math.min(Math.max(0, heroPage), heroPages - 1);
+  const heroPairTickets = vm.tickets.slice(safeHeroPage * 2, safeHeroPage * 2 + 2);
+
+  /** Turns left plus the local close time, under the masthead on both trees. */
+  const closeLine = vm.closeSummary ? (
+    <div
+      style={{
+        fontFamily: FONT.mono,
+        fontSize: 10.5,
+        letterSpacing: ".08em",
+        color: BLEND.muted,
+      }}
+    >
+      {vm.closeSummary.toUpperCase()}
+    </div>
+  ) : null;
+
+  /** Pager for the hero pair, drawn only once a third ticket exists. */
+  const heroPager =
+    heroPages > 1 ? (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 12,
+          marginBottom: 12,
+        }}
+      >
+        <span
+          style={{
+            fontFamily: FONT.mono,
+            fontSize: 10,
+            letterSpacing: ".1em",
+            color: BLEND.mutedDim,
+          }}
+        >
+          {safeHeroPage * 2 + 1}-{Math.min(vm.tickets.length, safeHeroPage * 2 + 2)} OF{" "}
+          {vm.tickets.length}
+        </span>
+        <span style={{ display: "inline-flex", gap: 8 }}>
+          <button
+            type="button"
+            aria-label="Show previous tickets"
+            disabled={safeHeroPage === 0}
+            onClick={() => setHeroPage(safeHeroPage - 1)}
+            style={{
+              padding: "4px 12px",
+              font: "inherit",
+              fontFamily: FONT.mono,
+              fontSize: 12,
+              cursor: safeHeroPage === 0 ? "not-allowed" : "pointer",
+              border: `1px solid ${BLEND.hairlineStrong}`,
+              background: "transparent",
+              color: safeHeroPage === 0 ? BLEND.mutedDimmer : BLEND.muted,
+            }}
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            aria-label="Show next tickets"
+            disabled={safeHeroPage >= heroPages - 1}
+            onClick={() => setHeroPage(safeHeroPage + 1)}
+            style={{
+              padding: "4px 12px",
+              font: "inherit",
+              fontFamily: FONT.mono,
+              fontSize: 12,
+              cursor: safeHeroPage >= heroPages - 1 ? "not-allowed" : "pointer",
+              border: `1px solid ${BLEND.hairlineStrong}`,
+              background: "transparent",
+              color: safeHeroPage >= heroPages - 1 ? BLEND.mutedDimmer : BLEND.muted,
+            }}
+          >
+            ›
+          </button>
+        </span>
+      </div>
+    ) : null;
 
   /**
    * Endorse or un-endorse a ticket.
@@ -535,17 +718,21 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
    * the figures stopped lining up. Shared grid rows align by construction,
    * whatever each side happens to carry.
    */
-  const heroPair = (scale: {
-    name: number;
-    party: number;
-    mate: number;
-    label: number;
-    votes: number;
-    share: number;
-    projection: number;
-    columnGap: number;
-    marginBottom: number;
-  }) => (
+  const heroPair = (
+    scale: {
+      name: number;
+      party: number;
+      mate: number;
+      label: number;
+      votes: number;
+      share: number;
+      projection: number;
+      columnGap: number;
+      marginBottom: number;
+      avatarSize: string;
+    },
+    pair: GeneralTicketVM[]
+  ) => (
     <div
       style={{
         display: "grid",
@@ -555,16 +742,37 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         marginBottom: scale.marginBottom,
       }}
     >
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(
           c,
           i,
           "name",
           { fontFamily: FONT.serif, fontSize: scale.name, fontWeight: 600 },
-          c.name
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 8,
+              minWidth: 0,
+              justifyContent: i === 0 ? "flex-start" : "flex-end",
+            }}
+          >
+            <Avatar url={c.avatarUrl} name={c.name} size={scale.avatarSize} />
+            <Link
+              href={c.href}
+              style={{
+                color: "inherit",
+                textDecoration: "underline",
+                textDecorationColor: "rgba(255,255,255,.25)",
+                textUnderlineOffset: 3,
+              }}
+            >
+              {c.name}
+            </Link>
+          </span>
         )
       )}
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(
           c,
           i,
@@ -577,13 +785,35 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             textTransform: "uppercase",
             color: BLEND.mutedDim,
           },
-          c.party
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <i
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 99,
+                background: c.color,
+                display: "block",
+                flexShrink: 0,
+              }}
+            />
+            <Link
+              href={c.partyHref}
+              style={{
+                color: "inherit",
+                textDecoration: "underline",
+                textDecorationColor: "rgba(255,255,255,.25)",
+                textUnderlineOffset: 3,
+              }}
+            >
+              {c.party}
+            </Link>
+          </span>
         )
       )}
       {/* Rendered for both sides even when only one has a mate, so the row
           exists and the figures below it stay level. */}
-      {vm.topTwo.some((c) => c.mate)
-        ? vm.topTwo.map((c, i) =>
+      {pair.some((c) => c.mate)
+        ? pair.map((c, i) =>
             heroCell(
               c,
               i,
@@ -603,10 +833,10 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
       {/* The counted half. These are ballots the engine has actually banked, so
           they carry the hero figure; the electoral votes below them are read
           off the same ballots and are a forecast until the race resolves. */}
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(c, i, "votes-label", { marginTop: 9, ...labelStyle(scale.label) }, "Votes banked")
       )}
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(
           c,
           i,
@@ -623,7 +853,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           c.votes
         )
       )}
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(
           c,
           i,
@@ -633,7 +863,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         )
       )}
       {/* The forecast half, ruled off so the two cannot be read as one figure. */}
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(
           c,
           i,
@@ -647,7 +877,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           "Current projection"
         )
       )}
-      {vm.topTwo.map((c, i) =>
+      {pair.map((c, i) =>
         heroCell(
           c,
           i,
@@ -664,8 +894,8 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
           `${c.ev} EV`
         )
       )}
-      {vm.topTwo.some((c) => !c.isYou)
-        ? vm.topTwo.map((c, i) => heroCell(c, i, "endorse", { marginTop: 10 }, endorseButton(c)))
+      {pair.some((c) => !c.isYou)
+        ? pair.map((c, i) => heroCell(c, i, "endorse", { marginTop: 10 }, endorseButton(c)))
         : null}
     </div>
   );
@@ -684,8 +914,28 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
       }}
     >
       <span>
-        <span style={{ display: "block", fontFamily: FONT.serif, fontSize: 17, fontWeight: 600 }}>
-          {c.name}
+        <span
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            fontFamily: FONT.serif,
+            fontSize: 17,
+            fontWeight: 600,
+          }}
+        >
+          <Avatar url={c.avatarUrl} name={c.name} size="h-9 w-9" />
+          <Link
+            href={c.href}
+            style={{
+              color: "inherit",
+              textDecoration: "underline",
+              textDecorationColor: "rgba(255,255,255,.25)",
+              textUnderlineOffset: 3,
+            }}
+          >
+            {c.name}
+          </Link>
         </span>
         <span
           style={{
@@ -768,19 +1018,25 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
         <BlendTicker tag="CALLS" items={vm.wire} />
 
         <div style={{ padding: 16 }}>
-          {vm.showCollege && vm.topTwo.length > 0 ? (
+          {closeLine ? <div style={{ marginBottom: 14 }}>{closeLine}</div> : null}
+          {vm.showCollege && heroPairTickets.length > 0 ? (
             <div style={{ marginBottom: 22 }}>
-              {heroPair({
-                name: 15,
-                party: 9,
-                mate: 12,
-                label: 8,
-                votes: 34,
-                share: 11,
-                projection: 20,
-                columnGap: 16,
-                marginBottom: 0,
-              })}
+              {heroPager}
+              {heroPair(
+                {
+                  name: 15,
+                  party: 9,
+                  mate: 12,
+                  label: 8,
+                  votes: 34,
+                  share: 11,
+                  projection: 20,
+                  columnGap: 16,
+                  marginBottom: 0,
+                  avatarSize: "h-8 w-8",
+                },
+                heroPairTickets
+              )}
               <div style={{ marginTop: 14 }}>
                 <EvBar vm={vm} height={28} error={endorseError} />
               </div>
@@ -818,7 +1074,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               >
                 The board
               </h2>
-              <TileBoard vm={vm} columns={6} />
+              <TileBoard vm={vm} columns={6} electionId={electionId} />
               <TierLegend vm={vm} />
             </div>
           ) : null}
@@ -850,13 +1106,33 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                   <div
                     style={{
                       display: "flex",
-                      alignItems: "baseline",
+                      alignItems: "center",
                       justifyContent: "space-between",
                       gap: 10,
                     }}
                   >
-                    <span style={{ fontFamily: FONT.serif, fontSize: 16, fontWeight: 600 }}>
-                      {c.name}
+                    <span
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        fontFamily: FONT.serif,
+                        fontSize: 16,
+                        fontWeight: 600,
+                      }}
+                    >
+                      <Avatar url={c.avatarUrl} name={c.name} size="h-8 w-8" />
+                      <Link
+                        href={c.href}
+                        style={{
+                          color: "inherit",
+                          textDecoration: "underline",
+                          textDecorationColor: "rgba(255,255,255,.25)",
+                          textUnderlineOffset: 3,
+                        }}
+                      >
+                        {c.name}
+                      </Link>
                     </span>
                     <span style={{ fontFamily: FONT.mono, fontSize: 16, color: c.color }}>
                       {c.ev}
@@ -910,6 +1186,22 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             </div>
           ) : null}
 
+          {election.democraticHealth ? (
+            <div style={{ marginTop: 24 }}>
+              <h2
+                style={{
+                  margin: "0 0 4px",
+                  fontFamily: FONT.serif,
+                  fontSize: 20,
+                  fontWeight: 600,
+                }}
+              >
+                Democratic health
+              </h2>
+              <DemocraticHealthBlock data={election.democraticHealth} />
+            </div>
+          ) : null}
+
           {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
             <div style={{ marginTop: 24 }}>
               <h2
@@ -943,7 +1235,6 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               items={vm.railItems}
               selectedId={rail}
               onSelect={(id) => setRail(id as GeneralRail)}
-              footnote="The final four turns carry a quarter of the vote; the earlier turns carried the rest."
             />
           }
           right={
@@ -991,6 +1282,23 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
                 </div>
               ) : null}
 
+              {election.democraticHealth ? (
+                <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
+                  <div
+                    style={{
+                      fontFamily: FONT.mono,
+                      fontSize: 9.5,
+                      letterSpacing: ".16em",
+                      textTransform: "uppercase",
+                      color: BLEND.mutedDimmer,
+                    }}
+                  >
+                    Democratic health
+                  </div>
+                  <DemocraticHealthBlock data={election.democraticHealth} />
+                </div>
+              ) : null}
+
               {vm.drivers.length + vm.coattailDrivers.length > 0 ? (
                 <div style={{ paddingTop: 20, borderTop: `1px solid ${BLEND.hairline}` }}>
                   <div
@@ -1017,23 +1325,31 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
             standfirst={vm.standfirst}
             headlineSize={34}
           />
+          {closeLine ? (
+            <div style={{ padding: "10px 26px 0", background: BLEND.page }}>{closeLine}</div>
+          ) : null}
           <BlendTicker tag="CALLS" items={vm.wire} />
 
-          {vm.showCollege && vm.topTwo.length > 0 ? (
+          {vm.showCollege && heroPairTickets.length > 0 ? (
             <section
               style={{ padding: "24px 26px", borderBottom: `1px solid ${BLEND.hairlineStrong}` }}
             >
-              {heroPair({
-                name: 19,
-                party: 10,
-                mate: 13,
-                label: 9,
-                votes: 46,
-                share: 12,
-                projection: 25,
-                columnGap: 24,
-                marginBottom: 18,
-              })}
+              {heroPager}
+              {heroPair(
+                {
+                  name: 19,
+                  party: 10,
+                  mate: 13,
+                  label: 9,
+                  votes: 46,
+                  share: 12,
+                  projection: 25,
+                  columnGap: 24,
+                  marginBottom: 18,
+                  avatarSize: "h-9 w-9",
+                },
+                heroPairTickets
+              )}
               <EvBar vm={vm} height={34} error={endorseError} />
             </section>
           ) : null}
@@ -1043,7 +1359,7 @@ export function GeneralBlendView({ election, electionId, wire, onRefresh }: Gene
               title="The battleground board"
               lede="Margin tiers, the same shading the popular-vote map uses."
             >
-              <TileBoard vm={vm} columns={11} />
+              <TileBoard vm={vm} columns={11} electionId={electionId} />
               <TierLegend vm={vm} />
             </BlendSection>
           ) : null}

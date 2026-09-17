@@ -21,7 +21,10 @@ export async function GET() {
 
     const db = await getDb();
 
-    const allCampaigns = await db.collection<Campaign>("campaigns").find({}).toArray();
+    const allCampaigns = await db
+      .collection<Campaign>("campaigns")
+      .find({}, { projection: { activityHistory: 0 } })
+      .toArray();
 
     if (allCampaigns.length === 0) {
       return NextResponse.json({ status: "ok", message: "No campaign documents found.", total: 0 });
@@ -168,7 +171,10 @@ export async function POST() {
 
     const db = await getDb();
 
-    const allCampaigns = await db.collection<Campaign>("campaigns").find({}).toArray();
+    const allCampaigns = await db
+      .collection<Campaign>("campaigns")
+      .find({}, { projection: { activityHistory: 0 } })
+      .toArray();
 
     if (allCampaigns.length === 0) {
       return NextResponse.json({ healed: true, deleted: 0, message: "No campaigns to clean up." });

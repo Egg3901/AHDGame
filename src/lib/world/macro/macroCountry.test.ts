@@ -135,13 +135,14 @@ describe("Austria Tier-2 sphere-macro economy", () => {
 
       const skipped = await processMacroCountryTurn(db as unknown as Db, nonTick);
       expect(skipped.countriesUpdated).toBe(0);
-      expect(db.collectionMocks.macroCountries!.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.macroCountries!.bulkWrite).not.toHaveBeenCalled();
 
       const updated = await processMacroCountryTurn(db as unknown as Db, tickTurn);
       expect(updated.countriesUpdated).toBe(1);
       expect(updated.updatedEntityIds).toEqual([AUSTRIA_ENTITY_ID]);
-      expect(db.collectionMocks.macroCountries!.updateOne).toHaveBeenCalledTimes(1);
-      const setDoc = db.collectionMocks.macroCountries!.updateOne.mock.calls[0]![1].$set;
+      expect(db.collectionMocks.macroCountries!.bulkWrite).toHaveBeenCalledTimes(1);
+      const setDoc =
+        db.collectionMocks.macroCountries!.bulkWrite.mock.calls[0]![0][0].updateOne.update.$set;
       expect(setDoc.lastMacroTickTurn).toBe(tickTurn);
       expect(setDoc.contribution.computedOnTurn).toBe(tickTurn);
     });
@@ -196,17 +197,16 @@ describe("Austria Tier-2 sphere-macro economy", () => {
       });
     });
 
-    it("seeds the full 1953 Tier-2 roster into macroCountries only", async () => {
+    it("seeds every 1953 aggregate country into macroCountries only", async () => {
       const seeded = await seedMacroCountries(db as unknown as Db, "1953-default");
-      expect(seeded).toBe(ALL_1953_MACRO_ENTITY_IDS.length);
-      expect(db.collectionMocks.macroCountries!.updateOne).toHaveBeenCalledTimes(
-        ALL_1953_MACRO_ENTITY_IDS.length
-      );
+      expect(seeded).toBeGreaterThan(ALL_1953_MACRO_ENTITY_IDS.length);
+      expect(db.collectionMocks.macroCountries!.bulkWrite).toHaveBeenCalledTimes(1);
 
-      const seededIds = db.collectionMocks.macroCountries!.updateOne.mock.calls.map(
-        (call) => call[1].$set.entityId as string
+      const seededIds = db.collectionMocks.macroCountries!.bulkWrite.mock.calls[0]![0].map(
+        (op: { replaceOne: { replacement: { entityId: string } } }) =>
+          op.replaceOne.replacement.entityId
       );
-      expect(seededIds.sort()).toEqual([...ALL_1953_MACRO_ENTITY_IDS].sort());
+      expect(seededIds).toEqual(expect.arrayContaining([...ALL_1953_MACRO_ENTITY_IDS]));
     });
 
     it("never touches firm, corporate, NPP, or office collections", async () => {
@@ -223,10 +223,11 @@ describe("Austria Tier-2 sphere-macro economy", () => {
       }
     });
 
-    it("is a no-op for presets without sphere-macro entities", async () => {
+    it("seeds background countries for modern presets", async () => {
       const seeded = await seedMacroCountries(db as unknown as Db, "2019-default");
-      expect(seeded).toBe(0);
+      expect(seeded).toBeGreaterThan(150);
       expect(db.collectionMocks.macroCountries!.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks.macroCountries!.bulkWrite).toHaveBeenCalledTimes(1);
     });
   });
 

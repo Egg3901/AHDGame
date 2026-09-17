@@ -50,6 +50,8 @@ import {
 } from "@/lib/labour/laborCost";
 import { makeLabourDemandByState } from "@/lib/labour/labourMarket";
 import { computeTechAssetValueAnchor } from "@/lib/corporations/techAssetValue";
+import { bankEquity } from "@/lib/banking/balanceSheet";
+import { bankNpvFromPerTurnIncome } from "@/lib/banking/valuation";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { indexFundOwnershipFraction } from "@/lib/corporations/indexOwnership";
 // getCountryConfig is needed for the prime rate fallback:
@@ -1214,6 +1216,18 @@ export function processSectors(
   for (const [cId, history] of updatedEarningsHistoryByCorpId) {
     baseEarningsMap.set(cId, normalizedEarningsFromHistory(history));
   }
+  // Banking income is earned after the corporation pass and lives in the
+  // ring-fenced charter, so it is not part of the corporation's rolling
+  // earningsHistory. Add the realized annual bank result explicitly rather
+  // than leaving a profitable bank invisible to the earnings component.
+  for (const corp of lookups.corporations) {
+    const charter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
+    if (!charter) continue;
+    const bankFxRate = lookups.exchangeRatesByCurrency.get(charter.currency) ?? 1;
+    const bankIncomeAnchor = (charter.lastBankingIncome ?? 0) / bankFxRate;
+    const id = corp._id.toString();
+    baseEarningsMap.set(id, (baseEarningsMap.get(id) ?? 0) + bankIncomeAnchor * TURNS_PER_YEAR);
+  }
   const totalSharesById = new Map<string, number>(
     lookups.corporations.map((c) => [c._id.toString(), c.totalShares ?? 10_000_000])
   );
@@ -1248,10 +1262,21 @@ export function processSectors(
     // bounds the effect, so a negative value only raises the floor toward true
     // liquidCapital, which is benign.
     const issuanceProceedsAnchor = corpCapitalToAnchor(corp.shareIssuanceProceeds ?? 0, code, rate);
+    const activeBankCharter = corp.bankCharter?.status === "active" ? corp.bankCharter : null;
+    const bankFxRate = activeBankCharter
+      ? (lookups.exchangeRatesByCurrency.get(activeBankCharter.currency) ?? 1)
+      : 1;
+    const bankEquityAnchor = activeBankCharter
+      ? corpCapitalToAnchor(bankEquity(activeBankCharter), activeBankCharter.currency, bankFxRate)
+      : 0;
+    const bankNpvAnchor = activeBankCharter
+      ? bankNpvFromPerTurnIncome((activeBankCharter.lastBankingIncome ?? 0) / bankFxRate)
+      : 0;
     return {
       corpId: id,
       liquidCapitalAnchor: Math.max(0, s.liquidCapitalAnchorAfterIncome - issuanceProceedsAnchor),
-      sectorNPVAnchor: s.sectorNPV,
+      bankEquityAnchor,
+      sectorNPVAnchor: s.sectorNPV + bankNpvAnchor,
       issuedBondDebt: lookups.issuedBondDebtByCorpId.get(id) ?? 0,
       bondHoldingsAnchor: lookups.bondAndImfPortfolioAnchorByCorpId.get(id) ?? 0,
       normalizedEarningsAnchor: adjustedEarningsMap.get(id) ?? 0,

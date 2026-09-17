@@ -10,9 +10,17 @@ export interface CabinetMember extends IterationStampFields {
   _id: ObjectId;
   countryId: CountryId;
   positionId: string;
-  characterId: ObjectId;
+  /**
+   * Character holder. `null` when the seat is held by a confirmed NPP nominee
+   * (see `isNPP` / `nppId`), mirroring {@link UnifiedCabinetMember}.
+   */
+  characterId: ObjectId | null;
   characterName: string;
   party?: string;
+  /** True when this seat is held by an NPP rather than a character. */
+  isNPP?: boolean;
+  /** The seated NPP's id when `isNPP` is true. */
+  nppId?: ObjectId;
   /**
    * @deprecated Legacy name, written only by the US confirmation path. The
    * collection's canonical field is `appointedByCharacterId` on
@@ -40,7 +48,16 @@ export interface CabinetNomination extends IterationStampFields {
   _id: ObjectId;
   countryId: CountryId;
   positionId: string;
-  nomineeCharacterId: ObjectId;
+  /** Player nominee. Null for NPP nominees (see nomineeMode). */
+  nomineeCharacterId: ObjectId | null;
+  /** NPP nominee. Set only when nomineeMode is "npp". */
+  nomineeNppId?: ObjectId | null;
+  /**
+   * Discriminator replacing the old player-only nominee. Follows the SCOTUS
+   * pattern. Optional so legacy docs and the character-only VP path keep
+   * compiling; absent means "character".
+   */
+  nomineeMode?: "character" | "npp";
   nomineeCharacterName: string;
   nomineeParty?: string;
   proposedByPresidentId: ObjectId;

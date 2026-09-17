@@ -18,6 +18,7 @@ const RESULT_KEYS: Record<string, { key: string; ok: boolean }> = {
   access_denied: { key: "accessDenied", ok: false },
   already_linked: { key: "alreadyLinked", ok: false },
   invalid_state: { key: "sessionExpired", ok: false },
+  session_expired: { key: "sessionInterrupted", ok: false },
   not_configured: { key: "notConfigured", ok: false },
 };
 

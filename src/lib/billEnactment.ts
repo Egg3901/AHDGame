@@ -61,6 +61,7 @@ import { validateFederalBudgetImpact } from "@/lib/budget/validation";
 import { triggerDebtCeilingCrisis } from "@/lib/budget/debt";
 import { recordEnactedLaw } from "@/lib/budget/enactedLaws";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
+import { generateDiscordEventCard } from "@/lib/discord/eventCard";
 import { calculateShiftImpacts } from "@/lib/archetypeAffinities";
 import { regionalDefaultLevel } from "@/lib/politicalLegislation/regionalDefaults";
 import {
@@ -711,13 +712,26 @@ export async function onBillEnacted(
   // (see referendumWebhooks); skip the generic "Bill Enacted" notice to avoid a
   // duplicate post for the same event.
   if (bill.category !== "reunification") {
+    const cardUrl = await generateDiscordEventCard(
+      {
+        eyebrow: `${countryLabel} · ${locationLabel}`,
+        title: bill.title,
+        summary: "Signed into law",
+        metadata: policyLabel ? ["Bill enacted", policyLabel] : ["Bill enacted"],
+        tone: "positive",
+      },
+      `bill-enacted-${bill._id.toString()}`
+    );
     sendCountryGameEvent(resolvedCountry ?? "US", {
-      title: `${countryLabel} — Bill Enacted — ${locationLabel}`,
-      description: `**${bill.title}** was signed into law.`,
+      title: `Bill enacted: ${bill.title}`,
+      description: cardUrl
+        ? `[View the enacted bill](${billUrl})`
+        : `**${bill.title}** was signed into law.`,
       color: DISCORD_COLORS.billEnacted,
-      fields: embedFields,
+      fields: cardUrl ? undefined : embedFields,
+      image: cardUrl ? { url: cardUrl } : undefined,
       url: billUrl,
-      footer: { text: "A House Divided" },
+      footer: { text: `${countryLabel} · ${locationLabel}` },
       timestamp: new Date().toISOString(),
     }).catch(() => {});
   }

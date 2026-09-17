@@ -67,6 +67,8 @@ import {
 } from "@/lib/labour/unionLaws";
 import { validateNationalizationProvisions } from "@/lib/nationalization/billProvisionValidation";
 import type { SubsidyProvision, EndSubsidyProvision } from "@/lib/db/types";
+import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
+import { enactSingleplayerDecree } from "@/lib/legislature/commands/enactSingleplayerDecree";
 import {
   getBillProposalAutoFailWarning,
   getBillProposalAutoFailWarningError,
@@ -183,11 +185,12 @@ export async function GET(request: Request) {
             status: { $nin: TERMINAL_STATUSES },
           }),
         ]);
+        const sovereign = char ? mayRuleByDecree(char, "US") : false;
         inCongress = !!official;
         hasActiveBill = !!activeBill;
         // Congress members can propose only when they have no active bill in flight
-        canPropose = inCongress && !hasActiveBill;
-        myChamber = official?.officeType as "house" | "senate" | null;
+        canPropose = (inCongress || sovereign) && (!hasActiveBill || sovereign);
+        myChamber = sovereign ? "house" : (official?.officeType as "house" | "senate" | null);
       }
       if (authUser.isAdmin) canPropose = true;
     }
@@ -296,8 +299,9 @@ export async function POST(request: Request) {
       officeType: { $in: ["house", "senate"] },
     });
     const isAdmin = authUser.isAdmin === true;
+    const usingSovereignOverride = mayRuleByDecree(character, "US");
     const usingAdminOverride = isAdmin && !official;
-    if (!official && !isAdmin) {
+    if (!official && !isAdmin && !usingSovereignOverride) {
       logRequest("POST", path, 403, Date.now() - start);
       return NextResponse.json(
         { error: "You must be a sitting member of Congress to propose legislation." },
@@ -306,7 +310,7 @@ export async function POST(request: Request) {
     }
 
     // One active bill at a time per player (admins bypass)
-    if (!isAdmin) {
+    if (!isAdmin && !usingSovereignOverride) {
       const existingActiveBill = await db.collection<Bill>("bills").findOne({
         sponsorId: character._id,
         status: { $nin: NATIONAL_TERMINAL_STATUSES as BillStatus[] },
@@ -359,7 +363,7 @@ export async function POST(request: Request) {
     }
 
     // Validate chamber matches user's membership (admins can bypass)
-    if (!isAdmin && official) {
+    if (!isAdmin && official && !usingSovereignOverride) {
       const userChamber = official.officeType; // "house" or "senate"
       if (chamber === "house" && userChamber !== "house") {
         logRequest("POST", path, 403, Date.now() - start);
@@ -394,7 +398,7 @@ export async function POST(request: Request) {
         chamber as BillProposalOriginChamber,
         now
       );
-      if (proposalWarning && !confirmElectionRisk) {
+      if (proposalWarning && !confirmElectionRisk && !usingSovereignOverride) {
         logRequest("POST", path, 409, Date.now() - start);
         return NextResponse.json(
           {
@@ -490,9 +494,18 @@ export async function POST(request: Request) {
       };
       try {
         const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
+        if (usingSovereignOverride) {
+          await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
+        }
         logRequest("POST", path, 201, Date.now() - start);
         return NextResponse.json(
-          { id: result.insertedId.toString(), message: "Bill proposed — voting is now open." },
+          {
+            id: result.insertedId.toString(),
+            message: usingSovereignOverride
+              ? "Law enacted by head-of-state authority."
+              : "Bill proposed; voting is now open.",
+            ...(usingSovereignOverride ? { enacted: true } : {}),
+          },
           { status: 201 }
         );
       } catch (error) {
@@ -1090,6 +1103,9 @@ export async function POST(request: Request) {
 
     try {
       const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+      if (usingSovereignOverride) {
+        await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
+      }
       try {
         const { checkBillSponsoredAchievements } = await import("@/lib/achievements/triggers");
         await checkBillSponsoredAchievements(new ObjectId(authUser.userId), character._id);
@@ -1105,7 +1121,13 @@ export async function POST(request: Request) {
       }
       logRequest("POST", path, 201, Date.now() - start);
       return NextResponse.json(
-        { id: result.insertedId.toString(), message: "Bill proposed — voting is now open." },
+        {
+          id: result.insertedId.toString(),
+          message: usingSovereignOverride
+            ? "Law enacted by head-of-state authority."
+            : "Bill proposed; voting is now open.",
+          ...(usingSovereignOverride ? { enacted: true } : {}),
+        },
         { status: 201 }
       );
     } catch (error) {

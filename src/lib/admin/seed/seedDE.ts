@@ -35,6 +35,7 @@ async function deRegionRosterForPreset(preset: string) {
   const { deRegions1999 } = await import("@/lib/seeds/de/deRegions1999");
   const { deRegions2007 } = await import("@/lib/seeds/de/deRegions2007");
   const { deRegions2023 } = await import("@/lib/seeds/de/deRegions2023");
+  const { deRegions2027 } = await import("@/lib/seeds/de/deRegions2027");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
   return selectPresetBundle(
     preset,
@@ -46,6 +47,7 @@ async function deRegionRosterForPreset(preset: string) {
       "1999-default": deRegions1999,
       "2007-default": deRegions2007,
       "2023-default": deRegions2023,
+      "2027-default": deRegions2027,
     },
     "seedDE:deRegions1953"
   );
@@ -468,7 +470,9 @@ export async function seedDEBundestag2021(db: Db, reset: boolean, log: (msg: str
 
   const { DE_BUNDESTAG_2021 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, DE_BUNDESTAG_2021);
+  const result = await seedFromSeats(db, DE_BUNDESTAG_2021, "winners", {
+    presetId: "2019-default",
+  });
   log(
     `Seeded DE Bundestag (2021): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );
@@ -521,7 +525,9 @@ export async function seedDEMinisterPresidents2020(
 
   const { DE_MINISTERPRAESIDENTEN_2020 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, DE_MINISTERPRAESIDENTEN_2020);
+  const result = await seedFromSeats(db, DE_MINISTERPRAESIDENTEN_2020, "winners", {
+    presetId: "2019-default",
+  });
   log(
     `Seeded DE Minister-Presidents (2020): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );

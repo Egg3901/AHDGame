@@ -112,6 +112,17 @@
       "recordedTurn": "Read on turn {turn}.",
       "pts": "pts"
     },
+    "democraticHealth": {
+      "title": "Democratic Health",
+      "subtitle": "Institutional strength changes how voters judge {party}.",
+      "partyFallback": "the ruling party",
+      "scaleNote": "The election drag starts below 60 and grows as health falls.",
+      "partyEffect": "Ruling party drag",
+      "rulerEffect": "Sitting President drag",
+      "rulerNotRunning": "The sitting President is not in this race, so the larger personal drag is not active.",
+      "relief": "A temporary constitutional measure reduces the extra presidential drag by {percent}%.",
+      "recordedTurn": "Read on turn {turn}."
+    },
     "factorLedger": {
       "title": "Factor Ledger",
       "subtitle": "Why a candidate is ahead or behind, broken into named factors. This is already inside the vote totals.",

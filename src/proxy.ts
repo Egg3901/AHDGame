@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { jwtVerify, SignJWT } from "jose";
+import { SignJWT } from "jose";
 import { getCachedMaintenanceStatus, isMaintenanceBypassPath } from "@/lib/maintenanceStatus";
 import { getCachedPublicViewingMode, isPublicApiReadBypassPath } from "@/lib/publicViewing";
 import { AUTH_COOKIE_NAME } from "@/lib/authCookieName";
 import { CHARACTER_GATE_COOKIE, isCharacterGatedPath } from "@/lib/auth/characterGate";
-import { isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
+import { isLoopbackOrigin, isSingleplayer, singleplayerSessionClaims } from "@/lib/singleplayer";
+import { getAuthUserFromToken, verifyAuthToken, type AuthUser } from "@/lib/auth";
 
 // Well-known root files that must never be rewritten under /wiki on the
 // subdomain — /robots.txt would otherwise hit the wiki [slug] route and serve
@@ -28,29 +29,24 @@ function withRailwayNoindex(response: NextResponse, host: string): NextResponse 
   return response;
 }
 
-function getJwtSecret(): Uint8Array | null {
-  const secret = process.env.AUTH_SECRET?.trim();
-  if (!secret) return null;
-  return new TextEncoder().encode(secret);
-}
-
-/** Verify the auth cookie and return its JWT payload, or null when absent/invalid. */
-async function verifySession(request: NextRequest): Promise<Record<string, unknown> | null> {
+/**
+ * Resolve the presented session against the current account record.
+ *
+ * Shared validation lives in `@/lib/auth`: strict JWT and DB account checks
+ * for bans, deletion, revocation and current staff roles. Returns null
+ * for absent, invalid, deleted, banned, or revoked sessions. Throws when a
+ * dependency (JWT secret, DB) fails so callers fail closed with 503 without
+ * clearing cookies.
+ */
+async function getSessionUser(request: NextRequest): Promise<AuthUser | null> {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!token) return null;
-  const secret = getJwtSecret();
-  if (!secret) return null;
-  try {
-    const { payload } = await jwtVerify(token, secret);
-    return payload as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+  return getAuthUserFromToken(token);
 }
 
 async function requestIsAdmin(request: NextRequest): Promise<boolean> {
-  const payload = await verifySession(request);
-  return payload?.isAdmin === true;
+  const user = await getSessionUser(request);
+  return user?.isAdmin === true;
 }
 
 /**
@@ -78,12 +74,22 @@ async function handleApiReadGate(request: NextRequest): Promise<NextResponse> {
   // Self-protected (own key/token/signature) or pre-login/asset namespaces.
   if (isPublicApiReadBypassPath(pathname)) return NextResponse.next();
 
-  // Any authenticated session may read.
-  if (await verifySession(request)) return NextResponse.next();
+  // Any current-account session may read. Deleted, banned, or revoked
+  // sessions resolve to null and stay denied. A dependency failure fails
+  // closed with 503 and never clears cookies.
+  try {
+    if (await getSessionUser(request)) return NextResponse.next();
+  } catch {
+    console.warn("[proxy] session lookup failed; failing closed");
+    return NextResponse.json(
+      { error: "Authentication service unavailable. Try again." },
+      { status: 503, headers: { "Cache-Control": "private, no-store" } }
+    );
+  }
 
   return NextResponse.json(
     { error: "Public viewing is disabled. Sign in to view this content." },
-    { status: 401 }
+    { status: 401, headers: { "Cache-Control": "private, no-store" } }
   );
 }
 
@@ -109,18 +115,46 @@ export async function proxy(request: NextRequest) {
   // early with the cookie attached; the retried request then flows through
   // the normal path below. See @/lib/singleplayer for the guards that stop
   // this running anywhere that serves more than one person.
-  if (singleplayer && !request.cookies.get(AUTH_COOKIE_NAME)) {
-    return await grantSingleplayerSession(request);
+  //
+  // Host mode (singleplayer serving the LAN): only loopback remotes get the
+  // fixed local session. A guest arriving over the network must register and
+  // log in as themselves — minting them the host's session would hand every
+  // guest the keys to the world. The request URL names the server address
+  // the request targeted, so a loopback hostname means the host's own browser.
+  const loopbackRemote = isLoopbackOrigin(request.nextUrl.origin);
+  if (singleplayer && loopbackRemote) {
+    // Offline mint path: strict shared JWT check only, no DB. A transient
+    // verification failure re-mints rather than blocking the local player.
+    let session = null;
+    try {
+      const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
+      session = token ? await verifyAuthToken(token) : null;
+    } catch {
+      session = null;
+    }
+    const expected = singleplayerSessionClaims();
+    // Loopback cookies cross ports, but each world signs with its own secret.
+    // Also replace old admin claims when the current world is a player session.
+    if (
+      !session ||
+      session.userId !== expected.userId ||
+      session.role !== expected.role ||
+      session.isAdmin !== expected.isAdmin
+    ) {
+      return await grantSingleplayerSession(request);
+    }
   }
 
   // The local build has no account lifecycle. Keep old bookmarks to the
   // public auth pages inside the local launcher rather than showing a sign-in,
-  // registration, or logout screen for the fixed local session.
+  // registration, or logout screen for the fixed local session. Loopback-only
+  // like the mint above: LAN guests in host mode need the real auth pages.
   if (
     singleplayer &&
+    loopbackRemote &&
     (pathname === "/login" || pathname === "/register" || pathname === "/logout")
   ) {
-    return NextResponse.redirect(new URL("/singleplayer", request.url));
+    return NextResponse.redirect(new URL("/profile", request.url));
   }
 
   // Canonical host is the apex domain. www duplicates every page (splits SEO
@@ -184,7 +218,7 @@ export async function proxy(request: NextRequest) {
   // requests in Next.js 16 — the layout runs, redirect is called, but the
   // response still returns the page content as a 200 RSC payload. Gating in
   // the proxy intercepts both hard loads and RSC requests.
-  if (!isMaintenanceBypassPath(pathname)) {
+  if (!singleplayer && !isMaintenanceBypassPath(pathname)) {
     // Fail-open if the maintenance lookup throws (e.g. transient DB blip):
     // a 500 from the proxy would take down every page hit, which is worse
     // than briefly letting a request through.
@@ -199,8 +233,25 @@ export async function proxy(request: NextRequest) {
     } catch (err) {
       console.warn("[proxy] maintenance lookup failed; passing through", err);
     }
-    if (maintenanceMode === "full" && !(await requestIsAdmin(request))) {
-      return NextResponse.redirect(new URL("/maintenance", request.url));
+    if (maintenanceMode === "full") {
+      // Staff bypass reflects the current account record, not stale token
+      // claims. A dependency failure fails closed with 503 and never
+      // clears cookies.
+      let isAdmin = false;
+      try {
+        isAdmin = await requestIsAdmin(request);
+      } catch {
+        console.warn("[proxy] session lookup failed during maintenance gate; failing closed");
+        return NextResponse.json(
+          { error: "Authentication service unavailable. Try again." },
+          { status: 503, headers: { "Cache-Control": "private, no-store" } }
+        );
+      }
+      if (!isAdmin) {
+        const response = NextResponse.redirect(new URL("/maintenance", request.url));
+        response.headers.set("Cache-Control", "private, no-store");
+        return response;
+      }
     }
   }
 
@@ -227,7 +278,12 @@ async function grantSingleplayerSession(request: NextRequest): Promise<NextRespo
     .sign(new TextEncoder().encode(secret));
 
   const requestHeaders = new Headers(request.headers);
-  const existing = requestHeaders.get("cookie");
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
+  requestHeaders.set("x-search", request.nextUrl.search);
+  const existing = (requestHeaders.get("cookie") ?? "")
+    .split(";")
+    .filter((part) => part.trim() && part.trim().split("=")[0] !== AUTH_COOKIE_NAME)
+    .join(";");
   requestHeaders.set(
     "cookie",
     existing ? `${existing}; ${AUTH_COOKIE_NAME}=${token}` : `${AUTH_COOKIE_NAME}=${token}`

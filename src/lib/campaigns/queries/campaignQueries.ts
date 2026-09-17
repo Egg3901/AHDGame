@@ -1,6 +1,6 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import type { AuthUserWithCharacter } from "@/lib/auth";
-import { calculateCampaignActions } from "@/lib/campaigns/actions";
+import { campaignActionsPerTurn } from "@/lib/campaigns/actions";
 import { calculateCampaignIncome } from "@/lib/campaigns/income";
 import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { calculateMaintenanceCosts } from "@/lib/campaigns/maintenance";
@@ -54,6 +54,7 @@ import type {
   ElectionVoteTally,
   NPP,
   NPPEndorsement,
+  PlayerEndorsement,
   PoliticalParty,
 } from "@/lib/db/types";
 import { ObjectId, type Db } from "mongodb";
@@ -305,10 +306,9 @@ export async function getCampaignDetail(
   // _id (not campaign.candidateId, which is the character/NPP identity id —
   // see ticket #868), so resolve the row once and join on it. A character
   // can have more than one row per election (e.g. withdrew and re-entered
-  // under a different party) — prefer the active one, matching what the
-  // ownSupport/suspension panel below expects, but fall back to any row so
-  // the endorsement count still reflects a withdrawn candidate's real
-  // endorsements (matching pre-#868 behavior).
+  // under a different party). `candidateRow` prefers the active one and falls
+  // back to any row, which is what the ownSupport/suspension panel below
+  // expects. Endorsements do NOT take that fallback: see `activeCandidateRow`.
   const candidateRowCandidates = await db
     .collection<ElectionCandidate>("electionCandidates")
     .find({
@@ -320,30 +320,89 @@ export async function getCampaignDetail(
     candidateRowCandidates.find((row) => row.status === "active") ??
     candidateRowCandidates[0] ??
     null;
-  const [nppEndorsementCount, playerEndorsementCount] = await Promise.all([
-    db.collection<NPPEndorsement>("nppEndorsements").countDocuments(
-      buildActiveVisibleNppEndorsementFilter({
+  /**
+   * Endorsements join on the ACTIVE row only, with no fallback.
+   *
+   * The turn engine resolves rows with `status: "active"` and nothing else, so
+   * a withdrawn candidate earns nothing from endorsements held on the old row.
+   * Falling back here would promise a withdrawn presidential candidate actions
+   * the turn will not pay, which is the mismatch this desk exists to avoid.
+   */
+  const activeCandidateRow = candidateRowCandidates.find((row) => row.status === "active") ?? null;
+  // Read the endorsing rows rather than counting them: the ledger's
+  // endorsements tab lists the same rows the action panel counts, so one read
+  // serves both and the list cannot disagree with the number beside it.
+  const [nppEndorsementRows, playerEndorsementRows] = await Promise.all([
+    db
+      .collection<NPPEndorsement>("nppEndorsements")
+      .find(
+        buildActiveVisibleNppEndorsementFilter({
+          electionId: campaign.electionId,
+          candidateId: campaign.candidateId,
+        }),
+        { projection: { nppName: 1, createdAt: 1 } }
+      )
+      .toArray(),
+    activeCandidateRow
+      ? db
+          .collection<PlayerEndorsement>("playerEndorsements")
+          .find(
+            {
+              electionId: campaign.electionId,
+              candidateId: activeCandidateRow._id,
+              isActive: true,
+            },
+            { projection: { characterName: 1, createdAt: 1 } }
+          )
+          .toArray()
+      : Promise.resolve([]),
+  ]);
+  const endorsements: CampaignData["endorsements"] = [
+    ...nppEndorsementRows.map((row) => ({
+      kind: "npp" as const,
+      name: row.nppName || "Unknown politician",
+      since: row.createdAt?.toISOString() ?? null,
+    })),
+    ...playerEndorsementRows.map((row) => ({
+      kind: "player" as const,
+      name: row.characterName || "Unknown candidate",
+      since: row.createdAt?.toISOString() ?? null,
+    })),
+    // Newest first. Rows without a timestamp sort last rather than jumping to
+    // the top, which is where an empty string would put them.
+  ].sort((a, b) => (b.since ?? "").localeCompare(a.since ?? ""));
+  const nppEndorsementCount = nppEndorsementRows.length;
+  const playerEndorsementCount = playerEndorsementRows.length;
+  const endorsementCount = nppEndorsementCount + playerEndorsementCount;
+  // The desk must promise exactly what the turn engine pays, so it reads the
+  // same four endorsement sources and hands them to the same function rather
+  // than re-deriving the rule. Re-deriving it is what let this panel advertise
+  // 15 actions a turn against an engine crediting 8.
+  const [gameConfigForActions, governorEndorsementCount, executiveEndorsementCount] =
+    await Promise.all([
+      db
+        .collection<{ _id: string; baseActionsPerTurn?: number }>("gameConfig")
+        .findOne({ _id: "default" }, { projection: { baseActionsPerTurn: 1 } }),
+      db.collection("governorEndorsements").countDocuments({
         electionId: campaign.electionId,
         candidateId: campaign.candidateId,
-      })
-    ),
-    candidateRow
-      ? db.collection("playerEndorsements").countDocuments({
-          electionId: campaign.electionId,
-          candidateId: candidateRow._id,
-          isActive: true,
-        })
-      : Promise.resolve(0),
-  ]);
-  const endorsementCount = nppEndorsementCount + playerEndorsementCount;
-  // Baseline mirrors the turn engine (campaignTurn.ts): max(baseActionsPerTurn, 4),
-  // NOT the calculateCampaignActions default of 1 — otherwise the panel understates
-  // the real per-turn gain.
-  const gameConfigForActions = await db
-    .collection<{ _id: string; baseActionsPerTurn?: number }>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { baseActionsPerTurn: 1 } });
-  const playerBaseActions = Math.max(gameConfigForActions?.baseActionsPerTurn ?? 4, 4);
-  const grossActionsPerTurn = calculateCampaignActions(endorsementCount, playerBaseActions);
+        isActive: true,
+      }),
+      db.collection("executiveEndorsements").countDocuments({
+        electionId: campaign.electionId,
+        candidateId: campaign.candidateId,
+        isActive: true,
+      }),
+    ]);
+  const grossActionsPerTurn = campaignActionsPerTurn({
+    nppEndorsements: nppEndorsementCount,
+    playerEndorsements: playerEndorsementCount,
+    governorEndorsements: governorEndorsementCount,
+    executiveEndorsements: executiveEndorsementCount,
+    isPresidential: election?.electionType === "president",
+    candidateIsNPP: campaign.candidateIsNPP === true,
+    baseActionsPerTurn: gameConfigForActions?.baseActionsPerTurn ?? 4,
+  });
   // Rally-tour tick drains actions every turn (campaignTurn.ts subtracts it from the
   // same $inc). Populated in the owner block below once we know the tour state; the
   // headline perTurn is reported NET of it so the panel matches the balance movement.
@@ -490,6 +549,14 @@ export async function getCampaignDetail(
   // campaigns (no live plan to brief). Delegate/tipping paths and coalition
   // weakness are presidential concepts read off the tally; the cash runway
   // applies to any race.
+  /**
+   * Whether the turn will move this campaign at all. `campaignTurn.ts`
+   * `continue`s past an archived campaign and past a suspended one before it
+   * computes income, charges maintenance or credits actions, so the desk has to
+   * report zero rather than a rate that will never be applied.
+   */
+  const accruesNothing = campaign.status === "archived" || campaignSuspended;
+
   const briefing =
     campaign.status === "archived"
       ? undefined
@@ -499,7 +566,10 @@ export async function getCampaignDetail(
           election,
           candidateRow,
           isGeneralPhase,
-          netPerTurn: toLocal(income) - toLocal(maintenance),
+          // Zero when suspended, like every other per-turn figure: the runway
+          // built from this is a countdown to insolvency, and a campaign the
+          // turn engine skips is neither earning nor burning.
+          netPerTurn: accruesNothing ? 0 : toLocal(income) - toLocal(maintenance),
         });
 
   return {
@@ -515,25 +585,49 @@ export async function getCampaignDetail(
         }
       : {}),
     ...(suspendEndorse ? { suspendEndorse } : {}),
-    activityHistory: campaign.activityHistory.map((entry: CampaignActivity) => ({
+    endorsements,
+    // Guarded for documents written before the field existed; every insert
+    // path sets it to [] now.
+    activityHistory: (campaign.activityHistory ?? []).map((entry: CampaignActivity) => ({
       ...entry,
       timestamp: entry.timestamp.toISOString(),
     })),
     budget: {
       // income / maintenance are anchor constants; funds is stored local.
       // Localize the per-turn figures so the budget panel matches the balance.
-      income: { total: toLocal(income) },
+      //
+      // A dormant campaign moves on none of these. The turn engine `continue`s
+      // past both archived and suspended campaigns BEFORE it computes income,
+      // charges maintenance or credits actions, so every per-turn figure here
+      // is zero rather than a rate the turn will never apply. Reporting money
+      // at full value beside zero actions would put two contradictory rates in
+      // the same row.
+      income: { total: accruesNothing ? 0 : toLocal(income) },
       expenses: {
-        groundGameMaintenance: toLocal(groundGameMaintenance),
-        mediaSpendingMaintenance: toLocal(mediaSpendingMaintenance),
-        total: toLocal(maintenance),
+        groundGameMaintenance: accruesNothing ? 0 : toLocal(groundGameMaintenance),
+        mediaSpendingMaintenance: accruesNothing ? 0 : toLocal(mediaSpendingMaintenance),
+        total: accruesNothing ? 0 : toLocal(maintenance),
       },
-      netIncome: toLocal(income) - toLocal(maintenance),
+      netIncome: accruesNothing ? 0 : toLocal(income) - toLocal(maintenance),
       actions: {
         endorsementCount,
-        perTurn: grossActionsPerTurn - rallyTourActionDrain,
-        grossPerTurn: grossActionsPerTurn,
-        baseline: playerBaseActions,
+        perTurn: accruesNothing ? 0 : grossActionsPerTurn - rallyTourActionDrain,
+        grossPerTurn: accruesNothing ? 0 : grossActionsPerTurn,
+        // What the campaign would earn with no endorsements at all, from the
+        // same rule that produced the figure above. Zeroed alongside the rest
+        // when suspended: a baseline beside a zero rate is the contradiction
+        // the zeroing exists to avoid.
+        baseline: accruesNothing
+          ? 0
+          : campaignActionsPerTurn({
+              nppEndorsements: 0,
+              playerEndorsements: 0,
+              governorEndorsements: 0,
+              executiveEndorsements: 0,
+              isPresidential: election?.electionType === "president",
+              candidateIsNPP: campaign.candidateIsNPP === true,
+              baseActionsPerTurn: gameConfigForActions?.baseActionsPerTurn ?? 4,
+            }),
         rallyTourDrain: rallyTourActionDrain,
       },
       cumulative: {
@@ -716,22 +810,32 @@ export async function getViewerCampaigns(
     .filter((election) => isCampaignEligibleElection(election))
     .map((election) => election._id);
 
-  const myCampaignDoc = await db.collection<Campaign>("campaigns").findOne({
-    status: { $ne: "archived" },
-    $or: [
-      { managerId: userOid },
-      ...(candidateIds.length > 0 ? [{ candidateId: { $in: candidateIds } }] : []),
-    ],
-  });
+  // This resolves a name and an election type for a nav link, so it has no use
+  // for the activity array. A campaign now keeps 200 entries rather than 10.
+  const campaignListProjection = { projection: { activityHistory: 0 } };
+
+  const myCampaignDoc = await db.collection<Campaign>("campaigns").findOne(
+    {
+      status: { $ne: "archived" },
+      $or: [
+        { managerId: userOid },
+        ...(candidateIds.length > 0 ? [{ candidateId: { $in: candidateIds } }] : []),
+      ],
+    },
+    campaignListProjection
+  );
 
   let partyCampaignDoc: Campaign | null = null;
   if (party && party !== "independent" && eligibleCountryElectionIds.length > 0) {
-    partyCampaignDoc = await db.collection<Campaign>("campaigns").findOne({
-      party,
-      status: { $ne: "archived" },
-      electionId: { $in: eligibleCountryElectionIds },
-      _id: { $ne: myCampaignDoc?._id ?? new ObjectId() },
-    });
+    partyCampaignDoc = await db.collection<Campaign>("campaigns").findOne(
+      {
+        party,
+        status: { $ne: "archived" },
+        electionId: { $in: eligibleCountryElectionIds },
+        _id: { $ne: myCampaignDoc?._id ?? new ObjectId() },
+      },
+      campaignListProjection
+    );
   }
 
   const electionIds = [myCampaignDoc?.electionId, partyCampaignDoc?.electionId].filter(

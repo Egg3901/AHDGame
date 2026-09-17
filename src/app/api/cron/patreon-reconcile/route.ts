@@ -19,16 +19,14 @@ import {
 // actually write. Auth: requireCron (Authorization: Bearer $CRON_SECRET).
 //
 // Decision rules (per run):
-//   - toGrant: an ACTIVE paid patron matched to an AHD user (by patreonUserId,
-//     else by exact lowercased email) whose AHD patreonTier differs from Patreon
-//     -> applyPatreonStatus (grant/upgrade/downgrade) and backfill patreonUserId.
+//   - toGrant: an ACTIVE paid patron matched by a linked patreonUserId whose
+//     AHD patreonTier differs from Patreon -> applyPatreonStatus.
 //   - toDerole: an AHD supporter positively matched to a Patreon record that is
 //     no longer an active paid patron AND not already counting down
 //     (patreonExpiresAt == null) -> startPatreonGracePeriod (30d), never an
 //     immediate clear.
 //   - unmatchedAhdSupporters: AHD supporters we CANNOT find in the Patreon data
-//     by patreonUserId or email -> left completely untouched (manual grants /
-//     email mismatches), reported only.
+//     by patreonUserId -> left completely untouched, reported only.
 //   - unmatchedActivePatrons: active paid patrons with no matching AHD user ->
 //     reported only, no change.
 //   - expired: any supporter whose grace has elapsed (patreonExpiresAt in the
@@ -70,10 +68,6 @@ export interface ReconcileResult {
   expired: SupporterEntry[];
 }
 
-function normEmail(email: string | null | undefined): string | null {
-  return email ? String(email).trim().toLowerCase() : null;
-}
-
 /** Ordinal ranking of a tier so we can compare "which is higher". */
 function tierRank(tier: PatreonTier): number {
   if (tier === "supporter-plus-plus") return 3;
@@ -82,21 +76,9 @@ function tierRank(tier: PatreonTier): number {
   return 0;
 }
 
-/** Find an AHD user for an active patron: patreonUserId first, then email. */
+/** Resolve linked provider identity; email is contact information only. */
 async function findUserForPatron(db: Db, patron: PatreonMemberRecord): Promise<User | null> {
-  if (patron.patreonUserId) {
-    const byId = await findUserByPatreonUserId(db, patron.patreonUserId);
-    if (byId) return byId;
-  }
-  if (patron.email) {
-    // Exact match on a lowercased email. Case-insensitive so we still match when
-    // a legacy AHD record stored mixed-case; email is otherwise an exact equality.
-    const escaped = patron.email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return db
-      .collection<User>("users")
-      .findOne({ email: { $regex: `^${escaped}$`, $options: "i" } });
-  }
-  return null;
+  return patron.patreonUserId ? findUserByPatreonUserId(db, patron.patreonUserId) : null;
 }
 
 export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileResult> {
@@ -105,11 +87,8 @@ export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileRes
 
   // Index Patreon records for supporter -> patreon matching.
   const byPatreonUserId = new Map<string, PatreonMemberRecord>();
-  const byEmail = new Map<string, PatreonMemberRecord>();
   for (const m of members) {
     if (m.patreonUserId) byPatreonUserId.set(m.patreonUserId, m);
-    const e = normEmail(m.email);
-    if (e) byEmail.set(e, m);
   }
 
   const activePaid = members.filter((m) => m.active && m.tier !== null);
@@ -153,7 +132,7 @@ export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileRes
           tier: patron.tier,
           expiresAt: null,
           adsDisabledDefault: true,
-          // Backfill patreonUserId when missing so the webhook works going forward.
+          // Keep the explicit provider mapping used for this match.
           patreonUserId: patron.patreonUserId ?? user.patreonUserId,
         });
       }
@@ -193,12 +172,10 @@ export async function runReconcile(db: Db, apply: boolean): Promise<ReconcileRes
     }
 
     // Positively match this supporter to a Patreon record.
-    const rec =
-      (u.patreonUserId ? byPatreonUserId.get(u.patreonUserId) : undefined) ??
-      (normEmail(u.email) ? byEmail.get(normEmail(u.email)!) : undefined);
+    const rec = u.patreonUserId ? byPatreonUserId.get(u.patreonUserId) : undefined;
 
     if (!rec) {
-      // Cannot find them in Patreon by id or email — never derole. Manual grant
+      // Cannot find them in Patreon by linked provider ID — never derole. Manual grant
       // or email mismatch. Skip if the grant loop already reaffirmed them.
       if (!matchedUserIds.has(u._id.toString())) unmatchedAhdSupporters.push(entry);
       continue;

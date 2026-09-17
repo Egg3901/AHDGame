@@ -52,7 +52,7 @@ describe("deriveFiscalState", () => {
     expect(s.debtToGdpRatio).toBeCloseTo(0.5, 5); // 50 / 100
   });
 
-  it("preserves an authored historical risk regime and reprices deterioration", () => {
+  it("uses current debt-to-GDP despite an authored historical risk anchor", () => {
     const sovereignRiskAnchor = {
       debtToGdpRatio: 1.8,
       creditRating: "AAA" as const,
@@ -64,8 +64,8 @@ describe("deriveFiscalState", () => {
       ceiling: 250,
       sovereignRiskAnchor,
     });
-    expect(seeded.creditRating).toBe("AAA");
-    expect(seeded.interestRate).toBeCloseTo(0.04, 8);
+    expect(seeded.creditRating).toBe("B");
+    expect(seeded.interestRate).toBeCloseTo(0.1, 8);
 
     const deteriorated = deriveFiscalState({
       treasuryBalance: -252,
@@ -73,7 +73,7 @@ describe("deriveFiscalState", () => {
       ceiling: 300,
       sovereignRiskAnchor,
     });
-    expect(deteriorated.creditRating).toBe("AA");
-    expect(deteriorated.interestRate).toBeCloseTo(0.05, 8);
+    expect(deteriorated.creditRating).toBe("CCC");
+    expect(deteriorated.interestRate).toBeCloseTo(0.14, 8);
   });
 });

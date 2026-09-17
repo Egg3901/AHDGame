@@ -64,13 +64,13 @@ async function resolvedPreIteration(
 }
 
 describe("presetDefaultsToFoundingPhase", () => {
-  it("founds a fresh 1953 world", () => {
+  it("founds fresh historical worlds whose authored chambers start vacant", () => {
     expect(presetDefaultsToFoundingPhase("1953-default")).toBe(true);
+    expect(presetDefaultsToFoundingPhase("1979-default")).toBe(true);
   });
 
   it("leaves every other era preset alone — modern presets ship full chamber rosters", () => {
     for (const preset of [
-      "1979-default",
       "1991-default",
       "1999-default",
       "2007-default",
@@ -96,6 +96,13 @@ describe("resetAndBootstrapGameWorld — founding phase resolution", () => {
     });
   });
 
+  it("activates the founding phase on a plain 1979 historical bootstrap", async () => {
+    expect(await resolvedPreIteration({ preset: "1979-default", mode: "historical" })).toEqual({
+      reset: true,
+      bootstrap: true,
+    });
+  });
+
   it("leaves modern presets untouched", async () => {
     for (const preset of ["1991-default", "1999-default", "2007-default", "2019-default"]) {
       expect(await resolvedPreIteration({ preset, mode: "historical" })).toEqual({
@@ -115,10 +122,10 @@ describe("resetAndBootstrapGameWorld — founding phase resolution", () => {
     ).toEqual({ reset: false, bootstrap: false });
   });
 
-  it("lets an explicit true opt a non-defaulting preset in", async () => {
+  it("lets an explicit true opt a modern preset in", async () => {
     expect(
       await resolvedPreIteration({
-        preset: "1979-default",
+        preset: "1991-default",
         mode: "historical",
         preIteration: true,
       })

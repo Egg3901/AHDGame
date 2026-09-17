@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { createMockDb } from "@/lib/test-utils/mockDb";
 import {
+  calculateFederalLawAnnualCosts,
   calculateFederalSpending,
   normalizeFederalSpending,
   normalizeStateSpending,
@@ -168,6 +169,41 @@ describe("calculateFederalSpending", () => {
       debtInterest: 10,
       total: 10 + health,
     });
+  });
+
+  it("exposes each live nonzero law charge used by the spending total", async () => {
+    const db = createMockDb();
+    db.collection("enactedLaws").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        {
+          _id: "tax-law",
+          legislationTypeId: "cn_enterprise_income_tax",
+          countryId: "CN",
+          scope: "national",
+          budgetCategory: "tax",
+          budgetCost: 0,
+          rate: 38,
+        },
+        {
+          _id: "health-law",
+          legislationTypeId: "cn_medical_insurance",
+          countryId: "CN",
+          scope: "national",
+          budgetCategory: "health",
+          budgetCost: 0,
+          annualCostUsd: 200,
+        },
+      ]),
+    });
+    db.collection("states").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: "HB", countryId: "CN", population: 1000 }]),
+    });
+
+    const { items } = await calculateFederalLawAnnualCosts(db as unknown as Db, mockBudget());
+
+    expect(items).toHaveLength(1);
+    expect(items[0].law._id).toBe("health-law");
+    expect(items[0].amount).toBe(200 * getGdpIndexedCostScale("CN", 1000));
   });
 
   it("books CN config-derived central transfer grants as national stateGrants", async () => {

@@ -231,7 +231,7 @@ export function SettingsDropdown({
                     ((user.patreonTier === "supporter-plus" ||
                       user.patreonTier === "supporter-plus-plus") &&
                       user.isPatronActive);
-                  if (!canAccessSandbox) return null;
+                  if (user.singleplayer || !canAccessSandbox) return null;
                   const { url, isSandbox } = getSandboxToggleInfo();
                   return (
                     <a

@@ -112,6 +112,10 @@ export function resolveSourceLink(
     }
   }
 
+  if (m.type === "central_bank_pricing_change") {
+    return { label: "Open banking & credit", href: "/banking" };
+  }
+
   // ── Feedback (admin) ──────────────────────────────────────────────────────
   if (
     (type === "feedback_status_changed" || type === "new_feedback") &&
@@ -169,6 +173,17 @@ export function resolveSourceLink(
     const corpSeqId = asNumber(m.corporationSequentialId);
     if (corpSeqId != null) {
       return { label: "Corporation", href: `/corporation/${corpSeqId}` };
+    }
+  }
+
+  // ── Supply agreement negotiation ─────────────────────────────────────────
+  if (type === "corp_supply_agreement_offer") {
+    const corporationId = asString(m.corporationId);
+    if (corporationId) {
+      return {
+        label: "Review supply offer",
+        href: `/corporation/${corporationId}?tab=commodities#supply-agreements`,
+      };
     }
   }
 

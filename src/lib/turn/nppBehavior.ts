@@ -11,6 +11,8 @@
  */
 
 import { loadNPPContext } from "./npp/context";
+import { getDb } from "@/lib/mongodb";
+import { processNppMortality } from "@/lib/npp/mortality";
 import { processElectionEntry } from "./npp/electionEntry";
 import { processNppEndorsements } from "./npp/endorsements";
 import { processBillVoting } from "./npp/billVoting";
@@ -21,15 +23,17 @@ import { processSlateResponses, syncPersistentSlateAssignments } from "./npp/sla
 
 export async function processNPPTurn(
   now: Date,
-  options?: {
+  options: {
     billDeadlineNow?: Date;
     currentTurn?: number;
+    currentYear: number;
   }
 ): Promise<{
   entered: number;
   votescast: number;
   speakerVotes: number;
   slateResponses: number;
+  deaths: number;
 }> {
   console.log("[Turn] NPP behavior processing started");
 
@@ -46,9 +50,27 @@ export async function processNPPTurn(
     _tPrev = nowMs;
   };
 
+  const db = await getDb();
+
+  // Mortality must run before loading the shared context. Successors and
+  // withdrawn candidacies then appear in every downstream NPP phase this turn.
+  const mortality = await processNppMortality(db, {
+    now,
+    year: options.currentYear,
+    rng: Math.random,
+  });
+  mark("processNppMortality");
+
+  if (mortality.deaths > 0) {
+    console.log(
+      `[Turn] NPP mortality: ${mortality.deaths} deaths, ${mortality.replacements} successors seated`
+    );
+  }
+
   const ctx = await loadNPPContext(now, {
-    billDeadlineNow: options?.billDeadlineNow,
-    currentTurn: options?.currentTurn,
+    db,
+    billDeadlineNow: options.billDeadlineNow,
+    currentTurn: options.currentTurn,
   });
   mark("loadNPPContext");
 
@@ -99,5 +121,5 @@ export async function processNPPTurn(
   // leadership voting became player-only for NPPs.
   const speakerVotes = 0;
 
-  return { entered, votescast, speakerVotes, slateResponses };
+  return { entered, votescast, speakerVotes, slateResponses, deaths: mortality.deaths };
 }

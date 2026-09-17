@@ -16,7 +16,7 @@ import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/co
 import { calculateFederalRevenue, loadLatestSourcedImportAggregates } from "@/lib/budget/revenue";
 import { loadFxRatesByCurrency } from "@/lib/currency/corporationCapital";
 import { FISCAL_YEAR_START_TURN_IN_YEAR, calculateFiscalYear } from "@/lib/budget/fiscalYear";
-import { normalizeFederalSpending } from "@/lib/budget/spending";
+import { calculateFederalLawAnnualCosts, normalizeFederalSpending } from "@/lib/budget/spending";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { liveNationalGdpUnits } from "@/lib/budget/gdpDenominator";
 import { TURNS_PER_YEAR, STARTING_YEAR } from "@/lib/constants/turnTime";
@@ -27,6 +27,7 @@ import { readStateOwnershipConcentration } from "@/lib/nationalization/concentra
 import { nationalLawCountryQuery } from "@/lib/policy/nationalPolicyRecords";
 import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 import { loadDefenseFunding } from "./defenseFunding";
+import { loadOrganizationContributions } from "./organizationContributions";
 import { getGameStatePresetOrDefault } from "@/lib/db/collections/gameState";
 
 /** One point on the fiscal-year trend series (stat strip compare + debt sparkline). */
@@ -93,12 +94,80 @@ export function buildFyHistory(
 }
 
 /** Live sovereign-health signals for the Sovereign Health panel (read-only). */
+export type SovereignCeilingStatus = "clear" | "warning" | "critical" | "exceeded";
+
 export interface SovereignProjection {
   state: SovereignCrisisState;
   demandRatio: number | null;
   failedAuctions: number;
   marketAccess: "Open" | "Locked";
   marketAccessUntilTurn: number | null;
+  ceilingUseRatio: number | null;
+  ceilingHeadroom: number | null;
+  ceilingHeadroomYears: number | null;
+  ceilingStatus: SovereignCeilingStatus;
+}
+
+type SovereignProjectionBudget = {
+  sovereignCrisisState?: SovereignCrisisState;
+  lastAuctionDemandRatio?: number;
+  failedAuctionConsecutiveCount?: number;
+  marketAccessLockedUntilTurn?: number | null;
+  debt?: Pick<FederalBudget["debt"], "principal" | "ceiling">;
+  revenue?: Pick<FederalBudget["revenue"], "total">;
+  spending?: Pick<FederalBudget["spending"], "total">;
+};
+
+function projectCeiling(
+  budget: SovereignProjectionBudget
+): Pick<
+  SovereignProjection,
+  "ceilingUseRatio" | "ceilingHeadroom" | "ceilingHeadroomYears" | "ceilingStatus"
+> {
+  const principal = budget.debt?.principal;
+  const ceiling = budget.debt?.ceiling;
+  if (
+    principal == null ||
+    ceiling == null ||
+    !Number.isFinite(principal) ||
+    !Number.isFinite(ceiling) ||
+    ceiling <= 0
+  ) {
+    return {
+      ceilingUseRatio: null,
+      ceilingHeadroom: null,
+      ceilingHeadroomYears: null,
+      ceilingStatus: "clear",
+    };
+  }
+
+  const ceilingUseRatio = Math.max(0, principal) / ceiling;
+  const ceilingHeadroom = Math.max(0, ceiling - Math.max(0, principal));
+  const revenue = budget.revenue?.total;
+  const spending = budget.spending?.total;
+  const deficit =
+    revenue != null && spending != null && Number.isFinite(revenue) && Number.isFinite(spending)
+      ? Math.max(0, spending - revenue)
+      : 0;
+  const ceilingHeadroomYears =
+    deficit > 0 && ceilingHeadroom > 0 ? ceilingHeadroom / deficit : null;
+
+  let ceilingStatus: SovereignCeilingStatus = "clear";
+  if (ceilingUseRatio > 1) {
+    ceilingStatus = "exceeded";
+  } else if (
+    ceilingUseRatio >= 0.95 ||
+    (ceilingHeadroomYears != null && ceilingHeadroomYears < 1)
+  ) {
+    ceilingStatus = "critical";
+  } else if (
+    ceilingUseRatio >= 0.85 ||
+    (ceilingHeadroomYears != null && ceilingHeadroomYears < 2.5)
+  ) {
+    ceilingStatus = "warning";
+  }
+
+  return { ceilingUseRatio, ceilingHeadroom, ceilingHeadroomYears, ceilingStatus };
 }
 
 /**
@@ -107,13 +176,7 @@ export interface SovereignProjection {
  * Open" posture (pre-migration / un-stressed countries).
  */
 export function projectSovereign(
-  budget: Pick<
-    FederalBudget,
-    | "sovereignCrisisState"
-    | "lastAuctionDemandRatio"
-    | "failedAuctionConsecutiveCount"
-    | "marketAccessLockedUntilTurn"
-  >,
+  budget: SovereignProjectionBudget,
   currentTurn: number
 ): SovereignProjection {
   const lockUntil = budget.marketAccessLockedUntilTurn ?? null;
@@ -124,6 +187,7 @@ export function projectSovereign(
     failedAuctions: budget.failedAuctionConsecutiveCount ?? 0,
     marketAccess: locked ? "Locked" : "Open",
     marketAccessUntilTurn: locked ? lockUntil : null,
+    ...projectCeiling(budget),
   };
 }
 
@@ -410,30 +474,47 @@ export async function loadFederalBudgetDetail(params: {
       if (t.taxRateChange?.taxType) revenueTaxTypeByLegId.set(t._id, t.taxRateChange.taxType);
     }
   }
+  const { items: federalLawCosts } = await calculateFederalLawAnnualCosts(
+    db,
+    resolvedNationalBudget
+  );
+  const annualCostByLawId = new Map(
+    federalLawCosts.map(({ law, amount }) => [law._id.toString(), amount])
+  );
   const enrichedLaws = enactedLaws.map((law) => {
     const revenueTaxType = law.legislationTypeId
       ? revenueTaxTypeByLegId.get(law.legislationTypeId)
       : undefined;
-    return revenueTaxType ? { ...law, revenueTaxType } : law;
+    const annualCost = annualCostByLawId.get(law._id.toString());
+    return {
+      ...law,
+      ...(revenueTaxType ? { revenueTaxType } : {}),
+      ...(annualCost != null ? { annualCost } : {}),
+    };
   });
 
-  // Signed per-turn State-enterprise (National Corporation) net, in local
-  // currency, for the budget's revenue/expenditure State Enterprises line.
-  const stateEnterpriseNet = await estimateCountryOwnedBudgetNetLocal(db, budgetCountryId);
-  // State Ownership Concentration Index (SOCI, 0–100) for the State Enterprises card.
-  const stateOwnershipConcentration = await readStateOwnershipConcentration(db, budgetCountryId);
-
-  // Defence funding position (live budgets only): the enacted line the
-  // surplus tile counts vs the force's actual upkeep, plus the appropriation
-  // pot. Upkeep beyond the line leaves the treasury as debt without touching
-  // any spending row, which is the usual reason a balance falls under a
-  // surplus (ticket #1269). Read-only; the turn phase stays the sole writer.
-  const defenseFunding = await loadDefenseFunding(
-    db,
-    budgetCountryId,
-    storedNationalBudget,
-    await getGameStatePresetOrDefault(db)
-  );
+  const preset = await getGameStatePresetOrDefault(db);
+  const [
+    // Signed per-turn State-enterprise (National Corporation) net, in local
+    // currency, for the budget's revenue/expenditure State Enterprises line.
+    stateEnterpriseNet,
+    // State Ownership Concentration Index (SOCI, 0–100) for the State Enterprises card.
+    stateOwnershipConcentration,
+    // Defence funding position (live budgets only): the enacted line the
+    // surplus tile counts vs the force's actual upkeep, plus the appropriation
+    // pot. Upkeep beyond the line leaves the treasury as debt without touching
+    // any spending row, which is the usual reason a balance falls under a
+    // surplus (ticket #1269). Read-only; the turn phase stays the sole writer.
+    defenseFunding,
+    // International organization dues or tribute debited directly from the
+    // treasury. These are also read-only; the turn phase remains the sole writer.
+    organizationContributions,
+  ] = await Promise.all([
+    estimateCountryOwnedBudgetNetLocal(db, budgetCountryId),
+    readStateOwnershipConcentration(db, budgetCountryId),
+    loadDefenseFunding(db, budgetCountryId, storedNationalBudget, preset),
+    loadOrganizationContributions(db, budgetCountryId, preset),
+  ]);
 
   // Finance-Minister lens gate: only the seated finance-minister-equivalent (or
   // head of government when the seat is vacant) sees the confidential lens.
@@ -448,6 +529,7 @@ export async function loadFederalBudgetDetail(params: {
       stateEnterpriseNet,
       stateOwnershipConcentration,
       defenseFunding,
+      organizationContributions,
       // Signed national treasury balance (local currency) — the unified fiscal +
       // nationalization cash position. Positive = surplus, negative = national
       // debt. Pre-migration docs fall back to −debt.principal.

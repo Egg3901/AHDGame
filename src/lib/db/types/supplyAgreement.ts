@@ -2,6 +2,22 @@ import type { ObjectId } from "mongodb";
 import type { CommodityType } from "@/lib/constants/commodities";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
+/** One revision in a bilateral supply-agreement negotiation. */
+export interface SupplyAgreementOffer {
+  /** Monotonic within one agreement, starting at 1. */
+  revision: number;
+  /** Corporation that authored this offer. */
+  proposedByCorpId: ObjectId;
+  volumeCap: number;
+  pricePremium: number;
+  exclusive: boolean;
+  /** Optional fixed term. Absent means the accepted agreement is open-ended. */
+  durationTurns?: number;
+  /** Turn at which the offer was made, when the world turn was available. */
+  proposedAtTurn?: number;
+  proposedAt: Date;
+}
+
 /**
  * Private supply agreement (bilateral, both-consent). A supplier corp commits
  * to sell a commodity to a buyer corp off the open market: in clearing, the
@@ -32,6 +48,12 @@ export interface SupplyAgreement {
   stateId?: string;
   /** Max units per turn the supplier commits (its output is capped to this for the buyer). */
   volumeCap: number;
+  /** Optional fixed term. Existing agreements without this remain open-ended. */
+  durationTurns?: number;
+  /** Turn on which an accepted fixed-term agreement starts settling. */
+  startsAtTurn?: number;
+  /** Turn on which an accepted fixed-term agreement stops settling. */
+  expiresAtTurn?: number;
   /**
    * What `volumeCap` was validated AGAINST when the contract was signed, and
    * therefore whether the shortfall penalty may be assessed against it.
@@ -73,6 +95,10 @@ export interface SupplyAgreement {
    */
   cancelEffectiveTurn?: number;
   proposedByCorpId: ObjectId;
+  /** Latest offer, including the accepted offer on active agreements. */
+  currentOffer?: SupplyAgreementOffer;
+  /** Complete offer history, including the current offer. */
+  offers?: SupplyAgreementOffer[];
   /**
    * C5 transfer pricing: cumulative ₳ of profit this contract has shifted out
    * of one country and into another, while both parties were in the same
@@ -187,6 +213,12 @@ export const CONTRACT_SHORTFALL_PENALTY = 0.5;
  * PROVISIONAL: worldsim re-tunes.
  */
 export const CONTRACT_CANCEL_NOTICE_TURNS = 4;
+
+/** Minimum useful fixed term for a supply agreement, in turns. */
+export const SUPPLY_AGREEMENT_DURATION_MIN_TURNS = 4;
+
+/** Maximum fixed term for a supply agreement, in turns. */
+export const SUPPLY_AGREEMENT_DURATION_MAX_TURNS = 192;
 
 /**
  * Ceiling on shortfall damages from ONE settlement, as a fraction of that

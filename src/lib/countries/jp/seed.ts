@@ -33,20 +33,28 @@ export async function seedJPRegions(
   const { jpRegions1999 } = await import("@/lib/countries/jp/data/jpRegions1999");
   const { jpRegions2007 } = await import("@/lib/countries/jp/data/jpRegions2007");
   const { jpRegions2023 } = await import("@/lib/countries/jp/data/jpRegions2023");
+  const { jpRegions2027 } = await import("@/lib/countries/jp/data/jpRegions2027");
   const { selectPresetBundle } = await import("@/lib/seeds/presetSelector");
-  const bundle = selectPresetBundle(
-    preset,
-    {
-      "1953-default": jpRegions1953,
-      "2019-default": jpRegions,
-      "1979-default": jpRegions1979,
-      "1991-default": jpRegions1991,
-      "1999-default": jpRegions1999,
-      "2007-default": jpRegions2007,
-      "2023-default": jpRegions2023,
-    },
-    "seedJP:jpRegions1953"
-  );
+  // 2027-default is wired explicitly here so this country-local seeder does
+  // not depend on shared preset registry changes. `selectPresetBundle`
+  // has no 2027 entry for JP; without this branch a 2027 world would fall
+  // back to the 1953 bundle.
+  const bundle =
+    preset === "2027-default"
+      ? jpRegions2027
+      : selectPresetBundle(
+          preset,
+          {
+            "1953-default": jpRegions1953,
+            "2019-default": jpRegions,
+            "1979-default": jpRegions1979,
+            "1991-default": jpRegions1991,
+            "1999-default": jpRegions1999,
+            "2007-default": jpRegions2007,
+            "2023-default": jpRegions2023,
+          },
+          "seedJP:jpRegions1953"
+        );
   const regionOps = bundle.map((region) => {
     const { _id, ...regionData } = region;
     return { updateOne: { filter: { _id }, update: { $set: regionData }, upsert: true } };
@@ -417,7 +425,9 @@ export async function seedJPGovernors2020(db: Db, reset: boolean, log: (msg: str
 
   const { JP_GOVERNORS_2020 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, JP_GOVERNORS_2020);
+  const result = await seedFromSeats(db, JP_GOVERNORS_2020, "winners", {
+    presetId: "2019-default",
+  });
   log(
     `Seeded JP Regional Governors (2020): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );
@@ -471,7 +481,9 @@ export async function seedJPGovernors1991(db: Db, reset: boolean, log: (msg: str
 
   const { JP_GOVERNORS_1991 } = await import("@/lib/constants/historicalSeats");
   const { seedFromSeats } = await import("@/lib/npp/seedHistorical");
-  const result = await seedFromSeats(db, JP_GOVERNORS_1991);
+  const result = await seedFromSeats(db, JP_GOVERNORS_1991, "winners", {
+    presetId: "1991-default",
+  });
   log(
     `Seeded JP Regional Governors (1991): ${result.nppsCreated} NPPs, ${result.officialsCreated} officials`
   );

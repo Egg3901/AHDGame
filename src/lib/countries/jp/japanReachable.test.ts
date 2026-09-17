@@ -16,6 +16,7 @@ import { getRegionCensusData } from "@/lib/seeds/regionCensusData";
 import { getRegionMetricPresets } from "@/lib/seeds/metricPresets";
 import { CORE5_NORMALS } from "@/lib/era/metricCatalog";
 import { REGION_ROSTERS } from "@/lib/demographics/substrateCoverage";
+import { SHIPPING_PRESETS } from "@/lib/world/eraRoster";
 import { ORDERS_BY_COUNTRY } from "@/lib/constants/cabinetOrders";
 import { MECHANICS_BY_COUNTRY } from "@/lib/constants/cabinetMechanics";
 
@@ -120,8 +121,10 @@ describe("Japan is reachable through its registries", () => {
     // 1979 record must not be an alias of the 2019 one.
     expect(hok1979).not.toBe(hok2019);
     expect(getRegionMetricPresets("JP", "HOK", "1979-default")).not.toBeNull();
-    // All seven shipping presets have a roster thunk.
-    expect(Object.keys(REGION_ROSTERS.JP ?? {})).toHaveLength(7);
+    // Every shipping preset has a roster thunk. Asserted against
+    // SHIPPING_PRESETS rather than a literal: upstream's 2027 preset arrived
+    // mid-branch and a hard-coded 7 would have had to be found by hand.
+    expect(Object.keys(REGION_ROSTERS.JP ?? {})).toHaveLength(SHIPPING_PRESETS.length);
   });
 
   it("keeps the shared metric fallbacks that belong to every country", () => {

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import path from "path";
 import os from "os";
 import type { Db } from "mongodb";
+import { ObjectId } from "mongodb";
 import {
   ensureSingleplayerUser,
   setSingleplayerConfig,
@@ -10,6 +11,11 @@ import {
   singleplayerStatus,
 } from "./singleplayerServer";
 import { createMockDb } from "@/lib/test-utils/mockDb";
+import { reconcileSingleplayerHeadOfState } from "@/lib/singleplayerHeadOfState";
+
+vi.mock("@/lib/singleplayerHeadOfState", () => ({
+  reconcileSingleplayerHeadOfState: vi.fn().mockResolvedValue(false),
+}));
 
 describe("singleplayer data directory", () => {
   it("defaults to a dotfolder in the home directory", () => {
@@ -50,6 +56,43 @@ describe("singleplayer account", () => {
 });
 
 describe("singleplayer maintenance recovery", () => {
+  it("repairs a head-of-state world during the launcher status handshake", async () => {
+    const db = createMockDb();
+    vi.mocked(reconcileSingleplayerHeadOfState).mockClear();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 3,
+      preset: "2019-default",
+      singleplayerConfig: { mode: "head-of-state" },
+    });
+
+    await singleplayerStatus(db as unknown as Db);
+
+    expect(reconcileSingleplayerHeadOfState).toHaveBeenCalledWith(db, {
+      preset: "2019-default",
+    });
+  });
+
+  it("promotes the earliest account to admin when a world reports status with none", async () => {
+    const db = createMockDb();
+    const earliestId = new ObjectId();
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 3,
+      preset: "2019-default",
+      singleplayerConfig: { mode: "career" },
+    });
+    db.collection("users").countDocuments.mockResolvedValue(0);
+    db.collection("users").findOne.mockResolvedValue({ _id: earliestId });
+
+    await singleplayerStatus(db as unknown as Db);
+
+    expect(db.collection("users").updateOne).toHaveBeenCalledWith(
+      { _id: earliestId },
+      { $set: { isAdmin: true, updatedAt: expect.any(Date) } }
+    );
+  });
+
   it("clears hosted maintenance when an existing local world reports status", async () => {
     const db = createMockDb();
     db.collection("gameState").findOne.mockResolvedValue({
@@ -72,6 +115,52 @@ describe("singleplayer maintenance recovery", () => {
         },
       }
     );
+  });
+
+  it("exposes the persisted boolean feature map to the owner panel", async () => {
+    const db = createMockDb();
+    const featureFlags = { forexEnabled: false, worldEventsEnabled: true };
+    db.collection("gameState").findOne.mockResolvedValue({
+      _id: "current",
+      currentTurn: 3,
+      preset: "modern",
+      singleplayerConfig: {
+        mode: "career",
+        difficulty: "normal",
+        nppAutonomyLevel: "v4",
+        permanentHeadOfState: false,
+        featureFlags,
+      },
+    });
+
+    const status = await singleplayerStatus(db as unknown as Db);
+
+    expect(status.setup?.featureFlags).toEqual(featureFlags);
+  });
+
+  it("writes partial flags to both the stored config and the live world", async () => {
+    const db = createMockDb();
+
+    await setSingleplayerConfig(db as unknown as Db, {
+      mode: "normal",
+      difficulty: "hard",
+      nppAutonomyLevel: "v4",
+      permanentHeadOfState: true,
+      featureFlags: { forexEnabled: false },
+    });
+
+    const set = db.collectionMocks.gameState.updateOne.mock.calls[0]?.[1].$set;
+    expect(set.singleplayerConfig).toMatchObject({
+      mode: "normal",
+      difficulty: "hard",
+      nppAutonomyLevel: "v4",
+      permanentHeadOfState: true,
+    });
+    expect(set.singleplayerConfig.featureFlags.forexEnabled).toBe(false);
+    expect(set.singleplayerConfig.featureFlags.worldEventsEnabled).toBe(true);
+    expect(set.forexEnabled).toBe(false);
+    expect(set.worldEventsEnabled).toBe(true);
+    expect(set.nppAutonomyLevel).toBe("v4");
   });
 
   it("clears reset maintenance when a new local world is configured", async () => {

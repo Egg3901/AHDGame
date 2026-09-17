@@ -811,6 +811,7 @@ export async function getCommodityDetailData(
       globalPrice: currentPrice?.globalPrice ?? basePrice,
       globalSupply: currentPrice?.globalSupply ?? 0,
       globalDemand: currentPrice?.globalDemand ?? 0,
+      priceAttribution: currentPrice?.priceAttribution ?? null,
       priceChange:
         Math.round((((currentPrice?.globalPrice ?? basePrice) - basePrice) / basePrice) * 10000) /
         100,

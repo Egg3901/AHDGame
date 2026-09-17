@@ -76,6 +76,20 @@ describe("singleplayer worldsim contract", () => {
     expect(advance).toHaveBeenCalledTimes(2);
   });
 
+  it("retains completed turns with engine warnings", async () => {
+    const advance = vi.fn(async () => ({
+      success: false,
+      turn: 2,
+      message: "Turn 2 processed with 1 warning(s)",
+      warnings: ["Optional summary unavailable"],
+    }));
+    await expect(advanceWorldsim(1, advance)).resolves.toMatchObject({
+      completed: 1,
+      finalTurn: 2,
+      results: [{ warnings: ["Optional summary unavailable"] }],
+    });
+  });
+
   it("rejects unbounded or empty requests", async () => {
     await expect(advanceWorldsim(0, vi.fn())).rejects.toThrow("1 to");
     await expect(advanceWorldsim(MAX_WORLD_SIM_TURNS + 1, vi.fn())).rejects.toThrow("1 to");

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { PoliticalParty, Suggestion, User } from "@/lib/db/types";
 import { getSuggestionsCollection } from "@/lib/db/collections/suggestions";
@@ -16,7 +17,7 @@ import {
 // GET /api/suggestions/public/[issueNumber] — Public suggestion detail for forum thread.
 // Auth: public
 // Errors: 400, 404
-export async function GET(
+export const GET = withNoStore(async function GET(
   _request: Request,
   { params }: { params: Promise<{ issueNumber: string }> }
 ) {
@@ -71,7 +72,7 @@ export async function GET(
       reporterDiscordUsername = discordSubmitHandleForChip(s);
     }
 
-    const viewer = await verifyAuth();
+    const viewer = await getAuthUser();
     let userReaction: "like" | "dislike" | null = null;
     if (viewer?.userId) {
       const uid = new ObjectId(viewer.userId);
@@ -117,7 +118,7 @@ export async function GET(
   } catch (err) {
     return handleRouteError(err);
   }
-}
+});
 
 function serializeDetail(
   s: Suggestion,

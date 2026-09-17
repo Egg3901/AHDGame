@@ -45,7 +45,7 @@ export function isHeadOfGovernmentRace(electionType: string, countryId: CountryI
 export async function resolvePresidentApproval(
   db: Db,
   countryId: CountryId
-): Promise<{ partyId: string; approval: number } | null> {
+): Promise<{ partyId: string; approval: number; characterId?: string } | null> {
   const headType = HEAD_OF_GOVERNMENT_TYPE_BY_COUNTRY[countryId];
   if (!headType) return null;
 
@@ -59,7 +59,11 @@ export async function resolvePresidentApproval(
     .findOne({ _id: countryId });
   const approval = approvalDoc?.approvalRating ?? BASE_APPROVAL;
 
-  return { partyId: official.party, approval };
+  return {
+    partyId: official.party,
+    approval,
+    ...(official.characterId ? { characterId: official.characterId.toString() } : {}),
+  };
 }
 
 /**

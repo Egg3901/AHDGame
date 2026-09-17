@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
-import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { COUNTRY_CONFIGS, isParliamentarySystem, type CountryId } from "@/lib/constants/countries";
 import { getGovernmentFormationsCollection } from "@/lib/db/collections/governmentFormation";
 import type { Character, ParliamentaryGovernment, PoliticalParty } from "@/lib/db/types";
 import {
@@ -40,19 +40,31 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         .findOne({ _id: countryId }),
     ]);
 
-    // Find the head of government — check currentOffice first (works for US/presidential),
-    // then fall back to canonical governmentFormations, then legacy parliamentaryGovernments.
-    const hogFilter: Record<string, unknown> = {
-      "currentOffice.type": executiveKey,
-    };
-    hogFilter.countryId = countryId;
-    let hogChar = await db.collection<Character>("characters").findOne(hogFilter);
+    // governmentFormations is authoritative for parliamentary head-of-government
+    // identity. Reading currentOffice first lets a stale office projection
+    // disagree with the executive page, which reads pmCharacterId. Preserve a
+    // present null as an intentional vacancy instead of falling through to a
+    // legacy document or stale currentOffice projection.
+    const formationHasPmField =
+      govFormation !== null && Object.prototype.hasOwnProperty.call(govFormation, "pmCharacterId");
+    const pmCharacterId = formationHasPmField
+      ? (govFormation?.pmCharacterId ?? null)
+      : (govDoc?.pmCharacterId ?? null);
+    let hogChar = pmCharacterId
+      ? await db.collection<Character>("characters").findOne({ _id: pmCharacterId })
+      : null;
 
-    if (!hogChar) {
-      const pmCharacterId = govFormation?.pmCharacterId ?? govDoc?.pmCharacterId ?? null;
-      if (pmCharacterId) {
-        hogChar = await db.collection<Character>("characters").findOne({ _id: pmCharacterId });
-      }
+    // Keep legacy and presidential callers working when there is no canonical
+    // PM field to consult. A present, null pmCharacterId is an intentional
+    // vacancy and must not be replaced by a stale currentOffice row.
+    const noCanonicalPmField =
+      !formationHasPmField &&
+      (govDoc === null || !Object.prototype.hasOwnProperty.call(govDoc, "pmCharacterId"));
+    if (!hogChar && (!isParliamentarySystem(config) || noCanonicalPmField)) {
+      hogChar = await db.collection<Character>("characters").findOne({
+        countryId,
+        "currentOffice.type": executiveKey,
+      });
     }
 
     let primeMinister = null;

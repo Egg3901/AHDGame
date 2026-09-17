@@ -67,6 +67,16 @@ export async function loadSettleableSupplyAgreements(args: {
   legacyStateLocalAgreementLive: boolean;
 }> {
   const { db, turn, now } = args;
+  // Fixed-term contracts stop before settlement on their expiration turn.
+  // Cancellation notices use the same retirement pass below, so both kinds of
+  // contract are removed from the live settlement book before it is read.
+  await db
+    .collection<SupplyAgreement>("supplyAgreements")
+    .updateMany(
+      { status: { $in: ["active", "cancelling"] }, expiresAtTurn: { $lte: turn } },
+      { $set: { status: "cancelled", updatedAt: now }, $unset: { cancelEffectiveTurn: "" } }
+    );
+
   // C6: a contract under NOTICE keeps delivering and settling until its
   // effective turn. Retire the ones whose notice has run out first, then load
   // everything still live. Ordering matters, a contract that expires this

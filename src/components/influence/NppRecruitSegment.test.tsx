@@ -81,4 +81,21 @@ describe("NppRecruitSegment", () => {
       (screen.getByRole("button", { name: /Insufficient|Recruit/ }) as HTMLButtonElement).disabled
     ).toBe(true);
   });
+
+  it("disables recruitment when the party-wide NPP capacity is reached", () => {
+    const onRecruit = vi.fn();
+    render(
+      <NppRecruitSegment
+        states={[{ ...STATES[0], canRecruit: false }]}
+        actionPoints={20}
+        recruitFund={100000}
+        treasury={5_000_000}
+        currency="USD"
+        onRecruit={onRecruit}
+      />
+    );
+
+    const button = screen.getByRole("button", { name: "Party NPP capacity reached" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+  });
 });

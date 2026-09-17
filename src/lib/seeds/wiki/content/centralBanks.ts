@@ -301,5 +301,9 @@ credit. Central-bank savings interest is created onto
 inflation), with the real rate floored at 0.5 percentage points so it can never
 go negative or near zero.
 
+During the current pricing phase-in, central-bank-held deposits also receive a
+temporary bonus that reaches 0.25 percentage points over 8 turns. Private-bank
+deposit rates remain controlled by their own charters.
+
 See also: [Currency Exchange](/wiki/currency-exchange), [National Metrics](/wiki/national-metrics), [Sovereign Bonds](/wiki/sovereign-bonds), [Corporate Bonds](/wiki/corporate-bonds), [Private Banking](/wiki/private-banking), [Government Approval](/wiki/government-approval), [Planned / Command Economies](/wiki/planned-economies), [FOMC / Rate-Setting Board](/wiki/fomc)
 `;

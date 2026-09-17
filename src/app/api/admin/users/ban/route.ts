@@ -62,10 +62,10 @@ export async function POST(request: Request) {
             isBanned: true,
             banReason: reason || "Violation of rules",
             bannedAt: new Date(),
-            authRevokedAt: new Date(),
             bannedShareReleaseCorporationIds: ceoCorpIds,
             updatedAt: new Date(),
           },
+          $max: { authRevokedAt: new Date() },
           $unset: {
             bannedShareReleaseProcessedAt: "",
           },

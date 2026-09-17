@@ -6,6 +6,7 @@ import { formatBankMoney } from "@/components/banking/formatBankMoney";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { ConsolePayload, ShowToast } from "../types";
 import { mergeState } from "../lib/helpers";
+import { Eyebrow } from "../components/BankSection";
 
 type PropAsset = "equity" | "bond" | "indexUnit" | "forex";
 
@@ -94,7 +95,10 @@ export function PropBookPanel({
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-base font-semibold text-foreground">Prop book</h3>
+        <div className="space-y-1">
+          <Eyebrow kind="ceoControl" />
+          <h3 className="text-base font-semibold text-foreground">Prop book</h3>
+        </div>
         <p className="text-sm font-mono tabular-nums text-muted">
           Mark {formatBankMoney(markValue, currency)}
         </p>

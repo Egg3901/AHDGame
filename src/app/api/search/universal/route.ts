@@ -28,6 +28,12 @@ import type {
 } from "@/lib/db/types";
 import { BOND_MATURITY_LABELS } from "@/lib/db/types/bond";
 
+/**
+ * Maximum accepted `q` length (after trimming). Longer queries are rejected
+ * with HTTP 400 before any auth, rate-limit, or database work.
+ */
+export const MAX_UNIVERSAL_SEARCH_QUERY_LENGTH = 200;
+
 export interface SearchResult {
   type:
     | "politician"
@@ -127,7 +133,7 @@ function resolveOfficialSearchTarget(
 
 // GET /api/search/universal — Searches across politicians, NPPs, elected seats, and active elections by query string.
 // Auth: public
-// Errors: (none)
+// Errors: 400 when q exceeds 200 characters
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -137,6 +143,15 @@ export async function GET(request: Request) {
     // forces a near-full scan of every searched collection.
     if (query.length < 2) {
       return NextResponse.json({ results: [] });
+    }
+
+    // Cap query length: an unbounded `q` becomes an unbounded regex scanned
+    // across many large collections.
+    if (query.length > MAX_UNIVERSAL_SEARCH_QUERY_LENGTH) {
+      return NextResponse.json(
+        { error: `Query too long (max ${MAX_UNIVERSAL_SEARCH_QUERY_LENGTH} characters)` },
+        { status: 400 }
+      );
     }
 
     const authUser = await getAuthUser();

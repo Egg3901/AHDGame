@@ -8,7 +8,7 @@
  * while allowing 1991-default bundles to opt in incrementally.
  */
 
-export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023";
+export type EraId = "1953" | "1979" | "1991" | "1999" | "2007" | "2019" | "2023" | "2027";
 
 export type ResetPresetId =
   | "1953-default"
@@ -18,6 +18,7 @@ export type ResetPresetId =
   | "2007-default"
   | "2019-default"
   | "2023-default"
+  | "2027-default"
   | "empty"
   | "2019-no-parties"
   | string;
@@ -126,6 +127,7 @@ const ERA_MAP: Record<string, EraId> = {
   "2007-default": "2007",
   "2019-default": "2019",
   "2023-default": "2023",
+  "2027-default": "2027",
   empty: "2019",
   "2019-no-parties": "2019",
 };
@@ -157,6 +159,7 @@ const PRESET_FOR_ERA_MAP: Record<EraId, ResetPresetId> = {
   "2007": "2007-default",
   "2019": "2019-default",
   "2023": "2023-default",
+  "2027": "2027-default",
 };
 
 export function presetForEra(era: EraId): ResetPresetId {
@@ -191,9 +194,8 @@ export function isEasternBlocEra(preset: string): boolean {
  *                  skips the executive backfill under `preIteration`. Chambers
  *                  start vacant BY DESIGN and the founding election seats them.
  *   1979-default   138 authored seats — RU/DD structures only; the US/UK
- *                  chambers have no authored roster at all. Same shape as 1953,
- *                  but flipping its default is a separate product call, so it
- *                  stays opt-in (`--pre-iteration` / `preIteration: true`).
+ *                  chambers have no authored roster at all. Same vacant-roster
+ *                  shape as 1953, so founding is required for a valid world.
  *   1991/1999/     ~1004-1015 authored seats each — every chamber ships a full
  *   2007/2019/     historical roster that seats at bootstrap. Defaulting the
  *   2023           founding phase on here would blank those rosters and replace
@@ -203,7 +205,7 @@ export function isEasternBlocEra(preset: string): boolean {
  * supplies the default when the caller says nothing.
  */
 export function presetDefaultsToFoundingPhase(preset: string): boolean {
-  return preset === "1953-default";
+  return preset === "1953-default" || preset === "1979-default";
 }
 
 /**
@@ -220,6 +222,7 @@ export function isKnownPreset(preset: string): boolean {
     preset === "2007-default" ||
     preset === "2019-default" ||
     preset === "2023-default" ||
+    preset === "2027-default" ||
     preset === "empty" ||
     preset === "2019-no-parties"
   );

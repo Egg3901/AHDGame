@@ -28,6 +28,7 @@ import {
 } from "@/lib/currency/savingsInterest";
 import { getGameState } from "@/lib/gameState";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 
 interface RouteContext {
   params: Promise<{ code: string }>;
@@ -76,7 +77,16 @@ export async function GET(request: Request, context: RouteContext) {
     const bank = await db.collection<CentralBank>("centralBanks").findOne({ _id: bankId });
     const primeRate = bank?.primeRate ?? DEFAULT_PRIME;
     const inflationRate = bank?.inflationHistory?.at(-1)?.rate ?? 0;
-    const apyPercent = Math.round(savingsApyPercent(primeRate, inflationRate) * 100) / 100;
+    const gameState = await getGameState();
+    const centralBankPricing = await loadCentralBankPricingAdjustment(
+      db,
+      gameState?.currentTurn ?? 0
+    );
+    const apyPercent =
+      Math.round(
+        savingsApyPercent(primeRate, inflationRate, centralBankPricing.depositBonusPercentPoints) *
+          100
+      ) / 100;
 
     const forexEnabled = await isForexEnabled();
     if (!forexEnabled) {
@@ -91,6 +101,7 @@ export async function GET(request: Request, context: RouteContext) {
     };
 
     if (type === "deposit") {
+      const ledger = await fetchSavingsLedgerForCharacter(db, character._id, nationalCurrency, 100);
       const savingsBalance = getSavingsBalance(character, nationalCurrency, true);
       const liquidBalance = getPersonalBalance(character, nationalCurrency, true);
       const lifetimeInterestEarned = getLifetimeInterestEarnedInCurrency(
@@ -101,11 +112,6 @@ export async function GET(request: Request, context: RouteContext) {
       const pendingInterest =
         character.currencyBalances?.pendingSavingsInterest?.[nationalCurrency] ?? 0;
       const accountOpened = character.savingsAccountsOpened?.[nationalCurrency] === true;
-
-      const [ledger, gameState] = await Promise.all([
-        fetchSavingsLedgerForCharacter(db, character._id, nationalCurrency, 100),
-        getGameState(),
-      ]);
 
       const turnsUntilCredit = turnsUntilSavingsCredit(gameState?.currentTurn ?? 0);
       const estimatedAccrualThisTurn =
@@ -150,7 +156,8 @@ export async function GET(request: Request, context: RouteContext) {
     const ledger = await fetchLocLedgerForCharacter(db, character._id, 100, nationalCurrency);
 
     const spread = snapshot?.spreadPercentPoints ?? 0;
-    const effectiveRatePercent = primeRate + spread;
+    const effectiveRatePercent =
+      primeRate + spread + (snapshot?.policySpreadAdjustmentPercentPoints ?? 0);
 
     return NextResponse.json({
       kind: "loan" as const,

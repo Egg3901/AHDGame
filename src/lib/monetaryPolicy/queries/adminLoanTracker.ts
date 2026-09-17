@@ -167,9 +167,11 @@ export async function loadAdminLoanTracker(params: { db: Db; countryId: CountryI
           ? 1
           : 0;
 
-    const spreadPercentPoints =
+    const creditSpreadPercentPoints =
       snapshot?.spreadPercentPoints ??
       (await computeSpreadForCharacter(db, character, rates, primeByCountryId));
+    const spreadPercentPoints =
+      creditSpreadPercentPoints + (snapshot?.policySpreadAdjustmentPercentPoints ?? 0);
     const walletOk = walletCoversNextScheduledPay(
       character,
       forexEnabled,

@@ -45,12 +45,16 @@ export const SAVINGS_REAL_RATE_FLOOR_PERCENT = 0.5;
  * and therefore its savings APY — is similar to everyone else's. Parking money in a
  * high-nominal-rate currency no longer yields a free real return.
  */
-export function savingsApyPercent(primeRatePercent: number, inflationPercent: number): number {
+export function savingsApyPercent(
+  primeRatePercent: number,
+  inflationPercent: number,
+  depositBonusPercent = 0
+): number {
   const realRatePercent = Math.max(
     SAVINGS_REAL_RATE_FLOOR_PERCENT,
     primeRatePercent - inflationPercent
   );
-  return realRatePercent / 2;
+  return realRatePercent / 2 + Math.max(0, depositBonusPercent);
 }
 
 /**
@@ -63,10 +67,11 @@ export function computeSavingsInterestForTurn(
   balance: number,
   primeRatePercent: number,
   currencyCode: CurrencyCode,
-  inflationPercent = 0
+  inflationPercent = 0,
+  depositBonusPercent = 0
 ): number {
   if (balance <= 0 || primeRatePercent <= 0) return 0;
-  const apyPercent = savingsApyPercent(primeRatePercent, inflationPercent);
+  const apyPercent = savingsApyPercent(primeRatePercent, inflationPercent, depositBonusPercent);
   const raw = (balance * (apyPercent / 100)) / TURNS_PER_YEAR;
   return roundSavingsAmount(raw, currencyCode);
 }

@@ -17,6 +17,7 @@ describe("eraForPreset", () => {
     ["2007-default", "2007"],
     ["2019-default", "2019"],
     ["2023-default", "2023"],
+    ["2027-default", "2027"],
     ["empty", "2019"],
     ["2019-no-parties", "2019"],
     ["unknown-preset", "2019"],
@@ -33,6 +34,7 @@ describe("isKnownPreset", () => {
     "2007-default",
     "2019-default",
     "2023-default",
+    "2027-default",
     "empty",
     "2019-no-parties",
   ])("returns true for %s", (preset) => {

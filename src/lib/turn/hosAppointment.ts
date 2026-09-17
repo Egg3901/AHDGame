@@ -67,9 +67,12 @@ export async function resolveHeadOfStateAppointmentVote(
     countryId,
     officeType: hosOfficeType,
   });
-  const nomineeChar = await db
-    .collection<Character>("characters")
-    .findOne({ _id: vote.nomineeCharacterId }, { projection: { party: 1, userId: 1 } });
+  const isNppVote = vote.nomineeMode === "npp";
+  const nomineeChar = isNppVote
+    ? null
+    : await db
+        .collection<Character>("characters")
+        .findOne({ _id: vote.nomineeCharacterId! }, { projection: { party: 1, userId: 1 } });
   await db.collection<ElectedOfficial>("electedOfficials").insertOne({
     _id: new ObjectId(),
     countryId,
@@ -77,9 +80,10 @@ export async function resolveHeadOfStateAppointmentVote(
     state: countryId,
     isAppointment: true,
     characterId: vote.nomineeCharacterId,
+    nppId: vote.nomineeNppId ?? undefined,
     characterName: vote.nomineeName,
     party: nomineeChar?.party ?? vote.nomineePartyId,
-    isNPP: false,
+    isNPP: isNppVote,
     electedAt: now,
     createdAt: now,
     updatedAt: now,
@@ -90,7 +94,7 @@ export async function resolveHeadOfStateAppointmentVote(
     {
       $set: {
         hosCharacterId: vote.nomineeCharacterId,
-        hosNppId: null,
+        hosNppId: vote.nomineeNppId ?? null,
         hosName: vote.nomineeName,
         updatedAt: now,
       },
@@ -103,7 +107,7 @@ export async function resolveHeadOfStateAppointmentVote(
     { $set: { status: "cancelled", closedAt: now, updatedAt: now } }
   );
 
-  if (nomineeChar?.userId) {
+  if (nomineeChar?.userId && vote.nomineeCharacterId) {
     await createNotifications([
       {
         userId: nomineeChar.userId,

@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { processCommodityPriceTurn, realizedOutputFraction } from "./commodityPriceTurn";
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
-import { COMMODITY_TYPES, COMMODITY_BASE_PRICES } from "@/lib/constants/commodities";
+import {
+  COMMODITY_TYPES,
+  COMMODITY_BASE_PRICES,
+  getCommodityStabilizer,
+} from "@/lib/constants/commodities";
 
 vi.mock("@/lib/market/featureFlag", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/market/featureFlag")>();
@@ -131,8 +135,9 @@ describe("commodityPriceTurn", () => {
 
       const result = await processCommodityPriceTurn(412);
 
-      expect(mockTradeUpdateOne).toHaveBeenCalledTimes(1);
-      const [filter, update, options] = mockTradeUpdateOne.mock.calls[0];
+      const tradeCall = mockTradeUpdateOne.mock.calls.find(([filter]) => filter.turn === 412);
+      expect(tradeCall).toBeDefined();
+      const [filter, update, options] = tradeCall!;
       expect(filter).toEqual({ turn: 412 });
       expect(options).toEqual({ upsert: true });
       expect(update.$set.turn).toBe(412);
@@ -172,6 +177,16 @@ describe("commodityPriceTurn", () => {
                   globalPrice: expect.any(Number),
                   globalSupply: expect.any(Number),
                   globalDemand: expect.any(Number),
+                  priceAttribution: expect.objectContaining({
+                    appliedPrice: expect.any(Number),
+                    realBasePrice: expect.any(Number),
+                    nominalInflation: expect.any(Number),
+                    scarcityMemory: expect.any(Number),
+                    producerInputCostPassThrough: expect.any(Number),
+                    marketBalance: expect.any(Number),
+                    adjustmentLag: expect.any(Number),
+                    explicitOverride: expect.any(Number),
+                  }),
                 }),
               }),
             }),
@@ -315,7 +330,13 @@ describe("commodityPriceTurn", () => {
       await processCommodityPriceTurn(100);
       const ops = mockBulkWrite.mock.calls[0][0];
       const advertisingOp = ops.find((op: any) => op.updateOne.filter.commodity === "advertising");
-      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBe(60);
+      // $10k funded against a $10k economy-wide total: far below the 2e8
+      // reference, so the sublinear pivot cushions demand — 60 linear units
+      // × (1e4/2e8)^-0.15 (demand audit step 7).
+      expect(advertisingOp.updateOne.update.$set.stateDemand["US-CA"]).toBeCloseTo(
+        60 * Math.pow(10_000 / 2e8, -0.15),
+        0
+      );
     });
 
     it("does not book advertising demand a corporation cannot afford", async () => {
@@ -642,6 +663,59 @@ describe("commodityPriceTurn", () => {
       expect(withBudget - globalDemandFor("ordnance")).toBeCloseTo(1.11, 2);
     });
 
+    /** State demand for one commodity/state out of the bulkWrite ops. */
+    function stateDemandFor(commodity: string, stateId: string): number {
+      const ops = mockBulkWrite.mock.calls[0][0];
+      return (
+        ops.find((op: any) => op.updateOne.filter.commodity === commodity).updateOne.update.$set
+          .stateDemand[stateId] ?? 0
+      );
+    }
+
+    it("writes government ordnance demand into the regional books pro-rata by state GDP", async () => {
+      setupMocks({
+        states: [
+          { _id: "us_tx", countryId: "US", gdp: 3_000_000 },
+          { _id: "us_ca", countryId: "US", gdp: 1_000_000 },
+        ],
+        exchangeRates: [{ currencyCode: "USD", rate: 1.0 }],
+        federalBudgets: [{ countryId: "US", spending: { byCategory: { defense: 48_000_000 } } }],
+      });
+
+      await processCommodityPriceTurn(100);
+      const tx = stateDemandFor("ordnance", "us_tx");
+      const ca = stateDemandFor("ordnance", "us_ca");
+      // 48M/yr → ~1.111 units/turn total, split 3:1 by state GDP. With no
+      // sectors the regional books hold ONLY this distribution. Persisted
+      // state demand is rounded to 2dp, so the ratio pin is loose.
+      expect(tx + ca).toBeCloseTo(1.11, 2);
+      expect(tx / ca).toBeCloseTo(3, 1);
+    });
+
+    it("floors rate-sensitive demand deltas at zero instead of subtracting (demand audit step 3)", async () => {
+      const world = (primeRate?: number) => ({
+        states: [{ _id: "us_tx", countryId: "US", gdp: 1_000_000 }],
+        centralBanks: primeRate === undefined ? [] : [{ countryId: "US", primeRate }],
+        stateBudgets: [{ stateId: "us_tx", stateGdp: 1_000_000_000 }],
+      });
+      setupMocks(world(10)); // far above neutral: old code subtracted food demand
+      await processCommodityPriceTurn(100);
+      const highPrime = globalDemandFor("food");
+
+      mockBulkWrite.mockClear();
+      // US neutral is 3.0 (MONETARY_BASELINES), not the 2.75 fallback: at
+      // exactly neutral the delta is 0 by construction.
+      setupMocks(world(3.0));
+      await processCommodityPriceTurn(100);
+      const neutral = globalDemandFor("food");
+      expect(highPrime).toBeCloseTo(neutral, 6);
+
+      mockBulkWrite.mockClear();
+      setupMocks(world(0.5)); // below neutral → positive leg intact
+      await processCommodityPriceTurn(100);
+      expect(globalDemandFor("food")).toBeGreaterThan(neutral);
+    });
+
     it("leaves ordnance demand untouched when a country spends nothing on defense", async () => {
       setupMocks({
         states: [{ _id: "us_tx", countryId: "US", gdp: 1_000_000 }],
@@ -728,6 +802,67 @@ describe("commodityPriceTurn", () => {
       // A named sub-path would silently drop every other category.
       const projected = Object.keys(budgetFind![1].projection as Record<string, unknown>);
       expect(projected.some((k) => k.startsWith("spending.byCategory."))).toBe(false);
+    });
+  });
+
+  describe("sublinear advertising demand (demand audit step 7)", () => {
+    const adWorld = (budgets: number[]) => ({
+      states: [{ _id: "us_ny", countryId: "US", gdp: 1_000_000 }],
+      corporations: budgets.map((marketingBudget) => ({
+        _id: new ObjectId(),
+        marketingBudget,
+        liquidCapital: 1e12,
+        headquartersState: "us_ny",
+      })),
+    });
+    /** Advertising demand net of the ledger stabilizer. */
+    function netAdDemand(): number {
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const op = ops.find((o: any) => o.updateOne.filter.commodity === "advertising");
+      return op.updateOne.update.$set.globalDemand - getCommodityStabilizer("advertising");
+    }
+
+    it("is continuous at the reference: 2e8 budgets convert at the old linear rate", async () => {
+      setupMocks(adWorld([2e8]));
+      await processCommodityPriceTurn(100);
+      // 2e8 × 0.9 / 150 with factor ≈ 1.003 (2e8 reference vs 1.96e8 live).
+      expect(netAdDemand() / ((2e8 * 0.9) / 150)).toBeCloseTo(1, 2);
+    });
+
+    it("grows slower than budgets above the reference and cushions below it", async () => {
+      setupMocks(adWorld([2e8]));
+      await processCommodityPriceTurn(100);
+      const atRef = netAdDemand();
+
+      mockBulkWrite.mockClear();
+      setupMocks(adWorld([4e8]));
+      await processCommodityPriceTurn(100);
+      const doubled = netAdDemand();
+
+      mockBulkWrite.mockClear();
+      setupMocks(adWorld([1e8]));
+      await processCommodityPriceTurn(100);
+      const halved = netAdDemand();
+
+      // Monotonic in budgets (media is never nerfed), sublinear above the
+      // reference (2 × budgets → ~1.80 × demand), cushioned below (0.5 ×
+      // budgets → ~0.56 × demand, i.e. above the 0.5 linear mark).
+      expect(halved).toBeGreaterThan(0);
+      expect(atRef).toBeGreaterThan(halved);
+      expect(doubled).toBeGreaterThan(atRef);
+      expect(doubled / atRef).toBeCloseTo(2 * Math.pow(2, -0.15), 3);
+      expect(halved / atRef).toBeCloseTo(0.5 * Math.pow(0.5, -0.15), 3);
+    });
+
+    it("scales the HQ-state leg by the same factor", async () => {
+      setupMocks(adWorld([2e8, 2e8]));
+      await processCommodityPriceTurn(100);
+      const ops = mockBulkWrite.mock.calls[0][0];
+      const op = ops.find((o: any) => o.updateOne.filter.commodity === "advertising");
+      // Two corps at 2e8 each: total 4e8 → same damped rate on both legs,
+      // and the whole 4e8 worth lands in the shared HQ state.
+      const expected = ((4e8 * 0.9) / 150) * Math.pow(2, -0.15);
+      expect(op.updateOne.update.$set.stateDemand["us_ny"]).toBeCloseTo(expected, 0);
     });
   });
 });

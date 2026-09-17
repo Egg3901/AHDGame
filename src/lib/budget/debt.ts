@@ -88,26 +88,22 @@ const DEBT_THRESHOLDS = [
   },
 ];
 
-const RATING_REFERENCE_RATIOS: Record<CreditRating, number> = {
-  AAA: 0.45,
-  AA: 0.7,
-  A: 0.9,
-  BBB: 1.1,
-  BB: 1.35,
-  B: 2.0,
-  CCC: 3.0,
-};
-
-/** Translate live debt/GDP into the common ladder relative to an authored seed. */
+/**
+ * Return the current debt/GDP ratio used by the risk ladder.
+ *
+ * `sovereignRiskAnchor` remains on persisted budgets for seed and migration
+ * provenance, and the optional argument is retained for compatibility with
+ * older callers. It must not rescale current risk: a country's authored
+ * starting position is not its current credit risk.
+ *
+ * @deprecated Use the current smoothed debt/GDP ratio directly. The name is
+ * retained so older integrations do not silently change shape.
+ */
 export function normalizeDebtToGdpForRisk(
   debtToGdpRatio: number,
-  anchor?: SovereignRiskAnchor
+  _anchor?: SovereignRiskAnchor
 ): number {
-  if (!anchor || anchor.debtToGdpRatio <= 0 || !Number.isFinite(anchor.debtToGdpRatio)) {
-    return debtToGdpRatio;
-  }
-  const reference = RATING_REFERENCE_RATIOS[anchor.creditRating];
-  return Math.max(0, (debtToGdpRatio / anchor.debtToGdpRatio) * reference);
+  return Math.max(0, debtToGdpRatio);
 }
 
 export function getDebtThreshold(debtToGdpRatio: number, anchor?: SovereignRiskAnchor) {
@@ -142,13 +138,13 @@ export function calculateCreditRating(
 export function calculateInterestRate(
   debtToGdpRatio: number,
   imfBailoutActive?: boolean,
-  anchor?: SovereignRiskAnchor
+  _anchor?: SovereignRiskAnchor
 ): number {
-  const ladderRate = getDebtThreshold(debtToGdpRatio, anchor).interestRate;
-  const tierRate = anchor
-    ? anchor.interestRate *
-      (ladderRate / getDebtThreshold(RATING_REFERENCE_RATIOS[anchor.creditRating]).interestRate)
-    : ladderRate;
+  const ladderRate = getDebtThreshold(debtToGdpRatio, _anchor).interestRate;
+  // The current tier is the market rate. Historical seed anchors do not
+  // rescale it; otherwise a low starting ratio can turn a healthy current
+  // debt/GDP level into an artificial distress rate.
+  const tierRate = ladderRate;
   return imfBailoutActive ? Math.min(tierRate, IMF_SOVEREIGN_DEFAULT_RATE) : tierRate;
 }
 

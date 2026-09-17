@@ -68,6 +68,10 @@ export const gameConfig: GameConfig = {
   // fund docs exist alongside this flag.
   nppEconomyEnabled: true,
   lineOfCreditEnabled: true,
+  // The rollout start turn is filled by the startup migration or the first
+  // economy turn. Keeping the object present makes the feature explicit while
+  // preserving the live world's exact start point.
+  centralBankPricingPhaseIn: {},
   moneySupplyEnabled: true,
   indexFundsMode: "full",
 

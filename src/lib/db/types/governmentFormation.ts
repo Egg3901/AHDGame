@@ -134,7 +134,12 @@ export interface PMAppointmentVote {
   office?: "headOfState";
 
   // Nomination
-  nomineeCharacterId: ObjectId; // player character only
+  /** Player nominee. Null for NPP nominees on head-of-state votes (see nomineeMode). */
+  nomineeCharacterId: ObjectId | null;
+  /** NPP nominee. Set only for head-of-state votes with nomineeMode "npp". */
+  nomineeNppId?: ObjectId | null;
+  /** Discriminator. Absent on legacy docs, which are always character nominees. */
+  nomineeMode?: "character" | "npp";
   nomineeName: string;
   nomineePartyId: string; // party sequentialId
   nominatedByCharacterId: ObjectId; // party chair or coalition chair

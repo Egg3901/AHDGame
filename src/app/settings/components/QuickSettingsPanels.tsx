@@ -118,7 +118,13 @@ function Toggle(props: {
   return <SettingsSwitch {...props} />;
 }
 
-export function GameQuickSettings({ countries }: { countries: CountryChoice[] }) {
+export function GameQuickSettings({
+  countries,
+  singleplayer = false,
+}: {
+  countries: CountryChoice[];
+  singleplayer?: boolean;
+}) {
   const t = useTranslations("settings");
   const [turnMinutes, setTurnMinutes] = useState<number | null>(null);
   const [turnAlerts, setTurnAlerts] = useState<boolean | null>(null);
@@ -199,14 +205,16 @@ export function GameQuickSettings({ countries }: { countries: CountryChoice[] })
         icon={<Clock3 className="h-4 w-4" />}
         title={t("quick.game.turnSpeed")}
         description={
-          turnMinutes
-            ? t("quick.game.turnsEvery", { minutes: turnMinutes })
-            : t("quick.game.readingCadence")
+          singleplayer
+            ? t("quick.game.localTurns")
+            : turnMinutes
+              ? t("quick.game.turnsEvery", { minutes: turnMinutes })
+              : t("quick.game.readingCadence")
         }
       >
         <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-card px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
           <Gauge className="h-3 w-3" />
-          {t("quick.game.worldControlled")}
+          {singleplayer ? t("quick.game.playerControlled") : t("quick.game.worldControlled")}
         </span>
       </Surface>
       <Surface

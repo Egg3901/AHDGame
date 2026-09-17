@@ -23,6 +23,47 @@ export function isPartyValidForPreset(seed: PartySeed, preset: string): boolean 
 }
 
 /**
+ * Select a complete party roster for a preset. Countries without a newly
+ * authored roster inherit their nearest earlier roster instead of booting with
+ * zero parties. Explicit rows for the requested preset always win as a group.
+ */
+/**
+ * Choose the party roster for a preset, inheriting an earlier one when the
+ * preset has none of its own.
+ *
+ * ⚠ THE FALLBACK IS UNGATED ON PURPOSE, AND THAT HAS A KNOWN COST. Every
+ * French and Italian party is tagged 1953/1979/1991 and none for a modern
+ * preset, so a 2019 world inherits the 1991 roster and seats Democrazia
+ * Cristiana, dissolved in 1994. That is wrong history.
+ *
+ * It is still the better of the two failures. The alternative -- gating the
+ * fallback so those countries get nothing -- boots France into 1999 with ZERO
+ * parties, which is not a cosmetic problem: a country with no parties cannot
+ * hold an election. `partyRosterCoverage.test.ts` forbids exactly that, and an
+ * earlier revision of this branch tried the gate and tripped it.
+ *
+ * The real fix is authoring modern French and Italian rosters, which is a data
+ * task, not a code one. Until then the anachronism is recorded here rather than
+ * traded for a broken world.
+ */
+export function selectPartyRosterForPreset(seeds: PartySeed[], preset: string): PartySeed[] {
+  const direct = seeds.filter((seed) => isPartyValidForPreset(seed, preset));
+  if (direct.length > 0) return direct;
+
+  const requestedYear = Number.parseInt(preset, 10);
+  const availableYears = seeds
+    .flatMap((seed) => seed.validForPresets ?? [])
+    .map((id) => Number.parseInt(id, 10))
+    .filter((year) => Number.isFinite(year) && year <= requestedYear)
+    .sort((a, b) => b - a);
+  const fallbackYear = availableYears[0];
+  if (fallbackYear === undefined) return seeds.filter((seed) => !seed.validForPresets);
+  return seeds.filter(
+    (seed) => !seed.validForPresets || seed.validForPresets.includes(`${fallbackYear}-default`)
+  );
+}
+
+/**
  * Deletes default parties whose seed declares `validForPresets` that excludes
  * the active preset. Country seeders call this before upserting so a reseed
  * self-heals worlds that still carry wrong-era defaults (e.g. MSZMP lingering

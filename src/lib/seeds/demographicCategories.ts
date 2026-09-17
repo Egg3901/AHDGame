@@ -185,6 +185,22 @@ export const ERA_TURNOUT_RATES: Record<EraId, DemographicTurnoutRates> = {
       gunowners: 68,
     },
   },
+  // 2027 retains the observed 2024 turnout calibration until the 2026 CPS
+  // voting supplement is released. This is an explicit modern-cycle anchor.
+  "2027": {
+    race: { white: 62, black: 58, hispanic: 47, asian: 51, other: 51 },
+    age: { young: 40, mid: 56, mature: 65, senior: 74 },
+    education: { no_college: 51, college: 65, graduate: 73 },
+    wealth: { low: 43, middle: 59, high: 73 },
+    ideology: {
+      evangelicals: 77,
+      environmentalists: 65,
+      libertarians: 64,
+      progressives: 63,
+      patriots: 70,
+      gunowners: 68,
+    },
+  },
 };
 
 /**
@@ -1317,6 +1333,148 @@ export const ERA_COMPOSITIONS: Record<EraId, EraComposition> = {
       secular_professionals: 70,
     },
   },
+  // January 2027 uses the post-2024 electorate composition. The weights are
+  // held at the latest calibrated modern cycle while state shares move forward.
+  "2027": {
+    groupIds: ERA_GROUP_IDS,
+    voterGroupComposition: {
+      young_renters: {
+        weights: [
+          { dim: "age", key: "young", w: 0.35 },
+          { dim: "wealth", key: "low", w: 0.26 }, // housing-cost squeeze widens the renter class
+          { dim: "education", key: "no_college", w: 0.14 },
+        ],
+      },
+      evangelicals: {
+        weights: [
+          { dim: "ideology", key: "evangelicals", w: 1.0 },
+          { dim: "race", key: "white", w: 0.18 }, // growing latino-evangelical share
+        ],
+      },
+      rural_traditionalists: {
+        weights: [
+          { dim: "race", key: "white", w: 0.2 },
+          { dim: "education", key: "no_college", w: 0.16 }, // education realignment deepens
+          { dim: "ideology", key: "patriots", w: 0.4 },
+          { dim: "ideology", key: "gunowners", w: 0.4 },
+        ],
+      },
+      union_trades: {
+        weights: [
+          { dim: "education", key: "no_college", w: 0.2 },
+          { dim: "wealth", key: "low", w: 0.29 },
+          { dim: "race", key: "black", w: 0.2 },
+          { dim: "race", key: "hispanic", w: 0.06 }, // growing latino trades cohort
+          { dim: "race", key: "white", w: 0.08 },
+        ],
+      },
+      soccer_moms: {
+        weights: [
+          { dim: "age", key: "mid", w: 0.4 },
+          { dim: "wealth", key: "middle", w: 0.4 },
+          { dim: "race", key: "white", w: 0.14 },
+        ],
+      },
+      college_liberals: {
+        weights: [
+          { dim: "education", key: "college", w: 0.17 },
+          { dim: "education", key: "graduate", w: 0.17 }, // largest college cohort of any era
+          { dim: "ideology", key: "progressives", w: 0.3 },
+          { dim: "ideology", key: "environmentalists", w: 0.3 },
+          { dim: "race", key: "white", w: 0.09 },
+        ],
+      },
+      small_business: {
+        weights: [
+          { dim: "wealth", key: "high", w: 0.35 },
+          { dim: "ideology", key: "libertarians", w: 0.35 },
+          { dim: "age", key: "mature", w: 0.2 },
+          { dim: "race", key: "white", w: 0.14 },
+        ],
+      },
+      public_sector: {
+        weights: [
+          { dim: "education", key: "college", w: 0.13 },
+          { dim: "education", key: "graduate", w: 0.16 },
+          { dim: "ideology", key: "progressives", w: 0.3 },
+          { dim: "wealth", key: "middle", w: 0.19 },
+          { dim: "race", key: "black", w: 0.1 },
+        ],
+      },
+      retirees: {
+        weights: [
+          { dim: "age", key: "senior", w: 0.42 }, // boomer retirement bulge
+          { dim: "age", key: "mature", w: 0.14 },
+          { dim: "race", key: "white", w: 0.15 },
+        ],
+      },
+      libertarians: {
+        weights: [
+          { dim: "ideology", key: "libertarians", w: 1.0 },
+          { dim: "race", key: "white", w: 0.14 },
+        ],
+      },
+      new_immigrants: {
+        weights: [
+          { dim: "race", key: "hispanic", w: 0.48 },
+          { dim: "race", key: "asian", w: 0.32 }, // fastest-growing naturalized cohort
+          { dim: "race", key: "other", w: 0.2 },
+        ],
+        civicMultiplier: 0.85, // naturalized-citizen registration gap narrowing
+      },
+      secular_professionals: {
+        weights: [
+          { dim: "education", key: "graduate", w: 0.21 },
+          { dim: "wealth", key: "high", w: 0.2 },
+          { dim: "ideology", key: "environmentalists", w: 0.2 },
+          { dim: "ideology", key: "progressives", w: 0.2 },
+          { dim: "race", key: "white", w: 0.09 },
+        ],
+      },
+    },
+    turnoutRates: {
+      race: { white: 65, black: 60, hispanic: 50, asian: 56, other: 54 },
+      age: { young: 45, mid: 58, mature: 66, senior: 76 }, // post-2020 youth surge persists
+      education: { no_college: 53, college: 68, graduate: 76 },
+      wealth: { low: 46, middle: 61, high: 75 },
+      ideology: {
+        evangelicals: 78,
+        environmentalists: 68,
+        libertarians: 65,
+        progressives: 68, // anger-driven mobilization both poles
+        patriots: 71,
+        gunowners: 68,
+      },
+    },
+    defaultLeans: {
+      young_renters: { economicLean: -4.5, socialLean: -4.5 },
+      evangelicals: { economicLean: 4.5, socialLean: 5 },
+      rural_traditionalists: { economicLean: 4.5, socialLean: 4.5 },
+      union_trades: { economicLean: -2.5, socialLean: 0.5 }, // continued working-class right drift
+      soccer_moms: { economicLean: -1.5, socialLean: -1 }, // suburban realignment post-2016
+      college_liberals: { economicLean: -5, socialLean: -5 },
+      small_business: { economicLean: 4, socialLean: 2.5 },
+      public_sector: { economicLean: -3, socialLean: -3.5 },
+      retirees: { economicLean: 1.5, socialLean: 2 },
+      libertarians: { economicLean: 5, socialLean: 1 },
+      new_immigrants: { economicLean: -2.5, socialLean: -1.5 }, // hispanic right drift
+      secular_professionals: { economicLean: -3, socialLean: -5 },
+    },
+    defaultTurnouts: {
+      young_renters: 50,
+      evangelicals: 74,
+      rural_traditionalists: 72,
+      union_trades: 63,
+      soccer_moms: 62,
+      college_liberals: 70,
+      small_business: 73,
+      public_sector: 68,
+      retirees: 78,
+      libertarians: 69,
+      new_immigrants: 45,
+      secular_professionals: 70,
+    },
+  },
 };
 
 export interface DemographicPosition {
@@ -1382,6 +1540,7 @@ export const DEMOGRAPHIC_POSITIONS: Record<
   "1999": {} as Record<keyof DemographicTurnoutRates, Record<string, DemographicPosition>>,
   "2007": {} as Record<keyof DemographicTurnoutRates, Record<string, DemographicPosition>>,
   "2023": {} as Record<keyof DemographicTurnoutRates, Record<string, DemographicPosition>>,
+  "2027": {} as Record<keyof DemographicTurnoutRates, Record<string, DemographicPosition>>,
 };
 
 /**
@@ -1561,6 +1720,11 @@ for (const era of ["1953", "1979", "1991", "1999", "2007", "2023"] as const) {
     DEMOGRAPHIC_POSITIONS[era][dim][key] = { economicLean: econ, socialLean: social };
   }
 }
+
+// The 2027 projection carries the latest observed position calibration
+// forward. Its census and turnout substrates are authored separately above;
+// new post-2024 position estimates can replace this copy when available.
+DEMOGRAPHIC_POSITIONS["2027"] = JSON.parse(JSON.stringify(DEMOGRAPHIC_POSITIONS["2023"]));
 
 /**
  * Deep South (AL MS SC LA GA AR): one-party organization, not left ideology.

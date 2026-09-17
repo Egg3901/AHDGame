@@ -4,7 +4,12 @@ import type { CabinetSetting } from "@/lib/db/types/cabinetSetting";
 import type { CountryId } from "@/lib/constants/countries";
 import { DEFENSE_POSITION_BY_COUNTRY } from "@/lib/constants/military";
 import { aggregateForce } from "@/lib/constants/military";
-import { accrualPerTurn, upkeepPerTurn } from "@/lib/military/appropriation";
+import {
+  accrualPerTurn,
+  overdraftFloor,
+  settleAppropriation,
+  upkeepPerTurn,
+} from "@/lib/military/appropriation";
 import { resolveSeedRosterUpkeep } from "@/lib/military/seedRosterUpkeepPin";
 import { resolveDefenseLineFrom } from "@/lib/turn/defenseEnvelope";
 import { getMilitaryUnitsCollection } from "@/lib/db/collections/militaryUnits";
@@ -27,8 +32,12 @@ export interface DefenseFundingPosition {
   accrualPerTurn: number;
   /** This turn's force upkeep, debited from the pot. */
   upkeepPerTurn: number;
-  /** Upkeep beyond funding (`max(0, upkeep - accrual)`): the per-turn treasury bleed. */
+  /** Gross force-over-line gap (`max(0, upkeep - accrual)`). */
   shortfallPerTurn: number;
+  /** New national-debt draw after applying this turn's accrual and upkeep to the pot. */
+  treasuryDrawPerTurn: number;
+  /** Net change the next appropriation sweep applies to the pot. */
+  potChangePerTurn: number;
   /** Appropriation pot balance; negative = cumulative overdraft already drawn. */
   potBalance: number | null;
   /** Share of upkeep going unpaid (0 = fully funded, via overdraft if needed). */
@@ -68,12 +77,25 @@ export async function loadDefenseFunding(
     await resolveSeedRosterUpkeep(db, preset, countryId),
     lineAnnual
   );
+  // The stored pot is the closing balance from the last sweep. Replaying the
+  // pure settlement against it gives the actual NEW treasury draw for the next
+  // sweep. In particular, a pot that is already negative must not re-charge its
+  // historical debt when this turn's accrual moves it back toward zero.
+  const openingPot = budget.defenseAppropriation?.balance ?? lineAnnual;
+  const projectedSettlement = settleAppropriation(
+    openingPot,
+    accrual,
+    upkeep,
+    overdraftFloor(lineAnnual)
+  );
 
   return {
     lineAnnual,
     accrualPerTurn: accrual,
     upkeepPerTurn: upkeep,
     shortfallPerTurn: Math.max(0, upkeep - accrual),
+    treasuryDrawPerTurn: Math.round(projectedSettlement.overdraftDrawn),
+    potChangePerTurn: Math.round(projectedSettlement.delta),
     potBalance: budget.defenseAppropriation?.balance ?? null,
     arrearsRatio: budget.defenseAppropriation?.arrearsRatio ?? 0,
     unitCount: units.length,

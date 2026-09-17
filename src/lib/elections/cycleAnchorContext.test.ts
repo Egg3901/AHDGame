@@ -168,6 +168,40 @@ describe("2023-default preset anchors (era-keying gap)", () => {
   });
 });
 
+describe("draft 2027-default preset anchors", () => {
+  const anchors = getCycleAnchors({ startingYear: 2027, preset: "2027-default" });
+
+  it("does not fall through to negative 2019-era anchors", () => {
+    const fallback = getCycleAnchors({ startingYear: 2027, preset: "2019-default" });
+    expect(fallback.house).toBeLessThan(0);
+    expect(fallback.jpSangiinClass1).toBeLessThan(0);
+    expect(anchors.house).toBe(96);
+    expect(anchors.house).not.toBe(fallback.house);
+  });
+
+  it("staggers the next US federal cycles", () => {
+    expect(anchors.house).toBe(96);
+    expect(anchors.president).toBe(96);
+    expect(anchors.senateClass1).toBe(192);
+    expect(anchors.senateClass2).toBe(288);
+    expect(anchors.senateClass3).toBe(96);
+  });
+
+  it("keeps every active cycle in the future", () => {
+    for (const [key, turn] of Object.entries(anchors)) {
+      if (turn == null) continue;
+      expect(turn, key).toBeGreaterThan(0);
+    }
+  });
+
+  it("keeps defunct modern-era chambers disabled", () => {
+    expect(anchors.trSenato).toBeNull();
+    expect(anchors.ruSupremeSoviet).toBeNull();
+    expect(anchors.ruRepublicSoviet).toBeNull();
+    expect(anchors.ddVolkskammer).toBeNull();
+  });
+});
+
 describe("preIterationTurns anchor offset (founding re-stagger handoff)", () => {
   const OFFSET = 37; // arbitrary founding length
 

@@ -140,7 +140,7 @@ function scheduleNextPoll(ms: number) {
   }, ms);
 }
 
-async function pollTurnStatus() {
+async function pollTurnStatus(force = false) {
   if (!hasSubscribers()) {
     clearScheduledPoll();
     return;
@@ -155,6 +155,7 @@ async function pollTurnStatus() {
     try {
       const res = await fetch("/api/game/turn/status", {
         signal: AbortSignal.timeout(8_000),
+        ...(force ? { cache: "no-store" as const } : {}),
       });
 
       if (res.ok) {
@@ -187,6 +188,15 @@ async function pollTurnStatus() {
   })();
 
   await pollInFlight;
+}
+
+/** A completed manual turn must update clocks and turn subscribers immediately. */
+export async function refreshGameTurnStatus(): Promise<void> {
+  clearScheduledPoll();
+  // A poll started during processing can carry the previous turn. Wait for it,
+  // then fetch the committed result instead of accepting that stale snapshot.
+  if (pollInFlight) await pollInFlight;
+  await pollTurnStatus(true);
 }
 
 function handleVisibilityChange() {

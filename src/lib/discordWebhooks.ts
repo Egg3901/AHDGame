@@ -10,6 +10,7 @@ import { ownsConfiguredWebhooks } from "@/lib/deploymentIdentity";
 import { isCountryEnabledForPlayers } from "@/lib/countryAccess";
 import type { CountryId } from "@/lib/constants/countries";
 import type { GameConfig } from "@/lib/db/types";
+import { generateLegacyDiscordEventCard } from "@/lib/discord/eventCard";
 
 export interface DiscordEmbed {
   title?: string;
@@ -49,6 +50,53 @@ export const DISCORD_COLORS = {
 function truncateDiscordText(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return `${text.slice(0, Math.max(0, maxLen - 1))}…`;
+}
+
+function compactDescription(description: string | undefined): string | undefined {
+  if (!description) return undefined;
+  const plain = description
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/[*_~`>|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return plain ? truncateDiscordText(plain, 180) : undefined;
+}
+
+async function withBrandedGameEventCard(
+  countryId: string,
+  embed: DiscordEmbed
+): Promise<DiscordEmbed> {
+  // Bespoke charts and already-rendered event cards keep their authored image.
+  if (embed.image) return embed;
+  const imageUrl = await generateLegacyDiscordEventCard(countryId, embed);
+  if (!imageUrl) return embed;
+  const fieldLink = embed.fields
+    ?.map((field) => field.value.match(/\[([^\]]+)]\((https?:\/\/[^)]+)\)/))
+    .find((match) => match != null);
+  const actionUrl =
+    embed.url ??
+    fieldLink?.[2] ??
+    `https://ahousedividedgame.com/country/${encodeURIComponent(countryId.toUpperCase())}`;
+  return {
+    title: embed.title,
+    description: compactDescription(embed.description),
+    color: embed.color,
+    timestamp: embed.timestamp,
+    url: actionUrl,
+    ...(actionUrl
+      ? {
+          fields: [
+            {
+              name: "Open event",
+              value: `[Open in A House Divided](${actionUrl})`,
+              inline: true,
+            },
+          ],
+        }
+      : {}),
+    footer: embed.footer ?? { text: "A House Divided" },
+    image: { url: imageUrl },
+  };
 }
 
 export interface BillVetoedDiscordInput {
@@ -229,13 +277,14 @@ async function resolveEnabledCountryUrl(
 /** Send embed to the country-specific webhook (+ global game webhook). */
 export async function sendCountryGameEvent(countryId: string, embed: DiscordEmbed): Promise<void> {
   try {
+    const cardEmbed = await withBrandedGameEventCard(countryId, embed);
     const urls = await getWebhookUrls();
     const countryUrl = await resolveEnabledCountryUrl(urls, countryId);
     // Dedup: if countryUrl and game point to the same webhook, only send once
     const targets = [...new Set([countryUrl, urls.game].filter(Boolean) as string[])];
     await Promise.all(
       targets.map((url) =>
-        sendDiscordWebhook(url, embed).catch((e) => {
+        sendDiscordWebhook(url, cardEmbed).catch((e) => {
           console.error(`[Discord] ${countryId} webhook POST failed (${url.slice(0, 48)}…):`, e);
         })
       )
@@ -256,6 +305,7 @@ export async function sendMultiCountryGameEvent(
   embed: DiscordEmbed
 ): Promise<void> {
   try {
+    const cardEmbed = await withBrandedGameEventCard(countryIds[0] ?? "GLOBAL", embed);
     const urls = await getWebhookUrls();
     const countryUrls = await Promise.all(
       countryIds.map((id) => resolveEnabledCountryUrl(urls, id))
@@ -263,7 +313,7 @@ export async function sendMultiCountryGameEvent(
     const targets = [...new Set([...countryUrls, urls.game].filter(Boolean) as string[])];
     await Promise.all(
       targets.map((url) =>
-        sendDiscordWebhook(url, embed).catch((e) => {
+        sendDiscordWebhook(url, cardEmbed).catch((e) => {
           console.error(`[Discord] multi-country webhook POST failed (${url.slice(0, 48)}…):`, e);
         })
       )
@@ -279,12 +329,15 @@ export async function sendCountryGameEventMultiple(
   embeds: DiscordEmbed[]
 ): Promise<void> {
   try {
+    const cardEmbeds = await Promise.all(
+      embeds.map((embed) => withBrandedGameEventCard(countryId, embed))
+    );
     const urls = await getWebhookUrls();
     const countryUrl = await resolveEnabledCountryUrl(urls, countryId);
     const targets = [...new Set([countryUrl, urls.game].filter(Boolean) as string[])];
     await Promise.all(
       targets.map((url) =>
-        sendDiscordWebhookMultiple(url, embeds).catch((e) => {
+        sendDiscordWebhookMultiple(url, cardEmbeds).catch((e) => {
           console.error(`[Discord] ${countryId} webhook POST failed (${url.slice(0, 48)}…):`, e);
         })
       )

@@ -207,9 +207,12 @@ export async function POST(request: Request, context: RouteContext) {
       nominatedAt: n.nominatedAt,
     }));
 
-    notifyCbExecutiveNominationDiscord(countryId, target.name, auth.character.name).catch((err) =>
-      console.error("[central-bank/nominate] Discord webhook failed:", err)
-    );
+    notifyCbExecutiveNominationDiscord(
+      countryId,
+      target.name,
+      auth.character.name,
+      target.avatarUrl
+    ).catch((err) => console.error("[central-bank/nominate] Discord webhook failed:", err));
 
     return NextResponse.json({ success: true, nominations });
   } catch (error) {

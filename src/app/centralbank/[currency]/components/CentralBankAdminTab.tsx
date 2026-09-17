@@ -54,6 +54,7 @@ interface DepositDetailResponse {
   currencyCode: CurrencyCode;
   primeRate: number;
   apyPercent: number;
+  centralBankDepositBonusPercentPoints?: number;
   character: {
     characterId: string;
     sequentialId?: number;
@@ -742,8 +743,11 @@ function DepositDetailPanel({
             {detail.character.name}
           </Link>
           <p className="text-xs text-muted">
-            APY {detail.apyPercent.toFixed(2)}% (½ real rate · prime {detail.primeRate.toFixed(2)}%)
-            · Credit in {turnsUntilLabel(detail.turnsUntilCredit)}
+            APY {detail.apyPercent.toFixed(2)}% (½ real rate · prime {detail.primeRate.toFixed(2)}%
+            {(detail.centralBankDepositBonusPercentPoints ?? 0) > 0
+              ? ` + CB bonus ${detail.centralBankDepositBonusPercentPoints?.toFixed(2)}%`
+              : ""}
+            ) · Credit in {turnsUntilLabel(detail.turnsUntilCredit)}
           </p>
         </div>
       </div>
@@ -836,7 +840,11 @@ function LoanDetailPanel({
           <p className="text-xs text-muted">
             Effective {detail.effectiveRatePercent.toFixed(2)}% at this bank (prime{" "}
             {detail.primeRate.toFixed(2)}%
-            {snap ? ` + spread ${snap.spreadPercentPoints.toFixed(2)}%` : ""})
+            {snap ? ` + spread ${snap.spreadPercentPoints.toFixed(2)}%` : ""}
+            {snap && (snap.policySpreadAdjustmentPercentPoints ?? 0) > 0
+              ? ` + central-bank adjustment ${(snap.policySpreadAdjustmentPercentPoints ?? 0).toFixed(2)}%`
+              : ""}
+            )
           </p>
         </div>
       </div>

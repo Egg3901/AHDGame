@@ -18,6 +18,7 @@ export const ACTION_TYPES: ReadonlySet<NotificationType> = new Set([
   "charter_replacement_needed",
   "share_listing_offer_received",
   "share_invite_received",
+  "corp_supply_agreement_offer",
   "election_opened",
   "leadership_election_opened",
   "national_leadership_election_opened",

@@ -17,6 +17,13 @@ export interface NPP {
   _id: ObjectId;
   countryId?: CountryId;
   name: string;
+  /**
+   * Calendar birth year. Stamped for historically-seeded NPPs (real age at the
+   * preset's starting year) and generated for runtime replacements. Absent on
+   * legacy rows, which are exempt from age-based mortality until healed.
+   * Age in game years = gameState.currentYear - birthYear.
+   */
+  birthYear?: number | null;
   gender?: NPPGender;
   ethnicity?: NPPEthnicity;
   homeState: string;

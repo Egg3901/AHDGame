@@ -24,6 +24,11 @@ import { estimatePerTurnCurrencyIncomeHomeFace } from "@/lib/lineOfCredit/curren
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { roundSavingsAmount } from "@/lib/currency/savingsInterest";
 import { getCountryIdForCurrency } from "@/lib/constants/currencies";
+import { getCurrentTurn } from "@/lib/currentTurn";
+import {
+  loadCentralBankPricingAdjustment,
+  resolveCentralBankPricingAdjustment,
+} from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
 const MAX_SIM_TURNS = 50_000;
@@ -85,7 +90,9 @@ export async function estimateTurnsToPayOffLocIdealized(
     debtToAssetsRatio,
     homePrimePercent: primeHome,
   });
-  const spread = spreadPercentPointsFromComposite(composite);
+  const creditSpread = spreadPercentPointsFromComposite(composite);
+  const currentTurn = await getCurrentTurn(db);
+  const centralBankPricing = await loadCentralBankPricingAdjustment(db, currentTurn);
 
   let turns = 0;
   while (turns < MAX_SIM_TURNS) {
@@ -98,7 +105,14 @@ export async function estimateTurnsToPayOffLocIdealized(
       const A = arrears[c] ?? 0;
       if (P <= 0 && A <= 0) continue;
       const prime = resolvePrime(c);
-      const int = computeLocInterestForTurn(P, A, prime, spread, c);
+      const policySpread =
+        centralBankPricing.startedTurn === undefined
+          ? 0
+          : resolveCentralBankPricingAdjustment(
+              currentTurn + turns + 1,
+              centralBankPricing.startedTurn
+            ).spreadHikePercentPoints;
+      const int = computeLocInterestForTurn(P, A, prime, creditSpread + policySpread, c);
       if (int <= 0) continue;
       arrears[c] = roundSavingsAmount((arrears[c] ?? 0) + int, c);
     }

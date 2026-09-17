@@ -287,6 +287,42 @@ export const WORLD_EVENT_SEED_DEFINITIONS: Omit<
     ],
     schedule: { kind: "window", minGapTurns: 12, maxGapTurns: 30 },
   },
+  {
+    kind: "worldEvents.constitutionalCrisis",
+    status: "draft",
+    version: 1,
+    title: "Constitutional Crisis",
+    headline: "The courts and the presidency are reading the constitution differently.",
+    body: "A dispute over emergency procedure, appointments, or legislative authority has reached a public breaking point. The president must keep government functioning while the constitutional settlement is tested.",
+    eligibility: ["all"],
+    baseWeight: 7,
+    cooldownTurnsMin: 96,
+    cooldownTurnsMax: 240,
+    requiresCountryIds: ["US"] as CountryId[],
+    deciderRole: "executive",
+    defaultOptionId: "judicialReview",
+    options: [
+      {
+        id: "judicialReview",
+        label: "Submit to constitutional review",
+        description: "Let the courts and legislature settle the dispute under ordinary procedure.",
+        isDefault: true,
+      },
+      {
+        id: "continuityProtocol",
+        label: "Adopt a temporary continuity protocol",
+        description:
+          "Keep essential services running under a time-limited order while review proceeds. It may steady the presidency now, but weakens trust in the boundary.",
+      },
+      {
+        id: "crossPartyConference",
+        label: "Call a cross-party constitutional conference",
+        description:
+          "Bring legislative leaders, the courts, and civic groups into a public settlement process.",
+      },
+    ],
+    schedule: { kind: "window", minGapTurns: 96, maxGapTurns: 240 },
+  },
   // World Events v1 Phase 3: Olympics/worlds-fair, rewritten to the same
   // simple no-decision flavor-event pattern as sports-victory/papal-visit/
   // royal-event above (per user feedback — Olympics is just one example of

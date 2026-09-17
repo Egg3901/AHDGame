@@ -2,6 +2,7 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Character, ElectionCandidate } from "@/lib/db/types";
 import { activeUserIds } from "@/lib/players/playerActivity";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 
 /**
  * Withdraws the active candidacies of players inactive for >96 turns, using the
@@ -21,12 +22,17 @@ export async function withdrawInactiveCandidates(
   const rawCandidates = await db
     .collection<ElectionCandidate>("electionCandidates")
     .find({ status: "active", isNPP: { $ne: true } })
-    .project<{ _id: ObjectId; characterId: ObjectId | null }>({ _id: 1, characterId: 1 })
+    .project<{ _id: ObjectId; characterId: ObjectId | null; electionId: ObjectId }>({
+      _id: 1,
+      characterId: 1,
+      electionId: 1,
+    })
     .toArray();
   // NPP rows are excluded above; a non-NPP row with no characterId is a data
   // anomaly — drop it (nothing to resolve a user from).
   const candidates = rawCandidates.filter(
-    (c): c is { _id: ObjectId; characterId: ObjectId } => c.characterId != null
+    (c): c is { _id: ObjectId; characterId: ObjectId; electionId: ObjectId } =>
+      c.characterId != null
   );
   if (candidates.length === 0) return { withdrawn: 0 };
 
@@ -41,17 +47,37 @@ export async function withdrawInactiveCandidates(
   const userIds = characters.map((c) => c.userId).filter((id): id is ObjectId => id != null);
   const activeIds = await activeUserIds(db, userIds, now);
 
-  const toWithdraw: ObjectId[] = [];
+  const toWithdraw: { _id: ObjectId; characterId: ObjectId; electionId: ObjectId }[] = [];
   for (const cand of candidates) {
     const userId = userIdByCharacter.get(cand.characterId.toString());
     // Missing character/user → treat as active (skip-on-missing); don't withdraw.
     if (!userId) continue;
-    if (!activeIds.has(userId.toString())) toWithdraw.push(cand._id);
+    if (!activeIds.has(userId.toString())) toWithdraw.push(cand);
   }
   if (toWithdraw.length === 0) return { withdrawn: 0 };
 
   const result = await db
     .collection<ElectionCandidate>("electionCandidates")
-    .updateMany({ _id: { $in: toWithdraw } }, { $set: { status: "withdrawn", withdrawnAt: now } });
+    .updateMany(
+      { _id: { $in: toWithdraw.map((c) => c._id) } },
+      { $set: { status: "withdrawn", withdrawnAt: now } }
+    );
+
+  // Archive their campaigns so an inactive player's campaign stops appearing on
+  // Campaign Operations next to the candidates still running (#1313). A row
+  // missing `electionId` is a data anomaly — skip it rather than throw, since
+  // this runs inside turn processing and a throw would abort the phase.
+  await archiveCampaignsForCandidates({
+    db,
+    candidates: toWithdraw
+      .filter((c) => c.electionId)
+      .map((c) => ({
+        electionId: c.electionId,
+        characterId: c.characterId,
+      })),
+    reason: "withdrawn",
+    now,
+  });
+
   return { withdrawn: result.modifiedCount };
 }

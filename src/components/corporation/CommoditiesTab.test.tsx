@@ -125,7 +125,7 @@ describe("CommoditiesTab private supply", () => {
     ).toBeTruthy();
   });
 
-  it("links supply-deal actions to the Structure tab where the form lives", async () => {
+  it("links supply-deal actions to the Commodities tab where the form lives", async () => {
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -152,9 +152,9 @@ describe("CommoditiesTab private supply", () => {
     render(<CommoditiesTab corpId="604" isCeo />);
 
     const link = await screen.findByRole("link", { name: "Supply deal" });
-    expect(link.getAttribute("href")).toBe("/corporation/604?tab=ownership&sub=structure");
-    expect(screen.getByRole("link", { name: "Structure" }).getAttribute("href")).toBe(
-      "/corporation/604?tab=ownership&sub=structure"
+    expect(link.getAttribute("href")).toBe("/corporation/604?tab=commodities#supply-agreements");
+    expect(screen.getByRole("link", { name: "Commodities" }).getAttribute("href")).toBe(
+      "/corporation/604?tab=commodities#supply-agreements"
     );
   });
 });

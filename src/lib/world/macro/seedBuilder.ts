@@ -8,6 +8,7 @@ import type {
   MacroEconomicSystem,
   MacroSectorState,
 } from "./types";
+import { macroTickBucket } from "./schedule";
 
 export const MACRO_TURNS_PER_YEAR = 48;
 export const MACRO_1953_PRESET_ID = "1953-default";
@@ -125,7 +126,12 @@ export function assessMacroSeedDataQuality(
 export function buildMacroCountryFromSpec(
   spec: MacroCountrySeedSpec,
   now = new Date(),
-  options: { markInitialTick?: boolean } = {}
+  options: {
+    markInitialTick?: boolean;
+    presetId?: string;
+    simulationTier?: "sphere-macro" | "background-macro";
+    provenance?: MacroCountryDataQuality["provenance"];
+  } = {}
 ): MacroCountryState {
   const sectors = buildSectorsFromSpec(spec);
   const dataQuality = assessMacroSeedDataQuality(spec, sectors);
@@ -143,7 +149,9 @@ export function buildMacroCountryFromSpec(
   const base: Omit<MacroCountryState, "contribution"> = {
     _id: spec.entityId,
     entityId: spec.entityId,
-    presetId: MACRO_1953_PRESET_ID,
+    presetId: options.presetId ?? MACRO_1953_PRESET_ID,
+    simulationTier: options.simulationTier ?? "sphere-macro",
+    tickBucket: macroTickBucket(spec.entityId),
     displayName: spec.displayName,
     economicSystem: spec.economicSystem,
     population: spec.population,
@@ -153,7 +161,7 @@ export function buildMacroCountryFromSpec(
     shockModifier: 1,
     resources: spec.resources,
     sectors,
-    dataQuality,
+    dataQuality: { ...dataQuality, provenance: options.provenance ?? dataQuality.provenance },
     lastMacroTickTurn: options.markInitialTick ? 1 : null,
     createdAt: now,
     updatedAt: now,

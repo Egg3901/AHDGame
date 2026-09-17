@@ -15,6 +15,7 @@ import {
 import { resolvePartyTier } from "@/lib/parties/partyTier";
 import type { State, StatePartyOrg, NPP } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
+import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
 
 // GET /api/country/[code]/parties/[id]/recruitment/states — Return eligible states with NPP slot and cost info for recruitment
 // Auth: requireAuthWithCharacter
@@ -74,6 +75,8 @@ export async function GET(
 
     // Total party NPPs
     const partyNPPCount = nppAgg.reduce((sum, a) => sum + a.count, 0);
+    const partyNppCapacity = await getPartyNppCapacity(db, countryId, partyIdStr);
+    const capacityError = partyNppCapacityError(partyNppCapacity, partyNPPCount);
 
     // NPP Recruitment spends a flat 5 Action Points from the national pool plus
     // a per-currency treasury cost.
@@ -99,7 +102,10 @@ export async function GET(
 
       const hasStateLeadership = statesWithLeadership.has(state._id);
       const canRecruit =
-        availableSlots > 0 && partyActionPoints >= recruitCost && partyTreasury >= recruitFund;
+        !capacityError &&
+        availableSlots > 0 &&
+        partyActionPoints >= recruitCost &&
+        partyTreasury >= recruitFund;
 
       return {
         stateId: state._id,
@@ -122,6 +128,10 @@ export async function GET(
       recruitFundCost: recruitFund,
       partyTreasury,
       partyNPPCount,
+      partyNPPMax: partyNppCapacity.maxNpps,
+      activeMemberCount: partyNppCapacity.activeMemberCount,
+      availablePartyNppSlots: Math.max(0, partyNppCapacity.maxNpps - partyNPPCount),
+      blockedReason: capacityError,
     });
   } catch (error) {
     return handleRouteError(error);

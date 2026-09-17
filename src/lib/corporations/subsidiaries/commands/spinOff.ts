@@ -1,4 +1,5 @@
 import type { Db, ObjectId } from "mongodb";
+import { isPrivateEnterpriseBlocked } from "@/lib/economy/queries/privateEnterpriseGate";
 import { ObjectId as Oid } from "mongodb";
 import type { Character, Corporation, CorporateSector } from "@/lib/db/types";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -88,6 +89,17 @@ export async function spinOff(
   }
 
   const nameTrimmed = name.trim();
+  // A spin-off creates a brand-new PRIVATE corporation in the parent's country,
+  // so it is a creation path and needs the same regime gate as founding and
+  // privatization. Reachable today: the private corps still sitting inside
+  // command economies awaiting remediation could each spin off more.
+  if (await isPrivateEnterpriseBlocked(db, parent.countryId)) {
+    return fail(
+      "Private corporations cannot be founded in a command economy. The state controls all enterprise.",
+      403
+    );
+  }
+
   if (!nameTrimmed) return fail("A corporation name is required.");
 
   // Parent must have ≥1 sector of the requested type.

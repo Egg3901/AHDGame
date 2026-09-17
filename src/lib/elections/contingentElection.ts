@@ -58,12 +58,22 @@ export interface ContingentHouseDelegation {
   voters: ContingentVoterProfile[];
 }
 
+export interface ContingentHouseBallot {
+  ballot: number;
+  activeCandidateIds: string[];
+  delegationVotes: Record<string, string | null>;
+  totals: Record<string, number>;
+  reason: string;
+  withdrawnCandidateId?: string;
+}
+
 export interface ContingentElectionResult {
   resolutionMode: "contingent" | "contingent_deadlock";
   eligiblePresidentCandidateIds: string[];
   eligibleVicePresidentCandidateIds: string[];
   houseDelegationVotes: Record<string, string | null>;
   houseVoteTotals: Record<string, number>;
+  houseBallots: ContingentHouseBallot[];
   senateVotes: Record<string, string | null>;
   senateVoteTotals: Record<string, number>;
   presidentWinnerId: string;
@@ -206,6 +216,51 @@ export function calculateHouseDelegationVotes(
   return { delegationVotes, totals };
 }
 
+function calculateCompromiseDelegationVote(
+  delegation: ContingentHouseDelegation,
+  eligibleCandidates: ContingentCandidateProfile[],
+  tieSeed: string
+): string | null {
+  const initialVote = calculateHouseDelegationVote(delegation, eligibleCandidates, tieSeed);
+  if (initialVote || delegation.stateId === CONTINGENT_EXCLUDED_HOUSE_STATE) return initialVote;
+  if (eligibleCandidates.length === 0 || delegation.voters.length === 0) return null;
+
+  const candidateScores = eligibleCandidates.map((candidate) => ({
+    id: candidate.id,
+    score: delegation.voters.reduce(
+      (total, voter) => total + scoreContingentPreference(voter, candidate) * (voter.weight ?? 1),
+      0
+    ),
+  }));
+  const bestScore = Math.max(...candidateScores.map(({ score }) => score));
+  const leaders = candidateScores
+    .filter(({ score }) => score === bestScore)
+    .map(({ id }) => id)
+    .sort();
+  if (leaders.length === 1) return leaders[0];
+
+  const idx =
+    createHash("sha256")
+      .update(`${tieSeed}:${delegation.stateId}:compromise:${leaders.join(":")}`)
+      .digest()[0] % leaders.length;
+  return leaders[idx];
+}
+
+function calculateCompromiseHouseBallot(
+  delegations: ContingentHouseDelegation[],
+  eligibleCandidates: ContingentCandidateProfile[],
+  tieSeed: string
+): { delegationVotes: Record<string, string | null>; totals: Record<string, number> } {
+  const delegationVotes: Record<string, string | null> = {};
+  const totals: Record<string, number> = {};
+  for (const delegation of delegations) {
+    const vote = calculateCompromiseDelegationVote(delegation, eligibleCandidates, tieSeed);
+    delegationVotes[delegation.stateId] = vote;
+    if (vote) totals[vote] = (totals[vote] ?? 0) + 1;
+  }
+  return { delegationVotes, totals };
+}
+
 export function calculateSenateVpVotes(
   senators: ContingentVoterProfile[],
   eligibleVpCandidates: ContingentCandidateProfile[],
@@ -344,11 +399,49 @@ export function resolveContingentElection(
   // and 49 of 96.
   const houseThreshold = contingentMajorityOf(houseDelegations.length, HOUSE_CONTINGENT_THRESHOLD);
   const senateThreshold = contingentMajorityOf(senators.length, SENATE_CONTINGENT_THRESHOLD);
-  const { delegationVotes, totals: houseVoteTotals } = calculateHouseDelegationVotes(
+  let { delegationVotes, totals: houseVoteTotals } = calculateHouseDelegationVotes(
     houseDelegations,
     presidentCandidates,
     tieSeed
   );
+  const houseBallots: ContingentHouseBallot[] = [
+    {
+      ballot: 1,
+      activeCandidateIds: eligiblePresidentCandidateIds,
+      delegationVotes,
+      totals: houseVoteTotals,
+      reason: "Initial state-delegation ballot",
+    },
+  ];
+
+  const firstBallotLeader = Math.max(0, ...Object.values(houseVoteTotals));
+  if (firstBallotLeader < houseThreshold && presidentCandidates.length > 2) {
+    const withdrawn = presidentCandidates
+      .slice()
+      .sort(
+        (a, b) =>
+          (houseVoteTotals[a.id] ?? 0) - (houseVoteTotals[b.id] ?? 0) ||
+          (electoralVotesByCandidate[a.id] ?? 0) - (electoralVotesByCandidate[b.id] ?? 0) ||
+          a.id.localeCompare(b.id)
+      )[0];
+    const compromiseCandidates = presidentCandidates.filter(({ id }) => id !== withdrawn.id);
+    const compromise = calculateCompromiseHouseBallot(
+      houseDelegations,
+      compromiseCandidates,
+      `${tieSeed}:ballot:2`
+    );
+    delegationVotes = compromise.delegationVotes;
+    houseVoteTotals = compromise.totals;
+    houseBallots.push({
+      ballot: 2,
+      activeCandidateIds: compromiseCandidates.map(({ id }) => id),
+      delegationVotes,
+      totals: houseVoteTotals,
+      reason:
+        "The least-supported candidate withdrew after the first ballot; tied delegations held a compromise ballot",
+      withdrawnCandidateId: withdrawn.id,
+    });
+  }
 
   let senateVotes: Record<string, string | null> = {};
   let senateVoteTotals: Record<string, number> = {};
@@ -397,6 +490,7 @@ export function resolveContingentElection(
     eligibleVicePresidentCandidateIds,
     houseDelegationVotes: delegationVotes,
     houseVoteTotals,
+    houseBallots,
     senateVotes,
     senateVoteTotals,
     presidentWinnerId: houseOutcome.winnerId,

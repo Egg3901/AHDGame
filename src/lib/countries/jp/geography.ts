@@ -13,6 +13,7 @@ import { jpRegionCensusData } from "@/lib/countries/jp/data/jpRegionCensusData";
 import { jpRegionCensusData1953 } from "@/lib/countries/jp/data/jpRegionCensusData1953";
 import { jpRegionCensusData1979 } from "@/lib/countries/jp/data/jpRegionCensusData1979";
 import { jpRegionCensusData1991 } from "@/lib/countries/jp/data/jpRegionCensusData1991";
+import { jpRegionCensusData2027 } from "@/lib/countries/jp/data/jpRegionCensusData2027";
 import { jpMetricPresets2019 } from "@/lib/countries/jp/data/jpMetricPresets";
 import { jpMetricPresets1953 } from "@/lib/countries/jp/data/jpMetricPresets1953";
 import { jpMetricPresets1979 } from "@/lib/countries/jp/data/jpMetricPresets1979";
@@ -107,6 +108,7 @@ const censusBundles = {
   "1979-default": jpRegionCensusData1979,
   "2019-default": jpRegionCensusData,
   "1991-default": jpRegionCensusData1991,
+  "2027-default": jpRegionCensusData2027,
 };
 
 const metricPresets = {
@@ -204,6 +206,19 @@ const calibrationTargets = {
     expectLeft: ["KAN", "KNS"],
     expectRight: ["TOH", "SHI"],
     election: "Japan 2021 HR (low confidence)",
+    twoAxis: {
+      minEconomicSpread: 0.6,
+      minSocialSpread: 1.2,
+      economicCenterTol: 0.35,
+    },
+  },
+  "2027": {
+    center: 0,
+    centerTol: 0.7,
+    minSpread: 1.2,
+    expectLeft: ["KAN", "KNS"],
+    expectRight: ["TOH", "SHI"],
+    election: "Japan 2026 House of Representatives",
     twoAxis: {
       minEconomicSpread: 0.6,
       minSocialSpread: 1.2,

@@ -111,8 +111,10 @@ region. `japanReachable.test.ts` uses `toBe`, not `toEqual`, for exactly this.
 
 ### 6. `eras` - one file per shipping preset
 
-All seven of `SHIPPING_PRESETS`, each `CountryEraOverride` naming its own
-`preset`.
+Every entry in `SHIPPING_PRESETS`, each `CountryEraOverride` naming its own
+`preset`. Count them from `SHIPPING_PRESETS`, never from a literal: the list
+grew from seven to eight when upstream added 2027, and every hard-coded seven
+had to be hunted down by hand.
 
 ⚠️ **`getCountryConfig` is a SHALLOW merge.** An era override supplying
 `legislature` replaces the base `legislature` _wholesale_ - every field the
@@ -131,15 +133,15 @@ import { JP } from "@/lib/countries/jp"; // no
 import { JP_IDENTITY } from "@/lib/countries/jp/identity"; // yes
 ```
 
-The barrel composes identity, institutions, elections, economy, geography and all
-seven era files, and elections reaches the MongoDB driver. A `"use client"`
+The barrel composes identity, institutions, elections, economy, geography and
+every era file, and elections reaches the MongoDB driver. A `"use client"`
 component that wanted one label would ship all of it, and nothing would fail -
 the bundle would just get bigger. `noClientBarrelImport.test.ts` enforces this.
 
 ### Leaf modules are not automatically light
 
-Avoiding the barrel is necessary and not sufficient. `geography.ts` imports all
-seven eras of region, census and metric data **as values**, and `institutions.ts`
+Avoiding the barrel is necessary and not sufficient. `geography.ts` imports every
+era of region, census and metric data **as values**, and `institutions.ts`
 imports the cabinet, of which `mechanics` alone is 28 KB. A registry that
 forwards to one of those for a single string ships the whole thing.
 

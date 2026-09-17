@@ -103,6 +103,34 @@ describe("GeneralBlendView", () => {
     renderView();
     expect(screen.getAllByText("PA")).toHaveLength(2);
   });
+
+  it("shows democratic health and both presidential drag levels on both layouts", () => {
+    render(
+      <GeneralBlendView
+        election={{
+          ...election(),
+          democraticHealth: {
+            value: 42.5,
+            label: "Fragile democracy",
+            rulingPartyId: "1",
+            rulingPartyName: "Democratic Party",
+            partyPenaltyPct: 4.2,
+            currentRulerPenaltyPct: 6.3,
+            currentRulerReliefPct: 40,
+            currentRulerInRace: true,
+            recordedTurn: 412,
+          },
+        }}
+        electionId="e1"
+        wire={[]}
+        onRefresh={() => {}}
+      />
+    );
+    expect(screen.getAllByText("Democratic health")).toHaveLength(2);
+    expect(screen.getAllByText("Ruling party drag")).toHaveLength(2);
+    expect(screen.getAllByText("Sitting President drag")).toHaveLength(2);
+    expect(screen.getAllByText(/Temporary constitutional relief/)).toHaveLength(2);
+  });
 });
 
 describe("nothing on this screen is won", () => {
@@ -295,6 +323,114 @@ describe("the hero separates what is counted from what is forecast", () => {
     // Two hero cells and one rail block per tree: (2 + 1) x 2. The rail carried
     // the same derived figure at 34px with nothing saying what it was.
     expect(screen.getAllByText("Current projection")).toHaveLength(6);
+  });
+});
+
+describe("names link out and states open", () => {
+  it("links each hero ticket to its candidate profile, on both layouts", () => {
+    renderView();
+    expect(screen.getAllByRole("link", { name: "First Ticket" })).toHaveLength(2);
+    const hrefs = screen
+      .getAllByRole("link", { name: "First Ticket" })
+      .map((a) => a.getAttribute("href"));
+    expect(new Set(hrefs)).toEqual(new Set(["/character/ch1"]));
+  });
+
+  it("links each hero party to its party page, on both layouts", () => {
+    renderView();
+    const links = screen.getAllByRole("link", { name: "Democratic Party" });
+    expect(links).toHaveLength(2);
+    for (const a of links) {
+      expect(a.getAttribute("href")).toBe("/country/us/parties/1");
+    }
+  });
+
+  it("links every board tile to its state detail, on both layouts", () => {
+    renderView();
+    const tiles = screen.getAllByRole("link", { name: /PA/ });
+    expect(tiles).toHaveLength(2);
+    for (const a of tiles) {
+      expect(a.getAttribute("href")).toBe("/elections/e1/state/PA");
+    }
+  });
+});
+
+describe("the close is explicit", () => {
+  it("prints the turns left on both layouts", () => {
+    // Fixture: endTurn 4186, currentTurn 4182, no endTime, so turns alone.
+    renderView();
+    expect(screen.getAllByText("4 TURNS LEFT")).toHaveLength(2);
+  });
+
+  it("pairs the turns with the local close time when the race has one", () => {
+    const e = election();
+    (e as unknown as Record<string, unknown>).endTime = "2026-11-10T15:24:00.000Z";
+    render(<GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />);
+    expect(screen.getAllByText(/4 TURNS LEFT, CLOSES /)).toHaveLength(2);
+  });
+});
+
+describe("a third ticket pages the hero", () => {
+  const threeWay = () => {
+    const e = election();
+    const third = candidate({
+      id: "c3",
+      characterId: "ch3",
+      characterName: "Third Ticket",
+      party: "3",
+      partyName: "Libertarian Party",
+      partyColor: "#d4af37",
+    });
+    e.allCandidates = [...CANDIDATES, third];
+    e.generalVotes = {
+      ...e.generalVotes!,
+      totalVotes: { c1: 69_473_000, c2: 67_213_000, c3: 4_519_000 },
+      electoralVotesByCandidate: { c1: 276, c2: 251, c3: 0 },
+    };
+    return e;
+  };
+
+  it("shows the top two first and pages to the third", () => {
+    render(
+      <GeneralBlendView election={threeWay()} electionId="e1" wire={[]} onRefresh={() => {}} />
+    );
+    expect(screen.getAllByText("1-2 OF 3")).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", { name: "Show next tickets" })[0]);
+    expect(screen.getAllByText("3-3 OF 3")).toHaveLength(2);
+  });
+
+  it("draws no pager for a two-way race", () => {
+    renderView();
+    expect(screen.queryByRole("button", { name: "Show next tickets" })).toBeNull();
+  });
+});
+
+describe("explanations live in tooltips", () => {
+  it("demotes the vote-weighting line from the rail footnote", () => {
+    renderView();
+    expect(screen.queryByText(/final four turns/)).toBeNull();
+    expect(screen.getAllByText("Turn weighting.")).toHaveLength(2);
+  });
+
+  it("tooltips the referendum figure instead of leaving it bare", () => {
+    const e = election();
+    (e as unknown as Record<string, unknown>).economicReferendum = {
+      miseryIndex: 1.6,
+      sharePts: 0.5,
+      components: [{ key: "inflation", label: "Inflation", contributionPts: -1.0 }],
+      fatigueMultiplier: 1,
+      recordedTurn: 775,
+    };
+    (e as unknown as Record<string, unknown>).medianVoter = { ep: 0, sp: -0 };
+    const { container } = render(
+      <GeneralBlendView election={e} electionId="e1" wire={[]} onRefresh={() => {}} />
+    );
+    const tips = Array.from(container.querySelectorAll("[title]"));
+    expect(tips.some((t) => t.textContent === "referendum points")).toBe(true);
+    expect(tips.some((t) => (t.getAttribute("title") ?? "").includes("1 to 4%"))).toBe(true);
+    // Negative-zero median normalizes rather than printing "-0 social".
+    expect(container.textContent).not.toMatch(/-0 social/);
+    expect(container.textContent).toMatch(/0 economic, 0 social/);
   });
 });
 

@@ -57,6 +57,11 @@ describe("computeSavingsInterestForTurn", () => {
     );
   });
 
+  it("adds the central-bank deposit bonus without changing the real-rate base", () => {
+    expect(savingsApyPercent(8, 4, 0.25)).toBe(2.25);
+    expect(computeSavingsInterestForTurn(4800, 8, "USD", 4, 0.25)).toBe(2.25);
+  });
+
   it("rounds JPY to whole units", () => {
     expect(computeSavingsInterestForTurn(100000, 0.2, "JPY")).toBeGreaterThanOrEqual(0);
     expect(Number.isInteger(computeSavingsInterestForTurn(480000, 4, "JPY"))).toBe(true);

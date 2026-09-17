@@ -1071,7 +1071,8 @@ export function computeSectorMarginSection(args: {
  */
 export interface PlantIdleCause {
   /** Stable key the UI maps to a label, colour and tooltip. */
-  cause: "inputs" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
+  cause:
+    "inputs" | "demand" | "strike" | "disaster" | "policy" | "deposits" | "mothballed" | "other";
   /** Capacity units that did not run for this reason, units/day. */
   units: number;
 }
@@ -1441,7 +1442,6 @@ export function buildSectorPlantsSection(args: {
     money,
     regulatoryBurdenPp,
     crisisMarginPenaltyPp,
-    depositBound,
   } = args;
 
   const num = (v: unknown): number | null =>
@@ -1468,9 +1468,10 @@ export function buildSectorPlantsSection(args: {
 
   // ─── Idle attribution ──────────────────────────────────────────────────────
   // Every leg the engine applied is a factor in (0, 1]; its loss weight is
-  // 1 − factor. The named weights are scaled to fit inside the ACTUAL idle
-  // share and any remainder becomes "other", so the meter reconciles exactly
-  // rather than asserting a decomposition the engine did not produce.
+  // 1 − factor. The named weights, including the persisted demand throttle,
+  // are scaled to fit inside the ACTUAL idle share and any remainder becomes
+  // "other", so the meter reconciles exactly rather than asserting a
+  // decomposition the engine did not produce.
   const activeFraction = activeCapacityFraction(sector);
   const idleCauses: PlantIdleCause[] = [];
   if (mothballed && capacityUnits != null && capacityUnits > 0) {
@@ -1483,6 +1484,10 @@ export function buildSectorPlantsSection(args: {
     const throughput = num(sector.throughputFactor);
     if (throughput != null && throughput < 1) {
       weights.push({ cause: "inputs", w: 1 - Math.max(0, throughput) });
+    }
+    const demandThrottle = num(sector.demandThrottleFactor);
+    if (demandThrottle != null && demandThrottle < 1) {
+      weights.push({ cause: "demand", w: 1 - Math.max(0, demandThrottle) });
     }
     if (sector.strikeStartedAtTurn != null) {
       weights.push({ cause: "strike", w: 1 - STRIKE_REVENUE_THROTTLE });
@@ -1498,9 +1503,10 @@ export function buildSectorPlantsSection(args: {
         w: Math.min(1, Math.abs(sector.productionPolicyLevel ?? 0) / 10),
       });
     }
-    if (depositBound) {
-      weights.push({ cause: "deposits", w: idleShare });
-    }
+    // A deposit constraint is only a yes/no signal, not a measured loss.
+    // Assigning the entire remaining idle share to it fabricates a quantity,
+    // including for output legs whose deposits have ample headroom. Keep
+    // unmeasured losses under "other"; the resource panel shows constraints.
     const sumW = weights.reduce((s, x) => s + x.w, 0);
     const scale = sumW > 0 ? Math.min(1, idleShare / sumW) : 0;
     let attributed = coldUnits;

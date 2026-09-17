@@ -42,6 +42,7 @@ import {
 import { parseSeatId } from "@/lib/seats/seatId";
 import { getGameTime } from "@/lib/time/gameTime";
 import { primaryOpenFilter } from "@/lib/elections/electionDeadlineFilters";
+import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 
 export async function POST(request: Request, { params }: { params: Promise<{ code: string }> }) {
   try {
@@ -99,10 +100,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       // ── 3a. Remove duplicate-party candidates ─────────────────────────────
       // If a character appears under more than one party, withdraw all but their
       // earliest entry (keeps first-entered party, removes the duplicates).
+      // Sorted by enteredAt so the kept row is deterministic (ticket #1312:
+      // unsorted cursor order made the survivor arbitrary).
       const seenCharacters = new Map<string, string>(); // characterId → candidateId kept
       const duplicateIds: string[] = [];
 
-      for (const c of candidates) {
+      const byEntry = [...candidates].sort(
+        (a, b) => new Date(a.enteredAt).getTime() - new Date(b.enteredAt).getTime()
+      );
+      for (const c of byEntry) {
         const cid = c.characterId.toString();
         if (seenCharacters.has(cid)) {
           duplicateIds.push(c._id.toString());
@@ -119,6 +125,20 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
             { $set: { status: "withdrawn", withdrawnAt: now } }
           );
         totalEliminated += duplicateIds.length;
+        // Withdrawn candidates' campaigns must leave active surfaces (ticket #1313).
+        await archiveCampaignsForCandidates({
+          db,
+          candidates: candidates
+            .filter((c) => duplicateIds.includes(c._id.toString()))
+            .map((c) => ({
+              electionId: election._id,
+              characterId: c.characterId,
+              isNPP: c.isNPP,
+              nppId: c.nppId,
+            })),
+          reason: "withdrawn",
+          now,
+        });
       }
 
       // Re-fetch active candidates after dedup
@@ -272,6 +292,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
             { $set: { status: "withdrawn", withdrawnAt: now } }
           );
         totalEliminated += loserIds.length;
+        // Primary-cut losers leave the race: their campaigns must leave active
+        // surfaces too (ticket #1313). Re-entry reactivates the campaign.
+        await archiveCampaignsForCandidates({
+          db,
+          candidates: activeCandidates
+            .filter((c) => loserIds.includes(c._id.toString()))
+            .map((c) => ({
+              electionId: election._id,
+              characterId: c.characterId,
+              isNPP: c.isNPP,
+              nppId: c.nppId,
+            })),
+          reason: "withdrawn",
+          now,
+        });
       }
 
       // ── 3c. Initialize vote tally for the general election ────────────────

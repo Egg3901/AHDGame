@@ -17,6 +17,7 @@ export const SHIPPING_PRESETS = [
   "2007-default",
   "2019-default",
   "2023-default",
+  "2027-default",
 ] as const;
 
 export type ShippingPreset = (typeof SHIPPING_PRESETS)[number];
@@ -209,6 +210,30 @@ const ERA_ROSTER_LITERAL = {
     // CA-25, MD-07, NY-27, TX-04 and WI-07 stood vacant in February 2020,
     // pending special elections. The seat rows carry the 430 occupied seats.
     vacantSeats: { "US.house": 5 },
+  },
+  /**
+   * The 2027 preset (#1687). Five player countries, not three: Germany, Japan
+   * and China are PLAYABLE here and therefore leave the econ list.
+   *
+   * ⚠ THE TIERS MIRROR 2023, they do not mirror upstream's accessMap.
+   * Upstream builds 2027 from `POST_COLD_WAR_ECONOMY`, which would make France,
+   * Italy, Spain, Sweden, Turkey, Austria, Finland and Greece economy-preview
+   * here while they are `npp` in 2023 and 1999/2007. Nothing promotes them to
+   * a full-autonomous economy in 2027, so calling them economy-preview would
+   * advertise an economy the world does not build -- exactly the landing-page
+   * drift the roster was introduced to end. `countryTiers.test.ts` is what
+   * catches it: it re-derives the landing tables from the manifest.
+   *
+   * ⚠ NO `vacantSeats`. The 2019 entry carries five because February 2020
+   * really had five pending special elections; 2027 is a future world with a
+   * full authored roster, so a vacancy here would be invented rather than
+   * recorded.
+   */
+  "2027-default": {
+    default: "absent",
+    player: ["US", "UK", "DE", "JP", "CN"],
+    econ: ["IE", "BR", "NG"],
+    npp: ["RU", "FR", "IT", "ES", "SE", "TR", "AT", "FI", "GR", "PL", "HU", "RO", "BG"],
   },
 } satisfies Record<ShippingPreset, EraRosterSpec>;
 

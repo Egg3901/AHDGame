@@ -21,6 +21,7 @@ import { ELECTION_1952_MARGIN } from "@/lib/data/1952ElectionResults";
  *   2007-default → 2008 (Obama v McCain)
  *   2019-default → 2020 (Biden v Trump)
  *   2023-default → 2024 (Harris v Trump)
+ *   2027-default → 2024 (latest certified presidential result before Jan 2027)
  *
  * Keep this map in sync with `ELECTION_BASELINES` in
  * `src/lib/seeds/calibration/electionBaselines.ts`, which the seed-readiness
@@ -38,6 +39,7 @@ const PRESET_MARGINS: Record<string, Record<string, number>> = {
   "2007-default": ELECTION_2008_MARGIN,
   "2019-default": ELECTION_2020_MARGIN,
   "2023-default": ELECTION_2024_MARGIN,
+  "2027-default": ELECTION_2024_MARGIN,
 };
 
 /**

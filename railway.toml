@@ -42,7 +42,7 @@ builder = "NIXPACKS"
 # to 7% of turn CPU in a local profile and about 2s off a 24s turn; it costs
 # ~150 MB of the 3 GB old-space budget above. Same flag ships in the
 # singleplayer launcher (scripts/singleplayer/launch.mjs).
-startCommand = "NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" HOSTNAME=0.0.0.0 npx next start"
+startCommand = "fc-cache -f public/fonts && NODE_OPTIONS=\"--max-old-space-size=3072 --max-semi-space-size=64\" HOSTNAME=0.0.0.0 npx next start"
 healthcheckPath = "/api/health"
 healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"

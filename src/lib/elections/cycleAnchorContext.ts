@@ -486,6 +486,48 @@ export const CANONICAL_REAL_ELECTION_YEARS_BY_PRESET: Record<string, PresetElect
     ruRepublicSoviet: null,
     ddVolkskammer: null, // GDR reunified into DE in 1990 — no elections
   },
+  // Draft 2027-default starts in January 2027 after the projected 2026 US
+  // midterms captured by US_CONGRESS_PROJECTION_2027. Fixed-cycle elections
+  // use their next reachable cycle. Dissolution-capable chambers use the legal
+  // maximum implied by the last known election, not a claimed scheduled date.
+  // Start-year elections are skipped consistently with the 2023 preset's
+  // start-adjacent convention so no normal world opens with an immediate vote.
+  "2027-default": {
+    house: 2028,
+    senateClass1: 2030,
+    senateClass2: 2032,
+    senateClass3: 2028,
+    governorStateSenate: 2030,
+    president: 2028,
+    ngGeneral: 2031,
+    ukCommons: 2029, // legal maximum from the 2024 election
+    jpSangiinClass1: 2028,
+    jpSangiinClass2: 2031,
+    jpShugiin: 2028, // legal maximum from the 2024 election; snap-capable
+    deBundestag: 2029, // legal maximum from the 2025 election; snap-capable
+    deLandtag: 2028, // fallback only; per-Land anchors remain separate
+    cnNpcDelegate: 2028,
+    brChamber: 2030,
+    brSenate: 2030,
+    ieDail: 2028, // current game model uses a four-year Dail cycle
+    ieUachtaran: 2032,
+    ieLocalCouncil: 2029,
+    scoHolyrood: 2031,
+    walSenedd: 2031,
+    frAssembly: 2029, // legal maximum from the 2024 election; snap-capable
+    itCamera: 2032,
+    esCongreso: 2031,
+    seRiksdag: 2030,
+    trMeclis: 2028, // retained from the authored 2023 schedule
+    grVouli: 2031,
+    atNationalrat: 2028, // legal maximum from the 2024 election
+    fiEduskunta: 2031,
+    frSenat: 2029,
+    trSenato: null,
+    ruSupremeSoviet: null,
+    ruRepublicSoviet: null,
+    ddVolkskammer: null,
+  },
 };
 
 /**

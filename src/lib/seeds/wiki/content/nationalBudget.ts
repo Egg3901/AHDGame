@@ -55,7 +55,7 @@ A sovereign credit rating from AAA to CCC reflects this ratio and affects borrow
 | ≤250% | B | 10.0% | −0.5% | −10 |
 | >250% | CCC | 14.0% | −0.7% | −15 |
 
-The engine normalizes the raw ratio against the country's seeded sovereign-risk anchor before choosing the tier. A country that begins with structurally high debt is therefore not forced straight into the raw-ratio tier on day one. Public-trust penalties apply at fiscal close; the GDP value is corporate margin drag applied in the per-turn economy, not a direct write to the printed GDP metric.
+The engine uses the current smoothed debt-to-GDP ratio before choosing the tier. A country's historical sovereign-risk anchor is retained as seed and migration provenance, but it does not rescale live risk. Public-trust penalties apply at fiscal close; the GDP value is corporate margin drag applied in the per-turn economy, not a direct write to the printed GDP metric.
 
 ## National debt
 

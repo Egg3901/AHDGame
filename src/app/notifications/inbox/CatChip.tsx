@@ -5,6 +5,7 @@
  */
 
 import type { InboxCategory } from "@/lib/inbox/categories";
+import { CATEGORY_VISUALS } from "./inboxVisuals";
 
 type ChipConfig = {
   bg: string;
@@ -93,45 +94,45 @@ const SYSTEM_ICON = (
 
 const CHIP_CONFIG: Record<InboxCategory, ChipConfig> = {
   crisis: {
-    bg: "bg-error/10",
-    text: "text-error",
-    label: "Crisis",
+    bg: CATEGORY_VISUALS.crisis.wash,
+    text: CATEGORY_VISUALS.crisis.text,
+    label: CATEGORY_VISUALS.crisis.label,
     icon: CRISIS_ICON,
   },
   legislation: {
-    bg: "bg-primary/10",
-    text: "text-primary",
-    label: "Legislation",
+    bg: CATEGORY_VISUALS.legislation.wash,
+    text: CATEGORY_VISUALS.legislation.text,
+    label: CATEGORY_VISUALS.legislation.label,
     icon: LEGISLATION_ICON,
   },
   election: {
-    bg: "bg-secondary/10",
-    text: "text-secondary",
-    label: "Election",
+    bg: CATEGORY_VISUALS.election.wash,
+    text: CATEGORY_VISUALS.election.text,
+    label: CATEGORY_VISUALS.election.label,
     icon: ELECTION_ICON,
   },
   party: {
-    bg: "bg-warning/10",
-    text: "text-warning",
-    label: "Party",
+    bg: CATEGORY_VISUALS.party.wash,
+    text: CATEGORY_VISUALS.party.text,
+    label: CATEGORY_VISUALS.party.label,
     icon: PARTY_ICON,
   },
   standing: {
-    bg: "bg-success/10",
-    text: "text-success",
-    label: "Standing",
+    bg: CATEGORY_VISUALS.standing.wash,
+    text: CATEGORY_VISUALS.standing.text,
+    label: CATEGORY_VISUALS.standing.label,
     icon: STANDING_ICON,
   },
   treasury: {
-    bg: "bg-info/10",
-    text: "text-info",
-    label: "Treasury",
+    bg: CATEGORY_VISUALS.treasury.wash,
+    text: CATEGORY_VISUALS.treasury.text,
+    label: CATEGORY_VISUALS.treasury.label,
     icon: TREASURY_ICON,
   },
   system: {
-    bg: "bg-card-border/50",
-    text: "text-muted",
-    label: "System",
+    bg: CATEGORY_VISUALS.system.wash,
+    text: CATEGORY_VISUALS.system.text,
+    label: CATEGORY_VISUALS.system.label,
     icon: SYSTEM_ICON,
   },
 };
@@ -141,14 +142,16 @@ interface CatChipProps {
   /** Optionally override with a custom icon */
   icon?: React.ReactNode;
   className?: string;
+  size?: "sm" | "md";
 }
 
-export function CatChip({ category, icon, className }: CatChipProps) {
+export function CatChip({ category, icon, className, size = "md" }: CatChipProps) {
   const cfg = CHIP_CONFIG[category] ?? CHIP_CONFIG.system;
   return (
     <span
       className={[
-        "inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+        "inline-flex shrink-0 items-center justify-center rounded-xl border border-current/15 shadow-sm",
+        size === "sm" ? "h-7 w-7" : "h-9 w-9",
         cfg.bg,
         cfg.text,
         className,

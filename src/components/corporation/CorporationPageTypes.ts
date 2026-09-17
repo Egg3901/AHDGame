@@ -503,6 +503,12 @@ export interface Financials {
    * fully replicate). Prefer `realizedIncome` for the headline when present.
    */
   income: number;
+  /** Realized net income from the ring-fenced bank subsidiary, in daily display units. */
+  bankingIncome?: number;
+  /** Turn represented by bankingIncome. */
+  bankingIncomeTurn?: number;
+  /** Parent operating income plus the bank subsidiary's realized income. */
+  economicIncomeIncludingBank?: number;
   /**
    * REALIZED per-turn net income the turn engine actually booked last turn
    * (daily display units, local currency = corporationHistory.income × turns/day).
@@ -725,6 +731,14 @@ export interface BalanceSheet {
       npv: number;
     }>;
     totalSectorNPV: number;
+    /** Current book equity of the active ring-fenced bank subsidiary. */
+    bankEquity?: number;
+    /** 75%-recognized bank valuation used by the market valuation model. */
+    bankValuation?: number;
+    /** Going-concern NPV from realized bank income. */
+    bankNPV?: number;
+    /** Sector NPV plus bank NPV. */
+    totalOperatingNPV?: number;
     bondHoldingsValue: number;
     stockHoldingsValue: number;
     /** Principal outstanding on IMF bailout loans this corporation is owed as lender (₳). */

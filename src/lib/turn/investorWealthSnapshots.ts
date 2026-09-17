@@ -359,7 +359,7 @@ export async function generateWealthListSnapshots(currentTurn: number, db?: Db):
   ];
   for (const ex of ALL_EXCHANGES) {
     // Command-economy registers have no private investors by construction
-    // (disallowPrivateCorporationFounding), so their wealth list is always
+    // (marketization level below the command ceiling), so their wealth list is always
     // empty. Writing it would add a wealthListSnapshots upsert AND a
     // wealthListHistory row per register per turn that nothing ever reads —
     // the wealth-list route recomputes on the fly whenever a snapshot is

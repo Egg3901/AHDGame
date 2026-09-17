@@ -1,8 +1,9 @@
 import { charterMay } from "@/lib/banking/rules/capabilities";
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth"; // Optional auth — uses verifyAuth() (userId only needed)
+import { getAuthUser } from "@/lib/auth"; // Optional auth with current account state.
 import { handleRouteError } from "@/lib/api/errors";
 import type { Bond, Corporation, BondHistory, User } from "@/lib/db/types";
 import type { Character } from "@/lib/db/types/character";
@@ -35,7 +36,7 @@ interface RouteParams {
  * GET /api/bonds/[bondId]
  * Get full details for a single bond, including holders with names and price history.
  */
-export async function GET(_request: Request, { params }: RouteParams) {
+export const GET = withNoStore(async function GET(_request: Request, { params }: RouteParams) {
   try {
     const { bondId } = await params;
     const db = await getDb();
@@ -55,7 +56,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
             _id: bond.corporationId,
           })
         : Promise.resolve(null),
-      verifyAuth(),
+      getAuthUser(),
     ]);
     const currentTurn = gameState?.currentTurn ?? 1;
 
@@ -417,4 +418,4 @@ export async function GET(_request: Request, { params }: RouteParams) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

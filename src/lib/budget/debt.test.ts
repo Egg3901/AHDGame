@@ -173,6 +173,18 @@ describe("debt module", () => {
     it("returns 14% for CCC rating (refs #3236)", () => {
       expect(calculateInterestRate(3.0)).toBe(0.14);
     });
+
+    it("uses current debt-to-GDP instead of a historical anchor", () => {
+      const inheritedAnchor = {
+        debtToGdpRatio: 0.07246376811594203,
+        creditRating: "AA" as const,
+        interestRate: 0.035,
+      };
+      const currentRatio = 0.35698525856922997;
+
+      expect(calculateCreditRating(currentRatio, inheritedAnchor)).toBe("AAA");
+      expect(calculateInterestRate(currentRatio, false, inheritedAnchor)).toBe(0.02);
+    });
   });
 
   describe("processAnnualDebt", () => {

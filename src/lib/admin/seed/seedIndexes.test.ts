@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { Db } from "mongodb";
 import { seedIndexes } from "./seedIndexes";
 
+vi.mock("@/lib/auth/providerIdentityIndexes", () => ({
+  ensureProviderIdentityIndexes: vi.fn().mockResolvedValue([]),
+}));
+
 /**
  * A Db whose `createIndex` yields to the microtask queue before resolving, so
  * concurrently-running modules genuinely interleave. Without the per-module log

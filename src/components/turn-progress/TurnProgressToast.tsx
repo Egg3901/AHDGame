@@ -1,62 +1,174 @@
 "use client";
 
-import { useState } from "react";
-import Image from "next/image";
+import { useCallback, useEffect, useReducer } from "react";
 import { usePathname } from "next/navigation";
-import { describeTurnPhase } from "./turnProgressPresentation";
-import { useGameTurnStatus } from "@/hooks/useGameEvents";
+import { useTranslations } from "next-intl";
+import { refreshGameTurnStatus, useGameEvents, useGameTurnStatus } from "@/hooks/useGameEvents";
 import { isLightweightLayoutPath } from "@/lib/constants/layoutPaths";
+import {
+  INITIAL_TURN_PROGRESS,
+  reduceTurnProgress,
+  type TurnProgressStatus,
+} from "./turnProgressLifecycle";
+import { TURN_PROGRESS_CARD_CLASS, TURN_PROGRESS_SLOT_CLASS } from "./turnProgressPresentation";
 
 const EXCLUDED_PATHS = ["/", "/login", "/register", "/banned"];
+
+function errorMessageFromEvent(event: Event): string | null {
+  if (!("detail" in event)) return null;
+  const detail = (event as CustomEvent<{ message?: string }>).detail;
+  return typeof detail?.message === "string" ? detail.message : null;
+}
 
 export function TurnProgressToast() {
   const pathname = usePathname();
   const enabled = !EXCLUDED_PATHS.includes(pathname) && !isLightweightLayoutPath(pathname);
-  const status = useGameTurnStatus(enabled);
-  const [dismissedTurn, setDismissedTurn] = useState<number | null>(null);
+  const status = useGameTurnStatus(enabled) as TurnProgressStatus | null;
+  const t = useTranslations("nav.singleplayer.progress");
+  const [snap, dispatch] = useReducer(reduceTurnProgress, INITIAL_TURN_PROGRESS);
 
-  if (!status?.isProcessing || dismissedTurn === status.processingTargetTurn) return null;
-  const progress = Math.max(2, Math.min(98, status.processingProgress ?? 2));
+  useGameEvents(
+    useCallback(() => {
+      dispatch({ type: "complete" });
+    }, []),
+    ["turn_complete"],
+    enabled
+  );
+
+  useEffect(() => {
+    if (!enabled) {
+      dispatch({ type: "reset" });
+      return;
+    }
+    dispatch({ type: "status", status, nowMs: Date.now() });
+  }, [enabled, status]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    const onComplete = () => dispatch({ type: "complete" });
+    const onError = (event: Event) =>
+      dispatch({ type: "error", message: errorMessageFromEvent(event) });
+    const onCancel = () => dispatch({ type: "cancel" });
+    const onOffline = () => dispatch({ type: "offline" });
+    const onOnline = () => dispatch({ type: "online", nowMs: Date.now() });
+    window.addEventListener("ahd:turn-complete", onComplete);
+    window.addEventListener("ahd:turn-error", onError);
+    window.addEventListener("ahd:turn-cancel", onCancel);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    return () => {
+      window.removeEventListener("ahd:turn-complete", onComplete);
+      window.removeEventListener("ahd:turn-error", onError);
+      window.removeEventListener("ahd:turn-cancel", onCancel);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, [enabled]);
+
+  useEffect(() => {
+    if (snap.view.kind === "hidden") return;
+    const id = window.setInterval(() => {
+      dispatch({ type: "tick", nowMs: Date.now() });
+    }, 5_000);
+    return () => window.clearInterval(id);
+  }, [snap.view.kind]);
+
+  if (!enabled || snap.view.kind === "hidden") return null;
+
+  const view = snap.view;
+  const title = view.targetTurn != null ? t("title", { turn: view.targetTurn }) : t("titleUnknown");
+  const activity =
+    view.activityId === "elections"
+      ? t("activity.elections")
+      : view.activityId === "economy"
+        ? t("activity.economy")
+        : view.activityId === "military"
+          ? t("activity.military")
+          : view.activityId === "policy"
+            ? t("activity.policy")
+            : view.activityId === "parties"
+              ? t("activity.parties")
+              : view.activityId === "people"
+                ? t("activity.people")
+                : view.activityId === "updating"
+                  ? t("activity.updating", { label: view.activityLabel ?? "" })
+                  : t("activity.preparing");
+  const isAlert = view.kind !== "processing";
+  const heading =
+    view.kind === "stale"
+      ? t("staleTitle")
+      : view.kind === "offline"
+        ? t("offlineTitle")
+        : view.kind === "error"
+          ? t("errorTitle")
+          : title;
+  const body =
+    view.kind === "stale"
+      ? t("staleBody")
+      : view.kind === "offline"
+        ? t("offlineBody")
+        : view.kind === "error"
+          ? view.errorMessage || t("errorTitle")
+          : activity;
+
   return (
-    <aside
-      className="fixed bottom-[calc(3.25rem+env(safe-area-inset-bottom))] right-3 z-40 w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-card-border/80 bg-card/95 shadow-2xl backdrop-blur-xl sm:right-5"
-      aria-live="polite"
-    >
-      <div className="flex items-center gap-3 p-3.5">
-        <div className="relative h-10 w-10 shrink-0">
-          <span className="absolute inset-0 animate-spin rounded-full border-2 border-primary/20 border-t-primary" />
-          <span className="absolute inset-1 animate-pulse rounded-full bg-primary/10" />
-          <Image
-            src="/icon.png"
-            alt=""
-            width={32}
-            height={32}
-            className="absolute inset-1 rounded-full"
-          />
+    <div className={TURN_PROGRESS_SLOT_CLASS} data-turn-progress-slot="">
+      <aside
+        className={TURN_PROGRESS_CARD_CLASS}
+        role={isAlert ? "alert" : "status"}
+        aria-live={isAlert ? "assertive" : "polite"}
+        aria-atomic="true"
+      >
+        <div className="flex items-start gap-2 p-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">
+              {heading}
+            </p>
+            <p className="mt-0.5 truncate text-sm text-foreground">{body}</p>
+          </div>
+          <button
+            type="button"
+            className="rounded-md px-1.5 py-0.5 text-base leading-none text-muted transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 motion-reduce:transition-none"
+            aria-label={t("dismiss")}
+            onClick={() => dispatch({ type: "dismiss" })}
+          >
+            ×
+          </button>
         </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-primary">
-            Processing turn {status.processingTargetTurn ?? ""}
-          </p>
-          <p className="mt-0.5 truncate text-sm font-medium text-foreground">
-            {describeTurnPhase(status.processingPhase ?? null, status.processingPhaseLabel ?? null)}
-          </p>
-        </div>
-        <button
-          type="button"
-          className="rounded-md px-2 py-1 text-lg leading-none text-muted transition hover:bg-foreground/5 hover:text-foreground"
-          aria-label="Dismiss turn progress"
-          onClick={() => setDismissedTurn(status.processingTargetTurn ?? null)}
-        >
-          ×
-        </button>
-      </div>
-      <div className="h-1.5 bg-foreground/5">
-        <div
-          className="h-full rounded-r-full bg-gradient-to-r from-primary via-red-400 to-primary transition-[width] duration-700 ease-out"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-    </aside>
+        {view.kind === "processing" || view.progress != null ? (
+          <div
+            className="h-1 bg-foreground/10"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={view.progress ?? undefined}
+            aria-label={title}
+          >
+            {view.progress != null ? (
+              <div
+                className="h-full bg-primary transition-[width] duration-500 ease-out motion-reduce:transition-none"
+                style={{ width: `${view.progress}%` }}
+              />
+            ) : (
+              <div className="h-full w-1/4 bg-primary/30 motion-reduce:w-0" />
+            )}
+          </div>
+        ) : null}
+        {isAlert ? (
+          <div className="flex justify-end px-3 pb-3">
+            <button
+              type="button"
+              className="rounded-md px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 motion-reduce:transition-none"
+              onClick={() => {
+                dispatch({ type: "retry", nowMs: Date.now() });
+                void refreshGameTurnStatus();
+              }}
+            >
+              {t("retry")}
+            </button>
+          </div>
+        ) : null}
+      </aside>
+    </div>
   );
 }

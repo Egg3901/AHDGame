@@ -697,6 +697,14 @@ export interface CorporateSector {
    */
   producedUnits?: number;
   /**
+   * Plants-tier telemetry: the deliberate market-demand run-rate multiplier
+   * applied to this sector's production last turn. 1 means no demand cap;
+   * lower values mean the plant was held below its physical plan because
+   * recent sales did not support a full run. Display-only, never read back
+   * into the economy.
+   */
+  demandThrottleFactor?: number | null;
+  /**
    * Units this sector could have produced after external constraints but before
    * the operator's production-policy and mothball choices. Used by supply
    * agreement damages. Absent until the sector has run after rollout.
@@ -926,6 +934,15 @@ export interface CorporateSector {
    * this does not.
    */
   lowFillTurns?: number;
+  /**
+   * Consecutive turns the sector's measured P&L was negative (plants
+   * `plantsPnl.profit < 0`). Maintained by the NPP decision pass for NPP-run
+   * corps only — players never get this field written — and reset on the
+   * first profitable turn and on mothball restart. The chronic-cost-loss
+   * signal behind NPP cost-mothballing (demand audit step 5): fill-based
+   * machinery cannot see a plant that sells everything yet bleeds on costs.
+   */
+  pnlLossTurns?: number;
   /**
    * Player toggle (design-realization-legs §6): true = the unsold remainder of
    * storable outputs becomes sector inventory; absent/false = sell-all, the

@@ -3,6 +3,8 @@ import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAdmin } from "@/lib/api/requireAdmin";
+import { withNoStore } from "@/lib/api/withNoStore";
+import { isAuthMigrationFenced } from "@/lib/auth/sourceFence";
 import { createAdminLog } from "@/lib/adminLog";
 import { parseJsonBody } from "@/lib/api/validate";
 import { adminDeleteUserSchema } from "@/lib/api/schemas/admin";
@@ -13,7 +15,7 @@ import { logCharacterDeleted } from "@/lib/db/collections/activityLog";
 // POST /api/admin/users/delete — Permanently delete a user account and their character.
 // Auth: requireAdmin
 // Errors: 400, 403, 404
-export async function POST(request: Request) {
+export const POST = withNoStore(async (request: Request) => {
   try {
     const auth = await requireAdmin();
     if (!auth.ok) return auth.response;
@@ -44,8 +46,14 @@ export async function POST(request: Request) {
     }
 
     // Prevent deleting other admins
-    if (user.isAdmin) {
+    if (user.isAdmin === true || user.role === "admin") {
       return NextResponse.json({ error: "Cannot delete admin users" }, { status: 400 });
+    }
+    if (isAuthMigrationFenced(user)) {
+      return NextResponse.json(
+        { error: "This account changed during this request. Please reload and try again." },
+        { status: 409 }
+      );
     }
 
     // Find the user's character
@@ -161,4 +169,4 @@ export async function POST(request: Request) {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

@@ -61,10 +61,21 @@ export interface NppCorpCountryPlan {
  * so that guard silently stopped firing — and a 2019 reset would have begun
  * spawning NPP corps for eight countries that previously got none.
  *
- * That is an economy change, not a config one, so it is now an explicit list
- * rather than a side effect. It reproduces the previous behaviour exactly.
- * Adding "2019-default"/"2023-default" is a deliberate product decision and
- * wants a simulation report per CLAUDE.md, not a quiet edit.
+ * That is an economy change, not a config one, so it is an explicit list rather
+ * than a side effect.
+ *
+ * ⚠ "2019-default" IS UPSTREAM'S DECISION, NOT A QUIET EDIT. This list
+ * originally reproduced the old behaviour exactly, with a note that adding 2019
+ * would be a deliberate product decision wanting a simulation report. Upstream
+ * then made that decision in "make every seed complete" (#1669): its test
+ * changed from `nppCorpSpawnPlan("2019-default")` returning [] to requiring a
+ * plan covering US, UK, JP, DE, IE and CN. Following the source of truth here
+ * is not the same as choosing it unilaterally.
+ *
+ * ⚠ 2023 AND 2027 STAY OUT. Upstream decided 2019 and only 2019, and the
+ * reasoning above still applies to the other two: both now have enablement maps
+ * from the era roster, so adding them is a one-line edit with an economy-wide
+ * effect and no simulation report behind it. Leave them to an explicit call.
  */
 const NPP_CORP_SPAWN_PRESETS = new Set<string>([
   "1953-default",
@@ -72,6 +83,7 @@ const NPP_CORP_SPAWN_PRESETS = new Set<string>([
   "1991-default",
   "1999-default",
   "2007-default",
+  "2019-default",
 ]);
 
 /**

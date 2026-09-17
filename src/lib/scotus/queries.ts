@@ -21,6 +21,8 @@ export interface ScotusSeatSummary {
   economicLean: number | null;
   socialLean: number | null;
   isDivergent: boolean;
+  /** True only for the preset's first occupant, never a later historical successor. */
+  originalRoster: boolean;
   deathChance: DivergentDeathChance | null;
 }
 
@@ -51,6 +53,7 @@ export async function getScotusComposition(
       economicLean: seat.economicLean,
       socialLean: seat.socialLean,
       isDivergent: seat.isDivergent,
+      originalRoster: seat.justiceMode === "historical" && seat.historicalOccupantIndex === 0,
       deathChance:
         !vacant && seat.isDivergent && currentTurn != null
           ? divergentDeathChance(currentTurn, seat.divergentHazardStartsTurn)

@@ -185,6 +185,135 @@ describe("getViewerCampaigns", () => {
   });
 });
 
+/**
+ * An owner-access campaign with no endorsements wired up. Each test then mocks
+ * the endorsement reads it cares about, so the fixture states the campaign once
+ * rather than per assertion.
+ */
+async function setUpOwnedCampaign() {
+  const userId = new ObjectId();
+  const activeCharacterId = new ObjectId();
+  const inactiveCandidateId = new ObjectId();
+  const campaignId = new ObjectId();
+  const electionId = new ObjectId();
+  const candidateRowId = new ObjectId();
+
+  const user: AuthUserWithCharacter = {
+    userId: userId.toString(),
+    username: "tester",
+    email: "test@example.com",
+    role: "user",
+    hasCharacter: true,
+    character: {
+      _id: activeCharacterId,
+      userId,
+      name: "Active Profile",
+      countryId: "US",
+      party: "1",
+    } as Character,
+  };
+
+  const campaign = {
+    _id: campaignId,
+    electionId,
+    candidateId: inactiveCandidateId,
+    candidateIsNPP: false,
+    party: "1",
+    managerId: null,
+    managerCharacterId: null,
+    funds: 125000,
+    actions: 22,
+    fundraisingLevel: 2,
+    oppositionResearchLevel: 1,
+    groundGameLevel: 0,
+    mediaSpendingLevel: 0,
+    oppositionTargetId: null,
+    oppositionTargetName: null,
+    oppositionResearchCooldownUntil: null,
+    donationLog: [],
+    publicFogOfWar: {
+      fundraisingLevel: 1,
+      oppositionResearchLevel: 0,
+      groundGameLevel: 0,
+      mediaSpendingLevel: 0,
+      lastUpdated: new Date("2026-05-01T00:00:00Z"),
+    },
+    partyFogOfWar: {
+      fundraisingLevel: 2,
+      oppositionResearchLevel: 1,
+      groundGameLevel: 0,
+      mediaSpendingLevel: 0,
+      lastUpdated: new Date("2026-05-01T00:00:00Z"),
+    },
+    activityHistory: [],
+    totalFundsGenerated: 0,
+    totalFundsSpent: 0,
+    totalActionsGenerated: 0,
+    totalActionsSpent: 0,
+    campaignStrength: 7,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  } as Campaign;
+
+  db.collection("campaigns");
+  db.collection("characters");
+  db.collection("elections");
+  db.collection("electionCandidates");
+  db.collection("nppEndorsements");
+  db.collection("playerEndorsements");
+  db.collection("politicalParties");
+
+  // playerEndorsements join on the electionCandidates row id, not the character
+  // identity id (ticket #868), so the row has to exist for player endorsements
+  // to resolve at all.
+  db.collectionMocks["electionCandidates"]!.find.mockReturnValue({
+    toArray: vi
+      .fn()
+      .mockResolvedValue([
+        { _id: candidateRowId, electionId, characterId: inactiveCandidateId, status: "active" },
+      ]),
+  });
+
+  db.collectionMocks["campaigns"]!.findOne.mockResolvedValue(campaign);
+  db.collectionMocks["characters"]!.findOne.mockImplementation(async (query) => {
+    const record = query as Record<string, unknown>;
+    if (
+      record._id instanceof ObjectId &&
+      record._id.equals(inactiveCandidateId) &&
+      !record.userId
+    ) {
+      return { _id: inactiveCandidateId, name: "Inactive Candidate" };
+    }
+    if (
+      record._id instanceof ObjectId &&
+      record._id.equals(inactiveCandidateId) &&
+      record.userId instanceof ObjectId &&
+      record.userId.equals(userId)
+    ) {
+      return { _id: inactiveCandidateId };
+    }
+    return null;
+  });
+  db.collectionMocks["elections"]!.findOne.mockResolvedValue({
+    _id: electionId,
+    countryId: "US",
+    state: "US",
+    electionType: "president",
+    cycle: 2028,
+    senateClass: null,
+    status: "active",
+  });
+  db.collectionMocks["nppEndorsements"]!.find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([]),
+  });
+  db.collectionMocks["playerEndorsements"]!.find.mockReturnValue({
+    toArray: vi.fn().mockResolvedValue([]),
+  });
+  db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(null);
+
+  return { db, campaignId, user };
+}
+
 describe("getCampaignDetail", () => {
   it("returns owner access and exact values for a user who owns the inactive candidate profile", async () => {
     const userId = new ObjectId();
@@ -286,8 +415,12 @@ describe("getCampaignDetail", () => {
       senateClass: null,
       status: "active",
     });
-    db.collectionMocks["nppEndorsements"]!.countDocuments.mockResolvedValue(0);
-    db.collectionMocks["playerEndorsements"]!.countDocuments.mockResolvedValue(0);
+    db.collectionMocks["nppEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks["playerEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(null);
 
     const detail = await getCampaignDetail(db as never, campaignId, user);
@@ -296,6 +429,35 @@ describe("getCampaignDetail", () => {
     expect(detail.funds).toBe(125000);
     expect(detail.actions).toBe(22);
     expect(detail.levels.fundraising).toBe(2);
+  });
+
+  it("lists active player and NPP endorsers, newest first", async () => {
+    const { db, campaignId, user } = await setUpOwnedCampaign();
+
+    db.collectionMocks["nppEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([
+        { nppName: "Aisha O'Connor", createdAt: new Date("2026-05-02T00:00:00Z") },
+        { nppName: "Carol Martin", createdAt: new Date("2026-05-05T00:00:00Z") },
+      ]),
+    });
+    db.collectionMocks["playerEndorsements"]!.find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { characterName: "Richard Nixon", createdAt: new Date("2026-05-04T00:00:00Z") },
+        ]),
+    });
+
+    const detail = await getCampaignDetail(db as never, campaignId, user);
+
+    expect(detail.endorsements).toEqual([
+      { kind: "npp", name: "Carol Martin", since: "2026-05-05T00:00:00.000Z" },
+      { kind: "player", name: "Richard Nixon", since: "2026-05-04T00:00:00.000Z" },
+      { kind: "npp", name: "Aisha O'Connor", since: "2026-05-02T00:00:00.000Z" },
+    ]);
+    // The count the action panel reports is derived from the same rows this
+    // tab lists, so the list and the number beside it cannot disagree.
+    expect(detail.budget!.actions.endorsementCount).toBe(3);
   });
 
   it("applies the general-phase surcharge to nextUpgradeCosts so the UI matches the gate", async () => {
@@ -387,8 +549,12 @@ describe("getCampaignDetail", () => {
       primaryEndTurn: 3,
       endTurn: 10,
     });
-    db.collectionMocks["nppEndorsements"]!.countDocuments.mockResolvedValue(0);
-    db.collectionMocks["playerEndorsements"]!.countDocuments.mockResolvedValue(0);
+    db.collectionMocks["nppEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks["playerEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["electionCandidates"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["exchangeRates"]!.findOne.mockResolvedValue(null); // rate 1.0
@@ -479,8 +645,12 @@ describe("getCampaignDetail", () => {
     db.collection("gameState");
     db.collection("states");
     db.collection("gameConfig");
-    db.collectionMocks["nppEndorsements"]!.countDocuments.mockResolvedValue(0);
-    db.collectionMocks["playerEndorsements"]!.countDocuments.mockResolvedValue(0);
+    db.collectionMocks["nppEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
+    db.collectionMocks["playerEndorsements"]!.find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([]),
+    });
     db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["gameState"]!.findOne.mockResolvedValue({
       _id: "current",

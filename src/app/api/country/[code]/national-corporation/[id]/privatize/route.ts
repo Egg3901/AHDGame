@@ -16,6 +16,10 @@ import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertTreasuryAuthority } from "@/lib/nationalization/authority";
 import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { privatizeAsset } from "@/lib/nationalization/privatizeAsset";
+import {
+  isPrivateEnterpriseBlocked,
+  PrivateEnterpriseBlockedError,
+} from "@/lib/economy/queries/privateEnterpriseGate";
 import { executivePrivatizeSchema } from "@/lib/api/schemas/nationalization";
 import { corporationQueryFromParamId } from "@/lib/api/corporations/resolveQuery";
 import { generateStockExchangeSnapshots } from "@/lib/turn/stockExchangeSnapshot";
@@ -53,6 +57,20 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const db = await getDb();
+
+    // Refuse before the authority check: a player in a command economy should be
+    // told the mechanic does not exist there, not that they hold the wrong
+    // office. privatizeAsset carries the authoritative guard; this is the clean
+    // error for the one caller that has a player on the other end.
+    if (await isPrivateEnterpriseBlocked(db, countryId)) {
+      return NextResponse.json(
+        {
+          error:
+            "Private corporations cannot be founded in a command economy. The state controls all enterprise.",
+        },
+        { status: 403 }
+      );
+    }
 
     // Authority: seated finance minister, or head of government if vacant.
     const authorized = await assertTreasuryAuthority(db, countryId, auth.user.character._id);
@@ -122,6 +140,9 @@ export async function POST(request: Request, { params }: RouteParams) {
           request,
           route: "/api/country/[code]/national-corporation/[id]/privatize",
         });
+      }
+      if (err instanceof PrivateEnterpriseBlockedError) {
+        return NextResponse.json({ error: err.message }, { status: 403 });
       }
       return NextResponse.json(
         { error: err instanceof Error ? err.message : "Privatization failed" },

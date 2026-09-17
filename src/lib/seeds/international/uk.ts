@@ -23,6 +23,7 @@ import { ukRegionCensusData1991 } from "@/lib/seeds/uk/ukRegionCensusData1991";
 import { ukRegionCensusData1999 } from "@/lib/seeds/uk/ukRegionCensusData1999";
 import { ukRegionCensusData2007 } from "@/lib/seeds/uk/ukRegionCensusData2007";
 import { ukRegionCensusData2023 } from "@/lib/seeds/uk/ukRegionCensusData2023";
+import { ukRegionCensusData2027 } from "@/lib/seeds/uk/ukRegionCensusData2027";
 import type { UKRegionLayer1 } from "@/lib/seeds/uk/ukRegionCensusData";
 import type { EraId } from "@/lib/seeds/presetSelector";
 
@@ -550,6 +551,7 @@ const ERA_POSITIONS: Record<EraId, EraPositions> = {
   "2007": POSITIONS_2007,
   "2019": POSITIONS_2019,
   "2023": POSITIONS_2023,
+  "2027": POSITIONS_2023,
 };
 
 // ── Census conversion ─────────────────────────────────────────────────────────
@@ -580,6 +582,7 @@ const ERA_CENSUS: Record<EraId, Record<string, UKRegionLayer1>> = {
   "2007": ukRegionCensusData2007,
   "2019": ukRegionCensusData, // 2021 ONS base, used for 2019 era
   "2023": ukRegionCensusData2023,
+  "2027": ukRegionCensusData2027,
 };
 
 // ── Public API ────────────────────────────────────────────────────────────────

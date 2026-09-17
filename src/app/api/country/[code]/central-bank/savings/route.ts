@@ -25,6 +25,7 @@ import {
 } from "@/lib/currency/savingsInterest";
 import { getGameState } from "@/lib/gameState";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { loadCentralBankPricingAdjustment } from "@/lib/monetaryPolicy/centralBankPricing";
 
 const DEFAULT_PRIME = 2.5;
 
@@ -59,7 +60,6 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
     const nationalCurrency = COUNTRY_CURRENCY_MAP[countryId];
     const primeRate = bank?.primeRate ?? DEFAULT_PRIME;
     const inflationRate = bank?.inflationHistory?.at(-1)?.rate ?? 0;
-    const apyPercent = Math.round(savingsApyPercent(primeRate, inflationRate) * 100) / 100;
 
     const [totalNationalSavings, ledger, history, gameState] = await Promise.all([
       sumSavingsInCurrency(db, nationalCurrency),
@@ -82,6 +82,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
         .then((arr) => arr.reverse()),
       getGameState(),
     ]);
+    const centralBankPricing = await loadCentralBankPricingAdjustment(
+      db,
+      gameState?.currentTurn ?? 0
+    );
+    const apyPercent =
+      Math.round(
+        savingsApyPercent(primeRate, inflationRate, centralBankPricing.depositBonusPercentPoints) *
+          100
+      ) / 100;
 
     const liquidBalance = getPersonalBalance(character, nationalCurrency, forexEnabled);
     const savingsBalance = getSavingsBalance(character, nationalCurrency, forexEnabled);
@@ -103,6 +112,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
       currencyCode: nationalCurrency,
       primeRate,
       apyPercent,
+      centralBankDepositBonusPercentPoints: centralBankPricing.depositBonusPercentPoints,
+      centralBankPricingProgress: centralBankPricing.progress,
+      centralBankPricingTurnsRemaining: centralBankPricing.turnsRemaining,
+      centralBankPricingActive: centralBankPricing.startedTurn !== undefined,
       totalNationalSavings,
       liquidBalance,
       savingsBalance,

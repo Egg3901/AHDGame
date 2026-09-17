@@ -2,6 +2,26 @@ import { describe, expect, it } from "vitest";
 import { SECTOR_STRATEGIES } from "./sectorStrategies";
 import { COMMODITY_TYPES } from "./commodities";
 
+describe("telecom wireline lean recipe (demand audit step 5)", () => {
+  const telecom = SECTOR_STRATEGIES.telecommunications;
+  const wireline = telecom.find((s) => s.id === "wireline")!;
+  const standard = telecom.find((s) => s.id === "standard")!;
+
+  it("exists, needs no tech unlock, and keeps the standard default untouched", () => {
+    expect(wireline).toBeDefined();
+    expect(wireline.requiresTechUnlock ?? false).toBe(false);
+    expect(standard).toBeDefined();
+  });
+
+  it("cuts the dearest component inputs hardest versus standard", () => {
+    for (const c of ["rare_earth", "electronics", "construction_services", "energy"] as const) {
+      expect(wireline.demand[c] ?? 0, `wireline ${c}`).toBeLessThan(standard.demand[c] ?? 0);
+    }
+    // Same output composition (network + software), smaller level.
+    expect(Object.keys(wireline.supply).sort()).toEqual(Object.keys(standard.supply).sort());
+  });
+});
+
 describe("defence strategies cover every arsenal domain", () => {
   const defence = SECTOR_STRATEGIES.defense;
 

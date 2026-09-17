@@ -17,10 +17,15 @@ type StaffDropdownProps = StaffNavOpts;
 /**
  * Staff-only navigation menu. Replaces the old single admin "Ops" link with a
  * dropdown of staff tools. Each item is gated by role: admins see everything,
- * moderators see only what they can use (Mod Panel + Docs). The trigger is
- * hidden entirely for non-staff.
+ * moderators see only what they can use (Mod Panel + Docs). Singleplayer
+ * world owners also see Local World (/singleplayer/admin); singleplayer mode
+ * alone never grants it. The trigger is hidden entirely for non-staff.
  */
-export function StaffDropdown({ isAdmin = false, isModerator = false }: StaffDropdownProps) {
+export function StaffDropdown({
+  isAdmin = false,
+  isModerator = false,
+  isSingleplayerOwner = false,
+}: StaffDropdownProps) {
   const t = useTranslations("nav");
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -46,7 +51,7 @@ export function StaffDropdown({ isAdmin = false, isModerator = false }: StaffDro
 
   if (!isStaffUser({ isAdmin, isModerator })) return null;
 
-  const visible = visibleStaffNavItems({ isAdmin, isModerator });
+  const visible = visibleStaffNavItems({ isAdmin, isModerator, isSingleplayerOwner });
   if (visible.length === 0) return null;
 
   const itemClass =

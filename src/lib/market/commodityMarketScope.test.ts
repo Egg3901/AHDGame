@@ -60,6 +60,62 @@ describe("commodityMarketScope", () => {
     ).toBe(0);
   });
 
+  it("restores hidden demand inside the max on the state and global legs", () => {
+    expect(
+      commodityDemandGap({
+        commodity: "freight",
+        stateBalance: { supply: 100, demand: 80 },
+        latentDemandTopUp: 50,
+      })
+    ).toBe(30);
+    expect(
+      commodityDemandGap({
+        commodity: "steel",
+        globalBalance: { supply: 100, demand: 80 },
+        latentDemandTopUp: 50,
+      })
+    ).toBe(30);
+    // Still floored at zero when even the true demand clears supply.
+    expect(
+      commodityDemandGap({
+        commodity: "steel",
+        globalBalance: { supply: 100, demand: 80 },
+        latentDemandTopUp: 10,
+      })
+    ).toBe(0);
+  });
+
+  it("restores hidden demand inside the reachable domestic gap", () => {
+    const reachableBook = {
+      supply: 100,
+      demand: 100,
+      domesticDemand: 140,
+      imports: 40,
+      exports: 0,
+      blockedSupply: 0,
+      untradedSupply: 0,
+      unmetForeignDemand: 10,
+    };
+    expect(commodityDemandGap({ commodity: "steel", reachableBook, latentDemandTopUp: 25 })).toBe(
+      75
+    );
+    expect(commodityDemandGap({ commodity: "steel", reachableBook })).toBe(50);
+    expect(commodityDemandGap({ commodity: "steel", reachableBook, latentDemandTopUp: NaN })).toBe(
+      50
+    );
+    expect(commodityDemandGap({ commodity: "steel", reachableBook, latentDemandTopUp: -5 })).toBe(
+      50
+    );
+
+    expect(
+      commodityDemandGap({
+        commodity: "steel",
+        reachableBook: { ...reachableBook, domesticDemand: 40, imports: 0, unmetForeignDemand: 0 },
+        latentDemandTopUp: 25,
+      })
+    ).toBe(0);
+  });
+
   it("keeps every reachable commodity on its reachable book", () => {
     const reachableBook = {
       supply: 100,

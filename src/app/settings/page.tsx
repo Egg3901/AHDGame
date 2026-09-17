@@ -657,7 +657,18 @@ export function SettingsPageContent() {
     )
   );
   const availableSections = ALL_SECTIONS.filter(
-    (section) => section.group === "account" || visibleCharacterSections.has(section.id)
+    (section) =>
+      (!rawUser?.singleplayer ||
+        ![
+          "identity",
+          "security",
+          "api-keys",
+          "danger",
+          "referrals",
+          "patreon",
+          "supporter-perks",
+        ].includes(section.id)) &&
+      (section.group === "account" || visibleCharacterSections.has(section.id))
   );
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const activeDefinition = activeSection
@@ -678,7 +689,12 @@ export function SettingsPageContent() {
   const renderBucketQuickSettings = (bucketId: SettingsBucketId) => {
     switch (bucketId) {
       case "game":
-        return <GameQuickSettings countries={playerCountries} />;
+        return (
+          <GameQuickSettings
+            countries={playerCountries}
+            singleplayer={rawUser?.singleplayer === true}
+          />
+        );
       case "interface":
         return <InterfaceQuickSettings />;
       case "audio":
@@ -1056,6 +1072,7 @@ export function SettingsPageContent() {
 
                         {bucketContainsActive &&
                           activeSection &&
+                          activeDefinition &&
                           (!normalizedSearch ||
                             (activeDefinition &&
                               sectionMatchesQuery(

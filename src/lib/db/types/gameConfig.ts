@@ -2,6 +2,10 @@ import type { EconomicInterventionPlan } from "@/lib/economy/interventionGoverna
 
 export interface GameConfig {
   _id: string;
+  /** Shared nominal commodity price level. Scarcity remains in price/base ratios. */
+  commodityNominalPriceIndex?: number;
+  /** Last commodity turn included in commodityNominalPriceIndex. */
+  commodityNominalPriceIndexTurn?: number;
   /**
    * Outcome of the most recent reset. Makes a SEALED world interpretable: an
    * admin who did not watch the SSE stream can tell "fresh world awaiting your
@@ -177,6 +181,15 @@ export interface GameConfig {
    * Defaults to **enabled** — absent/undefined means on; only explicit `false` disables.
    */
   lineOfCreditEnabled?: boolean;
+  /**
+   * One-time rollout marker for the central-bank pricing change. The turn
+   * engine fills in startedTurn when a fresh world reaches its first economy
+   * turn; existing hosted worlds receive it from the startup migration.
+   */
+  centralBankPricingPhaseIn?: {
+    startedTurn?: number;
+    notificationSentTurn?: number;
+  };
   /**
    * Private banking (1.1): corp-chartered banks, deposits, lending, failure.
    * Defaults to **disabled** — only explicit `true` enables. Flag-off is a

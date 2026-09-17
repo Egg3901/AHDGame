@@ -2,6 +2,13 @@ import { describe, it, expect } from "vitest";
 import { getRegionCensusData } from "./regionCensusData";
 
 describe("getRegionCensusData", () => {
+  it("selects the projected US census for the draft 2027 preset", () => {
+    expect(getRegionCensusData("US", "CA", "2027-default")).toMatchObject({
+      race: expect.any(Object),
+      education: expect.any(Object),
+    });
+  });
+
   it("returns US census for a known state under 2019-default", () => {
     const c = getRegionCensusData("US", "CA", "2019-default");
     expect(c).not.toBeNull();

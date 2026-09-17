@@ -43,6 +43,8 @@ import {
   getOfficeTypeForChamber,
 } from "@/lib/legislature/chamberOfficeType";
 import { hasBillLifecycle } from "@/lib/legislature/hasBillLifecycle";
+import { mayRuleByDecree } from "@/lib/singleplayerHeadOfState";
+import { enactSingleplayerDecree } from "./enactSingleplayerDecree";
 
 const VOTING_DURATION_HOURS = 24;
 const VOTING_DURATION_MS = VOTING_DURATION_HOURS * 60 * 60 * 1000;
@@ -122,6 +124,7 @@ export async function proposeNationalBill(
   };
   const official = await db.collection<ElectedOfficial>("electedOfficials").findOne(officialFilter);
   const usingAdminOverride = isAdmin && !official;
+  const usingSovereignOverride = mayRuleByDecree(character, countryId);
 
   // Origin/current chamber is stored as the *chamber key* (e.g. "npc"), which is
   // what every read path — bills list, active-bill guard, turn lifecycle — filters
@@ -130,8 +133,9 @@ export async function proposeNationalBill(
   // getChamberKeyForOfficeType. Storing the raw officeType hid CN bills from the
   // NPC page and wedged sponsors (Bug #0734).
   let sponsorChamberKey: string = lowerKey;
-  if (usingAdminOverride && allowedOriginKeys.includes(chamber)) sponsorChamberKey = chamber;
-  if (!isAdmin) {
+  if ((usingAdminOverride || usingSovereignOverride) && allowedOriginKeys.includes(chamber))
+    sponsorChamberKey = chamber;
+  if (!isAdmin && !usingSovereignOverride) {
     if (!official) {
       const chamberLabels =
         allowedOriginKeys.length > 1 && upperKey
@@ -207,7 +211,7 @@ export async function proposeNationalBill(
       sponsorChamberKey as BillProposalOriginChamber,
       now
     );
-    if (proposalWarning && !confirmElectionRisk) {
+    if (proposalWarning && !confirmElectionRisk && !usingSovereignOverride) {
       return {
         status: 409,
         body: {
@@ -304,7 +308,19 @@ export async function proposeNationalBill(
     };
     try {
       const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(natBill);
-      return { status: 201, body: { success: true, billId: result.insertedId.toString() } };
+      if (usingSovereignOverride) {
+        await enactSingleplayerDecree(db, { ...natBill, _id: result.insertedId } as Bill);
+      }
+      return {
+        status: 201,
+        body: {
+          success: true,
+          billId: result.insertedId.toString(),
+          ...(usingSovereignOverride
+            ? { enacted: true, message: "Law enacted by head-of-state authority." }
+            : {}),
+        },
+      };
     } catch (error) {
       if (!isAdmin) {
         await db.collection<Character>("characters").updateOne(
@@ -468,7 +484,7 @@ export async function proposeNationalBill(
     sponsorChamberKey as BillProposalOriginChamber,
     now
   );
-  if (proposalWarning && !confirmElectionRisk) {
+  if (proposalWarning && !confirmElectionRisk && !usingSovereignOverride) {
     return {
       status: 409,
       body: {
@@ -584,9 +600,18 @@ export async function proposeNationalBill(
 
   try {
     const result = await db.collection<Omit<Bill, "_id">>("bills").insertOne(bill);
+    if (usingSovereignOverride) {
+      await enactSingleplayerDecree(db, { ...bill, _id: result.insertedId } as Bill);
+    }
     return {
       status: 201,
-      body: { success: true, billId: result.insertedId.toString() },
+      body: {
+        success: true,
+        billId: result.insertedId.toString(),
+        ...(usingSovereignOverride
+          ? { enacted: true, message: "Law enacted by head-of-state authority." }
+          : {}),
+      },
     };
   } catch (error) {
     if (!isAdmin) {

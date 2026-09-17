@@ -66,12 +66,16 @@ describe("resolveReadinessArchetypes", () => {
     ).toEqual(["one-party", "planned-economy"]);
   });
 
-  it("treats disallowPrivateCorporationFounding as a planned-economy signal", () => {
+  it("treats a marketization schedule as a planned-economy signal", () => {
+    // Was `disallowPrivateCorporationFounding`. That config flag was redundant
+    // with MARKETIZATION_SCHEDULE and has been retired; the schedule is now the
+    // single planned-economy signal, which also covers CN and the union
+    // republics that never carried the flag.
     expect(
       resolveReadinessArchetypes({
         governmentType: "parliamentaryRepublic",
         economicArchetype: "market",
-        disallowPrivateCorporationFounding: true,
+        hasMarketizationSchedule: true,
       })
     ).toEqual(["parliamentary", "planned-economy"]);
   });

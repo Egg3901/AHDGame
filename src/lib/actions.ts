@@ -5,6 +5,15 @@ import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies"
 import { statMultiplier } from "@/lib/stats/statMultiplier";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
+import { FUNDRAISE_ACTION_COST, fundraiseYieldAnchor, isFundraiseEligible } from "./actions/rules";
+
+export {
+  FUNDRAISE_ACTION_COST,
+  calculateFundraisingAmount,
+  fundraiseYieldAnchor,
+  isFundraiseEligible,
+  type FundraiseActor,
+} from "./actions/rules";
 
 /**
  * Read a character's stat with a neutral fallback for characters that predate
@@ -81,36 +90,6 @@ export function calculateConvertCashInfamy(amount: number): number {
   if (amount <= 0) return 0;
   const raw = 15 * Math.pow(amount / 1_000_000, 0.564);
   return Math.min(100, Math.round(raw));
-}
-
-/**
- * Per-use fundraising yield for the Fundraise action.
- * $50K floor + $2K per donor base level (calibrated for 0–75 range),
- * scaled by state influence multiplier (1.0x at 0% → 2.0x at 100%).
- * L0/0%: $50K, L50/50%: $225K, L75/100%: $400K.
- */
-export function calculateFundraisingAmount(
-  donorBaseLevel: number,
-  stateInfluence?: number
-): number {
-  const base = 50_000 + donorBaseLevel * 2_000;
-  if (stateInfluence === undefined) return base;
-  const multiplier = 1 + Math.max(0, Math.min(100, stateInfluence)) / 100;
-  return Math.round(base * multiplier);
-}
-
-/**
- * Canonical per-use Fundraise yield in ANCHOR units, including the fundraising
- * stat multiplier. This is the single source of truth: the Fundraise action
- * effect and every UI that quotes the yield must call this, or the quote and
- * the credit drift apart (ticket 1107).
- */
-export function fundraiseYieldAnchor(character: Character): number {
-  const base = calculateFundraisingAmount(
-    character.donorBaseLevel,
-    character.politicalInfluence ?? 0
-  );
-  return Math.round(base * statMultiplier(statValue(character, "fundraising")));
 }
 
 /**
@@ -232,7 +211,7 @@ export function getDonorActionCost(
   donorBaseLevel: number,
   action: "fundraise" | "buildDonorBase"
 ): number {
-  if (action === "fundraise") return 3;
+  if (action === "fundraise") return FUNDRAISE_ACTION_COST;
   return Math.min(20, Math.round(4 + Math.pow(donorBaseLevel / 75, 1.4) * 16));
 }
 
@@ -375,7 +354,7 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     type: "fundraise",
     name: "Fundraise",
     description: "Raise money from your donor base",
-    baseCost: 3,
+    baseCost: FUNDRAISE_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
       // Fundraising stat scales the yield (gentle ±20%). Shared with every UI
@@ -631,7 +610,7 @@ export function canPerformAction(
   }
 
   // Fundraising requires an established donor base
-  if (actionType === "fundraise" && (character.donorBaseLevel ?? 0) === 0) {
+  if (actionType === "fundraise" && !isFundraiseEligible(character.donorBaseLevel)) {
     return {
       canPerform: false,
       reason:

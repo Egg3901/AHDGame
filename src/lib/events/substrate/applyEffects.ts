@@ -5,6 +5,7 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { Character } from "@/lib/db/types/character";
 import type { ElectionCandidate } from "@/lib/db/types/election";
 import type { EventEffect } from "@/lib/db/types/events";
+import type { ElectedOfficial } from "@/lib/db/types/officials";
 import type { SentimentPulse } from "@/lib/db/types/sentimentPulse";
 import {
   anchorToLocal,
@@ -18,6 +19,7 @@ import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   writeSectorDemandModifier,
   writeSectorOutputDemandModifier,
+  writePresidentialHealthRelief,
   writeWarEmergencyMitigation,
 } from "./countryModifiers";
 import { applyCivilLibertiesDelta } from "@/lib/politicalMetrics/civilLiberties";
@@ -103,6 +105,30 @@ async function applyCountryEffects(
         await writeSectorOutputDemandModifier(ctx.db, {
           countryId,
           sectorType: effect.sectorType,
+          pct: effect.pct,
+          durationTurns: effect.durationTurns,
+          appliedAtTurn: ctx.currentTurn,
+          sourceInstanceId: ctx.instance._id,
+        });
+        break;
+      }
+      case "democraticHealthDelta": {
+        await applyCivilLibertiesDelta(ctx.db, countryId, effect.delta);
+        break;
+      }
+      case "presidentialHealthRelief": {
+        if (effect.pct <= 0 || effect.durationTurns <= 0) break;
+        const official = await ctx.db
+          .collection<ElectedOfficial>("electedOfficials")
+          .findOne(
+            { countryId, officeType: "president", characterId: { $ne: null } },
+            { sort: { electedAt: -1 }, projection: { party: 1, characterId: 1 } }
+          );
+        if (!official?.party || !official.characterId) break;
+        await writePresidentialHealthRelief(ctx.db, {
+          countryId,
+          partyId: official.party,
+          characterId: official.characterId.toString(),
           pct: effect.pct,
           durationTurns: effect.durationTurns,
           appliedAtTurn: ctx.currentTurn,

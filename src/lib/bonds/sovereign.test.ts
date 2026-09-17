@@ -527,14 +527,14 @@ describe("sovereign bond helpers", () => {
       "2019-default"
     );
 
-    // US + UK + JP + DE + IE + BR + CN + NG + DD — every supported budget country
+    // Every supported 2019 budget country plus DD has a sovereign issuer corp
     // has a sovereign issuer corp seeded so sovereign-default flows can reference
     // one. DD was added because seedSovereignBondInstruments falls back to
     // `new ObjectId()` when it cannot resolve a country-owned corporation, which
     // left East Germany's seeded DDM 3B of debt pointing at a corporation that
     // did not exist. DD is issuer-only (sectors: []) — it is a command economy
     // and deliberately has no producing corporations.
-    expect(entries).toHaveLength(9);
+    expect(entries).toHaveLength(17);
     const us = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.US.id);
     const uk = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.UK.id);
     const jp = entries.find((entry) => entry.corporation.countryOwnerId === COUNTRY_CONFIGS.JP.id);

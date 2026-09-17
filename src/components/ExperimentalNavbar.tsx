@@ -26,6 +26,7 @@ import { useActiveCharters } from "@/hooks/useActiveCharters";
 import { useActiveReferendumCampaign } from "@/hooks/useActiveReferendumCampaign";
 import { useActivePresidentElection } from "@/hooks/useActivePresidentElection";
 import { CDN_LOGO_URL } from "@/lib/images/staticCdnAssets";
+import { SingleplayerEndTurnButton } from "@/components/singleplayer/SingleplayerEndTurnButton";
 import { UniversalSearch } from "./UniversalSearch";
 import { Avatar } from "./Avatar";
 import { CountryFlag } from "@/components/CountryFlag";
@@ -50,7 +51,7 @@ import {
 import { buildNationalDetailsSections } from "@/components/navbar/nationDetailsSections";
 import { visibleWorldNavItems } from "@/components/navbar/worldNavItems";
 import { visibleProfileOrgItems } from "@/components/navbar/profileNavItems";
-import { visibleStaffNavItems } from "@/components/navbar/staffNavItems";
+import { viewerIsSingleplayerOwner, visibleStaffNavItems } from "@/components/navbar/staffNavItems";
 import {
   Chevron,
   DropdownPanel,
@@ -75,6 +76,7 @@ import type {
 } from "@/components/navbar/experimentalNavTypes";
 
 export interface ExperimentalNavbarProps {
+  clientShell?: boolean;
   user?: NavLinkRef;
   showProfile?: boolean;
   currentParty?: { id: string; name: string; countryId: string };
@@ -101,6 +103,7 @@ export interface ExperimentalNavbarProps {
 }
 
 export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
+  clientShell = false,
   user,
   showProfile = false,
   currentParty,
@@ -263,10 +266,11 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
   })();
 
   const canAccessSandbox =
-    user?.isAdmin ||
-    user?.isModerator ||
-    ((user?.patreonTier === "supporter-plus" || user?.patreonTier === "supporter-plus-plus") &&
-      user?.isPatronActive);
+    !user?.singleplayer &&
+    (user?.isAdmin ||
+      user?.isModerator ||
+      ((user?.patreonTier === "supporter-plus" || user?.patreonTier === "supporter-plus-plus") &&
+        user?.isPatronActive));
   const showWiki = !!(user?.isAdmin || user?.isModerator) || !wikiDisabled;
 
   // Top-level tabs: Actions · State · Nation · World (Help and Staff are
@@ -333,7 +337,11 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
 
   const staffSubItems =
     user?.isAdmin || user?.isModerator
-      ? visibleStaffNavItems({ isAdmin: !!user?.isAdmin, isModerator: !!user?.isModerator })
+      ? visibleStaffNavItems({
+          isAdmin: !!user?.isAdmin,
+          isModerator: !!user?.isModerator,
+          isSingleplayerOwner: viewerIsSingleplayerOwner(user),
+        })
       : [];
 
   // ── Dropdown panels ────────────────────────────────────────────────────────
@@ -718,6 +726,8 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               </span>
             </Link>
 
+            {user?.singleplayer && !clientShell && <SingleplayerEndTurnButton />}
+
             {/* Right group — primary tabs + icon cluster hug the right, classic-nav style */}
             <div className="relative flex min-w-0 flex-1 items-center justify-end gap-2 overflow-visible">
               {/* Primary nav — text-forward tabs; fade out while the search overlay is open */}
@@ -1061,6 +1071,13 @@ export const ExperimentalNavbar = React.memo(function ExperimentalNavbar({
               characterProfile={characterProfile}
               profileDisplayName={profileDisplayName}
               unreadCount={unreadCount}
+              isImperialMode={isImperialMode}
+              adminCharacters={adminCharacters}
+              imperialCharacter={imperialCharacter}
+              switchingCharacter={switchingCharacter}
+              switchingImperial={switchingImperial}
+              handleSwitchCharacter={handleSwitchCharacter}
+              handleSwitchImperial={handleSwitchImperial}
               currentParty={currentParty}
               homeState={homeState}
               activeElection={activeElection}

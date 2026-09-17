@@ -649,6 +649,18 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
   },
   { file: "src/lib/countries/jp/data/jpRegions.ts", bucket: "D", phase: "D6", source: "derived" },
   {
+    file: "src/lib/countries/jp/data/jpRegionCensusData2027.ts",
+    bucket: "D",
+    phase: "D7",
+    source: "derived",
+  },
+  {
+    file: "src/lib/countries/jp/data/jpRegions2027.ts",
+    bucket: "D",
+    phase: "D7",
+    source: "derived",
+  },
+  {
     file: "src/lib/countries/jp/data/jpBucketAffinities.ts",
     bucket: "A",
     phase: "D7",
@@ -882,6 +894,22 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
 /** Deliberately not handled by this plan, so no phase. Each entry states why. */
 export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: string }> = [
   {
+    file: "src/lib/seeds/reference/worldSeats2027.ts",
+    why: "Arrived from origin/development with the 2027 preset, AFTER the Japan folder work. It is a multi-country 2027 seat file (JP_SHUGIIN_2027/JP_SANGIIN_2027 beside the UK and German arrays), the same shape as historicalSeats.ts, which D6 also left in place. Splitting Japan's slice out is the next country-folder increment, not part of this one.",
+  },
+  {
+    file: "scripts/seeds/generate-world-seats-2027.ts",
+    why: "The generator that emits worldSeats2027.ts. A build tool, not a home for Japan facts: it names JP only to decide which arrays to write.",
+  },
+  {
+    file: "src/lib/npp/rosters/p1991-jp.ts",
+    why: "Japan's 1991 non-player-politician roster, arrived from origin/development after the folder work. Genuinely Japan's data and a candidate to relocate, but moving it now would widen a merge into a fresh migration.",
+  },
+  {
+    file: "src/lib/npp/rosters/p2019-jp.ts",
+    why: "Japan's 2019 non-player-politician roster. Same provenance and same reasoning as its 1991 sibling.",
+  },
+  {
     file: "scripts/countries/verify-jp-runtime.ts",
     why: "Created by D3 to prove every forwarded registry resolves at runtime. A circular import typechecks cleanly and yields undefined, so this runs outside vitest to exercise the app's own module-init order. It owns no Japan fact.",
   },
@@ -916,6 +944,10 @@ export const ACKNOWLEDGED_OUT_OF_SCOPE: ReadonlyArray<{ file: string; why: strin
   {
     file: "src/lib/countries/jp/eras/2023.ts",
     why: "Created by D3 as Japan's 2023 era override. Holds differences only, generated from the pre-move snapshot; it is where Japan's era facts now live.",
+  },
+  {
+    file: "src/lib/countries/jp/eras/2027.ts",
+    why: "Japan's 2027 era override, added when upstream's 2027 preset merged in. Holds differences only and reuses 2023's order of battle by reference; it is where Japan's era facts now live, not a source of them.",
   },
   {
     file: "src/lib/countries/jp/eras/index.ts",

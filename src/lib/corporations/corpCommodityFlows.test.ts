@@ -49,12 +49,12 @@ describe("computeCorpCommodityFlows", () => {
     expect(steel!.consumptionUnits).toBe(0);
     expect(steel!.netUnits).toBeCloseTo(steel!.outputUnits, 1);
 
-    // It consumes energy@0.2 (demand only → net negative).
+    // It consumes energy@0.18 (demand only → net negative).
     const energy = commodities.find((c) => c.commodity === "energy");
     expect(energy).toBeDefined();
     expect(energy!.outputUnits).toBe(0);
     expect(energy!.consumptionUnits).toBeCloseTo(
-      dollarsToUnits(100_000 * 0.2, COMMODITY_BASE_PRICES.energy),
+      dollarsToUnits(100_000 * 0.18, COMMODITY_BASE_PRICES.energy),
       1
     );
     expect(energy!.netUnits).toBeLessThan(0);
@@ -144,9 +144,9 @@ describe("computeCorpCommodityFlows", () => {
       contractedUnits: 80,
       deliveredUnits: 60,
       consumptionCoveredUnits: 60,
-      coveragePercent: 60,
+      coveragePercent: 66.67,
       turn: 9,
-      consumptionUnits: 100,
+      consumptionUnits: 90,
     });
   });
 
@@ -251,7 +251,7 @@ describe("computeCorpCommodityFlows — plants-tier physical production (ticket 
     // A plant running at 60% of nameplate buys ~60% of its inputs.
     const energy = commodities.find((c) => c.commodity === "energy")!;
     expect(energy.consumptionUnits).toBeCloseTo(
-      dollarsToUnits(100_000 * 0.2, COMMODITY_BASE_PRICES.energy) * 0.6,
+      dollarsToUnits(100_000 * 0.18, COMMODITY_BASE_PRICES.energy) * 0.6,
       1
     );
   });

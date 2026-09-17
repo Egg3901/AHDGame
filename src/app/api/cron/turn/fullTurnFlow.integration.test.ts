@@ -436,6 +436,7 @@ describe("processTurn() — full turn flow", () => {
     expect(processNPPTurn).toHaveBeenCalledWith(expectedGameNow, {
       billDeadlineNow: realNow,
       currentTurn: expect.any(Number),
+      currentYear: expect.any(Number),
     });
     expect(processBillLifecycle).toHaveBeenCalledWith(realNow);
     expect(mockUKBillLifecycle).toHaveBeenCalledWith(realNow);

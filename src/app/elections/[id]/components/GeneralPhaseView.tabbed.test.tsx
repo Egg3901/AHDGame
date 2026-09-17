@@ -34,6 +34,9 @@ vi.mock("@/components/elections/general/FactorLedgerCard", () => ({
 vi.mock("@/components/elections/general/NationalMoodGauge", () => ({
   NationalMoodGauge: () => <div data-testid="mood" />,
 }));
+vi.mock("@/components/elections/general/DemocraticHealthGauge", () => ({
+  DemocraticHealthGauge: () => <div data-testid="democratic-health" />,
+}));
 vi.mock("./RunningMateSelector", () => ({
   RunningMateSelector: () => <div data-testid="running-mate" />,
 }));

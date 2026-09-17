@@ -123,6 +123,11 @@ export const ECONOMIC_POWER_FEATURE_IDS_BY_PRESET: Readonly<Record<string, reado
     "276", // DE
     "372", // IE
   ],
+  // Only Ireland. France, Italy and the rest are npp in 2027, as they are in
+  // 2023, and Brazil and Nigeria carry the same 1953-gated full-autonomous
+  // promotion gap they do elsewhere. Re-derived from the manifest by
+  // countryTiers.test.ts.
+  "2027-default": ["372"],
   "2019-default": [
     "156", // CN
     "276", // DE
@@ -183,6 +188,7 @@ export const BATTLEGROUND_FEATURE_IDS_BY_PRESET: Readonly<Record<string, readonl
   "2007-default": [],
   "2019-default": [],
   "2023-default": [],
+  "2027-default": [],
 };
 
 /** Economic-Power feature ids for a landing era id (e.g. "1953"). */

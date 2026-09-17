@@ -5,9 +5,10 @@
  * Justice confirmations the same way it lists cabinet confirmations (#1050).
  */
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
-import { verifyAuth } from "@/lib/auth";
+import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
 import type { ElectedOfficial, Character } from "@/lib/db/types";
 import type { ScotusNomination } from "@/lib/db/types/scotus";
@@ -16,10 +17,10 @@ import { computeCabinetNominationTally } from "@/lib/congress/governmentVoteBrea
 // GET /api/congress/scotus-nominations — Returns all active SCOTUS nominations with the current user's vote status.
 // Auth: public
 // Errors: 400
-export async function GET() {
+export const GET = withNoStore(async function GET() {
   try {
     const db = await getDb();
-    const authUser = await verifyAuth().catch(() => null);
+    const authUser = await getAuthUser();
 
     const activeNominations = await db
       .collection<ScotusNomination>("scotusNominations")
@@ -76,4 +77,4 @@ export async function GET() {
   } catch (error) {
     return handleRouteError(error);
   }
-}
+});

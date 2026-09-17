@@ -13,6 +13,8 @@ import type {
   SingleplayerDifficulty,
   SingleplayerMode,
 } from "@/lib/db/types";
+import { reconcileSingleplayerHeadOfState } from "@/lib/singleplayerHeadOfState";
+import { promoteSingleplayerOwnerIfNoAdmin } from "@/lib/singleplayerOwnerAdmin";
 
 /**
  * Node-only singleplayer helpers. `@/lib/singleplayer` must stay importable
@@ -44,7 +46,7 @@ export function singleplayerCdnDir(env: Record<string, string | undefined> = pro
  */
 export async function ensureSingleplayerUser(
   db: Db,
-  displayName = "Player"
+  displayName = "Admin"
 ): Promise<{ created: boolean }> {
   const users = db.collection("users");
   const _id = new ObjectId(SINGLEPLAYER_USER_ID);
@@ -53,6 +55,7 @@ export async function ensureSingleplayerUser(
   const result = await users.updateOne(
     { _id },
     {
+      $set: { role: claims.role, isAdmin: claims.isAdmin },
       $setOnInsert: {
         _id,
         email: claims.email,
@@ -60,8 +63,6 @@ export async function ensureSingleplayerUser(
         displayName,
         // Never a valid hash: the proxy mints the session, nobody logs in.
         password: "!singleplayer-no-login",
-        role: claims.role,
-        isAdmin: claims.isAdmin,
         hasCompletedSetup: false,
         createdAt: now,
         updatedAt: now,
@@ -121,6 +122,9 @@ async function clearSingleplayerMaintenance(db: Db): Promise<void> {
  */
 export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
   const account = await ensureSingleplayerUser(db);
+  // Existing worlds predate owner-admin: promote the earliest account when
+  // nobody holds admin, next to the head-of-state repair below.
+  await promoteSingleplayerOwnerIfNoAdmin(db);
   await clearSingleplayerMaintenance(db);
   const userId = new ObjectId(SINGLEPLAYER_USER_ID);
   const [gameState, character, characterCount] = await Promise.all([
@@ -130,10 +134,15 @@ export async function singleplayerStatus(db: Db): Promise<SingleplayerStatus> {
         { _id: "current" },
         { projection: { currentTurn: 1, preset: 1, isProcessing: 1, singleplayerConfig: 1 } }
       ),
-    db.collection("characters").findOne({ userId }, { projection: { _id: 1, name: 1 } }),
+    db
+      .collection("characters")
+      .findOne({ userId, retiredAt: { $exists: false } }, { projection: { _id: 1, name: 1 } }),
     db.collection("characters").countDocuments({ retiredAt: { $exists: false } }),
   ]);
   const config = gameState?.singleplayerConfig;
+  if (config?.mode === "head-of-state") {
+    await reconcileSingleplayerHeadOfState(db, { preset: gameState?.preset });
+  }
   return {
     singleplayer: true,
     accountCreated: account.created,
