@@ -104,6 +104,9 @@ interface SimJob {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  // Frontier-entry experiment gate (issue #991, gameState flag). Explicit
+  // false is a pinned control arm, not an omission: it must reach runWorld.
+  frontierEntryExperimentEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
