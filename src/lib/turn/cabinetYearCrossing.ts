@@ -41,7 +41,10 @@ export interface CabinetYearCrossingResult {
  *
  * News copy carries no literal years (LARP convention).
  */
-export async function runCabinetYearCrossing(db: Db): Promise<CabinetYearCrossingResult> {
+export async function runCabinetYearCrossing(
+  db: Db,
+  currentYearOverride?: number
+): Promise<CabinetYearCrossingResult> {
   const result: CabinetYearCrossingResult = {
     ran: false,
     transferred: [],
@@ -56,7 +59,9 @@ export async function runCabinetYearCrossing(db: Db): Promise<CabinetYearCrossin
     );
 
   if (!gameState) return result;
-  const currentYear = gameState.currentYear;
+  // Prefer the turn context's authoritative year: the persisted
+  // gameState.currentYear is only stamped at turn end (#2059).
+  const currentYear = currentYearOverride ?? gameState.currentYear;
   if (currentYear === undefined || !Number.isFinite(currentYear)) return result;
 
   const lastYear = gameState.lastCabinetYearProcessed;

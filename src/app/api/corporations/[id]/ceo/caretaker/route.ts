@@ -137,6 +137,12 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
     const turn = await getCurrentTurn(db);
     const result = await dismissCaretakerCeo(db, { corp: corporation, turn, now: new Date() });
     if (!result.ok) {
+      if (result.error === "one-person-rule") {
+        return NextResponse.json(
+          { error: "This player already operates another subsidiary of the same parent." },
+          { status: 403 }
+        );
+      }
       return NextResponse.json(
         { error: "This corporation does not have a caretaker CEO." },
         { status: 400 }
