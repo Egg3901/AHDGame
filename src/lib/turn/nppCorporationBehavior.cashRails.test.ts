@@ -134,11 +134,54 @@ describe("NPP cash rails at 1953 scale", () => {
     expect(decision.newSectors).toBeUndefined();
   });
 
+  it("cuts discretionary budgets immediately when cash is below the floor", () => {
+    const decision = decide(50_000, "aggressive");
+
+    expect(decision.updates.logisticsBudget).toBe(3_000);
+    expect(decision.updates.rdBudget ?? 0).toBe(0);
+    expect(decision.updates.marketingBudget as number).toBeLessThan(15_000);
+  });
+
   it("lets a mid-size corp reach the expansion gate", () => {
     // cautious expansion needs surplus > EXPANSION_MIN_CASH × 1.5 = ₳937,500
     // on top of the ₳375,000 floor. Under the old constants that was ₳7,500,000
     // of surplus over a ₳3,000,000 floor, unreachable for most of the cohort.
     const decision = decide(4_000_000, "cautious", true);
     expect(decision.newSectors).toHaveLength(1);
+  });
+
+  it("makes no new discretionary commitments under a passive caretaker mandate", () => {
+    const passiveCorp = corp(4_000_000);
+    passiveCorp.marketingBudget = 20_000;
+    passiveCorp.logisticsBudget = 12_000;
+    passiveCorp.rdBudget = 8_000;
+    passiveCorp.dividendRate = 8;
+    const decision = makeNppCorpDecision(
+      {
+        corp: passiveCorp,
+        sectors: [sector()],
+        turn: TURN,
+        now: new Date(),
+        fxRate: 1,
+        modifiers: ceoArchetypeModifiers("aggressive"),
+        ordinaryEntryEligible: true,
+        caretakerMandate: "passive",
+      },
+      new Map<string, UnownedSector[]>([["US", [pool()]]]),
+      noState,
+      noPrices,
+      plantsCtx
+    );
+
+    expect(decision.liquidCapitalDelta).toBe(0);
+    expect(decision.newSectors).toBeUndefined();
+    expect(decision.reinvestments).toBeUndefined();
+    expect(decision.shortageCreditRequest).toBeUndefined();
+    expect(decision.updates).toMatchObject({
+      marketingBudget: 0,
+      logisticsBudget: 0,
+      rdBudget: 0,
+      dividendRate: 0,
+    });
   });
 });

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
@@ -7,7 +8,7 @@ import { getAccountAchievements, getAchievementRarityMap } from "@/lib/achieveme
 // GET /api/settings/achievements/list — Returns account-level achievements (no character required)
 // Auth: requireBasicAuth
 // Errors: 401
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -38,3 +39,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

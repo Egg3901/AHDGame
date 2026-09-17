@@ -133,6 +133,25 @@ describe("checkStatThresholds", () => {
     const convertRec = recs.find((r) => r.id.includes("convert-cash"));
     expect(convertRec).toBeUndefined();
   });
+
+  it("quotes the shared conversion and capped infamy legs", () => {
+    const character = createCharacter({ cashOnHand: 500_000, funds: 50_000 });
+    const recs = checkStatThresholds(character, "GA");
+    const convertRec = recs.find((r) => r.id.includes("convert-cash"));
+    expect(convertRec?.why).toContain("+$250,000");
+    expect(convertRec?.why).toContain("+10 infamy");
+    expect(convertRec?.action.estimatedBenefit).toBe("+$250,000 campaign funds");
+  });
+
+  it("caps whale infamy at 100 like the execution does", () => {
+    // The old inline formula omitted the cap and printed +136 here.
+    const character = createCharacter({ cashOnHand: 50_000_000, funds: 50_000 });
+    const recs = checkStatThresholds(character, "GA");
+    const convertRec = recs.find((r) => r.id.includes("convert-cash"));
+    expect(convertRec?.why).toContain("+100 infamy");
+    expect(convertRec?.why).not.toContain("+136 infamy");
+    expect(convertRec?.action.estimatedBenefit).toBe("+$25,000,000 campaign funds");
+  });
 });
 
 describe("findUnownedOpportunities", () => {

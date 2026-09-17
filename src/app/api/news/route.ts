@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth"; // Optional auth — intentionally uses getAuthUser() in GET
@@ -19,7 +20,7 @@ const createPostSchema = z.object({
 // GET /api/news — List recent news posts (`feed=article|advertisement|ticker`), optional author filter, pagination, reactions.
 // Auth: public
 // Errors: (none)
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const limitRaw = Number.parseInt(searchParams.get("limit") ?? "20", 10);
@@ -45,6 +46,8 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/news — Create a player post: free `article` (12h cooldown) or paid `advertisement` (5 AP, $100k personal cash, 30m cooldown).
 // Auth: requireBasicAuth

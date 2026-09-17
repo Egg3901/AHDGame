@@ -45,6 +45,8 @@ import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
   economicExperimentConfigSet,
+  isGameplayOverrideArg,
+  parseEquityLiquidityFacilityEnabled,
   parseOptionalBoolean,
   type FreightSettlementExperimentMode,
 } from "@/lib/sim/economicExperiment";
@@ -63,6 +65,14 @@ interface SimRunDoc {
   error: string | null;
   lastMessage?: string;
   lastWarnings?: string[];
+  /** Pinned-source identity (#1966): requested pin plus the exact code that
+   * executed this run. Proves the SHA in the experiment report. */
+  source?: {
+    worktree?: string | null;
+    requestedCommit?: string | null;
+    executedPath: string;
+    executedCommit?: string | null;
+  };
   // Elections-only run metadata (sim-only).
   simTurnPhaseMode?: "full" | "elections-only" | "economy-only" | "macro-only";
   electionScope?: string[] | null;
@@ -72,6 +82,7 @@ interface SimRunDoc {
     canonicalFreightBillingEnabled?: boolean;
     shortageResponsiveSourcingEnabled?: boolean;
     indexFundBondLiquidityEnabled?: boolean;
+    equityLiquidityFacilityEnabled?: boolean;
     nppMarketCoverageEnabled?: boolean;
     nppFragileMarketSupplyEnabled?: boolean;
   };
@@ -92,6 +103,21 @@ function arg(flag: string): string | undefined {
 
 function hasFlag(flag: string): boolean {
   return process.argv.includes(`--${flag}`);
+}
+
+function scalarConfig(
+  doc: Record<string, unknown> | null
+): Record<string, boolean | number | string | null> {
+  const out: Record<string, boolean | number | string | null> = {};
+  for (const [key, value] of Object.entries(doc ?? {})) {
+    if (
+      key !== "_id" &&
+      (value === null || ["boolean", "number", "string"].includes(typeof value))
+    ) {
+      out[key] = value as boolean | number | string | null;
+    }
+  }
+  return out;
 }
 
 /**
@@ -193,10 +219,9 @@ const indexFundBondLiquidityEnabled = parseOptionalBoolean(
   arg("index-fund-bond-liquidity"),
   "index-fund-bond-liquidity"
 );
-const equityLiquidityFacilityEnabled = parseOptionalBoolean(
-  arg("equity-liquidity"),
-  "equity-liquidity"
-);
+// Canonical flag is --equity-liquidity-facility; the deprecated
+// --equity-liquidity alias still parses so older scripts keep working.
+const equityLiquidityFacilityEnabled = parseEquityLiquidityFacilityEnabled(arg);
 const nppMarketCoverageEnabled = parseOptionalBoolean(
   arg("npp-market-coverage"),
   "npp-market-coverage"
@@ -225,6 +250,7 @@ const brandLoyalty = hasFlag("brand-loyalty");
 const brandLoyaltySlice = hasFlag("brand-loyalty-slice");
 const sectorQuality = hasFlag("quality");
 const demographicsDemand = hasFlag("demographics");
+const allFeatureFlags = hasFlag("all-feature-flags");
 // Command Economy v2 A/B: --command-economy enables commandEconomyEnabled on the
 // sandbox gameConfig. Unlike the other tier flags this MUST be set BEFORE
 // bootstrap (below), because the multi-SOE split in the budget seed reads the
@@ -301,6 +327,19 @@ const isColdWarPreset = preset === "1953-default" || preset === "1979-default";
 const inSimScope = (countryId: string) =>
   (isColdWarPreset || SIM_HARNESS_COUNTRIES.has(countryId)) &&
   (!electionScope || electionScope.has(countryId));
+/** Pinned source requested by the worker (#1966). The child re-checks HEAD
+ * itself and fails closed on mismatch, so the report proves executed code. */
+const sourceWorktree = arg("source-worktree");
+const sourceCommit = arg("source-commit");
+if ((sourceWorktree === undefined) !== (sourceCommit === undefined)) {
+  throw new Error("--source-worktree and --source-commit must both be set (got only one)");
+}
+if (sourceCommit !== undefined && !/^[0-9a-f]{40}$/.test(sourceCommit)) {
+  throw new Error(
+    `--source-commit must be a full 40-hex commit SHA (got ${JSON.stringify(sourceCommit)})`
+  );
+}
+
 const dbName = arg("db") ?? `ahd_sim_${seed}`.replace(/[^a-zA-Z0-9_-]/g, "_");
 const checkpointEvery = Number(arg("checkpoint-every") ?? "10");
 const runId = arg("run-id") ?? `${seed}-${dbName}`;
@@ -310,14 +349,7 @@ const quiet = hasFlag("quiet");
 // sandbox can run unattended.
 const preservePlayerRail = preserveLiveConfig || hasFlag("preserve-player-rail");
 
-if (
-  preserveLiveConfig &&
-  process.argv.some((value) =>
-    /^(--(?:market-mode|labour-mode|autonomy|difficulty|foreign-policy|foreign-policy-stage|freight-settlement|npp-market-coverage|npp-fragile-market-supply|canonical-freight-billing|shortage-responsive-sourcing|index-fund-bond-liquidity|equity-liquidity-facility)=|--(?:scarcity-drift|brand-loyalty|brand-loyalty-slice|quality|demographics|command-economy|macro-growth|pre-iteration|no-pre-iteration)$)/.test(
-      value
-    )
-  )
-) {
+if (preserveLiveConfig && process.argv.some(isGameplayOverrideArg)) {
   throw new Error("--preserve-live-config cannot be combined with gameplay overrides");
 }
 
@@ -380,6 +412,35 @@ async function main() {
   const { snapshotCorporationsByCountry } = await import("@/lib/turn/corporationCountrySnapshot");
 
   const db = await getDb();
+
+  // Executed source identity (#1966): this process's own cwd + git HEAD.
+  // Best-effort SHA, but fails closed when a pin was requested and disagrees,
+  // so the report always proves the exact code that ran. Stamped into simRuns
+  // on every upsert below.
+  const { execFileSync } = await import("child_process");
+  const executedPath = process.cwd();
+  let executedCommit: string | null = null;
+  try {
+    executedCommit = (
+      execFileSync("git", ["rev-parse", "HEAD"], {
+        cwd: executedPath,
+        encoding: "utf8",
+      }) as string
+    ).trim();
+  } catch {
+    executedCommit = null;
+  }
+  if (sourceCommit !== undefined && executedCommit !== null && executedCommit !== sourceCommit) {
+    throw new Error(
+      `Pinned source mismatch: requested ${sourceCommit} but executing ${executedCommit} in ${executedPath}`
+    );
+  }
+  const source: NonNullable<SimRunDoc["source"]> = {
+    worktree: sourceWorktree ?? null,
+    requestedCommit: sourceCommit ?? null,
+    executedPath,
+    executedCommit,
+  };
 
   // Guardrail: refuse to run against a DB that looks like a real world — a
   // misconfigured SIM_MONGODB_URI/--db combo would otherwise get bulldozed by
@@ -658,6 +719,7 @@ async function main() {
           status: "running",
           currentTurn: 0,
           error: null,
+          source,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
@@ -677,6 +739,7 @@ async function main() {
         $set: {
           status: "running",
           error: null,
+          source,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
@@ -814,6 +877,19 @@ async function main() {
     log("Set macroGrowthV1=true on sandbox gameState");
   }
 
+  if (allFeatureFlags) {
+    const { DEFAULT_GAME_STATE_FLAGS } = await import("@/lib/seeds/reference/featureFlagDefaults");
+    const enabledFlags = Object.fromEntries(
+      Object.entries(DEFAULT_GAME_STATE_FLAGS)
+        .filter(([, value]) => typeof value === "boolean")
+        .map(([key]) => [key, true])
+    );
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: enabledFlags });
+    log(`Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags`);
+  }
+
   // ── SIM-ONLY: elections-only turn profile + country scope ──────────────────
   // Runs for fresh, resumed AND clone worlds (idempotent) so the profile always
   // takes effect before the turn loop, mirroring how --market-mode is applied.
@@ -873,6 +949,24 @@ async function main() {
         nppForeignPolicyStage: foreignPolicyStage,
         preservePlayerRail,
         preserveLiveConfig,
+        effectiveConfigInitial: {
+          capturedAtTurn: Number(
+            (await db.collection<GameState>("gameState").findOne({ _id: "current" }))
+              ?.currentTurn ?? 0
+          ),
+          gameState: scalarConfig(
+            (await db.collection("gameState").findOne({ _id: "current" as never })) as Record<
+              string,
+              unknown
+            > | null
+          ),
+          gameConfig: scalarConfig(
+            (await db.collection("gameConfig").findOne({ _id: "default" as never })) as Record<
+              string,
+              unknown
+            > | null
+          ),
+        },
       },
     }
   );

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { handleRouteError } from "@/lib/api/errors";
@@ -19,7 +20,7 @@ const MAX_CANDIDATE_POOL = 100;
 // generated party/seat/office/election pages, category indexes and learning paths.
 // Auth: public (private pages excluded for non-admins); blocked when wiki is disabled
 // Errors: 403
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const blocked = await checkWikiDisabled();
     if (blocked) return blocked;
@@ -112,3 +113,5 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

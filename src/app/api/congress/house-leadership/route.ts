@@ -26,7 +26,7 @@ import {
 } from "@/lib/congress/leadershipRaceGuard";
 import { castLeadershipVoteBallot } from "@/lib/congress/leadershipVoteBallots";
 import {
-  vacateLeadershipBulkIfLostSeat,
+  vacateLeadershipForLostSeats,
   resolveLeadershipElection,
   clearIneligibleHouseLeadershipNominations,
 } from "@/lib/congress/leadershipElections";
@@ -102,12 +102,11 @@ export async function GET() {
       }
     }
 
-    await vacateLeadershipBulkIfLostSeat(db, [
-      { leaderRole: "majority_leader_house", chamber: "house" },
-      { leaderRole: "minority_leader_house", chamber: "house" },
-      { leaderRole: "majority_whip_house", chamber: "house" },
-      { leaderRole: "minority_whip_house", chamber: "house" },
-    ]);
+    // The same sweep the turn runs, so a chair emptied here gets its election
+    // exactly as one emptied on the turn does. The page-load path used to
+    // vacate and stop, and because it fires far more often than the turn it
+    // would win the race and leave the seat with nothing to refill it.
+    await vacateLeadershipForLostSeats(db);
 
     // Sits beside the seat-loss sweep because it is the same kind of check —
     // "does the holder still qualify?" — just keyed on party rather than seat.

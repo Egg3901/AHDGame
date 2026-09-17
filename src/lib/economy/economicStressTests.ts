@@ -47,7 +47,16 @@ function severityForFill(fill: number | null): EconomicStressFinding["severity"]
   return "low";
 }
 
-function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFinding {
+type SupplierRemoval = {
+  commodity: string;
+  fill: number;
+  unmet: number;
+  removedSupply: number;
+  removedSupplyShare: number | null;
+  priceAnchorPerUnit: number | null;
+};
+
+function worstSupplierRemoval(snapshot: EconomicVitalSigns): SupplierRemoval | null {
   const stressed = snapshot.competition.markets
     .filter(
       (market) => market.demandUnits > 0 && market.largestOwnershipAdjustedSellerShare != null
@@ -64,10 +73,33 @@ function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFin
       const remainingSupply = market.supplyUnits - removedSupply;
       const fill = clamp01(remainingSupply / market.demandUnits);
       const unmet = Math.max(0, market.demandUnits - remainingSupply);
-      return { market, fill, unmet, removedSupply };
+      return {
+        commodity: market.commodity,
+        fill,
+        unmet,
+        removedSupply,
+        removedSupplyShare: market.largestOwnershipAdjustedSellerShare,
+        priceAnchorPerUnit: market.priceAnchorPerUnit,
+      };
     })
     .sort((a, b) => a.fill - b.fill || b.unmet - a.unmet);
-  const worst = stressed[0];
+  return stressed[0] ?? null;
+}
+
+/**
+ * Pure reporting helper for the largest-supplier-failure stress scenario: the
+ * implied share of demand left unmet after removing the largest common-control
+ * seller (1 - stressed fill rate). Null when no ownership-adjusted commodity
+ * sample is measurable. Absolute unmet units are reported on the finding
+ * itself; this is the rate complement beside the stressed fill rate.
+ */
+export function largestSupplierUnmetShare(snapshot: EconomicVitalSigns): number | null {
+  const worst = worstSupplierRemoval(snapshot);
+  return worst == null ? null : clamp01(1 - worst.fill);
+}
+
+function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFinding {
+  const worst = worstSupplierRemoval(snapshot);
   if (!worst) {
     return {
       scenario: "largest_supplier_failure",
@@ -77,34 +109,58 @@ function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFin
       unmetDemandUnits: null,
       balanceSheetLossAnchor: null,
       recoveryTurns: 24,
-      indicators: { stressedFillRate: null, removedSupplyShare: null },
+      indicators: {
+        stressedFillRate: null,
+        stressedUnmetSupplyShare: null,
+        removedSupplyShare: null,
+      },
       basis: "No ownership-adjusted commodity sample was available.",
     };
   }
   return {
     scenario: "largest_supplier_failure",
     severity: severityForFill(worst.fill),
-    firstFailure: `commodity:${worst.market.commodity}`,
+    firstFailure: `commodity:${worst.commodity}`,
     propagationPath: [
       "largest formalized ownership group",
-      `commodity:${worst.market.commodity}`,
+      `commodity:${worst.commodity}`,
       "input-buying sectors",
       "downstream output",
     ],
     unmetDemandUnits: worst.unmet,
     balanceSheetLossAnchor:
-      worst.market.priceAnchorPerUnit == null
-        ? null
-        : worst.unmet * worst.market.priceAnchorPerUnit,
+      worst.priceAnchorPerUnit == null ? null : worst.unmet * worst.priceAnchorPerUnit,
     recoveryTurns: 24,
     indicators: {
       stressedFillRate: worst.fill,
-      removedSupplyShare: worst.market.largestOwnershipAdjustedSellerShare,
+      stressedUnmetSupplyShare: largestSupplierUnmetShare(snapshot),
+      removedSupplyShare: worst.removedSupplyShare,
       removedSupplyUnits: worst.removedSupply,
     },
     basis:
-      "Static removal of the largest common-control seller; 24 turns is the declared replacement-capacity review horizon.",
+      "Static removal of the largest common-control seller; unmet share is the implied 1 - stressed fill rate, null when no ownership-adjusted sample is measurable. 24 turns is the declared replacement-capacity review horizon.",
   };
+}
+
+/**
+ * Pure reporting helper for the freight-shock stress scenario: the implied share of
+ * buyer intent left unmet after the static capacity haircut (1 - stressed fulfillment).
+ * Null when intent fulfillment or the local share is unmeasured. Absolute unmet units
+ * stay unavailable because the trade snapshot carries only rates, never demand units.
+ */
+export function freightShockUnmetIntentShare(
+  snapshot: EconomicVitalSigns,
+  assumptions: EconomicStressAssumptions
+): number | null {
+  const fulfillment = snapshot.trade.intentFulfillmentRate.value;
+  const localShare = snapshot.trade.localShare.value;
+  const nonlocalShare =
+    (snapshot.trade.interstateShare.value ?? 0) + (snapshot.trade.importShare.value ?? 0);
+  if (fulfillment == null || localShare == null) return null;
+  const stressedFulfillment =
+    fulfillment *
+    (localShare + nonlocalShare * (1 - clamp01(assumptions.freightCapacityLossShare)));
+  return clamp01(1 - stressedFulfillment);
 }
 
 function freightCapacityShock(
@@ -130,10 +186,11 @@ function freightCapacityShock(
     recoveryTurns: assumptions.freightShockTurns + 12,
     indicators: {
       stressedIntentFulfillmentRate: stressedFulfillment,
+      stressedUnmetIntentShare: freightShockUnmetIntentShare(snapshot, assumptions),
       nonlocalFulfillmentShare: nonlocalShare,
     },
     basis:
-      "Static haircut to interstate and import fulfillment; recovery includes the shock duration plus a 12-turn supply-chain normalization window.",
+      "Static haircut to interstate and import fulfillment; unmet share is the implied 1 - stressed fulfillment, null when intent or local share is unmeasured. Recovery includes the shock duration plus a 12-turn supply-chain normalization window.",
   };
 }
 
@@ -164,6 +221,24 @@ function exchangeClosure(
   };
 }
 
+/**
+ * Pure reporting helper for the synchronized-liquidation stress scenario: the share of
+ * offered sell notional left without bid depth (1 - absorption rate). Null when nothing
+ * is offered, since absorption is then unmeasurable. Absolute unmet demand units stay
+ * unavailable because the securities snapshot carries notional and depth, never demand
+ * units.
+ */
+export function liquidationUnabsorbedShare(
+  snapshot: EconomicVitalSigns,
+  assumptions: EconomicStressAssumptions
+): number | null {
+  const offered =
+    snapshot.firms.marketCapitalizationAnchor * assumptions.liquidationShareOfMarketCap;
+  if (offered <= 0) return null;
+  const absorbed = Math.min(offered, snapshot.securities.openOrderDepthAnchor);
+  return clamp01(1 - absorbed / offered);
+}
+
 function synchronizedLiquidation(
   snapshot: EconomicVitalSigns,
   assumptions: EconomicStressAssumptions
@@ -181,9 +256,13 @@ function synchronizedLiquidation(
     unmetDemandUnits: null,
     balanceSheetLossAnchor: unabsorbed,
     recoveryTurns: 24,
-    indicators: { absorptionRate, unabsorbedNotionalAnchor: unabsorbed },
+    indicators: {
+      absorptionRate,
+      unabsorbedNotionalAnchor: unabsorbed,
+      unabsorbedShare: liquidationUnabsorbedShare(snapshot, assumptions),
+    },
     basis:
-      "Unabsorbed offered notional is liquidity exposure, not a forecast realized loss; 24 turns is the declared order-book recovery horizon.",
+      "Unabsorbed offered notional is liquidity exposure, not a forecast realized loss; unabsorbed share is the implied 1 - absorption rate, null when nothing is offered. 24 turns is the declared order-book recovery horizon.",
   };
 }
 

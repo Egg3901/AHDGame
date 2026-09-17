@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -7,7 +8,7 @@ import { getResignablePositions } from "@/lib/settings/resignations";
 
 // GET /api/settings/resignable-positions
 // Returns the authenticated character's current political positions.
-export async function GET() {
+async function handleGET() {
   try {
     const authResult = await requireAuthWithCharacter();
     if (!authResult.ok) return authResult.response;
@@ -22,3 +23,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

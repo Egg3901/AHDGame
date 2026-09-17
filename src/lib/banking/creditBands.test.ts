@@ -4,13 +4,16 @@ import {
   CREDIT_BAND_IDS,
   LENDING_PROFILES,
   STRESS_LOSS_FRACTION,
+  bandOriginationTargets,
   bandRatePercent,
   bandsForProfile,
   demandShareForProfile,
   getCreditBand,
   getLendingProfile,
   stressLossFraction,
+  type LendingProfileId,
 } from "./creditBands";
+import { npcFlowDelta } from "./rules/loans";
 
 describe("credit bands", () => {
   it("covers the whole of household demand exactly once", () => {
@@ -74,6 +77,91 @@ describe("lending profiles", () => {
 
   it("resolves an unknown stance to the default rather than throwing", () => {
     expect(getLendingProfile(undefined).id).toBe("balanced");
+  });
+});
+
+describe("lending profile origination mix", () => {
+  const FUNDING = 10_000_000;
+  const RATE = 8;
+
+  const targets = (profile: LendingProfileId) =>
+    bandOriginationTargets({ fundingCapacity: FUNDING, lendingRatePercent: RATE, profile });
+
+  const totalFor = (profile: LendingProfileId) =>
+    targets(profile).reduce((sum, t) => sum + t.target, 0);
+
+  it("steers each stance toward a materially different book size", () => {
+    // Ticket 1749: the selector must move the mix, not just relabel it.
+    const conservative = totalFor("conservative");
+    const balanced = totalFor("balanced");
+    const aggressive = totalFor("aggressive");
+    expect(balanced).toBeGreaterThan(conservative * 1.2);
+    expect(aggressive).toBeGreaterThan(balanced * 1.2);
+    expect(aggressive).toBeGreaterThan(FUNDING * 0.5);
+  });
+
+  it("targets zero for closed bands and a positive target for open ones", () => {
+    for (const entry of targets("conservative")) {
+      if (["BB", "B", "CCC", "BBB"].includes(entry.band)) {
+        expect(entry.target).toBe(0);
+        expect(entry.open).toBe(false);
+      } else {
+        expect(entry.target).toBeGreaterThan(0);
+        expect(entry.open).toBe(true);
+      }
+    }
+    expect(targets("aggressive").every((entry) => entry.open && entry.target > 0)).toBe(true);
+  });
+
+  it("allocates the junk bands only under the aggressive stance", () => {
+    const junk = (profile: LendingProfileId) =>
+      targets(profile)
+        .filter((t) => ["BB", "B", "CCC"].includes(t.band))
+        .reduce((sum, t) => sum + t.target, 0);
+    expect(junk("conservative")).toBe(0);
+    expect(junk("balanced")).toBe(0);
+    expect(junk("aggressive") / totalFor("aggressive")).toBeGreaterThan(0.15);
+  });
+
+  it("converges to a different mix after a stance flip, at the flow cap", () => {
+    // Drive the same per-band flow rule the turn enforces, starting from a
+    // balanced-converged book, and flip the stance. Both destinations must end
+    // materially apart: this is the player-visible effect the ticket asks for.
+    const runBook = (profile: LendingProfileId, turns: number) => {
+      const book = new Map(targets("balanced").map((t) => [t.band, t.target]));
+      const dest = new Map(targets(profile).map((t) => [t.band, t.target]));
+      for (let turn = 0; turn < turns; turn += 1) {
+        for (const band of CREDIT_BANDS) {
+          book.set(
+            band.id,
+            Math.max(0, book.get(band.id)! + npcFlowDelta(book.get(band.id)!, dest.get(band.id)!))
+          );
+        }
+      }
+      return book;
+    };
+    const bookTotal = (book: Map<string, number>) => [...book.values()].reduce((a, b) => a + b, 0);
+    const junkShare = (book: Map<string, number>) => {
+      const total = bookTotal(book);
+      return (book.get("BB")! + book.get("B")! + book.get("CCC")!) / total;
+    };
+
+    const cautious = runBook("conservative", 48);
+    const bold = runBook("aggressive", 48);
+    expect(bookTotal(bold)).toBeGreaterThan(bookTotal(cautious) * 1.3);
+    expect(junkShare(bold)).toBeGreaterThan(0.15);
+    expect(junkShare(cautious)).toBeLessThan(0.05);
+  });
+
+  it("treats zero or unusable funding as no origination without throwing", () => {
+    for (const fundingCapacity of [0, -100, Number.NaN]) {
+      const entries = bandOriginationTargets({
+        fundingCapacity,
+        lendingRatePercent: RATE,
+        profile: "aggressive",
+      });
+      expect(entries.every((entry) => entry.target === 0)).toBe(true);
+    }
   });
 });
 

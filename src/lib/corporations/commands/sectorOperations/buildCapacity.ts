@@ -47,6 +47,7 @@ import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
 import { emitBuildCapexTx } from "@/lib/corporations/capexTxLog";
 import { recordCapacityDecisionBestEffort } from "@/lib/corporations/capacityDecisionTelemetry/persistence";
+import { classifyCorporationManagement } from "@/lib/corporations/balanceAudit/rules";
 import { getMarketSystemMode, isMarketSystemMode, marketAtLeast } from "@/lib/market/featureFlag";
 import { STARTING_YEAR, TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import {
@@ -210,6 +211,13 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
 
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
+
+    if (corporation.ceoType === "npp" && body.action === "build") {
+      return NextResponse.json(
+        { error: "Resume player control before building capacity for this corporation" },
+        { status: 403 }
+      );
+    }
 
     if (!ObjectId.isValid(sectorId)) {
       return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
@@ -540,12 +548,22 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
       corporation,
       corpFxRate
     );
+    // Management cohort (never an id) so the balance funnel can split player
+    // and NPP capacity decisions without identifying anyone.
+    const cohort = classifyCorporationManagement({
+      ceoType: corporation.ceoType ?? null,
+      ceoVacant: corporation.ceoVacant,
+      countryOwnerId: corporation.countryOwnerId ?? null,
+      ownershipState: corporation.ownershipState ?? null,
+      userId: corporation.userId?.toString() ?? null,
+    });
     const observe = (
       stage: "quote" | "order",
       outcome: "quoted" | "placed" | "queue_full" | "insufficient_cash" | "concurrent_change"
     ) =>
       recordCapacityDecisionBestEffort(db, currentTurn, {
         actor: "player",
+        cohort,
         stage,
         outcome,
         marketSharePct,

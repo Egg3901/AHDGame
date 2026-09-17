@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, forbidden } from "@/lib/api/errors";
@@ -19,7 +20,7 @@ import type { CharacterStateOrg, PoliticalParty } from "@/lib/db/types";
  * Auth: requireAuthWithCharacter (US-only)
  * Errors: 401, 403
  */
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -92,3 +93,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

@@ -29,7 +29,6 @@ import {
 import {
   ARREARS_DEFAULT_TURNS,
   MAX_NPC_FLOW_PER_TURN_FRACTION,
-  computeNpcLoanBook,
   npcFlowDelta,
   fundedNpcFlowDelta,
   perTurnInterest,
@@ -58,10 +57,8 @@ import {
   type MoneyTarget,
 } from "@/lib/banking/moneyMove";
 import {
-  CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
-  bandRatePercent,
-  bandsForProfile,
+  bandOriginationTargets,
   getCreditBand,
   type CreditBandId,
   type LendingProfileId,
@@ -1323,7 +1320,6 @@ async function serviceNpcBulkBook(
   const nonNpcLoans = Math.max(0, totalLoans - currentTotal);
   const npcFundingCapacity = Math.max(0, state.loanFundingCapacity - nonNpcLoans);
 
-  const openBands = bandsForProfile(state.lendingProfile);
   const byBand = new Map<string, BankLoan>();
   const legacy: BankLoan[] = [];
   for (const loan of existing) {
@@ -1341,27 +1337,28 @@ async function serviceNpcBulkBook(
 
   const work: TrancheWork[] = [];
 
-  for (const band of CREDIT_BANDS) {
-    const open = openBands.some((b) => b.id === band.id);
-    const loan = byBand.get(band.id) ?? null;
-    if (!open && !loan) continue;
-
-    const rate = bandRatePercent(band, lendingRatePercent);
-    // Demand for a band is its share of the bank's funding capacity, taken at
-    // the rate that band is actually charged: price still moves volume, it just
-    // moves it per band now instead of across the whole book at once.
-    const target = open
-      ? Math.max(0, computeNpcLoanBook(npcFundingCapacity * band.demandShare, rate).volume)
-      : 0;
+  // Targets come from the shared rules helper, so the console shows the same
+  // numbers this loop steers toward. Demand for a band is its share of the
+  // bank's funding capacity, taken at the rate that band is actually charged:
+  // price still moves volume, it just moves it per band now instead of across
+  // the whole book at once.
+  const targets = bandOriginationTargets({
+    fundingCapacity: npcFundingCapacity,
+    lendingRatePercent,
+    profile: state.lendingProfile,
+  });
+  for (const entry of targets) {
+    const loan = byBand.get(entry.band) ?? null;
+    if (!entry.open && !loan) continue;
 
     work.push({
       loan,
-      band: band.id,
-      target,
+      band: entry.band,
+      target: entry.target,
       // An existing tranche keeps its originated rate; only a fresh one prices
       // at today's rate.
-      ratePercent: loan ? (loan.ratePercent ?? rate) : rate,
-      defaultRatePercent: band.defaultRatePercent,
+      ratePercent: loan ? (loan.ratePercent ?? entry.ratePercent) : entry.ratePercent,
+      defaultRatePercent: getCreditBand(entry.band).defaultRatePercent,
     });
   }
 

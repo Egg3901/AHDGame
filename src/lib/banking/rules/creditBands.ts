@@ -30,6 +30,8 @@
  * fragility, which is the choice an actual bank makes.
  */
 
+import { computeNpcLoanBook } from "./loans";
+
 /** Rating bands, ordered best credit first. Display order in the console. */
 export const CREDIT_BAND_IDS = ["AAA", "AA", "A", "BBB", "BB", "B", "CCC"] as const;
 
@@ -141,6 +143,50 @@ export function bandsForProfile(profileId: LendingProfileId | undefined): Credit
 /** Share of total household demand a profile is willing to serve, 0..1. */
 export function demandShareForProfile(profileId: LendingProfileId | undefined): number {
   return bandsForProfile(profileId).reduce((sum, band) => sum + band.demandShare, 0);
+}
+
+export interface BandOriginationTarget {
+  band: CreditBandId;
+  open: boolean;
+  /**
+   * Outstanding this band is steered toward: its share of the bank's funding
+   * capacity taken at the rate the band is actually charged, or zero when the
+   * profile has closed the band. The turn moves each tranche toward its target
+   * at the ordinary household flow cap, so a closed band runs off gradually
+   * rather than being called in.
+   */
+  target: number;
+  /** Rate a fresh tranche in this band prices at. */
+  ratePercent: number;
+}
+
+/**
+ * Per-band origination targets for one bank on one turn.
+ *
+ * This is the computation the banking turn enforces in `serviceNpcBulkBook`,
+ * factored out so the console and the lending-profile route can show the same
+ * numbers the turn will steer toward instead of describing them in words.
+ */
+export function bandOriginationTargets(args: {
+  fundingCapacity: number;
+  lendingRatePercent: number;
+  profile: LendingProfileId | undefined;
+}): BandOriginationTarget[] {
+  const open = new Set(bandsForProfile(args.profile).map((b) => b.id));
+  const capacity =
+    Number.isFinite(args.fundingCapacity) && args.fundingCapacity > 0 ? args.fundingCapacity : 0;
+  return CREDIT_BANDS.map((band) => {
+    const isOpen = open.has(band.id);
+    const rate = bandRatePercent(band, args.lendingRatePercent);
+    return {
+      band: band.id,
+      open: isOpen,
+      target: isOpen
+        ? Math.max(0, computeNpcLoanBook(capacity * band.demandShare, rate).volume)
+        : 0,
+      ratePercent: rate,
+    };
+  });
 }
 
 /** Rate this bank charges a band, floored at zero. */

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -29,7 +30,7 @@ import type { TradeHistoryEntry, TradeSource } from "@/lib/db/types";
  *               to trades involving the authenticated character (summary
  *               aggregates are always global — they're what move rates)
  */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -260,3 +261,5 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

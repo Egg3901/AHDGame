@@ -11,6 +11,7 @@ import { processCabinetNominationLifecycle } from "@/lib/cabinetNominationLifecy
 import { processFomcNominationLifecycle } from "@/lib/fomcNominationLifecycle";
 import { processScotusTurn } from "@/lib/turn/scotusTurn";
 import { processUkJrSurpriseTurn } from "@/lib/turn/ukJrSurpriseTurn";
+import { processUkLeadershipChallengeTurn } from "@/lib/turn/ukLeadershipChallengeTurn";
 import { processSocialAxisDrift } from "@/lib/turn/socialAxisDrift";
 import { processGovernorAPRegen } from "@/lib/turn/governorAPRegen";
 import { seedOfficeStates } from "@/lib/governorOffice/seedOfficeStates";
@@ -43,7 +44,7 @@ import {
 } from "@/lib/turn/perpetualElections";
 import {
   resolveExpiredLeadershipElections,
-  vacateLeadershipAfterElections,
+  vacateLeadershipForLostSeats,
 } from "@/lib/congress/leadershipElections";
 import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
@@ -847,6 +848,12 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           // FOMC seat confirmations, a like-shaped Senate-confirmation lifecycle,
           // appended last so the index math above is unchanged.
           runtime.runPhase("fomcNominations", () => processFomcNominationLifecycle(realNow)),
+          // UK party-leadership challenges (#861): expire stale gatherings and
+          // resolve closed ballots. UK-gated no-op elsewhere; appended last so
+          // the index math above is unchanged.
+          runtime.runPhase("ukLeadershipChallenges", () =>
+            processUkLeadershipChallengeTurn(db, gameState.currentTurn, realNow)
+          ),
         ]);
         const countryBillResultsStart = 1;
         const stateBillResultIndex = countryBillResultsStart + countryBillPhaseEntries.length;
@@ -876,6 +883,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           ReturnType<typeof processFomcNominationLifecycle>
         > | null;
         phaseResults.fomcNominations = fomcNominationResult ?? null;
+        const ukLeadershipResult = billPhaseResults[ukJrSurpriseResultIndex + 2] as Awaited<
+          ReturnType<typeof processUkLeadershipChallengeTurn>
+        > | null;
+        phaseResults.ukLeadershipChallenges = ukLeadershipResult ?? {
+          expired: 0,
+          resolved: 0,
+          removed: 0,
+        };
 
         phaseResults.billLifecycle = billLifecycleResult ?? {
           billsProcessed: 0,
@@ -1120,12 +1135,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.clearResolvedSupport = clearedSupport;
         }
 
-        if (generalResolved && generalResolved > 0) {
-          const vacatedCount = await runtime.runPhase("leadershipVacate", () =>
-            vacateLeadershipAfterElections(db)
-          );
-          phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
-        }
+        // Every turn, not only when a general resolved: a seat can be given up
+        // by a withdrawal, a resignation or a move to another chamber, and the
+        // only other thing watching was a lazy check on the congress page GETs.
+        // Still sequenced after resolution, so it reads settled seats.
+        const vacatedCount = await runtime.runPhase("leadershipVacate", () =>
+          vacateLeadershipForLostSeats(db)
+        );
+        phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
         const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", () =>
           runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0)

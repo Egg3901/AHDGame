@@ -1,11 +1,27 @@
 import type { Character, State, ActionType } from "@/lib/db/types";
-import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
-import { statMultiplier } from "@/lib/stats/statMultiplier";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
-import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
-import { FUNDRAISE_ACTION_COST, fundraiseYieldAnchor, isFundraiseEligible } from "./actions/rules";
+import { DEBATE_PREP_ACTION_COST, type StatKey } from "@/lib/stats/statsConstants";
+import {
+  FUNDRAISE_ACTION_COST,
+  fundraiseYieldAnchor,
+  isFundraiseEligible,
+  getCampaignActionCost,
+  quoteCampaignAction,
+  getAdvertiseActionCost,
+  quoteAdvertiseAction,
+  getBuildDonorBaseActionCost,
+  quoteBuildDonorBaseAction,
+  CONVERT_CASH_ACTION_COST,
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  quotePollAction,
+  type PollTier,
+} from "./actions/rules";
 
 export {
   FUNDRAISE_ACTION_COST,
@@ -13,16 +29,53 @@ export {
   fundraiseYieldAnchor,
   isFundraiseEligible,
   type FundraiseActor,
+  CAMPAIGN_BASE_FUND_COST,
+  CAMPAIGN_MAX_INFLUENCE,
+  getFundMultiplier,
+  getCampaignActionCost,
+  getCampaignFundCost,
+  campaignInfluenceGain,
+  isCampaignEligible,
+  quoteCampaignAction,
+  type CampaignQuoteActor,
+  type CampaignQuoteTarget,
+  type CampaignQuote,
+  ADVERTISE_BASE_FUND_COST,
+  getAdvertiseActionCost,
+  getAdvertiseFundCost,
+  advertiseFavorabilityGain,
+  quoteAdvertiseAction,
+  type AdvertiseQuoteActor,
+  type AdvertiseQuoteTarget,
+  type AdvertiseQuote,
+  BUILD_DONOR_BASE_FUND,
+  BUILD_DONOR_BASE_FUND_PER_LEVEL,
+  BUILD_DONOR_BASE_LEVEL_GAIN,
+  getBuildDonorBaseActionCost,
+  getBuildDonorBaseFundCost,
+  quoteBuildDonorBaseAction,
+  type BuildDonorBaseQuoteActor,
+  type BuildDonorBaseQuoteTarget,
+  type BuildDonorBaseQuote,
+  CONVERT_CASH_ACTION_COST,
+  CONVERT_CASH_RATE,
+  calculateConvertCashInfamy,
+  convertCashConversion,
+  quoteConvertCashAction,
+  type ConvertCashQuoteActor,
+  type ConvertCashQuote,
+  POLL_BASE_FUND_COST,
+  POLL_LARGE_BASE_FUND_COST,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  getPollBaseFundCost,
+  getPollFundCost,
+  quotePollAction,
+  type PollTier,
+  type PollQuoteActor,
+  type PollQuote,
 } from "./actions/rules";
-
-/**
- * Read a character's stat with a neutral fallback for characters that predate
- * the stat system (pre-grandfather migration). Neutral yields a 1.0× multiplier
- * so unmigrated characters are unaffected.
- */
-function statValue(character: Character, key: StatKey): number {
-  return character.stats?.[key] ?? NEUTRAL_STAT;
-}
 
 /**
  * Currency context the execute route supplies so action result messages render
@@ -82,17 +135,6 @@ export interface ActionResult {
 }
 
 /**
- * Infamy gained from converting personal cash to campaign funds.
- * Power curve: 15 × (amount / $1M) ^ 0.564
- * ~4 at $100K, ~15 at $1M, ~55 at $10M, capped at 100.
- */
-export function calculateConvertCashInfamy(amount: number): number {
-  if (amount <= 0) return 0;
-  const raw = 15 * Math.pow(amount / 1_000_000, 0.564);
-  return Math.min(100, Math.round(raw));
-}
-
-/**
  * The Fundraise yield as it will actually land in the campaign treasury, in the
  * character's LOCAL campaign currency. Mirrors executeAction exactly: campaign
  * funds convert at the FROZEN base rate (`campaignAnchorToLocal`), never the
@@ -123,82 +165,6 @@ export function calculateInfluenceAccrual(_currentInfluence: number): number {
 }
 
 /**
- * Tiered action-point cost for the Campaign action (raise state PI).
- * Tier 1–5 based on current state political influence.
- */
-export function getCampaignActionCost(influence: number): number {
-  const clampedInfluence = Math.max(0, Math.min(100, influence));
-  if (clampedInfluence >= 80) return 5;
-  if (clampedInfluence >= 60) return 4;
-  if (clampedInfluence >= 40) return 3;
-  if (clampedInfluence >= 20) return 2;
-  return 1;
-}
-
-/**
- * Fund cost for the Campaign action.
- * Base $20,000 × tier, scaled by state GDP per capita relative to country baseline.
- * GDP is stored in millions of dollars (e.g. CT = 289,500 → $289.5B).
- */
-export function getCampaignFundCost(
-  influence: number,
-  stateGdpMillions: number,
-  statePopulation: number,
-  countryId = "US"
-): number {
-  const tier = getCampaignActionCost(influence); // 1-5
-  const multiplier = getFundMultiplier(tier - 1, stateGdpMillions, statePopulation, countryId);
-  return Math.round((20_000 * tier * multiplier) / 1_000) * 1_000;
-}
-
-/**
- * Fund cost for the Advertise action.
- * Base $100,000 scaled by favorability tier and state GDP per capita.
- */
-export function getAdvertiseFundCost(
-  favorability: number,
-  stateGdpMillions: number,
-  statePopulation: number,
-  countryId = "US"
-): number {
-  const tier = getAdvertiseActionCost(favorability) - 5; // tier index 0-4
-  const multiplier = getFundMultiplier(tier, stateGdpMillions, statePopulation, countryId);
-  return Math.round((100_000 * multiplier) / 1_000) * 1_000;
-}
-
-/**
- * Fund cost for the BuildDonorBase action (0–75 level range).
- * Linear base: $3K + $1.5K/level, scaled by state GDP per capita (0.85–2.0×) vs country baseline.
- * Early levels are cheap (~$3K); L75 costs ~$114K (before GDP scaling).
- * Total 0→75 ≈ $4.4M at national-average GDP.
- */
-export function getBuildDonorBaseFundCost(
-  donorBaseLevel: number,
-  stateGdpMillions: number,
-  statePopulation: number,
-  countryId = "US"
-): number {
-  const baseCost = 3_000 + donorBaseLevel * 1_500;
-  const baseline = getGdpBaseline(countryId);
-  const gdpPerCapita = (stateGdpMillions * 1_000_000) / statePopulation;
-  const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return Math.round((baseCost * gdpScalar) / 1_000) * 1_000;
-}
-
-/**
- * Tiered action-point cost for the Advertise action.
- * Tier based on current favorability (0–100).
- */
-export function getAdvertiseActionCost(favorability: number): number {
-  const clampedFavorability = Math.max(0, Math.min(100, favorability));
-  if (clampedFavorability >= 85) return 9;
-  if (clampedFavorability >= 70) return 8;
-  if (clampedFavorability >= 50) return 7;
-  if (clampedFavorability >= 30) return 6;
-  return 5;
-}
-
-/**
  * Action-point cost for Fundraise and BuildDonorBase actions (0–75 level range).
  *
  * Fundraise: flat 3 AP at every level — no escalating penalty for a large network.
@@ -212,41 +178,7 @@ export function getDonorActionCost(
   action: "fundraise" | "buildDonorBase"
 ): number {
   if (action === "fundraise") return FUNDRAISE_ACTION_COST;
-  return Math.min(20, Math.round(4 + Math.pow(donorBaseLevel / 75, 1.4) * 16));
-}
-
-/**
- * Shared fund-cost multiplier for actions that spend money.
- * multiplier = (1 + tier × 0.2) × gdpScalar
- * gdpScalar = clamp(gdpPerCapita / countryBaseline, 0.85, 2.0)
- * gdpMillions: state GDP stored in millions (e.g. 289_500 = $289.5B)
- */
-export function getFundMultiplier(
-  tier: number,
-  gdpMillions: number,
-  population: number,
-  countryId = "US"
-): number {
-  const baseline = getGdpBaseline(countryId);
-  const gdpPerCapita = (gdpMillions * 1_000_000) / population;
-  const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return (1 + tier * 0.2) * gdpScalar;
-}
-
-/**
- * Base favorability gain for one "Run Advertisements" action, before stat
- * scaling. Shared by player actions and NPP turn processing so the two stay at
- * parity: base +3, diminishing returns above 70% favorability (−0.1 per point
- * over 70), floored at 1 so an ad is never fully wasted. `effectivenessMult`
- * carries the player's charisma multiplier; NPPs pass the default 1.
- */
-export function advertiseFavorabilityGain(
-  currentFavorability: number,
-  effectivenessMult = 1
-): number {
-  const baseGain = 3;
-  const penalty = currentFavorability > 70 ? (currentFavorability - 70) * 0.1 : 0;
-  return Math.max(1, Math.floor((baseGain - penalty) * effectivenessMult));
+  return getBuildDonorBaseActionCost(donorBaseLevel);
 }
 
 /**
@@ -306,43 +238,6 @@ export function diminishPassiveFavorabilityGain(
 }
 
 /**
- * Base political-influence gain for one "Campaign" action, before stat scaling.
- * Shared by player actions and NPP turn processing (mirrors
- * `advertiseFavorabilityGain`'s shape exactly, so the same "curves must
- * intersect" fix applies to both self-reinforcing stats).
- *
- * Root cause this closes: influence used to grow by a FLAT +1/action forever
- * while `calculatePoliticalInfluenceDecay` only takes 0.75% of the CURRENT
- * value/turn — at the 100 cap that's just -0.75, so one campaign action a
- * turn always won under the old formula and influence pinned at the cap for
- * the life of the world (see `shared/constants/formulas.ts`'s decay doc and
- * the 654-turn `ahd_sim_grand53fx` world's 3.6x/consecutive-incumbent
- * measurement). This gives the gain curve the same diminishing shape
- * favorability already has — base +1, penalized above 50 at 1/75 of the
- * excess, floored at 0.1 so campaigning is never fully wasted — so it has a
- * stable intersection with the proportional decay instead of racing it to the
- * cap.
- *
- * Equilibrium (base gain, one campaign/turn, mult=1): decay(I) = 0.0075·I;
- * gain(I) = 1 − (I−50)/75 for I>50. Setting them equal solves to I* = 80 —
- * a hard-campaigning character with charisma-neutral stats converges on ~80
- * influence, not 100, and does so from either side (a fresher/lower character
- * climbs toward it, an over-decayed one recovers toward it). Heavier
- * dedication (multiple banked campaign actions in one turn) raises the
- * practical ceiling but `getCampaignActionCost`'s own 1-5 AP tiers already
- * throttle sustained multi-action-per-turn campaigning as influence climbs,
- * so even a maximally-dedicated player converges below 100 rather than
- * re-pinning at the cap (simulated ~85-93 at 2x normal AP throughput).
- */
-export function campaignInfluenceGain(currentInfluence: number, effectivenessMult = 1): number {
-  const baseGain = 1;
-  const threshold = 50;
-  const rate = 1 / 75;
-  const penalty = currentInfluence > threshold ? (currentInfluence - threshold) * rate : 0;
-  return Math.max(0.1, (baseGain - penalty) * effectivenessMult);
-}
-
-/**
  * All available player actions.
  * Costs are balanced for ~25 starting actions per character, with 4 action points
  * regenerated per turn. Dynamic costs (campaign, advertise, donor actions) are
@@ -377,23 +272,29 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 1, // dynamic — actual cost computed via getCampaignActionCost()
     requiresState: false,
     effect: (character: Character, state?: State) => {
-      const influence = character.politicalInfluence ?? 0;
-      const rawFundCost = state
-        ? getCampaignFundCost(influence, state.gdp, state.population, character.countryId)
-        : 20_000;
-      // Intellect softens the campaign cost-scaling curve (higher → cheaper).
-      const fundCost = Math.round(rawFundCost / statMultiplier(statValue(character, "intellect")));
-      // Base +1 with diminishing returns above 50% and a floor of 0.1 (shared
-      // with NPP processing — see campaignInfluenceGain's doc comment for the
-      // equilibrium this creates), then charisma scales the result (gentle ±20%).
-      const piGain = campaignInfluenceGain(
-        influence,
-        statMultiplier(statValue(character, "charisma"))
+      // Single source of truth: the UI card quotes this same quote, so the
+      // advertised cost/gain can never drift from the debited/credited result.
+      // canPerformAction runs the quote first; the throw below is a defensive
+      // invariant for direct effect callers that skip validation.
+      const quote = quoteCampaignAction(
+        {
+          politicalInfluence: character.politicalInfluence,
+          charisma: character.stats?.charisma,
+          intellect: character.stats?.intellect,
+        },
+        state
+          ? {
+              gdpMillions: state.gdp,
+              population: state.population,
+              countryId: character.countryId,
+            }
+          : undefined
       );
+      if (!quote.ok) throw new Error(quote.error);
       return {
-        fundsChange: -fundCost,
-        politicalInfluenceChange: piGain,
-        message: `Campaigned in ${state?.name ?? "your state"} — gained ${piGain.toFixed(2)}% political influence.`,
+        fundsChange: -quote.fundCostAnchor,
+        politicalInfluenceChange: quote.influenceGain,
+        message: `Campaigned in ${state?.name ?? "your state"} — gained ${quote.influenceGain.toFixed(2)}% political influence.`,
       };
     },
   },
@@ -405,24 +306,30 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 5,
     requiresState: false,
     effect: (character: Character, state?: State, ctx?: ActionEffectContext) => {
-      const currentFav = character.favorability;
-      // Base +3 with diminishing returns above 70% and a floor of 1 (shared with
-      // NPP processing), then charisma scales the result (gentle ±20%).
-      const charismaMult = statMultiplier(statValue(character, "charisma"));
-      const favGain = advertiseFavorabilityGain(currentFav, charismaMult);
-
-      const tier = getAdvertiseActionCost(currentFav) - 5; // convert cost (5-9) to tier index (0-4)
-      const baseCost = 100_000;
-      const multiplier = state
-        ? getFundMultiplier(tier, state.gdp, state.population, character.countryId)
-        : 1 + tier * 0.2;
-      const cost = Math.round((baseCost * multiplier) / 1_000) * 1_000;
+      // Single source of truth: the UI card quotes this same quote, so the
+      // advertised cost/gain can never drift from the debited/credited result.
+      // canPerformAction runs the quote first; the throw below is a defensive
+      // invariant for direct effect callers that skip validation.
+      const quote = quoteAdvertiseAction(
+        {
+          favorability: character.favorability,
+          charisma: character.stats?.charisma,
+        },
+        state
+          ? {
+              gdpMillions: state.gdp,
+              population: state.population,
+              countryId: character.countryId,
+            }
+          : undefined
+      );
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
 
       return {
-        fundsChange: -cost,
-        favorabilityChange: favGain,
-        message: `Spent ${fmt(cost)} on ads and gained ${favGain} favorability points!`,
+        fundsChange: -quote.fundCostAnchor,
+        favorabilityChange: quote.favorabilityGain,
+        message: `Spent ${fmt(quote.fundCostAnchor)} on ads and gained ${quote.favorabilityGain} favorability points!`,
       };
     },
   },
@@ -434,23 +341,30 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 6,
     requiresState: false,
     effect: (character: Character, state?: State, ctx?: ActionEffectContext) => {
-      const level = character.donorBaseLevel ?? 0;
-      const rawCost = state
-        ? getBuildDonorBaseFundCost(level, state.gdp, state.population, character.countryId)
-        : getBuildDonorBaseFundCost(
-            level,
-            getGdpBaseline(character.countryId),
-            1_000_000,
-            character.countryId
-          );
-      // Fundraising stat makes donor-network expansion cheaper (gentle ±20%).
-      const cost = Math.round(rawCost / statMultiplier(statValue(character, "fundraising")));
+      // Single source of truth: the UI card quotes this same quote, so the
+      // advertised cost/gain can never drift from the debited/credited result.
+      // canPerformAction runs the quote first; the throw below is a defensive
+      // invariant for direct effect callers that skip validation.
+      const quote = quoteBuildDonorBaseAction(
+        {
+          donorBaseLevel: character.donorBaseLevel,
+          fundraising: character.stats?.fundraising,
+        },
+        state
+          ? {
+              gdpMillions: state.gdp,
+              population: state.population,
+              countryId: character.countryId,
+            }
+          : undefined
+      );
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
 
       return {
-        fundsChange: -cost,
-        donorBaseLevelChange: 1,
-        message: `Spent ${fmt(cost)} to expand your donor network!`,
+        fundsChange: -quote.fundCostAnchor,
+        donorBaseLevelChange: quote.donorGain,
+        message: `Spent ${fmt(quote.fundCostAnchor)} to expand your donor network!`,
       };
     },
   },
@@ -460,15 +374,20 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Quick Poll",
     description:
       "Commission a quick poll — see your topline appeal and best/worst demographic groups ($25,000)",
-    baseCost: 2,
+    baseCost: POLL_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Intellect lowers polling cost (gentle ±20%).
-      const cost = Math.round(25_000 / statMultiplier(statValue(character, "intellect")));
+      // Single source of truth: the poll page quotes this same quote and the
+      // poll API route debits it, so the advertised cost can never drift from
+      // the charged result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quotePollAction({ intellect: character.stats?.intellect }, "small");
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
-        fundsChange: -cost,
-        message: `Quick poll commissioned (${fmt(cost)}). Topline results available.`,
+        fundsChange: -quote.fundCostAnchor,
+        message: `Quick poll commissioned (${fmt(quote.fundCostAnchor)}). Topline results available.`,
       };
     },
   },
@@ -478,15 +397,20 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Full Demographic Poll",
     description:
       "Commission a comprehensive poll — full breakdown across every demographic group and category ($75,000)",
-    baseCost: 6,
+    baseCost: POLL_LARGE_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Intellect lowers polling cost (gentle ±20%).
-      const cost = Math.round(75_000 / statMultiplier(statValue(character, "intellect")));
+      // Single source of truth: the poll page quotes this same quote and the
+      // poll API route debits it, so the advertised cost can never drift from
+      // the charged result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
-        fundsChange: -cost,
-        message: `Full demographic poll commissioned (${fmt(cost)}). Detailed breakdown available.`,
+        fundsChange: -quote.fundCostAnchor,
+        message: `Full demographic poll commissioned (${fmt(quote.fundCostAnchor)}). Detailed breakdown available.`,
       };
     },
   },
@@ -496,15 +420,21 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Personal Campaign Donation",
     description:
       "Convert personal cash on hand into campaign funds at a 50% rate (infamy scales with amount)",
-    baseCost: 2,
+    baseCost: CONVERT_CASH_ACTION_COST,
     requiresState: false,
     effect: (character: Character) => {
       // Default effect uses all cash; execute route overrides with convertAmount.
       // Post-Phase-8: prefer the per-currency personal balance in the home
       // currency; fall back to the legacy cashOnHand for un-migrated fixtures.
+      // Single source of truth: the shared conversion and infamy legs (the
+      // same legs quoteConvertCashAction prices) so the credited conversion
+      // can never drift from the debited one. The legs — not the full quote —
+      // because a zero home-bucket balance is not a quotable amount but must
+      // still price (canPerformAction probes this effect for its funds check
+      // after the zero-wealth gate).
       const homeCode = getHomeCurrency(character);
       const cash = character.currencyBalances?.personal?.[homeCode] ?? character.cashOnHand ?? 0;
-      const converted = Math.floor(cash * 0.5);
+      const converted = convertCashConversion(cash);
       const infamy = calculateConvertCashInfamy(cash);
       // `cash`/`converted` are already in LOCAL home currency, so format with the
       // home symbol directly (no anchor→local conversion).
@@ -584,11 +514,52 @@ export function canPerformAction(
     return { canPerform: false, reason: "Invalid action type" };
   }
 
-  if (actionType === "campaign" && (character.politicalInfluence ?? 0) >= 100) {
-    return {
-      canPerform: false,
-      reason: "Your political influence is already at maximum (100%).",
-    };
+  // Campaign validates through the same rules quote the UI and the effect use:
+  // tiered AP cost, GDP-scaled fund cost, stat-scaled gain and the 100% cap.
+  // Missing stats or missing home-state economics reject here with the quote
+  // reason instead of falling back to neutral values.
+  if (actionType === "campaign") {
+    const quote = quoteCampaignAction(
+      {
+        politicalInfluence: character.politicalInfluence,
+        charisma: character.stats?.charisma,
+        intellect: character.stats?.intellect,
+      },
+      state
+        ? {
+            gdpMillions: state.gdp,
+            population: state.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // BuildDonorBase validates through the same rules quote the UI and the
+  // effect use: level-scaled AP cost, GDP-scaled fund cost with the
+  // fundraising discount, and the +1 level gain. Missing stats or missing
+  // home-state economics reject here with the quote reason instead of
+  // falling back to neutral values.
+  if (actionType === "buildDonorBase") {
+    const quote = quoteBuildDonorBaseAction(
+      {
+        donorBaseLevel: character.donorBaseLevel,
+        fundraising: character.stats?.fundraising,
+      },
+      state
+        ? {
+            gdpMillions: state.gdp,
+            population: state.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
   }
 
   const actualCost = getActionPointCost(character, actionType);
@@ -616,6 +587,41 @@ export function canPerformAction(
       reason:
         "You have no donor base. Use 'Build Donor Network' first to establish one before fundraising.",
     };
+  }
+
+  // Polls validate through the same rules quote the poll page and the effect
+  // use: flat AP cost and the intellect-scaled fund cost. A missing intellect
+  // stat rejects here with the quote reason instead of falling back to the
+  // unscaled base.
+  if (actionType === "poll" || actionType === "pollLarge") {
+    const tier: PollTier = actionType === "pollLarge" ? "large" : "small";
+    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // Advertise validates through the same rules quote the UI and the effect use:
+  // tiered AP cost, GDP-scaled fund cost and the charisma-scaled gain. Missing
+  // stats or missing home-state economics reject here with the quote reason
+  // instead of falling back to neutral values.
+  if (actionType === "advertise") {
+    const quote = quoteAdvertiseAction(
+      {
+        favorability: character.favorability,
+        charisma: character.stats?.charisma,
+      },
+      state
+        ? {
+            gdpMillions: state.gdp,
+            population: state.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
   }
 
   // Check if state is required
@@ -665,6 +671,12 @@ export function getActionPointCost(character: Character, actionType: ActionType)
   }
   if (actionType === "advertise") {
     return getAdvertiseActionCost(character.favorability ?? 0);
+  }
+  if (actionType === "poll") {
+    return getPollActionCost("small");
+  }
+  if (actionType === "pollLarge") {
+    return getPollActionCost("large");
   }
   if (actionType === "fundraise") {
     return getDonorActionCost(character.donorBaseLevel ?? 0, "fundraise");
