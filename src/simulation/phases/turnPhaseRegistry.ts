@@ -194,7 +194,16 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
     {
       key: "resourceAndFinanceStart",
       async execute(context, runtime) {
-        const { characters, config, gameNow, stateMap, gameState, newTurn, phaseResults } = context;
+        const {
+          characters,
+          config,
+          gameNow,
+          stateMap,
+          gameState,
+          newTurn,
+          currentYear,
+          phaseResults,
+        } = context;
         // When an admin pauses corporation actions, the corporate turn phase
         // (sector revenue, operating income, dividends, market-cap/history
         // snapshots) is skipped entirely, this is what makes the admin toggle's
@@ -297,8 +306,11 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
         // Algeria 1962, Guyana 1966 and South Yemen 1967 all fall inside a
         // 1953 world's 1000-turn span and none of them happened. Runs on the
         // in-game year boundary only.
+        // Authoritative turn-context year, not the persisted gameState year which
+        // is only stamped at turn end and would fire boundary transitions one
+        // turn late (#2059).
         await runtime.runPhase("decolonization", () =>
-          processDecolonizationTurn(context.db, newTurn, gameState.currentYear)
+          processDecolonizationTurn(context.db, newTurn, currentYear)
         );
 
         await runtime.runPhase("partyInfluenceTurn", () =>
