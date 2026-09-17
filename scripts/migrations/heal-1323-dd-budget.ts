@@ -34,7 +34,7 @@
  *      every turn, but the stored per-law figure is frozen at whatever base it
  *      was last written against (pre-reunification East Germany for the
  *      rescoped rows). Any reader of the stored field sees the stale number,
- *      so this rewrites each v2 law's figure as fraction x live base GDP —
+ *      so this rewrites each v2 law's figure as fraction x live base GDP -
  *      the same arithmetic `billEnactment` writes on enactment. Legacy laws
  *      with no `costModelV2` keep their persisted value; there is nothing to
  *      recompute them from.
@@ -178,7 +178,7 @@ async function main() {
     // with none recorded there is nothing to re-anchor to. This happens when the
     // heal runs before `fiscalBaseGrowth` has ever self-healed the field (it
     // snapshots the current shares on the first turn it finds it absent). Heal
-    // the other three items now, run one turn, then re-run this heal — do not
+    // the other three items now, run one turn, then re-run this heal - do not
     // report the book healed while the drift is still in it.
     const basesBlocked = keys.length === 0;
     let probe: FederalTaxBases = { ...(budget.taxBases as FederalTaxBases) };
@@ -201,7 +201,7 @@ async function main() {
     );
     let basesStale = false;
     if (basesBlocked) {
-      console.log("    no taxBaseGdpShareBaseline on this book — skipping; re-run after one turn");
+      console.log("    no taxBaseGdpShareBaseline on this book - skipping; re-run after one turn");
     }
     for (const key of keys) {
       const share = shareBaseline[key];
@@ -252,7 +252,7 @@ async function main() {
     // ── 4. stale persisted annualRevenueV2 ───────────────────────────────────
     // Same read the revenue side does, so the stored per-law figures can be
     // compared against exactly what the next turn will compute from them.
-    // Fresh value is fraction x live base GDP — the arithmetic `billEnactment`
+    // Fresh value is fraction x live base GDP - the arithmetic `billEnactment`
     // writes on enactment (`computeLawCost(...).revenue` with a null band
     // index prices revenue as pure fraction x GDP).
     const lawDocs = await db

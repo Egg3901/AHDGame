@@ -181,7 +181,7 @@ describe("TAX_BASE_GROWTH_PREMIUM_CAP", () => {
 
   it("leaves an ordinary market economy near baseline over the same horizon", () => {
     // DE-like: 4% GDP growth, wage growth inside the premium. Thirty years
-    // must not move the share materially — the ordinary case the gravity
+    // must not move the share materially - the ordinary case the gravity
     // change must not destabilize.
     const market: EconomicGrowthFactors = {
       gdpGrowth: 4,
