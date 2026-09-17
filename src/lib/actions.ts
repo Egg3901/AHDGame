@@ -1,5 +1,4 @@
 import type { Character, State, ActionType } from "@/lib/db/types";
-import { getGdpBaseline } from "@/lib/utils/fundGeneration";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
 import { statMultiplier } from "@/lib/stats/statMultiplier";
@@ -13,6 +12,8 @@ import {
   quoteCampaignAction,
   getAdvertiseActionCost,
   quoteAdvertiseAction,
+  getBuildDonorBaseActionCost,
+  quoteBuildDonorBaseAction,
 } from "./actions/rules";
 
 export {
@@ -40,6 +41,15 @@ export {
   type AdvertiseQuoteActor,
   type AdvertiseQuoteTarget,
   type AdvertiseQuote,
+  BUILD_DONOR_BASE_FUND,
+  BUILD_DONOR_BASE_FUND_PER_LEVEL,
+  BUILD_DONOR_BASE_LEVEL_GAIN,
+  getBuildDonorBaseActionCost,
+  getBuildDonorBaseFundCost,
+  quoteBuildDonorBaseAction,
+  type BuildDonorBaseQuoteActor,
+  type BuildDonorBaseQuoteTarget,
+  type BuildDonorBaseQuote,
 } from "./actions/rules";
 
 /**
@@ -150,25 +160,6 @@ export function calculateInfluenceAccrual(_currentInfluence: number): number {
 }
 
 /**
- * Fund cost for the BuildDonorBase action (0–75 level range).
- * Linear base: $3K + $1.5K/level, scaled by state GDP per capita (0.85–2.0×) vs country baseline.
- * Early levels are cheap (~$3K); L75 costs ~$114K (before GDP scaling).
- * Total 0→75 ≈ $4.4M at national-average GDP.
- */
-export function getBuildDonorBaseFundCost(
-  donorBaseLevel: number,
-  stateGdpMillions: number,
-  statePopulation: number,
-  countryId = "US"
-): number {
-  const baseCost = 3_000 + donorBaseLevel * 1_500;
-  const baseline = getGdpBaseline(countryId);
-  const gdpPerCapita = (stateGdpMillions * 1_000_000) / statePopulation;
-  const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return Math.round((baseCost * gdpScalar) / 1_000) * 1_000;
-}
-
-/**
  * Action-point cost for Fundraise and BuildDonorBase actions (0–75 level range).
  *
  * Fundraise: flat 3 AP at every level — no escalating penalty for a large network.
@@ -182,7 +173,7 @@ export function getDonorActionCost(
   action: "fundraise" | "buildDonorBase"
 ): number {
   if (action === "fundraise") return FUNDRAISE_ACTION_COST;
-  return Math.min(20, Math.round(4 + Math.pow(donorBaseLevel / 75, 1.4) * 16));
+  return getBuildDonorBaseActionCost(donorBaseLevel);
 }
 
 /**
@@ -345,23 +336,30 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 6,
     requiresState: false,
     effect: (character: Character, state?: State, ctx?: ActionEffectContext) => {
-      const level = character.donorBaseLevel ?? 0;
-      const rawCost = state
-        ? getBuildDonorBaseFundCost(level, state.gdp, state.population, character.countryId)
-        : getBuildDonorBaseFundCost(
-            level,
-            getGdpBaseline(character.countryId),
-            1_000_000,
-            character.countryId
-          );
-      // Fundraising stat makes donor-network expansion cheaper (gentle ±20%).
-      const cost = Math.round(rawCost / statMultiplier(statValue(character, "fundraising")));
+      // Single source of truth: the UI card quotes this same quote, so the
+      // advertised cost/gain can never drift from the debited/credited result.
+      // canPerformAction runs the quote first; the throw below is a defensive
+      // invariant for direct effect callers that skip validation.
+      const quote = quoteBuildDonorBaseAction(
+        {
+          donorBaseLevel: character.donorBaseLevel,
+          fundraising: character.stats?.fundraising,
+        },
+        state
+          ? {
+              gdpMillions: state.gdp,
+              population: state.population,
+              countryId: character.countryId,
+            }
+          : undefined
+      );
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
 
       return {
-        fundsChange: -cost,
-        donorBaseLevelChange: 1,
-        message: `Spent ${fmt(cost)} to expand your donor network!`,
+        fundsChange: -quote.fundCostAnchor,
+        donorBaseLevelChange: quote.donorGain,
+        message: `Spent ${fmt(quote.fundCostAnchor)} to expand your donor network!`,
       };
     },
   },
@@ -505,6 +503,30 @@ export function canPerformAction(
         politicalInfluence: character.politicalInfluence,
         charisma: character.stats?.charisma,
         intellect: character.stats?.intellect,
+      },
+      state
+        ? {
+            gdpMillions: state.gdp,
+            population: state.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
+  // BuildDonorBase validates through the same rules quote the UI and the
+  // effect use: level-scaled AP cost, GDP-scaled fund cost with the
+  // fundraising discount, and the +1 level gain. Missing stats or missing
+  // home-state economics reject here with the quote reason instead of
+  // falling back to neutral values.
+  if (actionType === "buildDonorBase") {
+    const quote = quoteBuildDonorBaseAction(
+      {
+        donorBaseLevel: character.donorBaseLevel,
+        fundraising: character.stats?.fundraising,
       },
       state
         ? {

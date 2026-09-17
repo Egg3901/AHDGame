@@ -133,6 +133,10 @@ function makeCharacter(overrides: {
 const AVG_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
 const NEUTRAL_STATS = { charisma: 5.5 } as Character["stats"];
 
+// Average-GDP home state (scalar 1.0): the donor quote requires home-state
+// economics, rejecting neutral fallbacks instead.
+const AVG_GDP_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+
 describe("canPerformAction — tiered costs", () => {
   it("advertise blocked when actions < tiered cost (high fav)", () => {
     const char = makeCharacter({ actions: 7, favorability: 90, stats: NEUTRAL_STATS }); // tier 4, needs 9
@@ -160,7 +164,12 @@ describe("canPerformAction — tiered costs", () => {
 
   it("buildDonorBase blocked at high donor level when AP insufficient", () => {
     const char = makeCharacter({ actions: 12, donorBaseLevel: 75, funds: 1_000_000 }); // L75 needs 20
-    const result = canPerformAction(char, "buildDonorBase");
+    // Neutral fundraising (pivot 5.5 → 1.0x), average-GDP state and an
+    // explicit country basis: the donor quote requires all three, rejecting
+    // neutral fallbacks instead.
+    char.stats = { fundraising: 5.5 } as Character["stats"];
+    char.countryId = "US";
+    const result = canPerformAction(char, "buildDonorBase", AVG_GDP_STATE);
     expect(result.canPerform).toBe(false);
     expect(result.reason).toContain("20");
   });
@@ -218,7 +227,9 @@ describe("action effect messages — local currency", () => {
 
   it("buildDonorBase message renders the spend via the local formatter, no ₳", () => {
     const char = makeCharacter({ donorBaseLevel: 0 });
-    const r = ACTIONS.buildDonorBase.effect(char, undefined, ctx);
+    char.stats = { fundraising: 5.5 } as Character["stats"];
+    char.countryId = "US";
+    const r = ACTIONS.buildDonorBase.effect(char, AVG_GDP_STATE, ctx);
     expect(r.message).not.toContain("₳");
     expect(r.message).toContain("€");
   });
