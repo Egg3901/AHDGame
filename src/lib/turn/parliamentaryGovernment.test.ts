@@ -1512,3 +1512,71 @@ describe("autoVoteNPPsForNoConfidence — ticket-1137 NPP benches vote the party
     expect(db.collectionMocks["noConfidenceVotes"].updateOne).not.toHaveBeenCalled();
   });
 });
+
+describe("UK prime minister loses Commons seat", () => {
+  function seedHolder(npp = false) {
+    const id = new ObjectId();
+    db.collection("governmentFormations").findOne.mockResolvedValue({
+      _id: "UK",
+      status: "formed",
+      cycle: 3,
+      pmCharacterId: npp ? null : id,
+      pmNppId: npp ? id : null,
+      pmName: "Former MP",
+      governingPartyId: "1",
+      formationType: "majority",
+    });
+    db.collection("gameState").findOne.mockResolvedValue({ _id: "current", currentTurn: 200 });
+    db.collection("characters").findOne.mockResolvedValue({ _id: id });
+    return id;
+  }
+  it.each([false, true])(
+    "vacates a seatless holder and cancels stale votes (NPP=%s)",
+    async (npp) => {
+      seedHolder(npp);
+      await updateParliamentaryGovernmentSeats(db as unknown as Db, "UK");
+      expect(db.collectionMocks.governmentFormations.updateOne).toHaveBeenCalledWith(
+        { _id: "UK" },
+        expect.objectContaining({
+          $set: expect.objectContaining({
+            status: "pending",
+            pmCharacterId: null,
+            pmNppId: null,
+            pmVacancyDeadlineTurn: 296,
+          }),
+        })
+      );
+      expect(db.collectionMocks.cabinetMembers.deleteMany).toHaveBeenCalledWith({
+        countryId: "UK",
+      });
+      expect(db.collectionMocks.pmAppointmentVotes.updateMany).toHaveBeenCalledWith(
+        { countryId: "UK", status: "active" },
+        expect.objectContaining({ $set: expect.objectContaining({ status: "cancelled" }) })
+      );
+    }
+  );
+  it("does not retain a seatless player PM after an election", async () => {
+    seedHolder();
+    await resetParliamentaryGovernmentAfterElection(
+      db as unknown as Db,
+      "UK",
+      new Date("2026-09-17")
+    );
+    expect(db.collectionMocks.governmentFormations.updateOne).toHaveBeenCalledWith(
+      { _id: "UK" },
+      expect.objectContaining({
+        $set: expect.objectContaining({
+          status: "pending",
+          pmCharacterId: null,
+          pmVacancyDeadlineTurn: 296,
+        }),
+      })
+    );
+  });
+  it("retains the PM who still holds a Commons seat", async () => {
+    seedHolder();
+    db.collection("electedOfficials").findOne.mockResolvedValue({ _id: new ObjectId() });
+    await updateParliamentaryGovernmentSeats(db as unknown as Db, "UK");
+    expect(db.collection("cabinetMembers").deleteMany).not.toHaveBeenCalled();
+  });
+});
