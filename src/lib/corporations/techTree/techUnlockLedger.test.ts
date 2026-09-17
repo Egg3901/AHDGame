@@ -259,9 +259,7 @@ describe("tech unlock ledger (ticket #1998)", () => {
     const corp = makeCorp();
     const { db, txInserts, corpsUpdateOne, collections } = mockDb();
     type ShadowDoc = { legs: Array<{ amount: number }> };
-    const ledgerInsertMany = vi.fn((_docs: ShadowDoc[]) =>
-      Promise.resolve({ insertedCount: 1 })
-    );
+    const ledgerInsertMany = vi.fn((_docs: ShadowDoc[]) => Promise.resolve({ insertedCount: 1 }));
     collections.ledgerEntries = { insertMany: ledgerInsertMany };
     vi.mocked(isLedgerShadowEnabled).mockResolvedValueOnce(true);
     mockAppliedButUnackedTx(db, txInserts);
