@@ -109,9 +109,22 @@ import { resolveCountryPrimeRate } from "@/lib/corporations/sectorGrowthCost";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
 import {
   anchorToCorpCapital,
+  corpLiquidCapitalToAnchor,
   resolveSectorHostCurrencyCode,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
+import { classifyCorporationManagement } from "@/lib/corporations/balanceAudit/rules";
+import {
+  FOUNDING_GATE_PRECEDENCE,
+  REINVEST_GATE_PRECEDENCE,
+  firstRejectingGate,
+  type CapacityDecisionObservation,
+} from "@/lib/corporations/capacityDecisionTelemetry/rules";
+import {
+  dominanceDensityFactor,
+  getDominanceGrowthCostMultiplier,
+} from "@/lib/constants/corporations";
+import { recordCapacityDecisionBulkBestEffort } from "@/lib/corporations/capacityDecisionTelemetry/persistence";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { getEraNominalAmount } from "@/lib/constants/sectorSeedEra";
@@ -355,6 +368,21 @@ export async function processNppCorporationDecisions(
   const stateControlled = computeStateControlledBuckets(globalSectors, nationalCorpIds);
   placementSignals.activeMarketBuckets = buildActiveMarketBuckets(globalSectors);
 
+  // In-memory rival count per (state, sectorType) bucket for capacity-decision
+  // telemetry. `globalSectors` is already loaded for the state-controlled
+  // computation above, so this adds no turn-path reads.
+  const competitorsByBucket = new Map<string, Set<string>>();
+  for (const s of globalSectors) {
+    if (!s.stateId || !s.sectorType || !s.corporationId) continue;
+    const key = bucketKey(s.stateId, s.sectorType);
+    let rivals = competitorsByBucket.get(key);
+    if (!rivals) {
+      rivals = new Set();
+      competitorsByBucket.set(key, rivals);
+    }
+    rivals.add(s.corporationId.toString());
+  }
+
   // Resolve the shared plants pricing context once for the cohort.
   const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
   let plants: NppPlantsContext | undefined;
@@ -399,6 +427,9 @@ export async function processNppCorporationDecisions(
     };
   }
   const unownedDraws: NonNullable<NppCorpDecision["unownedDraws"]> = [];
+  // Capacity-decision observations, aggregated in memory and flushed once for
+  // the whole cohort below: no per-row turn queries, no new reads.
+  const capacityObservations: CapacityDecisionObservation[] = [];
   // Capex ledger legs for NPP capacity reinvestment, flushed in one insert
   // below. A build is a cash → CIP RECLASS, and the shadow ledger drops rows
   // with no anchor value, so every row carries both the local and ₳ magnitude.
@@ -476,6 +507,11 @@ export async function processNppCorporationDecisions(
       turn,
       now,
       fxRate: corpFxRate,
+      competitorCountOf: (stateId, sectorType, ownCorporationId) => {
+        const rivals = competitorsByBucket.get(bucketKey(stateId, sectorType));
+        if (!rivals) return 0;
+        return rivals.has(ownCorporationId) ? rivals.size - 1 : rivals.size;
+      },
       fxByCurrency,
       strategy: corp.nppStrategy,
       strategyEligible: entryCohortEligible,
@@ -524,6 +560,22 @@ export async function processNppCorporationDecisions(
     });
     markMarketsActive(placementSignals, decision.newSectors);
     if (decision.entryDiagnostic) entryDiagnostics.push(decision.entryDiagnostic);
+    if (decision.capacityObservations) {
+      // A requested entry whose credit pipeline failed is a cash rejection,
+      // not a near-entry: the corp could not raise the cash. Rewrite the
+      // deferral outcome so the funnel does not overstate credit demand.
+      const creditFailed =
+        decision.entryDiagnostic?.reason === "credit_cooldown" ||
+        decision.entryDiagnostic?.reason === "credit_capacity" ||
+        decision.entryDiagnostic?.reason === "credit_issuance_failed" ||
+        decision.entryDiagnostic?.reason === "credit_rounding_shortfall";
+      for (const observation of decision.capacityObservations) {
+        if (creditFailed && observation.outcome === "credit_requested") {
+          observation.outcome = "insufficient_cash";
+        }
+        capacityObservations.push(observation);
+      }
+    }
     if (decision.reinvestments && corpCurrency) {
       for (const r of decision.reinvestments) {
         capexRows.push({
@@ -736,6 +788,7 @@ export async function processNppCorporationDecisions(
   }
 
   await persistNppMarketEntryFunnelBestEffort(db, turn, now, entryDiagnostics);
+  await recordCapacityDecisionBulkBestEffort(db, turn, capacityObservations);
 
   return {
     corpUpdates,
@@ -777,6 +830,25 @@ export function makeNppCorpDecision(
   const corpFxRate = ctx.fxRate ?? 1;
   const toCorpLocal = (amountAnchor: number): number =>
     anchorToCorpCapital(amountAnchor, corpCurrencyCode, corpFxRate);
+  const cashToAnchor = (amountLocal: number): number =>
+    corpLiquidCapitalToAnchor(amountLocal, corp, corpFxRate);
+
+  // Capacity-decision telemetry (T821 audit): one founding observation plus one
+  // per evaluated reinvestment candidate, all in the player path's vocabulary.
+  // Cohort is the management cohort, never an id; competitor counts come from
+  // the shell's in-memory index (ctx.competitorCountOf), so observing adds no
+  // turn-path reads. Aggregated by the caller in a single bulk write.
+  const capacityCohort = classifyCorporationManagement({
+    ceoType: corp.ceoType ?? null,
+    ceoVacant: corp.ceoVacant,
+    countryOwnerId: corp.countryOwnerId ?? null,
+    ownershipState: corp.ownershipState ?? null,
+    userId: corp.userId?.toString() ?? null,
+  });
+  const capacityObservations: CapacityDecisionObservation[] = [];
+  const ownCorporationId = corp._id.toString();
+  const rivalCount = (stateId: string, sectorType: string): number =>
+    ctx.competitorCountOf?.(stateId, sectorType, ownCorporationId) ?? 0;
   const sectorEconomicToCorpLocal = (amount: number, sector: CorporateSector): number => {
     const hostCurrency = resolveSectorHostCurrencyCode(sector, corp);
     const hostRate =
@@ -1412,11 +1484,27 @@ export function makeNppCorpDecision(
   if (interventionTargetCommodity) {
     entryDiagnostic = { ...entryDiagnostic, interventionTargetCommodity };
   }
-  if (
-    expansion &&
+  // Whether the founding evaluation below runs at all. Captured so the
+  // capacity observation can tell pre-evaluation gates (eligibility, demand)
+  // from affordability gates; `newSectors` is still empty here, so the cap
+  // term is trivially true and needs no gate of its own.
+  const foundingBlockEntered =
+    expansion !== null &&
     newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
-    (ordinaryEntry || exceptionalShortageEntry)
-  ) {
+    (ordinaryEntry || exceptionalShortageEntry);
+  // Quote facts for the capacity observation, set by whichever founding branch
+  // prices the candidate. Null when no branch ran: pre-pricing gates observe
+  // explicit zeros (see the telemetry contract), never a fabricated quote.
+  let foundingAffordable = false;
+  let foundingCreditPath = false;
+  let foundingSizeBlocked = false;
+  let foundingPriced: {
+    unitPriceAnchor: number;
+    dominanceMultiplier: number;
+    requestedUnits: number;
+    cashHeadroomAnchor: number;
+  } | null = null;
+  if (foundingBlockEntered) {
     if (plants?.enabled) {
       // NPPs and players found sectors on the same priced-capacity terms.
       const headroomUnits = unownedHeadroomUnitsOf(
@@ -1428,8 +1516,9 @@ export function makeNppCorpDecision(
       const starterUnits = foundingStarterUnits(expansion.sectorType as CorporationType);
       // Per-unit founding price. computeBuildCost is linear in units and, at a
       // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
-      // one-unit quote scales exactly to any order size.
-      const perUnitFoundingAnchor =
+      // one-unit quote scales exactly to any order size. The breakdown (not
+      // just the total) is kept for the capacity observation's price vocabulary.
+      const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
               sectorType: expansion.sectorType as CorporationType,
@@ -1448,8 +1537,9 @@ export function makeNppCorpDecision(
               acumen: NEUTRAL_STAT,
               hostCostOfLivingIndex: plants.costOfLivingOf(expansion.stateId),
               founding: true,
-            }).totalAnchor
-          : 0;
+            })
+          : null;
+      const perUnitFoundingAnchor = foundingUnitQuote?.totalAnchor ?? 0;
       // Charged in the corp's own currency: fee + build are ₳, liquidCapital is not.
       const entryFeeAnchor = sectorEntryFeeAnchor(plants.preset);
       const entryCapital =
@@ -1501,11 +1591,26 @@ export function makeNppCorpDecision(
       // itself under the cash floor. Demand-side sectors also require the market
       // have room for the facility; extraction is deposit-gated (candidacy)
       // rather than headroom-gated, so it skips that check.
-      if (
+      // Named (not inlined) so the capacity observation below records the same
+      // first-rejecting-gate outcome the branch takes.
+      foundingAffordable =
         buildUnits > 0 &&
         (isExtraction || headroomUnits >= buildUnits) &&
-        entryCapital - foundingCost >= effectiveCashFloor
-      ) {
+        entryCapital - foundingCost >= effectiveCashFloor;
+      foundingCreditPath =
+        exceptionalShortageEntry &&
+        starterUnits > 0 &&
+        headroomUnits >= starterUnits &&
+        !isStateOwned(corp) &&
+        !corp.imfBailoutActive;
+      foundingSizeBlocked = starterUnits <= 0 || headroomUnits < starterUnits;
+      foundingPriced = {
+        unitPriceAnchor: perUnitFoundingAnchor,
+        dominanceMultiplier: foundingUnitQuote?.dominanceMultiplier ?? 1,
+        requestedUnits: buildUnits,
+        cashHeadroomAnchor: cashToAnchor(entryCapital - foundingCost),
+      };
+      if (foundingAffordable) {
         const buildTurns = Math.max(
           1,
           CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
@@ -1549,19 +1654,13 @@ export function makeNppCorpDecision(
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
-      } else if (
-        exceptionalShortageEntry &&
-        starterUnits > 0 &&
-        headroomUnits >= starterUnits &&
-        !isStateOwned(corp) &&
-        !corp.imfBailoutActive
-      ) {
+      } else if (foundingCreditPath) {
         shortageCreditRequest = {
           amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
           sectorType: expansion.sectorType as CorporationType,
         };
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "credit_requested");
-      } else if (starterUnits <= 0 || headroomUnits < starterUnits) {
+      } else if (foundingSizeBlocked) {
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "facility_size");
       } else if (exceptionalShortageEntry) {
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
@@ -1570,7 +1669,18 @@ export function makeNppCorpDecision(
       const foundingCost = toCorpLocal(EXPANSION_COST);
       const entryCapital =
         liquidCapital + (exceptionalShortageEntry ? (ctx.shortageEntryCreditLocal ?? 0) : 0);
-      if (entryCapital - foundingCost >= effectiveCashFloor) {
+      // Legacy (non-plants) founding has no per-unit quote; the observation
+      // records the affordability facts with an explicit zero price.
+      foundingAffordable = entryCapital - foundingCost >= effectiveCashFloor;
+      foundingCreditPath =
+        exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive;
+      foundingPriced = {
+        unitPriceAnchor: 0,
+        dominanceMultiplier: 1,
+        requestedUnits: 0,
+        cashHeadroomAnchor: cashToAnchor(entryCapital - foundingCost),
+      };
+      if (foundingAffordable) {
         newSectors.push({
           stateId: expansion.stateId,
           countryId: expansion.countryId,
@@ -1581,7 +1691,7 @@ export function makeNppCorpDecision(
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
-      } else if (exceptionalShortageEntry && !isStateOwned(corp) && !corp.imfBailoutActive) {
+      } else if (foundingCreditPath) {
         shortageCreditRequest = {
           amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
           sectorType: expansion.sectorType as CorporationType,
@@ -1591,6 +1701,63 @@ export function makeNppCorpDecision(
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "state_credit_restricted");
       }
     }
+  }
+
+  // Capacity-decision observation: one per corp per turn, in the player
+  // path's vocabulary. The gate is the FIRST rejection in
+  // FOUNDING_GATE_PRECEDENCE order (null means the candidate placed); priced
+  // branches contribute the full quote, pre-pricing gates observe explicit
+  // zeros with headroom as the deployable surplus over the cash floor.
+  {
+    const foundingCompetitors = entryCandidate
+      ? rivalCount(entryCandidate.stateId, entryCandidate.sectorType)
+      : 0;
+    // Legacy worlds have no surplus-cash band in the priced branch: the
+    // ordinary-entry surplus gate below is the cash rejection there.
+    const foundingSurplusBlocked =
+      plants?.enabled !== true &&
+      expansion !== null &&
+      hasLogisticsCapacity &&
+      marketEntryEligible &&
+      !ordinaryEntryTargetGlutted &&
+      !(surplusCash > effectiveExpansionMinCash) &&
+      !exceptionalShortageEntry;
+    const foundingGate = firstRejectingGate(FOUNDING_GATE_PRECEDENCE, {
+      strategy_disallowed: !levers.allowExpansion,
+      unprofitable: !isProfitable,
+      margin_below_floor: corpMargin < effectiveExpansionMinMargin,
+      no_enterable_market: entryCandidate == null,
+      logistics_capacity: !hasLogisticsCapacity,
+      cohort_ineligible: !marketEntryEligible && ctx.shortageEntryEligible !== true,
+      retail_paused:
+        ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
+      glutted_market: ordinaryEntryTargetGlutted && !exceptionalShortageEntry,
+      facility_size: foundingBlockEntered && !foundingAffordable && foundingSizeBlocked,
+      credit_requested: foundingBlockEntered && !foundingAffordable && foundingCreditPath,
+      state_credit_restricted:
+        foundingBlockEntered &&
+        !foundingAffordable &&
+        !foundingCreditPath &&
+        !foundingSizeBlocked &&
+        exceptionalShortageEntry,
+      insufficient_cash:
+        (foundingBlockEntered && !foundingAffordable) || foundingSurplusBlocked,
+    });
+    capacityObservations.push({
+      actor: "npp",
+      cohort: capacityCohort,
+      stage: "order",
+      outcome: foundingGate ?? "placed",
+      marketSharePct: 0,
+      competitorCount: foundingCompetitors,
+      rawDominanceMultiplier: getDominanceGrowthCostMultiplier(0),
+      dominanceDensityFactor: dominanceDensityFactor(foundingCompetitors),
+      dominanceMultiplier: foundingPriced?.dominanceMultiplier ?? 1,
+      unitPriceAnchor: foundingPriced?.unitPriceAnchor ?? 0,
+      cashHeadroomAnchor:
+        foundingPriced?.cashHeadroomAnchor ?? cashToAnchor(cashLocal - effectiveCashFloor),
+      requestedUnits: foundingPriced?.requestedUnits ?? 0,
+    });
   }
 
   // ── 6. Capacity reinvestment (plants only) ────────────────────────────────
@@ -1648,39 +1815,101 @@ export function makeNppCorpDecision(
       interventionPriority: number;
     };
     const candidates: Candidate[] = [];
+    // Hoisted for the observation closure below (narrowing does not persist
+    // into closures).
+    const plantsEraUnitScale = plants.eraUnitScale;
+
+    // Capacity observation for one evaluated reinvestment candidate. Market
+    // share mirrors the pricing input below (owned capacity over owned plus
+    // unowned headroom, read off the same in-memory pool the sizing uses).
+    // Priced candidates carry the charged quote; earlier gates observe an
+    // explicit zero price with headroom as current cash, and the
+    // density-adjusted premium they would have paid (computeBuildCost terms).
+    const observeReinvestCandidate = (
+      gate: CapacityDecisionObservation["outcome"],
+      sector: CorporateSector,
+      capitalStock: number,
+      headroomUnits: number | null,
+      units: number,
+      priced: {
+        unitPriceAnchor: number;
+        dominanceMultiplier: number;
+        cashHeadroomAnchor: number;
+      } | null
+    ): void => {
+      let headroom = headroomUnits;
+      if (headroom == null) {
+        const pool = poolFor(
+          sector.countryId ?? corp.countryId,
+          sector.stateId,
+          sector.sectorType
+        );
+        headroom = pool
+          ? unownedHeadroomUnitsOf(
+              sector.sectorType,
+              pool.headroomUnits,
+              pool.revenue,
+              plantsEraUnitScale
+            )
+          : 0;
+      }
+      const bucketTotal = capitalStock + headroom;
+      const marketSharePct = bucketTotal > 0 ? (100 * capitalStock) / bucketTotal : 0;
+      const competitors = rivalCount(sector.stateId, sector.sectorType);
+      const rawDominance = getDominanceGrowthCostMultiplier(marketSharePct);
+      const density = dominanceDensityFactor(competitors);
+      capacityObservations.push({
+        actor: "npp",
+        cohort: capacityCohort,
+        stage: "order",
+        outcome: gate,
+        marketSharePct,
+        competitorCount: competitors,
+        rawDominanceMultiplier: rawDominance,
+        dominanceDensityFactor: density,
+        dominanceMultiplier: priced?.dominanceMultiplier ?? (1 + (rawDominance - 1) * density),
+        unitPriceAnchor: priced?.unitPriceAnchor ?? 0,
+        cashHeadroomAnchor: priced?.cashHeadroomAnchor ?? cashToAnchor(cashLocal),
+        requestedUnits: units,
+      });
+    };
 
     for (const sp of sectorProfits) {
       const sector = sp.sector;
-      if (divestedSectorIds.includes(sector._id)) continue;
-      // A mothballed plant is deliberately idle — buying it more capacity is the
-      // opposite of the decision that mothballed it.
-      if (sector.mothballed) continue;
       // Nothing built yet (a newborn founding, or a pre-flip sector still
       // awaiting its transition order): there is no capacity to maintain and no
       // fill telemetry to justify a build.
       const capitalStock = sector.capitalStock ?? 0;
-      if (!(capitalStock > 0)) continue;
       // Queue-array ceiling — see the constant for why this is not the
       // rationing dial.
       const queueDepth = sector.buildQueue?.length ?? 0;
-      if (queueDepth >= NPP_REINVEST_MAX_QUEUE_DEPTH) continue;
-
       // (a) Is it selling what it makes? Persisted units telemetry only — no
       // telemetry means no evidence, and no evidence means no build.
       const produced = sector.producedUnits ?? 0;
       const sold = sector.soldUnits ?? 0;
-      if (!(produced > 0)) continue;
-      const fill = sold / produced;
-      if (fill < NPP_REINVEST_MIN_FILL) continue;
-
+      const fill = produced > 0 ? sold / produced : 0;
       // (b) Is there room in the market to absorb more output? Same unowned
       // pool the founding path sizes and draws against.
       const sectorCountryId = sector.countryId ?? corp.countryId;
-      // Don't add private capacity into a bucket a National Corporation runs —
-      // the same gate `findBestUnownedSector` applies to expansion. Every corp
-      // reaching here is private — state-owned corps returned above — so this
-      // no longer needs the SOE carve-out it used to carry.
-      if (stateControlled.has(bucketKey(sector.stateId, sector.sectorType))) {
+      // Pre-sizing gates as flags, decided once by REINVEST_GATE_PRECEDENCE
+      // order. Same conditions, same order as the sequential continues this
+      // replaces (divested → mothballed → capacity → queue → telemetry → fill
+      // → state-controlled), so behavior is unchanged; the first rejecting
+      // gate is observed for the capacity funnel instead of silently skipped.
+      // A mothballed plant is deliberately idle — buying it more capacity is
+      // the opposite of the decision that mothballed it. National buckets are
+      // excluded exactly as `findBestUnownedSector` excludes them.
+      const preSizingGate = firstRejectingGate(REINVEST_GATE_PRECEDENCE, {
+        divested: divestedSectorIds.includes(sector._id),
+        mothballed: sector.mothballed === true,
+        no_capacity: !(capitalStock > 0),
+        queue_full: queueDepth >= NPP_REINVEST_MAX_QUEUE_DEPTH,
+        no_telemetry: !(produced > 0),
+        fill_below_min: produced > 0 && fill < NPP_REINVEST_MIN_FILL,
+        state_controlled: stateControlled.has(bucketKey(sector.stateId, sector.sectorType)),
+      });
+      if (preSizingGate) {
+        observeReinvestCandidate(preSizingGate, sector, capitalStock, null, 0, null);
         continue;
       }
       // ─── Headroom is a gate on GROWTH, never on REPLACEMENT ────────────────
@@ -1853,7 +2082,17 @@ export function makeNppCorpDecision(
           : 0;
       const growthUnits = affordableGrowthUnits >= facilityUnits ? affordableGrowthUnits : 0;
       const units = replacementUnits + growthUnits;
-      if (!(units > 0)) continue;
+      if (!(units > 0)) {
+        observeReinvestCandidate(
+          "below_minimum_order",
+          sector,
+          capitalStock,
+          headroomUnits,
+          units,
+          null
+        );
+        continue;
+      }
 
       candidates.push({
         sector,
@@ -1887,7 +2126,9 @@ export function makeNppCorpDecision(
       const bucketTotal = capitalStock + candidate.headroomUnits;
       const marketSharePercent = bucketTotal > 0 ? (100 * capitalStock) / bucketTotal : 0;
 
-      const costAnchor = computeBuildCost({
+      // Breakdown (not just the total) is kept for the capacity observation's
+      // price vocabulary: unit price, charged dominance multiplier, headroom.
+      const reinvestPrice = computeBuildCost({
         sectorType: sector.sectorType,
         units,
         strategyId: sector.strategyId ?? null,
@@ -1902,7 +2143,8 @@ export function makeNppCorpDecision(
         // discount does not apply. An NPP topping up capacity pays the same
         // list price a player pays through `buildCapacity`.
         founding: false,
-      }).totalAnchor;
+      });
+      const costAnchor = reinvestPrice.totalAnchor;
       const costLocal = toCorpLocal(costAnchor);
 
       // Affordability. Nobody builds free — this is also the SOE capex
@@ -1916,13 +2158,42 @@ export function makeNppCorpDecision(
       // rationed as a share of cash instead — see
       // NPP_REINVEST_MAINTENANCE_CASH_SHARE for why the entry floor applied to
       // maintenance is a death spiral rather than prudence.
-      if (!(costLocal > 0)) continue;
+      // A zero or negative charge is not a buildable quote: observe it as a
+      // sizing rejection, the same outcome as sizing to non-positive units.
+      if (!(costLocal > 0)) {
+        observeReinvestCandidate(
+          "below_minimum_order",
+          sector,
+          capitalStock,
+          headroomUnits,
+          units,
+          null
+        );
+        continue;
+      }
       const affordable =
         candidate.growthUnits > 0
           ? cashLocal - costLocal >= effectiveCashFloor
           : costLocal <= Math.max(0, cashLocal) * NPP_REINVEST_MAINTENANCE_CASH_SHARE &&
             cashLocal - costLocal > 0;
-      if (!affordable) continue;
+      // Unit price off the charged total, exactly as the player quote reports
+      // it; headroom is cash after the sized cost, matching `buildCapacity`.
+      const reinvestUnitPriceAnchor = units > 0 ? costAnchor / units : 0;
+      if (!affordable) {
+        observeReinvestCandidate(
+          "insufficient_cash",
+          sector,
+          capitalStock,
+          headroomUnits,
+          units,
+          {
+            unitPriceAnchor: reinvestUnitPriceAnchor,
+            dominanceMultiplier: reinvestPrice.dominanceMultiplier,
+            cashHeadroomAnchor: cashToAnchor(cashLocal - costLocal),
+          }
+        );
+        continue;
+      }
 
       const buildTurns = Math.max(1, CAPACITY_BUILD_TURNS(sector.sectorType));
       const order: SectorBuildOrder = {
@@ -1965,6 +2236,13 @@ export function makeNppCorpDecision(
         costLocal,
         onlineTurn: order.onlineTurn,
       });
+      // Observed after the spend: headroom is cash after the charged cost,
+      // the same post-cost headroom the player path records.
+      observeReinvestCandidate("placed", sector, capitalStock, headroomUnits, units, {
+        unitPriceAnchor: reinvestUnitPriceAnchor,
+        dominanceMultiplier: reinvestPrice.dominanceMultiplier,
+        cashHeadroomAnchor: cashToAnchor(cashLocal),
+      });
       placed += 1;
     }
   }
@@ -1995,5 +2273,6 @@ export function makeNppCorpDecision(
     shortageCreditRequest,
     entryDiagnostic,
     strategy: strategyDecision?.state,
+    capacityObservations,
   };
 }

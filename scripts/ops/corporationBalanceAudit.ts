@@ -18,7 +18,10 @@ import {
   buildCorporationBalanceAudit,
   type CorporationAuditInput,
 } from "../../src/lib/corporations/balanceAudit/rules";
-import type { CapacityDecisionAggregate } from "../../src/lib/corporations/capacityDecisionTelemetry/rules";
+import {
+  summarizeCapacityDecisionBuckets,
+  type CapacityDecisionAggregate,
+} from "../../src/lib/corporations/capacityDecisionTelemetry/rules";
 import { CAPACITY_DECISION_COLLECTION } from "../../src/lib/corporations/capacityDecisionTelemetry/persistence";
 import { resolveMongoDbName } from "../../src/lib/mongodb";
 
@@ -162,6 +165,16 @@ async function main(): Promise<void> {
         "corporations + corporateSectors.plantsPnl + nppMarketEntryFunnels/current + capacityDecisionFunnels/latest",
       coverage,
       latestCapacityDecisionFunnel: capacityDecisions,
+      // Aggregate, non-identifying funnel: world denominators plus each
+      // bucket's share of observed capacity decisions. Buckets carry sums and
+      // counts only, so no player or corporation is identifiable.
+      capacityDecisionFunnelSummary: capacityDecisions
+        ? {
+            schemaVersion: capacityDecisions.schemaVersion,
+            turn: capacityDecisions.turn,
+            ...summarizeCapacityDecisionBuckets(capacityDecisions.buckets ?? {}),
+          }
+        : null,
       latestNppEntryFunnel: entryFunnel
         ? {
             schemaVersion: entryFunnel.schemaVersion,
