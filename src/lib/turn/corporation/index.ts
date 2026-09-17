@@ -79,7 +79,11 @@ import { readCorpEconomicAnchor } from "@/lib/currency/corpEconomyFields";
 import { toInternalUnits } from "@/lib/lineOfCredit/locMath";
 import { garnishLocFromIncome } from "@/lib/lineOfCredit/garnishment";
 import { loadTxThresholds } from "@/lib/financialTxLog/emit";
-import { processSoeOperations } from "@/lib/nationalization/soeOperations";
+import {
+  processSoeOperations,
+  foldSoeCashDeltas,
+  buildSoeBackingAuditEntry,
+} from "@/lib/nationalization/soeOperations";
 import { processSoeRemittance } from "@/lib/nationalization/soeRemittance";
 import { processPendingNationalizations } from "@/lib/nationalization/pendingNationalizations";
 import { processNationalizationAuctions } from "@/lib/nationalization/privatizationAuction";
@@ -1313,16 +1317,43 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
   // and back operating losses from the treasury (spec §11.1/§11.2). Runs after
   // sector/corp writes so liquidCapital reflects this turn's result, and within
   // the corp turn so the metric writes precede the late state-metrics phase.
+  // The realized per-corp operating result comes from this turn's own snapshots
+  // (the same ₳/turn `income` that moved liquidCapital); it is the coverable
+  // basis, with the margin estimate only as fallback (#2043).
   mark("acumen+fxSpread+newSectors");
-  await processSoeOperations(db, now, currentYear);
+  const realizedIncomeAnchorByCorpId = new Map(
+    corpSnapshots.map((snap) => [snap.corpId.toString(), snap.income])
+  );
+  const { backing: soeBacking } = await processSoeOperations(
+    db,
+    now,
+    currentYear,
+    realizedIncomeAnchorByCorpId
+  );
 
   // Phase 3a': NatCorp profit remittance, split this turn's SOE operating profit
   // between CEO retention (stays in liquidCapital) and remittance to the treasury
   // reserve (spec P6g §5.1). Runs after loss-backing so it only acts on a positive
   // balance, and reuses the same estimate the budget revenue line scales by.
   mark("soeOperations");
-  await processSoeRemittance(db, now);
+  const { perCorp: soeRemitted } = await processSoeRemittance(db, now);
   mark("soeRemittance");
+
+  // Fold both SOE cash legs into the in-memory snapshots/corp map BEFORE the
+  // Phase 8 history persistence, so corporationHistory rows chart post-backing
+  // cash (pre-fold they showed the stale pre-backing balance). Also emits the
+  // deterministic aggregate audit row for the sweep.
+  foldSoeCashDeltas({
+    corpSnapshots,
+    corpById: lookups.corpById,
+    backing: soeBacking,
+    remittedLocalByCorpId: new Map(soeRemitted.map((r) => [r.corpId.toString(), r.amountLocal])),
+  });
+  const soeSweepAudit = buildSoeBackingAuditEntry({
+    backing: soeBacking,
+    remittedCorps: soeRemitted.length,
+  });
+  if (soeSweepAudit) corpAuditEntries.push(soeSweepAudit);
 
   // Phase 3b: R&D innovation, every 6 turns, corps with accumulated R&D score
   // have a chance to boost a sector's revenue. Extraction corps also boost state
