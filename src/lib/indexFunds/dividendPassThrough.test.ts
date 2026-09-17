@@ -7,7 +7,19 @@ import {
   processIndexFundDividendsBatch,
 } from "@/lib/indexFunds/dividendPassThrough";
 
-vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
+const { supportMock, getMongoClientMock } = vi.hoisted(() => ({
+  supportMock: vi.fn(),
+  getMongoClientMock: vi.fn(),
+}));
+
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: supportMock,
+}));
+
+vi.mock("@/lib/mongodb", () => ({
+  getMongoClient: getMongoClientMock,
+  getDb: vi.fn(),
+}));
 vi.mock("@/lib/financialTxLog/emit", () => ({
   emitTx: vi.fn().mockResolvedValue(undefined),
   emitTxBulk: vi.fn().mockResolvedValue(undefined),
@@ -59,6 +71,8 @@ describe("dividendPassThrough", () => {
 
     beforeEach(async () => {
       vi.clearAllMocks();
+      supportMock.mockResolvedValue(false);
+      getMongoClientMock.mockReturnValue(undefined);
       db = createMockDb();
       for (const name of [
         "indexFunds",
@@ -131,16 +145,14 @@ describe("dividendPassThrough", () => {
       });
       expect(reinvestUpdate).toBeDefined();
 
-      expect(db.collectionMocks["characters"]!.bulkWrite).toHaveBeenCalled();
-      const charBulk = vi.mocked(db.collectionMocks["characters"]!.bulkWrite).mock.calls[0][0] as {
-        updateOne: {
-          filter: { _id: ObjectId };
-          update: { $inc: Record<string, number>; $set: { updatedAt: Date } };
-        };
-      }[];
-      expect(charBulk[0].updateOne.filter._id.toString()).toBe(characterId.toString());
+      // The holder credit is a keyed leg (one idempotent updateOne), not a
+      // bulk write: a crash between holders resumes per holder.
+      expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
+      const charUpdates = vi.mocked(db.collectionMocks["characters"]!.updateOne).mock.calls;
+      expect(charUpdates).toHaveLength(1);
+      expect((charUpdates[0][0] as { _id: ObjectId })._id.toString()).toBe(characterId.toString());
       // forex is always on — dividend pass-through writes to personal currency balance
-      const incFields = charBulk[0].updateOne.update.$inc;
+      const incFields = (charUpdates[0][1] as { $inc: Record<string, number> }).$inc;
       const paidAmount = Object.values(incFields)[0];
       expect(paidAmount).toBe(250_000);
 
@@ -183,10 +195,11 @@ describe("dividendPassThrough", () => {
         turn: 42,
       });
 
-      const charBulk = vi.mocked(db.collectionMocks["characters"]!.bulkWrite).mock.calls[0][0] as {
-        updateOne: { update: { $inc: Record<string, number> } };
-      }[];
-      const paidNative = Object.values(charBulk[0].updateOne.update.$inc)[0];
+      const charUpdates = vi.mocked(db.collectionMocks["characters"]!.updateOne).mock.calls;
+      expect(charUpdates).toHaveLength(1);
+      const paidNative = Object.values(
+        (charUpdates[0][1] as { $inc: Record<string, number> }).$inc
+      )[0];
       // 250,000 ₳ of pass-through at 102.23 JPY per ₳. Crediting the raw ₳ figure
       // into a yen wallet, which is what this used to do, underpaid by ~102x.
       expect(paidNative).toBeCloseTo(250_000 * 102.23, 0);
@@ -225,11 +238,10 @@ describe("dividendPassThrough", () => {
   });
 
   /**
-   * The batched path is what `corporationTurn` runs. Its correctness claim is
-   * that aggregating N accruals into a handful of bulk `$inc`s lands the same
-   * balances as N separate calls. These pin the arithmetic that claim rests
-   * on: per-accrual flooring must happen BEFORE summation, and invalid
-   * accruals must be dropped rather than poisoning a total with NaN.
+   * The batched path is what `corporationTurn` runs. Each accrual is its own
+   * crash-safe keyed flow now, so these pin the arithmetic the flows rest on:
+   * per-accrual flooring must happen BEFORE crediting, and invalid accruals
+   * must be dropped rather than poisoning a total with NaN.
    *
    * Full state-level equivalence across all six written collections is proved
    * against a real Mongo by scripts/perf/dividend-equivalence.ts, which a
@@ -243,6 +255,8 @@ describe("dividendPassThrough", () => {
 
     beforeEach(async () => {
       vi.clearAllMocks();
+      supportMock.mockResolvedValue(false);
+      getMongoClientMock.mockReturnValue(undefined);
       db = createMockDb();
       for (const name of [
         "indexFunds",
@@ -286,19 +300,24 @@ describe("dividendPassThrough", () => {
 
     /**
      * Total of every `$inc` the batch issued against a collection, summed
-     * across fields. Deliberately field-agnostic: the balance field depends
-     * on whether forex is on (`cashOnHand` vs
-     * `currencyBalances.personal.<CCY>`), and what these tests pin is the
-     * amount credited, not where it is stored.
+     * across fields and across keyed-leg updateOnes and bulk writes.
+     * Deliberately field-agnostic: the balance field depends on whether forex
+     * is on (`cashOnHand` vs `currencyBalances.personal.<CCY>`), and what
+     * these tests pin is the amount credited, not where it is stored.
      */
     function totalInc(collection: string): number {
-      const calls = db.collectionMocks[collection]!.bulkWrite.mock.calls;
       let sum = 0;
-      for (const [ops] of calls) {
+      const addIncs = (inc: Record<string, number> | undefined): void => {
+        for (const value of Object.values(inc ?? {})) {
+          if (typeof value === "number") sum += value;
+        }
+      };
+      for (const call of db.collectionMocks[collection]!.updateOne.mock.calls) {
+        addIncs((call[1] as { $inc?: Record<string, number> })?.$inc);
+      }
+      for (const [ops] of db.collectionMocks[collection]!.bulkWrite.mock.calls) {
         for (const op of ops as { updateOne?: { update?: { $inc?: Record<string, number> } } }[]) {
-          for (const value of Object.values(op.updateOne?.update?.$inc ?? {})) {
-            if (typeof value === "number") sum += value;
-          }
+          addIncs(op.updateOne?.update?.$inc);
         }
       }
       return sum;
@@ -315,14 +334,9 @@ describe("dividendPassThrough", () => {
       await processIndexFundDividendsBatch(db as unknown as Db, accruals, { turn: 42 });
 
       // 5 x 1,000,000 gross => 5 x 750,000 reinvested, 5 x 250,000 passed through.
-      const fundCalls = db.collectionMocks["indexFunds"]!.bulkWrite.mock.calls;
-      let fundCash = 0;
-      for (const [ops] of fundCalls) {
-        for (const op of ops as { updateOne?: { update?: { $inc?: Record<string, number> } } }[]) {
-          fundCash += op.updateOne?.update?.$inc?.cashAnchor ?? 0;
-        }
-      }
-      expect(fundCash).toBe(3_750_000);
+      // Each accrual is its own keyed flow (distinct occurrence keys), so the
+      // fund credits land as five separate idempotent legs.
+      expect(totalInc("indexFunds")).toBe(3_750_000);
       // The sole holder owns the whole float, so it takes the entire 25%.
       expect(totalInc("characters")).toBe(1_250_000);
     });
@@ -367,6 +381,9 @@ describe("dividendPassThrough", () => {
 
       expect(db.collectionMocks["indexFunds"]!.bulkWrite).not.toHaveBeenCalled();
       expect(db.collectionMocks["characters"]!.bulkWrite).not.toHaveBeenCalled();
+      expect(db.collectionMocks["indexFunds"]!.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks["characters"]!.updateOne).not.toHaveBeenCalled();
+      expect(db.collectionMocks["indexFundTransactions"]!.insertOne).not.toHaveBeenCalled();
     });
 
     it("keeps per-corporation transaction granularity across the batch", async () => {
@@ -387,8 +404,8 @@ describe("dividendPassThrough", () => {
         { turn: 42 }
       );
 
-      const inserted = db.collectionMocks["indexFundTransactions"]!.insertMany.mock.calls.flatMap(
-        ([docs]) => docs as { corporationId?: ObjectId }[]
+      const inserted = db.collectionMocks["indexFundTransactions"]!.insertOne.mock.calls.map(
+        ([doc]) => doc as { corporationId?: ObjectId }
       );
       // Two rows per accrual (reinvest + pass-through), attributed per corp.
       expect(inserted.length).toBe(4);

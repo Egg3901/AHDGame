@@ -1440,7 +1440,19 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
             } catch {
               prefetch = undefined; // fall back to per-call fetch on any read hiccup
             }
+            // Same-tuple occurrence index in pass order, mirroring the
+            // batched path, so repeated identical accruals key distinctly.
+            const occurrenceByTuple = new Map<string, number>();
             for (const accrual of list) {
+              const tupleKey = [
+                accrual.fundId.toString(),
+                accrual.corporationId.toString(),
+                `turn:${typeof turn === "number" ? turn : "?"}`,
+                `gross:${Math.round(accrual.amountAnchor * 100) / 100}`,
+                `shares:${accrual.shares}`,
+              ].join(":");
+              const occurrence = occurrenceByTuple.get(tupleKey) ?? 0;
+              occurrenceByTuple.set(tupleKey, occurrence + 1);
               try {
                 await processIndexFundDividend(
                   db,
@@ -1448,7 +1460,11 @@ export async function processCorporationTurn(turn?: number): Promise<Corporation
                   accrual.amountAnchor,
                   accrual.corporationId,
                   accrual.shares,
-                  { turn: typeof turn === "number" ? turn : undefined, prefetch }
+                  {
+                    turn: typeof turn === "number" ? turn : undefined,
+                    prefetch,
+                    occurrence,
+                  }
                 );
               } catch (err) {
                 console.warn("[corp-turn] Index fund dividend pass-through failed:", {

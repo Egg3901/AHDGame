@@ -24,22 +24,18 @@ import type {
   IndexFund,
   IndexFundPosition,
 } from "@/lib/db/types";
-import type { IndexFundTransaction } from "@/lib/db/types";
-import {
-  getFundById,
-  listFundPositions,
-  insertFundTransaction,
-  insertFundTransactionsBulk,
-} from "@/lib/indexFunds/fundQueries";
+import { getFundById, listFundPositions } from "@/lib/indexFunds/fundQueries";
 import { splitIndexFundDividend } from "@/lib/indexFunds/unitAccounting";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { buildPersonalBalanceInc, loadCharacterFxRate } from "@/lib/currency/characterFunds";
-import {
-  buildIndexFundDividendTxEntry,
-  logIndexFundDividendBulk,
-} from "@/lib/indexFunds/fundTxLog";
+import { loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
+import {
+  applyFundDividendSpend,
+  buildFundDividendFingerprint,
+  buildFundDividendKey,
+  type FundDividendRecipient,
+} from "@/lib/indexFunds/fundDividendSpend";
 
 /**
  * ₳ → fund-currency rate for a holder payout, matching what redeem applies.
@@ -98,6 +94,14 @@ export async function processIndexFundDividend(
     // unitSupply (constant) and positions (constant); the reinvest/undistributed
     // $inc on cashAnchor is additive and never reads the fetched cashAnchor.
     prefetch?: { fund: IndexFund; positions: IndexFundPosition[] };
+    /**
+     * Same-tuple occurrence index for the deterministic idempotency key (see
+     * `buildFundDividendKey`). The turn-loop fallback counts repeated
+     * identical accruals in pass order; a standalone call is occurrence 0.
+     */
+    occurrence?: number;
+    /** Override key, for tests. */
+    idempotencyKey?: string;
   }
 ): Promise<DividendPassThroughResult> {
   const fund = options?.prefetch?.fund ?? (await getFundById(db, fundId));
@@ -117,16 +121,10 @@ export async function processIndexFundDividend(
     };
   }
 
-  // Credit the reinvestment portion (75%) to fund cash.
-  await db.collection("indexFunds").updateOne(
-    { _id: fundId },
-    {
-      $inc: { cashAnchor: split.reinvestAnchor },
-      $set: { updatedAt: new Date() },
-    }
-  );
-
-  // Distribute the pass-through portion (25%) to unit holders proportionally.
+  // Resolve the ownership snapshot and pin every recipient before any money
+  // moves. Eligibility is decided here from pre-debit reads exactly like the
+  // legacy loop did; the spend primitive replays the pinned list on retry
+  // instead of recomputing entitlements from possibly changed ownership.
   const forexEnabled = await isForexEnabled();
   // Holder dividends are computed in ₳ and credited into the fund-currency
   // wallet bucket, so they need the same ₳ → native conversion redeem applies.
@@ -135,7 +133,6 @@ export async function processIndexFundDividend(
   const positions = options?.prefetch?.positions ?? (await listFundPositions(db, fundId));
   const perUnitDividend = split.passThroughAnchor / fund.unitSupply;
   const turn = options?.turn ?? (await getCurrentTurn(db));
-  const now = new Date();
 
   const corporation = await db
     .collection<Corporation>("corporations")
@@ -166,22 +163,8 @@ export async function processIndexFundDividend(
   const characterNameById = new Map(characterDocs.map((c) => [c._id.toString(), c.name]));
   const imperialNameById = new Map(imperialDocs.map((c) => [c._id.toString(), c.name]));
 
-  let holdersPaid = 0;
+  const recipients: FundDividendRecipient[] = [];
   let distributedAnchor = 0;
-  const dividendTxEntries: ReturnType<typeof buildIndexFundDividendTxEntry>[] = [];
-  const characterOps: {
-    updateOne: {
-      filter: { _id: ObjectId };
-      update: { $inc: Record<string, number>; $set: { updatedAt: Date } };
-    };
-  }[] = [];
-  const imperialOps: typeof characterOps = [];
-  const nppOps: {
-    updateOne: {
-      filter: { _id: ObjectId };
-      update: { $inc: Record<string, number>; $set: { updatedAt: Date } };
-    };
-  }[] = [];
 
   for (const position of positions) {
     if (position.holderKind === "fund_reserve") continue;
@@ -193,146 +176,101 @@ export async function processIndexFundDividend(
     if (position.holderKind === "character" && position.characterId) {
       const holderName = characterNameById.get(position.characterId.toString());
       if (!holderName) continue;
-
-      const inc = buildPersonalBalanceInc(
-        holderDividend * fundFxRate,
-        fund.anchorCurrencyCode,
-        forexEnabled
-      );
-      characterOps.push({
-        updateOne: {
-          filter: { _id: position.characterId },
-          update: { $inc: inc, $set: { updatedAt: now } },
-        },
+      recipients.push({
+        holderKind: "character",
+        holderId: position.characterId,
+        holderName,
+        units: position.units,
+        amountAnchor: holderDividend,
+        amountNative: holderDividend * fundFxRate,
       });
-      dividendTxEntries.push(
-        buildIndexFundDividendTxEntry({
-          fund,
-          holder: {
-            holderKind: "character",
-            holderId: position.characterId,
-            holderName,
-          },
-          amountAnchor: holderDividend,
-          amountNative: holderDividend * fundFxRate,
-          units: position.units,
-          corporationId,
-          corporationName,
-          turn,
-          createdAt: now,
-        })
-      );
-      holdersPaid++;
       distributedAnchor += holderDividend;
     } else if (position.holderKind === "imperial_character" && position.imperialCharacterId) {
       const holderName = imperialNameById.get(position.imperialCharacterId.toString());
       if (!holderName) continue;
-
-      const inc = buildPersonalBalanceInc(
-        holderDividend * fundFxRate,
-        fund.anchorCurrencyCode,
-        forexEnabled
-      );
-      imperialOps.push({
-        updateOne: {
-          filter: { _id: position.imperialCharacterId },
-          update: { $inc: inc, $set: { updatedAt: now } },
-        },
+      recipients.push({
+        holderKind: "imperial_character",
+        holderId: position.imperialCharacterId,
+        holderName,
+        units: position.units,
+        amountAnchor: holderDividend,
+        amountNative: holderDividend * fundFxRate,
       });
-      dividendTxEntries.push(
-        buildIndexFundDividendTxEntry({
-          fund,
-          holder: {
-            holderKind: "imperial_character",
-            holderId: position.imperialCharacterId,
-            holderName,
-          },
-          amountAnchor: holderDividend,
-          amountNative: holderDividend * fundFxRate,
-          units: position.units,
-          corporationId,
-          corporationName,
-          turn,
-          createdAt: now,
-        })
-      );
-      holdersPaid++;
       distributedAnchor += holderDividend;
     } else if (position.holderKind === "npp" && position.nppId) {
-      nppOps.push({
-        updateOne: {
-          filter: { _id: position.nppId },
-          update: {
-            $inc: { nppInvestmentCashAnchor: holderDividend },
-            $set: { updatedAt: new Date() },
-          },
-        },
+      recipients.push({
+        holderKind: "npp",
+        holderId: position.nppId,
+        holderName: "",
+        units: position.units,
+        amountAnchor: holderDividend,
+        amountNative: holderDividend,
       });
-      holdersPaid++;
       distributedAnchor += holderDividend;
     }
   }
 
-  if (characterOps.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("characters").bulkWrite(characterOps as any);
-  }
-  if (imperialOps.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("imperialCharacters").bulkWrite(imperialOps as any);
-  }
-  if (nppOps.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.collection("npps").bulkWrite(nppOps as any);
-  }
-
-  if (dividendTxEntries.length > 0) {
-    await logIndexFundDividendBulk(db, dividendTxEntries);
-  }
-
   const undistributedPassThrough =
     Math.round(Math.max(0, split.passThroughAnchor - distributedAnchor) * 100) / 100;
-  if (undistributedPassThrough > 0) {
-    await db.collection("indexFunds").updateOne(
-      { _id: fundId },
-      {
-        $inc: { cashAnchor: undistributedPassThrough },
-        $set: { updatedAt: new Date() },
-      }
-    );
-  }
-
-  // Log the dividend transaction on the fund.
-  await insertFundTransaction(db, {
-    fundId,
-    kind: "dividend_pass_through",
-    corporationId,
-    shares: sharesHeld,
-    navAnchor: fund.quotedNav,
-    amountAnchor: distributedAnchor,
-    note: `Dividend pass-through: ${distributedAnchor.toFixed(2)}₳ to ${holdersPaid} holders`,
-    createdAt: new Date(),
-  });
-
-  // Also log the retained cash portion.
+  // The legacy two fund writes (75% up front, floored remainder after) were
+  // additive $incs, so they arrive here as one pinned fund credit.
   const retainedAnchor = split.reinvestAnchor + undistributedPassThrough;
-  await insertFundTransaction(db, {
+  const holdersPaid = recipients.length;
+  const fingerprint = buildFundDividendFingerprint({
     fundId,
-    kind: "dividend_reinvest",
     corporationId,
-    shares: sharesHeld,
-    navAnchor: fund.quotedNav,
-    amountAnchor: retainedAnchor,
-    note: `Dividend retained: ${retainedAnchor.toFixed(2)}₳ to fund cash`,
-    createdAt: new Date(),
+    sharesHeld,
+    grossAnchor: split.grossAnchor,
+    reinvestAnchor: split.reinvestAnchor,
+    retainedAnchor,
+    distributedAnchor,
+    holdersPaid,
+    anchorCurrencyCode: fund.anchorCurrencyCode,
+    quotedNav: fund.quotedNav,
+    fundFxRate,
+    forexEnabled,
+    recipients,
+    turn,
+  });
+  const key =
+    options?.idempotencyKey ??
+    buildFundDividendKey(
+      fundId,
+      corporationId,
+      turn,
+      split.grossAnchor,
+      sharesHeld,
+      options?.occurrence ?? 0
+    );
+  const { outcome } = await applyFundDividendSpend(db, {
+    fundId,
+    fundName: fund.name,
+    fundSlug: fund.slug,
+    fundTicker: fund.tickerSymbol,
+    anchorCurrencyCode: fund.anchorCurrencyCode,
+    quotedNav: fund.quotedNav,
+    corporationId,
+    ...(corporationName !== undefined ? { corporationName } : {}),
+    sharesHeld,
+    grossAnchor: split.grossAnchor,
+    reinvestAnchor: split.reinvestAnchor,
+    retainedAnchor,
+    distributedAnchor,
+    holdersPaid,
+    recipients,
+    fundFxRate,
+    forexEnabled,
+    turn,
+    fingerprint,
+    idempotencyKey: key,
   });
 
   return {
     fundId,
-    totalGrossAnchor: split.grossAnchor,
-    reinvestedAnchor: retainedAnchor,
-    passedThroughAnchor: distributedAnchor,
-    holdersPaid,
+    totalGrossAnchor: outcome.grossAnchor,
+    reinvestedAnchor: outcome.retainedAnchor,
+    passedThroughAnchor: outcome.distributedAnchor,
+    holdersPaid: outcome.holdersPaid,
   };
 }
 
@@ -346,21 +284,24 @@ export interface FundDividendAccrualInput {
 
 /**
  * Batched index-fund dividend pass-through — behaviourally identical to calling
- * processIndexFundDividend once per accrual, but collapsing the ~9 DB
- * round-trips × N accruals into a handful of bulk operations.
+ * processIndexFundDividend once per accrual, but batching the reads (fund
+ * docs, positions, corp/holder names) with `$in` while each accrual's writes
+ * run as its own crash-safe resumable flow (`applyFundDividendSpend`).
  *
- * How it stays equivalent: the per-holder / per-fund credits are pure `$inc`s
- * (additive, order-independent), so they aggregate across accruals to the same
- * final balances; each accrual's amount is floored to 2dp BEFORE aggregation
- * exactly as the per-call path does; and every transaction-log row is preserved
- * (holder tx entries and the two per-accrual fund-tx rows are collected and bulk
- * inserted), keeping per-corporation attribution granularity. Reads (fund docs,
- * positions, corp/holder names) are batched with `$in`. The only observable
- * difference is `updatedAt`/`createdAt` timestamps sharing one turn-instant
- * instead of per-call `new Date()` — immaterial.
+ * How it stays equivalent: each accrual floors its per-holder credits to 2dp
+ * BEFORE crediting, exactly as the per-call path does; every transaction-log
+ * row is preserved (holder entries plus the two per-accrual fund-tx rows),
+ * keeping per-corporation attribution granularity. Same-holder credits across
+ * accruals land as separate keyed legs under different flow keys instead of
+ * one pre-summed `$inc`: the totals agree up to float-association drift
+ * (~1e-8 absolute, six orders of magnitude below the floored cent).
  *
- * This is the dominant cost of corporationTurn on production (remote Mongo: ~5k
- * serial round-trips/turn); batching it is the single biggest turn-time win.
+ * One deliberate difference from the old bulk pass: a pathological accrual
+ * (a holder row vanishing between the batched read and the keyed write) fails
+ * closed for just that accrual — its applied prefix compensates and the pass
+ * logs a warning and continues — instead of aborting the whole batch. The
+ * old path could not fail this way at all (unmatched bulk filters silently
+ * matched nothing); the new path refuses to strand a partial distribution.
  */
 export async function processIndexFundDividendsBatch(
   db: Db,
@@ -382,7 +323,6 @@ export async function processIndexFundDividendsBatch(
     return rate;
   };
   const turn = options?.turn ?? (await getCurrentTurn(db));
-  const now = new Date();
 
   // Prefetch each distinct fund + its positions once.
   const fundIdStrs = [...new Set(valid.map((a) => a.fundId.toString()))];
@@ -440,30 +380,18 @@ export async function processIndexFundDividendsBatch(
   const charNameById = new Map(charDocs.map((c) => [c._id.toString(), c.name]));
   const impNameById = new Map(impDocs.map((c) => [c._id.toString(), c.name]));
 
-  // Aggregators (all $inc, so additive across accruals).
-  const fundCashInc = new Map<string, { id: ObjectId; amt: number }>();
-  const charInc = new Map<string, { id: ObjectId; inc: Record<string, number> }>();
-  const impInc = new Map<string, { id: ObjectId; inc: Record<string, number> }>();
-  const nppInc = new Map<string, { id: ObjectId; amt: number }>();
-  const holderTxEntries: ReturnType<typeof buildIndexFundDividendTxEntry>[] = [];
-  const fundTxDocs: Omit<IndexFundTransaction, "_id">[] = [];
-
-  const addInc = (
-    map: Map<string, { id: ObjectId; inc: Record<string, number> }>,
-    id: ObjectId,
-    inc: Record<string, number>
-  ) => {
-    const key = id.toString();
-    const e = map.get(key) ?? { id, inc: {} };
-    for (const [field, v] of Object.entries(inc)) e.inc[field] = (e.inc[field] ?? 0) + v;
-    map.set(key, e);
-  };
-  const addAmt = (map: Map<string, { id: ObjectId; amt: number }>, id: ObjectId, amt: number) => {
-    const key = id.toString();
-    const e = map.get(key) ?? { id, amt: 0 };
-    e.amt += amt;
-    map.set(key, e);
-  };
+  // Same-tuple occurrence index per accrual, in pass order: repeated
+  // identical (fund, corp, turn, gross, shares) tuples each get their own
+  // deterministic key instead of colliding on one flow.
+  const occurrenceByTuple = new Map<string, number>();
+  const tupleKeyFor = (accrual: FundDividendAccrualInput): string =>
+    [
+      accrual.fundId.toString(),
+      accrual.corporationId.toString(),
+      `turn:${turn}`,
+      `gross:${Math.round(accrual.amountAnchor * 100) / 100}`,
+      `shares:${accrual.shares}`,
+    ].join(":");
 
   for (const accrual of valid) {
     const fund = fundById.get(accrual.fundId.toString());
@@ -471,11 +399,15 @@ export async function processIndexFundDividendsBatch(
     const split = splitIndexFundDividend(accrual.amountAnchor);
     if (split.grossAnchor <= 0 || fund.unitSupply <= 0) continue;
 
+    const tupleKey = tupleKeyFor(accrual);
+    const occurrence = occurrenceByTuple.get(tupleKey) ?? 0;
+    occurrenceByTuple.set(tupleKey, occurrence + 1);
+
     const positions = positionsByFund.get(accrual.fundId.toString()) ?? [];
     const perUnitDividend = split.passThroughAnchor / fund.unitSupply;
     const fundFxRate = await fundFxRateFor(fund.anchorCurrencyCode);
     const corporationName = corpNameById.get(accrual.corporationId.toString());
-    let holdersPaid = 0;
+    const recipients: FundDividendRecipient[] = [];
     let distributedAnchor = 0;
 
     for (const position of positions) {
@@ -486,64 +418,36 @@ export async function processIndexFundDividendsBatch(
       if (position.holderKind === "character" && position.characterId) {
         const holderName = charNameById.get(position.characterId.toString());
         if (!holderName) continue;
-        addInc(
-          charInc,
-          position.characterId,
-          buildPersonalBalanceInc(
-            holderDividend * fundFxRate,
-            fund.anchorCurrencyCode,
-            forexEnabled
-          )
-        );
-        holderTxEntries.push(
-          buildIndexFundDividendTxEntry({
-            fund,
-            holder: { holderKind: "character", holderId: position.characterId, holderName },
-            amountAnchor: holderDividend,
-            amountNative: holderDividend * fundFxRate,
-            units: position.units,
-            corporationId: accrual.corporationId,
-            corporationName,
-            turn,
-            createdAt: now,
-          })
-        );
-        holdersPaid++;
+        recipients.push({
+          holderKind: "character",
+          holderId: position.characterId,
+          holderName,
+          units: position.units,
+          amountAnchor: holderDividend,
+          amountNative: holderDividend * fundFxRate,
+        });
         distributedAnchor += holderDividend;
       } else if (position.holderKind === "imperial_character" && position.imperialCharacterId) {
         const holderName = impNameById.get(position.imperialCharacterId.toString());
         if (!holderName) continue;
-        addInc(
-          impInc,
-          position.imperialCharacterId,
-          buildPersonalBalanceInc(
-            holderDividend * fundFxRate,
-            fund.anchorCurrencyCode,
-            forexEnabled
-          )
-        );
-        holderTxEntries.push(
-          buildIndexFundDividendTxEntry({
-            fund,
-            holder: {
-              holderKind: "imperial_character",
-              holderId: position.imperialCharacterId,
-              holderName,
-            },
-            amountAnchor: holderDividend,
-            amountNative: holderDividend * fundFxRate,
-            units: position.units,
-            corporationId: accrual.corporationId,
-            corporationName,
-            turn,
-            createdAt: now,
-          })
-        );
-        holdersPaid++;
+        recipients.push({
+          holderKind: "imperial_character",
+          holderId: position.imperialCharacterId,
+          holderName,
+          units: position.units,
+          amountAnchor: holderDividend,
+          amountNative: holderDividend * fundFxRate,
+        });
         distributedAnchor += holderDividend;
       } else if (position.holderKind === "npp" && position.nppId) {
-        addAmt(nppInc, position.nppId, holderDividend);
-        holdersPaid++;
+        recipients.push({
+          holderKind: "npp",
+          holderId: position.nppId,
+          holderName: "",
+          units: position.units,
+          amountAnchor: holderDividend,
+          amountNative: holderDividend,
+        });
         distributedAnchor += holderDividend;
       }
     }
@@ -551,64 +455,61 @@ export async function processIndexFundDividendsBatch(
     const undistributedPassThrough =
       Math.round(Math.max(0, split.passThroughAnchor - distributedAnchor) * 100) / 100;
     const retainedAnchor = split.reinvestAnchor + undistributedPassThrough;
-    addAmt(fundCashInc, accrual.fundId, retainedAnchor);
-
-    fundTxDocs.push({
+    const holdersPaid = recipients.length;
+    const fingerprint = buildFundDividendFingerprint({
       fundId: accrual.fundId,
-      kind: "dividend_pass_through",
       corporationId: accrual.corporationId,
-      shares: accrual.shares,
-      navAnchor: fund.quotedNav,
-      amountAnchor: distributedAnchor,
-      note: `Dividend pass-through: ${distributedAnchor.toFixed(2)}₳ to ${holdersPaid} holders`,
-      createdAt: now,
-    } as Omit<IndexFundTransaction, "_id">);
-    fundTxDocs.push({
-      fundId: accrual.fundId,
-      kind: "dividend_reinvest",
-      corporationId: accrual.corporationId,
-      shares: accrual.shares,
-      navAnchor: fund.quotedNav,
-      amountAnchor: retainedAnchor,
-      note: `Dividend retained: ${retainedAnchor.toFixed(2)}₳ to fund cash`,
-      createdAt: now,
-    } as Omit<IndexFundTransaction, "_id">);
+      sharesHeld: accrual.shares,
+      grossAnchor: split.grossAnchor,
+      reinvestAnchor: split.reinvestAnchor,
+      retainedAnchor,
+      distributedAnchor,
+      holdersPaid,
+      anchorCurrencyCode: fund.anchorCurrencyCode,
+      quotedNav: fund.quotedNav,
+      fundFxRate,
+      forexEnabled,
+      recipients,
+      turn,
+    });
+    try {
+      await applyFundDividendSpend(db, {
+        fundId: accrual.fundId,
+        fundName: fund.name,
+        fundSlug: fund.slug,
+        fundTicker: fund.tickerSymbol,
+        anchorCurrencyCode: fund.anchorCurrencyCode,
+        quotedNav: fund.quotedNav,
+        corporationId: accrual.corporationId,
+        ...(corporationName !== undefined ? { corporationName } : {}),
+        sharesHeld: accrual.shares,
+        grossAnchor: split.grossAnchor,
+        reinvestAnchor: split.reinvestAnchor,
+        retainedAnchor,
+        distributedAnchor,
+        holdersPaid,
+        recipients,
+        fundFxRate,
+        forexEnabled,
+        turn,
+        fingerprint,
+        idempotencyKey: buildFundDividendKey(
+          accrual.fundId,
+          accrual.corporationId,
+          turn,
+          split.grossAnchor,
+          accrual.shares,
+          occurrence
+        ),
+      });
+    } catch (err) {
+      console.warn("[corp-turn] Index fund dividend pass-through failed:", {
+        fundId: accrual.fundId.toString(),
+        corporationId: accrual.corporationId.toString(),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
-
-  // Bulk writes — one round-trip per collection.
-  const fundOps = [...fundCashInc.values()]
-    .filter((e) => e.amt !== 0)
-    .map((e) => ({
-      updateOne: {
-        filter: { _id: e.id },
-        update: { $inc: { cashAnchor: e.amt }, $set: { updatedAt: now } },
-      },
-    }));
-  const charOps = [...charInc.values()].map((e) => ({
-    updateOne: { filter: { _id: e.id }, update: { $inc: e.inc, $set: { updatedAt: now } } },
-  }));
-  const impOps = [...impInc.values()].map((e) => ({
-    updateOne: { filter: { _id: e.id }, update: { $inc: e.inc, $set: { updatedAt: now } } },
-  }));
-  const nppOps = [...nppInc.values()].map((e) => ({
-    updateOne: {
-      filter: { _id: e.id },
-      update: { $inc: { nppInvestmentCashAnchor: e.amt }, $set: { updatedAt: now } },
-    },
-  }));
-
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  await Promise.all([
-    fundOps.length ? db.collection("indexFunds").bulkWrite(fundOps as any[]) : Promise.resolve(),
-    charOps.length ? db.collection("characters").bulkWrite(charOps as any[]) : Promise.resolve(),
-    impOps.length
-      ? db.collection("imperialCharacters").bulkWrite(impOps as any[])
-      : Promise.resolve(),
-    nppOps.length ? db.collection("npps").bulkWrite(nppOps as any[]) : Promise.resolve(),
-  ]);
-  /* eslint-enable @typescript-eslint/no-explicit-any */
-  await logIndexFundDividendBulk(db, holderTxEntries);
-  await insertFundTransactionsBulk(db, fundTxDocs);
 }
 
 /**

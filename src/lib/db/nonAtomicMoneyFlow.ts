@@ -265,10 +265,27 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * derivations byte-identical and hashes only the overflowing ones, so long
  * client keys flow through dissolution fan-out and compensation paths
  * instead of throwing `RangeError`.
+ * Index-fund dividend pass-through is migrated (one distribution per
+ * accrual via the fundDividendSpend primitive, driven by
+ * processIndexFundDividend and processIndexFundDividendsBatch: the caller
+ * owns the 75/25 split, the ownership snapshot, the FX gate, and the 2dp
+ * flooring, and every pinned figure — recipients, ownership weights,
+ * currencies, rates, gross/net amounts, the fund-cash sink, and audit
+ * metadata — lands on the receipt resume plan at claim time, so a same-key
+ * retry replays the stored plan instead of recomputing entitlements from
+ * changed ownership; fund credit plus one resumable credit per
+ * character/imperial/NPP holder plus two deterministic audit rows run as
+ * keyed steps under a per-fund-per-corp-per-turn-per-gross-per-shares caller
+ * key with same-key replay, fingerprint-conflict, terminal, crash-after-
+ * every-write, concurrent-retry, partial-holder, and compensation tests; the
+ * holder financial-tx entries stay post-commit best effort and fire only on
+ * the fresh attempt, never on a replay. A same-turn re-run resumes via the
+ * deterministic keys; there is no pass-level orphan driver (like buys/sales,
+ * no intent row exists to strand).
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
- * and its float-buy and equity-sale legs are keyed; dividend pass-through
- * and cross-fund writes are not).
+ * and its float-buy, equity-sale, and dividend legs are keyed; cross-fund
+ * writes are not).
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in
