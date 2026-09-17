@@ -5,6 +5,7 @@ import { badRequest } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
 import { loadCampaignAudience } from "./audience";
+import { decorateAdTargets } from "./adTargets";
 import {
   AD_ACTION_COST,
   AD_MAX_ACTIONS,
@@ -40,47 +41,58 @@ export async function quoteAdAudience(
     for (const [dimension, bucket] of Object.entries(cell.buckets))
       unique.set(`${dimension}:${bucket}`, { dimension, bucket });
   const current = targetedAdBonuses(audience.cells, position, ads, stateId, currentTurn);
-  const targets = [...unique.values()].map((target) => {
-    const info = targetAudience(audience.cells, target)!;
-    const maxCount = Math.min(
-      AD_MAX_ACTIONS,
-      Math.ceil(
-        Math.max(
-          0,
-          AD_BONUS_CAP - currentAdBonus(ads, { ...target, stateId }, currentTurn) - 1e-10
-        ) / AD_BOOST_PER_ACTION
-      )
-    );
-    const planned = planAdPurchase(ads, { ...target, stateId }, currentTurn, count);
-    const after = targetedAdBonuses(audience.cells, position, planned ?? ads, stateId, currentTurn);
-    const mean = (bonuses: Record<string, number>) =>
-      audience.cells.reduce(
-        (sum, cell) =>
-          sum +
-          (cell.buckets[target.dimension] === target.bucket
-            ? (cell.share * (bonuses[cell.id] ?? 0)) / info.share
-            : 0),
-        0
+  const targets = decorateAdTargets(
+    [...unique.values()].map((target) => {
+      const info = targetAudience(audience.cells, target)!;
+      const maxCount = Math.min(
+        AD_MAX_ACTIONS,
+        Math.ceil(
+          Math.max(
+            0,
+            AD_BONUS_CAP - currentAdBonus(ads, { ...target, stateId }, currentTurn) - 1e-10
+          ) / AD_BOOST_PER_ACTION
+        )
       );
-    const active = ads.find(
-      (ad) =>
-        ad.stateId === stateId && ad.dimension === target.dimension && ad.bucket === target.bucket
-    );
-    return {
-      ...target,
-      audienceShare: info.share,
-      eligibleAudience: Math.round(audience.context.statePopulation * info.share),
-      cohesion: info.cohesion,
-      cost: adPurchaseCost(1) * rate,
-      currentBonus: mean(current),
-      afterBonus: mean(after),
-      exposure: active ? adExposure(active, currentTurn) : 0,
-      maxCount,
-      available: planned !== null && count <= maxCount,
-    };
-  });
+      const planned = planAdPurchase(ads, { ...target, stateId }, currentTurn, count);
+      const after = targetedAdBonuses(
+        audience.cells,
+        position,
+        planned ?? ads,
+        stateId,
+        currentTurn
+      );
+      const mean = (bonuses: Record<string, number>) =>
+        audience.cells.reduce(
+          (sum, cell) =>
+            sum +
+            (cell.buckets[target.dimension] === target.bucket
+              ? (cell.share * (bonuses[cell.id] ?? 0)) / info.share
+              : 0),
+          0
+        );
+      const active = ads.find(
+        (ad) =>
+          ad.stateId === stateId && ad.dimension === target.dimension && ad.bucket === target.bucket
+      );
+      return {
+        ...target,
+        audienceShare: info.share,
+        eligibleAudience: Math.round(audience.context.statePopulation * info.share),
+        cohesion: info.cohesion,
+        cost: adPurchaseCost(1) * rate,
+        currentBonus: mean(current),
+        afterBonus: mean(after),
+        exposure: active ? adExposure(active, currentTurn) : 0,
+        maxCount,
+        available: planned !== null && count <= maxCount,
+      };
+    }),
+    countryId,
+    audience.context.preset
+  );
   return {
     enabled: true as const,
+    countryId,
     targets,
     actionCost: AD_ACTION_COST,
     currentTurn: currentTurn,
