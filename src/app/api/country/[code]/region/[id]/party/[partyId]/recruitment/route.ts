@@ -1,6 +1,7 @@
 // src/app/api/state/[id]/party/[partyId]/recruitment/route.ts
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/mongodb";
 import { handleRouteError } from "@/lib/api/errors";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -22,7 +23,7 @@ import { getStateLean } from "@/lib/utils/demographics";
 import type { State, StatePartyOrg, NPP } from "@/lib/db/types";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { applyRecruitSpend, STATE_RECRUITMENT_CHANGED } from "@/lib/npp/recruitSpend";
 import { getPartyNppControlStatus } from "@/lib/parties/antiAbuseGuards";
 import { getPartyNppCapacity, partyNppCapacityError } from "@/lib/npp/partyCapacity";
 import { getGameTime } from "@/lib/time/gameTime";
@@ -322,8 +323,10 @@ export async function POST(
 
     const sequentialId = await getNextSequentialId(db, "npp");
 
-    const npp: NPP = {
-      _id: new ObjectId(),
+    // The row `_id` is derived from the flow's idempotency key inside the
+    // spend flow, so a crash retry converges on one NPP row instead of
+    // recording it twice.
+    const npp: Omit<NPP, "_id"> = {
       name,
       countryId,
       homeState: stateId,
@@ -370,98 +373,48 @@ export async function POST(
         );
     }
 
-    await runWithOptionalTransaction(
-      async (session) => {
-        const deductResult = await db.collection<StatePartyOrg>("statePartyOrg").updateOne(
-          {
-            stateId,
-            partyId: partyIdStr,
-            nppActionPoints: { $gte: recruitCost },
-            treasury: { $gte: recruitFund },
-            ...cooldownReadyFilter,
+    // Crash-safe spend (issue #1672): the state AP + treasury deduct is a
+    // keyed idempotent leg and the NPP row a deterministic insert, so a crash
+    // between the sequential writes reconciles instead of spending for an NPP
+    // that never lands. `Idempotency-Key` replays the stored outcome without
+    // spending again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    let nppId: ObjectId;
+    try {
+      ({ nppId } = await applyRecruitSpend(db, {
+        scope: "state",
+        partyObjectId: party._id,
+        orgDocId: statePartyOrg?._id ?? null,
+        recruitCost,
+        recruitFund,
+        cooldown: {
+          set: cooldownSet,
+          readyFilter: cooldownReadyFilter,
+          prior: {
+            ...(statePartyOrg?.nppRecruitmentCooldownUntil
+              ? { nppRecruitmentCooldownUntil: statePartyOrg.nppRecruitmentCooldownUntil }
+              : {}),
+            ...(statePartyOrg?.nppRecruitmentCooldownUntilTurn != null
+              ? { nppRecruitmentCooldownUntilTurn: statePartyOrg.nppRecruitmentCooldownUntilTurn }
+              : {}),
           },
-          {
-            $inc: { nppActionPoints: -recruitCost, treasury: -recruitFund },
-            $set: { ...cooldownSet, updatedAt: now },
-          },
-          { session }
+        },
+        npp,
+        fingerprint: `state:${stateId}:${partyIdStr}:${gameTime.currentTurn}`,
+        idempotencyKey: headerKey ?? randomUUID(),
+      }));
+    } catch (error) {
+      if (error instanceof Error && error.message === STATE_RECRUITMENT_CHANGED) {
+        return NextResponse.json(
+          { error: "Recruitment resources or cooldown changed before the recruit completed." },
+          { status: 409 }
         );
-
-        if (deductResult.matchedCount === 0) {
-          throw new Error("STATE_RECRUITMENT_CHANGED");
-        }
-
-        await db.collection<NPP>("npps").insertOne(npp, { session });
-      },
-      async () => {
-        const deductResult = await db.collection<StatePartyOrg>("statePartyOrg").updateOne(
-          {
-            stateId,
-            partyId: partyIdStr,
-            nppActionPoints: { $gte: recruitCost },
-            treasury: { $gte: recruitFund },
-            ...cooldownReadyFilter,
-          },
-          {
-            $inc: { nppActionPoints: -recruitCost, treasury: -recruitFund },
-            $set: { ...cooldownSet, updatedAt: now },
-          }
-        );
-
-        if (deductResult.matchedCount === 0) {
-          throw new Error("STATE_RECRUITMENT_CHANGED");
-        }
-
-        try {
-          await db.collection<NPP>("npps").insertOne(npp);
-        } catch (error) {
-          const rollbackUpdate: {
-            $inc: { nppActionPoints: number; treasury: number };
-            $set: {
-              updatedAt: Date;
-              nppRecruitmentCooldownUntil?: Date;
-              nppRecruitmentCooldownUntilTurn?: number;
-            };
-            $unset?: Partial<{
-              nppRecruitmentCooldownUntil: "";
-              nppRecruitmentCooldownUntilTurn: "";
-            }>;
-          } = {
-            $inc: { nppActionPoints: recruitCost, treasury: recruitFund },
-            $set: { updatedAt: new Date() },
-          };
-
-          // Restore each pre-recruit cooldown field independently: $set the ones
-          // that existed, $unset the ones that did not — so a rollback never
-          // leaves a phantom turn/Date cooldown behind (e.g. a legacy org that
-          // had only the Date field would otherwise keep the freshly-written turn).
-          const rollbackUnset: Partial<{
-            nppRecruitmentCooldownUntil: "";
-            nppRecruitmentCooldownUntilTurn: "";
-          }> = {};
-          if (statePartyOrg?.nppRecruitmentCooldownUntil) {
-            rollbackUpdate.$set.nppRecruitmentCooldownUntil =
-              statePartyOrg.nppRecruitmentCooldownUntil;
-          } else {
-            rollbackUnset.nppRecruitmentCooldownUntil = "";
-          }
-          if (statePartyOrg?.nppRecruitmentCooldownUntilTurn != null) {
-            rollbackUpdate.$set.nppRecruitmentCooldownUntilTurn =
-              statePartyOrg.nppRecruitmentCooldownUntilTurn;
-          } else {
-            rollbackUnset.nppRecruitmentCooldownUntilTurn = "";
-          }
-          if (Object.keys(rollbackUnset).length > 0) {
-            rollbackUpdate.$unset = rollbackUnset;
-          }
-
-          await db
-            .collection<StatePartyOrg>("statePartyOrg")
-            .updateOne({ stateId, partyId: partyIdStr }, rollbackUpdate);
-          throw error;
-        }
       }
-    );
+      throw error;
+    }
 
     console.log(
       `[NPP Recruitment] State leadership ${auth.character.name} recruited ${name} in ${state.name} for ${party.name}`
@@ -470,7 +423,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       npp: {
-        id: npp._id.toString(),
+        id: nppId.toString(),
         sequentialId: npp.sequentialId,
         name: npp.name,
         homeState: stateId,
@@ -479,12 +432,6 @@ export async function POST(
       cost: { actionPoints: recruitCost, funds: recruitFund },
     });
   } catch (error) {
-    if (error instanceof Error && error.message === "STATE_RECRUITMENT_CHANGED") {
-      return NextResponse.json(
-        { error: "Recruitment resources or cooldown changed before the recruit completed." },
-        { status: 409 }
-      );
-    }
     return handleRouteError(error);
   }
 }

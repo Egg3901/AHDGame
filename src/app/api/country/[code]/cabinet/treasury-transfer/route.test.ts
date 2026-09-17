@@ -8,8 +8,9 @@ vi.mock("@/lib/api/requireAuth", () => ({ requireAuth: vi.fn() }));
 vi.mock("@/lib/gameState", () => ({
   getGameState: vi.fn().mockResolvedValue({ currentTurn: 100 }),
 }));
-vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
-  runWithOptionalTransaction: vi.fn(async (_tx, fallback) => fallback()),
+// Standalone topology: the spend flow runs its keyed sequential fallback.
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: vi.fn().mockResolvedValue(false),
 }));
 
 let db: MockDb;
@@ -57,10 +58,10 @@ function makeBank(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeRequest(body: Record<string, unknown>) {
+function makeRequest(body: Record<string, unknown>, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/country/US/cabinet/treasury-transfer", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -132,12 +133,15 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
     expect(json.record.turn).toBe(100);
   });
 
-  it("deducts from surplus and increments reserveBalance atomically", async () => {
+  it("deducts from surplus and increments reserveBalance as keyed idempotent writes", async () => {
     await setup();
     const { POST } = await import("./route");
 
     await POST(makeRequest({ amount: 1000 }), ctx());
 
+    const budgetFilter = db.collectionMocks.federalBudget.updateOne.mock.calls[0]![0];
+    expect(budgetFilter._id).toBe("federal");
+    expect(budgetFilter.appliedMoneyFlowKeys).toEqual({ $ne: expect.any(String) });
     const budgetInc = db.collectionMocks.federalBudget.updateOne.mock.calls[0]![1].$inc;
     expect(budgetInc.surplus).toBe(-1000);
     expect(budgetInc["spending.byCategory.fxReserveTransfer"]).toBe(1000);
@@ -145,7 +149,24 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
 
     const bankUpdate = db.collectionMocks.centralBanks.updateOne.mock.calls[0]![1];
     expect(bankUpdate.$inc.reserveBalance).toBe(1000);
-    expect(bankUpdate.$set.treasuryTransferHistory).toHaveLength(1);
+    expect(bankUpdate.$push.treasuryTransferHistory.$each).toHaveLength(1);
+    expect(bankUpdate.$push.treasuryTransferHistory.$each[0]).toMatchObject({
+      turn: 100,
+      amount: 1000,
+    });
+    // The success path releases the mutex claim in the same write.
+    expect(bankUpdate.$unset).toMatchObject({
+      treasuryTransferInProgressAt: "",
+      treasuryTransferClaimKey: "",
+    });
+  });
+
+  it("rejects an invalid Idempotency-Key header", async () => {
+    await setup();
+    const { POST } = await import("./route");
+
+    const res = await POST(makeRequest({ amount: 1000 }, { "Idempotency-Key": "" }), ctx());
+    expect(res.status).toBe(400);
   });
 
   it("enforces per-turn cap (0.5% of annual revenue)", async () => {
@@ -249,23 +270,21 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
         ],
       }),
     });
-    db.collectionMocks.centralBanks.findOneAndUpdate.mockResolvedValueOnce(null);
     const { POST } = await import("./route");
 
     const res = await POST(makeRequest({ amount: 1000 }), ctx());
     expect(res.status).toBe(400);
   });
 
-  it("refunds the budget and clears the claim if the bank settlement step fails", async () => {
+  it("refunds the budget and clears its own claim if the bank settlement step fails", async () => {
     await setup();
-    db.collectionMocks.centralBanks.findOneAndUpdate.mockResolvedValueOnce(makeBank());
-    db.collectionMocks.federalBudget.updateOne.mockResolvedValueOnce({
-      matchedCount: 1,
-      modifiedCount: 1,
+    // The reserve-credit write matches nothing; its disambiguation read finds
+    // the bank row without the key, so the step reports guard-rejected and the
+    // applied budget prefix is compensated.
+    db.collectionMocks.centralBanks.updateOne.mockResolvedValueOnce({
+      matchedCount: 0,
+      modifiedCount: 0,
     });
-    db.collectionMocks.centralBanks.updateOne
-      .mockResolvedValueOnce({ matchedCount: 0, modifiedCount: 0 })
-      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 });
 
     const { POST } = await import("./route");
     const res = await POST(makeRequest({ amount: 1000 }), ctx());
@@ -279,8 +298,18 @@ describe("POST /api/country/[code]/cabinet/treasury-transfer", () => {
         "spending.total": -1000,
       },
     });
-    expect(db.collectionMocks.centralBanks.updateOne.mock.calls[1]?.[1]).toMatchObject({
-      $unset: { treasuryTransferInProgressAt: "" },
+    // The failure path releases only the claim this key owns.
+    const releaseUpdate =
+      db.collectionMocks.centralBanks.updateOne.mock.calls[
+        db.collectionMocks.centralBanks.updateOne.mock.calls.length - 1
+      ]?.[1];
+    expect(releaseUpdate).toMatchObject({
+      $unset: { treasuryTransferInProgressAt: "", treasuryTransferClaimKey: "" },
     });
+    const releaseFilter =
+      db.collectionMocks.centralBanks.updateOne.mock.calls[
+        db.collectionMocks.centralBanks.updateOne.mock.calls.length - 1
+      ]?.[0];
+    expect(releaseFilter.treasuryTransferClaimKey).toEqual(expect.any(String));
   });
 });

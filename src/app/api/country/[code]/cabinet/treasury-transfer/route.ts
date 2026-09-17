@@ -5,22 +5,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/mongodb";
 import { requireAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
 import { federalSurplus } from "@/lib/budget/federalSurplus";
 import { COUNTRY_CONFIGS, type CountryId } from "@/lib/constants/countries";
-import {
-  TREASURY_TRANSFER_MAX_PER_TURN_FRACTION,
-  TREASURY_TRANSFER_HISTORY_MAX,
-} from "@/lib/constants/currencies";
+import { TREASURY_TRANSFER_MAX_PER_TURN_FRACTION } from "@/lib/constants/currencies";
 import type { CentralBank } from "@/lib/db/types";
 import type { TreasuryTransferRecord } from "@/lib/db/types/centralBank";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { effectiveBorrowingLimit } from "@/lib/budget/borrowingLimit";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyTreasuryTransferSpend,
+  TreasuryTransferBusyError,
+} from "@/lib/centralBank/treasuryTransferSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { getGameState } from "@/lib/gameState";
 import { getBankId } from "@/lib/centralBank/helpers";
 
@@ -32,41 +34,6 @@ const schema = z.object({
   amount: z.number().positive(),
   justification: z.string().max(200).optional(),
 });
-
-function buildTreasuryTransferClaimFilter(bankId: string, currentTurn: number, isAdmin: boolean) {
-  if (isAdmin) {
-    return {
-      _id: bankId,
-      treasuryTransferInProgressAt: { $exists: false },
-    };
-  }
-
-  return {
-    _id: bankId,
-    treasuryTransferInProgressAt: { $exists: false },
-    $expr: {
-      $let: {
-        vars: { history: { $ifNull: ["$treasuryTransferHistory", []] } },
-        in: {
-          $or: [
-            { $eq: [{ $size: "$$history" }, 0] },
-            {
-              $ne: [
-                {
-                  $let: {
-                    vars: { lastTransfer: { $arrayElemAt: ["$$history", -1] } },
-                    in: "$$lastTransfer.turn",
-                  },
-                },
-                currentTurn,
-              ],
-            },
-          ],
-        },
-      },
-    },
-  };
-}
 
 export async function POST(request: Request, context: RouteContext) {
   try {
@@ -147,124 +114,51 @@ export async function POST(request: Request, context: RouteContext) {
       createdAt: now,
     };
 
-    const budgetDebtFloor =
-      typeof debtCeiling === "number" ? parsed.data.amount - debtCeiling : undefined;
-    const claimFilter = buildTreasuryTransferClaimFilter(bankId, currentTurn, isAdmin);
-    const budgetUpdate = {
-      $inc: {
-        surplus: -parsed.data.amount,
-        "spending.byCategory.fxReserveTransfer": parsed.data.amount,
-        "spending.total": parsed.data.amount,
-      },
-      $set: { updatedAt: now },
-    };
-
-    await runWithOptionalTransaction(
-      async (session) => {
-        const claimedBank = await db
-          .collection<CentralBank>("centralBanks")
-          .findOneAndUpdate(
-            claimFilter,
-            { $set: { treasuryTransferInProgressAt: now, updatedAt: now } },
-            { returnDocument: "before", session }
-          );
-        if (!claimedBank) {
-          throw badRequest("Only one treasury transfer per turn is permitted.");
-        }
-
-        const budgetResult = await db.collection<FederalBudget>("federalBudget").updateOne(
-          {
-            _id: budgetId,
-            ...(budgetDebtFloor !== undefined ? { surplus: { $gte: budgetDebtFloor } } : {}),
-          },
-          budgetUpdate,
-          { session }
-        );
-        if (budgetResult.matchedCount === 0) {
-          throw badRequest("Transfer would breach the federal debt ceiling.");
-        }
-
-        const nextHistory = [...(claimedBank.treasuryTransferHistory ?? []), record].slice(
-          -TREASURY_TRANSFER_HISTORY_MAX
-        );
-        const bankResult = await db.collection<CentralBank>("centralBanks").updateOne(
-          { _id: bankId, treasuryTransferInProgressAt: now },
-          {
-            $inc: { reserveBalance: parsed.data.amount },
-            $set: { treasuryTransferHistory: nextHistory, updatedAt: now },
-            $unset: { treasuryTransferInProgressAt: "" },
-          },
-          { session }
-        );
-        if (bankResult.matchedCount === 0) {
-          throw new Error("TREASURY_TRANSFER_CLAIM_LOST");
-        }
-      },
-      async () => {
-        const claimedBank = await db
-          .collection<CentralBank>("centralBanks")
-          .findOneAndUpdate(
-            claimFilter,
-            { $set: { treasuryTransferInProgressAt: now, updatedAt: now } },
-            { returnDocument: "before" }
-          );
-        if (!claimedBank) {
-          throw badRequest("Only one treasury transfer per turn is permitted.");
-        }
-
-        let budgetDebited = false;
-        try {
-          const budgetResult = await db.collection<FederalBudget>("federalBudget").updateOne(
-            {
-              _id: budgetId,
-              ...(budgetDebtFloor !== undefined ? { surplus: { $gte: budgetDebtFloor } } : {}),
-            },
-            budgetUpdate
-          );
-          if (budgetResult.matchedCount === 0) {
-            throw badRequest("Transfer would breach the federal debt ceiling.");
-          }
-          budgetDebited = true;
-
-          const nextHistory = [...(claimedBank.treasuryTransferHistory ?? []), record].slice(
-            -TREASURY_TRANSFER_HISTORY_MAX
-          );
-          const bankResult = await db.collection<CentralBank>("centralBanks").updateOne(
-            { _id: bankId, treasuryTransferInProgressAt: now },
-            {
-              $inc: { reserveBalance: parsed.data.amount },
-              $set: { treasuryTransferHistory: nextHistory, updatedAt: now },
-              $unset: { treasuryTransferInProgressAt: "" },
-            }
-          );
-          if (bankResult.matchedCount === 0) {
-            throw new Error("TREASURY_TRANSFER_CLAIM_LOST");
-          }
-        } catch (error) {
-          if (budgetDebited) {
-            await db.collection<FederalBudget>("federalBudget").updateOne(
-              { _id: budgetId },
-              {
-                $inc: {
-                  surplus: parsed.data.amount,
-                  "spending.byCategory.fxReserveTransfer": -parsed.data.amount,
-                  "spending.total": -parsed.data.amount,
-                },
-                $set: { updatedAt: new Date() },
-              }
-            );
-          }
-
-          await db
-            .collection<CentralBank>("centralBanks")
-            .updateOne(
-              { _id: bankId, treasuryTransferInProgressAt: now },
-              { $unset: { treasuryTransferInProgressAt: "" }, $set: { updatedAt: new Date() } }
-            );
-          throw error;
-        }
+    // Crash-safe spend (issue #1672): the budget debit is a keyed idempotent
+    // leg and the reserve credit, history push, and mutex release are one
+    // atomic keyed write, so a crash between the sequential writes reconciles
+    // instead of debiting a surplus that never lands. `Idempotency-Key`
+    // replays the stored outcome without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    try {
+      await applyTreasuryTransferSpend(db, {
+        budgetId,
+        bankId,
+        amount: parsed.data.amount,
+        ...(typeof debtCeiling === "number" ? { debtCeiling } : {}),
+        currentTurn,
+        isAdmin,
+        record,
+        fingerprint: `${countryId}:${budgetId}:${parsed.data.amount}:${currentTurn}:${record.transferredBy.toHexString()}`,
+        idempotencyKey: headerKey ?? randomUUID(),
+      });
+    } catch (error) {
+      if (error instanceof TreasuryTransferBusyError) {
+        throw badRequest("Only one treasury transfer per turn is permitted.");
       }
-    );
+      if (
+        error instanceof Error &&
+        error.message === "Transfer would breach the federal debt ceiling."
+      ) {
+        throw badRequest("Transfer would breach the federal debt ceiling.");
+      }
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "Transfer already settled; start a new attempt with a new key." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "Idempotency key was reused for a different transfer." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json({ success: true, transferred: parsed.data.amount, record });
   } catch (error) {

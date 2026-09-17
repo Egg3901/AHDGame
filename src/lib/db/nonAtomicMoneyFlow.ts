@@ -38,15 +38,22 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * deterministic-insert side effects as revertible steps (`applyKeyedUpdate`,
  * `insertKeyedDoc` via `makeInsertStep`, deterministic `_id` via
  * `keyedInsertId`). Migrated: character transfers, donations, election
- * travel/primary/surge, state-attack, canvassing, nominate, player ads.
- * Still on the legacy debit-first-plus-compensation fallback: both
- * recruitment flows, treasury transfer, campaign commands and
- * targeting, union busting/bargaining, forex orders/direct/fill/cancel, bond
+ * travel/primary/surge, state-attack, canvassing, nominate, player ads,
+ * treasury transfer (budget leg + reserve-credit/history/mutex-release step,
+ * key-adopted mutex claim), national + state NPP recruitment (shared
+ * recruit-spend primitive: AP/treasury leg with cooldown guard, prior-
+ * restoring inverse, deterministic NPP insert).
+ * Still on the legacy debit-first-plus-compensation fallback: campaign
+ * commands and targeting, union busting/bargaining (+ leadership
+ * accept/resign), forex orders/direct/fill/cancel, bond
  * sell/default/payoff, index-fund cron/rebalancing, directAction, state-org
  * build — multi-write status machines, positional holder claims, and
  * bulkWrite batches that need reserve/order/history support beyond keyed
- * single-document writes. Migrating one of those means expressing its writes
- * as steps here, with an explicit inverse per step that mutates prior state.
+ * single-document writes. Military recruitment sits outside even that: manual
+ * unwind (ministerial action, manpower pool, defence appropriation, arsenal
+ * lots, unit insert) with no transaction wrapper at all. Migrating one of
+ * those means expressing its writes as steps here, with an explicit inverse
+ * per step that mutates prior state.
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in

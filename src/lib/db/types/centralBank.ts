@@ -440,6 +440,12 @@ export interface CentralBank {
   treasuryTransferHistory?: TreasuryTransferRecord[];
   /** Guards treasury â†’ reserve transfers against duplicate submits and partial failures. */
   treasuryTransferInProgressAt?: Date;
+  /**
+   * Idempotency key owning `treasuryTransferInProgressAt` (issue #1672). A
+   * retry presenting the same key re-adopts its own crashed claim and
+   * reconciles the keyed legs; any other key sees the mutex as held.
+   */
+  treasuryTransferClaimKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }
