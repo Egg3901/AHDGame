@@ -52,7 +52,11 @@ beforeEach(async () => {
 it("publishes to a bounded publisher slot without creating a private contract", async () => {
   expect((await POST(request(offer), context)).status).toBe(200);
   const call = db.collectionMocks.supplyListings.replaceOne.mock.calls[0];
-  expect(call[0]).toEqual({ _id: `${corpId}:0`, corporationId: corpId });
+  expect(call[0]).toEqual({
+    _id: `${corpId}:0`,
+    corporationId: corpId,
+    expiresAtTurn: { $lte: 100 },
+  });
   expect(call[1]).toMatchObject({ expiresAtTurn: 148, volumeCap: 100, publishedByUserId: "owner" });
   expect(db.collectionMocks.supplyAgreements).toBeUndefined();
 });
@@ -134,4 +138,10 @@ it("removes advertisements authored by a former CEO and serializes only public t
     own: false,
   });
   expect(data.listings[0]).not.toHaveProperty("publishedByUserId");
+});
+
+it("does not replace an active offer when another tab fills the same slot", async () => {
+  db.collection("supplyListings").replaceOne.mockRejectedValue({ code: 11000 });
+  const response = await POST(request(offer), context);
+  expect(response.status).toBe(409);
 });

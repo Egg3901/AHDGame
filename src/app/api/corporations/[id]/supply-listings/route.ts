@@ -147,7 +147,21 @@ export async function POST(request: Request, context: Context) {
       expiresAtTurn: turn + body.validForTurns,
       updatedAt: new Date(),
     };
-    await collection.replaceOne({ _id: id, corporationId: a.corp._id }, row, { upsert: true });
+    try {
+      await collection.replaceOne(
+        { _id: id, corporationId: a.corp._id, expiresAtTurn: { $lte: turn } },
+        row,
+        { upsert: true }
+      );
+    } catch (error) {
+      if (error && typeof error === "object" && "code" in error && error.code === 11000) {
+        return NextResponse.json(
+          { error: "This offer slot is already occupied. Refresh the board before publishing." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
     return NextResponse.json({ success: true }, { headers: privateHeaders });
   } catch (error) {
     return handleRouteError(error);
