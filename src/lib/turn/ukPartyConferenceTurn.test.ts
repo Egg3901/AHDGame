@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { processUkPartyConferenceTurn } from "./ukPartyConferenceTurn";
 import { createFakeLeadershipDb } from "@/lib/uk/leadership/leadershipTestDb";
+import { getOrSeedConference } from "@/lib/uk/conference/conferenceStore";
 import {
   getUKPartyConferencesCollection,
   getUKPartyPlatformsCollection,
@@ -221,6 +222,30 @@ describe("processUkPartyConferenceTurn", () => {
     expect(closed).toMatchObject({ completed: 1, ratified: 1, payoffs: 1 });
     const platform = await getUKPartyPlatformsCollection(db).findOne({ _id: "UK:7" });
     expect(platform?.pledgeIds).toHaveLength(3);
+  });
+
+  it("does not expire a past-year conference whose voting window is still open", async () => {
+    const db = createFakeLeadershipDb();
+    const world = await seedParty(db, { seq: 2, name: "Conservative Party" });
+    // Legacy spilled row (pre-dates the schedule guard): opened late in
+    // year 1 with a window closing on turn 59, flipped open like the driver
+    // would once its opening turn passes.
+    await getOrSeedConference(db, "UK", world.party, 1, 41, 59, NOW(), 40);
+    await db
+      .collection("ukPartyConferences")
+      .updateOne({ _id: "UK:2:1" }, { $set: { status: "open", openedAtTurn: 41 } });
+    const rolled = await processUkPartyConferenceTurn(db, YEAR2_START, NOW());
+    expect(rolled.expired).toBe(0);
+    expect(await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" })).toMatchObject({
+      status: "open",
+    });
+    // Once the window itself passes, the leftover row expires as missed.
+    const late = await processUkPartyConferenceTurn(db, 60, NOW());
+    expect(late.expired).toBe(1);
+    expect(await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" })).toMatchObject({
+      status: "expired",
+      outcome: "missed",
+    });
   });
 
   it("survives a news-post failure without duplicating resolution or payoff", async () => {

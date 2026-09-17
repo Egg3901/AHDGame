@@ -227,6 +227,57 @@ describe("scheduleConference", () => {
       404
     );
   });
+
+  it("schedules on the last turn whose window still fits inside the year", async () => {
+    // Year 1 runs turns 1-48 with an 18-turn window: scheduling on turn 29
+    // opens on turn 30 and closes exactly on turn 48.
+    const world = await seedWorld();
+    const result = await scheduleConference(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      29,
+      NOW()
+    );
+    expect(result.success).toBe(true);
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    expect(doc?.opensAtTurn).toBe(30);
+    expect(doc?.votingClosesTurn).toBe(48);
+  });
+
+  it("400s when a new row's voting window would spill past the year's end", async () => {
+    // Turn 30 opens on turn 31 and would close on turn 49, after year 1
+    // ends: the row could never resolve, so scheduling is refused and no
+    // row is seeded.
+    const world = await seedWorld();
+    await expectApiError(
+      scheduleConference(world.db, "UK", world.partySeq, world.leader.actor, 30, NOW()),
+      400
+    );
+    expect(await getConference(world.db, "UK", world.partySeq, 1)).toBeNull();
+  });
+
+  it("still returns the existing row late in the year instead of 400ing", async () => {
+    const world = await seedWorld();
+    const first = await scheduleConference(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      2,
+      NOW()
+    );
+    const second = await scheduleConference(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      40,
+      NOW()
+    );
+    expect(second.conferenceId).toBe(first.conferenceId);
+  });
 });
 
 describe("proposePlatform", () => {

@@ -279,13 +279,27 @@ export async function scheduleConference(
   }
   const year = conferenceYearForTurn(currentTurn);
   const opensAt = Math.max(currentTurn + 1, conferenceOpensAtTurn(year));
+  const closesAt = conferenceVotingClosesTurn(opensAt);
+  if (!(await getConference(db, countryId, partySeqId, year))) {
+    // A conference only lives inside its own conference year: every agenda
+    // command and the turn driver address the current year's row, so a
+    // window that spills past the year's last turn could never resolve.
+    // Late in the year there is no room left; the next annual conference
+    // seeds automatically at the year's first turn.
+    const yearEndTurn = conferenceYearStartTurn(year + 1) - 1;
+    if (closesAt > yearEndTurn) {
+      throw badRequest(
+        `Too late in the conference year to schedule: voting would close on turn ${closesAt}, after year ${year} ends (turn ${yearEndTurn})`
+      );
+    }
+  }
   const doc = await getOrSeedConference(
     db,
     countryId,
     party,
     year,
     opensAt,
-    conferenceVotingClosesTurn(opensAt),
+    closesAt,
     now,
     currentTurn
   );

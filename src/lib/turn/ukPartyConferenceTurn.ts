@@ -121,6 +121,10 @@ export async function processUkPartyConferenceTurn(
       .toArray();
     for (const row of stale) {
       if (row.conferenceYear >= year) continue;
+      // Expire only rows whose voting window actually passed. A row seeded
+      // with a window that outlives its conference year must not be killed
+      // while votes are still live; it expires once the window closes.
+      if (currentTurn < row.votingClosesTurn) continue;
       const claimed = await getUKPartyConferencesCollection(db).findOneAndUpdate(
         { _id: row._id, status: { $in: ["scheduled", "open"] } },
         { $set: { status: "expired", outcome: "missed", updatedAt: now } },

@@ -14,9 +14,11 @@ interface RouteParams {
   params: Promise<{ code: string; id: string }>;
 }
 
-// POST /api/country/[code]/parties/[id]/conference/schedule — open this
+// POST /api/country/[code]/parties/[id]/conference/schedule: open this
 // year's conference early (the turn driver seeds it automatically at the
-// year's first turn; this only pulls the opening forward).
+// year's first turn; this only pulls the opening forward). Late in the year,
+// when a new 18-turn voting window would spill past the year's last turn,
+// this 400s: the conference only lives inside its own year.
 // Auth: requireAuthWithCharacter; party member, leader/committee-gated.
 // Errors: 400, 401, 403, 404, 429
 async function postHandler(_request: Request, { params }: RouteParams) {
