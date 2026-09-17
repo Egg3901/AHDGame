@@ -3,6 +3,7 @@
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 403 (forex disabled), 500
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import type { InsertOneResult, ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -35,7 +36,7 @@ const limitOrderSchema = z
     message: "Cannot trade a currency for itself",
   });
 
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const forexActive = await isForexEnabled();
     if (!forexActive) throw forbidden("Currency exchange is not yet enabled");
@@ -84,6 +85,8 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 export async function POST(request: Request) {
   try {

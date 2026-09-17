@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
@@ -11,7 +12,7 @@ import { loadOnboardingSignals } from "@/lib/onboarding/checklist";
  * back a union). Reuses the same derivation the onboarding checklist uses so
  * the two can never disagree. Keys here match CoachAdvanceSignal.
  */
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -33,3 +34,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

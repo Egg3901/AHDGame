@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -53,7 +54,7 @@ async function buildSuggestion(
 // GET /api/character/allocate-stats — Returns a suggested 28-point build for the
 // active character (used to pre-fill the grandfather allocation modal).
 // Auth: requireHumanSession. Errors: 401, 403, 404, 409.
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     const auth = await requireHumanSession(request);
     if (!auth.ok) return auth.response;
@@ -79,6 +80,8 @@ export async function GET(request: Request) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/character/allocate-stats — Commits a one-time 28-point stat allocation
 // for a grandfathered character.

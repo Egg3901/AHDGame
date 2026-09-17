@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import type { Character } from "@/lib/db/types";
@@ -48,7 +49,7 @@ const planBodySchema = z
     message: "experience and interests must be sent together",
   });
 
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -65,6 +66,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 export async function PUT(request: Request) {
   try {

@@ -1,4 +1,5 @@
 import { loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { turnoutForElection } from "@/lib/campaignTargeting/rules";
 import { projectCampaignPoll } from "@/lib/campaignTargeting/poll";
 import { NextResponse } from "next/server";
@@ -50,7 +51,7 @@ const LARGE_POLL_ACTIONS = 6;
 // GET /api/actions/poll — Returns poll eligibility, stored poll results, and demographic context for the authenticated character's home state
 // Auth: requireBasicAuth
 // Errors: 400, 401, 404
-export async function GET(request: NextRequest) {
+async function handleGET(request: NextRequest) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -236,6 +237,8 @@ export async function GET(request: NextRequest) {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/actions/poll — Commissions a quick or full demographic poll, deducts funds and actions, and persists the results
 // Auth: requireHumanSession (bot tokens rejected)

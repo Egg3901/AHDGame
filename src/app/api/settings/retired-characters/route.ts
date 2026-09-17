@@ -3,12 +3,13 @@
 // Errors: 401
 
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
 import { ObjectId } from "mongodb";
 
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -27,3 +28,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
