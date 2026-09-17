@@ -122,6 +122,8 @@ export function subjectAccount(
       return null;
     case "government":
       return ids.countryId ? accountId("government", ids.countryId, currency) : null;
+    case "fund":
+      return ids.subjectId ? accountId("fund", ids.subjectId, currency) : null;
     case "pension_scheme":
       return ids.subjectId ? accountId("pension_scheme", ids.subjectId, currency) : null;
     case "npp":
