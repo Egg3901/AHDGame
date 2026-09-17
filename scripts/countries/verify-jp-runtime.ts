@@ -82,6 +82,41 @@ import { COUNTRY_ANCHOR } from "../../src/lib/maps/countryAnchors";
 import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
 import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
 
+// ---- The folder itself, for the identity checks at the tail. ----
+import { JP_IDENTITY } from "../../src/lib/countries/jp/identity";
+import { JP_ECONOMY } from "../../src/lib/countries/jp/economy";
+import { JP_GEOGRAPHY } from "../../src/lib/countries/jp/geography";
+import { JP_INSTITUTIONS } from "../../src/lib/countries/jp/institutions";
+import { JP_ELECTIONS } from "../../src/lib/countries/jp/elections";
+import { JP_ERAS } from "../../src/lib/countries/jp/eras";
+import {
+  JP_CABINET_SEAT_IDS,
+  JP_CONFIG,
+  JP_ESTATE_PORTFOLIO,
+  JP_LEGISLATIVE_PROCESS,
+  JP_MILITARY_BRANCHES,
+} from "../../src/lib/countries/jp/institutionsFacts";
+import {
+  JP_ADJACENCY_MAP,
+  JP_CONTINENT,
+  JP_CORE5_NORMALS,
+  JP_ISO_NUMERIC,
+  JP_MAP_ANCHOR,
+} from "../../src/lib/countries/jp/geographyFacts";
+import { JP_CABINET_POSITIONS } from "../../src/lib/countries/jp/cabinet/positions";
+import { JP_MINISTERIAL_ORDERS } from "../../src/lib/countries/jp/cabinet/orders";
+import { JP_CABINET_MECHANICS } from "../../src/lib/countries/jp/cabinet/mechanics";
+import { JP_DOMAIN_BUCKET_AFFINITIES } from "../../src/lib/countries/jp/data/jpBucketAffinities";
+import { JP_BUCKET_LABELS } from "../../src/lib/countries/jp/data/jpBucketLabels";
+import { JP_MODIFIER_PATCHES } from "../../src/lib/countries/jp/data/jpModifierPatches";
+import { JP_PARTY_TIERS } from "../../src/lib/countries/jp/data/jpPartyTiers";
+import { JP_READINESS_EXPECTATIONS } from "../../src/lib/countries/jp/data/jpReadinessExpectations";
+import { JP_SECTOR_WEIGHTS_1953 } from "../../src/lib/countries/jp/data/jpSectorWeights1953";
+import {
+  JP_UNION_NAMES_1953,
+  JP_UNION_NAMES_MODERN,
+} from "../../src/lib/countries/jp/data/jpUnionNames";
+
 const checks: Check[] = [
   // ---- D7: registries whose Japan payload moved in the final sweep. ----
   // Each was a literal block until D7 step 4 and is now a forwarder, so each
@@ -287,6 +322,103 @@ if (MAJOR_DEFAULT_PARTIES.JP?.length !== 4) {
     failed++;
   }
 }
+
+// ---------------------------------------------------------------------------
+// IS THERE STILL EXACTLY ONE COPY?
+//
+// ⚠ THIS IS THE CHECK THE REST OF THE FILE CANNOT MAKE. Everything above asks
+// whether a registry RESOLVES. None of it asks whether it resolves to the
+// FOLDER'S object or to a second one holding equal values. Deep equality passes
+// either way, which is exactly how a forwarder quietly becomes a copy: correct
+// on the day it is made, silently divergent after the first edit to one side.
+//
+// `===` is the whole point. For an object it is reference identity, so it fails
+// the moment a registry holds its own copy; for a scalar it is value equality,
+// which is the strongest statement available. An early D5 draft of geography.ts
+// generated copies of every census bundle -- deep equality passed while Japan
+// quietly had two sources for each one. This is what catches that class.
+// ---------------------------------------------------------------------------
+type Same = [label: string, registry: unknown, folder: unknown];
+const sameObject: Same[] = [
+  ["COUNTRY_CONFIGS.JP", COUNTRY_CONFIGS.JP, JP_CONFIG],
+  ["COUNTRY_CONFIGS.JP (via institutions)", COUNTRY_CONFIGS.JP, JP_INSTITUTIONS.config],
+  ["LEGISLATIVE_PROCESS.JP", LEGISLATIVE_PROCESS.JP, JP_LEGISLATIVE_PROCESS],
+  ["CABINET_IDENTITY.JP", CABINET_IDENTITY.JP, JP_IDENTITY.cabinet],
+  ["NATIONAL_IDENTITY.JP", NATIONAL_IDENTITY.JP, JP_IDENTITY.national],
+  ["ESTATE_PORTFOLIO_BY_COUNTRY.JP", ESTATE_PORTFOLIO_BY_COUNTRY.JP, JP_ESTATE_PORTFOLIO],
+  ["MILITARY_BRANCHES_BY_COUNTRY.JP", MILITARY_BRANCHES_BY_COUNTRY.JP, JP_MILITARY_BRANCHES],
+  ["GROUPS.JP", GROUPS.JP, JP_INSTITUTIONS.cabinet.groups],
+  ["ORDERS_BY_COUNTRY.JP", ORDERS_BY_COUNTRY.JP, JP_MINISTERIAL_ORDERS],
+  ["MECHANICS_BY_COUNTRY.JP", MECHANICS_BY_COUNTRY.JP, JP_CABINET_MECHANICS],
+  ["DEFENSE_POSITION_BY_COUNTRY.JP", DEFENSE_POSITION_BY_COUNTRY.JP, JP_CABINET_SEAT_IDS.defense],
+  ["ENERGY_POSITION_BY_COUNTRY.JP", ENERGY_POSITION_BY_COUNTRY.JP, JP_CABINET_SEAT_IDS.energy],
+  [
+    "INFRA_POSITION_BY_COUNTRY.JP",
+    INFRA_POSITION_BY_COUNTRY.JP,
+    JP_CABINET_SEAT_IDS.infrastructure,
+  ],
+  ["STATE_ADJACENCY.JP", STATE_ADJACENCY.JP, JP_ADJACENCY_MAP],
+  ["STATE_ADJACENCY.JP (via geography)", STATE_ADJACENCY.JP, JP_GEOGRAPHY.adjacency],
+  ["COUNTRY_CONTINENT.JP", COUNTRY_CONTINENT.JP, JP_CONTINENT],
+  ["COUNTRY_TO_ISO_NUMERIC.JP", COUNTRY_TO_ISO_NUMERIC.JP, JP_ISO_NUMERIC],
+  ["COUNTRY_ANCHOR.JP", COUNTRY_ANCHOR.JP, JP_MAP_ANCHOR],
+  ["COUNTRY_CURRENCY_MAP.JP", COUNTRY_CURRENCY_MAP.JP, JP_ECONOMY.currencyCode],
+  ["ECONOMIC_BASELINES.JP", ECONOMIC_BASELINES.JP, JP_ECONOMY.economicBaseline],
+  ["COST_SCALE_ANCHORS.JP", COST_SCALE_ANCHORS.JP, JP_ECONOMY.costScaleAnchors],
+  ["REP_ECON.JP", REP_ECON.JP, JP_ECONOMY.repEcon],
+  ["COUNTRY_SECTOR_WEIGHTS.JP", COUNTRY_SECTOR_WEIGHTS.JP, JP_ECONOMY.sectorWeights.base],
+  ["PLAYER_PAYOUT_CAP_PER_TURN.JP", PLAYER_PAYOUT_CAP_PER_TURN.JP, JP_ECONOMY.payoutCapPerTurn],
+  ["CENSUS_BUNDLES.JP", CENSUS_BUNDLES.JP, JP_GEOGRAPHY.censusBundles],
+  ["CORE5_NORMALS.gdpGrowth.JP", CORE5_NORMALS.gdpGrowth?.JP, JP_CORE5_NORMALS["gdpGrowth"]],
+  ["DOMAIN_BUCKET_AFFINITIES.JP", DOMAIN_BUCKET_AFFINITIES.JP, JP_DOMAIN_BUCKET_AFFINITIES],
+  ["COUNTRY_BUCKET_LABELS.JP", COUNTRY_BUCKET_LABELS.JP, JP_BUCKET_LABELS],
+  ["COUNTRY_MODIFIER_PATCHES.JP", COUNTRY_MODIFIER_PATCHES.JP, JP_MODIFIER_PATCHES],
+  ["MAJOR_DEFAULT_PARTIES.JP", MAJOR_DEFAULT_PARTIES.JP, JP_PARTY_TIERS],
+  [
+    "COUNTRY_READINESS_EXPECTATIONS.JP",
+    COUNTRY_READINESS_EXPECTATIONS.JP,
+    JP_READINESS_EXPECTATIONS,
+  ],
+  ["COUNTRY_SECTOR_WEIGHTS_1953.JP", COUNTRY_SECTOR_WEIGHTS_1953.JP, JP_SECTOR_WEIGHTS_1953],
+  ["UNION_NAMES_BY_ERA.2019.JP", UNION_NAMES_BY_ERA["2019"]?.JP, JP_UNION_NAMES_MODERN],
+  ["UNION_NAMES_BY_ERA.1953.JP", UNION_NAMES_BY_ERA["1953"]?.JP, JP_UNION_NAMES_1953],
+  ["COUNTRY_ELECTION_PHASES.JP", COUNTRY_ELECTION_PHASES.JP, JP_ELECTIONS.electionPhases],
+  ["SPAWN_ELECTIONS_REGISTRY.JP", SPAWN_ELECTIONS_REGISTRY.JP, JP_ELECTIONS.spawn],
+  [
+    "ERA_COUNTRY_CONFIG_OVERRIDES.1953.JP",
+    ERA_COUNTRY_CONFIG_OVERRIDES["1953-default"]?.JP,
+    JP_ERAS["1953-default"]?.config,
+  ],
+  [
+    "ERA_COUNTRY_CONFIG_OVERRIDES.1991.JP",
+    ERA_COUNTRY_CONFIG_OVERRIDES["1991-default"]?.JP,
+    JP_ERAS["1991-default"]?.config,
+  ],
+  ["ORDERS_OF_BATTLE.JP", ORDERS_OF_BATTLE.JP, JP_INSTITUTIONS.military.ordersOfBattle],
+  [
+    "NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP",
+    NEUTRAL_FEDERAL_SALES_TAX_BY_COUNTRY.JP,
+    JP_ECONOMY.tax.neutralFederalSalesTax,
+  ],
+  ["cabinet positions reachable", JP_INSTITUTIONS.cabinet.positions, JP_CABINET_POSITIONS],
+];
+
+let copies = 0;
+for (const [label, registry, folder] of sameObject) {
+  if (registry === undefined || folder === undefined) {
+    const which = registry === undefined ? "registry" : "folder";
+    console.log(`FAIL  ${label} -> ${which} side is undefined`);
+    copies++;
+    failed++;
+  } else if (registry !== folder) {
+    console.log(
+      `FAIL  ${label} is a SECOND COPY: equal values, different object. It no longer forwards.`
+    );
+    copies++;
+    failed++;
+  }
+}
+console.log(`${sameObject.length} forwarders checked for identity, ${copies} holding a copy.`);
 
 console.log(`\n${checks.length} registries checked, ${failed} failed.`);
 if (failed > 0) process.exit(1);
