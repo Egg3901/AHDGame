@@ -107,6 +107,27 @@ function largestSupplierFailure(snapshot: EconomicVitalSigns): EconomicStressFin
   };
 }
 
+/**
+ * Pure reporting helper for the freight-shock stress scenario: the implied share of
+ * buyer intent left unmet after the static capacity haircut (1 - stressed fulfillment).
+ * Null when intent fulfillment or the local share is unmeasured. Absolute unmet units
+ * stay unavailable because the trade snapshot carries only rates, never demand units.
+ */
+export function freightShockUnmetIntentShare(
+  snapshot: EconomicVitalSigns,
+  assumptions: EconomicStressAssumptions
+): number | null {
+  const fulfillment = snapshot.trade.intentFulfillmentRate.value;
+  const localShare = snapshot.trade.localShare.value;
+  const nonlocalShare =
+    (snapshot.trade.interstateShare.value ?? 0) + (snapshot.trade.importShare.value ?? 0);
+  if (fulfillment == null || localShare == null) return null;
+  const stressedFulfillment =
+    fulfillment *
+    (localShare + nonlocalShare * (1 - clamp01(assumptions.freightCapacityLossShare)));
+  return clamp01(1 - stressedFulfillment);
+}
+
 function freightCapacityShock(
   snapshot: EconomicVitalSigns,
   assumptions: EconomicStressAssumptions
@@ -130,10 +151,11 @@ function freightCapacityShock(
     recoveryTurns: assumptions.freightShockTurns + 12,
     indicators: {
       stressedIntentFulfillmentRate: stressedFulfillment,
+      stressedUnmetIntentShare: freightShockUnmetIntentShare(snapshot, assumptions),
       nonlocalFulfillmentShare: nonlocalShare,
     },
     basis:
-      "Static haircut to interstate and import fulfillment; recovery includes the shock duration plus a 12-turn supply-chain normalization window.",
+      "Static haircut to interstate and import fulfillment; unmet share is the implied 1 - stressed fulfillment, null when intent or local share is unmeasured. Recovery includes the shock duration plus a 12-turn supply-chain normalization window.",
   };
 }
 
