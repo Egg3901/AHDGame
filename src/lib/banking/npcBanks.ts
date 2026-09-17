@@ -1,5 +1,5 @@
 import { ObjectId, type Db } from "mongodb";
-import type { Corporation } from "@/lib/db/types";
+import type { Corporation, State } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 import { ALL_COUNTRY_IDS } from "@/lib/constants/countries";
 import {
@@ -201,7 +201,7 @@ export async function seedNpcBanks(
     // is a deliberate exclusion (recorded with reason), never an attempted
     // spawn that fails with `State "…" not found`.
     const hqDoc = await db
-      .collection<{ countryId: CountryId }>("states")
+      .collection<State>("states")
       .findOne({ _id: hqState }, { projection: { countryId: 1 } });
     if (!hqDoc || hqDoc.countryId !== countryId) {
       const reason: NpcBankHqExclusionReason = !hqDoc

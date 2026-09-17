@@ -5,6 +5,7 @@ import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { MODERN_DEPOSIT_CORRIDOR, MODERN_LENDING_CORRIDOR } from "@/lib/banking/regulationQ";
 import { NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
+import { NPC_BANKS_PER_COUNTRY } from "../npcBanks";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -267,6 +268,38 @@ describe("npcBanks", () => {
       expect(spawnedCountries).not.toContain("RU");
       expect(result.skippedIneligible).toBeGreaterThanOrEqual(2);
       expect(result.charterFailures).toBe(0);
+    });
+
+    it("excludes a country whose HQ state belongs to another country", async () => {
+      // The HQ lookup reads `states` by string `_id` and compares the stored
+      // countryId: a DC doc owned by the UK must exclude the US by design,
+      // never attempt a US spawn.
+      db.collectionMocks.states!.findOne.mockImplementation(
+        async (filter: Record<string, unknown>) => {
+          const id = filter._id as string | undefined;
+          if (id === "DC") return { _id: "DC", countryId: "UK" };
+          if (id === "LON") return { _id: "LON", countryId: "UK" };
+          if (id === "MOW") return { _id: "MOW", countryId: "RU" };
+          return null;
+        }
+      );
+      wireSpawnToIssueCharter();
+
+      const { seedNpcBanks } = await importNpcBanks();
+      const result = await seedNpcBanks(db as unknown as Db);
+
+      const usExclusion = result.excludedMissingState.find((e) => e.countryId === "US");
+      expect(usExclusion).toMatchObject({
+        hqState: "DC",
+        reason: "state-country-mismatch",
+        preset: "2019-default",
+      });
+      expect(result.skippedNoState).toBe(NPC_BANKS_PER_COUNTRY);
+      const spawnedCountries = spawnNppCorporation.mock.calls.map(
+        (c) => (c[1] as { countryId: string }).countryId
+      );
+      expect(spawnedCountries).not.toContain("US");
+      expect(spawnedCountries).toEqual(expect.arrayContaining(["UK"]));
     });
 
     it("charters via the real issueCharter path (capital debited)", async () => {
