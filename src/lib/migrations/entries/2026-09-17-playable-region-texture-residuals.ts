@@ -117,7 +117,7 @@ async function backfillPlayableTextureResiduals(db: Db, dryRun: boolean): Promis
     });
   }
 
-  const wouldWrite = perCountry.values().reduce((n, c) => n + c, 0);
+  const wouldWrite = [...perCountry.values()].reduce((n, c) => n + c, 0);
   for (const [countryId, count] of [...perCountry.entries()].sort()) {
     notes.push(`${countryId}: ${dryRun ? "would texture" : "textured"} ${count} region(s)`);
   }

@@ -80,7 +80,9 @@ function serialize(texture: PlayableTexture): string {
 function main(): void {
   const { texture, diagnostics } = derivePlayableTexture1953();
 
-  console.log(`preset ${PLAYABLE_TEXTURE_PRESET}, year ${PLAYABLE_TEXTURE_YEAR}, bound +/-${PLAYABLE_TEXTURE_BOUND}`);
+  console.log(
+    `preset ${PLAYABLE_TEXTURE_PRESET}, year ${PLAYABLE_TEXTURE_YEAR}, bound +/-${PLAYABLE_TEXTURE_BOUND}`
+  );
   console.log("cc     regions  varying  unauthored  scaled  textured-regions");
   let totalEntries = 0;
   for (const d of diagnostics) {

@@ -5,10 +5,7 @@ import { NATIONAL_BASELINES_1953 } from "@/lib/politicalMetrics/seeds/nationalBa
 import { REGIONAL_MODIFIERS_1953 } from "@/lib/politicalMetrics/seeds/regionalModifiers1953";
 import { REGIONAL_TEXTURE_1953 } from "@/lib/politicalMetrics/seeds/regionalTexture1953";
 import type { PoliticalMetricsDoc } from "@/lib/db/types/politicalMetrics";
-import type {
-  PoliticalMetricId,
-  PoliticalMetricsCountryId,
-} from "@/lib/politicalMetrics/types";
+import type { PoliticalMetricId, PoliticalMetricsCountryId } from "@/lib/politicalMetrics/types";
 import { seedPoliticalMetrics } from "./seedPoliticalMetrics";
 
 /**
@@ -26,9 +23,7 @@ function expectedPlayable(
   const modifier = REGIONAL_MODIFIERS_1953[countryId][regionId]?.[metricId];
   if (modifier !== undefined) return Math.max(0, Math.min(100, base + modifier));
   const texture =
-    preset === "1953-default"
-      ? (REGIONAL_TEXTURE_1953[countryId]?.[regionId]?.[metricId] ?? 0)
-      : 0;
+    preset === "1953-default" ? (REGIONAL_TEXTURE_1953[countryId]?.[regionId]?.[metricId] ?? 0) : 0;
   return Math.max(0, Math.min(100, base + texture));
 }
 

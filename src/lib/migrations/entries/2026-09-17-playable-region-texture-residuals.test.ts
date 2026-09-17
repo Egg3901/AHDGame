@@ -72,7 +72,7 @@ describe(migration.id, () => {
     const result = await run(db as unknown as Db, true);
     expect(result.documentsUpdated).toBe(0);
     expect(db.collectionMocks.politicalMetrics!.bulkWrite).not.toHaveBeenCalled();
-    expect(result.notes.join("\n")).toMatch(/dry run/i);
+    expect((result.notes ?? []).join("\n")).toMatch(/dry run/i);
   });
 
   it("skips worlds whose preset is not 1953-default", async () => {
@@ -86,7 +86,7 @@ describe(migration.id, () => {
 
     const result = await run(db as unknown as Db);
     expect(result.documentsUpdated ?? 0).toBe(0);
-    expect(result.notes.join("\n")).toMatch(/skipped: active preset/);
+    expect((result.notes ?? []).join("\n")).toMatch(/skipped: active preset/);
   });
 
   it("skips 1953-preset worlds whose starting year is not 1953", async () => {
@@ -100,7 +100,7 @@ describe(migration.id, () => {
 
     const result = await run(db as unknown as Db);
     expect(result.documentsUpdated ?? 0).toBe(0);
-    expect(result.notes.join("\n")).toMatch(/skipped: startingYear/);
+    expect((result.notes ?? []).join("\n")).toMatch(/skipped: startingYear/);
   });
 
   it("does not double-apply: stamped docs are skipped on re-run", async () => {
@@ -118,7 +118,7 @@ describe(migration.id, () => {
     const result = await run(db as unknown as Db);
     expect(result.documentsUpdated).toBe(0);
     expect(db.collectionMocks.politicalMetrics!.bulkWrite).not.toHaveBeenCalled();
-    expect(result.notes.join("\n")).toMatch(/already stamped/);
+    expect((result.notes ?? []).join("\n")).toMatch(/already stamped/);
   });
 
   it("leaves docs without a residuals map for the dynamics self-heal", async () => {
@@ -129,7 +129,7 @@ describe(migration.id, () => {
     const result = await run(db as unknown as Db);
     expect(result.documentsUpdated).toBe(0);
     expect(db.collectionMocks.politicalMetrics!.bulkWrite).not.toHaveBeenCalled();
-    expect(result.notes.join("\n")).toMatch(/no residuals map/);
+    expect((result.notes ?? []).join("\n")).toMatch(/no residuals map/);
   });
 
   it("skips regions carrying no texture without writing", async () => {
@@ -140,6 +140,6 @@ describe(migration.id, () => {
     const result = await run(db as unknown as Db);
     expect(result.documentsUpdated).toBe(0);
     expect(db.collectionMocks.politicalMetrics!.bulkWrite).not.toHaveBeenCalled();
-    expect(result.notes.join("\n")).toMatch(/no texture/);
+    expect((result.notes ?? []).join("\n")).toMatch(/no texture/);
   });
 });
