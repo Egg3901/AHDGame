@@ -23,7 +23,7 @@ import { formatAccountingCost, formatMarketingStrength } from "@/lib/utils/forma
 import { SummaryBand } from "./financials/SummaryBand";
 import { GlanceRail } from "./financials/GlanceRail";
 import { Waterfall } from "./financials/FinancialsVisuals";
-import { buildAllocation, corpIncomeBasis } from "./financials/financialsModel";
+import { buildAllocation, cashAfterContracts, corpIncomeBasis } from "./financials/financialsModel";
 import {
   MONEY_PERIOD_FACTOR,
   MONEY_PERIOD_PER_LABEL,
@@ -547,6 +547,54 @@ export default function FinancialsTab({
                   })()}
                 </>
               )}
+
+              {(Math.abs(financials.supplyAgreementSettlementDaily ?? 0) > 0 ||
+                (financials.supplyAgreementUnpaidAnchor ?? 0) > 0) &&
+                (() => {
+                  const basis = corpIncomeBasis(financials);
+                  const settlement = financials.supplyAgreementSettlementDaily ?? 0;
+                  const unpaid = financials.supplyAgreementUnpaidAnchor ?? 0;
+                  const after = cashAfterContracts(financials);
+                  return (
+                    <>
+                      <div className="border-t border-card-border mt-3" />
+                      <div className="text-[11px] font-semibold text-muted uppercase tracking-wider pt-3 pb-2">
+                        Cash after contracts
+                      </div>
+                      <FinRowTip
+                        label="Retained earnings"
+                        value={fmtSigned(Math.round(scaleMoney(basis.retained, periodView)))}
+                        indent
+                        tooltip="P&L retained after tax, interest, and dividends. Supply-agreement premiums are not in this number."
+                      />
+                      <FinRowTip
+                        label="Supply agreement settlements"
+                        value={fmtSigned(Math.round(scaleMoney(settlement, periodView)))}
+                        valueClass={settlement >= 0 ? "text-success" : "text-error"}
+                        indent
+                        tooltip="Last-turn contract-for-difference cash on signed supply agreements (premiums and shortfall damages). This is a cash transfer on top of operating income, not a P&L cost."
+                      />
+                      {unpaid > 0 && (
+                        <FinRowTip
+                          label="Unpaid settlement (last turn)"
+                          value={formatAmount(unpaid)}
+                          valueClass="text-warning"
+                          indent
+                          tooltip="Premium or damages still owed after the solvency floor. Not deducted from liquid capital this turn; the next settlement will try again."
+                        />
+                      )}
+                      <div className="border-t border-card-border mt-2 pt-2">
+                        <FinRowTip
+                          label="Cash after contracts"
+                          value={fmtSigned(Math.round(scaleMoney(after, periodView)))}
+                          valueClass={after >= 0 ? "text-foreground" : "text-error"}
+                          bold
+                          tooltip="Retained earnings plus last-turn supply-agreement cash. This is the liquid-capital move the income line does not show."
+                        />
+                      </div>
+                    </>
+                  );
+                })()}
             </div>
 
             {/* Key Metrics footer */}

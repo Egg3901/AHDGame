@@ -535,6 +535,11 @@ const RUNTIME: CollectionEntry[] = [
       "Per-commodity aggregate quality state (sector-quality system), recomputed in the corp turn.",
   },
   {
+    name: "supplyListings",
+    category: "runtime",
+    notes: "Nonbinding supply offers; tied to corporations, which are wiped on reset.",
+  },
+  {
     name: "supplyAgreements",
     category: "runtime",
     notes: "Player corp-to-corp supply agreements; tied to corporations, which are wiped on reset.",
