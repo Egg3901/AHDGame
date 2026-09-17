@@ -594,6 +594,56 @@ describe("applyMilitaryRecruitSpend (standalone fallback)", () => {
     }
   });
 
+  it("pins the remainder draw across a crash at every point of the degraded path", async () => {
+    // The plan assumes a full store (4 lots) but only 2 are there, so the
+    // arsenal step takes its remainder leg. A crash between that leg's apply
+    // and the post-apply persist must still converge to the 2 lots that
+    // actually left the store — never the 4 the plan assumed (which would
+    // equip the unit for phantom lots). The intent is recorded before the
+    // remainder leg runs, so every crash point below replays the same fill.
+    const probe = new FakeDb();
+    seedDb(probe, { stock: 2, grade: 1 });
+    await applyMilitaryRecruitSpend(
+      probe as unknown as Db,
+      spendInput({ idempotencyKey: "probe", plannedDrawn: 4, arsenalGrade: 1 })
+    );
+    const totalWrites = probe.writeCount;
+    expect(totalWrites).toBeGreaterThan(0);
+
+    for (let crashAt = 0; crashAt <= totalWrites; crashAt += 1) {
+      const db = new FakeDb();
+      seedDb(db, { stock: 2, grade: 1 });
+      const input = spendInput({
+        idempotencyKey: `recruit-remainder-crash-${crashAt}`,
+        plannedDrawn: 4,
+        arsenalGrade: 1,
+      });
+      db.crashAfterWrites = crashAt;
+      let firstThrew = false;
+      try {
+        await applyMilitaryRecruitSpend(db as unknown as Db, input);
+      } catch (error) {
+        expect((error as Error).message).toBe("INJECTED_CRASH");
+        firstThrew = true;
+      }
+      if (crashAt >= totalWrites) expect(firstThrew).toBe(false);
+
+      db.crashAfterWrites = Number.POSITIVE_INFINITY;
+      await applyMilitaryRecruitSpend(db as unknown as Db, input);
+
+      expect(receipt(db, input.idempotencyKey!).status).toBe("completed");
+      expect(storedPlan(db, input.idempotencyKey!).drawnLots).toBe(2);
+      expect(num(db, "nationalArsenal", arsenalId, "stock.ground")).toBe(0);
+      expect(units(db)).toHaveLength(1);
+      expect(units(db)[0]).toMatchObject({
+        techTier: 1,
+        equipment: { firepower: 1.5, protection: 1.5, support: 1.5 },
+      });
+      expect(num(db, "cabinetMembers", memberId, "ministerialActions")).toBe(1);
+      expect(num(db, "nationalManpower", manpowerId, "pool")).toBe(488_000);
+    }
+  });
+
   it("reconciles live input when the crash predates the plan write", async () => {
     const db = new FakeDb();
     seedDb(db);

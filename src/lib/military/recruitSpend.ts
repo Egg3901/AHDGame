@@ -550,6 +550,16 @@ function buildRecruitSteps(
         await persistDrawn(0, opts);
         return "applied";
       }
+      // Intent-first: the remainder leg draws LESS than the planned amount,
+      // so a crash between its apply and the post-apply persist below would
+      // otherwise leave no stored draw while the key is already recorded —
+      // and a retry would converge to `already-applied` with the stored
+      // value still null, overstating the draw as the full planned amount
+      // (a unit equipped for lots that never left the store). Recording the
+      // intent up front closes that window: every later outcome overwrites
+      // it with the actual result, and a retry before the leg runs simply
+      // re-applies the same remainder under the same key.
+      await persistDrawn(remainder, opts);
       const second = await applyIdempotentLeg(
         arsenalKey,
         {
