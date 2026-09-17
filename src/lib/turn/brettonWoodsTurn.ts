@@ -162,19 +162,17 @@ export async function processBrettonWoodsTurn(
     floated = true;
   }
 
-  await db
-    .collection<GameState>("gameState")
-    .updateOne(
-      { _id: "current" },
-      {
-        $set: {
-          bwGoldCover: goldCover,
-          bwForeignClaims: foreignClaims,
-          bwRegime: regime,
-          ...(regimeChangedAtTurn != null ? { bwRegimeChangedAtTurn: regimeChangedAtTurn } : {}),
-        },
-      }
-    );
+  await db.collection<GameState>("gameState").updateOne(
+    { _id: "current" },
+    {
+      $set: {
+        bwGoldCover: goldCover,
+        bwForeignClaims: foreignClaims,
+        bwRegime: regime,
+        ...(regimeChangedAtTurn != null ? { bwRegimeChangedAtTurn: regimeChangedAtTurn } : {}),
+      },
+    }
+  );
 
   return { ran: true, regime, regimeChangedAtTurn, goldCover, foreignClaims, suspended, floated };
 }
