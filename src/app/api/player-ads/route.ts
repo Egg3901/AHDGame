@@ -8,18 +8,16 @@ import { handleRouteError } from "@/lib/api/errors";
 import { optimizeImage, IMAGE_PRESETS } from "@/lib/imageOptimize";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getPersonalBalance, getHomeCurrency } from "@/lib/currency/characterFunds";
-import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-} from "@/lib/financialTxLog/atomicCashGuard";
 import { getPlayerBannerAdsCollection } from "@/lib/db/collections/playerBannerAds";
 import type { Character, User } from "@/lib/db/types";
 import { isPlusOrBetter } from "@/lib/db/types";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { isR2Enabled, uploadFile } from "@/lib/r2";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { parseFormData } from "@/lib/api/validate";
+import { randomUUID } from "node:crypto";
+import { applyPlayerAdSpend, PlayerAdSlotUnavailableError } from "@/lib/playerAds/playerAdSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 const MAX_SIZE = 2 * 1024 * 1024; // 2 MB
@@ -138,7 +136,6 @@ export const GET = withNoStore(handleGET);
 // POST /api/player-ads — submit a new player banner ad. Accepts multipart/form-data.
 // Fields: file (required), linkUrl (optional), altText (optional)
 export async function POST(request: Request) {
-  let turnsUntilEligible: number | null = null;
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -259,130 +256,78 @@ export async function POST(request: Request) {
     const personalBalanceField = forexEnabled
       ? `currencyBalances.personal.${homeCurrency}`
       : "cashOnHand";
-    const ad = await runWithOptionalTransaction(
-      async (session) => {
-        const recentAdsInTx = await ads
-          .find({ characterId: character._id, createdTurn: { $gte: windowStartTurn } }, { session })
-          .sort({ createdTurn: -1 })
-          .toArray();
-        const freeUsedInTx = recentAdsInTx.filter((entry) => entry.costPaid === 0).length;
-        const canUseFreeInTx = freeUsedInTx < rateLimit.maxFree;
-
-        if (!canUseFreeInTx && recentAdsInTx.length > 0) {
-          turnsUntilEligible = Math.max(
-            0,
-            recentAdsInTx[0].createdTurn + rateLimit.windowTurns - currentTurn
-          );
-          throw new Error("PLAYER_AD_SLOT_UNAVAILABLE");
-        }
-
-        if (!canUseFreeInTx) {
-          const debitResult = await db
-            .collection<Character>("characters")
-            .updateOne(
-              { _id: character._id, [personalBalanceField]: { $gte: cost } },
-              { $inc: { [personalBalanceField]: -cost }, $set: { updatedAt: new Date() } },
-              { session }
-            );
-
-          if (debitResult.modifiedCount === 0) {
-            throw new Error("PLAYER_AD_FUNDS_CHANGED");
-          }
-        }
-
-        return ads.insertOne(
+    // Crash-safe spend (issue #1672): the personal-cash debit is a keyed
+    // idempotent leg and the ad row a terminal deterministic insert, so a
+    // crash between the sequential writes reconciles to exactly one charged
+    // ad instead of charging for an ad that never landed (or landing it
+    // twice). `Idempotency-Key` replays the stored outcome without charging
+    // again. The turn-window re-check lives inside the flow so a concurrent
+    // submit cannot slip past the pre-check above on either topology.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    let adId: string;
+    try {
+      const result = await applyPlayerAdSpend(db, {
+        characterId: character._id,
+        userId: new ObjectId(authUser.userId),
+        characterName: character.name,
+        countryId: character.countryId,
+        balanceField: personalBalanceField,
+        cost,
+        isFree,
+        imageUrl,
+        ...(linkUrl ? { linkUrl } : {}),
+        ...(altText ? { altText } : {}),
+        createdTurn: currentTurn,
+        currencyCode: homeCurrency,
+        windowStartTurn,
+        maxFree: rateLimit.maxFree,
+        windowTurns: rateLimit.windowTurns,
+        fingerprint: `${character._id.toHexString()}:${currentTurn}:${isFree ? "free" : "paid"}:${isFree ? 0 : cost}:${homeCurrency}`,
+        idempotencyKey: headerKey ?? randomUUID(),
+      });
+      adId = result.adId.toHexString();
+    } catch (error) {
+      if (error instanceof PlayerAdSlotUnavailableError) {
+        return NextResponse.json(
           {
-            _id: new ObjectId(),
-            characterId: character._id,
-            userId: new ObjectId(authUser.userId),
-            characterName: character.name,
-            countryId: character.countryId,
-            imageUrl,
-            linkUrl,
-            altText,
-            viewCount: 0,
-            isActive: true,
-            moderationStatus: "pending" as const,
-            createdAt: new Date(),
-            createdTurn: currentTurn,
-            costPaid: canUseFreeInTx ? 0 : cost,
-            currencyCode: homeCurrency,
+            error: "You have used your ad slots for this period.",
+            turnsUntilEligible: error.turnsUntilEligible,
           },
-          { session }
+          { status: 429 }
         );
-      },
-      async () => {
-        const recentAdsFallback = await ads
-          .find({ characterId: character._id, createdTurn: { $gte: windowStartTurn } })
-          .sort({ createdTurn: -1 })
-          .toArray();
-        const freeUsedFallback = recentAdsFallback.filter((entry) => entry.costPaid === 0).length;
-        const canUseFreeFallback = freeUsedFallback < rateLimit.maxFree;
-
-        if (!canUseFreeFallback && recentAdsFallback.length > 0) {
-          turnsUntilEligible = Math.max(
-            0,
-            recentAdsFallback[0].createdTurn + rateLimit.windowTurns - currentTurn
-          );
-          throw new Error("PLAYER_AD_SLOT_UNAVAILABLE");
-        }
-
-        let debited = false;
-        if (!canUseFreeFallback) {
-          const debitResult = await atomicallyDebitCharacterCash(
-            db,
-            character._id,
-            homeCurrency,
-            cost,
-            forexEnabled
-          );
-          if (!debitResult.ok) {
-            throw new Error("PLAYER_AD_FUNDS_CHANGED");
-          }
-          debited = true;
-        }
-
-        try {
-          return await ads.insertOne({
-            _id: new ObjectId(),
-            characterId: character._id,
-            userId: new ObjectId(authUser.userId),
-            characterName: character.name,
-            countryId: character.countryId,
-            imageUrl,
-            linkUrl,
-            altText,
-            viewCount: 0,
-            isActive: true,
-            moderationStatus: "pending" as const,
-            createdAt: new Date(),
-            createdTurn: currentTurn,
-            costPaid: canUseFreeFallback ? 0 : cost,
-            currencyCode: homeCurrency,
-          });
-        } catch (error) {
-          if (debited) {
-            await refundCharacterCash(db, character._id, homeCurrency, cost, forexEnabled);
-          }
-          throw error;
-        }
       }
-    );
+      if (error instanceof Error && error.message === "PLAYER_AD_FUNDS_CHANGED") {
+        return NextResponse.json(
+          { error: "Your available personal funds changed before the ad completed." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof Error && error.message.startsWith("PLAYER_AD_CONFLICT")) {
+        return NextResponse.json(
+          { error: "Your ad could not be recorded. Please try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This submission already settled. Start a new submission to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different submission." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
-    return NextResponse.json({ success: true, adId: ad.insertedId.toString() }, { status: 201 });
+    return NextResponse.json({ success: true, adId }, { status: 201 });
   } catch (error) {
-    if (error instanceof Error && error.message === "PLAYER_AD_SLOT_UNAVAILABLE") {
-      return NextResponse.json(
-        { error: "You have used your ad slots for this period.", turnsUntilEligible },
-        { status: 429 }
-      );
-    }
-    if (error instanceof Error && error.message === "PLAYER_AD_FUNDS_CHANGED") {
-      return NextResponse.json(
-        { error: "Your available personal funds changed before the ad completed." },
-        { status: 409 }
-      );
-    }
     return handleRouteError(error);
   }
 }

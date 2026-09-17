@@ -38,9 +38,9 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * deterministic-insert side effects as revertible steps (`applyKeyedUpdate`,
  * `insertKeyedDoc` via `makeInsertStep`, deterministic `_id` via
  * `keyedInsertId`). Migrated: character transfers, donations, election
- * travel/primary/surge, state-attack. Still on the legacy
- * debit-first-plus-compensation fallback: canvassing, player ads, both
- * recruitment flows, treasury transfer, nominate, campaign commands and
+ * travel/primary/surge, state-attack, canvassing, nominate, player ads.
+ * Still on the legacy debit-first-plus-compensation fallback: both
+ * recruitment flows, treasury transfer, campaign commands and
  * targeting, union busting/bargaining, forex orders/direct/fill/cancel, bond
  * sell/default/payoff, index-fund cron/rebalancing, directAction, state-org
  * build — multi-write status machines, positional holder claims, and
