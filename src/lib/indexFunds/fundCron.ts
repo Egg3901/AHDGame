@@ -83,6 +83,7 @@ import {
 import { planFundTargetRebalance } from "@/lib/indexFunds/fundTargetRebalance";
 import { calculateHourlyPublicFloatAbsorptionCap } from "@/lib/indexFunds/publicFloatAbsorption";
 import {
+  buildFundCrossRebalancePassKey,
   executeFundCrossRebalancing,
   planFundCrossRebalancing,
   type CrossRebalanceResult,
@@ -1311,10 +1312,18 @@ export async function runIndexFundCron(
       });
 
       if (crossPlans.length > 0) {
+        // The pass pins this exact market (participants, targets, plan,
+        // rates) on a per-turn parent receipt before the first transfer, so
+        // a same-turn retry resumes the stored legs instead of replanning
+        // from post-transfer state.
         const crossResult: CrossRebalanceResult = await executeFundCrossRebalancing(
           db,
           crossPlans,
-          currentTurn
+          currentTurn,
+          {
+            idempotencyKey: buildFundCrossRebalancePassKey(currentTurn),
+            context: { funds: rebalFunds, corps: candidateCorps, exchangeRates },
+          }
         );
         result.crossFundTransfers = crossResult.transfers;
         if (crossResult.errors.length > 0) {

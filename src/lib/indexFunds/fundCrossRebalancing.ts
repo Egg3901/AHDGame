@@ -6,22 +6,40 @@
  * Cash moves between funds; no issuer treasury or public float is touched.
  */
 
-import type { ClientSession, Db, ObjectId } from "mongodb";
+import type { ClientSession, Collection, Db, ObjectId } from "mongodb";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import type { Corporation, IndexFund, IndexFundHolding } from "@/lib/db/types";
-import { creditSharesToFund, debitSharesFromFund } from "@/lib/corporations/shareholderOps";
+import type { Corporation, IndexFund } from "@/lib/db/types";
 import { resolveShareExecutionPrice } from "@/lib/corporations/marketExecution";
 import { convertLocalPriceToAnchor } from "@/lib/indexFunds/fundHoldingsValuation";
 import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
 import { INDEX_FUND_MAX_EQUITY_ALLOCATION } from "@/lib/indexFunds/unitAccounting";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
 import {
-  getFundById,
-  insertFundTransaction,
-  updateFundHoldings,
-} from "@/lib/indexFunds/fundQueries";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
-import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
+  claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
+  failMoneyFlowReceipt,
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+  type MoneyFlowReceipt,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyFundCrossTransferSpend,
+  buildFundCrossTransferFingerprint,
+  fireCrossTransferPostCommit,
+  FUND_CROSS_TRANSFER_BUYER,
+  FUND_CROSS_TRANSFER_CASH,
+  FUND_CROSS_TRANSFER_SELLER,
+  type FundCrossTransferOutcome,
+} from "@/lib/indexFunds/fundCrossTransferSpend";
+
+// Holding-image formulas live with the keyed cross-transfer primitive so the
+// pass planner and the primitive steps share one definition; re-exported here
+// for the historical import path.
+export {
+  updateHoldingAfterPurchase,
+  updateHoldingAfterSale,
+} from "@/lib/indexFunds/fundCrossTransferSpend";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -256,318 +274,592 @@ function groupByAnchor(
   return map;
 }
 
-// ── Execution ─────────────────────────────────────────────────────────────
+// ── Execution: crash-safe pass driver ───────────────────────────────────────
 
+/**
+ * Deterministic parent key for one turn's cross-fund pass: the cron runs at
+ * most one cross-fund market per turn, so the turn names the attempt. A
+ * same-turn retry (crash recovery, same-turn double-fire) reuses it and
+ * resumes instead of rebalancing twice.
+ */
+export function buildFundCrossRebalancePassKey(turn: number): string {
+  return `indexfund-cross-rebalance:turn:${turn}`;
+}
+
+/**
+ * Planner context the pass pins before mutable work. The cron already holds
+ * every row the planner read (fund snapshots with targets, corp rows, the
+ * rate table); handing them here lets the driver pin the complete
+ * participant set, targets, ordering, computed quantities, currencies, and
+ * rates without re-reading — and a retry replays the pins instead of
+ * re-deriving them from post-transfer state.
+ */
+export interface CrossRebalancePassContext {
+  funds: CrossRebalanceFund[];
+  corps: CrossRebalanceCorp[];
+  exchangeRates: Partial<Record<CurrencyCode, number>>;
+}
+
+export type CrossPassLegStatus = "pending" | "completed" | "skipped" | "failed";
+
+interface CrossPassLeg {
+  corporationIdHex: string;
+  sellerFundIdHex: string;
+  buyerFundIdHex: string;
+  sellerFundName: string;
+  buyerFundName: string;
+  shares: number;
+  pricePerShareAnchor: number;
+  valueAnchor: number;
+  executionPriceLocal: number;
+  anchorCurrencyCode: CurrencyCode;
+  corpCurrencyCode?: string;
+  sellerAvgCostAnchor: number | null;
+  childKey: string;
+  status: CrossPassLegStatus;
+  error?: string;
+  outcome?: FundCrossTransferOutcome;
+}
+
+interface CrossPassStoredPlan {
+  version: 1;
+  turn: number;
+  nowIso: string;
+  funds: Array<{
+    fundIdHex: string;
+    name: string;
+    anchorCurrencyCode: CurrencyCode;
+    status: string;
+    targets: Array<{ corporationIdHex: string; targetWeight: number }>;
+  }>;
+  corps: Array<{ corporationIdHex: string; liquidCurrencyCode?: CurrencyCode }>;
+  exchangeRates: Record<string, number>;
+  legs: CrossPassLeg[];
+  outcome?: CrossRebalanceResult;
+}
+
+/** Receipt rows carry the pass resume plan under this field (never in the shared type). */
+type CrossPassReceipt = MoneyFlowReceipt & { fundCrossRebalancePassPlan?: unknown };
+
+function isCrossPassPlan(value: unknown): value is CrossPassStoredPlan {
+  if (!value || typeof value !== "object") return false;
+  const plan = value as Record<string, unknown>;
+  return plan.version === 1 && typeof plan.turn === "number" && Array.isArray(plan.legs);
+}
+
+function isCrossPassOutcome(value: unknown): value is CrossRebalanceResult {
+  if (!value || typeof value !== "object") return false;
+  const outcome = value as Record<string, unknown>;
+  return (
+    typeof outcome.transfers === "number" &&
+    typeof outcome.sharesTransferred === "number" &&
+    typeof outcome.valueTransferred === "number" &&
+    Array.isArray(outcome.errors)
+  );
+}
+
+/**
+ * Deterministic fingerprint for one cross-fund pass. Covers the turn and the
+ * participant fund set — the identity of the market — but NOT the legs: the
+ * legs are the stored payload, and each transfer still carries its own
+ * fingerprint under its child key, so a child key reused for different
+ * figures fails closed there. A parent key reused for a different fund set
+ * is a different market and stays a `MoneyFlowKeyConflictError`.
+ */
+function buildCrossPassFingerprint(turn: number, fundIdHexes: string[]): string {
+  return `fund-cross-rebalance-pass:turn:${turn}:funds:${[...fundIdHexes].sort().join(",")}`;
+}
+
+function isSkipCrossError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : "";
+  return (
+    message.startsWith(FUND_CROSS_TRANSFER_SELLER) ||
+    message.startsWith(FUND_CROSS_TRANSFER_BUYER) ||
+    message.startsWith(FUND_CROSS_TRANSFER_CASH)
+  );
+}
+
+async function readChildReceiptError(
+  db: Db,
+  childKey: string,
+  sessionOpts: { session?: ClientSession }
+): Promise<string | null> {
+  try {
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const existing = await receipts.findOne(
+      { _id: childKey } as never,
+      sessionOpts.session ? { session: sessionOpts.session } : {}
+    );
+    return typeof existing?.error === "string" ? existing.error : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve every pinned figure for one planned transfer before any mutable
+ * work runs. Planner context wins when present; otherwise the pins come from
+ * live reads taken here, still before the first transfer applies. A leg
+ * whose fund, corp, or price is gone names a skip exactly like the legacy
+ * pre-checks did (silent, not an error).
+ */
+async function pinCrossLeg(
+  db: Db,
+  parentKey: string,
+  plan: PlannedCrossTransfer,
+  context: CrossRebalancePassContext | undefined
+): Promise<CrossPassLeg> {
+  const base = {
+    corporationIdHex: plan.corporationId.toHexString(),
+    sellerFundIdHex: plan.sellerFundId.toHexString(),
+    buyerFundIdHex: plan.buyerFundId.toHexString(),
+    shares: plan.shares,
+    pricePerShareAnchor: plan.pricePerShareAnchor,
+    valueAnchor: plan.valueAnchor,
+    childKey: deriveMoneyFlowKey(
+      parentKey,
+      "xfund",
+      plan.corporationId.toHexString(),
+      plan.sellerFundId.toHexString(),
+      plan.buyerFundId.toHexString(),
+      String(plan.shares)
+    ),
+    status: "pending" as CrossPassLegStatus,
+  };
+  const skip = (leg: Omit<CrossPassLeg, "status">): CrossPassLeg => ({ ...leg, status: "skipped" });
+
+  const contextFund = (id: string): CrossRebalanceFund | undefined =>
+    context?.funds.find((f) => f._id.toString() === id);
+  const sellerSnapshot = contextFund(base.sellerFundIdHex);
+  const buyerSnapshot = contextFund(base.buyerFundIdHex);
+  const corpSnapshot = context?.corps.find(
+    (c) => c._id.toString() === base.corporationIdHex
+  );
+
+  let sellerName = sellerSnapshot?.name;
+  let buyerName = buyerSnapshot?.name;
+  let sellerAvg: number | null | undefined = sellerSnapshot?.holdings.find(
+    (h) => h.corporationId.toString() === base.corporationIdHex
+  )?.avgCostPerShareAnchor;
+  let anchor = sellerSnapshot?.anchorCurrencyCode ?? buyerSnapshot?.anchorCurrencyCode;
+  let liquidCurrency: CurrencyCode | undefined = corpSnapshot?.liquidCurrencyCode ?? undefined;
+  let executionPriceLocal: number | undefined = corpSnapshot
+    ? resolveShareExecutionPrice(corpSnapshot)
+    : undefined;
+
+  if (
+    sellerName === undefined ||
+    buyerName === undefined ||
+    sellerAvg === undefined ||
+    anchor === undefined ||
+    executionPriceLocal === undefined
+  ) {
+    const funds = db.collection<IndexFund>("indexFunds");
+    const [sellerLive, buyerLive] = await Promise.all([
+      sellerName === undefined || sellerAvg === undefined || anchor === undefined
+        ? funds.findOne(
+            { _id: plan.sellerFundId } as never,
+            { projection: { name: 1, anchorCurrencyCode: 1, holdings: 1 } }
+          )
+        : null,
+      buyerName === undefined || anchor === undefined
+        ? funds.findOne(
+            { _id: plan.buyerFundId } as never,
+            { projection: { name: 1, anchorCurrencyCode: 1 } }
+          )
+        : null,
+    ]);
+    if (sellerName === undefined) sellerName = sellerLive?.name;
+    if (buyerName === undefined) buyerName = buyerLive?.name;
+    if (anchor === undefined)
+      anchor = sellerLive?.anchorCurrencyCode ?? buyerLive?.anchorCurrencyCode;
+    if (sellerAvg === undefined) {
+      const holding = (sellerLive?.holdings as IndexFund["holdings"] | undefined)?.find(
+        (h) => h.corporationId.toString() === base.corporationIdHex
+      );
+      sellerAvg = holding?.avgCostPerShareAnchor ?? null;
+    }
+    if (executionPriceLocal === undefined) {
+      const corpLive = await db
+        .collection<Corporation>("corporations")
+        .findOne(
+          { _id: plan.corporationId } as never,
+          { projection: { sharePrice: 1, fundamentalSharePrice: 1, liquidCurrencyCode: 1 } }
+        );
+      if (!corpLive) {
+        return skip({
+          ...base,
+          sellerFundName: sellerName ?? base.sellerFundIdHex,
+          buyerFundName: buyerName ?? base.buyerFundIdHex,
+          executionPriceLocal: 0,
+          anchorCurrencyCode: (anchor ?? "USD") as CurrencyCode,
+          sellerAvgCostAnchor: null,
+        });
+      }
+      executionPriceLocal = resolveShareExecutionPrice(corpLive);
+      liquidCurrency = corpLive.liquidCurrencyCode;
+    }
+  }
+
+  if (!sellerName || !buyerName || !anchor) {
+    return skip({
+      ...base,
+      sellerFundName: sellerName ?? base.sellerFundIdHex,
+      buyerFundName: buyerName ?? base.buyerFundIdHex,
+      executionPriceLocal: executionPriceLocal ?? 0,
+      anchorCurrencyCode: (anchor ?? "USD") as CurrencyCode,
+      sellerAvgCostAnchor: null,
+    });
+  }
+  if (!Number.isFinite(executionPriceLocal) || (executionPriceLocal as number) <= 0) {
+    return skip({
+      ...base,
+      sellerFundName,
+      buyerFundName,
+      executionPriceLocal: 0,
+      anchorCurrencyCode: anchor,
+      sellerAvgCostAnchor: null,
+    });
+  }
+  return {
+    ...base,
+    sellerFundName,
+    buyerFundName,
+    executionPriceLocal: executionPriceLocal as number,
+    anchorCurrencyCode: anchor,
+    ...(liquidCurrency !== undefined ? { corpCurrencyCode: liquidCurrency as string } : {}),
+    sellerAvgCostAnchor: sellerAvg ?? null,
+  };
+}
+
+/** Run one pinned leg through the primitive under its child key. */
+async function applyCrossLeg(
+  db: Db,
+  leg: CrossPassLeg,
+  currentTurn: number,
+  sessionOpts: { session?: ClientSession }
+): Promise<{ duplicate: boolean; outcome: FundCrossTransferOutcome }> {
+  const result = await applyFundCrossTransferSpend(
+    db,
+    {
+      sellerFundId: new ObjectId(leg.sellerFundIdHex),
+      buyerFundId: new ObjectId(leg.buyerFundIdHex),
+      corpId: new ObjectId(leg.corporationIdHex),
+      shares: leg.shares,
+      pricePerShareAnchor: leg.pricePerShareAnchor,
+      valueAnchor: leg.valueAnchor,
+      executionPriceLocal: leg.executionPriceLocal,
+      sellerFundName: leg.sellerFundName,
+      buyerFundName: leg.buyerFundName,
+      anchorCurrencyCode: leg.anchorCurrencyCode,
+      ...(leg.corpCurrencyCode !== undefined ? { corpCurrencyCode: leg.corpCurrencyCode } : {}),
+      sellerAvgCostAnchor: leg.sellerAvgCostAnchor,
+      turn: currentTurn,
+      fingerprint: buildFundCrossTransferFingerprint({
+        sellerFundId: new ObjectId(leg.sellerFundIdHex),
+        buyerFundId: new ObjectId(leg.buyerFundIdHex),
+        corpId: new ObjectId(leg.corporationIdHex),
+        shares: leg.shares,
+        pricePerShareAnchor: leg.pricePerShareAnchor,
+        valueAnchor: leg.valueAnchor,
+        executionPriceLocal: leg.executionPriceLocal,
+        turn: currentTurn,
+      }),
+      idempotencyKey: leg.childKey,
+    },
+    sessionOpts.session ? { session: sessionOpts.session } : {}
+  );
+  if (!result.duplicate) {
+    await fireCrossTransferPostCommit(
+      db,
+      {
+        corpId: new ObjectId(leg.corporationIdHex),
+        sellerFundId: new ObjectId(leg.sellerFundIdHex),
+        sellerFundName: leg.sellerFundName,
+        buyerFundName: leg.buyerFundName,
+        shares: leg.shares,
+        pricePerShareAnchor: leg.pricePerShareAnchor,
+        ...(leg.corpCurrencyCode !== undefined ? { corpCurrencyCode: leg.corpCurrencyCode } : {}),
+        turn: currentTurn,
+      },
+      sessionOpts
+    );
+  }
+  return result;
+}
+
+/**
+ * Execute a planned cross-fund market so a retry cannot repeat completed
+ * legs, rebalance one fund twice, use changed targets midway, or strand
+ * partially applied state (issue #1672).
+ *
+ * Crash-safe pass driver over the `applyFundCrossTransferSpend` primitive:
+ * the pass pins the complete participant set, targets, ordering, computed
+ * quantities, currencies/rates, and child operation keys on a parent receipt
+ * before the first transfer, then runs each leg through the keyed primitive
+ * under its child key. A same-key retry replays the stored legs (completed
+ * legs tally from the stored outcome without re-invoking, pending legs
+ * reconcile through their child receipts) instead of recomputing from
+ * post-transfer state, so a resumed market cannot repeat a landed transfer
+ * or price one from moved cash. A lost seller, buyer, or cash race skips
+ * the leg exactly like the legacy guarded writes did; anything later lands
+ * in `errors` and the pass continues with the next leg, exactly like the
+ * legacy per-transfer catch did.
+ *
+ * There is no pass-level orphan driver (like buys/sales, no intent row
+ * exists to strand): an unretried partial stays exactly as the crash left
+ * it, and the next turn's pass runs under a new key.
+ */
 export async function executeFundCrossRebalancing(
   db: Db,
   plans: PlannedCrossTransfer[],
-  currentTurn: number
+  currentTurn: number,
+  options?: {
+    session?: ClientSession;
+    idempotencyKey?: string;
+    context?: CrossRebalancePassContext;
+  }
 ): Promise<CrossRebalanceResult> {
-  const result: CrossRebalanceResult = {
+  const zeros: CrossRebalanceResult = {
     transfers: 0,
     sharesTransferred: 0,
     valueTransferred: 0,
     errors: [],
   };
+  if (plans.length === 0) return zeros;
 
-  if (plans.length === 0) return result;
+  const parentKey =
+    options?.idempotencyKey !== undefined
+      ? options.idempotencyKey
+      : buildFundCrossRebalancePassKey(currentTurn);
+  if (parentKey.length === 0 || parentKey.length > 128) {
+    throw new RangeError("Cross-fund pass idempotency key must be 1-128 characters");
+  }
 
-  // Fetch current fund/corp state once and update in memory so consecutive
-  // transfers for the same fund see their own cumulative effect.
-  const fundState = new Map<string, IndexFund>();
-  const corpState = new Map<string, CrossRebalanceCorp>();
+  const contextFunds = options?.context?.funds;
+  const fingerprintFunds =
+    contextFunds !== undefined && contextFunds.length > 0
+      ? contextFunds.map((f) => f._id.toString())
+      : [...new Set(plans.flatMap((p) => [p.sellerFundId.toString(), p.buyerFundId.toString()]))];
+  const fingerprint = buildCrossPassFingerprint(currentTurn, fingerprintFunds);
 
+  // Pin every leg figure once, before any mutable write. A same-key retry
+  // replays these pins (never a fresh plan over post-transfer state).
+  const liveLegs: CrossPassLeg[] = [];
   for (const plan of plans) {
+    liveLegs.push(await pinCrossLeg(db, parentKey, plan, options?.context));
+  }
+
+  const snapshotFunds = (options?.context?.funds ?? []).map((f) => ({
+    fundIdHex: f._id.toString(),
+    name: f.name,
+    anchorCurrencyCode: f.anchorCurrencyCode,
+    status: f.status,
+    targets: f.targetConstituents.map((t) => ({
+      corporationIdHex: t.corporationId.toString(),
+      targetWeight: t.targetWeight,
+    })),
+  }));
+  const snapshotCorps = (options?.context?.corps ?? []).map((c) => ({
+    corporationIdHex: c._id.toString(),
+    ...(c.liquidCurrencyCode !== undefined ? { liquidCurrencyCode: c.liquidCurrencyCode } : {}),
+  }));
+  const snapshotRates: Record<string, number> = {};
+  for (const [code, rate] of Object.entries(options?.context?.exchangeRates ?? {})) {
+    if (typeof rate === "number" && Number.isFinite(rate)) snapshotRates[code] = rate;
+  }
+
+  const runPass = async (session?: ClientSession) => {
+    const sessionOpts = session ? { session } : {};
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const receiptCollection = receipts as unknown as Collection<CrossPassReceipt>;
+    let claim: Awaited<ReturnType<typeof claimMoneyFlowReceipt>>;
     try {
-      const executed = await executeSingleTransfer(db, plan, fundState, corpState, currentTurn);
-      if (executed) {
-        result.transfers++;
-        result.sharesTransferred += plan.shares;
-        result.valueTransferred += plan.valueAnchor;
-      }
+      claim = await claimMoneyFlowReceipt(receipts, parentKey, fingerprint, sessionOpts);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      result.errors.push(
-        `Cross-rebalance ${plan.corporationId} ${plan.sellerFundId}→${plan.buyerFundId}: ${message}`
-      );
+      if (!(err instanceof MoneyFlowKeyConflictError)) throw err;
+      // Same key, different fund set: a genuinely different market reusing
+      // the key, not a post-crash remainder. Fail closed.
+      throw err;
     }
-  }
+    if (claim === "duplicate") {
+      const existing = await receiptCollection.findOne({ _id: parentKey }, sessionOpts);
+      const stored = existing?.fundCrossRebalancePassPlan;
+      if (!isCrossPassPlan(stored) || !isCrossPassOutcome(stored.outcome)) {
+        throw new Error("MONEY_FLOW_RECEIPT_LOST");
+      }
+      return { ...stored.outcome, errors: [...stored.outcome.errors] };
+    }
+    let legsToRun = liveLegs;
+    if (claim === "in-progress") {
+      // Same fingerprint, so the live legs name the same market, but the
+      // pass runs the STORED legs when they exist: post-transfer state would
+      // replan different sizes and strand the landed legs' cash outside the
+      // remaining market. No stored plan means the crash landed between the
+      // claim insert and the plan write below (nothing applied yet), so the
+      // live legs under the stored fingerprint are exact.
+      const existing = await receiptCollection.findOne({ _id: parentKey }, sessionOpts);
+      const stored = existing?.fundCrossRebalancePassPlan;
+      if (isCrossPassPlan(stored)) {
+        legsToRun = stored.legs;
+      }
+    } else {
+      // A fresh claim owns the pass. Persist the leg sequence before the
+      // first transfer: a crash from here on replays this exact sequence
+      // under the same key.
+      try {
+        await receiptCollection.updateOne(
+          { _id: parentKey },
+          {
+            $set: {
+              fundCrossRebalancePassPlan: {
+                version: 1,
+                turn: currentTurn,
+                nowIso: new Date().toISOString(),
+                funds: snapshotFunds,
+                corps: snapshotCorps,
+                exchangeRates: snapshotRates,
+                legs: liveLegs,
+              } satisfies CrossPassStoredPlan,
+              updatedAt: new Date(),
+            },
+          },
+          sessionOpts
+        );
+      } catch (planError) {
+        await failMoneyFlowReceipt(
+          receipts,
+          parentKey,
+          `${FUND_CROSS_TRANSFER_TX}:pass-plan-store`,
+          sessionOpts
+        );
+        throw planError;
+      }
+    }
 
-  return result;
-}
-
-async function executeSingleTransfer(
-  db: Db,
-  plan: PlannedCrossTransfer,
-  fundState: Map<string, IndexFund>,
-  corpState: Map<string, CrossRebalanceCorp>,
-  currentTurn: number
-): Promise<boolean> {
-  const sellerFund = await loadFundState(db, plan.sellerFundId, fundState);
-  const buyerFund = await loadFundState(db, plan.buyerFundId, fundState);
-  if (!sellerFund || !buyerFund) return false;
-
-  const corpKey = plan.corporationId.toString();
-  let corp = corpState.get(corpKey);
-  if (!corp) {
-    const loaded = await db
-      .collection<Corporation>("corporations")
-      .findOne({ _id: plan.corporationId });
-    if (!loaded) return false;
-    corp = loaded;
-    corpState.set(corpKey, corp);
-  }
-
-  const executionPrice = resolveShareExecutionPrice(corp);
-  if (!Number.isFinite(executionPrice) || executionPrice <= 0) return false;
-
-  const sellerHolding = sellerFund.holdings.find((h) => h.corporationId.toString() === corpKey);
-  if (!sellerHolding || sellerHolding.shares < plan.shares) return false;
-
-  if (buyerFund.cashAnchor < plan.valueAnchor) return false;
-
-  const applyTransfer = async (session?: ClientSession): Promise<boolean> => {
-    const sessionOpts = session ? { session } : undefined;
-
-    // 1. Debit shares from seller on corporation cap table.
-    const sellerRemaining = await debitSharesFromFund(
-      db,
-      plan.corporationId,
-      plan.sellerFundId,
-      plan.shares,
-      { $set: { updatedAt: new Date() } },
-      { requireSufficient: true, ...sessionOpts }
-    );
-    if (sellerRemaining < 0) return false;
-
-    // 2. Credit shares to buyer on corporation cap table.
-    const buyerCredited = await creditSharesToFund(
-      db,
-      plan.corporationId,
-      plan.buyerFundId,
-      plan.shares,
-      executionPrice,
-      { $set: { updatedAt: new Date() } },
-      sessionOpts
-    );
-    if (!buyerCredited) {
-      // Best-effort rollback of seller debit.
-      await creditSharesToFund(
-        db,
-        plan.corporationId,
-        plan.sellerFundId,
-        plan.shares,
-        executionPrice,
-        { $set: { updatedAt: new Date() } },
+    const settleLeg = async (
+      index: number,
+      status: CrossPassLegStatus,
+      error?: string,
+      outcome?: FundCrossTransferOutcome
+    ): Promise<void> => {
+      const leg = legsToRun[index];
+      if (!leg) return;
+      leg.status = status;
+      if (error !== undefined) leg.error = error;
+      else delete leg.error;
+      if (outcome !== undefined) leg.outcome = { ...outcome };
+      await receiptCollection.updateOne(
+        { _id: parentKey },
+        {
+          $set: {
+            [`fundCrossRebalancePassPlan.legs.${index}.status`]: status,
+            ...(error !== undefined
+              ? { [`fundCrossRebalancePassPlan.legs.${index}.error`]: error }
+              : {}),
+            ...(outcome !== undefined
+              ? { [`fundCrossRebalancePassPlan.legs.${index}.outcome`]: { ...outcome } }
+              : {}),
+            updatedAt: new Date(),
+          },
+        },
         sessionOpts
       );
-      return false;
+    };
+
+    let transfers = 0;
+    let sharesTransferred = 0;
+    let valueTransferred = 0;
+    for (let index = 0; index < legsToRun.length; index += 1) {
+      const leg = legsToRun[index]!;
+      if (leg.status === "completed") {
+        transfers += 1;
+        sharesTransferred += leg.outcome?.sharesTransferred ?? leg.shares;
+        valueTransferred += leg.outcome?.valueTransferred ?? leg.valueAnchor;
+        continue;
+      }
+      if (leg.status === "skipped") continue;
+      if (leg.status === "failed" && leg.error !== undefined) {
+        // A leg that already failed and settled keeps its verdict on resume:
+        // its child receipt is terminal, so re-driving would only re-report
+        // the same failure. Preserve the legacy continue-with-next-leg.
+        continue;
+      }
+      let result: Awaited<ReturnType<typeof applyCrossLeg>>;
+      try {
+        result = await applyCrossLeg(db, leg, currentTurn, sessionOpts);
+      } catch (err) {
+        if (isSkipCrossError(err)) {
+          await settleLeg(index, "skipped");
+          continue;
+        }
+        if (err instanceof MoneyFlowTerminalError) {
+          const childError = await readChildReceiptError(db, leg.childKey, sessionOpts);
+          if (childError !== null && isSkipCrossError(new Error(childError))) {
+            await settleLeg(index, "skipped");
+            continue;
+          }
+          const message =
+            `Cross-rebalance ${leg.corporationIdHex} ` +
+            `${leg.sellerFundIdHex}→${leg.buyerFundIdHex}: ${err instanceof Error ? err.message : String(err)}`;
+          await settleLeg(index, "failed", message);
+          continue;
+        }
+        const message =
+          `Cross-rebalance ${leg.corporationIdHex} ` +
+          `${leg.sellerFundIdHex}→${leg.buyerFundIdHex}: ${err instanceof Error ? err.message : String(err)}`;
+        await settleLeg(index, "failed", message);
+        continue;
+      }
+      await settleLeg(index, "completed", undefined, result.outcome);
+      transfers += 1;
+      sharesTransferred += result.outcome.sharesTransferred;
+      valueTransferred += result.outcome.valueTransferred;
     }
 
-    // 3. Move cash: buyer → seller.
-    const cashMoved = await atomicallyMoveFundCash(
-      db,
-      plan.buyerFundId,
-      plan.sellerFundId,
-      plan.valueAnchor,
-      sessionOpts
-    );
-    if (!cashMoved) {
-      // Rollback share movements.
-      await creditSharesToFund(
-        db,
-        plan.corporationId,
-        plan.sellerFundId,
-        plan.shares,
-        executionPrice,
-        { $set: { updatedAt: new Date() } },
-        sessionOpts
-      );
-      await debitSharesFromFund(
-        db,
-        plan.corporationId,
-        plan.buyerFundId,
-        plan.shares,
-        { $set: { updatedAt: new Date() } },
-        { requireSufficient: true, ...sessionOpts }
-      );
-      return false;
-    }
-
-    // 4. Update in-memory fund holdings.
-    const updatedSellerHoldings = updateHoldingAfterSale(
-      sellerFund.holdings,
-      plan.corporationId,
-      plan.shares,
-      plan.pricePerShareAnchor
-    );
-    const updatedBuyerHoldings = updateHoldingAfterPurchase(
-      buyerFund.holdings,
-      plan.corporationId,
-      plan.shares,
-      plan.pricePerShareAnchor
-    );
-
-    // 5. Persist holdings arrays.
-    await updateFundHoldings(db, plan.sellerFundId, updatedSellerHoldings, sessionOpts);
-    await updateFundHoldings(db, plan.buyerFundId, updatedBuyerHoldings, sessionOpts);
-
-    // 6. Log transactions.
-    await insertFundTransaction(
-      db,
+    // One atomic settle: the outcome lands with the `completed` status, so
+    // no crash window separates them. Errors rebuild from the per-leg
+    // verdicts, so a resumed settle reports identically.
+    const storedPlan = await receiptCollection.findOne({ _id: parentKey }, sessionOpts);
+    const settledLegs = isCrossPassPlan(storedPlan?.fundCrossRebalancePassPlan)
+      ? storedPlan.fundCrossRebalancePassPlan.legs
+      : legsToRun;
+    const outcome: CrossRebalanceResult = {
+      transfers,
+      sharesTransferred,
+      valueTransferred,
+      errors: settledLegs.flatMap((leg) =>
+        leg.status === "failed" && leg.error !== undefined ? [leg.error] : []
+      ),
+    };
+    await receiptCollection.updateOne(
+      { _id: parentKey },
       {
-        fundId: plan.sellerFundId,
-        kind: "cross_fund_sell",
-        corporationId: plan.corporationId,
-        shares: plan.shares,
-        navAnchor: plan.pricePerShareAnchor,
-        amountAnchor: plan.valueAnchor,
-        note: `Sold ${plan.shares} shares to ${buyerFund.name}`,
-        createdAt: new Date(),
+        $set: {
+          status: "completed",
+          fundCrossRebalancePassPlan: {
+            version: 1,
+            turn: currentTurn,
+            nowIso: new Date().toISOString(),
+            funds: snapshotFunds,
+            corps: snapshotCorps,
+            exchangeRates: snapshotRates,
+            legs: settledLegs,
+            outcome,
+          } satisfies CrossPassStoredPlan,
+          updatedAt: new Date(),
+        },
       },
       sessionOpts
     );
-    await insertFundTransaction(
-      db,
-      {
-        fundId: plan.buyerFundId,
-        kind: "cross_fund_buy",
-        corporationId: plan.corporationId,
-        shares: plan.shares,
-        navAnchor: plan.pricePerShareAnchor,
-        amountAnchor: plan.valueAnchor,
-        note: `Bought ${plan.shares} shares from ${sellerFund.name}`,
-        createdAt: new Date(),
-      },
-      sessionOpts
-    );
-
-    // 7. Record public trade history (the cross-fund market is still a trade).
-    void recordShareTrade(db, {
-      corporationId: plan.corporationId,
-      kind: "market_buy",
-      turn: currentTurn,
-      shares: plan.shares,
-      pricePerShareAnchor: plan.pricePerShareAnchor,
-      from: { name: `${sellerFund.name} (index fund)` },
-      to: { name: `${buyerFund.name} (index fund)` },
-      corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,
-      note: "Cross-fund rebalancing transfer",
-    });
-
-    // 8. Refresh in-memory state for subsequent transfers in this batch.
-    sellerFund.holdings = updatedSellerHoldings;
-    sellerFund.cashAnchor += plan.valueAnchor;
-    buyerFund.holdings = updatedBuyerHoldings;
-    buyerFund.cashAnchor -= plan.valueAnchor;
-
-    return true;
+    return outcome;
   };
 
+  // Join the caller's transaction when one is in flight; otherwise manage our
+  // own. Never open a nested transaction around an outer session.
+  if (options?.session) return runPass(options.session);
   return runWithOptionalTransaction(
-    (session) => applyTransfer(session),
-    () => applyTransfer()
+    async (session) => runPass(session ?? undefined),
+    async () => runPass()
   );
-}
-
-async function loadFundState(
-  db: Db,
-  fundId: ObjectId,
-  fundState: Map<string, IndexFund>
-): Promise<IndexFund | null> {
-  const key = fundId.toString();
-  let fund: IndexFund | null = fundState.get(key) ?? null;
-  if (!fund) {
-    fund = await getFundById(db, fundId);
-    if (fund) fundState.set(key, fund);
-  }
-  return fund;
-}
-
-async function atomicallyMoveFundCash(
-  db: Db,
-  buyerFundId: ObjectId,
-  sellerFundId: ObjectId,
-  amountAnchor: number,
-  options?: { session?: ClientSession }
-): Promise<boolean> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return false;
-
-  const now = new Date();
-  const sessionOpts = options?.session ? { session: options.session } : undefined;
-
-  const buyerDebit = await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: buyerFundId, cashAnchor: { $gte: amountAnchor } },
-      { $inc: { cashAnchor: -amountAnchor }, $set: { updatedAt: now } },
-      sessionOpts
-    );
-  if (buyerDebit.matchedCount === 0) return false;
-
-  await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: sellerFundId },
-      { $inc: { cashAnchor: amountAnchor }, $set: { updatedAt: now } },
-      sessionOpts
-    );
-
-  return true;
-}
-
-// ── Holding updates ───────────────────────────────────────────────────────
-
-export function updateHoldingAfterPurchase(
-  holdings: IndexFundHolding[],
-  corporationId: ObjectId,
-  additionalShares: number,
-  sharePriceAnchor: number
-): IndexFundHolding[] {
-  const existing = holdings.find((h) => h.corporationId.toString() === corporationId.toString());
-  if (existing) {
-    return holdings.map((h) => {
-      if (h.corporationId.toString() !== corporationId.toString()) return h;
-      const newShares = h.shares + additionalShares;
-      const newAvg =
-        h.avgCostPerShareAnchor !== undefined
-          ? (h.shares * h.avgCostPerShareAnchor + additionalShares * sharePriceAnchor) / newShares
-          : sharePriceAnchor;
-      return {
-        ...h,
-        shares: newShares,
-        avgCostPerShareAnchor: newAvg,
-        lastValueAnchor: newShares * sharePriceAnchor,
-      };
-    });
-  }
-  return [
-    ...holdings,
-    {
-      corporationId,
-      shares: additionalShares,
-      avgCostPerShareAnchor: sharePriceAnchor,
-      lastValueAnchor: additionalShares * sharePriceAnchor,
-    },
-  ];
-}
-
-export function updateHoldingAfterSale(
-  holdings: IndexFundHolding[],
-  corporationId: ObjectId,
-  sharesSold: number,
-  sharePriceAnchor: number
-): IndexFundHolding[] {
-  return holdings
-    .map((h) => {
-      if (h.corporationId.toString() !== corporationId.toString()) return h;
-      const newShares = h.shares - sharesSold;
-      if (newShares <= 0) return null;
-      return {
-        ...h,
-        shares: newShares,
-        lastValueAnchor: newShares * sharePriceAnchor,
-      };
-    })
-    .filter((h): h is IndexFundHolding => h !== null);
 }

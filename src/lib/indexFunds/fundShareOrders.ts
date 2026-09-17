@@ -1,7 +1,15 @@
-import { ObjectId, type Db } from "mongodb";
+import { randomUUID } from "node:crypto";
+import { ObjectId, type Db, type Filter } from "mongodb";
 import type { Corporation, IndexFund, IndexFundTransaction, ShareOrder } from "@/lib/db/types";
 import { corpLiquidCapitalToAnchor } from "@/lib/currency/corporationCapital";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
+import {
+  applyKeyedUpdate,
+  deriveMoneyFlowKey,
+  insertKeyedDoc,
+  keyedInsertId,
+  type MoneyFlowAccount,
+} from "@/lib/db/nonAtomicMoneyFlow";
 
 /**
  * Index-fund-owned order-book buy orders.
@@ -19,36 +27,6 @@ import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
  * seller. On cancel the remaining unfilled escrow returns to `cashAnchor`.
  */
 
-/**
- * Atomically debit `amountAnchor` from a fund's `cashAnchor`, gated on a
- * sufficient balance. Returns false when the fund can't cover it (no mutation).
- */
-async function atomicallyDebitFundCashAnchor(
-  db: Db,
-  fundId: ObjectId,
-  amountAnchor: number
-): Promise<boolean> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return false;
-  const res = await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: fundId, cashAnchor: { $gte: amountAnchor } },
-      { $inc: { cashAnchor: -amountAnchor }, $set: { updatedAt: new Date() } }
-    );
-  return res.matchedCount > 0;
-}
-
-/** Refund `amountAnchor` back to a fund's `cashAnchor`. */
-async function refundFundCashAnchor(db: Db, fundId: ObjectId, amountAnchor: number): Promise<void> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return;
-  await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: fundId },
-      { $inc: { cashAnchor: amountAnchor }, $set: { updatedAt: new Date() } }
-    );
-}
-
 export interface PlaceFundShareBuyOrderInput {
   fund: Pick<IndexFund, "_id" | "name" | "anchorCurrencyCode">;
   corp: Pick<Corporation, "_id" | "liquidCurrencyCode" | "countryId">;
@@ -61,14 +39,29 @@ export interface PlaceFundShareBuyOrderInput {
   /**
    * When set, the escrow transaction row is pushed here instead of inserted,
    * for a caller placing many bids that writes them in one insertMany.
+   * The row is pushed only when the order insert freshly applied, never on
+   * a same-key replay (which already recorded it).
    */
   txSink?: Omit<IndexFundTransaction, "_id">[];
+  /**
+   * Caller-supplied idempotency key. The rebalance pass derives one per bid
+   * leg from its parent key so a same-pass retry resumes instead of
+   * double-escrowing. Omit to mint one: the attempt is still guarded by the
+   * atomic debit, but a retry mints a new key and is treated as a new bid.
+   */
+  keyOptions?: { idempotencyKey?: string };
 }
 
 export interface PlaceFundShareBuyOrderResult {
   ok: boolean;
   orderId?: ObjectId;
   reason?: string;
+  /**
+   * True when the order already existed under this key (a same-key replay
+   * converged without moving money). Callers tally placements only when
+   * this is false.
+   */
+  duplicate?: boolean;
 }
 
 /**
@@ -76,6 +69,16 @@ export interface PlaceFundShareBuyOrderResult {
  * `cashAnchor` by the anchor escrow up front, then inserts an `open` buy
  * `ShareOrder` carrying `placerFundId`, the corp-local `escrowAmount`, and the
  * debited `escrowAnchor`. No `characterId` is set.
+ *
+ * Crash-safe placement (issue #1672): the escrow debit carries an
+ * amount-bound idempotent sub-operation key and the order `_id` derives from
+ * the flow key, so a crash between the debit and the insert resumes to
+ * exactly one debit and one order instead of stranding escrow with no order
+ * (the legacy debit-then-insert left exactly that strand on a crash). A
+ * same-key retry with the SAME amounts converges; a same-key retry with
+ * different amounts debits and inserts separately (money-conserved, never
+ * confused with the first attempt) because both the subkey and the order id
+ * bind the amounts.
  */
 export async function placeFundShareBuyOrder(
   db: Db,
@@ -95,36 +98,75 @@ export async function placeFundShareBuyOrder(
   const escrowAmount = shares * limitPriceLocal;
   const escrowAnchor = corpLiquidCapitalToAnchor(escrowAmount, corp, fxRate);
 
-  const debited = await atomicallyDebitFundCashAnchor(db, fund._id, escrowAnchor);
-  if (!debited) {
+  const key = input.keyOptions?.idempotencyKey !== undefined
+    ? input.keyOptions.idempotencyKey
+    : randomUUID();
+  if (key.length === 0 || key.length > 128) {
+    throw new RangeError("Fund bid idempotency key must be 1-128 characters");
+  }
+  const escrowCents = String(Math.round(escrowAnchor * 100) / 100);
+  const debitSubkey = deriveMoneyFlowKey(key, "escrow", escrowCents);
+  const funds = db.collection<MoneyFlowAccount>("indexFunds");
+
+  const debitOutcome = await applyKeyedUpdate(
+    debitSubkey,
+    {
+      collection: funds,
+      filter: { _id: fund._id, cashAnchor: { $gte: escrowAnchor } } as Filter<MoneyFlowAccount>,
+      update: {
+        $inc: { cashAnchor: -escrowAnchor },
+        $set: { updatedAt: new Date() },
+      },
+    }
+  );
+  if (debitOutcome !== "applied" && debitOutcome !== "already-applied") {
     return { ok: false, reason: "Insufficient fund cash for escrow" };
   }
 
   const now = new Date();
-  const orderId = new ObjectId();
-  try {
-    await db.collection<ShareOrder>("shareOrders").insertOne({
-      _id: orderId,
-      corporationId: corp._id,
-      placerFundId: fund._id,
-      type: "buy",
-      shares,
-      sharesRemaining: shares,
-      pricePerShare: limitPriceLocal,
-      escrowAmount,
-      escrowAnchor,
-      ...(input.liquidityQuote
-        ? {
-            liquidityProvider: true,
-            liquidityQuotedTurn: input.liquidityQuote.turn,
-            liquidityReferencePrice: input.liquidityQuote.referencePrice,
-          }
-        : {}),
-      status: "open",
-      createdAt: now,
-      updatedAt: now,
-    });
+  const orderId = keyedInsertId(key, `indexfund-bid-order:${escrowCents}`);
+  const insertOutcome = await (async () => {
+    try {
+      return await insertKeyedDoc(db.collection<ShareOrder>("shareOrders"), {
+        _id: orderId,
+        corporationId: corp._id,
+        placerFundId: fund._id,
+        type: "buy",
+        shares,
+        sharesRemaining: shares,
+        pricePerShare: limitPriceLocal,
+        escrowAmount,
+        escrowAnchor,
+        ...(input.liquidityQuote
+          ? {
+              liquidityProvider: true,
+              liquidityQuotedTurn: input.liquidityQuote.turn,
+              liquidityReferencePrice: input.liquidityQuote.referencePrice,
+            }
+          : {}),
+        status: "open",
+        createdAt: now,
+        updatedAt: now,
+      });
+    } catch (err) {
+      // Roll the escrow back if we couldn't persist the order. The
+      // compensation carries its own key so a retried refund converges.
+      await applyKeyedUpdate(
+        deriveMoneyFlowKey(debitSubkey, "compensate", "escrow"),
+        {
+          collection: funds,
+          filter: { _id: fund._id } as Filter<MoneyFlowAccount>,
+          update: {
+            $inc: { cashAnchor: escrowAnchor },
+            $set: { updatedAt: new Date() },
+          },
+        }
+      );
+      throw err;
+    }
+  })();
 
+  if (insertOutcome === "applied") {
     const escrowTx = {
       fundId: fund._id,
       kind: "public_float_buy" as const,
@@ -136,13 +178,9 @@ export async function placeFundShareBuyOrder(
     };
     if (input.txSink) input.txSink.push(escrowTx);
     else await insertFundTransaction(db, escrowTx);
-  } catch (err) {
-    // Roll the escrow back if we couldn't persist the order.
-    await refundFundCashAnchor(db, fund._id, escrowAnchor);
-    throw err;
   }
 
-  return { ok: true, orderId };
+  return { ok: true, orderId, duplicate: insertOutcome === "already-applied" };
 }
 
 export interface PlaceFundShareSellOrderInput {
@@ -242,6 +280,20 @@ export async function cancelFundShareOrder(db: Db, orderId: ObjectId): Promise<v
 
   const refundAnchor = claimed.escrowAnchor ?? 0;
   if (refundAnchor > 0) {
-    await refundFundCashAnchor(db, claimed.placerFundId, refundAnchor);
+    // Keyed refund (issue #1672): a crash between the claim above and the
+    // refund used to strand escrow forever (a retry finds the order already
+    // `cancelled` and no-ops). The refund carries a key derived from the
+    // order id, so a resumed cancel refunds exactly once.
+    await applyKeyedUpdate(
+      `indexfund-bid-cancel:${orderId.toHexString()}`,
+      {
+        collection: db.collection<MoneyFlowAccount>("indexFunds"),
+        filter: { _id: claimed.placerFundId } as Filter<MoneyFlowAccount>,
+        update: {
+          $inc: { cashAnchor: refundAnchor },
+          $set: { updatedAt: new Date() },
+        },
+      }
+    );
   }
 }
