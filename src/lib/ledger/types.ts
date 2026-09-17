@@ -116,6 +116,26 @@ export interface MoneySupplyFinding {
   byReason: MoneySupplyReason[];
 }
 
+/**
+ * One row of the per-kind stock-vs-flow inventory.
+ *
+ * `findings` on the report is capped (MAX_FINDINGS) so a single turn's ~1,100
+ * divergent accounts never all persist; this breakdown is computed over the
+ * FULL finding list before the cap, so the class ranking survives. It is the
+ * recurring form of the #992 "inventory divergent account classes and rank
+ * them by unexplained balance change" scope item.
+ */
+export interface StockVsFlowByKind {
+  /** Ledger account kind prefix (character, corporation, ...). */
+  kind: string;
+  /** Divergent accounts of this kind this turn. */
+  divergentCount: number;
+  /** Σ |divergence| over divergent accounts of this kind (₳). */
+  absDivergence: number;
+  /** Of those, accounts that moved with no ledger legs (uninstrumented). */
+  uninstrumentedCount: number;
+}
+
 export interface ReconcileReport {
   turn: number;
   generatedAt: Date;
@@ -132,6 +152,8 @@ export interface ReconcileReport {
     /** null when the check was skipped: unknown, not zero. */
     divergentCount: number | null;
     findings: StockVsFlowFinding[];
+    /** Per-kind inventory over the FULL finding list, before the findings cap. */
+    byKind: StockVsFlowByKind[];
   };
   moneySupply: {
     status: ReconcileStatus;

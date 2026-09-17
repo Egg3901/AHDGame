@@ -10,6 +10,7 @@ import type {
   MoneySupplyFinding,
   ReconcileReport,
   ReconcileStatus,
+  StockVsFlowByKind,
   StockVsFlowFinding,
   TrialBalanceFinding,
 } from "@/lib/ledger/types";
@@ -193,6 +194,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       skipped: Boolean(input.skipStockVsFlow),
       divergentCount: input.skipStockVsFlow ? null : stockFindings.length,
       findings: stockFindings.slice(0, MAX_FINDINGS),
+      byKind: summarizeStockVsFlowByKind(stockFindings),
     },
     moneySupply: {
       status: supplyStatus,
@@ -202,6 +204,28 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
       .sort((a, b) => b.anchorAmount - a.anchorAmount)
       .slice(0, MAX_FINDINGS),
   };
+}
+
+/**
+ * Roll the FULL (pre-cap) stock-vs-flow finding list into a per-kind
+ * inventory ranked by unexplained balance change (Σ|divergence|). Pure.
+ */
+export function summarizeStockVsFlowByKind(findings: StockVsFlowFinding[]): StockVsFlowByKind[] {
+  const byKind = new Map<string, StockVsFlowByKind>();
+  for (const finding of findings) {
+    const kind = accountKind(finding.account);
+    const row = byKind.get(kind) ?? {
+      kind,
+      divergentCount: 0,
+      absDivergence: 0,
+      uninstrumentedCount: 0,
+    };
+    row.divergentCount += 1;
+    row.absDivergence += Math.abs(finding.divergence);
+    if (finding.uninstrumented) row.uninstrumentedCount += 1;
+    byKind.set(kind, row);
+  }
+  return [...byKind.values()].sort((a, b) => b.absDivergence - a.absDivergence);
 }
 
 function rateForAccount(account: string, rates: Record<string, number> | undefined): number {
