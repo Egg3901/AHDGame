@@ -89,6 +89,15 @@ export interface UKPartyLeadership {
   lastAmendedByCharacterId?: ObjectId | null;
   /** Turn a survived ballot resolved on; drives the immunity window. Null = never. */
   lastSurvivalTurn: number | null;
+  /**
+   * Receipts for conference committee motions (ticket #862) applied to this
+   * ruleset. The conference apply writes the ruleset patch and pushes the
+   * motion id here in ONE conditional update guarded by
+   * `appliedConferenceMotionIds: {$ne: motionId}`, so replays and
+   * concurrent resolvers apply each motion exactly once. Absent = none
+   * applied (covers every legacy row, no migration).
+   */
+  appliedConferenceMotionIds?: string[];
   /** The one live challenge for this party, if any. */
   activeChallengeId: ObjectId | null;
   history: LeadershipHistoryEntry[];

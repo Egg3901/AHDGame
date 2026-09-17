@@ -69,7 +69,12 @@ function matches(doc: Doc, query: Doc): boolean {
         } else if (op === "$exists") {
           if ((docVal !== undefined) !== (arg as boolean)) return false;
         } else if (op === "$ne") {
-          if (valuesEqual(docVal, arg)) return false;
+          // Server semantics: an array field matches $ne only when NO
+          // element equals the value (missing field still matches).
+          const hit = Array.isArray(docVal)
+            ? docVal.some((v) => valuesEqual(v, arg))
+            : valuesEqual(docVal, arg);
+          if (hit) return false;
         } else if (op === "$lte") {
           if (!((docVal as number) <= (arg as number))) return false;
         } else if (op === "$gte") {
@@ -190,6 +195,60 @@ function applyPipeline(doc: Doc, pipeline: Doc[]): void {
 
 export interface FakeLeadershipSeed {
   [collection: string]: Doc[];
+}
+
+/**
+ * Fault-injection wrapper for crash-recovery tests: throws `Error` on the
+ * matching collection/method calls (after `skip` matching calls, `times`
+ * times) to simulate a process crash between two persisted writes. Calls
+ * that do not match pass through to the inner db, so the faulted db stays
+ * usable for the retry that must heal the row. Only for tests using
+ * `createFakeLeadershipDb` (its collections are plain objects, so wrapping
+ * preserves every method).
+ */
+export interface CollectionFaultSpec {
+  collection: string;
+  method: "updateOne" | "findOneAndUpdate" | "insertOne";
+  /** Matching calls to let through before faulting starts. Defaults to 0. */
+  skip?: number;
+  /** Matching calls to fail once faulting starts. Defaults to 1. */
+  times?: number;
+  /** Narrow the fault to calls whose args match (e.g. a specific filter). */
+  match?: (args: unknown[]) => boolean;
+}
+
+export function withCollectionFaults(db: Db, specs: CollectionFaultSpec[]): Db {
+  const calls = specs.map(() => 0);
+  return {
+    ...db,
+    collection: (name: string) => {
+      const inner = db.collection(name) as unknown as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >;
+      const relevant = specs
+        .map((spec, index) => ({ spec, index }))
+        .filter(({ spec }) => spec.collection === name);
+      if (relevant.length === 0) return inner;
+      const wrapped: Record<string, unknown> = { ...inner };
+      for (const method of new Set(relevant.map(({ spec }) => spec.method))) {
+        const fn = inner[method] as (...args: unknown[]) => Promise<unknown>;
+        wrapped[method] = async (...args: unknown[]) => {
+          for (const { spec, index } of relevant) {
+            if (spec.method !== method) continue;
+            if (spec.match && !spec.match(args)) continue;
+            calls[index] += 1;
+            const at = calls[index] - (spec.skip ?? 0);
+            if (at >= 1 && at <= (spec.times ?? 1)) {
+              throw new Error(`injected ${method} fault on ${name} (call ${calls[index]})`);
+            }
+          }
+          return fn(...args);
+        };
+      }
+      return wrapped;
+    },
+  } as unknown as Db;
 }
 
 export function createFakeLeadershipDb(seed: FakeLeadershipSeed = {}): Db {

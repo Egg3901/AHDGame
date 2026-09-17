@@ -80,6 +80,7 @@ export async function getOrSeedPartyLeadership(
         lastAmendedTurn: null,
         lastAmendedByCharacterId: null,
         lastSurvivalTurn: null,
+        appliedConferenceMotionIds: [],
         activeChallengeId: null,
         history: seedHistory,
         createdAt: now,

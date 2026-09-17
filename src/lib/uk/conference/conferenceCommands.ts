@@ -609,7 +609,23 @@ async function applyPassedMotion(
   currentTurn: number,
   now: Date
 ): Promise<{ applied: boolean; voidReason: string | null }> {
+  const collection = getUKPartyLeadershipCollection(db);
   const leadership = await getOrSeedPartyLeadership(db, countryId, party, now, currentTurn);
+  if ((leadership.appliedConferenceMotionIds ?? []).includes(motion.motionId)) {
+    // Replay guard: the effect is already durable, so there is nothing to
+    // re-apply. The write below is conditional on the same receipt, so even
+    // a concurrent caller that passed this check cannot double-apply.
+    return { applied: true, voidReason: null };
+  }
+  if (!Array.isArray(leadership.appliedConferenceMotionIds)) {
+    // Pre-receipt leadership row: create the receipt array before the
+    // conditional write below needs it. Idempotent; real Mongo would also
+    // create it via $push, but the test stand-in requires the array.
+    await collection.updateOne(
+      { _id: leadershipId },
+      { $set: { appliedConferenceMotionIds: [], updatedAt: now } }
+    );
+  }
   const sinceAmend =
     leadership.lastAmendedTurn == null ? undefined : currentTurn - leadership.lastAmendedTurn;
   if (sinceAmend !== undefined && sinceAmend < LEADERSHIP_AMENDMENT_COOLDOWN_TURNS) {
@@ -623,8 +639,11 @@ async function applyPassedMotion(
     return { applied: false, voidReason: `void: ${validation.errors.join("; ")}` };
   }
   const ruleset = { ...leadership.ruleset, ...motion.patch };
-  await getUKPartyLeadershipCollection(db).updateOne(
-    { _id: leadershipId },
+  // Effect + receipt in ONE conditional write: the ruleset patch, the audit
+  // entry, and the motion receipt land together or not at all, and the
+  // $ne guard makes a replay match zero documents.
+  const write = await collection.updateOne(
+    { _id: leadershipId, appliedConferenceMotionIds: { $ne: motion.motionId } },
     {
       $set: {
         ruleset,
@@ -641,8 +660,14 @@ async function applyPassedMotion(
         ),
         updatedAt: now,
       },
+      $push: { appliedConferenceMotionIds: motion.motionId },
     }
   );
+  if (write.matchedCount === 0) {
+    // The _id always matches, so a miss means the $ne guard failed: a
+    // concurrent resolver applied this motion first. Treat as applied.
+    return { applied: true, voidReason: null };
+  }
   recordAudit({
     source: "turn",
     category: "party",
@@ -662,33 +687,54 @@ export interface ConferenceResolution {
 }
 
 /**
- * Close a conference whose voting window passed: resolve the platform vote
- * (ratify → write the standing-platform row), resolve each voting motion
- * (passed → apply under #861 bounds/cooldown, else fail/void), then mark
- * completed with payoff due when ratified. Atomic open→completed claim, so
- * turn retries cannot double-apply; the platform upsert is naturally
- * idempotent and the payoff has its own claim below.
+ * Pure in-memory gate: does a completed row still owe resolution side
+ * effects (standing-platform write or motion applications)? Lets the turn
+ * driver heal crashed rows without extra reads.
  */
-export async function resolveConference(
+export function conferenceResolutionNeedsHeal(doc: UKPartyConference): boolean {
+  if (doc.status !== "completed" || doc.outcome == null) return false;
+  if (doc.ratified && doc.platformAppliedTurn == null) return true;
+  const applied = new Set(doc.appliedMotionIds ?? []);
+  return (doc.motions ?? []).some(
+    (motion) =>
+      motion.status === "voting" || (motion.status === "passed" && !applied.has(motion.motionId))
+  );
+}
+
+/** Committee-vote decision for one motion, shared by fill and reconcile. */
+function decideMotionVote(
+  motion: ConferenceRulesMotion,
+  committeeSize: number,
+  isNpp: boolean
+): { votesFor: number; votesAgainst: number; passed: boolean; reason: string } {
+  let votesFor = motion.votesFor;
+  const votesAgainst = motion.votesAgainst;
+  if (isNpp && votesFor + votesAgainst === 0) {
+    // Deterministic NPP committee: a valid tabled motion carries.
+    votesFor = Math.max(1, committeeSize);
+  }
+  const result = resolveConferenceMotion({ votesFor, votesAgainst, eligibleCount: committeeSize });
+  return { votesFor, votesAgainst, passed: result.passed, reason: result.reason };
+}
+
+/**
+ * Fill a claimed-but-unresolved row: decide the platform vote and every
+ * motion vote from the frozen snapshot, then persist the whole decision in
+ * ONE guarded write. The outcome-null guard elects exactly one filler, so
+ * concurrent callers and crash resumes converge instead of double-filling.
+ * No cross-collection side effects happen here; those reconcile afterwards.
+ */
+async function fillConferenceResolution(
   db: Db,
-  countryId: CountryId,
   party: PoliticalParty,
   doc: UKPartyConference,
   currentTurn: number,
   now: Date
-): Promise<ConferenceResolution> {
-  const partySeqId = partySeqIdOf(party);
-  const claimed = await getUKPartyConferencesCollection(db).findOneAndUpdate(
-    { _id: doc._id, status: "open" },
-    { $set: { status: "completed", updatedAt: now } },
-    { returnDocument: "after" }
-  );
-  if (!claimed) return { completed: false, ratified: false, motionsPassed: 0, motionsVoided: 0 };
+): Promise<{ won: boolean; doc: UKPartyConference }> {
   const isNpp = !party.chairId;
-
   let ratified = false;
-  let proposal = claimed.proposal;
-  const history = [...claimed.history];
+  let proposal = doc.proposal;
+  const history = [...(doc.history ?? [])];
   if (proposal && proposal.status === "voting") {
     if (isNpp && proposal.votesFor + proposal.votesAgainst === 0) {
       // AI-run parties acclaim a valid tabled platform: deterministic, no rng.
@@ -724,108 +770,42 @@ export async function resolveConference(
         )
       );
     }
-    if (ratified) {
-      await getUKPartyPlatformsCollection(db).updateOne(
-        { _id: `${countryId}:${partySeqId}` },
-        {
-          $set: {
-            countryId,
-            partyId: partySeqId,
-            pledgeIds: [...proposal.pledgeIds],
-            ratifiedConferenceId: doc._id,
-            ratifiedYear: doc.conferenceYear,
-            ratifiedAtTurn: currentTurn,
-            updatedAt: now,
-          },
-          $setOnInsert: { createdAt: now },
-        },
-        { upsert: true }
-      );
-    }
   }
 
-  let motionsPassed = 0;
-  let motionsVoided = 0;
   const committeeSize = getEligibleVoterSet(party).size;
-  const motions = await Promise.all(
-    claimed.motions.map(async (motion) => {
-      if (motion.status !== "voting") return motion;
-      let votesFor = motion.votesFor;
-      const votesAgainst = motion.votesAgainst;
-      if (isNpp && votesFor + votesAgainst === 0) {
-        // Deterministic NPP committee: a valid tabled motion carries.
-        votesFor = Math.max(1, committeeSize);
-      }
-      const result = resolveConferenceMotion({
-        votesFor,
-        votesAgainst,
-        eligibleCount: committeeSize,
-      });
-      if (!result.passed) {
-        history.push(
-          conferenceHistoryEntry(
-            currentTurn,
-            "motionFailed",
-            `Conference motion ${motion.motionId} failed: ${result.reason}`
-          )
-        );
-        return {
-          ...motion,
-          votesFor,
-          votesAgainst,
-          status: "failed" as const,
-          resolvedAtTurn: currentTurn,
-        };
-      }
-      const applied = await applyPassedMotion(
-        db,
-        countryId,
-        party,
-        `${countryId}:${partySeqId}`,
-        { ...motion, votesFor, votesAgainst },
-        currentTurn,
-        now
-      );
-      if (applied.applied) {
-        motionsPassed += 1;
-        history.push(
-          conferenceHistoryEntry(
-            currentTurn,
-            "motionPassed",
-            `Conference motion ${motion.motionId} passed and amended leadership rules (${votesFor} for, ${votesAgainst} against)`,
-            { characterId: motion.proposedByCharacterId, actorName: motion.proposedByName }
-          )
-        );
-        return {
-          ...motion,
-          votesFor,
-          votesAgainst,
-          status: "passed" as const,
-          resolvedAtTurn: currentTurn,
-        };
-      }
-      motionsVoided += 1;
+  const motions = (doc.motions ?? []).map((motion) => {
+    if (motion.status !== "voting") return motion;
+    const decided = decideMotionVote(motion, committeeSize, isNpp);
+    if (!decided.passed) {
       history.push(
         conferenceHistoryEntry(
           currentTurn,
-          "motionVoided",
-          `Conference motion ${motion.motionId} passed its vote but ${applied.voidReason}`
+          "motionFailed",
+          `Conference motion ${motion.motionId} failed: ${decided.reason}`
         )
       );
       return {
         ...motion,
-        votesFor,
-        votesAgainst,
-        status: "void" as const,
-        voidReason: applied.voidReason,
+        votesFor: decided.votesFor,
+        votesAgainst: decided.votesAgainst,
+        status: "failed" as const,
         resolvedAtTurn: currentTurn,
       };
-    })
-  );
+    }
+    // Tentatively passed: the vote carried, the leadership-ruleset write
+    // reconciles afterwards against the motion receipt.
+    return {
+      ...motion,
+      votesFor: decided.votesFor,
+      votesAgainst: decided.votesAgainst,
+      status: "passed" as const,
+      resolvedAtTurn: currentTurn,
+    };
+  });
 
   const outcome = ratified ? "ratified" : "closedWithoutRatification";
-  await getUKPartyConferencesCollection(db).updateOne(
-    { _id: doc._id },
+  const filled = await getUKPartyConferencesCollection(db).findOneAndUpdate(
+    { _id: doc._id, status: "completed", outcome: null },
     {
       $set: {
         proposal,
@@ -839,24 +819,264 @@ export async function resolveConference(
             currentTurn,
             "completed",
             ratified
-              ? `Conference completed: platform ratified, ${motionsPassed} motion(s) applied`
+              ? "Conference completed: platform ratified, motions reconciling"
               : "Conference completed without ratifying a platform: no payoff"
           )
         ),
         updatedAt: now,
       },
+    },
+    { returnDocument: "after" }
+  );
+  return filled ? { won: true, doc: filled } : { won: false, doc };
+}
+
+/**
+ * Reconcile resolution side effects for a decided row: the
+ * standing-platform upsert (idempotent by key, confirmed via the platform
+ * receipt) and each passed motion's leadership write (exactly-once via the
+ * motion receipt in the conditional apply). Marks land in ONE batched row
+ * write; a crash anywhere before it simply reconciles again, and the
+ * leadership receipt makes the re-apply a no-op.
+ */
+async function reconcileConferenceEffects(
+  db: Db,
+  countryId: CountryId,
+  party: PoliticalParty,
+  doc: UKPartyConference,
+  currentTurn: number,
+  now: Date
+): Promise<{ motionsPassed: number; motionsVoided: number }> {
+  const partySeqId = partySeqIdOf(party);
+  const isNpp = !party.chairId;
+  const committeeSize = getEligibleVoterSet(party).size;
+  let motionsPassed = 0;
+  let motionsVoided = 0;
+  const newEntries: ConferenceHistoryEntry[] = [];
+
+  let platformAppliedTurn = doc.platformAppliedTurn ?? null;
+  if (doc.ratified && platformAppliedTurn == null) {
+    if (!doc.proposal) {
+      // Decided ratified with no proposal to write: nothing exists to
+      // persist, so mark it rather than retrying forever.
+      platformAppliedTurn = currentTurn;
+    } else {
+      const key = `${countryId}:${partySeqId}`;
+      const existing = await getUKPartyPlatformsCollection(db).findOne({ _id: key });
+      if (existing?.ratifiedConferenceId === doc._id) {
+        platformAppliedTurn = currentTurn;
+      } else {
+        await getUKPartyPlatformsCollection(db).updateOne(
+          { _id: key },
+          {
+            $set: {
+              countryId,
+              partyId: partySeqId,
+              pledgeIds: [...doc.proposal.pledgeIds],
+              ratifiedConferenceId: doc._id,
+              ratifiedYear: doc.conferenceYear,
+              ratifiedAtTurn: currentTurn,
+              updatedAt: now,
+            },
+            $setOnInsert: { createdAt: now },
+          },
+          { upsert: true }
+        );
+        platformAppliedTurn = currentTurn;
+      }
     }
+  }
+
+  const applied = new Set(doc.appliedMotionIds ?? []);
+  const motions = await Promise.all(
+    (doc.motions ?? []).map(async (motion) => {
+      let working = motion;
+      if (working.status === "voting") {
+        // Leftover from a row decided before vote outcomes were persisted:
+        // decide it now from the frozen votes instead of stranding it.
+        const decided = decideMotionVote(working, committeeSize, isNpp);
+        if (!decided.passed) {
+          newEntries.push(
+            conferenceHistoryEntry(
+              currentTurn,
+              "motionFailed",
+              `Conference motion ${working.motionId} failed: ${decided.reason}`,
+              undefined,
+              now
+            )
+          );
+          return {
+            ...working,
+            votesFor: decided.votesFor,
+            votesAgainst: decided.votesAgainst,
+            status: "failed" as const,
+            resolvedAtTurn: currentTurn,
+          };
+        }
+        working = {
+          ...working,
+          votesFor: decided.votesFor,
+          votesAgainst: decided.votesAgainst,
+          status: "passed" as const,
+          resolvedAtTurn: currentTurn,
+        };
+      }
+      if (working.status !== "passed") return working;
+      if (applied.has(working.motionId)) {
+        motionsPassed += 1;
+        return working;
+      }
+      const result = await applyPassedMotion(
+        db,
+        countryId,
+        party,
+        `${countryId}:${partySeqId}`,
+        working,
+        currentTurn,
+        now
+      );
+      if (result.applied) {
+        motionsPassed += 1;
+        applied.add(working.motionId);
+        newEntries.push(
+          conferenceHistoryEntry(
+            currentTurn,
+            "motionPassed",
+            `Conference motion ${working.motionId} passed and amended leadership rules ` +
+              `(${working.votesFor} for, ${working.votesAgainst} against)`,
+            { characterId: working.proposedByCharacterId, actorName: working.proposedByName },
+            now
+          )
+        );
+        return working;
+      }
+      motionsVoided += 1;
+      newEntries.push(
+        conferenceHistoryEntry(
+          currentTurn,
+          "motionVoided",
+          `Conference motion ${working.motionId} passed its vote but ${result.voidReason}`,
+          undefined,
+          now
+        )
+      );
+      return {
+        ...working,
+        status: "void" as const,
+        voidReason: result.voidReason,
+        resolvedAtTurn: currentTurn,
+      };
+    })
   );
 
-  recordAudit({
-    source: "turn",
-    category: "party",
-    action: "uk.conference.completed",
-    outcome: "ok",
-    subject: { type: "party", id: partySeqId, name: party.name },
-    meta: { conferenceId: doc._id, ratified, motionsPassed, motionsVoided },
-  });
-  return { completed: true, ratified, motionsPassed, motionsVoided };
+  const motionsChanged = motions.some((motion, index) => motion !== (doc.motions ?? [])[index]);
+  if (
+    platformAppliedTurn !== (doc.platformAppliedTurn ?? null) ||
+    motionsChanged ||
+    applied.size !== (doc.appliedMotionIds ?? []).length ||
+    newEntries.length > 0
+  ) {
+    let history = doc.history ?? [];
+    for (const entry of newEntries) history = pushConferenceHistory(history, entry);
+    await getUKPartyConferencesCollection(db).updateOne(
+      { _id: doc._id },
+      {
+        $set: {
+          motions,
+          appliedMotionIds: [...applied],
+          platformAppliedTurn,
+          history,
+          updatedAt: now,
+        },
+      }
+    );
+  }
+  return { motionsPassed, motionsVoided };
+}
+
+/**
+ * Close a conference whose voting window passed, crash-resumable and
+ * replay-safe. Protocol, in order:
+ *
+ * 1. Claim: open->completed freezes the row (agenda writes require status
+ *    open, so votes cannot move under the decision) and elects one
+ *    resolver. A crash here leaves the durable recovery state
+ *    (completed + outcome null), which any later call resumes.
+ * 2. Fill: decide the platform + motion votes from the frozen snapshot in
+ *    one outcome-null-guarded write (exactly one filler wins).
+ * 3. Reconcile: platform upsert + motion applications against persisted
+ *    receipts, so replays skip completed effects instead of double-applying.
+ *
+ * Returns completed:true only to the caller that won the fill; heal-only
+ * and duplicate calls return completed:false after converging the row.
+ */
+export async function resolveConference(
+  db: Db,
+  countryId: CountryId,
+  party: PoliticalParty,
+  doc: UKPartyConference,
+  currentTurn: number,
+  now: Date
+): Promise<ConferenceResolution> {
+  const none: ConferenceResolution = {
+    completed: false,
+    ratified: false,
+    motionsPassed: 0,
+    motionsVoided: 0,
+  };
+  const collection = getUKPartyConferencesCollection(db);
+  const fresh = (await collection.findOne({ _id: doc._id })) ?? doc;
+  if (fresh.status !== "open" && fresh.status !== "completed") return none;
+
+  let working = fresh;
+  if (working.status === "open") {
+    const claimed = await collection.findOneAndUpdate(
+      { _id: doc._id, status: "open" },
+      { $set: { status: "completed", updatedAt: now } },
+      { returnDocument: "after" }
+    );
+    working = claimed ?? (await collection.findOne({ _id: doc._id })) ?? fresh;
+  }
+  if (working.status !== "completed") return none;
+
+  let completedThisCall = false;
+  if (working.outcome == null) {
+    const filled = await fillConferenceResolution(db, party, working, currentTurn, now);
+    if (filled.won) {
+      completedThisCall = true;
+      working = filled.doc;
+    } else {
+      working = (await collection.findOne({ _id: doc._id })) ?? working;
+      // A concurrent filler is mid-flight or just landed: without a decided
+      // row there is nothing safe to reconcile yet; the next tick resumes.
+      if (working.outcome == null) return none;
+    }
+  }
+
+  const effects = await reconcileConferenceEffects(db, countryId, party, working, currentTurn, now);
+  if (completedThisCall) {
+    const resolution: ConferenceResolution = {
+      completed: true,
+      ratified: working.ratified,
+      motionsPassed: effects.motionsPassed,
+      motionsVoided: effects.motionsVoided,
+    };
+    recordAudit({
+      source: "turn",
+      category: "party",
+      action: "uk.conference.completed",
+      outcome: "ok",
+      subject: { type: "party", id: partySeqIdOf(party), name: party.name },
+      meta: {
+        conferenceId: doc._id,
+        ratified: resolution.ratified,
+        motionsPassed: resolution.motionsPassed,
+        motionsVoided: resolution.motionsVoided,
+      },
+    });
+    return resolution;
+  }
+  return none;
 }
 
 export interface ConferencePayoff {
@@ -866,11 +1086,60 @@ export interface ConferencePayoff {
 }
 
 /**
- * Apply the completion payoff once: favorability rows for the ratified
- * platform's salient groups (gated by UK_CONFERENCE_PAYOFF until worldsim
- * calibration) plus a PS credit clamped at the party's tier cap. Atomic
- * payoff claim first, so retries never double-write; conference rows that
- * never ratified never become due.
+ * Pure gate: payoff work still owed? The turn driver uses this shape
+ * (payoffDue with no settle marker) so crashed payoffs resume on the next
+ * tick instead of stranding a claimed-but-unapplied row.
+ */
+export function conferencePayoffNeedsSettle(doc: UKPartyConference): boolean {
+  return doc.payoffDue === true && doc.payoffSettledTurn == null;
+}
+
+function cohesionGrantFor(party: PoliticalParty): number {
+  const tier = resolvePartyTier(party);
+  const cap = resolvePartyPsCap(tier, party.psCapEarnedRegions?.length ?? 0, NATIONAL_PS_CAP);
+  return Math.max(0, Math.min(CONFERENCE_COHESION_PS, cap - (party.politicalStrength ?? 0)));
+}
+
+/** Payoff intent from live state, fixed once at claim and replayed thereafter. */
+async function computePayoffIntent(
+  db: Db,
+  countryId: CountryId,
+  party: PoliticalParty,
+  proposal: UKPartyConference["proposal"]
+): Promise<{ grant: number; groups: string[] }> {
+  const partyNow =
+    (await db.collection<PoliticalParty>("politicalParties").findOne({ _id: party._id })) ?? party;
+  let groups: string[] = [];
+  if (proposal && isConferencePayoffEnabled(process.env.UK_CONFERENCE_PAYOFF)) {
+    const catalog = pledgeCatalogFor(countryId);
+    const salience = new Map(catalog.map((e) => [e.id, Object.keys(e.salienceByGroup ?? {})]));
+    groups = payoffGroupsForPledges(proposal.pledgeIds, salience).slice(
+      0,
+      CONFERENCE_MAX_PAYOFF_GROUPS
+    );
+  }
+  return { grant: cohesionGrantFor(partyNow), groups };
+}
+
+/**
+ * Apply the completion payoff exactly once per conference: favorability rows
+ * for the ratified platform's salient groups (gated by UK_CONFERENCE_PAYOFF
+ * until worldsim calibration) plus a PS credit clamped at the party's tier
+ * cap. Claim + reconcile protocol:
+ *
+ * 1. Claim: one guarded write fixes the payoff INTENT (cohesion grant from
+ *    the claim-time party, approval groups from the ratified proposal) and
+ *    marks the row claimed. Resumes replay the same intent, never a
+ *    recomputation from drifted state.
+ * 2. Approval rows reconcile via upserts keyed by
+ *    (sourceConferenceId, groupId): replays converge, concurrent writers
+ *    cannot duplicate.
+ * 3. The cohesion credit lands in ONE conditional party write that sets the
+ *    `lastConferencePayoffId` receipt atomically with the `$inc`: replays
+ *    and concurrent callers match zero documents and cannot double-credit.
+ * 4. Settle: a guarded write flips `payoffSettledTurn` only after every
+ *    effect verifies durable. Returns applied:true solely to the settler,
+ *    so turn telemetry counts each payoff once.
  */
 export async function applyConferencePayoff(
   db: Db,
@@ -880,70 +1149,139 @@ export async function applyConferencePayoff(
   currentTurn: number,
   now: Date
 ): Promise<ConferencePayoff> {
-  if (!doc.payoffDue || doc.payoffAppliedTurn != null) {
-    return { applied: false, approvalGroups: 0, cohesionPs: 0 };
-  }
-  const claimed = await getUKPartyConferencesCollection(db).findOneAndUpdate(
-    { _id: doc._id, payoffDue: true, payoffAppliedTurn: null },
-    { $set: { payoffAppliedTurn: currentTurn, updatedAt: now } },
-    { returnDocument: "after" }
-  );
-  if (!claimed?.proposal) return { applied: false, approvalGroups: 0, cohesionPs: 0 };
+  const none: ConferencePayoff = { applied: false, approvalGroups: 0, cohesionPs: 0 };
+  const collection = getUKPartyConferencesCollection(db);
+  const fresh = (await collection.findOne({ _id: doc._id })) ?? doc;
+  if (!conferencePayoffNeedsSettle(fresh)) return none;
 
-  let approvalGroups = 0;
-  if (isConferencePayoffEnabled(process.env.UK_CONFERENCE_PAYOFF)) {
-    const catalog = pledgeCatalogFor(countryId);
-    const salience = new Map(catalog.map((e) => [e.id, Object.keys(e.salienceByGroup ?? {})]));
-    const groups = payoffGroupsForPledges(claimed.proposal.pledgeIds, salience).slice(
-      0,
-      CONFERENCE_MAX_PAYOFF_GROUPS
+  let working = fresh;
+  if (working.payoffAppliedTurn == null) {
+    const intent = await computePayoffIntent(db, countryId, party, working.proposal);
+    const claimed = await collection.findOneAndUpdate(
+      { _id: doc._id, payoffDue: true, payoffAppliedTurn: null },
+      {
+        $set: {
+          payoffAppliedTurn: currentTurn,
+          payoffCohesionPs: intent.grant,
+          payoffApprovalGroups: intent.groups,
+          updatedAt: now,
+        },
+      },
+      { returnDocument: "after" }
     );
-    for (const groupId of groups) {
-      const row: PartyGroupFavorability = {
-        countryId,
-        partyId: partySeqIdOf(party),
-        groupId,
-        favorabilityDelta: CONFERENCE_APPROVAL_DELTA,
-        sourceConferenceId: doc._id,
-        expiresAtTurn: currentTurn + CONFERENCE_PAYOFF_DURATION_TURNS,
-        createdAt: now,
-      };
-      await db.collection<PartyGroupFavorability>("partyGroupFavorability").insertOne(row);
-      approvalGroups += 1;
-    }
+    // A miss means a concurrent caller owns the claim now; it (or a later
+    // tick) settles, so this call stands down instead of duplicating work.
+    if (!claimed) return none;
+    working = claimed;
   }
 
-  const tier = resolvePartyTier(party);
-  const cap = resolvePartyPsCap(tier, party.psCapEarnedRegions?.length ?? 0, NATIONAL_PS_CAP);
-  const grant = Math.max(0, Math.min(CONFERENCE_COHESION_PS, cap - (party.politicalStrength ?? 0)));
-  if (grant > 0) {
+  if (working.payoffCohesionPs == null || working.payoffApprovalGroups == null) {
+    // Pre-intent legacy row: the old claim stamped no intent, so fix it once
+    // from current state. Every effect downstream is idempotent or
+    // single-winner, so concurrent fixers converge on the re-read intent.
+    const intent = await computePayoffIntent(db, countryId, party, working.proposal);
+    await collection.updateOne(
+      { _id: working._id },
+      {
+        $set: {
+          payoffCohesionPs: working.payoffCohesionPs ?? intent.grant,
+          payoffApprovalGroups: working.payoffApprovalGroups ?? intent.groups,
+          updatedAt: now,
+        },
+      }
+    );
+    working = (await collection.findOne({ _id: working._id })) ?? working;
+  }
+
+  const expectedGroups = working.payoffApprovalGroups ?? [];
+  const intentGrant = working.payoffCohesionPs ?? 0;
+
+  for (const groupId of expectedGroups) {
+    const row: PartyGroupFavorability = {
+      countryId,
+      partyId: partySeqIdOf(party),
+      groupId,
+      favorabilityDelta: CONFERENCE_APPROVAL_DELTA,
+      sourceConferenceId: working._id,
+      expiresAtTurn: currentTurn + CONFERENCE_PAYOFF_DURATION_TURNS,
+      createdAt: now,
+    };
     await db
-      .collection<PoliticalParty>("politicalParties")
+      .collection<PartyGroupFavorability>("partyGroupFavorability")
       .updateOne(
-        { _id: party._id },
-        { $set: { politicalStrength: (party.politicalStrength ?? 0) + grant, updatedAt: now } }
+        { sourceConferenceId: working._id, groupId },
+        { $setOnInsert: row },
+        { upsert: true }
       );
   }
 
-  await getUKPartyConferencesCollection(db).updateOne(
-    { _id: doc._id },
+  if (working.payoffCohesionAppliedTurn == null && intentGrant > 0) {
+    const partyNow =
+      (await db.collection<PoliticalParty>("politicalParties").findOne({ _id: party._id })) ??
+      party;
+    if ((partyNow.lastConferencePayoffId ?? null) !== working._id) {
+      // Reclamp at apply time: the party may have earned PS after the claim
+      // fixed the intent, and the tier cap stays binding. A zero effective
+      // grant settles as skipped-at-cap below.
+      const effective = Math.min(intentGrant, cohesionCapRoom(partyNow));
+      if (effective > 0) {
+        await db.collection<PoliticalParty>("politicalParties").updateOne(
+          { _id: partyNow._id, lastConferencePayoffId: { $ne: working._id } },
+          {
+            $inc: { politicalStrength: effective },
+            $set: { lastConferencePayoffId: working._id, updatedAt: now },
+          }
+        );
+      }
+    }
+  }
+
+  // Verify every effect before settling; anything still missing stays owed
+  // for the next tick instead of being marked done.
+  const presentGroups = new Set(
+    (
+      await db
+        .collection<PartyGroupFavorability>("partyGroupFavorability")
+        .find({ sourceConferenceId: working._id })
+        .toArray()
+    ).map((row) => row.groupId)
+  );
+  const partyCheck =
+    (await db.collection<PoliticalParty>("politicalParties").findOne({ _id: party._id })) ?? party;
+  const cohesionDone =
+    working.payoffCohesionAppliedTurn != null ||
+    intentGrant <= 0 ||
+    (partyCheck.lastConferencePayoffId ?? null) === working._id ||
+    cohesionCapRoom(partyCheck) <= 0;
+  if (!expectedGroups.every((groupId) => presentGroups.has(groupId)) || !cohesionDone) {
+    return none;
+  }
+
+  const settled = await collection.findOneAndUpdate(
+    { _id: working._id, payoffSettledTurn: null },
     {
       $set: {
+        payoffCohesionAppliedTurn: working.payoffCohesionAppliedTurn ?? currentTurn,
+        payoffSettledTurn: currentTurn,
         history: pushConferenceHistory(
-          (await getUKPartyConferencesCollection(db).findOne({ _id: doc._id }))?.history ?? [],
+          working.history ?? [],
           conferenceHistoryEntry(
             currentTurn,
             "payoffApplied",
-            `Well-run conference payoff: +${CONFERENCE_APPROVAL_DELTA} favorability in ${approvalGroups} group(s), +${grant} party strength`
+            `Well-run conference payoff: +${CONFERENCE_APPROVAL_DELTA} favorability in ${expectedGroups.length} group(s), +${intentGrant} party strength`,
+            undefined,
+            now
           )
         ),
         updatedAt: now,
       },
-    }
+    },
+    { returnDocument: "after" }
   );
+  if (!settled) return none;
 
-  // The payoff above is already claimed and persisted; the chair notice is
-  // decorative and must never fail the turn or double-pay on retry.
+  // Everything above is persisted; the chair notice is decorative and must
+  // never fail the turn or double-pay on retry.
   try {
     const chair = party.chairId
       ? await db
@@ -955,11 +1293,11 @@ export async function applyConferencePayoff(
         userId: chair.userId,
         type: "system",
         title: "Conference Concluded",
-        message: `Your party conference ratified the standing platform. The party gains +${grant} political strength${approvalGroups > 0 ? ` and favorability in ${approvalGroups} voter groups` : ""}. The leader will finalise the election manifesto from this platform at dissolution.`,
+        message: `Your party conference ratified the standing platform. The party gains +${intentGrant} political strength${expectedGroups.length > 0 ? ` and favorability in ${expectedGroups.length} voter groups` : ""}. The leader will finalise the election manifesto from this platform at dissolution.`,
       });
     }
   } catch {
-    // Notification is best-effort; the payoff claim already prevents duplicates.
+    // Notification is best-effort; the settle guard already prevents duplicates.
   }
   recordAudit({
     source: "turn",
@@ -967,9 +1305,16 @@ export async function applyConferencePayoff(
     action: "uk.conference.payoffApplied",
     outcome: "ok",
     subject: { type: "party", id: partySeqIdOf(party), name: party.name },
-    meta: { conferenceId: doc._id, approvalGroups, cohesionPs: grant },
+    meta: { conferenceId: doc._id, approvalGroups: expectedGroups.length, cohesionPs: intentGrant },
   });
-  return { applied: true, approvalGroups, cohesionPs: grant };
+  return { applied: true, approvalGroups: expectedGroups.length, cohesionPs: intentGrant };
+}
+
+/** PS room below the party's tier cap (the binding constraint on the grant). */
+function cohesionCapRoom(party: PoliticalParty): number {
+  const tier = resolvePartyTier(party);
+  const cap = resolvePartyPsCap(tier, party.psCapEarnedRegions?.length ?? 0, NATIONAL_PS_CAP);
+  return Math.max(0, cap - (party.politicalStrength ?? 0));
 }
 
 /** Standing platforms for every UK party with one (election-handoff read). */

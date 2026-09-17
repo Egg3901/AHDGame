@@ -4,6 +4,8 @@ import type { PoliticalParty } from "@/lib/db/types";
 import { getUKPartyConferencesCollection } from "@/lib/db/collections/ukPartyConferences";
 import {
   applyConferencePayoff,
+  conferencePayoffNeedsSettle,
+  conferenceResolutionNeedsHeal,
   ensureNppPlatformProposal,
   postConferenceNews,
   resolveConference,
@@ -174,9 +176,32 @@ export async function processUkPartyConferenceTurn(
         }
         doc = (await getUKPartyConferencesCollection(db).findOne({ _id: doc._id })) ?? doc;
       }
+    } else if (
+      doc.status === "completed" &&
+      (doc.outcome == null || conferenceResolutionNeedsHeal(doc))
+    ) {
+      // Recovery: a previous tick won the open->completed claim but crashed
+      // before the fill (outcome null), or before the side effects landed.
+      // resolveConference resumes both; only a won fill counts telemetry.
+      const full = await db
+        .collection<PoliticalParty>("politicalParties")
+        .findOne({ _id: party._id });
+      if (full) {
+        const resolution = await resolveConference(db, "UK", full, doc, currentTurn, now);
+        if (resolution.completed) {
+          result.completed += 1;
+          if (resolution.ratified) result.ratified += 1;
+          try {
+            await postConferenceNews(party.name, doc.conferenceYear, resolution.ratified);
+          } catch {
+            // News is decorative; the resolution is already persisted.
+          }
+        }
+        doc = (await getUKPartyConferencesCollection(db).findOne({ _id: doc._id })) ?? doc;
+      }
     }
 
-    if (doc.status === "completed" && doc.payoffDue && doc.payoffAppliedTurn == null) {
+    if (doc.status === "completed" && conferencePayoffNeedsSettle(doc)) {
       const full = await db
         .collection<PoliticalParty>("politicalParties")
         .findOne({ _id: party._id });

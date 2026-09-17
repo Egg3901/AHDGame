@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import {
   applyConferencePayoff,
+  conferencePayoffNeedsSettle,
+  conferenceResolutionNeedsHeal,
   ensureNppPlatformProposal,
   getConferenceState,
   getStandingPlatformsForCountry,
@@ -22,8 +24,9 @@ import {
   conferenceOpensAtTurn,
   conferenceVotingClosesTurn,
   conferenceYearForTurn,
+  payoffGroupsForPledges,
 } from "./rules";
-import { createFakeLeadershipDb } from "../leadership/leadershipTestDb";
+import { createFakeLeadershipDb, withCollectionFaults } from "../leadership/leadershipTestDb";
 import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
 import {
   getUKPartyConferencesCollection,
@@ -1448,5 +1451,485 @@ describe("postConferenceNews", () => {
     await postConferenceNews("Liberal Party", 1, false);
     expect(vi.mocked(createSystemNewsPost)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(createSystemNewsPost).mock.calls[0][0]).toContain("ratifying");
+  });
+});
+
+describe("resolveConference crash recovery", () => {
+  async function seedVoted(world: SeedWorld, ayes = 5) {
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    await proposePlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      validPledgeIds(),
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const voters = [...world.members, ...world.committee, world.leader];
+    for (let i = 0; i < ayes; i++) {
+      await voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        voters[i].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    return (await getConference(world.db, "UK", world.partySeq, 1))!;
+  }
+
+  async function seedVotedWithMotion(world: SeedWorld) {
+    await seedVoted(world);
+    const { motionId } = await proposeRulesMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[0].actor,
+      { triggerThresholdPct: 0.2 },
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    for (const member of world.committee) {
+      await voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        member.actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    return { doc: (await getConference(world.db, "UK", world.partySeq, 1))!, motionId };
+  }
+
+  it("resumes a legacy claim-without-fill row to full completion, exactly once", async () => {
+    const world = await seedWorld();
+    await seedVoted(world);
+    // The old claim-then-fill shape: the claim won, the fill never landed.
+    await getUKPartyConferencesCollection(world.db).updateOne(
+      { _id: conferenceDocId("UK", world.partySeq, 1) },
+      { $set: { status: "completed" } }
+    );
+    const stuck = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(stuck).toMatchObject({ status: "completed", outcome: null });
+    expect(conferenceResolutionNeedsHeal(stuck)).toBe(false);
+
+    const resolution = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      stuck,
+      stuck.votingClosesTurn,
+      NOW()
+    );
+    expect(resolution).toMatchObject({ completed: true, ratified: true });
+    const after = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(after.proposal?.status).toBe("ratified");
+    expect(after.outcome).toBe("ratified");
+    expect(after.payoffDue).toBe(true);
+    const platform = await getUKPartyPlatformsCollection(world.db).findOne({
+      _id: `UK:${world.partySeq}`,
+    });
+    expect(platform?.ratifiedConferenceId).toBe(after._id);
+
+    const retry = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      after,
+      after.votingClosesTurn,
+      NOW()
+    );
+    expect(retry).toMatchObject({ completed: false, ratified: false });
+    expect(
+      await getUKPartyPlatformsCollection(world.db)
+        .find({ _id: `UK:${world.partySeq}` })
+        .toArray()
+    ).toHaveLength(1);
+  });
+
+  it("survives an injected crash on the claim, then on the fill", async () => {
+    const isFillWrite = (args: unknown[]) => "outcome" in (args[0] as Record<string, unknown>);
+    const isClaimWrite = (args: unknown[]) =>
+      (args[0] as Record<string, unknown>).status === "open" &&
+      !("outcome" in (args[0] as Record<string, unknown>));
+
+    // Crash on the claim: the row stays open, the retry wins it cleanly.
+    const claimed = await seedWorld();
+    await seedVoted(claimed);
+    const claimFaultDb = withCollectionFaults(claimed.db, [
+      { collection: "ukPartyConferences", method: "findOneAndUpdate", match: isClaimWrite },
+    ]);
+    const open = (await getConference(claimed.db, "UK", claimed.partySeq, 1))!;
+    await expect(
+      resolveConference(claimFaultDb, "UK", claimed.party, open, open.votingClosesTurn, NOW())
+    ).rejects.toThrow("injected");
+    expect(await getConference(claimed.db, "UK", claimed.partySeq, 1)).toMatchObject({
+      status: "open",
+    });
+    const claimedRetry = await resolveConference(
+      claimed.db,
+      "UK",
+      claimed.party,
+      open,
+      open.votingClosesTurn,
+      NOW()
+    );
+    expect(claimedRetry).toMatchObject({ completed: true, ratified: true });
+
+    // Crash on the fill: the row sits in the durable recovery state.
+    const world = await seedWorld();
+    await seedVoted(world);
+    const fillFaultDb = withCollectionFaults(world.db, [
+      { collection: "ukPartyConferences", method: "findOneAndUpdate", match: isFillWrite },
+    ]);
+    const voting = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    await expect(
+      resolveConference(fillFaultDb, "UK", world.party, voting, voting.votingClosesTurn, NOW())
+    ).rejects.toThrow("injected");
+    const stuck = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(stuck).toMatchObject({ status: "completed", outcome: null });
+    expect(stuck.proposal?.status).toBe("voting");
+
+    const resolution = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      stuck,
+      stuck.votingClosesTurn,
+      NOW()
+    );
+    expect(resolution).toMatchObject({ completed: true, ratified: true });
+    const after = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(after.history?.filter((h) => h.kind === "completed")).toHaveLength(1);
+    expect(await getUKPartyPlatformsCollection(world.db).find({}).toArray()).toHaveLength(1);
+  });
+
+  it("heals a crash during side effects without double-applying the motion", async () => {
+    const world = await seedWorld();
+    const { doc, motionId } = await seedVotedWithMotion(world);
+    // Fault only the conditional leadership apply write ($push receipt);
+    // the getOrSeed upsert ($setOnInsert, no $push) passes through.
+    const faultDb = withCollectionFaults(world.db, [
+      {
+        collection: "ukPartyLeadership",
+        method: "updateOne",
+        match: (args) => "$push" in (args[1] as Record<string, unknown>),
+      },
+    ]);
+    await expect(
+      resolveConference(faultDb, "UK", world.party, doc, doc.votingClosesTurn, NOW())
+    ).rejects.toThrow("injected");
+
+    // Durable resolution landed; only the motion side effect is missing.
+    const mid = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(mid.outcome).toBe("ratified");
+    expect(mid.motions.find((m) => m.motionId === motionId)?.status).toBe("passed");
+    expect(mid.appliedMotionIds ?? []).toHaveLength(0);
+    expect(conferenceResolutionNeedsHeal(mid)).toBe(true);
+    const leadershipMid = await getUKPartyLeadershipCollection(world.db).findOne({
+      _id: `UK:${world.partySeq}`,
+    });
+    expect(leadershipMid?.ruleset?.triggerThresholdPct).not.toBe(0.2);
+
+    // The retry wins no fill (completed:false) but heals the side effect.
+    const retry = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      mid,
+      mid.votingClosesTurn,
+      NOW()
+    );
+    expect(retry).toMatchObject({ completed: false, ratified: false });
+    const after = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(after.appliedMotionIds).toEqual([motionId]);
+    expect(conferenceResolutionNeedsHeal(after)).toBe(false);
+    const leadership = await getUKPartyLeadershipCollection(world.db).findOne({
+      _id: `UK:${world.partySeq}`,
+    });
+    expect(leadership?.ruleset?.triggerThresholdPct).toBe(0.2);
+    expect(leadership?.appliedConferenceMotionIds).toEqual([motionId]);
+    expect(leadership?.history?.filter((h) => h.detail.includes(motionId))).toHaveLength(1);
+
+    // A third pass changes nothing.
+    const leadershipBefore = JSON.stringify(leadership);
+    await resolveConference(world.db, "UK", world.party, after, after.votingClosesTurn, NOW());
+    expect(
+      JSON.stringify(
+        await getUKPartyLeadershipCollection(world.db).findOne({ _id: `UK:${world.partySeq}` })
+      )
+    ).toBe(leadershipBefore);
+  });
+
+  it("heals a crash on the platform upsert with exactly one platform row", async () => {
+    const world = await seedWorld();
+    const doc = await seedVoted(world);
+    const faultDb = withCollectionFaults(world.db, [
+      { collection: "ukPartyPlatforms", method: "updateOne" },
+    ]);
+    await expect(
+      resolveConference(faultDb, "UK", world.party, doc, doc.votingClosesTurn, NOW())
+    ).rejects.toThrow("injected");
+    const mid = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(mid.outcome).toBe("ratified");
+    expect(await getUKPartyPlatformsCollection(world.db).find({}).toArray()).toHaveLength(0);
+
+    await resolveConference(world.db, "UK", world.party, mid, mid.votingClosesTurn, NOW());
+    const rows = await getUKPartyPlatformsCollection(world.db).find({}).toArray();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.ratifiedConferenceId).toBe(mid._id);
+  });
+
+  it("elects a single winner under concurrent resolvers", async () => {
+    const world = await seedWorld();
+    const { doc, motionId } = await seedVotedWithMotion(world);
+    const [first, second] = await Promise.all([
+      resolveConference(world.db, "UK", world.party, doc, doc.votingClosesTurn, NOW()),
+      resolveConference(world.db, "UK", world.party, doc, doc.votingClosesTurn, NOW()),
+    ]);
+    expect([first.completed, second.completed].filter(Boolean)).toHaveLength(1);
+    const after = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(after.outcome).toBe("ratified");
+    expect(after.appliedMotionIds).toEqual([motionId]);
+    expect(await getUKPartyPlatformsCollection(world.db).find({}).toArray()).toHaveLength(1);
+    const leadership = await getUKPartyLeadershipCollection(world.db).findOne({
+      _id: `UK:${world.partySeq}`,
+    });
+    expect(leadership?.appliedConferenceMotionIds).toEqual([motionId]);
+    expect(leadership?.history?.filter((h) => h.detail.includes(motionId))).toHaveLength(1);
+  });
+});
+
+describe("applyConferencePayoff crash recovery", () => {
+  async function seedCompleted(world: SeedWorld) {
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    await proposePlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      validPledgeIds(),
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const voters = [...world.members, ...world.committee];
+    for (let i = 0; i < 5; i++) {
+      await voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        voters[i].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    await resolveConference(world.db, "UK", world.party, doc!, doc!.votingClosesTurn, NOW());
+    return (await getConference(world.db, "UK", world.partySeq, 1))!;
+  }
+
+  function expectedApprovalGroups(): string[] {
+    const catalog = pledgeCatalogFor("UK");
+    const salience = new Map(catalog.map((e) => [e.id, Object.keys(e.salienceByGroup ?? {})]));
+    return payoffGroupsForPledges(validPledgeIds(), salience);
+  }
+
+  async function partyPs(db: Db, party: SeedWorld["party"]): Promise<number> {
+    const row = await db.collection("politicalParties").findOne({ _id: party._id });
+    return row?.politicalStrength as number;
+  }
+
+  it("resumes a legacy claimed-but-unapplied payoff exactly once", async () => {
+    const world = await seedWorld();
+    const completed = await seedCompleted(world);
+    // The old claim shape: applied turn stamped, no intent or receipts.
+    await getUKPartyConferencesCollection(world.db).updateOne(
+      { _id: completed._id },
+      { $set: { payoffAppliedTurn: TURN_YEAR1_OPEN + 20 } }
+    );
+    const stuck = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(conferencePayoffNeedsSettle(stuck)).toBe(true);
+
+    const payoff = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      stuck,
+      TURN_YEAR1_OPEN + 20,
+      NOW()
+    );
+    expect(payoff).toMatchObject({ applied: true, cohesionPs: CONFERENCE_COHESION_PS });
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+    const after = (await getConference(world.db, "UK", world.partySeq, 1))!;
+    expect(after.payoffSettledTurn).not.toBeNull();
+
+    const retry = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      after,
+      TURN_YEAR1_OPEN + 21,
+      NOW()
+    );
+    expect(retry.applied).toBe(false);
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+  });
+
+  it("survives a crash mid-approval-rows with no duplicates and one credit", async () => {
+    process.env.UK_CONFERENCE_PAYOFF = "1";
+    try {
+      const expected = expectedApprovalGroups();
+      expect(expected.length).toBeGreaterThan(0);
+      const world = await seedWorld();
+      const completed = await seedCompleted(world);
+      const faultDb = withCollectionFaults(world.db, [
+        { collection: "partyGroupFavorability", method: "updateOne" },
+      ]);
+      await expect(
+        applyConferencePayoff(faultDb, "UK", world.party, completed, TURN_YEAR1_OPEN + 20, NOW())
+      ).rejects.toThrow("injected");
+
+      const mid = (await getConference(world.db, "UK", world.partySeq, 1))!;
+      expect(mid.payoffAppliedTurn).not.toBeNull();
+      expect(mid.payoffSettledTurn).toBeNull();
+      expect(await partyPs(world.db, world.party)).toBe(0);
+
+      const payoff = await applyConferencePayoff(
+        world.db,
+        "UK",
+        world.party,
+        mid,
+        TURN_YEAR1_OPEN + 20,
+        NOW()
+      );
+      expect(payoff).toMatchObject({ applied: true, approvalGroups: expected.length });
+      const rows = await world.db.collection("partyGroupFavorability").find({}).toArray();
+      expect(rows.map((r) => r.groupId).sort()).toEqual([...expected].sort());
+      expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+
+      const retry = await applyConferencePayoff(
+        world.db,
+        "UK",
+        world.party,
+        (await getConference(world.db, "UK", world.partySeq, 1))!,
+        TURN_YEAR1_OPEN + 21,
+        NOW()
+      );
+      expect(retry.applied).toBe(false);
+      expect(await world.db.collection("partyGroupFavorability").find({}).toArray()).toHaveLength(
+        expected.length
+      );
+    } finally {
+      delete process.env.UK_CONFERENCE_PAYOFF;
+    }
+  });
+
+  it("credits cohesion exactly once across a crash on the party write", async () => {
+    const world = await seedWorld();
+    const completed = await seedCompleted(world);
+    const faultDb = withCollectionFaults(world.db, [
+      {
+        collection: "politicalParties",
+        method: "updateOne",
+        match: (args) => "$inc" in (args[1] as Record<string, unknown>),
+      },
+    ]);
+    await expect(
+      applyConferencePayoff(faultDb, "UK", world.party, completed, TURN_YEAR1_OPEN + 20, NOW())
+    ).rejects.toThrow("injected");
+    expect(await partyPs(world.db, world.party)).toBe(0);
+
+    const payoff = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      (await getConference(world.db, "UK", world.partySeq, 1))!,
+      TURN_YEAR1_OPEN + 20,
+      NOW()
+    );
+    expect(payoff).toMatchObject({ applied: true, cohesionPs: CONFERENCE_COHESION_PS });
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+    const party = await world.db.collection("politicalParties").findOne({ _id: world.party._id });
+    expect(party?.lastConferencePayoffId).toBe(completed._id);
+  });
+
+  it("settles without re-crediting when the party receipt already exists", async () => {
+    const world = await seedWorld();
+    const completed = await seedCompleted(world);
+    // Crash between the party credit and the settle write: receipt on the
+    // party, no settle marker on the conference.
+    await getUKPartyConferencesCollection(world.db).updateOne(
+      { _id: completed._id },
+      {
+        $set: {
+          payoffAppliedTurn: TURN_YEAR1_OPEN + 20,
+          payoffCohesionPs: CONFERENCE_COHESION_PS,
+          payoffApprovalGroups: [],
+        },
+      }
+    );
+    await world.db.collection("politicalParties").updateOne(
+      { _id: world.party._id },
+      {
+        $inc: { politicalStrength: CONFERENCE_COHESION_PS },
+        $set: { lastConferencePayoffId: completed._id },
+      }
+    );
+    const payoff = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      (await getConference(world.db, "UK", world.partySeq, 1))!,
+      TURN_YEAR1_OPEN + 20,
+      NOW()
+    );
+    expect(payoff).toMatchObject({ applied: true, cohesionPs: CONFERENCE_COHESION_PS });
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+  });
+
+  it("survives a crash on the settle write with no duplicate economics", async () => {
+    const world = await seedWorld();
+    const completed = await seedCompleted(world);
+    const faultDb = withCollectionFaults(world.db, [
+      {
+        collection: "ukPartyConferences",
+        method: "findOneAndUpdate",
+        match: (args) => "payoffSettledTurn" in (args[0] as Record<string, unknown>),
+      },
+    ]);
+    await expect(
+      applyConferencePayoff(faultDb, "UK", world.party, completed, TURN_YEAR1_OPEN + 20, NOW())
+    ).rejects.toThrow("injected");
+    // Effects landed; only the settle marker is missing.
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+
+    const payoff = await applyConferencePayoff(
+      world.db,
+      "UK",
+      world.party,
+      (await getConference(world.db, "UK", world.partySeq, 1))!,
+      TURN_YEAR1_OPEN + 20,
+      NOW()
+    );
+    expect(payoff.applied).toBe(true);
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+  });
+
+  it("credits once under concurrent payoff callers", async () => {
+    const world = await seedWorld();
+    const completed = await seedCompleted(world);
+    const [first, second] = await Promise.all([
+      applyConferencePayoff(world.db, "UK", world.party, completed, TURN_YEAR1_OPEN + 20, NOW()),
+      applyConferencePayoff(world.db, "UK", world.party, completed, TURN_YEAR1_OPEN + 20, NOW()),
+    ]);
+    expect([first.applied, second.applied].filter(Boolean)).toHaveLength(1);
+    expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
   });
 });

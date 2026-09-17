@@ -248,6 +248,48 @@ describe("processUkPartyConferenceTurn", () => {
     });
   });
 
+  it("recovers a claimed-but-unfilled row on the next tick", async () => {
+    const db = createFakeLeadershipDb();
+    const world = await seedParty(db, { seq: 2, name: "Conservative Party", members: 5 });
+    await processUkPartyConferenceTurn(db, YEAR1_START, NOW());
+    await processUkPartyConferenceTurn(db, YEAR1_OPEN, NOW());
+    await castAyes(db, world.partySeq, world.memberIds.slice(0, 4), YEAR1_OPEN);
+    // Previous tick won the open->completed claim, then crashed pre-fill.
+    await getUKPartyConferencesCollection(db).updateOne(
+      { _id: "UK:2:1" },
+      { $set: { status: "completed" } }
+    );
+
+    const closed = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
+    expect(closed).toMatchObject({ completed: 1, ratified: 1, payoffs: 1 });
+    const party = await db.collection("politicalParties").findOne({ _id: world.party._id });
+    expect(party?.politicalStrength).toBe(30);
+
+    const retry = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
+    expect(retry).toMatchObject({ completed: 0, payoffs: 0 });
+  });
+
+  it("resumes an unsettled payoff on the next tick without re-resolving", async () => {
+    const db = createFakeLeadershipDb();
+    const world = await seedParty(db, { seq: 2, name: "Conservative Party", members: 5 });
+    await processUkPartyConferenceTurn(db, YEAR1_START, NOW());
+    await processUkPartyConferenceTurn(db, YEAR1_OPEN, NOW());
+    await castAyes(db, world.partySeq, world.memberIds.slice(0, 4), YEAR1_OPEN);
+    // Resolve outside the driver (fills + reconciles, leaves payoff owed).
+    const { resolveConference } = await import("@/lib/uk/conference/conferenceCommands");
+    const open = await getUKPartyConferencesCollection(db).findOne({ _id: "UK:2:1" });
+    const party = (await db
+      .collection("politicalParties")
+      .findOne({ _id: world.party._id })) as PoliticalParty;
+    const resolution = await resolveConference(db, "UK", party, open!, YEAR1_CLOSE, NOW());
+    expect(resolution).toMatchObject({ completed: true, ratified: true });
+
+    const closed = await processUkPartyConferenceTurn(db, YEAR1_CLOSE + 1, NOW());
+    expect(closed).toMatchObject({ completed: 0, payoffs: 1 });
+    const paid = await db.collection("politicalParties").findOne({ _id: world.party._id });
+    expect(paid?.politicalStrength).toBe(30);
+  });
+
   it("survives a news-post failure without duplicating resolution or payoff", async () => {
     const db = createFakeLeadershipDb();
     const world = await seedParty(db, { seq: 2, name: "Conservative Party", members: 5 });

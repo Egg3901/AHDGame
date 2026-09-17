@@ -85,6 +85,12 @@ export async function getOrSeedConference(
         outcome: null,
         payoffDue: false,
         payoffAppliedTurn: null,
+        appliedMotionIds: [],
+        platformAppliedTurn: null,
+        payoffCohesionPs: null,
+        payoffCohesionAppliedTurn: null,
+        payoffApprovalGroups: [],
+        payoffSettledTurn: null,
         history: [
           conferenceHistoryEntry(
             currentTurn,
