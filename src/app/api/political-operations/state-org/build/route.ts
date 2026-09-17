@@ -224,7 +224,7 @@ export async function POST(request: Request) {
                 },
                 {
                   $inc: { level: 1, totalInvested: STATE_ORG_COST_ACTIONS },
-                  $set: { updatedAt: now },
+                  $set: { updatedAt: now, lastBuildAt: now, lastBuildFunds: costFundsLocal },
                   $setOnInsert: { characterId: character._id, stateId },
                 },
                 { upsert: true, returnDocument: "after", session }
@@ -277,7 +277,7 @@ export async function POST(request: Request) {
                 },
                 {
                   $inc: { level: 1, totalInvested: STATE_ORG_COST_ACTIONS },
-                  $set: { updatedAt: now },
+                  $set: { updatedAt: now, lastBuildAt: now, lastBuildFunds: costFundsLocal },
                   $setOnInsert: { characterId: character._id, stateId },
                 },
                 { upsert: true, returnDocument: "after" }
@@ -332,6 +332,7 @@ export async function POST(request: Request) {
       level: final?.level ?? 1,
       totalInvested: final?.totalInvested ?? STATE_ORG_COST_ACTIONS,
       stateId,
+      spentThisTurn: costFundsLocal,
     });
   } catch (error) {
     return handleRouteError(error);
