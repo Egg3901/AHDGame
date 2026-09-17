@@ -154,7 +154,20 @@ export async function reconcileFederalBudgetInvariants(
         .collection<Bond>("bonds")
         .find(
           { issuerType: "sovereign", matured: false, defaulted: false },
-          { projection: { countryId: 1, totalIssued: 1, restructureHaircutPercent: 1 } }
+          // The outstanding helper re-checks the query-filtered fields, so
+          // they must be projected: a doc arriving without `issuerType`
+          // reads as non-sovereign and contributes 0, which would re-point
+          // every stored principal at zero (refs #1975).
+          {
+            projection: {
+              countryId: 1,
+              issuerType: 1,
+              matured: 1,
+              defaulted: 1,
+              totalIssued: 1,
+              restructureHaircutPercent: 1,
+            },
+          }
         )
         .toArray(),
     ]);

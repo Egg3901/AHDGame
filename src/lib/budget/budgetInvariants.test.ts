@@ -103,11 +103,21 @@ describe("reconcileFederalBudgetInvariants", () => {
     updateOne: { filter: { _id: unknown }; update: { $set: Record<string, number | string> } };
   };
 
-  function stubDb(budgetDocs: unknown[], bondDocsList: unknown[], onWrite?: (ops: Op[]) => void) {
+  function stubDb(
+    budgetDocs: unknown[],
+    bondDocsList: unknown[],
+    onWrite?: (ops: Op[]) => void,
+    onBondsFind?: (filter: unknown, options: unknown) => void
+  ) {
     return {
       collection: (name: string) => {
         if (name === "bonds") {
-          return { find: () => ({ toArray: async () => bondDocsList }) };
+          return {
+            find: (filter: unknown, options: unknown) => {
+              onBondsFind?.(filter, options);
+              return { toArray: async () => bondDocsList };
+            },
+          };
         }
         return {
           find: () => ({ toArray: async () => budgetDocs }),
@@ -182,6 +192,51 @@ describe("reconcileFederalBudgetInvariants", () => {
     expect(r.skipped).toBe(1);
     expect(r.corrected).toBe(0);
     expect(ops).toHaveLength(0);
+  });
+
+  it("projects the bond fields the outstanding helper re-checks", async () => {
+    // Mocks ignore projections and return full docs, but production applies
+    // them: a doc arriving without `issuerType` reads as non-sovereign and
+    // contributes 0, which would re-point every stored principal at zero.
+    let seen: { filter: unknown; options: unknown } | null = null;
+    const db = stubDb([{ _id: "US", countryId: "US", ...clean }], bondDocs(5000), undefined, (filter, options) => {
+      seen = { filter, options };
+    });
+    await reconcileFederalBudgetInvariants(db, 673);
+    expect(seen!.filter).toEqual({ issuerType: "sovereign", matured: false, defaulted: false });
+    expect(seen!.options).toEqual({
+      projection: {
+        countryId: 1,
+        issuerType: 1,
+        matured: 1,
+        defaulted: 1,
+        totalIssued: 1,
+        restructureHaircutPercent: 1,
+      },
+    });
+  });
+
+  it("converges on bonds in as-projected shape (only projected fields present)", async () => {
+    // What production actually returns under the projection above: no holders,
+    // no coupon, no currency. The outstanding sum must still count full face.
+    const ops: Op[] = [];
+    const db = stubDb(
+      [{ _id: "BAL", countryId: "BAL", ...clean, debt: { principal: 5400 } }],
+      [
+        {
+          _id: "b1",
+          countryId: "BAL",
+          issuerType: "sovereign",
+          matured: false,
+          defaulted: false,
+          totalIssued: 5000,
+          restructureHaircutPercent: null,
+        },
+      ],
+      (o) => ops.push(...o)
+    );
+    await reconcileFederalBudgetInvariants(db, 673);
+    expect(ops[0].updateOne.update.$set).toMatchObject({ "debt.principal": 5000 });
   });
 
   it("never throws, so a hygiene pass cannot fail a turn", async () => {

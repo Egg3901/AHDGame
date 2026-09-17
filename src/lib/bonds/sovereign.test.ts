@@ -10,6 +10,7 @@ import {
   calculateQuarterlyIssuanceAmount,
   calculateSovereignRolloverAmount,
   getSovereignCouponRate,
+  resyncSovereignPrincipalFromBonds,
   getNationalBudgetId,
   getSovereignIssuerName,
   issueScheduledSovereignBondSeries,
@@ -957,5 +958,71 @@ describe("issueScheduledSovereignBondSeries", () => {
     );
     expect(issuedCountries).toContain("US");
     expect(issuedCountries).not.toContain("DD");
+  });
+});
+
+describe("resyncSovereignPrincipalFromBonds", () => {
+  it("re-points stored principal at projected-shape ledger stock", async () => {
+    const db = createMockDb();
+    db.collection("federalBudget");
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 9999, interestRate: 0.05, ceiling: 100_000 },
+      gdp: 100_000,
+      gdpSmoothed: 100_000,
+    });
+    db.collection("bonds");
+    // As-projected shape: only the fields the resync projection requests, as
+    // production returns them. The outstanding sum must still count full face.
+    db.collectionMocks["bonds"]!.find.mockReturnValue({
+      toArray: async () => [
+        {
+          issuerType: "sovereign",
+          matured: false,
+          defaulted: false,
+          totalIssued: 5000,
+          restructureHaircutPercent: null,
+        },
+      ],
+    });
+
+    const result = await resyncSovereignPrincipalFromBonds(
+      db as unknown as Db,
+      COUNTRY_CONFIGS.US.id
+    );
+
+    expect(result).toMatchObject({ outstanding: 5000, stored: 9999, corrected: true });
+    const set = db.collectionMocks["federalBudget"]!.updateOne.mock.calls[0][1].$set;
+    expect(set["debt.principal"]).toBe(5000);
+  });
+
+  it("projects the bond fields the outstanding sum re-checks", async () => {
+    const db = createMockDb();
+    db.collection("federalBudget");
+    db.collectionMocks["federalBudget"]!.findOne.mockResolvedValue({
+      _id: "federal",
+      debt: { principal: 0, interestRate: 0.05, ceiling: 100_000 },
+      gdp: 100_000,
+    });
+    db.collection("bonds");
+    db.collectionMocks["bonds"]!.find.mockReturnValue({ toArray: async () => [] });
+
+    await resyncSovereignPrincipalFromBonds(db as unknown as Db, COUNTRY_CONFIGS.US.id);
+
+    // Mocks ignore projections and return full docs, but production applies
+    // them: a doc arriving without `issuerType` reads as non-sovereign and
+    // contributes 0, which would re-point the stored principal at zero.
+    expect(db.collectionMocks["bonds"]!.find).toHaveBeenCalledWith(
+      { issuerType: "sovereign", countryId: COUNTRY_CONFIGS.US.id, matured: false, defaulted: false },
+      expect.objectContaining({
+        projection: expect.objectContaining({
+          issuerType: 1,
+          matured: 1,
+          defaulted: 1,
+          totalIssued: 1,
+          restructureHaircutPercent: 1,
+        }),
+      })
+    );
   });
 });
