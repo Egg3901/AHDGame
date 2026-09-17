@@ -71,8 +71,8 @@ describe("getDonorActionCost", () => {
 
 describe("getFundMultiplier", () => {
   it("returns 1.0 at tier 0 with average-GDP state", () => {
-    // gdpPerCapita = (65_000 * 1_000_000) / 1_000_000 = 65_000 → scalar = 1.0, tier 0 → 1.0
-    expect(getFundMultiplier(0, 65_000, 1_000_000)).toBeCloseTo(1.0);
+    // gdpPerCapita = (69_618 * 1_000_000) / 1_000_000 = 69_618 → scalar = 1.0, tier 0 → 1.0
+    expect(getFundMultiplier(0, 69_618, 1_000_000)).toBeCloseTo(1.0);
   });
   it("clamps gdp scalar to 0.85 minimum", () => {
     expect(getFundMultiplier(0, 1, 10_000_000)).toBeCloseTo(0.85);
@@ -81,7 +81,7 @@ describe("getFundMultiplier", () => {
     expect(getFundMultiplier(0, 1_000_000, 1_000_000)).toBeCloseTo(2.0);
   });
   it("applies tier modifier: tier 2 with average GDP → 1.4", () => {
-    expect(getFundMultiplier(2, 65_000, 1_000_000)).toBeCloseTo(1.4);
+    expect(getFundMultiplier(2, 69_618, 1_000_000)).toBeCloseTo(1.4);
   });
 
   it("does not saturate the cost ceiling for a representative NG region", () => {
