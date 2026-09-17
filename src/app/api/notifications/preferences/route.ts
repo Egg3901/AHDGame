@@ -110,17 +110,15 @@ export async function PUT(request: Request) {
       snoozedTypes = snoozedTypes.filter((s) => s.type !== type);
     }
 
-    await db
-      .collection<User>("users")
-      .updateOne(
-        { _id: userId },
-        {
-          $set: {
-            "notificationPreferences.mutedTypes": mutedTypes,
-            "notificationPreferences.snoozedTypes": snoozedTypes,
-          },
-        }
-      );
+    await db.collection<User>("users").updateOne(
+      { _id: userId },
+      {
+        $set: {
+          "notificationPreferences.mutedTypes": mutedTypes,
+          "notificationPreferences.snoozedTypes": snoozedTypes,
+        },
+      }
+    );
 
     return NextResponse.json({
       success: true,
