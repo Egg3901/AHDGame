@@ -372,9 +372,13 @@ export interface SoeCorpBacking {
  * WRITE ORDER (loud failure, #2043): every per-corp cover amount is computed
  * PURE first; then each owning treasury is debited; only then are the corp
  * credits bulk-written. A treasury failure therefore THROWS before any corp is
- * credited — never free money — and the turn retry recomputes the same cover
- * from the still-negative cash, so the backing is self-healing rather than
- * silently partial.
+ * credited — never free money. The boundary is deliberate: a failure BETWEEN
+ * the treasury debits and the corp bulk-write leaves debits without matching
+ * credits on the treasury ledger (visible, auditable), and a retry recomputes
+ * the same cover from the still-negative corp cash — so an operator rerun
+ * after such a mid-pass failure must account for already-issued debits first.
+ * Turn-level rerun atomicity beyond this window belongs to the turn framework,
+ * like every other treasury leg in this turn.
  */
 export async function processSoeOperations(
   db: Db,

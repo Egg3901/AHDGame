@@ -4,7 +4,7 @@ import type { Corporation, CorporateSector } from "@/lib/db/types";
 import type { CorpSnapshot } from "@/lib/turn/corporation/types";
 import {
   processSoeOperations,
-  coverableSoeShortfallAnchor,
+  estimateSoeOperatingLossAnchor,
   foldSoeCashDeltas,
   buildSoeBackingAuditEntry,
   type SoeCorpBacking,
@@ -255,34 +255,87 @@ describe("processSoeOperations — realized-loss backing", () => {
 });
 
 describe("120-turn upkeep-heavy loop (the #2043 shape)", () => {
-  it("residual equals held CIP and treasury/corp legs reconcile every turn", () => {
-    // One 200k build order outstanding for the whole horizon; every turn the
-    // enterprise loses 400k operating (upkeep-heavy: invisible to margins) and
-    // the treasury covers exactly that turn's loss.
+  it("residual equals held CIP and treasury/corp legs reconcile every turn", async () => {
+    // Drives the SHIPPED path per turn — processSoeOperations with this turn's
+    // snapshot income, then foldSoeCashDeltas — not the bare cover pure
+    // function. One 200k build order outstanding for the whole horizon; every
+    // turn the enterprise loses 400k operating on an upkeep-heavy sector whose
+    // margin estimate sees only a fraction of it (the #2043 under-cover), and
+    // the treasury covers exactly that turn's realized loss.
+    //
+    // Snapshot incomes are supplied (the upkeep-to-income link inside
+    // sectorCalculations is closed by the owed worldsim run, not here); what
+    // this loop proves is the multi-turn composition: cover math, CIP naming,
+    // leg equality, and the history-shape fold, every turn for 120 turns.
     const CIP = 200_000;
     const LOSS = 400_000;
+    const corpId = new ObjectId();
+    const corp = makeCorp(corpId, { liquidCapital: -CIP });
+    const sector = makeSector(corpId, {
+      revenue: 240_000,
+      realizedRevenue: 240_000,
+      profitMargin: 12,
+      effectiveProfitMargin: -52,
+      constructionInProgressAnchor: CIP,
+    });
+    const { db, written } = makeDb([corp], [sector]);
     // The build drain happened before the loop: cash opens at exactly -CIP.
     let cash = -CIP;
     let treasuryOut = 0;
-    let corpIn = 0;
     for (let turn = 0; turn < 120; turn++) {
       cash -= LOSS; // operating loss accrues (build cash left long ago)
-      const shortfall = -cash;
-      const covered = coverableSoeShortfallAnchor({
-        corporation: makeCorp(new ObjectId()),
-        sectors: [],
-        shortfallAnchor: shortfall,
+      corp.liquidCapital = cash; // mirror of the corp-turn $inc, pre-backing
+      const result = await processSoeOperations(
+        db,
+        NOW,
+        1953,
+        new Map([[corpId.toString(), -LOSS]])
+      );
+      expect(result.backing).toHaveLength(1);
+      const [b] = result.backing;
+      expect(b.realizedSource).toBe("snapshot");
+      expect(b.shortfallAnchor).toBe(-cash);
+      expect(b.coveredAnchor).toBe(LOSS);
+      expect(b.cipHeldAnchor).toBe(CIP);
+      // The residual is EXACTLY the held construction spend, every turn —
+      // the same invariant the worldsim checklist query asserts per history row.
+      expect(b.residualAnchor).toBe(CIP);
+      expect(b.residualAnchor).toBe(b.cipHeldAnchor);
+      // The old estimate-preferred path would have under-covered THIS turn on
+      // THIS sector: pin the discriminator continuously, not just once.
+      const estimated = estimateSoeOperatingLossAnchor({
+        corporation: corp,
+        sectors: [sector],
         corpOverheadAnchor: 0,
         fxByCurrency: new Map(),
-        plantsEnabled: true,
-        realizedLossAnchor: LOSS,
       });
-      cash += covered;
-      treasuryOut += covered;
-      corpIn += covered;
-      // The residual is EXACTLY the held construction spend, every turn.
-      expect(shortfall - covered).toBe(CIP);
-      expect(treasuryOut).toBe(corpIn);
+      expect(estimated).toBeGreaterThan(0);
+      expect(estimated).toBeLessThan(LOSS);
+      expect(b.coveredAnchor).toBeGreaterThan(estimated);
+      // Equal legs this turn: last treasury debit funds the last corp credit.
+      const debits = written.budgetIncs.filter((w) => treasuryDelta(w.update) !== undefined);
+      const credits = written.corpBulk.filter((op) => corpLiquidInc(op) !== undefined);
+      expect(-treasuryDelta(debits[debits.length - 1].update)!).toBe(LOSS);
+      expect(corpLiquidInc(credits[credits.length - 1])).toBe(LOSS);
+      treasuryOut += LOSS;
+      // Fold into the history-shape snapshot: post-backing cash with the
+      // reconciliation beside it, exactly what corporationHistory persists.
+      const snapshots = [{ corpId, liquidCapital: cash } as unknown as CorpSnapshot];
+      foldSoeCashDeltas({
+        corpSnapshots: snapshots,
+        corpById: new Map([[corpId.toString(), corp]]),
+        backing: result.backing,
+        remittedLocalByCorpId: new Map(),
+      });
+      expect(snapshots[0].liquidCapital).toBe(cash + LOSS);
+      expect(snapshots[0].soeBacking).toMatchObject({
+        realizedSource: "snapshot",
+        coveredAnchor: LOSS,
+        cipHeldAnchor: CIP,
+        residualAnchor: CIP,
+      });
+      cash += LOSS; // mirror of the corp credit for the next turn's base
+      corp.liquidCapital = cash;
     }
     // The hole never accumulates: 120 turns of losses, cash still just -CIP.
     expect(cash).toBe(-CIP);
