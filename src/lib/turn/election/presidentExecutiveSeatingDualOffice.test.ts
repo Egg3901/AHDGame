@@ -23,6 +23,10 @@ vi.mock("@/lib/singleplayer", () => ({ isSingleplayer: vi.fn(() => false) }));
 vi.mock("@/lib/congress/leadershipElections", () => ({
   triggerLeadershipElectionsAfterChamberVote: vi.fn().mockResolvedValue(undefined),
 }));
+vi.mock("@/lib/singleplayerHeadOfState", () => ({
+  pinnedSingleplayerHeadOfState: vi.fn().mockResolvedValue(null),
+  seatSingleplayerHeadOfState: vi.fn().mockResolvedValue(true),
+}));
 
 const NOW = new Date("2026-09-17T11:13:41.046Z");
 
@@ -261,6 +265,20 @@ function rowsForNpp(id: ObjectId) {
 
 describe("seatPresidentialExecutive dual-office invariant (#2038)", () => {
   it("seats the NPP vice president and vacates their Senate seat through the vacancy mechanism", async () => {
+    // Same holder, second incompatible office: a House seat must vacate too.
+    store.push({
+      _id: new ObjectId(),
+      officeType: "house",
+      countryId: "US",
+      state: "MO",
+      nppId: VP_NPP,
+      characterId: null,
+      characterName: "Amanda Bishop",
+      party: "1",
+      isNPP: true,
+      electedAt: NOW,
+      updatedAt: NOW,
+    });
     const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
     await seatPresidentialExecutive(db as unknown as Db, {
       election: makeElection(),
@@ -299,11 +317,15 @@ describe("seatPresidentialExecutive dual-office invariant (#2038)", () => {
       $set: expect.objectContaining({ currentOffice: { type: "vicePresident" } }),
     });
 
+    // Both incompatible rows vacated: no filled House row remains for the NPP.
+    expect(filledRows().filter((d) => d.officeType === "house")).toHaveLength(0);
+
     // Succession side effects ran: governor notified, leadership re-triggered, presence recounted.
     expect(db.collectionMocks["notifications"]!.insertOne).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Senate Seat Vacant" })
     );
     expect(triggerLeadershipElectionsAfterChamberVote).toHaveBeenCalledWith(db, "senate", NOW);
+    expect(triggerLeadershipElectionsAfterChamberVote).toHaveBeenCalledWith(db, "house", NOW);
     expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalledWith(
       { _id: "MO_1" },
       expect.anything()
@@ -450,5 +472,62 @@ describe("seatPresidentialExecutive dual-office invariant (#2038)", () => {
       )
     ).toHaveLength(0);
     expect(triggerLeadershipElectionsAfterChamberVote).not.toHaveBeenCalled();
+  });
+
+  it("vacates the pinned singleplayer head of state's House seat before seating", async () => {
+    const pinnedId = new ObjectId();
+    store.push({
+      _id: new ObjectId(),
+      officeType: "house",
+      countryId: "US",
+      state: "MO",
+      characterId: pinnedId,
+      characterName: "Pinned Player",
+      party: "1",
+      isNPP: false,
+      electedAt: NOW,
+      updatedAt: NOW,
+    });
+    const { pinnedSingleplayerHeadOfState, seatSingleplayerHeadOfState } =
+      await import("@/lib/singleplayerHeadOfState");
+    vi.mocked(pinnedSingleplayerHeadOfState).mockResolvedValue({ _id: pinnedId } as never);
+
+    const { seatPresidentialExecutive } = await import("./presidentExecutiveSeating");
+    await seatPresidentialExecutive(db as unknown as Db, {
+      election: makeElection(),
+      winnerCandidate: {
+        _id: new ObjectId(),
+        isNPP: false,
+        characterId: WIN_CHAR,
+        characterName: "President Pat",
+        party: "1",
+      } as unknown as ElectionCandidate,
+      now: NOW,
+    });
+
+    // The pinned holder's House row is an unheld vacancy, not a held seat.
+    expect(store.filter((d) => d.characterId?.toString() === pinnedId.toString())).toHaveLength(0);
+    const moHouse = store.filter((d) => d.officeType === "house" && d.state === "MO");
+    expect(moHouse).toHaveLength(1);
+    expect(moHouse[0].party).toBeNull();
+    expect(moHouse[0].isNPP).toBe(false);
+    expect(triggerLeadershipElectionsAfterChamberVote).toHaveBeenCalledWith(db, "house", NOW);
+    expect(db.collectionMocks["statePartyOrg"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "MO_1" },
+      expect.anything()
+    );
+
+    // The singleplayer seating still ran for the pinned character.
+    expect(seatSingleplayerHeadOfState).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ characterId: pinnedId, countryId: "US" })
+    );
+
+    // Negative control: the NPP's Senate seat is untouched by the pinned path.
+    const txSenate = store.filter(
+      (d) => d.officeType === "senate" && d.state === "TX" && d.senateClass === 2
+    );
+    expect(txSenate).toHaveLength(1);
+    expect(txSenate[0].nppId?.toString()).toBe(OTHER_NPP.toString());
   });
 });

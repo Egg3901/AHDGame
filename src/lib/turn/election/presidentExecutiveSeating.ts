@@ -11,7 +11,11 @@ import type {
 } from "@/lib/db/types";
 import { getOfficeLabel } from "@/lib/utils/politics";
 import { clearCabinetOnTransition } from "@/lib/cabinetTransition";
-import { COUNTRY_CONFIGS } from "@/lib/constants/countries";
+import {
+  COUNTRY_CONFIGS,
+  isPresidentialGovernmentType,
+  type CountryId,
+} from "@/lib/constants/countries";
 import { getExecutiveOfficialFilter } from "@/lib/elections/executiveOfficeFilters";
 import { vacateNonExecutiveOfficesForExecutive } from "@/lib/elections/vacateOfficesForExecutive";
 import { incrementExecutiveTermsServedUpdate } from "@/lib/elections/executiveTermLimits";
@@ -42,6 +46,18 @@ export async function seatPresidentialExecutive(
   const pinned = await pinnedSingleplayerHeadOfState(db, electionCountry);
   if (pinned) {
     const preset = await getGameStatePresetOrDefault(db);
+    // The pinned head of state can already hold a legislative seat won in the
+    // same founding wave (#2038). Vacate it through the shared vacancy path in
+    // presidential systems, where the executive keeps no other office.
+    // Parliamentary heads of government keep their seats, so this never runs
+    // for the direct-government path inside seatSingleplayerHeadOfState.
+    if (
+      isPresidentialGovernmentType(
+        COUNTRY_CONFIGS[election.countryId as CountryId]?.governmentType ?? "presidential"
+      )
+    ) {
+      await vacateNonExecutiveOfficesForExecutive(db, { characterId: pinned._id }, now);
+    }
     await seatSingleplayerHeadOfState(db, {
       characterId: pinned._id,
       countryId: electionCountry,
