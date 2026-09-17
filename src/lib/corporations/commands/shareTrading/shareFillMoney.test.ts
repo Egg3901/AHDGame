@@ -52,9 +52,7 @@ function clone<T>(value: T): T {
 }
 
 function getPath(doc: Doc, path: string): unknown {
-  return path
-    .split(".")
-    .reduce<unknown>((node, part) => (node as Doc)?.[part], doc);
+  return path.split(".").reduce<unknown>((node, part) => (node as Doc)?.[part], doc);
 }
 
 function setPath(doc: Doc, path: string, value: unknown): void {
@@ -225,7 +223,7 @@ function applyUpdate(doc: Doc, update: Doc, filter: Doc): void {
         const slice = (spec as Doc).$slice as number | undefined;
         doc.appliedMoneyFlowKeys = slice !== undefined ? keys.slice(slice) : keys;
       } else if (path === "shareholders" || path === "holdings") {
-        ((doc[path] as Doc[] | undefined) ?? (doc[path] = [] as unknown as Doc[]));
+        (doc[path] as Doc[] | undefined) ?? (doc[path] = [] as unknown as Doc[]);
         (doc[path] as Doc[]).push(clone(spec as Doc));
       }
     }
@@ -342,12 +340,7 @@ function charShares(db: FakeDb, corpId: ObjectId, charId: ObjectId): number {
   return (rows.find((r) => valueEquals(r.characterId, charId))?.shares as number) ?? 0;
 }
 
-function capEntry(
-  db: FakeDb,
-  corpId: ObjectId,
-  field: string,
-  id: ObjectId
-): Doc | undefined {
+function capEntry(db: FakeDb, corpId: ObjectId, field: string, id: ObjectId): Doc | undefined {
   const corp = getColl(db, "corporations").get(docKey(corpId));
   const rows = (corp?.shareholders as Doc[] | undefined) ?? [];
   return rows.find((r) => valueEquals(r[field], id));
@@ -359,9 +352,7 @@ function walletOf(db: FakeDb, collection: string, id: ObjectId, field: string): 
 }
 
 function moneyReceipt(db: FakeDb, fillKey: string): Doc | undefined {
-  return getColl(db, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(
-    `${fillKey}:money`
-  );
+  return getColl(db, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(`${fillKey}:money`);
 }
 
 let fillSeq = 0;
@@ -408,9 +399,7 @@ function sellPlan(overrides: Partial<ShareFillMoneyPlan> = {}): ShareFillMoneyPl
 
 function seedSellBaseline(db: FakeDb): void {
   seedCorp(db, {
-    shareholders: [
-      { characterId: SELLER_ID, shares: 50, avgCostPerShare: 90 },
-    ],
+    shareholders: [{ characterId: SELLER_ID, shares: 50, avgCostPerShare: 90 }],
   });
   seedCharacter(db, FILLER_ID, 5000);
   seedCharacter(db, SELLER_ID, 200);
@@ -428,10 +417,7 @@ describe("share-fill keyed money legs", () => {
   it("sell-fill character-to-character moves cash and shares exactly once", async () => {
     seedSellBaseline(state);
     const plan = sellPlan();
-    const outcome = await executeShareFillMoneyFlow(
-      db as never,
-      plan
-    );
+    const outcome = await executeShareFillMoneyFlow(db as never, plan);
     expect(outcome.sharesMoved).toBe(10);
     expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(4000);
     expect(walletOf(state, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(1200);
@@ -509,8 +495,18 @@ describe("share-fill keyed money legs", () => {
     const totalWrites = state.writes;
     expect(totalWrites).toBeGreaterThan(3);
 
-    const expectedFiller = walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD");
-    const expectedSeller = walletOf(state, "characters", SELLER_ID, "currencyBalances.personal.USD");
+    const expectedFiller = walletOf(
+      state,
+      "characters",
+      FILLER_ID,
+      "currencyBalances.personal.USD"
+    );
+    const expectedSeller = walletOf(
+      state,
+      "characters",
+      SELLER_ID,
+      "currencyBalances.personal.USD"
+    );
 
     for (let crashAt = 1; crashAt <= totalWrites; crashAt += 1) {
       const trial = makeFakeDb();
@@ -540,7 +536,9 @@ describe("share-fill keyed money legs", () => {
         const result = await recoverShareFillMoneyByFillKey(trialDb as never, plan.fillKey);
         expect(result.action).toBe("settled-failed-no-plan");
         expect(charShares(trial, CORP_ID, SELLER_ID)).toBe(50);
-        expect(walletOf(trial, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(5000);
+        expect(walletOf(trial, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(
+          5000
+        );
         continue;
       }
       if (attempt !== "ok") expect((attempt as Error).message).toBe("injected-crash");
@@ -703,6 +701,39 @@ describe("share-fill money actor variants", () => {
     expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(5000);
     expect(charShares(state, CORP_ID, FILLER_ID)).toBe(0);
     expect(walletOf(state, "indexFunds", FUND_ID, "cashAnchor")).toBe(300);
+  });
+
+  it("sell-fill with a split liquidity race leaves no partial cap-table leg", async () => {
+    // Cap table covers the fill but the holdings ledger is short: the
+    // holdings subleg refuses after the cap subleg landed, so the step must
+    // reverse its own cap debit before the receipt settles compensated.
+    seedCorp(state, {
+      shareholders: [{ fundId: FUND_ID, shares: 60, avgCostPerShare: 95 }],
+    });
+    seedCharacter(state, FILLER_ID, 5000);
+    seedCharacter(state, SELLER_ID, 200);
+    seedFund(state, 300, [{ corporationId: CORP_ID, shares: 3, avgCostPerShareAnchor: 95 }]);
+    const plan = sellPlan({
+      sellerDebit: null,
+      fundInventoryDebit: { fundIdHex: FUND_ID.toHexString(), pricePerShareAnchor: 100 },
+      sellerProceeds: {
+        collection: "indexFunds",
+        idHex: FUND_ID.toHexString(),
+        field: "cashAnchor",
+        amount: 1000,
+      },
+    });
+    await expect(executeShareFillMoneyFlow(db as never, plan)).rejects.toThrow(
+      SHARE_FILL_MONEY_LIQUIDITY_SHARES
+    );
+    expect(capEntry(state, CORP_ID, "fundId", FUND_ID)?.shares).toBe(60);
+    const holdings = getColl(state, "indexFunds").get(docKey(FUND_ID))?.holdings as Doc[];
+    expect(holdings.find((h) => valueEquals(h.corporationId, CORP_ID))?.shares).toBe(3);
+    expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(5000);
+    expect(walletOf(state, "indexFunds", FUND_ID, "cashAnchor")).toBe(300);
+    expect(charShares(state, CORP_ID, FILLER_ID)).toBe(0);
+    const receipt = moneyReceipt(state, plan.fillKey);
+    expect(receipt?.status).toBe("compensated");
   });
 
   it("sell-fill imperial filler debits the imperial wallet", async () => {
@@ -947,8 +978,14 @@ describe("share-fill buy-fill money legs", () => {
       },
     });
     await executeShareFillMoneyFlow(db as never, back);
+    // Conservation: the sell moves 1000 filler->seller (5000/200 to 4000/1200
+    // on 5200 total), and the buy-back releases the placer's 1000 of escrow
+    // (locked at bid placement, outside this flow) to the filler while moving
+    // the shares back with no proceeds leg. Net in-flow: filler 5000-1000+1000
+    // = 5000, seller 200+1000 = 1200, shares restored 50/0. The seller keeps
+    // the sell proceeds; only the shares round-trip.
     expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(5000);
-    expect(walletOf(state, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(200);
+    expect(walletOf(state, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(1200);
     expect(charShares(state, CORP_ID, FILLER_ID)).toBe(0);
     expect(charShares(state, CORP_ID, SELLER_ID)).toBe(50);
   });
@@ -1014,7 +1051,7 @@ describe("share-fill money recovery and equivalence", () => {
   });
 
   it("executed-then-resumed equals resumed-only end state (restart equivalence)", async () => {
-    const runOnce = async (crashAt: number | null): Promise<FakeDb> => {
+    const runOnce = async (crashAt: number | null) => {
       const trial = makeFakeDb();
       seedCorp(trial, {
         shareholders: [{ characterId: SELLER_ID, shares: 50, avgCostPerShare: 90 }],
@@ -1023,7 +1060,7 @@ describe("share-fill money recovery and equivalence", () => {
       seedCharacter(trial, SELLER_ID, 200);
       const trialDb = fakeDb(trial);
       const plan = sellPlan();
-      // Same fill key on both runs so both executions are the same attempt.
+      // Same fill key on every run so each execution is the same attempt.
       plan.fillKey = "restart-equivalence";
       if (crashAt !== null) {
         trial.faultAt = crashAt;
@@ -1031,16 +1068,38 @@ describe("share-fill money recovery and equivalence", () => {
           "injected-crash"
         );
         trial.faultAt = null;
+      } else {
+        await executeShareFillMoneyFlow(trialDb as never, plan);
       }
-      await recoverShareFillMoneyByFillKey(trialDb as never, plan.fillKey);
+      const first = await recoverShareFillMoneyByFillKey(trialDb as never, plan.fillKey);
       // A second recovery is a settled skip, not a second movement.
       const again = await recoverShareFillMoneyByFillKey(trialDb as never, plan.fillKey);
       expect(again.action).toBe("skipped-settled");
-      return trial;
+      return { trial, first, again };
     };
+    // Uncrashed execution converges, and both recoveries are settled skips.
     const direct = await runOnce(null);
-    const crashed = await runOnce(2);
-    for (const trial of [direct, crashed]) {
+    expect(direct.first.action).toBe("skipped-settled");
+    // A crash before the plan lands is not recoverable: no plan means no
+    // amounts to replay, so the first recovery settles failed with nothing
+    // moved and the second is a settled skip. This end state is intentionally
+    // NOT equal to direct; the route settles the attempt failed and a new key
+    // retries the fill.
+    const planless = await runOnce(2);
+    expect(planless.first.action).toBe("settled-failed-no-plan");
+    expect(walletOf(planless.trial, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(
+      5000
+    );
+    expect(walletOf(planless.trial, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(
+      200
+    );
+    expect(charShares(planless.trial, CORP_ID, SELLER_ID)).toBe(50);
+    expect(charShares(planless.trial, CORP_ID, FILLER_ID)).toBe(0);
+    // A crash after the plan lands (write 3 is the filler-debit leg) replays
+    // from the stored plan to the exact direct end state.
+    const resumed = await runOnce(3);
+    expect(["money-recovered", "skipped-settled"]).toContain(resumed.first.action);
+    for (const trial of [direct.trial, resumed.trial]) {
       expect(walletOf(trial, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(4000);
       expect(walletOf(trial, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(1200);
       expect(charShares(trial, CORP_ID, FILLER_ID)).toBe(10);

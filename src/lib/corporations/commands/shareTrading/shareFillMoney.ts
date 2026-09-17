@@ -11,6 +11,7 @@ import {
   type MoneyFlowLegOutcome,
   type MoneyFlowReceipt,
   type MoneyFlowStep,
+  type MoneyFlowStepRef,
 } from "@/lib/db/nonAtomicMoneyFlow";
 import { markShareFillMoneyCommitted } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 
@@ -53,17 +54,11 @@ import { markShareFillMoneyCommitted } from "@/lib/corporations/commands/shareTr
 
 /** Cap-table entry discriminator inside `corporations.shareholders`. */
 export type ShareFillCapEntryField =
-  | "characterId"
-  | "imperialCharacterId"
-  | "corporationId"
-  | "fundId";
+  "characterId" | "imperialCharacterId" | "corporationId" | "fundId";
 
 /** Wallet/treasury collections a cash leg can target. */
 export type ShareFillCashCollection =
-  | "characters"
-  | "imperialCharacters"
-  | "corporations"
-  | "indexFunds";
+  "characters" | "imperialCharacters" | "corporations" | "indexFunds";
 
 export interface ShareFillCashLeg {
   collection: ShareFillCashCollection;
@@ -195,20 +190,20 @@ export const SHARE_FILL_MONEY_INSUFFICIENT_FUNDS = "SHARE_FILL_MONEY_INSUFFICIEN
 export const SHARE_FILL_MONEY_SELLER_SHARES = "SHARE_FILL_MONEY_SELLER_SHARES";
 export const SHARE_FILL_MONEY_LIQUIDITY_SHARES = "SHARE_FILL_MONEY_LIQUIDITY_SHARES";
 
-function mapMoneyError(stepName: string, outcome: MoneyFlowLegOutcome): Error {
-  if (stepName === "filler-debit") {
+function mapMoneyError(step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome): Error {
+  if (step.name === "filler-debit") {
     return new Error(`${SHARE_FILL_MONEY_INSUFFICIENT_FUNDS}:${outcome}`);
   }
-  if (stepName === "seller-debit") {
+  if (step.name === "seller-debit") {
     return new Error(`${SHARE_FILL_MONEY_SELLER_SHARES}:${outcome}`);
   }
-  if (stepName === "fund-inventory-debit") {
+  if (step.name === "fund-inventory-debit") {
     return new Error(`${SHARE_FILL_MONEY_LIQUIDITY_SHARES}:${outcome}`);
   }
-  if (stepName === "filler-shares-debit") {
+  if (step.name === "filler-shares-debit") {
     return new Error(`${SHARE_FILL_MONEY_SELLER_SHARES}:${outcome}`);
   }
-  return new Error(`share-fill-money:${stepName}:${outcome}`);
+  return new Error(`share-fill-money:${step.name}:${outcome}`);
 }
 
 interface CapAccount {
@@ -261,7 +256,9 @@ function makeCapDebitStep(
       if (outcome !== "applied" && outcome !== "already-applied") return outcome;
       await corps.updateOne(
         { _id: corpId } as Filter<CapAccount>,
-        { $pull: { shareholders: { [leg.field]: new ObjectId(leg.idHex), shares: { $lte: 0 } } } } as never
+        {
+          $pull: { shareholders: { [leg.field]: new ObjectId(leg.idHex), shares: { $lte: 0 } } },
+        } as never
       );
       return outcome;
     },
@@ -305,7 +302,9 @@ export async function applyCapCreditKeyed(
     if (!live) return "missing";
     const existing = (
       live as unknown as {
-        shareholders?: Array<{ shares: number; avgCostPerShare?: number } & Record<string, unknown>>;
+        shareholders?: Array<
+          { shares: number; avgCostPerShare?: number } & Record<string, unknown>
+        >;
       }
     ).shareholders?.find((entry) => {
       const value = entry[leg.field];
@@ -494,10 +493,9 @@ function makeHoldingsDebitStep(
         {}
       );
       if (outcome !== "applied" && outcome !== "already-applied") return outcome;
-      const holding = await funds.findOne(
-        { _id: fundId } as Filter<HoldingAccount>,
-        { projection: { holdings: 1 } }
-      );
+      const holding = await funds.findOne({ _id: fundId } as Filter<HoldingAccount>, {
+        projection: { holdings: 1 },
+      });
       const rows = (
         holding as unknown as {
           holdings?: Array<{ corporationId: ObjectId; shares: number }>;
@@ -560,7 +558,11 @@ export async function applyHoldingsCreditKeyed(
     if (!live) return "missing";
     const existing = (
       live as unknown as {
-        holdings?: Array<{ corporationId: ObjectId; shares: number; avgCostPerShareAnchor?: number }>;
+        holdings?: Array<{
+          corporationId: ObjectId;
+          shares: number;
+          avgCostPerShareAnchor?: number;
+        }>;
       }
     ).holdings?.find((row) => row.corporationId.equals(corpId));
     if (!existing) return "guard-rejected";
@@ -737,7 +739,14 @@ function makeFundInventoryDebitStep(
 ): MoneyFlowStep {
   const capSub = deriveMoneyFlowKey(moneyKey, "fund-inventory-debit", "cap");
   const holdingsSub = deriveMoneyFlowKey(moneyKey, "fund-inventory-debit", "holdings");
-  const capStep = makeCapDebitStep(db, capSub, corpId, { field: "fundId", idHex: fundId.toHexString(), pricePerShare: pricePerShareAnchor }, shares, now);
+  const capStep = makeCapDebitStep(
+    db,
+    capSub,
+    corpId,
+    { field: "fundId", idHex: fundId.toHexString(), pricePerShare: pricePerShareAnchor },
+    shares,
+    now
+  );
   const holdingsStep = makeHoldingsDebitStep(
     db,
     holdingsSub,
@@ -752,7 +761,22 @@ function makeFundInventoryDebitStep(
     apply: async () => {
       const capOutcome = await capStep.apply();
       if (capOutcome !== "applied" && capOutcome !== "already-applied") return capOutcome;
-      return holdingsStep.apply();
+      const holdingsOutcome = await holdingsStep.apply();
+      if (holdingsOutcome === "applied" || holdingsOutcome === "already-applied") {
+        return holdingsOutcome;
+      }
+      // The cap-table subleg landed but the holdings ledger refused (liquidity
+      // race): reverse our own sub-prefix before reporting failure. A failed
+      // step's revert never runs, so without this the cap debit would strand
+      // while the receipt settles compensated. The compensate write is keyed,
+      // so a crash here converges on retry instead of double-reverting.
+      if (capStep.revert) {
+        const reversal = await capStep.revert();
+        if (reversal !== "applied" && reversal !== "already-applied") {
+          throw new Error(`share-fill-money:fund-inventory-debit:compensate-${reversal}`);
+        }
+      }
+      return holdingsOutcome;
     },
     revert: async () => {
       const holdingsRevert = holdingsStep.revert ? await holdingsStep.revert() : "guard-rejected";
@@ -872,7 +896,8 @@ export function buildShareFillMoneySteps(
       const holdingsSub = deriveMoneyFlowKey(moneyKey, "buyer-holdings-credit");
       steps.push({
         name: "buyer-holdings-credit",
-        apply: () => applyHoldingsCreditKeyed(db, holdingsSub, fundId, corpId, plan.shares, priceAnchor, now),
+        apply: () =>
+          applyHoldingsCreditKeyed(db, holdingsSub, fundId, corpId, plan.shares, priceAnchor, now),
         revert: () =>
           revertHoldingsCreditKeyed(
             db,
@@ -901,10 +926,7 @@ export function buildShareFillMoneySteps(
   return steps;
 }
 
-function readFillerBalance(
-  doc: Record<string, unknown> | null,
-  field: string
-): number | undefined {
+function readFillerBalance(doc: Record<string, unknown> | null, field: string): number | undefined {
   if (!doc) return undefined;
   const value = field
     .split(".")
@@ -968,17 +990,22 @@ export async function executeShareFillMoneyFlow(
     }
     active = stored;
   } else {
-    try {
-      await receiptsEx(db).updateOne(
-        { _id: moneyKey },
-        { $set: { shareFillMoneyPlan: plan, updatedAt: new Date() } }
-      );
-    } catch (planError) {
-      await failMoneyFlowReceipt(receipts(db), moneyKey, "share-fill-money:plan-store");
-      throw planError;
-    }
+    // Persist the resume plan before any money moves. Deliberately unsettled
+    // on failure: a real crash here runs no further code, leaving the receipt
+    // plan-less `in_progress`, so settling here would mask the crash with a
+    // write the dead process could never have run. Key recovery owns the
+    // settlement and fails the plan-less receipt without guessing.
+    await receiptsEx(db).updateOne(
+      { _id: moneyKey },
+      { $set: { shareFillMoneyPlan: plan, updatedAt: new Date() } }
+    );
   }
-  await runMoneyFlowSteps(receipts(db), moneyKey, buildShareFillMoneySteps(db, moneyKey, active), mapMoneyError);
+  await runMoneyFlowSteps(
+    receipts(db),
+    moneyKey,
+    buildShareFillMoneySteps(db, moneyKey, active),
+    mapMoneyError
+  );
   const outcome: ShareFillMoneyOutcome = { sharesMoved: active.shares };
   const bridged = await bridgeAuditFromPlan(db, active);
   if (bridged !== undefined) outcome.fillerBalanceAfter = bridged;

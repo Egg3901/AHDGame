@@ -353,26 +353,34 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * whose order already filled. Tested: crash-after-every-audit-write for
  * sell/buy and character/fund/corporation variants, retry convergence (no
  * double audit), every recovery boundary, stranded repair, partial/final
- * conditional status on both paths, and the turn-driver wiring. The money
- * legs themselves (filler debit, seller share debit, buyer credit, seller
- * proceeds, escrow release, fund inventory dual-ledger) keep their legacy
- * compensation: a crash between two money writes still settles
- * `in_progress` for ops, exactly as before, only now the audit cannot go
- * missing underneath it.
+ * conditional status on both paths, and the turn-driver wiring.
+ * Share-fill money legs are migrated
+ * (src/lib/corporations/commands/shareTrading/shareFillMoney.ts, issue
+ * #1672): route sell/buy fills (fillShareOrder both sell paths,
+ * fillShareOrderSettlement buy fills, fillBestBuyOrder market sells) run
+ * filler debit, seller/inventory debit, buyer credit, proceeds, and escrow
+ * release as compare-and-set steps under a stored-plan money receipt keyed
+ * from the audit attempt key, with keyed inverses and orphan recovery
+ * re-driven by the turn driver before the audit orphan pass. Guard failures
+ * keep the legacy route surface (insufficient filler funds/treasury 400,
+ * lost seller-share and exhausted liquidity-provider races 409 with the
+ * applied prefix compensated, including the split cap/holdings liquidity
+ * race, which reverses its own cap subleg). A plan-store crash settles via
+ * key recovery (`settled-failed-no-plan`, nothing moved) rather than a
+ * masking settle write. Tested: crash-after-every-money-write for sell/buy,
+ * guard-failure settlement for every actor variant, round-trip balance/share
+ * conservation, restart equivalence, competing retries, and orphan bridging
+ * into the audit receipt. Post-commit and still unkeyed around fills: the
+ * corp-filler FX spread routing on the routes and the deterministic-_id
+ * fund-tx/emitTx/trade-history inserts (convergent post-commit, never part
+ * of the money prefix).
  * Open seams for the next pass (all sighted, none audited here). (1) The
- * share-fill money legs named above
- * (src/lib/corporations/commands/shareTrading/fillShareOrder.ts,
- * fillShareOrderSettlement.ts, fillBestBuyOrder.ts): filler-debited-then-
- * crash-before-seller-credit leaves the filler down with the seller
- * unpaid; seller-shares-debited-then-crash-before-buyer-credit strands
- * shares until ops intervene; buy-fill escrow release has the same window.
- * Migrating these to keyed legs is the natural next slice. (2) The turn
- * limit-order matcher (fillPendingShareOrders in
+ * turn limit-order matcher (fillPendingShareOrders in
  * src/lib/turn/corporation/shareOrders.ts):
  * pool-leg, corp float/shareholder, character-cash, corp-payout, treasury,
  * and fund-credit bulkWrites commit in sequence with no receipt or resume
  * plan, so a crash between any two leaves partial fills; the largest
- * remaining window, likely more than one pass. (3) Order-placement escrow
+ * remaining window, likely more than one pass. (2) Order-placement escrow
  * and refunds (placeShareOrder.ts, cancelShareOrder.ts,
  * cleanupShareMarketActivity.ts, shareEscrowSettlement.ts,
  * cancelShareListing.ts), direct market buy/sell legs outside the order
