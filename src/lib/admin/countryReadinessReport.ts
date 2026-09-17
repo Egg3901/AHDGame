@@ -38,6 +38,39 @@ export interface CountryReadinessReport {
  * gameState, and when neither is available the authored entry is used as-is
  * rather than assuming a modern default.
  */
+/**
+ * Total SEATS in a collection, not the number of rows holding them.
+ *
+ * ⚠️ THE TWO ARE NOT THE SAME, AND THE EXPECTATIONS ARE WRITTEN IN SEATS.
+ * `seats` stores one row per constituency with a `totalSeats` count, and
+ * `electedOfficials` one row per (region, party) with a `seatsHeld` count.
+ * Japan's 465-seat Shugiin is 8 rows in `seats` and 51 in `electedOfficials`.
+ * Counting rows against `seatMin: 713` therefore reported "found 32" for a
+ * fully and correctly seeded Diet -- a false alarm on every reset, for every
+ * country: the UK read 12 against 650 while holding exactly 650.
+ *
+ * ⚠️ A MISSING COUNT MEANS ONE SEAT, NOT ZERO. Single-seat offices omit the
+ * field entirely rather than storing 1: US senate (100 rows), governors,
+ * president and Ireland's uachtaran all have no `totalSeats`. Summing without
+ * the fallback scores the entire US Senate as nothing. The field is never
+ * explicitly 0, so `$ifNull` is safe here and `$max` against 1 would be wrong.
+ */
+async function sumSeats(
+  db: Db,
+  collection: "seats" | "electedOfficials",
+  countryId: CountryId,
+  field: "totalSeats" | "seatsHeld"
+): Promise<number> {
+  const [row] = await db
+    .collection(collection)
+    .aggregate<{ seats: number }>([
+      { $match: { countryId } },
+      { $group: { _id: null, seats: { $sum: { $ifNull: [`$${field}`, 1] } } } },
+    ])
+    .toArray();
+  return row?.seats ?? 0;
+}
+
 export async function buildCountryReadinessReport(
   db: Db,
   countryId: CountryId,
@@ -86,7 +119,7 @@ export async function buildCountryReadinessReport(
     detail: `Expected ≥${expect.statePartyOrgMin}, found ${orgCount}`,
   });
 
-  const seatCount = await db.collection("seats").countDocuments({ countryId });
+  const seatCount = await sumSeats(db, "seats", countryId, "totalSeats");
   checks.push({
     name: "Seats",
     status:
@@ -112,7 +145,7 @@ export async function buildCountryReadinessReport(
     detail: `${expect.nppNote}, found ${nppCount}`,
   });
 
-  const officialCount = await db.collection("electedOfficials").countDocuments({ countryId });
+  const officialCount = await sumSeats(db, "electedOfficials", countryId, "seatsHeld");
   checks.push({
     name: "ElectedOfficials",
     status:
