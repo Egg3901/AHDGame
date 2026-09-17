@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EconomicVitalSigns } from "@/lib/db/types/economicVitalSigns";
-import { runEconomicStressTests } from "./economicStressTests";
+import { freightShockUnmetIntentShare, runEconomicStressTests } from "./economicStressTests";
 
 const value = (number: number) => ({ value: number, observations: 1, basis: "test" });
 
@@ -60,6 +60,41 @@ describe("runEconomicStressTests", () => {
     expect(finding.unmetDemandUnits).toBeCloseTo(84);
     expect(finding.balanceSheetLossAnchor).toBeCloseTo(840);
     expect(finding.severity).toBe("critical");
+  });
+
+  it("reports freight-shock unmet demand as the implied unmet intent share", () => {
+    const finding = runEconomicStressTests(snapshot)[1]!;
+    expect(finding.scenario).toBe("freight_capacity_shock");
+    expect(finding.indicators.stressedIntentFulfillmentRate).toBeCloseTo(0.6);
+    expect(finding.indicators.stressedUnmetIntentShare).toBeCloseTo(0.4);
+    // Absolute units stay unavailable: the trade snapshot carries only rates.
+    expect(finding.unmetDemandUnits).toBeNull();
+    expect(finding.firstFailure).toBe("nonlocal buyer-intent fulfillment");
+    expect(finding.recoveryTurns).toBe(24);
+  });
+
+  it("reports null freight-shock unmet share when intent inputs are unmeasured", () => {
+    const unmeasured = {
+      ...snapshot,
+      trade: {
+        ...snapshot.trade,
+        intentFulfillmentRate: value(0.8),
+        localShare: { value: null, observations: 0, basis: "test" },
+      },
+    } as EconomicVitalSigns;
+    const finding = runEconomicStressTests(unmeasured)[1]!;
+    expect(finding.indicators.stressedIntentFulfillmentRate).toBeNull();
+    expect(finding.indicators.stressedUnmetIntentShare).toBeNull();
+    expect(finding.severity).toBe("moderate");
+    expect(
+      freightShockUnmetIntentShare(unmeasured, {
+        freightCapacityLossShare: 0.5,
+        freightShockTurns: 12,
+        exchangeClosureTurns: 12,
+        liquidationShareOfMarketCap: 0.1,
+        dormantBalanceReactivationShare: 0.5,
+      })
+    ).toBeNull();
   });
 
   it("does not describe unabsorbed liquidation notional as a realized loss", () => {
