@@ -103,10 +103,13 @@ const ROLES = [
 ];
 
 const raw = fs.readFileSync("./.env.local", "utf8");
-const line = raw
-  .split(/\r?\n/)
-  .find((l) => l.startsWith("MONGODB_URI_LIVE=") && l.includes("rlwy.net"));
+const line = raw.split(/\r?\n/).find((l) => l.startsWith("MONGODB_URI_LIVE="));
+if (!line) throw new Error("MONGODB_URI_LIVE is missing from .env.local");
 const base = line.slice("MONGODB_URI_LIVE=".length).trim();
+const hostname = new URL(base).hostname.toLowerCase();
+if (hostname !== "rlwy.net" && !hostname.endsWith(".rlwy.net")) {
+  throw new Error("MONGODB_URI_LIVE must use a Railway database host");
+}
 const c = new MongoClient(base + (base.includes("?") ? "&" : "?") + "directConnection=true");
 await c.connect();
 const db = c.db("a-house-divided");
