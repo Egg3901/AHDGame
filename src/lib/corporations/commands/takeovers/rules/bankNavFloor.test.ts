@@ -174,9 +174,7 @@ describe("takeoverBankNav: realizable value the acquirer inherits (issue #1750)"
       80
     );
     expect(takeoverBankNav(charter({ ...base, propBookMarkValue: -500 }))).toBe(80);
-    expect(
-      takeoverBankNav({ ...charter(base), propBookMarkValue: "500" as unknown as number })
-    ).toBe(80);
+    expect(takeoverBankNav({ ...base, propBookMarkValue: "500" } as never)).toBe(80);
     expect(takeoverBankNav({ cashReserves: 100, npcDeposits: 20 } as never)).toBe(80);
     expect(takeoverBankNav(null)).toBe(0);
   });

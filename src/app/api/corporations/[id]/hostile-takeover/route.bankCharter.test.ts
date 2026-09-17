@@ -33,6 +33,7 @@ vi.mock("@/lib/currency/characterFunds", () => ({
 }));
 vi.mock("@/lib/currency/corporationCapital", () => ({
   anchorToCorpLiquidCapital: vi.fn((value: number) => value),
+  corpCapitalToAnchor: vi.fn((value: number) => value),
   corpLiquidCapitalToAnchor: vi.fn((value: number) => value),
   loadFxRatesByCurrency: vi.fn().mockResolvedValue(new Map()),
   fxRateForCorpFromMap: vi.fn().mockReturnValue(1),
