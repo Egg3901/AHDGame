@@ -115,6 +115,22 @@ describe("recordIdentityObservation", () => {
     expect(rows[2].firstSeen).toEqual(at(3));
   });
 
+  it("repairs a malformed lastSeen instead of throwing and going silent", async () => {
+    const { db, rows } = fakeDb();
+    const input = {
+      userId: USER,
+      track: "ip" as const,
+      value: "1.1.1.1",
+      source: "session" as const,
+    };
+    await recordIdentityObservation(db, { ...input, observedAt: at(1) });
+    // Simulate a schemaless row that lost its Date type.
+    (rows[0] as unknown as { lastSeen: unknown }).lastSeen = "2026-09-01";
+    const result = await recordIdentityObservation(db, { ...input, observedAt: at(2) });
+    expect(result).toBe("extended");
+    expect(rows[0].lastSeen).toEqual(at(2));
+  });
+
   it("keeps the two tracks independent", async () => {
     const { db, rows } = fakeDb();
     await recordIdentityObservation(db, {

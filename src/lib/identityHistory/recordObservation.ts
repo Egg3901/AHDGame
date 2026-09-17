@@ -56,10 +56,21 @@ export async function recordIdentityObservation(
   const openRun = await collection.findOne({ userId, track }, { sort: { lastSeen: -1 } });
 
   if (openRun && openRun.value === value && openRun._id) {
+    // Mongo enforces no schema, so a row can carry a malformed `lastSeen` where
+    // the type promises a Date (same hazard `isUsableDate` guards in
+    // src/lib/auth/identitySignals.ts). Calling .getTime() on one would throw
+    // into this module's fire-and-forget callers and silently disable capture
+    // for this user and track FOREVER, because a bad row keeps sorting to the
+    // top. Treat it as "not debounced" instead, so the update below runs and
+    // repairs `lastSeen` to a real Date.
+    const lastSeenMs = openRun.lastSeen instanceof Date ? openRun.lastSeen.getTime() : Number.NaN;
     // A negative delta (clock skew, or an out-of-order fire-and-forget landing
     // late) also lands here, which is what we want: never move `lastSeen`
     // backwards, because it is the TTL anchor.
-    if (observedAt.getTime() - openRun.lastSeen.getTime() < IDENTITY_OBSERVATION_DEBOUNCE_MS) {
+    if (
+      Number.isFinite(lastSeenMs) &&
+      observedAt.getTime() - lastSeenMs < IDENTITY_OBSERVATION_DEBOUNCE_MS
+    ) {
       return "debounced";
     }
     await collection.updateOne(
