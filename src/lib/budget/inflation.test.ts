@@ -887,7 +887,9 @@ describe("Bretton Woods money-growth coefficient (issue #7)", () => {
     expect(postExit).toBeGreaterThan(PEGGED_MONEY_GROWTH_COEFF);
     const pegged = calculateInflationWithBreakdown(excessMoney);
     const floated = calculateInflationWithBreakdown({ ...excessMoney, moneyGrowthCoeff: postExit });
-    expect(floated.breakdown.moneySupply).toBeGreaterThan(pegged.breakdown.moneySupply);
+    expect(floated.breakdown.moneySupply).toBeDefined();
+    expect(pegged.breakdown.moneySupply).toBeDefined();
+    expect(floated.breakdown.moneySupply!).toBeGreaterThan(pegged.breakdown.moneySupply!);
     expect(calculateInflation({ ...excessMoney, moneyGrowthCoeff: postExit })).toBeGreaterThan(
       calculateInflation(excessMoney)
     );
