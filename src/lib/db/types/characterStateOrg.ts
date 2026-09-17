@@ -19,4 +19,8 @@ export interface CharacterStateOrg {
   level: number;
   totalInvested: number;
   updatedAt: Date;
+  /** Latest successful build receipt. Legacy rows have no receipt and need no backfill. */
+  lastBuildAt?: Date;
+  /** Funds actually debited in the campaign currency, not a reconstructed quote. */
+  lastBuildFunds?: number;
 }

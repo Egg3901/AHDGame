@@ -8,7 +8,10 @@ import {
 } from "../shared";
 
 /** Soviet of the Union — seats per region = the live region doc's houseDistricts. */
-export async function ensureRUSupremeSovietElections(now: Date): Promise<void> {
+export async function ensureRUSupremeSovietElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "RU",
@@ -19,12 +22,16 @@ export async function ensureRUSupremeSovietElections(now: Date): Promise<void> {
       electionsLiveGate: ruElectionsLive,
       label: "Supreme Soviet",
     },
-    now
+    now,
+    inFlightTurn
   );
 }
 
 /** Soviet of Nationalities — republic-weighted D11 map, same-day as the Union. */
-export async function ensureRUNationalitiesElections(now: Date): Promise<void> {
+export async function ensureRUNationalitiesElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "RU",
@@ -35,7 +42,8 @@ export async function ensureRUNationalitiesElections(now: Date): Promise<void> {
       electionsLiveGate: ruElectionsLive,
       label: "Nationalities",
     },
-    now
+    now,
+    inFlightTurn
   );
 }
 
@@ -46,7 +54,10 @@ export async function ensureRUNationalitiesElections(now: Date): Promise<void> {
  * election totals, the admin seat panel, and state-bill passage thresholds
  * on one source of truth (amended D11 — user decision 2026-07-20).
  */
-export async function ensureRURepublicSovietElections(now: Date): Promise<void> {
+export async function ensureRURepublicSovietElections(
+  now: Date,
+  inFlightTurn?: number
+): Promise<void> {
   await ensureRegionalDelegateElections(
     {
       countryId: "RU",
@@ -57,7 +68,8 @@ export async function ensureRURepublicSovietElections(now: Date): Promise<void> 
       electionsLiveGate: ruElectionsLive,
       label: "Republic Soviet",
     },
-    now
+    now,
+    inFlightTurn
   );
 }
 
@@ -66,10 +78,10 @@ export async function ensureRURepublicSovietElections(now: Date): Promise<void> 
  * override (ruRepublicSoviet, threaded via countryId). The shared helper has
  * no status gate, so the RU wrapper adds it (the NG pattern).
  */
-export async function ensureRUGovernorElections(now: Date): Promise<void> {
+export async function ensureRUGovernorElections(now: Date, inFlightTurn?: number): Promise<void> {
   const db = await getDb();
   if (!(await ruElectionsLive(db))) return;
-  await ensureRegionalGovernorElections("RU", now);
+  await ensureRegionalGovernorElections("RU", now, undefined, inFlightTurn);
 }
 
 // ─── East Germany: Volkskammer ──────────────────────────────────────────────

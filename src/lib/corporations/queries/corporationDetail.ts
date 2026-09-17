@@ -222,6 +222,7 @@ export async function loadCorporationDetailView(args: {
       ...brandLoyaltyFields,
       /** True when this world runs `marketSystemMode >= "plants"`. */
       plantsMode,
+      labourEnabled: labourWagesEnabled,
       /** Corp-wide physical rollups; null outside plants. */
       physical,
       averageQuality:
