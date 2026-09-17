@@ -29,12 +29,8 @@
 import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { MongoClient, type Db, type Collection } from "mongodb";
-// Canonical tier list — a local literal here silently omitted every tier added
-// after it was written (it stopped at "capital", so a "plants" job was rejected
-// as invalid). Pure constant module: no Mongo, no env, safe to import eagerly.
-import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
-import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
+import { assertSafeToken, buildRunWorldArgs } from "./simJobArgs";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
 const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
@@ -88,21 +84,6 @@ if (OPS_MONGODB_URI === SIM_MONGODB_URI && !ALLOW_SHARED_MONGO) {
       "SIM_ALLOW_SHARED_MONGO=1 to allow it. Never set that on the ops box."
   );
   process.exit(1);
-}
-
-/** Pattern every job-derived value (id/seed/preset/dbName) must match before it's used
- * as a Mongo db name or passed as a child-process CLI arg — both have their own
- * restricted character sets (Mongo db names reject /\. "$*<>:|?), and this keeps
- * job documents from ever injecting something unexpected into either. */
-const SAFE_TOKEN = /^[a-zA-Z0-9_-]{1,64}$/;
-
-function assertSafeToken(value: string, field: string): string {
-  if (!SAFE_TOKEN.test(value)) {
-    throw new Error(
-      `Job field "${field}" failed validation (got ${JSON.stringify(value)}): must match ${SAFE_TOKEN}`
-    );
-  }
-  return value;
 }
 
 interface SimJob {
@@ -282,108 +263,10 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       `--db=${job.dbName}`,
       `--run-id=${job._id}`,
       ...(job.cloneFromLive ? ["--clone-mode"] : []),
+      // Conditional experiment overrides (see simJobArgs.ts). Explicit true
+      // AND false are both emitted so control arms stay explicit.
+      ...buildRunWorldArgs(job),
     ];
-    // Structural-market rollout tier (enum, not a free token) — passed through
-    // to runWorld.ts, which patches the sandbox gameConfig after bootstrap.
-    if (job.marketSystemMode) {
-      if (!MARKET_MODE_ORDER.includes(job.marketSystemMode as MarketSystemMode)) {
-        throw new Error(`invalid marketSystemMode "${job.marketSystemMode}"`);
-      }
-      runWorldArgs.push(`--market-mode=${job.marketSystemMode}`);
-    }
-    // Labour rollout tier, same treatment. Both tiers were raised together when
-    // fresh worlds took the production posture, but only the market half could
-    // be driven from here, so an MCP-launched A/B held labour at the preset
-    // default while reporting itself as a controlled comparison.
-    if (job.labourSystemMode) {
-      if (!LABOUR_MODE_ORDER.includes(job.labourSystemMode as LabourSystemMode)) {
-        throw new Error(`invalid labourSystemMode "${job.labourSystemMode}"`);
-      }
-      runWorldArgs.push(`--labour-mode=${job.labourSystemMode}`);
-    }
-    if (job.freightSettlementMode) {
-      if (!(["shadow", "active"] as const).includes(job.freightSettlementMode)) {
-        throw new Error(`invalid freightSettlementMode "${job.freightSettlementMode}"`);
-      }
-      runWorldArgs.push(`--freight-settlement=${job.freightSettlementMode}`);
-    }
-    if (job.canonicalFreightBillingEnabled !== undefined) {
-      if (typeof job.canonicalFreightBillingEnabled !== "boolean") {
-        throw new Error("canonicalFreightBillingEnabled must be boolean");
-      }
-      runWorldArgs.push(
-        `--canonical-freight-billing=${String(job.canonicalFreightBillingEnabled)}`
-      );
-    }
-    if (job.shortageResponsiveSourcingEnabled !== undefined) {
-      if (typeof job.shortageResponsiveSourcingEnabled !== "boolean") {
-        throw new Error("shortageResponsiveSourcingEnabled must be boolean");
-      }
-      runWorldArgs.push(
-        `--shortage-responsive-sourcing=${String(job.shortageResponsiveSourcingEnabled)}`
-      );
-    }
-    if (job.indexFundBondLiquidityEnabled !== undefined) {
-      if (typeof job.indexFundBondLiquidityEnabled !== "boolean") {
-        throw new Error("indexFundBondLiquidityEnabled must be boolean");
-      }
-      runWorldArgs.push(`--index-fund-bond-liquidity=${String(job.indexFundBondLiquidityEnabled)}`);
-    }
-    if (job.equityLiquidityFacilityEnabled !== undefined) {
-      if (typeof job.equityLiquidityFacilityEnabled !== "boolean") {
-        throw new Error("equityLiquidityFacilityEnabled must be boolean");
-      }
-      runWorldArgs.push(
-        `--equity-liquidity-facility=${String(job.equityLiquidityFacilityEnabled)}`
-      );
-    }
-    if (job.nppMarketCoverageEnabled !== undefined) {
-      if (typeof job.nppMarketCoverageEnabled !== "boolean") {
-        throw new Error("nppMarketCoverageEnabled must be boolean");
-      }
-      runWorldArgs.push(`--npp-market-coverage=${String(job.nppMarketCoverageEnabled)}`);
-    }
-    if (job.nppFragileMarketSupplyEnabled !== undefined) {
-      if (typeof job.nppFragileMarketSupplyEnabled !== "boolean") {
-        throw new Error("nppFragileMarketSupplyEnabled must be boolean");
-      }
-      runWorldArgs.push(`--npp-fragile-market-supply=${String(job.nppFragileMarketSupplyEnabled)}`);
-    }
-    if (job.allFeatureFlags !== undefined) {
-      if (typeof job.allFeatureFlags !== "boolean") {
-        throw new Error("allFeatureFlags must be boolean");
-      }
-      if (job.allFeatureFlags) runWorldArgs.push("--all-feature-flags");
-    }
-    // NPP autonomy tier. Without this an MCP-launched run silently used the
-    // harness default (v3) while hand-launched runs used v4, so the two were not
-    // comparable and the MCP could not reproduce a long full-world run.
-    const AUTONOMY_LEVELS = ["v3", "v4", "v5"];
-    if (job.autonomyLevel) {
-      if (!AUTONOMY_LEVELS.includes(job.autonomyLevel)) {
-        throw new Error(`invalid autonomyLevel "${job.autonomyLevel}"`);
-      }
-      runWorldArgs.push(`--autonomy=${job.autonomyLevel}`);
-    }
-    // Elections-only turn profile + country scope (sim-only). runWorld.ts writes
-    // gameConfig.simTurnPhaseMode (skips economy phases) and scopes election
-    // spawning via countryGameStates.
-    const SIM_TURN_PHASE_MODES = ["full", "elections-only"];
-    if (job.mode) {
-      if (!SIM_TURN_PHASE_MODES.includes(job.mode)) {
-        throw new Error(`invalid mode "${job.mode}"`);
-      }
-      runWorldArgs.push(`--mode=${job.mode}`);
-    }
-    if (job.countries) {
-      // Comma-separated ids become part of a child-process argv — validate each.
-      const ids = job.countries
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean);
-      for (const id of ids) assertSafeToken(id, "countries[]");
-      if (ids.length) runWorldArgs.push(`--countries=${ids.join(",")}`);
-    }
     const { code } = await run("scripts/sim/runWorld.ts", runWorldArgs, runWorldEnv);
 
     clearInterval(statusMirror);
