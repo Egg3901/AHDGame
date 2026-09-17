@@ -4,7 +4,7 @@ import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { checkFederalBudgetInvariants, reconcileFederalBudgetInvariants } from "./budgetInvariants";
 import { federalSurplus } from "./federalSurplus";
-import { resyncFederalBudgetDebtFromBalance } from "./treasurySpend";
+import { sumOutstandingSovereignPrincipal } from "@/lib/bonds/sovereignPrincipal";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -97,18 +97,17 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + balance w
     expect(r).toEqual({ checked: 3, corrected: 0, skipped: 0 });
   });
 
-  it("resyncs debt principal after a blind treasury-balance move", async () => {
+  it("leaves bond-owned principal alone after a blind treasury-balance move", async () => {
     const db = await setup();
+    const [before] = (await readBudgets(db)).filter((b) => b.countryId === "GR");
+    const storedPrincipal = before!.debt?.principal ?? 0;
     await db
       .collection<FederalBudget>("federalBudget")
       .updateOne({ _id: "GR" }, { $inc: { treasuryBalance: 4_000_000 } });
-    let [gr] = (await readBudgets(db)).filter((b) => b.countryId === "GR");
-    expect(checkFederalBudgetInvariants(gr!).map((x) => x.field)).toContain("debtPrincipal");
-
-    await resyncFederalBudgetDebtFromBalance(db, { _id: "GR" });
-    [gr] = (await readBudgets(db)).filter((b) => b.countryId === "GR");
-    expect(checkFederalBudgetInvariants(gr!)).toEqual([]);
-    expect(gr!.debt?.principal).toBe(Math.max(0, -(gr!.treasuryBalance ?? 0)));
+    const [gr] = (await readBudgets(db)).filter((b) => b.countryId === "GR");
+    // Cash moved; the bond ledger owns principal, so the stored stock is untouched.
+    expect(gr!.debt?.principal).toBe(storedPrincipal);
+    expect(sumOutstandingSovereignPrincipal([])).toBe(0);
   });
 
   it("keeps the triple coherent through a deposit-insurance backstop debit", async () => {
@@ -127,6 +126,6 @@ describe("federal budget end-of-turn coherence (#1975 slice: surplus + balance w
     const docs = await readBudgets(db);
     const leg = docs.find((b) => b.countryId === "LEG")!;
     expect(checkFederalBudgetInvariants(leg)).toEqual([]);
-    await expect(resyncFederalBudgetDebtFromBalance(db, { _id: "LEG" })).resolves.toBeUndefined();
+    expect(sumOutstandingSovereignPrincipal([])).toBe(0);
   });
 });

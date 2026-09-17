@@ -4,7 +4,6 @@ import type { CountryId } from "@/lib/constants/countries";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { writeGovBudgetLocal } from "@/lib/currency/govBudgetFields";
 import { getCurrencyFxRate } from "@/lib/currency/corporationCapital";
-import { resyncFederalBudgetDebtFromBalance } from "@/lib/budget/treasurySpend";
 
 /**
  * Government cash account for nationalization money flows.
@@ -21,11 +20,9 @@ import { resyncFederalBudgetDebtFromBalance } from "@/lib/budget/treasurySpend";
 /**
  * Move `delta` (signed, country-local currency) on the country's treasury balance.
  *
- * Every nationalization/SOE/privatization cash flow funnels through here, so this
- * is also where the balance-derived debt chain is resynced: `debt.principal` is a
- * cache of `max(0, -treasuryBalance)` and a bare `$inc` would leave it stale and
- * trip the end-of-turn budget invariant (#1975). The `$inc` itself is kept (it
- * preserves concurrent updates); the resync reads the post-write balance.
+ * Every nationalization/SOE/privatization cash flow funnels through here as a
+ * cash-only `$inc` (concurrent-safe). `debt.principal` belongs to the bond
+ * ledger (see bonds/sovereignPrincipal.ts) and is correctly left alone (#1975).
  */
 async function incTreasuryBalance(
   db: Db,
@@ -36,7 +33,6 @@ async function incTreasuryBalance(
   await db
     .collection<FederalBudget>("federalBudget")
     .updateOne({ countryId }, { $inc: { treasuryBalance: delta }, $set: { updatedAt: now } });
-  await resyncFederalBudgetDebtFromBalance(db, { countryId });
 }
 
 /**

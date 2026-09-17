@@ -51,6 +51,11 @@ import {
   recordSovereignPrimaryFill,
 } from "@/lib/bonds/primaryMarket";
 import { createNotifications } from "@/lib/notifications";
+import {
+  sovereignBondOutstanding,
+  sumOutstandingSovereignPrincipal,
+  sovereignDebtTerms,
+} from "@/lib/bonds/sovereignPrincipal";
 
 export const SOVEREIGN_ISSUANCE_INTERVAL_TURNS = 12;
 export const SOVEREIGN_BOND_MATURITY_TURNS: BondMaturityTurns = 48;
@@ -802,15 +807,26 @@ export async function reconcileSovereignDebt(
 
 export async function settleSovereignBondMaturity(
   db: Db,
-  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued">
+  bond: Pick<Bond, "countryId" | "couponRate" | "totalIssued" | "restructureHaircutPercent">
 ): Promise<void> {
   if (!bond.countryId) return;
   const budgetId = getNationalBudgetId(bond.countryId);
   const budget = await db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId });
   if (!budget) return;
 
+  // Net exactly this bond's outstanding contribution (face minus any restructure
+  // haircut, see sovereignPrincipal.ts), not raw face: a haircut bond carries
+  // only its written-down stock on the books, so redeeming full face would push
+  // principal below the remaining outstanding sum (#1975).
+  const maturedFace = sovereignBondOutstanding({
+    issuerType: "sovereign",
+    matured: false,
+    defaulted: false,
+    totalIssued: bond.totalIssued,
+    restructureHaircutPercent: bond.restructureHaircutPercent ?? null,
+  });
   const annualCouponCost = (bond.couponRate / 100) * bond.totalIssued;
-  const budgetUpdate = applySovereignDebtAdjustment(budget, -bond.totalIssued, -annualCouponCost);
+  const budgetUpdate = applySovereignDebtAdjustment(budget, -maturedFace, -annualCouponCost);
 
   await db.collection<FederalBudget>("federalBudget").updateOne(
     { _id: budgetId },
@@ -825,6 +841,62 @@ export async function settleSovereignBondMaturity(
       },
     }
   );
+}
+
+export interface SovereignPrincipalResync {
+  countryId: CountryId;
+  stored: number;
+  outstanding: number;
+  corrected: boolean;
+}
+
+/**
+ * Re-point a country's stored `debt.principal` at its authoritative outstanding
+ * bond stock (see sovereignPrincipal.ts) and refresh the debt-service terms off
+ * that stock. Treasury cash is deliberately untouched: a haircut, repudiation,
+ * or merge writes down obligations, never cash (#1975).
+ *
+ * Idempotent: a pure function of the bonds read, so crash/retry replay and the
+ * end-of-turn hygiene pass converge to the same value.
+ */
+export async function resyncSovereignPrincipalFromBonds(
+  db: Db,
+  countryId: CountryId
+): Promise<SovereignPrincipalResync | null> {
+  const budgetId = getNationalBudgetId(countryId);
+  const [budget, bonds] = await Promise.all([
+    db.collection<FederalBudget>("federalBudget").findOne({ _id: budgetId }),
+    db
+      .collection<Bond>("bonds")
+      .find(
+        { issuerType: "sovereign", countryId, matured: false, defaulted: false },
+        { projection: { totalIssued: 1, restructureHaircutPercent: 1 } }
+      )
+      .toArray(),
+  ]);
+  if (!budget || !budget.debt) return null;
+  const outstanding = Math.round(sumOutstandingSovereignPrincipal(bonds));
+  const stored = budget.debt.principal ?? 0;
+  const terms = sovereignDebtTerms(outstanding, {
+    gdp: budget.gdp ?? 0,
+    gdpSmoothed: budget.gdpSmoothed,
+    investorConfidence: budget.investorConfidence,
+    imfBailoutActive: budget.imfSovereignBailoutActive,
+    sovereignRiskAnchor: budget.sovereignRiskAnchor,
+  });
+  await db.collection<FederalBudget>("federalBudget").updateOne(
+    { _id: budgetId },
+    {
+      $set: {
+        "debt.principal": outstanding,
+        "debt.interestRate": terms.interestRate,
+        debtToGdpRatio: terms.debtToGdpRatio,
+        creditRating: terms.creditRating,
+        updatedAt: new Date(),
+      },
+    }
+  );
+  return { countryId, stored, outstanding, corrected: stored !== outstanding };
 }
 
 /**
