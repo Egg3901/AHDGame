@@ -49,6 +49,7 @@ import {
   getDonorActionCost,
   getActionPointCost,
   simulateActionBatch,
+  type ActionEffectContext,
 } from "../actions";
 
 function makeCharacter(overrides: Partial<Character>): Character {
@@ -711,6 +712,16 @@ function cn1953Target(preset?: string) {
   };
 }
 
+// Effect context for preset-parity checks: the assertions compare debited
+// ANCHOR units, never the rendered message, so the formatter is the same
+// bare-number fallback canPerformAction uses for non-rendering callers.
+function presetEffectCtx(preset: "1953-default" | undefined): ActionEffectContext {
+  return {
+    preset,
+    formatFunds: (anchor) => Math.round(anchor).toLocaleString(),
+  };
+}
+
 describe("GDP-baseline preset is load-bearing in every GDP-scaled quote", () => {
   it("campaign quotes the era baseline when preset is threaded, the modern floor when omitted", () => {
     const actor = { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 };
@@ -770,7 +781,7 @@ describe("GDP-baseline preset parity between UI quote and execution", () => {
       expect(quote.ok).toBe(true);
       if (!quote.ok) continue;
       const char = campaignCharacter(0, 5.5, 5.5, { countryId: "CN" });
-      const effect = ACTIONS.campaign.effect(char, state, { preset });
+      const effect = ACTIONS.campaign.effect(char, state, presetEffectCtx(preset));
       expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
       expect(effect.politicalInfluenceChange).toBe(quote.influenceGain);
     }
@@ -788,7 +799,7 @@ describe("GDP-baseline preset parity between UI quote and execution", () => {
         countryId: "CN",
         stats: { ...NEUTRAL_STATS, charisma: 5.5 },
       });
-      const effect = ACTIONS.advertise.effect(char, state, { preset });
+      const effect = ACTIONS.advertise.effect(char, state, presetEffectCtx(preset));
       expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
       expect(effect.favorabilityChange).toBe(quote.favorabilityGain);
     }
@@ -803,7 +814,7 @@ describe("GDP-baseline preset parity between UI quote and execution", () => {
       expect(quote.ok).toBe(true);
       if (!quote.ok) continue;
       const char = donorCharacter(10, 5.5, { countryId: "CN" });
-      const effect = ACTIONS.buildDonorBase.effect(char, state, { preset });
+      const effect = ACTIONS.buildDonorBase.effect(char, state, presetEffectCtx(preset));
       expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
       expect(effect.donorBaseLevelChange).toBe(quote.donorGain);
     }

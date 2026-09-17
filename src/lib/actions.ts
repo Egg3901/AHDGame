@@ -649,7 +649,10 @@ export function canPerformAction(
   // Check funds for actions that cost money. effect.fundsChange is ANCHOR; the
   // stored balance is LOCAL. Compare and report in LOCAL home currency — campaign
   // funds live in local and the UI must never surface anchor (₳) to the player.
-  const effect = action.effect(character, state, { formatFunds: plainFunds, preset: options?.preset });
+  const effect = action.effect(character, state, {
+    formatFunds: plainFunds,
+    preset: options?.preset,
+  });
   if (effect.fundsChange && effect.fundsChange < 0) {
     const costAnchor = Math.abs(effect.fundsChange);
     const balanceLocal = character.currencyBalances?.campaign ?? character.funds ?? 0;
