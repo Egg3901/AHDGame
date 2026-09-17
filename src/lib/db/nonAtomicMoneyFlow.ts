@@ -136,6 +136,13 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * order, same-key replay/resume/terminal semantics, key-only orphan
  * recovery re-driven by the turn driver before its scan; the driver tallies
  * guarded transitions, mirroring the legacy modifiedCount).
+ * State-org build is migrated (campaign actions + treasury debit via a
+ * keyed leg with the extra actions guard, then the throttle/level-guarded
+ * org upsert as a terminal keyed step via the stateOrgBuildSpend primitive,
+ * with the same-key E11000 retry converging to already-applied; a lost race
+ * compensates the debit and reports the historical ORG_RACE_OR_THROTTLE 409,
+ * with Idempotency-Key validation/forwarding and route-level
+ * replay/terminal/conflict tests).
  * Forex turn chair interventions are migrated
  * (applyForexInterventionSpend: deterministic per-turn key, resume plan
  * persisted on the receipt at claim, keyed rate-writeback + combined
@@ -157,7 +164,7 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
  * are keyed; surrounding equity/dividend/cross-fund writes are not),
- * directAction, state-org build — multi-write status machines, positional
+ * directAction — multi-write status machines, positional
  * holder claims, and bulkWrite batches that need reserve/order/history
  * support beyond keyed single-document writes.
  * Military recruitment sits outside even that: manual unwind (ministerial

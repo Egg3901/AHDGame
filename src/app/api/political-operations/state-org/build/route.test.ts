@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ObjectId, MongoServerError } from "mongodb";
-import { stateOrgLevelCost } from "@/lib/electionEngine/constants";
+import { ObjectId } from "mongodb";
+import { stateOrgLevelCost, STATE_ORG_COST_ACTIONS } from "@/lib/electionEngine/constants";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 
 vi.mock("@/lib/mongodb", () => ({
   getDb: vi.fn(),
@@ -29,12 +33,16 @@ vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(false),
 }));
 
-vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
-  runWithOptionalTransaction: vi.fn().mockImplementation(async (tx) => {
-    const mockSession = {} as never;
-    await tx(mockSession);
-  }),
-}));
+vi.mock("@/lib/elections/stateOrgBuildSpend", async () => {
+  const actual =
+    await vi.importActual<typeof import("@/lib/elections/stateOrgBuildSpend")>(
+      "@/lib/elections/stateOrgBuildSpend"
+    );
+  return {
+    ...actual,
+    applyStateOrgBuildSpend: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/time/gameTime", () => ({
   getGameTime: vi.fn(),
@@ -68,6 +76,13 @@ describe("POST /api/political-operations/state-org/build", () => {
     }
   >;
 
+  const buildRequest = (body: unknown, headers?: Record<string, string>) =>
+    new Request("http://localhost/api/political-operations/state-org/build", {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify(body),
+    });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
@@ -94,6 +109,13 @@ describe("POST /api/political-operations/state-org/build", () => {
       pausedAt: null,
       effectiveNow: turnStart,
       startingYear: 2019,
+    });
+
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+    vi.mocked(applyStateOrgBuildSpend).mockResolvedValue({
+      duplicate: false,
+      level: 1,
+      totalInvested: STATE_ORG_COST_ACTIONS,
     });
   });
 
@@ -137,6 +159,25 @@ describe("POST /api/political-operations/state-org/build", () => {
     return mockDb;
   }
 
+  async function setupSuccessOrg(level = 0) {
+    await setupDb({
+      characters: { findOne: vi.fn().mockResolvedValue({ ...baseCharacter }) },
+      campaigns: campaignFixture(),
+      characterStateOrg: {
+        findOne: vi.fn().mockResolvedValue(
+          level === 0
+            ? null
+            : {
+                characterId: mockCharacterId,
+                stateId: "PA",
+                level,
+                totalInvested: level * STATE_ORG_COST_ACTIONS,
+              }
+        ),
+      },
+    });
+  }
+
   it("returns 403 when the character is not US", async () => {
     const { requireAuthWithCharacter } = await import("@/lib/api/requireAuth");
     vi.mocked(requireAuthWithCharacter).mockResolvedValue({
@@ -154,12 +195,7 @@ describe("POST /api/political-operations/state-org/build", () => {
     await setupDb({});
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
+    const response = await POST(buildRequest({ stateId: "PA" }));
     expect(response.status).toBe(403);
   });
 
@@ -167,50 +203,18 @@ describe("POST /api/political-operations/state-org/build", () => {
     await setupDb({});
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "ZZ" }),
-      })
-    );
+    const response = await POST(buildRequest({ stateId: "ZZ" }));
     expect(response.status).toBe(400);
   });
 
-  it("allows building a personal campaign presence in territorial Alaska", async () => {
-    const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
-      _id: new ObjectId(),
-      characterId: mockCharacterId,
-      stateId: "AK",
-      level: 1,
-      totalInvested: 3,
-      updatedAt: new Date(),
-    });
-    await setupDb({
-      characters: {
-        findOne: vi.fn().mockResolvedValue({ ...baseCharacter }),
-        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
-      },
-      campaigns: campaignFixture(),
-      characterStateOrg: {
-        findOne: vi.fn().mockResolvedValue({ level: 1, totalInvested: 3 }),
-        findOneAndUpdate: orgFindOneAndUpdate,
-      },
-    });
+  it("returns 400 for an over-long Idempotency-Key header", async () => {
+    await setupSuccessOrg();
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "AK" }),
-      })
-    );
-
-    expect(response.status).toBe(200);
-    expect(orgFindOneAndUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ stateId: "AK" }),
-      expect.anything(),
-      expect.anything()
-    );
+    const response = await POST(buildRequest({ stateId: "PA" }, { "Idempotency-Key": "k".repeat(129) }));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body.error).toMatch(/idempotency/i);
   });
 
   it("returns 400 when the character has no active campaign", async () => {
@@ -223,46 +227,10 @@ describe("POST /api/political-operations/state-org/build", () => {
     });
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
+    const response = await POST(buildRequest({ stateId: "PA" }));
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error).toMatch(/active campaign/i);
-  });
-
-  it("prices the next level off the current one (escalating cost)", async () => {
-    // The curve is what keeps an uncapped ladder from being a flat toll, so the
-    // route must price level N+1, not a constant.
-    const campaignUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    await setupDb({
-      characterStateOrg: {
-        findOne: vi.fn().mockResolvedValue({ level: 7, totalInvested: 21 }),
-        findOneAndUpdate: vi.fn().mockResolvedValue({ level: 8, totalInvested: 24 }),
-      },
-      characters: { findOne: vi.fn().mockResolvedValue({ ...baseCharacter }) },
-      campaigns: {
-        findOne: vi
-          .fn()
-          .mockResolvedValue({ _id: mockCampaignId, actions: 50, funds: 100_000_000 }),
-        updateOne: campaignUpdateOne,
-      },
-    });
-
-    const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
-    expect(response.status).toBe(200);
-    expect(campaignUpdateOne.mock.calls[0][1].$inc.funds).toBe(-stateOrgLevelCost(7));
-    // Level 8 must cost strictly more than level 1 — the whole point.
-    expect(stateOrgLevelCost(7)).toBeGreaterThan(stateOrgLevelCost(0));
   });
 
   it("returns 400 when the CAMPAIGN has insufficient actions", async () => {
@@ -289,256 +257,151 @@ describe("POST /api/political-operations/state-org/build", () => {
     });
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
+    const response = await POST(buildRequest({ stateId: "PA" }));
     expect(response.status).toBe(400);
     const body = await response.json();
     expect(body.error).toMatch(/actions/i);
   });
 
-  it("increments level on success and debits actions + funds (pre-forex)", async () => {
-    const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
-      _id: new ObjectId(),
-      characterId: mockCharacterId,
-      stateId: "PA",
-      level: 1,
-      totalInvested: 3,
-      updatedAt: new Date(),
-    });
-    const orgFindOnePostRead = vi.fn().mockResolvedValue({
-      _id: new ObjectId(),
-      characterId: mockCharacterId,
-      stateId: "PA",
-      level: 1,
-      totalInvested: 3,
-    });
-    const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
-    const campaignUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-
+  it("returns 400 when the CAMPAIGN cannot afford the priced level", async () => {
     await setupDb({
-      characterStateOrg: {
-        findOne: orgFindOnePostRead,
-        findOneAndUpdate: orgFindOneAndUpdate,
-      },
-      characters: { findOne: charFindOne, updateOne: charUpdateOne },
-      campaigns: {
-        findOne: vi
-          .fn()
-          .mockResolvedValue({ _id: mockCampaignId, actions: 50, funds: 100_000_000 }),
-        updateOne: campaignUpdateOne,
-      },
+      characters: { findOne: vi.fn().mockResolvedValue({ ...baseCharacter }) },
+      campaigns: campaignFixture({ funds: 1 }),
+      characterStateOrg: { findOne: vi.fn().mockResolvedValue(null) },
     });
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
-    expect(response.status).toBe(200);
+    const response = await POST(buildRequest({ stateId: "PA" }));
+    expect(response.status).toBe(400);
     const body = await response.json();
-    expect(body.level).toBe(1);
-    expect(body.totalInvested).toBe(3);
-
-    // Debit lands on the CAMPAIGN, not the character. The org doc reports
-    // level 1 pre-build, so the price is the level-1→2 rung of the escalating
-    // curve, asserted through the helper rather than a literal.
-    const expectedCost = stateOrgLevelCost(1);
-    const campCall = campaignUpdateOne.mock.calls[0];
-    expect(campCall[0]).toMatchObject({
-      _id: mockCampaignId,
-      actions: { $gte: 3 },
-      funds: { $gte: expectedCost },
-    });
-    expect(campCall[1].$inc).toMatchObject({
-      actions: -3,
-      funds: -expectedCost,
-    });
-    expect(charUpdateOne).not.toHaveBeenCalled();
-
-    // Atomic findOneAndUpdate carries the throttle + price-stability guards and uses $inc
-    // so two parallel requests cannot bypass the throttle.
-    expect(orgFindOneAndUpdate).toHaveBeenCalled();
-    const orgCall = orgFindOneAndUpdate.mock.calls[0];
-    expect(orgCall[0]).toMatchObject({ characterId: mockCharacterId, stateId: "PA" });
-    expect(orgCall[0].$or).toBeDefined();
-    expect(orgCall[1].$inc).toMatchObject({ level: 1, totalInvested: 3 });
-    expect(orgCall[2]).toMatchObject({ upsert: true, returnDocument: "after" });
+    expect(body.error).toMatch(/funds/i);
   });
 
-  it("returns 409 (not 500) when the upsert races into an E11000 duplicate key", async () => {
-    // A doc already exists for { characterId, stateId } but no longer matches
-    // the throttle/level filter, so upsert attempts an insert and the unique
-    // index throws E11000. This is the race/throttle loser, not a server error.
-    const dupErr = new MongoServerError({
-      message:
-        "E11000 duplicate key error collection: a-house-divided.characterStateOrg index: characterId_1_stateId_1",
-    });
-    dupErr.code = 11000;
-    dupErr.keyPattern = { characterId: 1, stateId: 1 };
-
-    const orgFindOneAndUpdate = vi.fn().mockRejectedValue(dupErr);
-    const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
-
-    await setupDb({
-      characterStateOrg: {
-        findOne: vi.fn().mockResolvedValue(null),
-        findOneAndUpdate: orgFindOneAndUpdate,
-      },
-      campaigns: campaignFixture(),
-      characters: { findOne: charFindOne, updateOne: charUpdateOne },
+  it("forwards the priced build to the spend primitive and returns its post-image", async () => {
+    await setupSuccessOrg(7);
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+    vi.mocked(applyStateOrgBuildSpend).mockResolvedValue({
+      duplicate: false,
+      level: 8,
+      totalInvested: 24,
     });
 
     const { POST } = await import("./route");
+    const response = await POST(buildRequest({ stateId: "PA" }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ level: 8, totalInvested: 24, stateId: "PA" });
+
+    // The curve is what keeps an uncapped ladder from being a flat toll: the
+    // route prices level N+1 off the stored level and hands the exact rung to
+    // the primitive rather than a constant.
+    const call = vi.mocked(applyStateOrgBuildSpend).mock.calls[0]![1];
+    expect(call).toMatchObject({
+      campaignId: mockCampaignId,
+      characterId: mockCharacterId,
+      stateId: "PA",
+      currentLevel: 7,
+      actionCost: STATE_ORG_COST_ACTIONS,
+      fundCostLocal: stateOrgLevelCost(7),
+    });
+    expect(stateOrgLevelCost(7)).toBeGreaterThan(stateOrgLevelCost(0));
+    // No client key: the primitive mints one, so none is forwarded.
+    expect(call).not.toHaveProperty("idempotencyKey");
+    // The turn-based throttle cutoff travels with the priced build.
+    expect((call.throttleCutoff as Date).getTime()).toBe(turnStart.getTime());
+    expect(call.fingerprint).toContain("PA");
+  });
+
+  it("forwards a client Idempotency-Key to the spend primitive", async () => {
+    await setupSuccessOrg();
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+
+    const { POST } = await import("./route");
     const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
+      buildRequest({ stateId: "PA" }, { "Idempotency-Key": "client-key-1" })
+    );
+    expect(response.status).toBe(200);
+    expect(vi.mocked(applyStateOrgBuildSpend).mock.calls[0]![1]).toMatchObject({
+      idempotencyKey: "client-key-1",
+    });
+  });
+
+  it("maps a raced campaign debit to 409 without leaking the sentinel", async () => {
+    await setupSuccessOrg();
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+    vi.mocked(applyStateOrgBuildSpend).mockRejectedValue(
+      new Error("INSUFFICIENT_RESOURCES:guard-rejected")
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(buildRequest({ stateId: "PA" }));
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.error).toMatch(/changed/i);
+  });
+
+  it("maps a lost throttle/level race to the historical 409", async () => {
+    await setupSuccessOrg();
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+    vi.mocked(applyStateOrgBuildSpend).mockRejectedValue(
+      new Error("ORG_RACE_OR_THROTTLE:guard-rejected")
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(buildRequest({ stateId: "PA" }));
+    expect(response.status).toBe(409);
+    const body = await response.json();
+    expect(body.error).toMatch(/already built/i);
+  });
+
+  it("maps a settled key to 409 instead of charging again", async () => {
+    await setupSuccessOrg();
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+    vi.mocked(applyStateOrgBuildSpend).mockRejectedValue(
+      new MoneyFlowTerminalError("client-key-1", "compensated")
+    );
+
+    const { POST } = await import("./route");
+    const response = await POST(
+      buildRequest({ stateId: "PA" }, { "Idempotency-Key": "client-key-1" })
     );
     expect(response.status).toBe(409);
     const body = await response.json();
-    expect(body.error).toMatch(/already built|cap/i);
+    expect(body.error).toMatch(/new key/i);
   });
 
-  it("uses the last processed turn boundary as the throttle cutoff", async () => {
-    const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
-      _id: new ObjectId(),
-      characterId: mockCharacterId,
-      stateId: "PA",
-      level: 1,
-      totalInvested: 3,
-      updatedAt: new Date(),
-    });
-    const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
-
-    await setupDb({
-      characterStateOrg: {
-        findOne: vi.fn().mockResolvedValue({
-          characterId: mockCharacterId,
-          stateId: "PA",
-          level: 1,
-          totalInvested: 3,
-        }),
-        findOneAndUpdate: orgFindOneAndUpdate,
-      },
-      campaigns: campaignFixture(),
-      characters: { findOne: charFindOne, updateOne: charUpdateOne },
-    });
+  it("maps a reused key for a different build to 409", async () => {
+    await setupSuccessOrg();
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
+    vi.mocked(applyStateOrgBuildSpend).mockRejectedValue(
+      new MoneyFlowKeyConflictError("client-key-1")
+    );
 
     const { POST } = await import("./route");
     const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
-    expect(response.status).toBe(200);
-
-    const orgCall = orgFindOneAndUpdate.mock.calls[0];
-    expect(orgCall[0]).toMatchObject({
-      characterId: mockCharacterId,
-      stateId: "PA",
-    });
-    const throttleCondition = orgCall[0].$or?.find(
-      (clause: Record<string, unknown>) => clause.updatedAt && (clause.updatedAt as { $lt?: Date }).$lt
-    );
-    expect(throttleCondition).toBeDefined();
-    expect((throttleCondition.updatedAt as { $lt: Date }).$lt.getTime()).toBe(turnStart.getTime());
-  });
-
-  it("returns 409 when the existing org doc was already updated this turn", async () => {
-    const orgFindOneAndUpdate = vi.fn().mockResolvedValue(null);
-    const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
-
-    await setupDb({
-      characterStateOrg: {
-        findOne: vi.fn().mockResolvedValue({
-          characterId: mockCharacterId,
-          stateId: "PA",
-          level: 1,
-          totalInvested: 3,
-          updatedAt: new Date(turnStart.getTime() + 1000),
-        }),
-        findOneAndUpdate: orgFindOneAndUpdate,
-      },
-      campaigns: campaignFixture(),
-      characters: { findOne: charFindOne, updateOne: charUpdateOne },
-    });
-
-    const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
+      buildRequest({ stateId: "PA" }, { "Idempotency-Key": "client-key-1" })
     );
     expect(response.status).toBe(409);
     const body = await response.json();
-    expect(body.error).toMatch(/already built|cap/i);
+    expect(body.error).toMatch(/different build/i);
   });
 
-  it("allows a second build after the turn boundary advances", async () => {
-    const { getGameTime } = await import("@/lib/time/gameTime");
-    vi.mocked(getGameTime).mockResolvedValue({
-      currentTurn: 101,
-      lastTurnProcessed: new Date(turnStart.getTime() + 60 * 60 * 1000),
-      isActive: true,
-      pausedAt: null,
-      effectiveNow: new Date(turnStart.getTime() + 60 * 60 * 1000),
-      startingYear: 2019,
-    });
-
-    const orgFindOneAndUpdate = vi.fn().mockResolvedValue({
-      _id: new ObjectId(),
-      characterId: mockCharacterId,
-      stateId: "PA",
-      level: 2,
-      totalInvested: 6,
-      updatedAt: new Date(),
-    });
-    const orgFindOnePostRead = vi.fn().mockResolvedValue({
-      characterId: mockCharacterId,
-      stateId: "PA",
-      level: 2,
-      totalInvested: 6,
-    });
-    const charUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const charFindOne = vi.fn().mockResolvedValue({ ...baseCharacter });
-    const campaignUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-
+  it("allows building a personal campaign presence in territorial Alaska", async () => {
     await setupDb({
-      characterStateOrg: {
-        findOne: orgFindOnePostRead,
-        findOneAndUpdate: orgFindOneAndUpdate,
+      characters: {
+        findOne: vi.fn().mockResolvedValue({ ...baseCharacter }),
+        updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }),
       },
-      characters: { findOne: charFindOne, updateOne: charUpdateOne },
-      campaigns: {
-        findOne: vi
-          .fn()
-          .mockResolvedValue({ _id: mockCampaignId, actions: 50, funds: 100_000_000 }),
-        updateOne: campaignUpdateOne,
+      campaigns: campaignFixture(),
+      characterStateOrg: {
+        findOne: vi.fn().mockResolvedValue({ level: 1, totalInvested: 3 }),
+        findOneAndUpdate: vi.fn(),
       },
     });
+    const { applyStateOrgBuildSpend } = await import("@/lib/elections/stateOrgBuildSpend");
 
     const { POST } = await import("./route");
-    const response = await POST(
-      new Request("http://localhost/api/political-operations/state-org/build", {
-        method: "POST",
-        body: JSON.stringify({ stateId: "PA" }),
-      })
-    );
+    const response = await POST(buildRequest({ stateId: "AK" }));
     expect(response.status).toBe(200);
-    const body = await response.json();
-    expect(body.level).toBe(2);
+    expect(vi.mocked(applyStateOrgBuildSpend).mock.calls[0]![1]).toMatchObject({ stateId: "AK" });
   });
 });

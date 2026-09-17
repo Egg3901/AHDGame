@@ -13,35 +13,25 @@ import {
 } from "@/lib/electionEngine/constants";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyStateOrgBuildSpend,
+  buildStateOrgBuildFingerprint,
+  STATE_ORG_INSUFFICIENT_RESOURCES,
+  STATE_ORG_RACE_OR_THROTTLE,
+} from "@/lib/elections/stateOrgBuildSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   loadUsPoliticalStateIds,
   unplayableTerritoryHomeError,
 } from "@/lib/elections/usPoliticalHome";
 import { isUsResidentPoliticalRegion } from "@/lib/elections/statehoodAdmission";
-import type { Campaign, Character, CharacterStateOrg } from "@/lib/db/types";
-import { MongoServerError } from "mongodb";
+import type { Campaign, Character } from "@/lib/db/types";
 
 const VALID_US_STATES = new Set(ELECTORAL_VOTE_UNITS.map((u) => u.stateId));
-
-/**
- * The characterStateOrg upsert filter (below) carries throttle + level
- * conditions beyond the unique-index key { characterId, stateId }. When a doc
- * already exists but no longer matches those conditions (e.g. it was updated
- * within the throttle window), `upsert: true` attempts an INSERT, which the
- * unique index rejects with E11000. That is the throttle/race loser — surface
- * it as ORG_RACE_OR_THROTTLE (clean 409) rather than an unhandled 500.
- */
-function isStateOrgDuplicateKey(error: unknown): error is MongoServerError {
-  return (
-    error instanceof MongoServerError &&
-    error.code === 11000 &&
-    (!!error.keyPattern?.characterId ||
-      !!error.keyPattern?.stateId ||
-      /\bcharacterStateOrg\b/.test(error.message))
-  );
-}
 
 const schema = z.object({
   // Modern 50-state alphabet check only; era political gate runs after parse.
@@ -68,11 +58,21 @@ const schema = z.object({
  * Auth: requireAuthWithCharacter (must be a US character with a campaign)
  * Errors: 400 (bad input / no campaign / insufficient campaign actions or
  *         funds / throttled), 403 (non-US), 401, 409 (race), 500
+ *
+ * Crash-safe settlement (issue #1672): the campaign debit + org upsert run
+ * as exactly-once money flow under the client's `Idempotency-Key` (minted
+ * when absent). A retry with the same key replays the stored outcome instead
+ * of charging again.
  */
 export async function POST(request: Request) {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
+
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
 
     const limit = checkRateLimit(
       `election:${auth.user.userId}`,
@@ -161,7 +161,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const now = new Date();
     // The throttle is turn-based, not wall-clock. The current turn started at
     // the most recently processed turn boundary; a build that happened in the
     // current turn (updatedAt >= lastTurnProcessed) must wait until the next turn
@@ -171,143 +170,54 @@ export async function POST(request: Request) {
     const { lastTurnProcessed } = await getGameTime();
     const throttleCutoff = lastTurnProcessed;
 
-    // Atomic guard: the upsert filter requires the doc to be absent OR at a
-    // level < MAX AND last-updated before the start of the current turn. Combined
-    // with the unique index on { characterId, stateId } seeded in core.ts, this
-    // eliminates the read-then-write TOCTOU window — two parallel requests
-    // serialize through the upsert and only one increments the level. A racing
-    // partner whose filter no longer matches (because the first request just
-    // updated the doc) returns null from findOneAndUpdate → we refund and 409.
+    // Crash-safe spend (issue #1672): the guarded campaign debit and the
+    // throttle + price-stability org upsert run as keyed idempotent steps.
+    // A crash between them leaves an `in_progress` receipt that a same-key
+    // retry reconciles; a lost throttle/level race compensates the debit and
+    // surfaces as ORG_RACE_OR_THROTTLE, exactly like the historical refund.
+    // The primitive reports the stored post-image, so no final re-read.
+    let built: { level: number; totalInvested: number };
     try {
-      await runWithOptionalTransaction(
-        async (session) => {
-          const debitResult = await db.collection<Campaign>("campaigns").updateOne(
-            {
-              _id: campaign._id,
-              actions: { $gte: STATE_ORG_COST_ACTIONS },
-              funds: { $gte: costFundsLocal },
-            },
-            {
-              $inc: {
-                actions: -STATE_ORG_COST_ACTIONS,
-                funds: -costFundsLocal,
-              },
-              $set: { updatedAt: now },
-            },
-            { session }
-          );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-          let orgUpdate;
-          try {
-            orgUpdate = await db
-              .collection<CharacterStateOrg>("characterStateOrg")
-              .findOneAndUpdate(
-                {
-                  characterId: character._id,
-                  stateId,
-                  $or: [
-                    { updatedAt: { $exists: false } },
-                    { updatedAt: { $lt: throttleCutoff } },
-                  ],
-                  // No level ceiling. This asserts the level is still the one
-                  // we priced, so a racing build cannot buy a level at a stale
-                  // (cheaper) price on the escalating cost curve.
-                  $and: [
-                    {
-                      $or: [
-                        { level: { $exists: false } },
-                        { level: currentLevel },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  $inc: { level: 1, totalInvested: STATE_ORG_COST_ACTIONS },
-                  $set: { updatedAt: now },
-                  $setOnInsert: { characterId: character._id, stateId },
-                },
-                { upsert: true, returnDocument: "after", session }
-              );
-          } catch (error) {
-            if (isStateOrgDuplicateKey(error)) throw new Error("ORG_RACE_OR_THROTTLE");
-            throw error;
-          }
-          if (!orgUpdate) throw new Error("ORG_RACE_OR_THROTTLE");
-        },
-        async () => {
-          const debitResult = await db.collection<Campaign>("campaigns").updateOne(
-            {
-              _id: campaign._id,
-              actions: { $gte: STATE_ORG_COST_ACTIONS },
-              funds: { $gte: costFundsLocal },
-            },
-            {
-              $inc: {
-                actions: -STATE_ORG_COST_ACTIONS,
-                funds: -costFundsLocal,
-              },
-              $set: { updatedAt: now },
-            }
-          );
-          if (debitResult.modifiedCount === 0) throw new Error("INSUFFICIENT_RESOURCES");
-
-          try {
-            const orgUpdate = await db
-              .collection<CharacterStateOrg>("characterStateOrg")
-              .findOneAndUpdate(
-                {
-                  characterId: character._id,
-                  stateId,
-                  $or: [
-                    { updatedAt: { $exists: false } },
-                    { updatedAt: { $lt: throttleCutoff } },
-                  ],
-                  // No level ceiling. This asserts the level is still the one
-                  // we priced, so a racing build cannot buy a level at a stale
-                  // (cheaper) price on the escalating cost curve.
-                  $and: [
-                    {
-                      $or: [
-                        { level: { $exists: false } },
-                        { level: currentLevel },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  $inc: { level: 1, totalInvested: STATE_ORG_COST_ACTIONS },
-                  $set: { updatedAt: now },
-                  $setOnInsert: { characterId: character._id, stateId },
-                },
-                { upsert: true, returnDocument: "after" }
-              );
-            if (!orgUpdate) throw new Error("ORG_RACE_OR_THROTTLE");
-          } catch (error) {
-            await db.collection<Campaign>("campaigns").updateOne(
-              { _id: campaign._id },
-              {
-                $inc: {
-                  actions: STATE_ORG_COST_ACTIONS,
-                  funds: costFundsLocal,
-                },
-                $set: { updatedAt: new Date() },
-              }
-            );
-            if (isStateOrgDuplicateKey(error)) throw new Error("ORG_RACE_OR_THROTTLE");
-            throw error;
-          }
-        }
-      );
+      const outcome = await applyStateOrgBuildSpend(db, {
+        campaignId: campaign._id,
+        characterId: character._id,
+        stateId,
+        currentLevel,
+        actionCost: STATE_ORG_COST_ACTIONS,
+        fundCostLocal: costFundsLocal,
+        throttleCutoff,
+        fingerprint: buildStateOrgBuildFingerprint({
+          characterId: character._id,
+          stateId,
+          currentLevel,
+          actionCost: STATE_ORG_COST_ACTIONS,
+          fundCostLocal: costFundsLocal,
+          throttleCutoff,
+        }),
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+      built = { level: outcome.level, totalInvested: outcome.totalInvested };
     } catch (error) {
-      const msg = (error as Error).message;
-      if (msg === "INSUFFICIENT_RESOURCES") {
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "Build already settled; start a new attempt with a new key." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "Idempotency key was reused for a different build." },
+          { status: 409 }
+        );
+      }
+      const msg = error instanceof Error ? error.message : "";
+      if (msg.startsWith(STATE_ORG_INSUFFICIENT_RESOURCES)) {
         return NextResponse.json(
           badRequest("Your campaign's actions or funds changed. Please try again.").toJson(),
           { status: 409 }
         );
       }
-      if (msg === "ORG_RACE_OR_THROTTLE") {
+      if (msg.startsWith(STATE_ORG_RACE_OR_THROTTLE)) {
         return NextResponse.json(
           badRequest(
             `Already built ${stateId} this turn (cap ${STATE_ORG_PER_STATE_TURN_CAP} per state per turn), or another build landed first — reload for the current price`
@@ -318,19 +228,9 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    // Re-read the post-image after both paths complete. We can't reliably
-    // close-over the value from inside runWithOptionalTransaction, so the
-    // returned shape is sourced from a fresh findOne — single round trip
-    // and avoids transaction-vs-callback bookkeeping.
-    const final = await db
-      .collection<CharacterStateOrg>("characterStateOrg")
-      .findOne(
-        { characterId: character._id, stateId },
-        { projection: { level: 1, totalInvested: 1 } }
-      );
     return NextResponse.json({
-      level: final?.level ?? 1,
-      totalInvested: final?.totalInvested ?? STATE_ORG_COST_ACTIONS,
+      level: built.level,
+      totalInvested: built.totalInvested,
       stateId,
     });
   } catch (error) {
