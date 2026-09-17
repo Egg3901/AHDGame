@@ -14,4 +14,5 @@ areas: [backend, frontend]
 - Count seated Supreme Court justices by party in the Governance Style health score.
 - A 5-4 Court costs nothing. From about 6-3 upward, one-party control subtracts from democratic health, up to a 24-point cap at 9-0.
 - Vacant seats do not count, so an empty Court is not scored as packed.
+- Seated justices without a recorded party still count toward the bench size, diluting the largest-party share instead of shrinking the bench.
 - The Balance of Power card now shows the Court's largest-party share.

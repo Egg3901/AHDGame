@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assessDemocraticCompetition } from "./competition";
+import { assessCourtPacking, assessDemocraticCompetition } from "./competition";
 
 describe("assessDemocraticCompetition", () => {
   it("does not punish an ordinary democratic majority", () => {
@@ -127,6 +127,15 @@ describe("assessDemocraticCompetition", () => {
       courtSeated: 7,
       courtDominantShare: 85.7,
       courtPenalty: 15.4,
+    });
+  });
+
+  it("counts seated justices without a party in the bench denominator", () => {
+    expect(assessCourtPacking({ "1": 6 }, 9)).toMatchObject({
+      courtDominantPartyId: "1",
+      courtDominantShare: 66.7,
+      courtSeated: 9,
+      courtPenalty: 4,
     });
   });
 

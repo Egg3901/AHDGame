@@ -132,6 +132,77 @@ describe("loadDemocraticCompetition", () => {
     expect(result.penalty).toBe(result.seatMarginPenalty + 15.4);
   });
 
+  it("counts occupied seats without a party toward the seated bench", async () => {
+    db.collection("electedOfficials").find().toArray.mockResolvedValue([]);
+    db.collection("supremeCourtSeats")
+      .find()
+      .toArray.mockResolvedValue([
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: "1",
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: null,
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: null,
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+        {
+          justiceMode: "historical",
+          justiceParty: null,
+          justiceCharacterId: null,
+          justiceNppId: null,
+        },
+      ]);
+
+    const result = await loadDemocraticCompetition(db as unknown as Db, "US", "1953-default", null);
+
+    expect(result).toMatchObject({
+      courtSeated: 9,
+      courtDominantPartyId: "1",
+      courtDominantShare: 66.7,
+      courtPenalty: 4,
+    });
+  });
+
   it("does not apply a separate presidential signal to parliamentary government", async () => {
     db.collection("electedOfficials")
       .find()

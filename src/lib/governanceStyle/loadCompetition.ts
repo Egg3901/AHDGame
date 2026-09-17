@@ -42,6 +42,7 @@ export async function loadDemocraticCompetition(
       .find({ countryId, officeType })
       .sort({ turn: 1 })
       .toArray(),
+    // eslint-disable-next-line local/no-country-literals -- SCOTUS is US-only per #3581 scope; the find filter below carries the country scope
     countryId === "US"
       ? db
           .collection<SupremeCourtSeat>("supremeCourtSeats")
@@ -73,12 +74,15 @@ export async function loadDemocraticCompetition(
   const hasSeparateExecutive = config.governmentType === "presidential";
 
   const justicesByParty: Record<string, number> = {};
+  let seatedJustices = 0;
   for (const seat of courtSeats) {
     const occupied =
       seat.justiceCharacterId != null ||
       seat.justiceNppId != null ||
       seat.justiceMode === "historical";
-    if (!occupied || !seat.justiceParty) continue;
+    if (!occupied) continue;
+    seatedJustices += 1;
+    if (!seat.justiceParty) continue;
     justicesByParty[seat.justiceParty] = (justicesByParty[seat.justiceParty] ?? 0) + 1;
   }
 
@@ -88,5 +92,6 @@ export async function loadDemocraticCompetition(
     executivePartyId: hasSeparateExecutive ? executiveTenure?.party : null,
     consecutiveExecutiveTerms: hasSeparateExecutive ? (executiveTenure?.consecutiveTerms ?? 0) : 0,
     justicesByParty,
+    seatedJustices,
   });
 }

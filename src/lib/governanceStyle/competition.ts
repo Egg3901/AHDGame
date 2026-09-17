@@ -80,12 +80,18 @@ function uninterruptedControlTurns(
 }
 
 /**
- * One-party control of the seated Supreme Court. Vacant seats do not count.
+ * One-party control of the seated Supreme Court. Vacant seats do not count,
+ * but occupied seats without a recorded party still count toward the seated
+ * bench: pass the full occupied headcount as `seatedTotal` so unaffiliated
+ * justices dilute the dominant share instead of vanishing from it.
  * A 5-4 split is 55.6% and costs nothing. Penalty starts at 60% of seated
  * justices (about 6-3) and scales to a 24-point cap at a 9-0 bench. Courts
  * with fewer than 5 seated justices are too empty to score as packed.
  */
-export function assessCourtPacking(justicesByParty?: Record<string, number>): {
+export function assessCourtPacking(
+  justicesByParty?: Record<string, number>,
+  seatedTotal?: number
+): {
   courtDominantPartyId: string | null;
   courtDominantShare: number;
   courtSeated: number;
@@ -94,7 +100,11 @@ export function assessCourtPacking(justicesByParty?: Record<string, number>): {
   const entries = Object.entries(justicesByParty ?? {}).filter(
     ([, seats]) => Number.isFinite(seats) && seats > 0
   );
-  const seated = entries.reduce((sum, [, seats]) => sum + seats, 0);
+  const partied = entries.reduce((sum, [, seats]) => sum + seats, 0);
+  const seated = Math.max(
+    partied,
+    Number.isFinite(seatedTotal) ? Math.floor(seatedTotal as number) : partied
+  );
   if (seated < 5) {
     return {
       courtDominantPartyId: null,
@@ -129,6 +139,8 @@ export function assessDemocraticCompetition(input: {
   executivePartyId?: string | null;
   consecutiveExecutiveTerms?: number;
   justicesByParty?: Record<string, number>;
+  /** Full occupied headcount, including seated justices without a recorded party. */
+  seatedJustices?: number;
 }): DemocraticCompetition {
   const current = tallyChambers(input.chambersByParty ?? [input.seatsByParty ?? {}]);
   const executivePartyId = input.executivePartyId || null;
@@ -136,7 +148,7 @@ export function assessDemocraticCompetition(input: {
   const continuityPartyId = executivePartyId ?? current.party;
   const controlTurns = uninterruptedControlTurns(continuityPartyId, input.history ?? []);
   const executiveTerms = Math.max(0, Math.floor(input.consecutiveExecutiveTerms ?? 0));
-  const court = assessCourtPacking(input.justicesByParty);
+  const court = assessCourtPacking(input.justicesByParty, input.seatedJustices);
 
   const seatPenalty = clamp((current.share * 100 - 55) * 0.6, 0, 27);
   const legislativeContinuityPenalty = clamp(((controlTurns - 48) / 48) * 6, 0, 6);
