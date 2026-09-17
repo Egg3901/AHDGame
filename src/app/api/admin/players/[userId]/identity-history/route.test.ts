@@ -130,6 +130,13 @@ describe("GET /api/admin/players/[userId]/identity-history", () => {
     expect(JSON.stringify(await res.json())).not.toContain(RAW_IP);
   });
 
+  it("NEVER emits a raw fingerprint in a moderator (non-admin) response", async () => {
+    const RAW_FP = "10f9219d43944d1ec95b59b6135395b7";
+    seed([{ ...run(USER_ID, RAW_FP, 1), track: "fingerprint" }]);
+    const res = await callRoute(USER_ID.toHexString(), "?track=fingerprint", false);
+    expect(JSON.stringify(await res.json())).not.toContain(RAW_FP);
+  });
+
   it("counts other accounts sharing a value, excluding the subject", async () => {
     seed([run(USER_ID, RAW_IP, 1)], [USER_ID, OTHER_ID]);
     const res = await callRoute(USER_ID.toHexString(), "?track=ip", true);

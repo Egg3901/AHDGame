@@ -3,6 +3,7 @@ import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
 import { loadIdentityHistory, IDENTITY_HISTORY_PAGE_SIZE } from "./loadHistory";
 import type { IdentityObservation } from "@/lib/db/types/identityObservation";
+import { hashSensitiveSignal } from "@/lib/utils/hashSignal";
 
 const USER = new ObjectId();
 const OTHER = new ObjectId();
@@ -84,12 +85,23 @@ describe("loadIdentityHistory", () => {
     expect(page.rows[0].value).toBe("68.192.35.xxx");
   });
 
-  it("never masks a fingerprint, which is already a hash", async () => {
+  it("gives an admin the raw fingerprint", async () => {
     const fp: IdentityObservation = { ...row(USER, "abc123def456", 1), track: "fingerprint" };
+    const page = await loadIdentityHistory(fakeDb([fp]), USER, "fingerprint", 1, {
+      revealNetwork: true,
+    });
+    expect(page.rows[0].value).toBe("abc123def456");
+  });
+
+  it("hashes a fingerprint for a moderator, matching the users-table *Key column", async () => {
+    const raw = "abc123def456";
+    const fp: IdentityObservation = { ...row(USER, raw, 1), track: "fingerprint" };
     const page = await loadIdentityHistory(fakeDb([fp]), USER, "fingerprint", 1, {
       revealNetwork: false,
     });
-    expect(page.rows[0].value).toBe("abc123def456");
+    expect(page.rows[0].value).not.toBe(raw);
+    // Same function /api/moderator/users uses, so the two surfaces corroborate.
+    expect(page.rows[0].value).toBe(hashSensitiveSignal(raw));
   });
 
   it("emits null dates for undated rows", async () => {

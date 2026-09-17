@@ -1,4 +1,3 @@
-import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { handleRouteError } from "@/lib/api/errors";
 import { getDb } from "@/lib/mongodb";
@@ -6,11 +5,7 @@ import { requireModerator } from "@/lib/api/requireModerator";
 import type { User, PoliticalParty } from "@/lib/db/types";
 import { eligibleIdentitySignals } from "@/lib/auth/identitySignals";
 import { loadRecentIdentityValues } from "@/lib/identityHistory/recentValues";
-
-function hashSensitiveSignal(value: string | null | undefined): string | null {
-  if (!value) return null;
-  return createHash("sha256").update(value).digest("hex").slice(0, 16);
-}
+import { hashSensitiveSignal } from "@/lib/utils/hashSignal";
 
 /** Hash a list of identity values, dropping any that hash to null. The client
  * grouper matches on these hashes, so a hash of one value must equal a hash of

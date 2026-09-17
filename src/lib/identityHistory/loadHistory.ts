@@ -5,6 +5,21 @@ import {
   type IdentityTrack,
 } from "@/lib/db/types/identityObservation";
 import { maskIp } from "@/lib/utils/maskIp";
+import { hashSensitiveSignal } from "@/lib/utils/hashSignal";
+
+/**
+ * A moderator never sees a raw identity signal.
+ *
+ * IPs are masked to the /24, matching `hydrateMembers` on the alt panel, so a
+ * moderator can still judge "same network" without reading the address.
+ * Fingerprints are hashed with the SAME function `/api/moderator/users` uses
+ * for its `*Key` columns, so the value shown here lines up with the one in the
+ * users table instead of being a second, unrelatable string.
+ */
+function presentValue(value: string, track: IdentityTrack, revealNetwork: boolean): string {
+  if (revealNetwork) return value;
+  return track === "ip" ? maskIp(value) : (hashSensitiveSignal(value) ?? "");
+}
 
 export const IDENTITY_HISTORY_PAGE_SIZE = 10;
 
@@ -84,7 +99,7 @@ export async function loadIdentityHistory(
 
   return {
     rows: docs.map((doc) => ({
-      value: track === "ip" && !revealNetwork ? maskIp(doc.value) : doc.value,
+      value: presentValue(doc.value, track, revealNetwork),
       firstSeen: doc.datesKnown ? doc.firstSeen.toISOString() : null,
       lastSeen: doc.datesKnown ? doc.lastSeen.toISOString() : null,
       observations: doc.observations,
