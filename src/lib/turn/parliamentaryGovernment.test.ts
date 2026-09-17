@@ -1579,4 +1579,14 @@ describe("UK prime minister loses Commons seat", () => {
     await updateParliamentaryGovernmentSeats(db as unknown as Db, "UK");
     expect(db.collection("cabinetMembers").deleteMany).not.toHaveBeenCalled();
   });
+  it("retains an NPP PM who still holds a Commons seat", async () => {
+    const id = seedHolder(true);
+    db.collection("electedOfficials").findOne.mockResolvedValue({ _id: new ObjectId() });
+    await updateParliamentaryGovernmentSeats(db as unknown as Db, "UK");
+    expect(db.collectionMocks.electedOfficials.findOne).toHaveBeenCalledWith(
+      { countryId: "UK", officeType: "commons", nppId: id, isNPP: true },
+      { projection: { _id: 1 } }
+    );
+    expect(db.collection("cabinetMembers").deleteMany).not.toHaveBeenCalled();
+  });
 });
