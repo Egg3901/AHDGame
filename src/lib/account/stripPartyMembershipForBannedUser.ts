@@ -6,7 +6,8 @@
  */
 
 import type { Db, ObjectId } from "mongodb";
-import type { Character, PartyCharter, PoliticalParty } from "@/lib/db/types";
+import type { Character, CongressLeader, PartyCharter, PoliticalParty } from "@/lib/db/types";
+import { vacateAllLeadershipRoles } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import {
   withdrawFromMismatchedPrimaries,
   cleanupPartyPositionsOnSwitch,
@@ -19,6 +20,50 @@ export interface StripPartyMembershipResult {
   charactersUpdated: number;
 }
 
+/**
+ * Empty any congressional leadership chairs these characters hold and open a
+ * race for each. Failing to open the race must never fail the ban, so this
+ * swallows and logs: the worst case is a chair that needs an admin to restart
+ * an election, against a banned account that has already lost the office.
+ */
+async function vacateCongressionalLeadershipForCharacters(
+  db: Db,
+  characters: Character[],
+  now: Date
+): Promise<void> {
+  if (characters.length === 0) return;
+  try {
+    const held = await db
+      .collection<CongressLeader>("congressLeaders")
+      .find({ characterId: { $in: characters.map((c) => c._id) } })
+      .toArray();
+    if (held.length === 0) return;
+    await vacateAllLeadershipRoles(
+      db,
+      held.flatMap((doc) =>
+        doc.characterId
+          ? [
+              {
+                leaderRole: doc.role,
+                holderId: doc.characterId,
+                formerHolderName: doc.characterName,
+              },
+            ]
+          : []
+      ),
+      now
+    );
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        error: "congress_leadership_vacate_failed",
+        operation: "strip_party_membership_for_banned_user",
+        details: err instanceof Error ? err.message : "Unknown error",
+      })
+    );
+  }
+}
+
 export async function stripPartyMembershipForBannedUser(
   db: Db,
   userId: ObjectId
@@ -27,6 +72,14 @@ export async function stripPartyMembershipForBannedUser(
 
   let charactersUpdated = 0;
   const now = new Date();
+
+  // Congressional leadership is held on a seat, not a party, so the party strip
+  // below cannot reach it: `cleanupPartyPositionsOnSwitch` only gives up the
+  // offices a switch actually disqualifies the holder from, and an `any-seated`
+  // office such as the Speaker is not one of them. A ban is a removal, not a
+  // switch, so it empties them outright — and unlike the switch it applies to
+  // every character, including the already-independent ones the loop skips.
+  await vacateCongressionalLeadershipForCharacters(db, characters, now);
   const partyCharacterIds = characters
     .filter((char) => !!char.party && char.party !== "independent")
     .map((char) => char._id);

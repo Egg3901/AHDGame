@@ -163,37 +163,47 @@ describe("cleanupPartyPositionsOnSwitch — congressional leadership follow-up e
     } as never);
   });
 
-  it("opens a 24-turn race for a majority-gated seat the switch just emptied", async () => {
-    // Vacating alone is what the switch always did; without this follow-up the
-    // chair simply read "Vacant" until an admin started an election by hand.
+  it("hands every held role to the leadership module, with the party being joined", async () => {
+    // The switch itself no longer decides who loses their office: only the
+    // role's own eligibility policy can answer that, and it lives next to the
+    // races it opens. Vacating here unconditionally is what emptied the
+    // Speaker's chair, which is an `any-seated` office a switch cannot cost.
     db.collectionMocks["congressLeaders"]!.find.mockReturnValue({
       toArray: async () => [
         { role: "president_pro_tempore", characterId, characterName: "Estes Kefauver" },
+        { role: "speaker_of_the_house", characterId, characterName: "Estes Kefauver" },
       ],
     } as never);
 
-    const openElections = vi.fn().mockResolvedValue(["president_pro_tempore"]);
-    const buildContexts = vi.fn().mockResolvedValue({ senate: {}, house: null });
+    const vacateLost = vi.fn().mockResolvedValue(["president_pro_tempore"]);
     vi.doMock("@/lib/congress/leadership/reconcilePartyEligibility", () => ({
-      openElectionsForVacatedMajorityRoles: openElections,
-      buildContextsForRoles: buildContexts,
+      vacateRolesLostToPartySwitch: vacateLost,
     }));
 
     const { cleanupPartyPositionsOnSwitch } = await import("./electionCandidacy");
-    await cleanupPartyPositionsOnSwitch(characterId, "1", "independent", "US");
+    await cleanupPartyPositionsOnSwitch(characterId, "1", "2", "US");
 
     // The outgoing holder's name is captured before the vacate, so the feed
     // notice can name them instead of reading "Vacant".
-    const expectedRoles = [
-      { leaderRole: "president_pro_tempore", formerHolderName: "Estes Kefauver" },
-    ];
-    expect(buildContexts).toHaveBeenCalledWith(db, expectedRoles);
-    expect(openElections).toHaveBeenCalledWith(
+    expect(vacateLost).toHaveBeenCalledWith(
       db,
-      expectedRoles,
-      { senate: {}, house: null },
+      [
+        {
+          leaderRole: "president_pro_tempore",
+          holderId: characterId,
+          formerHolderName: "Estes Kefauver",
+        },
+        {
+          leaderRole: "speaker_of_the_house",
+          holderId: characterId,
+          formerHolderName: "Estes Kefauver",
+        },
+      ],
+      "2",
       expect.any(Date)
     );
+    // The cleanup no longer writes to congressLeaders itself.
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).not.toHaveBeenCalled();
   });
 
   it("skips the leadership work entirely when the character held no roles", async () => {
@@ -201,28 +211,24 @@ describe("cleanupPartyPositionsOnSwitch — congressional leadership follow-up e
       toArray: async () => [],
     } as never);
 
-    const openElections = vi.fn();
-    const buildContexts = vi.fn();
+    const vacateLost = vi.fn();
     vi.doMock("@/lib/congress/leadership/reconcilePartyEligibility", () => ({
-      openElectionsForVacatedMajorityRoles: openElections,
-      buildContextsForRoles: buildContexts,
+      vacateRolesLostToPartySwitch: vacateLost,
     }));
 
     const { cleanupPartyPositionsOnSwitch } = await import("./electionCandidacy");
     await cleanupPartyPositionsOnSwitch(characterId, "1", "independent", "US");
 
-    expect(buildContexts).not.toHaveBeenCalled();
-    expect(openElections).not.toHaveBeenCalled();
+    expect(vacateLost).not.toHaveBeenCalled();
   });
 
-  it("still completes the party switch when opening the election throws", async () => {
+  it("still completes the party switch when the leadership follow-up throws", async () => {
     db.collectionMocks["congressLeaders"]!.find.mockReturnValue({
       toArray: async () => [{ role: "majority_leader_senate", characterId }],
     } as never);
 
     vi.doMock("@/lib/congress/leadership/reconcilePartyEligibility", () => ({
-      openElectionsForVacatedMajorityRoles: vi.fn(),
-      buildContextsForRoles: vi.fn().mockRejectedValue(new Error("composition unavailable")),
+      vacateRolesLostToPartySwitch: vi.fn().mockRejectedValue(new Error("composition unavailable")),
     }));
 
     const { cleanupPartyPositionsOnSwitch } = await import("./electionCandidacy");

@@ -6,14 +6,18 @@
  * roles: the chamber's biggest party runs for them, votes on them, and holds
  * them.
  *
- * Two pieces live here.
+ * Three pieces live here.
  *
- * `openElectionsForVacatedMajorityRoles` is the one that does the day-to-day
- * work. `cleanupPartyPositionsOnSwitch` has always vacated these seats on a
- * party switch, but it stopped there, so the chair read "Vacant" until an admin
+ * `vacateRolesLostToPartySwitch` is the front door for a party switch: it gives
+ * up only the offices the switch actually disqualifies the holder from, so an
+ * `any-seated` office such as the Speaker survives one. `vacateAllLeadershipRoles`
+ * is its no-questions sibling, for a ban.
+ *
+ * `openElectionsForVacatedRoles` is the one that does the day-to-day work.
+ * `cleanupPartyPositionsOnSwitch` has always vacated these seats on a party
+ * switch, but it stopped there, so the chair read "Vacant" until an admin
  * hand-started a race. This opens that race at the vacancy transition — the same
- * shape as `vacateSpeakerIfLostSeat` → `openSpeakerElection`, which is why the
- * Speaker never had this problem.
+ * shape as `vacateSpeakerIfLostSeat` → `openSpeakerElection`.
  *
  * `reconcileLeadershipPartyEligibility` is the backstop for the paths that
  * mutate `characters.party` WITHOUT going through that cleanup — the admin heal
@@ -25,10 +29,12 @@
  * enters resolves by vacating the role and closing, so a poller would read that
  * as a fresh vacancy and re-open forever.
  *
- * Deliberately NOT extended to the minority roles or the Speaker — see the
- * scope decision recorded on the branch. The minority roles are `non-coalition`
- * and the Speaker is `any-seated`, so both need their own rules.
+ * The reconciler stays majority-only, because `largest-single-party` is the one
+ * policy a direct `characters.party` write can silently break. The opener does
+ * not: it covers every US congressional role, Speaker and minority seats
+ * included, since a vacated seat with no race never refills itself.
  */
+import type { ObjectId } from "mongodb";
 import type { Db } from "@/lib/mongodb";
 import { sendCountryGameEvent, DISCORD_COLORS } from "@/lib/discordWebhooks";
 import { getPartyMap } from "@/lib/db/partyMap";
@@ -37,6 +43,7 @@ import { getHouseComposition } from "@/lib/congress/houseComposition";
 import { vacateCongressLeadershipRole } from "@/lib/congress/leadershipElections";
 import {
   isPartyEligible,
+  qualifiesAfterPartySwitch,
   POLICY_BY_ROLE,
   buildChamberLeadershipContext,
   type ChamberLeadershipContext,
@@ -47,6 +54,7 @@ import {
   resolveSeatHolderParty,
   type ChamberElectionRole,
 } from "@/lib/congress/leadership/openElection";
+import { openSpeakerElection } from "@/lib/congress/speaker/openSpeakerElection";
 import type { Character, CongressLeader, ElectedOfficial, LeadershipRole } from "@/lib/db/types";
 
 /**
@@ -107,8 +115,8 @@ export async function reconcileLeadershipPartyEligibility(
   const roles = MAJORITY_GATED_ROLES[chamber];
 
   // Three queries total, not three per role: this runs on the congress page
-  // GETs, right beside `vacateLeadershipBulkIfLostSeat`, which exists in bulk
-  // form for exactly this reason.
+  // GETs, right beside `vacateLeadershipForLostSeats`, which is batched for
+  // exactly this reason.
   const leaders = await db
     .collection<CongressLeader>("congressLeaders")
     .find({ role: { $in: roles.map((r) => r.leaderRole) } })
@@ -195,7 +203,7 @@ export async function reconcileLeadershipPartyEligibility(
   // One place opens the race and posts the notice, shared with the party-switch
   // path, so the two cannot drift in behaviour or wording.
   if (vacated.length > 0) {
-    await openElectionsForVacatedMajorityRoles(
+    await openElectionsForVacatedRoles(
       db,
       vacated.map((v) => ({ leaderRole: v.leaderRole, formerHolderName: v.characterName })),
       chamber === "senate" ? { senate: ctx, house: null } : { senate: null, house: ctx },
@@ -206,13 +214,75 @@ export async function reconcileLeadershipPartyEligibility(
   return vacated;
 }
 
+/**
+ * Every US chamber role with a per-role election doc, majority-gated or not.
+ * The minority seats are vacated by the same paths as the rest, so they need
+ * the same follow-up race; only the reconciler above is majority-only.
+ */
+const CHAMBER_ELECTION_ROLES: Record<
+  "house" | "senate",
+  Array<{ leaderRole: LeadershipRole; role: ChamberElectionRole }>
+> = {
+  senate: [
+    ...MAJORITY_GATED_ROLES.senate,
+    { leaderRole: "minority_leader_senate", role: "minority_leader" },
+    { leaderRole: "minority_whip_senate", role: "minority_whip" },
+  ],
+  house: [
+    ...MAJORITY_GATED_ROLES.house,
+    { leaderRole: "minority_leader_house", role: "minority_leader" },
+    { leaderRole: "minority_whip_house", role: "minority_whip" },
+  ],
+};
+
 const LEADER_ROLE_TO_CHAMBER = new Map(
   (["house", "senate"] as const).flatMap((chamber) =>
-    MAJORITY_GATED_ROLES[chamber].map(
+    CHAMBER_ELECTION_ROLES[chamber].map(
       ({ leaderRole, role }) => [leaderRole, { chamber, role }] as const
     )
   )
 );
+
+/**
+ * Roles whose race lives in its own singleton collection rather than under a
+ * `ChamberElectionRole` key, mapped to the chamber whose composition gates them.
+ */
+const SINGLETON_ELECTION_ROLES = new Map<LeadershipRole, "house" | "senate">([
+  ["speaker_of_the_house", "house"],
+]);
+
+/** The chamber a role's race is gated by, or null if this module cannot run it. */
+function chamberForLeaderRole(leaderRole: LeadershipRole): "house" | "senate" | null {
+  return (
+    LEADER_ROLE_TO_CHAMBER.get(leaderRole)?.chamber ??
+    SINGLETON_ELECTION_ROLES.get(leaderRole) ??
+    null
+  );
+}
+
+/**
+ * Why a chair was emptied. It only steers the wording of the feed notice, but
+ * getting it wrong publishes a false claim about a player: a ban is not a party
+ * change, and saying so in the feed would invent one.
+ */
+export type VacancyReason = "party-change" | "removal";
+
+/** The feed notice for a vacancy, in the wording its reason earns. */
+function vacancyNotice(
+  reason: VacancyReason,
+  label: string,
+  formerHolderName: string | undefined
+): string {
+  const tail = "The office is vacant and a 24 turn election has opened.";
+  if (reason === "removal") {
+    return formerHolderName
+      ? `**${formerHolderName}** no longer holds **${label}**. ${tail}`
+      : `**${label}** is vacant. A 24 turn election has opened.`;
+  }
+  return formerHolderName
+    ? `**${formerHolderName}** has changed party and no longer qualifies to hold **${label}**. ${tail}`
+    : `**${label}** is vacant after a party change. A 24 turn election has opened.`;
+}
 
 /** A role that has just been emptied, plus who was holding it. */
 export interface VacatedRole {
@@ -228,14 +298,15 @@ export interface ChamberContexts {
 }
 
 /**
- * Open a 24-turn race for each majority-gated role in `vacatedRoles`.
+ * Open a 24-turn race for each US congressional role in `vacatedRoles`.
  *
  * Called at the moment a party switch empties the chair, mirroring
- * `vacateSpeakerIfLostSeat` → `openSpeakerElection`: the Speaker vacates AND
- * refills itself, while these five roles only ever vacated, so the seat sat
- * empty until an admin noticed. Roles outside the majority-gated set are
- * ignored — `congressLeaders` also holds the minority roles, the Speaker, and
- * the DE/CN chairs, none of which are this module's business.
+ * `vacateSpeakerIfLostSeat` → `openSpeakerElection`. Every role this module can
+ * open a race for belongs here, because a role that is vacated without one sits
+ * empty indefinitely: the Speaker's own auto-open early-returns the instant
+ * `characterId` is already null, so whichever path empties the chair first
+ * suppresses it for good. Roles whose race is run by another module (the DE and
+ * CN chairs) are ignored.
  *
  * This deliberately fires on the vacancy *transition* rather than polling for
  * empty seats. A poller would re-open forever: a race nobody enters resolves by
@@ -244,44 +315,48 @@ export interface ChamberContexts {
  *
  * @returns the leader roles an election was actually opened for.
  */
-export async function openElectionsForVacatedMajorityRoles(
+export async function openElectionsForVacatedRoles(
   db: Db,
   vacatedRoles: readonly VacatedRole[],
   contexts: ChamberContexts,
-  now: Date
+  now: Date,
+  reason: VacancyReason = "party-change"
 ): Promise<LeadershipRole[]> {
   const opened: LeadershipRole[] = [];
 
   for (const { leaderRole, formerHolderName } of vacatedRoles) {
-    const target = LEADER_ROLE_TO_CHAMBER.get(leaderRole);
-    if (!target) continue;
+    const chamber = chamberForLeaderRole(leaderRole);
+    if (!chamber) continue;
 
-    const ctx = contexts[target.chamber];
-    // Same guard as the reconciler: with no majority party there is nobody
-    // eligible to run, so opening a race would just time out into a vacancy.
+    const ctx = contexts[chamber];
+    // Same guard as the reconciler: with no majority party the chamber has no
+    // seated members at all, so opening a race would just time out into a
+    // vacancy.
     if (!ctx || ctx.majorityParty === null) continue;
 
-    const didOpen = await openCongressLeadershipElection(db, {
-      role: target.role,
-      chamber: target.chamber,
-      ctx,
-      now,
-      // The seat was just emptied; there is no incumbent to seed.
-      skipIncumbentNomination: true,
-    });
+    const target = LEADER_ROLE_TO_CHAMBER.get(leaderRole);
+    const didOpen = target
+      ? await openCongressLeadershipElection(db, {
+          role: target.role,
+          chamber,
+          ctx,
+          now,
+          // The seat was just emptied; there is no incumbent to seed.
+          skipIncumbentNomination: true,
+        })
+      : // The Speaker's race is a singleton doc in its own collection, and its
+        // opener already seeds no incumbent for an empty chair.
+        await openSpeakerElection(db, now);
     // A race was already running for this seat — leave it be, and do not
     // announce a second time.
     if (!didOpen) continue;
 
     opened.push(leaderRole);
     const label = leadershipRoleLabel(leaderRole);
-    console.log(`[Leadership] ${leaderRole} vacated by a party change; 24-turn election opened`);
+    console.log(`[Leadership] ${leaderRole} vacated (${reason}); 24-turn election opened`);
     sendCountryGameEvent("US", {
       title: `Leadership Vacancy — ${label}`,
-      description: formerHolderName
-        ? `**${formerHolderName}** has changed party and no longer qualifies to hold **${label}**. ` +
-          `The office is vacant and a 24 turn election has opened.`
-        : `**${label}** is vacant after a party change. A 24 turn election has opened.`,
+      description: vacancyNotice(reason, label, formerHolderName),
       color: DISCORD_COLORS.leadership,
       footer: { text: "A House Divided" },
       timestamp: now.toISOString(),
@@ -289,6 +364,133 @@ export async function openElectionsForVacatedMajorityRoles(
   }
 
   return opened;
+}
+
+/**
+ * Chamber contexts for `roles`, degrading to none rather than throwing. Callers
+ * use the empty result to fall back to vacating every party-gated role, which
+ * is what these paths did before there was an eligibility gate: an ineligible
+ * holder keeping the office is the worse of the two failures.
+ */
+async function buildContextsSafely(
+  db: Db,
+  roles: readonly HeldLeadershipRole[]
+): Promise<ChamberContexts> {
+  try {
+    return await buildContextsForRoles(db, roles);
+  } catch (err) {
+    console.error(
+      JSON.stringify({
+        error: "leadership_context_unavailable",
+        operation: "vacate_leadership_roles",
+        details: err instanceof Error ? err.message : "Unknown error",
+      })
+    );
+    return { house: null, senate: null };
+  }
+}
+
+/** A leadership role the switching character holds right now. */
+export interface HeldLeadershipRole {
+  leaderRole: LeadershipRole;
+  /** The seated holder, so the vacate can be scoped to them. */
+  holderId: ObjectId;
+  /** Read BEFORE the vacate, so the feed notice can still name them. */
+  formerHolderName?: string;
+}
+
+/**
+ * Give up the leadership roles a character's party switch has actually cost
+ * them, and open a race for each one emptied.
+ *
+ * The gate is the role's own eligibility policy, not the fact of the switch:
+ * `any-seated` offices (the Speaker above all) are held on the strength of a
+ * seat, so their holder keeps them and no race is needed. Vacating those
+ * regardless is what left the House with an empty chair and no election — the
+ * Speaker's own auto-open cannot recover it, because it early-returns once
+ * `characterId` is already null.
+ *
+ * `newParty` comes from the caller's argument rather than `characters.party`,
+ * so the decision does not depend on whether the switch has been written yet
+ * (`performRelocation` deliberately cleans up first — see its comment at the
+ * `cleanupPartyPositionsOnSwitch` call).
+ *
+ * A composition read that fails degrades to vacating every party-gated role,
+ * which is what this path did before the gate existed: an ineligible holder
+ * keeping the office is the worse of the two failures.
+ *
+ * @returns the roles actually vacated.
+ */
+export async function vacateRolesLostToPartySwitch(
+  db: Db,
+  heldRoles: readonly HeldLeadershipRole[],
+  newParty: string,
+  now: Date
+): Promise<LeadershipRole[]> {
+  if (heldRoles.length === 0) return [];
+
+  const contexts = await buildContextsSafely(db, heldRoles);
+
+  // The holder sits in the chamber, so the party they are joining has a seat in
+  // it by definition. Saying so explicitly is what makes the answer the same
+  // whichever caller this is: the party `leave` route relabels the seat row
+  // before running the cleanup, while `performRelocation` deliberately runs the
+  // cleanup first (see its comment at the call site), so the composition read
+  // here may or may not have caught up yet. Only the gate sees this; the opener
+  // still gets the real composition.
+  const withHolderSeat = (ctx: ChamberLeadershipContext | null) =>
+    ctx ? { ...ctx, allChamberPartySlugs: new Set([...ctx.allChamberPartySlugs, newParty]) } : null;
+
+  const lost = heldRoles.filter(({ leaderRole }) => {
+    const chamber = chamberForLeaderRole(leaderRole);
+    const ctx = chamber ? withHolderSeat(contexts[chamber]) : null;
+    return !qualifiesAfterPartySwitch(POLICY_BY_ROLE[leaderRole], newParty, ctx);
+  });
+
+  return vacateAllLeadershipRoles(db, lost, now, { contexts, reason: "party-change" });
+}
+
+/** Options for {@link vacateAllLeadershipRoles}. */
+export interface VacateAllOptions {
+  /** Contexts already built by the caller, so they are not read twice. */
+  contexts?: ChamberContexts;
+  /** Defaults to "removal": the reason a caller with no party question has. */
+  reason?: VacancyReason;
+}
+
+/**
+ * Empty every one of `heldRoles` and open a race for each, with no eligibility
+ * question asked.
+ *
+ * For the removals where the holder's standing is not in doubt because they are
+ * gone: a ban, which is not a party switch and must reach the `any-seated`
+ * offices a switch deliberately leaves alone.
+ *
+ * @returns the roles actually vacated — fewer than asked for when another
+ * request claimed the same vacancy first.
+ */
+export async function vacateAllLeadershipRoles(
+  db: Db,
+  heldRoles: readonly HeldLeadershipRole[],
+  now: Date,
+  { contexts: knownContexts, reason = "removal" }: VacateAllOptions = {}
+): Promise<LeadershipRole[]> {
+  if (heldRoles.length === 0) return [];
+  const contexts = knownContexts ?? (await buildContextsSafely(db, heldRoles));
+
+  // Scoped to the holder so two overlapping requests cannot both claim the same
+  // vacancy and both open a race.
+  const claimed = await Promise.all(
+    heldRoles.map(async (role) => ({
+      role,
+      won: await vacateCongressLeadershipRole(db, role.leaderRole, now, role.holderId),
+    }))
+  );
+  const vacated = claimed.filter((c) => c.won).map((c) => c.role);
+  if (vacated.length === 0) return [];
+
+  await openElectionsForVacatedRoles(db, vacated, contexts, now, reason);
+  return vacated.map((r) => r.leaderRole);
 }
 
 /**
@@ -301,8 +503,8 @@ export async function buildContextsForRoles(
 ): Promise<ChamberContexts> {
   const needed = new Set(
     roles.flatMap((r) => {
-      const target = LEADER_ROLE_TO_CHAMBER.get(r.leaderRole);
-      return target ? [target.chamber] : [];
+      const chamber = chamberForLeaderRole(r.leaderRole);
+      return chamber ? [chamber] : [];
     })
   );
   if (needed.size === 0) return { house: null, senate: null };

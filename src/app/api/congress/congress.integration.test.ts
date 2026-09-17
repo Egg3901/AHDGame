@@ -41,8 +41,9 @@ vi.mock("@/lib/congress/senateComposition", () => ({
 }));
 
 vi.mock("@/lib/congress/leadershipElections", () => ({
-  vacateLeadershipBulkIfLostSeat: vi.fn().mockResolvedValue(undefined),
+  vacateLeadershipForLostSeats: vi.fn().mockResolvedValue(0),
   resolveLeadershipElection: vi.fn().mockResolvedValue(false),
+  clearIneligibleHouseLeadershipNominations: vi.fn().mockResolvedValue(undefined),
   isLeadershipElectionClosed: (
     el: { endsOnTurn?: number | null; endsAt?: Date | null },
     currentTurn: number,
@@ -60,6 +61,8 @@ const mockEmptyCollection = () => ({
       skip: vi.fn().mockReturnValue({
         limit: vi.fn().mockReturnValue({ toArray: vi.fn().mockResolvedValue([]) }),
       }),
+      // Leadership state sorts candidacies without paging them.
+      toArray: vi.fn().mockResolvedValue([]),
     }),
     toArray: vi.fn().mockResolvedValue([]),
   }),
@@ -367,6 +370,40 @@ describe("POST /api/congress/speaker", () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(json.error).toContain("nominationId");
+  });
+});
+
+describe("GET /api/congress/house-leadership", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue({
+      collection: vi.fn().mockImplementation(() => mockEmptyCollection()),
+    } as never);
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+    vi.mocked(getHouseComposition).mockResolvedValue({
+      composition: [],
+      totalSeats: 0,
+      blocs: [],
+      majorityBloc: null,
+      minorityBloc: null,
+      majorityParty: null,
+      minorityParty: null,
+      majoritySeats: 0,
+      minoritySeats: 0,
+    } as never);
+  });
+
+  it("sweeps seats lost since the last turn through the shared sweep, which opens the race", async () => {
+    // The page-load sweep used to vacate a chair and stop there, so for the
+    // nine roles it covers it would empty the seat before the hourly turn sweep
+    // ever saw it — and a vacated chair is skipped, so the race never opened.
+    const { vacateLeadershipForLostSeats } = await import("@/lib/congress/leadershipElections");
+    const { GET } = await import("./house-leadership/route");
+    const res = await GET();
+
+    expect(res.status).toBe(200);
+    expect(vacateLeadershipForLostSeats).toHaveBeenCalled();
   });
 });
 

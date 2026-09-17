@@ -18,7 +18,6 @@ import { removeWithdrawnCandidateFromTally } from "@/lib/electionEngine/tallyCle
 import { archiveCampaignsForCandidates } from "@/lib/campaigns/archiveWithdrawnCampaigns";
 import { withdrawFromPartyLeadershipElections } from "@/lib/elections/withdrawFromPartyLeadershipElections";
 import { withdrawPlayerEndorsementsOnPartyChange } from "@/lib/elections/playerEndorsements";
-import { vacateCongressLeadershipRole } from "@/lib/congress/leadershipElections";
 import type { CongressLeader } from "@/lib/db/types";
 import type { CountryId } from "@/lib/constants/countries";
 
@@ -402,34 +401,34 @@ export async function cleanupPartyPositionsOnSwitch(
     withdrawnCommitteeElections = result.modifiedCount;
   }
 
-  // 6. Vacate any congressional leadership roles (SML, Speaker, whips, PPT) this character holds.
-  // These positions are party-affiliated; leaving/being purged from a party ends eligibility.
+  // 6. Give up the congressional leadership roles (SML, Speaker, whips, PPT)
+  // this switch actually costs the character, and open a race for each seat it
+  // empties. Which roles those are is the leadership module's question, not this
+  // one's: it is decided by each role's eligibility policy, so an `any-seated`
+  // office such as the Speaker — held on the strength of a seat, not a party —
+  // survives the switch instead of leaving an empty chair with no election.
+  // Lazy import keeps that module (and the two chamber compositions it reads)
+  // out of every party switch that touches no leadership at all.
   const heldLeadershipRoles = await db
     .collection<CongressLeader>("congressLeaders")
     .find({ characterId })
     .toArray();
-  await Promise.all(
-    heldLeadershipRoles.map((doc) => vacateCongressLeadershipRole(db, doc.role, now))
-  );
-
-  // Vacating alone left the chair empty until an admin noticed — the Speaker has
-  // refilled itself since `vacateSpeakerIfLostSeat`, but Pro Tempore and the
-  // Majority Leader/Whip seats had no equivalent. Open their 24-turn race here,
-  // at the vacancy transition. Lazy import keeps the congress leadership module
-  // (and the two chamber compositions it reads) out of every party switch that
-  // touches no leadership at all.
   if (heldLeadershipRoles.length > 0) {
     try {
-      const { openElectionsForVacatedMajorityRoles, buildContextsForRoles } =
+      const { vacateRolesLostToPartySwitch } =
         await import("@/lib/congress/leadership/reconcilePartyEligibility");
-      // Names come from the docs read BEFORE the vacate above, so the feed
-      // notice can still say who left rather than "Vacant".
-      const vacatedRoles = heldLeadershipRoles.map((doc) => ({
-        leaderRole: doc.role,
-        formerHolderName: doc.characterName,
-      }));
-      const contexts = await buildContextsForRoles(db, vacatedRoles);
-      await openElectionsForVacatedMajorityRoles(db, vacatedRoles, contexts, now);
+      await vacateRolesLostToPartySwitch(
+        db,
+        // Names are read BEFORE the vacate, so the feed notice can still say who
+        // left rather than "Vacant".
+        heldLeadershipRoles.map((doc) => ({
+          leaderRole: doc.role,
+          holderId: characterId,
+          formerHolderName: doc.characterName,
+        })),
+        newParty,
+        now
+      );
     } catch (err) {
       // A failure to open the follow-up election must not roll back the party
       // switch itself, which has already been applied by the caller.

@@ -267,7 +267,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
   });
 
   it("leaves a holder who has lost their seat to the seat-loss sweep", async () => {
-    // No electedOfficials row: `vacateLeadershipBulkIfLostSeat` owns that case,
+    // No electedOfficials row: `vacateLeadershipForLostSeats` owns that case,
     // and a de-seated member must not trigger a party-switch election here.
     const holder = new ObjectId();
     seatLeaders(db, ["president_pro_tempore"], holder, "MAJ");
@@ -339,7 +339,7 @@ describe("reconcileLeadershipPartyEligibility", () => {
   });
 });
 
-describe("openElectionsForVacatedMajorityRoles", () => {
+describe("openElectionsForVacatedRoles", () => {
   let db: MockDb;
 
   beforeEach(() => {
@@ -350,6 +350,8 @@ describe("openElectionsForVacatedMajorityRoles", () => {
       "senateLeadershipNominations",
       "houseLeadershipElections",
       "houseLeadershipNominations",
+      "speakerElections",
+      "speakerNominations",
       "congressLeaders",
       "electedOfficials",
       "characters",
@@ -358,12 +360,13 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     }
     db.collectionMocks["senateLeadershipElections"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["houseLeadershipElections"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["speakerElections"]!.findOne.mockResolvedValue(null);
     db.collectionMocks["congressLeaders"]!.findOne.mockResolvedValue(null);
   });
 
   it("opens a 24-turn race for each majority-gated role just vacated", async () => {
-    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
-    const opened = await openElectionsForVacatedMajorityRoles(
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
       db as unknown as Db,
       [{ leaderRole: "president_pro_tempore" }, { leaderRole: "majority_whip_senate" }],
       SENATE_CTX_BY_CHAMBER,
@@ -390,8 +393,8 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     // The canonical role and the per-chamber election id are different
     // vocabularies, and getting the pairing wrong opens a real race under the
     // wrong key — the seat stays vacant while a phantom election runs elsewhere.
-    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
-    await openElectionsForVacatedMajorityRoles(
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    await openElectionsForVacatedRoles(
       db as unknown as Db,
       [{ leaderRole }],
       SENATE_CTX_BY_CHAMBER,
@@ -405,17 +408,77 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     );
   });
 
-  it("ignores roles outside the majority-gated set", async () => {
-    // Minority leadership, the Speaker, and the DE/CN chairs share the
-    // congressLeaders collection but are not this module's business.
-    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
-    const opened = await openElectionsForVacatedMajorityRoles(
+  it("opens the Speaker race in its own collection, with both close anchors", async () => {
+    // The Speaker keeps a singleton election doc rather than a per-role one.
+    // Leaving it out is what let a vacated chair sit with no race at all: the
+    // Speaker's own auto-open early-returns once characterId is already null.
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
       db as unknown as Db,
-      [
-        { leaderRole: "minority_leader_senate" },
-        { leaderRole: "speaker_of_the_house" },
-        { leaderRole: "chair_npcsc" },
-      ],
+      [{ leaderRole: "speaker_of_the_house", formerHolderName: "Sam Rayburn" }],
+      SENATE_CTX_BY_CHAMBER,
+      NOW
+    );
+
+    expect(opened).toEqual(["speaker_of_the_house"]);
+    expect(db.collectionMocks["speakerElections"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "current" },
+      expect.objectContaining({
+        $set: expect.objectContaining({ status: "voting", endsOnTurn: 524 }),
+      }),
+      { upsert: true }
+    );
+  });
+
+  it("leaves a Speaker race that is already running alone", async () => {
+    db.collectionMocks["speakerElections"]!.findOne.mockResolvedValue({
+      _id: "current",
+      status: "voting",
+      endsOnTurn: 510,
+    });
+
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
+      db as unknown as Db,
+      [{ leaderRole: "speaker_of_the_house" }],
+      SENATE_CTX_BY_CHAMBER,
+      NOW
+    );
+
+    expect(opened).toEqual([]);
+    expect(db.collectionMocks["speakerElections"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["minority_leader_house", "houseLeadershipElections", "minority_leader"],
+    ["minority_whip_house", "houseLeadershipElections", "minority_whip"],
+    ["minority_leader_senate", "senateLeadershipElections", "minority_leader"],
+    ["minority_whip_senate", "senateLeadershipElections", "minority_whip"],
+  ] as const)("opens %s as %s/%s", async (leaderRole, collection, electionId) => {
+    // The minority seats were vacated on a party switch like every other role,
+    // but nothing reopened them — the same hole the Speaker fell through.
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    await openElectionsForVacatedRoles(
+      db as unknown as Db,
+      [{ leaderRole }],
+      SENATE_CTX_BY_CHAMBER,
+      NOW
+    );
+
+    expect(db.collectionMocks[collection]!.updateOne).toHaveBeenCalledWith(
+      { _id: electionId },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "voting" }) }),
+      { upsert: true }
+    );
+  });
+
+  it("ignores roles whose race is run by another module", async () => {
+    // The DE/CN chairs share the congressLeaders collection but keep their own
+    // election collections and openers.
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
+      db as unknown as Db,
+      [{ leaderRole: "chair_npcsc" }, { leaderRole: "chair_cppcc" }],
       SENATE_CTX_BY_CHAMBER,
       NOW
     );
@@ -423,6 +486,7 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     expect(opened).toEqual([]);
     expect(db.collectionMocks["senateLeadershipElections"]!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["houseLeadershipElections"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["speakerElections"]!.updateOne).not.toHaveBeenCalled();
   });
 
   it("does not disturb a race that is already running", async () => {
@@ -432,8 +496,8 @@ describe("openElectionsForVacatedMajorityRoles", () => {
       endsOnTurn: 510,
     });
 
-    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
-    const opened = await openElectionsForVacatedMajorityRoles(
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
       db as unknown as Db,
       [{ leaderRole: "president_pro_tempore" }],
       SENATE_CTX_BY_CHAMBER,
@@ -445,8 +509,8 @@ describe("openElectionsForVacatedMajorityRoles", () => {
   });
 
   it("does nothing when the chamber has no majority party", async () => {
-    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
-    const opened = await openElectionsForVacatedMajorityRoles(
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
       db as unknown as Db,
       [{ leaderRole: "president_pro_tempore" }],
       {
@@ -465,8 +529,8 @@ describe("openElectionsForVacatedMajorityRoles", () => {
   });
 
   it("is a no-op when handed no roles, without touching a composition", async () => {
-    const { openElectionsForVacatedMajorityRoles } = await import("./reconcilePartyEligibility");
-    const opened = await openElectionsForVacatedMajorityRoles(
+    const { openElectionsForVacatedRoles } = await import("./reconcilePartyEligibility");
+    const opened = await openElectionsForVacatedRoles(
       db as unknown as Db,
       [],
       { senate: null, house: null },
@@ -474,6 +538,203 @@ describe("openElectionsForVacatedMajorityRoles", () => {
     );
 
     expect(opened).toEqual([]);
+  });
+});
+
+describe("vacateRolesLostToPartySwitch", () => {
+  let db: MockDb;
+  const holder = new ObjectId();
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    for (const name of [
+      "senateLeadershipElections",
+      "senateLeadershipNominations",
+      "houseLeadershipElections",
+      "houseLeadershipNominations",
+      "speakerElections",
+      "speakerNominations",
+      "congressLeaders",
+      "electedOfficials",
+      "characters",
+    ]) {
+      db.collection(name);
+    }
+    db.collectionMocks["senateLeadershipElections"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["houseLeadershipElections"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["speakerElections"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["congressLeaders"]!.findOne.mockResolvedValue(null);
+    db.collectionMocks["congressLeaders"]!.updateOne.mockResolvedValue({ matchedCount: 1 });
+
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+    // A chamber with no coalitions still has a majority bloc: `computeBlocsForCountry`
+    // makes every standalone party its own bloc and takes the largest. Mocking it
+    // as null would make `non-coalition` admit the majority party itself.
+    const composition = {
+      composition: [{ party: "MAJ" }, { party: "OPP" }, { party: "THIRD" }],
+      majorityParty: "MAJ",
+      majorityBloc: {
+        kind: "party",
+        id: "MAJ",
+        displayName: "Democratic Party",
+        displayColor: "#000",
+        partySlugs: new Set(["MAJ"]),
+        seats: 3,
+        dominantPartySlug: "MAJ",
+        dominantPartySeats: 3,
+      },
+    } as never;
+    vi.mocked(getSenateComposition).mockResolvedValue(composition);
+    vi.mocked(getHouseComposition).mockResolvedValue(composition);
+  });
+
+  it("leaves the Speaker in the chair, because that office is held on a seat not a party", async () => {
+    // This is the bug: a party switch emptied the chair, and nothing refilled it.
+    // The Speaker is `any-seated`, so the switch never cost them the office at all.
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "speaker_of_the_house", holderId: holder, formerHolderName: "Sam Rayburn" }],
+      "OPP",
+      NOW
+    );
+
+    expect(vacated).toEqual([]);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["speakerElections"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("vacates a majority-gated role the holder has just left the majority party for", async () => {
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "president_pro_tempore", holderId: holder, formerHolderName: "Kefauver" }],
+      "OPP",
+      NOW
+    );
+
+    expect(vacated).toEqual(["president_pro_tempore"]);
+    // Scoped to the holder, so two overlapping switches cannot both claim the
+    // vacancy and both open a race.
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).toHaveBeenCalledWith(
+      { role: "president_pro_tempore", characterId: holder },
+      expect.objectContaining({
+        $set: expect.objectContaining({ characterId: null, characterName: "Vacant" }),
+      }),
+      { upsert: false }
+    );
+    expect(db.collectionMocks["senateLeadershipElections"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "pro_tempore" },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "voting" }) }),
+      { upsert: true }
+    );
+  });
+
+  it("keeps a minority role when the holder moves to another non-majority party", async () => {
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "minority_leader_house", holderId: holder }],
+      "THIRD",
+      NOW
+    );
+
+    expect(vacated).toEqual([]);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("vacates a minority role whose holder has joined the majority party", async () => {
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "minority_leader_house", holderId: holder }],
+      "MAJ",
+      NOW
+    );
+
+    expect(vacated).toEqual(["minority_leader_house"]);
+    expect(db.collectionMocks["houseLeadershipElections"]!.updateOne).toHaveBeenCalledWith(
+      { _id: "minority_leader" },
+      expect.objectContaining({ $set: expect.objectContaining({ status: "voting" }) }),
+      { upsert: true }
+    );
+  });
+
+  it("counts the holder's own seat toward the party they are joining", async () => {
+    // Whether the chamber composition already shows the new party depends on
+    // which caller this is: the party `leave` route relabels the seat row before
+    // running the cleanup, while `performRelocation` deliberately runs it first.
+    // Without this the same defection keeps the post down one path and loses it
+    // down the other. The holder holds a seat, so their new party has one.
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "minority_leader_house", holderId: holder }],
+      // "independent" is not in the mocked composition — the seat row has not
+      // been relabelled yet.
+      "independent",
+      NOW
+    );
+
+    expect(vacated).toEqual([]);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("vacates a party-gated role it has no way to evaluate", async () => {
+    // The CN chair is `largest-single-party` but sits in neither US chamber, so
+    // there is no context to judge it by. Falling back to the vacate is the
+    // behaviour this path had before the eligibility gate existed.
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [{ leaderRole: "chair_cppcc", holderId: holder }],
+      "MAJ",
+      NOW
+    );
+
+    expect(vacated).toEqual(["chair_cppcc"]);
+    expect(db.collectionMocks["congressLeaders"]!.updateOne).toHaveBeenCalled();
+  });
+
+  it("does not tell the feed a removed holder changed party", async () => {
+    // `vacateAllLeadershipRoles` serves bans as well as switches, and a ban is
+    // not a party change. Posting one would be a public claim about a player
+    // that is simply untrue.
+    const { sendCountryGameEvent } = await import("@/lib/discordWebhooks");
+    const { vacateAllLeadershipRoles } = await import("./reconcilePartyEligibility");
+    await vacateAllLeadershipRoles(
+      db as unknown as Db,
+      [{ leaderRole: "president_pro_tempore", holderId: holder, formerHolderName: "Kefauver" }],
+      NOW,
+      { reason: "removal" }
+    );
+
+    expect(sendCountryGameEvent).toHaveBeenCalledWith(
+      "US",
+      expect.objectContaining({ description: expect.not.stringContaining("changed party") })
+    );
+  });
+
+  it("still vacates party-gated roles when the composition read fails", async () => {
+    // Degrading to the old unconditional vacate is the safe direction: an
+    // ineligible holder must not keep the office just because a read failed.
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    vi.mocked(getSenateComposition).mockRejectedValue(new Error("composition unavailable"));
+
+    const { vacateRolesLostToPartySwitch } = await import("./reconcilePartyEligibility");
+    const vacated = await vacateRolesLostToPartySwitch(
+      db as unknown as Db,
+      [
+        { leaderRole: "president_pro_tempore", holderId: holder },
+        { leaderRole: "speaker_of_the_house", holderId: holder },
+      ],
+      "OPP",
+      NOW
+    );
+
+    expect(vacated).toEqual(["president_pro_tempore"]);
   });
 });
 
@@ -505,14 +766,33 @@ describe("buildContextsForRoles", () => {
     expect(contexts.house?.majorityParty).toBe("MAJ");
   });
 
-  it("reads no composition at all when no role is majority-gated", async () => {
+  it("fetches the House for the Speaker, whose race this module now opens", async () => {
+    const { getSenateComposition } = await import("@/lib/congress/senateComposition");
+    const { getHouseComposition } = await import("@/lib/congress/houseComposition");
+    vi.mocked(getHouseComposition).mockResolvedValue({
+      composition: [{ party: "MAJ" }],
+      majorityParty: "MAJ",
+      majorityBloc: null,
+    } as never);
+
+    const { buildContextsForRoles } = await import("./reconcilePartyEligibility");
+    const contexts = await buildContextsForRoles(db as unknown as Db, [
+      { leaderRole: "speaker_of_the_house" },
+    ]);
+
+    expect(getHouseComposition).toHaveBeenCalled();
+    expect(getSenateComposition).not.toHaveBeenCalled();
+    expect(contexts.house?.majorityParty).toBe("MAJ");
+  });
+
+  it("reads no composition at all when every role belongs to another module", async () => {
     const { getSenateComposition } = await import("@/lib/congress/senateComposition");
     const { getHouseComposition } = await import("@/lib/congress/houseComposition");
 
     const { buildContextsForRoles } = await import("./reconcilePartyEligibility");
     const contexts = await buildContextsForRoles(db as unknown as Db, [
-      { leaderRole: "speaker_of_the_house" },
-      { leaderRole: "minority_whip_senate" },
+      { leaderRole: "chair_npcsc" },
+      { leaderRole: "speaker_of_the_bundestag" },
     ]);
 
     expect(contexts).toEqual({ house: null, senate: null });

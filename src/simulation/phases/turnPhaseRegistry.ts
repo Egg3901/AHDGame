@@ -44,7 +44,7 @@ import {
 } from "@/lib/turn/perpetualElections";
 import {
   resolveExpiredLeadershipElections,
-  vacateLeadershipAfterElections,
+  vacateLeadershipForLostSeats,
 } from "@/lib/congress/leadershipElections";
 import { reconcileAllLeadershipPartyEligibility } from "@/lib/congress/leadership/reconcilePartyEligibility";
 import { processAlignmentTurn } from "@/lib/turn/alignmentPhase";
@@ -1135,12 +1135,14 @@ export function getTurnPhaseRegistry(): TurnPhaseAdapter[] {
           phaseResults.clearResolvedSupport = clearedSupport;
         }
 
-        if (generalResolved && generalResolved > 0) {
-          const vacatedCount = await runtime.runPhase("leadershipVacate", () =>
-            vacateLeadershipAfterElections(db)
-          );
-          phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
-        }
+        // Every turn, not only when a general resolved: a seat can be given up
+        // by a withdrawal, a resignation or a move to another chamber, and the
+        // only other thing watching was a lazy check on the congress page GETs.
+        // Still sequenced after resolution, so it reads settled seats.
+        const vacatedCount = await runtime.runPhase("leadershipVacate", () =>
+          vacateLeadershipForLostSeats(db)
+        );
+        phaseResults.leadershipVacated = { positionsVacated: vacatedCount ?? 0 };
 
         const govResult = await runtime.runPhase("parliamentaryGovernmentFormation", () =>
           runPostElectionGovernmentPhases(db, gameNow, generalResolved ?? 0)

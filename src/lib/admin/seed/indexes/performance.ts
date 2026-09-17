@@ -91,6 +91,19 @@ export async function seedPerfIndexes(db: Db, log: (msg: string) => void) {
     log
   );
 
+  // electedOfficials — the NPP half of the same lookup. The seat-loss sweep
+  // asks "does this leadership holder still sit in the chamber" as one $or over
+  // characterId and nppId, and an $or is only served by an index when EVERY
+  // branch has one — otherwise the whole query falls back to a collection scan.
+  // That sweep runs each turn and on both congress leadership page loads.
+  await ensureIndex(
+    db,
+    "electedOfficials",
+    { nppId: 1, officeType: 1 },
+    { name: "electedOfficials_nppId_officeType" },
+    log
+  );
+
   // nppEndorsements — endorsements per election
   await ensureIndex(
     db,
