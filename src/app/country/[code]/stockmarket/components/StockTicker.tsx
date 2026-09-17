@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useTickerDecel } from "@/hooks/useTickerDecel";
 import type { StockListing, CommodityData } from "../types";
+import { finitePriceChange } from "@/lib/stockExchange/listingEligibility";
 
 const mobileQuery = "(max-width: 640px)";
 function subscribeMobile(cb: () => void) {
@@ -91,7 +92,7 @@ export function StockTicker({
       // corps without one fall back to the full company name.
       name: s.tickerSymbol ?? s.name,
       price: s.sharePrice,
-      priceChange24h: s.priceChange24h ?? 0,
+      priceChange24h: finitePriceChange(s.priceChange24h),
       link: `/corporation/${s.sequentialId ?? s._id}`,
       isSubsidiary: s.isSubsidiary === true,
     }));

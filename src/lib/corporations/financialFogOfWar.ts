@@ -129,6 +129,8 @@ export function applyFogToFinancials(financials: Financials, factor: number): Fi
     governmentBondSubsidy: fog(financials.governmentBondSubsidy, factor),
     imfFacilityPaymentDaily: fog(financials.imfFacilityPaymentDaily, factor),
     imfFacilityReceiptsDaily: fog(financials.imfFacilityReceiptsDaily, factor),
+    supplyAgreementSettlementDaily: fog(financials.supplyAgreementSettlementDaily ?? 0, factor),
+    supplyAgreementUnpaidAnchor: fog(financials.supplyAgreementUnpaidAnchor ?? 0, factor),
     totalCosts: fog(financials.totalCosts, factor),
     income: fog(financials.income, factor),
     dividendRate: financials.dividendRate,

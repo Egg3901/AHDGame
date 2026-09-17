@@ -140,6 +140,9 @@ export interface SupplyAgreement {
   /** Exact supplier-side cash movement after premium netting and solvency, in the stored currency. */
   lastSupplierCashDelta?: number;
   lastSupplierCashCurrency?: CurrencyCode;
+  /** Exact buyer-side cash movement after premium netting and solvency, in the buyer's currency. */
+  lastBuyerCashDelta?: number;
+  lastBuyerCashCurrency?: CurrencyCode;
   /** Net settlement amount left unpaid by the solvency floor, in anchor currency. */
   lastUnpaidSettlementAnchor?: number;
   /**

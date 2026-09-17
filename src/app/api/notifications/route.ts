@@ -1,3 +1,4 @@
+import { notificationTypeFilter } from "@/lib/notifications/visibility";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
@@ -28,7 +29,10 @@ const notificationsDeleteSchema = z.object({
 async function loadBundleContext(db: Db, userId: ObjectId) {
   const user = await db
     .collection<User>("users")
-    .findOne({ _id: userId }, { projection: { _id: 1, notificationBundleUserIds: 1 } });
+    .findOne(
+      { _id: userId },
+      { projection: { _id: 1, notificationBundleUserIds: 1, notificationPreferences: 1 } }
+    );
   if (!user) return null;
   const bundleUserIds = getNotificationBundleUserIds(user);
   const labelDocs = await db
@@ -48,7 +52,7 @@ async function loadBundleContext(db: Db, userId: ObjectId) {
       displayName: row?.displayName ?? row?.username ?? "?",
     };
   });
-  return { bundleUserIds, notificationAccounts };
+  return { bundleUserIds, notificationAccounts, preferences: user.notificationPreferences };
 }
 
 // GET /api/notifications — Paginated notifications; supports bundled accounts via `account` query param
@@ -95,12 +99,13 @@ export const GET = withNoStore(async (request: Request) => {
       return NextResponse.json({ error: "Invalid profile filter" }, { status: 400 });
     }
 
-    const query: Record<string, unknown> = { userId: { $in: queryUserIds } };
+    const visibility = notificationTypeFilter(ctx.preferences, new Date());
+    const query: Record<string, unknown> = { userId: { $in: queryUserIds }, ...visibility };
     if (profileResolution.characterId) {
       query["metadata.recipientCharacterId"] = profileResolution.characterId;
     }
     if (type && type !== "all") {
-      query.type = type;
+      query.type = { ...visibility.type, $eq: type };
     }
     if (search) {
       query.$or = [
@@ -127,7 +132,7 @@ export const GET = withNoStore(async (request: Request) => {
       db
         .collection<Notification>("notifications")
         .aggregate<{ _id: ObjectId; count: number }>([
-          { $match: { userId: { $in: bundleUserIds }, read: false } },
+          { $match: { userId: { $in: bundleUserIds }, ...visibility, read: false } },
           { $group: { _id: "$userId", count: { $sum: 1 } } },
         ])
         .toArray(),
@@ -137,6 +142,7 @@ export const GET = withNoStore(async (request: Request) => {
           {
             $match: {
               userId: { $in: queryUserIds },
+              ...visibility,
               read: false,
               "metadata.recipientCharacterId": { $exists: true, $type: "string", $ne: "" },
             },
@@ -239,7 +245,10 @@ export async function PATCH(request: Request) {
 
     const user = await db
       .collection<User>("users")
-      .findOne({ _id: userId }, { projection: { _id: 1, notificationBundleUserIds: 1 } });
+      .findOne(
+        { _id: userId },
+        { projection: { _id: 1, notificationBundleUserIds: 1, notificationPreferences: 1 } }
+      );
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
@@ -324,7 +333,10 @@ export async function DELETE(request: Request) {
 
     const user = await db
       .collection<User>("users")
-      .findOne({ _id: userId }, { projection: { _id: 1, notificationBundleUserIds: 1 } });
+      .findOne(
+        { _id: userId },
+        { projection: { _id: 1, notificationBundleUserIds: 1, notificationPreferences: 1 } }
+      );
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }

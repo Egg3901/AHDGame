@@ -58,6 +58,14 @@ export interface StockExchangeListing {
   /** Shares available in the public float (0 = no shares on market) */
   publicFloat: number;
   /**
+   * Canonical tradability flag (#2033): false when the row cannot be traded
+   * (zero/non-finite totalShares or publicFloat). Absent on pre-#2033
+   * snapshots; readers fall back to `isTradableListing(listing)` from the
+   * canonical module, never a local re-derivation. Lets the UI tell a
+   * non-tradable firm apart from a tradable listing with a real zero return.
+   */
+  isTradable?: boolean;
+  /**
    * Venue this corporation is listed on ("NYSE", "GOSPLAN", …). `null` when the
    * corp's country has no configured venue — such corps appear in the `global`
    * snapshot only, never on another country's exchange.
