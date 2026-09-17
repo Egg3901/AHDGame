@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   LABOUR_STAFFING_MAX_TURN_MOVE,
-  LABOUR_TIGHTNESS_SCORE_K,
   LABOUR_UNEMPLOYMENT_TIGHTNESS_CAP_PP,
   LABOUR_UNEMPLOYMENT_TIGHTNESS_K,
   accumulateLabourDemand,
