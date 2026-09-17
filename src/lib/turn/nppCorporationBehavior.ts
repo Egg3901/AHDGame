@@ -1729,8 +1729,7 @@ export function makeNppCorpDecision(
       no_enterable_market: entryCandidate == null,
       logistics_capacity: !hasLogisticsCapacity,
       cohort_ineligible: !marketEntryEligible && ctx.shortageEntryEligible !== true,
-      retail_paused:
-        ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
+      retail_paused: ctx.retailExpansionPaused === true && entryCandidate?.sectorType === "retail",
       glutted_market: ordinaryEntryTargetGlutted && !exceptionalShortageEntry,
       facility_size: foundingBlockEntered && !foundingAffordable && foundingSizeBlocked,
       credit_requested: foundingBlockEntered && !foundingAffordable && foundingCreditPath,
@@ -1740,8 +1739,7 @@ export function makeNppCorpDecision(
         !foundingCreditPath &&
         !foundingSizeBlocked &&
         exceptionalShortageEntry,
-      insufficient_cash:
-        (foundingBlockEntered && !foundingAffordable) || foundingSurplusBlocked,
+      insufficient_cash: (foundingBlockEntered && !foundingAffordable) || foundingSurplusBlocked,
     });
     capacityObservations.push({
       actor: "npp",
@@ -1839,11 +1837,7 @@ export function makeNppCorpDecision(
     ): void => {
       let headroom = headroomUnits;
       if (headroom == null) {
-        const pool = poolFor(
-          sector.countryId ?? corp.countryId,
-          sector.stateId,
-          sector.sectorType
-        );
+        const pool = poolFor(sector.countryId ?? corp.countryId, sector.stateId, sector.sectorType);
         headroom = pool
           ? unownedHeadroomUnitsOf(
               sector.sectorType,
@@ -1867,7 +1861,7 @@ export function makeNppCorpDecision(
         competitorCount: competitors,
         rawDominanceMultiplier: rawDominance,
         dominanceDensityFactor: density,
-        dominanceMultiplier: priced?.dominanceMultiplier ?? (1 + (rawDominance - 1) * density),
+        dominanceMultiplier: priced?.dominanceMultiplier ?? 1 + (rawDominance - 1) * density,
         unitPriceAnchor: priced?.unitPriceAnchor ?? 0,
         cashHeadroomAnchor: priced?.cashHeadroomAnchor ?? cashToAnchor(cashLocal),
         requestedUnits: units,
@@ -2165,7 +2159,7 @@ export function makeNppCorpDecision(
           "below_minimum_order",
           sector,
           capitalStock,
-          headroomUnits,
+          candidate.headroomUnits,
           units,
           null
         );
@@ -2184,7 +2178,7 @@ export function makeNppCorpDecision(
           "insufficient_cash",
           sector,
           capitalStock,
-          headroomUnits,
+          candidate.headroomUnits,
           units,
           {
             unitPriceAnchor: reinvestUnitPriceAnchor,
@@ -2238,7 +2232,7 @@ export function makeNppCorpDecision(
       });
       // Observed after the spend: headroom is cash after the charged cost,
       // the same post-cost headroom the player path records.
-      observeReinvestCandidate("placed", sector, capitalStock, headroomUnits, units, {
+      observeReinvestCandidate("placed", sector, capitalStock, candidate.headroomUnits, units, {
         unitPriceAnchor: reinvestUnitPriceAnchor,
         dominanceMultiplier: reinvestPrice.dominanceMultiplier,
         cashHeadroomAnchor: cashToAnchor(cashLocal),
