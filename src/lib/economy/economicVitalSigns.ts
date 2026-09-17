@@ -677,6 +677,18 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const sovereignHolderCounts = sovereignBonds.map(
     (bond) => bond.holders.filter((holder) => holder.units > 0).length
   );
+  const corporateHolderCounts = corporateBonds.map(
+    (bond) => bond.holders.filter((holder) => holder.units > 0).length
+  );
+  const corporateHeldUnits = corporateBonds.reduce(
+    (sum, bond) =>
+      sum + bond.holders.reduce((holderSum, holder) => holderSum + nonnegative(holder.units), 0),
+    0
+  );
+  const corporateFloatUnits = corporateBonds.reduce(
+    (sum, bond) => sum + nonnegative(bond.publicFloat),
+    0
+  );
   const sovereignHeldUnits = sovereignBonds.reduce(
     (sum, bond) =>
       sum + bond.holders.reduce((holderSum, holder) => holderSum + nonnegative(holder.units), 0),
@@ -941,6 +953,16 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         ratio(sovereignHeldUnits, sovereignHeldUnits + sovereignFloatUnits),
         sovereignBonds.length,
         "unmatured_sovereign_units"
+      ),
+      corporateMedianHolders: metric(
+        median(corporateHolderCounts),
+        corporateBonds.length,
+        "unmatured_corporate_issue_count"
+      ),
+      corporateSubscriptionRate: metric(
+        ratio(corporateHeldUnits, corporateHeldUnits + corporateFloatUnits),
+        corporateBonds.length,
+        "unmatured_corporate_units"
       ),
       sovereignMaturityHhi: metric(
         sovereignMaturityConcentration.hhi,

@@ -600,6 +600,64 @@ describe("computeEconomicVitalSigns", () => {
     expect(noVehicles.money.householdGrossVelocity48.value).toBe(1);
   });
 
+  it("covers corporate bond holders with the same depth as sovereign issues", () => {
+    const corpId = new ObjectId();
+    const bond = (overrides: object) => ({
+      _id: new ObjectId(),
+      corporationId: corpId,
+      faceValue: 1_000,
+      couponRate: 4,
+      maturityTurns: 96,
+      issuedAtTurn: 1,
+      maturityTurn: 97,
+      marketPrice: 1,
+      totalIssued: 10_000,
+      publicFloat: 0,
+      holders: [],
+      defaulted: false,
+      defaultedAtTurn: null,
+      matured: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    });
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      bonds: [
+        bond({
+          holders: [{ corporationId: corpId, units: 30 }, { units: 10 }],
+          publicFloat: 60,
+        }),
+        // Legacy corporate rows omit issuerType and still count as corporate.
+        bond({ holders: [], publicFloat: 0 }),
+        bond({ issuerType: "sovereign", holders: [{ units: 5 }], publicFloat: 5 }),
+      ] as never,
+    });
+
+    // Holder counts [2, 0]: median 1 across the two corporate issues.
+    expect(snapshot.securities.corporateMedianHolders.value).toBe(1);
+    expect(snapshot.securities.corporateMedianHolders.observations).toBe(2);
+    expect(snapshot.securities.corporateMedianHolders.basis).toBe(
+      "unmatured_corporate_issue_count"
+    );
+    // Held 40 of 100 outstanding corporate units; the sovereign leg is excluded.
+    expect(snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
+    expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(2);
+    expect(snapshot.securities.corporateSubscriptionRate.basis).toBe("unmatured_corporate_units");
+    expect(snapshot.securities.corporateNoHolderBondShare.value).toBe(0.5);
+    expect(snapshot.securities.sovereignSubscriptionRate.value).toBe(0.5);
+  });
+
+  it("reports absent corporate bond coverage as unknown, not as zero holders", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+
+    expect(snapshot.securities.corporateMedianHolders.value).toBeNull();
+    expect(snapshot.securities.corporateMedianHolders.observations).toBe(0);
+    expect(snapshot.securities.corporateSubscriptionRate.value).toBeNull();
+    expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),
