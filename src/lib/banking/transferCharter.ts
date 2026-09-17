@@ -330,9 +330,20 @@ export async function transferBankCharterToAcquirer(
     sameId(plan.to, acquirerId) &&
     plan.fingerprint === fingerprint &&
     charterFingerprint(acquirer.bankCharter) === fingerprint;
+  // The plan's charter with a stale copy of it on our own slot: attempt 1
+  // claimed, then crashed, then banking turns drifted the still-held charter
+  // past the stamped fingerprint. The slot copy is provably our orphan (it
+  // matches the plan fingerprint exactly, and the plan already names us), so
+  // it must not read as a foreign bank occupying the slot.
+  const staleOwnClaim =
+    !!acquirer.bankCharter &&
+    !!plan &&
+    sameId(plan.to, acquirerId) &&
+    plan.fingerprint !== fingerprint &&
+    charterFingerprint(acquirer.bankCharter) === plan.fingerprint;
   const conflict = bankTransferConflict(target, acquirer);
-  if (conflict && !ownClaim) return { ok: false, error: conflict };
-  if (charter.status !== "active" && acquirer.bankCharter && !ownClaim) {
+  if (conflict && !ownClaim && !staleOwnClaim) return { ok: false, error: conflict };
+  if (charter.status !== "active" && acquirer.bankCharter && !ownClaim && !staleOwnClaim) {
     return { ok: true, transferred: false, currency: null, ...NO_COUNTS };
   }
 
@@ -352,6 +363,7 @@ export async function transferBankCharterToAcquirer(
   // already released is someone's in-flight transfer and is never adopted.
   let owned: string | null = null;
   let prevTo: ObjectId | null = null;
+  let prevFingerprint: string | null = null;
   const stamp = await corps.updateOne(
     { _id: targetId, bankCharterTransfer: { $exists: false } },
     { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
@@ -376,6 +388,28 @@ export async function transferBankCharterToAcquirer(
     ) {
       // Same-pair sibling (or our own lost-ack retry): drive jointly.
       owned = curPlan.attemptId;
+    } else if (curPlan && sameId(curPlan.to, acquirerId)) {
+      // Stale own plan: it names this acquirer but its fingerprint predates
+      // the shell's current charter. Fingerprinted economics move on every
+      // banking turn, so any strand between stamp and release drifts within
+      // hours and could otherwise never rejoin — a permanent "claimed by
+      // another merge" dead end for the pinned merge. Take the plan over via
+      // token compare-and-swap guarded on the shell still holding this
+      // charter, then proceed as owner under fresh identity. Foreign plans
+      // never reach here (same `to` is required), so a different acquirer's
+      // race still conflicts below with zero writes.
+      const takeOver = await corps.updateOne(
+        {
+          _id: targetId,
+          ...identityFilter(charter),
+          "bankCharterTransfer.attemptId": curPlan.attemptId,
+        },
+        { $set: { bankCharterTransfer: stampPlan, updatedAt: now } }
+      );
+      if (takeOver.modifiedCount === 1) {
+        owned = attemptId;
+        prevFingerprint = curPlan.fingerprint;
+      }
     } else if (curRaw && !sameId(curRaw.to, acquirerId)) {
       // Foreign plan: adopt only while the shell still holds this charter.
       // The token CAS means exactly one adopter wins; losers conflict below
@@ -424,6 +458,20 @@ export async function transferBankCharterToAcquirer(
       { _id: prevTo, ...fingerprintFilter(charter) },
       { $unset: { bankCharter: "" }, $set: { updatedAt: now } }
     );
+  } else if (prevFingerprint) {
+    // The superseded plan left its claimed copy behind on our own slot
+    // (crash after claim, then drift). Remove exactly that stale copy:
+    // reaching here means the join already failed, so the superseded
+    // fingerprint always differs from the fresh one and the current charter
+    // is never the delete target. A sibling's fresh claim of the current
+    // charter (or any foreign bank) never matches the old fingerprint.
+    const slot = await corps.findOne({ _id: acquirerId }, { projection: { bankCharter: 1 } });
+    if (slot?.bankCharter && charterFingerprint(slot.bankCharter) === prevFingerprint) {
+      await corps.updateOne(
+        { _id: acquirerId, ...fingerprintFilter(slot.bankCharter) },
+        { $unset: { bankCharter: "" }, $set: { updatedAt: now } }
+      );
+    }
   }
 
   // Claim the acquirer's charter slot, guarded: a charter issued on the

@@ -3,7 +3,7 @@ import { ObjectId, type Db } from "mongodb";
 import { createInMemoryDb, type InMemoryDb } from "@/lib/test-utils/inMemoryDb";
 import type { BankCharter } from "@/lib/db/types/bank";
 import type { Corporation } from "@/lib/db/types";
-import { transferBankCharterToAcquirer } from "../transferCharter";
+import { charterFingerprint, transferBankCharterToAcquirer } from "../transferCharter";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -290,6 +290,105 @@ describe("transferBankCharterToAcquirer crash recovery", () => {
     expect(result).toMatchObject({ ok: true, transferred: true });
     expect("bankCharter" in corp(staleAcquirer)).toBe(false);
     expectUnified();
+  });
+
+  it("takes over a stale own plan after turn-driven charter drift", async () => {
+    // Attempt 1 stamped a plan, then stranded before release; banking turns
+    // since mutated the fingerprinted economics on the still-held charter.
+    // Without a same-acquirer takeover the retry could never rejoin its own
+    // plan (fingerprint mismatch) and no foreign adopt applies (same owner):
+    // a permanent "claimed by another merge" dead end.
+    const before = makeCharter();
+    const drifted = makeCharter({ cashReserves: before.cashReserves + 1_000 });
+    await memory.collection("corporations").updateOne(
+      { _id: targetId },
+      {
+        $set: {
+          bankCharter: drifted,
+          bankCharterTransfer: {
+            to: acquirerId,
+            currency: "USD",
+            attemptId: "stale-attempt",
+            fingerprint: charterFingerprint(before),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+
+    const result = await transferBankCharterToAcquirer(db(), targetId, acquirerId, now);
+    expect(result).toMatchObject({ ok: true, transferred: true });
+    expect(corp(acquirerId).bankCharter?.cashReserves).toBe(drifted.cashReserves);
+    expectUnified();
+  });
+
+  it("replaces its own stale claimed copy when taking over after drift", async () => {
+    // Crash after claim plus drift: the acquirer holds the superseded plan's
+    // orphan copy while the shell holds the drifted charter. The retry must
+    // not read its own orphan as a foreign bank (occupied-slot conflict);
+    // it removes exactly the stale copy and moves the current charter.
+    const before = makeCharter();
+    const drifted = makeCharter({ cashReserves: before.cashReserves + 1_000 });
+    await memory.collection("corporations").updateOne(
+      { _id: targetId },
+      {
+        $set: {
+          bankCharter: drifted,
+          bankCharterTransfer: {
+            to: acquirerId,
+            currency: "USD",
+            attemptId: "stale-attempt",
+            fingerprint: charterFingerprint(before),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+    await memory
+      .collection("corporations")
+      .updateOne({ _id: acquirerId }, { $set: { bankCharter: { ...before }, updatedAt: now } });
+
+    const result = await transferBankCharterToAcquirer(db(), targetId, acquirerId, now);
+    expect(result).toMatchObject({ ok: true, transferred: true });
+    expect(corp(acquirerId).bankCharter?.cashReserves).toBe(drifted.cashReserves);
+    expectUnified();
+  });
+
+  it("still conflicts when a foreign bank holds the slot after our plan drifted", async () => {
+    // The takeover must not mistake a genuinely foreign bank for our stale
+    // claim: the slot copy matches neither the plan fingerprint nor the
+    // current charter, so the retry conflicts with zero writes.
+    const before = makeCharter();
+    const drifted = makeCharter({ cashReserves: before.cashReserves + 1_000 });
+    await memory.collection("corporations").updateOne(
+      { _id: targetId },
+      {
+        $set: {
+          bankCharter: drifted,
+          bankCharterTransfer: {
+            to: acquirerId,
+            currency: "USD",
+            attemptId: "stale-attempt",
+            fingerprint: charterFingerprint(before),
+            startedAt: now,
+          },
+          updatedAt: now,
+        },
+      }
+    );
+    await memory
+      .collection("corporations")
+      .updateOne(
+        { _id: acquirerId },
+        { $set: { bankCharter: makeCharter({ cashReserves: 999 }), updatedAt: now } }
+      );
+
+    const result = await transferBankCharterToAcquirer(db(), targetId, acquirerId, now);
+    expect(result.ok).toBe(false);
+    expect(corp(targetId).bankCharter?.cashReserves).toBe(drifted.cashReserves);
+    expect(corp(acquirerId).bankCharter?.cashReserves).toBe(999);
   });
 
   it("converges concurrent same-pair retries to one charter and unified keys", async () => {
