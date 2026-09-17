@@ -147,4 +147,52 @@ describe("seedCoreIndexes corporation guard (issue #2028)", () => {
       /corporations_sequentialId unique index creation failed/
     );
   });
+
+  it("stays tolerant when an equivalent unique guard already exists", async () => {
+    const log = vi.fn();
+    const createIndex = vi.fn(async (key: unknown, options?: { name?: string }) => {
+      if (options?.name === "corporations_sequentialId") {
+        // Code 86 shape: same key spec held under another name. Deliberately
+        // avoids the phrase "already exists" so the test exercises the
+        // equivalent-guard lookup branch, not the message-match branch.
+        const err = new Error(
+          "IndexKeySpecsConflict: existing index legacy_corps_seq has the same key specification"
+        ) as Error & { code: number };
+        err.code = 86;
+        throw err;
+      }
+      return "ok";
+    });
+    const db = {
+      collection: vi.fn(() => ({
+        indexes: vi.fn().mockResolvedValue([
+          { key: { _id: 1 }, name: "_id_" },
+          { key: { sequentialId: 1 }, name: "legacy_corps_seq", unique: true },
+        ]),
+        find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+        createIndex,
+      })),
+    } as unknown as Db;
+    await expect(seedCoreIndexes(db, log)).resolves.toBeUndefined();
+    expect(log.mock.calls.join("\n")).toContain("already exists");
+  });
+
+  it("stays tolerant on a plain already-exists createIndex outcome", async () => {
+    const log = vi.fn();
+    const createIndex = vi.fn(async (key: unknown, options?: { name?: string }) => {
+      if (options?.name === "corporations_sequentialId") {
+        throw new Error("Index already exists: corporations_sequentialId");
+      }
+      return "ok";
+    });
+    const db = {
+      collection: vi.fn(() => ({
+        indexes: vi.fn().mockResolvedValue([{ key: { _id: 1 }, name: "_id_" }]),
+        find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })),
+        createIndex,
+      })),
+    } as unknown as Db;
+    await expect(seedCoreIndexes(db, log)).resolves.toBeUndefined();
+    expect(log.mock.calls.join("\n")).toContain("already exists");
+  });
 });

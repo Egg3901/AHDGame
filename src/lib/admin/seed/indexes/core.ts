@@ -155,10 +155,13 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
   // creation, so one seed fix can close every duplicate at once instead of
   // tripping over a bare E11000 one key at a time.
   await assertUniqueCorporationSequentialIds(db);
-  // Created directly (not via the tolerant ensureIndex helper), so a failure
-  // stays fatal and visible instead of degrading to a log line that leaves
-  // the collection unprotected against later collisions. createIndex with the
-  // same name/key/options is idempotent, so re-runs are safe.
+  // Created directly (not via the tolerant ensureIndex helper), so a genuine
+  // failure stays fatal and visible instead of degrading to a log line that
+  // leaves the collection unprotected against later collisions. createIndex
+  // with the same name/key/options is idempotent, so re-runs are safe. Only
+  // the benign "an equivalent unique guard already exists" outcomes stay
+  // tolerant (same contract ensureIndex offers other indexes): anything else,
+  // including a post-guard E11000 from a concurrent writer, still throws.
   try {
     await db
       .collection("corporations")
@@ -169,7 +172,25 @@ export async function seedCoreIndexes(db: Db, log: (msg: string) => void) {
     log("  ✓ corporations.corporations_sequentialId");
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    throw new Error(`corporations_sequentialId unique index creation failed: ${msg}`);
+    if (msg.includes("already exists")) {
+      log("  = corporations.corporations_sequentialId (already exists)");
+    } else {
+      const indexes = await db
+        .collection("corporations")
+        .indexes()
+        .catch(() => []);
+      const equivalentGuard = indexes.find(
+        (index) =>
+          JSON.stringify(index.key ?? {}) === JSON.stringify({ sequentialId: 1 }) && !!index.unique
+      );
+      if (equivalentGuard) {
+        log(
+          `  = corporations.${equivalentGuard.name ?? "corporations_sequentialId"} (already exists under different name)`
+        );
+      } else {
+        throw new Error(`corporations_sequentialId unique index creation failed: ${msg}`);
+      }
+    }
   }
   await ensureIndex(db, "corporations", { ceoId: 1 }, { name: "corporations_ceoId" }, log);
   // Supports sellNppStockSurplus's per-cycle scan (nppActionProcessing.ts) for

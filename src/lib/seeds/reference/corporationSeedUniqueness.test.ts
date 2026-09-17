@@ -4,6 +4,7 @@ import {
   corporationPathIdFromDoc,
   corporationQueryFromParamId,
 } from "@/lib/api/corporations/resolveQuery";
+import { SEED_PRESET_IDS } from "@/lib/constants/turnTime";
 
 // One synthetic producing state per country that can own seeded corporations:
 // sovereign issuers (US/UK/JP/RU/DE/IE/BR/CN/NG/FR/IT/ES/SE/TR/GR/AT/FI/DD),
@@ -47,16 +48,10 @@ function statesForAll() {
   }));
 }
 
-export const SUPPORTED_CORP_SEED_PRESETS = [
-  "1953-default",
-  "1979-default",
-  "1991-default",
-  "1999-default",
-  "2007-default",
-  "2019-default",
-  "2023-default",
-  "2027-default",
-];
+// Cover every canonical reset preset (not a local copy of the list): a new
+// preset added to SEED_PRESET_IDS is automatically covered here instead of
+// silently skipping uniqueness for its seed output.
+const SUPPORTED_CORP_SEED_PRESETS: readonly string[] = SEED_PRESET_IDS;
 
 function seqIdsOf(preset: string, commandEconomyEnabled: boolean) {
   return generateCountryOwnedSeedData(statesForAll(), preset, commandEconomyEnabled).map(
