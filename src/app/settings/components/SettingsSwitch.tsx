@@ -6,7 +6,7 @@ export const SETTINGS_SWITCH_THUMB_ON = "left-1 translate-x-[22px]";
 
 /**
  * Settings control-panel switch. The thumb must keep an explicit `left-*`
- * anchor — translate-only absolute positioning used the static position and
+ * anchor. Translate-only absolute positioning used the static position and
  * parked the knob outside the track (ticket #998).
  */
 export function SettingsSwitch({
