@@ -198,6 +198,15 @@ export interface EconomicGrowthFactors {
   /** Goods scarcity at administered prices, 0 (abundant) → 100 (acute), derived
    *  from the demand-vs-supply gap and the overhang relative to the money stock. */
   shortageIndex?: number;
+  /** Observed country commodity demand-vs-supply gap, percent of supply
+   *  (0 = balanced, capped at 500 = acute), aggregated from the prior turn's
+   *  basis-explicit country ledger rows. Present only when the ledger tier is
+   *  active and at least one valid observation exists; the command economy
+   *  phase `$unset`s it otherwise, so cold start and tier changes need no
+   *  migration. Diagnostic readout: the shortage kernel consumes it same-turn
+   *  and falls back to overhang-only when absent. See
+   *  countryPhysicalDemandSupplyGapPct in @/lib/economy/rules. */
+  physicalDemandSupplyGapPct?: number;
   /** Shadow (black-market / swap-rate) premium over the official price/FX, as a
    *  fraction (0.3 = +30%). Rises with overhang + shortage, falls with tolerance. */
   blackMarketPremium?: number;
