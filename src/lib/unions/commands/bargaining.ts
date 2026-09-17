@@ -37,6 +37,13 @@ import {
   type BargainingTerms,
 } from "@/lib/unions/bargaining";
 import { strikeCallCost, STRIKE_CALL_MIN_UNIONIZATION } from "@/lib/unions/unionEconomy";
+import {
+  applyBargainingEscalationSpend,
+  ESCALATION_CAMPAIGN_CHANGED,
+  ESCALATION_INSUFFICIENT_TREASURY,
+  ESCALATION_SECTOR_CHANGED,
+} from "@/lib/unions/bargainingEscalationSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { realWageIndex } from "@/lib/labour/unionization";
 import { STRIKE_EXPECTATION_GAP_THRESHOLD } from "@/lib/labour/strikes";
 import { rejectIfTurnProcessing, resolveOwnedUnion, type UnionActionResult } from "./unionActions";
@@ -539,7 +546,8 @@ export async function persistUnionBargainingEscalation(
   db: Db,
   union: Union,
   campaign: BargainingCampaign,
-  currentTurn: number
+  currentTurn: number,
+  opts?: { idempotencyKey?: string }
 ): Promise<UnionActionResult> {
   const now = new Date();
   const sectors = await db
@@ -592,46 +600,6 @@ export async function persistUnionBargainingEscalation(
   }
   const cost = plan.cashCost;
 
-  const campaignCollection = db.collection<BargainingCampaign>("bargainingCampaigns");
-  const unionCollection = db.collection<Union>("unions");
-  const sectorCollection = db.collection<CorporateSector>("corporateSectors");
-  const claimCampaign = async (session?: ClientSession) => {
-    const result = await campaignCollection.updateOne(
-      {
-        _id: campaign._id,
-        status: "dispute",
-        escalationLevel: campaign.escalationLevel,
-        lastActionTurn: campaign.lastActionTurn,
-      },
-      {
-        $set: {
-          escalationLevel: next.escalationLevel,
-          escalationStartedAtTurn: currentTurn,
-          lastActionTurn: currentTurn,
-          mandate: next.mandate,
-          mandateUpdatedAtTurn: currentTurn,
-          updatedAt: now,
-        },
-        ...(recordedExpectations.length > 0 && {
-          $push: { escalationExpectations: { $each: recordedExpectations } },
-        }),
-      },
-      { session }
-    );
-    if (result.modifiedCount === 0) throw new Error("CAMPAIGN_CHANGED");
-  };
-  const fundAction = async (session?: ClientSession) => {
-    if (cost === 0) return;
-    const result = await unionCollection.updateOne(
-      { _id: union._id, treasury: { $gte: cost } },
-      {
-        $inc: { treasury: -cost },
-        $set: { lastCalledStrikeTurn: currentTurn, updatedAt: now },
-      },
-      { session }
-    );
-    if (result.modifiedCount === 0) throw new Error("INSUFFICIENT_TREASURY");
-  };
   // Record what the shop floor believed before the strike call, so ending the
   // campaign can put it back. Locals already recorded by an earlier rung keep
   // their original value.
@@ -644,7 +612,7 @@ export async function persistUnionBargainingEscalation(
       sectorId: sector._id,
       previousExpectationIndex: sector.workerExpectationIndex ?? null,
     }));
-  const strikeOps = targets.map((sector) => {
+  const strikeTargets = targets.map((sector) => {
     // Same cost-of-living index the corporation turn will use next turn when
     // it recomputes the gap. A COL-blind figure makes the forced expectation
     // fall below the concession threshold on the very next turn in cheap
@@ -655,123 +623,65 @@ export async function persistUnionBargainingEscalation(
       STRIKE_EXPECTATION_GAP_THRESHOLD +
       0.05;
     return {
-      updateOne: {
-        filter: { _id: sector._id, strikeStartedAtTurn: sector.strikeStartedAtTurn ?? null },
-        update: {
-          $set: {
-            strikeStartedAtTurn: currentTurn,
-            workerExpectationIndex: expectation,
-            updatedAt: now,
-          },
-        },
-      },
+      sectorId: sector._id,
+      priorStrikeStartedAtTurn: sector.strikeStartedAtTurn ?? null,
+      priorExpectationIndex: sector.workerExpectationIndex ?? null,
+      newExpectation: expectation,
     };
   });
-  const startStrikes = async (session?: ClientSession) => {
-    if (strikeOps.length === 0) return;
-    const result = await sectorCollection.bulkWrite(strikeOps, { session });
-    if (result.matchedCount !== strikeOps.length) throw new Error("SECTOR_CHANGED");
-  };
-  const restoreCampaign = () =>
-    campaignCollection.updateOne(
-      {
-        _id: campaign._id,
-        status: "dispute",
-        escalationLevel: next.escalationLevel,
-        lastActionTurn: currentTurn,
-      },
-      {
-        $set: {
-          escalationLevel: campaign.escalationLevel,
-          lastActionTurn: campaign.lastActionTurn,
-          mandate: campaign.mandate,
-          updatedAt: campaign.updatedAt,
-          ...(campaign.escalationStartedAtTurn != null && {
-            escalationStartedAtTurn: campaign.escalationStartedAtTurn,
-          }),
-          ...(campaign.mandateUpdatedAtTurn != null && {
-            mandateUpdatedAtTurn: campaign.mandateUpdatedAtTurn,
-          }),
-        },
-        ...(recordedExpectations.length > 0 && {
-          $pull: {
-            escalationExpectations: {
-              sectorId: { $in: recordedExpectations.map((entry) => entry.sectorId) },
-            },
-          },
-        }),
-        ...((campaign.escalationStartedAtTurn == null || campaign.mandateUpdatedAtTurn == null) && {
-          $unset: {
-            ...(campaign.escalationStartedAtTurn == null && { escalationStartedAtTurn: "" }),
-            ...(campaign.mandateUpdatedAtTurn == null && { mandateUpdatedAtTurn: "" }),
-          },
-        }),
-      }
-    );
-  let fallbackFunded = false;
-  const restoreFund = () =>
-    !fallbackFunded
-      ? Promise.resolve()
-      : unionCollection.updateOne(
-          { _id: union._id },
-          {
-            $inc: { treasury: cost },
-            $set: { lastCalledStrikeTurn: union.lastCalledStrikeTurn, updatedAt: union.updatedAt },
-          }
-        );
-  const restoreStrikes = async () => {
-    if (targets.length === 0) return;
-    await sectorCollection.bulkWrite(
-      targets.map((sector) => ({
-        updateOne: {
-          filter: { _id: sector._id, strikeStartedAtTurn: currentTurn },
-          update:
-            sector.workerExpectationIndex == null
-              ? {
-                  $set: { strikeStartedAtTurn: sector.strikeStartedAtTurn ?? null },
-                  $unset: { workerExpectationIndex: "" },
-                }
-              : {
-                  $set: {
-                    strikeStartedAtTurn: sector.strikeStartedAtTurn ?? null,
-                    workerExpectationIndex: sector.workerExpectationIndex,
-                  },
-                },
-        },
-      }))
-    );
-  };
 
+  // Crash-safe spend (issue #1672): the campaign claim is a guarded keyed
+  // update, the strike-fund debit a keyed idempotent leg, and each strike
+  // start a guarded keyed update, so a crash between the sequential writes
+  // reconciles instead of charging for strikes that never started (or
+  // starting them twice). `Idempotency-Key` replays the stored outcome
+  // without charging again.
   try {
-    await runWithOptionalTransaction(
-      async (session) => {
-        await claimCampaign(session);
-        await fundAction(session);
-        await startStrikes(session);
-      },
-      async () => {
-        await claimCampaign();
-        try {
-          await fundAction();
-          fallbackFunded = cost > 0;
-          await startStrikes();
-        } catch (error) {
-          await restoreStrikes();
-          await restoreFund();
-          await restoreCampaign();
-          throw error;
-        }
-      }
-    );
+    await applyBargainingEscalationSpend(db, {
+      campaignId: campaign._id,
+      unionId: union._id,
+      currentTurn,
+      now,
+      priorEscalationLevel: campaign.escalationLevel,
+      priorLastActionTurn: campaign.lastActionTurn,
+      nextEscalationLevel: next.escalationLevel,
+      nextMandate: next.mandate,
+      recordedExpectations,
+      priorMandate: campaign.mandate,
+      priorCampaignUpdatedAt: campaign.updatedAt,
+      priorEscalationStartedAtTurn: campaign.escalationStartedAtTurn ?? null,
+      priorMandateUpdatedAtTurn: campaign.mandateUpdatedAtTurn ?? null,
+      cashCost: cost,
+      priorLastCalledStrikeTurn: union.lastCalledStrikeTurn,
+      priorUnionUpdatedAt: union.updatedAt,
+      strikes: strikeTargets,
+      fingerprint: `${union._id.toHexString()}:${campaign._id.toHexString()}:${currentTurn}:${next.escalationLevel}:${cost}`,
+      ...(opts?.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+    });
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
     if (
-      error instanceof Error &&
-      (error.message === "CAMPAIGN_CHANGED" || error.message === "SECTOR_CHANGED")
+      message.startsWith(ESCALATION_CAMPAIGN_CHANGED) ||
+      message.startsWith(ESCALATION_SECTOR_CHANGED)
     ) {
       return { ok: false, status: 409, error: "Campaign state changed. Reload and try again." };
     }
-    if (error instanceof Error && error.message === "INSUFFICIENT_TREASURY") {
+    if (message.startsWith(ESCALATION_INSUFFICIENT_TREASURY)) {
       return { ok: false, status: 402, error: "The strike fund cannot finance this escalation." };
+    }
+    if (error instanceof MoneyFlowKeyConflictError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This escalation key was already used for a different escalation.",
+      };
+    }
+    if (error instanceof MoneyFlowTerminalError) {
+      return {
+        ok: false,
+        status: 409,
+        error: "This escalation already settled; retry without the idempotency key.",
+      };
     }
     throw error;
   }
@@ -797,7 +707,8 @@ export async function actOnBargainingCampaignAsUnion(
     | "accept_mediation"
     | "reject_mediation",
   currentTurn: number,
-  terms?: BargainingTerms
+  terms?: BargainingTerms,
+  opts?: { idempotencyKey?: string }
 ): Promise<UnionActionResult> {
   const turnBusy = await rejectIfTurnProcessing(db);
   if (turnBusy) return turnBusy;
@@ -835,7 +746,7 @@ export async function actOnBargainingCampaignAsUnion(
     return persistBargainingMediationAction(db, campaign, "union", action, currentTurn);
   }
   if (action === "escalate") {
-    return persistUnionBargainingEscalation(db, resolved.union, campaign, currentTurn);
+    return persistUnionBargainingEscalation(db, resolved.union, campaign, currentTurn, opts);
   }
   if (campaign.status !== "negotiating" && campaign.status !== "dispute") {
     return { ok: false, status: 400, error: "This campaign can no longer be withdrawn." };

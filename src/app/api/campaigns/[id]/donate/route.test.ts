@@ -119,7 +119,13 @@ async function setupRoute() {
   db.collectionMocks["characters"]!.find.mockReturnValue({
     toArray: async () => [{ _id: mockCharacterId, name: "Test Character", countryId: "US" }],
   } as never);
-  db.collectionMocks["characters"]!.updateOne.mockResolvedValue({ modifiedCount: 1 });
+  // The crash-safe spend (issue #1672) treats `matchedCount === 1` as
+  // applied and disambiguates anything else, so the debit mock must carry
+  // matchedCount the way the real driver does.
+  db.collectionMocks["characters"]!.updateOne.mockResolvedValue({
+    matchedCount: 1,
+    modifiedCount: 1,
+  });
   db.collectionMocks["politicalParties"]!.findOne.mockResolvedValue(makeMockParty());
   db.collectionMocks["politicalParties"]!.updateOne.mockResolvedValue({
     matchedCount: 1,

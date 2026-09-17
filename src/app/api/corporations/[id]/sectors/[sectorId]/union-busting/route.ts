@@ -40,8 +40,17 @@ export async function POST(request: Request, { params }: RouteParams) {
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
+    // Crash-safe spend (issue #1672): a client retry with the same key
+    // replays the stored busting outcome instead of charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const currentTurn = await getCurrentTurn(db);
-    const result = await attemptUnionBusting(db, corporation, sectorId, currentTurn);
+    const result = await attemptUnionBusting(db, corporation, sectorId, currentTurn, {
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+    });
 
     if (!result.ok) {
       return NextResponse.json({ error: result.error }, { status: result.status });

@@ -4,13 +4,13 @@
  * and authorized managers spend their own personal resources.
  */
 
-import { ObjectId, type Db, type ClientSession } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { COUNTRIES_WITH_BESPOKE_PRESIDENTIAL_ELECTIONS } from "@/lib/constants/countries";
 import type { AuthUserWithCharacter } from "@/lib/auth";
 import type { Campaign, Character, Election, ElectionCandidate, NPP } from "@/lib/db/types";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { isCampaignManagerUser, isCampaignNomineeUser } from "@/lib/campaigns/access";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { applyTargetedAdSpend, AD_SPEND_CONFLICT, AD_SPEND_INSUFFICIENT } from "./adSpend";
 import { getGameTime } from "@/lib/time/gameTime";
 import { quoteAdAudience } from "./adQuote";
 import { quoteStandingAds, purchaseStandingAds } from "./standingCommands";
@@ -116,7 +116,8 @@ export async function purchaseTargetedAds(
     stateId: string;
     count: number;
     quote: { turn: number; cost: number; revision: number };
-  }
+  },
+  opts?: { idempotencyKey?: string }
 ) {
   const context = await loadTargetedAdContext(db, campaignId, user);
   if (!context.candidate.isNPP) {
@@ -124,7 +125,7 @@ export async function purchaseTargetedAds(
       .collection<Character>("characters")
       .findOne({ _id: context.candidate.characterId });
     if (!owner) throw notFound("Candidate not found");
-    return purchaseStandingAds(db, owner, user.character, request);
+    return purchaseStandingAds(db, owner, user.character, request, opts);
   }
 
   const quote = await quoteTargetedAds(db, context, request.stateId, request.count);
@@ -150,49 +151,50 @@ export async function purchaseTargetedAds(
     throw conflict("The ad quote changed. Refresh before buying.");
   const actions = AD_ACTION_COST * request.count;
   const fundsField = quote.forex ? "currencyBalances.campaign" : "funds";
-  const candidateFilter = {
-    _id: context.candidate._id,
-    status: "active" as const,
-    campaignSuspended: { $ne: true },
-    targetedAdsRevision: context.candidate.targetedAdsRevision ?? { $exists: false },
-  };
-  const debit = async (session?: ClientSession) => {
-    const result = await db
-      .collection<Character>("characters")
-      .updateOne(
-        { _id: user.character._id, actions: { $gte: actions }, [fundsField]: { $gte: funds } },
-        { $inc: { actions: -actions, [fundsField]: -funds } },
-        { session }
-      );
-    if (!result.modifiedCount) throw conflict("Insufficient personal actions or campaign funds");
-  };
-  const write = async (session?: ClientSession) => {
-    const result = await db
-      .collection<ElectionCandidate>("electionCandidates")
-      .updateOne(
-        candidateFilter,
-        { $set: { targetedAds: ads }, $inc: { targetedAdsRevision: 1 } },
-        { session }
-      );
-    if (!result.modifiedCount) throw conflict("Campaign changed. Refresh before buying ads");
-  };
-  await runWithOptionalTransaction(
-    async (session) => {
-      await debit(session);
-      await write(session);
-    },
-    async () => {
-      await debit();
-      try {
-        await write();
-      } catch (error) {
-        await db
-          .collection<Character>("characters")
-          .updateOne({ _id: user.character._id }, { $inc: { actions, [fundsField]: funds } });
-        throw error;
-      }
+  // Crash-safe spend (issue #1672): the payer debit is a keyed idempotent
+  // leg and the candidate inventory write a guarded keyed update, so a crash
+  // between the sequential writes reconciles instead of charging for ads
+  // that never landed (or landing them twice). `Idempotency-Key` replays the
+  // stored outcome without charging again.
+  try {
+    await applyTargetedAdSpend(db, {
+      target: {
+        kind: "candidate",
+        ownerDocId: context.candidate._id,
+        ads,
+        guardFilter: {
+          status: "active" as const,
+          campaignSuspended: { $ne: true },
+          targetedAdsRevision: context.candidate.targetedAdsRevision ?? { $exists: false },
+        },
+      },
+      payerId: user.character._id,
+      costFunds: funds,
+      costActions: actions,
+      fundsField,
+      fingerprint: [
+        user.character._id.toHexString(),
+        context.candidate._id.toHexString(),
+        request.stateId,
+        request.dimension,
+        request.bucket,
+        request.count,
+        request.quote.turn,
+        funds,
+        request.quote.revision,
+      ].join(":"),
+      ...(opts?.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+    });
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.startsWith(AD_SPEND_INSUFFICIENT)) {
+      throw conflict("Insufficient personal actions or campaign funds");
     }
-  );
+    if (message.startsWith(AD_SPEND_CONFLICT)) {
+      throw conflict("Campaign changed. Refresh before buying ads");
+    }
+    throw error;
+  }
   return {
     success: true,
     cost: funds,

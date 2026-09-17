@@ -3,10 +3,10 @@
  * Purchases need no candidacy; one character revision serializes all buyers and
  * their bonuses persist across races while decaying through the shared rules.
  */
-import type { Db, ClientSession } from "mongodb";
+import type { Db } from "mongodb";
 import type { Character } from "@/lib/db/types";
 import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { applyStandingAdSpend, AD_SPEND_CONFLICT, AD_SPEND_INSUFFICIENT } from "./adSpend";
 import { getGameTime } from "@/lib/time/gameTime";
 import { assertStandingAdRegion } from "./regions";
 import { quoteAdAudience } from "./adQuote";
@@ -40,7 +40,8 @@ export async function purchaseStandingAds(
   db: Db,
   owner: Character,
   payer: Character,
-  request: StandingAdRequest
+  request: StandingAdRequest,
+  opts?: { idempotencyKey?: string }
 ) {
   const current = await db.collection<Character>("characters").findOne({ _id: owner._id });
   if (!current) throw notFound("Character not found");
@@ -73,23 +74,10 @@ export async function purchaseStandingAds(
     targetedAdsRevision: current.targetedAdsRevision ?? { $exists: false },
   };
   const debitFilter = { _id: payer._id, actions: { $gte: actions }, [fundsField]: { $gte: funds } };
-  const write = async (session?: ClientSession) => {
-    const result = await db
-      .collection<Character>("characters")
-      .updateOne(
-        ownerFilter,
-        { $set: { targetedAds: ads }, $inc: { targetedAdsRevision: 1 } },
-        { session }
-      );
-    if (!result.modifiedCount) throw conflict("Ad purchases changed. Refresh before buying");
-  };
-  const debit = async (session?: ClientSession) => {
-    const result = await db
-      .collection<Character>("characters")
-      .updateOne(debitFilter, { $inc: { actions: -actions, [fundsField]: -funds } }, { session });
-    if (!result.modifiedCount) throw conflict("Insufficient personal actions or campaign funds");
-  };
   if (current._id.equals(payer._id)) {
+    // Single-document atomic purchase: the debit and the inventory write
+    // commit in one update, so there is no partial state to reconcile and no
+    // money-flow migration applies.
     const result = await db.collection<Character>("characters").updateOne(
       { ...ownerFilter, ...debitFilter },
       {
@@ -100,23 +88,48 @@ export async function purchaseStandingAds(
     if (!result.modifiedCount)
       throw conflict("Resources or ad purchases changed. Refresh before buying");
   } else {
-    await runWithOptionalTransaction(
-      async (session) => {
-        await debit(session);
-        await write(session);
-      },
-      async () => {
-        await debit();
-        try {
-          await write();
-        } catch (error) {
-          await db
-            .collection<Character>("characters")
-            .updateOne({ _id: payer._id }, { $inc: { actions, [fundsField]: funds } });
-          throw error;
-        }
+    // Crash-safe spend (issue #1672): the payer debit is a keyed idempotent
+    // leg and the owner inventory write a guarded keyed update, so a crash
+    // between the sequential writes reconciles instead of charging for ads
+    // that never landed (or landing them twice). `Idempotency-Key` replays
+    // the stored outcome without charging again.
+    try {
+      await applyStandingAdSpend(db, {
+        target: {
+          kind: "character",
+          ownerDocId: current._id,
+          ads,
+          guardFilter: {
+            targetedAdsRevision: current.targetedAdsRevision ?? { $exists: false },
+          },
+        },
+        payerId: payer._id,
+        costFunds: funds,
+        costActions: actions,
+        fundsField,
+        fingerprint: [
+          payer._id.toHexString(),
+          current._id.toHexString(),
+          request.stateId,
+          request.dimension,
+          request.bucket,
+          request.count,
+          request.quote.turn,
+          funds,
+          request.quote.revision,
+        ].join(":"),
+        ...(opts?.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message.startsWith(AD_SPEND_INSUFFICIENT)) {
+        throw conflict("Insufficient personal actions or campaign funds");
       }
-    );
+      if (message.startsWith(AD_SPEND_CONFLICT)) {
+        throw conflict("Ad purchases changed. Refresh before buying");
+      }
+      throw error;
+    }
   }
   return {
     success: true,

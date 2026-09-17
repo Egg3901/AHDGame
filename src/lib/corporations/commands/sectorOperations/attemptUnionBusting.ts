@@ -1,7 +1,11 @@
 import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 import type { Corporation, CorporateSector, State } from "@/lib/db/types";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyUnionBustingSpend,
+  BUSTING_COOLDOWN_ACTIVE,
+  BUSTING_INSUFFICIENT_FUNDS,
+} from "@/lib/corporations/unionBustingSpend";
 import { getGameState } from "@/lib/gameState";
 import { isTurnProcessingNow } from "@/lib/turn/processingLock";
 import {
@@ -35,27 +39,15 @@ export type AttemptUnionBustingResult =
     }
   | { ok: false; status: number; error: string };
 
-/** In-cooldown filter shared by the read-check and the guarded write below. */
-function notInCooldown(currentTurn: number) {
-  return {
-    $or: [
-      { bustingCooldownUntilTurn: null },
-      { bustingCooldownUntilTurn: { $exists: false } },
-      { bustingCooldownUntilTurn: { $lte: currentTurn } },
-    ],
-  };
-}
-
 /**
  * Core logic for a CEO's union-busting attempt on one sector
  * (`labourSystemMode >= "full"`). Rolls a success/backfire outcome (see
- * `src/lib/labour/unionBusting.ts`), atomically debits the cash cost from
- * the corporation and applies the unionization change + cooldown to the
- * sector, using `runWithOptionalTransaction` since these are two different
- * collections — the non-transaction fallback path (standalone Mongo)
- * compensates with a manual revert if the second write fails, mirroring
- * `src/app/api/characters/[id]/transfer/route.ts`'s refund-on-partial-failure
- * pattern.
+ * `src/lib/labour/unionBusting.ts`), debits the cash cost from the
+ * corporation and applies the unionization change + cooldown to the sector
+ * through `applyUnionBustingSpend` (issue #1672) — a guarded keyed sector
+ * claim plus a keyed idempotent cash leg, so the attempt is exactly-once on
+ * every topology and a client retry with the same `Idempotency-Key` replays
+ * the stored outcome instead of charging again.
  *
  * Caller handles auth (CEO), the feature gate, and resolving the corporation.
  */
@@ -63,7 +55,8 @@ export async function attemptUnionBusting(
   db: Db,
   corporation: Corporation,
   sectorId: string,
-  currentTurn: number
+  currentTurn: number,
+  opts?: { idempotencyKey?: string }
 ): Promise<AttemptUnionBustingResult> {
   if (!ObjectId.isValid(sectorId)) {
     return { ok: false, status: 400, error: "Invalid sector ID" };
@@ -137,87 +130,45 @@ export async function attemptUnionBusting(
   const success = rollUnionBustingOutcome(calculation.finalChance, roll);
   const newUnionization = applyUnionBustingOutcome(priorUnionization, success);
   const cooldownUntilTurn = currentTurn + BUSTING_COOLDOWN_TURNS;
-  const now = new Date();
-  const sectorFilter = { _id: sectorObjectId, ...notInCooldown(currentTurn) };
   // A successful bust also ends an active strike outright — busting a
   // sector's unionization down while a strike is still throttling revenue
   // would otherwise achieve nothing for the strike itself (the strike's own
   // resolution logic never checks unionization, only the wage gap/duration).
   // Backfire leaves any active strike untouched.
   const endsActiveStrike = success && priorStrikeStartedAtTurn != null;
-  const sectorSet = {
-    $set: {
-      unionization: newUnionization,
-      bustingCooldownUntilTurn: cooldownUntilTurn,
-      updatedAt: now,
-      ...(endsActiveStrike && {
-        strikeStartedAtTurn: null,
-        strikeCooldownUntilTurn: currentTurn + STRIKE_COOLDOWN_TURNS,
-      }),
-    },
-  };
-  const revertSector = {
-    $set: {
-      unionization: priorUnionization,
-      bustingCooldownUntilTurn: priorCooldown,
-      ...(endsActiveStrike && {
+
+  // Crash-safe spend (issue #1672): the sector claim is a guarded keyed
+  // update and the cash debit a keyed idempotent leg, so a crash between the
+  // sequential writes reconciles instead of charging for a bust that never
+  // landed (or landing it twice). `Idempotency-Key` replays the stored
+  // outcome without charging again.
+  let settledUnionization: number;
+  try {
+    const settled = await applyUnionBustingSpend(db, {
+      corporationId: corporation._id,
+      sectorId: sectorObjectId,
+      currentTurn,
+      cashCost,
+      prior: {
+        unionization: priorUnionization,
+        bustingCooldownUntilTurn: priorCooldown,
         strikeStartedAtTurn: priorStrikeStartedAtTurn,
         strikeCooldownUntilTurn: priorStrikeCooldownUntilTurn,
-      }),
-    },
-  };
-
-  try {
-    await runWithOptionalTransaction(
-      async (session) => {
-        const sectorUpdate = await db
-          .collection<CorporateSector>("corporateSectors")
-          .updateOne(sectorFilter, sectorSet, { session });
-        if (sectorUpdate.modifiedCount === 0) throw new Error("COOLDOWN_ACTIVE");
-
-        const corpUpdate = await db
-          .collection<Corporation>("corporations")
-          .updateOne(
-            { _id: corporation._id, liquidCapital: { $gte: cashCost } },
-            { $inc: { liquidCapital: -cashCost }, $set: { updatedAt: now } },
-            { session }
-          );
-        if (corpUpdate.modifiedCount === 0) throw new Error("INSUFFICIENT_FUNDS");
       },
-      async () => {
-        const sectorUpdate = await db
-          .collection<CorporateSector>("corporateSectors")
-          .updateOne(sectorFilter, sectorSet);
-        if (sectorUpdate.modifiedCount === 0) throw new Error("COOLDOWN_ACTIVE");
-
-        try {
-          const corpUpdate = await db
-            .collection<Corporation>("corporations")
-            .updateOne(
-              { _id: corporation._id, liquidCapital: { $gte: cashCost } },
-              { $inc: { liquidCapital: -cashCost }, $set: { updatedAt: now } }
-            );
-          if (corpUpdate.modifiedCount === 0) {
-            await db
-              .collection<CorporateSector>("corporateSectors")
-              .updateOne({ _id: sectorObjectId }, revertSector);
-            throw new Error("INSUFFICIENT_FUNDS");
-          }
-        } catch (error) {
-          if ((error as Error).message !== "INSUFFICIENT_FUNDS") {
-            await db
-              .collection<CorporateSector>("corporateSectors")
-              .updateOne({ _id: sectorObjectId }, revertSector);
-          }
-          throw error;
-        }
-      }
-    );
+      newUnionization,
+      cooldownUntilTurn,
+      endsActiveStrike,
+      strikeCooldownUntilTurn: currentTurn + STRIKE_COOLDOWN_TURNS,
+      fingerprint: `${corporation._id.toHexString()}:${sectorObjectId.toHexString()}:${currentTurn}:${cashCost}`,
+      ...(opts?.idempotencyKey !== undefined ? { idempotencyKey: opts.idempotencyKey } : {}),
+    });
+    settledUnionization = settled.unionization;
   } catch (error) {
-    if (error instanceof Error && error.message === "COOLDOWN_ACTIVE") {
+    const message = (error as Error).message;
+    if (message.startsWith(BUSTING_COOLDOWN_ACTIVE)) {
       return { ok: false, status: 409, error: "This sector is still in a union-busting cooldown." };
     }
-    if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
+    if (message.startsWith(BUSTING_INSUFFICIENT_FUNDS)) {
       return { ok: false, status: 402, error: "Not enough cash to attempt union-busting." };
     }
     throw error;
@@ -242,14 +193,14 @@ export async function attemptUnionBusting(
     employerId: corporation._id,
     success,
     unionizationBefore: priorUnionization,
-    unionizationAfter: newUnionization,
+    unionizationAfter: settledUnionization,
   });
 
   return {
     ok: true,
     status: 200,
     success,
-    unionization: newUnionization,
+    unionization: settledUnionization,
     cashSpent: cashCost,
     roll,
     finalChance: calculation.finalChance,

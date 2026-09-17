@@ -41,8 +41,22 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
     const { amount, partyId } = parsed.data;
 
+    // Crash-safe spend (issue #1672): a client retry with the same key
+    // replays the stored donation outcome instead of charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const db = await getDb();
-    await donateToCampaign({ db, campaignId: new ObjectId(campaignId), user, amount, partyId });
+    await donateToCampaign({
+      db,
+      campaignId: new ObjectId(campaignId),
+      user,
+      amount,
+      partyId,
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+    });
     return NextResponse.json({ success: true });
   } catch (error) {
     return handleRouteError(error);

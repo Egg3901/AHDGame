@@ -56,6 +56,34 @@ function makeSector(corpId: ObjectId, overrides: Partial<CorporateSector> = {}):
   } as unknown as CorporateSector;
 }
 
+/**
+ * In-memory receipts fake honoring the operators the money-flow primitive
+ * emits (duplicate-key insert, _id read, $set settle), so the keyed spend
+ * converges exactly like production. Each attempt mints a fresh key, so one
+ * fake per test is enough.
+ */
+function receiptsCollection() {
+  const docs = new Map<string, Record<string, unknown>>();
+  return {
+    insertOne: vi.fn(async (doc: { _id: string }) => {
+      if (docs.has(doc._id)) {
+        const error = new Error("E11000 duplicate key error") as Error & { code: number };
+        error.code = 11000;
+        throw error;
+      }
+      docs.set(doc._id, { ...doc });
+      return { insertedId: doc._id };
+    }),
+    findOne: vi.fn(async (filter: { _id: string }) => docs.get(filter._id) ?? null),
+    updateOne: vi.fn(async (filter: { _id: string }, update: { $set: Record<string, unknown> }) => {
+      const doc = docs.get(filter._id);
+      if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+      Object.assign(doc, update.$set);
+      return { matchedCount: 1, modifiedCount: 1 };
+    }),
+  };
+}
+
 /** Mock db: corporateSectors.findOne/updateOne, corporations.updateOne, gameState.findOne (not processing by default). */
 function mockDb({
   sector,
@@ -71,10 +99,24 @@ function mockDb({
   /** The country the sector's STATE is in, when it differs from the stored one. */
   stateCountryId?: string;
 }) {
-  const sectorUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: sectorUpdateModifiedCount });
-  const corpUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: corpUpdateModifiedCount });
+  // Keyed steps read `matchedCount` (not `modifiedCount`) to tell applied
+  // apart from guard-rejected, so the mocks must report both.
+  const sectorUpdateOne = vi
+    .fn()
+    .mockResolvedValue({
+      matchedCount: sectorUpdateModifiedCount,
+      modifiedCount: sectorUpdateModifiedCount,
+    });
+  const corpUpdateOne = vi
+    .fn()
+    .mockResolvedValue({
+      matchedCount: corpUpdateModifiedCount,
+      modifiedCount: corpUpdateModifiedCount,
+    });
+  const receipts = receiptsCollection();
   const db = {
     collection: (name: string) => {
+      if (name === "nonAtomicMoneyFlowReceipts") return receipts;
       if (name === "corporateSectors") {
         return {
           findOne: vi.fn().mockResolvedValue(sector),
@@ -235,20 +277,21 @@ describe("attemptUnionBusting", () => {
     expect(result.unionization).toBeGreaterThan(50);
   });
 
-  it("compensates the corp debit when the sector write races (cooldown set concurrently)", async () => {
+  it("returns 409 when the sector claim races (cooldown set concurrently), never debiting", async () => {
     const { rollD100 } = await import("@/lib/labour/unionBusting");
     vi.mocked(rollD100).mockReturnValue(1);
 
     const corp = makeCorp();
     const sector = makeSector(corp._id);
-    const { db, sectorUpdateOne } = mockDb({ sector, sectorUpdateModifiedCount: 0 });
+    const { db, sectorUpdateOne, corpUpdateOne } = mockDb({ sector, sectorUpdateModifiedCount: 0 });
 
     const result = await attemptUnionBusting(db, corp, sector._id.toString(), 10);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.status).toBe(409);
-    // Only the guarded (failed) update should have run — no compensation needed
-    // since the sector write is attempted before the cash debit.
+    // The keyed sector claim guard-rejects, so the flow settles failed before
+    // the cash leg runs: one claim write, no debit, no compensation to run.
     expect(sectorUpdateOne).toHaveBeenCalledTimes(1);
+    expect(corpUpdateOne).not.toHaveBeenCalled();
   });
 
   it("rejects while a turn is actively processing (avoids the clobber race with the corp turn's bulk write)", async () => {
@@ -314,9 +357,11 @@ describe("attemptUnionBusting — union ban gate (player suggestion #93)", () =>
     sector: CorporateSector,
     { bannedIn, stateCountryId }: { bannedIn: string; stateCountryId?: string }
   ) {
-    const sectorUpdateOne = vi.fn().mockResolvedValue({ modifiedCount: 1 });
+    const sectorUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const receipts = receiptsCollection();
     const db = {
       collection: (name: string) => {
+        if (name === "nonAtomicMoneyFlowReceipts") return receipts;
         if (name === "corporateSectors")
           return { findOne: vi.fn().mockResolvedValue(sector), updateOne: sectorUpdateOne };
         if (name === "federalBudget")
@@ -338,7 +383,7 @@ describe("attemptUnionBusting — union ban gate (player suggestion #93)", () =>
           };
         if (name === "gameConfig") return { findOne: vi.fn().mockResolvedValue(null) };
         if (name === "corporations")
-          return { updateOne: vi.fn().mockResolvedValue({ modifiedCount: 1 }) };
+          return { updateOne: vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 }) };
         throw new Error(`unexpected collection ${name}`);
       },
     } as unknown as Db;

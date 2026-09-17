@@ -14,7 +14,11 @@ import { isCampaignEligibleElection } from "@/lib/campaigns/isCampaignEligible";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
 import { campaignAnchorToLocal, campaignLocalRate } from "@/lib/campaigns/campaignCurrency";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyCampaignDonationSpend,
+  CAMPAIGN_DONATION_CAMPAIGN_MISSING,
+  CAMPAIGN_DONATION_INSUFFICIENT,
+} from "@/lib/campaigns/campaignDonationSpend";
 import { createNotification } from "@/lib/notifications";
 import type {
   Campaign,
@@ -39,7 +43,7 @@ import {
 import { buildRallyAccrualEntry } from "@/lib/turn/elections/supportAccrual";
 import { emitTreasuryTransaction } from "@/lib/treasury/emit";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
-import { ObjectId, type ClientSession, type Db, type UpdateFilter } from "mongodb";
+import { ObjectId, type Db } from "mongodb";
 import { getGameTime } from "@/lib/time/gameTime";
 import { isCampaignUpgradeGeneralPhase } from "@/lib/elections/phases";
 import {
@@ -306,8 +310,13 @@ export async function donateToCampaign(params: {
   user: AuthUserWithCharacter & { hasCharacter: true; character: Character };
   amount: number;
   partyId?: string;
+  /**
+   * Caller-supplied idempotency key (e.g. `Idempotency-Key` header echoed by
+   * the route). Same key + same donation replays instead of charging again.
+   */
+  idempotencyKey?: string;
 }) {
-  const { db, campaignId, user, amount, partyId } = params;
+  const { db, campaignId, user, amount, partyId, idempotencyKey } = params;
   const campaignRates = await loadCampaignCurrencyRates(db);
   const campaign = await getCampaignOrThrow(db, campaignId);
   const forexEnabled = await isForexEnabled();
@@ -394,68 +403,32 @@ export async function donateToCampaign(params: {
       turnNumber,
     };
     const now = new Date();
-    const campaignUpdate: UpdateFilter<Campaign> = {
-      $inc: { funds: amountPartyLocal, totalFundsGenerated: amountPartyLocal },
-      $push: {
-        donationLog: {
-          $each: [donationEntry],
-          $slice: -100,
-        },
-      },
-      $set: { updatedAt: now },
-    };
-    const partyDebit: UpdateFilter<PoliticalParty> = {
-      $inc: { treasury: -amountPartyLocal },
-      $set: { updatedAt: now },
-    };
 
-    const applyPartyDonationInTransaction = async (session: ClientSession) => {
-      const debitResult = await db
-        .collection<PoliticalParty>("politicalParties")
-        .updateOne({ _id: party._id, treasury: { $gte: amountPartyLocal } }, partyDebit, {
-          session,
-        });
-      if (debitResult.matchedCount === 0) {
+    // Crash-safe spend (issue #1672): the treasury debit is a keyed
+    // idempotent leg and the campaign credit a keyed update, so a crash
+    // between the sequential writes reconciles instead of charging for a
+    // donation that never landed (or landing it twice). `Idempotency-Key`
+    // replays the stored outcome without charging again.
+    try {
+      await applyCampaignDonationSpend(db, {
+        kind: "party",
+        donorDocId: party._id,
+        campaignId,
+        amountLocal: amountPartyLocal,
+        donationEntry,
+        fingerprint: `party:${party._id.toHexString()}:${campaignId.toHexString()}:${amountPartyLocal}`,
+        ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+      });
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message.startsWith(CAMPAIGN_DONATION_INSUFFICIENT)) {
         throw badRequest("Insufficient party funds");
       }
-      const campaignUpdateResult = await db
-        .collection<Campaign>("campaigns")
-        .updateOne({ _id: campaignId }, campaignUpdate, { session });
-      if (campaignUpdateResult.matchedCount === 0) {
+      if (message.startsWith(CAMPAIGN_DONATION_CAMPAIGN_MISSING)) {
         throw notFound("Campaign not found");
       }
-    };
-
-    const applyPartyDonationWithoutTransaction = async () => {
-      const debitResult = await db
-        .collection<PoliticalParty>("politicalParties")
-        .updateOne({ _id: party._id, treasury: { $gte: amountPartyLocal } }, partyDebit);
-      if (debitResult.matchedCount === 0) {
-        throw badRequest("Insufficient party funds");
-      }
-
-      const campaignUpdateResult = await db
-        .collection<Campaign>("campaigns")
-        .updateOne({ _id: campaignId }, campaignUpdate);
-      if (campaignUpdateResult.matchedCount === 0) {
-        await db
-          .collection<PoliticalParty>("politicalParties")
-          .updateOne(
-            { _id: party._id },
-            { $inc: { treasury: amountPartyLocal }, $set: { updatedAt: new Date() } }
-          );
-        throw notFound("Campaign not found");
-      }
-    };
-
-    await runWithOptionalTransaction(
-      async (session) => {
-        await applyPartyDonationInTransaction(session);
-      },
-      async () => {
-        await applyPartyDonationWithoutTransaction();
-      }
-    );
+      throw error;
+    }
 
     // Log the donor-side outflow in the party's local home currency — same
     // unit the treasury ledger / chair UI displays. (The donation amount the
@@ -537,61 +510,31 @@ export async function donateToCampaign(params: {
   // Campaign treasury is stored in the campaign's local currency. The donor and
   // election are same-country (asserted above), so `amountLocal` — the local
   // value debited from the donor — is already in the campaign's currency.
-  const campaignUpdate: UpdateFilter<Campaign> = {
-    $inc: { funds: amountLocal, totalFundsGenerated: amountLocal },
-    $push: {
-      donationLog: {
-        $each: [donationEntry],
-        $slice: -100,
-      },
-    },
-    $set: { updatedAt: now },
-  };
-  const characterDebit = { $inc: { [campaignFundsField]: -amountLocal } };
-  const characterBalanceFilter: Record<string, unknown> = {
-    _id: character._id,
-    [campaignFundsField]: { $gte: amountLocal },
-  };
-
-  await runWithOptionalTransaction(
-    async (session) => {
-      const debitResult = await db
-        .collection<Character>("characters")
-        .updateOne(characterBalanceFilter, characterDebit, { session });
-      if (debitResult.matchedCount === 0) {
-        throw badRequest("Insufficient funds");
-      }
-
-      const campaignUpdateResult = await db
-        .collection<Campaign>("campaigns")
-        .updateOne({ _id: campaignId }, campaignUpdate, { session });
-      if (campaignUpdateResult.matchedCount === 0) {
-        throw notFound("Campaign not found");
-      }
-    },
-    async () => {
-      const debitResult = await db
-        .collection<Character>("characters")
-        .updateOne(characterBalanceFilter, characterDebit);
-      if (debitResult.matchedCount === 0) {
-        throw badRequest("Insufficient funds");
-      }
-
-      try {
-        const campaignUpdateResult = await db
-          .collection<Campaign>("campaigns")
-          .updateOne({ _id: campaignId }, campaignUpdate);
-        if (campaignUpdateResult.matchedCount === 0) {
-          throw notFound("Campaign not found");
-        }
-      } catch (error) {
-        await db
-          .collection<Character>("characters")
-          .updateOne({ _id: character._id }, { $inc: { [campaignFundsField]: amountLocal } });
-        throw error;
-      }
+  // Crash-safe spend (issue #1672): same keyed shape as the party path —
+  // the campaign-funds debit is an idempotent leg, the campaign credit a
+  // keyed update — so a crash between the writes reconciles to exactly one
+  // charged donation.
+  try {
+    await applyCampaignDonationSpend(db, {
+      kind: "character",
+      donorDocId: character._id,
+      campaignId,
+      characterFundsField: campaignFundsField,
+      amountLocal,
+      donationEntry,
+      fingerprint: `character:${character._id.toHexString()}:${campaignId.toHexString()}:${amountLocal}`,
+      ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+    });
+  } catch (error) {
+    const message = (error as Error).message;
+    if (message.startsWith(CAMPAIGN_DONATION_INSUFFICIENT)) {
+      throw badRequest("Insufficient funds");
     }
-  );
+    if (message.startsWith(CAMPAIGN_DONATION_CAMPAIGN_MISSING)) {
+      throw notFound("Campaign not found");
+    }
+    throw error;
+  }
 
   // Log the donor-side outflow in the character's local home currency so the
   // activityLog reflects what the character actually paid. The Campaign.funds

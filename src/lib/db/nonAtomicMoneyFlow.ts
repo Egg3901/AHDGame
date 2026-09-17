@@ -42,10 +42,25 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * treasury transfer (budget leg + reserve-credit/history/mutex-release step,
  * key-adopted mutex claim), national + state NPP recruitment (shared
  * recruit-spend primitive: AP/treasury leg with cooldown guard, prior-
- * restoring inverse, deterministic NPP insert).
+ * restoring inverse, deterministic NPP insert), campaign donations
+ * (party-treasury + character campaign-funds paths via the shared
+ * campaignDonationSpend primitive), targeted ads (candidate inventory) and
+ * cross-character standing ads (shared adSpend primitive; self-purchase stays
+ * a single atomic update), union busting (guarded sector-claim + corp-debit
+ * via unionBustingSpend), union bargaining escalation (campaign claim +
+ * treasury leg + per-local strike steps via bargainingEscalationSpend).
+ * Ownership-only and excluded (no balance writes): union leadership
+ * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
+ * bargaining settlement (campaign claim + agreement insert + expectation
+ * restore move no balances), campaign upgrades (single-document guarded
+ * spend).
  * Still on the legacy debit-first-plus-compensation fallback: campaign
- * commands and targeting, union busting/bargaining (+ leadership
- * accept/resign), forex orders/direct/fill/cancel, bond
+ * strength purchases (character debit + campaign credit + refund) and
+ * rallies (campaign-actions debit + candidate support write + rollback),
+ * union treasury funding (character campaign-funds debit + treasury credit +
+ * refund), union organizing drives (actions + treasury debits with manual
+ * compensation), union founding (combined actions/funds spend + refund on a
+ * failed union insert), forex orders/direct/fill/cancel, bond
  * sell/default/payoff, index-fund cron/rebalancing, directAction, state-org
  * build — multi-write status machines, positional holder claims, and
  * bulkWrite batches that need reserve/order/history support beyond keyed

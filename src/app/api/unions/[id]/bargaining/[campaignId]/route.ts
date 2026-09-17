@@ -50,6 +50,11 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const character = await getCharacterByUserId(db, auth.user.userId);
     if (!character) return NextResponse.json({ error: "Character not found" }, { status: 404 });
     const terms = parsed.data.action === "counter" ? parsed.data : undefined;
+    // Crash-safe escalation (issue #1672): a client retry with the same key
+    // replays the stored escalation outcome instead of charging again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128))
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
     const result = await actOnBargainingCampaignAsUnion(
       db,
       character,
@@ -57,7 +62,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       campaignId,
       parsed.data.action,
       await getCurrentTurn(db),
-      terms
+      terms,
+      ...(headerKey !== null ? [{ idempotencyKey: headerKey } as const] : [])
     );
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
     return NextResponse.json({ success: true, ...result });

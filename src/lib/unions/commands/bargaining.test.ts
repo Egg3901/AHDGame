@@ -298,11 +298,35 @@ describe("bargaining commands", () => {
       sectorId,
       escalationLevel: "overtime_ban",
     });
-    const campaignUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const unionUpdate = vi.fn().mockResolvedValue({ modifiedCount: 1 });
-    const sectorBulkWrite = vi.fn().mockResolvedValue({ matchedCount: 1 });
+    // Keyed steps read `matchedCount` (not `modifiedCount`) to tell applied
+    // apart from guard-rejected, so the mocks must report both.
+    const campaignUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const unionUpdate = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const sectorUpdateOne = vi.fn().mockResolvedValue({ matchedCount: 1, modifiedCount: 1 });
+    const receiptsDocs = new Map<string, Record<string, unknown>>();
+    const receipts = {
+      insertOne: vi.fn(async (doc: { _id: string }) => {
+        if (receiptsDocs.has(doc._id)) {
+          const error = new Error("E11000 duplicate key error") as Error & { code: number };
+          error.code = 11000;
+          throw error;
+        }
+        receiptsDocs.set(doc._id, { ...doc });
+        return { insertedId: doc._id };
+      }),
+      findOne: vi.fn(async (filter: { _id: string }) => receiptsDocs.get(filter._id) ?? null),
+      updateOne: vi.fn(
+        async (filter: { _id: string }, update: { $set: Record<string, unknown> }) => {
+          const doc = receiptsDocs.get(filter._id);
+          if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+          Object.assign(doc, update.$set);
+          return { matchedCount: 1, modifiedCount: 1 };
+        }
+      ),
+    };
     const db = {
       collection: (name: string) => {
+        if (name === "nonAtomicMoneyFlowReceipts") return receipts;
         if (name === "gameState")
           return { findOne: vi.fn().mockResolvedValue({ isProcessing: false }) };
         if (name === "bargainingCampaigns") {
@@ -340,7 +364,8 @@ describe("bargaining commands", () => {
                   },
                 ]),
             }),
-            bulkWrite: sectorBulkWrite,
+            updateOne: sectorUpdateOne,
+            findOne: vi.fn().mockResolvedValue(null),
           };
         }
         throw new Error(`unexpected collection ${name}`);
@@ -364,27 +389,28 @@ describe("bargaining commands", () => {
         cashSpent: 400,
       })
     );
+    // The strike-fund debit is a keyed idempotent leg: same guard and $inc,
+    // plus the key record in the same atomic write.
     expect(unionUpdate).toHaveBeenCalledWith(
-      { _id: ledUnion._id, treasury: { $gte: 400 } },
-      expect.objectContaining({ $inc: { treasury: -400 } }),
-      { session: undefined }
+      expect.objectContaining({ _id: ledUnion._id, treasury: { $gte: 400 } }),
+      expect.objectContaining({ $inc: expect.objectContaining({ treasury: -400 }) }),
+      undefined
     );
-    expect(sectorBulkWrite).toHaveBeenCalledOnce();
-    const strikeOps = sectorBulkWrite.mock.calls[0][0] as Array<{
-      updateOne: {
-        filter: { strikeStartedAtTurn: number | null };
-        update: { $set: { workerExpectationIndex: number } };
-      };
-    }>;
-    expect(strikeOps[0].updateOne.filter.strikeStartedAtTurn).toBeNull();
+    // Each strike start is one guarded keyed update, not a bulkWrite batch.
+    expect(sectorUpdateOne).toHaveBeenCalledOnce();
+    const [strikeFilter, strikeUpdate] = sectorUpdateOne.mock.calls[0] as [
+      Record<string, unknown>,
+      { $set: { workerExpectationIndex: number } },
+    ];
+    expect(strikeFilter.strikeStartedAtTurn).toBeNull();
     // Cost of living in the local's state, not a neutral 100: a COL-blind
     // figure sits below the concession threshold the moment the corporation
     // turn recomputes the gap, and resolves the strike immediately.
-    expect(strikeOps[0].updateOne.update.$set.workerExpectationIndex).toBeCloseTo(
+    expect(strikeUpdate.$set.workerExpectationIndex).toBeCloseTo(
       realWageIndex(1, 110) + STRIKE_EXPECTATION_GAP_THRESHOLD + 0.05,
       6
     );
-    expect(strikeOps[0].updateOne.update.$set.workerExpectationIndex).not.toBe(2);
+    expect(strikeUpdate.$set.workerExpectationIndex).not.toBe(2);
   });
 
   it("lets an employer request a server-derived mediation package in dispute", async () => {

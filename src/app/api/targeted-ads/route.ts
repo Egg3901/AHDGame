@@ -40,11 +40,15 @@ export async function POST(request: NextRequest) {
     const parsed = await parseJsonBody(request, purchaseSchema);
     if (!parsed.success)
       return NextResponse.json({ error: parsed.error }, { status: parsed.status });
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128))
+      throw badRequest("Invalid Idempotency-Key header");
     const result = await purchaseStandingAds(
       await getDb(),
       auth.user.character,
       auth.user.character,
-      parsed.data
+      parsed.data,
+      ...(headerKey !== null ? [{ idempotencyKey: headerKey } as const] : [])
     );
     return NextResponse.json(result, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
