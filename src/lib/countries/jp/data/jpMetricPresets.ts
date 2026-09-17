@@ -1,5 +1,6 @@
 import type { StateMetrics } from "@/lib/db/types";
 import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
+import { JP_REGION_IDS } from "./jpRegionDirectory";
 
 /**
  * Per-region, per-era HAND-AUTHORED values for Japan's new overhaul ROOT metrics.
@@ -71,8 +72,6 @@ export const JP_AUTHORED_METRIC_PATHS = [
   "population.demographicDecline",
   "mediaInformation.stateMediaControl",
 ] as const;
-
-const JP_REGIONS = ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"] as const;
 
 function readPath(m: StateMetrics, path: string): number | undefined {
   const [cat, id] = path.split(".");
@@ -294,5 +293,5 @@ const TILTS_1991: Record<string, Record<string, number>> = {
 };
 
 export const jpMetricPresets1991: MetricPresetBundle = Object.fromEntries(
-  JP_REGIONS.map((region) => [region, { ...NATIONAL_1991, ...(TILTS_1991[region] ?? {}) }])
+  JP_REGION_IDS.map((region) => [region, { ...NATIONAL_1991, ...(TILTS_1991[region] ?? {}) }])
 );

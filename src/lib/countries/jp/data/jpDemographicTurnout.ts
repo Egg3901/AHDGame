@@ -1,4 +1,5 @@
 import type { StateDemographicTurnout } from "@/lib/db/types";
+import { JP_REGION_IDS } from "./jpRegionDirectory";
 
 /**
  * Japan region demographic turnout modifier seeds.
@@ -11,8 +12,6 @@ import type { StateDemographicTurnout } from "@/lib/db/types";
  *
  * One document per JP region (matches jpRegions.ts IDs).
  */
-
-const JP_REGION_IDS = ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"];
 
 const ZERO_MODIFIERS = {
   salaryman_conservative: 0,

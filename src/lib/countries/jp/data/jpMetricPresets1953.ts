@@ -1,4 +1,5 @@
 import type { MetricPresetBundle } from "@/lib/countries/jp/data/jpMetricPresets";
+import { JP_REGION_IDS } from "./jpRegionDirectory";
 
 /**
  * 1953 Japan — Yoshida Shigeru (Liberal Party); San Francisco Peace Treaty (April 1952)
@@ -11,8 +12,6 @@ import type { MetricPresetBundle } from "@/lib/countries/jp/data/jpMetricPresets
  * Severe gender inequality; women expected to leave work on marriage (Confucian norms +
  * pre-Equal Employment Opportunity Act).
  */
-
-const JP_REGIONS = ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"] as const;
 
 const NATIONAL_1953: Record<string, number> = {
   "economic.laborParticipation": 62, // high — farming absorbs everyone; no retirement norms
@@ -149,5 +148,5 @@ const TILTS_1953: Record<string, Record<string, number>> = {
 };
 
 export const jpMetricPresets1953: MetricPresetBundle = Object.fromEntries(
-  JP_REGIONS.map((region) => [region, { ...NATIONAL_1953, ...(TILTS_1953[region] ?? {}) }])
+  JP_REGION_IDS.map((region) => [region, { ...NATIONAL_1953, ...(TILTS_1953[region] ?? {}) }])
 );

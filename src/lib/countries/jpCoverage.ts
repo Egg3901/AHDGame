@@ -647,6 +647,12 @@ export const JP_COVERAGE: readonly CoverageEntry[] = [
     phase: "D6",
     source: "derived",
   },
+  {
+    file: "src/lib/countries/jp/data/jpRegionDirectory.ts",
+    bucket: "D",
+    phase: "D7",
+    source: "derived",
+  },
   { file: "src/lib/countries/jp/data/jpRegions.ts", bucket: "D", phase: "D6", source: "derived" },
   {
     file: "src/lib/countries/jp/data/jpRegionCensusData2027.ts",

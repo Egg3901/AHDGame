@@ -1,4 +1,5 @@
 import type { MetricPresetBundle } from "@/lib/countries/jp/data/jpMetricPresets";
+import { JP_REGION_IDS } from "./jpRegionDirectory";
 
 /**
  * 1979 Japan — Ohira Masayoshi (LDP); second oil shock (Iran Revolution) hitting hard;
@@ -10,8 +11,6 @@ import type { MetricPresetBundle } from "@/lib/countries/jp/data/jpMetricPresets
  * (227 ¥/$ in 1979). Very low unemployment (2.1%). Women working but leaving on marriage.
  * No broadband. Population ~116M.
  */
-
-const JP_REGIONS = ["HOK", "TOH", "KAN", "CHU", "KNS", "CGK", "SHI", "KYU"] as const;
 
 const NATIONAL_1979: Record<string, number> = {
   "economic.laborParticipation": 65, // high — lifetime employment full absorption
@@ -114,5 +113,5 @@ const TILTS_1979: Record<string, Record<string, number>> = {
 };
 
 export const jpMetricPresets1979: MetricPresetBundle = Object.fromEntries(
-  JP_REGIONS.map((region) => [region, { ...NATIONAL_1979, ...(TILTS_1979[region] ?? {}) }])
+  JP_REGION_IDS.map((region) => [region, { ...NATIONAL_1979, ...(TILTS_1979[region] ?? {}) }])
 );

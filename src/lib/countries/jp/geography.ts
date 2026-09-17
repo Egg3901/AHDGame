@@ -9,6 +9,7 @@ import type { ConscriptionPolicy } from "@/lib/demographics/conscription";
 import type { CountryModifierPatch } from "@/lib/states/conditions/countryPatches";
 import type { CountryMapConfig } from "@/lib/commodity-map/commodityMapRegistry";
 import type { CountryGeography } from "../contract";
+import { JP_REGIONS } from "@/lib/countries/jp/data/jpRegionDirectory";
 import { jpRegionCensusData } from "@/lib/countries/jp/data/jpRegionCensusData";
 import { jpRegionCensusData1953 } from "@/lib/countries/jp/data/jpRegionCensusData1953";
 import { jpRegionCensusData1979 } from "@/lib/countries/jp/data/jpRegionCensusData1979";
@@ -67,16 +68,16 @@ import { jpStateMetrics } from "@/lib/countries/jp/data/jpStateMetrics";
 
 /** Japan's eight regions and their neighbours. */
 
-const regionNames: Record<string, string> = {
-  HOK: "Hokkaido",
-  TOH: "Tohoku",
-  KAN: "Kanto",
-  CHU: "Chubu",
-  KNS: "Kansai",
-  CGK: "Chugoku",
-  SHI: "Shikoku",
-  KYU: "Kyushu & Okinawa",
-};
+/**
+ * ⚠ DERIVED, NOT REPEATED. This used to spell out all eight names while
+ * `JP_REGIONS` in the region directory spelled out the same eight. The values
+ * agreed and nothing kept them agreeing -- a second source in the state that
+ * looks fine until one side is edited. The directory is the richer record (it
+ * also carries each region's prefectures), so it is the one that holds the name.
+ */
+const regionNames: Record<string, string> = Object.fromEntries(
+  JP_REGIONS.map((region) => [region.id, region.name])
+);
 
 const demographicCategoryIds: string[] = ["jp_voterGroups"];
 
