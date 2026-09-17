@@ -179,7 +179,7 @@ export function resolvePlantsRevenue(input: PlantsRevenueInput): PlantsRevenueRe
   // full. Off-mode this is the plain priceRealization path (clearingFactor 1).
   const clearingRevenueLeg = clearingEnabled
     ? softenedMarketRealization(
-        computePriceRealization(strategySupply, priceRatioByCommodity),
+        computePriceRealization(strategySupply ?? {}, priceRatioByCommodity),
         clearingFactor,
         clearingStartTurn,
         currentTurn,

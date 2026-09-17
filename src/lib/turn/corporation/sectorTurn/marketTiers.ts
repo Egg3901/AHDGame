@@ -86,7 +86,7 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   const clearingStartTurn =
     market.clearingEnabled && clearing && clearing.factor < 1
       ? (sector.clearingStartTurn ?? currentTurn)
-      : sector.clearingStartTurn;
+      : (sector.clearingStartTurn ?? undefined);
   // Ramp only softens sub-1 factors (capacityHaircutFactor returns 1 for
   // factor >= 1); premium upside applies immediately — upside needs no
   // bankruptcy protection.
@@ -97,7 +97,7 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
     : 1;
   const priceRealization =
     market.realizationEnabled && !market.clearingEnabled
-      ? computePriceRealization(strategySupply, priceRatioByCommodity)
+      ? computePriceRealization(strategySupply ?? {}, priceRatioByCommodity)
       : 1;
   // Throughput coupling (marketSystemMode >= "clearing", audit t806 D1):
   // realized output is throttled by the scarcest available input (Leontief),
@@ -107,7 +107,7 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   // sector over the same 240-turn window as the capacity haircut.
   const throughputRaw = market.throughputEnabled
     ? computeThroughput(
-        strategyDemand,
+        strategyDemand ?? {},
         wideCommodityBalances,
         stateInputAvailabilityByState.get(stateId)
       )
@@ -115,7 +115,7 @@ export function computeMarketTiers(input: MarketTiersInput): MarketTiersResult {
   const throughputStartTurn =
     market.throughputEnabled && throughputRaw.throughput < 1
       ? (sector.throughputStartTurn ?? currentTurn)
-      : sector.throughputStartTurn;
+      : (sector.throughputStartTurn ?? undefined);
   // capacityHaircutFactor already ramps throughput in from 1 (flip = no-op).
   // The launch-safety governor adds only the downside floor: an input-starved
   // sector's revenue can't be cut more than `cap` below the ledger baseline

@@ -263,7 +263,7 @@ export function decomposePhysicalCosts(input: PhysicalCostsInput): PhysicalCosts
         // list on `computeInputsCost`; all four are level effects the
         // calibration solve absorbs.
         nominalDailyRevenue: plantsNameplateRevenue,
-        rates: effectiveDemand,
+        rates: effectiveDemand ?? {},
         basePrices: COMMODITY_BASE_PRICES,
         // Partition worlds: inputs are BOUGHT in the sector country's
         // reachable market, so they are billed at its price level. The world

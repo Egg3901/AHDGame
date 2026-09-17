@@ -48,7 +48,9 @@ import { isStateOwned } from "@/lib/nationalization/nationalCorporation";
 import { resolveSectorMandate } from "@/lib/nationalization/soeMandates";
 import { corpAlignmentModifier } from "@/lib/economicModels/effects";
 import type { getSectorTechEffects } from "@/lib/constants/techTree";
+import type { CountryId } from "@/lib/constants/countries";
 import type { CorporateSector, Corporation } from "@/lib/db/types";
+import type { PoliticalMetricId } from "@/lib/politicalMetrics/types";
 import type { CorporationLookups } from "../types";
 import type { CommodityType } from "@/lib/constants/commodities";
 
@@ -63,6 +65,7 @@ export interface MarginStackInput {
     | "typeSwitchTurn"
     | "countryOwnerId"
     | "logisticsStrength"
+    | "soeMandate"
   >;
   sector: Pick<
     CorporateSector,
@@ -73,6 +76,7 @@ export interface MarginStackInput {
     | "transitionStartTurn"
     | "countryId"
     | "profitMargin"
+    | "soeMandate"
   >;
   lookups: CorporationLookups;
   strategySupply: Partial<Record<CommodityType, number>> | undefined;
@@ -81,8 +85,8 @@ export interface MarginStackInput {
   techEffects: ReturnType<typeof getSectorTechEffects>;
   sectorMarketSharePct: number;
   nationalDominanceSharePct: number;
-  sectorCountryId: string;
-  corpCountry: string;
+  sectorCountryId: CountryId;
+  corpCountry: CountryId;
   turn: number | undefined;
   currentTurn: number;
   plantsEnabled: boolean;
@@ -96,9 +100,7 @@ export interface MarginStackInput {
   strikeMarginModifier: number;
   wideCommodityBalances: CorporationLookups["globalCommodityBalances"];
   /** Raw political board for playable regions; also feeds labour headcount. */
-  politicalBoard: CorporationLookups["politicalBoardByState"] extends Map<string, infer V>
-    ? V | undefined
-    : never;
+  politicalBoard: Record<PoliticalMetricId, number> | undefined;
 }
 
 export interface MarginStackResult {
@@ -253,13 +255,13 @@ export function accumulateMarginModifiers(input: MarginStackInput): MarginStackR
   const stateBalances = lookups.rawStateBalances.get(sector.stateId) ?? new Map();
   const baseSupply = applyExtractionResourceCapacityToSupply(
     sector.sectorType,
-    strategySupply,
+    strategySupply ?? {},
     lookups.stateResourceCapacityByState.get(sector.stateId)
   );
   // Tech production-method effects: scale specific commodity output up and
   // input (demand) down. No-op for commodities a node doesn't target.
   const effectiveSupply = scaleCommodityRates(baseSupply, techEffects.outputRateMult);
-  const effectiveDemand = scaleCommodityRates(strategyDemand, techEffects.inputRateMult);
+  const effectiveDemand = scaleCommodityRates(strategyDemand ?? {}, techEffects.inputRateMult);
   const { inputMod: commodityMod, surplusMod } = computeBlendedMarginModifiers(
     sector.sectorType,
     wideCommodityBalances,
