@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -20,17 +22,16 @@ import {
   loadFxRatesRecord,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { distributeConversionSpread } from "@/lib/currency/marketMaker";
 import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-  atomicallyDebitCorpLiquidCapital,
-  refundCorpLiquidCapital,
-} from "@/lib/financialTxLog/atomicCashGuard";
-import { emitTx } from "@/lib/financialTxLog/emit";
+  buildShareOfferSubmitOfferId,
+  executeShareOfferSubmitFlow,
+  getStoredShareOfferSubmitResponse,
+  recoverShareOfferSubmitByKey,
+  type ShareOfferSubmitPlan,
+} from "@/lib/corporations/commands/shareTrading/shareOfferSpend";
+import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
-import { isPendingShareOfferDuplicateKey } from "@/lib/elections/duplicateKey";
 import type {
   Character,
   Corporation,
@@ -41,6 +42,38 @@ import type {
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
+
+/** Maps keyed-flow claim failures onto the legacy 409 surface. */
+function mapSubmitKeyError(error: unknown): NextResponse {
+  if (error instanceof MoneyFlowTerminalError) {
+    return NextResponse.json(
+      { error: "Offer submission already settled; start a new attempt with a new key." },
+      { status: 409 }
+    );
+  }
+  if (error instanceof MoneyFlowKeyConflictError) {
+    return NextResponse.json(
+      { error: "Idempotency key was reused for a different transfer." },
+      { status: 409 }
+    );
+  }
+  throw error;
+}
+
+async function runSubmitKeyRecovery(
+  db: Awaited<ReturnType<typeof getDb>>,
+  submitKey: string
+): Promise<NextResponse> {
+  try {
+    const recovered = await recoverShareOfferSubmitByKey(db, submitKey);
+    if (!recovered.ok) {
+      return NextResponse.json({ error: recovered.error }, { status: 400 });
+    }
+    return NextResponse.json({ success: true, ...recovered.body });
+  } catch (error) {
+    return mapSubmitKeyError(error);
+  }
+}
 
 interface RouteParams {
   params: Promise<{ id: string; listingId: string }>;
@@ -61,6 +94,14 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
     const rateLimit = checkRateLimit(auth.user.userId, 20, 60000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
 
+    // Crash-safe submit (issue #1672): the escrow debit, the offer insert,
+    // and the corp-branch FX spread run as keyed idempotent steps.
+    // `Idempotency-Key` replays the stored outcome without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const { id, listingId } = await params;
     const parsed = await parseJsonBody(request, submitOfferSchema);
     if (!parsed.success)
@@ -68,6 +109,19 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
 
     const { shares, pricePerShare, offerAsCorporation } = parsed.data;
     const db = await getDb();
+
+    // Same-key retry: the first attempt already validated, so reconcile
+    // through the stored plan instead of re-running the guards (which
+    // post-debit reads would fail). Runs before the action/turn guards so
+    // crash recovery converges even while fresh submits are blocked.
+    if (headerKey !== null) {
+      const prior = await getStoredShareOfferSubmitResponse(db, headerKey);
+      if (prior) {
+        return runSubmitKeyRecovery(db, headerKey);
+      }
+    }
+
+    const submitKey = headerKey ?? randomUUID();
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
     const turnGuard = await rejectDuringTurn(db);
@@ -178,6 +232,7 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
     // placement (cancel/reject refunds only escrowAmount, not the markup), so
     // routed to the CB system before returning. Set inside the corp branch.
     let offerFxSpread: { fee: number; from: CurrencyCode; to: CurrencyCode } | null = null;
+    let submitBody: { escrowAmount: number; spreadPaid: number };
 
     if (offerAsCorporation) {
       const placerCorp = await db
@@ -227,85 +282,61 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
         offerFxSpread = { fee: escrowEstimate.spreadFee, from: placerCurrency, to: targetCurrency };
       }
 
-      // Atomic balance-gated escrow debit on placer corp's liquidCapital.
-      const corpDebit = await atomicallyDebitCorpLiquidCapital(
-        db,
-        placerCorp._id,
-        escrowInPlacerCapital
-      );
-      if (!corpDebit.ok) {
-        const placerSym = CURRENCY_SYMBOLS[placerCurrency] ?? "$";
-        const targetSym = CURRENCY_SYMBOLS[targetCurrency] ?? "$";
-        const needStr = escrowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 });
-        const adjustedStr = escrowInPlacerCapital.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-        });
-        const haveStr = (placerCorp.liquidCapital ?? 0).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-        });
-        const currencyNote =
-          placerCurrency !== targetCurrency
-            ? ` (${placerSym}${adjustedStr} ${placerCurrency} incl. FX, corp has ${placerSym}${haveStr} ${placerCurrency})`
-            : `, corp has ${placerSym}${haveStr} ${placerCurrency}`;
-        return NextResponse.json(
-          {
-            error: `Insufficient corporation funds for escrow. Need ${targetSym}${needStr}${currencyNote}`,
-          },
-          { status: 400 }
-        );
-      }
-
-      let offerId: ObjectId;
+      // Keyed escrow settlement (issue #1672): the guarded debit, the
+      // deterministic offer insert, and the FX spread run as idempotent
+      // steps under one receipt. The legacy insufficient-funds message is
+      // pinned here so guard failures keep the byte-identical surface.
+      const placerSym = CURRENCY_SYMBOLS[placerCurrency] ?? "$";
+      const targetSym = CURRENCY_SYMBOLS[targetCurrency] ?? "$";
+      const needStr = escrowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 });
+      const adjustedStr = escrowInPlacerCapital.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+      });
+      const haveStr = (placerCorp.liquidCapital ?? 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+      });
+      const currencyNote =
+        placerCurrency !== targetCurrency
+          ? ` (${placerSym}${adjustedStr} ${placerCurrency} incl. FX, corp has ${placerSym}${haveStr} ${placerCurrency})`
+          : `, corp has ${placerSym}${haveStr} ${placerCurrency}`;
+      const spreadPaid = offerFxSpread != null ? Math.round(offerFxSpread.fee * 100) / 100 : 0;
+      const corpPlan: ShareOfferSubmitPlan = {
+        version: 1,
+        submitKey,
+        listingIdHex: listing._id.toHexString(),
+        corpIdHex: listing.corporationId.toHexString(),
+        buyerCharacterIdHex: character._id.toHexString(),
+        buyerCorporationIdHex: placerCorp._id.toHexString(),
+        shares,
+        pricePerShare,
+        escrowAmount,
+        escrowDebit: {
+          collection: "corporations",
+          idHex: placerCorp._id.toHexString(),
+          field: "liquidCapital",
+          amount: escrowInPlacerCapital,
+        },
+        payerType: "corporation",
+        payerIdHex: placerCorp._id.toHexString(),
+        payerName: placerCorp.name,
+        payerCurrencyCode: placerCurrency,
+        insufficientError: `Insufficient corporation funds for escrow. Need ${targetSym}${needStr}${currencyNote}`,
+        turn: currentTurn,
+        nowIso: now.toISOString(),
+        offerIdHex: buildShareOfferSubmitOfferId(submitKey).toHexString(),
+        spread: offerFxSpread,
+        response: { escrowAmount, spreadPaid },
+      };
+      let corpResult: Awaited<ReturnType<typeof executeShareOfferSubmitFlow>>;
       try {
-        const insertResult = await db.collection<Omit<ShareOffer, "_id">>("shareOffers").insertOne({
-          listingId: listing._id,
-          corporationId: listing.corporationId,
-          buyerCharacterId: character._id,
-          buyerCorporationId: placerCorp._id,
-          shares,
-          pricePerShare,
-          escrowAmount,
-          status: "pending",
-          createdAt: now,
-        } as Omit<ShareOffer, "_id">);
-        offerId = insertResult.insertedId;
-      } catch (err) {
-        await refundCorpLiquidCapital(db, placerCorp._id, escrowInPlacerCapital);
-        if (isPendingShareOfferDuplicateKey(err)) {
-          return NextResponse.json(
-            { error: "You already have a pending offer on this listing" },
-            { status: 400 }
-          );
-        }
-        throw err;
+        corpResult = await executeShareOfferSubmitFlow(db, corpPlan, { idempotencyKey: submitKey });
+      } catch (error) {
+        return mapSubmitKeyError(error);
       }
-      try {
-        await emitTx(db, {
-          type: "share_offer_escrow",
-          turn: currentTurn,
-          createdAt: now,
-          subjectType: "corporation",
-          subjectId: placerCorp._id,
-          subjectName: placerCorp.name,
-          amount: -escrowInPlacerCapital,
-          balanceAfter: corpDebit.newBalance,
-          currencyCode: resolveCorpLiquidCurrencyCode(placerCorp) ?? "USD",
-          counterpartyType: "system",
-          counterpartyName: "Private listing escrow",
-          meta: {
-            listingId: listing._id.toString(),
-            corporationId: listing.corporationId.toString(),
-            shares,
-            pricePerShare,
-          },
-        });
-      } catch (err) {
-        await Promise.all([
-          db.collection<ShareOffer>("shareOffers").deleteOne({ _id: offerId, status: "pending" }),
-          refundCorpLiquidCapital(db, placerCorp._id, escrowInPlacerCapital),
-        ]);
-        throw err;
+      if (!corpResult.ok) {
+        return NextResponse.json({ error: corpResult.error }, { status: 400 });
       }
+      submitBody = corpResult.body;
     } else {
       const homeCurrency = getHomeCurrency(character);
       let charFxRate = 1.0;
@@ -321,69 +352,47 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       }
       const escrowInHome = escrowAnchor * charFxRate;
 
-      // Atomic balance-gated escrow debit on character cash. Pre-fix used
-      // getPersonalBalance() against a cached doc + non-atomic $inc.
-      const debitResult = await atomicallyDebitCharacterCash(
-        db,
-        character._id,
-        homeCurrency,
-        escrowInHome,
-        forexEnabled
-      );
-      if (!debitResult.ok) {
-        return NextResponse.json({ error: "Insufficient funds for escrow" }, { status: 400 });
-      }
-
-      let offerId: ObjectId;
+      // Keyed escrow settlement (issue #1672): the guarded debit and the
+      // deterministic offer insert run as idempotent steps under one
+      // receipt. Pre-fix used getPersonalBalance() against a cached doc +
+      // non-atomic $inc; the keyed debit keeps the same `$gte` guard.
+      const charPlan: ShareOfferSubmitPlan = {
+        version: 1,
+        submitKey,
+        listingIdHex: listing._id.toHexString(),
+        corpIdHex: listing.corporationId.toHexString(),
+        buyerCharacterIdHex: character._id.toHexString(),
+        buyerCorporationIdHex: null,
+        shares,
+        pricePerShare,
+        escrowAmount,
+        escrowDebit: {
+          collection: "characters",
+          idHex: character._id.toHexString(),
+          field: personalBalanceField(homeCurrency, forexEnabled),
+          amount: escrowInHome,
+        },
+        payerType: "character",
+        payerIdHex: character._id.toHexString(),
+        payerName: character.name,
+        payerCurrencyCode: homeCurrency,
+        insufficientError: "Insufficient funds for escrow",
+        turn: currentTurn,
+        nowIso: now.toISOString(),
+        offerIdHex: buildShareOfferSubmitOfferId(submitKey).toHexString(),
+        spread: null,
+        response: { escrowAmount, spreadPaid: 0 },
+      };
+      let charResult: Awaited<ReturnType<typeof executeShareOfferSubmitFlow>>;
       try {
-        const insertResult = await db.collection<Omit<ShareOffer, "_id">>("shareOffers").insertOne({
-          listingId: listing._id,
-          corporationId: listing.corporationId,
-          buyerCharacterId: character._id,
-          shares,
-          pricePerShare,
-          escrowAmount,
-          status: "pending",
-          createdAt: now,
-        } as Omit<ShareOffer, "_id">);
-        offerId = insertResult.insertedId;
-      } catch (err) {
-        await refundCharacterCash(db, character._id, homeCurrency, escrowInHome, forexEnabled);
-        if (isPendingShareOfferDuplicateKey(err)) {
-          return NextResponse.json(
-            { error: "You already have a pending offer on this listing" },
-            { status: 400 }
-          );
-        }
-        throw err;
+        charResult = await executeShareOfferSubmitFlow(db, charPlan, { idempotencyKey: submitKey });
+      } catch (error) {
+        return mapSubmitKeyError(error);
       }
-      try {
-        await emitTx(db, {
-          type: "share_offer_escrow",
-          turn: currentTurn,
-          createdAt: now,
-          subjectType: "character",
-          subjectId: character._id,
-          subjectName: character.name,
-          amount: -escrowInHome,
-          balanceAfter: debitResult.newBalance,
-          currencyCode: homeCurrency,
-          counterpartyType: "system",
-          counterpartyName: "Private listing escrow",
-          meta: {
-            listingId: listing._id.toString(),
-            corporationId: listing.corporationId.toString(),
-            shares,
-            pricePerShare,
-          },
-        });
-      } catch (err) {
-        await Promise.all([
-          db.collection<ShareOffer>("shareOffers").deleteOne({ _id: offerId, status: "pending" }),
-          refundCharacterCash(db, character._id, homeCurrency, escrowInHome, forexEnabled),
-        ]);
-        throw err;
+      if (!charResult.ok) {
+        return NextResponse.json({ error: charResult.error }, { status: 400 });
       }
+      submitBody = charResult.body;
     }
 
     // Notify the seller
@@ -405,15 +414,12 @@ export async function submitShareOffer(request: Request, { params }: RouteParams
       } as Omit<Notification, "_id">);
     })().catch(() => undefined);
 
-    // Offer fully placed — route the corp's escrow FX spread to the CB system.
-    if (offerFxSpread) {
-      await distributeConversionSpread(db, offerFxSpread.fee, offerFxSpread.from, offerFxSpread.to);
-    }
-
+    // The corp-branch FX spread already routed as keyed steps inside the
+    // flow (exactly once, not post-commit), so nothing routes here.
     return NextResponse.json({
       success: true,
-      escrowAmount,
-      spreadPaid: offerFxSpread ? Math.round(offerFxSpread.fee * 100) / 100 : 0,
+      escrowAmount: submitBody.escrowAmount,
+      spreadPaid: submitBody.spreadPaid,
     });
   } catch (error) {
     return handleRouteError(error);

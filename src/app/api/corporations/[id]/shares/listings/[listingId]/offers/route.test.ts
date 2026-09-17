@@ -27,12 +27,6 @@ vi.mock("@/lib/currency/corporationCapital", async () => {
     loadFxRatesRecord: vi.fn().mockResolvedValue({ USD: 0.75, GBP: 1 }),
   };
 });
-vi.mock("@/lib/financialTxLog/atomicCashGuard", () => ({
-  atomicallyDebitCharacterCash: vi.fn(),
-  refundCharacterCash: vi.fn(),
-  atomicallyDebitCorpLiquidCapital: vi.fn(),
-  refundCorpLiquidCapital: vi.fn(),
-}));
 vi.mock("@/lib/financialTxLog/emit", () => ({ emitTx: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/lib/turn/currentTurn", () => ({ getCurrentTurn: vi.fn().mockResolvedValue(12) }));
 
@@ -139,13 +133,6 @@ describe("POST /api/corporations/[id]/shares/listings/[listingId]/offers", () =>
       countryId: "US",
     } as never);
 
-    const { atomicallyDebitCharacterCash, refundCharacterCash } =
-      await import("@/lib/financialTxLog/atomicCashGuard");
-    vi.mocked(atomicallyDebitCharacterCash).mockResolvedValue({
-      ok: true,
-      newBalance: 9000,
-    } as never);
-
     db.collectionMocks["shareListings"]!.findOne.mockResolvedValue({
       _id: listingId,
       corporationId,
@@ -188,7 +175,14 @@ describe("POST /api/corporations/[id]/shares/listings/[listingId]/offers", () =>
     await expect(res.json()).resolves.toMatchObject({
       error: "You already have a pending offer on this listing",
     });
-    expect(refundCharacterCash).toHaveBeenCalledWith(db, buyerId, "USD", 1000, false);
+    // Keyed settlement (issue #1672): the guarded escrow debit applied,
+    // then the pending-unique race compensated it with an equal credit.
+    const charWrites = db.collectionMocks["characters"]!.updateOne.mock.calls;
+    expect(charWrites).toHaveLength(2);
+    expect((charWrites[0]![0] as { _id: ObjectId })._id.equals(buyerId)).toBe(true);
+    expect(charWrites[0]![0]).toMatchObject({ cashOnHand: { $gte: 1000 } });
+    expect(charWrites[0]![1]).toMatchObject({ $inc: { cashOnHand: -1000 } });
+    expect(charWrites[1]![1]).toMatchObject({ $inc: { cashOnHand: 1000 } });
   });
 
   it("charges corporation escrow with FX spread when the buyer corp currency differs", async () => {
@@ -211,13 +205,6 @@ describe("POST /api/corporations/[id]/shares/listings/[listingId]/offers", () =>
       userId,
       name: "Buyer Test",
       countryId: "GB",
-    } as never);
-
-    const { atomicallyDebitCorpLiquidCapital } =
-      await import("@/lib/financialTxLog/atomicCashGuard");
-    vi.mocked(atomicallyDebitCorpLiquidCapital).mockResolvedValue({
-      ok: true,
-      newBalance: 9_000,
     } as never);
 
     db.collectionMocks["shareListings"]!.findOne.mockResolvedValue({
@@ -274,10 +261,18 @@ describe("POST /api/corporations/[id]/shares/listings/[listingId]/offers", () =>
     );
 
     expect(res.status).toBe(200);
-    expect(atomicallyDebitCorpLiquidCapital).toHaveBeenCalledWith(
-      db,
-      buyerCorpId,
-      1000 / ((1 - MARKET_MAKER_SPREAD) * 0.75)
-    );
+    await expect(res.json()).resolves.toMatchObject({
+      success: true,
+      escrowAmount: 1000,
+      spreadPaid: expect.any(Number),
+    });
+    // Keyed settlement (issue #1672): escrow leaves via one guarded keyed
+    // debit on the placer corp instead of the legacy atomic debit.
+    const expectedEscrow = 1000 / ((1 - MARKET_MAKER_SPREAD) * 0.75);
+    const corpWrites = db.collectionMocks["corporations"]!.updateOne.mock.calls;
+    expect(corpWrites).toHaveLength(1);
+    expect((corpWrites[0]![0] as { _id: ObjectId })._id.equals(buyerCorpId)).toBe(true);
+    expect(corpWrites[0]![0]).toMatchObject({ liquidCapital: { $gte: expectedEscrow } });
+    expect(corpWrites[0]![1]).toMatchObject({ $inc: { liquidCapital: -expectedEscrow } });
   });
 });

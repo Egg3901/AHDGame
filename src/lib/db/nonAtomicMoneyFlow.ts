@@ -407,8 +407,7 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * already-applied legacy refunds converge. Recovery is by key plus a
  * bounded orphan scan (default 50) re-driven every turn by
  * fillPendingShareOrders alongside the fill scans (see the placement
- * paragraph below for the current scan budget after this pass added the
- * fifth scan).
+ * paragraph below for the current scan budget).
  * A crash-heavy turn recovers at most 50 receipts per scan before the
  * matcher proceeds. Tested:
  * crash-after-every-write convergence for the fund path, partial-fill
@@ -443,7 +442,7 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * validated) and return the stored body; competing keys race on the keyed
  * guards with truthful 400/409s. Recovery is by key plus a bounded orphan
  * scan (default 50) re-driven every turn by fillPendingShareOrders, so the
- * empty-turn cost stays five bounded scans (seven finds, ~7 commands
+ * empty-turn cost stays nine bounded scans (eighteen finds, ~18 commands
  * against the 2000-command corporationTurn budget). Tested:
  * crash-after-every-write convergence for all eight paths, partial
  * placement failures with new-key retry, same-key replay identity,
@@ -471,11 +470,32 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * float buys/sells, no intent row exists to strand); same-turn retries
  * converge by key and ops can re-drive the bounded scan, which skips
  * foreign-domain receipts via the fingerprint prefix.
+ * Private-listing share offers are migrated
+ * (src/lib/corporations/commands/shareTrading/shareOfferSpend.ts, issue
+ * #1672): submit runs the guarded escrow debit (character home-currency
+ * field or corp liquidCapital, same `$gte` guard the legacy atomic debits
+ * used) plus a deterministic-`_id` offer insert (a crash between debit
+ * and insert converges on retry instead of stranding debited-with-no-offer
+ * rows) plus the corp-branch FX spread as keyed bank steps; the
+ * pending-unique race converges via the unique index with the debit
+ * compensated and the legacy 400. Accept runs the CAS offer claim
+ * (`pending` to `accepted`, stamped with the flow key) plus the CAS
+ * listing decrement (`open` + `sharesRemaining $gte`, stamped) plus the
+ * buyer cap-table credit, the seller proceeds, and the partial-refund
+ * remainder as keyed steps with keyed inverses. Both shells keep every
+ * read-only guard with byte-identical validation order and error strings
+ * and pin every amount, currency, party, and response figure before the
+ * first step, so recovery replays stored figures instead of re-reading
+ * post-attempt state. Recovery is by key plus one bounded orphan scan
+ * per flow (default 50) re-driven every turn by fillPendingShareOrders
+ * alongside the other scans. Tested: crash-after-every-write convergence
+ * for submit and accept, guard-failure settlement for every actor
+ * variant, same-key replay identity, key-conflict/terminal semantics,
+ * and orphan-scan recovery including plan-less settle-failed.
  * Open seams for the next pass (all sighted, none audited here). (1)
  * Remaining escrow settlement callers outside the order flow
  * (shareEscrowSettlement.ts via buyPublicShares.ts, sellPublicShares.ts,
- * cancelShareListing.ts), share offers (submitShareOffer.ts,
- * acceptShareOffer.ts), and corp-level money (takeovers, spin-offs,
+ * cancelShareListing.ts) and corp-level money (takeovers, spin-offs,
  * capital injections, acquisitions, privatization). (2) Plan-less receipt
  * coverage in the route/audit orphan scans: recoverShareFillMoneyOrphans
  * and recoverShareFillOrphans only scan receipts that already carry a

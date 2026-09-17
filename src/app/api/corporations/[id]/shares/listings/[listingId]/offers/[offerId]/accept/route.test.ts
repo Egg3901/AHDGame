@@ -84,6 +84,8 @@ describe("POST /api/corporations/[id]/shares/listings/[listingId]/offers/[offerI
 
     expect(res.status).toBe(404);
     await expect(res.json()).resolves.toMatchObject({ error: "Listing not found" });
-    expect(db.collectionMocks["shareOffers"]!.findOneAndUpdate).not.toHaveBeenCalled();
+    // Keyed settlement (issue #1672) claims via `updateOne`, never
+    // `findOneAndUpdate`, so a rejected accept must not write at all.
+    expect(db.collectionMocks["shareOffers"]!.updateOne).not.toHaveBeenCalled();
   });
 });
