@@ -12,6 +12,7 @@ import {
   getCampaignActionCost,
   getAdvertiseActionCost,
   getDonorActionCost,
+  REST_ACTION_COST,
   getPollActionCost,
 } from "@/lib/actions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -154,7 +155,7 @@ async function handleGET() {
       buildDonorBase: getDonorActionCost(donor, "buildDonorBase"),
       poll: getPollActionCost("small"),
       pollLarge: getPollActionCost("large"),
-      rest: 0,
+      rest: REST_ACTION_COST,
     };
 
     // --- Fund income projection ---

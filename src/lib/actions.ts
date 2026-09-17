@@ -21,6 +21,9 @@ import {
   getPollActionCost,
   quotePollAction,
   type PollTier,
+  REST_ACTION_COST,
+  REST_RESULT_MESSAGE,
+  quoteRestAction,
   DEBATE_PREP_ACTION_COST,
   quoteDebatePrepAction,
   describeDebatePrepAction,
@@ -82,6 +85,10 @@ export {
   type PollTier,
   type PollQuoteActor,
   type PollQuote,
+  REST_ACTION_COST,
+  REST_RESULT_MESSAGE,
+  quoteRestAction,
+  type RestQuote,
   DEBATE_PREP_ACTION_COST,
   DEBATE_PREP_SUCCESS_CHANCE,
   DEBATE_PREP_DEBATE_GAIN,
@@ -477,11 +484,18 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     type: "rest",
     name: "Rest",
     description: "Take a break (does nothing)",
-    baseCost: 0,
+    baseCost: REST_ACTION_COST,
     requiresState: false,
     effect: () => {
+      // Single source of truth: the dashboard, the advisor and
+      // canPerformAction read this same quote, so the advertised (zero) cost
+      // can never drift from the charged result. canPerformAction runs the
+      // quote first; the throw below is a defensive invariant for direct
+      // effect callers that skip validation.
+      const quote = quoteRestAction();
+      if (!quote.ok) throw new Error(quote.error);
       return {
-        message: "You took a well-deserved break.",
+        message: REST_RESULT_MESSAGE,
       };
     },
   },
@@ -682,6 +696,16 @@ export function canPerformAction(
     }
   }
 
+  // Rest validates through the same rules quote the effect uses: zero AP
+  // cost, zero fund cost, always eligible. The quote cannot reject; the gate
+  // keeps every action on one validation path with one failure shape.
+  if (actionType === "rest") {
+    const quote = quoteRestAction();
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
   // Check if state is required
   if (action.requiresState && !state) {
     return {
@@ -729,6 +753,9 @@ export function getActionPointCost(character: Character, actionType: ActionType)
   }
   if (actionType === "advertise") {
     return getAdvertiseActionCost(character.favorability ?? 0);
+  }
+  if (actionType === "rest") {
+    return REST_ACTION_COST;
   }
   if (actionType === "poll") {
     return getPollActionCost("small");

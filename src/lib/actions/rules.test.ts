@@ -49,6 +49,9 @@ import {
   getPollBaseFundCost,
   getPollFundCost,
   quotePollAction,
+  REST_ACTION_COST,
+  REST_RESULT_MESSAGE,
+  quoteRestAction,
   DEBATE_PREP_ACTION_COST,
   DEBATE_PREP_SUCCESS_CHANCE,
   DEBATE_PREP_DEBATE_GAIN,
@@ -60,6 +63,7 @@ import {
 } from "./rules";
 import {
   ACTIONS,
+  buildBatchResultMessage,
   canPerformAction,
   getDonorActionCost,
   getActionPointCost,
@@ -1017,6 +1021,45 @@ describe("poll failure agreement", () => {
   });
 });
 
+describe("rest quote agreement", () => {
+  it("rest is always free and always quotable", () => {
+    expect(REST_ACTION_COST).toBe(0);
+    expect(quoteRestAction()).toEqual({ ok: true, apCost: 0, fundCostAnchor: 0 });
+  });
+  it("effect, validation and AP cost agree on zero cost", () => {
+    expect(ACTIONS.rest.baseCost).toBe(REST_ACTION_COST);
+    expect(ACTIONS.rest.effect(makeCharacter({ actions: 0, funds: 0 }))).toEqual({
+      message: REST_RESULT_MESSAGE,
+    });
+    expect(getActionPointCost(makeCharacter({}), "rest")).toBe(0);
+    // A fully spent, broke character can always rest: no AP gate, no funds
+    // gate, no state requirement.
+    expect(canPerformAction(makeCharacter({ actions: 0, funds: 0 }), "rest")).toEqual({
+      canPerform: true,
+    });
+  });
+  it("batch rest charges no AP, moves no funds and reports the single message", () => {
+    const char = makeCharacter({
+      actions: 3,
+      funds: 500_000,
+      politicalInfluence: 10,
+      favorability: 20,
+    });
+    const batch = simulateActionBatch(char, undefined, "rest", 5);
+    expect(batch.ok).toBe(true);
+    if (!batch.ok) return;
+    expect(batch.totalActionPoints).toBe(0);
+    expect(batch.netFundsChange).toBe(0);
+    expect(batch.finalCharacter.actions).toBe(3);
+    expect(batch.finalCharacter.funds).toBe(500_000);
+    expect(batch.finalCharacter.politicalInfluence).toBe(10);
+    // Every delta is zero, so the batch message falls back to the single-run
+    // message from the shared effect.
+    expect(buildBatchResultMessage(5, char, batch.finalCharacter, REST_RESULT_MESSAGE, "USD")).toBe(
+      `Completed 5 times. ${REST_RESULT_MESSAGE}`
+    );
+  });
+});
 // ── Fundraise (Game1724 slice) ──────────────────────────────────────────────
 // quoteFundraiseAction owns the flat AP cost, the stat-scaled yield and the
 // donor-base eligibility. The action effect (result), canPerformAction
