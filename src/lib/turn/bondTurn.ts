@@ -229,6 +229,25 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
   // see PartialTxEntry in ./bondTurnLedger for the charId/isImperial shape).
   const txBondEntries: PartialTxEntry[] = [];
   const govCouponByCountry = new Map<string, { total: number; currency: CurrencyCode }>();
+  // #992 tranche 4: fund-holder coupon/maturity rows are fund-subject legs, so
+  // the shadow ledger books them against fund:<id> (the stock-checked cash
+  // account) instead of a phantom corporation:<fundId>. One projected read:
+  // funds are few and the currency never changes mid-turn.
+  const fundCurrencyById = new Map(
+    (
+      await db
+        .collection("indexFunds")
+        .find({}, { projection: { anchorCurrencyCode: 1 } })
+        .toArray()
+    ).map((f) => [
+      String(f._id),
+      typeof f.anchorCurrencyCode === "string" ? f.anchorCurrencyCode : "",
+    ])
+  );
+  function fundLedgerCurrency(fundIdStr: string): CurrencyCode | null {
+    const ccy = fundCurrencyById.get(fundIdStr);
+    return ccy ? (ccy as CurrencyCode) : null;
+  }
   // Cash owed to each currency's bond market pool for the units it holds
   // (`publicFloat`). Issuers already pay for those units: corporate coupon and
   // maturity cost below count float units, and the sovereign budget carries
@@ -330,23 +349,53 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         });
       } else if (holder.fundId) {
         addFundPayment(holder.fundId.toString(), paymentAnchor);
-        txBondEntries.push({
-          type: "bond_coupon",
-          turn,
-          createdAt: now,
-          subjectType: "corporation",
-          subjectId: holder.fundId,
-          amount: localAmountForTx,
-          currencyCode: bondCcy,
-          counterpartyType: "government",
-          counterpartyName: bond.issuerName ?? "Bond issuer",
-          meta: {
-            bondId: String(bond._id),
-            units: holder.units,
-            couponRate: bond.couponRate,
-            fundId: holder.fundId.toString(),
-          },
-        });
+        // #992 tranche 4: the fund credit lands on cashAnchor (₳), so the row
+        // is fund-subject in the fund's own currency with the ₳ value stated
+        // outright — never derived from the live FX table. Without a fund doc
+        // there is no currency to book in, so the row keeps the legacy shape
+        // rather than guessing.
+        const couponFundIdStr = holder.fundId.toString();
+        const couponFundCcy = fundLedgerCurrency(couponFundIdStr);
+        if (couponFundCcy) {
+          const couponAnchor = Math.round(paymentAnchor * 100) / 100;
+          txBondEntries.push({
+            type: "bond_coupon",
+            turn,
+            createdAt: now,
+            subjectType: "fund",
+            subjectId: holder.fundId,
+            amount: couponAnchor,
+            anchorAmount: couponAnchor,
+            currencyCode: couponFundCcy,
+            counterpartyType: "government",
+            counterpartyName: bond.issuerName ?? "Bond issuer",
+            meta: {
+              bondId: String(bond._id),
+              units: holder.units,
+              couponRate: bond.couponRate,
+              fundId: couponFundIdStr,
+              fundCurrency: couponFundCcy,
+            },
+          });
+        } else {
+          txBondEntries.push({
+            type: "bond_coupon",
+            turn,
+            createdAt: now,
+            subjectType: "corporation",
+            subjectId: holder.fundId,
+            amount: localAmountForTx,
+            currencyCode: bondCcy,
+            counterpartyType: "government",
+            counterpartyName: bond.issuerName ?? "Bond issuer",
+            meta: {
+              bondId: String(bond._id),
+              units: holder.units,
+              couponRate: bond.couponRate,
+              fundId: couponFundIdStr,
+            },
+          });
+        }
       } else if (holder.corporationId) {
         const key = holder.corporationId.toString();
         const holderCorp = corpMap.get(key);
@@ -911,23 +960,47 @@ export async function processBondTurn(turn: number): Promise<BondTurnResult> {
         });
       } else if (holder.fundId) {
         addFundPayment(holder.fundId.toString(), faceValueReturnAnchor);
-        const fxRate = fxByCurrency.get(bondCcy) ?? 1;
-        const localAmount = faceValueReturnAnchor * (fxRate > 0 ? fxRate : 1);
-        txBondEntries.push({
-          type: "bond_maturity",
-          turn,
-          createdAt: now,
-          subjectType: "corporation",
-          subjectId: holder.fundId,
-          amount: localAmount,
-          currencyCode: bondCcy,
-          meta: {
-            bondId: String(bond._id),
-            units: holder.units,
-            couponRate: bond.couponRate,
-            fundId: holder.fundId.toString(),
-          },
-        });
+        // #992 tranche 4: same fund-subject treatment as the coupon leg above.
+        const maturityFundIdStr = holder.fundId.toString();
+        const maturityFundCcy = fundLedgerCurrency(maturityFundIdStr);
+        if (maturityFundCcy) {
+          const maturityAnchor = Math.round(faceValueReturnAnchor * 100) / 100;
+          txBondEntries.push({
+            type: "bond_maturity",
+            turn,
+            createdAt: now,
+            subjectType: "fund",
+            subjectId: holder.fundId,
+            amount: maturityAnchor,
+            anchorAmount: maturityAnchor,
+            currencyCode: maturityFundCcy,
+            meta: {
+              bondId: String(bond._id),
+              units: holder.units,
+              couponRate: bond.couponRate,
+              fundId: maturityFundIdStr,
+              fundCurrency: maturityFundCcy,
+            },
+          });
+        } else {
+          const fxRate = fxByCurrency.get(bondCcy) ?? 1;
+          const localAmount = faceValueReturnAnchor * (fxRate > 0 ? fxRate : 1);
+          txBondEntries.push({
+            type: "bond_maturity",
+            turn,
+            createdAt: now,
+            subjectType: "corporation",
+            subjectId: holder.fundId,
+            amount: localAmount,
+            currencyCode: bondCcy,
+            meta: {
+              bondId: String(bond._id),
+              units: holder.units,
+              couponRate: bond.couponRate,
+              fundId: maturityFundIdStr,
+            },
+          });
+        }
       } else if (holder.corporationId) {
         // Corp-holder maturity credit was applied in Phase 1.5 / Phase 2 so it
         // could enter the default check; we only emit the ledger row here.

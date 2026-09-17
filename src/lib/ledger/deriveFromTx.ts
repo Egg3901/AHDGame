@@ -127,6 +127,10 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   loc_repay: "credit_principal",
   loc_interest: "credit_interest",
   index_fund_subscribe: "fund_subscription",
+  // #992 tranche 4: queue-paid NPP redemptions mirror like any holder redeem
+  // when currencies match; this is only the fail-closed fallback for a
+  // cross-currency pair, never the common path.
+  index_fund_redeem: "fund_redemption",
   index_fund_dividend: "fund_distribution",
   // #992 tranche 3: the fund's retained dividend slice. Single-sided by
   // construction (the corp evidences net-of-dividend revenue), so this is an
@@ -147,6 +151,15 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   // of pooling both in `unattributed`. (The spin-off incorporation fee debit
   // shares the type; it is likewise a seeding flow.)
   corp_capital_seed: "seed_capital",
+  // #992 tranche 4: order-book escrow. The debit is a reservation, not
+  // destruction — the standing escrow reads as a named sink bucket (same
+  // convention as capacity_capex), and the refund shares the reason so a
+  // placement nets against its own cancel per currency instead of pooling in
+  // `unattributed`. Applies to character/corporation escrow rows as well as
+  // the new fund-subject ones: both directions were already emitted, only the
+  // attribution was missing.
+  stock_order_escrow: "order_escrow",
+  stock_order_refund: "order_escrow",
   corp_escrow_funding: "escrow_transfer",
   corp_group_relief: "corporate_group_transfer",
   caucus_tax_debit: "party_internal_transfer",
