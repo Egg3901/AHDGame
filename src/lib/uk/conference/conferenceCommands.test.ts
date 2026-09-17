@@ -27,7 +27,10 @@ import {
   payoffGroupsForPledges,
 } from "./rules";
 import { createFakeLeadershipDb, withCollectionFaults } from "../leadership/leadershipTestDb";
-import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
+import {
+  buildEmbeddedVoteTallyUpdate,
+  buildMotionVoteTallyUpdate,
+} from "@/lib/votes/embeddedVoteTally";
 import {
   getUKPartyConferencesCollection,
   getUKPartyPlatformsCollection,
@@ -719,6 +722,374 @@ describe("proposeRulesMotion and voteOnMotion", () => {
       ),
       400
     );
+  });
+});
+
+describe("voteOnMotion atomic tally", () => {
+  async function seedMotionWorld() {
+    const world = await seedWorld();
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    const { motionId } = await proposeRulesMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[0].actor,
+      { triggerThresholdPct: 0.2 },
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    return { world, motionId };
+  }
+
+  async function readMotion(world: SeedWorld, motionId: string) {
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    return doc?.motions.find((m) => m.motionId === motionId);
+  }
+
+  it("emits a $map pipeline update (never a whole-array literal write)", () => {
+    const update = buildMotionVoteTallyUpdate<"aye" | "nay">({
+      motionId: "m1",
+      voteKey: new ObjectId().toString(),
+      vote: "aye",
+      tallyFieldByVote: { aye: "votesFor", nay: "votesAgainst" },
+      updatedAt: NOW(),
+    });
+    expect(Array.isArray(update)).toBe(true);
+    const set = (update as Array<{ $set: Record<string, unknown> }>)[0].$set;
+    expect(Object.keys(set).sort()).toEqual(["motions", "updatedAt"].sort());
+    const map = (set.motions as { $map: Record<string, unknown> }).$map;
+    expect(map.as).toBe("m");
+    expect(map.input).toBe("$motions");
+  });
+
+  it("converges concurrent votes from distinct members on the shared parent row", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    const voters = [world.leader, ...world.committee];
+    const votes = ["aye", "aye", "nay", "aye"] as const;
+    const results = await Promise.all(
+      voters.map((voter, i) =>
+        voteOnMotion(
+          world.db,
+          "UK",
+          world.partySeq,
+          motionId,
+          voter.actor,
+          votes[i],
+          TURN_YEAR1_OPEN,
+          NOW()
+        )
+      )
+    );
+    expect(results.every((r) => r.success)).toBe(true);
+    // No vote lost, none duplicated: every receipt lands exactly once.
+    const motion = await readMotion(world, motionId);
+    expect(motion?.votesFor).toBe(3);
+    expect(motion?.votesAgainst).toBe(1);
+    expect(Object.keys(motion?.votes ?? {}).sort()).toEqual(
+      voters.map((voter) => voter.id.toString()).sort()
+    );
+    expect(motion?.votes[voters[2].id.toString()]).toBe("nay");
+  });
+
+  it("applies a vote computed before a concurrent vote without clobbering it", async () => {
+    // Two servers read the same parent row, then both write: A computes its
+    // write first but the write lands after B's. The deferred write must
+    // converge on the stored state, not overwrite it with its stale snapshot.
+    const { world, motionId } = await seedMotionWorld();
+    const collName = "ukPartyConferences";
+    const inner = world.db.collection(collName) as unknown as {
+      updateOne: (
+        filter: unknown,
+        update: unknown,
+        opts?: unknown
+      ) => Promise<{ matchedCount: number; modifiedCount: number }>;
+      findOne: (filter: unknown) => Promise<unknown>;
+      findOneAndUpdate: (filter: unknown, update: unknown, opts?: unknown) => Promise<unknown>;
+    };
+    const recorded: Array<{ filter: unknown; update: unknown }> = [];
+    let deferNextWrite = true;
+    const racingDb = {
+      ...world.db,
+      collection: (name: string) => {
+        const innerColl = world.db.collection(name);
+        if (name !== collName) return innerColl;
+        return {
+          ...innerColl,
+          updateOne: async (filter: unknown, update: unknown, opts?: unknown) => {
+            if (deferNextWrite) {
+              deferNextWrite = false;
+              recorded.push({ filter, update });
+              return { matchedCount: 1, modifiedCount: 1 };
+            }
+            return inner.updateOne(filter, update, opts);
+          },
+          findOneAndUpdate: async (filter: unknown, update: unknown, opts?: unknown) => {
+            if (deferNextWrite) {
+              deferNextWrite = false;
+              recorded.push({ filter, update });
+              return inner.findOne(filter);
+            }
+            return inner.findOneAndUpdate(filter, update, opts);
+          },
+        };
+      },
+    } as unknown as Db;
+    const aVote = voteOnMotion(
+      racingDb,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const bVote = await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[1].actor,
+      "nay",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(bVote).toMatchObject({ votesFor: 0, votesAgainst: 1 });
+    const aResult = await aVote;
+    expect(aResult.success).toBe(true);
+    expect(recorded).toHaveLength(1);
+    // A's write lands after B's: replay the deferred write against the row
+    // that already holds B's vote.
+    await inner.updateOne(recorded[0].filter, recorded[0].update);
+    const motion = await readMotion(world, motionId);
+    expect(motion).toMatchObject({ votesFor: 1, votesAgainst: 1 });
+    expect(motion?.votes[world.committee[0].id.toString()]).toBe("aye");
+    expect(motion?.votes[world.committee[1].id.toString()]).toBe("nay");
+  });
+
+  it("counts concurrent duplicate votes from the same member exactly once", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    await Promise.all([
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.committee[0].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.committee[0].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.committee[1].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+    ]);
+    const motion = await readMotion(world, motionId);
+    expect(motion?.votesFor).toBe(2);
+    expect(motion?.votesAgainst).toBe(0);
+    expect(Object.keys(motion?.votes ?? {})).toHaveLength(2);
+  });
+
+  it("replays the same vote as a no-op and moves the tally on change", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    const first = await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(first).toMatchObject({ votesFor: 1, votesAgainst: 0 });
+    const replay = await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(replay).toMatchObject({ votesFor: 1, votesAgainst: 0 });
+    const changed = await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "nay",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(changed).toMatchObject({ votesFor: 0, votesAgainst: 1 });
+    const motion = await readMotion(world, motionId);
+    expect(motion?.votes[world.committee[0].id.toString()]).toBe("nay");
+  });
+
+  it("rejects votes from members removed from the committee roll", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    // Member-roll drift lands between calls: eligibility is re-read from the
+    // party row on every vote, so the next vote honors the new roll.
+    await world.db
+      .collection("politicalParties")
+      .updateOne(
+        { _id: world.party._id },
+        { $set: { committeeIds: world.committee.slice(1).map((m) => m.id) } }
+      );
+    await expectApiError(
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.committee[0].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      403
+    );
+    const ok = await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[1].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(ok).toMatchObject({ votesFor: 1, votesAgainst: 0 });
+    const motion = await readMotion(world, motionId);
+    expect(motion?.votes[world.committee[0].id.toString()]).toBeUndefined();
+  });
+
+  it("leaves sibling motions untouched", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    const second = await proposeRulesMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[1].actor,
+      { triggerThresholdPct: 0.25 },
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const voted = await readMotion(world, motionId);
+    expect(voted).toMatchObject({ votesFor: 1, votesAgainst: 0 });
+    const sibling = await readMotion(world, second.motionId);
+    expect(sibling).toMatchObject({ votesFor: 0, votesAgainst: 0, status: "voting" });
+    expect(sibling?.votes).toEqual({});
+    // The motion write preserves ObjectId-typed fields (proposer receipt).
+    expect(voted?.proposedByCharacterId).toBeInstanceOf(ObjectId);
+  });
+
+  it("freezes votes at resolution: decided tallies persist and late votes fail", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    for (const m of world.committee) {
+      await voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        m.actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    const resolution = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      doc!,
+      doc!.votingClosesTurn,
+      NOW()
+    );
+    expect(resolution.motionsPassed).toBe(1);
+    const after = await readMotion(world, motionId);
+    expect(after?.status).toBe("passed");
+    expect(after).toMatchObject({ votesFor: 3, votesAgainst: 0 });
+    // The resolution claim flips the row to completed, so the conditional
+    // vote write matches zero documents instead of writing into a decided row.
+    await expectApiError(
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.leader.actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      400
+    );
+    const settled = await readMotion(world, motionId);
+    expect(settled).toMatchObject({ votesFor: 3, votesAgainst: 0 });
+  });
+
+  it("rejects votes after the window closes without writing", async () => {
+    const { world, motionId } = await seedMotionWorld();
+    await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    const late = doc!.votingClosesTurn;
+    await expectApiError(
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.committee[1].actor,
+        "aye",
+        late,
+        NOW()
+      ),
+      400
+    );
+    const motion = await readMotion(world, motionId);
+    expect(motion).toMatchObject({ votesFor: 1, votesAgainst: 0 });
+    expect(motion?.votes[world.committee[1].id.toString()]).toBeUndefined();
   });
 });
 

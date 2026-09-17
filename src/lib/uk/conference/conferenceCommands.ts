@@ -3,7 +3,10 @@ import { badRequest, conflict, forbidden, notFound } from "@/lib/api/errors";
 import { createNotification } from "@/lib/notifications";
 import { createSystemNewsPost } from "@/lib/news";
 import { recordAudit } from "@/lib/audit/recordAudit";
-import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
+import {
+  buildEmbeddedVoteTallyUpdate,
+  buildMotionVoteTallyUpdate,
+} from "@/lib/votes/embeddedVoteTally";
 import { getEligibleVoterSet } from "@/lib/parties/proposals";
 import { findPartyBySequentialId } from "@/lib/db/partyLookup";
 import { validateManifestoPledges } from "@/lib/db/collections/manifestos";
@@ -524,24 +527,34 @@ export async function voteOnMotion(
     throw badRequest("No such motion is open for voting");
   }
   if (currentTurn >= doc.votingClosesTurn) throw badRequest("Conference voting has closed");
-  // Whole-array write: committee votes are low-frequency, and this keeps the
-  // update to plain $set (no arrayFilters) for the portable store pattern.
-  const prev = motion.votes[voter._id.toString()];
-  if (prev === vote) {
-    return { success: true, votesFor: motion.votesFor, votesAgainst: motion.votesAgainst };
-  }
-  const votesFor = motion.votesFor + (vote === "aye" ? 1 : 0) - (prev === "aye" ? 1 : 0);
-  const votesAgainst = motion.votesAgainst + (vote === "nay" ? 1 : 0) - (prev === "nay" ? 1 : 0);
-  const motions = doc.motions.map((m) =>
-    m.motionId === motionId
-      ? { ...m, votes: { ...m.votes, [voter._id.toString()]: vote }, votesFor, votesAgainst }
-      : m
+  // Atomic per-motion tally: the $map pipeline reads the stored vote at write
+  // time, so concurrent votes on the same motion converge (new vote applies,
+  // repeat vote is a tally no-op, changed vote moves the tally) instead of
+  // clobbering each other like the old whole-array read/modify/write. The
+  // status + votingClosesTurn guard in the filter makes the write conditional:
+  // a vote racing the window close or the resolution claim matches zero
+  // documents and reports closed instead of writing into a decided row.
+  //
+  // Residual hazards, deliberately out of scope for this write (documented,
+  // not broadened): committee eligibility is enforced from the party row read
+  // above, so a member-roll change landing between that read and this write
+  // is honored only on the next vote; and the leadership-cooldown check in
+  // reconcileConferenceEffects reads lastAmendedTurn before its conditional
+  // receipt write, so two different passed motions reconciling at once can
+  // both observe a satisfied cooldown (each motion still applies exactly once
+  // via its own appliedConferenceMotionIds receipt).
+  const updateResult = await getUKPartyConferencesCollection(db).updateOne(
+    { _id: doc._id, status: "open", votingClosesTurn: { $gte: currentTurn + 1 } },
+    buildMotionVoteTallyUpdate({
+      motionId,
+      voteKey: voter._id.toString(),
+      vote,
+      tallyFieldByVote: { aye: "votesFor", nay: "votesAgainst" },
+      updatedAt: now,
+    })
   );
-  const updated = await getUKPartyConferencesCollection(db).findOneAndUpdate(
-    { _id: doc._id, status: "open" },
-    { $set: { motions, updatedAt: now } },
-    { returnDocument: "after" }
-  );
+  if (updateResult.matchedCount === 0) throw badRequest("Conference voting has closed");
+  const updated = await getUKPartyConferencesCollection(db).findOne({ _id: doc._id });
   const resolved = updated?.motions.find((m) => m.motionId === motionId);
   if (!resolved) throw badRequest("Conference voting has closed");
   return { success: true, votesFor: resolved.votesFor, votesAgainst: resolved.votesAgainst };
