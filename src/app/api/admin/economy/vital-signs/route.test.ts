@@ -59,6 +59,31 @@ describe("GET /api/admin/economy/vital-signs", () => {
           observations: 3,
           basis: "fund_org_npp_primary_ledger_flow_to_closing_balance",
         },
+        householdTransactionalVelocity48: {
+          value: 1.2,
+          observations: 4,
+          basis: "character_primary_ledger_flow_to_closing_balance",
+        },
+        householdSavingsVelocity48: {
+          value: 0.1,
+          observations: 4,
+          basis: "character_savings_primary_ledger_flow_to_closing_balance",
+        },
+        savingsShareOfHouseholdBalances: {
+          value: 0.4,
+          observations: 2,
+          basis: "character_savings_share_of_household_closing_balance",
+        },
+        bankCashReservesAnchor: {
+          value: 200,
+          observations: 2,
+          basis: "active_chartered_bank_cash_reserves_anchor",
+        },
+        ringFencedShareOfLiquid: {
+          value: 0.4,
+          observations: 3,
+          basis: "ring_fenced_to_ledger_backed_plus_ring_fenced_closing_stock",
+        },
       },
       securities: {
         corporateMedianHolders: {
@@ -76,6 +101,16 @@ describe("GET /api/admin/economy/vital-signs", () => {
           observations: 2,
           basis: "unmatured_corporate_issue_count",
         },
+        corporateMaturityHhi: {
+          value: 5000,
+          observations: 2,
+          basis: "corporate_face_by_maturity_turn",
+        },
+        medianTopTraderNotionalShare48: {
+          value: 0.7,
+          observations: 2,
+          basis: "named_counterparty_share_of_listing_notional_48_turns",
+        },
       },
     };
     db.collectionMocks.economicVitalSigns.findOne.mockResolvedValue(snapshot);
@@ -86,9 +121,16 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.snapshot.money.intermediatedGrossVelocity48.value).toBe(0.5);
+    expect(body.snapshot.money.householdTransactionalVelocity48.value).toBe(1.2);
+    expect(body.snapshot.money.householdSavingsVelocity48.value).toBe(0.1);
+    expect(body.snapshot.money.savingsShareOfHouseholdBalances.value).toBe(0.4);
+    expect(body.snapshot.money.bankCashReservesAnchor.value).toBe(200);
+    expect(body.snapshot.money.ringFencedShareOfLiquid.value).toBe(0.4);
     expect(body.snapshot.securities.corporateMedianHolders.value).toBe(1);
     expect(body.snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
     expect(body.snapshot.securities.corporateMedianPriceToParSpreadPct.value).toBe(2.5);
+    expect(body.snapshot.securities.corporateMaturityHhi.value).toBe(5000);
+    expect(body.snapshot.securities.medianTopTraderNotionalShare48.value).toBe(0.7);
   });
 
   it("rejects an invalid turn", async () => {

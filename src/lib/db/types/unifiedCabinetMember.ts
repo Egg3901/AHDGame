@@ -49,6 +49,12 @@ export interface UnifiedCabinetMember extends IterationStampFields {
   ministerialActions: number;
   /** YYYY-MM-DD (`America/New_York`) for the last daily action refill */
   lastMinisterialActionResetDay?: string;
+  /**
+   * Role slot for UK dual-ministry rules (issue #2049): one "departmental"
+   * plus one "central" row per player. Absent on legacy rows and outside the
+   * UK, where a missing slot keeps the one-seat-per-character semantics.
+   */
+  roleSlot?: "departmental" | "central";
   /** @deprecated Legacy turn-based regen marker — no longer consulted */
   lastActionGrantedTurn?: number;
   /** Custom banner image for office page */
