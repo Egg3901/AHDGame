@@ -90,6 +90,8 @@ export interface EconomicVitalSigns {
     bondSubscriptionRate: EconomicMetric;
     sovereignMedianHolders: EconomicMetric;
     sovereignSubscriptionRate: EconomicMetric;
+    corporateMedianHolders: EconomicMetric;
+    corporateSubscriptionRate: EconomicMetric;
     sovereignMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
     openBuyOrders: number;

@@ -185,6 +185,8 @@ export interface MarketAccessMetrics {
   sovereignNoHolderBondShare: number | null;
   corporateNoHolderBondShare: number | null;
   bondSubscriptionRate: number | null;
+  corporateMedianHolders: number | null;
+  corporateSubscriptionRate: number | null;
   twoSidedListingShare: number | null;
   medianQuotedSpreadPct: number | null;
   depthToMarketCap: number | null;
@@ -236,6 +238,8 @@ export function marketAccessMetricsFromSnapshot(
     sovereignNoHolderBondShare: snapshot?.securities.sovereignNoHolderBondShare?.value ?? null,
     corporateNoHolderBondShare: snapshot?.securities.corporateNoHolderBondShare?.value ?? null,
     bondSubscriptionRate: snapshot?.securities.bondSubscriptionRate.value ?? null,
+    corporateMedianHolders: snapshot?.securities.corporateMedianHolders?.value ?? null,
+    corporateSubscriptionRate: snapshot?.securities.corporateSubscriptionRate?.value ?? null,
     twoSidedListingShare: snapshot?.securities.twoSidedListingShare.value ?? null,
     medianQuotedSpreadPct: snapshot?.securities.medianQuotedSpreadPct.value ?? null,
     depthToMarketCap: snapshot?.securities.depthToMarketCap.value ?? null,
