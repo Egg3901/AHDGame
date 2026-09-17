@@ -90,6 +90,8 @@ export interface EconomicVitalSigns {
     bondSubscriptionRate: EconomicMetric;
     sovereignMedianHolders: EconomicMetric;
     sovereignSubscriptionRate: EconomicMetric;
+    corporateMedianHolders: EconomicMetric;
+    corporateSubscriptionRate: EconomicMetric;
     sovereignMaturityHhi: EconomicMetric;
     sovereignMedianPriceToParSpreadPct: EconomicMetric;
     openBuyOrders: number;
@@ -131,6 +133,8 @@ export interface EconomicVitalSigns {
     corporateGrossVelocity48: EconomicMetric;
     partyGrossVelocity48: EconomicMetric;
     governmentGrossVelocity48: EconomicMetric;
+    /** Turnover over closing balances for pooled vehicles (fund, org, npp legs). */
+    intermediatedGrossVelocity48: EconomicMetric;
   };
   /** How much of the 48 turn window actually produced a snapshot, and which turns did not. */
   coverage: {

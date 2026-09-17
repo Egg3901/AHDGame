@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -28,7 +29,7 @@ const bodySchema = z.discriminatedUnion("kind", [
 // GET /api/settings/supporter-requests — the current user's recent supporter
 // requests plus eligibility flags for the settings UI.
 // Auth: requireBasicAuth
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -90,6 +91,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/settings/supporter-requests — submit a wall-name or npp-rename
 // request for moderator review.

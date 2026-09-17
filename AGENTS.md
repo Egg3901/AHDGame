@@ -124,6 +124,21 @@ costs), new mechanics, and schema changes under `src/lib/db/types`. Balance
 changes merge only with a simulation report from `scripts/sim/`. See
 CONTRIBUTING.md for the full policy.
 
+## Keep touched issues current
+
+Issue accounting is part of finishing the work, not a later cleanup task.
+
+- Link every affected issue in the implementation PR.
+- Before handing off or merging, update each touched issue with the verified
+  completed substeps, source and test evidence, and every remaining acceptance
+  criterion.
+- Use `Closes #N` only when all acceptance criteria are met and verified. Partial
+  work keeps the issue open and carries the `status: partial` label.
+- When closing child issues, update the parent tracker or epic counts and status
+  in the same pass.
+- Do not describe the open issue count as the amount of untouched work. An open
+  issue may be partially implemented, blocked, or awaiting verification.
+
 ## Where things live
 
 - `src/app/api/**` — thin route handlers: auth guard, Zod parse, call into lib.

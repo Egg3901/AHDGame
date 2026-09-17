@@ -47,6 +47,44 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(db.collectionMocks.economicVitalSigns.findOne).toHaveBeenCalledWith({ turn: 100 });
   });
 
+  it("passes new money and securities fields through untouched", async () => {
+    await setupAdmin();
+    const snapshot = {
+      _id: "turn:100",
+      schemaVersion: 1,
+      turn: 100,
+      money: {
+        intermediatedGrossVelocity48: {
+          value: 0.5,
+          observations: 3,
+          basis: "fund_org_npp_primary_ledger_flow_to_closing_balance",
+        },
+      },
+      securities: {
+        corporateMedianHolders: {
+          value: 1,
+          observations: 2,
+          basis: "unmatured_corporate_issue_count",
+        },
+        corporateSubscriptionRate: {
+          value: 0.4,
+          observations: 2,
+          basis: "unmatured_corporate_units",
+        },
+      },
+    };
+    db.collectionMocks.economicVitalSigns.findOne.mockResolvedValue(snapshot);
+    const { GET } = await import("./route");
+    const response = await GET(
+      new Request("http://localhost/api/admin/economy/vital-signs?turn=100")
+    );
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.snapshot.money.intermediatedGrossVelocity48.value).toBe(0.5);
+    expect(body.snapshot.securities.corporateMedianHolders.value).toBe(1);
+    expect(body.snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
+  });
+
   it("rejects an invalid turn", async () => {
     await setupAdmin();
     const { GET } = await import("./route");

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { handleRouteError } from "@/lib/api/errors";
@@ -19,7 +20,7 @@ const revokeUserApiKeySchema = z.object({
 });
 
 // GET /api/settings/user-api-keys — List the authenticated user's API keys.
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -37,6 +38,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/settings/user-api-keys — Create a new API key for the authenticated user.
 export async function POST(request: Request) {

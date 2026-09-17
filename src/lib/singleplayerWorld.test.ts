@@ -48,6 +48,25 @@ function report(): BalanceReport {
       savingsDiscrepancies: 0,
       counters: {},
     },
+    fiscalByCountry: [],
+    inflationByCountry: [],
+    corporateCashFlow: {
+      corporationCount: 0,
+      totalRevenueAnchor: 0,
+      totalIncomeAnchor: 0,
+      negativeIncomeShare: 0,
+      byCountry: {},
+    },
+    military: {
+      unitCount: 0,
+      personnel: 0,
+      meanReadiness: 0,
+      meanIntegrity: 0,
+      meanSupply: 0,
+      activeConflicts: 0,
+      battleReports: 0,
+      byCountry: {},
+    },
   };
 }
 

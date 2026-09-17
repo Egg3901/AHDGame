@@ -155,6 +155,8 @@ export type ConsolePayload = {
       expectedDefaultRatePercent: number;
       demandShare: number;
       open: boolean;
+      /** Outstanding the next turns steer this band toward; null when not computable. */
+      target: number | null;
       isLegacy: boolean;
       tranches: number;
     }>;

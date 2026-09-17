@@ -29,12 +29,9 @@
 import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { MongoClient, type Db, type Collection } from "mongodb";
-// Canonical tier list — a local literal here silently omitted every tier added
-// after it was written (it stopped at "capital", so a "plants" job was rejected
-// as invalid). Pure constant module: no Mongo, no env, safe to import eagerly.
-import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
-import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
-import { canClaimAt, parseClaimWindow } from "./claimWindow";
+import { claimFilterAt, parseClaimWindow } from "./claimWindow";
+import { assertSafeToken } from "./simJobArgs";
+import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
 const OPS_DB_NAME = process.env.OPS_DB_NAME || "a-house-divided";
@@ -90,21 +87,6 @@ if (OPS_MONGODB_URI === SIM_MONGODB_URI && !ALLOW_SHARED_MONGO) {
   process.exit(1);
 }
 
-/** Pattern every job-derived value (id/seed/preset/dbName) must match before it's used
- * as a Mongo db name or passed as a child-process CLI arg — both have their own
- * restricted character sets (Mongo db names reject /\. "$*<>:|?), and this keeps
- * job documents from ever injecting something unexpected into either. */
-const SAFE_TOKEN = /^[a-zA-Z0-9_-]{1,64}$/;
-
-function assertSafeToken(value: string, field: string): string {
-  if (!SAFE_TOKEN.test(value)) {
-    throw new Error(
-      `Job field "${field}" failed validation (got ${JSON.stringify(value)}): must match ${SAFE_TOKEN}`
-    );
-  }
-  return value;
-}
-
 interface SimJob {
   _id: string;
   status: "queued" | "running" | "completed" | "failed";
@@ -112,6 +94,7 @@ interface SimJob {
   turns: number;
   seed: string;
   dbName: string;
+  startPolicy?: "immediate" | "window";
   marketSystemMode?: string;
   labourSystemMode?: string;
   freightSettlementMode?: "shadow" | "active";
@@ -121,6 +104,7 @@ interface SimJob {
   equityLiquidityFacilityEnabled?: boolean;
   nppMarketCoverageEnabled?: boolean;
   nppFragileMarketSupplyEnabled?: boolean;
+  allFeatureFlags?: boolean;
   autonomyLevel?: string;
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
@@ -129,6 +113,13 @@ interface SimJob {
   /** Clone the LIVE world into the sandbox db first, then run --clone-mode.
    * Quick before/after validation of deployed code on real state. */
   cloneFromLive?: boolean;
+  /** Pinned source revision (issue #1966). Both set or both absent; when set,
+   * runWorld executes from the verified worktree at exactly this commit. */
+  sourceWorktree?: string;
+  sourceCommit?: string;
+  /** Executed source identity, stamped by the worker after verification. */
+  sourceRepoDir?: string;
+  sourceCommitVerified?: string;
   createdAt: Date;
   updatedAt: Date;
   workerStartedAt?: Date;
@@ -170,11 +161,12 @@ const NPX_PATH = join(dirname(process.execPath), "npx");
 function run(
   script: string,
   args: string[],
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  cwd: string = GAME_REPO_DIR
 ): Promise<{ code: number | null }> {
   return new Promise((resolve, reject) => {
     const child = spawn(NPX_PATH, ["tsx", script, ...args], {
-      cwd: GAME_REPO_DIR,
+      cwd,
       env,
       stdio: "inherit",
     });
@@ -229,6 +221,22 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
   if (!Number.isInteger(job.turns) || job.turns <= 0 || job.turns > 5000) {
     throw new Error(`Job turns must be a positive integer <= 5000, got ${job.turns}`);
   }
+  // Pinned source (#1966): fail fast on an invalid pin before any clone or
+  // spawn work. Read-only git checks only - the worker never fetches,
+  // checks out, resets, or otherwise mutates the shared worktree.
+  const verifiedSource = verifySimSource(job, defaultSimSourceDeps());
+  if (verifiedSource) {
+    await jobsCol.updateOne(
+      { _id: job._id },
+      {
+        $set: {
+          sourceRepoDir: verifiedSource.repoDir,
+          sourceCommitVerified: verifiedSource.commit,
+          updatedAt: new Date(),
+        },
+      }
+    );
+  }
 
   log(`Claimed job ${job._id} (preset=${job.preset}, turns=${job.turns}, db=${job.dbName})`);
 
@@ -273,108 +281,36 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
       }
       log(`Clone complete; running ${job.turns} turn(s) in clone mode`);
     }
-    const runWorldArgs = [
-      `--seed=${job.seed}`,
-      `--preset=${job.preset}`,
-      `--turns=${job.turns}`,
-      `--db=${job.dbName}`,
-      `--run-id=${job._id}`,
-      ...(job.cloneFromLive ? ["--clone-mode"] : []),
-    ];
-    // Structural-market rollout tier (enum, not a free token) — passed through
-    // to runWorld.ts, which patches the sandbox gameConfig after bootstrap.
-    if (job.marketSystemMode) {
-      if (!MARKET_MODE_ORDER.includes(job.marketSystemMode as MarketSystemMode)) {
-        throw new Error(`invalid marketSystemMode "${job.marketSystemMode}"`);
-      }
-      runWorldArgs.push(`--market-mode=${job.marketSystemMode}`);
-    }
-    // Labour rollout tier, same treatment. Both tiers were raised together when
-    // fresh worlds took the production posture, but only the market half could
-    // be driven from here, so an MCP-launched A/B held labour at the preset
-    // default while reporting itself as a controlled comparison.
-    if (job.labourSystemMode) {
-      if (!LABOUR_MODE_ORDER.includes(job.labourSystemMode as LabourSystemMode)) {
-        throw new Error(`invalid labourSystemMode "${job.labourSystemMode}"`);
-      }
-      runWorldArgs.push(`--labour-mode=${job.labourSystemMode}`);
-    }
-    if (job.freightSettlementMode) {
-      if (!(["shadow", "active"] as const).includes(job.freightSettlementMode)) {
-        throw new Error(`invalid freightSettlementMode "${job.freightSettlementMode}"`);
-      }
-      runWorldArgs.push(`--freight-settlement=${job.freightSettlementMode}`);
-    }
-    if (job.canonicalFreightBillingEnabled !== undefined) {
-      if (typeof job.canonicalFreightBillingEnabled !== "boolean") {
-        throw new Error("canonicalFreightBillingEnabled must be boolean");
-      }
-      runWorldArgs.push(
-        `--canonical-freight-billing=${String(job.canonicalFreightBillingEnabled)}`
+    // Re-verify immediately before spawn: the worktree is shared, so HEAD
+    // may have moved or dirtied since the claim-time check. Fail closed.
+    const spawnSource = verifySimSource(job, defaultSimSourceDeps());
+    if (verifiedSource && (!spawnSource || spawnSource.commit !== verifiedSource.commit)) {
+      throw new Error(
+        `Pinned source moved between validation and spawn for job ${job._id} - refusing to run`
       );
     }
-    if (job.shortageResponsiveSourcingEnabled !== undefined) {
-      if (typeof job.shortageResponsiveSourcingEnabled !== "boolean") {
-        throw new Error("shortageResponsiveSourcingEnabled must be boolean");
-      }
-      runWorldArgs.push(
-        `--shortage-responsive-sourcing=${String(job.shortageResponsiveSourcingEnabled)}`
-      );
+    const spawnPlan = planRunWorldSpawn(
+      job,
+      [
+        `--seed=${job.seed}`,
+        `--preset=${job.preset}`,
+        `--turns=${job.turns}`,
+        `--db=${job.dbName}`,
+        `--run-id=${job._id}`,
+        ...(job.cloneFromLive ? ["--clone-mode"] : []),
+      ],
+      GAME_REPO_DIR,
+      spawnSource
+    );
+    if (spawnSource) {
+      log(`Running from pinned source ${spawnSource.repoDir} @ ${spawnSource.commit}`);
     }
-    if (job.indexFundBondLiquidityEnabled !== undefined) {
-      if (typeof job.indexFundBondLiquidityEnabled !== "boolean") {
-        throw new Error("indexFundBondLiquidityEnabled must be boolean");
-      }
-      runWorldArgs.push(`--index-fund-bond-liquidity=${String(job.indexFundBondLiquidityEnabled)}`);
-    }
-    if (job.equityLiquidityFacilityEnabled !== undefined) {
-      if (typeof job.equityLiquidityFacilityEnabled !== "boolean") {
-        throw new Error("equityLiquidityFacilityEnabled must be boolean");
-      }
-      runWorldArgs.push(`--equity-liquidity=${String(job.equityLiquidityFacilityEnabled)}`);
-    }
-    if (job.nppMarketCoverageEnabled !== undefined) {
-      if (typeof job.nppMarketCoverageEnabled !== "boolean") {
-        throw new Error("nppMarketCoverageEnabled must be boolean");
-      }
-      runWorldArgs.push(`--npp-market-coverage=${String(job.nppMarketCoverageEnabled)}`);
-    }
-    if (job.nppFragileMarketSupplyEnabled !== undefined) {
-      if (typeof job.nppFragileMarketSupplyEnabled !== "boolean") {
-        throw new Error("nppFragileMarketSupplyEnabled must be boolean");
-      }
-      runWorldArgs.push(`--npp-fragile-market-supply=${String(job.nppFragileMarketSupplyEnabled)}`);
-    }
-    // NPP autonomy tier. Without this an MCP-launched run silently used the
-    // harness default (v3) while hand-launched runs used v4, so the two were not
-    // comparable and the MCP could not reproduce a long full-world run.
-    const AUTONOMY_LEVELS = ["off", "v0", "v1", "v2", "v3", "v4"];
-    if (job.autonomyLevel) {
-      if (!AUTONOMY_LEVELS.includes(job.autonomyLevel)) {
-        throw new Error(`invalid autonomyLevel "${job.autonomyLevel}"`);
-      }
-      runWorldArgs.push(`--autonomy=${job.autonomyLevel}`);
-    }
-    // Elections-only turn profile + country scope (sim-only). runWorld.ts writes
-    // gameConfig.simTurnPhaseMode (skips economy phases) and scopes election
-    // spawning via countryGameStates.
-    const SIM_TURN_PHASE_MODES = ["full", "elections-only"];
-    if (job.mode) {
-      if (!SIM_TURN_PHASE_MODES.includes(job.mode)) {
-        throw new Error(`invalid mode "${job.mode}"`);
-      }
-      runWorldArgs.push(`--mode=${job.mode}`);
-    }
-    if (job.countries) {
-      // Comma-separated ids become part of a child-process argv — validate each.
-      const ids = job.countries
-        .split(",")
-        .map((c) => c.trim())
-        .filter(Boolean);
-      for (const id of ids) assertSafeToken(id, "countries[]");
-      if (ids.length) runWorldArgs.push(`--countries=${ids.join(",")}`);
-    }
-    const { code } = await run("scripts/sim/runWorld.ts", runWorldArgs, runWorldEnv);
+    const { code } = await run(
+      "scripts/sim/runWorld.ts",
+      spawnPlan.args,
+      runWorldEnv,
+      spawnPlan.cwd
+    );
 
     clearInterval(statusMirror);
     await mirrorSandboxStatus(jobsCol, job);
@@ -497,9 +433,9 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
 async function tick(jobsCol: Collection<SimJob>) {
   // A running simulation is never interrupted at the window boundary. The
   // window controls admission of the next queued job only.
-  if (!canClaimAt(new Date(), CLAIM_WINDOW)) return;
+  const claimFilter = claimFilterAt(new Date(), CLAIM_WINDOW);
   const job = await jobsCol.findOneAndUpdate(
-    { status: "queued" },
+    claimFilter,
     { $set: { status: "running", workerStartedAt: new Date(), updatedAt: new Date() } },
     { sort: { createdAt: 1 }, returnDocument: "after" }
   );

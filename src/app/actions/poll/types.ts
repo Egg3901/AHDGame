@@ -111,6 +111,9 @@ export interface PollData {
   };
   fundCost: number;
   actionCost: number;
+  /** Intellect-scaled ANCHOR fund cost per tier (display both cards from one quote each). */
+  fundCostSmall: number;
+  fundCostLarge: number;
   canAffordSmall: boolean;
   canAffordLarge: boolean;
   hasActionsSmall: boolean;

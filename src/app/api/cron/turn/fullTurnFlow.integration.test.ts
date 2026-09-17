@@ -78,6 +78,8 @@ vi.mock("@/lib/budget/fiscalYear", () => ({
 }));
 vi.mock("@/lib/congress/leadershipElections", () => ({
   resolveExpiredLeadershipElections: vi.fn(),
+  // Runs on every turn now, not only when a general resolves.
+  vacateLeadershipForLostSeats: vi.fn().mockResolvedValue(0),
 }));
 const mockUKBillLifecycle = vi.fn();
 vi.mock("@/lib/turn/countryPhases", () => ({

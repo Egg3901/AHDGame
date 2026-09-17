@@ -153,6 +153,7 @@ export async function processNppCorpTreasury(db: Db, turn: number, now: Date): P
           liquidCurrencyCode: 1,
           earningsHistory: 1,
           name: 1,
+          caretakerCeo: 1,
         },
       }
     )
@@ -218,6 +219,7 @@ export async function processNppCorpTreasury(db: Db, turn: number, now: Date): P
   let bought = 0;
   for (const corp of nppCorps) {
     if (isStateOwned(corp)) continue;
+    if (corp.caretakerCeo?.mandate === "passive") continue;
     if (!glutStaggerEligible(corp._id.toString(), turn)) continue;
     const currencyCode = resolveCorpLiquidCurrencyCode(corp);
     if (!currencyCode) continue;

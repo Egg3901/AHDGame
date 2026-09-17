@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
@@ -57,7 +58,7 @@ function isUkConstituencyOffice(
 // GET /api/character/constituency — Returns the current constituency choices for a UK Commons MP or Prime Minister.
 // Auth: requireAuthWithCharacter
 // Errors: 401
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
@@ -85,6 +86,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/character/constituency — Updates a UK Commons MP's or Prime Minister's constituency within their current region.
 // Auth: requireAuthWithCharacter

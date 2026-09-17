@@ -94,6 +94,13 @@ export async function expandSector(request: Request, { params }: RouteParams) {
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
+    if (corporation.ceoType === "npp") {
+      return NextResponse.json(
+        { error: "Resume player control before building plants for this corporation" },
+        { status: 403 }
+      );
+    }
+
     const plantsEnabled = marketAtLeast(await getMarketSystemModeForDb(db), "plants");
     // Building is allowed in any sector type. The corp's primary and secondary
     // types are highlighted in the UI and carry a margin bonus; off-type sectors
@@ -395,7 +402,6 @@ export async function expandSector(request: Request, { params }: RouteParams) {
         { _id: corporation._id },
         { $inc: { liquidCapital: -costInCorpCapital }, $set: { updatedAt: now } }
       );
-
     // Route the cross-currency expansion spread to the CB system.
     if (expansionSpread.spreadAnchor > 0 && expansionSpread.from && expansionSpread.to) {
       const feeInCorp = Math.round(

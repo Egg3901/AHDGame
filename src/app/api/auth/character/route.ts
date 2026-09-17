@@ -1,4 +1,5 @@
 import { campaignLocalRate, loadCampaignCurrencyRates } from "@/lib/campaigns/campaignCurrency";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { handleRouteError } from "@/lib/api/errors";
@@ -524,7 +525,7 @@ export async function POST(request: Request) {
 // Auth: requireBasicAuth
 // Errors: 401, 404
 // GET endpoint to fetch current user's character
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -551,3 +552,5 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);

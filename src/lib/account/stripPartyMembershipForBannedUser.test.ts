@@ -19,6 +19,10 @@ vi.mock("@/lib/turn/partyOrg/presence", () => ({
   updatePartyPresence: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock("@/lib/congress/leadership/reconcilePartyEligibility", () => ({
+  vacateAllLeadershipRoles: vi.fn().mockResolvedValue([]),
+}));
+
 vi.mock("@/lib/db/partyLookup", () => ({
   findPartyBySequentialId: vi.fn().mockResolvedValue({
     _id: new ObjectId(),
@@ -151,6 +155,56 @@ describe("stripPartyMembershipForBannedUser", () => {
       }),
       expect.any(Object)
     );
+  });
+
+  it("vacates congressional leadership even for an independent banned character", async () => {
+    // The party strip cannot reach these: the Speaker's chair is held on a seat,
+    // not a party, so an eligibility-gated cleanup leaves it alone. A ban is a
+    // removal, not a party switch, and must empty it outright.
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    db.collection("characters").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: charId, userId, party: "independent" }]),
+    });
+    db.collection("congressLeaders").find.mockReturnValue({
+      toArray: vi
+        .fn()
+        .mockResolvedValue([
+          { role: "speaker_of_the_house", characterId: charId, characterName: "Sam Rayburn" },
+        ]),
+    });
+
+    const { vacateAllLeadershipRoles } =
+      await import("@/lib/congress/leadership/reconcilePartyEligibility");
+    const { stripPartyMembershipForBannedUser } =
+      await import("./stripPartyMembershipForBannedUser");
+    await stripPartyMembershipForBannedUser(db as unknown as Db, userId);
+
+    expect(vacateAllLeadershipRoles).toHaveBeenCalledWith(
+      db,
+      [{ leaderRole: "speaker_of_the_house", holderId: charId, formerHolderName: "Sam Rayburn" }],
+      expect.any(Date)
+    );
+  });
+
+  it("still completes the ban when the leadership vacate throws", async () => {
+    const userId = new ObjectId();
+    const charId = new ObjectId();
+    db.collection("characters").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ _id: charId, userId, party: "independent" }]),
+    });
+    db.collection("congressLeaders").find.mockReturnValue({
+      toArray: vi.fn().mockResolvedValue([{ role: "speaker_of_the_house", characterId: charId }]),
+    });
+    const { vacateAllLeadershipRoles } =
+      await import("@/lib/congress/leadership/reconcilePartyEligibility");
+    vi.mocked(vacateAllLeadershipRoles).mockRejectedValueOnce(new Error("compositions down"));
+
+    const { stripPartyMembershipForBannedUser } =
+      await import("./stripPartyMembershipForBannedUser");
+    await expect(
+      stripPartyMembershipForBannedUser(db as unknown as Db, userId)
+    ).resolves.toMatchObject({ charactersUpdated: expect.any(Number) });
   });
 
   it("returns 0 when user has no party-affiliated characters", async () => {

@@ -6,6 +6,7 @@ import {
   eligiblePartySlugsFor,
   isPartyEligible,
   POLICY_BY_ROLE,
+  qualifiesAfterPartySwitch,
   type ChamberLeadershipContext,
   type RoleEligibilityPolicy,
 } from "./rolePolicy";
@@ -178,5 +179,38 @@ describe("describeEligibility", () => {
     expect(describeEligibility({ kind: "non-coalition" }, ctx)).toBe(
       "non-majority-coalition parties"
     );
+  });
+});
+
+describe("qualifiesAfterPartySwitch", () => {
+  it("keeps an any-seated role even when the new party holds no chamber seats", () => {
+    // The Speaker is `any-seated`: the only thing that policy asks of the holder
+    // is a seat, which a party switch never takes away. Vacating the chair on a
+    // switch is what left the House with no Speaker and no race to refill it.
+    expect(qualifiesAfterPartySwitch({ kind: "any-seated" }, "brand-new-party", makeCtx())).toBe(
+      true
+    );
+  });
+
+  it("drops a largest-single-party role when the holder leaves the majority party", () => {
+    expect(qualifiesAfterPartySwitch({ kind: "largest-single-party" }, "rep", makeCtx())).toBe(
+      false
+    );
+  });
+
+  it("keeps a non-coalition role when the holder moves to another non-majority party", () => {
+    expect(qualifiesAfterPartySwitch({ kind: "non-coalition" }, "grn", makeCtx())).toBe(true);
+  });
+
+  it("drops a non-coalition role when the holder joins the majority bloc", () => {
+    expect(qualifiesAfterPartySwitch({ kind: "non-coalition" }, "lib", makeCtx())).toBe(false);
+  });
+
+  it("drops a party-gated role that cannot be evaluated, so an unknown chamber keeps vacating", () => {
+    expect(qualifiesAfterPartySwitch({ kind: "largest-single-party" }, "dem", null)).toBe(false);
+  });
+
+  it("keeps an any-seated role even with no chamber context to evaluate", () => {
+    expect(qualifiesAfterPartySwitch({ kind: "any-seated" }, "dem", null)).toBe(true);
   });
 });

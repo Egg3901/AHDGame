@@ -262,6 +262,17 @@ const REFERENCE: CollectionEntry[] = [
 
 const RUNTIME: CollectionEntry[] = [
   {
+    name: "ukPartyLeadership",
+    category: "runtime",
+    notes:
+      "Per-party Westminster leadership rules, committee history, and active challenge pointer.",
+  },
+  {
+    name: "ukLeadershipChallenges",
+    category: "runtime",
+    notes: "Westminster leadership challenge gathering, ballot, and resolution state.",
+  },
+  {
     name: "sentNewsDedup",
     category: "runtime",
     notes:

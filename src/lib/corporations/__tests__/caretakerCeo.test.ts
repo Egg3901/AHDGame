@@ -146,11 +146,13 @@ describe("appointCaretakerCeo (I/O)", () => {
       underlyingUserId: ObjectId;
       appointedTurn: number;
       appointmentSource: "owner" | "vacancy";
+      mandate: "active" | "passive";
     };
     expect(caretaker.underlyingCharacterId.equals(ceoId)).toBe(true);
     expect(caretaker.underlyingUserId.equals(userId)).toBe(true);
     expect(caretaker.appointedTurn).toBe(42);
     expect(caretaker.appointmentSource).toBe("owner");
+    expect(caretaker.mandate).toBe("active");
   });
 
   it("refuses when the corp already has a caretaker (no write)", async () => {
@@ -277,5 +279,46 @@ describe("dismissCaretakerCeo (I/O)", () => {
     expect(result.ok).toBe(false);
     expect(result.error).toBe("not-caretaker");
     expect(db.collectionMocks["corporations"]).toBeUndefined(); // never written
+  });
+
+  it("refuses reclaim when the stashed human already operates a sibling subsidiary", async () => {
+    const db = createMockDb();
+    const parentId = new ObjectId();
+    const siblingId = new ObjectId();
+    const underlyingUserId = new ObjectId();
+    const underlyingCharacterId = new ObjectId();
+    const c = corp({
+      ceoType: "npp",
+      subsidiaryFormalizedAtTurn: 10,
+      totalShares: 100,
+      shareholders: [{ corporationId: parentId, shares: 80 }],
+      caretakerCeo: {
+        underlyingCharacterId,
+        underlyingUserId,
+        appointedTurn: 10,
+        appointmentSource: "owner",
+      },
+    });
+    const sibling = {
+      _id: siblingId,
+      subsidiaryFormalizedAtTurn: 10,
+      totalShares: 100,
+      shareholders: [{ corporationId: parentId, shares: 80 }],
+      ceoType: "character",
+      userId: underlyingUserId,
+    };
+    db.collection("corporations").find = vi.fn().mockReturnValue({
+      toArray: async () => [c, sibling],
+    });
+    db.collection("corporations").findOne = vi.fn().mockResolvedValue({
+      _id: parentId,
+      userId: new ObjectId(),
+      ceoType: "character",
+    });
+
+    const result = await dismissCaretakerCeo(db as unknown as Db, { corp: c, turn: 20, now });
+    expect(result.ok).toBe(false);
+    expect(result.error).toBe("one-person-rule");
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
   });
 });

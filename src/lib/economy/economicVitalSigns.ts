@@ -500,6 +500,9 @@ function monetaryActivity(
     corporateVelocity: velocity(["corporation"]),
     partyVelocity: velocity(["party"]),
     governmentVelocity: velocity(["government"]),
+    // Pooled vehicles hold modeled balances (fund/org cash legs, NPP investment
+    // cash) but had no holder-class velocity: their flow dissolved into gross.
+    intermediatedVelocity: velocity(["fund", "org", "npp"]),
   };
 }
 
@@ -673,6 +676,18 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   const bondFloatUnits = activeBonds.reduce((sum, bond) => sum + nonnegative(bond.publicFloat), 0);
   const sovereignHolderCounts = sovereignBonds.map(
     (bond) => bond.holders.filter((holder) => holder.units > 0).length
+  );
+  const corporateHolderCounts = corporateBonds.map(
+    (bond) => bond.holders.filter((holder) => holder.units > 0).length
+  );
+  const corporateHeldUnits = corporateBonds.reduce(
+    (sum, bond) =>
+      sum + bond.holders.reduce((holderSum, holder) => holderSum + nonnegative(holder.units), 0),
+    0
+  );
+  const corporateFloatUnits = corporateBonds.reduce(
+    (sum, bond) => sum + nonnegative(bond.publicFloat),
+    0
   );
   const sovereignHeldUnits = sovereignBonds.reduce(
     (sum, bond) =>
@@ -939,6 +954,16 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         sovereignBonds.length,
         "unmatured_sovereign_units"
       ),
+      corporateMedianHolders: metric(
+        median(corporateHolderCounts),
+        corporateBonds.length,
+        "unmatured_corporate_issue_count"
+      ),
+      corporateSubscriptionRate: metric(
+        ratio(corporateHeldUnits, corporateHeldUnits + corporateFloatUnits),
+        corporateBonds.length,
+        "unmatured_corporate_units"
+      ),
       sovereignMaturityHhi: metric(
         sovereignMaturityConcentration.hhi,
         sovereignMaturityValues.length,
@@ -1101,6 +1126,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.activeAccounts,
         "government_primary_ledger_flow_to_closing_balance"
       ),
+      intermediatedGrossVelocity48: metric(
+        activity.intermediatedVelocity,
+        activity.activeAccounts,
+        "fund_org_npp_primary_ledger_flow_to_closing_balance"
+      ),
     },
     measurement: { confidence: measurementConfidence, reasons: measurementReasons },
     reconciliation: {
@@ -1154,7 +1184,21 @@ export async function snapshotEconomicVitalSigns(
     db.collection<CommodityFlow>("commodityFlows").find({ turn }).toArray(),
     db
       .collection<CommodityFlow>("commodityFlows")
-      .find({ turn: { $gte: windowStart, $lte: turn } })
+      // Historical fill-rate medians only need these pooled totals. In
+      // particular, do not decode each turn's large `byCountry` diagnostic
+      // object for the entire 48-turn window.
+      .find(
+        { turn: { $gte: windowStart, $lte: turn } },
+        {
+          projection: {
+            turn: 1,
+            demandUnitsLedger: 1,
+            demandUnits: 1,
+            clearedUnitsPooled: 1,
+            clearedUnits: 1,
+          },
+        }
+      )
       .toArray(),
     db.collection<CommodityPrice>("commodityPrices").find({}).toArray(),
     db.collection<CommoditySourcingDoc>("commoditySourcingFlows").find({ turn }).toArray(),

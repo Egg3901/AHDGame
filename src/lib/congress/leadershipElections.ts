@@ -91,101 +91,6 @@ export async function vacateCongressLeadershipRole(
 }
 
 /**
- * Checks if current leader still holds their seat. If not, vacates the position.
- */
-export async function vacateLeadershipIfLostSeat(
-  db: Db,
-  leaderRole: LeadershipRole,
-  chamber: ChamberKind
-): Promise<void> {
-  const leaderDoc = await db
-    .collection<CongressLeader>("congressLeaders")
-    .findOne({ role: leaderRole });
-  if (!leaderDoc?.characterId) return;
-
-  const officeType = chamber;
-  const stillHasSeat = await db.collection<ElectedOfficial>("electedOfficials").findOne({
-    officeType,
-    $or: [{ characterId: leaderDoc.characterId }, { nppId: leaderDoc.characterId }],
-  });
-
-  if (stillHasSeat) return;
-
-  const now = new Date();
-  await db
-    .collection<CongressLeader>("congressLeaders")
-    .updateOne(
-      { role: leaderRole },
-      { $set: { characterId: null, characterName: "Vacant", updatedAt: now } }
-    );
-}
-
-/**
- * Batch version of vacateLeadershipIfLostSeat.
- * Fetches all leader docs in one query and all seat checks in one query per
- * office type, avoiding the N+1 pattern of calling vacateLeadershipIfLostSeat
- * sequentially for multiple roles.
- */
-export async function vacateLeadershipBulkIfLostSeat(
-  db: Db,
-  roles: Array<{ leaderRole: LeadershipRole; chamber: ChamberKind }>
-): Promise<void> {
-  const leaderRoleNames = roles.map((r) => r.leaderRole);
-
-  const leaderDocs = await db
-    .collection<CongressLeader>("congressLeaders")
-    .find({ role: { $in: leaderRoleNames } })
-    .toArray();
-
-  const docsWithLeader = leaderDocs.filter((doc: CongressLeader) => doc.characterId);
-  if (docsWithLeader.length === 0) return;
-
-  const roleToOfficeType = new Map(roles.map((r) => [r.leaderRole, r.chamber] as const));
-
-  // Group by officeType so we can do one electedOfficials query per office type
-  const byOfficeType = new Map<string, CongressLeader[]>();
-  for (const doc of docsWithLeader) {
-    const officeType = roleToOfficeType.get(doc.role) ?? "senate";
-    if (!byOfficeType.has(officeType)) byOfficeType.set(officeType, []);
-    byOfficeType.get(officeType)!.push(doc);
-  }
-
-  const hasSeats = new Set<string>();
-  await Promise.all(
-    [...byOfficeType.entries()].map(async ([officeType, docs]) => {
-      const orClauses = docs.flatMap((doc) =>
-        doc.characterId ? [{ characterId: doc.characterId }, { nppId: doc.characterId }] : []
-      );
-      const seats = await db
-        .collection<ElectedOfficial>("electedOfficials")
-        .find({ officeType, $or: orClauses }, { projection: { characterId: 1, nppId: 1 } })
-        .toArray();
-      for (const seat of seats) {
-        if (seat.characterId) hasSeats.add(seat.characterId.toString());
-        if (seat.nppId) hasSeats.add(seat.nppId.toString());
-      }
-    })
-  );
-
-  const now = new Date();
-  const toVacate = docsWithLeader.filter(
-    (doc: CongressLeader) => !hasSeats.has(doc.characterId!.toString())
-  );
-  if (toVacate.length > 0) {
-    await Promise.all(
-      toVacate.map((doc: CongressLeader) =>
-        db
-          .collection<CongressLeader>("congressLeaders")
-          .updateOne(
-            { role: doc.role },
-            { $set: { characterId: null, characterName: "Vacant", updatedAt: now } }
-          )
-      )
-    );
-  }
-}
-
-/**
  * Resolves a leadership election when voting ends.
  * Handles both cases: with candidates (declares winner) and without (vacates the role).
  */
@@ -828,11 +733,22 @@ export async function resolveExpiredLeadershipElections(db: Db): Promise<void> {
 }
 
 /**
- * Vacate all Congress leadership positions for leaders who no longer hold
- * the correct seat (lost re-election, changed chambers, elected to Governor/State Senate).
- * Called after general elections resolve to ensure leadership is cleared immediately.
+ * Vacate every Congress leadership office whose holder no longer sits in the
+ * chamber it requires — lost re-election, withdrew from their race, changed
+ * chambers, took a Governor's seat — and open the election to refill it.
+ *
+ * Runs every turn, not only when a general resolves. A seat can be given up at
+ * any time, and the only other thing that noticed was a lazy check on the
+ * congress page GETs, so a chair could stand empty for hours until somebody
+ * happened to open the page.
+ *
+ * Safe to run every turn because it fires on the holder-loses-seat transition:
+ * once the chair is vacant it is skipped, so it cannot re-open a race that a
+ * previous one resolved into a vacancy.
+ *
+ * @returns how many chairs it actually emptied.
  */
-export async function vacateLeadershipAfterElections(db: Db): Promise<number> {
+export async function vacateLeadershipForLostSeats(db: Db): Promise<number> {
   const now = new Date();
 
   // All leadership roles and their required chamber. `bundestag` covers the
@@ -865,67 +781,91 @@ export async function vacateLeadershipAfterElections(db: Db): Promise<number> {
 
   const leaderRoleToDoc = new Map(leaderDocs.map((d) => [d.role, d]));
 
-  // Fetch all current officials across every relevant chamber.
-  const allOfficials = await db
+  // Only the seat rows of the thirteen people in question. This runs every turn
+  // now, so reading every official of all four chambers to answer it (264 rows
+  // on live today, unprojected, and unbounded as the world grows) is work worth
+  // not doing hourly. Note a row can carry many seats — CN's 14 npcDelegate rows
+  // stand for ~2,980 delegates — so row counts understate what a scan reads.
+  // `nppId` is checked too: an NPP-held chair stores the NPP id in
+  // `congressLeaders.characterId`, and its seat row keys that id under `nppId`.
+  const seatedByChamber = new Map<string, Set<string>>();
+  const holderIds = leaderDocs.flatMap((doc) => (doc.characterId ? [doc.characterId] : []));
+  if (holderIds.length === 0) return 0;
+
+  const seats = await db
     .collection<ElectedOfficial>("electedOfficials")
-    .find({ officeType: { $in: ["house", "senate", "bundestag", "npcDelegate"] } })
+    .find(
+      {
+        officeType: { $in: ["house", "senate", "bundestag", "npcDelegate"] },
+        $or: [{ characterId: { $in: holderIds } }, { nppId: { $in: holderIds } }],
+      },
+      { projection: { characterId: 1, nppId: 1, officeType: 1 } }
+    )
     .toArray();
-
-  // Build sets of character IDs who currently hold each chamber seat
-  const houseCharacterIds = new Set<string>();
-  const senateCharacterIds = new Set<string>();
-  const bundestagCharacterIds = new Set<string>();
-  const npcDelegateCharacterIds = new Set<string>();
-
-  for (const official of allOfficials) {
-    const charId = official.characterId?.toString() ?? official.nppId?.toString();
-    if (!charId) continue;
-
-    if (official.officeType === "house") {
-      houseCharacterIds.add(charId);
-    } else if (official.officeType === "senate") {
-      senateCharacterIds.add(charId);
-    } else if (official.officeType === "bundestag") {
-      bundestagCharacterIds.add(charId);
-    } else if (official.officeType === "npcDelegate") {
-      npcDelegateCharacterIds.add(charId);
-    }
+  for (const seat of seats) {
+    if (!seat.officeType) continue;
+    const set = seatedByChamber.get(seat.officeType) ?? new Set<string>();
+    // Both ids, not whichever is set first: a row can carry a character and an
+    // NPP, and reading only one of them would leave a seated holder looking
+    // seatless and vacate a chair that is filled.
+    if (seat.characterId) set.add(seat.characterId.toString());
+    if (seat.nppId) set.add(seat.nppId.toString());
+    seatedByChamber.set(seat.officeType, set);
   }
 
-  let vacated = 0;
+  // A chamber with no seats at all is a failed or not-yet-seeded read, not a
+  // chamber that lost every member. Without this one bad read would empty a
+  // whole leadership slate and announce a race for every seat. Counted lazily
+  // and once per chamber, so a normal turn — where every holder is still seated
+  // — never issues it at all.
+  const chamberSeatCounts = new Map<string, number>();
+  const chamberHasSeats = async (chamber: string): Promise<boolean> => {
+    const cached = chamberSeatCounts.get(chamber);
+    if (cached !== undefined) return cached > 0;
+    const count = await db
+      .collection<ElectedOfficial>("electedOfficials")
+      .countDocuments({ officeType: chamber });
+    chamberSeatCounts.set(chamber, count);
+    return count > 0;
+  };
+
+  const lostSeats: Array<{
+    leaderRole: LeadershipRole;
+    holderId: ObjectId;
+    formerHolderName?: string;
+  }> = [];
 
   for (const { role, chamber } of leadershipRoles) {
     const leaderDoc = leaderRoleToDoc.get(role);
+    // An already-vacant chair is not a fresh vacancy. Keying on "the holder
+    // lost their seat" rather than "the seat is empty" is what keeps this a
+    // transition check instead of a poller: a race nobody enters resolves by
+    // vacating the role and closing, which a poller would re-open forever.
     if (!leaderDoc?.characterId) continue;
 
     const charId = leaderDoc.characterId.toString();
-    const requiredSet =
-      chamber === "house"
-        ? houseCharacterIds
-        : chamber === "senate"
-          ? senateCharacterIds
-          : chamber === "bundestag"
-            ? bundestagCharacterIds
-            : npcDelegateCharacterIds;
+    if (seatedByChamber.get(chamber)?.has(charId)) continue;
+    if (!(await chamberHasSeats(chamber))) continue;
 
-    if (!requiredSet.has(charId)) {
-      // Leader no longer holds the required seat — vacate
-      await db.collection<CongressLeader>("congressLeaders").updateOne(
-        { role },
-        {
-          $set: {
-            characterId: null,
-            characterName: "Vacant",
-            updatedAt: now,
-          },
-        }
-      );
-      console.log(
-        `[Turn] Vacated ${role}: ${leaderDoc.characterName} no longer holds a ${chamber} seat`
-      );
-      vacated++;
-    }
+    console.log(
+      `[Turn] Vacating ${role}: ${leaderDoc.characterName} no longer holds a ${chamber} seat`
+    );
+    lostSeats.push({
+      leaderRole: role,
+      holderId: leaderDoc.characterId,
+      formerHolderName: leaderDoc.characterName,
+    });
   }
 
-  return vacated;
+  if (lostSeats.length === 0) return 0;
+
+  // Vacate AND open the race to refill each chair. Vacating alone is what left
+  // the House with no Speaker: the seat-loss sweep emptied the chair, and the
+  // Speaker's own auto-open (`vacateSpeakerIfLostSeat`) then early-returned
+  // because `characterId` was already null, so nothing ever refilled it.
+  // Imported lazily because `reconcilePartyEligibility` imports this module.
+  const { vacateAllLeadershipRoles } =
+    await import("@/lib/congress/leadership/reconcilePartyEligibility");
+  const vacated = await vacateAllLeadershipRoles(db, lostSeats, now);
+  return vacated.length;
 }

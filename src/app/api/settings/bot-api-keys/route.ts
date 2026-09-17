@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { withNoStore } from "@/lib/api/withNoStore";
 import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { handleRouteError } from "@/lib/api/errors";
@@ -20,7 +21,7 @@ const revokeBotApiKeySchema = z.object({
 // GET /api/settings/bot-api-keys - Lists the authenticated user's active bot API keys.
 // Auth: requireBasicAuth
 // Errors: 401
-export async function GET() {
+async function handleGET() {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -37,6 +38,8 @@ export async function GET() {
     return handleRouteError(error);
   }
 }
+
+export const GET = withNoStore(handleGET);
 
 // POST /api/settings/bot-api-keys - Creates a new bot API key for the authenticated user.
 // Auth: requireBasicAuth
