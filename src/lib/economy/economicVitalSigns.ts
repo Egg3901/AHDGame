@@ -500,6 +500,9 @@ function monetaryActivity(
     corporateVelocity: velocity(["corporation"]),
     partyVelocity: velocity(["party"]),
     governmentVelocity: velocity(["government"]),
+    // Pooled vehicles hold modeled balances (fund/org cash legs, NPP investment
+    // cash) but had no holder-class velocity: their flow dissolved into gross.
+    intermediatedVelocity: velocity(["fund", "org", "npp"]),
   };
 }
 
@@ -1100,6 +1103,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.governmentVelocity,
         activity.activeAccounts,
         "government_primary_ledger_flow_to_closing_balance"
+      ),
+      intermediatedGrossVelocity48: metric(
+        activity.intermediatedVelocity,
+        activity.activeAccounts,
+        "fund_org_npp_primary_ledger_flow_to_closing_balance"
       ),
     },
     measurement: { confidence: measurementConfidence, reasons: measurementReasons },

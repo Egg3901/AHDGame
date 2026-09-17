@@ -548,6 +548,58 @@ describe("computeEconomicVitalSigns", () => {
     );
   });
 
+  it("measures pooled-vehicle velocity separately, and as unknown when absent", () => {
+    const funded = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 30,
+        createdAt: new Date(),
+        balances: {
+          "fund:cash:USD": 100,
+          "npp:polis:USD": 300,
+          "character:a:USD": 600,
+        },
+      },
+      ledgerTurnover: [
+        { account: "fund:cash:USD", turnover: 50 },
+        { account: "npp:polis:USD", turnover: 150 },
+        { account: "character:a:USD", turnover: 600 },
+        // System legs never reach the classifier.
+        { account: "mint:reason:USD", turnover: 10_000 },
+      ],
+      ledgerEntryCount: 4,
+    });
+
+    // (50 + 150) / (100 + 300) from pooled vehicles only.
+    expect(funded.money.intermediatedGrossVelocity48.value).toBe(0.5);
+    expect(funded.money.intermediatedGrossVelocity48.basis).toBe(
+      "fund_org_npp_primary_ledger_flow_to_closing_balance"
+    );
+    // Gross still covers every real account: (50 + 150 + 600) / 1000.
+    expect(funded.money.modeledGrossVelocity48.value).toBe(0.8);
+    // Household velocity is untouched by pooled-vehicle flow.
+    expect(funded.money.householdGrossVelocity48.value).toBe(1);
+
+    const noVehicles = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 30,
+        createdAt: new Date(),
+        balances: { "character:a:USD": 600 },
+      },
+      ledgerTurnover: [{ account: "character:a:USD", turnover: 600 }],
+      ledgerEntryCount: 1,
+    });
+
+    // No pooled-vehicle stock: unknown, not zero.
+    expect(noVehicles.money.intermediatedGrossVelocity48.value).toBeNull();
+    expect(noVehicles.money.householdGrossVelocity48.value).toBe(1);
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),
