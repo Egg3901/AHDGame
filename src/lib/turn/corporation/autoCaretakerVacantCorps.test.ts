@@ -83,6 +83,7 @@ describe("buildVacantCaretakerCeoUpdate", () => {
       underlyingUserId: user,
       appointedTurn: 5,
       appointmentSource: "vacancy",
+      mandate: "active",
     });
   });
 
@@ -98,6 +99,7 @@ describe("buildVacantCaretakerCeoUpdate", () => {
       underlyingUserId: user,
       appointedTurn: 5,
       appointmentSource: "vacancy",
+      mandate: "active",
     });
     expect(set.caretakerCeo).not.toHaveProperty("underlyingCharacterId");
   });

@@ -292,6 +292,7 @@ export function buildVacantCaretakerCeoUpdate(
       underlyingUserId: corp.userId,
       appointedTurn: turn,
       appointmentSource: "vacancy",
+      mandate: "active",
     };
   }
   return { set, unset };

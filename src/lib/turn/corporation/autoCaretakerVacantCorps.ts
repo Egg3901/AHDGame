@@ -110,6 +110,7 @@ export async function installCaretakersForVacantCorps(
           underlyingUserId: prevUserId,
           appointedTurn: turn,
           appointmentSource: "vacancy",
+          mandate: "active",
         };
       }
 
