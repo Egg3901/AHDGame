@@ -38,6 +38,17 @@ vi.mock("@/lib/market/featureFlag", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/labour/featureFlag", () => ({
+  isLabourWagesEnabled: vi.fn().mockResolvedValue(true),
+  isLabourUnionsEnabled: vi.fn().mockResolvedValue(true),
+}));
+vi.mock("@/lib/unions/collectiveAgreementEffects", () => ({
+  loadCollectiveAgreementEffects: vi.fn().mockResolvedValue({ wageFloorBySectorId: new Map() }),
+}));
+vi.mock("@/lib/currency/corporationCapital", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/currency/corporationCapital")>()),
+  loadValuationFxRates: vi.fn().mockResolvedValue(new Map([["USD", 1]])),
+}));
 let db: MockDb;
 const corpId = new ObjectId();
 const corp = { _id: corpId, name: "Energy Co", ceoId: new ObjectId(), countryId: "US" };
@@ -234,5 +245,44 @@ describe("bulkSetSectorOperations", () => {
     });
     expect(res.status).toBe(400);
     expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+  });
+});
+
+describe("bulk wage controls", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    db.collection("corporateSectors");
+    const { isLabourWagesEnabled } = await import("@/lib/labour/featureFlag");
+    vi.mocked(isLabourWagesEnabled).mockResolvedValue(true);
+  });
+  it("previews wages without writing and then applies the setting", async () => {
+    await wire([{ ...energySector("CA"), laborCost: 100, wageLevel: 1 }]);
+    const response = await bulkSetSectorOperations(
+      req({ countryId: "US", wageLevel: 1.2, preview: true }),
+      { params }
+    );
+    expect((await response.json()).wages.costDeltaPerTurn).toBeCloseTo(20);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+    await bulkSetSectorOperations(req({ countryId: "US", wageLevel: 1.2 }), { params });
+    expect(
+      db.collectionMocks.corporateSectors.bulkWrite.mock.calls[0][0][0].updateOne.update.$set
+        .wageLevel
+    ).toBe(1.2);
+  });
+  it("refuses wages when disabled", async () => {
+    await wire([energySector("CA")]);
+    const { isLabourWagesEnabled } = await import("@/lib/labour/featureFlag");
+    vi.mocked(isLabourWagesEnabled).mockResolvedValue(false);
+    expect(
+      (await bulkSetSectorOperations(req({ countryId: "US", wageLevel: 1.2 }), { params })).status
+    ).toBe(403);
+    expect(db.collectionMocks.corporateSectors.bulkWrite).not.toHaveBeenCalled();
+  });
+  it("rejects wage levels outside single-sector bounds", async () => {
+    await wire([energySector("CA")]);
+    expect(
+      (await bulkSetSectorOperations(req({ countryId: "US", wageLevel: 0.1 }), { params })).status
+    ).toBe(400);
   });
 });

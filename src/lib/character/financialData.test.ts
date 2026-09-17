@@ -83,3 +83,23 @@ describe("getFinancialData", () => {
     expect(db.collectionMocks["corporateSectors"]!.aggregate).not.toHaveBeenCalled();
   });
 });
+
+it("recognizes fund-only and zero-income investors", async () => {
+  const db = createMockDb();
+  const id = new ObjectId();
+  const { getDb } = await import("@/lib/mongodb");
+  vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+  db.collection("corporations").findOne.mockResolvedValue(null);
+  db.collection("corporations").find.mockReturnValue(makeCursor([]));
+  db.collection("bonds").find.mockReturnValue(makeCursor([]));
+  db.collection("exchangeRates").find.mockReturnValue(makeCursor([]));
+  db.collection("indexFundPositions").findOne.mockResolvedValue({ _id: new ObjectId() });
+  const { getFinancialData } = await import("./financialData");
+  const result = await getFinancialData(id);
+  expect(result.isInvestor).toBe(true);
+  expect(result.dividendIncomePerTurn).toBe(0);
+  expect(db.collectionMocks.indexFundPositions.findOne).toHaveBeenCalledWith(
+    { holderKind: "character", characterId: id, units: { $gt: 0 } },
+    { projection: { _id: 1 } }
+  );
+});
