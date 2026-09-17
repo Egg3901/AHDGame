@@ -126,7 +126,7 @@ describe("resignCabinetMemberHandler", () => {
     seedUkGauge(db);
   });
 
-  function seedCallerAsHolder(positionId: string, junior = false) {
+  function seedCallerAsHolder(positionId: string, _junior = false) {
     const holderId = new ObjectId();
     db.collectionMocks.characters.findOne.mockResolvedValue({
       _id: holderId,
@@ -186,6 +186,20 @@ describe("resignCabinetMemberHandler", () => {
     expect(res.status).toBe(404);
     expect(db.collectionMocks.ukGovernment.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks.cabinetMembers.deleteOne).not.toHaveBeenCalled();
+  });
+
+  it("a lost fire/resignation race reports 404 and writes nothing", async () => {
+    seedCallerAsHolder("chief_whip");
+    // A concurrent fire won: our guarded delete matches nothing.
+    db.collectionMocks.cabinetMembers.deleteOne.mockResolvedValueOnce({ deletedCount: 0 });
+    const res = await resignCabinetMemberHandler(
+      post("/api/country/uk/executive/cabinet/resign", { positionId: "chief_whip" }),
+      "UK" as never
+    );
+    expect(res.status).toBe(404);
+    // Loser restores no office and records no confidence event.
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.ukGovernment.updateOne).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid position with 400", async () => {

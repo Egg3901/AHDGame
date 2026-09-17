@@ -136,18 +136,27 @@ describe("reshuffleCabinetHandler", () => {
     expect(db.collectionMocks.cabinetMembers.deleteMany).toHaveBeenCalled();
     expect(db.collectionMocks.cabinetMembers.insertOne).toHaveBeenCalledTimes(2);
 
-    // The persisted log is what the limiter reads: one entry keyed by the
-    // formation-derived ids.
+    // The claim is the persisted token: a conditional $push of one entry
+    // keyed by the formation-derived ids. Also assert the filter carries the
+    // atomic guard (absence of the pair) plus the formation identity pins.
     const updateCall = db.collectionMocks.governmentFormations.updateOne.mock.calls[0];
-    const nextLog = updateCall[1].$set.reshuffleLog;
-    expect(nextLog).toHaveLength(1);
+    expect(updateCall[0]).toMatchObject({
+      _id: "UK",
+      reshuffleLog: { $not: { $elemMatch: expect.anything() } },
+      cycle: 3,
+      formedTurn: 50,
+    });
     const identity = getReshuffleIdentity({
       countryId: "UK",
       pmCharacterId,
       formedTurn: 50,
       cycle: 3,
     });
-    expect(nextLog[0]).toMatchObject({
+    expect(updateCall[0].reshuffleLog.$not.$elemMatch).toMatchObject({
+      governmentId: identity.governmentId,
+      parliamentId: identity.parliamentId,
+    });
+    expect(updateCall[1].$push.reshuffleLog).toMatchObject({
       governmentId: identity.governmentId,
       parliamentId: identity.parliamentId,
     });
@@ -159,8 +168,9 @@ describe("reshuffleCabinetHandler", () => {
 
     const first = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
     expect(first.status).toBe(200);
-    const persistedLog = db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set
-      .reshuffleLog;
+    const claimedEntry =
+      db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$push.reshuffleLog;
+    const persistedLog = [claimedEntry];
 
     // End to end: feed the persisted log back as the stored state.
     seedGovernment(
@@ -184,8 +194,9 @@ describe("reshuffleCabinetHandler", () => {
     seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);
     const first = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
     expect(first.status).toBe(200);
-    const persistedLog = db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set
-      .reshuffleLog;
+    const claimedEntry =
+      db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$push.reshuffleLog;
+    const persistedLog = [claimedEntry];
 
     seedGovernment(
       db,
@@ -202,8 +213,9 @@ describe("reshuffleCabinetHandler", () => {
     seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);
     const first = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
     expect(first.status).toBe(200);
-    const persistedLog = db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$set
-      .reshuffleLog;
+    const claimedEntry =
+      db.collectionMocks.governmentFormations.updateOne.mock.calls[0][1].$push.reshuffleLog;
+    const persistedLog = [claimedEntry];
 
     const newPm = new ObjectId();
     seedGovernment(
@@ -260,5 +272,170 @@ describe("reshuffleCabinetHandler", () => {
     );
     expect(restoreCall).toBeDefined();
     expect(restoreCall![1]).toHaveProperty(["$set", "currentOffice"]);
+  });
+});
+
+describe("reshuffleCabinetHandler atomic claim", () => {
+  let db: MockDb;
+  const pmCharacterId = new ObjectId();
+
+  /** Formation store that emulates the conditional-$push atomicity of Mongo:
+   * the claim filter only matches while the pair is absent, so concurrent
+   * claims serialize exactly like the real collection. */
+  function seedLiveFormation(extra: Partial<FormationSeed> = {}) {
+    const seed = { pmCharacterId, cycle: 3, formedTurn: 50, ...extra };
+    let log: { governmentId: string; parliamentId: string; at: Date }[] = [
+      ...(seed.reshuffleLog ?? []),
+    ];
+    const doc = () => ({
+      _id: "UK",
+      countryId: "UK",
+      pmCharacterId: seed.pmCharacterId,
+      cycle: seed.cycle,
+      formedTurn: seed.formedTurn,
+      formedAt: new Date(0),
+      reshuffleLog: [...log],
+    });
+    db.collectionMocks.governmentFormations.findOne.mockImplementation(async () => doc());
+    db.collectionMocks.governmentFormations.updateOne.mockImplementation(
+      async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
+        const push = (update.$push as Record<string, unknown> | undefined)?.reshuffleLog as
+          { governmentId: string; parliamentId: string; at: Date } | undefined;
+        if (push) {
+          const wanted = (filter.reshuffleLog as Record<string, Record<string, unknown>>)?.$not
+            ?.$elemMatch as { governmentId: string; parliamentId: string };
+          const absent =
+            wanted &&
+            !log.some(
+              (r) =>
+                r.governmentId === wanted.governmentId && r.parliamentId === wanted.parliamentId
+            );
+          const pinsOk =
+            (filter.pmCharacterId === undefined ||
+              String(filter.pmCharacterId) === String(seed.pmCharacterId)) &&
+            (filter.cycle === undefined || filter.cycle === seed.cycle) &&
+            (filter.formedTurn === undefined || filter.formedTurn === seed.formedTurn);
+          if (!absent || !pinsOk) return { matchedCount: 0, modifiedCount: 0 };
+          log = [...log, push];
+          return { matchedCount: 1, modifiedCount: 1 };
+        }
+        const pull = (update.$pull as Record<string, unknown> | undefined)?.reshuffleLog as
+          { governmentId: string; parliamentId: string } | undefined;
+        if (pull) {
+          log = log.filter(
+            (r) => !(r.governmentId === pull.governmentId && r.parliamentId === pull.parliamentId)
+          );
+          return { matchedCount: 1, modifiedCount: 1 };
+        }
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
+    return { getLog: () => log };
+  }
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db = createMockDb();
+    const { getDb } = await import("@/lib/mongodb");
+    vi.mocked(getDb).mockResolvedValue(db as unknown as Db);
+    const { requireAuth } = await import("@/lib/api/requireAuth");
+    vi.mocked(requireAuth).mockResolvedValue({
+      ok: true,
+      user: { userId: PM_USER_ID },
+    } as never);
+  });
+
+  it("races two whole-cabinet requests: exactly one roster mutation and one token", async () => {
+    const { appointees, body } = ROSTER();
+    seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);
+    const store = seedLiveFormation();
+
+    const [first, second] = await Promise.all([
+      reshuffleCabinetHandler(makeRequest(body), "UK" as never),
+      reshuffleCabinetHandler(makeRequest(body), "UK" as never),
+    ]);
+
+    expect([first.status, second.status].sort()).toEqual([200, 409]);
+    const loser = first.status === 409 ? first : second;
+    const loserJson = await loser.json();
+    expect(loserJson.error).toMatch(/already used for this parliament/);
+
+    // Exactly one token consumed and one roster written: the loser made no
+    // cabinet mutations at all.
+    expect(store.getLog()).toHaveLength(1);
+    expect(db.collectionMocks.cabinetMembers.deleteMany).toHaveBeenCalledTimes(1);
+    expect(db.collectionMocks.cabinetMembers.insertOne).toHaveBeenCalledTimes(2);
+  });
+
+  it("a claim lost after a stale read returns the repeat 409 and mutates nothing", async () => {
+    const { appointees, body } = ROSTER();
+    seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);
+    // Our read saw an empty log, but the atomic claim finds the pair taken
+    // (a winner claimed between our read and our write); the re-read then
+    // sees the winner's entry.
+    let claimed = false;
+    const identity = getReshuffleIdentity({
+      countryId: "UK",
+      pmCharacterId,
+      formedTurn: 50,
+      cycle: 3,
+    });
+    db.collectionMocks.governmentFormations.findOne.mockImplementation(async () => ({
+      _id: "UK",
+      countryId: "UK",
+      pmCharacterId,
+      cycle: 3,
+      formedTurn: 50,
+      formedAt: new Date(0),
+      reshuffleLog: claimed ? [{ ...identity, at: new Date() }] : [],
+    }));
+    db.collectionMocks.governmentFormations.updateOne.mockImplementation(async () => {
+      claimed = true;
+      return { matchedCount: 0, modifiedCount: 0 };
+    });
+
+    const res = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json.error).toMatch(/already used for this parliament/);
+    expect(db.collectionMocks.cabinetMembers.deleteMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks.cabinetMembers.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("a roster failure after claim releases the token so a retry reconciles", async () => {
+    const { appointees, body } = ROSTER();
+    seedGovernment(db, { pmCharacterId, cycle: 3, formedTurn: 50 }, appointees);
+    const store = seedLiveFormation();
+    db.collectionMocks.cabinetMembers.deleteMany.mockRejectedValueOnce(
+      new Error("roster write failed")
+    );
+
+    const failed = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
+    expect(failed.status).toBe(500);
+
+    // Compensation released exactly our pair: the token is spendable again.
+    const pullCall = db.collectionMocks.governmentFormations.updateOne.mock.calls.find(
+      (call) => (call[1] as Record<string, unknown>).$pull !== undefined
+    );
+    expect(pullCall).toBeDefined();
+    const identity = getReshuffleIdentity({
+      countryId: "UK",
+      pmCharacterId,
+      formedTurn: 50,
+      cycle: 3,
+    });
+    expect(
+      (pullCall![1] as Record<string, Record<string, unknown>>).$pull.reshuffleLog
+    ).toMatchObject({
+      governmentId: identity.governmentId,
+      parliamentId: identity.parliamentId,
+    });
+    expect(store.getLog()).toHaveLength(0);
+
+    const retry = await reshuffleCabinetHandler(makeRequest(body), "UK" as never);
+    expect(retry.status).toBe(200);
+    expect(store.getLog()).toHaveLength(1);
   });
 });

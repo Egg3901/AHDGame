@@ -456,4 +456,34 @@ describe("fireCabinetMemberHandler", () => {
     expect(res.status).toBe(403);
     expect(db.collectionMocks.cabinetMembers.deleteOne).not.toHaveBeenCalled();
   });
+
+  it("a lost fire/resignation race reports 404 and writes nothing", async () => {
+    seedPrimeMinister(db, "UK");
+    const ministerId = new ObjectId();
+
+    db.collectionMocks.cabinetMembers.findOne.mockResolvedValue({
+      _id: new ObjectId(),
+      countryId: "UK",
+      positionId: "chancellor",
+      characterId: ministerId,
+      characterName: "Chancellor",
+    });
+    db.collection("electedOfficials");
+    db.collectionMocks.electedOfficials.findOne.mockResolvedValue(null);
+    db.collection("ukGovernment");
+    // A concurrent resignation won: our guarded delete matches nothing.
+    db.collectionMocks.cabinetMembers.deleteOne.mockResolvedValueOnce({ deletedCount: 0 });
+
+    const req = new Request("http://localhost/api/country/uk/executive/cabinet/fire", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ positionId: "chancellor" }),
+    });
+
+    const res = await fireCabinetMemberHandler(req, "UK" as never);
+    expect(res.status).toBe(404);
+    // Loser restores no office and records no confidence event.
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.ukGovernment.updateOne).not.toHaveBeenCalled();
+  });
 });

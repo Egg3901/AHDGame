@@ -51,6 +51,7 @@ export async function resignNppCaretakerMinister(
   });
   if (removed.deletedCount === 0) return { resigned: false };
 
+  // eslint-disable-next-line local/no-country-literals -- the confidence gauge and Great Offices are UK-specific structures (ukGovernment singleton)
   if (countryId === "UK") {
     const greatOffice = GREAT_OFFICE_POSITION_IDS.has(positionId);
     await applyConfidenceEventToGov(db, { kind: "ministerResigned", greatOffice }, now);
@@ -59,10 +60,7 @@ export async function resignNppCaretakerMinister(
 }
 
 /** Read the latest aggregate approval for the resignation rule (UK hook). */
-export async function readApprovalForResignation(
-  db: Db,
-  countryId: CountryId
-): Promise<number> {
+export async function readApprovalForResignation(db: Db, countryId: CountryId): Promise<number> {
   const doc = await db
     .collection<GovernmentApproval>("governmentApprovals")
     .findOne({ _id: countryId });

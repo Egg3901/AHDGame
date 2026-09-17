@@ -53,9 +53,6 @@ export function nppResignationChance(input: NppResignationInput): number {
 }
 
 /** Roll the resignation decision with an injected rng. Pure. */
-export function shouldNppMinisterResign(
-  input: NppResignationInput,
-  rng: () => number
-): boolean {
+export function shouldNppMinisterResign(input: NppResignationInput, rng: () => number): boolean {
   return rng() < nppResignationChance(input);
 }

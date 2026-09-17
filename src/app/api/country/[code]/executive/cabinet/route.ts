@@ -234,9 +234,8 @@ async function handleParliamentaryCabinet(countryId: CountryId) {
   // The viewer's own minister seat, if any — drives the Resign button.
   const myPositionId =
     myCharacter != null
-      ? (members.find(
-          (m) => m.characterId != null && m.characterId.equals(myCharacter._id)
-        )?.positionId ?? null)
+      ? (members.find((m) => m.characterId != null && m.characterId.equals(myCharacter._id))
+          ?.positionId ?? null)
       : null;
 
   return NextResponse.json({
