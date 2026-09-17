@@ -5,7 +5,7 @@ import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
-import { calculateFundraisingAmount } from "@/lib/actions";
+import { fundraiseYieldAnchor } from "@/lib/actions";
 import { calculateFullFundDistribution, getPopulationTier } from "@/lib/utils/fundGeneration";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -825,9 +825,9 @@ export async function GET(request: Request) {
       cashOnHand: getTotalPersonalLiquidWealth(character, forexEnabled, forexRates),
       personalHomeLiquid: getTotalPersonalLiquidWealth(character, forexEnabled),
       homeCurrency: getHomeCurrency(character),
-      projectedIncome: toCampaignLocal(
-        calculateFundraisingAmount(character.donorBaseLevel ?? 0, character.politicalInfluence ?? 0)
-      ),
+      // Single source of truth: the same stat-scaled yield the execute shell
+      // credits, so the projection can never understate what fundraising pays.
+      projectedIncome: toCampaignLocal(fundraiseYieldAnchor(character)),
       campaignIncomeBreakdown,
       donorBaseLevel: character.donorBaseLevel ?? 0,
       politicalInfluence: character.politicalInfluence ?? 0,

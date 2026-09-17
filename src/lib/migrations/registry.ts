@@ -13,6 +13,7 @@
 // scripts/migrations/incidents/ and DO NOT belong in this registry.
 
 import { migration as supplyListingIndexes } from "./entries/2026-09-17-supply-listing-indexes";
+import { migration as ukDualMinistryRoleSlot } from "./entries/2026-09-17-uk-dual-ministry-role-slot";
 import type { Migration } from "./types";
 
 import { migration as bondCurrencyStamp } from "./entries/2026-04-15-bond-currency-stamp";
@@ -255,6 +256,10 @@ export const MIGRATIONS: Migration[] = [
   // unprotected collection until something renumbers them in place. Seed +
   // bootstrap cover fresh/reset worlds; this reaches ones already running.
   repairDuplicateCorporationSequentialIds,
+  // Issue #2049: UK dual ministry. Classify rows into role slots, init shared
+  // holder pools from current balances, and swap the one-seat index for the
+  // role-slot index. Idempotent, dry-run safe, deletes nothing.
+  ukDualMinistryRoleSlot,
 ];
 
 // D13 rollback drill — registered but deliberately OUTSIDE the normal chain.
