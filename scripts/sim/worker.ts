@@ -106,6 +106,9 @@ interface SimJob {
   nppFragileMarketSupplyEnabled?: boolean;
   allFeatureFlags?: boolean;
   autonomyLevel?: string;
+  /** Simulation actor mode (#1993). Omitted means pure NPP autonomy.
+   * Flows into runWorld via planRunWorldSpawn -> buildRunWorldArgs. */
+  actors?: "pure-npp" | "synthetic";
   /** Sim turn-phase profile: "elections-only" skips the economy phases. Default full. */
   mode?: "full" | "elections-only";
   /** Elections-only country scope: comma-separated ids (e.g. "US,UK,DE"). Omit for global. */

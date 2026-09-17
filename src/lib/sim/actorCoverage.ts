@@ -139,7 +139,7 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
     id: "player-country-offices",
     label: "Player-enabled-country offices",
     requires: "player characters holding national office",
-    seams: [seam("src/lib/sim/forceFullAutonomy.ts", "Forcing every country off the player rail")],
+    seams: [seam("src/lib/sim/forceFullAutonomy.ts", "off the player rail")],
     pureNpp: {
       status: "partial",
       reason:
@@ -270,7 +270,7 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
     id: "corp-founding-ipo",
     label: "Founding IPO placement",
     requires: "a player-run corporation placing shares publicly at founding",
-    seams: [seam("src/lib/corporations/ipoIssuance.ts", "proceeds")],
+    seams: [seam("src/lib/corporations/ipoIssuance.ts", "how many new shares to issue")],
     pureNpp: {
       status: "unreachable",
       reason:
@@ -311,6 +311,14 @@ export const ACTOR_GATED_MECHANICS: readonly ActorGatedMechanic[] = [
 /** Every known actor-gated mechanic id. Reports and probes must resolve through
  * `assertKnownActorMechanic`; adding a mechanic means adding it here. */
 export const ACTOR_GATED_MECHANIC_IDS: readonly string[] = ACTOR_GATED_MECHANICS.map((m) => m.id);
+
+/** Every source seam the registry pins, flattened across mechanics. The drift
+ * guard test reads each file and asserts its anchor is still present, so a
+ * renamed or removed actor gate fails the build instead of silently drifting
+ * the manifest. */
+export function actorCoverageSeams(): ActorGateSeam[] {
+  return ACTOR_GATED_MECHANICS.flatMap((m) => m.seams.map((s) => ({ ...s })));
+}
 
 /** Throw on an unregistered mechanic id so new report/probe call sites cannot
  * silently reference a mechanic the manifest does not classify. */
@@ -403,19 +411,33 @@ function evidenceFor(id: string, s: ActorPopulationSnapshot): string {
   }
 }
 
+/** Reason used when synthetic mode was requested but no synthetic actors were
+ * materialized in the world. The deterministic plan exists, but zero synthetic
+ * characters means actor-gated paths are UNREACHABLE here — the manifest must
+ * not claim them covered just because the mode flag was set. */
+export const SYNTHETIC_UNSEEDED_REASON =
+  "synthetic mode was requested but this world contains zero synthetic characters, " +
+  "so the deterministic actor plan was not materialized and actor-gated paths " +
+  "stay UNREACHABLE here, not covered.";
+
 /** Build the effective run manifest's actor-coverage section. Pure and
  * deterministic for a given snapshot and timestamp. */
 export function evaluateActorCoverage(
   snapshot: ActorPopulationSnapshot,
   evaluatedAt: string
 ): ActorCoverageManifest {
+  // A mode flag without materialized actors proves nothing: degrade every
+  // synthetic-covered entry to unreachable so reports warn instead of
+  // presenting vacancies as balance evidence.
+  const seeded = snapshot.mode === "pure-npp" || snapshot.syntheticCharacters > 0;
   const entries = ACTOR_GATED_MECHANICS.map((m) => {
     const perMode = snapshot.mode === "synthetic" ? m.synthetic : m.pureNpp;
+    const degraded = snapshot.mode === "synthetic" && !seeded && perMode.status === "covered";
     return {
       id: assertKnownActorMechanic(m.id),
       label: m.label,
-      status: perMode.status,
-      reason: perMode.reason,
+      status: (degraded ? "unreachable" : perMode.status) as ActorGateStatus,
+      reason: degraded ? SYNTHETIC_UNSEEDED_REASON : perMode.reason,
       evidence: evidenceFor(m.id, snapshot),
     };
   });

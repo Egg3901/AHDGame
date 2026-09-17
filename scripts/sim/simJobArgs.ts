@@ -4,6 +4,7 @@
 // env, safe to import eagerly.
 import { MARKET_MODE_ORDER, type MarketSystemMode } from "@/lib/market/modes";
 import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
+import { SIM_ACTOR_MODES, type SimActorMode } from "@/lib/sim/syntheticActors";
 
 /** Subset of a simJobs document that controls runWorld CLI emission. */
 export interface SimJobExperimentFields {
@@ -20,6 +21,9 @@ export interface SimJobExperimentFields {
   autonomyLevel?: string;
   mode?: string;
   countries?: string;
+  /** Simulation actor mode (#1993): "pure-npp" keeps full NPP autonomy,
+   * "synthetic" seeds deterministic simulation-only actors. */
+  actors?: string;
 }
 
 /** Pattern every job-derived value (id/seed/preset/dbName) must match before
@@ -107,6 +111,15 @@ export function buildRunWorldArgs(job: SimJobExperimentFields): string[] {
       throw new Error(`invalid mode "${job.mode}"`);
     }
     args.push(`--mode=${job.mode}`);
+  }
+  // Simulation actor mode (#1993). Omitted means pure NPP autonomy (the
+  // harness default); an explicit value must be a known mode — a typo can
+  // never silently run the wrong population.
+  if (job.actors) {
+    if (!SIM_ACTOR_MODES.includes(job.actors as SimActorMode)) {
+      throw new Error(`invalid actors "${job.actors}"`);
+    }
+    args.push(`--actors=${job.actors}`);
   }
   if (job.countries) {
     // Comma-separated ids become part of a child-process argv — validate each.

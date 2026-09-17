@@ -123,6 +123,7 @@ async function main() {
                 "marketSystemMode",
                 "labourSystemMode",
                 "autonomyLevel",
+                "actors",
                 "allFeatureFlags",
                 "freightSettlementMode",
                 "canonicalFreightBillingEnabled",
@@ -141,6 +142,24 @@ async function main() {
       mcpVersion,
       ...(await gitProvenance()),
     };
+
+    // Actor coverage (#1993): the sandbox run doc carries the manifest
+    // stamped by runWorld from live counts. Attach the report-ready section
+    // — including the prominent per-mechanic warnings — so conclusions that
+    // touch a partial/unreachable system warn inline instead of presenting
+    // vacancies as balance evidence.
+    const actorManifest = (
+      sandboxRun as { actorCoverage?: import("@/lib/sim/actorCoverage").ActorCoverageManifest } | null
+    )?.actorCoverage;
+    if (actorManifest) {
+      const { buildActorCoverageSection } = await import("@/lib/sim/actorReport");
+      const section = buildActorCoverageSection(actorManifest);
+      (report as { actorCoverage?: unknown }).actorCoverage = {
+        manifest: actorManifest,
+        warnings: section.warnings,
+        lines: section.lines,
+      };
+    }
 
     await opsDb
       .collection("simExperimentReports")

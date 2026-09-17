@@ -22,6 +22,7 @@
  * entries rendered at the top of the report.
  */
 import { MongoClient } from "mongodb";
+import type { ActorCoverageManifest } from "@/lib/sim/actorCoverage";
 import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { getWorldEntityPresetManifest } from "@/lib/world/worldEntityManifest";
@@ -1370,6 +1371,19 @@ async function main(): Promise<void> {
   const clampedInflation = Object.entries(series)
     .filter(([, s]) => s.inflation.length > 0 && s.inflation[s.inflation.length - 1] >= 14.9)
     .map(([cid]) => cid);
+  // Actor coverage (#1993): runWorld stamps the manifest into the sandbox
+  // simRuns doc from live counts. A missing doc predates stamping and must
+  // warn, not pass silently.
+  const simRunDoc = (await db
+    .collection("simRuns")
+    .find({})
+    .sort({ startedAt: -1 })
+    .limit(1)
+    .toArray())[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
+  const { summarizeActorCoverageForVerdict } = await import("@/lib/sim/actorReport");
+  const actorCoverageVerdict = summarizeActorCoverageForVerdict(
+    simRunDoc?.actorCoverage ?? null
+  );
   const verdict = buildVerdict({
     health,
     market,
@@ -1379,6 +1393,7 @@ async function main(): Promise<void> {
     commandEconomy,
     auditFindings,
     clampedInflation,
+    actorCoverage: actorCoverageVerdict,
   });
 
   // Downsample the inlined series so the payload stays bounded as the run grows.
@@ -2183,6 +2198,7 @@ function buildVerdict(input: {
   commandEconomy: { marketizationStuck: string[] };
   auditFindings: AuditFinding[];
   clampedInflation: string[];
+  actorCoverage: { status: "good" | "warn" | "bad"; title: string; detail: string };
 }): VerdictLine[] {
   const out: VerdictLine[] = [];
   const {
@@ -2198,6 +2214,13 @@ function buildVerdict(input: {
 
   const critical = auditFindings.filter((f) => f.severity === "critical").length;
   const high = auditFindings.filter((f) => f.severity === "high").length;
+  // Actor coverage renders ABOVE every chart: partial/unreachable mechanics
+  // constrain what this checkpoint can conclude, and must be read first.
+  out.push({
+    status: input.actorCoverage.status,
+    title: input.actorCoverage.title,
+    detail: input.actorCoverage.detail,
+  });
   out.push({
     status: critical > 0 ? "bad" : high > 0 ? "warn" : "good",
     title:

@@ -44,6 +44,18 @@ import { LABOUR_MODE_ORDER, type LabourSystemMode } from "@/lib/labour/modes";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 import { applyCloneControllerPolicy } from "@/lib/sim/cloneControllers";
 import {
+  evaluateActorCoverage,
+  actorCoverageWarnings,
+  uncoveredEntries,
+  type ActorCoverageManifest,
+  type SimActorMode,
+} from "@/lib/sim/actorCoverage";
+import {
+  SIM_ACTOR_USERNAME_PREFIX,
+  parseSimActorMode,
+  snapshotActorPopulation,
+} from "@/lib/sim/syntheticActors";
+import {
   economicExperimentConfigSet,
   isGameplayOverrideArg,
   parseEquityLiquidityFacilityEnabled,
@@ -88,6 +100,10 @@ interface SimRunDoc {
   };
   nppForeignPolicyMode?: NppForeignPolicyMode;
   nppForeignPolicyStage?: NppForeignPolicyStage;
+  /** Simulation actor mode (#1993): pure NPP autonomy vs synthetic actors. */
+  actorMode?: SimActorMode;
+  /** Effective-run actor-coverage manifest evaluated from live sandbox counts. */
+  actorCoverage?: ActorCoverageManifest;
   preservePlayerRail?: boolean;
   preserveLiveConfig?: boolean;
   /** Autonomy tier and local-world difficulty the run was configured with. */
@@ -285,6 +301,10 @@ if (modeRaw && !SIM_TURN_PHASE_MODES.includes(modeRaw)) {
 }
 const simTurnPhaseMode = modeRaw as
   "full" | "elections-only" | "economy-only" | "macro-only" | undefined;
+// Simulation actor mode (#1993). Omitted means pure NPP autonomy —
+// byte-identical to every harness run before this flag existed. Explicit
+// selection is validated here so a typo fails fast before any sandbox work.
+const actorMode = parseSimActorMode(arg("actors"));
 const electionsOnly = simTurnPhaseMode === "elections-only";
 const economyOnly = simTurnPhaseMode === "economy-only";
 const macroOnly = simTurnPhaseMode === "macro-only";
@@ -947,6 +967,7 @@ async function main() {
         electionScope: electionScope ? [...electionScope] : null,
         nppForeignPolicyMode: foreignPolicyMode,
         nppForeignPolicyStage: foreignPolicyStage,
+        actorMode,
         preservePlayerRail,
         preserveLiveConfig,
         effectiveConfigInitial: {
@@ -970,6 +991,39 @@ async function main() {
       },
     }
   );
+
+  // Actor-coverage manifest (#1993): evaluate every known actor-gated mechanic
+  // as covered or unreachable from LIVE sandbox counts and stamp it into the
+  // effective run manifest. Pure NPP runs honestly report vacancies; synthetic
+  // mode without materialized synthetic characters degrades to unreachable
+  // (see SYNTHETIC_UNSEEDED_REASON) instead of claiming coverage from a flag.
+  {
+    const simUsernamePrefix = SIM_ACTOR_USERNAME_PREFIX.replace(/\./g, "\\.");
+    const [characters, users, syntheticCharacters, syntheticUsers] = await Promise.all([
+      db.collection("characters").countDocuments({}),
+      db.collection("users").countDocuments({}),
+      db.collection("characters").countDocuments({ isSynthetic: true }),
+      db.collection("users").countDocuments({ username: { $regex: `^${simUsernamePrefix}` } }),
+    ]);
+    const manifest = evaluateActorCoverage(
+      snapshotActorPopulation({
+        mode: actorMode,
+        preset,
+        characters,
+        users,
+        syntheticCharacters,
+        syntheticUsers,
+      }),
+      new Date().toISOString()
+    );
+    await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
+    log(
+      `Actor mode: ${actorMode} — ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
+        `/${manifest.mechanicCount} mechanics covered ` +
+        `(characters=${characters} users=${users} synthetic=${syntheticCharacters}/${syntheticUsers})`
+    );
+    for (const warning of actorCoverageWarnings(manifest)) log(warning);
+  }
 
   // Candidate-supply guard (#3253): some seeds (FR/IT/ES/SE/TR) ship no NPPs, so
   // their elections resolve empty. Flag scoped countries with no NPP supply so
