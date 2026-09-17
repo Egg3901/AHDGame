@@ -169,13 +169,6 @@ export interface PhysicalRollups {
   totalUnitsOnOrder: number;
 }
 
-export interface SectorDetailsResult {
-  sectorDetails: SectorDetailRow[];
-  totals: SectorFinancialTotals;
-  wageBillAnchorPerTurnBySectorId: Map<string, number>;
-  physicalRollups: PhysicalRollups;
-}
-
 /**
  * Per-sector detail rows plus corp-level financial totals (#587).
  *
@@ -184,7 +177,7 @@ export interface SectorDetailsResult {
  * Totals and the wage-bill/pension map accumulate as a side effect of the
  * row build, exactly as the inline loop always did.
  */
-export function buildSectorDetails(ctx: SectorRowContext): SectorDetailsResult {
+export function buildSectorDetails(ctx: SectorRowContext) {
   const {
     corporation,
     sectors,
@@ -746,4 +739,5 @@ export function buildSectorDetails(ctx: SectorRowContext): SectorDetailsResult {
   };
 }
 
+export type SectorDetailsResult = ReturnType<typeof buildSectorDetails>;
 export type SectorDetailRow = SectorDetailsResult["sectorDetails"][number];
