@@ -126,7 +126,7 @@ export default function CommoditiesGuidePage() {
           <section className="space-y-4">
             <SectionHeader id="overview">1. How the Market Works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
-              The commodity market connects corporations through 22 traded goods. Sectors that
+              The commodity market connects corporations through 28 goods and services. Sectors that
               produce certain goods <strong className="text-foreground">add to supply</strong>;
               sectors that consume them <strong className="text-foreground">add to demand</strong>.
               When supply is short, buyers pay a margin penalty. When supply exceeds demand, buyers
@@ -1038,7 +1038,7 @@ Examples:
                 ],
                 [
                   "Retail smooths out sector imbalances.",
-                  "Retail consumes all 22 commodities at low rates, scaled by GDP. It is a constant baseline demand floor. In a contraction, retail demand shrinks and commodity shortages self-correct. In a boom, retail demand amplifies every existing imbalance.",
+                  "Retail consumes a basket of 21 of the 28 commodities at low rates, scaled by GDP. It is a constant baseline demand floor. In a contraction, retail demand shrinks and commodity shortages self-correct. In a boom, retail demand amplifies every existing imbalance.",
                 ],
               ].map(([title, body]) => (
                 <li

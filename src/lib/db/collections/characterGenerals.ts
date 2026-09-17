@@ -87,10 +87,20 @@ export async function listCountryGenerals(db: Db, countryId: string): Promise<Co
 export async function getCharacterCommission(
   db: Db,
   characterId: string
-): Promise<{ commissioned: boolean; general: ProfileGeneral | null }> {
+): Promise<{
+  commissioned: boolean;
+  general: ProfileGeneral | null;
+  commissionedTurn?: number;
+  dismissedTurn?: number;
+}> {
   const doc = await getCharacterGeneralsCollection(db).findOne({ characterId });
   if (!doc) return { commissioned: false, general: null };
-  return { commissioned: isCommissioned(doc), general: doc.general ?? null };
+  return {
+    commissioned: isCommissioned(doc),
+    general: doc.general ?? null,
+    ...(doc.commissionedTurn !== undefined ? { commissionedTurn: doc.commissionedTurn } : {}),
+    ...(doc.dismissedTurn !== undefined ? { dismissedTurn: doc.dismissedTurn } : {}),
+  };
 }
 
 /** A member of a country's general corps. `spec` is their derived best-fit label. */

@@ -27,6 +27,11 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { computeMarketFormationSnapshot } from "@/lib/economy/marketFormation";
+import {
+  clampShare,
+  isTradableListing,
+  tradableListingIds,
+} from "@/lib/stockExchange/listingEligibility";
 import { NPP_MARKET_ENTRY_FUNNEL_COLLECTION } from "@/lib/turn/npp/entryDiagnostics";
 
 export const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
@@ -285,6 +290,35 @@ function marketQuality(
     return [Math.abs(listing.priceChange48h) / (notional / 1_000_000)];
   });
 
+  // Per-listing inventory concentration: each economic trade's notional is
+  // split evenly across its distinct named counterparties, so a float-only
+  // leg attributes fully to the trader on the other side. Rows with no named
+  // party are unattributable and narrow the sample instead of diluting it.
+  const notionalByListingParty = new Map<string, Map<string, number>>();
+  for (const trade of trades) {
+    const notional = nonnegative(trade.totalAnchor);
+    if (notional <= 0) continue;
+    const parties = new Set(
+      [trade.from, trade.to].map(tradePartyKey).filter((key): key is string => key != null)
+    );
+    if (parties.size === 0) continue;
+    const share = notional / parties.size;
+    const key = trade.corporationId.toString();
+    let byParty = notionalByListingParty.get(key);
+    if (!byParty) {
+      byParty = new Map();
+      notionalByListingParty.set(key, byParty);
+    }
+    for (const party of parties) byParty.set(party, (byParty.get(party) ?? 0) + share);
+  }
+  const topTraderShares: number[] = [];
+  for (const [listingId, byParty] of notionalByListingParty) {
+    if (!listingById.has(listingId)) continue;
+    const total = [...byParty.values()].reduce((sum, value) => sum + value, 0);
+    if (total <= 0) continue;
+    topTraderShares.push(Math.max(...byParty.values()) / total);
+  }
+
   return {
     openBuyOrders: open.filter((order) => order.type === "buy").length,
     openSellOrders: open.filter((order) => order.type === "sell").length,
@@ -296,7 +330,16 @@ function marketQuality(
     organicDepthAnchor,
     executionHours,
     amihud,
+    topTraderShares,
   };
+}
+
+function tradePartyKey(party: ShareTradeHistory["from"]): string | null {
+  if (!party) return null;
+  if (party.characterId) return `character:${party.characterId.toString()}`;
+  if (party.imperialCharacterId) return `imperial:${party.imperialCharacterId.toString()}`;
+  if (party.corporationId) return `corporation:${party.corporationId.toString()}`;
+  return party.name ? `name:${party.name}` : null;
 }
 
 function relevantMarketDiagnostics(
@@ -649,9 +692,20 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     "takeover_buyout",
   ]);
   const economicTrades = input.trades.filter((trade) => economicTradeKinds.has(trade.kind));
-  const quality = marketQuality(listings, input.shareOrders, economicTrades);
+  // The eligible tradable set (#2033): zero-share / zero-float rows stay
+  // visible as firms but leave every breadth denominator, and the retained
+  // 48-turn window is intersected with it so dissolved/delisted corporations
+  // cannot linger in a numerator after leaving the current listings.
+  const tradable = listings.filter(isTradableListing);
+  const tradableIds = tradableListingIds(listings);
+  const quality = marketQuality(tradable, input.shareOrders, economicTrades);
   const competition = relevantMarketDiagnostics(input.commodityParticipants, input.currentFlows);
-  const tradedCorporations = new Set(economicTrades.map((trade) => trade.corporationId.toString()));
+  const tradedCorporations = new Set(
+    economicTrades
+      .map((trade) => trade.corporationId.toString())
+      .filter((id) => tradableIds.has(id))
+  );
+  const tradableCount = tradable.length;
   const activeBonds = input.bonds.filter((bond) => !bond.matured);
   const sovereignBonds = activeBonds.filter((bond) => bond.issuerType === "sovereign");
   const corporateBonds = activeBonds.filter((bond) => bond.issuerType !== "sovereign");
@@ -922,9 +976,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         0
       ),
       activeTradedListingShare: metric(
-        ratio(tradedCorporations.size, listings.length),
-        listings.length,
-        "listed_firm_count_48_turns"
+        clampShare(ratio(tradedCorporations.size, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_48_turns"
       ),
       activeBonds: activeBonds.length,
       noHolderBondShare: metric(
@@ -977,15 +1031,15 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,
       twoSidedListingShare: metric(
-        ratio(quality.twoSidedListings, listings.length),
-        listings.length,
-        "listed_firm_count_open_order_books"
+        clampShare(ratio(quality.twoSidedListings, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_open_order_books"
       ),
       facilityQuotedListings: quality.facilityQuotedListings,
       organicTwoSidedListingShare: metric(
-        ratio(quality.organicTwoSidedListings, listings.length),
-        listings.length,
-        "listed_firm_count_open_order_books_excluding_liquidity_facility"
+        clampShare(ratio(quality.organicTwoSidedListings, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_open_order_books_excluding_liquidity_facility"
       ),
       medianQuotedSpreadPct: metric(
         median(quality.spreads),
@@ -1015,6 +1069,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         quality.amihud.length,
         "absolute_48h_return_pct_per_million_anchor_notional"
       ),
+      medianTopTraderNotionalShare48: metric(
+        median(quality.topTraderShares),
+        quality.topTraderShares.length,
+        "named_counterparty_share_of_listing_notional_48_turns"
+      ),
     },
     coverage,
     securitiesRecent12: {
@@ -1028,16 +1087,16 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       twoSidedListingShareMedian: recent12Median(
         input.turn,
         history,
-        ratio(quality.twoSidedListings, listings.length),
+        clampShare(ratio(quality.twoSidedListings, tradableCount)),
         (row) => row.twoSidedListingShare,
-        "listed_firm_count_open_order_books_median_12"
+        "tradable_listing_count_open_order_books_median_12"
       ),
       activeTradedListingShareMedian: recent12Median(
         input.turn,
         history,
-        ratio(tradedCorporations.size, listings.length),
+        clampShare(ratio(tradedCorporations.size, tradableCount)),
         (row) => row.activeTradedListingShare,
-        "listed_firm_count_48_turns_median_12"
+        "tradable_listing_count_48_turns_median_12"
       ),
       sovereignNoHolderBondShareMedian: recent12Median(
         input.turn,

@@ -9,6 +9,8 @@ import type { PrimaryStateActionKind } from "@/lib/db/types";
 import type { PrimaryViewerCampaign } from "@/lib/elections/dto/primaryPartyDetail";
 
 export interface StatePresenceRow {
+  builtThisTurn?: boolean;
+  spentThisTurn?: number | null;
   stateId: string;
   name: string;
   level: number;
