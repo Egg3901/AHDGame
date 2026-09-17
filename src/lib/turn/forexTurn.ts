@@ -17,7 +17,6 @@ import type {
 } from "@/lib/db/types/exchangeRate";
 import { FOREX_AND_MACRO_CHART_HISTORY_TURNS, MS_PER_TURN } from "@/lib/constants/turnTime";
 import type { CurrencyOrder } from "@/lib/db/types/currencyOrder";
-import type { TradeHistoryEntry } from "@/lib/db/types/tradeHistory";
 import type { Character } from "@/lib/db/types/character";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
@@ -25,9 +24,6 @@ import {
   INITIAL_RATES,
   getInitialRates,
   COUNTRY_CURRENCY_MAP,
-  LIMIT_ORDER_SPREAD,
-  SPREAD_FEE_CENTRAL_BANK_RATIO,
-  SPREAD_FEE_RESERVE_RATIO,
   CURRENCY_SYMBOLS,
   INTERVENTION_FAILURE_INFAMY,
   INTERVENTION_HISTORY_MAX,
@@ -47,6 +43,14 @@ import { interventionAdherenceMultiplier } from "@/lib/centralBank/marketEffects
 import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  applyForexTurnFillSpend,
+  forexTurnFillFingerprint,
+  forexTurnFillKey,
+  resumeForexTurnFillByKey,
+  FOREX_TURN_FILL_RACED,
+} from "@/lib/forex/forexSpend";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
 
 export interface ForexTurnResult {
@@ -773,21 +777,87 @@ interface LimitOrderResult {
  *
  * Spread revenue is split: 50% destroyed, 50% to central bank.
  *
- * Crash-safety: each order is atomically claimed (open/partial → processing)
- * before any credits are applied. If the process dies after claiming but
- * before completing, the order is left in "processing" (not "open"), so it
- * will not be replayed on the next turn. Orders stuck in "processing" for
- * more than 2 turns are recovered at the start of this function.
+ * Crash-safety (issue #1672): each fill settles through
+ * `applyForexTurnFillSpend` as keyed steps under a deterministic per-turn
+ * key, with the resume plan persisted on the receipt at claim time. A crash
+ * between one turn's fill steps converges on a later turn via the keyed
+ * recovery below (same-turn re-entry converges under the same key); the
+ * guarded order settle is what takes the order out of the scan, so a later
+ * turn only ever refills an order this attempt never touched. New fills
+ * never enter the legacy `processing` status — the stuck-order reset below
+ * heals only pre-migration rows.
  */
 async function processTriggeredLimitOrders(
   db: Db,
   currentTurn: number,
   now: Date
 ): Promise<LimitOrderResult> {
+  let ordersFilled = 0;
+  let totalSpreadRevenue = 0;
+  const notifications: FilledOrderNotification[] = [];
+
+  // ── Keyed-fill recovery ───────────────────────────────────────────────────
+  // Re-drive `in_progress` turn-fill receipts from prior turns through
+  // their stored plans BEFORE the scan, so a crash between one turn's fill
+  // steps converges now instead of stranding (settled without credit) or
+  // double-paying (refilled under a new key while the old credit landed).
+  // A resumed receipt settles its order, so the scan below never picks the
+  // same order up twice. Anything already settled (or unsettleable) is left
+  // alone: terminal receipts hold their outcome, plan-less orphans moved
+  // nothing and the scan fresh-fills the still-open order.
+  try {
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const orphans = await receipts
+      .find({ _id: { $regex: "^forex-turn-fill:" }, status: "in_progress" })
+      .limit(50)
+      .toArray();
+    const resumedByOrder = new Map<string, Awaited<ReturnType<typeof resumeForexTurnFillByKey>>>();
+    for (const orphan of orphans) {
+      try {
+        const resumed = await resumeForexTurnFillByKey(db, orphan._id);
+        if (!resumed) continue;
+        resumedByOrder.set(resumed.orderId.toHexString(), resumed);
+      } catch {
+        continue;
+      }
+    }
+    const recoveredIds = [...resumedByOrder.keys()];
+    const recoveredOrders =
+      recoveredIds.length > 0
+        ? await db
+            .collection<CurrencyOrder>("currencyOrders")
+            .find({ _id: { $in: [...resumedByOrder.values()].map((r) => r!.orderId) } })
+            .toArray()
+        : [];
+    const recoveredById = new Map(recoveredOrders.map((o) => [o._id.toHexString(), o]));
+    for (const resumed of resumedByOrder.values()) {
+      if (!resumed) continue;
+      // Spread is collected on both the filled and the owner-gone paths.
+      totalSpreadRevenue += resumed.centralBankShare;
+      if (resumed.outcome !== "filled") continue;
+      ordersFilled++;
+      const order = recoveredById.get(resumed.orderId.toHexString());
+      if (!order) continue;
+      notifications.push({
+        characterId: order.characterId,
+        characterName: order.characterName,
+        fromCurrency: order.fromCurrency,
+        toCurrency: order.toCurrency,
+        spentAmount: resumed.fillAmount,
+        receivedAmount: resumed.toAmount,
+        filledRate: resumed.filledRate,
+      });
+    }
+  } catch {
+    // Recovery is best effort: a receipt-store wobble must never block the
+    // live scan — unsettled orphans keep until the next turn.
+  }
+
   // ── Stuck-order recovery ──────────────────────────────────────────────────
-  // Orders left in "processing" from a prior crash are safe to re-attempt:
-  // they were claimed but never completed. Reset them to "open" so they are
-  // picked up in this turn's scan below. 2-turn window = 2 real-time hours.
+  // Orders left in "processing" by the pre-migration claim pattern are safe
+  // to re-attempt: they were claimed but never completed. Reset them to
+  // "open" so they are picked up in this turn's scan below. 2-turn window =
+  // 2 real-time hours.
   await db.collection<CurrencyOrder>("currencyOrders").updateMany(
     {
       status: "processing",
@@ -809,10 +879,6 @@ async function processTriggeredLimitOrders(
     })
     .sort({ createdAt: 1 })
     .toArray();
-
-  let ordersFilled = 0;
-  let totalSpreadRevenue = 0;
-  const notifications: FilledOrderNotification[] = [];
 
   for (const order of openOrders) {
     if (order.limitRate === undefined) continue;
@@ -841,149 +907,52 @@ async function processTriggeredLimitOrders(
     const remainingAmount = order.amount - order.filledAmount;
     if (remainingAmount <= 0) continue;
 
-    // ── Atomic claim: open/partial → processing ───────────────────────────
-    // This is the idempotency guard. If the process crashes after this point
-    // the order stays in "processing", not "open", and will not be replayed.
-    const claimResult = await db
-      .collection<CurrencyOrder>("currencyOrders")
-      .updateOne(
-        { _id: order._id, status: { $in: ["open", "partial"] } },
-        { $set: { status: "processing" as const, updatedAt: now } }
-      );
-    if (claimResult.modifiedCount === 0) {
-      // Another process already claimed it (or it was cancelled/expired concurrently).
-      continue;
-    }
-
-    // Calculate spread on the remaining fill
-    const spreadAmount = remainingAmount * LIMIT_ORDER_SPREAD;
-    const netAmount = remainingAmount - spreadAmount;
-    const centralBankShare = spreadAmount * SPREAD_FEE_CENTRAL_BANK_RATIO;
-
-    // Convert net fromCurrency to toCurrency at current cross rate
-    const toAmount = netAmount * crossRate;
-
-    totalSpreadRevenue += centralBankShare;
-
-    // Split the central bank share per the SPREAD_FEE_*_RATIO constants.
-    // forexRevenue (home revenue) stays with the fromCurrency country's CB. The
-    // reserve slice stays denominated in the collected fromCurrency but accrues
-    // to the *destination* (toCurrency) country's CB as a foreign reserve in the
-    // outflow currency — mirroring distributeSpreadFee's cross-currency routing.
-    // Use getBankId so shared-bank countries route to the correct bank document.
-    const fromCountryEntry = rates.find((r) => r.currencyCode === order.fromCurrency);
-    if (fromCountryEntry) {
-      const toReserveBalance = Math.floor(spreadAmount * SPREAD_FEE_RESERVE_RATIO);
-      const toForexRevenue = centralBankShare - toReserveBalance;
-      const fromBankId = getBankId(fromCountryEntry.countryId as Parameters<typeof getBankId>[0]);
-      const toCountryEntry = rates.find((r) => r.currencyCode === order.toCurrency);
-      const reserveBankId = toCountryEntry
-        ? getBankId(toCountryEntry.countryId as Parameters<typeof getBankId>[0])
-        : fromBankId;
-      const banks = db.collection<CentralBank>("centralBanks");
-      if (reserveBankId === fromBankId) {
-        await banks.updateOne(
-          { _id: fromBankId },
-          {
-            $inc: {
-              forexRevenue: toForexRevenue,
-              [`spreadFeeReserveBalances.${order.fromCurrency}`]: toReserveBalance,
-            } as Record<string, number>,
-          },
-          { upsert: true }
-        );
-      } else {
-        await Promise.all([
-          banks.updateOne(
-            { _id: fromBankId },
-            { $inc: { forexRevenue: toForexRevenue } as Record<string, number> },
-            { upsert: true }
-          ),
-          toReserveBalance > 0
-            ? banks.updateOne(
-                { _id: reserveBankId },
-                {
-                  $inc: {
-                    [`spreadFeeReserveBalances.${order.fromCurrency}`]: toReserveBalance,
-                  } as Record<string, number>,
-                },
-                { upsert: true }
-              )
-            : Promise.resolve(),
-        ]);
-      }
-    }
-
-    // Credit the purchased toCurrency to the character's personal balance.
-    // The fromCurrency was escrowed at order creation time — no deduction needed here.
-    const creditInc = buildPersonalBalanceInc(toAmount, order.toCurrency, true);
-    const creditResult = await db
-      .collection("characters")
-      .updateOne({ _id: order.characterId }, { $inc: creditInc });
-
-    // Character was deleted between order creation and fill — cancel the order
-    // so it doesn't retry every turn. Escrowed funds are unrecoverable.
-    // Record the trade for audit trail since spread was already collected.
-    if (creditResult.modifiedCount === 0) {
-      await db.collection<TradeHistoryEntry>("tradeHistory").insertOne({
-        buyerCharacterId: order.characterId,
-        sellerCharacterId: null,
-        fromCurrency: order.fromCurrency,
-        toCurrency: order.toCurrency,
-        amount: netAmount,
-        rate: crossRate,
-        spread: spreadAmount,
+    // Crash-safe settlement (issue #1672): the fill runs as keyed steps
+    // under a deterministic per-turn key (guarded settle + credit +
+    // spread slices + deterministic history row), with the resume plan
+    // persisted on the receipt at claim time. A same-turn retry converges
+    // under the key guards; a later turn only refills an order this attempt
+    // never touched. The fromCurrency was escrowed at order creation time —
+    // no deduction happens here.
+    let fill;
+    try {
+      fill = await applyForexTurnFillSpend(db, {
+        orderId: order._id,
+        crossRate,
         turn: currentTurn,
-        createdAt: now,
-        source: "limit_order",
-      } as TradeHistoryEntry);
-
-      await db
-        .collection<CurrencyOrder>("currencyOrders")
-        .updateOne({ _id: order._id }, { $set: { status: "expired" as const, updatedAt: now } });
-      continue;
+        now,
+        fingerprint: forexTurnFillFingerprint(
+          order._id,
+          currentTurn,
+          order.filledAmount,
+          remainingAmount
+        ),
+        idempotencyKey: forexTurnFillKey(currentTurn, order._id),
+      });
+    } catch (err) {
+      // A concurrent cancel, peer fill, or expiry won the settle race (or
+      // the remainder vanished first): the winner's outcome stands, so skip
+      // quietly. Anything else aborts the phase like the legacy throw did.
+      if (err instanceof Error && err.message.startsWith(FOREX_TURN_FILL_RACED)) continue;
+      throw err;
     }
+    if (fill.outcome === "skipped") continue;
 
-    // forexEnabled is always true here — this phase only runs inside the gameState.forexEnabled gate
-    // Record trade history entry
-    await db.collection<TradeHistoryEntry>("tradeHistory").insertOne({
-      buyerCharacterId: order.characterId,
-      sellerCharacterId: null, // market maker
-      fromCurrency: order.fromCurrency,
-      toCurrency: order.toCurrency,
-      amount: netAmount,
-      rate: crossRate,
-      spread: spreadAmount,
-      turn: currentTurn,
-      createdAt: now,
-      source: "limit_order",
-    } as TradeHistoryEntry);
+    totalSpreadRevenue += fill.centralBankShare;
 
-    // Update order to its terminal status (filled or partial)
-    const newFilledAmount = order.filledAmount + remainingAmount;
-    const newStatus = newFilledAmount >= order.amount ? "filled" : "partial";
-
-    await db.collection<CurrencyOrder>("currencyOrders").updateOne(
-      { _id: order._id },
-      {
-        $set: {
-          status: newStatus,
-          filledAmount: newFilledAmount,
-          filledRate: crossRate,
-          updatedAt: now,
-        },
-        $inc: { spreadCharged: spreadAmount },
-      }
-    );
+    // The owner row is gone: escrow died with the account, spread still
+    // collected and history written (legacy deleted-character path) — the
+    // order is released, never notified or tallied.
+    if (fill.outcome === "expired") continue;
 
     notifications.push({
       characterId: order.characterId,
       characterName: order.characterName,
       fromCurrency: order.fromCurrency,
       toCurrency: order.toCurrency,
-      spentAmount: remainingAmount,
-      receivedAmount: toAmount,
-      filledRate: crossRate,
+      spentAmount: fill.fillAmount,
+      receivedAmount: fill.toAmount,
+      filledRate: fill.filledRate,
     });
     ordersFilled++;
   }

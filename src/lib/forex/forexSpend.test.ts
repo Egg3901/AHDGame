@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ObjectId, type Db } from "mongodb";
+import { ObjectId, type Collection, type Db } from "mongodb";
 import {
   applyForexCancelSpend,
   applyForexFillSpend,
   applyForexOrderCreateSpend,
+  applyForexTurnFillSpend,
+  forexTurnFillFingerprint,
+  forexTurnFillKey,
+  resumeForexTurnFillByKey,
+  FOREX_TURN_FILL_RACED,
   FOREX_CANCEL_ORDER_MISSING,
   FOREX_CANCEL_UNAVAILABLE,
   FOREX_DIRECT_INSUFFICIENT,
@@ -17,6 +22,8 @@ import {
   FOREX_ORDER_INSUFFICIENT,
 } from "./forexSpend";
 import {
+  claimMoneyFlowReceipt,
+  failMoneyFlowReceipt,
   keyedInsertId,
   MoneyFlowKeyConflictError,
   MoneyFlowTerminalError,
@@ -1352,5 +1359,368 @@ describe("applyForexCancelSpend", () => {
         cancelInput(orderId, { fingerprint: "fp-cancel-other", idempotencyKey: "cancel-replay" })
       )
     ).rejects.toThrow(MoneyFlowKeyConflictError);
+  });
+});
+
+describe("applyForexTurnFillSpend (turn triggered fills)", () => {
+  const TURN = 50;
+  const CROSS_RATE = 0.75; // GBP per USD
+
+  /** A 10_000 USD -> GBP limit order with the maker escrow already taken. */
+  function seedTurnOrder(db: FakeDb, overrides: Record<string, unknown> = {}): ObjectId {
+    const orderId = new ObjectId();
+    db.collection("currencyOrders").docs.set(orderId.toHexString(), {
+      _id: orderId,
+      characterId: makerId,
+      characterName: "Maker",
+      countryId: "US",
+      type: "limit",
+      direction: "buy",
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 10_000,
+      filledAmount: 0,
+      limitRate: 0.7,
+      status: "open",
+      spreadCharged: 0,
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+      _id: orderId,
+    });
+    return orderId;
+  }
+
+  function fillInputFor(
+    db: FakeDb,
+    orderId: ObjectId,
+    crossRate: number = CROSS_RATE
+  ): Parameters<typeof applyForexTurnFillSpend>[1] {
+    const order = orderDoc(db, orderId);
+    const filled = order.filledAmount as number;
+    const remaining = (order.amount as number) - filled;
+    return {
+      orderId,
+      crossRate,
+      turn: TURN,
+      now,
+      fingerprint: forexTurnFillFingerprint(orderId, TURN, filled, remaining),
+      idempotencyKey: forexTurnFillKey(TURN, orderId),
+    };
+  }
+
+  // Legacy-exact expectations for 10_000 USD -> GBP at 0.75:
+  // spread 64, net 9936, credit 7452, CB share 48, reserve 32, revenue 16.
+  const EXPECTED = {
+    spread: 64,
+    net: 9_936,
+    credit: 7_452,
+    cbShare: 48,
+    reserve: 32,
+    revenue: 16,
+  };
+
+  function freshDb(): FakeDb {
+    const db = new FakeDb();
+    seedDb(db);
+    return db;
+  }
+
+  it("fills exactly once with legacy-exact amounts, routing, and history", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+
+    const result = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, orderId)
+    );
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      outcome: "filled",
+      fillAmount: 10_000,
+      toAmount: EXPECTED.credit,
+      filledRate: CROSS_RATE,
+      spreadAmount: EXPECTED.spread,
+      centralBankShare: EXPECTED.cbShare,
+      orderStatus: "filled",
+    });
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+    expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
+    expect(
+      (bankDoc(db, "UK").spreadFeeReserveBalances as Record<string, number>).USD
+    ).toBe(EXPECTED.reserve);
+    const settled = orderDoc(db, orderId);
+    expect(settled.status).toBe("filled");
+    expect(settled.filledAmount).toBe(10_000);
+    expect(settled.filledRate).toBe(CROSS_RATE);
+    expect(settled.spreadCharged).toBe(EXPECTED.spread);
+    const rows = historyDocs(db);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      buyerCharacterId: makerId,
+      sellerCharacterId: null,
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: EXPECTED.net,
+      rate: CROSS_RATE,
+      spread: EXPECTED.spread,
+      turn: TURN,
+      source: "limit_order",
+    });
+    expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
+  });
+
+  it("a crash between the plan write and the credit converges on retry", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    // Writes: 1 claim + 1 plan, then the crash lands on the credit leg.
+    db.crashAfterWrites = 2;
+
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(personalOf(db, makerId).GBP).toBe(0);
+    expect(orderDoc(db, orderId).status).toBe("open");
+    expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("in_progress");
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    const retry = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, orderId)
+    );
+
+    expect(retry.duplicate).toBe(true);
+    expect(retry.outcome).toBe("filled");
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
+    expect(historyDocs(db)).toHaveLength(1);
+    expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
+  });
+
+  it("a crash after the credit but before the settle never double-pays", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    // Writes: claim + plan + credit land, then the crash lands on the settle.
+    db.crashAfterWrites = 3;
+
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(orderDoc(db, orderId).status).toBe("open");
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
+
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(orderDoc(db, orderId).status).toBe("filled");
+    expect(historyDocs(db)).toHaveLength(1);
+  });
+
+  it("a crash mid-spread routes each bank slice exactly once", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    // Writes through the US spread slice land; the crash lands on the UK
+    // existence insert.
+    db.crashAfterWrites = 6;
+
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
+
+    expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
+    expect(
+      (bankDoc(db, "UK").spreadFeeReserveBalances as Record<string, number>).USD
+    ).toBe(EXPECTED.reserve);
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(historyDocs(db)).toHaveLength(1);
+    expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
+  });
+
+  it("replays the stored outcome on a duplicate retry without moving money", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    const first = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, orderId)
+    );
+    // A same-key retry recomputed at drifted rates still replays the stored
+    // plan amounts instead of refilling.
+    const second = await applyForexTurnFillSpend(db as unknown as Db, {
+      ...fillInputFor(db, orderId),
+      crossRate: 0.9,
+    });
+
+    expect(first.duplicate).toBe(false);
+    expect(second).toMatchObject({
+      duplicate: true,
+      outcome: "filled",
+      fillAmount: 10_000,
+      toAmount: EXPECTED.credit,
+      filledRate: CROSS_RATE,
+    });
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(historyDocs(db)).toHaveLength(1);
+  });
+
+  it("rejects a key reused for a different order", async () => {
+    const db = freshDb();
+    const orderA = seedTurnOrder(db);
+    const orderB = seedTurnOrder(db);
+    await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderA));
+
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, {
+        ...fillInputFor(db, orderB),
+        idempotencyKey: forexTurnFillKey(TURN, orderA),
+      })
+    ).rejects.toThrow(MoneyFlowKeyConflictError);
+    expect(orderDoc(db, orderB).status).toBe("open");
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+  });
+
+  it("fails closed on a same-key retry after a terminal settlement", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    const key = forexTurnFillKey(TURN, orderId);
+    const receipts = db.collection(
+      NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
+    ) as unknown as Collection<MoneyFlowReceipt>;
+    expect(await claimMoneyFlowReceipt(receipts, key, "fp-terminal")).toBe("fresh");
+    await failMoneyFlowReceipt(receipts, key, "FOREX_TURN_FILL_RACED:guard-rejected");
+
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
+    ).rejects.toThrow(MoneyFlowTerminalError);
+    expect(personalOf(db, makerId).GBP).toBe(0);
+    expect(orderDoc(db, orderId).status).toBe("open");
+  });
+
+  it("a settle loser compensates its credit instead of double-paying the winner", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    const key = forexTurnFillKey(TURN, orderId);
+    // Crash after the credit but before the settle, then a concurrent
+    // winner fills the order under its own key.
+    db.crashAfterWrites = 3;
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    const winner = orderDoc(db, orderId);
+    winner.status = "filled";
+    winner.filledAmount = 10_000;
+
+    await expect(
+      resumeForexTurnFillByKey(db as unknown as Db, key)
+    ).rejects.toThrow(new RegExp(FOREX_TURN_FILL_RACED));
+
+    // The loser's credit was reversed; the winner's fill stands untouched.
+    expect(personalOf(db, makerId).GBP).toBe(0);
+    expect(orderDoc(db, orderId).status).toBe("filled");
+    expect(receipt(db, key).status).toBe("compensated");
+  });
+
+  it("skips writeless on empty remainder, missing order, and unusable rate", async () => {
+    const db = freshDb();
+    const settledId = seedTurnOrder(db, { filledAmount: 10_000, status: "filled" });
+    const skipped = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, settledId)
+    );
+    expect(skipped.outcome).toBe("skipped");
+    expect(db.writeCount).toBe(0);
+    expect(
+      db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.size
+    ).toBe(0);
+
+    const missing = await applyForexTurnFillSpend(db as unknown as Db, {
+      ...fillInputFor(db, settledId),
+      orderId: new ObjectId(),
+    });
+    expect(missing.outcome).toBe("skipped");
+
+    const orderId = seedTurnOrder(db);
+    const badRate = await applyForexTurnFillSpend(db as unknown as Db, {
+      ...fillInputFor(db, orderId),
+      crossRate: Number.NaN,
+    });
+    expect(badRate.outcome).toBe("skipped");
+    expect(orderDoc(db, orderId).status).toBe("open");
+  });
+
+  it("expires the order while keeping spread and history when the owner is gone", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    db.collection("characters").docs.delete(makerId.toHexString());
+
+    const result = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, orderId)
+    );
+
+    expect(result).toMatchObject({ duplicate: false, outcome: "expired" });
+    expect(result.centralBankShare).toBe(EXPECTED.cbShare);
+    const settled = orderDoc(db, orderId);
+    expect(settled.status).toBe("expired");
+    expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
+    expect(historyDocs(db)).toHaveLength(1);
+    expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
+
+    const replay = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, orderId)
+    );
+    expect(replay).toMatchObject({ duplicate: true, outcome: "expired" });
+    expect(historyDocs(db)).toHaveLength(1);
+  });
+
+  it("merges same-bank slices into one write", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db, { toCurrency: "USD" });
+
+    const result = await applyForexTurnFillSpend(
+      db as unknown as Db,
+      fillInputFor(db, orderId, 1)
+    );
+
+    expect(result.outcome).toBe("filled");
+    expect(personalOf(db, makerId).USD).toBe(20_000 + 9_936);
+    expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
+    expect(
+      (bankDoc(db, "US").spreadFeeReserveBalances as Record<string, number>).USD
+    ).toBe(EXPECTED.reserve);
+  });
+
+  it("resumes a prior-turn orphan by key without a live input", async () => {
+    const db = freshDb();
+    const orderId = seedTurnOrder(db);
+    db.crashAfterWrites = 2;
+    await expect(
+      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+
+    const resumed = await resumeForexTurnFillByKey(
+      db as unknown as Db,
+      forexTurnFillKey(TURN, orderId)
+    );
+
+    expect(resumed).toMatchObject({
+      duplicate: true,
+      outcome: "filled",
+      fillAmount: 10_000,
+      toAmount: EXPECTED.credit,
+      orderId,
+    });
+    expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
+    expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
+    expect(await resumeForexTurnFillByKey(db as unknown as Db, "unrelated-key")).toBeNull();
   });
 });
