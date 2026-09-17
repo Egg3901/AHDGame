@@ -266,6 +266,14 @@ export interface Character {
   currentOffice: OfficeType | null;
   careerHistory?: CareerEvent[];
   /**
+   * Shared UK ministerial action pool (issue #2049). One pool per UK player
+   * across both offices, so a second title grants no extra actions. Optional
+   * so legacy characters without the migration still read.
+   */
+  sharedMinisterialActions?: number;
+  /** YYYY-MM-DD (`America/New_York`) for the last shared pool refill. Optional for legacy rows. */
+  sharedMinisterialActionResetDay?: string;
+  /**
    * Executive terms completed/assumed per country.
    * Stored explicitly so re-election + succession can both count toward limits
    * without re-deriving from career history on every eligibility check.
