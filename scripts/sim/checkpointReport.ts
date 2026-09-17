@@ -1374,16 +1374,11 @@ async function main(): Promise<void> {
   // Actor coverage (#1993): runWorld stamps the manifest into the sandbox
   // simRuns doc from live counts. A missing doc predates stamping and must
   // warn, not pass silently.
-  const simRunDoc = (await db
-    .collection("simRuns")
-    .find({})
-    .sort({ startedAt: -1 })
-    .limit(1)
-    .toArray())[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
+  const simRunDoc = (
+    await db.collection("simRuns").find({}).sort({ startedAt: -1 }).limit(1).toArray()
+  )[0] as { actorCoverage?: ActorCoverageManifest } | undefined;
   const { summarizeActorCoverageForVerdict } = await import("@/lib/sim/actorReport");
-  const actorCoverageVerdict = summarizeActorCoverageForVerdict(
-    simRunDoc?.actorCoverage ?? null
-  );
+  const actorCoverageVerdict = summarizeActorCoverageForVerdict(simRunDoc?.actorCoverage ?? null);
   const verdict = buildVerdict({
     health,
     market,

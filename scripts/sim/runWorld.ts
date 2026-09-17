@@ -995,6 +995,8 @@ async function main() {
   // skip seeding entirely and honestly report vacancies; synthetic mode
   // without materialized synthetic characters degrades to unreachable
   // (see SYNTHETIC_UNSEEDED_REASON) instead of claiming coverage from a flag.
+  // This pre-turn stamp proves the population exists; the manifest is
+  // re-stamped after the turn loop so reports carry executed evidence.
   {
     if (actorMode === "synthetic") {
       const { materializeSyntheticActors } = await import("@/lib/sim/materializeSyntheticActors");
@@ -1159,6 +1161,24 @@ async function main() {
           }
         );
       }
+    }
+
+    // Final actor-coverage re-stamp (#1993): the pre-turn manifest proves the
+    // population was materialized, but only this post-turn read proves which
+    // paths actually executed (crisis decisions, wealth rows, founded corps).
+    // Reports must never claim a covered path whose evidence counter is zero.
+    {
+      const { readActorPopulation } = await import("@/lib/sim/materializeSyntheticActors");
+      const snapshot = await readActorPopulation(db, { mode: actorMode, preset });
+      const manifest = evaluateActorCoverage(snapshot, new Date().toISOString());
+      await simRuns.updateOne({ _id: runId }, { $set: { actorCoverage: manifest } });
+      log(
+        `Actor coverage re-stamped: ${manifest.mechanicCount - uncoveredEntries(manifest).length}` +
+          `/${manifest.mechanicCount} covered ` +
+          `(crisisDecided=${snapshot.crisisDecidedInteractions} ` +
+          `wealthRows=${snapshot.wealthListRows} playerCorps=${snapshot.playerFoundedCorps})`
+      );
+      for (const warning of actorCoverageWarnings(manifest)) log(warning);
     }
 
     await simRuns.updateOne(

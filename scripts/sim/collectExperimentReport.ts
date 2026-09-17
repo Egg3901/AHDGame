@@ -149,12 +149,13 @@ async function main() {
     // touch a partial/unreachable system warn inline instead of presenting
     // vacancies as balance evidence.
     const actorManifest = (
-      sandboxRun as { actorCoverage?: import("@/lib/sim/actorCoverage").ActorCoverageManifest } | null
+      sandboxRun as {
+        actorCoverage?: import("@/lib/sim/actorCoverage").ActorCoverageManifest;
+      } | null
     )?.actorCoverage;
     {
-      const { buildActorCoverageSection, summarizeActorCoverageForVerdict } = await import(
-        "@/lib/sim/actorReport"
-      );
+      const { buildActorCoverageSection, summarizeActorCoverageForVerdict } =
+        await import("@/lib/sim/actorReport");
       // A run with no stamped manifest (predates coverage) must read UNKNOWN,
       // never silently drop the section: vacancies are then indistinguishable
       // from representative behavior.
