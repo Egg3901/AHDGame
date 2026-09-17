@@ -58,3 +58,79 @@ describe("runClearingPrePass with clearing disabled", () => {
     expect(result.contractedByCorpCommodity?.get("corpA")?.get("steel")).toBe(42);
   });
 });
+
+function makeSectorWorld() {
+  const corp = { _id: "corp1", brandLoyalty: 0.5, brandPostureNorm: 0 };
+  const sector = {
+    _id: "sector1",
+    corporationId: "corp1",
+    sectorType: "manufacturing",
+    strategyId: "standard",
+    revenue: 1_000_000,
+    producedUnits: 100,
+    contractAchievableUnits: 100,
+  };
+  const lookups = {
+    sectorsByCorp: new Map([["corp1", [sector]]]),
+    corpById: new Map([["corp1", corp]]),
+    globalCommodityBalances: new Map(),
+    priceRatioByCommodity: new Map(),
+    eraUnitScale: 1,
+    exchangeRatesByCurrency: new Map(),
+    stateResourceCapacityByState: new Map(),
+    countryClearingBooks: undefined,
+    rawStateBalances: new Map(),
+    statePriceRatioByState: new Map(),
+    reachablePriceRatioByCountry: new Map(),
+  } as unknown as Lookups;
+  return { corp, lookups };
+}
+
+describe("runClearingPrePass with clearing enabled", () => {
+  it("populates clearing results on the market and reports deterministic breaches", () => {
+    const { lookups } = makeSectorWorld();
+    const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
+    const result = runClearingPrePass(makeInput({ lookups, market }));
+
+    expect(market.clearingBySectorId?.has("sector1")).toBe(true);
+    expect(market.advertisingSellerDeliveredValueAnchorByCorpId).toBeDefined();
+    expect(result.clearingInvariantBreaches.length).toBeGreaterThan(0);
+    for (const breach of result.clearingInvariantBreaches) {
+      expect(breach.startsWith("corporationTurn: ")).toBe(true);
+    }
+    expect(result.brandLoyaltyUpdates).toEqual([]);
+    expect(result.buyerDemandByCorpCommodity).toBeUndefined();
+    expect(result.contractedByCorpCommodity).toBeUndefined();
+  });
+
+  it("rolls loyalty up and keeps the in-memory corp docs consistent", () => {
+    const { corp, lookups } = makeSectorWorld();
+    const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
+    const result = runClearingPrePass(makeInput({ lookups, market, brandLoyaltyEnabled: true }));
+
+    expect(result.brandLoyaltyUpdates.length).toBeGreaterThan(0);
+    for (const lu of result.brandLoyaltyUpdates) {
+      expect(lookups.corpById.get(lu.corpId)).toBe(corp);
+      expect(corp.brandLoyalty).toBe(Math.round(lu.loyalty * 100) / 100);
+      expect(corp.brandPostureNorm).toBe(Math.round(lu.postureNorm * 10000) / 10000);
+    }
+  });
+
+  it("returns buyer demand and reservation maps on the agreements path", () => {
+    const { lookups } = makeSectorWorld();
+    const market = { clearingEnabled: true, plantsEnabled: false } as MarketContext;
+    const result = runClearingPrePass(
+      makeInput({
+        lookups,
+        market,
+        supplyAgreementsEnabled: true,
+        settleableAgreements: [],
+        contractedByCorpCommodity: new Map(),
+      })
+    );
+
+    expect(result.buyerDemandByCorpCommodity).toBeDefined();
+    expect(result.contractedByCorpCommodity).toBeDefined();
+    expect(result.contractedByCorpCommodity?.size).toBe(0);
+  });
+});
