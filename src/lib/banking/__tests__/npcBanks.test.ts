@@ -4,6 +4,9 @@ import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Corporation } from "@/lib/db/types";
 import type { BankCharter } from "@/lib/db/types/bank";
 import { MODERN_DEPOSIT_CORRIDOR, MODERN_LENDING_CORRIDOR } from "@/lib/banking/regulationQ";
+import { NPP_CAPITAL_STATES } from "@/lib/admin/spawnNppCorporation";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
+import type { CountryId } from "@/lib/constants/countries";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -59,6 +62,17 @@ describe("npcBanks", () => {
     db.collection("corporations");
     db.collection("bankingLaws");
     db.collection("centralBanks");
+    db.collection("states");
+    // HQ states for the mocked capital map below (US/DC, UK/LON, RU/MOW).
+    db.collectionMocks.states!.findOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        const id = filter._id as string | undefined;
+        if (id === "DC") return { _id: "DC", countryId: "US" };
+        if (id === "LON") return { _id: "LON", countryId: "UK" };
+        if (id === "MOW") return { _id: "MOW", countryId: "RU" };
+        return null;
+      }
+    );
 
     db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
       _id: "default",
@@ -114,14 +128,18 @@ describe("npcBanks", () => {
   function wireSpawnToIssueCharter() {
     spawnNppCorporation.mockImplementation(
       async (_db: Db, input: { name: string; countryId: string; startingCapital: number }) => {
-        const currency = input.countryId === "UK" ? "GBP" : "USD";
+        // Treasury and HQ follow the seeded country so the real charter path
+        // finds an eligible corp (a USD-treasury RU corp would fail RUB
+        // eligibility and must surface, not silently skip).
+        const countryId = input.countryId as CountryId;
+        const currency = COUNTRY_CURRENCY_MAP[countryId] ?? "USD";
         const corp = makeCorp({
           _id: new ObjectId(),
           name: input.name,
-          countryId: input.countryId as "US" | "UK",
+          countryId: countryId as "US" | "UK",
           liquidCapital: input.startingCapital,
           liquidCurrencyCode: currency,
-          headquartersState: input.countryId === "UK" ? "LON" : "DC",
+          headquartersState: NPP_CAPITAL_STATES[countryId],
         });
 
         const priorFindOne = db.collectionMocks.corporations!.findOne.getMockImplementation();
@@ -227,7 +245,7 @@ describe("npcBanks", () => {
       const { getCharterCapitalRequirement } = await import("../charter");
       const requirement = await getCharterCapitalRequirement(db as unknown as Db, "USD");
 
-      // Pre-mark UK slots so only US is created (one currency, one debit to assert).
+      // Pre-mark UK/RU slots so only US is created (one currency, one debit to assert).
       corpsBySeedKey.set(
         "npc-bank:UK:0",
         makeCorp({ countryId: "UK", name: "Provincial Commercial Bank" })
@@ -235,6 +253,14 @@ describe("npcBanks", () => {
       corpsBySeedKey.set(
         "npc-bank:UK:1",
         makeCorp({ countryId: "UK", name: "Merchants Trust Company" })
+      );
+      corpsBySeedKey.set(
+        "npc-bank:RU:0",
+        makeCorp({ countryId: "RU", name: "Moscow Commercial Bank" })
+      );
+      corpsBySeedKey.set(
+        "npc-bank:RU:1",
+        makeCorp({ countryId: "RU", name: "Volga Savings Bank" })
       );
 
       let lastDebit: number | undefined;
