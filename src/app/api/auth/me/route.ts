@@ -23,6 +23,8 @@ import { getGameState } from "@/lib/gameState";
 import { isRedistrictingEnabled } from "@/lib/redistricting/flag";
 import { loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { getNotificationBundleUserIds } from "@/lib/notifications/notificationBundle";
+import { getClientIp } from "@/lib/utils/network";
+import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import { unifiedSessionIsCurrent } from "@/lib/auth/unifiedSession";
 
 function getPatreonAdPreference(
@@ -150,6 +152,30 @@ export const GET = withNoStore(async () => {
       .catch(() => {
         /* ignore errors */
       });
+
+    // Catch IP rotation that happens WITHOUT a re-login, which capture at the
+    // auth endpoints alone misses entirely. That is the evasion this exists to
+    // see: a player who changes network mid-session never re-authenticates, so
+    // `lastKnownIp` keeps reporting the address they logged in from.
+    //
+    // The equality check short-circuits before any I/O, so a player on a stable
+    // address costs nothing. When it does fire, the writer's debounce collapses
+    // repeat sightings, so a roaming player costs one indexed lookup per page
+    // rather than a write. Fire-and-forget, like the update above: identity
+    // history must never be able to slow or fail a page load.
+    // `getClientIp` reads `headers()`, so it is resolved HERE, inside the
+    // request scope. Reading it from a detached continuation instead can throw
+    // once the response has been sent, which would silently disable this whole
+    // capture path. Only the database write is fire-and-forget.
+    const sessionIp = await getClientIp();
+    if (sessionIp !== user?.lastKnownIp) {
+      recordIdentitySignals(db, {
+        userId: new ObjectId(userId),
+        ip: sessionIp,
+        observedAt: new Date(),
+        source: "session",
+      });
+    }
 
     // Get home state name, party name, and unread count in parallel
     let homeStateName: string | undefined;
