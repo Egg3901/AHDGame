@@ -11,6 +11,7 @@ import {
   DirectActionBalanceConflictError,
 } from "@/lib/npps/commands/directAction";
 import { getNppDirectActionView } from "@/lib/npps/queries/directAction";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 
 const bodySchema = z.object({
   action: z.enum([
@@ -34,6 +35,12 @@ interface RouteParams {
 // POST /api/npps/[id]/direct-action - Execute the shared player-to-NPP direct-action workflow.
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 404, 409, 429
+//
+// Crash-safe settlement (issue #1672): the AP/funds debit plus the
+// relationship, endorsement, NPP-stat, and audit writes run as exactly-once
+// money flow under the client's `Idempotency-Key` (minted when absent). A
+// retry with the same key replays the stored outcome instead of charging
+// again.
 export async function POST(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -43,6 +50,11 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const auth = await requireAuthWithCharacter();
     if (!auth.ok) return auth.response;
+
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
 
     const rateLimit = checkRateLimit(auth.user.userId, 30, 60_000);
     if (!rateLimit.ok) return rateLimitResponse(rateLimit.retryAfter);
@@ -59,6 +71,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       actorParty: auth.user.character.party,
       action: parsed.data.action,
       candidacyId: parsed.data.candidacyId,
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
     });
 
     if ("error" in result) {
@@ -75,6 +88,18 @@ export async function POST(request: Request, { params }: RouteParams) {
   } catch (error) {
     if (error instanceof DirectActionBalanceConflictError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof MoneyFlowTerminalError) {
+      return NextResponse.json(
+        { error: "Action already settled; start a new attempt with a new key." },
+        { status: 409 }
+      );
+    }
+    if (error instanceof MoneyFlowKeyConflictError) {
+      return NextResponse.json(
+        { error: "Idempotency key was reused for a different action." },
+        { status: 409 }
+      );
     }
     return handleRouteError(error);
   }

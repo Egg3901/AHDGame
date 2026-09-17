@@ -143,6 +143,25 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * compensates the debit and reports the historical ORG_RACE_OR_THROTTLE 409,
  * with Idempotency-Key validation/forwarding and route-level
  * replay/terminal/conflict tests).
+ * Player-to-NPP direct actions are migrated (AP + campaign-funds debit via a
+ * keyed leg that keeps the exact historical dual guard, including the
+ * zero-cash actions-only shape with its `$gte: 0` funds assertion, then the
+ * relationship upsert, the conditional endorsement upsert, the NPP stat
+ * write, and the deterministic audit row via the directActionSpend
+ * primitive, with Idempotency-Key validation/forwarding and route-level
+ * replay/terminal/conflict tests). Validation runs only for fresh keys: a
+ * receipt already on file means the first attempt validated, so a
+ * crash-recovery retry skips the cost gates (which post-debit reads would
+ * fail) and reconciles through the keyed steps, reporting the stored audit
+ * row. The endorsement keeps the historical conditional shape (refresh the
+ * active row for the target, else insert and withdraw the stale rows) but
+ * the insert `_id` is derived from the idempotency key, so concurrent
+ * same-key applies collapse onto one row via E11000 instead of duplicating
+ * it; cross-key races keep the legacy no-transaction semantics, and the
+ * revert removes only this attempt's row and reactivates the snapshot set
+ * (unlike the historical rollback, which deleted every row for the
+ * election). Reporting always follows the stored docs, so a retry returns
+ * the first attempt's exact result.
  * Forex turn chair interventions are migrated
  * (applyForexInterventionSpend: deterministic per-turn key, resume plan
  * persisted on the receipt at claim, keyed rate-writeback + combined
@@ -163,10 +182,7 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * instead of throwing `RangeError`.
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
- * are keyed; surrounding equity/dividend/cross-fund writes are not),
- * directAction — multi-write status machines, positional
- * holder claims, and bulkWrite batches that need reserve/order/history
- * support beyond keyed single-document writes.
+ * are keyed; surrounding equity/dividend/cross-fund writes are not).
  * Military recruitment sits outside even that: manual unwind (ministerial
  * action, manpower pool, defence appropriation, arsenal lots, unit insert)
  * with no transaction wrapper at all. Migrating one of those means

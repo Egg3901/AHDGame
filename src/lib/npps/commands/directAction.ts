@@ -1,10 +1,9 @@
-import { ObjectId, type ClientSession, type Db } from "mongodb";
+import { randomUUID } from "node:crypto";
+import { ObjectId, type Db } from "mongodb";
 import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import type {
-  CapitalActionLog,
   Character,
   Election,
   ElectionCandidate,
@@ -16,25 +15,21 @@ import type {
 import {
   buildCapitalActionPlan,
   validateCapitalAction,
+  CAPITAL_ACTIONS,
   type CapitalActionContext,
 } from "@/lib/capital/actions";
-import {
-  getEndorsementDecisionPhase,
-  nppCanPlausiblyEndorseElection,
-  upsertNppEndorsement,
-} from "@/lib/nppEndorsements";
+import { nppCanPlausiblyEndorseElection } from "@/lib/nppEndorsements";
 import { evaluateRequestedEndorsement } from "@/lib/npps/queries/directAction";
 import { isSameCountry } from "@/lib/api/sameCountry";
 import { statMultiplier } from "@/lib/stats/statMultiplier";
 import { NEUTRAL_STAT } from "@/lib/stats/statsConstants";
+import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
+import {
+  applyDirectActionSpend,
+  buildDirectActionFingerprint,
+} from "@/lib/npps/commands/directActionSpend";
 
-export class DirectActionBalanceConflictError extends Error {}
-
-interface DirectActionRollbackSnapshot {
-  relationship: NPPRelationship | null;
-  endorsementElectionId?: ObjectId;
-  endorsements?: NPPEndorsement[];
-}
+export { DirectActionBalanceConflictError } from "@/lib/npps/commands/directActionSpend";
 
 export async function applyNppDirectAction(
   db: Db,
@@ -44,6 +39,7 @@ export async function applyNppDirectAction(
     actorParty,
     action,
     candidacyId,
+    idempotencyKey,
   }: {
     nppId: ObjectId;
     characterId: ObjectId;
@@ -56,6 +52,7 @@ export async function applyNppDirectAction(
       | "reduce_favorability"
       | "reduce_influence";
     candidacyId?: string;
+    idempotencyKey?: string;
   }
 ) {
   const forexEnabled = await isForexEnabled();
@@ -92,6 +89,15 @@ export async function applyNppDirectAction(
     } as const;
   }
 
+  const config = CAPITAL_ACTIONS[action];
+  if (!config) {
+    return {
+      error: `Unknown action: ${action}`,
+      failure: "unknown_action" as const,
+      status: 400,
+    } as const;
+  }
+
   const currentActions = characterDoc.actions ?? 0;
   const useForexCampaignBalance =
     forexEnabled && typeof characterDoc.currencyBalances?.campaign === "number";
@@ -114,53 +120,6 @@ export async function applyNppDirectAction(
     targetPoliticalInfluence: npp.politicalInfluence ?? 0,
     context: { candidacyId },
   };
-  const validation = validateCapitalAction(action, validationCtx);
-  if (!validation.ok || !validation.config) {
-    return {
-      error: validation.message ?? "Action rejected",
-      failure: validation.failure,
-      status: 400,
-    } as const;
-  }
-
-  if (action === "request_endorsement") {
-    const candidacy = await db.collection<ElectionCandidate>("electionCandidates").findOne({
-      _id: new ObjectId(candidacyId!),
-      characterId,
-      status: "active",
-    });
-    if (!candidacy || candidacy.isNPP) {
-      return { error: "Selected candidacy is not active.", status: 400 } as const;
-    }
-
-    const election = await db
-      .collection<Election>("elections")
-      .findOne({ _id: candidacy.electionId });
-    if (!election) {
-      return { error: "Selected candidacy is not active.", status: 400 } as const;
-    }
-    if (!nppCanPlausiblyEndorseElection(npp, election)) {
-      return {
-        error: "This NPP cannot endorse a candidacy outside their country.",
-        status: 400,
-      } as const;
-    }
-
-    const evaluation = evaluateRequestedEndorsement({
-      npp,
-      election,
-      candidateCharacter: characterDoc,
-      relationshipScore: currentRelationship,
-    });
-    if (!evaluation.canRequest) {
-      return {
-        error: "This NPP is likely to decline your endorsement request right now.",
-        failure: "relationship_too_low",
-        status: 400,
-      } as const;
-    }
-  }
-
   const plan = buildCapitalActionPlan(action, validationCtx);
   const now = new Date();
 
@@ -187,227 +146,172 @@ export async function applyNppDirectAction(
   const fundCostLocal = useForexCampaignBalance ? plan.fundCost * homeFxRate : plan.fundCost;
   const campaignFundsField = useForexCampaignBalance ? "currencyBalances.campaign" : "funds";
 
-  const applyDirectAction = async (
-    session?: ClientSession,
-    onActionSpent?: () => void
-  ): Promise<{ actions: number; funds: number }> => {
-    const characterUpdate = await db.collection<Character>("characters").findOneAndUpdate(
-      {
-        _id: characterId,
-        actions: { $gte: plan.actionCost },
-        [campaignFundsField]: { $gte: fundCostLocal },
-      },
-      {
-        $inc: {
-          actions: -plan.actionCost,
-          [campaignFundsField]: -fundCostLocal,
-        },
-      },
-      { returnDocument: "after", ...(session ? { session } : {}) }
-    );
-    if (!characterUpdate) {
-      throw new DirectActionBalanceConflictError(
-        "Action balance changed mid-interaction; reload and try again."
-      );
+  const fingerprint = buildDirectActionFingerprint({
+    characterId,
+    nppId,
+    action,
+    candidacyId,
+    actionCost: plan.actionCost,
+    fundCostAnchor: plan.fundCost,
+    fundsField: campaignFundsField,
+  });
+  const key = idempotencyKey !== undefined ? idempotencyKey : randomUUID();
+  if (key.length === 0 || key.length > 128) {
+    throw new RangeError("Direct-action idempotency key must be 1-128 characters");
+  }
+
+  // A receipt already on file means this key was seen before: the first
+  // attempt already passed validation, so a crash-recovery retry (or a
+  // duplicate delivery) must NOT re-validate against post-debit reads, where
+  // the spent balances would fail the cost gates. It reconciles through the
+  // keyed steps instead and reports the stored outcome.
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const priorReceipt = await receipts.findOne({ _id: key });
+
+  if (!priorReceipt) {
+    const validation = validateCapitalAction(action, validationCtx);
+    if (!validation.ok || !validation.config) {
+      return {
+        error: validation.message ?? "Action rejected",
+        failure: validation.failure,
+        status: 400,
+      } as const;
     }
 
-    onActionSpent?.();
-
-    await db.collection<NPPRelationship>("nppRelationships").updateOne(
-      { _id: relationshipKey },
-      {
-        $set: {
-          relationshipScore: newRelationship,
-          lastAttemptTurn: currentTurn,
-          updatedAt: now,
-        },
-        $setOnInsert: {
-          _id: relationshipKey,
-          characterId,
-          nppId,
-          createdAt: now,
-        },
-        $inc: { totalAttempts: 1, successfulAttempts: 1 },
-      },
-      { upsert: true, ...(session ? { session } : {}) }
-    );
-
-    const context: CapitalActionLog["context"] = {};
-    if (plan.sideEffects.createEndorsement) {
-      const candidacyOid = new ObjectId(plan.sideEffects.createEndorsement.candidacyId);
-      const candidacy = await db
-        .collection<ElectionCandidate>("electionCandidates")
-        .findOne({ _id: candidacyOid, status: "active" }, session ? { session } : undefined);
-      if (candidacy) {
-        const [election, candidateCountAtDecision] = await Promise.all([
-          db
-            .collection<Election>("elections")
-            .findOne({ _id: candidacy.electionId }, session ? { session } : undefined),
-          db
-            .collection<ElectionCandidate>("electionCandidates")
-            .countDocuments(
-              { electionId: candidacy.electionId, status: "active" },
-              session ? { session } : undefined
-            ),
-        ]);
-
-        if (election) {
-          await upsertNppEndorsement(db, {
-            npp,
-            candidate: candidacy,
-            source: "arranged",
-            now,
-            currentTurn,
-            candidateCountAtDecision,
-            electionPhaseAtDecision: getEndorsementDecisionPhase(election, currentTurn, now),
-            arrangedBy: characterId,
-            arrangedByParty: actorParty,
-            session,
-          });
-        }
-      }
-      context.candidacyId = candidacyOid;
-    }
-
-    if (
-      plan.sideEffects.favorabilityDelta !== undefined ||
-      plan.sideEffects.politicalInfluenceDelta !== undefined
-    ) {
-      await db.collection<NPP>("npps").updateOne(
-        { _id: nppId },
-        {
-          $set: {
-            favorability: updatedFavorability,
-            politicalInfluence: updatedPoliticalInfluence,
-            updatedAt: now,
-          },
-        },
-        session ? { session } : undefined
-      );
-    }
-
-    await db.collection<CapitalActionLog>("capitalActionLogs").insertOne(
-      {
-        _id: new ObjectId(),
+    if (action === "request_endorsement") {
+      const candidacy = await db.collection<ElectionCandidate>("electionCandidates").findOne({
+        _id: new ObjectId(candidacyId!),
         characterId,
-        nppId,
-        action,
-        actionsSpent: plan.actionCost,
-        fundsSpent: plan.fundCost,
-        relationshipBefore: currentRelationship,
-        relationshipAfter: newRelationship,
-        effectSummary: plan.effectSummary,
-        context,
-        turn: currentTurn,
-        createdAt: now,
-      },
-      session ? { session } : undefined
-    );
-
-    return {
-      actions: characterUpdate.actions,
-      funds: characterUpdate.currencyBalances?.campaign ?? characterUpdate.funds ?? 0,
-    };
-  };
-
-  const remainingBalances = await runWithOptionalTransaction(
-    async (session) => applyDirectAction(session),
-    async () => {
-      const rollbackSnapshot: DirectActionRollbackSnapshot = { relationship: relationshipDoc };
-      if (plan.sideEffects.createEndorsement) {
-        const candidacy = await db.collection<ElectionCandidate>("electionCandidates").findOne({
-          _id: new ObjectId(plan.sideEffects.createEndorsement.candidacyId),
-        });
-        if (candidacy) {
-          rollbackSnapshot.endorsementElectionId = candidacy.electionId;
-          rollbackSnapshot.endorsements = await db
-            .collection<NPPEndorsement>("nppEndorsements")
-            .find({ nppId, electionId: candidacy.electionId })
-            .toArray();
-        }
+        status: "active",
+      });
+      if (!candidacy || candidacy.isNPP) {
+        return { error: "Selected candidacy is not active.", status: 400 } as const;
       }
 
-      let actionSpent = false;
-      try {
-        return await applyDirectAction(undefined, () => {
-          actionSpent = true;
-        });
-      } catch (error) {
-        if (actionSpent) {
-          await db.collection<Character>("characters").updateOne(
-            { _id: characterId },
-            {
-              $inc: {
-                actions: plan.actionCost,
-                [campaignFundsField]: fundCostLocal,
-              },
-            }
-          );
-        }
-        if (rollbackSnapshot.relationship) {
-          await db
-            .collection<NPPRelationship>("nppRelationships")
-            .replaceOne({ _id: relationshipKey }, rollbackSnapshot.relationship, {
-              upsert: true,
-            });
-        } else {
-          await db
-            .collection<NPPRelationship>("nppRelationships")
-            .deleteOne({ _id: relationshipKey });
-        }
-        if (
-          plan.sideEffects.favorabilityDelta !== undefined ||
-          plan.sideEffects.politicalInfluenceDelta !== undefined
-        ) {
-          await db.collection<NPP>("npps").updateOne(
-            { _id: nppId },
-            {
-              $set: {
-                favorability: npp.favorability,
-                politicalInfluence: npp.politicalInfluence,
-                updatedAt: npp.updatedAt,
-              },
-            }
-          );
-        }
-        if (rollbackSnapshot.endorsementElectionId) {
-          await db.collection<NPPEndorsement>("nppEndorsements").deleteMany({
-            nppId,
-            electionId: rollbackSnapshot.endorsementElectionId,
-          });
-          if ((rollbackSnapshot.endorsements?.length ?? 0) > 0) {
-            await db
-              .collection<NPPEndorsement>("nppEndorsements")
-              .insertMany(rollbackSnapshot.endorsements!);
-          }
-        }
-        throw error;
+      const election = await db
+        .collection<Election>("elections")
+        .findOne({ _id: candidacy.electionId });
+      if (!election) {
+        return { error: "Selected candidacy is not active.", status: 400 } as const;
+      }
+      if (!nppCanPlausiblyEndorseElection(npp, election)) {
+        return {
+          error: "This NPP cannot endorse a candidacy outside their country.",
+          status: 400,
+        } as const;
+      }
+
+      const evaluation = evaluateRequestedEndorsement({
+        npp,
+        election,
+        candidateCharacter: characterDoc,
+        relationshipScore: currentRelationship,
+      });
+      if (!evaluation.canRequest) {
+        return {
+          error: "This NPP is likely to decline your endorsement request right now.",
+          failure: "relationship_too_low",
+          status: 400,
+        } as const;
       }
     }
-  );
+  }
+
+  // Endorsement inputs are assembled on every path (fresh and replay): the
+  // spend primitive re-reads the candidacy/election at apply time so a retry
+  // converges, and the snapshot below feeds the compensation revert.
+  let endorsement: {
+    candidacyId: string;
+    arrangedByParty?: string;
+    now: Date;
+    currentTurn: number;
+    priorActive: NPPEndorsement[];
+  } | null = null;
+  let context: { candidacyId?: ObjectId } = {};
+  if (plan.sideEffects.createEndorsement) {
+    const endorsementCandidacyId = plan.sideEffects.createEndorsement.candidacyId;
+    if (!endorsementCandidacyId) {
+      throw new TypeError("Direct-action endorsement plan needs candidacyId");
+    }
+    const candidacyOid = new ObjectId(endorsementCandidacyId);
+    context = { candidacyId: candidacyOid };
+    const candidacy = await db
+      .collection<ElectionCandidate>("electionCandidates")
+      .findOne({ _id: candidacyOid });
+    const priorActive =
+      candidacy && !candidacy.isNPP
+        ? await db
+            .collection<NPPEndorsement>("nppEndorsements")
+            .find({ nppId, electionId: candidacy.electionId, isActive: true })
+            .toArray()
+        : [];
+    endorsement = {
+      candidacyId: endorsementCandidacyId,
+      ...(actorParty ? { arrangedByParty: actorParty } : {}),
+      now,
+      currentTurn,
+      priorActive,
+    };
+  }
+
+  const favorUpdate =
+    plan.sideEffects.favorabilityDelta !== undefined ||
+    plan.sideEffects.politicalInfluenceDelta !== undefined
+      ? {
+          favorability: updatedFavorability,
+          politicalInfluence: updatedPoliticalInfluence,
+          updatedAt: now,
+          prior: {
+            favorability: npp.favorability,
+            politicalInfluence: npp.politicalInfluence,
+            updatedAt: npp.updatedAt,
+          },
+        }
+      : null;
+
+  const outcome = await applyDirectActionSpend(db, {
+    characterId,
+    nppId,
+    nppName: npp.name,
+    relationshipKey,
+    action,
+    actionCost: plan.actionCost,
+    fundCostLocal,
+    fundsField: campaignFundsField,
+    relationshipDelta,
+    relationshipBefore: currentRelationship,
+    relationshipAfter: newRelationship,
+    lastAttemptTurn: currentTurn,
+    priorRelationship: relationshipDoc,
+    favorUpdate,
+    endorsement,
+    log: {
+      actionsSpent: plan.actionCost,
+      fundsSpentAnchor: plan.fundCost,
+      effectSummary: plan.effectSummary,
+      turn: currentTurn,
+      context,
+    },
+    now,
+    fingerprint,
+    idempotencyKey: key,
+  });
 
   const homeCurrency = getHomeCurrency(characterDoc);
   const currencySymbol = CURRENCY_SYMBOLS[homeCurrency] ?? "$";
 
   return {
     success: true,
-    effect: plan.effectSummary,
-    action,
-    actions: {
-      current: remainingBalances.actions,
-      spent: plan.actionCost,
-    },
+    effect: outcome.effect,
+    action: outcome.action,
+    actions: outcome.actions,
     funds: {
-      current: remainingBalances.funds,
+      current: outcome.funds.current,
       // fundCostLocal is the stored (home-currency) amount we just debited.
       spent: Math.round(fundCostLocal),
     },
     homeCurrency,
     currencySymbol,
-    relationship: {
-      before: currentRelationship,
-      after: newRelationship,
-      delta: relationshipDelta,
-    },
+    relationship: outcome.relationship,
   } as const;
 }
