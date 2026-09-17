@@ -104,6 +104,26 @@ describe("seedPoliticalMetrics", () => {
     );
   });
 
+  it("applies no texture outside the 1953-default preset", async () => {
+    // The texture was derived against 1953 baselines; any other preset keeps
+    // the previous baseline+modifier shape. AL carries no workerSecurity
+    // modifier, so it lands on the bare baseline; MI's modifier still wins.
+    await seedPoliticalMetrics(db as unknown as Db, false, () => {}, 2027, "2027-default");
+    const calls = bulkOps(db.collectionMocks["politicalMetrics"]!.bulkWrite);
+    const get = (id: string) =>
+      (calls.find((c) => (c[0] as { _id: string })._id === id)![1] as { $set: PoliticalMetricsDoc })
+        .$set.values;
+    expect(get("AL")["economy.workerSecurity"]).toBe(
+      expectedPlayable("US", "AL", "economy.workerSecurity", "2027-default")
+    );
+    expect(get("AL")["economy.workerSecurity"]).toBe(
+      NATIONAL_BASELINES_1953.US["economy.workerSecurity"].value
+    );
+    expect(get("MI")["economy.workerSecurity"]).toBe(
+      expectedPlayable("US", "MI", "economy.workerSecurity", "2027-default")
+    );
+  });
+
   it("seeds non-playable regions from the committed board file", async () => {
     db.collection("states")
       .find()
