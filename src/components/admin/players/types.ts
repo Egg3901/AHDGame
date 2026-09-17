@@ -68,8 +68,22 @@ export interface UserData {
   } | null;
 }
 
-export type MatchReason = "ip" | "fingerprint" | "tracking" | "device";
-export type GroupMember = UserData & { matchReasons: MatchReason[] };
+/** `*-past` means the value was shared within the 90-day history window but is
+ * no longer either account's current value. A moderator has to be able to tell
+ * "these two share a fingerprint right now" from "these two shared one six
+ * weeks ago"; collapsing the two would make the cards less trustworthy. */
+export type MatchReason =
+  "ip" | "fingerprint" | "tracking" | "device" | "ip-past" | "fingerprint-past";
+export type GroupMember = UserData & {
+  matchReasons: MatchReason[];
+  /** True when this member's ONLY link to the group is a shared IP, current or
+   * historical. Shared IPs are the least reliable signal (cgNAT, VPNs, DHCP
+   * reassignment, household networks), so a member joined by nothing else needs
+   * a caveat even when OTHER members of the group are strongly linked. The
+   * group-level `cgnatSuspect` cannot say this: it requires EVERY member to be
+   * IP-only, so it goes quiet on exactly the mixed groups that mislead. */
+  weakMatch: boolean;
+};
 
 export interface DuplicateGroup {
   members: GroupMember[];

@@ -3,7 +3,12 @@ import type { DuplicateGroup, GroupMember, MatchReason, UserData } from "./types
 
 /**
  * Build duplicate groups from shared IPs, tracking cookies, device keys and
- * exact fingerprints.
+ * exact fingerprints — both the accounts' CURRENT values and the values they
+ * were seen on within the last 90 days (`historicalIps` /
+ * `historicalFingerprints`, from `identityObservations`). Historical matches
+ * are reported as their own `*-past` reasons, never folded into the current
+ * ones. Without them, rotating a fingerprint removed an account from the panel
+ * entirely while the scoring engine still scored the link at 0.95.
  *
  * Eligibility is decided SERVER-SIDE (`eligibleIdentitySignals`) and arrives on
  * `UserData.signalEligibility`. This function must not re-derive it: the
@@ -57,6 +62,30 @@ export const getDuplicateGroups = (users: UserData[]): DuplicateGroup[] => {
   const sharedDevices = collect(["deviceKey"]);
   const sharedFingerprints = collect(["registrationFingerprint", "lastFingerprint"]);
 
+  // Historical values come from `identityObservations` via the list endpoints.
+  // They carry NO per-value eligibility annotation and need none: the server
+  // already bounded them to the 90-day window and ran the same shape guards
+  // (sentinel / Cloudflare edge / degenerate) at write time, so nothing
+  // unresolvable can reach grouping through this path.
+  const readHistorical = (u: UserData, track: "ip" | "fingerprint"): string[] =>
+    (track === "ip"
+      ? (u.historicalIpKeys ?? u.historicalIps)
+      : (u.historicalFingerprintKeys ?? u.historicalFingerprints)) ?? [];
+
+  const collectHistorical = (track: "ip" | "fingerprint"): Map<string, Set<string>> => {
+    const byValue = new Map<string, Set<string>>();
+    users.forEach((u) => {
+      for (const value of new Set(readHistorical(u, track))) {
+        if (!byValue.has(value)) byValue.set(value, new Set());
+        byValue.get(value)!.add(u.id);
+      }
+    });
+    return new Map([...byValue.entries()].filter(([, ids]) => ids.size > 1));
+  };
+
+  const sharedHistoricalIps = collectHistorical("ip");
+  const sharedHistoricalFingerprints = collectHistorical("fingerprint");
+
   // Union-find structure
   const parent = new Map<string, string>();
   const find = (id: string): string => {
@@ -92,12 +121,26 @@ export const getDuplicateGroups = (users: UserData[]): DuplicateGroup[] => {
     for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
   }
 
+  // Union users who shared a value within the 90-day history window. This is
+  // what stops rotation defeating the panel: an account that changed its
+  // fingerprint still links to the accounts it shared the old one with.
+  for (const [, userIds] of sharedHistoricalIps) {
+    const ids = [...userIds];
+    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+  for (const [, userIds] of sharedHistoricalFingerprints) {
+    const ids = [...userIds];
+    for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]);
+  }
+
   // Collect groups — only include users that were actually linked
   const allLinkedIds = new Set<string>();
   for (const [, ids] of sharedIps) ids.forEach((id) => allLinkedIds.add(id));
   for (const [, ids] of sharedTracks) ids.forEach((id) => allLinkedIds.add(id));
   for (const [, ids] of sharedFingerprints) ids.forEach((id) => allLinkedIds.add(id));
   for (const [, ids] of sharedDevices) ids.forEach((id) => allLinkedIds.add(id));
+  for (const [, ids] of sharedHistoricalIps) ids.forEach((id) => allLinkedIds.add(id));
+  for (const [, ids] of sharedHistoricalFingerprints) ids.forEach((id) => allLinkedIds.add(id));
 
   const groupMap = new Map<string, Set<string>>();
   for (const id of allLinkedIds) {
@@ -129,6 +172,14 @@ export const getDuplicateGroups = (users: UserData[]): DuplicateGroup[] => {
       const groupDevices = new Set<string>();
       for (const [device, ids] of sharedDevices) {
         if ([...ids].some((id) => idSet.has(id))) groupDevices.add(device);
+      }
+      const groupHistoricalIps = new Set<string>();
+      for (const [ip, ids] of sharedHistoricalIps) {
+        if ([...ids].some((id) => idSet.has(id))) groupHistoricalIps.add(ip);
+      }
+      const groupHistoricalFingerprints = new Set<string>();
+      for (const [fingerprint, ids] of sharedHistoricalFingerprints) {
+        if ([...ids].some((id) => idSet.has(id))) groupHistoricalFingerprints.add(fingerprint);
       }
 
       // Build per-member match reasons (checked against all members including banned,
@@ -177,6 +228,33 @@ export const getDuplicateGroups = (users: UserData[]): DuplicateGroup[] => {
             break;
           }
         }
+        // The `*-past` reasons are suppressed when the CURRENT equivalent
+        // already fired, so a value that is both current and historical reads
+        // as the stronger of the two rather than as both.
+        if (!reasons.includes("ip")) {
+          for (const ip of groupHistoricalIps) {
+            const usersForIp = sharedHistoricalIps.get(ip);
+            if (
+              usersForIp?.has(member.id) &&
+              [...usersForIp].some((id) => id !== member.id && allMembers.some((m) => m.id === id))
+            ) {
+              reasons.push("ip-past");
+              break;
+            }
+          }
+        }
+        if (!reasons.includes("fingerprint")) {
+          for (const fingerprint of groupHistoricalFingerprints) {
+            const usersForFp = sharedHistoricalFingerprints.get(fingerprint);
+            if (
+              usersForFp?.has(member.id) &&
+              [...usersForFp].some((id) => id !== member.id && allMembers.some((m) => m.id === id))
+            ) {
+              reasons.push("fingerprint-past");
+              break;
+            }
+          }
+        }
         return reasons;
       };
 
@@ -184,7 +262,18 @@ export const getDuplicateGroups = (users: UserData[]): DuplicateGroup[] => {
       // evidence trail after taking action on one linked account.
       const displayMembers: GroupMember[] = allMembers
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .map((m) => ({ ...m, matchReasons: buildMatchReasons(m) }));
+        .map((m) => {
+          const matchReasons = buildMatchReasons(m);
+          return {
+            ...m,
+            matchReasons,
+            // Per-member, unlike `cgnatSuspect` below. A member joined to the
+            // group by a shared IP alone needs the caveat regardless of how
+            // strongly the OTHER members are linked to each other.
+            weakMatch:
+              matchReasons.length > 0 && matchReasons.every((r) => r === "ip" || r === "ip-past"),
+          };
+        });
 
       if (displayMembers.length < 2) return null;
 
