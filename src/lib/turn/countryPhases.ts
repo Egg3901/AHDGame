@@ -303,7 +303,14 @@ export const COUNTRY_BILL_PHASES: Partial<Record<CountryId, CountryBillPhaseEntr
 
 export interface CountryElectionPhaseEntry {
   name: string;
-  fn: (gameNow: Date) => Promise<unknown>;
+  /**
+   * The turn registry passes the authoritative in-flight turn (`newTurn`)
+   * as `currentTurn`. Spawners must use it instead of the persisted
+   * `gameState.currentTurn`, which still holds the prior turn until the end
+   * of `processTurn` (#2060). Optional so bootstrap and admin callers that
+   * run outside a turn keep working: they fall back to the persisted turn.
+   */
+  fn: (gameNow: Date, currentTurn?: number) => Promise<unknown>;
 }
 
 export const COUNTRY_ELECTION_PHASES: Partial<Record<CountryId, CountryElectionPhaseEntry[]>> = {
