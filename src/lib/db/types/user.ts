@@ -28,8 +28,11 @@ export interface User {
   isBanned?: boolean;
   banReason?: string;
   bannedAt?: Date;
-  /** Any auth token issued at or before this timestamp is invalid and must re-authenticate. */
-  authRevokedAt?: Date;
+  /**
+   * Any auth token issued at or before this timestamp is invalid and must re-authenticate.
+   * Legacy rows may store an explicit null, which revocation checks treat as no cutoff.
+   */
+  authRevokedAt?: Date | null;
   /**
    * Permanent source migration fence marker. Absent means unfenced legacy auth.
    * Any present value (including null or malformed) denies legacy login and
