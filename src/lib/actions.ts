@@ -1,9 +1,8 @@
 import type { Character, State, ActionType } from "@/lib/db/types";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies";
-import { statMultiplier } from "@/lib/stats/statMultiplier";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
-import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
+import { DEBATE_PREP_ACTION_COST, type StatKey } from "@/lib/stats/statsConstants";
 import {
   FUNDRAISE_ACTION_COST,
   fundraiseYieldAnchor,
@@ -17,6 +16,11 @@ import {
   CONVERT_CASH_ACTION_COST,
   calculateConvertCashInfamy,
   convertCashConversion,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  quotePollAction,
+  type PollTier,
 } from "./actions/rules";
 
 export {
@@ -60,16 +64,18 @@ export {
   quoteConvertCashAction,
   type ConvertCashQuoteActor,
   type ConvertCashQuote,
+  POLL_BASE_FUND_COST,
+  POLL_LARGE_BASE_FUND_COST,
+  POLL_ACTION_COST,
+  POLL_LARGE_ACTION_COST,
+  getPollActionCost,
+  getPollBaseFundCost,
+  getPollFundCost,
+  quotePollAction,
+  type PollTier,
+  type PollQuoteActor,
+  type PollQuote,
 } from "./actions/rules";
-
-/**
- * Read a character's stat with a neutral fallback for characters that predate
- * the stat system (pre-grandfather migration). Neutral yields a 1.0× multiplier
- * so unmigrated characters are unaffected.
- */
-function statValue(character: Character, key: StatKey): number {
-  return character.stats?.[key] ?? NEUTRAL_STAT;
-}
 
 /**
  * Currency context the execute route supplies so action result messages render
@@ -368,15 +374,20 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Quick Poll",
     description:
       "Commission a quick poll — see your topline appeal and best/worst demographic groups ($25,000)",
-    baseCost: 2,
+    baseCost: POLL_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Intellect lowers polling cost (gentle ±20%).
-      const cost = Math.round(25_000 / statMultiplier(statValue(character, "intellect")));
+      // Single source of truth: the poll page quotes this same quote and the
+      // poll API route debits it, so the advertised cost can never drift from
+      // the charged result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quotePollAction({ intellect: character.stats?.intellect }, "small");
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
-        fundsChange: -cost,
-        message: `Quick poll commissioned (${fmt(cost)}). Topline results available.`,
+        fundsChange: -quote.fundCostAnchor,
+        message: `Quick poll commissioned (${fmt(quote.fundCostAnchor)}). Topline results available.`,
       };
     },
   },
@@ -386,15 +397,20 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     name: "Full Demographic Poll",
     description:
       "Commission a comprehensive poll — full breakdown across every demographic group and category ($75,000)",
-    baseCost: 6,
+    baseCost: POLL_LARGE_ACTION_COST,
     requiresState: false,
     effect: (character: Character, _state?: State, ctx?: ActionEffectContext) => {
-      // Intellect lowers polling cost (gentle ±20%).
-      const cost = Math.round(75_000 / statMultiplier(statValue(character, "intellect")));
+      // Single source of truth: the poll page quotes this same quote and the
+      // poll API route debits it, so the advertised cost can never drift from
+      // the charged result. canPerformAction runs the quote first; the throw
+      // below is a defensive invariant for direct effect callers that skip
+      // validation.
+      const quote = quotePollAction({ intellect: character.stats?.intellect }, "large");
+      if (!quote.ok) throw new Error(quote.error);
       const fmt = ctx?.formatFunds ?? plainFunds;
       return {
-        fundsChange: -cost,
-        message: `Full demographic poll commissioned (${fmt(cost)}). Detailed breakdown available.`,
+        fundsChange: -quote.fundCostAnchor,
+        message: `Full demographic poll commissioned (${fmt(quote.fundCostAnchor)}). Detailed breakdown available.`,
       };
     },
   },
@@ -573,6 +589,18 @@ export function canPerformAction(
     };
   }
 
+  // Polls validate through the same rules quote the poll page and the effect
+  // use: flat AP cost and the intellect-scaled fund cost. A missing intellect
+  // stat rejects here with the quote reason instead of falling back to the
+  // unscaled base.
+  if (actionType === "poll" || actionType === "pollLarge") {
+    const tier: PollTier = actionType === "pollLarge" ? "large" : "small";
+    const quote = quotePollAction({ intellect: character.stats?.intellect }, tier);
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
+  }
+
   // Advertise validates through the same rules quote the UI and the effect use:
   // tiered AP cost, GDP-scaled fund cost and the charisma-scaled gain. Missing
   // stats or missing home-state economics reject here with the quote reason
@@ -643,6 +671,12 @@ export function getActionPointCost(character: Character, actionType: ActionType)
   }
   if (actionType === "advertise") {
     return getAdvertiseActionCost(character.favorability ?? 0);
+  }
+  if (actionType === "poll") {
+    return getPollActionCost("small");
+  }
+  if (actionType === "pollLarge") {
+    return getPollActionCost("large");
   }
   if (actionType === "fundraise") {
     return getDonorActionCost(character.donorBaseLevel ?? 0, "fundraise");
