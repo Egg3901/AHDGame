@@ -88,10 +88,25 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * primitive: guarded payer debit with liquid/escrow split, one resumable
  * credit per character/imperial/corp/fund/NPP holder, per-bond maturity
  * claims, with Idempotency-Key validation/forwarding and route-level
- * replay/invalid-key/conflict/partial-recovery tests; the resume plan is
+ * replay/minted-key/invalid-key/conflict/terminal/partial- and
+ * empty-remainder-recovery/payer-issuer-mismatch tests; the resume plan is
  * persisted on the receipt at claim time, so a same-key retry after partial
- * maturity reconciles the stored plan instead of conflicting; the
- * financial-tx maturity rows stay post-commit best effort).
+ * maturity reconciles the stored plan instead of conflicting, and an
+ * empty-remainder retry reports the stored outcome; the financial-tx
+ * maturity rows stay post-commit best effort), bond-default refinance
+ * (debt-for-debt swap via the bondRefinanceSpend primitive: guarded
+ * refinance-count claim + deterministic replacement-bond insert under a
+ * key-derived _id + per-bond cure claims, with Idempotency-Key
+ * validation/forwarding and route-level
+ * replay/minted-key/invalid-key/conflict/terminal/empty-remainder tests;
+ * the cashless bond_issuance ledger row stays post-commit best effort) and
+ * bond-default restructure (sector liquidation as an idempotent caller
+ * pre-step with per-sector restore tokens, then corp liquid-capital net +
+ * holder credits + per-bond cures via the bondRestructureSpend primitive,
+ * same key contract and route tests; the bond_maturity rows stay
+ * post-commit best effort). Refinance and restructure both run through
+ * executeCorporationBondRefinance/Restructure on the routes and on the
+ * bondTurn auto-resolver with deterministic per-turn keys.
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
@@ -107,12 +122,12 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * status transition and the money writes there can still strand or double
  * value; migrating them means expressing each as keyed steps here.
  * Still on the legacy debit-first-plus-compensation fallback: bond
- * default dissolution/refinance/restructure, index-fund cron/rebalancing
- * orchestration (its bond purchase/sale legs are keyed; surrounding
- * equity/dividend/cross-fund writes are not), directAction,
- * state-org build — multi-write status machines, positional holder
- * claims, and bulkWrite batches that need reserve/order/history support
- * beyond keyed single-document writes.
+ * default dissolution (bare bulkWrite holder/equity/central-bank writes),
+ * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
+ * are keyed; surrounding equity/dividend/cross-fund writes are not),
+ * directAction, state-org build — multi-write status machines, positional
+ * holder claims, and bulkWrite batches that need reserve/order/history
+ * support beyond keyed single-document writes.
  * Military recruitment sits outside even that: manual unwind (ministerial
  * action, manpower pool, defence appropriation, arsenal lots, unit insert)
  * with no transaction wrapper at all. Migrating one of those means

@@ -3,9 +3,11 @@
  * (issue #1672): defaulted bonds cure through the shared bondPayoffSpend
  * primitive (guarded liquid+escrow debit, one resumable credit per holder,
  * per-bond maturity claims over still-defaulted bonds), so these tests
- * assert the keyed surface — invalid key, replay, conflict, same-key
- * partial recovery — plus the escrow split, the fund/NPP coverage (#809),
- * and the preserved status/body contract.
+ * assert the keyed surface — missing/minted key, invalid key, replay,
+ * conflict, same-key partial recovery, empty-remainder recovery after the
+ * final cure, terminal mapping, and empty-path terminal/mismatch mappings —
+ * plus the escrow split, the fund/NPP coverage (#809), and the preserved
+ * status/body contract.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
@@ -279,13 +281,33 @@ describe("POST /api/corporations/[id]/bond-default/cash — keyed flow", () => {
     expect(rows.some((r) => r.subjectId.toString() === f.nppId.toString())).toBe(false);
   });
 
-  it("rejects an invalid Idempotency-Key header without touching money", async () => {
+  it("settles without an Idempotency-Key, claiming a minted receipt", async () => {
     const f = await setupFixture();
 
-    const res = await postCash(f.corpId, { "Idempotency-Key": "x".repeat(129) });
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("Invalid Idempotency-Key header");
+    const res = await postCash(f.corpId);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, paid: 22_000, bondsMatured: 2 });
+
+    // No client key: the attempt is still crash-safe within itself, keyed
+    // under a minted id rather than a client-supplied one.
+    const receiptInsert = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne.mock
+      .calls[0]![0] as { _id: string };
+    expect(typeof receiptInsert._id).toBe("string");
+    expect(receiptInsert._id.length).toBeGreaterThan(0);
+  });
+
+  it("rejects an empty or overlong Idempotency-Key without touching money", async () => {
+    const f = await setupFixture();
+
+    for (const key of ["", "x".repeat(129)]) {
+      const res = await postCash(f.corpId, { "Idempotency-Key": key });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe(
+        "Invalid Idempotency-Key header"
+      );
+    }
     expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne).not.toHaveBeenCalled();
   });
 
@@ -368,6 +390,129 @@ describe("POST /api/corporations/[id]/bond-default/cash — keyed flow", () => {
       (call) => (call[1] as { $set?: { status?: string } }).$set?.status === "completed"
     );
     expect(settled.length).toBeGreaterThan(0);
+  });
+
+  it("recovers the stored outcome after the final cure when the live set reads empty", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "cash-payoff-final-cure" };
+
+    // A genuinely completed first attempt, captured so the retry below can
+    // replay its exact stored plan. Reporting the completed receipt back as
+    // `in_progress` models the crash window precisely: every write applied,
+    // the completion write lost, every bond cured so the live set is empty.
+    const first = await postCash(f.corpId, headers);
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const firstInsert = receipts.insertOne.mock.calls[0]?.[0] as {
+      _id: string;
+      fingerprint: string;
+    };
+    const planUpdate = receipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { bondPayoffPlan?: unknown } }).$set?.bondPayoffPlan
+    );
+    expect(planUpdate).toBeDefined();
+
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: firstInsert._id,
+      status: "in_progress",
+      fingerprint: firstInsert.fingerprint,
+      bondPayoffPlan: (planUpdate![1] as { $set: { bondPayoffPlan: unknown } }).$set.bondPayoffPlan,
+    });
+
+    const retry = await postCash(f.corpId, headers);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual(firstBody);
+    const settled = receipts.updateOne.mock.calls.filter(
+      (call) => (call[1] as { $set?: { status?: string } }).$set?.status === "completed"
+    );
+    expect(settled.length).toBeGreaterThan(0);
+  });
+
+  it("maps a settled failed receipt to 409 without moving money again", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "cash-payoff-terminal" };
+    // Force the payer-debit guard to reject: the first attempt settles
+    // `failed` (nothing applied, so the status is truthful) behind the 400
+    // race surface. A retry under the same key must fail closed.
+    db.collectionMocks["corporations"]!.updateOne.mockResolvedValueOnce({
+      matchedCount: 0,
+      modifiedCount: 0,
+    } as never);
+    const failed = await postCash(f.corpId, headers);
+    expect(failed.status).toBe(400);
+    expect(((await failed.json()) as { error: string }).error).toContain("race");
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const fingerprint = (receipts.insertOne.mock.calls[0]?.[0] as { fingerprint: string })
+      .fingerprint;
+    const corpWrites = db.collectionMocks["corporations"]!.updateOne.mock.calls.length;
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: "cash-payoff-terminal",
+      status: "failed",
+      fingerprint,
+    });
+
+    const res = await postCash(f.corpId, headers);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("already settled");
+    expect(db.collectionMocks["corporations"]!.updateOne.mock.calls.length).toBe(corpWrites);
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("maps a terminal receipt to 409 on the empty-remainder path", async () => {
+    const f = await setupFixture();
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    receipts.findOne.mockResolvedValue({
+      _id: "cash-payoff-empty-terminal",
+      status: "compensated",
+      fingerprint: "bond-payoff:cash:stale",
+    });
+
+    const res = await postCash(f.corpId, { "Idempotency-Key": "cash-payoff-empty-terminal" });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("already settled");
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("maps a stored plan naming a different payer to 409 on the empty-remainder path", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "cash-payoff-empty-mismatch" };
+
+    const first = await postCash(f.corpId, headers);
+    expect(first.status).toBe(200);
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const firstInsert = receipts.insertOne.mock.calls[0]?.[0] as {
+      _id: string;
+      fingerprint: string;
+    };
+    const planUpdate = receipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { bondPayoffPlan?: unknown } }).$set?.bondPayoffPlan
+    );
+    expect(planUpdate).toBeDefined();
+    const storedPlan = (planUpdate![1] as { $set: { bondPayoffPlan: Record<string, unknown> } })
+      .$set.bondPayoffPlan;
+
+    // The live set reads empty but the stored attempt names a different
+    // payer: cross-corp key reuse, fail closed rather than reporting the
+    // stored outcome for the wrong payoff.
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    receipts.findOne.mockResolvedValue({
+      _id: firstInsert._id,
+      status: "in_progress",
+      fingerprint: firstInsert.fingerprint,
+      bondPayoffPlan: { ...storedPlan, payerCorpIdHex: new ObjectId().toHexString() },
+    });
+
+    const res = await postCash(f.corpId, headers);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("different payoff");
   });
 
   it("returns 400 with no writes when liquid plus escrow cannot cover the cost", async () => {

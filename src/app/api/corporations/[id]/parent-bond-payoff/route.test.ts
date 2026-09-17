@@ -3,9 +3,11 @@
  * (issue #1672): the payoff settles through the shared bondPayoffSpend
  * primitive (guarded parent debit, one resumable credit per holder,
  * per-bond maturity claims), so these tests assert the keyed surface —
- * invalid key, replay, conflict, same-key partial recovery — plus the
- * multi-holder economics (character/imperial/corp/fund/NPP, public float
- * retired silently) and the preserved status/body contract.
+ * missing/minted key, invalid key, replay, conflict, same-key partial
+ * recovery, empty-remainder recovery after the final cure, terminal mapping,
+ * and empty-path terminal/mismatch mappings — plus the multi-holder
+ * economics (character/imperial/corp/fund/NPP, public float retired
+ * silently) and the preserved status/body contract.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId } from "mongodb";
@@ -334,12 +336,35 @@ describe("POST /api/corporations/[id]/parent-bond-payoff — keyed flow", () => 
     expect(rows.some((r) => r.subjectId.toString() === f.nppId.toString())).toBe(false);
   });
 
-  it("rejects an invalid Idempotency-Key header without touching money", async () => {
+  it("settles without an Idempotency-Key, claiming a minted receipt", async () => {
     const f = await setupFixture();
 
-    const res = await postPayoff(f.targetCorpId, f.parentCorpId, { "Idempotency-Key": "" });
-    expect(res.status).toBe(400);
-    expect(((await res.json()) as { error: string }).error).toBe("Invalid Idempotency-Key header");
+    const res = await postPayoff(f.targetCorpId, f.parentCorpId);
+    expect(res.status).toBe(200);
+    expect((await res.json()) as Record<string, unknown>).toMatchObject({
+      success: true,
+      paid: 22_000,
+      bondsMatured: 2,
+    });
+
+    // No client key: the attempt is still crash-safe within itself, keyed
+    // under a minted id rather than a client-supplied one.
+    const receiptInsert = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne.mock
+      .calls[0]![0] as { _id: string };
+    expect(typeof receiptInsert._id).toBe("string");
+    expect(receiptInsert._id.length).toBeGreaterThan(0);
+  });
+
+  it("rejects an empty or overlong Idempotency-Key without touching money", async () => {
+    const f = await setupFixture();
+
+    for (const key of ["", "x".repeat(129)]) {
+      const res = await postPayoff(f.targetCorpId, f.parentCorpId, { "Idempotency-Key": key });
+      expect(res.status).toBe(400);
+      expect(((await res.json()) as { error: string }).error).toBe(
+        "Invalid Idempotency-Key header"
+      );
+    }
     expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
     expect(db.collectionMocks["nonAtomicMoneyFlowReceipts"]!.insertOne).not.toHaveBeenCalled();
@@ -435,6 +460,127 @@ describe("POST /api/corporations/[id]/parent-bond-payoff — keyed flow", () => 
       (call) => (call[1] as { $set?: { matured?: boolean } }).$set?.matured === true
     );
     expect(matureB.length).toBeGreaterThan(0);
+  });
+
+  it("recovers the stored outcome after the final cure when the live set reads empty", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "parent-payoff-final-cure" };
+
+    // A genuinely completed first attempt, captured so the retry below can
+    // replay its exact stored plan. Reporting the completed receipt back as
+    // `in_progress` models the crash window precisely: every write applied,
+    // the completion write lost, every bond matured so the live set is empty.
+    const first = await postPayoff(f.targetCorpId, f.parentCorpId, headers);
+    expect(first.status).toBe(200);
+    const firstBody = await first.json();
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const firstInsert = receipts.insertOne.mock.calls[0]?.[0] as {
+      _id: string;
+      fingerprint: string;
+    };
+    const planUpdate = receipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { bondPayoffPlan?: unknown } }).$set?.bondPayoffPlan
+    );
+    expect(planUpdate).toBeDefined();
+
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: firstInsert._id,
+      status: "in_progress",
+      fingerprint: firstInsert.fingerprint,
+      bondPayoffPlan: (planUpdate![1] as { $set: { bondPayoffPlan: unknown } }).$set.bondPayoffPlan,
+    });
+
+    const retry = await postPayoff(f.targetCorpId, f.parentCorpId, headers);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual(firstBody);
+    const settled = receipts.updateOne.mock.calls.filter(
+      (call) => (call[1] as { $set?: { status?: string } }).$set?.status === "completed"
+    );
+    expect(settled.length).toBeGreaterThan(0);
+  });
+
+  it("maps a settled compensated receipt to 409 without moving money again", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "parent-payoff-terminal" };
+
+    const first = await postPayoff(f.targetCorpId, f.parentCorpId, headers);
+    expect(first.status).toBe(200);
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const fingerprint = (receipts.insertOne.mock.calls[0]?.[0] as { fingerprint: string })
+      .fingerprint;
+    const corpWrites = db.collectionMocks["corporations"]!.updateOne.mock.calls.length;
+    const bondWrites = db.collectionMocks["bonds"]!.updateOne.mock.calls.length;
+    // The stored attempt settled terminally (a later failure compensated its
+    // prefix); a retry under the same key must fail closed, not re-attempt.
+    receipts.insertOne.mockRejectedValueOnce({ code: 11000 });
+    receipts.findOne.mockResolvedValue({
+      _id: "parent-payoff-terminal",
+      status: "compensated",
+      fingerprint,
+    });
+
+    const res = await postPayoff(f.targetCorpId, f.parentCorpId, headers);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("already settled");
+    expect(db.collectionMocks["corporations"]!.updateOne.mock.calls.length).toBe(corpWrites);
+    expect(db.collectionMocks["bonds"]!.updateOne.mock.calls.length).toBe(bondWrites);
+  });
+
+  it("maps a terminal receipt to 409 on the empty-remainder path", async () => {
+    const f = await setupFixture();
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    receipts.findOne.mockResolvedValue({
+      _id: "parent-payoff-empty-terminal",
+      status: "failed",
+      fingerprint: "bond-payoff:parent_payoff:stale",
+    });
+
+    const res = await postPayoff(f.targetCorpId, f.parentCorpId, {
+      "Idempotency-Key": "parent-payoff-empty-terminal",
+    });
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("already settled");
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("maps a stored plan naming a different issuer to 409 on the empty-remainder path", async () => {
+    const f = await setupFixture();
+    const headers = { "Idempotency-Key": "parent-payoff-empty-mismatch" };
+
+    const first = await postPayoff(f.targetCorpId, f.parentCorpId, headers);
+    expect(first.status).toBe(200);
+
+    const receipts = db.collectionMocks["nonAtomicMoneyFlowReceipts"]!;
+    const firstInsert = receipts.insertOne.mock.calls[0]?.[0] as {
+      _id: string;
+      fingerprint: string;
+    };
+    const planUpdate = receipts.updateOne.mock.calls.find(
+      (call) => (call[1] as { $set?: { bondPayoffPlan?: unknown } }).$set?.bondPayoffPlan
+    );
+    expect(planUpdate).toBeDefined();
+    const storedPlan = (planUpdate![1] as { $set: { bondPayoffPlan: Record<string, unknown> } })
+      .$set.bondPayoffPlan;
+
+    // The live set reads empty but the stored attempt names a different
+    // issuer: cross-corp key reuse, fail closed rather than reporting the
+    // stored outcome for the wrong payoff.
+    db.collectionMocks["bonds"]!.find.mockReturnValue(makeCursor([]));
+    receipts.findOne.mockResolvedValue({
+      _id: firstInsert._id,
+      status: "in_progress",
+      fingerprint: firstInsert.fingerprint,
+      bondPayoffPlan: { ...storedPlan, issuerCorpIdHex: new ObjectId().toHexString() },
+    });
+
+    const res = await postPayoff(f.targetCorpId, f.parentCorpId, headers);
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as { error: string }).error).toContain("different payoff");
   });
 
   it("maps a lost parent-funds race to the historical 400 refusal", async () => {
