@@ -161,9 +161,7 @@ export async function getEligibleCabinetCharacters(
   // NPP-held seats carry a null characterId — only player holders block re-appointment.
   // Slots come from the stored `roleSlot`, falling back to the position
   // derivation for legacy rows, so unmigrated rows still filter correctly.
-  const vacancySlot = vacancyPositionId
-    ? roleSlotForPosition(countryId, vacancyPositionId)
-    : null;
+  const vacancySlot = vacancyPositionId ? roleSlotForPosition(countryId, vacancyPositionId) : null;
   const heldSlotsByCharacterId = new Map<string, UkMinisterialRoleSlot[]>();
   for (const member of existingMembers) {
     if (!member.characterId) continue;

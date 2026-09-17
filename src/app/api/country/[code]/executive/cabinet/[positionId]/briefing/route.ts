@@ -173,20 +173,18 @@ export async function GET(_request: Request, { params }: RouteParams) {
                 )
             : null,
           member.characterId
-            ? db
-                .collection<Character>("characters")
-                .findOne(
-                  { _id: member.characterId },
-                  {
-                    projection: {
-                      sequentialId: 1,
-                      avatarUrl: 1,
-                      borderKey: 1,
-                      tintColor: 1,
-                      sharedMinisterialActions: 1,
-                    },
-                  }
-                )
+            ? db.collection<Character>("characters").findOne(
+                { _id: member.characterId },
+                {
+                  projection: {
+                    sequentialId: 1,
+                    avatarUrl: 1,
+                    borderKey: 1,
+                    tintColor: 1,
+                    sharedMinisterialActions: 1,
+                  },
+                }
+              )
             : null,
         ])
       : [null, null];

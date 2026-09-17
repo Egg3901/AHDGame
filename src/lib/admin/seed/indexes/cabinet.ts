@@ -18,7 +18,7 @@ export async function seedCabinetIndexes(db: Db, log: (msg: string) => void) {
   // every other country keeps one seat per character. The replacement index is
   // created BEFORE the legacy one-seat index below is dropped, so the
   // collection is never without a player-holder guard. Partial so the many
-  // NPP-held seats — which carry `characterId: null` — are exempt and don't
+  // NPP-held seats (which carry `characterId: null`) are exempt and don't
   // collide on a shared null value. Legacy rows without `roleSlot` index as
   // null; at most one row per character can exist while the legacy index is
   // still enforced, so creation cannot conflict.

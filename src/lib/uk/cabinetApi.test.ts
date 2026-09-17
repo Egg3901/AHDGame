@@ -228,7 +228,7 @@ describe("appointCabinetMemberHandler", () => {
       countryId: "CN",
       regimeStatus: "ruling",
     });
-    // Seat appointed 10 turns ago — cooldown still active (124 > currentTurn 100),
+    // Seat appointed 10 turns ago, so cooldown is still active (124 > currentTurn 100),
     // even though the seat is now empty (the minister was fired).
     db.collection("ukCabinetCooldowns");
     db.collectionMocks.ukCabinetCooldowns.findOne.mockResolvedValue({
@@ -345,7 +345,7 @@ describe("appointCabinetMemberHandler", () => {
   it("rejects appointing to a seat not yet established in the current era", async () => {
     seedPrimeMinister(db, "UK");
     const targetId = new ObjectId();
-    // Live year 1953 — the Northern Ireland Office (yearEnabled 1972) does not
+    // Live year 1953: the Northern Ireland Office (yearEnabled 1972) does not
     // exist yet.
     db.collection("gameState");
     db.collectionMocks.gameState.findOne.mockResolvedValue({
@@ -458,7 +458,7 @@ describe("fireCabinetMemberHandler", () => {
   });
 });
 
-describe("appointCabinetMemberHandler — UK dual ministry (issue #2049)", () => {
+describe("appointCabinetMemberHandler - UK dual ministry (issue #2049)", () => {
   let db: MockDb;
 
   beforeEach(async () => {
@@ -629,7 +629,7 @@ describe("appointCabinetMemberHandler — UK dual ministry (issue #2049)", () =>
   });
 });
 
-describe("fireCabinetMemberHandler — UK dual ministry survivor (issue #2049)", () => {
+describe("fireCabinetMemberHandler - UK dual ministry survivor (issue #2049)", () => {
   let db: MockDb;
 
   beforeEach(async () => {

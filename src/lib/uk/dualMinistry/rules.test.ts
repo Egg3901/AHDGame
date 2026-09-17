@@ -44,9 +44,9 @@ describe("canHoldAdditionalAppointment", () => {
       ok: false,
       reason: "A minister may not hold both central titles",
     });
-    expect(
-      canHoldAdditionalAppointment("UK", ["departmental", "central"], "departmental").ok
-    ).toBe(false);
+    expect(canHoldAdditionalAppointment("UK", ["departmental", "central"], "departmental").ok).toBe(
+      false
+    );
     expect(canHoldAdditionalAppointment("UK", ["departmental", "central"], "central").ok).toBe(
       false
     );
@@ -101,9 +101,7 @@ describe("isCandidateEligibleForVacancy", () => {
     expect(isCandidateEligibleForVacancy("UK", "departmental", ["central"])).toBe(true);
     expect(isCandidateEligibleForVacancy("UK", "central", ["central"])).toBe(false);
     expect(isCandidateEligibleForVacancy("UK", "departmental", ["departmental"])).toBe(false);
-    expect(isCandidateEligibleForVacancy("UK", "central", ["departmental", "central"])).toBe(
-      false
-    );
+    expect(isCandidateEligibleForVacancy("UK", "central", ["departmental", "central"])).toBe(false);
   });
 
   it("keeps the legacy exclude-all-holders rule without a vacancy slot or outside the UK", () => {
@@ -117,11 +115,12 @@ describe("isCandidateEligibleForVacancy", () => {
 
 describe("unionLegislativeDomains", () => {
   it("unions domains across both offices without duplicates", () => {
-    expect(unionLegislativeDomains([["economy", "treasury"], ["constitution", "economy"]])).toEqual([
-      "economy",
-      "treasury",
-      "constitution",
-    ]);
+    expect(
+      unionLegislativeDomains([
+        ["economy", "treasury"],
+        ["constitution", "economy"],
+      ])
+    ).toEqual(["economy", "treasury", "constitution"]);
     expect(unionLegislativeDomains([])).toEqual([]);
   });
 });

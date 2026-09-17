@@ -4,10 +4,8 @@ import { getCalendarDayInTimezone } from "@/lib/time/dailyReset";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
 import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
 import type { Character } from "@/lib/db/types";
-import {
-  isSharedPoolStale,
-  sharedPoolFromRows,
-} from "@/lib/uk/dualMinistry/rules";
+import type { CountryId } from "@/lib/constants/countries";
+import { isSharedPoolStale, sharedPoolFromRows } from "@/lib/uk/dualMinistry/rules";
 
 /** Fields to seed on a new cabinet appointment's action pool. */
 export function initialMinisterialActionFields(now: Date = new Date()) {
@@ -28,7 +26,7 @@ export function usesSharedMinisterialPool(
   countryId: string,
   member: Pick<UnifiedCabinetMember, "characterId">
 ): member is UnifiedCabinetMember & { characterId: ObjectId } {
-  return countryId === "UK" && member.characterId != null;
+  return countryId === ("UK" as CountryId) && member.characterId != null;
 }
 
 interface HolderRowState {
@@ -104,7 +102,9 @@ export async function resolveMinisterialRemaining(
   if (member.ministerialActions == null || member.lastMinisterialActionResetDay == null) {
     const backfill = {
       ...initialMinisterialActionFields(now),
-      ...(member.ministerialActions != null ? { ministerialActions: member.ministerialActions } : {}),
+      ...(member.ministerialActions != null
+        ? { ministerialActions: member.ministerialActions }
+        : {}),
     };
     await getCabinetMembersCollection(db).updateOne({ _id: member._id }, { $set: backfill });
     return backfill.ministerialActions;
@@ -133,11 +133,13 @@ export async function spendMinisterialAction(
   if (usesSharedMinisterialPool(countryId, member)) {
     const pool = await ensureUkSharedPool(db, member.characterId, now);
     if (pool.remaining < 1) return { ok: false, remaining: pool.remaining };
-    const updated = await db.collection<Character>("characters").findOneAndUpdate(
-      { _id: member.characterId, sharedMinisterialActions: { $gte: 1 } },
-      { $inc: { sharedMinisterialActions: -1 }, $set: { updatedAt: now } },
-      { returnDocument: "after", projection: { sharedMinisterialActions: 1 } }
-    );
+    const updated = await db
+      .collection<Character>("characters")
+      .findOneAndUpdate(
+        { _id: member.characterId, sharedMinisterialActions: { $gte: 1 } },
+        { $inc: { sharedMinisterialActions: -1 }, $set: { updatedAt: now } },
+        { returnDocument: "after", projection: { sharedMinisterialActions: 1 } }
+      );
     if (!updated || (updated.sharedMinisterialActions ?? 0) < 0) {
       const current = await ensureUkSharedPool(db, member.characterId, now);
       return { ok: false, remaining: current.remaining };
@@ -219,12 +221,16 @@ export async function reconcileUkSharedPool(
     .toArray();
   const shared = sharedPoolFromRows(rows.map(toRowState), MINISTERIAL_ACTION_CAP);
   const resetDay = shared.resetDay ?? today;
-  await db
-    .collection<Character>("characters")
-    .updateOne(
-      { _id: characterId },
-      { $set: { sharedMinisterialActions: shared.remaining, sharedMinisterialActionResetDay: resetDay, updatedAt: now } }
-    );
+  await db.collection<Character>("characters").updateOne(
+    { _id: characterId },
+    {
+      $set: {
+        sharedMinisterialActions: shared.remaining,
+        sharedMinisterialActionResetDay: resetDay,
+        updatedAt: now,
+      },
+    }
+  );
   await getCabinetMembersCollection(db).updateMany(
     { countryId: "UK" as never, characterId },
     {

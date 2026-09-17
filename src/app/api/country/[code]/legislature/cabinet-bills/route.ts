@@ -148,7 +148,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
                     : undefined;
                   return mechanics
                     ? (mechanics.legislativeDomains ??
-                      mechanics.nationalMetrics.map((metric) => metric.category))
+                        mechanics.nationalMetrics.map((metric) => metric.category))
                     : [];
                 })
               );

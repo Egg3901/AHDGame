@@ -25,8 +25,7 @@ export async function preserveSurvivingCabinetRow(
     .project({ positionId: 1, roleSlot: 1 })
     .toArray();
   if (survivors.length === 0) return false;
-  const survivor =
-    survivors.find((row) => row.roleSlot === "departmental") ?? survivors[0]!;
+  const survivor = survivors.find((row) => row.roleSlot === "departmental") ?? survivors[0]!;
   const character = await db
     .collection<Character>("characters")
     .findOne({ _id: characterId }, { projection: { currentOffice: 1 } });

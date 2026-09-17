@@ -31,7 +31,7 @@ interface UkCabinetRow {
  *   2. every UK player holder whose character has no shared pool gets one,
  *      initialized from the minimum remaining actions across their rows
  *      (paired with that same row's reset day), so the migration never mints
- *      extra actions — legacy rows missing action fields read as a full cap
+ *      extra actions: legacy rows missing action fields read as a full cap
  *      pool with no reset day, exactly like the live spend path does;
  *   3. the replacement unique index on (countryId, characterId, roleSlot) is
  *      created BEFORE the legacy one-seat index is dropped.

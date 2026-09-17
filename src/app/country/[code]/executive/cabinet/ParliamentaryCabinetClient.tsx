@@ -181,9 +181,7 @@ export default function ParliamentaryCabinetClient({ config }: Props) {
   const fetchEligibleCharacters = async (vacantPositionId?: string) => {
     dispatch({ type: "SET_CHARACTERS_LOADING", payload: true });
     try {
-      const query = vacantPositionId
-        ? `?positionId=${encodeURIComponent(vacantPositionId)}`
-        : "";
+      const query = vacantPositionId ? `?positionId=${encodeURIComponent(vacantPositionId)}` : "";
       const res = await fetch(`${executiveApiUrl(countryId)}/cabinet/characters${query}`);
       if (res.ok) {
         const data = await res.json();
