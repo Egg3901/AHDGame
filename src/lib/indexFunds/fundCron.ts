@@ -706,7 +706,7 @@ export async function rebalanceFundToTarget(
 
     if (isOffBasket || isStale) {
       try {
-        await cancelFundShareOrder(db, order._id);
+        await cancelFundShareOrder(db, order._id, currentTurn);
         bidsCancelled++;
       } catch (err) {
         console.error(
@@ -759,6 +759,7 @@ export async function rebalanceFundToTarget(
         shares: leg.shares,
         limitPriceLocal,
         fxRate,
+        turn: currentTurn,
         txSink: bidTxSink,
       });
 

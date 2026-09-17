@@ -15,6 +15,8 @@
 import { ObjectId, type AnyBulkWriteOperation, type Db, type Document } from "mongodb";
 import type { NPP, IndexFund, IndexFundPosition, IndexFundTransaction } from "@/lib/db/types";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
+import { emitTxBulk, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import {
   FUND_POSITION_COLLECTION,
   FUND_TRANSACTION_COLLECTION,
@@ -180,6 +182,7 @@ type ProjectedNPP = {
 
 interface PlannedSubscription {
   nppId: ObjectId;
+  nppCurrency: CurrencyCode;
   fund: IndexFund;
   units: number;
   costAnchor: number;
@@ -420,6 +423,12 @@ export async function processNPPFundInvestments(
       let investedThisNPP = 0;
       const nppPlanned: PlannedSubscription[] = [];
 
+      // #992 tranche 4: the ledger row for each subscription is denominated
+      // in the NPP home currency so the subject account matches the snapshot
+      // (npp:<id>:<homeCurrency>); the ₳ value is stated outright, never
+      // derived from the live FX table.
+      const nppCurrency =
+        COUNTRY_CURRENCY_MAP[npp.countryId as keyof typeof COUNTRY_CURRENCY_MAP] ?? "USD";
       for (const { fund, amount } of subscriptions) {
         // Skip near-insolvent funds — below 1 unit of anchor currency, NPPs would
         // mint millions of units per turn from negligible cash, exploding unit supply.
@@ -427,7 +436,7 @@ export async function processNPPFundInvestments(
         const units = Math.floor(amount / fund.quotedNav);
         if (units <= 0) continue;
         const costAnchor = units * fund.quotedNav;
-        nppPlanned.push({ nppId: npp._id, fund, units, costAnchor, archetype });
+        nppPlanned.push({ nppId: npp._id, nppCurrency, fund, units, costAnchor, archetype });
         investedThisNPP += costAnchor;
       }
 
@@ -625,6 +634,42 @@ export async function processNPPFundInvestments(
     await db
       .collection<IndexFundTransaction>(FUND_TRANSACTION_COLLECTION)
       .insertMany(txDocs as IndexFundTransaction[]);
+  }
+
+  // ── Pass 6 (#992 tranche 4): financialTxLog legs for the same subscriptions.
+  // One index_fund_subscribe row per subscription, subject NPP in the NPP home
+  // currency with fundId/fundCurrency meta. The shadow ledger mirrors the fund
+  // side off that meta when the currencies match (same convention as the
+  // player subscribe rows in fundTxLog.ts); a cross-currency pair stays
+  // single-sided under the fund_subscription reason, never guessed. Bulk path:
+  // every row carries an explicit anchorAmount so no per-row FX read happens.
+  if (planned.length > 0) {
+    const thresholds = await loadTxThresholds(db);
+    await emitTxBulk(
+      db,
+      planned.map((p) => ({
+        type: "index_fund_subscribe" as const,
+        turn: currentTurn,
+        createdAt: now,
+        subjectType: "npp" as const,
+        subjectId: p.nppId,
+        subjectName: `NPP ${p.nppId.toString()}`,
+        // NPP investment cash is anchor-denominated; state the ₳ value
+        // outright in both fields so the flow equals the modeled debit exactly.
+        amount: -p.costAnchor,
+        anchorAmount: -p.costAnchor,
+        currencyCode: p.nppCurrency,
+        counterpartyType: "system" as const,
+        counterpartyName: p.fund.name,
+        meta: {
+          fundId: p.fund._id.toString(),
+          fundCurrency: p.fund.anchorCurrencyCode,
+          units: p.units,
+          source: "npp-investing",
+        },
+      })),
+      thresholds
+    );
   }
 
   return { nppsProcessed, totalInvested, errors };

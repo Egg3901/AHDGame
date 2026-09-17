@@ -22,6 +22,7 @@ import {
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { resolveCorpLiquidCurrencyCode } from "@/lib/currency/corporationCapital";
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import { emitTx } from "@/lib/financialTxLog/emit";
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -559,6 +560,32 @@ async function executeSingleTransfer(
         },
         sessionOpts
       );
+
+      // Emit one cash-transfer row after both fund balances and holdings have
+      // moved. The ledger derives the seller mirror from metadata, so a second
+      // row would double-count the transfer.
+      await emitTx(db, {
+        type: "fund_transfer",
+        turn: currentTurn,
+        createdAt: new Date(),
+        subjectType: "fund",
+        subjectId: plan.buyerFundId,
+        subjectName: buyerFund.name,
+        amount: -plan.valueAnchor,
+        anchorAmount: -plan.valueAnchor,
+        currencyCode: buyerFund.anchorCurrencyCode,
+        counterpartyType: "fund",
+        counterpartyId: plan.sellerFundId,
+        counterpartyName: sellerFund.name,
+        meta: {
+          fundId: plan.sellerFundId.toString(),
+          fundCurrency: buyerFund.anchorCurrencyCode,
+          corporationId: plan.corporationId.toString(),
+          shares: plan.shares,
+          pricePerShareAnchor: plan.pricePerShareAnchor,
+          source: "cross-fund-rebalancing",
+        },
+      });
 
       // 7. Record public trade history (the cross-fund market is still a trade).
       void recordShareTrade(db, {
