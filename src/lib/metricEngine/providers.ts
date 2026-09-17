@@ -300,7 +300,9 @@ export async function fiscalRatiosProvider(db: Db): Promise<Map<string, FiscalRa
     db
       .collection<FederalBudget>("federalBudget")
       .find({})
-      .project<Pick<FederalBudget, "_id" | "countryId" | "gdp" | "gdpSmoothed" | "revenue" | "spending">>({
+      .project<
+        Pick<FederalBudget, "_id" | "countryId" | "gdp" | "gdpSmoothed" | "revenue" | "spending">
+      >({
         countryId: 1,
         gdp: 1,
         gdpSmoothed: 1,
@@ -339,7 +341,10 @@ export async function fiscalRatiosProvider(db: Db): Promise<Map<string, FiscalRa
   for (const bond of bonds) {
     if (!bond.countryId) continue;
     const key = String(bond.countryId);
-    outstandingByCountry.set(key, (outstandingByCountry.get(key) ?? 0) + sovereignBondOutstanding(bond));
+    outstandingByCountry.set(
+      key,
+      (outstandingByCountry.get(key) ?? 0) + sovereignBondOutstanding(bond)
+    );
   }
 
   const byCountry = new Map<string, FiscalRatios>();

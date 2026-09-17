@@ -2,10 +2,7 @@ import type { Db } from "mongodb";
 import type { Bond } from "@/lib/db/types/bond";
 import type { FederalBudget } from "@/lib/db/types/budget";
 import { federalSurplus, type SurplusInputs } from "./federalSurplus";
-import {
-  sovereignBondOutstanding,
-  sovereignDebtTerms,
-} from "@/lib/bonds/sovereignPrincipal";
+import { sovereignBondOutstanding, sovereignDebtTerms } from "@/lib/bonds/sovereignPrincipal";
 
 /**
  * Stored fiscal fields that must agree with their definitions at every close:

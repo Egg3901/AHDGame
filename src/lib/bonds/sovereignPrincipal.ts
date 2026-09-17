@@ -85,11 +85,8 @@ export function sovereignDebtTerms(
   const debtToGdpRatio = ratioGdp > 0 ? stock / ratioGdp : 0;
   return {
     interestRate:
-      calculateInterestRate(
-        debtToGdpRatio,
-        input.imfBailoutActive,
-        input.sovereignRiskAnchor
-      ) + getSovereignConfidencePremium(input.investorConfidence),
+      calculateInterestRate(debtToGdpRatio, input.imfBailoutActive, input.sovereignRiskAnchor) +
+      getSovereignConfidencePremium(input.investorConfidence),
     debtToGdpRatio,
     creditRating: calculateCreditRating(debtToGdpRatio, input.sovereignRiskAnchor),
   };

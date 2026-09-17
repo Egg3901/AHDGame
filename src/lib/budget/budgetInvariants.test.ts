@@ -52,9 +52,7 @@ describe("checkFederalBudgetInvariants", () => {
 
   it("ignores treasury cash when checking principal: cash cannot overwrite the bond stock", () => {
     // A 4000 cash swing with the same bond stock is not a breach.
-    expect(
-      checkFederalBudgetInvariants({ ...clean, treasuryBalance: -1000 })
-    ).toEqual([]);
+    expect(checkFederalBudgetInvariants({ ...clean, treasuryBalance: -1000 })).toEqual([]);
     expect(checkFederalBudgetInvariants({ ...clean, treasuryBalance: 250 })).toEqual([]);
   });
 
@@ -72,9 +70,7 @@ describe("checkFederalBudgetInvariants", () => {
 
   it("skips the debt leg when no ledger sum is supplied", () => {
     const { outstandingSovereignPrincipal: _dropped, ...blind } = clean;
-    expect(checkFederalBudgetInvariants({ ...blind, debt: { principal: 999_999 } })).toEqual(
-      []
-    );
+    expect(checkFederalBudgetInvariants({ ...blind, debt: { principal: 999_999 } })).toEqual([]);
   });
 
   it("tolerates sub-unit floating point noise", () => {
@@ -170,9 +166,13 @@ describe("reconcileFederalBudgetInvariants", () => {
 
   it("does not write at all when every budget already agrees", async () => {
     let wrote = false;
-    const db = stubDb([{ _id: "US", countryId: "US", ...clean }], bondDocs(5000).map((b) => ({ ...b, countryId: "US" })), () => {
-      wrote = true;
-    });
+    const db = stubDb(
+      [{ _id: "US", countryId: "US", ...clean }],
+      bondDocs(5000).map((b) => ({ ...b, countryId: "US" })),
+      () => {
+        wrote = true;
+      }
+    );
     const r = await reconcileFederalBudgetInvariants(db, 673);
     expect(wrote).toBe(false);
     expect(r).toEqual({ checked: 1, corrected: 0, skipped: 0 });
@@ -199,9 +199,14 @@ describe("reconcileFederalBudgetInvariants", () => {
     // them: a doc arriving without `issuerType` reads as non-sovereign and
     // contributes 0, which would re-point every stored principal at zero.
     let seen: { filter: unknown; options: unknown } | null = null;
-    const db = stubDb([{ _id: "US", countryId: "US", ...clean }], bondDocs(5000), undefined, (filter, options) => {
-      seen = { filter, options };
-    });
+    const db = stubDb(
+      [{ _id: "US", countryId: "US", ...clean }],
+      bondDocs(5000),
+      undefined,
+      (filter, options) => {
+        seen = { filter, options };
+      }
+    );
     await reconcileFederalBudgetInvariants(db, 673);
     expect(seen!.filter).toEqual({ issuerType: "sovereign", matured: false, defaulted: false });
     expect(seen!.options).toEqual({

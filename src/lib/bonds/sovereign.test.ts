@@ -518,9 +518,7 @@ describe("reconcileSovereignDebt", () => {
     const setPayload = (
       updateCall as unknown[] as unknown as { $set: Record<string, unknown> }[]
     )[1];
-    expect((setPayload.$set.debt as { principal: number }).principal).toBe(
-      result!.newPrincipal
-    );
+    expect((setPayload.$set.debt as { principal: number }).principal).toBe(result!.newPrincipal);
   });
 
   it("measures coverage net of restructure haircuts", async () => {
@@ -574,15 +572,16 @@ describe("reconcileSovereignDebt", () => {
     db.collectionMocks["bonds"] = db.collection("bonds") as ReturnType<typeof db.collection>;
     const ledger: { totalIssued: number }[] = [{ totalIssued: 4_000_000_000 }];
     db.collectionMocks["bonds"]!.find.mockReturnValue({
-      toArray: async () =>
-        ledger.map((b) => ({ issuerType: "sovereign", countryId: "US", ...b })),
+      toArray: async () => ledger.map((b) => ({ issuerType: "sovereign", countryId: "US", ...b })),
     });
     let issuedFace = 0;
-    db.collectionMocks["bonds"]!.insertOne.mockImplementation(async (doc: { totalIssued: number }) => {
-      ledger.push({ totalIssued: doc.totalIssued });
-      issuedFace += doc.totalIssued;
-      return { insertedId: { toString: () => "mock-id" } };
-    });
+    db.collectionMocks["bonds"]!.insertOne.mockImplementation(
+      async (doc: { totalIssued: number }) => {
+        ledger.push({ totalIssued: doc.totalIssued });
+        issuedFace += doc.totalIssued;
+        return { insertedId: { toString: () => "mock-id" } };
+      }
+    );
 
     const params = { countryId: COUNTRY_CONFIGS.US.id, turn: 240, now: new Date() };
     await expect(reconcileSovereignDebt(db as unknown as Db, params)).rejects.toThrow(
@@ -1013,7 +1012,12 @@ describe("resyncSovereignPrincipalFromBonds", () => {
     // them: a doc arriving without `issuerType` reads as non-sovereign and
     // contributes 0, which would re-point the stored principal at zero.
     expect(db.collectionMocks["bonds"]!.find).toHaveBeenCalledWith(
-      { issuerType: "sovereign", countryId: COUNTRY_CONFIGS.US.id, matured: false, defaulted: false },
+      {
+        issuerType: "sovereign",
+        countryId: COUNTRY_CONFIGS.US.id,
+        matured: false,
+        defaulted: false,
+      },
       expect.objectContaining({
         projection: expect.objectContaining({
           issuerType: 1,

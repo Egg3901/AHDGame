@@ -364,9 +364,7 @@ describe("applyAppropriationSettlementWithOverdraft replay", () => {
     );
     expect(replay).toBe(false);
 
-    const after = await db
-      .collection<FederalBudget>("federalBudget")
-      .findOne({ countryId: "US" });
+    const after = await db.collection<FederalBudget>("federalBudget").findOne({ countryId: "US" });
     expect(after?.treasuryBalance).toBe(999_995);
     expect(after?.defenseAppropriation?.balance).toBe(-5);
     expect(after?.defenseAppropriation?.accruedThroughTurn).toBe(5);
