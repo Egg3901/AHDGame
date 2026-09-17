@@ -11,6 +11,7 @@ import {
   applyIdempotentLeg,
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  failMoneyFlowReceipt,
   keyedInsertId,
   makeInsertStep,
   makeLegStep,
@@ -22,7 +23,8 @@ import {
 import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import {
   calculateSpreadFee,
-  makeSpreadDistributionSteps,
+  makeSpreadDistributionStepsForFees,
+  type SpreadDistributionSpec,
 } from "@/lib/currency/spreadFees";
 import { getCountryForCurrency } from "@/lib/currency/marketMaker";
 import type { Character, CurrencyOrder, TradeHistoryEntry } from "@/lib/db/types";
@@ -306,13 +308,18 @@ export async function applyForexFillSpend(
   const history = db.collection<TradeHistoryEntry>("tradeHistory");
   const now = input.now;
 
-  const fail = (sentinel: string): never => {
-    throw new Error(sentinel);
-  };
-
   const runSpend = async (session?: ClientSession) => {
     const opts = session ? { session } : {};
     const claim = await claimMoneyFlowReceipt(receipts, key, input.fingerprint, opts);
+    // A fresh claim owns the attempt, so a validation failure settles the
+    // receipt `failed` (nothing applied yet — truthful). A resumed
+    // `in-progress` claim never settles here: the crashed prefix may have
+    // moved money, so it reconciles through the keyed steps below instead.
+    const fresh = claim === "fresh";
+    const fail = async (sentinel: string): Promise<never> => {
+      if (fresh) await failMoneyFlowReceipt(receipts, key, sentinel, opts);
+      throw new Error(sentinel);
+    };
     if (claim === "duplicate") {
       // Replay the stored outcome without touching balances or live state:
       // the history row is deterministic per key, and the taker spread
@@ -341,14 +348,14 @@ export async function applyForexFillSpend(
     if (!order) {
       const error =
         input.kind === "limit" ? FOREX_FILL_ORDER_MISSING : FOREX_DIRECT_ORDER_MISSING;
-      fail(error);
+      return fail(error);
     }
     if (input.kind === "limit" ? order.type !== "limit" : order.type !== "direct") {
       const error =
         input.kind === "limit"
           ? `${FOREX_FILL_UNAVAILABLE}:not-limit`
           : FOREX_DIRECT_WRONG_TYPE;
-      fail(error);
+      return fail(error);
     }
     const statusOpen =
       input.kind === "limit"
@@ -359,7 +366,7 @@ export async function applyForexFillSpend(
         input.kind === "limit"
           ? `${FOREX_FILL_UNAVAILABLE}:not-open`
           : FOREX_DIRECT_UNAVAILABLE;
-      fail(error);
+      return fail(error);
     }
 
     const remaining = order.amount - order.filledAmount;
@@ -370,10 +377,15 @@ export async function applyForexFillSpend(
     if (!(fillAmount > 0)) {
       const error =
         input.kind === "limit" ? `${FOREX_FILL_UNAVAILABLE}:empty` : FOREX_DIRECT_UNAVAILABLE;
-      fail(error);
+      return fail(error);
     }
 
-    const rate = order.limitRate ?? fail(input.kind === "limit" ? `${FOREX_FILL_UNAVAILABLE}:no-rate` : FOREX_DIRECT_UNAVAILABLE);
+    const rate = order.limitRate;
+    if (rate === undefined) {
+      return fail(
+        input.kind === "limit" ? `${FOREX_FILL_UNAVAILABLE}:no-rate` : FOREX_DIRECT_UNAVAILABLE
+      );
+    }
     // The taker provides toCurrency and receives fromCurrency at the order's
     // rate; each side pays half the spread in its own denomination.
     const toCurrencyAmount = fillAmount * rate;
@@ -389,7 +401,7 @@ export async function applyForexFillSpend(
         input.kind === "limit" ? FOREX_FILL_INSUFFICIENT : FOREX_DIRECT_INSUFFICIENT;
       // Embed the fresh need/have so routes render the historical
       // `Need <ceil>, have <floor>` message from exact numbers.
-      fail(`${error}:precheck:${takerTotalCost}:${takerHave}`);
+      return fail(`${error}:precheck:${takerTotalCost}:${takerHave}`);
     }
 
     const newFilledAmount = order.filledAmount + fillAmount;
@@ -398,6 +410,25 @@ export async function applyForexFillSpend(
 
     const fromCountryId = getCountryForCurrency(order.fromCurrency);
     const toCountryId = getCountryForCurrency(order.toCurrency);
+
+    // Half-spread routing specs for the merged per-bank spread steps below.
+    const spreadSpecs: SpreadDistributionSpec[] = [];
+    if (fromCountryId) {
+      spreadSpecs.push({
+        totalFee: makerSpread,
+        sourceCountryId: fromCountryId,
+        currencyCode: order.fromCurrency,
+        ...(toCountryId ? { destinationCountryId: toCountryId } : {}),
+      });
+    }
+    if (toCountryId) {
+      spreadSpecs.push({
+        totalFee: takerSpread,
+        sourceCountryId: toCountryId,
+        currencyCode: order.toCurrency,
+        ...(fromCountryId ? { destinationCountryId: fromCountryId } : {}),
+      });
+    }
 
     const makerStep: MoneyFlowStep =
       input.kind === "direct"
@@ -520,22 +551,11 @@ export async function applyForexFillSpend(
           createdAt: now,
           source: input.kind === "limit" ? "limit_order" : "direct",
         } as TradeHistoryEntry),
-        ...(fromCountryId
-          ? makeSpreadDistributionSteps(db, key, {
-              totalFee: makerSpread,
-              sourceCountryId: fromCountryId,
-              currencyCode: order.fromCurrency,
-              ...(toCountryId ? { destinationCountryId: toCountryId } : {}),
-            })
-          : []),
-        ...(toCountryId
-          ? makeSpreadDistributionSteps(db, key, {
-              totalFee: takerSpread,
-              sourceCountryId: toCountryId,
-              currencyCode: order.toCurrency,
-              ...(fromCountryId ? { destinationCountryId: fromCountryId } : {}),
-            })
-          : []),
+        // Both half-spread slices route under this key, so they merge per
+        // bank: two same-bank steps would collide on the `$ne: key` guard and
+        // the second slice would be silently skipped (see
+        // makeSpreadDistributionSteps).
+        ...makeSpreadDistributionStepsForFees(db, key, spreadSpecs),
       ],
       mapFillError(input.kind),
       opts
@@ -612,16 +632,23 @@ export async function applyForexCancelSpend(
   const orders = db.collection<CurrencyOrder>("currencyOrders");
   const now = input.now;
 
-  const fail = (sentinel: string): never => {
-    throw new Error(sentinel);
-  };
-
   const runSpend = async (session?: ClientSession) => {
     const opts = session ? { session } : {};
     const claim = await claimMoneyFlowReceipt(receipts, key, input.fingerprint, opts);
+    // A fresh claim owns the attempt, so a validation failure settles the
+    // receipt `failed` (nothing applied yet — truthful). A resumed
+    // `in-progress` claim never settles here: the crashed prefix may have
+    // moved money, so it reconciles through the keyed steps below instead —
+    // including a cancel this key already transitioned (the transition
+    // converges, the refund reads the frozen row).
+    const fresh = claim === "fresh";
+    const fail = async (sentinel: string): Promise<never> => {
+      if (fresh) await failMoneyFlowReceipt(receipts, key, sentinel, opts);
+      throw new Error(sentinel);
+    };
     if (claim === "duplicate") {
       const live = await orders.findOne({ _id: input.orderId }, opts);
-      if (!live) fail(FOREX_CANCEL_ORDER_MISSING);
+      if (!live) return fail(FOREX_CANCEL_ORDER_MISSING);
       return {
         duplicate: true as boolean,
         refundedAmount: Math.max(0, live.amount - live.filledAmount),
@@ -630,9 +657,14 @@ export async function applyForexCancelSpend(
     }
 
     const order = await orders.findOne({ _id: input.orderId }, opts);
-    if (!order) fail(FOREX_CANCEL_ORDER_MISSING);
-    if (order.status !== "open" && order.status !== "partial") {
-      fail(FOREX_CANCEL_UNAVAILABLE);
+    if (!order) return fail(FOREX_CANCEL_ORDER_MISSING);
+    const cancelledByUs = order.appliedMoneyFlowKeys?.includes(key) ?? false;
+    if (
+      order.status !== "open" &&
+      order.status !== "partial" &&
+      (fresh || !cancelledByUs)
+    ) {
+      return fail(FOREX_CANCEL_UNAVAILABLE);
     }
     const priorStatus = order.status;
     const priorUpdatedAt = order.updatedAt;

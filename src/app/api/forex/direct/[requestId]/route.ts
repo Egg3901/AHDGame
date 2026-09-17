@@ -9,17 +9,26 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc, getPersonalBalance } from "@/lib/currency/characterFunds";
-import { calculateSpreadFee, distributeSpreadFee } from "@/lib/currency/spreadFees";
-import { getCountryForCurrency } from "@/lib/currency/marketMaker";
-import { DIRECT_TRADE_SPREAD } from "@/lib/constants/currencies";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyForexCancelSpend,
+  applyForexFillSpend,
+  FOREX_CANCEL_ORDER_MISSING,
+  FOREX_CANCEL_UNAVAILABLE,
+  FOREX_DIRECT_INSUFFICIENT,
+  FOREX_DIRECT_ORDER_MISSING,
+  FOREX_DIRECT_UNAVAILABLE,
+  FOREX_DIRECT_WRONG_TYPE,
+} from "@/lib/forex/forexSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   getNewCharacterTransferBarrier,
   NEW_CHARACTER_TRANSFER_BARRIER_TURNS,
 } from "@/lib/character/newCharacterTransferBarrier";
-import type { CurrencyOrder, Character, TradeHistoryEntry, PlayerMail } from "@/lib/db/types";
+import type { CurrencyOrder, Character, PlayerMail } from "@/lib/db/types";
 
 interface RouteParams {
   params: Promise<{ requestId: string }>;
@@ -66,73 +75,56 @@ export async function POST(request: Request, { params }: RouteParams) {
 
     const now = new Date();
 
+    // Crash-safe decline/accept (issue #1672): both run as keyed idempotent
+    // money flows, so a crash between the sequential writes reconciles to
+    // exactly one outcome and a concurrent accept/decline race compensates
+    // the loser. `Idempotency-Key` replays the stored outcome without moving
+    // money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     if (action === "decline") {
-      const refundInc = buildPersonalBalanceInc(order.amount, order.fromCurrency, true);
       const sender = await db
         .collection<Character>("characters")
         .findOne({ _id: order.characterId });
 
-      await runWithOptionalTransaction(
-        async (session) => {
-          const claimedOrder = await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .findOneAndUpdate(
-              { _id: order._id, status: "open" },
-              { $set: { status: "processing", updatedAt: now } },
-              { returnDocument: "before", session }
-            );
-          if (!claimedOrder) throw badRequest("Trade request is no longer open");
-
-          await db
-            .collection("characters")
-            .updateOne({ _id: order.characterId }, { $inc: refundInc }, { session });
-          const cancelResult = await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: "cancelled", updatedAt: now } },
-              { session }
-            );
-          if (cancelResult.matchedCount === 0) {
-            throw badRequest("Trade request is no longer open");
-          }
-        },
-        async () => {
-          const claimedOrder = await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .findOneAndUpdate(
-              { _id: order._id, status: "open" },
-              { $set: { status: "processing", updatedAt: now } },
-              { returnDocument: "before" }
-            );
-          if (!claimedOrder) throw badRequest("Trade request is no longer open");
-
-          try {
-            await db
-              .collection("characters")
-              .updateOne({ _id: order.characterId }, { $inc: refundInc });
-            const cancelResult = await db
-              .collection<CurrencyOrder>("currencyOrders")
-              .updateOne(
-                { _id: order._id, status: "processing" },
-                { $set: { status: "cancelled", updatedAt: now } }
-              );
-            if (cancelResult.matchedCount === 0) {
-              throw badRequest("Trade request is no longer open");
-            }
-          } catch (error) {
-            await db
-              .collection<CurrencyOrder>("currencyOrders")
-              .updateOne(
-                { _id: order._id, status: "processing" },
-                { $set: { status: "open", updatedAt: new Date() } }
-              );
-            throw error;
-          }
+      let decline: Awaited<ReturnType<typeof applyForexCancelSpend>>;
+      try {
+        decline = await applyForexCancelSpend(db, {
+          orderId: order._id,
+          now,
+          fingerprint: `forex-decline:${order._id.toHexString()}:${character._id.toHexString()}`,
+          ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message === FOREX_CANCEL_ORDER_MISSING) {
+          throw notFound("Trade request not found");
         }
-      );
+        if (
+          error instanceof Error &&
+          (error.message === FOREX_CANCEL_UNAVAILABLE ||
+            error.message.startsWith("FOREX_CANCEL_order-cancel:"))
+        ) {
+          throw badRequest("Trade request is no longer open");
+        }
+        if (error instanceof MoneyFlowTerminalError) {
+          return NextResponse.json(
+            { error: "This decline already settled. Start a new request to try again." },
+            { status: 409 }
+          );
+        }
+        if (error instanceof MoneyFlowKeyConflictError) {
+          return NextResponse.json(
+            { error: "This idempotency key was already used for a different decline." },
+            { status: 409 }
+          );
+        }
+        throw error;
+      }
 
-      if (sender) {
+      if (!decline.duplicate && sender) {
         const mail: Omit<PlayerMail, "_id"> = {
           fromCharacterId: character._id,
           fromCharacterName: character.name,
@@ -173,204 +165,68 @@ export async function POST(request: Request, { params }: RouteParams) {
       );
     }
 
-    const toCurrencyAmount = order.amount * order.limitRate!;
-    const halfSpreadRate = DIRECT_TRADE_SPREAD / 2;
-    const senderSpreadFromCurrency = calculateSpreadFee(order.amount, halfSpreadRate);
-    const targetSpreadToCurrency = calculateSpreadFee(toCurrencyAmount, halfSpreadRate);
-
-    const targetBalance = getPersonalBalance(character, order.toCurrency, true);
-    const targetCost = toCurrencyAmount + targetSpreadToCurrency;
-    if (targetBalance < targetCost) {
-      throw badRequest(
-        `Insufficient ${order.toCurrency}. Need ~${Math.ceil(targetCost).toLocaleString()}, have ${Math.floor(targetBalance).toLocaleString()}.`
-      );
-    }
-
+    // The taker settlement, sender credit, guarded accept transition, history
+    // row, and both half-spread CB slices run as keyed idempotent steps inside
+    // the primitive (same conservation and routing as the legacy writes); the
+    // live balance pre-check moves in there too so the 400 echoes exact
+    // need/have numbers.
     const currentTurn = gameTime.currentTurn;
 
-    const senderCreditInc = buildPersonalBalanceInc(toCurrencyAmount, order.toCurrency, true);
-    const senderRollbackInc = buildPersonalBalanceInc(-toCurrencyAmount, order.toCurrency, true);
-    // Target receives the traded fromCurrency net of the sender's half-spread.
-    // The sender escrowed order.amount fromCurrency at request creation; that
-    // escrow now funds both the target credit and the CB spread routed via
-    // distributeSpreadFee below. Crediting the target the FULL order.amount while
-    // also handing senderSpreadFromCurrency to the CB minted fromCurrency on every
-    // accepted trade. Netting: (order.amount - senderSpread) to target + senderSpread
-    // to CB = order.amount out of escrow. Conserved.
-    const targetFromCurrencyCredit = order.amount - senderSpreadFromCurrency;
-    const targetDebitAndCreditInc = {
-      ...buildPersonalBalanceInc(-targetCost, order.toCurrency, true),
-      ...buildPersonalBalanceInc(targetFromCurrencyCredit, order.fromCurrency, true),
-    };
-    const targetRollbackInc = {
-      ...buildPersonalBalanceInc(targetCost, order.toCurrency, true),
-      ...buildPersonalBalanceInc(-targetFromCurrencyCredit, order.fromCurrency, true),
-    };
-    const fromCountryId = getCountryForCurrency(order.fromCurrency);
-    const toCountryId = getCountryForCurrency(order.toCurrency);
-    const tradeHistoryEntry = {
-      buyerCharacterId: order.characterId,
-      sellerCharacterId: character._id,
-      fromCurrency: order.fromCurrency,
-      toCurrency: order.toCurrency,
-      amount: order.amount,
-      rate: order.limitRate!,
-      spread: senderSpreadFromCurrency,
-      turn: currentTurn,
-      createdAt: now,
-      source: "direct",
-    } as TradeHistoryEntry;
-
-    await runWithOptionalTransaction(
-      async (session) => {
-        const claimedOrder = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .findOneAndUpdate(
-            { _id: order._id, status: "open" },
-            { $set: { status: "processing", updatedAt: now } },
-            { returnDocument: "before", session }
-          );
-        if (!claimedOrder) throw badRequest("Trade request is no longer open");
-
-        const targetUpdate = await db.collection("characters").updateOne(
-          {
-            _id: character._id,
-            [`currencyBalances.personal.${order.toCurrency}`]: { $gte: targetCost },
-          },
-          { $inc: targetDebitAndCreditInc },
-          { session }
-        );
-        if (targetUpdate.modifiedCount === 0) {
-          throw badRequest(
-            `Insufficient ${order.toCurrency}. Need ~${Math.ceil(targetCost).toLocaleString()}, have ${Math.floor(targetBalance).toLocaleString()}.`
-          );
-        }
-
-        await db
-          .collection("characters")
-          .updateOne({ _id: order.characterId }, { $inc: senderCreditInc }, { session });
-        const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
-          { _id: order._id, status: "processing" },
-          {
-            $set: {
-              status: "filled",
-              filledAmount: order.amount,
-              filledRate: order.limitRate,
-              spreadCharged: senderSpreadFromCurrency,
-              updatedAt: now,
-            },
-          },
-          { session }
-        );
-        if (fillResult.matchedCount === 0) {
-          throw badRequest("Trade request is no longer open");
-        }
-        await db.collection<TradeHistoryEntry>("tradeHistory").insertOne(tradeHistoryEntry, {
-          session,
-        });
-      },
-      async () => {
-        const claimedOrder = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .findOneAndUpdate(
-            { _id: order._id, status: "open" },
-            { $set: { status: "processing", updatedAt: now } },
-            { returnDocument: "before" }
-          );
-        if (!claimedOrder) throw badRequest("Trade request is no longer open");
-
-        let targetDebited = false;
-        let senderCredited = false;
-
-        try {
-          const targetUpdate = await db.collection("characters").updateOne(
-            {
-              _id: character._id,
-              [`currencyBalances.personal.${order.toCurrency}`]: { $gte: targetCost },
-            },
-            { $inc: targetDebitAndCreditInc }
-          );
-          if (targetUpdate.modifiedCount === 0) {
-            await db
-              .collection<CurrencyOrder>("currencyOrders")
-              .updateOne(
-                { _id: order._id, status: "processing" },
-                { $set: { status: "open", updatedAt: new Date() } }
-              );
-            throw badRequest(
-              `Insufficient ${order.toCurrency}. Need ~${Math.ceil(targetCost).toLocaleString()}, have ${Math.floor(targetBalance).toLocaleString()}.`
-            );
-          }
-          targetDebited = true;
-
-          await db
-            .collection("characters")
-            .updateOne({ _id: order.characterId }, { $inc: senderCreditInc });
-          senderCredited = true;
-
-          const fillResult = await db.collection<CurrencyOrder>("currencyOrders").updateOne(
-            { _id: order._id, status: "processing" },
-            {
-              $set: {
-                status: "filled",
-                filledAmount: order.amount,
-                filledRate: order.limitRate,
-                spreadCharged: senderSpreadFromCurrency,
-                updatedAt: now,
-              },
-            }
-          );
-          if (fillResult.matchedCount === 0) {
-            throw badRequest("Trade request is no longer open");
-          }
-          await db.collection<TradeHistoryEntry>("tradeHistory").insertOne(tradeHistoryEntry);
-        } catch (error) {
-          if (senderCredited) {
-            await db
-              .collection("characters")
-              .updateOne({ _id: order.characterId }, { $inc: senderRollbackInc });
-          }
-          if (targetDebited) {
-            await db
-              .collection("characters")
-              .updateOne({ _id: character._id }, { $inc: targetRollbackInc });
-          }
-          await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: "open", updatedAt: new Date() } }
-            );
-          throw error;
-        }
+    let fill: Awaited<ReturnType<typeof applyForexFillSpend>>;
+    try {
+      fill = await applyForexFillSpend(db, {
+        kind: "direct",
+        orderId: order._id,
+        takerCharacterId: character._id,
+        now,
+        turn: currentTurn,
+        fingerprint: `forex-direct:${order._id.toHexString()}:${character._id.toHexString()}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === FOREX_DIRECT_ORDER_MISSING) {
+        throw notFound("Trade request not found");
       }
-    );
+      if (error instanceof Error && error.message === FOREX_DIRECT_WRONG_TYPE) {
+        throw badRequest("Not a direct trade request");
+      }
+      if (error instanceof Error && error.message === FOREX_DIRECT_UNAVAILABLE) {
+        throw badRequest("Trade request is no longer open");
+      }
+      if (error instanceof Error && error.message.startsWith(FOREX_DIRECT_INSUFFICIENT)) {
+        const parts = error.message.split(":");
+        if (parts[1] === "precheck" && parts.length === 4) {
+          const need = Number(parts[2]);
+          const have = Number(parts[3]);
+          if (Number.isFinite(need) && Number.isFinite(have)) {
+            throw badRequest(
+              `Insufficient ${order.toCurrency}. Need ~${Math.ceil(need).toLocaleString()}, have ${Math.floor(have).toLocaleString()}.`
+            );
+          }
+        }
+        throw badRequest(`Insufficient ${order.toCurrency} balance`);
+      }
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This accept already settled. Start a new request to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different accept." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
-    await Promise.all(
-      [
-        fromCountryId
-          ? distributeSpreadFee(
-              db,
-              senderSpreadFromCurrency,
-              fromCountryId,
-              order.fromCurrency,
-              toCountryId ?? undefined
-            )
-          : null,
-        toCountryId
-          ? distributeSpreadFee(
-              db,
-              targetSpreadToCurrency,
-              toCountryId,
-              order.toCurrency,
-              fromCountryId ?? undefined
-            )
-          : null,
-      ].filter(Boolean) as Promise<unknown>[]
-    );
+    const toCurrencyAmount = fill.fillAmount * fill.rate;
+    const senderSpreadFromCurrency = fill.makerSpread;
+    const targetSpreadToCurrency = fill.takerSpread;
 
     const sender = await db.collection<Character>("characters").findOne({ _id: order.characterId });
-    if (sender) {
+    if (!fill.duplicate && sender) {
       const mail: Omit<PlayerMail, "_id"> = {
         fromCharacterId: character._id,
         fromCharacterName: character.name,

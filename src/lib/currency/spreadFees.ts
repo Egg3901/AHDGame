@@ -179,14 +179,22 @@ function makeBankSpreadStep<TDoc extends MoneyFlowAccount>(
 
 /**
  * The {@link distributeSpreadFee} routing as crash-safe idempotent money-flow
- * steps for issue #1672 forex flows (market-maker execution, peer fills,
- * direct accepts). Same split (via {@link splitSpreadFee}), same banks, same
- * zero-slice skips as the legacy path (`$inc` by zero is a no-op, so dropping
- * zero slices changes no balance); the destroyed sink needs no write.
+ * steps for a SINGLE fee (issue #1672 market-maker execution). Same split
+ * (via {@link splitSpreadFee}), same banks, same zero-slice skips as the
+ * legacy path (`$inc` by zero is a no-op, so dropping zero slices changes no
+ * balance); the destroyed sink needs no write.
  *
  * A non-positive or non-finite fee yields no steps, mirroring the legacy
  * no-op. Steps carry no balance guards (credits only) and their inverses
  * negate the exact slices, so compensation removes exactly what applied.
+ *
+ * Single-fee only: a flow routing TWO fees (a peer fill's maker + taker
+ * half-spreads) must use {@link makeSpreadDistributionStepsForFees}. Two
+ * same-bank steps under one key collide — the first step's key record trips
+ * the second step's `$ne: key` guard, and the disambiguation reads it as
+ * already-applied, so the second slice is silently SKIPPED (and its inverse
+ * would then negate a slice that never applied). Merging per bank keeps the
+ * module's one-key-per-document invariant.
  */
 export function makeSpreadDistributionSteps(
   db: Db,
@@ -221,6 +229,51 @@ export function makeSpreadDistributionSteps(
         [`spreadFeeReserveBalances.${spec.currencyCode}`]: toReserveBalance,
       })
     );
+  }
+  return steps;
+}
+
+/**
+ * The {@link distributeSpreadFee} routing as crash-safe idempotent money-flow
+ * steps for flows routing SEVERAL fees under one key (issue #1672 peer fills
+ * and direct accepts route the maker and taker half-spreads together). Same
+ * split, same banks, same zero-slice skips as the legacy path — but all
+ * slices landing on one bank merge into a single keyed write, so same-bank
+ * steps can never collide on the `$ne: key` guard (see
+ * {@link makeSpreadDistributionSteps}).
+ *
+ * Non-positive or non-finite fees contribute no slices, mirroring the legacy
+ * no-op. The merged inverses negate the exact per-bank totals, so
+ * compensation removes exactly what applied.
+ */
+export function makeSpreadDistributionStepsForFees(
+  db: Db,
+  key: string,
+  specs: SpreadDistributionSpec[]
+): MoneyFlowStep[] {
+  const banks = db.collection<CentralBank>("centralBanks");
+  const incByBank = new Map<string, Record<string, number>>();
+  const add = (bankId: string, field: string, delta: number): void => {
+    if (delta === 0) return;
+    let inc = incByBank.get(bankId);
+    if (!inc) {
+      inc = {};
+      incByBank.set(bankId, inc);
+    }
+    inc[field] = (inc[field] ?? 0) + delta;
+  };
+  for (const spec of specs) {
+    if (!Number.isFinite(spec.totalFee) || spec.totalFee <= 0) continue;
+    const { toReserveBalance, toForexRevenue } = splitSpreadFee(spec.totalFee);
+    const sourceBankId = getBankId(spec.sourceCountryId);
+    const reserveBankId = getBankId(spec.destinationCountryId ?? spec.sourceCountryId);
+    add(sourceBankId, "forexRevenue", toForexRevenue);
+    add(reserveBankId, `spreadFeeReserveBalances.${spec.currencyCode}`, toReserveBalance);
+  }
+  const steps: MoneyFlowStep[] = [];
+  for (const [bankId, inc] of incByBank) {
+    if (Object.keys(inc).length === 0) continue;
+    steps.push(makeBankSpreadStep(key, banks, `spread-bank-${bankId}`, bankId, inc));
   }
   return steps;
 }

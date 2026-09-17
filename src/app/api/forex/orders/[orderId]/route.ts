@@ -8,8 +8,15 @@ import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyForexCancelSpend,
+  FOREX_CANCEL_ORDER_MISSING,
+  FOREX_CANCEL_UNAVAILABLE,
+} from "@/lib/forex/forexSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import type { CurrencyOrder } from "@/lib/db/types";
 
 interface RouteParams {
@@ -43,91 +50,56 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       throw badRequest("Only open or partial orders can be cancelled");
     }
 
-    const refundAmount = order.amount - order.filledAmount;
+    // Crash-safe cancel (issue #1672): the open/partial → cancelled transition
+    // is one atomic guarded write and the escrow refund a keyed leg read from
+    // the frozen cancelled row, so a crash between the sequential writes
+    // reconciles to exactly one refund instead of stranding a half-cancelled
+    // order, and a concurrent fill either wins outright or compensates.
+    // `Idempotency-Key` replays the stored refund without refunding again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const now = new Date();
-    const claimFilter = {
-      _id: order._id,
-      characterId: order.characterId,
-      status: { $in: ["open", "partial"] as const },
-    };
-
-    await runWithOptionalTransaction(
-      async (session) => {
-        const claimedOrder = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .findOneAndUpdate(
-            claimFilter,
-            { $set: { status: "processing", updatedAt: now } },
-            { returnDocument: "before", session }
-          );
-        if (!claimedOrder) throw badRequest("Only open or partial orders can be cancelled");
-
-        if (refundAmount > 0) {
-          await db
-            .collection("characters")
-            .updateOne(
-              { _id: order.characterId },
-              { $inc: buildPersonalBalanceInc(refundAmount, order.fromCurrency, true) },
-              { session }
-            );
-        }
-
-        const cancelResult = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .updateOne(
-            { _id: order._id, status: "processing" },
-            { $set: { status: "cancelled", updatedAt: now } },
-            { session }
-          );
-        if (cancelResult.matchedCount === 0) {
-          throw badRequest("Only open or partial orders can be cancelled");
-        }
-      },
-      async () => {
-        const claimedOrder = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .findOneAndUpdate(
-            claimFilter,
-            { $set: { status: "processing", updatedAt: now } },
-            { returnDocument: "before" }
-          );
-        if (!claimedOrder) throw badRequest("Only open or partial orders can be cancelled");
-
-        try {
-          if (refundAmount > 0) {
-            await db
-              .collection("characters")
-              .updateOne(
-                { _id: order.characterId },
-                { $inc: buildPersonalBalanceInc(refundAmount, order.fromCurrency, true) }
-              );
-          }
-
-          const cancelResult = await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: "cancelled", updatedAt: now } }
-            );
-          if (cancelResult.matchedCount === 0) {
-            throw badRequest("Only open or partial orders can be cancelled");
-          }
-        } catch (error) {
-          await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .updateOne(
-              { _id: order._id, status: "processing" },
-              { $set: { status: order.status, updatedAt: new Date() } }
-            );
-          throw error;
-        }
+    let cancel: Awaited<ReturnType<typeof applyForexCancelSpend>>;
+    try {
+      cancel = await applyForexCancelSpend(db, {
+        orderId: order._id,
+        now,
+        fingerprint: `forex-cancel:${order._id.toHexString()}:${order.characterId.toHexString()}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.message === FOREX_CANCEL_ORDER_MISSING) {
+        throw notFound("Order not found");
       }
-    );
+      if (
+        error instanceof Error &&
+        (error.message === FOREX_CANCEL_UNAVAILABLE ||
+          error.message.startsWith("FOREX_CANCEL_order-cancel:"))
+      ) {
+        throw badRequest("Only open or partial orders can be cancelled");
+      }
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This cancellation already settled. Start a new request to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different cancellation." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     return NextResponse.json({
       success: true,
-      refundedAmount: refundAmount,
-      refundedCurrency: order.fromCurrency,
+      refundedAmount: cancel.refundedAmount,
+      refundedCurrency: cancel.refundedCurrency,
     });
   } catch (error) {
     return handleRouteError(error);

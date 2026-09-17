@@ -2,7 +2,7 @@
 // Auth: requireAuthWithCharacter
 // Errors: 400, 401, 403 (forex disabled), 404 (target not found)
 import { NextResponse } from "next/server";
-import { ObjectId, type InsertOneResult } from "mongodb";
+import { ObjectId } from "mongodb";
 import { z } from "zod";
 import { getDb } from "@/lib/mongodb";
 import { requireAuthWithCharacter } from "@/lib/api/requireAuth";
@@ -10,19 +10,26 @@ import { parseJsonBody, schemas } from "@/lib/api/validate";
 import { handleRouteError, forbidden, notFound, badRequest } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { getPersonalBalance, buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
+import { getPersonalBalance } from "@/lib/currency/characterFunds";
 import { ZOD_ACTIVE_CURRENCY_ENUM, DIRECT_TRADE_EXPIRY_TURNS } from "@/lib/constants/currencies";
 import {
   nonConvertibleCurrencyMessage,
   nonConvertibleTradeCurrency,
 } from "@/lib/constants/commandEconomy";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
+import {
+  applyForexOrderCreateSpend,
+  FOREX_ORDER_INSUFFICIENT,
+} from "@/lib/forex/forexSpend";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { getGameTime } from "@/lib/time/gameTime";
 import {
   getNewCharacterTransferBarrier,
   NEW_CHARACTER_TRANSFER_BARRIER_TURNS,
 } from "@/lib/character/newCharacterTransferBarrier";
-import type { CurrencyOrder, Character, GameConfig, PlayerMail } from "@/lib/db/types";
+import type { Character, GameConfig, PlayerMail } from "@/lib/db/types";
 
 const directTradeSchema = z
   .object({
@@ -100,84 +107,62 @@ export async function POST(request: Request) {
       throw badRequest(nonConvertibleCurrencyMessage(blocked));
     }
 
-    // Atomic escrow: deduct fromCurrency only if sufficient balance exists.
-    // The $gte filter prevents double-spend if two requests race.
-    const balanceField = `currencyBalances.personal.${fromCurrency}`;
-    const escrowInc = buildPersonalBalanceInc(-amount, fromCurrency, true);
-    const currentTurn = gameTime.currentTurn;
+    // Crash-safe escrow (issue #1672): the fromCurrency debit is a keyed
+    // idempotent leg and the direct-request row a deterministic insert, so a
+    // crash between the sequential writes reconciles to exactly one escrowed
+    // request instead of debiting for a request that never landed (or
+    // landing it twice). `Idempotency-Key` replays the stored request id
+    // without escrowing again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
 
+    const currentTurn = gameTime.currentTurn;
     const expiryTurns = expiresInTurns ?? DIRECT_TRADE_EXPIRY_TURNS;
     const now = new Date();
 
-    const order: Omit<CurrencyOrder, "_id"> = {
-      characterId: character._id,
-      characterName: character.name,
-      countryId: character.countryId,
-      type: "direct",
-      direction: "buy",
-      fromCurrency,
-      toCurrency,
-      amount,
-      limitRate: proposedRate,
-      targetCharacterId: new ObjectId(targetCharacterId),
-      targetCharacterName: target.name,
-      expiresAtTurn: currentTurn + expiryTurns,
-      status: "open",
-      filledAmount: 0,
-      spreadCharged: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    let requestId: ObjectId | null = null;
-    await runWithOptionalTransaction(
-      async (session) => {
-        const escrowResult = await db
-          .collection("characters")
-          .updateOne(
-            { _id: character._id, [balanceField]: { $gte: amount } },
-            { $inc: escrowInc },
-            { session }
-          );
-        if (escrowResult.modifiedCount === 0) {
-          const balance = getPersonalBalance(character, fromCurrency, true);
-          throw badRequest(
-            `Insufficient ${fromCurrency}. Have ${Math.floor(balance).toLocaleString()}, need ${amount.toLocaleString()}.`
-          );
-        }
-
-        const result: InsertOneResult<CurrencyOrder> = await db
-          .collection<CurrencyOrder>("currencyOrders")
-          .insertOne(order as CurrencyOrder, { session });
-        requestId = result.insertedId;
-      },
-      async () => {
-        const escrowResult = await db
-          .collection("characters")
-          .updateOne({ _id: character._id, [balanceField]: { $gte: amount } }, { $inc: escrowInc });
-        if (escrowResult.modifiedCount === 0) {
-          const balance = getPersonalBalance(character, fromCurrency, true);
-          throw badRequest(
-            `Insufficient ${fromCurrency}. Have ${Math.floor(balance).toLocaleString()}, need ${amount.toLocaleString()}.`
-          );
-        }
-
-        try {
-          const result: InsertOneResult<CurrencyOrder> = await db
-            .collection<CurrencyOrder>("currencyOrders")
-            .insertOne(order as CurrencyOrder);
-          requestId = result.insertedId;
-        } catch (error) {
-          await db
-            .collection("characters")
-            .updateOne(
-              { _id: character._id },
-              { $inc: buildPersonalBalanceInc(amount, fromCurrency, true) }
-            );
-          throw error;
-        }
+    let requestId: ObjectId;
+    try {
+      const result = await applyForexOrderCreateSpend(db, {
+        characterId: character._id,
+        characterName: character.name,
+        countryId: character.countryId,
+        orderType: "direct",
+        direction: "buy",
+        fromCurrency,
+        toCurrency,
+        amount,
+        limitRate: proposedRate,
+        targetCharacterId: new ObjectId(targetCharacterId),
+        targetCharacterName: target.name,
+        expiresAtTurn: currentTurn + expiryTurns,
+        now,
+        fingerprint: `forex-order:${character._id.toHexString()}:direct:${fromCurrency}:${toCurrency}:${amount}:${proposedRate}:buy:${expiresInTurns ?? "default"}:${targetCharacterId}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+      requestId = result.orderId;
+    } catch (error) {
+      if (error instanceof Error && error.message.startsWith(FOREX_ORDER_INSUFFICIENT)) {
+        const balance = getPersonalBalance(character, fromCurrency, true);
+        throw badRequest(
+          `Insufficient ${fromCurrency}. Have ${Math.floor(balance).toLocaleString()}, need ${amount.toLocaleString()}.`
+        );
       }
-    );
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This request already settled. Start a new request to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different request." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     // Send in-game mail notification to target
     const mail: Omit<PlayerMail, "_id"> = {
@@ -204,7 +189,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      requestId: requestId!.toString(),
+      requestId: requestId.toString(),
       notifiedTarget,
     });
   } catch (error) {

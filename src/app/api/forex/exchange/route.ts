@@ -12,6 +12,10 @@ import { handleRouteError, forbidden, badRequest } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { executeMarketMakerTrade } from "@/lib/currency/marketMaker";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import {
   ZOD_ACTIVE_CURRENCY_ENUM,
@@ -218,37 +222,68 @@ export async function POST(request: Request) {
       characterName = character.name;
     }
 
-    const result = await executeMarketMakerTrade(db, {
-      characterId,
-      countryId,
-      fromCurrency,
-      toCurrency,
-      amount,
-      turn: currentTurn,
-      collectionName,
-      source: "manual",
-    });
+    // Crash-safe trade (issue #1672): the wallet settlement, history row,
+    // and CB spread slices run as keyed idempotent steps inside
+    // executeMarketMakerTrade. `Idempotency-Key` replays the stored trade
+    // without trading again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
+    let result: Awaited<ReturnType<typeof executeMarketMakerTrade>>;
+    try {
+      result = await executeMarketMakerTrade(db, {
+        characterId,
+        countryId,
+        fromCurrency,
+        toCurrency,
+        amount,
+        turn: currentTurn,
+        collectionName,
+        source: "manual",
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+    } catch (error) {
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "This trade already settled. Start a new trade to try again." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "This idempotency key was already used for a different trade." },
+          { status: 409 }
+        );
+      }
+      throw error;
+    }
 
     if (!result.success) {
       return NextResponse.json({ error: result.error }, { status: 400 });
     }
 
-    void emitTx(db, {
-      type: "forex_trade",
-      turn: currentTurn,
-      createdAt: new Date(),
-      subjectType: "character",
-      subjectId: characterId,
-      subjectName: characterName,
-      amount: -result.fromAmount,
-      currencyCode: fromCurrency,
-      meta: {
-        tradeHistoryId: result.tradeHistoryId?.toString(),
-        toCurrency,
-        toAmount: result.toAmount,
-        effectiveRate: result.effectiveRate,
-      },
-    });
+    // A same-key replay returns the stored trade: the money log row from the
+    // first attempt already stands, so logging again would double-count it.
+    if (!result.duplicate) {
+      void emitTx(db, {
+        type: "forex_trade",
+        turn: currentTurn,
+        createdAt: new Date(),
+        subjectType: "character",
+        subjectId: characterId,
+        subjectName: characterName,
+        amount: -result.fromAmount,
+        currencyCode: fromCurrency,
+        meta: {
+          tradeHistoryId: result.tradeHistoryId?.toString(),
+          toCurrency,
+          toAmount: result.toAmount,
+          effectiveRate: result.effectiveRate,
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

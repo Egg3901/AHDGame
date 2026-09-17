@@ -317,6 +317,23 @@ export async function claimMoneyFlowReceipt(
   throw new MoneyFlowTerminalError(key, existing.status, existing.error);
 }
 
+/**
+ * Settle a receipt `failed` with a caller-chosen error WITHOUT running any
+ * step. For pre-step validation failures on a fresh claim only (nothing
+ * applied yet, so `failed` is truthful): a retry of a crashed attempt must
+ * never settle here, because the crashed prefix may have moved money — it
+ * reconciles through the keyed steps instead, or stays `in_progress`
+ * (TTL-visible) when it cannot.
+ */
+export async function failMoneyFlowReceipt(
+  receipts: Collection<MoneyFlowReceipt>,
+  key: string,
+  error: string,
+  options: MoneyFlowOptions = {}
+): Promise<void> {
+  await settleMoneyFlowReceipt(receipts, key, "failed", error, options);
+}
+
 async function settleMoneyFlowReceipt(
   receipts: Collection<MoneyFlowReceipt>,
   key: string,
