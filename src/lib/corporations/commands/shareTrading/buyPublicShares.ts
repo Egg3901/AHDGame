@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { getDb } from "@/lib/mongodb";
 import { ObjectId } from "mongodb";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -14,16 +16,16 @@ import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import type { Character, Corporation, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
-import {
-  creditShares,
-  creditSharesToCorp,
-  creditSharesToImperial,
-  debitShares,
-  debitSharesFromCorp,
-  debitSharesFromImperial,
-} from "@/lib/corporations/shareholderOps";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
+import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
+import {
+  executePublicShareTradeFlow,
+  getStoredPublicShareTradeResponse,
+  recoverPublicShareTradeByKey,
+  type PublicShareTradePlan,
+} from "@/lib/corporations/commands/shareTrading/publicShareTradeSpend";
+import type { ShareOrderPlacementDealer } from "@/lib/corporations/shareOrderPlacement";
+import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
@@ -37,33 +39,50 @@ import {
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
 import { autoConvertForPurchase, convertForExplicitPay } from "@/lib/currency/autoConvert";
-import { distributeConversionSpread } from "@/lib/currency/marketMaker";
 import { notifyHostileTakeoverThresholdIfEligible } from "@/lib/corporations/hostileTakeoverNotifications";
 import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
 import { loadEquityQuote } from "@/lib/equities/marketPool";
-import {
-  buildOrderFlowWindowInc,
-  buildOrderFlowWindowIncReversal,
-  isOrderFlowWashRoundTrip,
-} from "@/lib/corporations/orderFlowWashGuard";
+import { isOrderFlowWashRoundTrip } from "@/lib/corporations/orderFlowWashGuard";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import type { GameState } from "@/lib/db/types";
-import { emitTx } from "@/lib/financialTxLog/emit";
-import {
-  atomicallyDebitCharacterCash,
-  refundCharacterCash,
-  atomicallyDebitImperialCash,
-  refundImperialCash,
-  atomicallyDebitCorpLiquidCapital,
-  refundCorpLiquidCapital,
-} from "@/lib/financialTxLog/atomicCashGuard";
-import { applyFloatBuyCredit } from "@/lib/corporations/shareEscrowSettlement";
 import { assertCeoAcquisitionWithinCap } from "@/lib/corporations/ceoShareAcquisitionCap";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+/** Maps keyed-flow claim failures onto the legacy 409 surface. */
+function mapTradeKeyError(error: unknown): NextResponse {
+  if (error instanceof MoneyFlowTerminalError) {
+    return NextResponse.json(
+      { error: "Trade already settled; start a new attempt with a new key." },
+      { status: 409 }
+    );
+  }
+  if (error instanceof MoneyFlowKeyConflictError) {
+    return NextResponse.json(
+      { error: "Idempotency key was reused for a different transfer." },
+      { status: 409 }
+    );
+  }
+  throw error;
+}
+
+async function runTradeKeyRecovery(
+  db: import("mongodb").Db,
+  tradeKey: string
+): Promise<NextResponse> {
+  try {
+    const recovered = await recoverPublicShareTradeByKey(db, tradeKey);
+    if (!recovered.ok) {
+      return NextResponse.json({ error: recovered.error }, { status: recovered.status });
+    }
+    return NextResponse.json(recovered.body);
+  } catch (error) {
+    return mapTradeKeyError(error);
+  }
 }
 
 /**
@@ -82,6 +101,26 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
     }
 
     const { shares, buyAsCorporation, payCurrency } = parsed.data;
+
+    // Crash-safe float trades (issue #1672): the buyer debit, the float and
+    // cap-table writes, and the issuer credit run as keyed idempotent steps.
+    // `Idempotency-Key` replays the stored outcome without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
+    // Same-key retry: the first attempt already validated, so reconcile
+    // through the stored plan instead of re-running the guards (which
+    // post-debit reads would fail). Runs before the action/turn guards so
+    // crash recovery converges even while fresh trades are blocked.
+    if (headerKey !== null) {
+      const dbForReplay = await getDb();
+      const prior = await getStoredPublicShareTradeResponse(dbForReplay, headerKey);
+      if (prior) {
+        return runTradeKeyRecovery(dbForReplay, headerKey);
+      }
+    }
 
     if (buyAsCorporation) {
       // ── Corp buy path ─────────────────────────────────────────────
@@ -202,44 +241,33 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           : anchorToCorpLiquidCapital(cost, buyingCorp, fxRates[buyingCurrency] ?? 1);
 
       const now = new Date();
+      const currentTurn = await getCurrentTurn(db);
+      const tradeKey = headerKey ?? randomUUID();
 
-      // Atomic balance-gated debit. Replaces the read-then-write check + naïve
-      // $inc that allowed concurrent corp share buys to over-deduct or — the
-      // observed failure mode — credit shares while silently dropping the cash
-      // deduction. See src/lib/financialTxLog/atomicCashGuard.ts.
-      const corpDebit = await atomicallyDebitCorpLiquidCapital(
-        db,
-        buyingCorp._id,
-        costInBuyerCapital
-      );
-      if (!corpDebit.ok) {
-        const buySym = CURRENCY_SYMBOLS[buyingCurrency] ?? "$";
-        const targetSym = CURRENCY_SYMBOLS[targetCurrency] ?? "$";
-        const costStr = cost.toLocaleString(undefined, { minimumFractionDigits: 2 });
-        const adjustedStr = costInBuyerCapital.toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-        });
-        const haveStr = (buyingCorp.liquidCapital ?? 0).toLocaleString(undefined, {
-          minimumFractionDigits: 2,
-        });
-        const currencyNote =
-          buyingCurrency !== targetCurrency
-            ? ` (${buySym}${adjustedStr} ${buyingCurrency} incl. FX, corp has ${buySym}${haveStr} ${buyingCurrency})`
-            : "";
-        return NextResponse.json(
-          {
-            error:
-              buyingCurrency !== targetCurrency
-                ? `Insufficient funds. Need ${targetSym}${costStr}${currencyNote}`
-                : `Insufficient funds. Need ${targetSym}${costStr}, corp has ${buySym}${haveStr} ${buyingCurrency}`,
-          },
-          { status: 400 }
-        );
-      }
+      // Pinned legacy guard surface: the keyed buyer-debit step re-guards
+      // the same balance condition at apply time and reports this exact
+      // string, computed from pre-debit reads like the legacy check.
+      const buySym = CURRENCY_SYMBOLS[buyingCurrency] ?? "$";
+      const targetSym = CURRENCY_SYMBOLS[targetCurrency] ?? "$";
+      const costStr = cost.toLocaleString(undefined, { minimumFractionDigits: 2 });
+      const adjustedStr = costInBuyerCapital.toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+      });
+      const haveStr = (buyingCorp.liquidCapital ?? 0).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+      });
+      const currencyNote =
+        buyingCurrency !== targetCurrency
+          ? ` (${buySym}${adjustedStr} ${buyingCurrency} incl. FX, corp has ${buySym}${haveStr} ${buyingCurrency})`
+          : "";
+      const debitError =
+        buyingCurrency !== targetCurrency
+          ? `Insufficient funds. Need ${targetSym}${costStr}${currencyNote}`
+          : `Insufficient funds. Need ${targetSym}${costStr}, corp has ${buySym}${haveStr} ${buyingCurrency}`;
 
       // Wash-trade guard (see orderFlowWashGuard): a buy that round-trips this
       // corp's own recent sell contributes nothing to the order-flow window and
-      // neutralizes the sell leg instead.
+      // neutralizes the sell leg instead. Read-only; pinned into the plan.
       const washExcluded =
         orderFlowEligible &&
         (await isOrderFlowWashRoundTrip(
@@ -249,61 +277,136 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           "buy",
           now
         ));
-      const orderFlowInc = buildOrderFlowWindowInc(
-        orderFlowEligible,
-        "buy",
-        shares * executionPrice,
-        washExcluded
-      );
-      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
-        orderFlowEligible,
-        "buy",
-        shares * executionPrice,
-        washExcluded
-      );
 
-      let sharesCredited = false;
-      try {
-        const credited = await creditSharesToCorp(
-          db,
-          corporation._id,
-          buyingCorp._id,
-          shares,
-          executionPrice,
-          {
-            $inc: {
-              publicFloat: -shares,
-              ...orderFlowInc,
-            },
-            $set: { updatedAt: now },
+      // Treasury-backed market maker routing, pinned before the flow starts
+      // (mirrors `applyFloatBuyCredit`): pool counterparty when the quote is
+      // pool-backed, else the issuer escrow or treasury leg.
+      const issuerBuyback = shares * executionPrice;
+      let corpDealer: ShareOrderPlacementDealer;
+      if (marketQuote.active) {
+        corpDealer = {
+          kind: "pool",
+          currency: marketQuote.currency,
+          amountLocal: issuerBuyback,
+          flowKind: "purchasesIn",
+        };
+      } else if (getShareBuybackMode(corporation) === "escrow") {
+        corpDealer = { kind: "escrow-credit", amountLocal: issuerBuyback };
+      } else {
+        corpDealer = { kind: "treasury", amountLocal: issuerBuyback };
+      }
+
+      const corpBuyPlan: PublicShareTradePlan = {
+        version: 1,
+        tradeKey,
+        kind: "market-buy",
+        corpIdHex: corporation._id.toHexString(),
+        corpName: corporation.name,
+        shares,
+        executionPrice,
+        turn: currentTurn,
+        nowIso: now.toISOString(),
+        orderFlowEligible,
+        washExcluded,
+        buyerDebit: {
+          collection: "corporations",
+          idHex: buyingCorp._id.toHexString(),
+          field: "liquidCapital",
+          amount: costInBuyerCapital,
+        },
+        capCredit: {
+          field: "corporationId",
+          idHex: buyingCorp._id.toHexString(),
+          pricePerShare: executionPrice,
+        },
+        capDebit: null,
+        proceedsLeg: null,
+        dealer: corpDealer,
+        ceoVacate: null,
+        closeTenureHolderIdHex: null,
+        tx: {
+          type: "stock_trade_buy",
+          subjectType: "corporation",
+          subjectIdHex: buyingCorp._id.toHexString(),
+          subjectName: buyingCorp.name,
+          amount: -costInBuyerCapital,
+          includeBalanceAfter: true,
+          currencyCode: resolveCorpLiquidCurrencyCode(buyingCorp) ?? "USD",
+          counterpartyType: "corporation",
+          counterpartyIdHex: corporation._id.toHexString(),
+          counterpartyName: corporation.name,
+          meta: {
+            corporationId: corporation._id.toString(),
+            shares,
+            pricePerShare: executionPrice,
           },
-          { guardFilter: { publicFloat: { $gte: shares } } }
-        );
-        if (!credited) {
-          await refundCorpLiquidCapital(db, buyingCorp._id, costInBuyerCapital);
-          return NextResponse.json(
-            { error: "Not enough shares remain in public float" },
-            { status: 409 }
-          );
-        }
-        sharesCredited = true;
-
-        void recordShareTrade(db, {
-          corporationId: corporation._id,
+        },
+        history: {
           kind: "market_buy",
-          turn: await getCurrentTurn(db),
           shares,
           pricePerShareAnchor: cost / shares,
           from: null,
           to: { corporationId: buyingCorp._id, name: buyingCorp.name },
           corpCurrencyCode: corporation.liquidCurrencyCode,
-        });
+        },
+        // Route the FX spread the corp already paid on a cross-currency share
+        // buy into the CB system post-commit (reserve slice then revenue).
+        // Previously this spread was destroyed.
+        spread:
+          buyingCurrency !== targetCurrency
+            ? {
+                fee: corpPurchaseEstimate.spreadFee,
+                from: buyingCurrency,
+                to: targetCurrency,
+              }
+            : null,
+        audit: null,
+        notifyTakeover: true,
+        errors: {
+          "buyer-debit": { message: debitError, status: 400 },
+          float: { message: "Not enough shares remain in public float", status: 409 },
+          "buyer-credit": { message: "Failed to record trade", status: 500 },
+          dealer: { message: "Failed to record trade", status: 500 },
+          "seller-debit": { message: "Failed to record trade", status: 500 },
+          "proceeds-credit": { message: "Failed to record trade", status: 500 },
+          history: { message: "Failed to record trade", status: 500 },
+        },
+        response: {
+          success: true,
+          sharesBought: shares,
+          cost: Math.round(cost * 100) / 100,
+          costInBuyerCurrency: Math.round(costInBuyerCapital * 100) / 100,
+          buyerCurrency: buyingCurrency,
+          pricePerShare: executionPrice,
+          buyer: "corporation",
+          buyerName: buyingCorp.name,
+          // FX spread the corp paid on a cross-currency buy (0 when same currency).
+          spreadPaid:
+            buyingCurrency !== targetCurrency
+              ? Math.round(corpPurchaseEstimate.spreadFee * 100) / 100
+              : 0,
+          spreadCurrency: buyingCurrency,
+        },
+      };
 
+      let corpBuyResult;
+      try {
+        corpBuyResult = await executePublicShareTradeFlow(db, corpBuyPlan, {
+          idempotencyKey: tradeKey,
+        });
+      } catch (error) {
+        return mapTradeKeyError(error);
+      }
+      if (!corpBuyResult.ok) {
+        return NextResponse.json({ error: corpBuyResult.error }, { status: corpBuyResult.status });
+      }
+      if (!corpBuyResult.replayed) {
+        void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
         void logEconomicAction(db, {
           characterId: ceoId,
           userId: corpAuth.user.userId,
           actionType: "buyShares",
-          turn: await getCurrentTurn(db),
+          turn: currentTurn,
           characterName: buyingCorp.name,
           username: corpUserDoc?.username,
           countryId: corporation.countryId,
@@ -315,83 +418,8 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             message: `${buyingCorp.name} bought ${shares.toLocaleString()} shares of ${corporation.name}`,
           },
         }).catch(() => {});
-
-        void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
-
-        await emitTx(db, {
-          type: "stock_trade_buy",
-          turn: await getCurrentTurn(db),
-          createdAt: now,
-          subjectType: "corporation",
-          subjectId: buyingCorp._id,
-          subjectName: buyingCorp.name,
-          amount: -costInBuyerCapital,
-          balanceAfter: corpDebit.newBalance,
-          currencyCode: resolveCorpLiquidCurrencyCode(buyingCorp) ?? "USD",
-          counterpartyType: "corporation",
-          counterpartyId: corporation._id,
-          counterpartyName: corporation.name,
-          meta: {
-            corporationId: corporation._id.toString(),
-            shares,
-            pricePerShare: executionPrice,
-          },
-        });
-
-        // Treasury-backed market maker: the buyer's payment is injected into
-        // the issuer's liquidCapital so a float buy conserves money instead of
-        // vanishing. Last statement in the try — if it throws, the catch rolls
-        // back the shares + buyer cash, so the issuer simply isn't credited.
-        await applyFloatBuyCredit(db, corporation, shares * executionPrice);
-
-        // Route the FX spread the corp already paid on a cross-currency share
-        // buy into the CB system (reserve slice → target-currency CB; revenue →
-        // buyer-currency CB). Previously this spread was destroyed.
-        if (buyingCurrency !== targetCurrency) {
-          await distributeConversionSpread(
-            db,
-            corpPurchaseEstimate.spreadFee,
-            buyingCurrency,
-            targetCurrency
-          );
-        }
-      } catch (err) {
-        if (sharesCredited) {
-          await debitSharesFromCorp(
-            db,
-            corporation._id,
-            buyingCorp._id,
-            shares,
-            {
-              $inc: {
-                publicFloat: shares,
-                ...orderFlowIncReversal,
-              },
-              $set: { updatedAt: new Date() },
-            },
-            { requireSufficient: true }
-          );
-        }
-        await refundCorpLiquidCapital(db, buyingCorp._id, costInBuyerCapital);
-        throw err;
       }
-
-      return NextResponse.json({
-        success: true,
-        sharesBought: shares,
-        cost: Math.round(cost * 100) / 100,
-        costInBuyerCurrency: Math.round(costInBuyerCapital * 100) / 100,
-        buyerCurrency: buyingCurrency,
-        pricePerShare: executionPrice,
-        buyer: "corporation",
-        buyerName: buyingCorp.name,
-        // FX spread the corp paid on a cross-currency buy (0 when same currency).
-        spreadPaid:
-          buyingCurrency !== targetCurrency
-            ? Math.round(corpPurchaseEstimate.spreadFee * 100) / 100
-            : 0,
-        spreadCurrency: buyingCurrency,
-      });
+      return NextResponse.json(corpBuyResult.body);
     }
 
     // ── Character buy path (regular or imperial) ──────────────────────
@@ -510,25 +538,10 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
       }
 
       const now = new Date();
+      const imperialTurn = await getCurrentTurn(db);
+      const imperialTradeKey = headerKey ?? randomUUID();
 
-      // Atomic balance-gated debit on imperial wallet (post-autoConvert).
-      const debitResult = await atomicallyDebitImperialCash(
-        db,
-        imperial._id,
-        imperialHomeCurrency,
-        costInImperialHome,
-        forexEnabled
-      );
-      if (!debitResult.ok) {
-        return NextResponse.json(
-          {
-            error: `Insufficient funds. Need ${costInImperialHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${imperialHomeCurrency}.`,
-          },
-          { status: 400 }
-        );
-      }
-
-      // Wash-trade guard (see orderFlowWashGuard).
+      // Wash-trade guard (see orderFlowWashGuard). Read-only; pinned below.
       const washExcluded =
         orderFlowEligible &&
         (await isOrderFlowWashRoundTrip(
@@ -538,66 +551,120 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           "buy",
           now
         ));
-      const orderFlowInc = buildOrderFlowWindowInc(
-        orderFlowEligible,
-        "buy",
-        shares * executionPrice,
-        washExcluded
-      );
-      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
-        orderFlowEligible,
-        "buy",
-        shares * executionPrice,
-        washExcluded
-      );
 
-      let sharesCredited = false;
-      try {
-        const credited = await creditSharesToImperial(
-          db,
-          corporation._id,
-          imperial._id,
-          shares,
-          {
-            $inc: {
-              publicFloat: -shares,
-              ...orderFlowInc,
-            },
-            $set: { updatedAt: now },
+      const imperialIssuerBuyback = shares * executionPrice;
+      let imperialDealer: ShareOrderPlacementDealer;
+      if (marketQuote.active) {
+        imperialDealer = {
+          kind: "pool",
+          currency: marketQuote.currency,
+          amountLocal: imperialIssuerBuyback,
+          flowKind: "purchasesIn",
+        };
+      } else if (getShareBuybackMode(corporation) === "escrow") {
+        imperialDealer = { kind: "escrow-credit", amountLocal: imperialIssuerBuyback };
+      } else {
+        imperialDealer = { kind: "treasury", amountLocal: imperialIssuerBuyback };
+      }
+
+      const imperialBuyPlan: PublicShareTradePlan = {
+        version: 1,
+        tradeKey: imperialTradeKey,
+        kind: "market-buy",
+        corpIdHex: corporation._id.toHexString(),
+        corpName: corporation.name,
+        shares,
+        executionPrice,
+        turn: imperialTurn,
+        nowIso: now.toISOString(),
+        orderFlowEligible,
+        washExcluded,
+        buyerDebit: {
+          collection: "imperialCharacters",
+          idHex: imperial._id.toHexString(),
+          field: personalBalanceField(imperialHomeCurrency, forexEnabled),
+          amount: costInImperialHome,
+        },
+        capCredit: {
+          field: "imperialCharacterId",
+          idHex: imperial._id.toHexString(),
+          pricePerShare: executionPrice,
+        },
+        capDebit: null,
+        proceedsLeg: null,
+        dealer: imperialDealer,
+        ceoVacate: null,
+        closeTenureHolderIdHex: null,
+        tx: {
+          type: "stock_trade_buy",
+          subjectType: "character",
+          subjectIdHex: imperial._id.toHexString(),
+          subjectName: imperial.name,
+          amount: -costInImperialHome,
+          includeBalanceAfter: true,
+          currencyCode: imperialHomeCurrency,
+          counterpartyType: "corporation",
+          counterpartyIdHex: corporation._id.toHexString(),
+          counterpartyName: corporation.name,
+          meta: {
+            corporationId: corporation._id.toString(),
+            shares,
+            pricePerShare: executionPrice,
+            imperial: true,
           },
-          { pricePerShare: executionPrice, guardFilter: { publicFloat: { $gte: shares } } }
-        );
-        if (!credited) {
-          await refundImperialCash(
-            db,
-            imperial._id,
-            imperialHomeCurrency,
-            costInImperialHome,
-            forexEnabled
-          );
-          return NextResponse.json(
-            { error: "Not enough shares remain in public float" },
-            { status: 409 }
-          );
-        }
-        sharesCredited = true;
-
-        void recordShareTrade(db, {
-          corporationId: corporation._id,
+        },
+        history: {
           kind: "market_buy",
-          turn: await getCurrentTurn(db),
           shares,
           pricePerShareAnchor: cost / shares,
           from: null,
           to: { imperialCharacterId: imperial._id, name: imperial.name },
           corpCurrencyCode: corporation.liquidCurrencyCode,
-        });
+        },
+        spread: null,
+        audit: null,
+        notifyTakeover: true,
+        errors: {
+          "buyer-debit": {
+            message: `Insufficient funds. Need ${costInImperialHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${imperialHomeCurrency}.`,
+            status: 400,
+          },
+          float: { message: "Not enough shares remain in public float", status: 409 },
+          "buyer-credit": { message: "Failed to record trade", status: 500 },
+          dealer: { message: "Failed to record trade", status: 500 },
+          "seller-debit": { message: "Failed to record trade", status: 500 },
+          "proceeds-credit": { message: "Failed to record trade", status: 500 },
+          history: { message: "Failed to record trade", status: 500 },
+        },
+        response: {
+          success: true,
+          sharesBought: shares,
+          cost: Math.round(cost * 100) / 100,
+          pricePerShare: executionPrice,
+        },
+      };
 
+      let imperialBuyResult;
+      try {
+        imperialBuyResult = await executePublicShareTradeFlow(db, imperialBuyPlan, {
+          idempotencyKey: imperialTradeKey,
+        });
+      } catch (error) {
+        return mapTradeKeyError(error);
+      }
+      if (!imperialBuyResult.ok) {
+        return NextResponse.json(
+          { error: imperialBuyResult.error },
+          { status: imperialBuyResult.status }
+        );
+      }
+      if (!imperialBuyResult.replayed) {
+        void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
         void logEconomicAction(db, {
           characterId: imperial._id,
           userId: basicAuth.user.userId,
           actionType: "buyShares",
-          turn: await getCurrentTurn(db),
+          turn: imperialTurn,
           characterName: imperial.name,
           username: userDoc?.username,
           countryId: corporation.countryId,
@@ -609,65 +676,8 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
             message: `Bought ${shares.toLocaleString()} shares of ${corporation.name}`,
           },
         }).catch(() => {});
-
-        await emitTx(db, {
-          type: "stock_trade_buy",
-          turn: await getCurrentTurn(db),
-          createdAt: now,
-          subjectType: "character",
-          subjectId: imperial._id,
-          subjectName: imperial.name,
-          amount: -costInImperialHome,
-          balanceAfter: debitResult.newBalance,
-          currencyCode: imperialHomeCurrency,
-          counterpartyType: "corporation",
-          counterpartyId: corporation._id,
-          counterpartyName: corporation.name,
-          meta: {
-            corporationId: corporation._id.toString(),
-            shares,
-            pricePerShare: executionPrice,
-            imperial: true,
-          },
-        });
-
-        // Treasury-backed market maker: inject the buyer's payment into the
-        // issuer's liquidCapital so the float buy conserves money. Last in the
-        // try — a throw here is rolled back by the catch below.
-        await applyFloatBuyCredit(db, corporation, shares * executionPrice);
-      } catch (err) {
-        if (sharesCredited) {
-          await debitSharesFromImperial(
-            db,
-            corporation._id,
-            imperial._id,
-            shares,
-            {
-              $inc: {
-                publicFloat: shares,
-                ...orderFlowIncReversal,
-              },
-              $set: { updatedAt: new Date() },
-            },
-            { requireSufficient: true }
-          );
-        }
-        await refundImperialCash(
-          db,
-          imperial._id,
-          imperialHomeCurrency,
-          costInImperialHome,
-          forexEnabled
-        );
-        throw err;
       }
-
-      return NextResponse.json({
-        success: true,
-        sharesBought: shares,
-        cost: Math.round(cost * 100) / 100,
-        pricePerShare: executionPrice,
-      });
+      return NextResponse.json(imperialBuyResult.body);
     }
 
     // ── Regular character share buy ─────────────────────────────
@@ -750,27 +760,10 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
     }
 
     const now = new Date();
+    const charTurn = await getCurrentTurn(db);
+    const charTradeKey = headerKey ?? randomUUID();
 
-    // Atomic balance-gated debit. Closes the same race-window the bond buy
-    // route had (concurrent buys passing read-side check on stale data,
-    // partial writes leaving shares credited while cash never moved).
-    const debitResult = await atomicallyDebitCharacterCash(
-      db,
-      character._id,
-      homeCurrency,
-      costInHome,
-      forexEnabled
-    );
-    if (!debitResult.ok) {
-      return NextResponse.json(
-        {
-          error: `Insufficient funds. Need ${costInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency}.`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Wash-trade guard (see orderFlowWashGuard).
+    // Wash-trade guard (see orderFlowWashGuard). Read-only; pinned below.
     const washExcluded =
       orderFlowEligible &&
       (await isOrderFlowWashRoundTrip(
@@ -780,60 +773,120 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
         "buy",
         now
       ));
-    const orderFlowInc = buildOrderFlowWindowInc(
-      orderFlowEligible,
-      "buy",
-      shares * executionPrice,
-      washExcluded
-    );
-    const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
-      orderFlowEligible,
-      "buy",
-      shares * executionPrice,
-      washExcluded
-    );
 
-    let sharesCredited = false;
-    try {
-      const credited = await creditShares(
-        db,
-        corporation._id,
-        character._id,
-        shares,
-        {
-          $inc: {
-            publicFloat: -shares,
-            ...orderFlowInc,
-          },
-          $set: { updatedAt: now },
+    const charIssuerBuyback = shares * executionPrice;
+    let charDealer: ShareOrderPlacementDealer;
+    if (marketQuote.active) {
+      charDealer = {
+        kind: "pool",
+        currency: marketQuote.currency,
+        amountLocal: charIssuerBuyback,
+        flowKind: "purchasesIn",
+      };
+    } else if (getShareBuybackMode(corporation) === "escrow") {
+      charDealer = { kind: "escrow-credit", amountLocal: charIssuerBuyback };
+    } else {
+      charDealer = { kind: "treasury", amountLocal: charIssuerBuyback };
+    }
+
+    const charBuyPlan: PublicShareTradePlan = {
+      version: 1,
+      tradeKey: charTradeKey,
+      kind: "market-buy",
+      corpIdHex: corporation._id.toHexString(),
+      corpName: corporation.name,
+      shares,
+      executionPrice,
+      turn: charTurn,
+      nowIso: now.toISOString(),
+      orderFlowEligible,
+      washExcluded,
+      buyerDebit: {
+        collection: "characters",
+        idHex: character._id.toHexString(),
+        field: personalBalanceField(homeCurrency, forexEnabled),
+        amount: costInHome,
+      },
+      capCredit: {
+        field: "characterId",
+        idHex: character._id.toHexString(),
+        pricePerShare: executionPrice,
+      },
+      capDebit: null,
+      proceedsLeg: null,
+      dealer: charDealer,
+      ceoVacate: null,
+      closeTenureHolderIdHex: null,
+      tx: {
+        type: "stock_trade_buy",
+        subjectType: "character",
+        subjectIdHex: character._id.toHexString(),
+        subjectName: charDoc.name,
+        amount: -costInHome,
+        includeBalanceAfter: true,
+        currencyCode: homeCurrency,
+        counterpartyType: "corporation",
+        counterpartyIdHex: corporation._id.toHexString(),
+        counterpartyName: corporation.name,
+        meta: {
+          corporationId: corporation._id.toString(),
+          shares,
+          pricePerShare: executionPrice,
         },
-        { pricePerShare: executionPrice, guardFilter: { publicFloat: { $gte: shares } } }
-      );
-      if (!credited) {
-        await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
-        return NextResponse.json(
-          { error: "Not enough shares remain in public float" },
-          { status: 409 }
-        );
-      }
-      sharesCredited = true;
-
-      void recordShareTrade(db, {
-        corporationId: corporation._id,
+      },
+      history: {
         kind: "market_buy",
-        turn: await getCurrentTurn(db),
         shares,
         pricePerShareAnchor: cost / shares,
         from: null,
         to: { characterId: character._id, name: charDoc.name },
         corpCurrencyCode: corporation.liquidCurrencyCode,
-      });
+      },
+      // Character FX spreads are consumed inside autoConvert (folded into the
+      // pinned cost); there is nothing left to distribute post-commit.
+      spread: null,
+      audit: null,
+      notifyTakeover: true,
+      errors: {
+        "buyer-debit": {
+          message: `Insufficient funds. Need ${costInHome.toLocaleString(undefined, { minimumFractionDigits: 2 })} ${homeCurrency}.`,
+          status: 400,
+        },
+        float: { message: "Not enough shares remain in public float", status: 409 },
+        "buyer-credit": { message: "Failed to record trade", status: 500 },
+        dealer: { message: "Failed to record trade", status: 500 },
+        "seller-debit": { message: "Failed to record trade", status: 500 },
+        "proceeds-credit": { message: "Failed to record trade", status: 500 },
+        history: { message: "Failed to record trade", status: 500 },
+      },
+      response: {
+        success: true,
+        sharesBought: shares,
+        cost: Math.round(cost * 100) / 100,
+        pricePerShare: executionPrice,
+        // FX spread already folded into the cost when paying in a foreign currency.
+        spreadPaid: Math.round(charSpreadCharged * 100) / 100,
+      },
+    };
 
+    let charBuyResult;
+    try {
+      charBuyResult = await executePublicShareTradeFlow(db, charBuyPlan, {
+        idempotencyKey: charTradeKey,
+      });
+    } catch (error) {
+      return mapTradeKeyError(error);
+    }
+    if (!charBuyResult.ok) {
+      return NextResponse.json({ error: charBuyResult.error }, { status: charBuyResult.status });
+    }
+    if (!charBuyResult.replayed) {
+      void notifyHostileTakeoverThresholdIfEligible(db, corporation._id);
       void logEconomicAction(db, {
         characterId: character._id,
         userId: basicAuth.user.userId,
         actionType: "buyShares",
-        turn: await getCurrentTurn(db),
+        turn: charTurn,
         characterName: charDoc.name,
         username: userDoc?.username,
         countryId: corporation.countryId,
@@ -845,60 +898,8 @@ export async function buyPublicShares(request: Request, { params }: RouteParams)
           message: `Bought ${shares.toLocaleString()} shares of ${corporation.name}`,
         },
       }).catch(() => {});
-
-      await emitTx(db, {
-        type: "stock_trade_buy",
-        turn: await getCurrentTurn(db),
-        createdAt: now,
-        subjectType: "character",
-        subjectId: character._id,
-        subjectName: charDoc.name,
-        amount: -costInHome,
-        balanceAfter: debitResult.newBalance,
-        currencyCode: homeCurrency,
-        counterpartyType: "corporation",
-        counterpartyId: corporation._id,
-        counterpartyName: corporation.name,
-        meta: {
-          corporationId: corporation._id.toString(),
-          shares,
-          pricePerShare: executionPrice,
-        },
-      });
-
-      // Treasury-backed market maker: inject the buyer's payment into the
-      // issuer's liquidCapital so the float buy conserves money. Last in the
-      // try — a throw here is rolled back by the catch below.
-      await applyFloatBuyCredit(db, corporation, shares * executionPrice);
-    } catch (err) {
-      if (sharesCredited) {
-        await debitShares(
-          db,
-          corporation._id,
-          character._id,
-          shares,
-          {
-            $inc: {
-              publicFloat: shares,
-              ...orderFlowIncReversal,
-            },
-            $set: { updatedAt: new Date() },
-          },
-          { requireSufficient: true }
-        );
-      }
-      await refundCharacterCash(db, character._id, homeCurrency, costInHome, forexEnabled);
-      throw err;
     }
-
-    return NextResponse.json({
-      success: true,
-      sharesBought: shares,
-      cost: Math.round(cost * 100) / 100,
-      pricePerShare: executionPrice,
-      // FX spread already folded into the cost when paying in a foreign currency.
-      spreadPaid: Math.round(charSpreadCharged * 100) / 100,
-    });
+    return NextResponse.json(charBuyResult.body);
   } catch (error) {
     return handleRouteError(error);
   }

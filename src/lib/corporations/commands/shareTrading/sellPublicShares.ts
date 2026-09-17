@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
 import { getDb } from "@/lib/mongodb";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationActions";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { parseJsonBody } from "@/lib/api/validate";
@@ -10,24 +12,23 @@ import { resolveCorporation } from "@/lib/api/corporations/resolveQuery";
 import { assertCeoTradeNotBlocked } from "@/lib/corporations/commands/privatization/openVoteGuard";
 import type { Character, Corporation, ShareOrder, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
-import {
-  creditShares,
-  creditSharesToCorp,
-  creditSharesToImperial,
-  debitShares,
-  debitSharesFromCorp,
-  debitSharesFromImperial,
-} from "@/lib/corporations/shareholderOps";
-import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { logEconomicAction } from "@/lib/corporations/economicActionLog";
+import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
+import {
+  buildOrderBookFillFingerprint,
+  executePublicShareTradeFlow,
+  getStoredPublicShareTradeResponse,
+  recordCompletedTradeResponse,
+  recoverPublicShareTradeByKey,
+  type PublicShareTradeCeoSnapshot,
+  type PublicShareTradePlan,
+} from "@/lib/corporations/commands/shareTrading/publicShareTradeSpend";
+import type { ShareOrderPlacementDealer } from "@/lib/corporations/shareOrderPlacement";
+import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { getCurrentTurn } from "@/lib/turn/currentTurn";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import {
-  buildPersonalBalanceInc,
-  getHomeCurrency,
-  loadCharacterFxRate,
-} from "@/lib/currency/characterFunds";
+import { getHomeCurrency, loadCharacterFxRate } from "@/lib/currency/characterFunds";
 import {
   anchorToCorpLiquidCapital,
   getCorpFxRate,
@@ -36,21 +37,8 @@ import {
 } from "@/lib/currency/corporationCapital";
 import { isOrderFlowPriceEligible } from "@/lib/corporations/marketExecution";
 import { equityPoolDepthMessage, loadEquityQuote } from "@/lib/equities/marketPool";
-import {
-  buildOrderFlowWindowInc,
-  buildOrderFlowWindowIncReversal,
-  isOrderFlowWashRoundTrip,
-} from "@/lib/corporations/orderFlowWashGuard";
-import { emitTx } from "@/lib/financialTxLog/emit";
-import {
-  settleFloatSellDebit,
-  reverseFloatSellDebit,
-  onFloatSellCommitted,
-  type EscrowDebitSplit,
-} from "@/lib/corporations/shareEscrowSettlement";
+import { isOrderFlowWashRoundTrip } from "@/lib/corporations/orderFlowWashGuard";
 import { CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
-import { closeCeoTenure } from "@/lib/corporations/ceoHistory";
-import { recordAudit } from "@/lib/audit/recordAudit";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 import { fillBestBuyOrderForMarketSell } from "@/lib/corporations/commands/shareTrading/fillBestBuyOrder";
 
@@ -58,30 +46,36 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-function buildCeoRestoreUpdate(corporation: Corporation, now: Date) {
-  const unsetFields: Record<string, ""> = {};
-  if (corporation.ceoVacantSinceTurn === undefined) {
-    unsetFields.ceoVacantSinceTurn = "";
+/** Maps keyed-flow claim failures onto the legacy 409 surface. */
+function mapTradeKeyError(error: unknown): NextResponse {
+  if (error instanceof MoneyFlowTerminalError) {
+    return NextResponse.json(
+      { error: "Trade already settled; start a new attempt with a new key." },
+      { status: 409 }
+    );
   }
-  if (!corporation.pendingCeoCharacterId) {
-    unsetFields.pendingCeoCharacterId = "";
+  if (error instanceof MoneyFlowKeyConflictError) {
+    return NextResponse.json(
+      { error: "Idempotency key was reused for a different transfer." },
+      { status: 409 }
+    );
   }
+  throw error;
+}
 
-  return {
-    $set: {
-      ceoId: corporation.ceoId,
-      userId: corporation.userId,
-      ceoVacant: corporation.ceoVacant ?? false,
-      updatedAt: now,
-      ...(corporation.ceoVacantSinceTurn !== undefined
-        ? { ceoVacantSinceTurn: corporation.ceoVacantSinceTurn }
-        : {}),
-      ...(corporation.pendingCeoCharacterId
-        ? { pendingCeoCharacterId: corporation.pendingCeoCharacterId }
-        : {}),
-    },
-    ...(Object.keys(unsetFields).length > 0 ? { $unset: unsetFields } : {}),
-  };
+async function runTradeKeyRecovery(
+  db: import("mongodb").Db,
+  tradeKey: string
+): Promise<NextResponse> {
+  try {
+    const recovered = await recoverPublicShareTradeByKey(db, tradeKey);
+    if (!recovered.ok) {
+      return NextResponse.json({ error: recovered.error }, { status: recovered.status });
+    }
+    return NextResponse.json(recovered.body);
+  } catch (error) {
+    return mapTradeKeyError(error);
+  }
 }
 
 /**
@@ -106,7 +100,27 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     }
 
     const { shares, sellAsCorporation, confirmCeoVacate } = parsed.data;
+
+    // Crash-safe float trades (issue #1672): the issuer debit, the share
+    // debit, and the proceeds credit run as keyed idempotent steps.
+    // `Idempotency-Key` replays the stored outcome without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const [db, forexEnabled] = await Promise.all([getDb(), isForexEnabled()]);
+
+    // Same-key retry: the first attempt already validated, so reconcile
+    // through the stored plan instead of re-running the guards (which
+    // post-debit reads would fail). Runs before the action/turn guards so
+    // crash recovery converges even while fresh trades are blocked.
+    if (headerKey !== null) {
+      const prior = await getStoredPublicShareTradeResponse(db, headerKey);
+      if (prior) {
+        return runTradeKeyRecovery(db, headerKey);
+      }
+    }
     const corpGuard = await requireCorporationActionsEnabled(db);
     if (corpGuard) return corpGuard;
     const turnGuard = await rejectDuringTurn(db);
@@ -142,12 +156,23 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
     //  - escrow mode: debited from the market-making escrow with no cap (the
     //    balance may go negative), so the gate always passes.
     // Pre-fix the float minted the seller's proceeds with no counterparty debit.
+    //
+    // Crash-safe (issue #1672): the routing AND the escrow-mode split are
+    // pinned here, before the keyed flow starts, so a retry replays the same
+    // figures instead of re-reading post-debit state. The pool-depth
+    // pre-check below stays in the route (read-only); the flow re-guards the
+    // same message for a pool race at step time.
     const issuerBuyback = shares * executionPrice;
     const issuerCurrency = resolveCorpLiquidCurrencyCode(corporation) ?? "USD";
-    // Hoisted so the outer-scope rollback paths can reverse the exact escrow/
-    // treasury split recorded when the issuer buyback was settled.
-    let issuerBuybackSplit: EscrowDebitSplit | undefined;
-    async function gateIssuerBuyback(): Promise<NextResponse | null> {
+    function treasuryCoverError(): { message: string; status: number } {
+      const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
+      return {
+        message: `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
+        status: 400,
+      };
+    }
+    /** Pool-depth gate shared by every float sell (legacy pre-check). */
+    function gatePoolDepth(): NextResponse | null {
       if (marketQuote.active && shares > marketQuote.bidDepthShares) {
         return NextResponse.json(
           {
@@ -157,21 +182,60 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           { status: 400 }
         );
       }
-      const settle = await settleFloatSellDebit(db, corporation, issuerBuyback);
-      issuerBuybackSplit = settle.split;
-      if (!settle.ok) {
-        const sym = CURRENCY_SYMBOLS[issuerCurrency] ?? "$";
-        return NextResponse.json(
-          {
-            error: marketQuote.active
-              ? equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency)
-              : `${corporation.name}'s treasury can't cover this sale (needs ${sym}${issuerBuyback.toLocaleString(undefined, { maximumFractionDigits: 0 })}). List the shares for sale to a real buyer instead.`,
-            ...(marketQuote.active ? { marketDepthShares: marketQuote.bidDepthShares } : {}),
-          },
-          { status: 400 }
-        );
-      }
       return null;
+    }
+    /** Pins the sell dealer leg; reads the issuer escrow pot for the split. */
+    async function pinSellDealer(): Promise<{
+      dealer: ShareOrderPlacementDealer;
+      error: { message: string; status: number };
+    }> {
+      if (marketQuote.active) {
+        return {
+          dealer: {
+            kind: "pool",
+            currency: marketQuote.currency,
+            amountLocal: -issuerBuyback,
+            flowKind: "salesOut",
+          },
+          error: {
+            message: equityPoolDepthMessage(marketQuote.bidDepthShares, marketQuote.currency),
+            status: 400,
+          },
+        };
+      }
+      if (getShareBuybackMode(corporation) === "escrow") {
+        const issuerRow = await db
+          .collection<Corporation>("corporations")
+          .findOne({ _id: corporation._id }, { projection: { shareEscrowBalance: 1 } });
+        const escrowBalance = issuerRow?.shareEscrowBalance ?? 0;
+        const escrowPart = Math.min(issuerBuyback, Math.max(0, escrowBalance));
+        return {
+          dealer: {
+            kind: "escrow-split",
+            amountLocal: issuerBuyback,
+            escrowPart,
+            treasuryPart: issuerBuyback - escrowPart,
+          },
+          error: { message: "Failed to record trade", status: 500 },
+        };
+      }
+      return {
+        dealer: { kind: "treasury", amountLocal: -issuerBuyback },
+        error: treasuryCoverError(),
+      };
+    }
+    function ceoSnapshotOf(corp: Corporation): PublicShareTradeCeoSnapshot {
+      return {
+        ceoIdHex: corp.ceoId.toHexString(),
+        userIdHex: corp.userId.toHexString(),
+        ceoVacant: corp.ceoVacant ?? false,
+        ...(corp.ceoVacantSinceTurn !== undefined
+          ? { ceoVacantSinceTurn: corp.ceoVacantSinceTurn }
+          : {}),
+        ...(corp.pendingCeoCharacterId
+          ? { pendingCeoCharacterIdHex: corp.pendingCeoCharacterId.toHexString() }
+          : {}),
+      };
     }
 
     const userDoc = await db
@@ -223,12 +287,12 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         );
       }
 
-      const buybackGate = await gateIssuerBuyback();
-      if (buybackGate) return buybackGate;
+      const poolGate = gatePoolDepth();
+      if (poolGate) return poolGate;
 
       // Wash-trade guard: a sell that round-trips this corp's own recent buy
       // contributes nothing to the order-flow window and neutralizes the buy
-      // leg instead (see orderFlowWashGuard).
+      // leg instead (see orderFlowWashGuard). Read-only; pinned below.
       const washExcluded =
         orderFlowEligible &&
         (await isOrderFlowWashRoundTrip(
@@ -238,148 +302,146 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           "sell",
           now
         ));
-      const orderFlowInc = buildOrderFlowWindowInc(
-        orderFlowEligible,
-        "sell",
-        shares * executionPrice,
-        washExcluded
-      );
-      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
-        orderFlowEligible,
-        "sell",
-        shares * executionPrice,
-        washExcluded
-      );
-
-      const remainingAfterSale = await debitSharesFromCorp(
-        db,
-        corporation._id,
-        sellerCorp._id,
-        shares,
-        {
-          $inc: {
-            publicFloat: shares,
-            ...orderFlowInc,
-          },
-          $set: { updatedAt: now },
-        },
-        { requireSufficient: true }
-      );
-      if (remainingAfterSale < 0) {
-        await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
-      }
 
       // Convert ₳-denominated proceeds into seller corp's home currency.
+      // Pinned before the flow so recovery replays the same figure.
       const sellerFxRate = await getCorpFxRate(db, sellerCorp);
       const proceedsInSellerCapital = anchorToCorpLiquidCapital(proceeds, sellerCorp, sellerFxRate);
+      const sellerCurrency = resolveCorpLiquidCurrencyCode(sellerCorp) ?? "USD";
 
-      const sellerCredit = await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: sellerCorp._id },
-          { $inc: { liquidCapital: proceedsInSellerCapital }, $set: { updatedAt: now } }
-        );
-      if (sellerCredit.matchedCount === 0) {
-        await creditSharesToCorp(
-          db,
-          corporation._id,
-          sellerCorp._id,
-          shares,
-          shareholderEntry.avgCostPerShare ?? executionPrice,
-          {
-            $inc: {
-              publicFloat: -shares,
-              ...orderFlowIncReversal,
-            },
-            $set: { updatedAt: new Date() },
-          }
-        );
-        await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-        throw new Error("Seller corporation not found");
-      }
-
-      void recordShareTrade(db, {
-        corporationId: corporation._id,
-        kind: "market_sell",
-        turn: await getCurrentTurn(db),
+      const corpSellDealer = await pinSellDealer();
+      const corpSellTurn = await getCurrentTurn(db);
+      const corpSellKey = headerKey ?? randomUUID();
+      const corpSellPlan: PublicShareTradePlan = {
+        version: 1,
+        tradeKey: corpSellKey,
+        kind: "market-sell",
+        corpIdHex: corporation._id.toHexString(),
+        corpName: corporation.name,
         shares,
-        pricePerShareAnchor: proceeds / shares,
-        from: { corporationId: sellerCorp._id, name: sellerCorp.name },
-        to: null,
-        corpCurrencyCode: corporation.liquidCurrencyCode,
-      });
-
-      void logEconomicAction(db, {
-        characterId: ceoId,
-        userId: basicAuth.user.userId,
-        actionType: "sellShares",
-        turn: await getCurrentTurn(db),
-        characterName: sellerCorp.name,
-        username: userDoc?.username,
-        countryId: corporation.countryId,
-        // `proceeds` is the ₳ (anchor) sale value gained (pricePerShareAnchor = proceeds/shares).
-        // A sale spends no corp cash / MS, so only the gained revenue is logged.
-        capturedRevenueAnchor: proceeds,
-        currencyCode: corporation.liquidCurrencyCode,
-        result: {
-          success: true,
-          message: `${sellerCorp.name} sold ${shares.toLocaleString()} shares of ${corporation.name}`,
+        executionPrice,
+        turn: corpSellTurn,
+        nowIso: now.toISOString(),
+        orderFlowEligible,
+        washExcluded,
+        buyerDebit: null,
+        capCredit: null,
+        capDebit: {
+          field: "corporationId",
+          idHex: sellerCorp._id.toHexString(),
+          pricePerShare: shareholderEntry.avgCostPerShare ?? executionPrice,
         },
-      }).catch(() => {});
-
-      void emitTx(db, {
-        type: "stock_trade_sell",
-        turn: await getCurrentTurn(db),
-        createdAt: now,
-        subjectType: "corporation",
-        subjectId: sellerCorp._id,
-        subjectName: sellerCorp.name,
-        amount: proceedsInSellerCapital,
-        currencyCode: resolveCorpLiquidCurrencyCode(sellerCorp) ?? "USD",
-        counterpartyType: "corporation",
-        counterpartyId: corporation._id,
-        counterpartyName: corporation.name,
-        meta: {
-          corporationId: corporation._id.toString(),
+        proceedsLeg: {
+          collection: "corporations",
+          idHex: sellerCorp._id.toHexString(),
+          field: "liquidCapital",
+          amount: proceedsInSellerCapital,
+        },
+        dealer: corpSellDealer.dealer,
+        ceoVacate: null,
+        closeTenureHolderIdHex: null,
+        tx: {
+          type: "stock_trade_sell",
+          subjectType: "corporation",
+          subjectIdHex: sellerCorp._id.toHexString(),
+          subjectName: sellerCorp.name,
+          amount: proceedsInSellerCapital,
+          includeBalanceAfter: false,
+          currencyCode: sellerCurrency,
+          counterpartyType: "corporation",
+          counterpartyIdHex: corporation._id.toHexString(),
+          counterpartyName: corporation.name,
+          meta: {
+            corporationId: corporation._id.toString(),
+            shares,
+            pricePerShare: executionPrice,
+          },
+        },
+        history: {
+          kind: "market_sell",
+          shares,
+          pricePerShareAnchor: proceeds / shares,
+          from: { corporationId: sellerCorp._id, name: sellerCorp.name },
+          to: null,
+          corpCurrencyCode: corporation.liquidCurrencyCode,
+        },
+        spread: null,
+        audit: {
+          counterpartyType: "corporation",
+          counterpartyIdHex: sellerCorp._id.toHexString(),
+          counterpartyName: sellerCorp.name,
+          amount: proceedsInSellerCapital,
+          currencyCode: sellerCurrency,
           shares,
           pricePerShare: executionPrice,
         },
-      });
+        notifyTakeover: false,
+        errors: {
+          "buyer-debit": { message: "Failed to record trade", status: 500 },
+          float: { message: "Failed to record trade", status: 500 },
+          "buyer-credit": { message: "Failed to record trade", status: 500 },
+          dealer: corpSellDealer.error,
+          "seller-debit": {
+            message: "Shares were already sold or reserved by another action",
+            status: 409,
+          },
+          "proceeds-credit": { message: "Seller corporation not found", status: 500 },
+          history: { message: "Failed to record trade", status: 500 },
+        },
+        response: {
+          success: true,
+          sharesSold: shares,
+          proceeds,
+          pricePerShare: executionPrice,
+          seller: "corporation",
+        },
+      };
 
-      // Sell committed: shares returned to the float and the issuer treasury was
-      // debited (gateIssuerBuyback above). Symmetrically back out the realized
-      // issuance proceeds so the share-price book-floor lever tracks the float
-      // shrinking. Best-effort/terminal — never gates the committed sell.
-      void onFloatSellCommitted(db, corporation, issuerBuyback);
-
-      recordAudit({
-        source: "api",
-        action: "share.sell",
-        category: "market",
-        subject: { type: "corporation", id: corporation._id, name: corporation.name },
-        counterparty: { type: "corporation", id: sellerCorp._id, name: sellerCorp.name },
-        amount: proceedsInSellerCapital,
-        currencyCode: resolveCorpLiquidCurrencyCode(sellerCorp) ?? "USD",
-        refs: { corporationId: corporation._id },
-        delta: [
-          { field: "status", before: null, after: "filled" },
-          { field: "shares", before: null, after: shares },
-          { field: "pricePerShare", before: null, after: executionPrice },
-        ],
-        outcome: "ok",
-      });
-
-      return NextResponse.json({
-        success: true,
-        sharesSold: shares,
-        proceeds,
-        pricePerShare: executionPrice,
-        seller: "corporation",
-      });
+      let corpSellResult;
+      try {
+        corpSellResult = await executePublicShareTradeFlow(db, corpSellPlan, {
+          idempotencyKey: corpSellKey,
+        });
+      } catch (error) {
+        return mapTradeKeyError(error);
+      }
+      if (!corpSellResult.ok) {
+        // A compensated dealer gate reports the pinned gate surface; a
+        // pool-depth race keeps the legacy depth body without the shares hint.
+        if (corpSellResult.status === 400 && marketQuote.active) {
+          return NextResponse.json(
+            {
+              error: corpSellResult.error,
+              marketDepthShares: marketQuote.bidDepthShares,
+            },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json(
+          { error: corpSellResult.error },
+          { status: corpSellResult.status }
+        );
+      }
+      if (!corpSellResult.replayed) {
+        void logEconomicAction(db, {
+          characterId: ceoId,
+          userId: basicAuth.user.userId,
+          actionType: "sellShares",
+          turn: corpSellTurn,
+          characterName: sellerCorp.name,
+          username: userDoc?.username,
+          countryId: corporation.countryId,
+          // `proceeds` is the ₳ (anchor) sale value gained (pricePerShareAnchor = proceeds/shares).
+          // A sale spends no corp cash / MS, so only the gained revenue is logged.
+          capturedRevenueAnchor: proceeds,
+          currencyCode: corporation.liquidCurrencyCode,
+          result: {
+            success: true,
+            message: `${sellerCorp.name} sold ${shares.toLocaleString()} shares of ${corporation.name}`,
+          },
+        }).catch(() => {});
+      }
+      return NextResponse.json(corpSellResult.body);
     }
 
     if (isImperialMode) {
@@ -413,69 +475,8 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           { status: 409 }
         );
       }
-      // Wash-trade guard (see orderFlowWashGuard): round-trip legs are excluded
-      // from order-flow accumulation and neutralize the opposite leg instead.
-      const washExcluded =
-        orderFlowEligible &&
-        (await isOrderFlowWashRoundTrip(
-          db,
-          corporation._id,
-          { imperialCharacterId: imperial._id },
-          "sell",
-          now
-        ));
-      const orderFlowInc = buildOrderFlowWindowInc(
-        orderFlowEligible,
-        "sell",
-        shares * executionPrice,
-        washExcluded
-      );
-      const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
-        orderFlowEligible,
-        "sell",
-        shares * executionPrice,
-        washExcluded
-      );
-      let corporationUpdate: {
-        $inc: {
-          publicFloat: number;
-          orderFlowWindowSellValue?: number;
-          orderFlowWindowBuyValue?: number;
-        };
-        $set: {
-          updatedAt: Date;
-          ceoVacant?: boolean;
-          ceoVacantSinceTurn?: number;
-        };
-        $unset?: {
-          ceoId: "";
-          userId: "";
-          pendingCeoCharacterId: "";
-        };
-      } = {
-        $inc: {
-          publicFloat: shares,
-          ...orderFlowInc,
-        },
-        $set: { updatedAt: now },
-      };
-      if (shouldVacateCeo) {
-        const currentTurn = await getCurrentTurn(db);
-        corporationUpdate = {
-          $inc: {
-            publicFloat: shares,
-            ...orderFlowInc,
-          },
-          $set: {
-            ceoVacant: true,
-            ceoVacantSinceTurn: currentTurn,
-            updatedAt: now,
-          },
-          $unset: { ceoId: "", userId: "", pendingCeoCharacterId: "" },
-        };
-      }
-
-      // Proceeds are in ₳; convert to imperial character's home currency before crediting.
+      // Proceeds are in ₳; convert to imperial character's home currency before
+      // crediting. Pinned before the flow so recovery replays the same figure.
       const imperialHomeCurrency = getHomeCurrency(imperial);
       let imperialFxRate = 1.0;
       if (forexEnabled) {
@@ -508,153 +509,180 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
           turn: await getCurrentTurn(db),
         });
         if (orderFill.filled) {
-          return NextResponse.json({
+          const orderBookBody = {
             success: true,
             sharesSold: orderFill.shares,
             proceeds: Math.round(orderFill.proceedsAnchor * 100) / 100,
             pricePerShare: orderFill.pricePerShareLocal,
             execution: "order_book",
-          });
+          };
+          if (headerKey !== null) {
+            try {
+              const stored = await recordCompletedTradeResponse(
+                db,
+                headerKey,
+                buildOrderBookFillFingerprint({
+                  corpId: corporation._id,
+                  sellerId: imperial._id,
+                  shares: orderFill.shares,
+                  pricePerShareLocal: orderFill.pricePerShareLocal,
+                  proceedsAnchor: orderFill.proceedsAnchor,
+                }),
+                orderBookBody
+              );
+              return NextResponse.json(stored.body);
+            } catch (error) {
+              return mapTradeKeyError(error);
+            }
+          }
+          return NextResponse.json(orderBookBody);
         }
       }
 
-      const buybackGate = await gateIssuerBuyback();
-      if (buybackGate) return buybackGate;
+      const imperialPoolGate = gatePoolDepth();
+      if (imperialPoolGate) return imperialPoolGate;
 
-      const remainingAfterSale = await debitSharesFromImperial(
-        db,
-        corporation._id,
-        imperial._id,
-        shares,
-        corporationUpdate,
-        { requireSufficient: true }
-      );
-      if (remainingAfterSale < 0) {
-        await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-        return NextResponse.json(
-          { error: "Shares were already sold or reserved by another action" },
-          { status: 409 }
-        );
-      }
-
-      const sellerCredit = await db.collection<ImperialCharacter>("imperialCharacters").updateOne(
-        { _id: imperial._id },
-        {
-          $inc: {
-            ...buildPersonalBalanceInc(proceedsInImperialHome, imperialHomeCurrency, forexEnabled),
-          },
-          $set: { updatedAt: now },
-        }
-      );
-      if (sellerCredit.matchedCount === 0) {
-        await creditSharesToImperial(
+      // Wash-trade guard (see orderFlowWashGuard). Read-only; pinned below.
+      const imperialWashExcluded =
+        orderFlowEligible &&
+        (await isOrderFlowWashRoundTrip(
           db,
           corporation._id,
-          imperial._id,
-          shares,
-          {
-            $inc: {
-              publicFloat: -shares,
-              ...orderFlowIncReversal,
-            },
-            $set: { updatedAt: new Date() },
-          },
-          { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
-        );
-        if (shouldVacateCeo) {
-          await db
-            .collection<Corporation>("corporations")
-            .updateOne({ _id: corporation._id }, buildCeoRestoreUpdate(corporation, new Date()));
-        }
-        await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-        throw new Error("Imperial seller not found");
-      }
-      if (shouldVacateCeo) {
-        void db
-          .collection("corporationCeoVotes")
-          .deleteMany({ corporationId: corporation._id })
-          .catch(() => undefined);
-        await closeCeoTenure(db, corporation._id, {
-          holderId: imperial._id,
-          turn: await getCurrentTurn(db),
-        });
-      }
+          { imperialCharacterId: imperial._id },
+          "sell",
+          now
+        ));
 
-      void recordShareTrade(db, {
-        corporationId: corporation._id,
-        kind: "market_sell",
-        turn: await getCurrentTurn(db),
+      const imperialSellDealer = await pinSellDealer();
+      const imperialSellTurn = await getCurrentTurn(db);
+      const imperialSellKey = headerKey ?? randomUUID();
+      const imperialSellPlan: PublicShareTradePlan = {
+        version: 1,
+        tradeKey: imperialSellKey,
+        kind: "market-sell",
+        corpIdHex: corporation._id.toHexString(),
+        corpName: corporation.name,
         shares,
-        pricePerShareAnchor: proceeds / shares,
-        from: { imperialCharacterId: imperial._id, name: imperial.name },
-        to: null,
-        corpCurrencyCode: corporation.liquidCurrencyCode,
-      });
-
-      void logEconomicAction(db, {
-        characterId: imperial._id,
-        userId: basicAuth.user.userId,
-        actionType: "sellShares",
-        turn: await getCurrentTurn(db),
-        characterName: imperial.name,
-        username: userDoc?.username,
-        countryId: corporation.countryId,
-        // `proceeds` is the ₳ (anchor) sale value gained (pricePerShareAnchor = proceeds/shares).
-        // A sale spends no corp cash / MS, so only the gained revenue is logged.
-        capturedRevenueAnchor: proceeds,
-        currencyCode: corporation.liquidCurrencyCode,
-        result: {
-          success: true,
-          message: `Sold ${shares.toLocaleString()} shares of ${corporation.name}`,
+        executionPrice,
+        turn: imperialSellTurn,
+        nowIso: now.toISOString(),
+        orderFlowEligible,
+        washExcluded: imperialWashExcluded,
+        buyerDebit: null,
+        capCredit: null,
+        capDebit: {
+          field: "imperialCharacterId",
+          idHex: imperial._id.toHexString(),
+          pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice,
         },
-      }).catch(() => {});
-
-      void emitTx(db, {
-        type: "stock_trade_sell",
-        turn: await getCurrentTurn(db),
-        createdAt: now,
-        subjectType: "character",
-        subjectId: imperial._id,
-        subjectName: imperial.name,
-        amount: proceedsInImperialHome,
-        currencyCode: imperialHomeCurrency,
-        counterpartyType: "corporation",
-        counterpartyId: corporation._id,
-        counterpartyName: corporation.name,
-        meta: {
-          corporationId: corporation._id.toString(),
+        proceedsLeg: {
+          collection: "imperialCharacters",
+          idHex: imperial._id.toHexString(),
+          field: personalBalanceField(imperialHomeCurrency, forexEnabled),
+          amount: proceedsInImperialHome,
+        },
+        dealer: imperialSellDealer.dealer,
+        ceoVacate: shouldVacateCeo ? ceoSnapshotOf(corporation) : null,
+        closeTenureHolderIdHex: shouldVacateCeo ? imperial._id.toHexString() : null,
+        tx: {
+          type: "stock_trade_sell",
+          subjectType: "character",
+          subjectIdHex: imperial._id.toHexString(),
+          subjectName: imperial.name,
+          amount: proceedsInImperialHome,
+          includeBalanceAfter: false,
+          currencyCode: imperialHomeCurrency,
+          counterpartyType: "corporation",
+          counterpartyIdHex: corporation._id.toHexString(),
+          counterpartyName: corporation.name,
+          meta: {
+            corporationId: corporation._id.toString(),
+            shares,
+            pricePerShare: executionPrice,
+          },
+        },
+        history: {
+          kind: "market_sell",
+          shares,
+          pricePerShareAnchor: proceeds / shares,
+          from: { imperialCharacterId: imperial._id, name: imperial.name },
+          to: null,
+          corpCurrencyCode: corporation.liquidCurrencyCode,
+        },
+        spread: null,
+        audit: {
+          counterpartyType: "character",
+          counterpartyIdHex: imperial._id.toHexString(),
+          counterpartyName: imperial.name,
+          amount: proceedsInImperialHome,
+          currencyCode: imperialHomeCurrency,
           shares,
           pricePerShare: executionPrice,
         },
-      });
+        notifyTakeover: false,
+        errors: {
+          "buyer-debit": { message: "Failed to record trade", status: 500 },
+          float: { message: "Failed to record trade", status: 500 },
+          "buyer-credit": { message: "Failed to record trade", status: 500 },
+          dealer: imperialSellDealer.error,
+          "seller-debit": {
+            message: "Shares were already sold or reserved by another action",
+            status: 409,
+          },
+          "proceeds-credit": { message: "Imperial seller not found", status: 500 },
+          history: { message: "Failed to record trade", status: 500 },
+        },
+        response: {
+          success: true,
+          sharesSold: shares,
+          proceeds,
+          pricePerShare: executionPrice,
+        },
+      };
 
-      // Sell committed (imperial): back out realized issuance proceeds to match
-      // the float shrinking. Best-effort/terminal — never gates the committed sell.
-      void onFloatSellCommitted(db, corporation, issuerBuyback);
-
-      recordAudit({
-        source: "api",
-        action: "share.sell",
-        category: "market",
-        subject: { type: "corporation", id: corporation._id, name: corporation.name },
-        counterparty: { type: "character", id: imperial._id, name: imperial.name },
-        amount: proceedsInImperialHome,
-        currencyCode: imperialHomeCurrency,
-        refs: { corporationId: corporation._id },
-        delta: [
-          { field: "status", before: null, after: "filled" },
-          { field: "shares", before: null, after: shares },
-          { field: "pricePerShare", before: null, after: executionPrice },
-        ],
-        outcome: "ok",
-      });
-
-      return NextResponse.json({
-        success: true,
-        sharesSold: shares,
-        proceeds,
-        pricePerShare: executionPrice,
-      });
+      let imperialSellResult;
+      try {
+        imperialSellResult = await executePublicShareTradeFlow(db, imperialSellPlan, {
+          idempotencyKey: imperialSellKey,
+        });
+      } catch (error) {
+        return mapTradeKeyError(error);
+      }
+      if (!imperialSellResult.ok) {
+        if (imperialSellResult.status === 400 && marketQuote.active) {
+          return NextResponse.json(
+            {
+              error: imperialSellResult.error,
+              marketDepthShares: marketQuote.bidDepthShares,
+            },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json(
+          { error: imperialSellResult.error },
+          { status: imperialSellResult.status }
+        );
+      }
+      if (!imperialSellResult.replayed) {
+        void logEconomicAction(db, {
+          characterId: imperial._id,
+          userId: basicAuth.user.userId,
+          actionType: "sellShares",
+          turn: imperialSellTurn,
+          characterName: imperial.name,
+          username: userDoc?.username,
+          countryId: corporation.countryId,
+          // `proceeds` is the ₳ (anchor) sale value gained (pricePerShareAnchor = proceeds/shares).
+          // A sale spends no corp cash / MS, so only the gained revenue is logged.
+          capturedRevenueAnchor: proceeds,
+          currencyCode: corporation.liquidCurrencyCode,
+          result: {
+            success: true,
+            message: `Sold ${shares.toLocaleString()} shares of ${corporation.name}`,
+          },
+        }).catch(() => {});
+      }
+      return NextResponse.json(imperialSellResult.body);
     }
 
     // ── Regular character sell path ───────────────────────────────
@@ -714,61 +742,8 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         { status: 409 }
       );
     }
-    // Wash-trade guard (see orderFlowWashGuard): round-trip legs are excluded
-    // from order-flow accumulation and neutralize the opposite leg instead.
-    const washExcluded =
-      orderFlowEligible &&
-      (await isOrderFlowWashRoundTrip(
-        db,
-        corporation._id,
-        { characterId: charDoc._id },
-        "sell",
-        now
-      ));
-    const orderFlowInc = buildOrderFlowWindowInc(
-      orderFlowEligible,
-      "sell",
-      shares * executionPrice,
-      washExcluded
-    );
-    const orderFlowIncReversal = buildOrderFlowWindowIncReversal(
-      orderFlowEligible,
-      "sell",
-      shares * executionPrice,
-      washExcluded
-    );
-    let corporationUpdate: {
-      $inc: {
-        publicFloat: number;
-        orderFlowWindowSellValue?: number;
-        orderFlowWindowBuyValue?: number;
-      };
-      $set: { updatedAt: Date; ceoVacant?: boolean; ceoVacantSinceTurn?: number };
-      $unset?: { ceoId: ""; userId: ""; pendingCeoCharacterId: "" };
-    } = {
-      $inc: {
-        publicFloat: shares,
-        ...orderFlowInc,
-      },
-      $set: { updatedAt: now },
-    };
-    if (shouldVacateCeo) {
-      const currentTurn = await getCurrentTurn(db);
-      corporationUpdate = {
-        $inc: {
-          publicFloat: shares,
-          ...orderFlowInc,
-        },
-        $set: {
-          ceoVacant: true,
-          ceoVacantSinceTurn: currentTurn,
-          updatedAt: now,
-        },
-        $unset: { ceoId: "", userId: "", pendingCeoCharacterId: "" },
-      };
-    }
-
     // Proceeds are in ₳; convert to character's home currency before crediting.
+    // Pinned before the flow so recovery replays the same figure.
     const homeCurrency = getHomeCurrency(charDoc);
     let charFxRate = 1.0;
     if (forexEnabled) {
@@ -801,151 +776,177 @@ export async function sellPublicShares(request: Request, { params }: RouteParams
         turn: await getCurrentTurn(db),
       });
       if (orderFill.filled) {
-        return NextResponse.json({
+        const orderBookBody = {
           success: true,
           sharesSold: orderFill.shares,
           proceeds: Math.round(orderFill.proceedsAnchor * 100) / 100,
           pricePerShare: orderFill.pricePerShareLocal,
           execution: "order_book",
-        });
+        };
+        if (headerKey !== null) {
+          try {
+            const stored = await recordCompletedTradeResponse(
+              db,
+              headerKey,
+              buildOrderBookFillFingerprint({
+                corpId: corporation._id,
+                sellerId: charDoc._id,
+                shares: orderFill.shares,
+                pricePerShareLocal: orderFill.pricePerShareLocal,
+                proceedsAnchor: orderFill.proceedsAnchor,
+              }),
+              orderBookBody
+            );
+            return NextResponse.json(stored.body);
+          } catch (error) {
+            return mapTradeKeyError(error);
+          }
+        }
+        return NextResponse.json(orderBookBody);
       }
     }
 
-    const buybackGate = await gateIssuerBuyback();
-    if (buybackGate) return buybackGate;
+    const charPoolGate = gatePoolDepth();
+    if (charPoolGate) return charPoolGate;
 
-    const remainingAfterSale = await debitShares(
-      db,
-      corporation._id,
-      charDoc._id,
-      shares,
-      corporationUpdate,
-      { requireSufficient: true }
-    );
-    if (remainingAfterSale < 0) {
-      await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-      return NextResponse.json(
-        { error: "Shares were already sold or reserved by another action" },
-        { status: 409 }
-      );
-    }
-
-    const sellerCredit = await db.collection<Character>("characters").updateOne(
-      { _id: charDoc._id },
-      {
-        $inc: { ...buildPersonalBalanceInc(proceedsInHome, homeCurrency, forexEnabled) },
-        $set: { updatedAt: now },
-      }
-    );
-    if (sellerCredit.matchedCount === 0) {
-      await creditShares(
+    // Wash-trade guard (see orderFlowWashGuard). Read-only; pinned below.
+    const charWashExcluded =
+      orderFlowEligible &&
+      (await isOrderFlowWashRoundTrip(
         db,
         corporation._id,
-        charDoc._id,
-        shares,
-        {
-          $inc: {
-            publicFloat: -shares,
-            ...orderFlowIncReversal,
-          },
-          $set: { updatedAt: new Date() },
-        },
-        { pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice }
-      );
-      if (shouldVacateCeo) {
-        await db
-          .collection<Corporation>("corporations")
-          .updateOne({ _id: corporation._id }, buildCeoRestoreUpdate(corporation, new Date()));
-      }
-      await reverseFloatSellDebit(db, corporation, issuerBuyback, { split: issuerBuybackSplit });
-      throw new Error("Seller character not found");
-    }
-    if (shouldVacateCeo) {
-      void db
-        .collection("corporationCeoVotes")
-        .deleteMany({ corporationId: corporation._id })
-        .catch(() => undefined);
-      await closeCeoTenure(db, corporation._id, {
-        holderId: charDoc._id,
-        turn: await getCurrentTurn(db),
-      });
-    }
+        { characterId: charDoc._id },
+        "sell",
+        now
+      ));
 
-    void recordShareTrade(db, {
-      corporationId: corporation._id,
-      kind: "market_sell",
-      turn: await getCurrentTurn(db),
+    const charSellDealer = await pinSellDealer();
+    const charSellTurn = await getCurrentTurn(db);
+    const charSellKey = headerKey ?? randomUUID();
+    const charSellPlan: PublicShareTradePlan = {
+      version: 1,
+      tradeKey: charSellKey,
+      kind: "market-sell",
+      corpIdHex: corporation._id.toHexString(),
+      corpName: corporation.name,
       shares,
-      pricePerShareAnchor: proceeds / shares,
-      from: { characterId: charDoc._id, name: charDoc.name },
-      to: null,
-      corpCurrencyCode: corporation.liquidCurrencyCode,
-    });
-
-    void logEconomicAction(db, {
-      characterId: charDoc._id,
-      userId: basicAuth.user.userId,
-      actionType: "sellShares",
-      turn: await getCurrentTurn(db),
-      characterName: charDoc.name,
-      username: userDoc?.username,
-      countryId: corporation.countryId,
-      // `proceeds` is the ₳ (anchor) sale value gained (pricePerShareAnchor = proceeds/shares).
-      // A sale spends no corp cash / MS, so only the gained revenue is logged.
-      capturedRevenueAnchor: proceeds,
-      currencyCode: corporation.liquidCurrencyCode,
-      result: {
-        success: true,
-        message: `Sold ${shares.toLocaleString()} shares of ${corporation.name}`,
+      executionPrice,
+      turn: charSellTurn,
+      nowIso: now.toISOString(),
+      orderFlowEligible,
+      washExcluded: charWashExcluded,
+      buyerDebit: null,
+      capCredit: null,
+      capDebit: {
+        field: "characterId",
+        idHex: charDoc._id.toHexString(),
+        pricePerShare: shareholderEntry?.avgCostPerShare ?? executionPrice,
       },
-    }).catch(() => {});
-
-    void emitTx(db, {
-      type: "stock_trade_sell",
-      turn: await getCurrentTurn(db),
-      createdAt: now,
-      subjectType: "character",
-      subjectId: charDoc._id,
-      subjectName: charDoc.name,
-      amount: proceedsInHome,
-      currencyCode: homeCurrency,
-      counterpartyType: "corporation",
-      counterpartyId: corporation._id,
-      counterpartyName: corporation.name,
-      meta: {
-        corporationId: corporation._id.toString(),
+      proceedsLeg: {
+        collection: "characters",
+        idHex: charDoc._id.toHexString(),
+        field: personalBalanceField(homeCurrency, forexEnabled),
+        amount: proceedsInHome,
+      },
+      dealer: charSellDealer.dealer,
+      ceoVacate: shouldVacateCeo ? ceoSnapshotOf(corporation) : null,
+      closeTenureHolderIdHex: shouldVacateCeo ? charDoc._id.toHexString() : null,
+      tx: {
+        type: "stock_trade_sell",
+        subjectType: "character",
+        subjectIdHex: charDoc._id.toHexString(),
+        subjectName: charDoc.name,
+        amount: proceedsInHome,
+        includeBalanceAfter: false,
+        currencyCode: homeCurrency,
+        counterpartyType: "corporation",
+        counterpartyIdHex: corporation._id.toHexString(),
+        counterpartyName: corporation.name,
+        meta: {
+          corporationId: corporation._id.toString(),
+          shares,
+          pricePerShare: executionPrice,
+        },
+      },
+      history: {
+        kind: "market_sell",
+        shares,
+        pricePerShareAnchor: proceeds / shares,
+        from: { characterId: charDoc._id, name: charDoc.name },
+        to: null,
+        corpCurrencyCode: corporation.liquidCurrencyCode,
+      },
+      spread: null,
+      audit: {
+        counterpartyType: "character",
+        counterpartyIdHex: charDoc._id.toHexString(),
+        counterpartyName: charDoc.name,
+        amount: proceedsInHome,
+        currencyCode: homeCurrency,
         shares,
         pricePerShare: executionPrice,
       },
-    });
+      notifyTakeover: false,
+      errors: {
+        "buyer-debit": { message: "Failed to record trade", status: 500 },
+        float: { message: "Failed to record trade", status: 500 },
+        "buyer-credit": { message: "Failed to record trade", status: 500 },
+        dealer: charSellDealer.error,
+        "seller-debit": {
+          message: "Shares were already sold or reserved by another action",
+          status: 409,
+        },
+        "proceeds-credit": { message: "Seller character not found", status: 500 },
+        history: { message: "Failed to record trade", status: 500 },
+      },
+      response: {
+        success: true,
+        sharesSold: shares,
+        proceeds,
+        pricePerShare: executionPrice,
+      },
+    };
 
-    // Sell committed (character): back out realized issuance proceeds to match
-    // the float shrinking. Best-effort/terminal — never gates the committed sell.
-    void onFloatSellCommitted(db, corporation, issuerBuyback);
-
-    recordAudit({
-      source: "api",
-      action: "share.sell",
-      category: "market",
-      subject: { type: "corporation", id: corporation._id, name: corporation.name },
-      counterparty: { type: "character", id: charDoc._id, name: charDoc.name },
-      amount: proceedsInHome,
-      currencyCode: homeCurrency,
-      refs: { corporationId: corporation._id },
-      delta: [
-        { field: "status", before: null, after: "filled" },
-        { field: "shares", before: null, after: shares },
-        { field: "pricePerShare", before: null, after: executionPrice },
-      ],
-      outcome: "ok",
-    });
-
-    return NextResponse.json({
-      success: true,
-      sharesSold: shares,
-      proceeds,
-      pricePerShare: executionPrice,
-    });
+    let charSellResult;
+    try {
+      charSellResult = await executePublicShareTradeFlow(db, charSellPlan, {
+        idempotencyKey: charSellKey,
+      });
+    } catch (error) {
+      return mapTradeKeyError(error);
+    }
+    if (!charSellResult.ok) {
+      if (charSellResult.status === 400 && marketQuote.active) {
+        return NextResponse.json(
+          {
+            error: charSellResult.error,
+            marketDepthShares: marketQuote.bidDepthShares,
+          },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: charSellResult.error }, { status: charSellResult.status });
+    }
+    if (!charSellResult.replayed) {
+      void logEconomicAction(db, {
+        characterId: charDoc._id,
+        userId: basicAuth.user.userId,
+        actionType: "sellShares",
+        turn: charSellTurn,
+        characterName: charDoc.name,
+        username: userDoc?.username,
+        countryId: corporation.countryId,
+        // `proceeds` is the ₳ (anchor) sale value gained (pricePerShareAnchor = proceeds/shares).
+        // A sale spends no corp cash / MS, so only the gained revenue is logged.
+        capturedRevenueAnchor: proceeds,
+        currencyCode: corporation.liquidCurrencyCode,
+        result: {
+          success: true,
+          message: `Sold ${shares.toLocaleString()} shares of ${corporation.name}`,
+        },
+      }).catch(() => {});
+    }
+    return NextResponse.json(charSellResult.body);
   } catch (error) {
     return handleRouteError(error);
   }

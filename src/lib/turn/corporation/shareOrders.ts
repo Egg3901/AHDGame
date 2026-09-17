@@ -14,6 +14,8 @@ import { recoverShareFillOrphans } from "@/lib/corporations/commands/shareTradin
 import { recoverShareFillMoneyOrphans } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import { recoverShareOrderRefundOrphans } from "@/lib/corporations/shareOrderRefund";
 import { recoverShareOrderPlacementOrphans } from "@/lib/corporations/shareOrderPlacement";
+import { recoverPublicShareTradeOrphans } from "@/lib/corporations/commands/shareTrading/publicShareTradeSpend";
+import { recoverShareListingCancelOrphans } from "@/lib/corporations/cancelShareListing";
 import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import type { ShareFillCashLeg } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
@@ -123,6 +125,16 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     await recoverShareOrderPlacementOrphans(db, 50);
   } catch {
     // Placement receipts stay `in_progress` for the next turn.
+  }
+  try {
+    await recoverPublicShareTradeOrphans(db, 50);
+  } catch {
+    // Float-trade receipts stay `in_progress` for the next turn.
+  }
+  try {
+    await recoverShareListingCancelOrphans(db, 50);
+  } catch {
+    // Listing-cancel receipts stay `in_progress` for the next turn.
   }
 
   const openOrders = await db.collection("shareOrders").find({ status: "open" }).toArray();

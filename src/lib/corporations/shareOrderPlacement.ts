@@ -299,7 +299,7 @@ interface PoolAccount {
 }
 
 /** Float `$inc` with the order-flow window folded in (matcher shape). */
-function makeFloatStep(
+export function makeFloatStep(
   db: Db,
   placementKey: string,
   corpId: ObjectId,
@@ -407,7 +407,7 @@ function makeEscrowSplitDebitStep(
   };
 }
 
-function makeDealerStep(
+export function makeDealerStep(
   db: Db,
   placementKey: string,
   corpId: ObjectId,

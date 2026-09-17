@@ -6,7 +6,11 @@ import { handleRouteError } from "@/lib/api/errors";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { getCharacterByUserId } from "@/lib/db/characterLookup";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
-import { cancelShareListingAndRefund } from "@/lib/corporations/cancelShareListing";
+import {
+  cancelShareListingAndRefund,
+  getStoredShareListingCancelResponse,
+  recoverShareListingCancelByKey,
+} from "@/lib/corporations/cancelShareListing";
 import type { ShareListing } from "@/lib/db/types";
 import { rejectDuringTurn } from "@/lib/api/rejectDuringTurn";
 
@@ -30,6 +34,27 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
 
     const { listingId } = await params;
     const db = await getDb();
+
+    // Crash-safe cancel (issue #1672): same-key retries converge on the
+    // stored plan instead of refunding twice.
+    const headerKey = _request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    if (headerKey !== null) {
+      const prior = await getStoredShareListingCancelResponse(db, headerKey);
+      if (prior) {
+        const recovered = await recoverShareListingCancelByKey(db, headerKey);
+        if (!recovered.ok) {
+          if (recovered.rateUnavailable) {
+            return NextResponse.json({ error: recovered.error }, { status: 503 });
+          }
+          return NextResponse.json({ error: recovered.error }, { status: 400 });
+        }
+        return NextResponse.json({ success: true });
+      }
+    }
+
     const turnGuard = await rejectDuringTurn(db);
     if (turnGuard) return turnGuard;
     const forexEnabled = await isForexEnabled();
@@ -59,7 +84,9 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not your listing" }, { status: 403 });
     }
 
-    const result = await cancelShareListingAndRefund(db, listing, new Date(), forexEnabled);
+    const result = await cancelShareListingAndRefund(db, listing, new Date(), forexEnabled, null, {
+      ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+    });
     if (!result.ok) {
       if (result.rateUnavailable) {
         return NextResponse.json({ error: result.error }, { status: 503 });
