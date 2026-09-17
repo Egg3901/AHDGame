@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Character } from "@/lib/db/types";
+import type { Character, State } from "@/lib/db/types";
 import {
   calculateInfluenceAccrual,
   getCampaignActionCost,
@@ -103,12 +103,14 @@ function makeCharacter(overrides: {
   politicalInfluence?: number;
   cashOnHand?: number;
   savingsOnHand?: number;
+  stats?: Character["stats"];
 }): Character {
   return {
     _id: "test" as unknown as import("mongodb").ObjectId,
     userId: "u" as unknown as import("mongodb").ObjectId,
     name: "Test",
     homeState: "NY",
+    countryId: "US",
     party: "independent",
     actions: overrides.actions ?? 10,
     funds: overrides.funds ?? 1_000_000,
@@ -118,6 +120,7 @@ function makeCharacter(overrides: {
     infamy: 0,
     donorBaseLevel: overrides.donorBaseLevel ?? 0,
     politicalInfluence: overrides.politicalInfluence ?? 0,
+    stats: overrides.stats,
     demographics: { race: "white", gender: "male", education: "college", wealth: "middle" },
     policies: { economic: 0, social: 0 },
     createdAt: new Date(),
@@ -125,17 +128,27 @@ function makeCharacter(overrides: {
   } as Character;
 }
 
+// Average-GDP home state (scalar 1.0) and neutral charisma (multiplier 1.0):
+// the advertise quote requires both, rejecting neutral fallbacks instead.
+const AVG_STATE = { gdp: 65_000, population: 1_000_000, name: "Test State" } as State;
+const NEUTRAL_STATS = { charisma: 5.5 } as Character["stats"];
+
 describe("canPerformAction — tiered costs", () => {
   it("advertise blocked when actions < tiered cost (high fav)", () => {
-    const char = makeCharacter({ actions: 7, favorability: 90 }); // tier 4, needs 9
-    const result = canPerformAction(char, "advertise");
+    const char = makeCharacter({ actions: 7, favorability: 90, stats: NEUTRAL_STATS }); // tier 4, needs 9
+    const result = canPerformAction(char, "advertise", AVG_STATE);
     expect(result.canPerform).toBe(false);
     expect(result.reason).toContain("9");
   });
 
   it("advertise allowed when actions >= tiered cost", () => {
-    const char = makeCharacter({ actions: 9, favorability: 90, funds: 1_000_000 });
-    const result = canPerformAction(char, "advertise");
+    const char = makeCharacter({
+      actions: 9,
+      favorability: 90,
+      funds: 1_000_000,
+      stats: NEUTRAL_STATS,
+    });
+    const result = canPerformAction(char, "advertise", AVG_STATE);
     expect(result.canPerform).toBe(true);
   });
 
@@ -169,18 +182,18 @@ describe("canPerformAction — tiered costs", () => {
 describe("canPerformAction — insufficient-funds message currency", () => {
   it("reports the shortfall in LOCAL currency, never anchor (₳)", () => {
     // No forex: anchor == local. Old code emitted ₳; the fix uses the local symbol.
-    const char = makeCharacter({ actions: 9, favorability: 90, funds: 100 }); // advertise costs 180k
-    const result = canPerformAction(char, "advertise");
+    const char = makeCharacter({ actions: 9, favorability: 90, funds: 100, stats: NEUTRAL_STATS }); // advertise costs 180k
+    const result = canPerformAction(char, "advertise", AVG_STATE);
     expect(result.canPerform).toBe(false);
     expect(result.reason).not.toContain("₳");
     expect(result.reason).toContain("$");
   });
 
   it("converts the anchor cost to local magnitude when forex is enabled", () => {
-    // advertise (fav 90, no state): cost = 180,000 anchor. rate 0.9 → 162,000 local.
-    const char = makeCharacter({ actions: 9, favorability: 90 });
+    // advertise (fav 90, average-GDP state): cost = 180,000 anchor. rate 0.9 → 162,000 local.
+    const char = makeCharacter({ actions: 9, favorability: 90, stats: NEUTRAL_STATS });
     char.currencyBalances = { campaign: 1, personal: {} } as Character["currencyBalances"];
-    const result = canPerformAction(char, "advertise", undefined, {
+    const result = canPerformAction(char, "advertise", AVG_STATE, {
       forexEnabled: true,
       homeFxRate: 0.9,
     });
@@ -197,8 +210,8 @@ describe("action effect messages — local currency", () => {
   };
 
   it("advertise message renders the spend via the local formatter, no ₳", () => {
-    const char = makeCharacter({ favorability: 90 });
-    const r = ACTIONS.advertise.effect(char, undefined, ctx);
+    const char = makeCharacter({ favorability: 90, stats: NEUTRAL_STATS });
+    const r = ACTIONS.advertise.effect(char, AVG_STATE, ctx);
     expect(r.message).not.toContain("₳");
     expect(r.message).toContain("€");
   });
