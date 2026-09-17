@@ -102,7 +102,7 @@ describe("summarizeSovereignIssuanceByCountry", () => {
       bond({ countryId: "US", holders: [holder(10)], publicFloat: 10 }),
       bond({ countryId: "US", holders: [], publicFloat: 500 }),
       bond({ countryId: "UK", holders: [], publicFloat: 300 }),
-      bond({ countryId: "US", issuerType: "corporate", holders: [], publicFloat: 700 }),
+      bond({ countryId: "US", issuerType: "corporation", holders: [], publicFloat: 700 }),
       bond({ countryId: "UK", holders: [holder(5)], publicFloat: 0, matured: true }),
     ]);
     expect(rows.map((row) => row.countryId)).toEqual(["UK", "US"]);
