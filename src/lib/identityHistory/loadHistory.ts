@@ -50,12 +50,19 @@ export async function loadIdentityHistory(
   const total = await collection.countDocuments({ userId, track });
   const totalPages = Math.max(1, Math.ceil(total / IDENTITY_HISTORY_PAGE_SIZE));
 
-  const docs = await collection
-    .find({ userId, track })
-    .sort({ lastSeen: -1 })
-    .skip((safePage - 1) * IDENTITY_HISTORY_PAGE_SIZE)
-    .limit(IDENTITY_HISTORY_PAGE_SIZE)
-    .toArray();
+  // Past the last page, answer without querying. `skip` past the end still
+  // walks the index, so an arbitrarily large `?page=` would otherwise turn a
+  // URL parameter into real server work. The response still reports the page
+  // that was asked for rather than silently clamping to the last one.
+  const docs =
+    safePage > totalPages
+      ? []
+      : await collection
+          .find({ userId, track })
+          .sort({ lastSeen: -1 })
+          .skip((safePage - 1) * IDENTITY_HISTORY_PAGE_SIZE)
+          .limit(IDENTITY_HISTORY_PAGE_SIZE)
+          .toArray();
 
   // Resolved for the page's values only, in one round trip. This is the whole
   // point of the panel: a row that reads "also used by 2 other accounts" is

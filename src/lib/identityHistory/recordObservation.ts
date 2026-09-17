@@ -36,6 +36,15 @@ export const IDENTITY_OBSERVATION_DEBOUNCE_MS = 60_000;
  * Extends the CURRENTLY OPEN run (the one with the greatest `lastSeen`) when
  * the value matches, otherwise opens a new run. That is what makes a return to
  * an earlier value produce its own row rather than reviving the old one.
+ *
+ * Read-then-write, so two genuinely concurrent observations of the same NEW
+ * value can both open a run and leave a duplicate pair of rows. Preventing that
+ * outright needs a unique index, which cannot exist here because repeat runs on
+ * one value are the whole point. It is kept rare instead: each track has a
+ * single per-page writer (`/api/auth/me` owns the IP, `/api/auth/record-fingerprint`
+ * owns the fingerprint), so the remaining window is two simultaneous requests
+ * from one account, and the cost is a cosmetic duplicate row. Grouping dedupes
+ * by value, so detection is unaffected.
  */
 export async function recordIdentityObservation(
   db: Db,

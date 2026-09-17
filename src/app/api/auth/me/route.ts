@@ -158,23 +158,28 @@ export const GET = withNoStore(async () => {
     // see: a player who changes network mid-session never re-authenticates, so
     // `lastKnownIp` keeps reporting the address they logged in from.
     //
+    // `getClientIp` reads `headers()`, so it is resolved inside the request
+    // scope rather than from a detached continuation, where it can throw once
+    // the response has been sent. But that puts it on the critical path of the
+    // endpoint EVERY authenticated page load hits, so the whole block is
+    // wrapped: identity history is evidence collection, and a failure to
+    // collect it must never turn into a 500 for the player.
+    //
     // The equality check short-circuits before any I/O, so a player on a stable
-    // address costs nothing. When it does fire, the writer's debounce collapses
-    // repeat sightings, so a roaming player costs one indexed lookup per page
-    // rather than a write. Fire-and-forget, like the update above: identity
-    // history must never be able to slow or fail a page load.
-    // `getClientIp` reads `headers()`, so it is resolved HERE, inside the
-    // request scope. Reading it from a detached continuation instead can throw
-    // once the response has been sent, which would silently disable this whole
-    // capture path. Only the database write is fire-and-forget.
-    const sessionIp = await getClientIp();
-    if (sessionIp !== user?.lastKnownIp) {
-      recordIdentitySignals(db, {
-        userId: new ObjectId(userId),
-        ip: sessionIp,
-        observedAt: new Date(),
-        source: "session",
-      });
+    // address costs nothing, and the writer's debounce collapses repeat
+    // sightings for one who is roaming.
+    try {
+      const sessionIp = await getClientIp();
+      if (sessionIp !== user?.lastKnownIp) {
+        recordIdentitySignals(db, {
+          userId: new ObjectId(userId),
+          ip: sessionIp,
+          observedAt: new Date(),
+          source: "session",
+        });
+      }
+    } catch {
+      /* never block the session response on identity capture */
     }
 
     // Get home state name, party name, and unread count in parallel

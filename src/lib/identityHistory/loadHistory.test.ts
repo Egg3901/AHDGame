@@ -132,4 +132,24 @@ describe("loadIdentityHistory", () => {
     expect(page.total).toBe(0);
     expect(page.totalPages).toBe(1);
   });
+
+  it("does not query at all when the requested page is past the end", async () => {
+    let findCalls = 0;
+    const db = {
+      collection: () => ({
+        countDocuments: async () => 1,
+        find: () => {
+          findCalls += 1;
+          return {
+            sort: () => ({ skip: () => ({ limit: () => ({ toArray: async () => [] }) }) }),
+          };
+        },
+        aggregate: () => ({ toArray: async () => [] }),
+      }),
+    } as unknown as Db;
+    const page = await loadIdentityHistory(db, USER, "ip", 1_000_000, { revealNetwork: true });
+    expect(page.rows).toHaveLength(0);
+    expect(page.page).toBe(1_000_000);
+    expect(findCalls).toBe(0);
+  });
 });
