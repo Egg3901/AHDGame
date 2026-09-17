@@ -188,10 +188,14 @@ export async function processBrettonWoodsTurn(
   }
 
   // One bulk write: the stepped cover on the USD row plus every transition.
-  // No transitions and no USD row state change is impossible here (cover always
-  // re-persists while enabled), so the write is unconditional once docs exist.
+  // Sorted by country id so the write order (and the reported lists) are
+  // deterministic replay to replay. Skipped entirely when there is nothing to
+  // persist (no USD row and no transitions) — an empty bulkWrite throws.
+  regimeWrites.sort((a, b) => (a.countryId < b.countryId ? -1 : a.countryId > b.countryId ? 1 : 0));
+  suspended.sort();
+  floated.sort();
   const now = new Date();
-  await db.collection<ExchangeRate>("exchangeRates").bulkWrite([
+  const ops = [
     ...(usDoc
       ? [
           {
@@ -214,7 +218,10 @@ export async function processBrettonWoodsTurn(
         },
       },
     })),
-  ]);
+  ];
+  if (ops.length > 0) {
+    await db.collection<ExchangeRate>("exchangeRates").bulkWrite(ops);
+  }
 
   return {
     enabled: true,
