@@ -13,6 +13,7 @@ import {
   getAdvertiseActionCost,
   getDonorActionCost,
   REST_ACTION_COST,
+  getPollActionCost,
 } from "@/lib/actions";
 import { isForexEnabled } from "@/lib/currency/featureFlag";
 import { getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
@@ -152,8 +153,8 @@ async function handleGET() {
       advertise: getAdvertiseActionCost(fav),
       fundraise: getDonorActionCost(donor, "fundraise"),
       buildDonorBase: getDonorActionCost(donor, "buildDonorBase"),
-      poll: 2,
-      pollLarge: 6,
+      poll: getPollActionCost("small"),
+      pollLarge: getPollActionCost("large"),
       rest: REST_ACTION_COST,
     };
 
