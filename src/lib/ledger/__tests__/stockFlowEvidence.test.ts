@@ -8,6 +8,7 @@ import {
 } from "@/lib/ledger/stockFlowEvidence";
 
 const REVISION = "5b34bd6f32eaa000950b1fa47d44ca14351d12ce";
+const OTHER_REVISION = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 function provenance(overrides: Partial<StockFlowProvenance> = {}): StockFlowProvenance {
   return {
@@ -18,11 +19,18 @@ function provenance(overrides: Partial<StockFlowProvenance> = {}): StockFlowProv
     gitDirty: false,
     bankingMode: "authoritative",
     bankingActivationTurn: 100,
+    sourceWorktree: "muse-992",
+    sourceRequestedCommit: REVISION,
+    sourceExecutedPath: "/root/projects/AHDGame/worktrees/muse-992",
+    sourceExecutedCommit: REVISION,
     ...overrides,
   };
 }
 
-function turn(turnNumber: number, overrides: Partial<StockFlowTurnEvidence> = {}): StockFlowTurnEvidence {
+function turn(
+  turnNumber: number,
+  overrides: Partial<StockFlowTurnEvidence> = {}
+): StockFlowTurnEvidence {
   return {
     turn: turnNumber,
     trialBalanceStatus: "green",
@@ -58,7 +66,11 @@ describe("validateStockFlowWindow", () => {
 
   it("rejects a skipped stock-vs-flow check (null count reads as failure, not zero)", () => {
     const turns = cleanTwelve(101);
-    turns[5] = turn(106, { stockVsFlowSkipped: true, stockVsFlowDivergentCount: null, overallStatus: "amber" });
+    turns[5] = turn(106, {
+      stockVsFlowSkipped: true,
+      stockVsFlowDivergentCount: null,
+      overallStatus: "amber",
+    });
     const result = validateStockFlowWindow(input(turns));
     expect(result.ok).toBe(false);
     expect(result.qualifyingWindow).toBeNull();
@@ -70,30 +82,48 @@ describe("validateStockFlowWindow", () => {
     turns[11] = turn(112, { stockVsFlowDivergentCount: 3, overallStatus: "amber" });
     const result = validateStockFlowWindow(input(turns));
     expect(result.ok).toBe(false);
-    expect(result.failures.some((f) => f.turn === 112 && f.reason.includes("3 divergent"))).toBe(true);
+    expect(result.failures.some((f) => f.turn === 112 && f.reason.includes("3 divergent"))).toBe(
+      true
+    );
   });
 
   it("rejects trial-balance breaks", () => {
     const turns = cleanTwelve(101);
-    turns[0] = turn(101, { trialBalanceStatus: "red", trialBalanceUnbalancedCount: 2, overallStatus: "red" });
+    turns[0] = turn(101, {
+      trialBalanceStatus: "red",
+      trialBalanceUnbalancedCount: 2,
+      overallStatus: "red",
+    });
     const result = validateStockFlowWindow(input(turns));
     expect(result.ok).toBe(false);
-    expect(result.failures.some((f) => f.turn === 101 && f.reason.includes("trial balance"))).toBe(true);
+    expect(result.failures.some((f) => f.turn === 101 && f.reason.includes("trial balance"))).toBe(
+      true
+    );
   });
 
   it("rejects money-supply amber and non-empty unattributed buckets", () => {
     const turns = cleanTwelve(101);
-    turns[3] = turn(104, { moneySupplyStatus: "amber", unattributedCount: 4, overallStatus: "amber" });
+    turns[3] = turn(104, {
+      moneySupplyStatus: "amber",
+      unattributedCount: 4,
+      overallStatus: "amber",
+    });
     const result = validateStockFlowWindow(input(turns));
     expect(result.ok).toBe(false);
-    expect(result.failures.some((f) => f.turn === 104 && f.reason.includes("money supply"))).toBe(true);
-    expect(result.failures.some((f) => f.turn === 104 && f.reason.includes("unattributed"))).toBe(true);
+    expect(result.failures.some((f) => f.turn === 104 && f.reason.includes("money supply"))).toBe(
+      true
+    );
+    expect(result.failures.some((f) => f.turn === 104 && f.reason.includes("unattributed"))).toBe(
+      true
+    );
   });
 
   it("rejects turns at or before the banking activation turn", () => {
     const result = validateStockFlowWindow(input(cleanTwelve(90)));
     expect(result.ok).toBe(false);
-    expect(result.failures.some((f) => f.reason.includes("not post banking activation"))).toBe(true);
+    expect(result.failures.some((f) => f.reason.includes("not post banking activation"))).toBe(
+      true
+    );
   });
 
   it("rejects a non-authoritative banking mode", () => {
@@ -118,9 +148,62 @@ describe("validateStockFlowWindow", () => {
   });
 
   it("rejects executing-code mismatch against the expected branch revision", () => {
-    const result = validateStockFlowWindow(input(cleanTwelve(101), { codeRevision: "b55eda0b4" }));
+    const prov = provenance({
+      codeRevision: OTHER_REVISION,
+      sourceRequestedCommit: OTHER_REVISION,
+      sourceExecutedCommit: OTHER_REVISION,
+    });
+    const result = validateStockFlowWindow({
+      provenance: prov,
+      expectedCodeRevision: REVISION,
+      turns: cleanTwelve(101),
+    });
     expect(result.ok).toBe(false);
-    expect(result.failures.some((f) => f.reason.includes("does not match"))).toBe(true);
+    expect(
+      result.failures.some(
+        (f) => f.reason.includes("does not match") && f.reason.includes("expected branch revision")
+      )
+    ).toBe(true);
+  });
+
+  it("rejects a pinned source that moved between request and execution", () => {
+    const result = validateStockFlowWindow(
+      input(cleanTwelve(101), { sourceRequestedCommit: OTHER_REVISION })
+    );
+    expect(result.ok).toBe(false);
+    expect(result.failures.some((f) => f.reason.includes("pinned source moved"))).toBe(true);
+  });
+
+  it("rejects a code revision substituted over a different executed commit", () => {
+    const result = validateStockFlowWindow(
+      input(cleanTwelve(101), { codeRevision: OTHER_REVISION })
+    );
+    expect(result.ok).toBe(false);
+    expect(result.failures.some((f) => f.reason.includes("mixed report refused"))).toBe(true);
+  });
+
+  it("rejects machine-recorded provenance without a full-SHA executed commit", () => {
+    for (const sourceExecutedCommit of [null, "b55eda0b4", ""]) {
+      const result = validateStockFlowWindow(
+        input(cleanTwelve(101), { codeRevision: "b55eda0b4", sourceExecutedCommit })
+      );
+      expect(result.ok).toBe(false);
+      expect(
+        result.failures.some((f) => f.reason.includes("without a pinned full-SHA executed commit"))
+      ).toBe(true);
+    }
+  });
+
+  it("rejects pinned provenance without a proven source path", () => {
+    for (const overrides of [
+      { sourceWorktree: null },
+      { sourceExecutedPath: null },
+      { sourceWorktree: "", sourceExecutedPath: "" },
+    ]) {
+      const result = validateStockFlowWindow(input(cleanTwelve(101), overrides));
+      expect(result.ok).toBe(false);
+      expect(result.failures.some((f) => f.reason.includes("source path unproven"))).toBe(true);
+    }
   });
 
   it("rejects operator-asserted provenance (genuine means machine-recorded)", () => {

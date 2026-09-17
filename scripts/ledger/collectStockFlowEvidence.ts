@@ -2,9 +2,17 @@
  * #992 stock-flow evidence collector (read-only).
  *
  * Reads per-turn ledgerReconciliations from ONE sandbox sim DB, attaches run
- * provenance (simRuns + gameConfig banking mode + machine-recorded git
- * revision from control-plane simExperimentReports when reachable), and runs
- * the deterministic gate in src/lib/ledger/stockFlowEvidence.ts.
+ * provenance (simRuns + gameConfig banking mode + machine-recorded
+ * pinned-source identity from control-plane simExperimentReports when
+ * reachable), and runs the deterministic gate in
+ * src/lib/ledger/stockFlowEvidence.ts.
+ *
+ * The code revision comes from runConfig.source.executedCommit (the full SHA
+ * runWorld re-checked in the child on the pinned worktree), never from the
+ * legacy short runConfig.gitCommit, which is recorded on the collector
+ * operator's own checkout and may be a different tree. Reports without
+ * runConfig.source (pre-pinned jobs) degrade to operator-asserted provenance
+ * and the gate fails closed with the exact reason.
  *
  * This script never writes to any database and never runs a turn. It cannot
  * manufacture evidence for a branch revision: when the executing code
@@ -13,6 +21,7 @@
  *
  * Usage:
  *   SIM_MONGODB_URI=mongodb://127.0.0.1:27018 \
+ *     OPS_MONGODB_URI=mongodb://... \
  *     npx tsx scripts/ledger/collectStockFlowEvidence.ts \
  *       --db=ahd_sim_992 --run-id=<runId> \
  *       --expected-revision=<full-sha> --banking-activation-turn=<turn> \
@@ -90,12 +99,21 @@ async function main() {
     .collection<{ _id: string; savingsAccountsMode?: string }>("gameConfig")
     .findOne({ _id: "default" });
 
-  // Machine-recorded executing revision lives in the control-plane experiment
-  // report (written by collectExperimentReport.ts from the worker checkout).
-  // Read-only here; absent means operator-asserted provenance (gate fails closed).
+  // Machine-recorded pinned-source identity lives in the control-plane
+  // experiment report (runConfig.source, written by collectExperimentReport.ts
+  // from the simRuns.source stamp the worker/runWorld recorded on the pinned
+  // worktree). Read-only here; absent means operator-asserted provenance
+  // (gate fails closed). The legacy short runConfig.gitCommit is deliberately
+  // NOT used as a revision: it is recorded on this collector's own checkout,
+  // which may be a different tree, and a short SHA can never equal a full
+  // expected revision.
   let codeRevision = "";
   let codeRevisionSource: "simExperimentReport" | "operator" = "operator";
   let gitDirty: boolean | null = null;
+  let sourceWorktree: string | null = null;
+  let sourceRequestedCommit: string | null = null;
+  let sourceExecutedPath: string | null = null;
+  let sourceExecutedCommit: string | null = null;
   if (OPS_MONGODB_URI) {
     try {
       const { MongoClient } = await import("mongodb");
@@ -104,14 +122,41 @@ async function main() {
         await opsClient.connect();
         const report = await opsClient
           .db(OPS_DB_NAME)
-          .collection<{ runConfig?: { gitCommit?: string; gitDirty?: boolean } }>(
-            "simExperimentReports"
-          )
+          .collection<{
+            runConfig?: {
+              gitCommit?: string;
+              gitDirty?: boolean;
+              source?: {
+                worktree?: string | null;
+                requestedCommit?: string | null;
+                executedPath?: string | null;
+                executedCommit?: string | null;
+              } | null;
+            };
+          }>("simExperimentReports")
           .findOne({ _id: runId as never });
-        if (typeof report?.runConfig?.gitCommit === "string" && report.runConfig.gitCommit) {
-          codeRevision = report.runConfig.gitCommit;
+        gitDirty = report?.runConfig?.gitDirty ?? null;
+        const source = report?.runConfig?.source ?? null;
+        sourceWorktree = source?.worktree ?? null;
+        sourceRequestedCommit = source?.requestedCommit ?? null;
+        sourceExecutedPath = source?.executedPath ?? null;
+        sourceExecutedCommit = source?.executedCommit ?? null;
+        if (
+          typeof sourceExecutedCommit === "string" &&
+          /^[0-9a-f]{40}$/.test(sourceExecutedCommit)
+        ) {
+          codeRevision = sourceExecutedCommit;
           codeRevisionSource = "simExperimentReport";
-          gitDirty = report.runConfig.gitDirty ?? null;
+        } else if (source !== null) {
+          console.error(
+            "Experiment report has a pinned-source block without a full-SHA executed commit: " +
+              "provenance stays operator-asserted, gate will fail closed."
+          );
+        } else {
+          console.error(
+            "Experiment report has no pinned-source identity (pre-pinned job or legacy report): " +
+              "provenance stays operator-asserted, gate will fail closed."
+          );
         }
       } finally {
         await opsClient.close();
@@ -122,14 +167,13 @@ async function main() {
       );
     }
   } else {
-    console.error("OPS_MONGODB_URI unset: code revision is operator-asserted, gate will fail closed.");
+    console.error(
+      "OPS_MONGODB_URI unset: code revision is operator-asserted, gate will fail closed."
+    );
   }
 
   // Cross-check against the independent vital-signs surface for the same turns.
-  const vitalTurns = new Map<
-    number,
-    { divergent: number | null; skipped: boolean | null }
-  >();
+  const vitalTurns = new Map<number, { divergent: number | null; skipped: boolean | null }>();
   try {
     const vitals = await db
       .collection<{
@@ -183,6 +227,10 @@ async function main() {
       gitDirty,
       bankingMode: gameConfig?.savingsAccountsMode ?? null,
       bankingActivationTurn,
+      sourceWorktree,
+      sourceRequestedCommit,
+      sourceExecutedPath,
+      sourceExecutedCommit,
     },
     expectedCodeRevision: expectedRevision,
     turns: ordered.map((doc) => ({
@@ -201,7 +249,8 @@ async function main() {
   const output = JSON.stringify(
     {
       collectedAt: new Date().toISOString(),
-      windowTurns: ordered.length > 0 ? { from: ordered[0].turn, to: ordered[ordered.length - 1].turn } : null,
+      windowTurns:
+        ordered.length > 0 ? { from: ordered[0].turn, to: ordered[ordered.length - 1].turn } : null,
       simSeed: (simRun as { seed?: string }).seed ?? null,
       simPreset: (simRun as { preset?: string }).preset ?? null,
       evidence,

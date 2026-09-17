@@ -13,12 +13,40 @@
  * unattributed bucket. A skipped check reports null/amber upstream (see
  * reconcileLedger), and this gate rejects it explicitly so a run of dead
  * turns can never satisfy the 12-turn criterion.
+ *
+ * Machine-recorded provenance means pinned-source identity, not just a git
+ * string in the report. Since sim pinned-source support (#1969), a queued job
+ * binds to a registered worktree + full commit SHA, the worker verifies HEAD
+ * equality and a clean tree at claim AND immediately before spawn, runWorld
+ * re-checks HEAD in the child and stamps
+ * simRuns.source = {worktree, requestedCommit, executedPath, executedCommit},
+ * and collectExperimentReport surfaces it as runConfig.source. The collector
+ * reads that identity (never the short `runConfig.gitCommit` from the
+ * collector operator's own checkout, which may be a different tree and is a
+ * short SHA that can never equal a full expected revision). The gate requires
+ * the executed commit to be a full SHA, requested == executed (the pin held),
+ * codeRevision == executed (no mixed-report substitution), and a non-empty
+ * executed path + worktree leaf. Legacy reports without runConfig.source fail
+ * closed with the exact reason: rerun as a pinned job.
+ *
+ * Two inputs stay operator-supplied by necessity and are documented as such:
+ * expectedCodeRevision (the branch revision the evidence must come from) and
+ * bankingActivationTurn (no per-turn banking-mode history is machine-recorded;
+ * the gate enforces the consequence: every qualifying turn is strictly after
+ * it AND the run's gameConfig mode is authoritative at collection time).
+ * Worker-side tree cleanliness is enforced fail-closed by the worker itself
+ * (a dirty worktree fails the job, so no completed pinned run executed dirty);
+ * the report's gitDirty flag covers the collector checkout and is still
+ * required false.
  */
 
 import type { ReconcileStatus } from "@/lib/ledger/types";
 
 /** Minimum consecutive genuine turns the #992 exit criterion requires. */
 export const STOCK_FLOW_WINDOW_TURNS = 12 as const;
+
+/** Full commit SHA only: short SHAs can never satisfy the expected-revision pin. */
+const FULL_SHA_RE = /^[0-9a-f]{40}$/;
 
 /** How the executing code revision was established. */
 export type ProvenanceSource = "simExperimentReport" | "operator";
@@ -41,7 +69,7 @@ export interface StockFlowProvenance {
   runId: string;
   /** Sandbox DB every turn was read from (single-DB assertion). */
   dbName: string;
-  /** Executing code revision (full commit SHA). */
+  /** Executing code revision (full commit SHA). Must equal sourceExecutedCommit. */
   codeRevision: string;
   codeRevisionSource: ProvenanceSource;
   /** True when the executing checkout had uncommitted changes. */
@@ -50,6 +78,16 @@ export interface StockFlowProvenance {
   bankingMode: string | null;
   /** First turn AFTER banking activation cohorts completed. */
   bankingActivationTurn: number;
+  // Pinned-source identity from runConfig.source (#1966/#1969). Each field is
+  // null on reports that predate pinned-source support (legacy: gate fails
+  // closed). sourceWorktree is the registered worktree leaf the sim ran from.
+  sourceWorktree: string | null;
+  /** The commit SHA the queued job requested (full SHA). */
+  sourceRequestedCommit: string | null;
+  /** Canonical repo dir the worker spawned runWorld with as cwd. */
+  sourceExecutedPath: string | null;
+  /** The HEAD runWorld re-checked in the child (full SHA). */
+  sourceExecutedCommit: string | null;
 }
 
 export interface StockFlowEvidenceInput {
@@ -77,10 +115,7 @@ function turnFailure(turn: number, reason: string): StockFlowWindowFailure {
 }
 
 /** Per-turn genuine + clean check. Returns failure reasons (empty = qualifies). */
-function qualifyTurn(
-  evidence: StockFlowTurnEvidence,
-  provenance: StockFlowProvenance
-): string[] {
+function qualifyTurn(evidence: StockFlowTurnEvidence, provenance: StockFlowProvenance): string[] {
   const reasons: string[] = [];
   if (evidence.turn > provenance.bankingActivationTurn) {
     // post-activation; the mode gate below still applies
@@ -94,9 +129,7 @@ function qualifyTurn(
       `turn ${evidence.turn}: stock-vs-flow check was skipped (unverified, not passing)`
     );
   } else if (evidence.stockVsFlowDivergentCount !== 0) {
-    reasons.push(
-      `turn ${evidence.turn}: ${evidence.stockVsFlowDivergentCount} divergent accounts`
-    );
+    reasons.push(`turn ${evidence.turn}: ${evidence.stockVsFlowDivergentCount} divergent accounts`);
   }
   if (evidence.trialBalanceStatus !== "green" || evidence.trialBalanceUnbalancedCount !== 0) {
     reasons.push(
@@ -108,7 +141,9 @@ function qualifyTurn(
     reasons.push(`turn ${evidence.turn}: money supply status=${evidence.moneySupplyStatus}`);
   }
   if (evidence.unattributedCount !== 0) {
-    reasons.push(`turn ${evidence.turn}: unattributed bucket has ${evidence.unattributedCount} rows`);
+    reasons.push(
+      `turn ${evidence.turn}: unattributed bucket has ${evidence.unattributedCount} rows`
+    );
   }
   if (evidence.overallStatus !== "green") {
     reasons.push(`turn ${evidence.turn}: overall status=${evidence.overallStatus}`);
@@ -143,6 +178,42 @@ export function validateStockFlowWindow(input: StockFlowEvidenceInput): StockFlo
         `code revision is ${provenance.codeRevisionSource}-asserted, ` +
         `not machine-recorded in simExperimentReports`,
     });
+  } else if (
+    !provenance.sourceExecutedCommit ||
+    !FULL_SHA_RE.test(provenance.sourceExecutedCommit)
+  ) {
+    failures.push({
+      turn: null,
+      reason:
+        "machine-recorded provenance without a pinned full-SHA executed commit " +
+        `(runConfig.source.executedCommit=${JSON.stringify(provenance.sourceExecutedCommit)}): ` +
+        "rerun as a pinned-source job; the legacy short gitCommit cannot pin a revision",
+    });
+  } else {
+    if (provenance.sourceRequestedCommit !== provenance.sourceExecutedCommit) {
+      failures.push({
+        turn: null,
+        reason:
+          `pinned source moved: requested ${JSON.stringify(provenance.sourceRequestedCommit)} ` +
+          `but executed ${provenance.sourceExecutedCommit}`,
+      });
+    }
+    if (provenance.codeRevision !== provenance.sourceExecutedCommit) {
+      failures.push({
+        turn: null,
+        reason:
+          `code revision ${JSON.stringify(provenance.codeRevision)} does not match ` +
+          `pinned executed commit ${provenance.sourceExecutedCommit} (mixed report refused)`,
+      });
+    }
+    if (!provenance.sourceWorktree || !provenance.sourceExecutedPath) {
+      failures.push({
+        turn: null,
+        reason:
+          `pinned source path unproven (worktree=${JSON.stringify(provenance.sourceWorktree)}, ` +
+          `executedPath=${JSON.stringify(provenance.sourceExecutedPath)})`,
+      });
+    }
   }
   if (provenance.gitDirty !== false) {
     failures.push({
@@ -186,7 +257,11 @@ export function validateStockFlowWindow(input: StockFlowEvidenceInput): StockFlo
       runStart = evidence.turn;
     }
     prevTurn = evidence.turn;
-    if (qualifyingWindow === null && runStart !== null && prevTurn - runStart + 1 >= STOCK_FLOW_WINDOW_TURNS) {
+    if (
+      qualifyingWindow === null &&
+      runStart !== null &&
+      prevTurn - runStart + 1 >= STOCK_FLOW_WINDOW_TURNS
+    ) {
       qualifyingWindow = { startTurn: runStart, endTurn: prevTurn };
     }
   }
