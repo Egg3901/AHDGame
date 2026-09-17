@@ -118,9 +118,9 @@ describe("GET /api/admin/players/[userId]/identity-history", () => {
     expect(body.total).toBe(1);
   });
 
-  it("gives an admin the raw IP", async () => {
+  it("gives an admin the raw IP when the admin panel asks explicitly", async () => {
     seed([run(USER_ID, RAW_IP, 1)]);
-    const res = await callRoute(USER_ID.toHexString(), "?track=ip", true);
+    const res = await callRoute(USER_ID.toHexString(), "?track=ip&context=admin", true);
     expect(JSON.stringify(await res.json())).toContain(RAW_IP);
   });
 
@@ -164,11 +164,20 @@ describe("GET /api/admin/players/[userId]/identity-history", () => {
     expect(JSON.stringify(await res.json())).not.toContain(RAW_IP);
   });
 
-  it("ignores an unknown context rather than failing the request", async () => {
+  it("fails CLOSED on an unknown context: serves, but withholds", async () => {
     seed([run(USER_ID, RAW_IP, 1)]);
     const res = await callRoute(USER_ID.toHexString(), "?track=ip&context=banana", true);
     expect(res.status).toBe(200);
-    expect(JSON.stringify(await res.json())).toContain(RAW_IP);
+    expect(JSON.stringify(await res.json())).not.toContain(RAW_IP);
+  });
+
+  it("fails CLOSED when the caller omits context entirely", async () => {
+    // A future surface that forgets the parameter must withhold rather than
+    // silently over-disclose to an admin. Revealing is opt-in.
+    seed([run(USER_ID, RAW_IP, 1)]);
+    const res = await callRoute(USER_ID.toHexString(), "?track=ip", true);
+    expect(res.status).toBe(200);
+    expect(JSON.stringify(await res.json())).not.toContain(RAW_IP);
   });
 
   it("counts other accounts sharing a value, excluding the subject", async () => {

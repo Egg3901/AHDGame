@@ -22,11 +22,16 @@ const querySchema = z.object({
   // than a 400. An unknown `track` DOES fail, because guessing a track would
   // silently show a moderator the wrong evidence.
   page: z.coerce.number().int().positive().catch(1),
-  // Which surface is asking. The moderator panel hides network detail for
-  // EVERY viewer, including admins, so the card cannot say "Network details
-  // hidden" in one row and print the address in the next. Client-supplied, but
-  // it can only ever ADD masking: a non-admin is masked whatever they send.
-  context: z.enum(["admin", "moderator"]).catch("admin"),
+  // Which surface is asking. The moderator panel hides value detail for EVERY
+  // viewer, including admins, so the card cannot say "Network details hidden"
+  // in one row and print the address in the next.
+  //
+  // Client-supplied, and deliberately FAILS CLOSED: absent or unrecognised
+  // means "moderator", so a caller that forgets this parameter withholds values
+  // rather than silently over-disclosing. Revealing is opt-in and explicit.
+  // It can also only ever ADD masking — a non-admin is withheld whatever they
+  // send, because the role check below is the actual boundary.
+  context: z.enum(["admin", "moderator"]).catch("moderator"),
 });
 
 export async function GET(request: Request, { params }: RouteParams) {
@@ -44,7 +49,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     const parsedQuery = querySchema.safeParse({
       track: searchParams.get("track"),
       page: searchParams.get("page") ?? 1,
-      context: searchParams.get("context") ?? "admin",
+      context: searchParams.get("context"),
     });
     if (!parsedQuery.success) {
       return NextResponse.json({ error: "Invalid track" }, { status: 400 });
