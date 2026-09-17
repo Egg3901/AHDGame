@@ -133,6 +133,20 @@ describe("settlement crash recovery", () => {
     expect(failures).toEqual([]);
   });
 
+  it("reports the full sector total after a crash mid-sector-loop", async () => {
+    const log = await referenceLog({ sectorCount: 3 });
+    const firstSectorWrite = log.findIndex((e) => e.collection === "corporateSectors");
+    expect(firstSectorWrite).toBeGreaterThanOrEqual(0);
+    const { world, second } = await crashThenRetry(
+      { sectorCount: 3 },
+      crashAfter(firstSectorWrite)
+    );
+    expect(second).toMatchObject({ ok: true, sectorsMoved: 3 });
+    await expectExactlyOnceSuccess(world, 3);
+    const settlement = await loadAcquisitionSettlement(world.db, world.offerId);
+    expect(settlement?.sectorsMoved).toBe(3);
+  });
+
   it("resumes to exactly-once success after a crash past any durable write (banked target)", async () => {
     const log = await referenceLog({ charter: true });
     // Crashes inside the charter transfer's own claim/release/re-key window

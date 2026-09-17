@@ -126,6 +126,8 @@ export interface ClaimSpec {
   acquirerCurrency: string;
   shellCashTargetLocal: number;
   targetCurrency: string;
+  /** Target sector count pinned at claim time, before any move (see type). */
+  sectorTotal: number;
   /** Review whose remedy attaches on commit; persisted so a post-teardown retry can finish the tail. */
   remedyReviewId?: string;
   plan: PayoutPlan;
@@ -160,6 +162,7 @@ export async function claimAcquisitionSettlement(
     acquirerCurrency: spec.acquirerCurrency,
     legs: spec.plan.legs.map(toStoredLeg),
     refundTotal: 0,
+    sectorTotal: spec.sectorTotal,
     sectorsMoved: 0,
     bankCharterTransferred: false,
     shellDeleted: false,

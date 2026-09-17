@@ -101,6 +101,13 @@ export interface AcquisitionSettlement {
   remedyReviewId?: string;
   /** Acquirer-capital units refunded to the acquirer across compensations. */
   refundTotal: number;
+  /**
+   * Target sector count pinned at claim time, before any move. The recorded
+   * `sectorsMoved` total is derived as `sectorTotal` minus the sectors still
+   * on the target, so moves landed by an attempt that crashed before marking
+   * are still counted on retry.
+   */
+  sectorTotal: number;
   /** Shell cash in the target's own units (for the reversal leg on compensation). */
   shellCashTargetLocal: number;
   targetCurrency: string;

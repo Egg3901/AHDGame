@@ -332,6 +332,10 @@ async function runAgreedAcquisition(
     acquirerCurrency: acquirerCurrency ?? "USD",
     shellCashTargetLocal: Math.round(target.liquidCapital ?? 0),
     targetCurrency: targetCurrency ?? "USD",
+    // First-attempt sector count: this read precedes every move, so on the
+    // claiming attempt it is the true total. On retry it is only the
+    // remainder and the claim discards it in favor of the pinned value.
+    sectorTotal: targetSectors.length,
     remedyReviewId: clearance.review?._id.toString(),
     plan,
   });
@@ -428,7 +432,10 @@ async function runAgreedAcquisition(
 
     // 6. Move every sector into the acquirer (haircut-free, currency
     // re-denominated). Resumable by re-read: moved sectors no longer belong
-    // to the target, so a retry only sees what is left.
+    // to the target, so a retry only sees what is left. The recorded total
+    // derives from the pinned claim-time count minus the sectors still on
+    // the target, so moves landed by an attempt that crashed before marking
+    // are still counted: ground truth, not an accumulation.
     for (const sector of targetSectors) {
       await moveSectorToCorp(
         db,
@@ -441,8 +448,12 @@ async function runAgreedAcquisition(
         now
       );
     }
-    await markAcquisitionProgress(db, offer._id, { sectorsMoved: targetSectors.length });
-    settlement.sectorsMoved = targetSectors.length;
+    const sectorsRemain = await db
+      .collection<CorporateSector>("corporateSectors")
+      .countDocuments({ corporationId: target._id });
+    const sectorsMovedTotal = settlement.sectorTotal - sectorsRemain;
+    await markAcquisitionProgress(db, offer._id, { sectorsMoved: sectorsMovedTotal });
+    settlement.sectorsMoved = sectorsMovedTotal;
 
     // 7. Tear down the target shell.
     const forexEnabledNow = await isForexEnabled();
@@ -460,7 +471,7 @@ async function runAgreedAcquisition(
     if (clearance.review) await attachMergerRemedy(db, clearance.review, acquirer._id, currentTurn);
 
     const result = {
-      sectorsMoved: targetSectors.length,
+      sectorsMoved: settlement.sectorsMoved,
       priceAnchor: offer.priceAnchor,
       acquirerName: acquirer.name,
       targetName: target.name,
@@ -482,7 +493,7 @@ async function runAgreedAcquisition(
         targetCorporationId: target._id,
         targetName: target.name,
         priceAnchor: offer.priceAnchor,
-        sectorsMoved: targetSectors.length,
+        sectorsMoved: settlement.sectorsMoved,
       },
     });
 
