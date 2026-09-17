@@ -5,6 +5,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   makeLegStep,
   runMoneyFlowSteps,
@@ -165,7 +166,7 @@ export async function applyBondSellSpend(
         ),
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:holder-claim`,
+          deriveMoneyFlowKey(key, "compensate", "holder-claim"),
           {
             collection: bonds,
             filter: { _id: input.bondId, [`holders.${holderKey}`]: input.sellerId },
@@ -195,7 +196,7 @@ export async function applyBondSellSpend(
         ),
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:pool-debit`,
+          deriveMoneyFlowKey(key, "compensate", "pool-debit"),
           {
             collection: pools,
             filter: { _id: input.bondCurrency },

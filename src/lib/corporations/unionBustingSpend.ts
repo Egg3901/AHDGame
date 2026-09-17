@@ -4,6 +4,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   makeLegStep,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
@@ -152,7 +153,7 @@ export async function applyUnionBustingSpend(
         ),
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:sector-claim`,
+          deriveMoneyFlowKey(key, "compensate", "sector-claim"),
           {
             collection: sectors,
             filter: { _id: input.sectorId },

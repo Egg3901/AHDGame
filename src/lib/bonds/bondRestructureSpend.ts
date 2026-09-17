@@ -5,6 +5,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   makeLegStep,
   MoneyFlowKeyConflictError,
@@ -258,8 +259,8 @@ function isRemainderOfPlan(
  * holders got nothing.
  *
  * Fan-out keying: every step carries its own idempotent sub-operation key
- * derived from the flow key (`${key}:corp-lc`,
- * `${key}:holder:<kind>:<holderId>`, `${key}:cure:<bondId>`). Two legs on one
+ * derived from the flow key via `deriveMoneyFlowKey` (`corp-lc`,
+ * `holder:<kind>:<holderId>`, `cure:<bondId>` suffixes). Two legs on one
  * document under one key collide, because the first leg's key record trips
  * the second leg's `$ne: key` guard and the second balance change is silently
  * skipped — so the corp's own bond holdings (a corp paid as holder while its
@@ -350,7 +351,7 @@ function buildRestructureSteps(db: Db, key: string, plan: NormalizedRestructureP
   const lcSteps: MoneyFlowStep[] =
     plan.netLiquidCapitalDelta > 0
       ? [
-          makeLegStep(`${key}:corp-lc`, {
+          makeLegStep(deriveMoneyFlowKey(key, "corp-lc"), {
             name: "corp-lc",
             collection: db.collection<MoneyFlowAccount>("corporations"),
             docId: plan.corpId,
@@ -367,7 +368,7 @@ function buildRestructureSteps(db: Db, key: string, plan: NormalizedRestructureP
     .filter((holder) => holder.amount !== 0)
     .map((holder) => {
       const hex = holder.holderId.toHexString();
-      return makeLegStep(`${key}:holder:${holder.kind}:${hex}`, {
+      return makeLegStep(deriveMoneyFlowKey(key, "holder", holder.kind, hex), {
         name: `holder-credit-${holder.kind}-${hex}`,
         collection: db.collection<MoneyFlowAccount>(HOLDER_COLLECTION[holder.kind]),
         docId: holder.holderId,
@@ -379,7 +380,7 @@ function buildRestructureSteps(db: Db, key: string, plan: NormalizedRestructureP
 
   const cureSteps: MoneyFlowStep[] = plan.bonds.map((bond) => {
     const hex = bond.bondId.toHexString();
-    const subKey = `${key}:cure:${hex}`;
+    const subKey = deriveMoneyFlowKey(key, "cure", hex);
     return {
       name: `cure-${hex}`,
       apply: (stepOpts) =>
@@ -410,7 +411,7 @@ function buildRestructureSteps(db: Db, key: string, plan: NormalizedRestructureP
       // filter is the bare `_id` so a revert is never guard-blocked.
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${subKey}:compensate:cure`,
+          deriveMoneyFlowKey(subKey, "compensate", "cure"),
           {
             collection: bonds,
             filter: { _id: bond.bondId },

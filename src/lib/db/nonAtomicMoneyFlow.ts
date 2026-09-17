@@ -149,8 +149,12 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * per-currency rate/history/policy writebacks for in-band or policy-less
  * rows are bare `$set`s with no balance effect, and a same-turn retry of a
  * completed intervention replays instead of clobbering.
- * Still on the legacy debit-first-plus-compensation fallback: bond
- * default dissolution (bare bulkWrite holder/equity/central-bank writes),
+ * Derived subkeys stay within the key cap via `deriveMoneyFlowKey`: a base
+ * key near the accepted 128-character limit keeps its ordinary short
+ * derivations byte-identical and hashes only the overflowing ones, so long
+ * client keys flow through dissolution fan-out and compensation paths
+ * instead of throwing `RangeError`.
+ * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
  * are keyed; surrounding equity/dividend/cross-fund writes are not),
  * directAction, state-org build — multi-write status machines, positional
@@ -172,6 +176,13 @@ export const NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION = "nonAtomicMoneyFlowRece
 
 /** Cap on stored keys per account document; bounds growth, not correctness. */
 export const MAX_APPLIED_MONEY_FLOW_KEYS = 100;
+
+/**
+ * Maximum length of any money-flow idempotency key, including derived
+ * subkeys. Routes accept client `Idempotency-Key` values up to this length,
+ * so every internal derivation must stay within it too.
+ */
+export const MAX_MONEY_FLOW_KEY_LENGTH = 128;
 
 export type MoneyFlowReceiptStatus = "in_progress" | "completed" | "failed" | "compensated";
 
@@ -201,7 +212,7 @@ export interface MoneyFlowAccount {
 export type MoneyFlowLegOutcome = "applied" | "already-applied" | "missing" | "guard-rejected";
 
 export interface MoneyFlowLeg<TDoc extends MoneyFlowAccount> {
-  /** Stable name used in compensation keys (`${key}:compensate:${name}`). */
+  /** Stable name used in compensation keys (`deriveMoneyFlowKey(key, "compensate", name)`). */
   name: string;
   collection: Collection<TDoc>;
   docId: TDoc["_id"];
@@ -277,9 +288,46 @@ function isDuplicateKeyError(error: unknown): boolean {
 }
 
 function validateKey(key: string): void {
-  if (typeof key !== "string" || key.length === 0 || key.length > 128) {
+  if (typeof key !== "string" || key.length === 0 || key.length > MAX_MONEY_FLOW_KEY_LENGTH) {
     throw new RangeError("Money flow idempotency key must be 1-128 characters");
   }
+}
+
+/**
+ * Derive a deterministic subkey for one leg, step, or compensation of a flow
+ * (issue #1672). A client key near the accepted 128-character limit would
+ * overflow the cap once a `:holder:...` / `:pool:...` / `:compensate:...`
+ * suffix is appended, and the derived write would then throw `RangeError`
+ * instead of moving money. This keeps ordinary short keys byte-identical to
+ * the old `${base}:${segments...}` form (readable, back-compatible) and
+ * bounds long ones: `${head}:${suffix}:h:${hash}` where `hash` is 128 bits
+ * of SHA-256 over the full untruncated candidate, so the derivation is
+ * retry-stable (pure function of its inputs) and collision-resistant. The
+ * purpose suffix is preserved verbatim for ops readability; only the base
+ * head is truncated. When the suffix itself nearly fills the cap, the head
+ * of the whole candidate is truncated instead. Every output passes
+ * `validateKey`.
+ */
+export function deriveMoneyFlowKey(baseKey: string, ...segments: string[]): string {
+  validateKey(baseKey);
+  if (segments.length === 0) {
+    throw new TypeError("Derived money flow key needs at least one segment");
+  }
+  for (const segment of segments) {
+    if (typeof segment !== "string" || segment.length === 0) {
+      throw new TypeError("Derived money flow key segments must be non-empty strings");
+    }
+  }
+  const suffix = segments.join(":");
+  const candidate = `${baseKey}:${suffix}`;
+  if (candidate.length <= MAX_MONEY_FLOW_KEY_LENGTH) return candidate;
+  const hash = createHash("sha256").update(candidate).digest("hex").slice(0, 32);
+  const headBudget = MAX_MONEY_FLOW_KEY_LENGTH - suffix.length - 36;
+  if (headBudget >= 1) {
+    return `${baseKey.slice(0, headBudget)}:${suffix}:h:${hash}`;
+  }
+  const headLength = MAX_MONEY_FLOW_KEY_LENGTH - 35;
+  return `${candidate.slice(0, headLength)}:h:${hash}`;
 }
 
 function validateLeg<TDoc extends MoneyFlowAccount>(leg: MoneyFlowLeg<TDoc>): void {
@@ -628,7 +676,7 @@ export function makeLegStep<TDoc extends MoneyFlowAccount>(
     apply: (options) => applyIdempotentLeg(key, leg, options ?? {}),
     revert: (options) =>
       applyIdempotentLeg(
-        `${key}:compensate:${leg.name}`,
+        deriveMoneyFlowKey(key, "compensate", leg.name),
         {
           ...leg,
           delta: -leg.delta,

@@ -5,6 +5,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   makeLegStep,
   runMoneyFlowSteps,
@@ -179,7 +180,7 @@ export async function applyBondBuybackSpend(
         ),
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:float-claim`,
+          deriveMoneyFlowKey(key, "compensate", "float-claim"),
           {
             collection: bonds,
             filter: { _id: input.bondId },

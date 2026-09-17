@@ -5,6 +5,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   makeLegStep,
   MoneyFlowKeyConflictError,
@@ -331,7 +332,7 @@ function buildPayoffSteps(db: Db, key: string, plan: NormalizedPayoffPlan): Mone
   const liquid = plan.debitLiquidCapital;
   const escrow = plan.debitEscrow;
   const escrowOnly = escrow > 0 && !(liquid > 0);
-  const debitStep = makeLegStep(`${key}:payer-debit`, {
+  const debitStep = makeLegStep(deriveMoneyFlowKey(key, "payer-debit"), {
     name: "payer-debit",
     collection: db.collection<MoneyFlowAccount>("corporations"),
     docId: plan.payerCorpId,
@@ -353,7 +354,7 @@ function buildPayoffSteps(db: Db, key: string, plan: NormalizedPayoffPlan): Mone
 
   const holderSteps: MoneyFlowStep[] = plan.holders.map((holder) => {
     const hex = holder.holderId.toHexString();
-    return makeLegStep(`${key}:holder:${holder.kind}:${hex}`, {
+    return makeLegStep(deriveMoneyFlowKey(key, "holder", holder.kind, hex), {
       name: `holder-credit-${holder.kind}-${hex}`,
       collection: db.collection<MoneyFlowAccount>(HOLDER_COLLECTION[holder.kind]),
       docId: holder.holderId,
@@ -365,7 +366,7 @@ function buildPayoffSteps(db: Db, key: string, plan: NormalizedPayoffPlan): Mone
 
   const matureSteps: MoneyFlowStep[] = plan.bonds.map((bond) => {
     const hex = bond.bondId.toHexString();
-    const subKey = `${key}:mature:${hex}`;
+    const subKey = deriveMoneyFlowKey(key, "mature", hex);
     return {
       name: `mature-${hex}`,
       apply: (stepOpts) =>
@@ -399,7 +400,7 @@ function buildPayoffSteps(db: Db, key: string, plan: NormalizedPayoffPlan): Mone
       // filter is the bare `_id` so a revert is never guard-blocked.
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${subKey}:compensate:mature`,
+          deriveMoneyFlowKey(subKey, "compensate", "mature"),
           {
             collection: bonds,
             filter: { _id: bond.bondId },
@@ -435,8 +436,8 @@ function buildPayoffSteps(db: Db, key: string, plan: NormalizedPayoffPlan): Mone
  * payer paid but holders got nothing.
  *
  * Fan-out keying: every step carries its own idempotent sub-operation key
- * derived from the flow key (`${key}:payer-debit`,
- * `${key}:holder:<kind>:<holderId>`, `${key}:mature:<bondId>`). Two reasons
+ * derived from the flow key via `deriveMoneyFlowKey` (`payer-debit`,
+ * `holder:<kind>:<holderId>`, `mature:<bondId>` suffixes). Two reasons
  * this is per-step rather than one shared key. First, the payer can itself
  * be a bond holder (a parent paying off bonds it partly holds): two legs on
  * one document under one key collide, because the first leg's key record

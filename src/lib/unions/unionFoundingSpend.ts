@@ -4,6 +4,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   keyedInsertId,
   makeLegStep,
   runMoneyFlowSteps,
@@ -177,7 +178,7 @@ export async function applyUnionFoundingSpend(
     name: "leadership-claim",
     apply: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:leadership-claim`,
+        deriveMoneyFlowKey(key, "leadership-claim"),
         {
           collection: characters,
           filter: {
@@ -192,7 +193,7 @@ export async function applyUnionFoundingSpend(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:leadership-claim`,
+        deriveMoneyFlowKey(key, "compensate", "leadership-claim"),
         {
           collection: characters,
           filter: { _id: input.characterId, unionLeaderOf: unionId },

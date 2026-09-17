@@ -5,6 +5,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   keyedInsertId,
   makeInsertStep,
@@ -260,7 +261,7 @@ function buildRefinanceSteps(db: Db, key: string, plan: NormalizedRefinancePlan)
     name: "refinance-count",
     apply: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:refinance-count`,
+        deriveMoneyFlowKey(key, "refinance-count"),
         {
           collection: corporations,
           filter: {
@@ -279,7 +280,7 @@ function buildRefinanceSteps(db: Db, key: string, plan: NormalizedRefinancePlan)
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:refinance-count`,
+        deriveMoneyFlowKey(key, "compensate", "refinance-count"),
         {
           collection: corporations,
           filter: { _id: plan.corpId },
@@ -294,7 +295,7 @@ function buildRefinanceSteps(db: Db, key: string, plan: NormalizedRefinancePlan)
 
   const cureSteps: MoneyFlowStep[] = plan.bonds.map((bond) => {
     const hex = bond.bondId.toHexString();
-    const subKey = `${key}:cure:${hex}`;
+    const subKey = deriveMoneyFlowKey(key, "cure", hex);
     return {
       name: `cure-${hex}`,
       apply: (stepOpts) =>
@@ -327,7 +328,7 @@ function buildRefinanceSteps(db: Db, key: string, plan: NormalizedRefinancePlan)
       // the bare `_id` so a revert is never guard-blocked.
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${subKey}:compensate:cure`,
+          deriveMoneyFlowKey(subKey, "compensate", "cure"),
           {
             collection: bonds,
             filter: { _id: bond.bondId },

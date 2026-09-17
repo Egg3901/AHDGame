@@ -5,6 +5,7 @@ import { TREASURY_TRANSFER_HISTORY_MAX } from "@/lib/constants/currencies";
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   makeLegStep,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
@@ -241,7 +242,7 @@ export async function applyTreasuryTransferSpend(
             ),
           revert: (stepOpts) =>
             applyKeyedUpdate(
-              `${key}:compensate:reserve-credit`,
+              deriveMoneyFlowKey(key, "compensate", "reserve-credit"),
               {
                 collection: banks,
                 filter: { _id: input.bankId } as Filter<CentralBank>,

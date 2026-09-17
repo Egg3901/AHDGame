@@ -41,6 +41,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   keyedInsertId,
   makeInsertStep,
   makeLegStep,
@@ -155,7 +156,13 @@ export async function sellFundBondHoldingsForCash(
       const proceedsAnchor =
         Math.round(corpCapitalToAnchor(proceedsLocal, currency, rate) * 100) / 100;
 
-      const subKey = `${parentKey}:bond:${bond._id.toHexString()}:${units}:${proceedsLocal}`;
+      const subKey = deriveMoneyFlowKey(
+        parentKey,
+        "bond",
+        bond._id.toHexString(),
+        String(units),
+        String(proceedsLocal)
+      );
       const fingerprint =
         `bond-fund-sell:${fund._id.toHexString()}:${bond._id.toHexString()}` +
         `:${units}:${proceedsLocal}:${proceedsAnchor}`;
@@ -190,7 +197,7 @@ export async function sellFundBondHoldingsForCash(
           ),
         revert: (stepOpts) =>
           applyKeyedUpdate(
-            `${subKey}:compensate:holder-release`,
+            deriveMoneyFlowKey(subKey, "compensate", "holder-release"),
             {
               collection: bondDocs,
               filter: {

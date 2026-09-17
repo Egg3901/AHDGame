@@ -10,6 +10,7 @@ import type { CentralBank } from "@/lib/db/types/centralBank";
 import { getBankId } from "@/lib/centralBank/helpers";
 import {
   applyKeyedUpdate,
+  deriveMoneyFlowKey,
   insertKeyedDoc,
   type MoneyFlowAccount,
   type MoneyFlowLegOutcome,
@@ -170,7 +171,7 @@ function makeBankSpreadStep<TDoc extends MoneyFlowAccount>(
     },
     revert: (options?: MoneyFlowOptions): Promise<MoneyFlowLegOutcome> =>
       applyKeyedUpdate(
-        `${key}:compensate:${name}`,
+        deriveMoneyFlowKey(key, "compensate", name),
         { collection, filter: { _id: docId }, update: { $inc: revertInc } },
         options ?? {}
       ),

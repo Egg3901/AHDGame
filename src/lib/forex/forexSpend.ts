@@ -16,6 +16,7 @@ import {
   applyIdempotentLeg,
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   insertKeyedDoc,
   keyedInsertId,
@@ -452,7 +453,7 @@ export async function applyForexFillSpend(db: Db, input: ForexFillInput): Promis
             },
             revert: (stepOpts) =>
               applyIdempotentLeg(
-                `${key}:compensate:maker-credit`,
+                deriveMoneyFlowKey(key, "compensate", "maker-credit"),
                 {
                   name: "maker-credit",
                   collection: characters,
@@ -520,7 +521,7 @@ export async function applyForexFillSpend(db: Db, input: ForexFillInput): Promis
         ),
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:order-fill`,
+          deriveMoneyFlowKey(key, "compensate", "order-fill"),
           { collection: orders, filter: { _id: order._id }, update: orderInverse },
           stepOpts ?? {}
         ),
@@ -703,7 +704,7 @@ export async function applyForexCancelSpend(
       },
       revert: (stepOpts) =>
         applyIdempotentLeg(
-          `${key}:compensate:escrow-refund`,
+          deriveMoneyFlowKey(key, "compensate", "escrow-refund"),
           {
             name: "escrow-refund",
             collection: characters,
@@ -736,7 +737,7 @@ export async function applyForexCancelSpend(
             ),
           revert: (stepOpts) =>
             applyKeyedUpdate(
-              `${key}:compensate:order-cancel`,
+              deriveMoneyFlowKey(key, "compensate", "order-cancel"),
               {
                 collection: orders,
                 filter: { _id: order._id },
@@ -1034,7 +1035,7 @@ function makeTurnFillSpreadStep(
     },
     revert: (options) =>
       applyKeyedUpdate(
-        `${key}:compensate:${name}`,
+        deriveMoneyFlowKey(key, "compensate", name),
         { collection: banks, filter: { _id: bankId }, update: { $inc: revertInc } },
         options ?? {}
       ),
@@ -1120,7 +1121,7 @@ function buildTurnFillSteps(db: Db, key: string, plan: NormalizedTurnFillPlan): 
       // Reverting a real credit negates the exact fill credit.
       if (ownerGone) return Promise.resolve("already-applied" as MoneyFlowLegOutcome);
       return applyIdempotentLeg(
-        `${key}:compensate:fill-credit`,
+        deriveMoneyFlowKey(key, "compensate", "fill-credit"),
         {
           name: "fill-credit",
           collection: characters,
@@ -1194,7 +1195,7 @@ function buildTurnFillSteps(db: Db, key: string, plan: NormalizedTurnFillPlan): 
       };
       if (plan.priorFilledRate != null) restoreSet.filledRate = plan.priorFilledRate;
       return applyKeyedUpdate(
-        `${key}:compensate:order-settle`,
+        deriveMoneyFlowKey(key, "compensate", "order-settle"),
         {
           collection: orders,
           filter: { _id: plan.orderId },
@@ -1695,7 +1696,7 @@ function buildExpireSteps(
     },
     revert: (stepOpts) =>
       applyIdempotentLeg(
-        `${key}:compensate:escrow-refund`,
+        deriveMoneyFlowKey(key, "compensate", "escrow-refund"),
         {
           name: "escrow-refund",
           collection: characters,
@@ -1728,7 +1729,7 @@ function buildExpireSteps(
       },
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:order-expire`,
+          deriveMoneyFlowKey(key, "compensate", "order-expire"),
           {
             collection: orders,
             filter: { _id: order._id },
@@ -2188,7 +2189,7 @@ function buildInterventionSteps(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:rate-write`,
+        deriveMoneyFlowKey(key, "compensate", "rate-write"),
         {
           collection: rates,
           filter: { _id: plan.countryId },
@@ -2246,7 +2247,7 @@ function buildInterventionSteps(
       },
       revert: (stepOpts) =>
         applyKeyedUpdate(
-          `${key}:compensate:${stepName}`,
+          deriveMoneyFlowKey(key, "compensate", stepName),
           {
             collection: banks,
             filter: { _id: plan.bankId },

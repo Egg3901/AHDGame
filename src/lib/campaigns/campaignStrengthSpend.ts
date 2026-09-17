@@ -4,6 +4,7 @@ import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowRe
 import {
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   keyedInsertId,
   makeInsertStep,
   makeLegStep,
@@ -142,7 +143,7 @@ export async function applyCampaignStrengthSpend(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:campaign-credit`,
+        deriveMoneyFlowKey(key, "compensate", "campaign-credit"),
         {
           collection: campaigns,
           filter: { _id: input.campaignId },

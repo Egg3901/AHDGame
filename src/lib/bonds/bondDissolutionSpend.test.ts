@@ -778,3 +778,122 @@ describe("getBondDissolutionCompletedOutcome (route replay)", () => {
     ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
   });
 });
+
+describe("applyBondDissolutionSpend with near-limit idempotency keys (issue #1672)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    supportMock.mockResolvedValue(false);
+  });
+
+  it("proves the defect shape: naive concatenation of a 128-char key overflows the cap", () => {
+    const key = "L".repeat(128);
+    const naive = `${key}:holder:character:${CHAR_ID.toHexString()}`;
+    expect(naive.length).toBeGreaterThan(128);
+  });
+
+  it.each([86, 87, 117, 128])(
+    "completes exactly once with a %i-character key and replays without double-paying",
+    async (length) => {
+      const db = new FakeDb();
+      seedDb(db);
+      const key = "K".repeat(length);
+      const input = dissolutionInput({ idempotencyKey: key });
+
+      const first = await applyBondDissolutionSpend(db as unknown as Db, input);
+      expect(first).toEqual({ duplicate: false });
+      expectExactPayouts(db);
+      expect(receipt(db, key).status).toBe("completed");
+
+      const second = await applyBondDissolutionSpend(db as unknown as Db, input);
+      expect(second).toEqual({ duplicate: true });
+      expectExactPayouts(db);
+    }
+  );
+
+  it("converges to exactly one payout set when a crash interrupts any durable write under a 128-char key", async () => {
+    const probe = new FakeDb();
+    seedDb(probe);
+    await applyBondDissolutionSpend(
+      probe as unknown as Db,
+      dissolutionInput({ idempotencyKey: "P".repeat(128) })
+    );
+    const totalWrites = probe.writeCount;
+    expect(totalWrites).toBeGreaterThan(3);
+
+    for (let crashAfter = 1; crashAfter < totalWrites; crashAfter += 1) {
+      const db = new FakeDb();
+      seedDb(db);
+      // Same length as the crashed attempt (receipts are keyed, so each
+      // prefix needs its own key), still at the accepted limit.
+      const key = `C${String(crashAfter).padStart(3, "0")}${"c".repeat(124)}`;
+      expect(key).toHaveLength(128);
+      const input = dissolutionInput({ idempotencyKey: key });
+      db.crashAfterWrites = crashAfter;
+      await expect(applyBondDissolutionSpend(db as unknown as Db, input)).rejects.toThrow(
+        "INJECTED_CRASH"
+      );
+
+      db.crashAfterWrites = Number.POSITIVE_INFINITY;
+      db.writeCount = 0;
+      const retry = await applyBondDissolutionSpend(db as unknown as Db, input);
+      expect(retry).toEqual({ duplicate: true });
+      expectExactPayouts(db);
+      expect(receipt(db, key).status).toBe("completed");
+    }
+  });
+
+  it("finishes a crashed 128-char attempt key-only and reports the stored outcome", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "R".repeat(128);
+    const input = dissolutionInput({ idempotencyKey: key });
+    db.crashAfterWrites = 4;
+    await expect(applyBondDissolutionSpend(db as unknown as Db, input)).rejects.toThrow(
+      "INJECTED_CRASH"
+    );
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    db.writeCount = 0;
+    const resumed = await resumeBondDissolutionByKey(db as unknown as Db, key, CORP_ID);
+    expect(resumed?.outcome).toEqual(outcomeFixture());
+    expectExactPayouts(db);
+    expect(receipt(db, key).status).toBe("completed");
+  });
+
+  it("compensates through bounded keys and holds the key terminal when a holder vanished under a 128-char key", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    db.collection("corporations").docs.delete(CREDITOR_CORP_ID.toHexString());
+    const key = "T".repeat(128);
+
+    await expect(
+      applyBondDissolutionSpend(db as unknown as Db, dissolutionInput({ idempotencyKey: key }))
+    ).rejects.toThrow(new RegExp(`^${BOND_DISSOLUTION_HOLDER}`));
+
+    expect(poolDoc(db).cashLocal).toBe(5_000);
+    expect(charCash(db)).toBe(100);
+    expect(fundDoc(db).cashAnchor).toBe(0);
+    expect(receipt(db, key).status).toBe("compensated");
+
+    await expect(
+      applyBondDissolutionSpend(db as unknown as Db, dissolutionInput({ idempotencyKey: key }))
+    ).rejects.toBeInstanceOf(MoneyFlowTerminalError);
+  });
+
+  it("answers route replay from the completed receipt under a 128-char key", async () => {
+    const db = new FakeDb();
+    seedDb(db);
+    const key = "G".repeat(128);
+    await applyBondDissolutionSpend(
+      db as unknown as Db,
+      dissolutionInput({ idempotencyKey: key })
+    );
+
+    const outcome = await getBondDissolutionCompletedOutcome(
+      db as unknown as Db,
+      key,
+      CORP_ID.toHexString()
+    );
+    expect(outcome).toEqual(outcomeFixture());
+  });
+});

@@ -5,6 +5,7 @@ import {
   applyIdempotentLeg,
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   keyedInsertId,
   makeInsertStep,
   runMoneyFlowSteps,
@@ -187,7 +188,7 @@ export async function applyRecruitSpend(
           ),
         revert: (stepOpts) =>
           applyKeyedUpdate(
-            `${key}:compensate:spend-debit`,
+            deriveMoneyFlowKey(key, "compensate", "spend-debit"),
             {
               collection,
               filter: { _id: docId } as Filter<TDoc>,

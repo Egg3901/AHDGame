@@ -2,6 +2,7 @@ import type { ClientSession, Db, ObjectId } from "mongodb";
 import type { Bond } from "@/lib/db/types";
 import {
   applyKeyedUpdate,
+  deriveMoneyFlowKey,
   type MoneyFlowLegOutcome,
   type MoneyFlowStep,
 } from "@/lib/db/nonAtomicMoneyFlow";
@@ -193,7 +194,7 @@ export function makeReserveBondUnitsStep(
       }),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:holder-reserve`,
+        deriveMoneyFlowKey(key, "compensate", "holder-reserve"),
         {
           collection: db.collection<Bond>("bonds"),
           filter: { _id: bondId, [`holders.${target.field}`]: target.id },

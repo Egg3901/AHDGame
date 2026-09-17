@@ -15,7 +15,11 @@
 import type { ClientSession, Db } from "mongodb";
 import type { Bond, BondMarketPool, BondMarketPoolFlowKind } from "@/lib/db/types";
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
-import { applyKeyedUpdate, type MoneyFlowStep } from "@/lib/db/nonAtomicMoneyFlow";
+import {
+  applyKeyedUpdate,
+  deriveMoneyFlowKey,
+  type MoneyFlowStep,
+} from "@/lib/db/nonAtomicMoneyFlow";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { quoteBondPrices, type BondPoolQuote } from "@/lib/bonds/marketPoolQuotes";
@@ -172,7 +176,7 @@ export function makeBondPoolCreditStep(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:pool-credit`,
+        deriveMoneyFlowKey(key, "compensate", "pool-credit"),
         {
           collection: pools,
           filter: { _id: currency },
@@ -228,7 +232,7 @@ export function makeBondPoolDebitStep(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:pool-debit`,
+        deriveMoneyFlowKey(key, "compensate", "pool-debit"),
         {
           collection: pools,
           filter: { _id: currency },

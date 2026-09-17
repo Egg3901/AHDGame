@@ -6,6 +6,7 @@ import {
   applyIdempotentLeg,
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   failMoneyFlowReceipt,
   insertKeyedDoc,
   makeLegStep,
@@ -373,7 +374,7 @@ function makePoolCreditStep(
   index: number,
   now: Date
 ): MoneyFlowStep {
-  const subKey = `${flowKey}:pool:${pool.currency}:${index}`;
+  const subKey = deriveMoneyFlowKey(flowKey, "pool", pool.currency, String(index));
   const name = `pool-credit-${pool.currency}-${index}`;
   const pools = db.collection<BondMarketPool>("bondMarketPools");
   const leg = {
@@ -406,7 +407,7 @@ function makePoolCreditStep(
     },
     revert: (options) =>
       applyIdempotentLeg(
-        `${subKey}:compensate:${name}`,
+        deriveMoneyFlowKey(subKey, "compensate", name),
         {
           ...leg,
           delta: -leg.delta,
@@ -433,7 +434,7 @@ function makeFundCreditStep(
   now: Date
 ): MoneyFlowStep {
   const hex = fund.fundId.toHexString();
-  const subKey = `${flowKey}:fund:${hex}`;
+  const subKey = deriveMoneyFlowKey(flowKey, "fund", hex);
   const funds = db.collection<MoneyFlowAccount>("indexFunds");
   return {
     name: `fund-credit-${hex}`,
@@ -453,7 +454,7 @@ function makeFundCreditStep(
       ),
     revert: (options) =>
       applyKeyedUpdate(
-        `${subKey}:compensate:fund`,
+        deriveMoneyFlowKey(subKey, "compensate", "fund"),
         {
           collection: funds,
           filter: { _id: fund.fundId },
@@ -484,7 +485,7 @@ function buildDissolutionSteps(
   );
   const holderSteps = plan.holders.map((holder) => {
     const hex = holderIdToString(holder.holderId);
-    return makeLegStep(`${key}:holder:${holder.kind}:${hex}`, {
+    return makeLegStep(deriveMoneyFlowKey(key, "holder", holder.kind, hex), {
       name: `holder-credit-${holder.kind}-${hex}`,
       collection: db.collection<MoneyFlowAccount>(HOLDER_COLLECTION[holder.kind]),
       docId: holder.holderId,

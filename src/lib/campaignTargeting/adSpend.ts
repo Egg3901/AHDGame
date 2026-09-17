@@ -5,6 +5,7 @@ import {
   applyIdempotentLeg,
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   runMoneyFlowSteps,
   type MoneyFlowAccount,
   type MoneyFlowLegOutcome,
@@ -101,7 +102,7 @@ function payerDebitStep(key: string, db: Db, input: AdSpendInput, now: Date): Mo
       ),
     revert: (stepOpts) =>
       applyIdempotentLeg(
-        `${key}:compensate:payer-debit`,
+        deriveMoneyFlowKey(key, "compensate", "payer-debit"),
         {
           name: "payer-debit",
           collection: db.collection<Character>("characters"),

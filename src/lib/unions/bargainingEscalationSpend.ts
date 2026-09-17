@@ -5,6 +5,7 @@ import {
   applyIdempotentLeg,
   applyKeyedUpdate,
   claimMoneyFlowReceipt,
+  deriveMoneyFlowKey,
   runMoneyFlowSteps,
   type MoneyFlowLegOutcome,
   type MoneyFlowStep,
@@ -169,7 +170,7 @@ export async function applyBargainingEscalationSpend(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:campaign-claim`,
+        deriveMoneyFlowKey(key, "compensate", "campaign-claim"),
         {
           collection: campaigns,
           filter: {
@@ -233,7 +234,7 @@ export async function applyBargainingEscalationSpend(
       ),
     revert: (stepOpts) =>
       applyIdempotentLeg(
-        `${key}:compensate:treasury-debit`,
+        deriveMoneyFlowKey(key, "compensate", "treasury-debit"),
         {
           name: "treasury-debit",
           collection: unions,
@@ -269,7 +270,7 @@ export async function applyBargainingEscalationSpend(
       ),
     revert: (stepOpts) =>
       applyKeyedUpdate(
-        `${key}:compensate:strike-${targetIndex}`,
+        deriveMoneyFlowKey(key, "compensate", `strike-${targetIndex}`),
         {
           collection: sectors,
           filter: { _id: target.sectorId, strikeStartedAtTurn: input.currentTurn },
