@@ -25,6 +25,8 @@ const mockPollData: PollData = {
   actionCost: 6,
   fundCostSmall: 25000,
   fundCostLarge: 75000,
+  actionCostSmall: 2,
+  actionCostLarge: 6,
   canAffordSmall: true,
   canAffordLarge: true,
   hasActionsSmall: true,
