@@ -97,6 +97,19 @@ async function main() {
       seed: (job as { seed?: string } | null)?.seed,
       turns: (job as { turns?: number } | null)?.turns,
       jobId: runId,
+      source: {
+        worktree: ((job as { sourceWorktree?: string } | null)?.sourceWorktree ??
+          (sandboxRun as { source?: { worktree?: string } } | null)?.source?.worktree ??
+          null) as string | null,
+        requestedCommit: ((job as { sourceCommit?: string } | null)?.sourceCommit ??
+          (sandboxRun as { source?: { requestedCommit?: string } } | null)?.source
+            ?.requestedCommit ??
+          null) as string | null,
+        executedPath: ((sandboxRun as { source?: { executedPath?: string } } | null)?.source
+          ?.executedPath ?? null) as string | null,
+        executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
+          ?.executedCommit ?? null) as string | null,
+      },
       requestedConfig: job
         ? Object.fromEntries(
             Object.entries(job).filter(([key]) =>
@@ -104,6 +117,8 @@ async function main() {
                 "preset",
                 "turns",
                 "seed",
+                "sourceWorktree",
+                "sourceCommit",
                 "startPolicy",
                 "marketSystemMode",
                 "labourSystemMode",
