@@ -114,6 +114,18 @@ async function main() {
         executedCommit: ((sandboxRun as { source?: { executedCommit?: string } } | null)?.source
           ?.executedCommit ?? null) as string | null,
       },
+      // Paired baseline (issue #1470 experiment-validity audit): what the
+      // queue asked for (job doc) beside what the run executed against
+      // (sandbox simRuns stamp). Both must agree; the pinned-pair assert
+      // compares baseline identity through requestedConfig.
+      pair: {
+        pairId: ((job as { pairId?: string } | null)?.pairId ??
+          (sandboxRun as { pairId?: string } | null)?.pairId ??
+          null) as string | null,
+        baselineId: ((job as { baselineId?: string } | null)?.baselineId ??
+          (sandboxRun as { baselineId?: string } | null)?.baselineId ??
+          null) as string | null,
+      },
       // Run identity: what the queue asked for (authoritative projection
       // with run-profile normalization in simJobArgs.ts, so newly queueable
       // fields appear here automatically and countries spellings that run

@@ -1,12 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   SIM_JOB_REQUESTED_CONFIG_KEYS,
+  assertBaselineId,
+  assertBaselineStampCompatible,
+  assertPairedBaselineShape,
+  assertPairId,
   assertRealOutputShadowPinnedPair,
   assertSafeToken,
+  baselineDbNameFor,
+  baselineProvenanceFlags,
+  buildPairedBaselinePair,
   buildRealOutputShadowPinnedPair,
   buildRunWorldArgs,
+  isBaselineDbName,
   normalizeSimCountries,
   normalizeSimJobRequestedConfig,
+  pairedBaselineArmId,
+  planBaselineCopy,
+  planPairedBaselineRepair,
   type SimJobExperimentFields,
 } from "./simJobArgs";
 import { REAL_OUTPUT_SHADOW_CLI_FLAG } from "@/lib/economy/realOutputShadow";
@@ -188,6 +199,12 @@ describe("sim worker runWorld argument emission", () => {
       // drop the pin from the report's requestedConfig.
       "sourceWorktree",
       "sourceCommit",
+      // Paired baseline (experiment-validity audit): the shared snapshot
+      // both arms start from. Missing here would pass arms cloned at
+      // different claim times as pinned and drop baseline identity from the
+      // report's requestedConfig.
+      "pairId",
+      "baselineId",
     ]) {
       expect(keys).toContain(field);
     }
@@ -257,26 +274,38 @@ describe("sim worker runWorld argument emission", () => {
     ).toThrow('drifted on "countries"');
   });
 
-  it("rejects clone-source drift while accepting clone-parity pairs", () => {
-    // A clone arm starts from live state, a fresh arm from preset bootstrap:
-    // same shadow flag or not, that pair is not a clean comparison.
+  it("rejects any live clone on a pinned pair, even with matching flags", () => {
+    // Experiment-validity audit: two arms that each clone live do so at
+    // their own claim times, so identical flags prove nothing about the
+    // starting world. Paired clone comparisons must share a baseline.
     const fresh = buildRealOutputShadowPinnedPair({});
     expect(() =>
       assertRealOutputShadowPinnedPair(fresh.control, {
         ...fresh.treatment,
         cloneFromLive: true,
       })
-    ).toThrow('drifted on "cloneFromLive"');
-    // Clone parity on both arms is a clean comparison (both start from the
-    // same live source); the builder carries the base through its spread.
-    const cloneBase = buildRealOutputShadowPinnedPair({ cloneFromLive: true });
-    expect(cloneBase.control.cloneFromLive).toBe(true);
-    expect(cloneBase.treatment.cloneFromLive).toBe(true);
+    ).toThrow("must copy the shared baseline");
+    // The builder refuses to mint the invalid artifact in the first place.
+    expect(() => buildRealOutputShadowPinnedPair({ cloneFromLive: true })).toThrow(
+      "must not set cloneFromLive"
+    );
+    // ...while the assert still fails closed on hand-built clone docs (the
+    // gate that protects pairs assembled outside the builder).
+    const cloneControl = {
+      preset: "p",
+      turns: 4,
+      seed: "s",
+      realOutputShadowEnabled: false as const,
+      cloneFromLive: true,
+    };
+    const cloneTreatment = { ...cloneControl, realOutputShadowEnabled: true as const };
+    expect(() => assertRealOutputShadowPinnedPair(cloneControl, cloneTreatment)).toThrow(
+      "must copy the shared baseline"
+    );
+    // Explicit-false on both arms is a fresh bootstrap on both sides: clean.
+    const explicitFresh = buildRealOutputShadowPinnedPair({ cloneFromLive: false });
     expect(() =>
-      assertRealOutputShadowPinnedPair(
-        { preset: "p", turns: 4, seed: "s", ...cloneBase.control },
-        { preset: "p", turns: 4, seed: "s", ...cloneBase.treatment }
-      )
+      assertRealOutputShadowPinnedPair(explicitFresh.control, explicitFresh.treatment)
     ).not.toThrow();
   });
 
@@ -385,5 +414,281 @@ describe("sim worker runWorld argument emission", () => {
     expect(treatmentArgs.filter((a) => a !== "--real-output-shadow=true")).toEqual(
       controlArgs.filter((a) => a !== "--real-output-shadow=false")
     );
+  });
+
+  it("builds a baselined pair sharing pair/baseline identity with strict shadow arms", () => {
+    const { control, treatment } = buildPairedBaselinePair(
+      { marketSystemMode: "capital", autonomyLevel: "v4" },
+      { pairId: "rs1470-01", baselineId: "live-20260917" }
+    );
+    expect(control).toEqual({
+      marketSystemMode: "capital",
+      autonomyLevel: "v4",
+      pairId: "rs1470-01",
+      baselineId: "live-20260917",
+      realOutputShadowEnabled: false,
+    });
+    expect(treatment).toEqual({ ...control, realOutputShadowEnabled: true });
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { preset: "p", turns: 4, seed: "s", ...control },
+        { preset: "p", turns: 4, seed: "s", ...treatment }
+      )
+    ).not.toThrow();
+  });
+
+  it("refuses to mint a baselined pair from a tainted base or tainted provenance", () => {
+    const provenance = { pairId: "rs1470-01", baselineId: "live-20260917" };
+    expect(() => buildPairedBaselinePair({ realOutputShadowEnabled: true }, provenance)).toThrow(
+      "must not set realOutputShadowEnabled"
+    );
+    expect(() => buildPairedBaselinePair({ pairId: "x" }, provenance)).toThrow(
+      "must not set pairId/baselineId"
+    );
+    expect(() => buildPairedBaselinePair({ baselineId: "x" }, provenance)).toThrow(
+      "must not set pairId/baselineId"
+    );
+    expect(() => buildPairedBaselinePair({ cloneFromLive: true }, provenance)).toThrow(
+      "must not set cloneFromLive"
+    );
+    expect(() => buildPairedBaselinePair({ cloneFromLive: false }, provenance)).toThrow(
+      "must not set cloneFromLive"
+    );
+    expect(() => buildPairedBaselinePair({}, { pairId: "", baselineId: "b" })).toThrow(
+      "pairId must match"
+    );
+    expect(() => buildPairedBaselinePair({}, { pairId: "p", baselineId: "a/b" })).toThrow(
+      "baselineId must match"
+    );
+  });
+
+  it("fails the pair assert when baseline starts differ", () => {
+    const { control, treatment } = buildPairedBaselinePair(
+      {},
+      { pairId: "rs1470-01", baselineId: "live-20260917" }
+    );
+    // Same pair, different snapshots: not the same starting world.
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, { ...treatment, baselineId: "live-20260918" })
+    ).toThrow('drifted on "baselineId"');
+    // Same snapshot, different pair grouping: not the same comparison.
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, { ...treatment, pairId: "rs1470-02" })
+    ).toThrow('drifted on "pairId"');
+    // One arm carrying baseline identity the other lacks: mismatched start.
+    expect(() =>
+      assertRealOutputShadowPinnedPair(control, { ...treatment, baselineId: undefined as never })
+    ).toThrow();
+    const { control: freshControl, treatment: freshTreatment } = buildRealOutputShadowPinnedPair(
+      {}
+    );
+    expect(() =>
+      assertRealOutputShadowPinnedPair(freshControl, {
+        ...freshTreatment,
+        baselineId: "live-20260917",
+      })
+    ).toThrow();
+    expect(() =>
+      assertRealOutputShadowPinnedPair({ ...control, pairId: undefined as never }, treatment)
+    ).toThrow();
+  });
+
+  it("fails the pair assert on malformed or half-present baseline provenance", () => {
+    const good = buildPairedBaselinePair({}, { pairId: "rs1470-01", baselineId: "snap1" });
+    for (const bad of ["", "a/b", 42, "x".repeat(65)]) {
+      expect(() =>
+        assertRealOutputShadowPinnedPair({ ...good.control, baselineId: bad }, good.treatment)
+      ).toThrow("baselineId must match");
+      expect(() =>
+        assertRealOutputShadowPinnedPair(good.control, { ...good.treatment, pairId: bad })
+      ).toThrow("pairId must match");
+    }
+    // Half-present: baseline without pair reads as a different (broken) start.
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { realOutputShadowEnabled: false, baselineId: "snap1" },
+        { realOutputShadowEnabled: true, baselineId: "snap1" }
+      )
+    ).toThrow("must both be set");
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { realOutputShadowEnabled: false, pairId: "p" },
+        { realOutputShadowEnabled: true }
+      )
+    ).toThrow("must both be set");
+  });
+
+  it("recovers partial pair creation without producing mismatched arms", () => {
+    const pairId = "rs1470-01";
+    const controlId = pairedBaselineArmId(pairId, "control");
+    const treatmentId = pairedBaselineArmId(pairId, "treatment");
+    expect(controlId).toBe("rs1470-01-control");
+    expect(treatmentId).toBe("rs1470-01-treatment");
+    // Nothing created yet: both arms missing.
+    expect(planPairedBaselineRepair([], pairId)).toEqual(["control", "treatment"]);
+    // Crash between the two inserts: only the missing arm is (re-)inserted,
+    // upserted by deterministic _id so a retry converges.
+    expect(planPairedBaselineRepair([{ _id: controlId }], pairId)).toEqual(["treatment"]);
+    expect(planPairedBaselineRepair([treatmentId], pairId)).toEqual(["control"]);
+    // Completed creation re-runs to nothing; foreign pairs are ignored.
+    expect(planPairedBaselineRepair([{ _id: controlId }, { _id: treatmentId }], pairId)).toEqual(
+      []
+    );
+    expect(
+      planPairedBaselineRepair(
+        [{ _id: controlId }, { _id: treatmentId }, { _id: "rs1470-02-control" }],
+        pairId
+      )
+    ).toEqual([]);
+    expect(() => pairedBaselineArmId("", "control")).toThrow("pairId must match");
+    expect(() => planPairedBaselineRepair([], "")).toThrow("pairId must match");
+  });
+
+  it("derives the baseline snapshot db and guards the claim-time copy", () => {
+    expect(baselineDbNameFor("live-20260917")).toBe("ahd_sim_baseline_live-20260917");
+    expect(isBaselineDbName("ahd_sim_baseline_x")).toBe(true);
+    expect(isBaselineDbName("ahd_sim_s1")).toBe(false);
+    expect(() => baselineDbNameFor("a/b")).toThrow("baselineId must match");
+    expect(() => baselineDbNameFor("x".repeat(48))).toThrow("too long");
+    // Happy path: baseline snapshot -> arm db.
+    expect(planBaselineCopy({ pairId: "p", baselineId: "snap1", dbName: "ahd_sim_arm1" })).toEqual({
+      sourceDb: "ahd_sim_baseline_snap1",
+      destDb: "ahd_sim_arm1",
+    });
+    // No provenance, no copy.
+    expect(() => planBaselineCopy({ dbName: "ahd_sim_arm1" })).toThrow("no paired-baseline");
+    // Never run turns against the immutable snapshot itself.
+    expect(() =>
+      planBaselineCopy({ pairId: "p", baselineId: "snap1", dbName: "ahd_sim_baseline_snap1" })
+    ).toThrow("immutable copy sources");
+    // Half-present provenance and unsafe db names fail closed.
+    expect(() => planBaselineCopy({ baselineId: "snap1", dbName: "ahd_sim_arm1" })).toThrow(
+      "must both be set"
+    );
+    expect(() => planBaselineCopy({ pairId: "p", baselineId: "snap1", dbName: "a/b" })).toThrow(
+      "dbName must match"
+    );
+  });
+
+  it("projects baseline identity through the authoritative requested config", () => {
+    // collectExperimentReport.ts builds requestedConfig through this, so the
+    // baseline must survive the projection for the report assert to see it.
+    expect(
+      normalizeSimJobRequestedConfig({
+        preset: "p",
+        turns: 4,
+        seed: "s",
+        pairId: "rs1470-01",
+        baselineId: "live-20260917",
+        realOutputShadowEnabled: true,
+      })
+    ).toEqual({
+      preset: "p",
+      turns: 4,
+      seed: "s",
+      pairId: "rs1470-01",
+      baselineId: "live-20260917",
+      realOutputShadowEnabled: true,
+    });
+    // Older jobs without baseline identity project exactly as before.
+    expect(normalizeSimJobRequestedConfig({ preset: "p", turns: 4, seed: "s" })).toEqual({
+      preset: "p",
+      turns: 4,
+      seed: "s",
+    });
+    // ...and the report-shaped maps verify end to end through the assert.
+    const { control, treatment } = buildPairedBaselinePair(
+      {},
+      { pairId: "rs1470-01", baselineId: "live-20260917" }
+    );
+    const reportedControl = normalizeSimJobRequestedConfig({
+      preset: "p",
+      turns: 4,
+      seed: "s",
+      ...control,
+    });
+    const reportedTreatment = normalizeSimJobRequestedConfig({
+      preset: "p",
+      turns: 4,
+      seed: "s",
+      ...treatment,
+    });
+    expect(() =>
+      assertRealOutputShadowPinnedPair(reportedControl, reportedTreatment)
+    ).not.toThrow();
+    expect(() =>
+      assertRealOutputShadowPinnedPair(reportedControl, {
+        ...reportedTreatment,
+        baselineId: "live-20260918",
+      })
+    ).toThrow('drifted on "baselineId"');
+  });
+
+  it("keeps strict false/true treatment identity on baselined pairs", () => {
+    const { control, treatment } = buildPairedBaselinePair({}, { pairId: "p", baselineId: "b" });
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { ...control, realOutputShadowEnabled: undefined as never },
+        treatment
+      )
+    ).toThrow("control must carry");
+    expect(() => assertRealOutputShadowPinnedPair(control, control)).toThrow(
+      "treatment must carry"
+    );
+    expect(() => assertRealOutputShadowPinnedPair(treatment, treatment)).toThrow(
+      "control must carry"
+    );
+  });
+
+  it("emits baseline provenance argv only for baselined jobs", () => {
+    expect(baselineProvenanceFlags({})).toEqual([]);
+    const { control } = buildPairedBaselinePair({}, { pairId: "p", baselineId: "b" });
+    expect(baselineProvenanceFlags(control)).toEqual(["--pair-id=p", "--baseline-id=b"]);
+    expect(() => baselineProvenanceFlags({ pairId: "p" })).toThrow("must both be set");
+    // The turn-args builder never emits provenance itself: planRunWorldSpawn
+    // (simSource.ts) appends baselineProvenanceFlags separately.
+    expect(buildRunWorldArgs(control).some((a) => a.includes("pair-id"))).toBe(false);
+    expect(buildRunWorldArgs(control).some((a) => a.includes("baseline"))).toBe(false);
+  });
+
+  it("refuses to re-stamp a mutated baseline snapshot", () => {
+    // First stamp and identical re-stamp pass.
+    expect(() =>
+      assertBaselineStampCompatible(null, { baselineId: "b", sourceTurn: 10, docCount: 5 })
+    ).not.toThrow();
+    expect(() =>
+      assertBaselineStampCompatible(
+        { baselineId: "b", sourceTurn: 10, docCount: 5 },
+        { baselineId: "b", sourceTurn: 10, docCount: 5 }
+      )
+    ).not.toThrow();
+    // A turn advance or doc change means something ran against the snapshot.
+    expect(() =>
+      assertBaselineStampCompatible(
+        { baselineId: "b", sourceTurn: 10, docCount: 5 },
+        { baselineId: "b", sourceTurn: 11, docCount: 5 }
+      )
+    ).toThrow("refusing to re-stamp a mutated snapshot");
+    expect(() =>
+      assertBaselineStampCompatible(
+        { baselineId: "b", sourceTurn: 10, docCount: 5 },
+        { baselineId: "b", sourceTurn: 10, docCount: 6 }
+      )
+    ).toThrow("refusing to re-stamp a mutated snapshot");
+  });
+
+  it("validates pair and baseline ids strictly", () => {
+    expect(assertPairId("rs1470-01")).toBe("rs1470-01");
+    expect(assertBaselineId("live-20260917")).toBe("live-20260917");
+    expect(assertPairedBaselineShape({})).toBeNull();
+    expect(assertPairedBaselineShape({ pairId: "p", baselineId: "b" })).toEqual({
+      pairId: "p",
+      baselineId: "b",
+    });
+    for (const bad of [undefined, null, "", 42, "a/b", "x".repeat(65)]) {
+      if (bad === undefined) continue;
+      expect(() => assertPairId(bad)).toThrow("pairId must match");
+      expect(() => assertBaselineId(bad)).toThrow("baselineId must match");
+    }
   });
 });

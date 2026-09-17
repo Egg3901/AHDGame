@@ -79,6 +79,10 @@ interface SimRunDoc {
     executedPath: string;
     executedCommit?: string | null;
   };
+  /** Paired-baseline provenance (issue #1470 experiment-validity audit):
+   * the shared snapshot this arm executed against. Null when unbaselined. */
+  pairId?: string | null;
+  baselineId?: string | null;
   // Elections-only run metadata (sim-only).
   simTurnPhaseMode?: "full" | "elections-only" | "economy-only" | "macro-only";
   electionScope?: string[] | null;
@@ -350,6 +354,23 @@ if (sourceCommit !== undefined && !/^[0-9a-f]{40}$/.test(sourceCommit)) {
   throw new Error(
     `--source-commit must be a full 40-hex commit SHA (got ${JSON.stringify(sourceCommit)})`
   );
+}
+/** Paired-baseline provenance passed by the worker (issue #1470
+ * experiment-validity audit). Stamped onto the simRuns doc so the report
+ * proves which shared snapshot this arm executed against. */
+const pairId = arg("pair-id");
+const baselineId = arg("baseline-id");
+if ((pairId === undefined) !== (baselineId === undefined)) {
+  throw new Error("--pair-id and --baseline-id must both be set (got only one)");
+}
+const SAFE_ID = /^[a-zA-Z0-9_-]{1,64}$/;
+for (const [flag, value] of [
+  ["--pair-id", pairId],
+  ["--baseline-id", baselineId],
+] as const) {
+  if (value !== undefined && !SAFE_ID.test(value)) {
+    throw new Error(`${flag} must match ${SAFE_ID} (got ${JSON.stringify(value)})`);
+  }
 }
 
 const dbName = arg("db") ?? `ahd_sim_${seed}`.replace(/[^a-zA-Z0-9_-]/g, "_");
@@ -732,6 +753,8 @@ async function main() {
           currentTurn: 0,
           error: null,
           source,
+          pairId: pairId ?? null,
+          baselineId: baselineId ?? null,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),
@@ -752,6 +775,8 @@ async function main() {
           status: "running",
           error: null,
           source,
+          pairId: pairId ?? null,
+          baselineId: baselineId ?? null,
           autonomyLevel: AUTONOMY_LEVEL,
           ...(difficulty ? { difficulty } : {}),
           updatedAt: new Date(),

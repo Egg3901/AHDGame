@@ -27,7 +27,11 @@
 import { execFileSync } from "child_process";
 import { realpathSync, statSync } from "fs";
 import { posix } from "path";
-import { buildRunWorldArgs, type SimJobExperimentFields } from "./simJobArgs";
+import {
+  baselineProvenanceFlags,
+  buildRunWorldArgs,
+  type SimJobExperimentFields,
+} from "./simJobArgs";
 
 export const SIM_WORKTREE_ROOT = "/root/projects/AHDGame/worktrees";
 export const SIM_MAIN_CHECKOUT = "/root/projects/AHDGame";
@@ -211,8 +215,10 @@ export interface RunWorldSpawnPlan {
 }
 
 /** Pure spawn planner: pins cwd to the verified worktree, falls back to the
- * worker default repo otherwise. Unit-tested; worker.ts stays the only
- * production caller and never mutates git state. */
+ * worker default repo otherwise. Appends paired-baseline provenance argv so
+ * runWorld stamps executed pair/baseline identity on the simRuns doc.
+ * Unit-tested; worker.ts stays the only production caller and never mutates
+ * git state. */
 export function planRunWorldSpawn(
   job: SimJobExperimentFields,
   baseArgs: string[],
@@ -221,6 +227,11 @@ export function planRunWorldSpawn(
 ): RunWorldSpawnPlan {
   return {
     cwd: verified?.repoDir ?? defaultRepoDir,
-    args: [...baseArgs, ...buildRunWorldArgs(job), ...sourceProvenanceFlags(verified)],
+    args: [
+      ...baseArgs,
+      ...buildRunWorldArgs(job),
+      ...sourceProvenanceFlags(verified),
+      ...baselineProvenanceFlags(job),
+    ],
   };
 }

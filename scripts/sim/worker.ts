@@ -30,7 +30,12 @@ import { spawn } from "child_process";
 import { dirname, join } from "path";
 import { MongoClient, type Db, type Collection } from "mongodb";
 import { claimFilterAt, parseClaimWindow } from "./claimWindow";
-import { assertSafeToken } from "./simJobArgs";
+import {
+  assertPairedBaselineShape,
+  assertSafeToken,
+  isBaselineDbName,
+  planBaselineCopy,
+} from "./simJobArgs";
 import { defaultSimSourceDeps, planRunWorldSpawn, verifySimSource } from "./simSource";
 
 const OPS_MONGODB_URI = process.env.OPS_MONGODB_URI;
@@ -115,8 +120,15 @@ interface SimJob {
   /** Elections-only country scope: comma-separated ids (e.g. "US,UK,DE"). Omit for global. */
   countries?: string;
   /** Clone the LIVE world into the sandbox db first, then run --clone-mode.
-   * Quick before/after validation of deployed code on real state. */
+   * Quick before/after validation of deployed code on real state. Never set
+   * on a baselined pair arm: paired arms copy the shared baseline snapshot
+   * instead (independent claim-time clones do not share a starting world). */
   cloneFromLive?: boolean;
+  /** Paired-baseline identity (issue #1470 experiment-validity audit). Both
+   * set or both absent; when set, this arm copies the immutable sandbox
+   * snapshot baselineDbNameFor(baselineId) instead of cloning live. */
+  pairId?: string;
+  baselineId?: string;
   /** Pinned source revision (issue #1966). Both set or both absent; when set,
    * runWorld executes from the verified worktree at exactly this commit. */
   sourceWorktree?: string;
@@ -208,6 +220,31 @@ async function mirrorSandboxStatus(jobsCol: Collection<SimJob>, job: SimJob) {
   }
 }
 
+/**
+ * Fail-closed baseline check: the snapshot db must carry the marker stamped
+ * at capture time (stampBaseline.ts) for exactly this baseline id. A missing
+ * or mismatched marker means the baseline was never captured (or was
+ * overwritten), so the arm must fail rather than run on a guessed start.
+ * Reads the SANDBOX Mongo only, never the live game database.
+ */
+async function verifyBaselineMarker(baselineDb: string, baselineId: string): Promise<void> {
+  const client = new MongoClient(SIM_MONGODB_URI as string);
+  try {
+    await client.connect();
+    const marker = await client
+      .db(baselineDb)
+      .collection("simBaselines")
+      .findOne({ _id: baselineId as never });
+    if (!marker) {
+      throw new Error(
+        `baseline "${baselineId}" has no simBaselines marker in sandbox db "${baselineDb}": capture it with cloneWorld.ts + stampBaseline.ts before claiming arms`
+      );
+    }
+  } finally {
+    await client.close();
+  }
+}
+
 async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
   // Validate before this job's fields touch a Mongo db name or a child-process
   // argv — see SAFE_TOKEN above. A job document only ever comes from this
@@ -220,6 +257,11 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
   if (job.dbName === OPS_DB_NAME) {
     throw new Error(
       `Job dbName "${job.dbName}" collides with the control-plane OPS_DB_NAME — refusing to run.`
+    );
+  }
+  if (isBaselineDbName(job.dbName)) {
+    throw new Error(
+      `Job dbName "${job.dbName}" is a baseline snapshot db: baselines are immutable copy sources, never run targets.`
     );
   }
   if (!Number.isInteger(job.turns) || job.turns <= 0 || job.turns > 5000) {
@@ -254,6 +296,49 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
     // OPS_MONGODB_URI (it never should, but it especially shouldn't be handed
     // the production credential it has no use for).
     const runWorldEnv = { ...baseChildEnv(), SIM_MONGODB_URI: SIM_MONGODB_URI as string };
+    // Paired-baseline arms (issue #1470 experiment-validity audit): copy the
+    // shared immutable snapshot sandbox-to-sandbox. This branch never reads
+    // the live game database: SOURCE points at the SANDBOX Mongo holding the
+    // baseline db, and the marker check below fails the job when the baseline
+    // was never captured. Re-copying with --drop is idempotent, so a
+    // worker restart re-queuing a running arm (see main()) converges instead
+    // of forking a mismatched start.
+    const baselined = job.pairId !== undefined || job.baselineId !== undefined;
+    if (baselined) {
+      if (job.cloneFromLive) {
+        throw new Error(
+          `Job ${job._id} mixes baselineId with cloneFromLive: paired arms copy the shared baseline, never clone live independently`
+        );
+      }
+      const provenance = assertPairedBaselineShape(job);
+      if (!provenance) {
+        throw new Error(
+          `Job ${job._id} carries incomplete paired-baseline provenance: pairId and baselineId must both be set`
+        );
+      }
+      const copy = planBaselineCopy(job);
+      log(
+        `Copying paired baseline ${provenance.baselineId} (${copy.sourceDb} -> ${copy.destDb}) ...`
+      );
+      await verifyBaselineMarker(copy.sourceDb, provenance.baselineId);
+      const copyEnv = {
+        ...baseChildEnv(),
+        SOURCE_MONGODB_URI: SIM_MONGODB_URI as string,
+        SOURCE_DB_NAME: copy.sourceDb,
+        SIM_MONGODB_URI: SIM_MONGODB_URI as string,
+      };
+      const copyResult = await run(
+        "scripts/sim/cloneWorld.ts",
+        [`--db=${copy.destDb}`, "--drop"],
+        copyEnv
+      );
+      if (copyResult.code !== 0) {
+        throw new Error(
+          `baseline copy (cloneWorld ${copy.sourceDb} -> ${copy.destDb}) exited with code ${copyResult.code}`
+        );
+      }
+      log(`Baseline copy complete; running ${job.turns} turn(s) in clone mode`);
+    }
     if (job.cloneFromLive) {
       // Copy the live world's STATE into the sandbox db (history/log
       // collections excluded — see cloneWorld.ts). The clone step is the one
@@ -301,7 +386,10 @@ async function processJob(jobsCol: Collection<SimJob>, job: SimJob) {
         `--turns=${job.turns}`,
         `--db=${job.dbName}`,
         `--run-id=${job._id}`,
-        ...(job.cloneFromLive ? ["--clone-mode"] : []),
+        // Baselined arms run on a live-world copy (via the baseline
+        // snapshot), so they need clone mode exactly like live clones do:
+        // skip fresh bootstrap and the real-world users guardrail.
+        ...(job.cloneFromLive || baselined ? ["--clone-mode"] : []),
       ],
       GAME_REPO_DIR,
       spawnSource

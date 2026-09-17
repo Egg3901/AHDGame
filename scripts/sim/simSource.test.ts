@@ -224,4 +224,21 @@ describe("sim spawn planning", () => {
     expect(plan.args).toContain("--source-worktree=muse-992");
     expect(plan.args).toContain(`--source-commit=${SHA_A}`);
   });
+
+  it("carries paired-baseline provenance argv for baselined jobs only", () => {
+    const baselined = planRunWorldSpawn(
+      { pairId: "rs1470-01", baselineId: "snap1" },
+      ["--seed=x"],
+      "/default/repo",
+      null
+    );
+    expect(baselined.args).toContain("--pair-id=rs1470-01");
+    expect(baselined.args).toContain("--baseline-id=snap1");
+    const plain = planRunWorldSpawn({ mode: "full" }, ["--seed=x"], "/default/repo", null);
+    expect(plain.args.some((a) => a.startsWith("--pair-id="))).toBe(false);
+    expect(plain.args.some((a) => a.startsWith("--baseline-id="))).toBe(false);
+    expect(() => planRunWorldSpawn({ pairId: "p" }, ["--seed=x"], "/default/repo", null)).toThrow(
+      "must both be set"
+    );
+  });
 });

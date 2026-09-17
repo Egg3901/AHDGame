@@ -45,6 +45,20 @@ export interface SimJobExperimentFields {
    */
   sourceWorktree?: string;
   sourceCommit?: string;
+  /**
+   * Paired-baseline identity (issue #1470 experiment-validity audit). Both
+   * set or both absent; when set, both arms of a pinned pair carry the SAME
+   * values. pairId groups the two arms; baselineId names the single
+   * immutable sandbox snapshot (ahd_sim_baseline_<baselineId>) both arms
+   * copy instead of cloning live independently. NOT emitted by
+   * buildRunWorldArgs: baselineProvenanceFlags carries them as
+   * --pair-id/--baseline-id provenance argv so runWorld stamps them on the
+   * simRuns doc; the worker consumes baselineId directly for the
+   * sandbox-to-sandbox copy. Kept here so the pair builder carries them
+   * through its spread with full typing.
+   */
+  pairId?: string;
+  baselineId?: string;
 }
 
 /**
@@ -98,6 +112,12 @@ export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   // without it project exactly as before (absent stays absent).
   "sourceWorktree",
   "sourceCommit",
+  // Paired baseline (issue #1470 experiment-validity audit): the single
+  // immutable sandbox snapshot both arms start from. Appended last so older
+  // readers see a stable prefix; older jobs without it project exactly as
+  // before (absent stays absent).
+  "pairId",
+  "baselineId",
 ] as const;
 
 /**
@@ -118,6 +138,11 @@ export function buildRealOutputShadowPinnedPair(base: SimJobExperimentFields): {
   if (base.realOutputShadowEnabled !== undefined) {
     throw new Error(
       "buildRealOutputShadowPinnedPair: base must not set realOutputShadowEnabled (the pair sets it)"
+    );
+  }
+  if (base.cloneFromLive === true) {
+    throw new Error(
+      "buildRealOutputShadowPinnedPair: base must not set cloneFromLive (independent claim-time clones do not share a starting world; use buildPairedBaselinePair)"
     );
   }
   return {
@@ -153,9 +178,9 @@ export function normalizeSimCountries(value: unknown): string | undefined {
  * report and the comparison can never disagree on what run identity is.
  *
  * Compatibility: absent and undefined stay absent (no defaults injected), so
- * older jobs without mode/countries/cloneFromLive/pinned-source project
- * exactly as before, and scheduling metadata (startPolicy) passes through
- * dropped on both old and new docs alike.
+ * older jobs without mode/countries/cloneFromLive/pinned-source/paired-baseline
+ * project exactly as before, and scheduling metadata (startPolicy) passes
+ * through dropped on both old and new docs alike.
  */
 export function normalizeSimJobRequestedConfig(
   job: Record<string, unknown>
@@ -184,10 +209,18 @@ export function normalizeSimJobRequestedConfig(
  * unset; countries compare case-, spacing-, and order-insensitively, matching
  * what runWorld actually sees). Accepts full job docs or `requestedConfig`
  * maps, not just experiment fragments, so preset, turns, seed, mode,
- * countries, and clone-source drift are caught too. Scheduling metadata
- * (startPolicy) and run-instance identity are not run identity and never
- * count as drift. Throws on the first mismatch so the caller knows exactly
- * what unpinned the comparison.
+ * countries, clone-source, and paired-baseline drift are caught too.
+ * Scheduling metadata (startPolicy) and run-instance identity are not run
+ * identity and never count as drift. Throws on the first mismatch so the
+ * caller knows exactly what unpinned the comparison.
+ *
+ * Fail-closed on independent live clones (issue #1470
+ * experiment-validity audit): two arms that each set cloneFromLive clone the
+ * live world at their own claim times, so no flag comparison can prove they
+ * started from the same world (not even identical flags). Any cloneFromLive
+ * on a pinned pair therefore throws; paired clone comparisons must go
+ * through the shared baseline (buildPairedBaselinePair), which both arms
+ * copy instead of cloning live.
  */
 export function assertRealOutputShadowPinnedPair(
   control: Record<string, unknown>,
@@ -207,6 +240,25 @@ export function assertRealOutputShadowPinnedPair(
       )})`
     );
   }
+  // Baseline provenance shape first, so a malformed id fails as malformed
+  // rather than as drift. Both-or-neither: one arm carrying pair/baseline
+  // identity the other lacks is a mismatched start by construction.
+  assertPairedBaselineShape(control);
+  assertPairedBaselineShape(treatment);
+  // Independent live clones can never share a proven start: each arm clones
+  // at its own claim time. Fail closed even when the flags match.
+  for (const [arm, doc] of [
+    ["control", control],
+    ["treatment", treatment],
+  ] as const) {
+    if (doc.cloneFromLive === true) {
+      throw new Error(
+        `pinned pair ${arm} sets cloneFromLive: paired arms must copy the shared baseline ` +
+          `(baselineId) instead of cloning live independently (independent claim-time clones ` +
+          `do not share an identical starting world)`
+      );
+    }
+  }
   const a = normalizeSimJobRequestedConfig(control);
   const b = normalizeSimJobRequestedConfig(treatment);
   for (const key of SIM_JOB_REQUESTED_CONFIG_KEYS) {
@@ -220,6 +272,218 @@ export function assertRealOutputShadowPinnedPair(
         )}`
       );
     }
+  }
+}
+
+/**
+ * Paired-baseline contract (issue #1470 experiment-validity audit). A paired
+ * control/treatment request that independently clones live state at different
+ * claim times does NOT share an identical starting world. Paired clone
+ * comparisons therefore share one immutable sandbox snapshot instead:
+ *
+ *   1. The supervisor captures the baseline ONCE from live into the sandbox
+ *      db baselineDbNameFor(baselineId) (cloneWorld.ts with SOURCE at the
+ *      live DB), then stamps it with stampBaseline.ts. That capture is the
+ *      only step that ever reads the live game database.
+ *   2. Pair creation inserts two simJobs docs with deterministic _ids
+ *      (pairedBaselineArmId) carrying the SAME pairId + baselineId, via
+ *      buildPairedBaselinePair. Retries upsert by _id, so a retried creation
+ *      can never produce a second mismatched pair; planPairedBaselineRepair
+ *      recovers a partial creation by reporting exactly which arms are
+ *      missing.
+ *   3. At claim time the worker copies baseline -> arm db sandbox-to-sandbox
+ *      (cloneWorld.ts with SOURCE at the SANDBOX, never live), verifies the
+ *      baseline marker, and runs --clone-mode. See planBaselineCopy.
+ *
+ * Everything here is pure (no Mongo, no env) so creation, repair, and claim
+ * planning are unit-testable; worker.ts, stampBaseline.ts, and runWorld.ts
+ * stay the only production callers.
+ */
+
+/** Sandbox db name holding the immutable snapshot for a baseline id. */
+export function baselineDbNameFor(baselineId: string): string {
+  assertBaselineId(baselineId);
+  // Mongo db names cap at 64 bytes: the 17-char prefix leaves 47 for the id.
+  if (baselineId.length > 47) {
+    throw new Error(
+      `baselineId too long for a sandbox db name (max 47 chars, got ${baselineId.length})`
+    );
+  }
+  return `ahd_sim_baseline_${baselineId}`;
+}
+
+/** True for sandbox db names reserved for immutable baseline snapshots. */
+export function isBaselineDbName(name: string): boolean {
+  return name.startsWith("ahd_sim_baseline_");
+}
+
+/** Strict shape check for one baseline id: non-empty SAFE_TOKEN string. */
+export function assertBaselineId(value: unknown): string {
+  if (typeof value !== "string" || !SAFE_TOKEN.test(value)) {
+    throw new Error(`baselineId must match ${SAFE_TOKEN} (got ${JSON.stringify(value)})`);
+  }
+  return value;
+}
+
+/** Strict shape check for one pair id: non-empty SAFE_TOKEN string. */
+export function assertPairId(value: unknown): string {
+  if (typeof value !== "string" || !SAFE_TOKEN.test(value)) {
+    throw new Error(`pairId must match ${SAFE_TOKEN} (got ${JSON.stringify(value)})`);
+  }
+  return value;
+}
+
+/**
+ * Both-or-neither shape check for paired-baseline provenance on one arm doc
+ * (full job doc or requestedConfig map). Neither set passes (fresh preset
+ * bootstrap is deterministic, so unbaselined pairs are still clean). One set
+ * without the other throws; malformed values throw. Returns the validated
+ * pair when both are set, null when neither is.
+ */
+export function assertPairedBaselineShape(doc: {
+  pairId?: unknown;
+  baselineId?: unknown;
+}): { pairId: string; baselineId: string } | null {
+  const { pairId, baselineId } = doc;
+  if (pairId === undefined && baselineId === undefined) return null;
+  if (pairId === undefined || baselineId === undefined) {
+    throw new Error(
+      `pairId and baselineId must both be set (got pairId=${JSON.stringify(pairId)} baselineId=${JSON.stringify(baselineId)})`
+    );
+  }
+  return { pairId: assertPairId(pairId), baselineId: assertBaselineId(baselineId) };
+}
+
+/**
+ * Builds a baselined pinned pair: identical arms sharing pairId + baselineId,
+ * differing only in the shadow flag (control explicit false, treatment
+ * explicit true). Pure: enqueues nothing, enables nothing, touches no live
+ * config. The base must not set the shadow flag (the pair sets it), must not
+ * set pair/baseline identity (the pair sets it), and must not set
+ * cloneFromLive (paired arms copy the shared baseline; an independent live
+ * clone is exactly the mismatched start this contract removes).
+ */
+export function buildPairedBaselinePair(
+  base: SimJobExperimentFields,
+  provenance: { pairId: string; baselineId: string }
+): { control: SimJobExperimentFields; treatment: SimJobExperimentFields } {
+  if (base.realOutputShadowEnabled !== undefined) {
+    throw new Error(
+      "buildPairedBaselinePair: base must not set realOutputShadowEnabled (the pair sets it)"
+    );
+  }
+  if (base.pairId !== undefined || base.baselineId !== undefined) {
+    throw new Error(
+      "buildPairedBaselinePair: base must not set pairId/baselineId (the pair sets them)"
+    );
+  }
+  if (base.cloneFromLive !== undefined) {
+    throw new Error(
+      "buildPairedBaselinePair: base must not set cloneFromLive (paired arms copy the shared baseline instead of cloning live)"
+    );
+  }
+  const pairId = assertPairId(provenance.pairId);
+  const baselineId = assertBaselineId(provenance.baselineId);
+  return {
+    control: { ...base, pairId, baselineId, realOutputShadowEnabled: false },
+    treatment: { ...base, pairId, baselineId, realOutputShadowEnabled: true },
+  };
+}
+
+/** Durable arm of a baselined pair. */
+export type PairedBaselineArm = "control" | "treatment";
+
+/**
+ * Deterministic simJobs _id for one arm. Pair creation inserts (upserts) by
+ * this id, so a crashed-and-retried creation converges on the same two docs
+ * instead of producing a second mismatched pair.
+ */
+export function pairedBaselineArmId(pairId: string, arm: PairedBaselineArm): string {
+  return `${assertPairId(pairId)}-${arm}`;
+}
+
+/**
+ * Crash-safe creation recovery: given the arm docs already present for a
+ * pair (rows matching pairId, or their _ids), returns exactly which arms
+ * still need inserting. Empty means the pair is complete; re-running a
+ * completed creation inserts nothing. Foreign docs (other pairs) are
+ * ignored. Pure over plain records so queue backends stay out of this
+ * module; the caller queries simJobs by pairId and upserts the missing arms
+ * by pairedBaselineArmId.
+ */
+export function planPairedBaselineRepair(
+  existing: ReadonlyArray<{ _id: string } | string>,
+  pairId: string
+): PairedBaselineArm[] {
+  const want: PairedBaselineArm[] = ["control", "treatment"];
+  const ids = new Set(existing.map((doc) => (typeof doc === "string" ? doc : doc._id)));
+  return want.filter((arm) => !ids.has(pairedBaselineArmId(pairId, arm)));
+}
+
+/**
+ * Pure claim planner for a baselined arm: derives the sandbox-to-sandbox
+ * copy (baseline snapshot db -> arm db). Throws when the job carries no
+ * baseline, when the destination is itself a baseline snapshot db (baseline
+ * dbs never run turns: they are immutable sources), or when source and
+ * destination coincide. The worker resolves both names against the SANDBOX
+ * Mongo only; the live game database is never an endpoint of this copy.
+ */
+export function planBaselineCopy(job: {
+  pairId?: unknown;
+  baselineId?: unknown;
+  dbName?: unknown;
+}): { sourceDb: string; destDb: string } {
+  const provenance = assertPairedBaselineShape(job);
+  if (!provenance) {
+    throw new Error("planBaselineCopy: job carries no paired-baseline provenance");
+  }
+  const { dbName } = job;
+  if (typeof dbName !== "string" || !SAFE_TOKEN.test(dbName)) {
+    throw new Error(
+      `planBaselineCopy: job dbName must match ${SAFE_TOKEN} (got ${JSON.stringify(dbName)})`
+    );
+  }
+  if (isBaselineDbName(dbName)) {
+    throw new Error(
+      `planBaselineCopy: refusing to run turns against baseline snapshot db "${dbName}" (baselines are immutable copy sources, never run targets)`
+    );
+  }
+  const sourceDb = baselineDbNameFor(provenance.baselineId);
+  if (sourceDb === dbName) {
+    throw new Error(`planBaselineCopy: source and destination coincide ("${dbName}")`);
+  }
+  return { sourceDb, destDb: dbName };
+}
+
+/**
+ * Provenance argv the worker passes to runWorld so the child stamps executed
+ * pair/baseline identity onto the simRuns doc. Empty when unbaselined.
+ * Values are shape-checked here so a malformed id fails at plan time, not
+ * mid-run. Emitted only by planRunWorldSpawn (simSource.ts); never by hand.
+ */
+export function baselineProvenanceFlags(job: SimJobExperimentFields): string[] {
+  const provenance = assertPairedBaselineShape(job);
+  if (!provenance) return [];
+  return [`--pair-id=${provenance.pairId}`, `--baseline-id=${provenance.baselineId}`];
+}
+
+/**
+ * Immutability guard for the baseline snapshot marker (stampBaseline.ts).
+ * The marker records the live gameState turn (and doc count) seen at capture;
+ * a re-stamp observing a different turn or count means something ran against
+ * the baseline db, so the snapshot is no longer immutable and stamping must
+ * refuse. Same observation re-stamps idempotently. Pure so the refusal is
+ * unit-testable without Mongo.
+ */
+export function assertBaselineStampCompatible(
+  existing: { baselineId: string; sourceTurn: number; docCount: number } | null,
+  observed: { baselineId: string; sourceTurn: number; docCount: number }
+): void {
+  if (!existing) return;
+  if (existing.sourceTurn !== observed.sourceTurn || existing.docCount !== observed.docCount) {
+    throw new Error(
+      `baseline "${observed.baselineId}" changed since capture (turn ${existing.sourceTurn}->${observed.sourceTurn}, docs ${existing.docCount}->${observed.docCount}): refusing to re-stamp a mutated snapshot`
+    );
   }
 }
 
