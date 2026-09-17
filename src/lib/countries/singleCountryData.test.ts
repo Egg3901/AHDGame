@@ -43,6 +43,57 @@ const COUNTRY_IDS = new Set(
 );
 
 /**
+ * US state and territory codes.
+ *
+ * ⚠️ THREE OF THESE ARE ALSO COUNTRY IDS: CA (California / Canada), DE
+ * (Delaware / Germany) and IN (Indiana / India). A file keyed by state code
+ * therefore looks, to a rule that reads `XX:` as a country key, like a file
+ * about four countries at once -- which is not single-country, so it is not
+ * flagged at all.
+ *
+ * That is not hypothetical. It is how `seeds/reference/stateMetrics2027.ts` and
+ * its seven era siblings -- about 5,900 lines of pure US data, keyed `AL:`,
+ * `AK:`, `AZ:`, `CA:`, `DE:`, `IN:` -- sat INVISIBLE to the first version of
+ * this guard. The header warned about exactly this collision and the rule still
+ * had the hole, because the warning was written about bare two-letter STRINGS
+ * and the leak was in two-letter KEYS.
+ */
+const US_STATE_CODES = new Set(
+  (
+    "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO " +
+    "MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR GU VI AS MP"
+  ).split(" ")
+);
+
+/** The three codes that are both: California/Canada, Delaware/Germany, Indiana/India. */
+const AMBIGUOUS = new Set([...COUNTRY_IDS].filter((c) => US_STATE_CODES.has(c)));
+
+/**
+ * Does this file key things by US state?
+ *
+ * Evidence is the codes that can only be states -- AL, AK, AZ, TX, FL. One of
+ * those means state keys are in play somewhere in the file.
+ *
+ * ⚠️ THIS DELIBERATELY DOES NOT DECIDE THE WHOLE FILE, because a file can key by
+ * both. `STATE_ADJACENCY` is `Record<CountryId, AdjacencyMap>`: 23 country keys
+ * at the top level, 48 state keys nested under the US one. `sectorSeedWeights`
+ * is the same shape. A file-level majority vote calls those state-keyed, since
+ * 48 beats 23, and then throws away 23 genuine country keys -- which would make
+ * a multi-country registry look like it declares no country at all, and a guard
+ * that stops seeing countries stops flagging anything.
+ *
+ * So only the AMBIGUOUS codes are discounted. An unambiguous country key (JP,
+ * UK, FR, RU) is always a country no matter what else the file contains, and
+ * `countryId:` fields and `xx_` slugs are never in doubt either way.
+ */
+function hasUsStateKeys(keys: Set<string>): boolean {
+  for (const key of keys) {
+    if (US_STATE_CODES.has(key) && !COUNTRY_IDS.has(key)) return true;
+  }
+  return false;
+}
+
+/**
  * Directories where authored DATA lives. Content-based detection is limited to
  * these: elsewhere a lone `countryId: "US"` is far more likely to be a default
  * in engine code or a fixture than a country's data table.
@@ -157,8 +208,18 @@ function declaredCountries(raw: string): Set<string> {
   for (const [, cc] of source.matchAll(COUNTRY_ID_FIELD)) {
     if (COUNTRY_IDS.has(cc)) found.add(cc);
   }
-  for (const [, cc] of source.matchAll(REGISTRY_KEY)) {
-    if (COUNTRY_IDS.has(cc)) found.add(cc);
+  // ⚠️ In a file that keys by US state, `CA:` is California and `DE:` is
+  // Delaware. Counting them as Canada and Germany makes a pure US data file look
+  // like a four-country one, so it stops being single-country and is never
+  // flagged -- which is how 5,900 lines of stateMetrics went unseen. Only the
+  // three ambiguous codes are discounted, and only when the file demonstrably
+  // uses state keys; an unambiguous country key still counts.
+  const keys = new Set([...source.matchAll(REGISTRY_KEY)].map(([, cc]) => cc));
+  const stateKeyed = hasUsStateKeys(keys);
+  for (const cc of keys) {
+    if (!COUNTRY_IDS.has(cc)) continue;
+    if (stateKeyed && AMBIGUOUS.has(cc)) continue;
+    found.add(cc);
   }
   for (const [, cc] of source.matchAll(SLUG)) {
     if (COUNTRY_IDS.has(cc.toUpperCase())) found.add(cc.toUpperCase());

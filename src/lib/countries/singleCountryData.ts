@@ -122,14 +122,14 @@ export const ACKNOWLEDGED_OUTSIDE: ReadonlyArray<{
   },
 
   // ---- Deferred by decision, with the decision named. ----
-  {
-    file: "src/lib/npp/rosters/p1991-jp.ts",
-    country: "JP",
-    why: "Japan's 1991 non-player-politician roster. Arrived from origin/development AFTER the folder work; relocating it now would widen a merge into a fresh migration. Genuinely Japan's data and a candidate to move with the roster directory as a whole.",
-  },
-  {
-    file: "src/lib/npp/rosters/p2019-jp.ts",
-    country: "JP",
-    why: "Japan's 2019 non-player-politician roster. Same provenance and same reasoning as its 1991 sibling.",
-  },
+  //
+  // ⚠ EMPTY, AND IT SHOULD STAY HARD TO ADD TO. It held Japan's two
+  // non-player-politician rosters, deferred because "moving it now would widen a
+  // merge into a fresh migration". That was true while the merge from
+  // origin/development was in flight and stale the moment `b1605b15b` landed --
+  // and nothing re-read it, which is exactly how a deferral turns permanent. The
+  // two rosters (2,324 lines) are now in `jp/data/`.
+  //
+  // A deferral here needs a reason that can be CHECKED later, not one that was
+  // merely true when written.
 ];
