@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { ObjectId } from "mongodb";
+import { randomUUID } from "node:crypto";
 import { getDb } from "@/lib/mongodb";
 import { requireBasicAuth } from "@/lib/api/requireAuth";
 import { handleRouteError } from "@/lib/api/errors";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import type { Character, Corporation, ShareOrder, User } from "@/lib/db/types";
 import type { ImperialCharacter } from "@/lib/db/types/imperialCharacter";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
@@ -22,7 +24,7 @@ interface RouteParams {
  * Sell orders: reserved shares are restored when they were debited at creation.
  * The authorizing character, or the sitting CEO of a corp-placed order, may cancel.
  */
-export async function DELETE(_request: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const auth = await requireBasicAuth();
     if (!auth.ok) return auth.response;
@@ -88,10 +90,35 @@ export async function DELETE(_request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not your order" }, { status: 403 });
     }
 
-    const result = await cancelShareOrderAndRefund(db, order);
-    if (!result.ok) {
-      const status = result.error.startsWith("Exchange rate") ? 503 : 400;
-      return NextResponse.json({ error: result.error }, { status });
+    // Crash-safe cancel (issue #1672): the CAS claim, the pinned refund
+    // plan, and the exactly-once legs converge on retry. `Idempotency-Key`
+    // replays the stored outcome without moving money again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+    try {
+      const result = await cancelShareOrderAndRefund(db, order, {
+        idempotencyKey: headerKey ?? randomUUID(),
+      });
+      if (!result.ok) {
+        const status = result.error.startsWith("Exchange rate") ? 503 : 400;
+        return NextResponse.json({ error: result.error }, { status });
+      }
+    } catch (error) {
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "Cancel already settled; start a new attempt with a new key." },
+          { status: 409 }
+        );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "Idempotency key was reused for a different transfer." },
+          { status: 409 }
+        );
+      }
+      throw error;
     }
 
     return NextResponse.json({ success: true });

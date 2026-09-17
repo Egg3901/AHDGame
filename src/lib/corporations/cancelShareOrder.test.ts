@@ -44,9 +44,13 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
       pricePerShare: 1000,
     };
 
-    // shareOrders collection: updateOne (status: cancelled)
+    // shareOrders collection: CAS claim update + post-claim remainder read.
     db.collection("shareOrders");
-    db.collectionMocks["shareOrders"].updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks["shareOrders"].updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order);
 
     // corporations collection: findOne on target corp returns JP + JPY
     db.collection("corporations");
@@ -80,7 +84,10 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
       _id: characterId,
       countryId: "US",
     });
-    db.collectionMocks["characters"].updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks["characters"].updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
 
     const result = await cancelShareOrderAndRefund(db as never, order as never);
 
@@ -118,7 +125,11 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
     };
 
     db.collection("shareOrders");
-    db.collectionMocks["shareOrders"].updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks["shareOrders"].updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order);
 
     db.collection("corporations");
     db.collectionMocks["corporations"].findOne.mockImplementation((filter: { _id?: ObjectId }) => {
@@ -138,7 +149,10 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
       }
       return Promise.resolve(null);
     });
-    db.collectionMocks["corporations"].updateOne.mockResolvedValue({ modifiedCount: 1 });
+    db.collectionMocks["corporations"].updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
 
     db.collection("exchangeRates");
     db.collectionMocks["exchangeRates"].findOne.mockImplementation(
@@ -180,6 +194,7 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
 
     db.collection("shareOrders");
     db.collectionMocks["shareOrders"].updateOne.mockResolvedValue({ matchedCount: 1 });
+    db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order);
 
     db.collection("corporations");
     db.collectionMocks["corporations"].findOne.mockResolvedValue({
@@ -208,7 +223,13 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
     const result = await cancelShareOrderAndRefund(db as never, order as never);
 
     expect(result).toEqual({ ok: false, error: "Exchange rate unavailable, try again shortly" });
-    expect(db.collectionMocks["shareOrders"].updateOne).not.toHaveBeenCalled();
+    // The keyed flow claims first, then reverts the claim on validation
+    // failure, so the order ends open exactly like the legacy pre-claim
+    // failure (two writes: claim, then the open-restoring revert).
+    expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledTimes(2);
+    expect(db.collectionMocks["shareOrders"].updateOne.mock.calls[1]?.[1]).toMatchObject({
+      $set: expect.objectContaining({ status: "open" }),
+    });
   });
 
   it("cancels an orphaned buy order even when the owner document is missing", async () => {
@@ -232,6 +253,7 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
       matchedCount: 1,
       modifiedCount: 1,
     });
+    db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order);
 
     db.collection("corporations");
     db.collectionMocks["corporations"].findOne.mockResolvedValue({
@@ -254,12 +276,11 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
     const result = await cancelShareOrderAndRefund(db as never, order as never);
 
     expect(result).toEqual({ ok: true });
-    expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledWith(
-      { _id: orderId, status: "open" },
-      expect.objectContaining({
-        $set: expect.objectContaining({ status: "cancelled" }),
-      })
-    );
+    const claimCall = db.collectionMocks["shareOrders"].updateOne.mock.calls[0];
+    expect(claimCall?.[0]).toMatchObject({ _id: orderId, status: "open" });
+    expect(claimCall?.[1]).toMatchObject({
+      $set: expect.objectContaining({ status: "cancelled" }),
+    });
   });
 
   it("cancels an orphaned corp-placed buy order when the placer corp is missing", async () => {
@@ -290,6 +311,7 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
       matchedCount: 1,
       modifiedCount: 1,
     });
+    db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order);
 
     db.collection("corporations");
     // Target corp exists; placer corp is missing (dissolved).
@@ -313,17 +335,16 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
     const result = await cancelShareOrderAndRefund(db as never, order as never);
 
     expect(result).toEqual({ ok: true });
-    expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledWith(
-      { _id: orderId, status: "open" },
-      expect.objectContaining({
-        $set: expect.objectContaining({ status: "cancelled" }),
-      })
-    );
+    const claimCall = db.collectionMocks["shareOrders"].updateOne.mock.calls[0];
+    expect(claimCall?.[0]).toMatchObject({ _id: orderId, status: "open" });
+    expect(claimCall?.[1]).toMatchObject({
+      $set: expect.objectContaining({ status: "cancelled" }),
+    });
     // No refund should have been attempted on the missing placer corp.
     expect(db.collectionMocks["corporations"].updateOne).not.toHaveBeenCalled();
   });
 
-  it("reopens the order if a corporation refund fails after the cancel claim", async () => {
+  it("reopens the order if the placer corp vanishes before the refund leg lands", async () => {
     const orderId = new ObjectId();
     const targetCorpId = new ObjectId();
     const placerCorpId = new ObjectId();
@@ -342,10 +363,17 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
     };
 
     db.collection("shareOrders");
-    db.collectionMocks["shareOrders"].updateOne
-      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 })
-      .mockResolvedValueOnce({ matchedCount: 1, modifiedCount: 1 });
+    db.collectionMocks["shareOrders"].updateOne.mockResolvedValue({
+      matchedCount: 1,
+      modifiedCount: 1,
+    });
+    db.collectionMocks["shareOrders"].findOne.mockResolvedValue(order);
 
+    // The placer corp exists at plan time but is dissolved before the
+    // refund leg lands: the keyed flow compensates the claim (reopening
+    // the order) and reports the failed step instead of stranding a
+    // cancelled order with kept escrow.
+    let placerAlive = true;
     db.collection("corporations");
     db.collectionMocks["corporations"].findOne.mockImplementation((filter: { _id?: ObjectId }) => {
       if (filter?._id?.equals(targetCorpId)) {
@@ -356,6 +384,8 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
         });
       }
       if (filter?._id?.equals(placerCorpId)) {
+        if (!placerAlive) return Promise.resolve(null);
+        placerAlive = false;
         return Promise.resolve({
           _id: placerCorpId,
           name: "Buyer Corp",
@@ -365,7 +395,7 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
       }
       return Promise.resolve(null);
     });
-    db.collectionMocks["corporations"].updateOne.mockResolvedValueOnce({
+    db.collectionMocks["corporations"].updateOne.mockResolvedValue({
       matchedCount: 0,
       modifiedCount: 0,
     });
@@ -383,10 +413,10 @@ describe("cancelShareOrderAndRefund — Option B escrow semantics", () => {
 
     const result = await cancelShareOrderAndRefund(db as never, order as never);
 
-    expect(result).toEqual({ ok: false, error: "Buyer corporation not found" });
-    expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledTimes(2);
-    expect(db.collectionMocks["shareOrders"].updateOne.mock.calls[1]?.[1]).toMatchObject({
-      $set: { status: "open" },
+    expect(result).toEqual({ ok: false, error: "share-order-refund:refund-credit:missing" });
+    expect(db.collectionMocks["shareOrders"].updateOne).toHaveBeenCalledTimes(3);
+    expect(db.collectionMocks["shareOrders"].updateOne.mock.calls[2]?.[1]).toMatchObject({
+      $set: expect.objectContaining({ status: "open" }),
     });
   });
 });

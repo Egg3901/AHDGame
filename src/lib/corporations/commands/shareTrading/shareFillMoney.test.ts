@@ -1042,6 +1042,41 @@ describe("share-fill money recovery and equivalence", () => {
     expect(results[0]?.action).toBe("settled-failed-no-plan");
   });
 
+  it("orphan driver converges a claim-before-plan crash with money untouched", async () => {
+    seedSellBaseline(state);
+    const plan = sellPlan();
+    // Crash on write 2 (the plan store): the claim insert landed, the plan
+    // never did, so no money write ran. This is the exact receipt shape a
+    // dead process leaves behind.
+    state.faultAt = 2;
+    await expect(executeShareFillMoneyFlow(db as never, plan)).rejects.toThrow("injected-crash");
+    state.faultAt = null;
+    const moneyKey = buildShareFillMoneyKey(plan.fillKey);
+    const stranded = getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(moneyKey);
+    expect(stranded?.status).toBe("in_progress");
+    expect(stranded?.shareFillMoneyPlan).toBeUndefined();
+    // A foreign-domain plan-less receipt must stay invisible to this scan.
+    getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).set("bond-planless", {
+      _id: "bond-planless",
+      status: "in_progress",
+      fingerprint: "bond-payoff:corp:100",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const results = await recoverShareFillMoneyOrphans(db as never, 50);
+    expect(results).toEqual([{ moneyKey, action: "settled-failed-no-plan" }]);
+    expect(
+      getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get(moneyKey)?.status
+    ).toBe("failed");
+    expect(
+      getColl(state, NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).get("bond-planless")?.status
+    ).toBe("in_progress");
+    expect(walletOf(state, "characters", FILLER_ID, "currencyBalances.personal.USD")).toBe(5000);
+    expect(walletOf(state, "characters", SELLER_ID, "currencyBalances.personal.USD")).toBe(200);
+    expect(charShares(state, CORP_ID, SELLER_ID)).toBe(50);
+    expect(charShares(state, CORP_ID, FILLER_ID)).toBe(0);
+  });
+
   it("money key and fingerprint derive deterministically from the plan", async () => {
     const plan = sellPlan();
     expect(buildShareFillMoneyKey(plan.fillKey)).toBe(`${plan.fillKey}:money`);

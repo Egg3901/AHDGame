@@ -1029,16 +1029,17 @@ export interface ShareFillMoneyRecoveryResult {
 }
 
 /**
- * Crash recovery for one money flow, from only the fill key: derives the
- * money key, reloads the stored plan, and re-runs the keyed steps to
- * convergence. Never invents amounts; a missing plan settles `failed`
- * (nothing is recoverable, ops owns it).
+ * Crash recovery for one money flow, from only the money key: reloads the
+ * stored plan and re-runs the keyed steps to convergence. Never invents
+ * amounts; a missing plan settles `failed`. That verdict is truthful
+ * because the plan store precedes the first money write in
+ * `executeShareFillMoneyFlow`, so a plan-less receipt provably moved
+ * nothing and the order reopens for a new key.
  */
-export async function recoverShareFillMoneyByFillKey(
+export async function recoverShareFillMoneyByMoneyKey(
   db: Db,
-  fillKey: string
+  moneyKey: string
 ): Promise<ShareFillMoneyRecoveryResult> {
-  const moneyKey = buildShareFillMoneyKey(fillKey);
   const receipt = await receiptsEx(db).findOne({ _id: moneyKey });
   if (!receipt) return { moneyKey, action: "skipped-missing" };
   if (receipt.status !== "in_progress") {
@@ -1076,11 +1077,29 @@ export async function recoverShareFillMoneyByFillKey(
 }
 
 /**
+ * Crash recovery for one money flow, from only the fill key: derives the
+ * money key and delegates. The route path stamps the fill key on the
+ * order, so it never needs the derived key.
+ */
+export async function recoverShareFillMoneyByFillKey(
+  db: Db,
+  fillKey: string
+): Promise<ShareFillMoneyRecoveryResult> {
+  return recoverShareFillMoneyByMoneyKey(db, buildShareFillMoneyKey(fillKey));
+}
+
+/**
  * Bounded money orphan scan for the periodic driver. Recovers every
  * `in_progress` money receipt from its stored plan so money converges
  * before the audit orphan pass runs. Returns per-receipt results; a
  * receipt whose steps throw stays `in_progress` (TTL-visible) for the
  * next pass instead of being guessed at.
+ *
+ * Plan-less receipts (claim insert landed, plan store never did, so no
+ * money write ran) settle `failed` in the second pass: otherwise they
+ * stay `in_progress` forever, since no route stamps a key whose plan
+ * never landed. Failing is truthful because the prefix is provably
+ * empty. The fingerprint prefix keeps foreign-domain receipts out.
  */
 export async function recoverShareFillMoneyOrphans(
   db: Db,
@@ -1120,6 +1139,21 @@ export async function recoverShareFillMoneyOrphans(
     );
     await bridgeAuditFromPlan(db, stored);
     results.push({ moneyKey: receipt._id, action: "money-recovered" });
+  }
+  if (results.length >= limit) return results;
+  const planless = await receiptsEx(db)
+    .find({ status: "in_progress", shareFillMoneyPlan: { $exists: false } })
+    .limit(limit - results.length)
+    .toArray();
+  for (const receipt of planless) {
+    if (typeof receipt._id !== "string") continue;
+    if (
+      typeof receipt.fingerprint !== "string" ||
+      !receipt.fingerprint.startsWith("share-fill-money")
+    ) {
+      continue;
+    }
+    results.push(await recoverShareFillMoneyByMoneyKey(db, receipt._id));
   }
   return results;
 }

@@ -585,6 +585,14 @@ export async function prepareShareFillClaim(
  * Bounded orphan scan for wiring by a periodic driver (no fill path owns a
  * pass over all orders). The per-order stamp hook covers any order that sees
  * another fill; this covers lonely orders whose receipt outlives them.
+ *
+ * Plan-less receipts (claim insert landed, plan store never did, so the
+ * order claim never ran) settle `failed` in the second pass via
+ * `recoverShareFillAttempt`: otherwise they stay `in_progress` forever,
+ * since no order ever stamps a key whose plan never landed. Failing is
+ * truthful because `beginShareFillAttempt` persists the plan before the
+ * order claim runs. The fingerprint prefix keeps foreign-domain receipts
+ * (including the `share-fill-money` money receipts) out.
  */
 export async function recoverShareFillOrphans(
   db: Db,
@@ -596,6 +604,23 @@ export async function recoverShareFillOrphans(
     .toArray();
   const results: ShareFillRecoveryResult[] = [];
   for (const receipt of stuck) {
+    try {
+      results.push(await recoverShareFillAttempt(db, receipt._id));
+    } catch (err) {
+      Sentry.captureException(err, { tags: { module: "shareFillAudit" } });
+      results.push({ key: receipt._id, action: "left-in-progress-uncommitted" });
+    }
+  }
+  if (results.length >= limit) return results;
+  const planless = await receiptsEx(db)
+    .find({ status: "in_progress", shareFillPlan: { $exists: false } })
+    .limit(limit - results.length)
+    .toArray();
+  for (const receipt of planless) {
+    if (typeof receipt._id !== "string") continue;
+    if (typeof receipt.fingerprint !== "string" || !receipt.fingerprint.startsWith("share-fill:")) {
+      continue;
+    }
     try {
       results.push(await recoverShareFillAttempt(db, receipt._id));
     } catch (err) {

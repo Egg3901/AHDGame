@@ -74,6 +74,13 @@ export interface ShareOrder {
    * alongside the claim snapshot when a live attempt compensates.
    */
   lastShareFillKey?: string;
+  /**
+   * Idempotency key of the latest cancel attempt stamped atomically by the
+   * CAS cancel-claim write (issue #1672). Lets crash recovery rebuild a
+   * plan-less attempt's refund from the cancelled order. Kept on
+   * compensation so ops can trace the attempt that reopened the order.
+   */
+  lastShareOrderRefundKey?: string;
   createdAt: Date;
   updatedAt: Date;
 }

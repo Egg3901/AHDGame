@@ -886,6 +886,42 @@ describe("orphan scan", () => {
       "left-in-progress-uncommitted"
     );
   });
+
+  it("settles a claim-before-plan receipt failed without touching the order", async () => {
+    // The claim insert landed but the plan store crashed, so the order
+    // claim never ran: the receipt carries no plan and no order stamps
+    // this key. Failing is truthful and the order is untouched.
+    const order = seedOrder({ sharesRemaining: 10 });
+    fake.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+      _id: "claim-before-plan",
+      status: "in_progress",
+      fingerprint: "share-fill:order:filler:shares:10:price:5",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    // Foreign-domain plan-less receipts (other flows, money legs) stay out.
+    for (const [id, fingerprint] of [
+      ["bond-planless", "bond-payoff:corp:100"],
+      ["money-planless", "share-fill-money:corp:order:sell-fill:shares:10"],
+    ] as const) {
+      fake.seed(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION, {
+        _id: id,
+        status: "in_progress",
+        fingerprint,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+    const results = await recoverShareFillOrphans(fake.db, 50);
+    expect(results).toEqual([{ key: "claim-before-plan", action: "settled-failed-no-plan" }]);
+    expect((await readReceipt("claim-before-plan"))?.status).toBe("failed");
+    expect((await readReceipt("bond-planless"))?.status).toBe("in_progress");
+    expect((await readReceipt("money-planless"))?.status).toBe("in_progress");
+    const stored = (await fake.db.collection("shareOrders").findOne({ _id: ORDER_ID })) as Doc | null;
+    expect(stored?.sharesRemaining).toBe(order.sharesRemaining);
+    expect(stored?.status).toBe("open");
+    expect(fake.counts("financialTxLog").docs).toBe(0);
+  });
 });
 
 describe("turn driver orphan wiring", () => {

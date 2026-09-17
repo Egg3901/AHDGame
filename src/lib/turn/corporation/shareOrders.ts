@@ -12,10 +12,8 @@ import {
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { recoverShareFillOrphans } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
 import { recoverShareFillMoneyOrphans } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
-import {
-  MoneyFlowKeyConflictError,
-  MoneyFlowTerminalError,
-} from "@/lib/db/nonAtomicMoneyFlow";
+import { recoverShareOrderRefundOrphans } from "@/lib/corporations/shareOrderRefund";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { personalBalanceField } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import type { ShareFillCashLeg } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import {
@@ -65,7 +63,12 @@ interface RawShareMatch {
   corpCreditLocal?: number;
   /** Pool/treasury dealer movement in local currency, signed. */
   dealer:
-    | { kind: "pool"; currency: CurrencyCode; amountLocal: number; flowKind: "purchasesIn" | "salesOut" }
+    | {
+        kind: "pool";
+        currency: CurrencyCode;
+        amountLocal: number;
+        flowKind: "purchasesIn" | "salesOut";
+      }
     | { kind: "treasury"; amountLocal: number };
 }
 
@@ -106,6 +109,11 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     await recoverShareFillOrphans(db, 50);
   } catch {
     // Receipts stay `in_progress` for the next turn.
+  }
+  try {
+    await recoverShareOrderRefundOrphans(db, 50);
+  } catch {
+    // Cancel receipts stay `in_progress` for the next turn.
   }
 
   const openOrders = await db.collection("shareOrders").find({ status: "open" }).toArray();
@@ -234,9 +242,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
             priceAnchor: corpLiquidCapitalToAnchor(currentPrice, corp, targetFxRate),
             buyerFundId: order.placerFundId,
             cashAnchor:
-              refundLocal > 0
-                ? corpLiquidCapitalToAnchor(refundLocal, corp, targetFxRate)
-                : 0,
+              refundLocal > 0 ? corpLiquidCapitalToAnchor(refundLocal, corp, targetFxRate) : 0,
             dealer: fundDealer,
           });
           continue;
@@ -391,7 +397,6 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
         });
       }
     }
-
   }
 
   // Nothing matched: no receipts, no writes.
@@ -575,10 +580,7 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
           match.direction === "sell"
             ? toHistoryParty(match.sellerCharId, match.sellerCorpId)
             : null,
-        to:
-          match.direction === "buy"
-            ? toHistoryParty(match.buyerCharId, undefined)
-            : null,
+        to: match.direction === "buy" ? toHistoryParty(match.buyerCharId, undefined) : null,
       },
     };
   });
@@ -609,4 +611,3 @@ export async function fillPendingShareOrders(db: Db, now: Date, turn: number): P
     }
   }
 }
-
