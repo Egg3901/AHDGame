@@ -414,6 +414,18 @@ async function handleGET(_request: Request, { params }: RouteParams) {
               cashReserves: getCashReserves(charter),
               lastBankingIncome: charter.lastBankingIncome ?? 0,
               lastBankingIncomeTurn: charter.lastBankingIncomeTurn ?? null,
+              // Per-turn split behind the net: magnitudes in charter currency,
+              // stamped by the same banking pass. Absent on charters last
+              // processed before the split existed: read as zero, never null,
+              // so the console can always do arithmetic.
+              lastBankingDepositInterest: charter.lastBankingDepositInterest ?? 0,
+              lastBankingLoanInterest: charter.lastBankingLoanInterest ?? 0,
+              lastBankingInterbankInterestPaid: charter.lastBankingInterbankInterestPaid ?? 0,
+              lastBankingInterbankInterestReceived:
+                charter.lastBankingInterbankInterestReceived ?? 0,
+              lastBankingFacilityInterest: charter.lastBankingFacilityInterest ?? 0,
+              lastBankingInsurancePremium: charter.lastBankingInsurancePremium ?? 0,
+              lastBankingWriteoffs: charter.lastBankingWriteoffs ?? 0,
               requiredReserves: requiredReserves(charter, reserveRatio ?? 0, sheetOptions),
               upstreamCapacity: upstreamCapacity(charter, reserveRatio ?? 0, sheetOptions),
               lendingProfile: charter.lendingProfile ?? DEFAULT_LENDING_PROFILE,
