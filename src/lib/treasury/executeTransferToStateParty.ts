@@ -190,6 +190,7 @@ export async function executeTransferToStateParty(
     turn: gameState?.currentTurn ?? 0,
     createdAt: now,
     subjectType: "party",
+    subjectId: party._id,
     subjectName: party.name,
     amount: -amount,
     currencyCode: txCurrency,
@@ -197,6 +198,7 @@ export async function executeTransferToStateParty(
     counterpartyName: `${state.name} state party`,
     meta: {
       partyId: String(party._id),
+      statePartyKey,
       stateId: upperStateId,
       countryId,
       side: "national_outflow",
@@ -214,6 +216,7 @@ export async function executeTransferToStateParty(
     counterpartyName: party.name,
     meta: {
       partyId: String(party._id),
+      statePartyKey,
       stateId: upperStateId,
       countryId,
       side: "state_inflow",
