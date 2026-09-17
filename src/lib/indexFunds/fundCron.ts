@@ -16,13 +16,12 @@
  */
 
 import { ObjectId } from "mongodb";
-import type { ClientSession, Db } from "mongodb";
+import type { Db } from "mongodb";
 import type {
   Corporation,
   ExchangeRate,
   GameConfig,
   IndexFund,
-  IndexFundHolding,
   IndexFundRedemptionQueueEntry,
   IndexFundTargetConstituent,
 } from "@/lib/db/types";
@@ -53,12 +52,11 @@ import {
 } from "@/lib/indexFunds/constituents";
 import { describeFailure } from "./listingStandards";
 import { loadActiveWaiverIds, resolveDueListingPetitions } from "./petitions/service";
-import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
 import {
   isOrderFlowPriceEligible,
   resolveShareExecutionPrice,
 } from "@/lib/corporations/marketExecution";
-import { applyFloatBuyCredit } from "@/lib/corporations/shareEscrowSettlement";
+import { getShareBuybackMode } from "@/lib/corporations/shareBuybackMode";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import {
   sellFundHoldingsForRedemptionCash,
@@ -103,7 +101,6 @@ import {
   QUEUED_REDEMPTION_TX,
 } from "@/lib/indexFunds/queuedRedemptionSpend";
 import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
-import { runWithOptionalTransaction } from "@/lib/db/runWithOptionalTransaction";
 import { TURNS_PER_DAY, MS_PER_TURN } from "@/lib/constants/turnTime";
 import { placeFundShareBuyOrder, cancelFundShareOrder } from "@/lib/indexFunds/fundShareOrders";
 import {
@@ -119,7 +116,19 @@ import {
   loadQueuedRedemptionUnitsByFundId,
 } from "@/lib/indexFunds/fundValuation";
 import { refreshEquityLiquidityFacility } from "@/lib/indexFunds/equityLiquidityFacility";
-import { loadEquityPoolsByCurrency, loadEquityQuote } from "@/lib/equities/marketPool";
+import {
+  equityPoolCurrency,
+  loadEquityPoolsByCurrency,
+  loadEquityQuote,
+  readEquityPool,
+} from "@/lib/equities/marketPool";
+import {
+  applyFundShareBuySpend,
+  buildFundShareBuyFingerprint,
+  buildFundShareBuyKey,
+  FUND_SHARE_BUY_CORP,
+  FUND_SHARE_BUY_FUNDS,
+} from "@/lib/indexFunds/fundShareBuySpend";
 
 // ── Types ─────────────────────────────────────────────────────────────
 
@@ -247,43 +256,6 @@ async function applyMarkToMarketIfNeeded(
   return { ...fund, holdings: refreshedHoldings };
 }
 
-// ── Cash helpers for public-float buys ────────────────────────────────
-
-async function atomicallyDebitFundCashAnchor(
-  db: Db,
-  fundId: IndexFund["_id"],
-  amountAnchor: number,
-  options?: { session?: ClientSession }
-): Promise<Pick<IndexFund, "_id" | "cashAnchor" | "holdings"> | null> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return null;
-
-  return db.collection<IndexFund>("indexFunds").findOneAndUpdate(
-    { _id: fundId, cashAnchor: { $gte: amountAnchor } },
-    { $inc: { cashAnchor: -amountAnchor }, $set: { updatedAt: new Date() } },
-    {
-      returnDocument: "after",
-      projection: { _id: 1, cashAnchor: 1, holdings: 1 },
-      ...(options?.session ? { session: options.session } : {}),
-    }
-  );
-}
-
-async function refundFundCashAnchor(
-  db: Db,
-  fundId: IndexFund["_id"],
-  amountAnchor: number,
-  options?: { session?: ClientSession }
-): Promise<void> {
-  if (!Number.isFinite(amountAnchor) || amountAnchor <= 0) return;
-  await db
-    .collection<IndexFund>("indexFunds")
-    .updateOne(
-      { _id: fundId },
-      { $inc: { cashAnchor: amountAnchor }, $set: { updatedAt: new Date() } },
-      options?.session ? { session: options.session } : undefined
-    );
-}
-
 // ── Pass 2 / Pass 3b cadence (financial-day boundary) ─────────────────
 
 export function shouldRebalanceIndexFundConstituents(
@@ -342,26 +314,26 @@ export function recomputeNav(
 /**
  * Execute a single index-fund share purchase from the public float.
  *
- * Debits `shares × sharePriceAnchor` from the fund's `cashAnchor`, credits the
- * shares to the fund, applies the issuer-side float credit, updates holdings,
- * inserts a `public_float_buy` transaction, and fires a `recordShareTrade`
- * side-effect. All writes are wrapped in `runWithOptionalTransaction` so they
- * are atomic on a replica set and individually guarded on standalone mongod.
+ * Crash-safe command shell (issue #1672) over the `applyFundShareBuySpend`
+ * primitive: this shell owns everything ambient (the pool quote, the FX
+ * conversion, the order-flow eligibility read, the issuer-route decision),
+ * pins every computed figure into the primitive input, and maps the
+ * sentinel failures back onto the historical `{ ok }` surface. A lost cash
+ * or float race returns `ok: false` exactly like the legacy guarded writes
+ * did; anything later throws after the applied prefix compensates.
  *
  * Returns `{ ok: true, sharesBought, anchorSpent }` on success or
  * `{ ok: false, sharesBought: 0, anchorSpent: 0 }` when the debit or credit
  * guard fails (e.g. insufficient cash or float already sold).
  */
 /**
- * Shared state for a pass that executes many buys: the pool table read once,
- * and a sink that collects fund transactions for one insertMany at the end
- * instead of an insert per buy. Both are optional; without them a buy is
- * self-contained.
+ * Shared state for a pass that executes many buys: the pool table read once
+ * so every quote in the pass prices from the same snapshot. Optional;
+ * without it a buy reads its pool live.
  */
 export interface FundShareBuyBatch {
   /** Mutable: each credited buy advances the snapshot's cash so later quotes see it. */
   pools?: Map<CurrencyCode, EquityMarketPool>;
-  txSink?: Omit<IndexFundTransaction, "_id">[];
 }
 
 export async function executeFundShareBuy(
@@ -371,8 +343,12 @@ export async function executeFundShareBuy(
   shares: number,
   referencePriceAnchor: number,
   currentTurn: number,
-  batch?: FundShareBuyBatch
+  batch?: FundShareBuyBatch,
+  keyOptions?: { idempotencyKey?: string }
 ): Promise<{ ok: boolean; sharesBought: number; anchorSpent: number }> {
+  if (!Number.isInteger(shares) || shares <= 0) {
+    return { ok: false, sharesBought: 0, anchorSpent: 0 };
+  }
   const quote = await loadEquityQuote(db, corp, { pools: batch?.pools });
   const executionPrice = quote.askPriceLocal;
   // The caller already loaded the fund's anchor-currency reference price in a
@@ -381,92 +357,86 @@ export async function executeFundShareBuy(
     quote.mid > 0 ? referencePriceAnchor * (executionPrice / quote.mid) : referencePriceAnchor;
   const actualCost = shares * executionPriceAnchor;
   const actualIssuerCreditLocal = shares * executionPrice;
-  const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat ?? 0, corp.totalShares);
-
-  // Runs both inside a transaction (replica set) and as sequential writes
-  // (standalone mongod) — every step is individually guarded/refunded.
-  const applyPurchase = async (session?: ClientSession): Promise<boolean> => {
-    const sessionOpts = session ? { session } : undefined;
-
-    const debitedFund = await atomicallyDebitFundCashAnchor(db, fund._id, actualCost, sessionOpts);
-    if (!debitedFund) return false;
-
-    const creditOk = await creditSharesToFund(
-      db,
-      corp._id,
-      fund._id,
-      shares,
-      executionPrice,
-      {
-        $inc: {
-          publicFloat: -shares,
-          ...(orderFlowEligible ? { orderFlowWindowBuyValue: actualIssuerCreditLocal } : {}),
-        },
-        $set: { updatedAt: new Date() },
-      },
-      {
-        guardFilter: { publicFloat: { $gte: shares } },
-        ...(session ? { session } : {}),
-      }
-    );
-
-    if (!creditOk) {
-      await refundFundCashAnchor(db, fund._id, actualCost, sessionOpts);
-      return false;
-    }
-
-    await applyFloatBuyCredit(db, corp, actualIssuerCreditLocal, {
-      ...sessionOpts,
-      pools: batch?.pools,
-    });
-
-    const updatedHoldings = updateHoldingAfterPurchase(
-      debitedFund.holdings ?? [],
-      corp._id,
-      shares,
-      executionPriceAnchor
-    );
-    await updateFundHoldings(db, fund._id, updatedHoldings, sessionOpts);
-
-    const tx = {
-      fundId: fund._id,
-      kind: "public_float_buy" as const,
-      corporationId: corp._id,
-      shares,
-      navAnchor: executionPriceAnchor,
-      amountAnchor: actualCost,
-      createdAt: new Date(),
-    };
-    // The transaction row is a log, not a balance: a batching caller writes
-    // the pass's rows in one insertMany after the loop.
-    if (batch?.txSink) batch.txSink.push(tx);
-    else await insertFundTransaction(db, tx, sessionOpts);
-
-    return true;
-  };
-
-  const purchaseApplied = await runWithOptionalTransaction(
-    (session) => applyPurchase(session),
-    () => applyPurchase()
-  );
-
-  if (!purchaseApplied) {
+  if (!Number.isFinite(actualCost) || actualCost <= 0) {
     return { ok: false, sharesBought: 0, anchorSpent: 0 };
   }
-
-  void recordShareTrade(db, {
-    corporationId: corp._id,
-    kind: "market_buy",
-    turn: currentTurn,
-    shares,
-    pricePerShareAnchor: executionPriceAnchor,
-    from: null,
-    to: { name: `${fund.name} (index fund)` },
-    corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,
-    note: "Index fund public-float absorption",
+  const orderFlowEligible = isOrderFlowPriceEligible(corp.publicFloat ?? 0, corp.totalShares);
+  const currency = equityPoolCurrency({
+    countryId: corp.countryId,
+    liquidCurrencyCode: corp.liquidCurrencyCode ?? undefined,
   });
+  // Only pool EXISTENCE is decided here; the credit itself runs inside the
+  // flow. Mirrors the legacy issuer-credit routing exactly.
+  const poolExists = batch?.pools
+    ? batch.pools.has(currency)
+    : (await readEquityPool(db, currency)) !== null;
+  const issuerRoute = poolExists
+    ? ("pool" as const)
+    : getShareBuybackMode(corp) === "escrow"
+      ? ("escrow" as const)
+      : ("liquid" as const);
 
-  return { ok: true, sharesBought: shares, anchorSpent: actualCost };
+  const idempotencyKey =
+    keyOptions?.idempotencyKey ?? buildFundShareBuyKey(fund._id, corp._id, currentTurn, shares);
+  let result: Awaited<ReturnType<typeof applyFundShareBuySpend>>;
+  try {
+    result = await applyFundShareBuySpend(db, {
+      fundId: fund._id,
+      corpId: corp._id,
+      shares,
+      executionPriceLocal: executionPrice,
+      executionPriceAnchor,
+      actualCost,
+      issuerCreditLocal: actualIssuerCreditLocal,
+      orderFlowEligible,
+      currency,
+      issuerRoute,
+      turn: currentTurn,
+      fingerprint: buildFundShareBuyFingerprint({
+        fundId: fund._id,
+        corpId: corp._id,
+        shares,
+        executionPriceLocal: executionPrice,
+        executionPriceAnchor,
+        actualCost,
+        issuerCreditLocal: actualIssuerCreditLocal,
+        orderFlowEligible,
+        currency,
+        issuerRoute,
+        turn: currentTurn,
+      }),
+      idempotencyKey,
+      ...(batch?.pools ? { pools: batch.pools } : {}),
+    });
+  } catch (err) {
+    const code = err instanceof Error ? err.message.split(":")[0] : "";
+    if (code === FUND_SHARE_BUY_FUNDS || code === FUND_SHARE_BUY_CORP) {
+      return { ok: false, sharesBought: 0, anchorSpent: 0 };
+    }
+    throw err;
+  }
+
+  // The trade-history row is a post-commit log, not a balance: it fires once
+  // per fresh buy, never on a same-key replay (which already fired it).
+  if (!result.duplicate) {
+    void recordShareTrade(db, {
+      corporationId: corp._id,
+      kind: "market_buy",
+      turn: currentTurn,
+      shares,
+      pricePerShareAnchor: executionPriceAnchor,
+      from: null,
+      to: { name: `${fund.name} (index fund)` },
+      corpCurrencyCode: resolveCorpLiquidCurrencyCode(corp) ?? undefined,
+      note: "Index fund public-float absorption",
+    });
+  }
+
+  return {
+    ok: true,
+    sharesBought: result.outcome.sharesBought,
+    anchorSpent: result.outcome.anchorSpent,
+  };
 }
 
 // ── Pass 3: Two-sided drift rebalance ─────────────────────────────────────────
@@ -500,29 +470,41 @@ export async function rebalanceFundToTarget(
 
   let buys = 0;
   const corpMap = new Map(corps.map((c) => [c._id.toString(), c]));
-  // One pool read and one transaction insert for the whole buy pass. The
-  // buy reads the fund's live cash and holdings from its own atomic debit, so
-  // the per-buy fund re-read this loop used to do bought nothing: on the
-  // rebalance day (every 24 turns) that was ~550 of ~5,000 round trips.
+  // One pool read for the whole buy pass. The buy reads the fund's live cash
+  // and holdings from its own atomic debit, so the per-buy fund re-read this
+  // loop used to do bought nothing: on the rebalance day (every 24 turns)
+  // that was ~550 of ~5,000 round trips. Each buy writes its own audit row
+  // inside its keyed flow (crash-safe), so there is no pass-level tx sink.
   const buyBatch: FundShareBuyBatch = {
     pools: plan.buys.length > 0 ? await loadEquityPoolsByCurrency(db) : undefined,
-    txSink: [],
   };
   for (const leg of plan.buys) {
     const corp = corpMap.get(leg.corporationId.toString());
     if (!corp) continue;
-    const res = await executeFundShareBuy(
-      db,
-      fund,
-      corp,
-      leg.shares,
-      leg.sharePriceAnchor,
-      currentTurn,
-      buyBatch
-    );
+    // One deterministic key per buy leg: a same-turn retry (crash recovery,
+    // same-turn double-fire) reconciles under the stored plan instead of
+    // double-buying. A settled key reused for a different leg fails closed
+    // and is skipped, never paid twice.
+    let res;
+    try {
+      res = await executeFundShareBuy(
+        db,
+        fund,
+        corp,
+        leg.shares,
+        leg.sharePriceAnchor,
+        currentTurn,
+        buyBatch,
+        { idempotencyKey: buildFundShareBuyKey(fund._id, corp._id, currentTurn, leg.shares) }
+      );
+    } catch (err) {
+      if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+        continue;
+      }
+      throw err;
+    }
     if (res.ok) buys++;
   }
-  await insertFundTransactionsBulk(db, buyBatch.txSink ?? []);
 
   // Place/refresh standing premium bids for residual deficit not satisfiable from float.
   let bidsPlaced = 0;
@@ -618,40 +600,6 @@ export async function rebalanceFundToTarget(
   await insertFundTransactionsBulk(db, bidTxSink);
 
   return { buys, sells, bidsPlaced, bidsCancelled };
-}
-
-/** Update the holdings array after buying shares of a constituent. */
-function updateHoldingAfterPurchase(
-  holdings: IndexFundHolding[],
-  corporationId: import("mongodb").ObjectId,
-  additionalShares: number,
-  sharePriceAnchor: number
-): IndexFundHolding[] {
-  const existing = holdings.find((h) => h.corporationId.toString() === corporationId.toString());
-  if (existing) {
-    return holdings.map((h) => {
-      if (h.corporationId.toString() !== corporationId.toString()) return h;
-      const newShares = h.shares + additionalShares;
-      const newAvg = existing.avgCostPerShareAnchor
-        ? (h.shares * h.avgCostPerShareAnchor! + additionalShares * sharePriceAnchor) / newShares
-        : sharePriceAnchor;
-      return {
-        ...h,
-        shares: newShares,
-        avgCostPerShareAnchor: newAvg,
-        lastValueAnchor: (h.lastValueAnchor ?? 0) + additionalShares * sharePriceAnchor,
-      };
-    });
-  }
-  return [
-    ...holdings,
-    {
-      corporationId,
-      shares: additionalShares,
-      avgCostPerShareAnchor: sharePriceAnchor,
-      lastValueAnchor: additionalShares * sharePriceAnchor,
-    },
-  ];
 }
 
 // ── Pass 2: Rebalance constituents (financial-day boundaries) ──────────

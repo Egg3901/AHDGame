@@ -235,7 +235,6 @@ class FakeDb {
 
 const fundId = new ObjectId();
 const charId = new ObjectId();
-const imperialId = new ObjectId();
 const nppId = new ObjectId();
 const entryId = new ObjectId();
 const TURN = 7;

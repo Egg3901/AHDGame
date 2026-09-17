@@ -15,7 +15,6 @@ import {
   runMoneyFlowSteps,
   type MoneyFlowAccount,
   type MoneyFlowLegOutcome,
-  type MoneyFlowOptions,
   type MoneyFlowReceipt,
   type MoneyFlowStep,
   type MoneyFlowStepRef,

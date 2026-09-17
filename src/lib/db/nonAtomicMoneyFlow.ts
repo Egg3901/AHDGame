@@ -195,6 +195,28 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * A survived audit-row insert error compensates the prefix (the historical
  * unwind-and-throw stranded money moved with no row); the holder log stays
  * post-commit best effort).
+ * Index-fund float buys are migrated (one public-float purchase via the
+ * fundShareBuySpend primitive, driven by the executeFundShareBuy command
+ * shell in the rebalance pass: the shell owns the pool quote, the FX
+ * conversion, the order-flow eligibility read, and the issuer-route decision,
+ * and every computed figure (execution prices, cost, issuer credit,
+ * eligibility, currency, route) is pinned on the receipt resume plan at
+ * claim time, so a same-key retry replays the stored amounts instead of
+ * repricing from post-debit pool state; fund debit (with the legacy cash
+ * guard) + corp float/shareholder reserve (positional increment, push, then
+ * one increment retry, mirroring the legacy triple attempt, with an exact
+ * average-cost-restoring inverse) + issuer credit (pool counterparty with
+ * caller-snapshot advance, escrow-mode, or instant-mode with
+ * issuance-proceeds tracking, matching the legacy routing) + holdings image
+ * write (computed from a live read inside the apply, removed exactly on
+ * revert) + deterministic audit row run as keyed steps under a
+ * per-fund-per-corp-per-turn-per-shares caller key, with same-key replay,
+ * fingerprint-conflict, terminal, crash-after-every-write, concurrent-buyer,
+ * dust-credit, and sabotage-compensation tests; the trade-history row stays
+ * post-commit best effort and fires only on the fresh attempt, never on a
+ * replay. There is no pass-level orphan driver for buys: unlike the queue,
+ * no intent row exists to strand, so an unretried partial stays as the
+ * crash left it and the next turn's buys run under new keys).
  * Forex turn chair interventions are migrated
  * (applyForexInterventionSpend: deterministic per-turn key, resume plan
  * persisted on the receipt at claim, keyed rate-writeback + combined
@@ -215,7 +237,8 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * instead of throwing `RangeError`.
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
- * are keyed; surrounding equity/dividend/cross-fund writes are not).
+ * and its float-buy leg are keyed; surrounding equity sells, dividend
+ * pass-through, and cross-fund writes are not).
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in

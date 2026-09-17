@@ -38,16 +38,21 @@ vi.mock("@/lib/indexFunds/fundQueries", () => ({
   FUND_REDEMPTION_QUEUE_COLLECTION: "indexFundRedemptionQueue",
 }));
 
-vi.mock("@/lib/corporations/shareholderOps", () => ({
-  creditSharesToFund: vi.fn().mockResolvedValue(true),
-}));
+const { applyBuyMock } = vi.hoisted(() => ({ applyBuyMock: vi.fn() }));
 
-vi.mock("@/lib/corporations/shareEscrowSettlement", () => ({
-  applyFloatBuyCredit: vi.fn().mockResolvedValue(undefined),
-}));
+vi.mock("@/lib/indexFunds/fundShareBuySpend", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return { ...actual, applyFundShareBuySpend: applyBuyMock };
+});
 
 vi.mock("@/lib/equities/marketPool", () => ({
   loadEquityPoolsByCurrency: vi.fn().mockResolvedValue(new Map()),
+  equityPoolCurrency: vi
+    .fn()
+    .mockImplementation(
+      (corp: { liquidCurrencyCode?: string | null }) => corp.liquidCurrencyCode ?? "USD"
+    ),
+  readEquityPool: vi.fn().mockResolvedValue(null),
   loadEquityQuote: vi.fn().mockImplementation((_db, corp: { sharePrice: number }) =>
     Promise.resolve({
       active: false,
@@ -60,6 +65,10 @@ vi.mock("@/lib/equities/marketPool", () => ({
       targetCash: 0,
     })
   ),
+}));
+
+vi.mock("@/lib/corporations/shareBuybackMode", () => ({
+  getShareBuybackMode: vi.fn().mockReturnValue("instant"),
 }));
 
 vi.mock("@/lib/corporations/shareTradeHistory", () => ({
@@ -78,8 +87,8 @@ vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
     .fn()
     .mockImplementation(
       async (
-        withSession: (s: undefined) => Promise<boolean>,
-        withoutSession: () => Promise<boolean>
+        withSession: (s: undefined) => Promise<unknown>,
+        withoutSession: () => Promise<unknown>
       ) => {
         // In test: simulate standalone mode (no transactions), call withoutSession
         return withoutSession();
@@ -353,7 +362,7 @@ describe("fundCron — recomputeNav", () => {
 // executeFundShareBuy — buy regression test
 // ---------------------------------------------------------------------------
 
-describe("fundCron — executeFundShareBuy", () => {
+describe("fundCron — executeFundShareBuy caller boundary", () => {
   const fundId = new ObjectId();
   const corpId = new ObjectId();
 
@@ -391,141 +400,72 @@ describe("fundCron — executeFundShareBuy", () => {
     shareBuybackMode: undefined,
   };
 
-  let mockDb: ReturnType<typeof buildMockDb>;
-
-  function buildMockDb(initialCashAnchor: number) {
-    // Simulates atomicallyDebitFundCashAnchor and refundFundCashAnchor via
-    // the indexFunds collection findOneAndUpdate / updateOne.
-    let cashAnchor = initialCashAnchor;
-    const publicFloat = baseCorp.publicFloat;
-    const fundTransactions: unknown[] = [];
-
-    const indexFundsColl = {
-      findOneAndUpdate: vi
-        .fn()
-        .mockImplementation(
-          (
-            filter: { cashAnchor?: { $gte: number } },
-            update: { $inc?: { cashAnchor?: number } }
-          ) => {
-            const required = filter.cashAnchor?.$gte ?? 0;
-            if (cashAnchor < required) return Promise.resolve(null);
-            cashAnchor += update.$inc?.cashAnchor ?? 0;
-            return Promise.resolve({ _id: fundId, cashAnchor, holdings: baseFund.holdings });
-          }
-        ),
-      updateOne: vi
-        .fn()
-        .mockImplementation((_filter: unknown, update: { $inc?: { cashAnchor?: number } }) => {
-          cashAnchor += update.$inc?.cashAnchor ?? 0;
-          return Promise.resolve({ matchedCount: 1 });
-        }),
-    };
-
-    const corporationsColl = {
-      // Used only if creditSharesToFund falls through — our mock handles it
-    };
-
-    const fundTransactionsColl = {
-      insertOne: vi.fn().mockImplementation((doc: unknown) => {
-        fundTransactions.push(doc);
-        return Promise.resolve({ insertedId: new ObjectId() });
-      }),
-    };
-
-    return {
-      collection: vi.fn().mockImplementation((name: string) => {
-        if (name === "indexFunds") return indexFundsColl;
-        if (name === "corporations") return corporationsColl;
-        if (name === "indexFundTransactions") return fundTransactionsColl;
-        return { findOneAndUpdate: vi.fn(), updateOne: vi.fn(), insertOne: vi.fn() };
-      }),
-      // Expose for assertions
-      _getCashAnchor: () => cashAnchor,
-      _getPublicFloat: () => publicFloat,
-      _getFundTransactions: () => fundTransactions,
-      _indexFundsColl: indexFundsColl,
-      _fundTransactionsColl: fundTransactionsColl,
-    };
-  }
+  // The shell delegates every balance write to the keyed primitive; the db
+  // handle passes straight through to the mocked quote/pool helpers.
+  const stubDb = { collection: vi.fn() } as unknown as import("mongodb").Db;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDb = buildMockDb(baseFund.cashAnchor);
   });
 
-  it("debits N × priceAnchor from cashAnchor, decrements publicFloat, appends public_float_buy tx", async () => {
-    const { insertFundTransaction } = await import("@/lib/indexFunds/fundQueries");
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-
-    const shares = 10;
-    const sharePriceAnchor = 50;
+  it("pins quote-derived amounts under a deterministic key and reports the stored outcome", async () => {
+    const { buildFundShareBuyKey } = await import("@/lib/indexFunds/fundShareBuySpend");
+    const { recordShareTrade } = await import("@/lib/corporations/shareTradeHistory");
+    applyBuyMock.mockResolvedValue({
+      duplicate: false,
+      outcome: { sharesBought: 10, anchorSpent: 500 },
+    });
 
     const result = await executeFundShareBuy(
-      mockDb as unknown as import("mongodb").Db,
+      stubDb,
       baseFund,
       baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
-      shares,
-      sharePriceAnchor,
+      10,
+      /* referencePriceAnchor */ 50,
       /* currentTurn */ 5
     );
 
-    expect(result.ok).toBe(true);
-    expect(result.sharesBought).toBe(shares);
-    expect(result.anchorSpent).toBe(shares * sharePriceAnchor); // 500
-
-    // Cash debit: atomicallyDebitFundCashAnchor should have been called with 500
-    expect(mockDb._indexFundsColl.findOneAndUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ cashAnchor: { $gte: shares * sharePriceAnchor } }),
-      expect.objectContaining({ $inc: { cashAnchor: -(shares * sharePriceAnchor) } }),
-      expect.anything()
+    expect(result).toEqual({ ok: true, sharesBought: 10, anchorSpent: 500 });
+    // Mock quote carries no mid, so the anchor reference passes through
+    // untouched and the cost is shares x reference.
+    expect(applyBuyMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        fundId,
+        corpId,
+        shares: 10,
+        executionPriceLocal: baseCorp.sharePrice,
+        executionPriceAnchor: 50,
+        actualCost: 500,
+        issuerCreditLocal: 500,
+        orderFlowEligible: false,
+        currency: "USD",
+        issuerRoute: "liquid",
+        turn: 5,
+        idempotencyKey: buildFundShareBuyKey(fundId, corpId, 5, 10),
+      })
     );
-
-    // Corp publicFloat decremented — creditSharesToFund called with correct args
-    expect(creditSharesToFund).toHaveBeenCalled();
-    const creditCall = vi.mocked(creditSharesToFund).mock.calls[0];
-    expect(creditCall[1].toString()).toBe(corpId.toString()); // corp._id
-    expect(creditCall[2].toString()).toBe(fundId.toString()); // fund._id
-    expect(creditCall[3]).toBe(shares);
-    expect(creditCall[4]).toBe(baseCorp.sharePrice);
-    expect(creditCall[5]).toMatchObject({ $inc: { publicFloat: -shares } });
-
-    // Fund transaction inserted with kind = "public_float_buy"
-    expect(insertFundTransaction).toHaveBeenCalled();
-    const txCall = vi.mocked(insertFundTransaction).mock.calls[0]!;
-    const txDoc = txCall[1]!;
-    expect(txDoc).toMatchObject({
-      kind: "public_float_buy",
-      shares,
-      navAnchor: sharePriceAnchor,
-      amountAnchor: shares * sharePriceAnchor,
-    });
-    expect(txDoc.corporationId!.toString()).toBe(corpId.toString());
-
-    // ── Real mock-DB state assertions ──────────────────────────────────────
-    // cashAnchor: started at 10_000, debited by shares × sharePriceAnchor = 500
-    expect(mockDb._getCashAnchor()).toBe(10_000 - shares * sharePriceAnchor); // 9_500
-
-    // publicFloat: the harness tracks the starting value but does not apply
-    // creditSharesToFund's update (that helper is fully mocked). We therefore
-    // assert the update payload passed to creditSharesToFund carries the right
-    // $inc instead.
-    expect(creditCall[5]).toMatchObject({ $inc: { publicFloat: -shares } }); // -10
-
-    // public_float_buy transaction recorded in the harness's captured inserts
-    // (insertFundTransaction is mocked at the module level, so we verify via
-    // the mock-call snapshot captured above — the harness's _getFundTransactions()
-    // only captures direct insertOne calls, which insertFundTransaction abstracts away)
-    expect(txDoc.shares).toBe(shares); // 10
-    expect(txDoc.amountAnchor).toBe(shares * sharePriceAnchor); // 500
+    expect(recordShareTrade).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ kind: "market_buy", turn: 5, shares: 10 })
+    );
   });
 
-  it("returns ok=false and does not spend cash when creditSharesToFund fails", async () => {
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    vi.mocked(creditSharesToFund).mockResolvedValueOnce(false);
+  it("applies the market-maker spread onto the caller FX reference", async () => {
+    const { loadEquityQuote } = await import("@/lib/equities/marketPool");
+    vi.mocked(loadEquityQuote).mockResolvedValueOnce({
+      active: true,
+      currency: "USD",
+      mid: 50,
+      askPriceLocal: 55,
+    } as never);
+    applyBuyMock.mockResolvedValue({
+      duplicate: false,
+      outcome: { sharesBought: 10, anchorSpent: 550 },
+    });
 
     const result = await executeFundShareBuy(
-      mockDb as unknown as import("mongodb").Db,
+      stubDb,
       baseFund,
       baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
       10,
@@ -533,15 +473,95 @@ describe("fundCron — executeFundShareBuy", () => {
       5
     );
 
-    expect(result.ok).toBe(false);
-    expect(result.sharesBought).toBe(0);
-    expect(result.anchorSpent).toBe(0);
+    expect(result.sharesBought).toBe(10);
+    expect(result.anchorSpent).toBeCloseTo(550, 10);
+    expect(result.ok).toBe(true);
+    const spreadInput = vi.mocked(applyBuyMock).mock.calls[0]![1] as Record<string, number>;
+    expect(spreadInput.executionPriceLocal).toBe(55);
+    // 50 * (55 / 50) in floating point: the pinned cost carries the dust,
+    // exactly like the legacy N x priceAnchor debit did.
+    expect(spreadInput.executionPriceAnchor).toBeCloseTo(55, 10);
+    expect(spreadInput.actualCost).toBeCloseTo(550, 10);
+    expect(spreadInput.issuerCreditLocal).toBe(55 * 10);
+  });
 
-    // Refund should have been issued (updateOne with positive $inc cashAnchor)
-    expect(mockDb._indexFundsColl.updateOne).toHaveBeenCalled();
-    const refundCall = mockDb._indexFundsColl.updateOne.mock.calls[0];
-    expect(refundCall[0]._id.toString()).toBe(fundId.toString());
-    expect(refundCall[1].$inc.cashAnchor).toBe(500);
+  it("maps a lost cash or float race onto ok:false", async () => {
+    const { FUND_SHARE_BUY_FUNDS, FUND_SHARE_BUY_CORP } =
+      await import("@/lib/indexFunds/fundShareBuySpend");
+    for (const sentinel of [FUND_SHARE_BUY_FUNDS, FUND_SHARE_BUY_CORP]) {
+      applyBuyMock.mockRejectedValueOnce(new Error(`${sentinel}:guard-rejected`));
+      const result = await executeFundShareBuy(
+        stubDb,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        10,
+        50,
+        5
+      );
+      expect(result).toEqual({ ok: false, sharesBought: 0, anchorSpent: 0 });
+    }
+  });
+
+  it("returns ok:false without calling the primitive for non-positive shares", async () => {
+    for (const shares of [0, -10, 2.5]) {
+      const result = await executeFundShareBuy(
+        stubDb,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        shares,
+        50,
+        5
+      );
+      expect(result).toEqual({ ok: false, sharesBought: 0, anchorSpent: 0 });
+    }
+    expect(applyBuyMock).not.toHaveBeenCalled();
+  });
+
+  it("skips the trade log on a same-key replay", async () => {
+    const { recordShareTrade } = await import("@/lib/corporations/shareTradeHistory");
+    applyBuyMock.mockResolvedValue({
+      duplicate: true,
+      outcome: { sharesBought: 10, anchorSpent: 500 },
+    });
+
+    const result = await executeFundShareBuy(
+      stubDb,
+      baseFund,
+      baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+      10,
+      50,
+      5
+    );
+
+    expect(result).toEqual({ ok: true, sharesBought: 10, anchorSpent: 500 });
+    expect(recordShareTrade).not.toHaveBeenCalled();
+  });
+
+  it("propagates key conflicts and terminal states instead of masking them", async () => {
+    const { MoneyFlowKeyConflictError, MoneyFlowTerminalError } =
+      await import("@/lib/db/nonAtomicMoneyFlow");
+    applyBuyMock.mockRejectedValueOnce(new MoneyFlowKeyConflictError("k"));
+    await expect(
+      executeFundShareBuy(
+        stubDb,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        10,
+        50,
+        5
+      )
+    ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
+    applyBuyMock.mockRejectedValueOnce(new MoneyFlowTerminalError("k", "failed"));
+    await expect(
+      executeFundShareBuy(
+        stubDb,
+        baseFund,
+        baseCorp as unknown as Parameters<typeof executeFundShareBuy>[2],
+        10,
+        50,
+        5
+      )
+    ).rejects.toBeInstanceOf(MoneyFlowTerminalError);
   });
 });
 
@@ -655,8 +675,10 @@ describe("fundCron — rebalanceFundToTarget", () => {
     const { getFundById } = await import("@/lib/indexFunds/fundQueries");
     vi.mocked(getFundById).mockResolvedValue(fundWithDrift);
 
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    vi.mocked(creditSharesToFund).mockResolvedValue(true);
+    applyBuyMock.mockResolvedValue({
+      duplicate: false,
+      outcome: { sharesBought: 20, anchorSpent: 200 },
+    });
 
     const { sellFundHoldingShares } = await import("@/lib/indexFunds/fundRedemptionLiquidity");
     vi.mocked(sellFundHoldingShares).mockResolvedValue({
@@ -684,6 +706,16 @@ describe("fundCron — rebalanceFundToTarget", () => {
       expect.any(Number),
       expect.objectContaining({ note: expect.stringContaining("Rebalance") })
     );
+    // Buys run through the keyed primitive under a deterministic per-leg key.
+    expect(applyBuyMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        fundId,
+        turn: 5,
+        idempotencyKey: expect.stringContaining("fund-share-buy"),
+      })
+    );
+    expect(result.buys).toBeGreaterThanOrEqual(1);
   });
 
   it("returns { buys, sells } counts", async () => {
@@ -691,8 +723,10 @@ describe("fundCron — rebalanceFundToTarget", () => {
     const { getFundById } = await import("@/lib/indexFunds/fundQueries");
     vi.mocked(getFundById).mockResolvedValue(fundWithDrift);
 
-    const { creditSharesToFund } = await import("@/lib/corporations/shareholderOps");
-    vi.mocked(creditSharesToFund).mockResolvedValue(true);
+    applyBuyMock.mockResolvedValue({
+      duplicate: false,
+      outcome: { sharesBought: 20, anchorSpent: 200 },
+    });
 
     const { sellFundHoldingShares } = await import("@/lib/indexFunds/fundRedemptionLiquidity");
     vi.mocked(sellFundHoldingShares).mockResolvedValue({
@@ -712,6 +746,34 @@ describe("fundCron — rebalanceFundToTarget", () => {
 
     expect(typeof result.sells).toBe("number");
     expect(typeof result.buys).toBe("number");
+  });
+
+  it("skips a buy leg whose key settled without breaking the pass", async () => {
+    const mockDb = buildRebalanceMockDb();
+    const { getFundById } = await import("@/lib/indexFunds/fundQueries");
+    vi.mocked(getFundById).mockResolvedValue(fundWithDrift);
+
+    const { MoneyFlowKeyConflictError } = await import("@/lib/db/nonAtomicMoneyFlow");
+    applyBuyMock.mockRejectedValue(new MoneyFlowKeyConflictError("stale-key"));
+
+    const { sellFundHoldingShares } = await import("@/lib/indexFunds/fundRedemptionLiquidity");
+    vi.mocked(sellFundHoldingShares).mockResolvedValue({
+      cashRaisedAnchor: 200,
+      sharesSold: 20,
+      salesExecuted: 1,
+    });
+
+    const result = await rebalanceFundToTarget(
+      mockDb as unknown as import("mongodb").Db,
+      fundWithDrift,
+      candidateCorps as unknown as Parameters<typeof rebalanceFundToTarget>[2],
+      {},
+      new Map(),
+      5
+    );
+
+    expect(result.buys).toBe(0);
+    expect(result.sells).toBeGreaterThanOrEqual(1);
   });
 });
 
