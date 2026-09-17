@@ -171,6 +171,36 @@ describe("sim source shape check (enqueue time)", () => {
     ).toThrow("full 40-hex");
     expect(() => assertSimSourceShape({ sourceWorktree: "../x", sourceCommit: SHA_A })).toThrow();
   });
+
+  it("mirrors the ops-dash enqueue contract (LSGD-ops-dash#136)", () => {
+    // No normalization: uppercase and padded SHAs are rejected, not fixed up.
+    for (const bad of [SHA_A.toUpperCase(), ` ${SHA_A}`, `${SHA_A}\n`, "g".repeat(40)]) {
+      expect(
+        () => assertSimSourceShape({ sourceWorktree: "muse-992", sourceCommit: bad }),
+        JSON.stringify(bad)
+      ).toThrow("full 40-hex");
+    }
+    // Empty strings are half pins, rejected with the same both-or-neither error.
+    for (const req of [
+      { sourceWorktree: "muse-992", sourceCommit: "" },
+      { sourceWorktree: "", sourceCommit: SHA_A },
+      { sourceWorktree: "", sourceCommit: "" },
+    ]) {
+      expect(() => assertSimSourceShape(req), JSON.stringify(req)).toThrow(
+        "sourceWorktree and sourceCommit must both be set (got only one)"
+      );
+    }
+    // Leaf charset is case-preserving but forbids dots and whitespace.
+    expect(() =>
+      assertSimSourceShape({ sourceWorktree: "Muse-992", sourceCommit: SHA_A })
+    ).not.toThrow();
+    for (const bad of ["muse.992", "muse 992", " muse-992", "muse-992 "]) {
+      expect(
+        () => assertSimSourceShape({ sourceWorktree: bad, sourceCommit: SHA_A }),
+        JSON.stringify(bad)
+      ).toThrow();
+    }
+  });
 });
 
 describe("sim spawn planning", () => {
