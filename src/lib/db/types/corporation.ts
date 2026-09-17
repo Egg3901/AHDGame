@@ -163,6 +163,23 @@ export interface Corporation {
    * at least one financial sector; one bank per corp. See src/lib/db/types/bank.ts.
    */
   bankCharter?: import("./bank").BankCharter;
+  /**
+   * Crash-recovery plan for an in-flight bank-charter transfer
+   * (transferCharter.ts, issue #2014). Stamped on the absorbed shell before
+   * its charter slot is claimed, cleared once every satellite record is
+   * re-keyed. A surviving marker after a crash tells the next attempt where
+   * the charter went and which currency the depositor pointers use, so the
+   * retry resumes instead of reporting "no transfer required" over split
+   * records. Dies with the shell when the merge completes.
+   */
+  bankCharterTransfer?: {
+    /** Corporation the charter is moving (or moved) to. */
+    to: ObjectId;
+    /** Charter currency, for the legacy savingsHolder pointer path. */
+    currency: CurrencyCode;
+    /** When the plan was stamped. */
+    startedAt: Date;
+  };
   /** Character who owns/runs this corporation */
   ceoId: ObjectId;
   /** Whether the CEO is a regular character, imperial character, or NPP. Defaults to "character". */
