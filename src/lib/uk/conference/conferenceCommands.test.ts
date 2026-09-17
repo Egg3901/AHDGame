@@ -948,8 +948,9 @@ describe("voteOnMotion atomic tally", () => {
 
   it("rejects votes from members removed from the committee roll", async () => {
     const { world, motionId } = await seedMotionWorld();
-    // Member-roll drift lands between calls: eligibility is re-read from the
-    // party row on every vote, so the next vote honors the new roll.
+    // Member-roll drift lands between calls: live eligibility is re-read
+    // from the party row on every vote, so the next vote honors the new
+    // roll, while the frozen roll keeps the write boundary and quorum stable.
     await world.db
       .collection("politicalParties")
       .updateOne(
@@ -2302,5 +2303,521 @@ describe("applyConferencePayoff crash recovery", () => {
     ]);
     expect([first.applied, second.applied].filter(Boolean)).toHaveLength(1);
     expect(await partyPs(world.db, world.party)).toBe(CONFERENCE_COHESION_PS);
+  });
+});
+
+describe("conference eligible-roll freeze", () => {
+  async function seedOpenWithProposal(world: SeedWorld) {
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    await proposePlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      validPledgeIds(),
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+  }
+
+  async function seedOpenWithMotion(world: SeedWorld) {
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    const { motionId } = await proposeRulesMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.committee[0].actor,
+      { triggerThresholdPct: 0.2 },
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    return motionId;
+  }
+
+  async function addMember(world: SeedWorld, name: string): Promise<SeedMember> {
+    const id = new ObjectId();
+    await world.db.collection("characters").insertOne({
+      _id: id,
+      name,
+      party: world.partySeq,
+      userId: new ObjectId(),
+    });
+    return { id, name, actor: { _id: id, name, party: world.partySeq } };
+  }
+
+  async function readProposal(world: SeedWorld) {
+    return (await getConference(world.db, "UK", world.partySeq, 1))?.proposal;
+  }
+
+  it("freezes the member and committee rolls on first proposal", async () => {
+    const world = await seedWorld();
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    // Reads never freeze: a pure view sees live counts and no roll.
+    const before = await getConferenceState(
+      world.db,
+      "UK",
+      world.partySeq,
+      1,
+      world.members[0].actor,
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(before.rollFrozen).toBe(false);
+    expect(before.proposal).toBeNull();
+    expect(before.capabilities.canVote).toBe(true);
+
+    await proposePlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      validPledgeIds(),
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    // Leader + 3 committee + 4 members on the platform roll; committee +
+    // chair on the motion roll.
+    expect(doc?.eligibleMemberIds?.sort()).toEqual(
+      [world.leader, ...world.committee, ...world.members].map((m) => m.id.toString()).sort()
+    );
+    expect(doc?.eligibleCommitteeIds?.sort()).toEqual(
+      [world.leader, ...world.committee].map((m) => m.id.toString()).sort()
+    );
+    const after = await getConferenceState(
+      world.db,
+      "UK",
+      world.partySeq,
+      1,
+      world.members[0].actor,
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(after.rollFrozen).toBe(true);
+    expect(after.proposal?.eligibleVoters).toBe(8);
+    expect(after.proposal?.quorumNeeded).toBe(3);
+    expect(after.capabilities.canVote).toBe(true);
+  });
+
+  it("rejects platform ballots from members who join after the freeze", async () => {
+    const world = await seedWorld();
+    await seedOpenWithProposal(world);
+    const joiner = await addMember(world, "Joiner June");
+    await expectApiError(
+      voteOnPlatform(world.db, "UK", world.partySeq, joiner.actor, "aye", TURN_YEAR1_OPEN, NOW()),
+      403
+    );
+    // No ballot seated, no tally moved.
+    expect(await readProposal(world)).toMatchObject({ votesFor: 0, votesAgainst: 0, votes: {} });
+    // The UI contract says the same thing: a member with no roll seat.
+    const view = await getConferenceState(
+      world.db,
+      "UK",
+      world.partySeq,
+      1,
+      joiner.actor,
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(view.rollFrozen).toBe(true);
+    expect(view.proposal?.eligibleVoters).toBe(8);
+    expect(view.proposal?.quorumNeeded).toBe(3);
+    expect(view.capabilities.isPartyMember).toBe(true);
+    expect(view.capabilities.canVote).toBe(false);
+  });
+
+  it("lets removals end voting but keeps cast ballots and the frozen quorum", async () => {
+    const world = await seedWorld();
+    await seedOpenWithProposal(world);
+    for (const voter of world.members.slice(0, 3)) {
+      await voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        voter.actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    // All three voters leave mid-conference.
+    for (const voter of world.members.slice(0, 3)) {
+      await world.db
+        .collection("characters")
+        .updateOne({ _id: voter.id }, { $set: { party: "99" } });
+    }
+    // No new or changed ballots after leaving ...
+    await expectApiError(
+      voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        world.members[0].actor,
+        "nay",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      403
+    );
+    // ... but the ballots cast while eligible stand.
+    expect(await readProposal(world)).toMatchObject({ votesFor: 3, votesAgainst: 0 });
+    // Quorum still measures the frozen roll of 8 (bar 3), not the 5 who are
+    // left: the 3 standing ayes ratify.
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    const resolution = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      doc!,
+      doc!.votingClosesTurn,
+      NOW()
+    );
+    expect(resolution).toMatchObject({ completed: true, ratified: true });
+  });
+
+  it("rejects motion ballots from committee seated after the freeze", async () => {
+    const world = await seedWorld();
+    const motionId = await seedOpenWithMotion(world);
+    const joiner = await addMember(world, "Joiner June");
+    await world.db
+      .collection("politicalParties")
+      .updateOne(
+        { _id: world.party._id },
+        { $set: { committeeIds: [...world.committee.map((m) => m.id), joiner.id] } }
+      );
+    // Live committee check passes, frozen roll check refuses.
+    await expectApiError(
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        joiner.actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      403
+    );
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    const motion = doc?.motions.find((m) => m.motionId === motionId);
+    expect(motion).toMatchObject({ votesFor: 0, votesAgainst: 0, votes: {} });
+  });
+
+  it("lands a deferred motion write cast while eligible, then rejects the next vote after removal", async () => {
+    const world = await seedWorld();
+    const motionId = await seedOpenWithMotion(world);
+    const collName = "ukPartyConferences";
+    const inner = world.db.collection(collName) as unknown as {
+      updateOne: (
+        filter: unknown,
+        update: unknown,
+        opts?: unknown
+      ) => Promise<{ matchedCount: number; modifiedCount: number }>;
+    };
+    const recorded: Array<{ filter: unknown; update: unknown }> = [];
+    let deferNextWrite = true;
+    const racingDb = {
+      ...world.db,
+      collection: (name: string) => {
+        const innerColl = world.db.collection(name);
+        if (name !== collName) return innerColl;
+        return {
+          ...innerColl,
+          updateOne: async (filter: unknown, update: unknown, opts?: unknown) => {
+            if (deferNextWrite) {
+              deferNextWrite = false;
+              recorded.push({ filter, update });
+              return { matchedCount: 1, modifiedCount: 1 };
+            }
+            return inner.updateOne(filter, update, opts);
+          },
+        };
+      },
+    } as unknown as Db;
+    // A's ballot is cast (pre-checks pass) but its write is deferred. B votes
+    // for real in the meantime, then A is removed from the committee.
+    const aVote = voteOnMotion(
+      racingDb,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const bVote = await voteOnMotion(
+      world.db,
+      "UK",
+      world.partySeq,
+      motionId,
+      world.committee[1].actor,
+      "nay",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(bVote).toMatchObject({ votesFor: 0, votesAgainst: 1 });
+    await world.db
+      .collection("politicalParties")
+      .updateOne(
+        { _id: world.party._id },
+        { $set: { committeeIds: world.committee.slice(1).map((m) => m.id) } }
+      );
+    expect((await aVote).success).toBe(true);
+    expect(recorded).toHaveLength(1);
+    // The deferred write lands against the immutable roll: a ballot cast
+    // while eligible is not unseated by a later removal.
+    await inner.updateOne(recorded[0].filter, recorded[0].update);
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    const motion = doc?.motions.find((m) => m.motionId === motionId);
+    expect(motion).toMatchObject({ votesFor: 1, votesAgainst: 1 });
+    // But no NEW ballot after the removal.
+    await expectApiError(
+      voteOnMotion(
+        world.db,
+        "UK",
+        world.partySeq,
+        motionId,
+        world.committee[0].actor,
+        "nay",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      403
+    );
+  });
+
+  it("converges deferred platform writes without clobbering", async () => {
+    const world = await seedWorld();
+    await seedOpenWithProposal(world);
+    const collName = "ukPartyConferences";
+    const inner = world.db.collection(collName) as unknown as {
+      updateOne: (
+        filter: unknown,
+        update: unknown,
+        opts?: unknown
+      ) => Promise<{ matchedCount: number; modifiedCount: number }>;
+    };
+    const recorded: Array<{ filter: unknown; update: unknown }> = [];
+    let deferNextWrite = true;
+    const racingDb = {
+      ...world.db,
+      collection: (name: string) => {
+        const innerColl = world.db.collection(name);
+        if (name !== collName) return innerColl;
+        return {
+          ...innerColl,
+          updateOne: async (filter: unknown, update: unknown, opts?: unknown) => {
+            if (deferNextWrite) {
+              deferNextWrite = false;
+              recorded.push({ filter, update });
+              return { matchedCount: 1, modifiedCount: 1 };
+            }
+            return inner.updateOne(filter, update, opts);
+          },
+        };
+      },
+    } as unknown as Db;
+    const aVote = voteOnPlatform(
+      racingDb,
+      "UK",
+      world.partySeq,
+      world.members[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const bVote = await voteOnPlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.members[1].actor,
+      "nay",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(bVote).toMatchObject({ votesFor: 0, votesAgainst: 1 });
+    expect((await aVote).success).toBe(true);
+    expect(recorded).toHaveLength(1);
+    await inner.updateOne(recorded[0].filter, recorded[0].update);
+    expect(await readProposal(world)).toMatchObject({ votesFor: 1, votesAgainst: 1 });
+  });
+
+  it("decides quorum from the frozen roll when joins inflate live membership", async () => {
+    const world = await seedWorld();
+    await seedOpenConference(world, TURN_YEAR1_OPEN);
+    // Six members leave before the first touch: the roll freezes at 2
+    // (leader + one member), so the quorum bar is 2, not 3.
+    for (const gone of [...world.committee, ...world.members.slice(1)]) {
+      await world.db.collection("characters").deleteOne({ _id: gone.id });
+    }
+    await proposePlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      validPledgeIds(),
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    await voteOnPlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.leader.actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    await voteOnPlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.members[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    // Five members join mid-conference: live membership is 7 (bar 3), but
+    // the frozen bar stays 2 and the joiners get no ballot here.
+    const joiners: SeedMember[] = [];
+    for (let i = 0; i < 5; i++) joiners.push(await addMember(world, `Joiner ${i}`));
+    await expectApiError(
+      voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        joiners[0].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      ),
+      403
+    );
+    const joinerView = await getConferenceState(
+      world.db,
+      "UK",
+      world.partySeq,
+      1,
+      joiners[0].actor,
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(joinerView.capabilities.canVote).toBe(false);
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    expect(doc?.eligibleMemberIds).toHaveLength(2);
+    const resolution = await resolveConference(
+      world.db,
+      "UK",
+      world.party,
+      doc!,
+      doc!.votingClosesTurn,
+      NOW()
+    );
+    expect(resolution).toMatchObject({ completed: true, ratified: true });
+  });
+
+  it("backfills legacy rows missing any snapshot on vote and on fill", async () => {
+    // A pre-freeze row: agenda touches happened, but the roll fields were
+    // never stamped (missing, not null).
+    const voted = await seedWorld();
+    await seedOpenWithProposal(voted);
+    await voteOnPlatform(
+      voted.db,
+      "UK",
+      voted.partySeq,
+      voted.members[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    await getUKPartyConferencesCollection(voted.db).updateOne(
+      { _id: conferenceDocId("UK", voted.partySeq, 1) },
+      { $unset: { eligibleMemberIds: "", eligibleCommitteeIds: "" } }
+    );
+    const legacy = await getConference(voted.db, "UK", voted.partySeq, 1);
+    expect(legacy?.eligibleMemberIds).toBeUndefined();
+    expect(legacy?.eligibleCommitteeIds).toBeUndefined();
+    // The next vote freezes the roll from live membership, then seats.
+    const second = await voteOnPlatform(
+      voted.db,
+      "UK",
+      voted.partySeq,
+      voted.members[1].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    expect(second).toMatchObject({ votesFor: 2, votesAgainst: 0 });
+    expect(
+      (await getConference(voted.db, "UK", voted.partySeq, 1))?.eligibleMemberIds
+    ).toHaveLength(8);
+
+    // A legacy claimed-but-unfilled row with votes and no roll: the fill
+    // freezes before deciding, then resolves exactly like a frozen row.
+    const stuck = await seedWorld();
+    await seedOpenWithProposal(stuck);
+    for (let i = 0; i < 5; i++) {
+      await voteOnPlatform(
+        stuck.db,
+        "UK",
+        stuck.partySeq,
+        [stuck.leader, ...stuck.committee, ...stuck.members][i].actor,
+        "aye",
+        TURN_YEAR1_OPEN,
+        NOW()
+      );
+    }
+    await getUKPartyConferencesCollection(stuck.db).updateOne(
+      { _id: conferenceDocId("UK", stuck.partySeq, 1) },
+      {
+        $set: { status: "completed" },
+        $unset: { eligibleMemberIds: "", eligibleCommitteeIds: "" },
+      }
+    );
+    const frozen = (await getConference(stuck.db, "UK", stuck.partySeq, 1))!;
+    expect(frozen).toMatchObject({ status: "completed", outcome: null });
+    const resolution = await resolveConference(
+      stuck.db,
+      "UK",
+      stuck.party,
+      frozen,
+      frozen.votingClosesTurn,
+      NOW()
+    );
+    expect(resolution).toMatchObject({ completed: true, ratified: true });
+    expect(
+      (await getConference(stuck.db, "UK", stuck.partySeq, 1))?.eligibleMemberIds
+    ).toHaveLength(8);
+  });
+
+  it("rejects platform votes after the window closes without writing", async () => {
+    const world = await seedWorld();
+    await seedOpenWithProposal(world);
+    await voteOnPlatform(
+      world.db,
+      "UK",
+      world.partySeq,
+      world.members[0].actor,
+      "aye",
+      TURN_YEAR1_OPEN,
+      NOW()
+    );
+    const doc = await getConference(world.db, "UK", world.partySeq, 1);
+    await expectApiError(
+      voteOnPlatform(
+        world.db,
+        "UK",
+        world.partySeq,
+        world.members[1].actor,
+        "aye",
+        doc!.votingClosesTurn,
+        NOW()
+      ),
+      400
+    );
+    expect(await readProposal(world)).toMatchObject({ votesFor: 1, votesAgainst: 0 });
+    expect((await readProposal(world))?.votes[world.members[1].id.toString()]).toBeUndefined();
   });
 });

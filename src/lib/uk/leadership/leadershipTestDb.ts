@@ -10,6 +10,12 @@ import { ObjectId, type Db } from "mongodb";
  * ($getField / $ifNull / $mergeObjects / $add / $cond / $eq / $and / $map
  * with $$ variables only — anything else throws so a divergence surfaces
  * loudly instead of silently passing).
+ *
+ * Two server matching semantics matter to conference code and are
+ * implemented faithfully here: `{ field: null }` matches rows where the
+ * field is null OR missing, and scalar equality against an array field
+ * matches when any element equals the value (how the frozen-roll write
+ * filters test membership).
  */
 
 type Doc = Record<string, unknown>;
@@ -84,6 +90,13 @@ function matches(doc: Doc, query: Doc): boolean {
           throw new Error(`fakeDb: unsupported query operator ${op}`);
         }
       }
+    } else if (cond === null) {
+      // Server semantics: `{ field: null }` matches null AND missing.
+      if (docVal !== undefined && docVal !== null) return false;
+    } else if (Array.isArray(docVal) && !Array.isArray(cond)) {
+      // Server semantics: scalar equality on an array field matches when
+      // any element equals the value (conference roll-membership filters).
+      if (!docVal.some((v) => valuesEqual(v, cond))) return false;
     } else if (!valuesEqual(docVal, cond)) {
       return false;
     }

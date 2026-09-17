@@ -132,6 +132,71 @@ async function requirePartyMemberCharacter(
   }
 }
 
+interface EligibleRoll {
+  memberIds: string[];
+  committeeIds: string[];
+}
+
+/** The durable roll on a row, or null when it has not frozen yet. */
+function frozenRollOf(doc: UKPartyConference): EligibleRoll | null {
+  if (Array.isArray(doc.eligibleMemberIds) && Array.isArray(doc.eligibleCommitteeIds)) {
+    return { memberIds: doc.eligibleMemberIds, committeeIds: doc.eligibleCommitteeIds };
+  }
+  return null;
+}
+
+/** Live electorate: player-member characters plus the committee voter set. */
+async function computeEligibleRoll(db: Db, party: PoliticalParty): Promise<EligibleRoll> {
+  const rows = await db
+    .collection<Character>("characters")
+    .find({ party: partySeqIdOf(party), userId: { $exists: true } }, { projection: { _id: 1 } })
+    .toArray();
+  return {
+    memberIds: rows.map((row) => row._id.toString()).sort(),
+    committeeIds: [...getEligibleVoterSet(party)].sort(),
+  };
+}
+
+/**
+ * Freeze the conference's authoritative roll, exactly once. The in-hand doc
+ * is authoritative when it already carries a roll (no extra read on the
+ * steady path); otherwise one guarded write elects the freezer and every
+ * loser re-reads the winner's roll, so concurrent first touches converge on
+ * one electorate instead of racing live membership reads.
+ *
+ * `persisted: false` is the defensive remainder: the row vanished under the
+ * freeze, so the caller decides from live inputs without a roll filter
+ * rather than failing a legitimate vote.
+ */
+async function ensureEligibleRoll(
+  db: Db,
+  party: PoliticalParty,
+  doc: UKPartyConference,
+  now: Date
+): Promise<EligibleRoll & { persisted: boolean }> {
+  const existing = frozenRollOf(doc);
+  if (existing) return { ...existing, persisted: true };
+  const live = await computeEligibleRoll(db, party);
+  const collection = getUKPartyConferencesCollection(db);
+  const claimed = await collection.findOneAndUpdate(
+    { _id: doc._id, eligibleMemberIds: null, eligibleCommitteeIds: null },
+    {
+      $set: {
+        eligibleMemberIds: live.memberIds,
+        eligibleCommitteeIds: live.committeeIds,
+        updatedAt: now,
+      },
+    },
+    { returnDocument: "after" }
+  );
+  const won = claimed ? frozenRollOf(claimed) : null;
+  if (won) return { ...won, persisted: true };
+  const reread = await collection.findOne({ _id: doc._id });
+  const raced = reread ? frozenRollOf(reread) : null;
+  if (raced) return { ...raced, persisted: true };
+  return { ...live, persisted: false };
+}
+
 /** Valid catalog ids for the standing-platform shape (mirrors manifestos). */
 function validPlatformIds(countryId: CountryId): Set<string> {
   return new Set(pledgeCatalogFor(countryId).map((e) => e.id));
@@ -167,6 +232,12 @@ export interface ConferenceStateView {
       })
     | null;
   motions: (ConferenceRulesMotion & { quorumNeeded: number; eligibleVoters: number })[];
+  /**
+   * True once the conference's voter roll froze. While false the counts
+   * below are live; once true they are the frozen electorate, and members
+   * who joined afterwards wait for next year's conference.
+   */
+  rollFrozen: boolean;
   platform: { pledgeIds: string[]; ratifiedYear: number; ratifiedAtTurn: number } | null;
   ratified: boolean;
   outcome: UKPartyConference["outcome"];
@@ -203,16 +274,23 @@ export async function getConferenceState(
     now,
     currentTurn
   );
-  const [memberCount, platform] = await Promise.all([
-    countPartyMembers(db, party),
-    getUKPartyPlatformsCollection(db).findOne({
-      _id: `${countryId}:${partySeqIdOf(party)}`,
-    }),
-  ]);
-  const committeeSize = getEligibleVoterSet(party).size;
+  const platform = await getUKPartyPlatformsCollection(db).findOne({
+    _id: `${countryId}:${partySeqIdOf(party)}`,
+  });
+  // Surfaced electorate: the frozen roll once it exists, live counts before
+  // the first agenda touch freezes it. Quorum denominators below follow the
+  // same source, so the panel never shows a bar the resolution will not use.
+  const frozen = frozenRollOf(doc);
+  const memberCount = frozen != null ? frozen.memberIds.length : await countPartyMembers(db, party);
+  const committeeSize =
+    frozen != null ? frozen.committeeIds.length : getEligibleVoterSet(party).size;
   const isMember = viewer != null && isPartyMember(viewer, party);
   const isCommittee = viewer != null && isCommitteeMember(viewer, party);
   const leader = viewer != null && isLeader(viewer, party);
+  const onRoll =
+    viewer == null || frozen == null
+      ? viewer != null
+      : frozen.memberIds.includes(viewer._id.toString());
 
   return {
     conferenceId: doc._id,
@@ -237,6 +315,7 @@ export async function getConferenceState(
       quorumNeeded: quorumFor(committeeSize, CONFERENCE_MOTION_QUORUM_FLOOR),
       eligibleVoters: committeeSize,
     })),
+    rollFrozen: frozen != null,
     platform: platform
       ? {
           pledgeIds: platform.pledgeIds,
@@ -257,7 +336,9 @@ export async function getConferenceState(
       isCommitteeMember: isCommittee,
       isLeader: leader,
       canPropose: (leader || isCommittee) && doc.status === "open",
-      canVote: isMember && doc.status === "open",
+      // Voting needs a roll seat as well as live membership: joining after
+      // the freeze confers no vote at this conference.
+      canVote: isMember && onRoll && doc.status === "open",
     },
     history: doc.history,
   };
@@ -343,6 +424,9 @@ export async function proposePlatform(
   if (doc.status !== "open") {
     throw badRequest(`Conference is ${doc.status}: platforms can only be proposed while open`);
   }
+  // First agenda touch freezes the roll: the electorate for every vote and
+  // quorum at this conference is the membership as of now, not as of resolve.
+  await ensureEligibleRoll(db, party, doc, now);
   const updated = await getUKPartyConferencesCollection(db).findOneAndUpdate(
     { _id: doc._id, status: "open" },
     {
@@ -403,18 +487,46 @@ export async function voteOnPlatform(
   if (!doc || doc.status !== "open" || !doc.proposal || doc.proposal.status !== "voting") {
     throw badRequest("No conference platform is open for voting");
   }
+  // The roll is the authority at write time, not the party/member rows read
+  // above: a join or removal landing between those reads and the tally write
+  // cannot seat a ballot the frozen electorate does not hold, and the live
+  // pre-checks above keep removals rejected on their next vote while ballots
+  // already cast stand.
+  const roll = await ensureEligibleRoll(db, party, doc, now);
+  const voteKey = voter._id.toString();
+  if (roll.persisted && !roll.memberIds.includes(voteKey)) {
+    throw forbidden("Only members on the conference roll vote at this conference");
+  }
   if (currentTurn >= doc.votingClosesTurn) throw badRequest("Conference voting has closed");
   const updateResult = await getUKPartyConferencesCollection(db).updateOne(
-    { _id: doc._id, status: "open" },
+    {
+      _id: doc._id,
+      status: "open",
+      votingClosesTurn: { $gte: currentTurn + 1 },
+      ...(roll.persisted ? { eligibleMemberIds: voteKey } : {}),
+    },
     buildEmbeddedVoteTallyUpdate({
       voteField: "proposal.votes",
-      voteKey: voter._id.toString(),
+      voteKey,
       vote,
       tallyFieldByVote: { aye: "proposal.votesFor", nay: "proposal.votesAgainst" },
       updatedAt: now,
     })
   );
-  if (updateResult.matchedCount === 0) throw badRequest("Conference voting has closed");
+  if (updateResult.matchedCount === 0) {
+    // The write is conditional on open status, window, motion state, and
+    // roll seat: re-read to report which guard refused the ballot instead
+    // of collapsing every race into one error.
+    const reread = await getUKPartyConferencesCollection(db).findOne({ _id: doc._id });
+    if (!reread || reread.status !== "open") throw badRequest("Conference voting has closed");
+    if (!reread.proposal || reread.proposal.status !== "voting") {
+      throw badRequest("No conference platform is open for voting");
+    }
+    if (roll.persisted && !roll.memberIds.includes(voteKey)) {
+      throw forbidden("Only members on the conference roll vote at this conference");
+    }
+    throw badRequest("Conference voting has closed");
+  }
   const updated = await getUKPartyConferencesCollection(db).findOne({ _id: doc._id });
   return {
     success: true,
@@ -458,6 +570,9 @@ export async function proposeRulesMotion(
   if (doc.status !== "open") {
     throw badRequest(`Conference is ${doc.status}: motions can only be proposed while open`);
   }
+  // First agenda touch freezes the roll, same as platforms: motion quorum is
+  // the committee as of now, not as of resolve.
+  await ensureEligibleRoll(db, party, doc, now);
   const motionId = new ObjectId().toString();
   const motion: ConferenceRulesMotion = {
     motionId,
@@ -526,7 +641,6 @@ export async function voteOnMotion(
   if (!doc || doc.status !== "open" || !motion || motion.status !== "voting") {
     throw badRequest("No such motion is open for voting");
   }
-  if (currentTurn >= doc.votingClosesTurn) throw badRequest("Conference voting has closed");
   // Atomic per-motion tally: the $map pipeline reads the stored vote at write
   // time, so concurrent votes on the same motion converge (new vote applies,
   // repeat vote is a tally no-op, changed vote moves the tally) instead of
@@ -535,25 +649,54 @@ export async function voteOnMotion(
   // a vote racing the window close or the resolution claim matches zero
   // documents and reports closed instead of writing into a decided row.
   //
-  // Residual hazards, deliberately out of scope for this write (documented,
-  // not broadened): committee eligibility is enforced from the party row read
-  // above, so a member-roll change landing between that read and this write
-  // is honored only on the next vote; and the leadership-cooldown check in
-  // reconcileConferenceEffects reads lastAmendedTurn before its conditional
-  // receipt write, so two different passed motions reconciling at once can
-  // both observe a satisfied cooldown (each motion still applies exactly once
-  // via its own appliedConferenceMotionIds receipt).
+  // Member-roll drift is closed by the frozen committee roll: eligibility is
+  // pre-checked from the live party row (so removals are rejected on their
+  // next vote and ballots already cast stand), and the write additionally
+  // requires a roll seat, so a join or removal landing between the read and
+  // the write cannot seat a ballot the frozen electorate does not hold. A
+  // deferred write from a ballot cast while eligible still lands, because the
+  // roll is immutable.
+  //
+  // Remaining residual, deliberately out of scope here: the
+  // leadership-cooldown check in reconcileConferenceEffects reads
+  // lastAmendedTurn before its conditional receipt write, so two different
+  // passed motions reconciling at once can both observe a satisfied cooldown
+  // (each motion still applies exactly once via its own
+  // appliedConferenceMotionIds receipt). This change moves no cooldown math,
+  // so that hazard is neither fixed nor widened by it.
+  const roll = await ensureEligibleRoll(db, party, doc, now);
+  const voteKey = voter._id.toString();
+  if (roll.persisted && !roll.committeeIds.includes(voteKey)) {
+    throw forbidden("Only committee members on the conference roll vote on motions");
+  }
+  if (currentTurn >= doc.votingClosesTurn) throw badRequest("Conference voting has closed");
   const updateResult = await getUKPartyConferencesCollection(db).updateOne(
-    { _id: doc._id, status: "open", votingClosesTurn: { $gte: currentTurn + 1 } },
+    {
+      _id: doc._id,
+      status: "open",
+      votingClosesTurn: { $gte: currentTurn + 1 },
+      ...(roll.persisted ? { eligibleCommitteeIds: voteKey } : {}),
+    },
     buildMotionVoteTallyUpdate({
       motionId,
-      voteKey: voter._id.toString(),
+      voteKey,
       vote,
       tallyFieldByVote: { aye: "votesFor", nay: "votesAgainst" },
       updatedAt: now,
     })
   );
-  if (updateResult.matchedCount === 0) throw badRequest("Conference voting has closed");
+  if (updateResult.matchedCount === 0) {
+    const reread = await getUKPartyConferencesCollection(db).findOne({ _id: doc._id });
+    if (!reread || reread.status !== "open") throw badRequest("Conference voting has closed");
+    const rereadMotion = reread.motions.find((m) => m.motionId === motionId);
+    if (!rereadMotion || rereadMotion.status !== "voting") {
+      throw badRequest("No such motion is open for voting");
+    }
+    if (roll.persisted && !roll.committeeIds.includes(voteKey)) {
+      throw forbidden("Only committee members on the conference roll vote on motions");
+    }
+    throw badRequest("Conference voting has closed");
+  }
   const updated = await getUKPartyConferencesCollection(db).findOne({ _id: doc._id });
   const resolved = updated?.motions.find((m) => m.motionId === motionId);
   if (!resolved) throw badRequest("Conference voting has closed");
@@ -745,6 +888,13 @@ async function fillConferenceResolution(
   now: Date
 ): Promise<{ won: boolean; doc: UKPartyConference }> {
   const isNpp = !party.chairId;
+  // Quorum decides from the frozen roll, never from live membership: joins
+  // after the freeze cannot inflate the bar and removals cannot shrink it.
+  // A legacy row that never froze freezes here, during the fill; only a
+  // freeze that cannot persist falls back to live counts for this decision.
+  const roll = await ensureEligibleRoll(db, party, doc, now);
+  const memberCount = roll.persisted ? roll.memberIds.length : await countPartyMembers(db, party);
+  const committeeSize = roll.persisted ? roll.committeeIds.length : getEligibleVoterSet(party).size;
   let ratified = false;
   let proposal = doc.proposal;
   const history = [...(doc.history ?? [])];
@@ -761,7 +911,6 @@ async function fillConferenceResolution(
         )
       );
     } else {
-      const memberCount = await countPartyMembers(db, party);
       const result = resolvePlatformRatification({
         votesFor: proposal.votesFor,
         votesAgainst: proposal.votesAgainst,
@@ -785,7 +934,6 @@ async function fillConferenceResolution(
     }
   }
 
-  const committeeSize = getEligibleVoterSet(party).size;
   const motions = (doc.motions ?? []).map((motion) => {
     if (motion.status !== "voting") return motion;
     const decided = decideMotionVote(motion, committeeSize, isNpp);
@@ -862,7 +1010,11 @@ async function reconcileConferenceEffects(
 ): Promise<{ motionsPassed: number; motionsVoided: number }> {
   const partySeqId = partySeqIdOf(party);
   const isNpp = !party.chairId;
-  const committeeSize = getEligibleVoterSet(party).size;
+  // Leftover voting motions on healed rows decide from the same frozen roll
+  // the fill used; legacy rows without one fall back to live counts.
+  const frozen = frozenRollOf(doc);
+  const committeeSize =
+    frozen != null ? frozen.committeeIds.length : getEligibleVoterSet(party).size;
   let motionsPassed = 0;
   let motionsVoided = 0;
   const newEntries: ConferenceHistoryEntry[] = [];

@@ -133,6 +133,48 @@ export interface UKPartyConference {
   platformAppliedTurn?: number | null;
   /** Payoff intent: cohesion grant fixed at claim from the claim-time party. */
   payoffCohesionPs?: number | null;
+  /**
+   * Authoritative electorate snapshot (ticket #862 follow-up). Standalone
+   * Mongo has no cross-collection atomics, so the party/member rows read at
+   * vote time cannot be rechecked inside the single-document conference
+   * write: a join or removal landing between the read and the write would
+   * otherwise seat an invalid ballot or silently move the quorum denominator.
+   *
+   * Instead the conference carries its own roll, frozen once and never
+   * rewritten afterwards:
+   *
+   * - `eligibleMemberIds`: character ids that may vote on the platform
+   *   (player members of the party at freeze time).
+   * - `eligibleCommitteeIds`: committee voter-set ids that may vote on
+   *   leadership-rules motions at freeze time.
+   *
+   * Freeze point: the first agenda or resolution touch after the row opens
+   * (proposal, vote, or resolve wins a single-winner guarded write; losers
+   * re-read the winner's roll). Reads never freeze.
+   *
+   * Frozen semantics, explicit:
+   *
+   * - Casting or changing a vote requires roll membership (enforced in the
+   *   atomic write filter) AND live membership (pre-check). A member who
+   *   joins after the freeze waits for next year's conference; a member who
+   *   leaves can no longer cast or change votes.
+   * - Ballots already cast stand: leaving never purges a recorded vote, and
+   *   a deferred write from a ballot cast while eligible still lands (the
+   *   roll is immutable, so the write filter still matches).
+   * - Quorum denominators are the frozen roll sizes, so joins cannot inflate
+   *   and removals cannot shrink the bar mid-conference.
+   * - Proposing stays live-gated (leader/committee at propose time): it
+   *   moves no quorum math.
+   *
+   * Both fields are optional so rows written before this change read as
+   * "not frozen yet" and freeze at their first post-change touch. A
+   * completed legacy row that resolves without another agenda touch freezes
+   * during the fill; only a freeze that cannot persist (no durable row to
+   * stamp) falls back to live counts for that one decision.
+   */
+  eligibleMemberIds?: string[] | null;
+  /** Committee roll for motion votes; frozen together with eligibleMemberIds. */
+  eligibleCommitteeIds?: string[] | null;
   /** Turn the cohesion credit reconciled (applied or deterministically skipped). */
   payoffCohesionAppliedTurn?: number | null;
   /** Payoff intent: approval groups fixed at claim (empty when gated off). */
