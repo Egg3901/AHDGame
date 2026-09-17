@@ -61,7 +61,7 @@ const TD = "border-b border-card-border/50 px-3 py-2 text-muted";
 
 const TOC_ITEMS = [
   { id: "overview", label: "How Forex Works" },
-  { id: "currencies", label: "Active Currencies" },
+  { id: "currencies", label: "Currencies and World Settings" },
   { id: "rate-movement", label: "How Exchange Rates Move" },
   { id: "trading-tiers", label: "The Three Trading Tiers" },
   { id: "wallet", label: "The Multi-Currency Wallet" },
@@ -109,17 +109,20 @@ export default function ForexGuidePage() {
           <section className="space-y-4">
             <SectionHeader id="overview">1. How Forex Works</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Every active country in A House Divided has its own floating currency. Exchange rates
-              move each turn based on real economic conditions inside the simulation - interest
-              rates, inflation, GDP growth, and trade - plus the buying and selling pressure of
-              players themselves. You can trade currencies directly for profit, and every
-              cross-border investment you make (foreign stocks, bonds, corporations) settles in the
-              currency of the asset&apos;s country, so exchange rates flow through your whole
+              Countries use the currencies configured for their world and era; some share a
+              currency. Floating exchange rates move each turn based on economic conditions -
+              interest rates, inflation, GDP growth, and trade - plus the buying and selling
+              pressure of players themselves. You can trade currencies directly for profit, and
+              every cross-border investment you make (foreign stocks, bonds, corporations) settles
+              in the currency of the asset&apos;s country, so exchange rates flow through your whole
               portfolio whether you trade forex deliberately or not.
             </p>
             <Callout variant="info">
-              Planned economies work differently: a fully command country&apos;s official rate is
-              fixed and does not float with macro or player volume. See{" "}
+              Fixed exchange rates work differently. A configured peg, including a historical
+              Bretton Woods peg, holds the rate steady instead of applying market drift. When
+              command-economy rules are enabled, command countries also hold their official rates
+              fixed. The floating-rate mechanics below apply only when neither fixed-rate rule is
+              active. See{" "}
               <Link href="/guides/planned-economies" className="text-primary hover:underline">
                 Planned / Command Economies
               </Link>
@@ -135,7 +138,7 @@ export default function ForexGuidePage() {
 
           {/* ── 2. Currencies ── */}
           <section className="space-y-4">
-            <SectionHeader id="currencies">2. Active Currencies</SectionHeader>
+            <SectionHeader id="currencies">2. Currencies and World Settings</SectionHeader>
             <div className={TABLE_WRAP}>
               <table className={TABLE}>
                 <thead>
@@ -161,28 +164,13 @@ export default function ForexGuidePage() {
                     <td className={TD}>Japanese Yen</td>
                     <td className={TD}>JPY</td>
                   </tr>
-                  <tr>
-                    <td className={TD}>Germany / EU</td>
-                    <td className={TD}>Euro</td>
-                    <td className={TD}>EUR</td>
-                  </tr>
-                  <tr>
-                    <td className={TD}>China</td>
-                    <td className={TD}>Chinese Yuan</td>
-                    <td className={TD}>CNY</td>
-                  </tr>
-                  <tr>
-                    <td className={TD}>Brazil</td>
-                    <td className={TD}>Brazilian Real</td>
-                    <td className={TD}>BRL</td>
-                  </tr>
                 </tbody>
               </table>
             </div>
             <p className="text-sm text-muted leading-relaxed">
-              All six currencies are tradeable. Additional currencies (like the Canadian dollar and
-              Nigerian naira) have monetary baselines defined in the simulation but are not yet part
-              of the trading system.
+              These are examples, not a complete currency roster. Available currencies and their
+              names depend on the world and era. Check the exchange screen for the currencies
+              available in your game and their current rates before placing a trade.
             </p>
           </section>
 
@@ -190,8 +178,9 @@ export default function ForexGuidePage() {
           <section className="space-y-4">
             <SectionHeader id="rate-movement">3. How Exchange Rates Move</SectionHeader>
             <p className="text-sm text-muted leading-relaxed">
-              Each turn, every rate updates through three components: macro fundamental drift (about
-              80% of direction), player volume pressure (about 20%), and a little random noise.
+              Each turn, floating rates update through three components: macro fundamental drift
+              (about 80% of direction), player volume pressure (about 20%), and a little random
+              noise.
             </p>
 
             <SubHeader>Macro fundamental drift</SubHeader>

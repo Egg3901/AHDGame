@@ -27,6 +27,11 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CommodityType } from "@/lib/constants/commodities";
 import { loadWorldEraUnitScale } from "@/lib/currency/gdpAnchorRate";
 import { computeMarketFormationSnapshot } from "@/lib/economy/marketFormation";
+import {
+  clampShare,
+  isTradableListing,
+  tradableListingIds,
+} from "@/lib/stockExchange/listingEligibility";
 import { NPP_MARKET_ENTRY_FUNNEL_COLLECTION } from "@/lib/turn/npp/entryDiagnostics";
 
 export const ECONOMIC_VITAL_SIGNS_COLLECTION = "economicVitalSigns";
@@ -649,9 +654,20 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
     "takeover_buyout",
   ]);
   const economicTrades = input.trades.filter((trade) => economicTradeKinds.has(trade.kind));
-  const quality = marketQuality(listings, input.shareOrders, economicTrades);
+  // The eligible tradable set (#2033): zero-share / zero-float rows stay
+  // visible as firms but leave every breadth denominator, and the retained
+  // 48-turn window is intersected with it so dissolved/delisted corporations
+  // cannot linger in a numerator after leaving the current listings.
+  const tradable = listings.filter(isTradableListing);
+  const tradableIds = tradableListingIds(listings);
+  const quality = marketQuality(tradable, input.shareOrders, economicTrades);
   const competition = relevantMarketDiagnostics(input.commodityParticipants, input.currentFlows);
-  const tradedCorporations = new Set(economicTrades.map((trade) => trade.corporationId.toString()));
+  const tradedCorporations = new Set(
+    economicTrades
+      .map((trade) => trade.corporationId.toString())
+      .filter((id) => tradableIds.has(id))
+  );
+  const tradableCount = tradable.length;
   const activeBonds = input.bonds.filter((bond) => !bond.matured);
   const sovereignBonds = activeBonds.filter((bond) => bond.issuerType === "sovereign");
   const corporateBonds = activeBonds.filter((bond) => bond.issuerType !== "sovereign");
@@ -931,9 +947,9 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         0
       ),
       activeTradedListingShare: metric(
-        ratio(tradedCorporations.size, listings.length),
-        listings.length,
-        "listed_firm_count_48_turns"
+        clampShare(ratio(tradedCorporations.size, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_48_turns"
       ),
       activeBonds: activeBonds.length,
       noHolderBondShare: metric(
@@ -991,15 +1007,15 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,
       twoSidedListingShare: metric(
-        ratio(quality.twoSidedListings, listings.length),
-        listings.length,
-        "listed_firm_count_open_order_books"
+        clampShare(ratio(quality.twoSidedListings, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_open_order_books"
       ),
       facilityQuotedListings: quality.facilityQuotedListings,
       organicTwoSidedListingShare: metric(
-        ratio(quality.organicTwoSidedListings, listings.length),
-        listings.length,
-        "listed_firm_count_open_order_books_excluding_liquidity_facility"
+        clampShare(ratio(quality.organicTwoSidedListings, tradableCount)),
+        tradableCount,
+        "tradable_listing_count_open_order_books_excluding_liquidity_facility"
       ),
       medianQuotedSpreadPct: metric(
         median(quality.spreads),
@@ -1042,16 +1058,16 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
       twoSidedListingShareMedian: recent12Median(
         input.turn,
         history,
-        ratio(quality.twoSidedListings, listings.length),
+        clampShare(ratio(quality.twoSidedListings, tradableCount)),
         (row) => row.twoSidedListingShare,
-        "listed_firm_count_open_order_books_median_12"
+        "tradable_listing_count_open_order_books_median_12"
       ),
       activeTradedListingShareMedian: recent12Median(
         input.turn,
         history,
-        ratio(tradedCorporations.size, listings.length),
+        clampShare(ratio(tradedCorporations.size, tradableCount)),
         (row) => row.activeTradedListingShare,
-        "listed_firm_count_48_turns_median_12"
+        "tradable_listing_count_48_turns_median_12"
       ),
       sovereignNoHolderBondShareMedian: recent12Median(
         input.turn,

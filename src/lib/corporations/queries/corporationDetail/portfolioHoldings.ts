@@ -23,6 +23,8 @@ import {
   imfFacilityPaymentAnchorPerTurn,
   sumImfLenderReceiptsAnchorPerTurnForReceivables,
 } from "@/lib/imf/imfFacilityFinancials";
+import { lastTurnSupplyAgreementCash } from "@/lib/corporations/supplyAgreementCash";
+import type { SupplyAgreement } from "@/lib/db/types/supplyAgreement";
 
 export interface LatestCorpIncomeRow {
   income?: number;
@@ -66,6 +68,8 @@ export interface PortfolioHoldings {
   totalDebtAnchor: number;
   annualInterestAnchor: number;
   dailyInterestAnchor: number;
+  supplyAgreementSettlementDaily: number;
+  supplyAgreementUnpaidAnchor: number;
 }
 
 /**
@@ -207,6 +211,34 @@ export async function loadPortfolioHoldings(
       ? Math.round(anchorPerTurnToFinancialDaily(imfLenderReceiptsAnchor))
       : 0;
 
+  const supplySettlementTurn = latestCorpIncomeRow?.turn ?? currentTurn;
+  const supplyAgreementDocs = await db
+    .collection<SupplyAgreement>("supplyAgreements")
+    .find(
+      {
+        $or: [{ supplierCorpId: corporation._id }, { buyerCorpId: corporation._id }],
+        lastDeliveryTurn: supplySettlementTurn,
+      },
+      {
+        projection: {
+          supplierCorpId: 1,
+          buyerCorpId: 1,
+          lastDeliveryTurn: 1,
+          lastSupplierCashDelta: 1,
+          lastBuyerCashDelta: 1,
+          lastUnpaidSettlementAnchor: 1,
+        },
+      }
+    )
+    .toArray();
+  const supplyAgreementCash = lastTurnSupplyAgreementCash({
+    corpId: corporation._id.toString(),
+    turn: supplySettlementTurn,
+    agreements: supplyAgreementDocs,
+  });
+  const supplyAgreementSettlementDaily = Math.round(supplyAgreementCash.netLocal * TURNS_PER_DAY);
+  const supplyAgreementUnpaidAnchor = Math.round(supplyAgreementCash.unpaidAnchor);
+
   const totalDebtAnchor = outstandingBonds.reduce((sum, b) => {
     const bondCcy = (b.currencyCode ??
       (b.countryId && b.countryId in COUNTRY_CURRENCY_MAP
@@ -242,5 +274,7 @@ export async function loadPortfolioHoldings(
     totalDebtAnchor,
     annualInterestAnchor,
     dailyInterestAnchor,
+    supplyAgreementSettlementDaily,
+    supplyAgreementUnpaidAnchor,
   };
 }
