@@ -197,6 +197,89 @@ describe("global sovereign demand", () => {
   });
 });
 
+describe("deployBondReserveFromCash ledger threading (#992 tranche 6)", () => {
+  function deployDb(issues: Bond[]) {
+    const systemSettingsFindOne = vi.fn().mockResolvedValue(null);
+    const collections = {
+      bonds: {
+        find: vi.fn(() => ({
+          sort: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue(issues) })),
+        })),
+      },
+      bondMarketPools: { find: vi.fn(() => ({ toArray: vi.fn().mockResolvedValue([]) })) },
+      exchangeRates: {
+        find: vi.fn(() => ({
+          project: vi.fn(() => ({
+            toArray: vi.fn().mockResolvedValue([
+              { currencyCode: "USD", rate: 1 },
+              { currencyCode: "GBP", rate: 1 },
+            ]),
+          })),
+        })),
+      },
+      systemSettings: { findOne: systemSettingsFindOne },
+    };
+    const db = {
+      collection: vi.fn((name: keyof typeof collections) => collections[name]),
+    } as unknown as Db;
+    return { db, systemSettingsFindOne };
+  }
+
+  const fund = {
+    _id: new ObjectId(),
+    name: "Bond Deploy Fund",
+    scope: "global",
+    anchorCurrencyCode: "USD",
+    cashAnchor: 100_000,
+    quotedNav: 100,
+    holdings: [],
+    bondAllocations: [],
+  } as unknown as IndexFund;
+
+  it("threads one turn and one preloaded thresholds object through every purchase", async () => {
+    const issues = [
+      { ...bond({ countryId: "US", maturityTurn: 60 }), publicFloat: 1_000, marketPrice: 1 },
+      { ...bond({ countryId: "US", maturityTurn: 72 }), publicFloat: 1_000, marketPrice: 1 },
+    ];
+    const { db, systemSettingsFindOne } = deployDb(issues);
+    const thresholds = { fund: {} };
+
+    await deployBondReserveFromCash(db, fund, 0, { liquidityTargetEnabled: true, turn: 7, thresholds: thresholds as never });
+
+    expect(purchaseMock).toHaveBeenCalledTimes(2);
+    for (const call of purchaseMock.mock.calls) {
+      expect(call[4]).toMatchObject({ turn: 7, thresholds });
+    }
+    // Preloaded thresholds mean zero settings reads for the pass.
+    expect(systemSettingsFindOne).not.toHaveBeenCalled();
+  });
+
+  it("loads thresholds once per pass when a turn is passed without preloaded values", async () => {
+    const issues = [
+      { ...bond({ countryId: "US", maturityTurn: 60 }), publicFloat: 1_000, marketPrice: 1 },
+    ];
+    const { db, systemSettingsFindOne } = deployDb(issues);
+
+    await deployBondReserveFromCash(db, fund, 0, { liquidityTargetEnabled: true, turn: 7 });
+
+    expect(purchaseMock).toHaveBeenCalledTimes(1);
+    expect(purchaseMock.mock.calls[0]![4]).toMatchObject({ turn: 7 });
+    expect(purchaseMock.mock.calls[0]![4].thresholds).toBeDefined();
+  });
+
+  it("passes no turn through when absent, so purchases emit nothing", async () => {
+    const issues = [
+      { ...bond({ countryId: "US", maturityTurn: 60 }), publicFloat: 1_000, marketPrice: 1 },
+    ];
+    const { db, systemSettingsFindOne } = deployDb(issues);
+
+    await deployBondReserveFromCash(db, fund, 0, { liquidityTargetEnabled: true });
+
+    expect(purchaseMock).toHaveBeenCalledTimes(1);
+    expect(purchaseMock.mock.calls[0]![4].turn).toBeUndefined();
+  });
+});
+
 describe("ratingWithinUniverse", () => {
   it("treats minRating as the worst grade allowed and maxRating as the best", () => {
     expect(ratingWithinUniverse("AAA", { minRating: "BBB" })).toBe(true);

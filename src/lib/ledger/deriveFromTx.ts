@@ -146,6 +146,8 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   fund_transfer: "fund_transfer",
   // A bond sale is the reverse of a purchase (cash from the bond position
   // asset). Share one reason so sales net against purchases per currency.
+  // #992 tranche 6: the fund-subject purchase/sale rows land here too,
+  // single-sided (the bond position is unmodeled) and never mirrored.
   bond_sell: "bond_principal_investment",
   // #992 tranche 3: capital seeding a new entity. The charter corp debit and
   // the wind-up sponsor return are single-sided by construction (the debit
@@ -174,9 +176,12 @@ const REASON_BY_TX_TYPE: Partial<Record<FinancialTxLogEntry["type"], string>> = 
   office_income: "public_salary",
   savings_interest: "deposit_interest",
   fundraise_credit: "political_fundraising",
-  // Fund-owned quotes are real equity transfers, but index funds are not yet
-  // financialTxLog counterparties. Name the cash leg instead of reporting an
-  // unexplained mint or sink while the fund holdings ledger records the asset.
+  // Equity transfers whose contra is an unmodeled asset account (public
+  // float, fund holdings). #992 tranches 5-6: fund-subject buy rows (cron
+  // float buys) and sell rows (redemption-liquidity sales, order-fill seller
+  // legs) evidence the fund cash side directly under this shared reason, so
+  // a buy nets against its own sale per currency instead of pooling in
+  // `unattributed`. Fund-subject rows never mirror.
   stock_trade_buy: "equity_transfer",
   stock_trade_sell: "equity_transfer",
 };

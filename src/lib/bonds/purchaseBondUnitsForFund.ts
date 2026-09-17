@@ -4,6 +4,8 @@ import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { reserveBondUnitsForHolder } from "@/lib/bonds/bondHolderOps";
+import { emitTx } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { insertFundTransaction } from "@/lib/indexFunds/fundQueries";
 import { sovereignBondCapError } from "@/lib/bonds/holderCap";
 import { creditBondPool, loadBondQuote, advanceBondPoolSnapshot } from "@/lib/bonds/marketPool";
@@ -60,6 +62,14 @@ export async function purchaseBondUnitsForFund(
     fxRates?: Partial<Record<CurrencyCode, number>>;
     /** Caller must flush completed purchase receipts even if a later purchase fails. */
     txSink?: Omit<IndexFundTransaction, "_id">[];
+    /**
+     * #992 tranche 6: game turn stamped on the fund-subject ledger row. When
+     * absent no ledger row is emitted (the cash debit still settles) so
+     * turn-less callers keep their old behavior.
+     */
+    turn?: number;
+    /** Preloaded thresholds for the ledger row; avoids a per-purchase read. */
+    thresholds?: TxThresholds;
   }
 ): Promise<PurchaseBondUnitsForFundResult> {
   const wholeUnits = Math.floor(units);
@@ -112,6 +122,38 @@ export async function purchaseBondUnitsForFund(
     };
     if (options?.txSink) options.txSink.push(transaction);
     else await insertFundTransaction(db, transaction);
+
+    // #992 tranche 6: fund-subject ledger leg for the cashAnchor debit above.
+    // The bond position is an asset account the shadow ledger does not carry,
+    // so the row is single-sided under the shared bond_principal_investment
+    // reason (the sale leg shares it, netting per currency). Fund-subject
+    // rows never mirror, so this is the only ledger row for the debit, and it
+    // fires only on the committed path — a refunded reservation emits nothing.
+    if (options?.turn !== undefined) {
+      await emitTx(
+        db,
+        {
+          type: "bond_purchase",
+          turn: options.turn,
+          createdAt: now,
+          subjectType: "fund",
+          subjectId: fund._id,
+          subjectName: fund.name,
+          amount: -costAnchor,
+          anchorAmount: -costAnchor,
+          currencyCode: fund.anchorCurrencyCode,
+          counterpartyType: "system",
+          counterpartyName: bond.issuerName ?? "Bond market",
+          meta: {
+            bondId: bond._id.toString(),
+            units: wholeUnits,
+            pricePerUnit,
+            source: "bond-reserve",
+          },
+        },
+        options.thresholds
+      );
+    }
 
     return { ok: true, units: wholeUnits, costAnchor, bondId: bond._id };
   } catch (err) {

@@ -175,7 +175,11 @@ async function collectBalanceState(
   // --- Index funds: cashAnchor (already ₳, like NPP cash) -------------------
   // The cash leg every holder↔fund movement settles against. Holdings, bond
   // allocations and queued redemptions are asset/liability accounts the shadow
-  // ledger does not carry; only the cash leg is a money balance.
+  // ledger does not carry; only the cash leg is a money balance. #992
+  // tranches 5-6: every fund cash write (float buys, holding/bond sales,
+  // order-fill seller credits, bond-reserve deploys) now carries a
+  // fund-subject ledger row against this key, so those flows stop reading as
+  // divergences.
   const funds = db.collection<{
     _id: ObjectId;
     anchorCurrencyCode?: CurrencyCode;
