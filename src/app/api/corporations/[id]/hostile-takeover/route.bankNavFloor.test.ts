@@ -153,8 +153,10 @@ async function setupMocks(opts: {
   vi.mocked(getCurrentTurn).mockResolvedValue(156);
 
   db.collectionMocks.corporations.findOne.mockImplementation((filter: { _id: ObjectId }) => {
-    if ((filter._id as ObjectId).equals(opts.targetId)) return Promise.resolve(opts.target as never);
-    if ((filter._id as ObjectId).equals(opts.holderId)) return Promise.resolve(opts.holder as never);
+    if ((filter._id as ObjectId).equals(opts.targetId))
+      return Promise.resolve(opts.target as never);
+    if ((filter._id as ObjectId).equals(opts.holderId))
+      return Promise.resolve(opts.holder as never);
     return Promise.resolve(opts.parent as never);
   });
   db.collectionMocks.gameConfig.findOne.mockResolvedValue(opts.gameConfig as never);
@@ -227,7 +229,8 @@ describe("hostile takeover bank-NAV floor (issue #1750)", () => {
     expect(body.minorityPayoutAnchorTotal).toBe(expectedPayout);
 
     // The implied whole-corp consideration covers the realizable bank.
-    const impliedFullValue = (Number(body.minorityPayoutAnchorTotal) / MINORITY_SHARES) * TOTAL_SHARES;
+    const impliedFullValue =
+      (Number(body.minorityPayoutAnchorTotal) / MINORITY_SHARES) * TOTAL_SHARES;
     expect(impliedFullValue).toBeGreaterThanOrEqual(BANK_EQUITY);
 
     // The parent funds the floored debit, and the minority holder is credited.
@@ -243,6 +246,29 @@ describe("hostile takeover bank-NAV floor (issue #1750)", () => {
         (update as { $inc?: { liquidCapital?: number } }).$inc?.liquidCapital === expectedPayout
     );
     expect(credit).toBeDefined();
+  }, 60_000);
+
+  it("counts the marked bond/prop book in the floor, net of borrowings", async () => {
+    // The acquirer inherits the whole charter including the prop book, so a
+    // bank carrying a 300M marked book cannot be squeezed out at cash-minus-
+    // deposits. Borrowings still net against the floor.
+    const propBookMarkValue = 300_000_000;
+    const discountWindowDebt = 10_000_000;
+    const nav = BANK_CASH + propBookMarkValue - BANK_DEPOSITS - discountWindowDebt;
+    const charter = makeCharter(150, { propBookMarkValue, discountWindowDebt });
+    const { parentId, targetId, holderId, parent, target, holder } = makeCorps(charter);
+    await setupMocks({ parentId, targetId, holderId, parent, target, holder, gameConfig: null });
+
+    const response = await postTakeover(targetId, parentId);
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(body.bankNavFloorApplied).toBe(true);
+    const expectedPayout = MINORITY_SHARES * (nav / TOTAL_SHARES);
+    expect(body.minorityPayoutAnchorTotal).toBe(expectedPayout);
+    const impliedFullValue =
+      (Number(body.minorityPayoutAnchorTotal) / MINORITY_SHARES) * TOTAL_SHARES;
+    expect(impliedFullValue).toBeGreaterThanOrEqual(nav);
   }, 60_000);
 
   it("leaves pricing untouched for targets without a bank", async () => {

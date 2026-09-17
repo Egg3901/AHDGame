@@ -4,20 +4,52 @@
  * The quoted share price recognizes only BANK_EQUITY_VALUATION_WEIGHT of a
  * subsidiary bank's book equity, so a bank-heavy target can be squeezed out
  * for less than the realizable bank net assets the acquirer inherits
- * (ring-fenced cash plus loans, net of cash-backed deposits and borrowings).
- * These pure helpers floor the per-share consideration at full authoritative
- * book equity per share, so the implied whole-corp value can never underprice
- * the bank the deal delivers.
+ * (ring-fenced cash plus loans plus the marked bond/prop book, net of
+ * cash-backed deposits and borrowings). These pure helpers floor the
+ * per-share consideration at full realizable NAV per share, so the implied
+ * whole-corp value can never underprice the bank the deal delivers.
  *
  * Rules zone: plain data in, plain data out. No DB, clock, randomness, env.
  */
 
+import {
+  bankEquity,
+  type BalanceSheetCharter,
+  type BalanceSheetOptions,
+} from "@/lib/banking/balanceSheet";
+
+/**
+ * Realizable bank NAV a takeover acquirer inherits, in charter currency.
+ *
+ * `bankEquity()` deliberately excludes the marked prop book: marks move with
+ * the market, so the distribution gate must not let an owner upstream cash
+ * against them. A takeover is the other side of that trade. It moves the
+ * whole charter (cash, loan book AND prop book) to the acquirer, and the
+ * supervision revoke path unwinds the book to cash at exactly this mark, so
+ * the marked book is realizable value the buyer receives and the floor must
+ * count it. Counted exactly once: prop buys debit `cashReserves` into the
+ * mark, so cash and mark never overlap and adding the mark to `bankEquity()`
+ * counts each dollar one time. All of `bankEquity()`'s liability netting
+ * (cash-backed deposits, every borrowing facility) still applies.
+ *
+ * Malformed marks (missing, non-numeric, non-finite, negative) contribute
+ * zero: a corrupt cache must shrink the floor, never invent value.
+ */
+export function takeoverBankNav(
+  charter: BalanceSheetCharter | null | undefined,
+  options: BalanceSheetOptions = {}
+): number {
+  const mark = charter?.propBookMarkValue;
+  const markedBook = typeof mark === "number" && Number.isFinite(mark) ? Math.max(0, mark) : 0;
+  return bankEquity(charter, options) + markedBook;
+}
+
 export interface BankNavFloorInput {
   /**
-   * Authoritative bank book equity (bankEquity(), charter currency normalized
-   * to anchor by the caller). May be negative; negative equity never floors.
+   * Realizable bank NAV (takeoverBankNav(), charter currency normalized to
+   * anchor by the caller). May be negative; negative NAV never floors.
    */
-  bankBookEquityAnchor: number;
+  bankNavAnchor: number;
   /** Fully-diluted share count. Must be > 0 for a floor to apply. */
   totalShares: number;
 }
@@ -28,7 +60,7 @@ export interface BankNavFloorInput {
  * finite: a missing floor fails open to the market price, never to zero.
  */
 export function bankNavFloorPerShareAnchor(input: BankNavFloorInput): number {
-  const equity = input.bankBookEquityAnchor;
+  const equity = input.bankNavAnchor;
   const shares = input.totalShares;
   if (!Number.isFinite(equity) || !Number.isFinite(shares) || shares <= 0) return 0;
   if (equity <= 0) return 0;

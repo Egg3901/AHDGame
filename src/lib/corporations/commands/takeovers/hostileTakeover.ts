@@ -43,10 +43,13 @@ import {
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { bankEquity } from "@/lib/banking/balanceSheet";
 import { loadBankingPolicy } from "@/lib/banking/policy";
 import { savingsReadsAuthoritative } from "@/lib/banking/rules/policy";
-import { applyBankNavFloor, bankNavFloorPerShareAnchor } from "./rules/bankNavFloor";
+import {
+  applyBankNavFloor,
+  bankNavFloorPerShareAnchor,
+  takeoverBankNav,
+} from "./rules/bankNavFloor";
 import { safeDistributeConversionSpread } from "@/lib/currency/marketMaker";
 import { sectorFxSpreadBetween } from "@/lib/currency/sectorFxSpread";
 import type { CurrencyCode } from "@/lib/constants/currencies";
@@ -237,11 +240,11 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
     // Bank-NAV floor (issue #1750): the quoted share price recognizes only a
     // haircut of a subsidiary bank's book equity, so a bank-heavy target can
     // otherwise be squeezed out for less than the realizable bank net assets
-    // the acquirer inherits (ring-fenced cash plus loans, net of cash-backed
-    // deposits and borrowings). Floor the per-share consideration at full
-    // authoritative book equity per share, so the implied whole-corp value
-    // can never underprice the bank the deal delivers. Inert for targets
-    // without an active charter.
+    // the acquirer inherits (ring-fenced cash plus loans plus the marked
+    // bond/prop book, net of cash-backed deposits and borrowings). Floor the
+    // per-share consideration at full realizable NAV per share, so the implied
+    // whole-corp value can never underprice the bank the deal delivers. Inert
+    // for targets without an active charter.
     const activeTakeoverCharter =
       target.bankCharter?.status === "active" ? target.bankCharter : null;
     let bankNavFloorApplied = false;
@@ -260,15 +263,15 @@ export async function runHostileTakeover(request: Request, { params }: RoutePara
       } catch {
         playerDepositsAreLiabilities = false;
       }
-      const takeoverBankEquityAnchor = corpCapitalToAnchor(
-        bankEquity(activeTakeoverCharter, { playerDepositsAreLiabilities }),
+      const takeoverBankNavAnchor = corpCapitalToAnchor(
+        takeoverBankNav(activeTakeoverCharter, { playerDepositsAreLiabilities }),
         takeoverBankCurrency,
         takeoverBankFxRate
       );
       const floored = applyBankNavFloor(
         marketPricePerShareAnchor,
         bankNavFloorPerShareAnchor({
-          bankBookEquityAnchor: takeoverBankEquityAnchor,
+          bankNavAnchor: takeoverBankNavAnchor,
           totalShares: target.totalShares ?? 0,
         })
       );

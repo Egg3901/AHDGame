@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { bankEquity } from "@/lib/banking/balanceSheet";
-import { applyBankNavFloor, bankNavFloorPerShareAnchor } from "./bankNavFloor";
+import { applyBankNavFloor, bankNavFloorPerShareAnchor, takeoverBankNav } from "./bankNavFloor";
 
 function charter(overrides: Record<string, number> = {}) {
   return {
@@ -20,25 +20,22 @@ function charter(overrides: Record<string, number> = {}) {
 }
 
 describe("bankNavFloorPerShareAnchor", () => {
-  it("prices full realizable equity per share", () => {
-    expect(bankNavFloorPerShareAnchor({ bankBookEquityAnchor: 52_300_000, totalShares: 1000 }))
-      .toBe(52_300);
+  it("prices full realizable NAV per share", () => {
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: 52_300_000, totalShares: 1000 })).toBe(
+      52_300
+    );
   });
 
-  it("floors at zero for negative or zero equity", () => {
-    expect(bankNavFloorPerShareAnchor({ bankBookEquityAnchor: -1, totalShares: 1000 })).toBe(0);
-    expect(bankNavFloorPerShareAnchor({ bankBookEquityAnchor: 0, totalShares: 1000 })).toBe(0);
+  it("floors at zero for negative or zero NAV", () => {
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: -1, totalShares: 1000 })).toBe(0);
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: 0, totalShares: 1000 })).toBe(0);
   });
 
   it("fails open to zero on unusable share counts or non-finite inputs", () => {
-    expect(bankNavFloorPerShareAnchor({ bankBookEquityAnchor: 100, totalShares: 0 })).toBe(0);
-    expect(bankNavFloorPerShareAnchor({ bankBookEquityAnchor: 100, totalShares: -5 })).toBe(0);
-    expect(
-      bankNavFloorPerShareAnchor({ bankBookEquityAnchor: Number.NaN, totalShares: 1000 })
-    ).toBe(0);
-    expect(
-      bankNavFloorPerShareAnchor({ bankBookEquityAnchor: 100, totalShares: Number.NaN })
-    ).toBe(0);
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: 100, totalShares: 0 })).toBe(0);
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: 100, totalShares: -5 })).toBe(0);
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: Number.NaN, totalShares: 1000 })).toBe(0);
+    expect(bankNavFloorPerShareAnchor({ bankNavAnchor: 100, totalShares: Number.NaN })).toBe(0);
   });
 });
 
@@ -101,12 +98,86 @@ describe("floor input: authoritative bank book equity (issue #1750)", () => {
     expect(bankEquity(held, { playerDepositsAreLiabilities: true })).toBe(70);
   });
 
-  it("excludes the prop book (even bond positions): marks are not realizable equity", () => {
+  it("bankEquity itself still excludes the prop book: marks are not distributable equity", () => {
     const withPropBonds = charter({
       cashReserves: 100,
       npcDeposits: 20,
       propBookMarkValue: 500,
     });
     expect(bankEquity(withPropBonds)).toBe(80);
+  });
+});
+
+describe("takeoverBankNav: realizable value the acquirer inherits (issue #1750)", () => {
+  it("covers cash plus the marked bond/prop book net of deposit liabilities", () => {
+    // The issue's acceptance criterion: a bank subsidiary cannot be bought
+    // below cash plus its bond/prop book net of liabilities.
+    expect(
+      takeoverBankNav(
+        charter({
+          cashReserves: 123_410_000,
+          propBookMarkValue: 300_000_000,
+          npcDeposits: 71_110_000,
+        })
+      )
+    ).toBe(123_410_000 + 300_000_000 - 71_110_000);
+  });
+
+  it("nets every borrowing facility alongside deposits", () => {
+    expect(
+      takeoverBankNav(
+        charter({
+          cashReserves: 100,
+          totalLoans: 40,
+          propBookMarkValue: 500,
+          npcDeposits: 20,
+          discountWindowDebt: 10,
+          discountWindowArrears: 5,
+          cbMarginDebt: 4,
+          cbMarginArrears: 3,
+          interbankDebt: 2,
+        })
+      )
+    ).toBe(100 + 40 + 500 - 20 - 10 - 5 - 4 - 3 - 2);
+  });
+
+  it("counts the marked book exactly once: a prop buy is a reclass, not new value", () => {
+    // Before the buy the bank holds 600 cash against 20 of deposits.
+    const before = charter({ cashReserves: 600, npcDeposits: 20 });
+    // The buy debits cash into the mark: 100 cash left, 500 marked.
+    const after = charter({ cashReserves: 100, npcDeposits: 20, propBookMarkValue: 500 });
+    expect(takeoverBankNav(after)).toBe(takeoverBankNav(before));
+    expect(takeoverBankNav(after)).toBe(100 + 500 - 20);
+  });
+
+  it("matches bankEquity when there is no prop book", () => {
+    const plain = charter({ cashReserves: 100, totalLoans: 40, npcDeposits: 20 });
+    expect(takeoverBankNav(plain)).toBe(bankEquity(plain));
+  });
+
+  it("ignores player pointer deposits but nets them once authoritative", () => {
+    const pointers = charter({
+      cashReserves: 100,
+      propBookMarkValue: 500,
+      playerDeposits: 1_000_000,
+      totalDeposits: 1_000_000,
+    });
+    expect(takeoverBankNav(pointers)).toBe(600);
+    expect(takeoverBankNav(pointers, { playerDepositsAreLiabilities: true })).toBe(600 - 1_000_000);
+  });
+
+  it("treats malformed marks as zero: a corrupt cache shrinks the floor, never invents value", () => {
+    const base = { cashReserves: 100, npcDeposits: 20 };
+    expect(takeoverBankNav(charter(base))).toBe(80);
+    expect(takeoverBankNav(charter({ ...base, propBookMarkValue: Number.NaN }))).toBe(80);
+    expect(takeoverBankNav(charter({ ...base, propBookMarkValue: Number.POSITIVE_INFINITY }))).toBe(
+      80
+    );
+    expect(takeoverBankNav(charter({ ...base, propBookMarkValue: -500 }))).toBe(80);
+    expect(
+      takeoverBankNav({ ...charter(base), propBookMarkValue: "500" as unknown as number })
+    ).toBe(80);
+    expect(takeoverBankNav({ cashReserves: 100, npcDeposits: 20 } as never)).toBe(80);
+    expect(takeoverBankNav(null)).toBe(0);
   });
 });
