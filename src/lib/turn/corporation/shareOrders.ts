@@ -13,6 +13,7 @@ import {
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { recordShareTrade } from "@/lib/corporations/shareTradeHistory";
 import { recoverShareFillOrphans } from "@/lib/corporations/commands/shareTrading/shareFillAudit";
+import { recoverShareFillMoneyOrphans } from "@/lib/corporations/commands/shareTrading/shareFillMoney";
 import type { ShareTradeParty } from "@/lib/db/types/shareTradeHistory";
 import { creditSharesToFund } from "@/lib/corporations/shareholderOps";
 import { upsertFundHoldingShares } from "@/lib/indexFunds/fundQueries";
@@ -54,13 +55,20 @@ interface PendingHistoryEmit {
  * `turn` is stamped on every emitted `shareTradeHistory` row.
  */
 export async function fillPendingShareOrders(db: Db, now: Date, turn: number): Promise<void> {
-  // Peer-fill orphan recovery (issue #1672): route and market-sell fills stamp
-  // a keyed audit receipt before money moves, so a crash between money and
-  // audit leaves it `in_progress`. Re-drive bounded recovery every turn before
-  // the fresh scan — fills are rejected during the turn so no live attempt
-  // races this, and lonely orphans (order already filled) are covered by the
-  // receipt scan rather than the per-order stamp hook. Best-effort: recovery
-  // never fails the matcher below.
+  // Peer-fill orphan recovery (issue #1672): route and market-sell fills run
+  // keyed money legs under a money receipt, then convergent audit rows under
+  // the audit receipt. Re-drive bounded recovery every turn before the fresh
+  // scan, money first so the audit pass observes settled money: a crash
+  // between two money legs converges the balances here, a crash between
+  // money and audit lands the missing rows there. Fills are rejected during
+  // the turn so no live attempt races this, and lonely orphans (order
+  // already filled) are covered by the receipt scans rather than the
+  // per-order stamp hook. Best-effort: recovery never fails the matcher.
+  try {
+    await recoverShareFillMoneyOrphans(db, 50);
+  } catch {
+    // Money receipts stay `in_progress` for the next turn.
+  }
   try {
     await recoverShareFillOrphans(db, 50);
   } catch {
