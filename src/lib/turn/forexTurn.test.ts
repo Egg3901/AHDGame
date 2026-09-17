@@ -230,89 +230,121 @@ describe("processForexTurn", () => {
     expect(result.totalSpreadRevenue).toBe(0);
   });
 
-  it("expires orders and refunds escrowed funds", async () => {
+  it("expires orders and refunds escrowed funds through the keyed flow", async () => {
     const { ObjectId } = await import("mongodb");
+    const { forexExpireKey, forexExpireFingerprint } = await import("@/lib/forex/forexSpend");
     const charId = new ObjectId();
     const orderId = new ObjectId();
 
-    // Set up the expiry find to return two orders
-    const expiringOrders = [
-      {
-        _id: orderId,
-        characterId: charId,
-        type: "limit",
-        fromCurrency: "USD",
-        toCurrency: "GBP",
-        amount: 1000,
-        filledAmount: 200,
-        status: "partial",
-        expiresAtTurn: 49,
-        spreadCharged: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      },
-    ];
+    const expiringOrder = {
+      _id: orderId,
+      characterId: charId,
+      characterName: "Trader",
+      type: "limit",
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 1000,
+      filledAmount: 200,
+      status: "partial",
+      expiresAtTurn: 49,
+      spreadCharged: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-    // forexTurn invokes updateMany twice on currencyOrders:
-    //   1) processTriggeredLimitOrders — stuck-order recovery (processing→open)
-    //   2) expireStaleOrders — expiry transition (open/partial→expired)
-    //      limitOrdersExpired is read from transitionResult.modifiedCount
-    // Stack two `mockResolvedValueOnce` so the second one (expiry) returns 1.
-    db.collectionMocks.currencyOrders.updateMany
-      .mockResolvedValueOnce({ modifiedCount: 0 })
-      .mockResolvedValueOnce({ modifiedCount: 1 });
-
-    // The expiry find uses a separate find() call (second one after limit order scan)
-    // Override the currencyOrders find mock to handle both calls
-    let findCallCount = 0;
-    db.collectionMocks.currencyOrders.find.mockImplementation(() => {
-      findCallCount++;
-      if (findCallCount === 1) {
-        // First call: limit order scan (open limit orders sorted by createdAt)
-        return {
-          toArray: vi.fn().mockResolvedValue([]),
-          sort: vi.fn().mockReturnValue({
-            toArray: vi.fn().mockResolvedValue([]),
-          }),
-        };
-      }
-      // Second call: expiry scan (status: "expired", updatedAt: now)
-      return {
-        toArray: vi.fn().mockResolvedValue(expiringOrders),
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
+    const cursorFor = (docs: unknown[]) => {
+      const cursor = {
+        toArray: vi.fn().mockResolvedValue(docs),
+        sort: vi.fn().mockReturnValue({
+          toArray: vi.fn().mockResolvedValue(docs),
+        }),
+        limit: vi.fn(),
         skip: vi.fn().mockReturnThis(),
         project: vi.fn().mockReturnThis(),
       };
+      cursor.limit.mockReturnValue(cursor);
+      return cursor;
+    };
+
+    // Route each find by its filter: fill scan (type limit), receipt
+    // recovery (_id regex), eligibility scan (status + expiry).
+    db.collectionMocks.currencyOrders.find.mockImplementation((filter: Record<string, unknown>) => {
+      if ((filter as { type?: string }).type === "limit") return cursorFor([]);
+      return cursorFor([{ _id: orderId }]);
     });
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.find.mockImplementation(() => cursorFor([]));
+    db.collectionMocks.currencyOrders.findOne.mockImplementation((filter: { _id: unknown }) =>
+      Promise.resolve(filter._id === orderId ? expiringOrder : null)
+    );
 
     const result = await processForexTurn(db as unknown as Db, 50);
     expect(result.limitOrdersExpired).toBe(1);
 
-    // Verify refund was issued via bulkWrite: 1000 - 200 = 800 USD refunded
-    const charBulkCalls = db.collectionMocks.characters.bulkWrite.mock.calls;
-    expect(charBulkCalls.length).toBeGreaterThan(0);
-    const [ops] = charBulkCalls[0];
-    const refundOp = ops.find(
-      (op: {
-        updateOne?: { filter?: { _id: unknown }; update?: { $inc?: Record<string, number> } };
-      }) =>
-        op.updateOne?.filter?._id === charId &&
-        op.updateOne?.update?.$inc?.["currencyBalances.personal.USD"] === 800
-    );
-    expect(refundOp).toBeDefined();
-
-    // Verify orders were transitioned in bulk by status + expiry filter
-    // (atomic crash-safe pattern: filter→updateMany, not find→by-_id)
-    expect(db.collectionMocks.currencyOrders.updateMany).toHaveBeenCalledWith(
+    // The eligibility scan uses the legacy filter, id-projected.
+    expect(db.collectionMocks.currencyOrders.find).toHaveBeenCalledWith(
       expect.objectContaining({
         status: { $in: ["open", "partial"] },
         expiresAtTurn: { $lte: 50 },
       }),
+      expect.objectContaining({ projection: { _id: 1 } })
+    );
+
+    // The order ran under its stable order-derived key and fingerprint.
+    const claimCall = db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mock.calls[0];
+    expect(claimCall[0]).toMatchObject({
+      _id: forexExpireKey(orderId),
+      fingerprint: forexExpireFingerprint(orderId),
+      status: "in_progress",
+    });
+
+    // Guarded terminal transition (open/partial → expired), not a bulk write.
+    const expireCall = db.collectionMocks.currencyOrders.updateOne.mock.calls.find(
+      (call: Array<Record<string, unknown>>) =>
+        String((call[0] as { _id: unknown })._id) === String(orderId)
+    );
+    expect(expireCall).toBeDefined();
+    expect(expireCall![1]).toMatchObject({
+      $set: expect.objectContaining({ status: "expired" }),
+    });
+
+    // Refund issued as a keyed leg: 1000 - 200 = 800 USD, same field the
+    // legacy bulkWrite credited.
+    const refundCall = db.collectionMocks.characters.updateOne.mock.calls.find(
+      (call: Array<Record<string, unknown>>) =>
+        String((call[0] as { _id: unknown })._id) === String(charId)
+    );
+    expect(refundCall).toBeDefined();
+    expect(refundCall![1]).toMatchObject({
+      $inc: expect.objectContaining({ "currencyBalances.personal.USD": 800 }),
+    });
+    expect(db.collectionMocks.characters.bulkWrite).not.toHaveBeenCalled();
+
+    // The receipt settled completed.
+    const settleCall = db.collectionMocks.nonAtomicMoneyFlowReceipts.updateOne.mock.calls.find(
+      (call: Array<Record<string, unknown>>) =>
+        (call[0] as { _id: unknown })._id === forexExpireKey(orderId)
+    );
+    expect(settleCall).toBeDefined();
+    expect(settleCall![1]).toMatchObject({
+      $set: expect.objectContaining({ status: "completed" }),
+    });
+  });
+
+  it("expires nothing and writes no receipts when no orders are due", async () => {
+    const result = await processForexTurn(db as unknown as Db, 50);
+
+    expect(result.limitOrdersExpired).toBe(0);
+    // Recovery scan ran (empty), the eligibility scan found nothing, and no
+    // expiry receipt was ever claimed.
+    expect(db.collectionMocks.nonAtomicMoneyFlowReceipts.find).toHaveBeenCalledWith(
       expect.objectContaining({
-        $set: expect.objectContaining({ status: "expired" }),
+        _id: { $regex: "^forex-expire:" },
+        status: "in_progress",
       })
     );
+    expect(db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks.characters.bulkWrite).not.toHaveBeenCalled();
   });
 
   it("stores triggered limit-order reserve spread fees in the collected currency", async () => {

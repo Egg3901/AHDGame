@@ -294,10 +294,7 @@ function mapFillError(kind: ForexFillKind) {
  * attempts, and the `in_progress` receipt now owns that job (the turn's
  * stuck-`processing` recovery is untouched and still heals legacy rows).
  */
-export async function applyForexFillSpend(
-  db: Db,
-  input: ForexFillInput
-): Promise<ForexFillResult> {
+export async function applyForexFillSpend(db: Db, input: ForexFillInput): Promise<ForexFillResult> {
   if (!input.orderId || !input.takerCharacterId) {
     throw new TypeError("Forex fill spend needs orderId and takerCharacterId");
   }
@@ -353,15 +350,12 @@ export async function applyForexFillSpend(
 
     const order = await orders.findOne({ _id: input.orderId }, opts);
     if (!order) {
-      const error =
-        input.kind === "limit" ? FOREX_FILL_ORDER_MISSING : FOREX_DIRECT_ORDER_MISSING;
+      const error = input.kind === "limit" ? FOREX_FILL_ORDER_MISSING : FOREX_DIRECT_ORDER_MISSING;
       return fail(error);
     }
     if (input.kind === "limit" ? order.type !== "limit" : order.type !== "direct") {
       const error =
-        input.kind === "limit"
-          ? `${FOREX_FILL_UNAVAILABLE}:not-limit`
-          : FOREX_DIRECT_WRONG_TYPE;
+        input.kind === "limit" ? `${FOREX_FILL_UNAVAILABLE}:not-limit` : FOREX_DIRECT_WRONG_TYPE;
       return fail(error);
     }
     const statusOpen =
@@ -370,17 +364,13 @@ export async function applyForexFillSpend(
         : order.status === "open";
     if (!statusOpen) {
       const error =
-        input.kind === "limit"
-          ? `${FOREX_FILL_UNAVAILABLE}:not-open`
-          : FOREX_DIRECT_UNAVAILABLE;
+        input.kind === "limit" ? `${FOREX_FILL_UNAVAILABLE}:not-open` : FOREX_DIRECT_UNAVAILABLE;
       return fail(error);
     }
 
     const remaining = order.amount - order.filledAmount;
     const fillAmount =
-      input.requestedAmount !== undefined
-        ? Math.min(input.requestedAmount, remaining)
-        : remaining;
+      input.requestedAmount !== undefined ? Math.min(input.requestedAmount, remaining) : remaining;
     if (!(fillAmount > 0)) {
       const error =
         input.kind === "limit" ? `${FOREX_FILL_UNAVAILABLE}:empty` : FOREX_DIRECT_UNAVAILABLE;
@@ -404,8 +394,7 @@ export async function applyForexFillSpend(
     const taker = await characters.findOne({ _id: input.takerCharacterId }, opts);
     const takerHave = personalBalance(taker, order.toCurrency);
     if (takerHave < takerTotalCost) {
-      const error =
-        input.kind === "limit" ? FOREX_FILL_INSUFFICIENT : FOREX_DIRECT_INSUFFICIENT;
+      const error = input.kind === "limit" ? FOREX_FILL_INSUFFICIENT : FOREX_DIRECT_INSUFFICIENT;
       // Embed the fresh need/have so routes render the historical
       // `Need <ceil>, have <floor>` message from exact numbers.
       return fail(`${error}:precheck:${takerTotalCost}:${takerHave}`);
@@ -481,7 +470,11 @@ export async function applyForexFillSpend(
 
     const orderFilter =
       input.kind === "limit"
-        ? { _id: order._id, status: { $in: ["open", "partial"] as const }, filledAmount: order.filledAmount }
+        ? {
+            _id: order._id,
+            status: { $in: ["open", "partial"] as const },
+            filledAmount: order.filledAmount,
+          }
         : { _id: order._id, status: "open" as const };
     const orderUpdate =
       input.kind === "limit"
@@ -666,11 +659,7 @@ export async function applyForexCancelSpend(
     const order = await orders.findOne({ _id: input.orderId }, opts);
     if (!order) return fail(FOREX_CANCEL_ORDER_MISSING);
     const cancelledByUs = order.appliedMoneyFlowKeys?.includes(key) ?? false;
-    if (
-      order.status !== "open" &&
-      order.status !== "partial" &&
-      (fresh || !cancelledByUs)
-    ) {
+    if (order.status !== "open" && order.status !== "partial" && (fresh || !cancelledByUs)) {
       return fail(FOREX_CANCEL_UNAVAILABLE);
     }
     const priorStatus = order.status;
@@ -1034,7 +1023,11 @@ function makeTurnFillSpreadStep(
     apply: async (options) => {
       const opts = options ?? {};
       await insertKeyedDoc(banks, { _id: bankId }, opts);
-      return applyKeyedUpdate(key, { collection: banks, filter: { _id: bankId }, update: { $inc: inc } }, opts);
+      return applyKeyedUpdate(
+        key,
+        { collection: banks, filter: { _id: bankId }, update: { $inc: inc } },
+        opts
+      );
     },
     revert: (options) =>
       applyKeyedUpdate(
@@ -1054,11 +1047,7 @@ function makeTurnFillSpreadStep(
  * currency) yields no steps — the legacy path skipped distribution the
  * same way while still crediting and recording the fill.
  */
-function turnFillSpreadSteps(
-  db: Db,
-  key: string,
-  plan: NormalizedTurnFillPlan
-): MoneyFlowStep[] {
+function turnFillSpreadSteps(db: Db, key: string, plan: NormalizedTurnFillPlan): MoneyFlowStep[] {
   if (!plan.fromBankId || !plan.reserveBankId) return [];
   const banks = db.collection<{ _id: string }>("centralBanks");
   if (plan.reserveBankId === plan.fromBankId) {
@@ -1270,7 +1259,13 @@ export async function applyForexTurnFillSpend(
     const opts = session ? { session } : {};
 
     const runPlan = async (plan: NormalizedTurnFillPlan): Promise<ForexTurnFillResult> => {
-      await runMoneyFlowSteps(receipts, key, buildTurnFillSteps(db, key, plan), mapTurnFillError, opts);
+      await runMoneyFlowSteps(
+        receipts,
+        key,
+        buildTurnFillSteps(db, key, plan),
+        mapTurnFillError,
+        opts
+      );
       const settled = await orders.findOne(
         { _id: plan.orderId },
         { ...opts, projection: { status: 1 } }
@@ -1393,7 +1388,8 @@ export async function applyForexTurnFillSpend(
           opts
         );
         const plan = normalizeTurnFillPlan(
-          (await receiptCollection.findOne({ _id: key }, opts))?.forexTurnFillPlan as ForexTurnFillStoredPlan
+          (await receiptCollection.findOne({ _id: key }, opts))
+            ?.forexTurnFillPlan as ForexTurnFillStoredPlan
         );
         const result = await runPlan(plan);
         return { ...result, duplicate: true as boolean };
@@ -1493,7 +1489,9 @@ async function replayTurnFillOutcome(
   key: string,
   opts: { session?: ClientSession }
 ): Promise<ForexTurnFillResult> {
-  const receiptCollection = (await getMoneyFlowReceiptsCollection(db)) as unknown as Collection<ForexTurnFillReceipt>;
+  const receiptCollection = (await getMoneyFlowReceiptsCollection(
+    db
+  )) as unknown as Collection<ForexTurnFillReceipt>;
   const existing = await receiptCollection.findOne({ _id: key }, opts);
   const stored = existing?.forexTurnFillPlan;
   if (!isTurnFillPlan(stored)) throw new Error("FOREX_TURN_FILL_RECEIPT_ORPHANED");
@@ -1581,4 +1579,318 @@ export async function resumeForexTurnFillByKey(
     async () => runResume()
   );
   return { ...result, orderId: plan.orderId };
+}
+
+// ── Turn expiry refunds ─────────────────────────────────────────────────────
+
+/** Expire cannot run: missing order. */
+export const FOREX_EXPIRE_ORDER_MISSING = "FOREX_EXPIRE_ORDER_MISSING";
+/** Expire cannot run: not open/partial (legacy already-expired row included), not due, or lost the settle race. */
+export const FOREX_EXPIRE_UNAVAILABLE = "FOREX_EXPIRE_UNAVAILABLE";
+
+/**
+ * Stable order-derived key for an expiry, so retries across turns converge
+ * under the key guards instead of refunding twice. Expiration is once-only
+ * per order (open/partial → expired is terminal), so the key deliberately
+ * carries NO turn: a per-turn key would let a later turn refund an order a
+ * prior turn already expired.
+ */
+export function forexExpireKey(orderId: ObjectId): string {
+  return `forex-expire:${orderId.toHexString()}`;
+}
+
+/**
+ * Fingerprint for an expiry: the operation identity (the order). The refund
+ * amount re-derives from the frozen expired row on every run, so it stays
+ * out of the fingerprint — a same-key retry always matches.
+ */
+export function forexExpireFingerprint(orderId: ObjectId): string {
+  return `forex-expire:${orderId.toHexString()}`;
+}
+
+export interface ForexExpireInput {
+  orderId: ObjectId;
+  /**
+   * Turn the driver is expiring for. When provided, a fresh attempt on an
+   * order whose `expiresAtTurn` is still in the future fails closed
+   * (`UNAVAILABLE:not-due`) instead of refunding early; a resumed
+   * `in-progress` attempt reconciles through the keyed steps regardless.
+   */
+  turn?: number;
+  now: Date;
+  fingerprint: string;
+  /**
+   * Deterministic key from {@link forexExpireKey} when called from the
+   * turn. Omit to mint one (tests / one-off callers).
+   */
+  idempotencyKey?: string;
+}
+
+export interface ForexExpireResult {
+  duplicate: boolean;
+  refundedAmount: number;
+  refundedCurrency: CurrencyCode;
+  orderStatus: CurrencyOrder["status"];
+  /**
+   * True when this call's guarded transition moved the order to `expired`.
+   * The turn driver tallies exactly this, mirroring the legacy
+   * `updateMany.modifiedCount` count.
+   */
+  transitionApplied: boolean;
+}
+
+function expireNotDue(order: CurrencyOrder, turn: number): boolean {
+  return (
+    typeof order.expiresAtTurn !== "number" ||
+    !Number.isFinite(order.expiresAtTurn) ||
+    order.expiresAtTurn > turn
+  );
+}
+
+/** Steps for one expiry: terminal transition first, escrow refund second. */
+function buildExpireSteps(
+  key: string,
+  order: CurrencyOrder,
+  now: Date,
+  db: Db
+): { steps: MoneyFlowStep[]; state: { refunded: number; transitionApplied: boolean } } {
+  const characters = db.collection<Character>("characters");
+  const orders = db.collection<CurrencyOrder>("currencyOrders");
+  const state = { refunded: 0, transitionApplied: false };
+  const priorStatus = order.status;
+  const priorUpdatedAt = order.updatedAt;
+
+  const refundStep: MoneyFlowStep = {
+    name: "escrow-refund",
+    apply: async (stepOpts) => {
+      const stepOptions = stepOpts ?? {};
+      // Read after the transition: the expired row is frozen (only this
+      // flow's transition could have moved it here), so this is the exact
+      // remainder. Keyed, so a retry converges instead of refunding twice.
+      const frozen = await orders.findOne({ _id: order._id }, stepOptions);
+      if (!frozen) {
+        state.refunded = 0;
+        return "already-applied";
+      }
+      const remainder = frozen.amount - frozen.filledAmount;
+      state.refunded = Number.isFinite(remainder) ? Math.max(0, remainder) : 0;
+      if (!(state.refunded > 0)) return "applied";
+      const outcome = await applyIdempotentLeg(
+        key,
+        {
+          name: "escrow-refund",
+          collection: characters,
+          docId: frozen.characterId,
+          field: personalField(frozen.fromCurrency),
+          delta: state.refunded,
+        },
+        stepOptions
+      );
+      // The legacy bulk refund never checked the owner write, so a vanished
+      // account credits nothing while the order still releases.
+      return outcome === "missing" ? "applied" : outcome;
+    },
+    revert: (stepOpts) =>
+      applyIdempotentLeg(
+        `${key}:compensate:escrow-refund`,
+        {
+          name: "escrow-refund",
+          collection: characters,
+          docId: order.characterId,
+          field: personalField(order.fromCurrency),
+          // Best-effort inverse of the pre-read remainder: the refund step
+          // is terminal (nothing runs after it), so this only runs if a
+          // future step is ever added and fails.
+          delta: -(order.amount - order.filledAmount),
+        },
+        stepOpts ?? {}
+      ),
+  };
+
+  const steps: MoneyFlowStep[] = [
+    {
+      name: "order-expire",
+      apply: async (stepOpts) => {
+        const outcome = await applyKeyedUpdate(
+          key,
+          {
+            collection: orders,
+            filter: { _id: order._id, status: { $in: ["open", "partial"] as const } },
+            update: { $set: { status: "expired" as const, updatedAt: now } },
+          },
+          stepOpts ?? {}
+        );
+        if (outcome === "applied") state.transitionApplied = true;
+        return outcome;
+      },
+      revert: (stepOpts) =>
+        applyKeyedUpdate(
+          `${key}:compensate:order-expire`,
+          {
+            collection: orders,
+            filter: { _id: order._id },
+            update: { $set: { status: priorStatus, updatedAt: priorUpdatedAt } },
+          },
+          stepOpts ?? {}
+        ),
+    } satisfies MoneyFlowStep,
+    refundStep,
+  ];
+  return { steps, state };
+}
+
+function mapExpireError(step: MoneyFlowStep, outcome: MoneyFlowLegOutcome): Error {
+  // The transition is the first step, so an empty prefix means a lost race
+  // (a concurrent fill, cancel, or expiry won) or a vanished order — the
+  // winner's outcome stands. The refund step never fails (missing owner and
+  // empty/malformed remainders converge as no-ops).
+  return new Error(`${FOREX_EXPIRE_UNAVAILABLE}:${step.name}:${outcome}`);
+}
+
+/**
+ * Expire one stale order and refund its remaining escrow, exactly once on
+ * every topology (issue #1672).
+ *
+ * Conservation: the owner escrowed `amount` fromCurrency at creation and
+ * `filledAmount` already left escrow through fills. The refund credits
+ * `amount - filledAmount` to `currencyBalances.personal.<fromCurrency>` —
+ * the same field the legacy unkeyed bulkWrite credited — and a vanished
+ * owner credits nothing (legacy no-op parity) while the order still
+ * releases. Malformed or non-positive remainders credit nothing and still
+ * complete, mirroring the legacy `refundAmount > 0` gate.
+ */
+export async function applyForexExpireSpend(
+  db: Db,
+  input: ForexExpireInput
+): Promise<ForexExpireResult> {
+  if (!input.orderId) throw new TypeError("Forex expire spend needs orderId");
+  const key =
+    input.idempotencyKey !== undefined
+      ? resolveKey(input.idempotencyKey, "Forex expire")
+      : forexExpireKey(input.orderId);
+
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const orders = db.collection<CurrencyOrder>("currencyOrders");
+  const now = input.now;
+
+  const runSpend = async (session?: ClientSession) => {
+    const opts = session ? { session } : {};
+    const claim = await claimMoneyFlowReceipt(receipts, key, input.fingerprint, opts);
+    // A fresh claim owns the attempt, so a validation failure settles the
+    // receipt `failed` (nothing applied yet — truthful). A resumed
+    // `in-progress` claim never settles here: the crashed prefix may have
+    // moved money, so it reconciles through the keyed steps below instead —
+    // including an expiry this key already transitioned (the transition
+    // converges, the refund reads the frozen row).
+    const fresh = claim === "fresh";
+    const fail = async (sentinel: string): Promise<never> => {
+      if (fresh) await failMoneyFlowReceipt(receipts, key, sentinel, opts);
+      throw new Error(sentinel);
+    };
+    if (claim === "duplicate") {
+      const live = await orders.findOne({ _id: input.orderId }, opts);
+      if (!live) return fail(FOREX_EXPIRE_ORDER_MISSING);
+      const remainder = live.amount - live.filledAmount;
+      return {
+        duplicate: true as boolean,
+        refundedAmount: Number.isFinite(remainder) ? Math.max(0, remainder) : 0,
+        refundedCurrency: live.fromCurrency,
+        orderStatus: live.status,
+        transitionApplied: false as boolean,
+      };
+    }
+
+    const order = await orders.findOne({ _id: input.orderId }, opts);
+    if (!order) return fail(FOREX_EXPIRE_ORDER_MISSING);
+    const cancelledByUs = order.appliedMoneyFlowKeys?.includes(key) ?? false;
+    if (order.status !== "open" && order.status !== "partial" && (fresh || !cancelledByUs)) {
+      return fail(FOREX_EXPIRE_UNAVAILABLE);
+    }
+    if (fresh && input.turn !== undefined && expireNotDue(order, input.turn)) {
+      return fail(`${FOREX_EXPIRE_UNAVAILABLE}:not-due`);
+    }
+
+    const { steps, state } = buildExpireSteps(key, order, now, db);
+    await runMoneyFlowSteps(receipts, key, steps, mapExpireError, opts);
+    const settled = await orders.findOne(
+      { _id: input.orderId },
+      { ...opts, projection: { status: 1, fromCurrency: 1 } }
+    );
+    return {
+      duplicate: claim === "in-progress",
+      refundedAmount: state.refunded,
+      refundedCurrency: order.fromCurrency,
+      orderStatus: (settled?.status ?? "expired") as CurrencyOrder["status"],
+      transitionApplied: state.transitionApplied,
+    };
+  };
+
+  return runWithOptionalTransaction(
+    async (session) => runSpend(session),
+    async () => runSpend()
+  );
+}
+
+/**
+ * Key-only crash recovery for expiries (issue #1672): the turn driver
+ * re-drives `in_progress` expire receipts through their keyed steps before
+ * scanning, so a crash between the transition and the refund converges on
+ * the next turn instead of stranding an expired-but-unrefunded order the
+ * scan (which only matches open/partial) would never pick up again.
+ *
+ * Returns null when there is nothing to resume (an unrelated key, no
+ * receipt, or an already-`completed` receipt). Throws
+ * `MoneyFlowTerminalError` when the receipt settled `failed`/`compensated`.
+ */
+export async function resumeForexExpireByKey(
+  db: Db,
+  key: string
+): Promise<(ForexExpireResult & { orderId: ObjectId }) | null> {
+  if (key.length === 0 || key.length > 128) {
+    throw new RangeError("Forex expire idempotency key must be 1-128 characters");
+  }
+  const prefix = "forex-expire:";
+  if (!key.startsWith(prefix)) return null;
+  let orderId: ObjectId;
+  try {
+    orderId = new ObjectId(key.slice(prefix.length));
+  } catch {
+    return null;
+  }
+  const receipts = await getMoneyFlowReceiptsCollection(db);
+  const existing = await receipts.findOne({ _id: key });
+  if (!existing) return null;
+  if (existing.status === "completed") return null;
+  if (existing.status === "failed" || existing.status === "compensated") {
+    throw new MoneyFlowTerminalError(key, existing.status);
+  }
+  if (existing.status !== "in_progress") return null;
+  const runResume = async (session?: ClientSession): Promise<ForexExpireResult> => {
+    const opts = session ? { session } : {};
+    const orders = db.collection<CurrencyOrder>("currencyOrders");
+    const order = await orders.findOne({ _id: orderId }, opts);
+    if (!order) {
+      await failMoneyFlowReceipt(receipts, key, FOREX_EXPIRE_ORDER_MISSING, opts);
+      throw new Error(FOREX_EXPIRE_ORDER_MISSING);
+    }
+    // No turn gate and no status gate here: the crashed attempt owns this
+    // order under this key, so reconcile whatever it left — the keyed
+    // transition converges when the order is already expired, and a
+    // concurrent winner's terminal state surfaces through the steps.
+    const { steps, state } = buildExpireSteps(key, order, order.updatedAt, db);
+    await runMoneyFlowSteps(receipts, key, steps, mapExpireError, opts);
+    const settled = await orders.findOne({ _id: orderId }, { ...opts, projection: { status: 1 } });
+    return {
+      duplicate: true as boolean,
+      refundedAmount: state.refunded,
+      refundedCurrency: order.fromCurrency,
+      orderStatus: (settled?.status ?? "expired") as CurrencyOrder["status"],
+      transitionApplied: state.transitionApplied,
+    };
+  };
+  const result = await runWithOptionalTransaction(
+    async (session) => runResume(session),
+    async () => runResume()
+  );
+  return { ...result, orderId };
 }

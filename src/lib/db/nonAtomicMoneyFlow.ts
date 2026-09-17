@@ -117,13 +117,19 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * claim, keyed credit/settle/spread/history steps with legacy-exact
  * amounts and phase order, same-key replay/resume/terminal semantics,
  * key-only orphan recovery re-driven by the turn driver before its scan).
- * Forex turn refund and intervention paths DO mutate money and remain
- * legacy (BEWARE): expireStaleOrders refunds escrow via an unkeyed
- * bulkWrite, and the intervention side effects draw reserves with bare
- * writes (both in src/lib/turn/forexTurn.ts, run from the
- * stateEffectsPhase forexTurn phase). A crash between the status
- * transition and the money writes there can still strand or double
- * value; migrating them means expressing each as keyed steps here.
+ * Forex turn expiry refunds are migrated (applyForexExpireSpend: stable
+ * order-derived key with no turn — expiration is once-only per order, so a
+ * per-turn key could refund twice across turns — guarded expire + refund
+ * steps with legacy-exact eligibility, currency/owner semantics, and phase
+ * order, same-key replay/resume/terminal semantics, key-only orphan
+ * recovery re-driven by the turn driver before its scan; the driver tallies
+ * guarded transitions, mirroring the legacy modifiedCount).
+ * The intervention path DOES mutate money and remains legacy
+ * (BEWARE): the intervention side effects draw reserves with bare writes
+ * (in src/lib/turn/forexTurn.ts, run from the stateEffectsPhase forexTurn
+ * phase). A crash between the rate write and the reserve writes there can
+ * still strand value; migrating it means expressing each draw as keyed
+ * steps here.
  * Still on the legacy debit-first-plus-compensation fallback: bond
  * default dissolution (bare bulkWrite holder/equity/central-bank writes),
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs

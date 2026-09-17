@@ -2,12 +2,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Collection, type Db } from "mongodb";
 import {
   applyForexCancelSpend,
+  applyForexExpireSpend,
   applyForexFillSpend,
   applyForexOrderCreateSpend,
   applyForexTurnFillSpend,
+  forexExpireFingerprint,
+  forexExpireKey,
   forexTurnFillFingerprint,
   forexTurnFillKey,
+  resumeForexExpireByKey,
   resumeForexTurnFillByKey,
+  FOREX_EXPIRE_ORDER_MISSING,
+  FOREX_EXPIRE_UNAVAILABLE,
   FOREX_TURN_FILL_RACED,
   FOREX_CANCEL_ORDER_MISSING,
   FOREX_CANCEL_UNAVAILABLE,
@@ -267,9 +273,7 @@ function charDoc(db: FakeDb, id: ObjectId): Record<string, unknown> {
 }
 
 function personalOf(db: FakeDb, id: ObjectId): Record<string, number> {
-  return (
-    (charDoc(db, id).currencyBalances as { personal: Record<string, number> }).personal ?? {}
-  );
+  return (charDoc(db, id).currencyBalances as { personal: Record<string, number> }).personal ?? {};
 }
 
 function orderDoc(db: FakeDb, id: ObjectId): Record<string, unknown> {
@@ -288,8 +292,7 @@ function bankDoc(db: FakeDb, bankId: string): Record<string, unknown> {
 
 function receipt(db: FakeDb, key: string): MoneyFlowReceipt {
   const doc = db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.get(key) as unknown as
-    | MoneyFlowReceipt
-    | undefined;
+    MoneyFlowReceipt | undefined;
   if (!doc) throw new Error(`missing receipt for ${key}`);
   return doc;
 }
@@ -482,9 +485,9 @@ describe("applyForexOrderCreateSpend", () => {
     const db = new FakeDb();
     seedDb(db);
 
-    await expect(
-      createLimitOrder(db, { fingerprint: "fp-x", idempotencyKey: "" })
-    ).rejects.toThrow(RangeError);
+    await expect(createLimitOrder(db, { fingerprint: "fp-x", idempotencyKey: "" })).rejects.toThrow(
+      RangeError
+    );
     await expect(
       createLimitOrder(db, { fingerprint: "fp-x", idempotencyKey: "k".repeat(129) })
     ).rejects.toThrow(RangeError);
@@ -1039,9 +1042,9 @@ describe("applyForexFillSpend (direct accept)", () => {
       return realUpdate(filter, update);
     }) as typeof orders.updateOne;
 
-    await expect(
-      applyForexFillSpend(db as unknown as Db, acceptInput(orderId))
-    ).rejects.toThrow(FOREX_DIRECT_UNAVAILABLE);
+    await expect(applyForexFillSpend(db as unknown as Db, acceptInput(orderId))).rejects.toThrow(
+      FOREX_DIRECT_UNAVAILABLE
+    );
 
     expect(personalOf(db, takerId)).toMatchObject({ GBP: 100_000, USD: 0 });
     expect(personalOf(db, makerId).GBP).toBe(0);
@@ -1055,9 +1058,9 @@ describe("applyForexFillSpend (direct accept)", () => {
     const orderId = await createDirectRequest(db, "direct-crash-setup");
     db.crashAfterWrites = db.writeCount + 2;
 
-    await expect(
-      applyForexFillSpend(db as unknown as Db, acceptInput(orderId))
-    ).rejects.toThrow("INJECTED_CRASH");
+    await expect(applyForexFillSpend(db as unknown as Db, acceptInput(orderId))).rejects.toThrow(
+      "INJECTED_CRASH"
+    );
     expect(receipt(db, "direct-accept").status).toBe("in_progress");
 
     db.crashAfterWrites = Number.POSITIVE_INFINITY;
@@ -1430,10 +1433,7 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     const db = freshDb();
     const orderId = seedTurnOrder(db);
 
-    const result = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, orderId)
-    );
+    const result = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
 
     expect(result).toMatchObject({
       duplicate: false,
@@ -1448,9 +1448,9 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
     expect(personalOf(db, makerId).USD).toBe(20_000);
     expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
-    expect(
-      (bankDoc(db, "UK").spreadFeeReserveBalances as Record<string, number>).USD
-    ).toBe(EXPECTED.reserve);
+    expect((bankDoc(db, "UK").spreadFeeReserveBalances as Record<string, number>).USD).toBe(
+      EXPECTED.reserve
+    );
     const settled = orderDoc(db, orderId);
     expect(settled.status).toBe("filled");
     expect(settled.filledAmount).toBe(10_000);
@@ -1486,10 +1486,7 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("in_progress");
 
     db.crashAfterWrites = Number.POSITIVE_INFINITY;
-    const retry = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, orderId)
-    );
+    const retry = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
 
     expect(retry.duplicate).toBe(true);
     expect(retry.outcome).toBe("filled");
@@ -1535,9 +1532,9 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
 
     expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
-    expect(
-      (bankDoc(db, "UK").spreadFeeReserveBalances as Record<string, number>).USD
-    ).toBe(EXPECTED.reserve);
+    expect((bankDoc(db, "UK").spreadFeeReserveBalances as Record<string, number>).USD).toBe(
+      EXPECTED.reserve
+    );
     expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
     expect(historyDocs(db)).toHaveLength(1);
     expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
@@ -1546,10 +1543,7 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
   it("replays the stored outcome on a duplicate retry without moving money", async () => {
     const db = freshDb();
     const orderId = seedTurnOrder(db);
-    const first = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, orderId)
-    );
+    const first = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
     // A same-key retry recomputed at drifted rates still replays the stored
     // plan amounts instead of refilling.
     const second = await applyForexTurnFillSpend(db as unknown as Db, {
@@ -1621,9 +1615,9 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     winner.status = "filled";
     winner.filledAmount = 10_000;
 
-    await expect(
-      resumeForexTurnFillByKey(db as unknown as Db, key)
-    ).rejects.toThrow(new RegExp(FOREX_TURN_FILL_RACED));
+    await expect(resumeForexTurnFillByKey(db as unknown as Db, key)).rejects.toThrow(
+      new RegExp(FOREX_TURN_FILL_RACED)
+    );
 
     // The loser's credit was reversed; the winner's fill stands untouched.
     expect(personalOf(db, makerId).GBP).toBe(0);
@@ -1634,15 +1628,10 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
   it("skips writeless on empty remainder, missing order, and unusable rate", async () => {
     const db = freshDb();
     const settledId = seedTurnOrder(db, { filledAmount: 10_000, status: "filled" });
-    const skipped = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, settledId)
-    );
+    const skipped = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, settledId));
     expect(skipped.outcome).toBe("skipped");
     expect(db.writeCount).toBe(0);
-    expect(
-      db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.size
-    ).toBe(0);
+    expect(db.collection(NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION).docs.size).toBe(0);
 
     const missing = await applyForexTurnFillSpend(db as unknown as Db, {
       ...fillInputFor(db, settledId),
@@ -1664,10 +1653,7 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     const orderId = seedTurnOrder(db);
     db.collection("characters").docs.delete(makerId.toHexString());
 
-    const result = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, orderId)
-    );
+    const result = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
 
     expect(result).toMatchObject({ duplicate: false, outcome: "expired" });
     expect(result.centralBankShare).toBe(EXPECTED.cbShare);
@@ -1677,10 +1663,7 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     expect(historyDocs(db)).toHaveLength(1);
     expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
 
-    const replay = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, orderId)
-    );
+    const replay = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId));
     expect(replay).toMatchObject({ duplicate: true, outcome: "expired" });
     expect(historyDocs(db)).toHaveLength(1);
   });
@@ -1689,17 +1672,14 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     const db = freshDb();
     const orderId = seedTurnOrder(db, { toCurrency: "USD" });
 
-    const result = await applyForexTurnFillSpend(
-      db as unknown as Db,
-      fillInputFor(db, orderId, 1)
-    );
+    const result = await applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId, 1));
 
     expect(result.outcome).toBe("filled");
     expect(personalOf(db, makerId).USD).toBe(20_000 + 9_936);
     expect(bankDoc(db, "US").forexRevenue).toBe(EXPECTED.revenue);
-    expect(
-      (bankDoc(db, "US").spreadFeeReserveBalances as Record<string, number>).USD
-    ).toBe(EXPECTED.reserve);
+    expect((bankDoc(db, "US").spreadFeeReserveBalances as Record<string, number>).USD).toBe(
+      EXPECTED.reserve
+    );
   });
 
   it("resumes a prior-turn orphan by key without a live input", async () => {
@@ -1726,5 +1706,375 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     expect(personalOf(db, makerId).GBP).toBe(EXPECTED.credit);
     expect(receipt(db, forexTurnFillKey(TURN, orderId)).status).toBe("completed");
     expect(await resumeForexTurnFillByKey(db as unknown as Db, "unrelated-key")).toBeNull();
+  });
+});
+
+describe("applyForexExpireSpend (turn expiry refunds)", () => {
+  const TURN = 50;
+
+  /** A 1000 USD order with 200 filled, due at turn 49 (refund 800 USD). */
+  function seedExpireOrder(db: FakeDb, overrides: Record<string, unknown> = {}): ObjectId {
+    const orderId = new ObjectId();
+    db.collection("currencyOrders").docs.set(orderId.toHexString(), {
+      _id: orderId,
+      characterId: makerId,
+      characterName: "Maker",
+      countryId: "US",
+      type: "limit",
+      direction: "buy",
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      amount: 1000,
+      filledAmount: 200,
+      limitRate: 0.8,
+      status: "partial",
+      expiresAtTurn: 49,
+      spreadCharged: 0,
+      createdAt: now,
+      updatedAt: now,
+      ...overrides,
+      _id: orderId,
+    });
+    return orderId;
+  }
+
+  function expireInputFor(
+    db: FakeDb,
+    orderId: ObjectId,
+    overrides: Record<string, unknown> = {}
+  ): Parameters<typeof applyForexExpireSpend>[1] {
+    void db;
+    return {
+      orderId,
+      turn: TURN,
+      now,
+      fingerprint: forexExpireFingerprint(orderId),
+      idempotencyKey: forexExpireKey(orderId),
+      ...overrides,
+    } as Parameters<typeof applyForexExpireSpend>[1];
+  }
+
+  function freshDb(): FakeDb {
+    const db = new FakeDb();
+    seedDb(db);
+    return db;
+  }
+
+  it("expires exactly once, refunding the remainder to the escrow currency", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+
+    const result = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      refundedAmount: 800,
+      refundedCurrency: "USD",
+      orderStatus: "expired",
+      transitionApplied: true,
+    });
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(orderDoc(db, orderId).status).toBe("expired");
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("a crash before the order terminalization converges on retry", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    // Writes: 1 claim lands, then the crash lands on the transition.
+    db.crashAfterWrites = 1;
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(orderDoc(db, orderId).status).toBe("partial");
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("in_progress");
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    const retry = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(retry.duplicate).toBe(true);
+    expect(retry.refundedAmount).toBe(800);
+    expect(retry.transitionApplied).toBe(true);
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(orderDoc(db, orderId).status).toBe("expired");
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("a crash after terminalization but before the credit refunds once", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    // Writes: claim + transition land, then the crash lands on the credit.
+    db.crashAfterWrites = 2;
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(orderDoc(db, orderId).status).toBe("expired");
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(orderDoc(db, orderId).status).toBe("expired");
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("a crash after the credit but before settle never double-refunds", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    // Writes: claim + transition + credit land, then the crash lands on settle.
+    db.crashAfterWrites = 3;
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("in_progress");
+
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+    const retry = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(retry.duplicate).toBe(true);
+    expect(retry.transitionApplied).toBe(false);
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("concurrent same-key claims converge to one refund", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    // A parallel worker crashes mid-flow; the second worker picks the same
+    // key up while it is still in_progress and finishes it.
+    db.crashAfterWrites = 2;
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+
+    const worker = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+    expect(worker.duplicate).toBe(true);
+
+    // The original worker retrying afterwards replays, never refunding again.
+    const replay = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+    expect(replay.duplicate).toBe(true);
+    expect(replay.refundedAmount).toBe(800);
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("a different-key concurrent loser fails explicitly without moving money", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    await expect(
+      applyForexExpireSpend(
+        db as unknown as Db,
+        expireInputFor(db, orderId, { fingerprint: "other-key-fp", idempotencyKey: "other-key" })
+      )
+    ).rejects.toThrow(FOREX_EXPIRE_UNAVAILABLE);
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+  });
+
+  it("replays the stored outcome on a duplicate retry without moving money", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    const first = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+    const second = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(first.duplicate).toBe(false);
+    expect(second).toMatchObject({
+      duplicate: true,
+      refundedAmount: 800,
+      refundedCurrency: "USD",
+      orderStatus: "expired",
+      transitionApplied: false,
+    });
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+  });
+
+  it("a stable order key never refunds twice across turns", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    // A later turn re-driving the same order-derived key replays the stored
+    // outcome instead of refunding a second time.
+    const later = await applyForexExpireSpend(
+      db as unknown as Db,
+      expireInputFor(db, orderId, { turn: 60 })
+    );
+    expect(later.duplicate).toBe(true);
+    expect(later.transitionApplied).toBe(false);
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+  });
+
+  it("releases the order when the owner is gone without crediting anyone", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    db.collection("characters").docs.delete(makerId.toHexString());
+
+    const result = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      refundedAmount: 800,
+      orderStatus: "expired",
+      transitionApplied: true,
+    });
+    expect(orderDoc(db, orderId).status).toBe("expired");
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("fails explicitly on legacy already-expired rows without moving money", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db, { status: "expired" });
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow(FOREX_EXPIRE_UNAVAILABLE);
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+    expect(orderDoc(db, orderId).status).toBe("expired");
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("failed");
+  });
+
+  it("fails closed on missing orders", async () => {
+    const db = freshDb();
+    const orderId = new ObjectId();
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow(FOREX_EXPIRE_ORDER_MISSING);
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+  });
+
+  it("fails closed when the order is not due yet", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db, { expiresAtTurn: 60 });
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow(`${FOREX_EXPIRE_UNAVAILABLE}:not-due`);
+    expect(orderDoc(db, orderId).status).toBe("partial");
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("failed");
+  });
+
+  it("treats a missing expiry turn as not due when the driver passes a turn", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db, { expiresAtTurn: undefined });
+
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow(`${FOREX_EXPIRE_UNAVAILABLE}:not-due`);
+    expect(orderDoc(db, orderId).status).toBe("partial");
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+  });
+
+  it("expires malformed remainders without minting funds", async () => {
+    const db = freshDb();
+    const nanId = seedExpireOrder(db, { amount: Number.NaN });
+    const nanResult = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, nanId));
+    expect(nanResult).toMatchObject({ orderStatus: "expired", refundedAmount: 0 });
+
+    const overId = seedExpireOrder(db, { filledAmount: 1500 });
+    const overResult = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, overId));
+    expect(overResult).toMatchObject({ orderStatus: "expired", refundedAmount: 0 });
+
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+  });
+
+  it("completes with zero refund on an empty remainder", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db, { filledAmount: 1000 });
+
+    const result = await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    expect(result).toMatchObject({
+      duplicate: false,
+      refundedAmount: 0,
+      orderStatus: "expired",
+      transitionApplied: true,
+    });
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+  });
+
+  it("rejects a key reused with a different fingerprint", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    await applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId));
+
+    await expect(
+      applyForexExpireSpend(
+        db as unknown as Db,
+        expireInputFor(db, orderId, { fingerprint: "forex-expire:something-else" })
+      )
+    ).rejects.toThrow(MoneyFlowKeyConflictError);
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+  });
+
+  it("fails closed on a same-key retry after a terminal settlement", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db, { status: "expired" });
+    const key = forexExpireKey(orderId);
+    const input = expireInputFor(db, orderId);
+    const receipts = db.collection(
+      NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
+    ) as unknown as Collection<MoneyFlowReceipt>;
+    // The terminal setup must claim under the input's real fingerprint: a
+    // mismatched fingerprint throws key-conflict before the terminal status
+    // is ever consulted, which would test the wrong failure.
+    expect(await claimMoneyFlowReceipt(receipts, key, input.fingerprint)).toBe("fresh");
+    await failMoneyFlowReceipt(receipts, key, `${FOREX_EXPIRE_UNAVAILABLE}:guard-rejected`);
+
+    await expect(applyForexExpireSpend(db as unknown as Db, input)).rejects.toThrow(
+      MoneyFlowTerminalError
+    );
+    expect(personalOf(db, makerId).USD).toBe(20_000);
+  });
+
+  it("resumes a crashed attempt by key without a live input", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db);
+    db.crashAfterWrites = 2;
+    await expect(
+      applyForexExpireSpend(db as unknown as Db, expireInputFor(db, orderId))
+    ).rejects.toThrow("INJECTED_CRASH");
+    db.crashAfterWrites = Number.POSITIVE_INFINITY;
+
+    const resumed = await resumeForexExpireByKey(db as unknown as Db, forexExpireKey(orderId));
+
+    expect(resumed).toMatchObject({
+      duplicate: true,
+      refundedAmount: 800,
+      refundedCurrency: "USD",
+      orderStatus: "expired",
+      orderId,
+    });
+    expect(personalOf(db, makerId).USD).toBe(20_800);
+    expect(receipt(db, forexExpireKey(orderId)).status).toBe("completed");
+    expect(await resumeForexExpireByKey(db as unknown as Db, "unrelated-key")).toBeNull();
+    expect(await resumeForexExpireByKey(db as unknown as Db, forexExpireKey(orderId))).toBeNull();
+  });
+
+  it("resume fails closed on terminal receipts", async () => {
+    const db = freshDb();
+    const orderId = seedExpireOrder(db, { status: "expired" });
+    const key = forexExpireKey(orderId);
+    const receipts = db.collection(
+      NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
+    ) as unknown as Collection<MoneyFlowReceipt>;
+    expect(await claimMoneyFlowReceipt(receipts, key, forexExpireFingerprint(orderId))).toBe(
+      "fresh"
+    );
+    await failMoneyFlowReceipt(receipts, key, `${FOREX_EXPIRE_UNAVAILABLE}:guard-rejected`);
+
+    await expect(resumeForexExpireByKey(db as unknown as Db, key)).rejects.toThrow(
+      MoneyFlowTerminalError
+    );
   });
 });

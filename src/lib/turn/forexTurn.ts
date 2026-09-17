@@ -8,7 +8,7 @@
  * See docs/design/currency-exchange.md "Rate Update Formula" and "Turn Processing Placement".
  */
 
-import type { AnyBulkWriteOperation, Db, ObjectId } from "mongodb";
+import type { Db, ObjectId } from "mongodb";
 import type { CentralBank, TurnSnapshot } from "@/lib/db/types/centralBank";
 import type {
   ExchangeRate,
@@ -40,15 +40,20 @@ import { rankReserveCurrencies } from "@/lib/centralBank/reserveCurrencyRanking"
 import { computeCurrencyVolumes } from "@/lib/currency/volumeTracker";
 import { computeInterventionPressure, isInBand } from "@/lib/currency/interventionCalculator";
 import { interventionAdherenceMultiplier } from "@/lib/centralBank/marketEffects";
-import { buildPersonalBalanceInc } from "@/lib/currency/characterFunds";
 import { sendSystemMail } from "@/lib/mail/systemMail";
 import { getBankId } from "@/lib/centralBank/helpers";
 import { getMoneyFlowReceiptsCollection } from "@/lib/db/collections/moneyFlowReceipts";
 import {
+  applyForexExpireSpend,
   applyForexTurnFillSpend,
+  forexExpireFingerprint,
+  forexExpireKey,
   forexTurnFillFingerprint,
   forexTurnFillKey,
+  resumeForexExpireByKey,
   resumeForexTurnFillByKey,
+  FOREX_EXPIRE_ORDER_MISSING,
+  FOREX_EXPIRE_UNAVAILABLE,
   FOREX_TURN_FILL_RACED,
 } from "@/lib/forex/forexSpend";
 import { DEFAULT_SEED_PRESET } from "@/lib/constants/seedPreset";
@@ -964,56 +969,86 @@ async function processTriggeredLimitOrders(
  * Expire open limit/direct orders that have passed their expiresAtTurn.
  * Refunds remaining escrowed fromCurrency back to each character.
  *
- * Crash-safety: status is transitioned (open/partial → expired) atomically
- * BEFORE any refund is issued. The filter on open/partial makes this
- * idempotent — already-expired orders are untouched. If the process crashes
- * after the updateMany but before all refunds complete, the next turn's query
- * (which filters on "open"/"partial") will NOT pick up these orders again,
- * eliminating the double-refund risk.
+ * Crash-safety (issue #1672): each expiry settles through
+ * `applyForexExpireSpend` as keyed steps under a stable order-derived key
+ * (guarded expire + refund), so a crash between one order's transition and
+ * its refund converges on retry instead of stranding an expired-but-
+ * unrefunded order the scan (which only matches open/partial) would never
+ * pick up again. Eligibility, currency/owner semantics, and phase order
+ * match the legacy path exactly: the same status + expiresAtTurn filter
+ * selects orders, the refund credits `currencyBalances.personal.<fromCurrency>`
+ * (the field the legacy bulkWrite credited, same zero/negative gate), and a
+ * vanished owner credits nothing while the order still releases.
  */
-async function expireStaleOrders(db: Db, currentTurn: number, now: Date): Promise<number> {
-  // Step 1: Atomically transition all eligible orders from open/partial → expired.
-  // The status filter makes this idempotent — already-expired orders are untouched.
-  const transitionResult = await db.collection<CurrencyOrder>("currencyOrders").updateMany(
-    {
-      status: { $in: ["open", "partial"] },
-      expiresAtTurn: { $lte: currentTurn },
-    },
-    { $set: { status: "expired" as const, updatedAt: now } }
-  );
+export async function expireStaleOrders(db: Db, currentTurn: number, now: Date): Promise<number> {
+  let expiredCount = 0;
 
-  if (transitionResult.modifiedCount === 0) return 0;
+  // ── Keyed-expiry recovery ─────────────────────────────────────────────────
+  // Re-drive `in_progress` expire receipts through their keyed steps BEFORE
+  // the scan, so a crash between one order's transition and its refund
+  // converges now. A resumed receipt settles its order, so the scan below
+  // never picks the same order up twice. Anything already settled (or
+  // unsettleable) is left alone: terminal receipts hold their outcome.
+  try {
+    const receipts = await getMoneyFlowReceiptsCollection(db);
+    const orphans = await receipts
+      .find({ _id: { $regex: "^forex-expire:" }, status: "in_progress" })
+      .limit(50)
+      .toArray();
+    for (const orphan of orphans) {
+      try {
+        const resumed = await resumeForexExpireByKey(db, orphan._id);
+        if (resumed?.transitionApplied) expiredCount += 1;
+      } catch {
+        continue;
+      }
+    }
+  } catch {
+    // Recovery is best effort: a receipt-store wobble must never block the
+    // live scan — unsettled orphans keep until the next turn.
+  }
 
-  // Step 2: Fetch the orders that were JUST transitioned (same `updatedAt` timestamp).
-  // Re-querying by status + updatedAt is safe because `now` is a fixed value for this turn
-  // and the transition above wrote it atomically.
-  const justExpired = await db
+  // ── Eligibility scan ──────────────────────────────────────────────────────
+  // Same filter the legacy updateMany transitioned on: open/partial orders
+  // whose expiresAtTurn has passed. Id-only: each order's transition and
+  // refund run inside its own keyed flow.
+  const eligible = await db
     .collection<CurrencyOrder>("currencyOrders")
-    .find({
-      status: "expired",
-      updatedAt: now,
-    })
+    .find(
+      {
+        status: { $in: ["open", "partial"] },
+        expiresAtTurn: { $lte: currentTurn },
+      },
+      { projection: { _id: 1 } }
+    )
     .toArray();
 
-  // Step 3: Issue refunds only for the just-transitioned orders.
-  const refundOps: AnyBulkWriteOperation<Character>[] = [];
-  for (const order of justExpired) {
-    const refundAmount = order.amount - order.filledAmount;
-    if (refundAmount > 0) {
-      const refundInc = buildPersonalBalanceInc(refundAmount, order.fromCurrency, true);
-      refundOps.push({
-        updateOne: {
-          filter: { _id: order.characterId },
-          update: { $inc: refundInc },
-        },
+  for (const { _id } of eligible) {
+    try {
+      const result = await applyForexExpireSpend(db, {
+        orderId: _id,
+        turn: currentTurn,
+        now,
+        fingerprint: forexExpireFingerprint(_id),
+        idempotencyKey: forexExpireKey(_id),
       });
+      if (result.transitionApplied) expiredCount += 1;
+    } catch (err) {
+      // A concurrent fill, cancel, or expiry won the order-step race (or the
+      // row vanished first): the winner's outcome stands, so skip quietly.
+      // Anything else aborts the phase like the legacy throw did.
+      if (
+        err instanceof Error &&
+        (err.message.startsWith(FOREX_EXPIRE_UNAVAILABLE) ||
+          err.message.startsWith(FOREX_EXPIRE_ORDER_MISSING))
+      ) {
+        continue;
+      }
+      throw err;
     }
   }
-  if (refundOps.length > 0) {
-    await db.collection<Character>("characters").bulkWrite(refundOps);
-  }
 
-  return transitionResult.modifiedCount;
+  return expiredCount;
 }
 
 /**
