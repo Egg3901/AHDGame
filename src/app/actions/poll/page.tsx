@@ -309,7 +309,7 @@ export default function PollPage() {
                   <div className="text-sm font-bold text-yellow-400">
                     ${pollData.fundCostSmall.toLocaleString()}
                   </div>
-                  <div className="text-xs text-muted">2 actions</div>
+                  <div className="text-xs text-muted">{pollData.actionCostSmall} actions</div>
                 </div>
               </div>
             </button>
@@ -338,7 +338,7 @@ export default function PollPage() {
                   <div className="text-sm font-bold text-yellow-400">
                     ${pollData.fundCostLarge.toLocaleString()}
                   </div>
-                  <div className="text-xs text-muted">6 actions</div>
+                  <div className="text-xs text-muted">{pollData.actionCostLarge} actions</div>
                 </div>
               </div>
             </button>
