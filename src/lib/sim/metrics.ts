@@ -198,6 +198,9 @@ export interface MarketAccessMetrics {
   externalBroadMoneyShare: number | null;
   activeModeledBalanceShare48: number | null;
   modeledGrossVelocity48: number | null;
+  householdTransactionalVelocity48: number | null;
+  householdSavingsVelocity48: number | null;
+  savingsShareOfHouseholdBalances: number | null;
   measurementConfidence: string;
   reconciliationStatus: string;
 }
@@ -252,6 +255,10 @@ export function marketAccessMetricsFromSnapshot(
     externalBroadMoneyShare: snapshot?.money.externalBroadMoneyShare.value ?? null,
     activeModeledBalanceShare48: snapshot?.money.activeModeledBalanceShare48.value ?? null,
     modeledGrossVelocity48: snapshot?.money.modeledGrossVelocity48.value ?? null,
+    householdTransactionalVelocity48:
+      snapshot?.money.householdTransactionalVelocity48?.value ?? null,
+    householdSavingsVelocity48: snapshot?.money.householdSavingsVelocity48?.value ?? null,
+    savingsShareOfHouseholdBalances: snapshot?.money.savingsShareOfHouseholdBalances?.value ?? null,
     measurementConfidence: snapshot?.measurement.confidence ?? "unavailable",
     reconciliationStatus: snapshot?.reconciliation.status ?? "unavailable",
   };

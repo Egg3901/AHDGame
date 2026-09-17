@@ -59,6 +59,21 @@ describe("GET /api/admin/economy/vital-signs", () => {
           observations: 3,
           basis: "fund_org_npp_primary_ledger_flow_to_closing_balance",
         },
+        householdTransactionalVelocity48: {
+          value: 1.2,
+          observations: 4,
+          basis: "character_primary_ledger_flow_to_closing_balance",
+        },
+        householdSavingsVelocity48: {
+          value: 0.1,
+          observations: 4,
+          basis: "character_savings_primary_ledger_flow_to_closing_balance",
+        },
+        savingsShareOfHouseholdBalances: {
+          value: 0.4,
+          observations: 2,
+          basis: "character_savings_share_of_household_closing_balance",
+        },
       },
       securities: {
         corporateMedianHolders: {
@@ -81,6 +96,9 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.snapshot.money.intermediatedGrossVelocity48.value).toBe(0.5);
+    expect(body.snapshot.money.householdTransactionalVelocity48.value).toBe(1.2);
+    expect(body.snapshot.money.householdSavingsVelocity48.value).toBe(0.1);
+    expect(body.snapshot.money.savingsShareOfHouseholdBalances.value).toBe(0.4);
     expect(body.snapshot.securities.corporateMedianHolders.value).toBe(1);
     expect(body.snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
   });

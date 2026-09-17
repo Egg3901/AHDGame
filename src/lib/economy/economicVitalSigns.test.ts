@@ -658,6 +658,80 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
   });
 
+  it("splits household velocity into transactional and savings activity", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 30,
+        createdAt: new Date(),
+        balances: {
+          "character:a:USD": 600,
+          "character_savings:a:USD": 400,
+        },
+      },
+      ledgerTurnover: [
+        { account: "character:a:USD", turnover: 600 },
+        { account: "character_savings:a:USD", turnover: 40 },
+        // System legs never reach the classifier.
+        { account: "mint:reason:USD", turnover: 10_000 },
+      ],
+      ledgerEntryCount: 3,
+    });
+
+    // Wallet turnover over wallet stock only: 600 / 600.
+    expect(snapshot.money.householdTransactionalVelocity48.value).toBe(1);
+    expect(snapshot.money.householdTransactionalVelocity48.basis).toBe(
+      "character_primary_ledger_flow_to_closing_balance"
+    );
+    // Savings turnover over savings stock only: 40 / 400.
+    expect(snapshot.money.householdSavingsVelocity48.value).toBe(0.1);
+    expect(snapshot.money.householdSavingsVelocity48.basis).toBe(
+      "character_savings_primary_ledger_flow_to_closing_balance"
+    );
+    // Savings share of household closing stock: 400 / (600 + 400).
+    expect(snapshot.money.savingsShareOfHouseholdBalances.value).toBe(0.4);
+    expect(snapshot.money.savingsShareOfHouseholdBalances.observations).toBe(2);
+    expect(snapshot.money.savingsShareOfHouseholdBalances.basis).toBe(
+      "character_savings_share_of_household_closing_balance"
+    );
+    // The lumped household velocity still covers both classes: 640 / 1000.
+    expect(snapshot.money.householdGrossVelocity48.value).toBe(0.64);
+  });
+
+  it("reports absent household balances as unknown, not as zero velocity", () => {
+    const snapshot = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+
+    expect(snapshot.money.householdTransactionalVelocity48.value).toBeNull();
+    expect(snapshot.money.householdTransactionalVelocity48.observations).toBe(0);
+    expect(snapshot.money.householdSavingsVelocity48.value).toBeNull();
+    expect(snapshot.money.householdSavingsVelocity48.observations).toBe(0);
+    expect(snapshot.money.savingsShareOfHouseholdBalances.value).toBeNull();
+    expect(snapshot.money.savingsShareOfHouseholdBalances.observations).toBe(0);
+  });
+
+  it("reports a missing savings class as unknown without moving the wallet read", () => {
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      balanceSnapshot: {
+        _id: new ObjectId(),
+        turn: 30,
+        createdAt: new Date(),
+        balances: { "character:a:USD": 600 },
+      },
+      ledgerTurnover: [{ account: "character:a:USD", turnover: 600 }],
+      ledgerEntryCount: 1,
+    });
+
+    expect(snapshot.money.householdTransactionalVelocity48.value).toBe(1);
+    // No savings stock: unknown, not zero, and the share is unknown too.
+    expect(snapshot.money.householdSavingsVelocity48.value).toBeNull();
+    expect(snapshot.money.savingsShareOfHouseholdBalances.value).toBeNull();
+    expect(snapshot.money.savingsShareOfHouseholdBalances.observations).toBe(1);
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),

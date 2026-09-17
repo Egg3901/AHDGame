@@ -7,6 +7,9 @@ describe("marketAccessMetricsFromSnapshot", () => {
     expect(marketAccessMetricsFromSnapshot(null)).toMatchObject({
       pooledFillRate: null,
       intentFulfillmentRate: null,
+      householdTransactionalVelocity48: null,
+      householdSavingsVelocity48: null,
+      savingsShareOfHouseholdBalances: null,
       reconciliationStatus: "unavailable",
     });
   });
@@ -52,6 +55,9 @@ describe("marketAccessMetricsFromSnapshot", () => {
         externalBroadMoneyShare: value(0.4),
         activeModeledBalanceShare48: value(0.25),
         modeledGrossVelocity48: value(0.75),
+        householdTransactionalVelocity48: value(1.2),
+        householdSavingsVelocity48: value(0.1),
+        savingsShareOfHouseholdBalances: value(0.4),
       },
       measurement: { confidence: "medium", reasons: ["test"] },
       reconciliation: { status: "amber" },
@@ -104,6 +110,9 @@ describe("marketAccessMetricsFromSnapshot", () => {
       externalBroadMoneyShare: 0.4,
       activeModeledBalanceShare48: 0.25,
       modeledGrossVelocity48: 0.75,
+      householdTransactionalVelocity48: 1.2,
+      householdSavingsVelocity48: 0.1,
+      savingsShareOfHouseholdBalances: 0.4,
       measurementConfidence: "medium",
       reconciliationStatus: "amber",
     });

@@ -475,6 +475,7 @@ function monetaryActivity(
   let total = 0;
   let active = 0;
   const balanceByKind = new Map<string, number>();
+  const accountCountByKind = new Map<string, number>();
   for (const [account, rawBalance] of Object.entries(balances)) {
     if (!isRealAccount(account)) continue;
     const balance = nonnegative(rawBalance);
@@ -482,6 +483,7 @@ function monetaryActivity(
     if (activeAccounts.has(account)) active += balance;
     const kind = accountKind(account);
     balanceByKind.set(kind, (balanceByKind.get(kind) ?? 0) + balance);
+    accountCountByKind.set(kind, (accountCountByKind.get(kind) ?? 0) + 1);
   }
 
   const velocity = (kinds: readonly string[]): number | null => {
@@ -489,6 +491,16 @@ function monetaryActivity(
     const flow = kinds.reduce((sum, kind) => sum + (turnoverByKind.get(kind) ?? 0), 0);
     return ratio(flow, stock);
   };
+  const householdStock =
+    (balanceByKind.get("character") ?? 0) + (balanceByKind.get("character_savings") ?? 0);
+  const householdAccountCount =
+    (accountCountByKind.get("character") ?? 0) + (accountCountByKind.get("character_savings") ?? 0);
+  // An absent savings class is unmeasured, not zero: a 0/600 share would claim
+  // the economy holds no savings when savings accounts simply do not exist.
+  const savingsShare =
+    (accountCountByKind.get("character_savings") ?? 0) === 0
+      ? null
+      : ratio(balanceByKind.get("character_savings") ?? 0, householdStock);
   return {
     total,
     active,
@@ -497,6 +509,10 @@ function monetaryActivity(
     accountCount: Object.keys(balances).filter((account) => isRealAccount(account)).length,
     grossVelocity: ratio(grossTurnover, total),
     householdVelocity: velocity(["character", "character_savings"]),
+    transactionalVelocity: velocity(["character"]),
+    savingsVelocity: velocity(["character_savings"]),
+    savingsShare,
+    householdAccountCount,
     corporateVelocity: velocity(["corporation"]),
     partyVelocity: velocity(["party"]),
     governmentVelocity: velocity(["government"]),
@@ -1110,6 +1126,21 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.householdVelocity,
         activity.activeAccounts,
         "character_primary_ledger_flow_to_closing_balance"
+      ),
+      householdTransactionalVelocity48: metric(
+        activity.transactionalVelocity,
+        activity.activeAccounts,
+        "character_primary_ledger_flow_to_closing_balance"
+      ),
+      householdSavingsVelocity48: metric(
+        activity.savingsVelocity,
+        activity.activeAccounts,
+        "character_savings_primary_ledger_flow_to_closing_balance"
+      ),
+      savingsShareOfHouseholdBalances: metric(
+        activity.savingsShare,
+        activity.householdAccountCount,
+        "character_savings_share_of_household_closing_balance"
       ),
       corporateGrossVelocity48: metric(
         activity.corporateVelocity,

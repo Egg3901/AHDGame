@@ -130,6 +130,12 @@ export interface EconomicVitalSigns {
     dormantModeledBalanceShare48: EconomicMetric;
     modeledGrossVelocity48: EconomicMetric;
     householdGrossVelocity48: EconomicMetric;
+    /** Wallet (`character`) turnover over wallet closing stock; null when the class is absent. */
+    householdTransactionalVelocity48: EconomicMetric;
+    /** Savings (`character_savings`) turnover over savings closing stock; null when absent. */
+    householdSavingsVelocity48: EconomicMetric;
+    /** Savings share of household (`character` + `character_savings`) closing stock. */
+    savingsShareOfHouseholdBalances: EconomicMetric;
     corporateGrossVelocity48: EconomicMetric;
     partyGrossVelocity48: EconomicMetric;
     governmentGrossVelocity48: EconomicMetric;
