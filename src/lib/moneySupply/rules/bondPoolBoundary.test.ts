@@ -171,9 +171,11 @@ describe("bond-pool settlement boundary in observed M2", () => {
     );
   });
 
-  it("nets a conserved secondary purchase exactly as before", () => {
+  it("lowers observed M2 at once on a secondary purchase", () => {
     // A bond purchase moves deposits into a security: corporate cash falls 100
     // while pool cash rises 100 with no QE funding, so observed M2 falls 100.
+    // Under v2 both sides sat inside M2 and the purchase netted to zero; v3
+    // moves observed M2 at the holder side and the matching sale reverses it.
     const before = calculateMoneyAggregates(base({ corporateLiquid: 10_000 })).m2;
     const after = calculateMoneyAggregates(base({ corporateLiquid: 9_900, bondPoolCash: 100 })).m2;
     expect(after - before).toBe(-100);

@@ -20,10 +20,14 @@ import { TURNS_PER_YEAR } from "@/lib/constants/turnTime";
  * the QE-parked portion, which IS created base money awaiting transmission —
  * and reports the rest as `excludedBondPoolCash`. Under this rule every
  * pool-only leg (maturity/coupon mint, issuance burn, inflow, sweep) leaves
- * observed M2 exactly unchanged, every conserved leg nets within it exactly
- * as before (a bond purchase still lowers observed M2: deposits became a
- * security), and QE/QT still move it once. Version 3 marks the boundary so
- * the one-time level drop can never annualize as tightening.
+ * observed M2 exactly unchanged, and QE/QT still move it once. Conserved
+ * legs move observed M2 at the holder side instead of netting inside it: a
+ * bond purchase lowers observed M2 at once (deposits became a security) and
+ * the matching sale raises it back; corporate issuance arrival raises it as
+ * the proceeds land in liquid cash. The full cycle still nets to zero, but
+ * the timing differs from v2, where the dealer leg kept both sides inside
+ * M2. Version 3 marks the boundary so the one-time level drop can never
+ * annualize as tightening.
  */
 export const MONEY_ACCOUNTING_VERSION = 3;
 
@@ -107,7 +111,10 @@ export function calculateMoneyAggregates(input: MoneySupplyComponents): MoneyAgg
     normalized.fundLiquid +
     normalized.organizationLiquid;
   const poolCash = money(normalized.bondPoolCash ?? 0);
-  const qeFunded = Math.max(0, money(normalized.bondPoolQeIn ?? 0) - money(normalized.bondPoolQeOut ?? 0));
+  const qeFunded = Math.max(
+    0,
+    money(normalized.bondPoolQeIn ?? 0) - money(normalized.bondPoolQeOut ?? 0)
+  );
   const observedBondPoolCash = Math.min(poolCash, qeFunded);
   const excludedBondPoolCash = poolCash - observedBondPoolCash;
   return {
