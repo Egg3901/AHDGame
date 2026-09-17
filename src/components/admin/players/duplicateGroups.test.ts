@@ -276,4 +276,33 @@ describe("getDuplicateGroups", () => {
     expect(byId.get("weak")?.matchReasons).toEqual(["ip-past"]);
     expect(byId.get("weak")?.weakMatch).toBe(true);
   });
+
+  it("surfaces a historical-only fingerprint match in the group header", () => {
+    const groups = getDuplicateGroups([
+      user("a", { historicalFingerprints: ["rotated"], signalEligibility: eligibility() }),
+      user("b", { historicalFingerprints: ["rotated"], signalEligibility: eligibility() }),
+    ]);
+    expect(groups[0].sharedHistoricalFingerprints).toEqual(["rotated"]);
+    // The group exists because of a value nobody currently carries, so the
+    // live-evidence lists must stay empty rather than borrowing from it.
+    expect(groups[0].sharedFingerprints).toEqual([]);
+    expect(groups[0].sharedIps).toEqual([]);
+  });
+
+  it("does not report a value as both current and historical evidence", () => {
+    const groups = getDuplicateGroups([
+      user("a", {
+        lastFingerprint: "shared",
+        historicalFingerprints: ["shared"],
+        signalEligibility: eligibility({ lastFingerprint: eligible(DAY) }),
+      }),
+      user("b", {
+        lastFingerprint: "shared",
+        historicalFingerprints: ["shared"],
+        signalEligibility: eligibility({ lastFingerprint: eligible(DAY) }),
+      }),
+    ]);
+    expect(groups[0].sharedFingerprints).toEqual(["shared"]);
+    expect(groups[0].sharedHistoricalFingerprints).toEqual([]);
+  });
 });

@@ -90,6 +90,13 @@ export interface DuplicateGroup {
   sharedIps: string[];
   sharedFingerprints: string[];
   sharedDevices: string[];
+  /** Values shared within the 90-day window that are no longer any member's
+   * current value. Kept separate from the lists above so the header never
+   * presents a rotated-away match as live evidence — but present, because a
+   * group formed ONLY by a rotated fingerprint would otherwise render with an
+   * empty header and read as having no evidence behind it at all. */
+  sharedHistoricalIps: string[];
+  sharedHistoricalFingerprints: string[];
   cgnatSuspect: boolean;
   /** Age in ms of the most recently observed eligible signal anywhere in this
    * group. Undefined when no member carried an age (e.g. a stale client

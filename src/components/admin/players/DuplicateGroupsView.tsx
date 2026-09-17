@@ -135,6 +135,26 @@ export function DuplicateGroupsView({
                   : `${group.sharedFingerprints.length} fingerprint matches`}
               </span>
             )}
+            {group.sharedHistoricalFingerprints.length > 0 && (
+              <span
+                className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-300 border border-red-500/20"
+                title="These accounts shared a browser fingerprint within the last 90 days and have since rotated away from it. Without this, a group formed only by a rotated fingerprint would show no evidence in this header at all."
+              >
+                {group.sharedHistoricalFingerprints.length === 1
+                  ? "Fingerprint match (past)"
+                  : `${group.sharedHistoricalFingerprints.length} fingerprint matches (past)`}
+              </span>
+            )}
+            {group.sharedHistoricalIps.length > 0 && (
+              <span
+                className="rounded bg-orange-500/10 px-2 py-0.5 text-xs font-medium text-orange-300 border border-orange-500/20"
+                title="These accounts shared an IP within the last 90 days but are not on it now."
+              >
+                {group.sharedHistoricalIps.length === 1
+                  ? "1 shared IP (past)"
+                  : `${group.sharedHistoricalIps.length} shared IPs (past)`}
+              </span>
+            )}
             {group.sharedDevices.length > 0 && (
               <span
                 className="rounded bg-pink-500/15 px-2 py-0.5 text-xs font-medium text-pink-400 border border-pink-500/30"

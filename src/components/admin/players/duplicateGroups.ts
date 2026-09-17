@@ -305,6 +305,12 @@ export const getDuplicateGroups = (users: UserData[]): DuplicateGroup[] => {
         sharedIps: [...groupIps],
         sharedFingerprints: [...groupFingerprints],
         sharedDevices: [...groupDevices],
+        // Only the values that are not already live evidence, so the header
+        // does not report the same fingerprint twice under two labels.
+        sharedHistoricalIps: [...groupHistoricalIps].filter((v) => !groupIps.has(v)),
+        sharedHistoricalFingerprints: [...groupHistoricalFingerprints].filter(
+          (v) => !groupFingerprints.has(v)
+        ),
         cgnatSuspect,
         newestEvidenceMs,
       };
