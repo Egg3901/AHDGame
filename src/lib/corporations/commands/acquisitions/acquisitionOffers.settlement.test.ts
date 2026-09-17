@@ -16,6 +16,7 @@ import {
   defaultSlices,
   readBalances,
   ACQUIRER_CASH,
+  SHELL_CASH,
   type AcquisitionWorld,
 } from "./acquisitionSettlementWorld";
 import { withInjectedCrash, InjectedCrash, type WriteOp } from "@/lib/test-utils/faultyDb";
@@ -142,6 +143,76 @@ describe("resolveAcquisitionOfferStatus over settlement states", () => {
     });
     expect(retry).toMatchObject({ ok: false, status: 409, terminal: true });
     expect(await readBalances(w)).toEqual(b);
+  });
+
+  it("withdraw after shell cash landed unwinds exactly (marked and money-only windows)", async () => {
+    // The shell credit created money on the acquirer without debiting the
+    // target, so compensation must take it back acquirer-side only (never
+    // credit the target, never shrink the price refund for it). Both crash
+    // windows must converge: after the applied mark, and after the money
+    // alone (flag clear, stamp present), which the compensation reconciles.
+    for (const moneyOnly of [false, true]) {
+      const log = await referenceLog();
+      const fundWrites = log
+        .map((e, i) => ({ ...e, i }))
+        .filter((e) => e.collection === "indexFunds" && e.op === "updateOne");
+      expect(fundWrites.length).toBeGreaterThanOrEqual(2);
+      const shellIdx = log.findIndex(
+        (e, i) =>
+          i > fundWrites[fundWrites.length - 1].i &&
+          e.collection === "corporations" &&
+          e.op === "updateOne"
+      );
+      expect(shellIdx).toBeGreaterThan(0);
+      expect(log[shellIdx + 1]).toMatchObject({
+        collection: "acquisitionSettlements",
+        op: "updateOne",
+      });
+      const world = buildAcquisitionWorld({});
+      const faulty = withInjectedCrash(world.memory, {
+        onCall: shellIdx + (moneyOnly ? 1 : 2),
+        afterWrite: true,
+      });
+      const crashed = await executeAgreedAcquisition({
+        db: faulty.db,
+        offer: world.offer as never,
+        currentTurn: 200,
+      }).catch((err) => err);
+      expect(crashed).toBeInstanceOf(InjectedCrash);
+
+      const r = await resolveAcquisitionOfferStatus(
+        world.db,
+        world.offer as never,
+        "withdrawn",
+        200
+      );
+      expect(r).toMatchObject({ ok: true });
+      expect(await offerStatus(world)).toBe("withdrawn");
+      const settlement = await loadAcquisitionSettlement(world.db, world.offerId);
+      expect(settlement?.status).toBe("compensated");
+      // Every holder bucket landed before the shell cash, so the refund is
+      // exactly price-minus-holders = 0; the shell take-back washes the rest.
+      const slices = defaultSlices(world.price);
+      expect(settlement?.refundTotal).toBe(0);
+      const b = await readBalances(world);
+      expect(b.charA).toBe(slices.charA);
+      expect(b.charB).toBe(slices.charB);
+      expect(b.imperial).toBe(slices.imperial);
+      expect(b.corpHolder).toBe(1_000 + slices.corp);
+      expect(b.fundCash).toBe(slices.fund);
+      expect(b.treasury).toBe(slices.float);
+      expect(b.acquirer).toBe(ACQUIRER_CASH - world.price);
+      expect(b.targetGone).toBe(false);
+      const target = await world.memory.collection("corporations").findOne({ _id: world.tgt });
+      expect(target?.liquidCapital).toBe(SHELL_CASH);
+      const retry = await executeAgreedAcquisition({
+        db: world.db,
+        offer: world.offer as never,
+        currentTurn: 200,
+      });
+      expect(retry).toMatchObject({ ok: false, status: 409, terminal: true });
+      expect(await readBalances(world)).toEqual(b);
+    }
   });
 
   it("reject compensates a running settlement the same way withdraw does", async () => {

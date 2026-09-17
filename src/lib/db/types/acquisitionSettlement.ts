@@ -43,8 +43,10 @@ export interface AcquisitionSettlementLeg {
   payoutAnchor: number;
   /**
    * Pinned cost of this leg in the acquirer's capital units. Terminal
-   * compensation refunds `price - sum(applied costs)`, so every delivered leg
-   * must know what the acquirer paid for it regardless of later FX drift.
+   * compensation refunds `price` minus the applied holder-leg costs, so every
+   * holder leg must know what the acquirer paid for it regardless of later FX
+   * drift. Shell-cash legs carry their cost for audit only: the relocation is
+   * unwound by taking it back from the acquirer, never by shrinking the refund.
    */
   costInAcquirerCapital: number;
   currencyCode: string;

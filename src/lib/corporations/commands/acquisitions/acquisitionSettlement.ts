@@ -300,13 +300,41 @@ export async function emitAcquisitionLegLedger(
   leg.ledgerEmitted = true;
 }
 
-/** Acquirer-capital cost of every delivered holder/shell-cash leg. */
+/**
+ * Acquirer-capital cost of every delivered holder leg. Shell-cash legs are
+ * deliberately excluded: the relocation is unwound by taking it back from the
+ * acquirer (see below), never by shrinking the price refund. Counting it here
+ * too would charge the acquirer twice for the same cash.
+ */
 export function deliveredCostInAcquirerCapital(settlement: AcquisitionSettlement): number {
   return settlement.legs
-    .filter(
-      (leg) => leg.applied && (leg.kind === "holder_credit" || leg.kind === "shell_cash_credit")
-    )
+    .filter((leg) => leg.applied && leg.kind === "holder_credit")
     .reduce((sum, leg) => sum + leg.costInAcquirerCapital, 0);
+}
+
+/**
+ * Mark legs whose money landed but whose applied flag did not (crash between
+ * the stamped credit and its mark). Without this a compensation computed from
+ * the flags alone would refund money that already reached a holder, or skip
+ * taking back shell cash that already reached the acquirer. Reads the stamp
+ * off each recipient document, the same check the replay path uses.
+ */
+async function reconcileLandedLegs(db: Db, settlement: AcquisitionSettlement): Promise<void> {
+  for (let index = 0; index < settlement.legs.length; index += 1) {
+    const leg = settlement.legs[index];
+    if (leg.applied) continue;
+    if (leg.kind === "acquirer_refund" || leg.kind === "shell_cash_reversal") continue;
+    const stamp = legStamp(settlement.key, index);
+    const landed = await db
+      .collection(leg.collection)
+      .findOne({ ...leg.filter, [SETTLED_KEYS_FIELD]: stamp } as Filter<Document>, {
+        projection: { _id: 1 },
+      });
+    if (landed) {
+      await markLegApplied(db, settlement._id, index);
+      leg.applied = true;
+    }
+  }
 }
 
 function debitLegApplied(settlement: AcquisitionSettlement): boolean {
@@ -352,10 +380,10 @@ export interface CompensationResult {
 
 /**
  * Terminal compensation: refund exactly the undelivered remainder to the
- * acquirer (stamped, so a retried compensation cannot refund twice), reverse
- * landed shell cash when the shell still exists, and close the record. Paid
- * holder legs are never touched: they cannot be clawed back, and the refund
- * math already accounts for them.
+ * acquirer (stamped, so a retried compensation cannot refund twice), take
+ * back landed shell cash from the acquirer when the shell still exists, and
+ * close the record. Paid holder legs are never touched: they cannot be
+ * clawed back, and the refund math already accounts for them.
  */
 export async function compensateAcquisitionSettlement(
   db: Db,
@@ -364,6 +392,9 @@ export async function compensateAcquisitionSettlement(
 ): Promise<CompensationResult> {
   const notes: string[] = [];
   let refunded = 0;
+  // Reconcile first: a crash between a stamped credit and its mark leaves the
+  // money landed but the flag clear, and the refund below reads the flags.
+  await reconcileLandedLegs(db, settlement);
   const refund = compensationRefundOwed(settlement);
   if (refund > 0) {
     const index = await appendLeg(db, settlement, {
@@ -420,6 +451,10 @@ export async function compensateAcquisitionSettlement(
   const shellLeg = settlement.legs.find((leg) => leg.kind === "shell_cash_credit");
   const shellAmount = shellLeg && shellLeg.applied ? shellLeg.inc.liquidCapital : 0;
   if (shellAmount > 0 && opts.targetHex) {
+    // The shell credit created money on the acquirer without debiting the
+    // target (which still holds its own cash), so the take-back is an
+    // acquirer-side debit only. Crediting the target as well would double its
+    // cash from nothing.
     const debitBack = await appendLeg(db, settlement, {
       key: "shell-reversal-acquirer",
       kind: "shell_cash_reversal",
@@ -434,24 +469,9 @@ export async function compensateAcquisitionSettlement(
       ledgerEmitted: true,
       ledgers: [],
     });
-    const targetBack = await appendLeg(db, settlement, {
-      key: "shell-reversal-target",
-      kind: "shell_cash_reversal",
-      collection: "corporations",
-      filter: { _id: new ObjectId(opts.targetHex) },
-      inc: { liquidCapital: settlement.shellCashTargetLocal },
-      payoutAnchor: 0,
-      costInAcquirerCapital: 0,
-      currencyCode: settlement.targetCurrency,
-      note: "terminal reversal of landed shell cash (target side)",
-      applied: false,
-      ledgerEmitted: true,
-      ledgers: [],
-    });
-    const first = await applyAcquisitionLeg(db, settlement, debitBack, opts.now);
-    const second = await applyAcquisitionLeg(db, settlement, targetBack, opts.now);
-    shellCashReversed = first !== "unpayable" && second !== "unpayable";
-    if (!shellCashReversed) notes.push("landed shell cash could not be fully reversed");
+    const outcome = await applyAcquisitionLeg(db, settlement, debitBack, opts.now);
+    shellCashReversed = outcome !== "unpayable";
+    if (!shellCashReversed) notes.push("landed shell cash could not be taken back");
   } else if (shellAmount > 0) {
     notes.push("landed shell cash stays with the acquirer; the target shell is gone");
   }
