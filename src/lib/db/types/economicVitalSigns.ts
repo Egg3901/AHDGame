@@ -109,6 +109,13 @@ export interface EconomicVitalSigns {
     organicDepthToMarketCap: EconomicMetric;
     medianFilledOrderExecutionHours: EconomicMetric;
     medianAmihudIlliquidity48: EconomicMetric;
+    /**
+     * Median across traded listings of the largest named counterparty's share
+     * of that listing's 48-turn economic trade notional. Float-only and
+     * non-economic rows are unattributable, so they narrow the sample instead
+     * of reading as dispersed trading.
+     */
+    medianTopTraderNotionalShare48: EconomicMetric;
   };
   households: {
     householdsObserved: number;

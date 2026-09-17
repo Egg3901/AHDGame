@@ -81,6 +81,11 @@ describe("GET /api/admin/economy/vital-signs", () => {
           observations: 2,
           basis: "unmatured_corporate_units",
         },
+        medianTopTraderNotionalShare48: {
+          value: 0.7,
+          observations: 2,
+          basis: "named_counterparty_share_of_listing_notional_48_turns",
+        },
       },
     };
     db.collectionMocks.economicVitalSigns.findOne.mockResolvedValue(snapshot);
@@ -95,6 +100,7 @@ describe("GET /api/admin/economy/vital-signs", () => {
     expect(body.snapshot.money.ringFencedShareOfLiquid.value).toBe(0.4);
     expect(body.snapshot.securities.corporateMedianHolders.value).toBe(1);
     expect(body.snapshot.securities.corporateSubscriptionRate.value).toBe(0.4);
+    expect(body.snapshot.securities.medianTopTraderNotionalShare48.value).toBe(0.7);
   });
 
   it("rejects an invalid turn", async () => {
