@@ -100,6 +100,15 @@ export interface StockVsFlowFinding {
   uninstrumented: boolean;
   /** Candidate emit sites active this turn for the account. */
   candidateEmitSites: string[];
+  /**
+   * Account-lifecycle evidence from the snapshot pair (#992). `created` = no
+   * opening key (creation, migration re-key, or first snapshot coverage);
+   * `closed` = no closing key (closure, secession delete, migration re-key);
+   * `currency_rekey` = the same kind+ref exists under another currency segment
+   * across the pair (currency conversion, e.g. transfer rescaling). Hints only:
+   * they never suppress the finding.
+   */
+  lifecycleHint?: "created" | "closed" | "currency_rekey";
 }
 
 export interface MoneySupplyReason {

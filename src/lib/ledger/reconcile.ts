@@ -108,6 +108,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
         divergence,
         uninstrumented: Math.abs(led) < eps && Math.abs(actualDelta) >= eps,
         candidateEmitSites: [...(emitSitesByAccount.get(account) ?? [])],
+        lifecycleHint: lifecycleHintFor(account, input),
       });
     }
     stockFindings.sort((a, b) => Math.abs(b.divergence) - Math.abs(a.divergence));
@@ -238,10 +239,61 @@ function rateForAccount(account: string, rates: Record<string, number> | undefin
  * leaving an account. Before the checkpoint, flows are valued at the
  * pre-forex rate. After it, flows are valued at the closing rate.
  */
+/**
+ * Account-lifecycle evidence for a divergent account, read off the snapshot
+ * key pair (#992). Pure hint: callers must still treat the finding as
+ * unexplained divergence, never as reconciled.
+ */
+function lifecycleHintFor(
+  account: string,
+  input: ReconcileInput
+): StockVsFlowFinding["lifecycleHint"] {
+  const hasOpening = account in input.openingBalances;
+  const hasClosing = account in input.closingBalances;
+  if (!hasOpening && hasClosing) {
+    // Same balance re-keyed under another currency reads as created + closed;
+    // report the conversion, which is the actionable evidence.
+    return hasRefUnderOtherCurrency(account, counterpartSide(input, "opening"))
+      ? "currency_rekey"
+      : "created";
+  }
+  if (hasOpening && !hasClosing) {
+    return hasRefUnderOtherCurrency(account, counterpartSide(input, "closing"))
+      ? "currency_rekey"
+      : "closed";
+  }
+  return undefined;
+}
+
+/**
+ * The snapshot holding the re-keyed counterpart: when an account is missing
+ * from the opening pair side, its old-currency key (if any) sits in the
+ * opening snapshot, and vice versa.
+ */
+function counterpartSide(
+  input: ReconcileInput,
+  missing: "opening" | "closing"
+): Record<string, number> {
+  return missing === "opening" ? input.openingBalances : input.closingBalances;
+}
+
+/** True when kind+ref exists under a different trailing currency segment. */
+function hasRefUnderOtherCurrency(account: string, side: Record<string, number>): boolean {
+  const first = account.indexOf(":");
+  const last = account.lastIndexOf(":");
+  if (first === -1 || last === -1 || first === last) return false;
+  const kind = account.slice(0, first);
+  const ref = account.slice(first + 1, last);
+  const prefix = `${kind}:${ref}:`;
+  return Object.keys(side).some((other) => other !== account && other.startsWith(prefix));
+}
+
 function cashMovementDelta(input: ReconcileInput, account: string): number {
-  // NPP investment cash is stored directly in anchor units. Do not apply the
-  // account suffix's native-currency rate to this wallet.
-  if (accountKind(account) === "npp") {
+  // NPP investment cash, index-fund cash, and pension-scheme cash are stored
+  // directly in anchor units. Do not apply the account suffix's
+  // native-currency rate to these wallets.
+  const kind = accountKind(account);
+  if (kind === "npp" || kind === "fund" || kind === "pension_scheme") {
     return (input.closingBalances[account] ?? 0) - (input.openingBalances[account] ?? 0);
   }
   if (

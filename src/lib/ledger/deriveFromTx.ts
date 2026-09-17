@@ -154,6 +154,60 @@ export function reasonForTxType(txType: FinancialTxLogEntry["type"]): string {
   return REASON_BY_TX_TYPE[txType] ?? UNATTRIBUTED_REASON;
 }
 
+/**
+ * Holder↔fund movements whose tx row carries the fund identity in `meta`
+ * (player subscribe/redeem via fundTxLog, scheme subscribe via
+ * schemeInvesting). The fund cash leg moves synchronously with the holder leg
+ * in the same operation, so the row evidences BOTH sides.
+ */
+const FUND_MIRROR_TX_TYPES: ReadonlySet<string> = new Set([
+  "index_fund_subscribe",
+  "index_fund_redeem",
+]);
+// index_fund_dividend is deliberately excluded: the holder payout never leaves
+// fund cash (the corp dividend splits 75% retained / 25% pass-through, and the
+// undistributed remainder is retained too), so a mirror leg would misstate the
+// fund cash delta. Dividend fund inflows stay honest amber findings.
+
+/**
+ * The fund cash account a holder row settles against, or null when the row
+ * does not evidence the fund side. Fail-closed: the fund account key must
+ * carry the fund's own anchor currency, and the row must be denominated in
+ * exactly that currency — otherwise the mirror would book against a key the
+ * snapshot never holds (e.g. a GBP scheme buying a USD fund).
+ */
+export function fundMirrorAccount(tx: DerivableTx): string | null {
+  if (!FUND_MIRROR_TX_TYPES.has(tx.type)) return null;
+  const meta = tx.meta;
+  const fundId = meta?.fundId;
+  const fundCurrency = meta?.fundCurrency;
+  if (typeof fundId !== "string" || fundId.length === 0) return null;
+  if (typeof fundCurrency !== "string" || fundCurrency !== tx.currencyCode) return null;
+  return `fund:${fundId}:${tx.currencyCode}`;
+}
+
+/**
+ * National↔state-party transfer contra routing. `party_transfer` rows are
+ * emitted in pairs (executeTransferToStateParty): the national outflow names
+ * the state key, the state inflow names the national party id. Either side
+ * without its meta linkage falls back to the mint/sink path, never to a guess.
+ */
+function partyTransferContra(tx: DerivableTx): string | null {
+  if (tx.type !== "party_transfer") return null;
+  const meta = tx.meta;
+  if (meta?.side === "state_inflow" && typeof meta.partyId === "string" && meta.partyId) {
+    return `party:${meta.partyId}:${tx.currencyCode}`;
+  }
+  if (
+    meta?.side === "national_outflow" &&
+    typeof meta.statePartyKey === "string" &&
+    meta.statePartyKey
+  ) {
+    return `state_party:${meta.statePartyKey}:${tx.currencyCode}`;
+  }
+  return null;
+}
+
 /** The tx-log fields the shim needs; anchorAmount must already be stamped. */
 export type DerivableTx = Pick<
   FinancialTxLogEntry,
@@ -204,8 +258,12 @@ export function deriveLedgerEntry(
     tx.counterpartyId?.toString(),
     tx.currencyCode
   );
+  // A derivable counterparty always wins. Failing that, a linked transfer
+  // account from the row's own meta (fund cash, transfer counterparty) wins
+  // over the mint/sink fallback — these are real transfers, not creation.
+  const linked = counterparty ?? fundMirrorAccount(tx) ?? partyTransferContra(tx);
   const contraAccount =
-    counterparty ?? mintSinkAccount(anchor, reasonForTxType(tx.type), tx.currencyCode);
+    linked ?? mintSinkAccount(anchor, reasonForTxType(tx.type), tx.currencyCode);
 
   const contra: LedgerLeg = {
     account: contraAccount,
@@ -228,7 +286,54 @@ export function deriveLedgerEntries(txs: DerivableTx[], emitSite?: string): Ledg
   const out: LedgerEntryInput[] = [];
   for (const tx of txs) {
     const entry = deriveLedgerEntry(tx, emitSite);
-    if (entry) out.push(entry);
+    if (!entry) continue;
+    out.push(entry);
+    const mirror = deriveFundMirrorEntry(tx, entry.legs[0].account, emitSite);
+    if (mirror) out.push(mirror);
   }
   return out;
+}
+
+/**
+ * The fund's own primary entry for a holder↔fund row. Mirrors the holder
+ * anchor exactly (the two cash legs are the same ₳ by construction at every
+ * mirrored site), booked in fund-books ₳ on both legs so the entry nets
+ * natively and in anchor. Carries no mint/sink leg: a subscription is a
+ * transfer, and the money-supply check must not read it as creation.
+ */
+function deriveFundMirrorEntry(
+  tx: DerivableTx,
+  holderAccount: string,
+  emitSite = "financialTxLog/emit.ts:shim"
+): LedgerEntryInput | null {
+  // Only mirror when the base entry actually routed its contra at the fund —
+  // otherwise the row never evidenced the fund side (currency mismatch, no
+  // fund meta) and a mirror would invent it.
+  const fundAccount = fundMirrorAccount(tx);
+  if (!fundAccount) return null;
+  const anchor = tx.anchorAmount;
+  if (anchor === undefined || !Number.isFinite(anchor)) return null;
+  if (Math.abs(anchor) < Number.EPSILON) return null;
+  return {
+    turn: tx.turn,
+    createdAt: tx.createdAt,
+    txType: tx.type,
+    legs: [
+      {
+        account: fundAccount,
+        amount: -anchor,
+        currencyCode: tx.currencyCode,
+        anchorAmount: -anchor,
+        role: "primary",
+      },
+      {
+        account: holderAccount,
+        amount: anchor,
+        currencyCode: tx.currencyCode,
+        anchorAmount: anchor,
+        role: "contra",
+      },
+    ],
+    emitSite: `${emitSite}:fund-mirror`,
+  };
 }

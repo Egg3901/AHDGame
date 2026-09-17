@@ -25,6 +25,11 @@ function buildFundMeta(fund: FundRef, extra: Record<string, unknown>): Record<st
     fundSlug: fund.slug,
     fundName: fund.name,
     fundTicker: fund.tickerSymbol,
+    // Fund-cash account currency. The shadow ledger mirrors holder↔fund rows
+    // against fund:<fundId> only when the row currency matches this (#992);
+    // without it the mirror cannot tell a same-currency settlement from a
+    // cross-currency one it must leave single-sided.
+    fundCurrency: fund.anchorCurrencyCode,
     ...extra,
   };
 }
