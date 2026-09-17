@@ -47,7 +47,7 @@ import type { WorldEntityRegion } from "@/lib/world/worldEntityManifest";
  * exists to stop.
  *
  * Which files each member absorbs, and which phase does it, is tracked
- * mechanically in `jpCoverage.ts` -- not in prose here.
+ * mechanically in `singleCountryData.ts` -- not in prose here.
  *
  * NOTHING IMPLEMENTS THIS YET. D1 builds the shape and the harness; D2 onward
  * fill it in one subject at a time.
@@ -226,7 +226,8 @@ export interface CountryElections {
  *
  * ⚠️ Exchange rates do NOT belong here. INITIAL_RATES* is relational -- a rate is
  * a fact BETWEEN two currencies, so a per-country copy drifts. Same for the two
- * SOE base tables in budgets.ts. See bucket B in jpCoverage.ts.
+ * SOE base tables in budgets.ts: relational data, which belongs beside the
+ * rows it must stay consistent with rather than in either country.
  *
  * ⚠️ REP_ECON and the sector-weight tables are BALANCE surfaces. A changed number
  * here needs a GitHub issue and a scripts/sim/ report per CLAUDE.md. This move

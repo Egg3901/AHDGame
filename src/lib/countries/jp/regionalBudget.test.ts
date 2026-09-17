@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { calculateJPRegionalBudget } from "./jpRegionalBudget";
+import { calculateJPRegionalBudget } from "./regionalBudget";
 
 describe("calculateJPRegionalBudget", () => {
   const baseInput = {

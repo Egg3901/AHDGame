@@ -24,7 +24,7 @@ import type { CountryEconomy } from "../contract";
  * and its 1953/1979/1991 variants live in the SAME FILE as COUNTRY_CURRENCY_MAP,
  * which does move -- but a rate is a fact BETWEEN two currencies, so a
  * per-country copy drifts the moment either side changes. Bucket B in
- * jpCoverage.ts. Same reasoning for the two SOE ID-range tables in budgets.ts,
+ * a relational table. Same reasoning for the two SOE ID-range tables in budgets.ts,
  * which allocate non-overlapping numeric ranges ACROSS countries.
  */
 
