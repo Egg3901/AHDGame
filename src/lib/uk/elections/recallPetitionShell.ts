@@ -66,7 +66,7 @@ export async function ensureRecallWatch(
     state,
     officialId: input.official._id,
     targetCharacterId: input.target._id,
-    targetCharacterName: input.target.characterName,
+    targetCharacterName: input.target.name,
     ...(typeof input.target.party === "string" ? { targetParty: input.target.party } : {}),
     status: "watch",
     trigger: input.trigger ?? "lowApproval",
@@ -151,7 +151,7 @@ export interface SignatureResult {
 export async function addRecallSignature(
   db: Db,
   petitionId: ObjectId,
-  signer: Pick<Character, "_id" | "characterName">,
+  signer: Pick<Character, "_id" | "name">,
   currentTurn: number,
   now: Date
 ): Promise<SignatureResult> {
@@ -167,7 +167,7 @@ export async function addRecallSignature(
       $push: {
         signatures: {
           characterId: signer._id,
-          characterName: signer.characterName,
+          characterName: signer.name,
           turn: currentTurn,
           createdAt: now,
         },

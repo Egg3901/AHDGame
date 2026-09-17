@@ -167,6 +167,25 @@ export async function claimVacanciesForElection(
   return result.modifiedCount ?? 0;
 }
 
+/**
+ * Reopen every vacancy a by-election claimed when the race resolved empty
+ * (no tally, no votes, or no candidates): the seats are still vacant, so the
+ * docs go back to `open` and the watcher retries after the cooldown. Only
+ * `scheduled` rows claimed by this election move, so a regular sweep that
+ * already subsumed the seat is never resurrected.
+ */
+export async function reopenCommonsVacanciesForRetry(
+  db: Db,
+  electionId: ObjectId,
+  now: Date
+): Promise<number> {
+  const result = await getUkCommonsVacanciesCollection(db).updateMany(
+    { electionId, status: "scheduled" },
+    { $set: { status: "open", updatedAt: now }, $unset: { electionId: "", scheduledTurn: "" } }
+  );
+  return result.modifiedCount ?? 0;
+}
+
 /** Mark every vacancy a resolved by-election claimed as filled. */
 export async function markVacanciesFilled(
   db: Db,

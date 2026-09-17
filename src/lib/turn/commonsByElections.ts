@@ -188,7 +188,7 @@ export async function processCommonsByElectionWatcher(
           .collection<Character>("characters")
           .find(
             { _id: { $in: characterIds } },
-            { projection: { _id: 1, characterName: 1, party: 1, favorability: 1, infamy: 1 } }
+            { projection: { _id: 1, name: 1, party: 1, favorability: 1, infamy: 1 } }
           )
           .toArray()
       : [];

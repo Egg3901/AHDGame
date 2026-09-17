@@ -13,6 +13,7 @@ import {
   isSpecialCommonsElection,
   officeKeyForElectionType,
 } from "@/lib/utils/electionLabels";
+import { reopenCommonsVacanciesForRetry } from "@/lib/uk/elections/commonsVacancyShell";
 import { triggerLeadershipElectionsAfterChamberVote } from "@/lib/congress/leadershipElections";
 import { spawnHouseElection, spawnCommonsElection } from "@/lib/turn/election/electionSpawning";
 import { notifyGovernorOfSenateVacancy } from "@/lib/governors/senateVacancy";
@@ -251,6 +252,12 @@ export async function resolveElectionWithNoTally(
       );
     }
   }
+  // An empty Commons by-election seats nobody: reopen its claimed vacancies
+  // so the watcher retries after the cooldown instead of stranding the seats
+  // as `scheduled` behind a finished race (#860).
+  if (isSpecialCommonsElection(election.electionType)) {
+    await reopenCommonsVacanciesForRetry(db, election._id, now);
+  }
   // Spawn next cycle for election types with dedicated respawn functions
   if (election.electionType === "house") {
     await spawnHouseElection(db, election, now);
@@ -361,6 +368,12 @@ export async function resolveElectionWithZeroVotes(
       );
     }
   }
+  // An empty Commons by-election seats nobody: reopen its claimed vacancies
+  // so the watcher retries after the cooldown instead of stranding the seats
+  // as `scheduled` behind a finished race (#860).
+  if (isSpecialCommonsElection(election.electionType)) {
+    await reopenCommonsVacanciesForRetry(db, election._id, now);
+  }
   // Spawn next cycle for election types with dedicated respawn functions
   if (election.electionType === "commons" && election.state) {
     await spawnCommonsElection(db, election, now);
@@ -467,6 +480,12 @@ export async function resolveElectionWithNoRankedCandidates(
           `(${election.state}${election.senateClass ? ` Class ${election.senateClass}` : ""}) — election resolved with no ranked candidates`
       );
     }
+  }
+  // An empty Commons by-election seats nobody: reopen its claimed vacancies
+  // so the watcher retries after the cooldown instead of stranding the seats
+  // as `scheduled` behind a finished race (#860).
+  if (isSpecialCommonsElection(election.electionType)) {
+    await reopenCommonsVacanciesForRetry(db, election._id, now);
   }
   await db
     .collection<Election>("elections")
