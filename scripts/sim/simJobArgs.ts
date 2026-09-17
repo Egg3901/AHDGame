@@ -28,6 +28,14 @@ export interface SimJobExperimentFields {
   autonomyLevel?: string;
   mode?: string;
   countries?: string;
+  /**
+   * Clone source (issue #1470 pinned-pair audit). NOT emitted by
+   * buildRunWorldArgs: worker.ts consumes it directly (cloneWorld.ts from the
+   * live DB, then runWorld --clone-mode). Kept on this interface so the
+   * pinned-pair builder can carry clone parity through its spread with full
+   * typing; the worker remains the only --clone-mode emitter.
+   */
+  cloneFromLive?: boolean;
 }
 
 /**
@@ -43,7 +51,6 @@ export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   "preset",
   "turns",
   "seed",
-  "startPolicy",
   "marketSystemMode",
   "labourSystemMode",
   "autonomyLevel",
@@ -62,15 +69,29 @@ export const SIM_JOB_REQUESTED_CONFIG_KEYS = [
   // so older readers see a stable prefix.
   "mode",
   "countries",
+  // Clone source: worker.ts clones the live world into the sandbox db, then
+  // runs runWorld --clone-mode (skips fresh preset bootstrap, autonomizes
+  // live controllers). A clone arm and a fresh-bootstrap arm start from
+  // different initial state, so a pair differing here is NOT a clean
+  // comparison. Appended last so older readers see a stable prefix; older
+  // jobs without it project exactly as before (absent stays absent).
+  //
+  // Deliberately NOT here: startPolicy (claim-window scheduling metadata read
+  // only by claimFilterAt — never reaches runWorld argv or the sandbox DB),
+  // run-instance identity (_id/runId/dbName/status/timestamps/counters —
+  // pinning dbName across arms would force the shared-db resume collision),
+  // and the live-source env (LIVE_MONGODB_URI/LIVE_DB_NAME are process env,
+  // not per-job requested fields).
+  "cloneFromLive",
 ] as const;
 
 /**
  * Pinned control/treatment pair for the issue-#1470 real-output comparison
  * (acceptance item 4 readiness). A rigorous comparison needs two queued jobs
- * that are IDENTICAL except the shadow flag: same preset, turns, seed, and
- * every other experiment field, with the control explicitly false and the
- * treatment explicitly true. Explicit (not absent) on both arms so run
- * identity stays unambiguous in `requestedConfig`.
+ * that are IDENTICAL except the shadow flag: same preset, turns, seed, clone
+ * source, and every other experiment field, with the control explicitly false
+ * and the treatment explicitly true. Explicit (not absent) on both arms so
+ * run identity stays unambiguous in `requestedConfig`.
  *
  * Pure: builds job-spec fragments only. Enqueues nothing, enables nothing,
  * touches no live config.
@@ -117,7 +138,9 @@ export function normalizeSimCountries(value: unknown): string | undefined {
  * report and the comparison can never disagree on what run identity is.
  *
  * Compatibility: absent and undefined stay absent (no defaults injected), so
- * older jobs without mode/countries project exactly as before.
+ * older jobs without mode/countries/cloneFromLive project exactly as before,
+ * and scheduling metadata (startPolicy) passes through dropped on both old
+ * and new docs alike.
  */
 export function normalizeSimJobRequestedConfig(
   job: Record<string, unknown>
@@ -145,9 +168,11 @@ export function normalizeSimJobRequestedConfig(
  * normalizeSimJobRequestedConfig (absent and undefined count as the same
  * unset; countries compare case-, spacing-, and order-insensitively, matching
  * what runWorld actually sees). Accepts full job docs or `requestedConfig`
- * maps, not just experiment fragments, so preset, turns, seed, mode, and
- * countries drift are caught too. Throws on the first mismatch so the caller
- * knows exactly what unpinned the comparison.
+ * maps, not just experiment fragments, so preset, turns, seed, mode,
+ * countries, and clone-source drift are caught too. Scheduling metadata
+ * (startPolicy) and run-instance identity are not run identity and never
+ * count as drift. Throws on the first mismatch so the caller knows exactly
+ * what unpinned the comparison.
  */
 export function assertRealOutputShadowPinnedPair(
   control: Record<string, unknown>,

@@ -178,9 +178,17 @@ describe("sim worker runWorld argument emission", () => {
       "autonomyLevel",
       "mode",
       "countries",
+      // Clone source: worker.ts clones the live world then passes
+      // --clone-mode, so a clone arm and a fresh arm start from different
+      // initial state. Missing here would hide that behind identical reports.
+      "cloneFromLive",
     ]) {
       expect(keys).toContain(field);
     }
+    // Scheduling metadata is not run identity: startPolicy only gates claim
+    // admission (claimWindow.ts), never reaches runWorld argv or the sandbox
+    // DB, so it must never count as pair drift.
+    expect(keys).not.toContain("startPolicy");
   });
 
   it("normalizes countries the way runWorld sees them: trim, uppercase, order-insensitive", () => {
@@ -241,6 +249,78 @@ describe("sim worker runWorld argument emission", () => {
     expect(() =>
       assertRealOutputShadowPinnedPair(control, { ...treatment, countries: "  " })
     ).toThrow('drifted on "countries"');
+  });
+
+  it("rejects clone-source drift while accepting clone-parity pairs", () => {
+    // A clone arm starts from live state, a fresh arm from preset bootstrap:
+    // same shadow flag or not, that pair is not a clean comparison.
+    const fresh = buildRealOutputShadowPinnedPair({});
+    expect(() =>
+      assertRealOutputShadowPinnedPair(fresh.control, {
+        ...fresh.treatment,
+        cloneFromLive: true,
+      })
+    ).toThrow('drifted on "cloneFromLive"');
+    // Clone parity on both arms is a clean comparison (both start from the
+    // same live source); the builder carries the base through its spread.
+    const cloneBase = buildRealOutputShadowPinnedPair({ cloneFromLive: true });
+    expect(cloneBase.control.cloneFromLive).toBe(true);
+    expect(cloneBase.treatment.cloneFromLive).toBe(true);
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { preset: "p", turns: 4, seed: "s", ...cloneBase.control },
+        { preset: "p", turns: 4, seed: "s", ...cloneBase.treatment }
+      )
+    ).not.toThrow();
+  });
+
+  it("leaves --clone-mode to the worker: the args builder never emits it", () => {
+    // worker.ts owns the clone step (cloneWorld.ts) and appends --clone-mode
+    // itself; buildRunWorldArgs carrying cloneFromLive would double-emit or
+    // silently drop it. The pinned assert above is what catches the drift.
+    expect(buildRunWorldArgs({ cloneFromLive: true }).some((a) => a.includes("clone"))).toBe(false);
+    expect(buildRunWorldArgs({ cloneFromLive: false }).some((a) => a.includes("clone"))).toBe(
+      false
+    );
+  });
+
+  it("drops scheduling metadata from run identity without breaking old reports", () => {
+    // startPolicy gates claim admission only; a control claimed immediately
+    // and a treatment claimed in-window ran identically.
+    expect(normalizeSimJobRequestedConfig({ preset: "p", startPolicy: "immediate" })).toEqual({
+      preset: "p",
+    });
+    const { control, treatment } = buildRealOutputShadowPinnedPair({});
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { ...control, startPolicy: "immediate" },
+        { ...treatment, startPolicy: "window" }
+      )
+    ).not.toThrow();
+    // Old reports recorded startPolicy in requestedConfig: they still
+    // validate against new jobs that no longer carry it.
+    expect(() =>
+      assertRealOutputShadowPinnedPair(
+        { realOutputShadowEnabled: false, startPolicy: "immediate" },
+        { realOutputShadowEnabled: true }
+      )
+    ).not.toThrow();
+  });
+
+  it("keeps older jobs without a clone source projecting exactly as before", () => {
+    expect(normalizeSimJobRequestedConfig({ preset: "default", turns: 48, seed: "s1" })).toEqual({
+      preset: "default",
+      turns: 48,
+      seed: "s1",
+    });
+    expect(
+      normalizeSimJobRequestedConfig({
+        preset: "default",
+        turns: 48,
+        seed: "s1",
+        cloneFromLive: true,
+      })
+    ).toEqual({ preset: "default", turns: 48, seed: "s1", cloneFromLive: true });
   });
 
   it("emits argv for a mode- and country-scoped pinned pair differing only in the shadow flag", () => {
