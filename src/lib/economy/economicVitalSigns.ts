@@ -285,6 +285,35 @@ function marketQuality(
     return [Math.abs(listing.priceChange48h) / (notional / 1_000_000)];
   });
 
+  // Per-listing inventory concentration: each economic trade's notional is
+  // split evenly across its distinct named counterparties, so a float-only
+  // leg attributes fully to the trader on the other side. Rows with no named
+  // party are unattributable and narrow the sample instead of diluting it.
+  const notionalByListingParty = new Map<string, Map<string, number>>();
+  for (const trade of trades) {
+    const notional = nonnegative(trade.totalAnchor);
+    if (notional <= 0) continue;
+    const parties = new Set(
+      [trade.from, trade.to].map(tradePartyKey).filter((key): key is string => key != null)
+    );
+    if (parties.size === 0) continue;
+    const share = notional / parties.size;
+    const key = trade.corporationId.toString();
+    let byParty = notionalByListingParty.get(key);
+    if (!byParty) {
+      byParty = new Map();
+      notionalByListingParty.set(key, byParty);
+    }
+    for (const party of parties) byParty.set(party, (byParty.get(party) ?? 0) + share);
+  }
+  const topTraderShares: number[] = [];
+  for (const [listingId, byParty] of notionalByListingParty) {
+    if (!listingById.has(listingId)) continue;
+    const total = [...byParty.values()].reduce((sum, value) => sum + value, 0);
+    if (total <= 0) continue;
+    topTraderShares.push(Math.max(...byParty.values()) / total);
+  }
+
   return {
     openBuyOrders: open.filter((order) => order.type === "buy").length,
     openSellOrders: open.filter((order) => order.type === "sell").length,
@@ -296,7 +325,16 @@ function marketQuality(
     organicDepthAnchor,
     executionHours,
     amihud,
+    topTraderShares,
   };
+}
+
+function tradePartyKey(party: ShareTradeHistory["from"]): string | null {
+  if (!party) return null;
+  if (party.characterId) return `character:${party.characterId.toString()}`;
+  if (party.imperialCharacterId) return `imperial:${party.imperialCharacterId.toString()}`;
+  if (party.corporationId) return `corporation:${party.corporationId.toString()}`;
+  return party.name ? `name:${party.name}` : null;
 }
 
 function relevantMarketDiagnostics(
@@ -1014,6 +1052,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         median(quality.amihud),
         quality.amihud.length,
         "absolute_48h_return_pct_per_million_anchor_notional"
+      ),
+      medianTopTraderNotionalShare48: metric(
+        median(quality.topTraderShares),
+        quality.topTraderShares.length,
+        "named_counterparty_share_of_listing_notional_48_turns"
       ),
     },
     coverage,

@@ -658,6 +658,118 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
   });
 
+  it("measures per-listing trade concentration from named counterparties", () => {
+    const concentratedId = new ObjectId();
+    const sharedId = new ObjectId();
+    const alice = { characterId: new ObjectId(), name: "Alice" };
+    const bob = { characterId: new ObjectId(), name: "Bob" };
+    const carol = { characterId: new ObjectId(), name: "Carol" };
+    const dave = { characterId: new ObjectId(), name: "Dave" };
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      globalExchange: {
+        _id: "global",
+        listings: [{ _id: concentratedId }, { _id: sharedId }],
+        updatedAt: new Date(),
+      } as never,
+      trades: [
+        // Concentrated book: Alice takes 90 of 100 notional from the float.
+        {
+          _id: new ObjectId(),
+          corporationId: concentratedId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 90,
+          pricePerShareAnchor: 1,
+          totalAnchor: 90,
+          to: alice,
+          from: null,
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: concentratedId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 10,
+          pricePerShareAnchor: 1,
+          totalAnchor: 10,
+          to: bob,
+          from: null,
+        },
+        // Shared book: Carol and Dave split 100 evenly across one peer fill.
+        {
+          _id: new ObjectId(),
+          corporationId: sharedId,
+          kind: "peer_fill",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 100,
+          pricePerShareAnchor: 1,
+          totalAnchor: 100,
+          to: dave,
+          from: carol,
+        },
+        // Non-economic kinds never count toward inventory concentration.
+        {
+          _id: new ObjectId(),
+          corporationId: sharedId,
+          kind: "issuance",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 1_000,
+          pricePerShareAnchor: 1,
+          totalAnchor: 1_000,
+          to: carol,
+          from: null,
+        },
+      ],
+    });
+
+    // Top shares [0.9, 0.5]: median 0.7 across the two traded listings.
+    expect(snapshot.securities.medianTopTraderNotionalShare48.value).toBeCloseTo(0.7, 10);
+    expect(snapshot.securities.medianTopTraderNotionalShare48.observations).toBe(2);
+    expect(snapshot.securities.medianTopTraderNotionalShare48.basis).toBe(
+      "named_counterparty_share_of_listing_notional_48_turns"
+    );
+  });
+
+  it("reports absent equity trade concentration as unknown, not as dispersed", () => {
+    const corpId = new ObjectId();
+    const floatOnly = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      globalExchange: {
+        _id: "global",
+        listings: [{ _id: corpId }],
+        updatedAt: new Date(),
+      } as never,
+      trades: [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 1,
+          pricePerShareAnchor: 1,
+          totalAnchor: 10,
+          to: null,
+          from: null,
+        },
+      ],
+    });
+
+    expect(floatOnly.securities.medianTopTraderNotionalShare48.value).toBeNull();
+    expect(floatOnly.securities.medianTopTraderNotionalShare48.observations).toBe(0);
+
+    const empty = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+    expect(empty.securities.medianTopTraderNotionalShare48.value).toBeNull();
+    expect(empty.securities.medianTopTraderNotionalShare48.observations).toBe(0);
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),
