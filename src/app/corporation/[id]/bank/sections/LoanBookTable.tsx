@@ -10,6 +10,7 @@ import {
   type CreditBandId,
   type LendingProfileId,
 } from "@/lib/banking/creditBands";
+import { MAX_NPC_FLOW_PER_TURN_FRACTION } from "@/lib/banking/rules/loans";
 import type { ConsolePayload } from "../types";
 import { partyHref } from "../lib/helpers";
 import { Eyebrow } from "../components/BankSection";
@@ -62,11 +63,12 @@ function HouseholdBookTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
+        <table className="w-full text-sm min-w-[640px]">
           <thead>
             <tr className="border-b border-card-border text-left text-[10px] uppercase tracking-widest text-muted">
               <th className="px-4 py-3 font-semibold">Rating</th>
               <th className="px-4 py-3 font-semibold text-right">Balance</th>
+              <th className="px-4 py-3 font-semibold text-right">Target</th>
               <th className="px-4 py-3 font-semibold">Share of book</th>
               <th className="px-4 py-3 font-semibold text-right">Rate</th>
               <th className="px-4 py-3 font-semibold text-right">Exp. default</th>
@@ -100,6 +102,20 @@ function HouseholdBookTable({
                 </td>
                 <td className="px-4 py-2.5 text-right font-mono tabular-nums">
                   {row.outstanding > 0 ? formatBankMoney(row.outstanding, currency) : "—"}
+                </td>
+                <td
+                  className="px-4 py-2.5 text-right font-mono tabular-nums text-muted"
+                  title={
+                    row.open
+                      ? "Outstanding this band is building toward under the current stance"
+                      : "Closed bands run off toward zero instead of being topped up"
+                  }
+                >
+                  {row.target === null || row.target === undefined
+                    ? "—"
+                    : row.target > 0
+                      ? formatBankMoney(row.target, currency)
+                      : "run off"}
                 </td>
                 <td className="px-4 py-2.5">
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-card-border/60">
@@ -168,7 +184,10 @@ function LendingProfilePicker({
       <div className="mb-1 text-sm font-semibold text-foreground">Lending stance</div>
       <p className="mb-3 text-xs text-muted">
         Sets which ratings the bank will lend to from the next turn. Loans already on the book keep
-        their rate and rating.
+        their rate and rating. Both directions move slowly: open bands build at up to{" "}
+        {MAX_NPC_FLOW_PER_TURN_FRACTION * 100}% of target per turn and closed bands run off at the
+        same pace, so a large mix shift takes dozens of turns. The Target column shows where each
+        band is heading under the current stance.
       </p>
       <div className="grid gap-2 sm:grid-cols-3">
         {LENDING_PROFILES.map((profile) => {

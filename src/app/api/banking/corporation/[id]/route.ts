@@ -39,6 +39,7 @@ import {
   CREDIT_BANDS,
   DEFAULT_LENDING_PROFILE,
   LEGACY_BAND,
+  bandOriginationTargets,
   bandsForProfile,
   getCreditBand,
 } from "@/lib/banking/creditBands";
@@ -62,11 +63,29 @@ interface RouteParams {
  * `LEGACY_BAND` with `isLegacy`, so the console can say plainly that those are
  * running off at their original rate rather than pretending they were rated.
  */
-function buildHouseholdBook(loans: BankLoan[], charter: BankCharter | null | undefined) {
+function buildHouseholdBook(
+  loans: BankLoan[],
+  charter: BankCharter | null | undefined,
+  inputs?: { lendingRatePercent: number; fundingCapacity: number }
+) {
   const bulk = loans.filter(
     (loan) =>
       loan.borrowerType === "npcBulk" && (loan.status === "current" || loan.status === "arrears")
   );
+  // Where the next banking turn steers each band, from the same helper the
+  // turn enforces: an open band at zero with a positive target is building, a
+  // closed band with a balance is running off, and the gap between outstanding
+  // and target is what the CEO's stance is doing.
+  const targets =
+    inputs !== undefined
+      ? new Map(
+          bandOriginationTargets({
+            fundingCapacity: inputs.fundingCapacity,
+            lendingRatePercent: inputs.lendingRatePercent,
+            profile: charter?.lendingProfile,
+          }).map((t) => [t.band, t] as const)
+        )
+      : null;
   const openBands = new Set(bandsForProfile(charter?.lendingProfile).map((b) => b.id));
 
   const rows = CREDIT_BANDS.map((band) => {
@@ -92,6 +111,8 @@ function buildHouseholdBook(loans: BankLoan[], charter: BankCharter | null | und
       expectedDefaultRatePercent: band.defaultRatePercent,
       demandShare: band.demandShare,
       open: openBands.has(band.id),
+      /** Outstanding the next turns steer this band toward; null when not computable. */
+      target: targets?.get(band.id)?.target ?? null,
       isLegacy: legacy.length > 0,
       tranches: all.length,
     };
@@ -353,6 +374,30 @@ async function handleGET(_request: Request, { params }: RouteParams) {
           }
         : null;
 
+    // Funding the per-band targets from the same base the turn uses: the
+    // cash-backed deposit base after the reserve requirement, less everything
+    // already lent outside the household book. The turn reads live depositors;
+    // the console reads the balance sheet, so this is the same derivation from
+    // console-visible inputs, not a second formula.
+    const npcOutstanding = loans
+      .filter(
+        (loan) =>
+          loan.borrowerType === "npcBulk" &&
+          (loan.status === "current" || loan.status === "arrears")
+      )
+      .reduce((sum, loan) => sum + Math.max(0, loan.outstanding ?? 0), 0);
+    const householdTargetInputs =
+      sheet && rates
+        ? {
+            lendingRatePercent: rates.lendingRatePercent,
+            fundingCapacity: Math.max(
+              0,
+              sheet.cashBackedDeposits * (1 - (reserveRatio ?? 0)) -
+                Math.max(0, sheet.totalLoans - npcOutstanding)
+            ),
+          }
+        : undefined;
+
     return NextResponse.json({
       privateBankingEnabled: privateEnabled,
       bankPropTradingEnabled: propTradingEnabled,
@@ -480,7 +525,10 @@ async function handleGET(_request: Request, { params }: RouteParams) {
       // The household book, by rating, best credit first. This is what the
       // console used to be unable to show: the book was one lump with one rate,
       // so "NPC bulk outstanding (implied)" was genuinely all there was to say.
-      householdBook: buildHouseholdBook(loans, charter),
+      // Per-band targets mirror the turn's funding derivation (deposit base
+      // after reserves, less non-household loans) from console-visible inputs,
+      // so each row shows where the stance is steering it, not just where it is.
+      householdBook: buildHouseholdBook(loans, charter, householdTargetInputs),
       // Where the charter is in its life and what that admits. The console
       // shows the stage and disables what the stage refuses, so a player is
       // told "impaired: no new exposure" rather than finding out from an error.
