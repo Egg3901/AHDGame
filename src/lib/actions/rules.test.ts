@@ -4,14 +4,28 @@
  * the same names so existing quote/effect callers need no rewrite.
  */
 import { describe, it, expect } from "vitest";
-import type { Character } from "@/lib/db/types";
+import type { Character, State } from "@/lib/db/types";
+import type { CharacterStats } from "@/lib/stats/statsConstants";
+import { statMultiplier } from "@/lib/stats/statMultiplier";
 import {
   FUNDRAISE_ACTION_COST,
   calculateFundraisingAmount,
   fundraiseYieldAnchor,
   isFundraiseEligible,
+  CAMPAIGN_BASE_FUND_COST,
+  getCampaignActionCost,
+  getCampaignFundCost,
+  campaignInfluenceGain,
+  isCampaignEligible,
+  quoteCampaignAction,
 } from "./rules";
-import { ACTIONS, canPerformAction, getDonorActionCost, getActionPointCost } from "../actions";
+import {
+  ACTIONS,
+  canPerformAction,
+  getDonorActionCost,
+  getActionPointCost,
+  simulateActionBatch,
+} from "../actions";
 
 function makeCharacter(overrides: Partial<Character>): Character {
   return {
@@ -105,5 +119,245 @@ describe("quote matches effect through the shared rule", () => {
       stats: { fundraising: 10 },
     } as Partial<Character>);
     expect(ACTIONS.fundraise.effect(char).fundsChange).toBe(247_800);
+  });
+});
+
+// ── Campaign (Game1724 slice 2) ─────────────────────────────────────────────
+// quoteCampaignAction owns the tiered AP cost, the GDP-scaled fund cost and
+// the stat-scaled influence gain. The UI quote, getActionPointCost (debit),
+// the action effect (result) and canPerformAction (failure) all route through
+// it, so the numbers below prove agreement instead of re-stating the formula.
+
+const NEUTRAL_STATS: CharacterStats = {
+  charisma: 5.5,
+  debate: 5.5,
+  energy: 5.5,
+  fundraising: 5.5,
+  businessAcumen: 5.5,
+  statecraft: 5.5,
+  intellect: 5.5,
+};
+
+const campaignStats = (charisma: number, intellect: number): CharacterStats => ({
+  ...NEUTRAL_STATS,
+  charisma,
+  intellect,
+});
+
+function campaignCharacter(
+  influence: number,
+  charisma = 5.5,
+  intellect = 5.5,
+  overrides: Partial<Character> = {}
+): Character {
+  return makeCharacter({
+    actions: 100,
+    funds: 100_000_000,
+    politicalInfluence: influence,
+    countryId: "US",
+    stats: campaignStats(charisma, intellect),
+    ...overrides,
+  });
+}
+
+function campaignState(): State {
+  return {
+    name: "Test State",
+    gdp: 65_000,
+    population: 1_000_000,
+    countryId: "US",
+  } as unknown as State;
+}
+
+function richState(): State {
+  return {
+    name: "Rich State",
+    gdp: 3_664_000,
+    population: 39_000_000,
+    countryId: "US",
+  } as unknown as State;
+}
+
+describe("campaign base cost is single-sourced", () => {
+  it("pins the $20K base the fund formula scales", () => {
+    expect(CAMPAIGN_BASE_FUND_COST).toBe(20_000);
+  });
+  it("AP tiers agree across the rules, the debit path and the quote", () => {
+    const cases: Array<[number, number]> = [
+      [0, 1],
+      [19, 1],
+      [20, 2],
+      [39, 2],
+      [40, 3],
+      [59, 3],
+      [60, 4],
+      [79, 4],
+      [80, 5],
+      [99, 5],
+      [100, 5],
+    ];
+    for (const [influence, tier] of cases) {
+      expect(getCampaignActionCost(influence)).toBe(tier);
+      expect(getActionPointCost(campaignCharacter(influence), "campaign")).toBe(tier);
+    }
+  });
+});
+
+describe("campaign quote matches debit and result through one source", () => {
+  it("pins the baseline quote (influence 0, average GDP, neutral stats)", () => {
+    const quote = quoteCampaignAction(
+      { politicalInfluence: 0, charisma: 5.5, intellect: 5.5 },
+      { gdpMillions: 65_000, population: 1_000_000, countryId: "US" }
+    );
+    expect(quote).toEqual({ ok: true, apCost: 1, fundCostAnchor: 20_000, influenceGain: 1 });
+  });
+  it("quote, AP debit, fund debit and result agree across a sweep", () => {
+    const influences = [0, 10, 19, 20, 45, 65, 85, 99];
+    const statPairs: Array<[number, number]> = [
+      [1, 1],
+      [5.5, 5.5],
+      [10, 10],
+      [1, 10],
+      [10, 1],
+    ];
+    for (const state of [campaignState(), richState()]) {
+      for (const influence of influences) {
+        for (const [charisma, intellect] of statPairs) {
+          const char = campaignCharacter(influence, charisma, intellect);
+          const quote = quoteCampaignAction(
+            { politicalInfluence: influence, charisma, intellect },
+            { gdpMillions: state.gdp, population: state.population, countryId: "US" }
+          );
+          expect(quote.ok).toBe(true);
+          if (!quote.ok) continue;
+          // Debit side: AP cost and the effect result carry the same numbers.
+          expect(getActionPointCost(char, "campaign")).toBe(quote.apCost);
+          const effect = ACTIONS.campaign.effect(char, state);
+          expect(effect.fundsChange).toBe(-quote.fundCostAnchor);
+          expect(effect.politicalInfluenceChange).toBe(quote.influenceGain);
+          // The quote itself applies the historical math, not a copy of it.
+          expect(quote.apCost).toBe(getCampaignActionCost(influence));
+          expect(quote.fundCostAnchor).toBe(
+            Math.round(
+              getCampaignFundCost(influence, state.gdp, state.population, "US") /
+                statMultiplier(intellect)
+            )
+          );
+          expect(quote.influenceGain).toBe(
+            campaignInfluenceGain(influence, statMultiplier(charisma))
+          );
+        }
+      }
+    }
+  });
+  it("a test-only influence bump moves quote and debit together", () => {
+    // One base input changes (influence 10 -> 85, crossing AP tiers 1 -> 5);
+    // both the displayed quote and the debited/applied result must follow it
+    // through the same function, with no second formula edit.
+    const target = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+    const before = quoteCampaignAction(
+      { politicalInfluence: 10, charisma: 5.5, intellect: 5.5 },
+      target
+    );
+    const after = quoteCampaignAction(
+      { politicalInfluence: 85, charisma: 5.5, intellect: 5.5 },
+      target
+    );
+    expect(before.ok && after.ok).toBe(true);
+    if (!before.ok || !after.ok) return;
+    expect(after.apCost).toBe(5);
+    expect(after.apCost).toBeGreaterThan(before.apCost);
+    expect(after.fundCostAnchor).toBeGreaterThan(before.fundCostAnchor);
+    const state = campaignState();
+    const effectBefore = ACTIONS.campaign.effect(campaignCharacter(10), state);
+    const effectAfter = ACTIONS.campaign.effect(campaignCharacter(85), state);
+    expect(effectBefore.fundsChange).toBe(-before.fundCostAnchor);
+    expect(effectAfter.fundsChange).toBe(-after.fundCostAnchor);
+    expect(effectAfter.politicalInfluenceChange).toBe(after.influenceGain);
+    expect(getActionPointCost(campaignCharacter(85), "campaign")).toBe(after.apCost);
+    expect(getActionPointCost(campaignCharacter(10), "campaign")).toBe(before.apCost);
+  });
+  it("a test-only charisma bump moves quoted and applied gain together", () => {
+    const target = { gdpMillions: 65_000, population: 1_000_000, countryId: "US" };
+    const weak = quoteCampaignAction(
+      { politicalInfluence: 20, charisma: 1, intellect: 5.5 },
+      target
+    );
+    const strong = quoteCampaignAction(
+      { politicalInfluence: 20, charisma: 10, intellect: 5.5 },
+      target
+    );
+    expect(weak.ok && strong.ok).toBe(true);
+    if (!weak.ok || !strong.ok) return;
+    expect(strong.influenceGain).toBeGreaterThan(weak.influenceGain);
+    const state = campaignState();
+    expect(ACTIONS.campaign.effect(campaignCharacter(20, 1), state).politicalInfluenceChange).toBe(
+      weak.influenceGain
+    );
+    expect(ACTIONS.campaign.effect(campaignCharacter(20, 10), state).politicalInfluenceChange).toBe(
+      strong.influenceGain
+    );
+  });
+});
+
+describe("campaign failure agreement", () => {
+  it("maxed influence rejects quote, validation and batch with one reason", () => {
+    const reason = "Your political influence is already at maximum (100%).";
+    expect(isCampaignEligible(99)).toBe(true);
+    expect(isCampaignEligible(100)).toBe(false);
+    const quote = quoteCampaignAction(
+      { politicalInfluence: 100, charisma: 5.5, intellect: 5.5 },
+      { gdpMillions: 65_000, population: 1_000_000, countryId: "US" }
+    );
+    expect(quote).toEqual({ ok: false, error: reason });
+    expect(canPerformAction(campaignCharacter(100), "campaign", campaignState())).toEqual({
+      canPerform: false,
+      reason,
+    });
+    expect(simulateActionBatch(campaignCharacter(100), campaignState(), "campaign", 5)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+  it("missing stats reject quote and validation with the same reason", () => {
+    const noStats = makeCharacter({
+      actions: 100,
+      funds: 100_000_000,
+      politicalInfluence: 20,
+      countryId: "US",
+      stats: undefined,
+    });
+    const quote = quoteCampaignAction(
+      { politicalInfluence: 20, charisma: undefined, intellect: undefined },
+      { gdpMillions: 65_000, population: 1_000_000, countryId: "US" }
+    );
+    expect(quote.ok).toBe(false);
+    if (quote.ok) return;
+    expect(quote.error).toMatch(/charisma/);
+    expect(canPerformAction(noStats, "campaign", campaignState())).toEqual({
+      canPerform: false,
+      reason: quote.error,
+    });
+  });
+  it("missing target rejects quote and validation with the same reason", () => {
+    const quote = quoteCampaignAction(
+      { politicalInfluence: 20, charisma: 5.5, intellect: 5.5 },
+      undefined
+    );
+    expect(quote.ok).toBe(false);
+    if (quote.ok) return;
+    expect(canPerformAction(campaignCharacter(20), "campaign", undefined)).toEqual({
+      canPerform: false,
+      reason: quote.error,
+    });
+  });
+  it("degenerate targets reject instead of pricing", () => {
+    const actor = { politicalInfluence: 20, charisma: 5.5, intellect: 5.5 };
+    expect(
+      quoteCampaignAction(actor, { gdpMillions: 65_000, population: 0, countryId: "US" }).ok
+    ).toBe(false);
+    expect(quoteCampaignAction(actor, { gdpMillions: 65_000, population: 1_000_000 }).ok).toBe(
+      false
+    );
   });
 });
