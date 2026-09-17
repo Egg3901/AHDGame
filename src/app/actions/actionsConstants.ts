@@ -1,5 +1,6 @@
 import { formatFundsCompact } from "@/lib/utils/formatters";
 import { getHomeCurrency } from "@/lib/currency/characterFunds";
+import { getPollActionCost, getPollBaseFundCost } from "@/lib/actions";
 import type { ActionCard } from "./actionsTypes";
 
 export const CARDS: ActionCard[] = [
@@ -90,9 +91,13 @@ export const CARDS: ActionCard[] = [
     tagline: "Topline intelligence",
     flavor:
       "A quick read of the electorate — overall appeal and the five groups you're strongest and weakest with. Adjust before it costs you.",
-    actionCost: 2,
-    fundCost: () => 25_000,
-    fundLabel: () => formatFundsCompact(25_000),
+    // Canonical Poll owner: flat AP cost and unscaled ANCHOR base fund cost
+    // from the shared rules quote execution debits (quotePollAction). The
+    // card preview stays display-only: the intellect-scaled debit is quoted
+    // by the poll route, not recomputed here.
+    actionCost: getPollActionCost("small"),
+    fundCost: () => getPollBaseFundCost("small"),
+    fundLabel: () => formatFundsCompact(getPollBaseFundCost("small")),
     effect: "Topline + best/worst groups",
     imageSlug: "poll",
     imageAlt: "Survey data being tabulated",
@@ -105,9 +110,10 @@ export const CARDS: ActionCard[] = [
     tagline: "The complete picture",
     flavor:
       "A comprehensive breakdown across every demographic category in your state. Know who you're winning and losing — and exactly why.",
-    actionCost: 6,
-    fundCost: () => 75_000,
-    fundLabel: () => formatFundsCompact(75_000),
+    // Same canonical owner as the quick poll, large tier.
+    actionCost: getPollActionCost("large"),
+    fundCost: () => getPollBaseFundCost("large"),
+    fundLabel: () => formatFundsCompact(getPollBaseFundCost("large")),
     effect: "Full demographic breakdown",
     imageSlug: "pollLarge",
     imageAlt: "Large-scale tabulation machinery",
