@@ -199,6 +199,9 @@ export async function completeWindUp(
           meta: {
             kind: "fund_seed_capital_return",
             fundId: fund._id.toString(),
+            // #992 tranche 3: lets the shadow ledger mirror this row against
+            // the fund cash account (fail-closed on currency mismatch).
+            fundCurrency: fund.anchorCurrencyCode,
             seedCapitalAnchor: fund.seedCapitalAnchor ?? 0,
             returnedAnchor: remainingAnchor,
           },

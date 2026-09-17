@@ -141,6 +141,10 @@ export async function chargeSponsorExpenseFees(
         meta: {
           kind: "fund_expense_fee",
           fundId: fund._id.toString(),
+          // #992 tranche 3: the shadow ledger mirrors this row against the
+          // fund cash account only when the fund currency is present and
+          // matches the row currency (fail-closed otherwise).
+          fundCurrency: fund.anchorCurrencyCode,
           expenseRatioAnnual: fund.expenseRatioAnnual,
           aumAnchor: Math.round(aumAnchor),
         },

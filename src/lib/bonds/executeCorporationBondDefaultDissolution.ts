@@ -621,7 +621,24 @@ export async function executeCorporationBondDefaultDissolution(
   // index-fund book). Pay the fund its ₳ pool slice and drop the holding, exactly
   // as the other two whole-corp payout flows do.
   if (allocation.fundRows.length > 0) {
-    await payFundShareholderRows(db, allocation.fundRows, refreshedCorporation._id, now);
+    // #992 tranche 3: book each fund credit with the same
+    // corp_dissolution_distribution type as the other shareholder buckets so
+    // the shadow ledger sees the fund side as a two-sided transfer.
+    const { txEntries: fundTxEntries } = await payFundShareholderRows(
+      db,
+      allocation.fundRows,
+      refreshedCorporation._id,
+      now,
+      {
+        ledger: {
+          turn: currentTurn,
+          txType: "corp_dissolution_distribution",
+          counterpartyId: refreshedCorporation._id,
+          counterpartyName: refreshedCorporation.name,
+        },
+      }
+    );
+    dissolutionTxEntries.push(...fundTxEntries);
   }
 
   // Emit the bond_default tx for the defaulting corp (subject side) BEFORE
