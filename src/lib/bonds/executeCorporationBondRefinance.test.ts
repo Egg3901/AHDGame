@@ -11,7 +11,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import { MAX_BOND_DEFAULT_REFINANCES } from "@/lib/constants/bonds";
-import { keyedInsertId } from "@/lib/db/nonAtomicMoneyFlow";
+import {
+  keyedInsertId,
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
+
+vi.mock("@/lib/bonds/bondRefinanceSpend", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/bondRefinanceSpend")>();
+  // Stub only the key-only resume path: the empty-live-set tests below drive
+  // the executor's delegation to it. applyBondRefinanceSpend stays real so the
+  // feasible-path tests above still run the keyed flow against mockDb.
+  return { ...actual, resumeBondRefinanceByKey: vi.fn() };
+});
 
 vi.mock("@/lib/wireEvent", () => ({
   logWireEvent: vi.fn(),
@@ -206,6 +218,164 @@ describe("executeCorporationBondRefinance", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected not ok");
     expect(result.reason).toMatch(/limit reached/i);
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
+  });
+});
+
+describe("executeCorporationBondRefinance empty-live-set recovery", () => {
+  const storedOutcome = {
+    faceValueAnchor: 15_000_000,
+    couponRate: 7.5,
+    maturityTurn: 540,
+    bondsMatured: 2,
+    retiredBondIds: [new ObjectId().toHexString(), new ObjectId().toHexString()],
+  };
+  const storedBondId = new ObjectId().toHexString();
+
+  beforeEach(async () => {
+    // The live defaulted set reads empty (every cure applied before the
+    // crash), so the executor must consult the key-only resume path.
+    db.collectionMocks["bonds"]!.find.mockImplementation(() => makeCursor([]));
+    const { resumeBondRefinanceByKey } = await import("@/lib/bonds/bondRefinanceSpend");
+    vi.mocked(resumeBondRefinanceByKey).mockReset().mockResolvedValue(null);
+  });
+
+  async function resumeMock() {
+    const { resumeBondRefinanceByKey } = await import("@/lib/bonds/bondRefinanceSpend");
+    return vi.mocked(resumeBondRefinanceByKey);
+  }
+
+  it("resumes an in-progress receipt and reports the exact stored outcome", async () => {
+    const resume = await resumeMock();
+    resume.mockResolvedValue({
+      bondId: storedBondId,
+      outcome: { ...storedOutcome, retiredBondIds: [...storedOutcome.retiredBondIds] },
+    });
+
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+      now: new Date(),
+      currentTurn: 444,
+      maturityTurns: 96,
+      idempotencyKey: "refi-exec-resume",
+    });
+
+    expect(resume).toHaveBeenCalledWith(db, "refi-exec-resume", corpId);
+    expect(result).toEqual({ ok: true, bondId: storedBondId, ...storedOutcome });
+  });
+
+  it("issues no replacement bond and touches no corp state on the resume path", async () => {
+    const resume = await resumeMock();
+    resume.mockResolvedValue({
+      bondId: storedBondId,
+      outcome: { ...storedOutcome, retiredBondIds: [...storedOutcome.retiredBondIds] },
+    });
+
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+      now: new Date(),
+      currentTurn: 444,
+      maturityTurns: 96,
+      idempotencyKey: "refi-exec-no-duplicate",
+    });
+
+    expect(result.ok).toBe(true);
+    // Recovery finishes inside the primitive; the executor itself must not
+    // issue a second replacement, re-cure, or re-count.
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.updateOne).not.toHaveBeenCalled();
+    expect(db.collectionMocks["bonds"]!.updateMany).not.toHaveBeenCalled();
+    expect(db.collectionMocks["corporations"]!.updateOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps the historical no-default result when no key is supplied", async () => {
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+      now: new Date(),
+      currentTurn: 444,
+      maturityTurns: 96,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "No defaulted bonds to refinance" });
+    expect(await resumeMock()).not.toHaveBeenCalled();
+  });
+
+  it("keeps the historical result when no receipt exists under the key", async () => {
+    // resumeBondRefinanceByKey returns null for an absent key (primitive's
+    // own "no receipt" case). The executor keeps its public result.
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+      now: new Date(),
+      currentTurn: 444,
+      maturityTurns: 96,
+      idempotencyKey: "refi-exec-absent",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "No defaulted bonds to refinance" });
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps the historical result for a completed receipt: finished work stays historical", async () => {
+    // A completed receipt is genuinely finished work, not stranded recovery:
+    // the primitive returns null and the executor keeps its public result
+    // instead of re-reporting the stored outcome.
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+      now: new Date(),
+      currentTurn: 444,
+      maturityTurns: 96,
+      idempotencyKey: "refi-exec-completed",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "No defaulted bonds to refinance" });
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("keeps the historical result for a malformed or outcome-less stored plan", async () => {
+    // An in-progress receipt with no usable plan, or a stored plan whose
+    // outcome is missing/malformed, cannot report an attempt: the primitive
+    // returns null and the executor keeps its public result rather than
+    // corrupt numbers.
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    const result = await executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+      now: new Date(),
+      currentTurn: 444,
+      maturityTurns: 96,
+      idempotencyKey: "refi-exec-malformed",
+    });
+
+    expect(result).toEqual({ ok: false, reason: "No defaulted bonds to refinance" });
+    expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
+  });
+
+  it("propagates the terminal error for a settled failed receipt", async () => {
+    const resume = await resumeMock();
+    resume.mockRejectedValue(new MoneyFlowTerminalError("refi-exec-terminal", "failed"));
+
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    await expect(
+      executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+        now: new Date(),
+        currentTurn: 444,
+        maturityTurns: 96,
+        idempotencyKey: "refi-exec-terminal",
+      })
+    ).rejects.toBeInstanceOf(MoneyFlowTerminalError);
+  });
+
+  it("propagates the key conflict when the stored attempt names a different corporation", async () => {
+    const resume = await resumeMock();
+    resume.mockRejectedValue(new MoneyFlowKeyConflictError("refi-exec-mismatch"));
+
+    const { executeCorporationBondRefinance } = await import("./executeCorporationBondRefinance");
+    await expect(
+      executeCorporationBondRefinance(db as unknown as Db, baseCorp() as never, {
+        now: new Date(),
+        currentTurn: 444,
+        maturityTurns: 96,
+        idempotencyKey: "refi-exec-mismatch",
+      })
+    ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
     expect(db.collectionMocks["bonds"]!.insertOne).not.toHaveBeenCalled();
   });
 });

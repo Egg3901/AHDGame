@@ -1,6 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
+import {
+  MoneyFlowKeyConflictError,
+  MoneyFlowTerminalError,
+} from "@/lib/db/nonAtomicMoneyFlow";
+
+vi.mock("@/lib/bonds/bondRestructureSpend", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/bonds/bondRestructureSpend")>();
+  // Stub only the key-only resume path: the empty-live-set tests below drive
+  // the executor's delegation to it. applyBondRestructureSpend stays real so
+  // the feasible-path test above still runs the keyed flow against mockDb.
+  return { ...actual, resumeBondRestructureByKey: vi.fn() };
+});
 
 vi.mock("@/lib/currency/featureFlag", () => ({
   isForexEnabled: vi.fn().mockResolvedValue(false),
@@ -175,5 +187,160 @@ describe("executeCorporationBondRestructure", () => {
         cureTurn: 50,
       })
     ).rejects.toThrow(/No defaulted bonds/);
+  });
+
+  describe("empty-live-set recovery", () => {
+    const storedOutcome = {
+      paid: 15_000,
+      bondsMatured: 2,
+      sectorsLiquidated: 2,
+      proceeds: 17_000,
+      residualLiquidCapital: 3_000,
+    };
+
+    beforeEach(async () => {
+      // The live defaulted set reads empty (every cure applied before the
+      // crash), so the executor must consult the key-only resume path.
+      db.collection("bonds").find.mockReturnValue(makeCursor([]));
+      const { resumeBondRestructureByKey } = await import("@/lib/bonds/bondRestructureSpend");
+      vi.mocked(resumeBondRestructureByKey).mockReset().mockResolvedValue(null);
+    });
+
+    async function resumeMock() {
+      const { resumeBondRestructureByKey } = await import("@/lib/bonds/bondRestructureSpend");
+      return vi.mocked(resumeBondRestructureByKey);
+    }
+
+    it("resumes an in-progress receipt and reports the exact stored outcome", async () => {
+      const resume = await resumeMock();
+      resume.mockResolvedValue({ outcome: { ...storedOutcome } });
+
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      const result = await executeCorporationBondRestructure(
+        db as unknown as Db,
+        { _id: corpId } as never,
+        { now: new Date(), cureTurn: 50, idempotencyKey: "restructure-exec-resume" }
+      );
+
+      expect(resume).toHaveBeenCalledWith(db, "restructure-exec-resume", corpId);
+      expect(result).toEqual({ ...storedOutcome });
+    });
+
+    it("pays no holder twice and liquidates no sector on the resume path", async () => {
+      const resume = await resumeMock();
+      resume.mockResolvedValue({ outcome: { ...storedOutcome } });
+      const { restoreSectorsToUnowned } = await import(
+        "@/lib/corporations/restoreSectorsToUnowned"
+      );
+
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      const result = await executeCorporationBondRestructure(
+        db as unknown as Db,
+        { _id: corpId } as never,
+        { now: new Date(), cureTurn: 50, idempotencyKey: "restructure-exec-no-duplicate" }
+      );
+
+      expect(result).toEqual({ ...storedOutcome });
+      // Recovery finishes inside the primitive; the executor itself must not
+      // re-liquidate, re-pay, re-cure, or move corp capital.
+      expect(restoreSectorsToUnowned).not.toHaveBeenCalled();
+      expect(db.collection("characters").updateOne).not.toHaveBeenCalled();
+      expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+      expect(db.collection("bonds").updateOne).not.toHaveBeenCalled();
+      expect(db.collection("bonds").updateMany).not.toHaveBeenCalled();
+    });
+
+    it("keeps the historical refusal when no key is supplied", async () => {
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      await expect(
+        executeCorporationBondRestructure(db as unknown as Db, { _id: corpId } as never, {
+          now: new Date(),
+          cureTurn: 50,
+        })
+      ).rejects.toThrow(/No defaulted bonds/);
+      expect(await resumeMock()).not.toHaveBeenCalled();
+    });
+
+    it("keeps the historical refusal when no receipt exists under the key", async () => {
+      // resumeBondRestructureByKey returns null for an absent key (primitive's
+      // own "no receipt" case). The executor keeps its public refusal.
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      await expect(
+        executeCorporationBondRestructure(db as unknown as Db, { _id: corpId } as never, {
+          now: new Date(),
+          cureTurn: 50,
+          idempotencyKey: "restructure-exec-absent",
+        })
+      ).rejects.toThrow(/No defaulted bonds/);
+      expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+    });
+
+    it("keeps the historical refusal for a completed receipt: finished work stays historical", async () => {
+      // A completed receipt is genuinely finished work, not stranded recovery:
+      // the primitive returns null and the executor keeps its public refusal
+      // instead of re-reporting the stored outcome.
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      await expect(
+        executeCorporationBondRestructure(db as unknown as Db, { _id: corpId } as never, {
+          now: new Date(),
+          cureTurn: 50,
+          idempotencyKey: "restructure-exec-completed",
+        })
+      ).rejects.toThrow(/No defaulted bonds/);
+      expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+    });
+
+    it("keeps the historical refusal for a malformed or outcome-less stored plan", async () => {
+      // An in-progress receipt with no usable plan, or a stored plan whose
+      // outcome is missing/malformed, cannot report an attempt: the primitive
+      // returns null and the executor keeps its public refusal rather than
+      // corrupt numbers.
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      await expect(
+        executeCorporationBondRestructure(db as unknown as Db, { _id: corpId } as never, {
+          now: new Date(),
+          cureTurn: 50,
+          idempotencyKey: "restructure-exec-malformed",
+        })
+      ).rejects.toThrow(/No defaulted bonds/);
+      expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+    });
+
+    it("propagates the terminal error for a settled failed receipt", async () => {
+      const resume = await resumeMock();
+      resume.mockRejectedValue(new MoneyFlowTerminalError("restructure-exec-terminal", "failed"));
+
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      await expect(
+        executeCorporationBondRestructure(db as unknown as Db, { _id: corpId } as never, {
+          now: new Date(),
+          cureTurn: 50,
+          idempotencyKey: "restructure-exec-terminal",
+        })
+      ).rejects.toBeInstanceOf(MoneyFlowTerminalError);
+    });
+
+    it("propagates the key conflict when the stored attempt names a different corporation", async () => {
+      const resume = await resumeMock();
+      resume.mockRejectedValue(new MoneyFlowKeyConflictError("restructure-exec-mismatch"));
+
+      const { executeCorporationBondRestructure } =
+        await import("./executeCorporationBondRestructure");
+      await expect(
+        executeCorporationBondRestructure(db as unknown as Db, { _id: corpId } as never, {
+          now: new Date(),
+          cureTurn: 50,
+          idempotencyKey: "restructure-exec-mismatch",
+        })
+      ).rejects.toBeInstanceOf(MoneyFlowKeyConflictError);
+      expect(db.collection("corporations").updateOne).not.toHaveBeenCalled();
+    });
   });
 });
