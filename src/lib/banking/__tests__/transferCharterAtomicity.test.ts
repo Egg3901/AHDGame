@@ -299,7 +299,7 @@ describe("transferBankCharterToAcquirer crash recovery", () => {
     // plan (fingerprint mismatch) and no foreign adopt applies (same owner):
     // a permanent "claimed by another merge" dead end.
     const before = makeCharter();
-    const drifted = makeCharter({ cashReserves: before.cashReserves + 1_000 });
+    const drifted = makeCharter({ cashReserves: (before.cashReserves ?? 0) + 1_000 });
     await memory.collection("corporations").updateOne(
       { _id: targetId },
       {
@@ -329,7 +329,7 @@ describe("transferBankCharterToAcquirer crash recovery", () => {
     // not read its own orphan as a foreign bank (occupied-slot conflict);
     // it removes exactly the stale copy and moves the current charter.
     const before = makeCharter();
-    const drifted = makeCharter({ cashReserves: before.cashReserves + 1_000 });
+    const drifted = makeCharter({ cashReserves: (before.cashReserves ?? 0) + 1_000 });
     await memory.collection("corporations").updateOne(
       { _id: targetId },
       {
@@ -361,7 +361,7 @@ describe("transferBankCharterToAcquirer crash recovery", () => {
     // claim: the slot copy matches neither the plan fingerprint nor the
     // current charter, so the retry conflicts with zero writes.
     const before = makeCharter();
-    const drifted = makeCharter({ cashReserves: before.cashReserves + 1_000 });
+    const drifted = makeCharter({ cashReserves: (before.cashReserves ?? 0) + 1_000 });
     await memory.collection("corporations").updateOne(
       { _id: targetId },
       {
