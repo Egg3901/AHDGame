@@ -391,9 +391,10 @@ export interface Character {
   partyJoinedAt?: Date;
   /**
    * Game turn at which the character last joined their current party. Stamped
-   * on every join/switch/merge-absorption and cleared on leave/purge. Anchors
-   * the turn-based leadership tenure gate (see lib/parties/leadershipTenure.ts).
-   * Optional: absent on legacy docs (treated as grandfathered) until backfill.
+   * on every join/switch and cleared on leave/purge; merge-absorption
+   * preserves the existing value. Anchors the turn-based leadership tenure
+   * gate (see lib/parties/leadershipTenure.ts). Optional: absent on legacy
+   * docs (treated as grandfathered) until backfill.
    */
   partyJoinedTurn?: number;
   /**

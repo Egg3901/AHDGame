@@ -19,6 +19,7 @@ import {
 import type { PoliticalParty } from "@/lib/db/types";
 import { POSITION_SHIFT_COOLDOWN_TURNS, PROPOSAL_COOLDOWN_TURNS } from "./proposalConstants";
 import type { CommitteeProposal } from "@/lib/db/types/committeeProposal";
+import { getPartyTenure } from "./leadershipTenure";
 import * as gameTimeModule from "@/lib/time/gameTime";
 
 vi.mock("@/lib/time/gameTime", async () => {
@@ -860,7 +861,7 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     expect((eo![1] as { $set: { party: string } }).$set.party).toBe("3");
   });
 
-  it("stamps partyJoinedTurn = currentTurn on absorbed members (tenure clock resets on merge)", async () => {
+  it("preserves each absorbed member's partyJoinedTurn (no tenure reset on merge)", async () => {
     const db = setup({ govDoc: null });
     await processMergeProposal(db as unknown as Db, proposal, 120);
 
@@ -869,7 +870,64 @@ describe("processMergeProposal (transfer semantics — seats + coalition)", () =
     expect(call![0]).toEqual({ party: "1", countryId: "IE" });
     const pipeline = call![1] as Array<{ $set: Record<string, unknown> }>;
     expect(pipeline[0].$set.party).toBe("3");
-    expect(pipeline[0].$set.partyJoinedTurn).toBe(120);
+    // Not a flat stamp of the merge turn: the tenure expression carries
+    // each member's existing value forward.
+    expect(pipeline[0].$set.partyJoinedTurn).toEqual({
+      $ifNull: ["$partyJoinedTurn", "$$REMOVE"],
+    });
+  });
+
+  describe("merge tenure preservation (evaluated pipeline expression)", () => {
+    // Evaluates the $set.partyJoinedTurn expression the merge pipeline
+    // carries against representative member docs. `undefined` means the
+    // field is left unrecorded. Against the old flat-stamp pipeline every
+    // case below evaluated to the merge turn, locking established and
+    // legacy members out for another 24 turns.
+    function evalTenureExpr(expr: unknown, doc: Record<string, unknown>): unknown {
+      if (typeof expr === "number" || expr == null) return expr;
+      if (typeof expr === "object" && expr !== null && "$ifNull" in expr) {
+        const [src, fallback] = (expr as { $ifNull: [unknown, unknown] }).$ifNull;
+        const val = typeof src === "string" && src.startsWith("$") ? doc[src.slice(1)] : src;
+        if (val !== null && val !== undefined) return val;
+        if (fallback === "$$REMOVE") return undefined;
+        return fallback;
+      }
+      throw new Error(`unsupported tenure expression: ${JSON.stringify(expr)}`);
+    }
+
+    async function mergeTenureExpr(): Promise<unknown> {
+      const db = setup({ govDoc: null });
+      await processMergeProposal(db as unknown as Db, proposal, 120);
+      const call = db.collectionMocks.characters!.updateMany.mock.calls[0];
+      const pipeline = call![1] as Array<{ $set: Record<string, unknown> }>;
+      return pipeline[0].$set.partyJoinedTurn;
+    }
+
+    it("established member keeps tenure and stays eligible", async () => {
+      const kept = await mergeTenureExpr().then((expr) =>
+        evalTenureExpr(expr, { partyJoinedTurn: 50 })
+      );
+      expect(kept).toBe(50);
+      expect(getPartyTenure(kept as number, 120).eligible).toBe(true);
+    });
+
+    it("recent member keeps a running (not reset) clock", async () => {
+      const kept = await mergeTenureExpr().then((expr) =>
+        evalTenureExpr(expr, { partyJoinedTurn: 110 })
+      );
+      expect(kept).toBe(110);
+      expect(getPartyTenure(kept as number, 120)).toEqual({
+        turnsServed: 10,
+        eligible: false,
+        turnsRemaining: 14,
+      });
+    });
+
+    it("legacy member with no recorded tenure stays grandfathered", async () => {
+      const kept = await mergeTenureExpr().then((expr) => evalTenureExpr(expr, {}));
+      expect(kept).toBeUndefined();
+      expect(getPartyTenure(kept as number | null | undefined, 120).eligible).toBe(true);
+    });
   });
 
   it("drops the founder marker from absorbed members (their party no longer exists)", async () => {

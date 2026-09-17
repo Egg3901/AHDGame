@@ -1,8 +1,9 @@
 // Turn-based party-membership tenure gate for leadership candidacy and voting.
 // A character must have been a member of a party for at least this many turns
 // before they may run for or vote in that party's leadership elections. The
-// clock resets on every join (initial join, switch, or merge-absorption); see
-// the stamp sites listed in the design doc.
+// clock resets on every join (initial join or switch); merge-absorption
+// preserves each member's existing partyJoinedTurn; see the stamp sites
+// listed in the design doc.
 
 export const PARTY_LEADERSHIP_TENURE_TURNS = 24;
 

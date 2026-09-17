@@ -581,8 +581,10 @@ export async function processMergeProposal(
     {
       $set: {
         party: targetStrId,
-        // Tenure clock resets on merge-absorption (see leadershipTenure.ts).
-        partyJoinedTurn: currentTurn,
+        // Tenure is preserved on merge-absorption: absorbed members keep
+        // their existing partyJoinedTurn (see leadershipTenure.ts). Members
+        // with no recorded tenure stay unrecorded (grandfathered eligible).
+        partyJoinedTurn: { $ifNull: ["$partyJoinedTurn", "$$REMOVE"] },
         partyInfluence: {
           $floor: { $multiply: [{ $ifNull: ["$partyInfluence", 0] }, 0.5] },
         },
