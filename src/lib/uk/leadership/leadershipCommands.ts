@@ -841,7 +841,7 @@ export async function resolveLeadershipChallenge(
 
   const { removed, removeShare } = resolveLeadershipBallot(
     challenge.votesFor,
-    challenge.votesAgainst,
+    challenge.votesFor + challenge.votesAgainst,
     challenge.ballotRuleset
   );
   const claimed = await coll.findOneAndUpdate(

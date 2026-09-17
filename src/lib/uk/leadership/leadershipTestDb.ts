@@ -123,6 +123,13 @@ function evalExpr(expr: unknown, doc: Doc): unknown {
     const [a, b] = obj.$eq as [unknown, unknown];
     return valuesEqual(evalExpr(a, doc), evalExpr(b, doc));
   }
+  // Plain literal subdocument (e.g. the `{ [voteKey]: vote }` merge fragment
+  // in the vote-tally update): no operator keys, so evaluate each value.
+  if (!Object.keys(obj).some((k) => k.startsWith("$"))) {
+    const out: Doc = {};
+    for (const [k, v] of Object.entries(obj)) out[k] = evalExpr(v, doc);
+    return out;
+  }
   throw new Error(`fakeDb: unsupported pipeline expression ${JSON.stringify(obj).slice(0, 80)}`);
 }
 

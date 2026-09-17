@@ -189,6 +189,12 @@ export interface TurnLog {
       confidenceProcessed: number;
     } | null;
 
+    ukLeadershipChallenges: {
+      expired: number;
+      resolved: number;
+      removed: number;
+    } | null;
+
     perpetualElections: {
       electionsCreated: number;
     } | null;
