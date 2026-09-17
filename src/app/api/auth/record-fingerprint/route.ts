@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ObjectId } from "mongodb";
 import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/mongodb";
+import { recordIdentitySignals } from "@/lib/identityHistory/recordObservation";
 import { parseJsonBody } from "@/lib/api/validate";
 import { handleRouteError, internalError, unauthorized } from "@/lib/api/errors";
 import type { User } from "@/lib/db/types";
@@ -155,6 +156,18 @@ export async function POST(request: Request) {
     );
 
     const clientIp = await getClientIp();
+
+    // Identity history runs. This route exists precisely to capture a
+    // fingerprint that registration could not (OAuth signups), so it is a
+    // first-class observation point for both tracks.
+    recordIdentitySignals(db, {
+      userId,
+      ip: clientIp,
+      fingerprint,
+      observedAt: now,
+      source: "record-fingerprint",
+    });
+
     recordAudit({
       source: "api",
       category: "auth",

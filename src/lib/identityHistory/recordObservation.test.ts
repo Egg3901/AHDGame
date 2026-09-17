@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ObjectId } from "mongodb";
 import type { Db } from "mongodb";
-import { recordIdentityObservation } from "./recordObservation";
+import { recordIdentityObservation, recordIdentitySignals } from "./recordObservation";
 import type { IdentityObservation } from "@/lib/db/types/identityObservation";
 
 function fakeDb() {
@@ -69,6 +69,40 @@ describe("recordIdentityObservation", () => {
     expect(rows[0].lastSeen).toEqual(at(2));
   });
 
+  it("debounces a repeat sighting of the same value inside the window", async () => {
+    const { db, rows } = fakeDb();
+    const input = {
+      userId: USER,
+      track: "ip" as const,
+      value: "1.1.1.1",
+      source: "session" as const,
+    };
+    const base = at(1);
+    await recordIdentityObservation(db, { ...input, observedAt: base });
+    const result = await recordIdentityObservation(db, {
+      ...input,
+      observedAt: new Date(base.getTime() + 30_000),
+    });
+    expect(result).toBe("debounced");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].observations).toBe(1);
+    expect(rows[0].lastSeen).toEqual(base);
+  });
+
+  it("never moves lastSeen backwards when an observation lands out of order", async () => {
+    const { db, rows } = fakeDb();
+    const input = {
+      userId: USER,
+      track: "ip" as const,
+      value: "1.1.1.1",
+      source: "session" as const,
+    };
+    await recordIdentityObservation(db, { ...input, observedAt: at(5) });
+    const result = await recordIdentityObservation(db, { ...input, observedAt: at(1) });
+    expect(result).toBe("debounced");
+    expect(rows[0].lastSeen).toEqual(at(5));
+  });
+
   it("opens a THIRD run when a user returns to an earlier value", async () => {
     const { db, rows } = fakeDb();
     const base = { userId: USER, track: "ip" as const, source: "login" as const };
@@ -111,5 +145,55 @@ describe("recordIdentityObservation", () => {
     });
     expect(result).toBe("rejected");
     expect(rows).toHaveLength(0);
+  });
+});
+
+describe("recordIdentitySignals", () => {
+  it("records both tracks from one event", async () => {
+    const { db, rows } = fakeDb();
+    recordIdentitySignals(db, {
+      userId: USER,
+      ip: "1.1.1.1",
+      fingerprint: "abc123",
+      observedAt: at(1),
+      source: "login",
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(rows.map((r) => r.track).sort()).toEqual(["fingerprint", "ip"]);
+  });
+
+  it("records the IP alone when no fingerprint was supplied", async () => {
+    const { db, rows } = fakeDb();
+    recordIdentitySignals(db, {
+      userId: USER,
+      ip: "1.1.1.1",
+      fingerprint: undefined,
+      observedAt: at(1),
+      source: "session",
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].track).toBe("ip");
+  });
+
+  it("never throws or rejects when the database is broken", async () => {
+    const brokenDb = {
+      collection: () => ({
+        findOne: async () => {
+          throw new Error("connection lost");
+        },
+      }),
+    } as unknown as Db;
+    expect(() =>
+      recordIdentitySignals(brokenDb, {
+        userId: USER,
+        ip: "1.1.1.1",
+        fingerprint: "abc123",
+        observedAt: at(1),
+        source: "login",
+      })
+    ).not.toThrow();
+    // An unhandled rejection here would fail the suite.
+    await new Promise((resolve) => setImmediate(resolve));
   });
 });
