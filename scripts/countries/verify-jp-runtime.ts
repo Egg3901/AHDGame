@@ -83,6 +83,11 @@ import { COUNTRY_COMMAND_FLAVOR } from "../../src/lib/military/theaters";
 import { GDP_DENOMINATION_1953 } from "../../src/lib/seeds/reference/gdpDenomination";
 
 // ---- The folder itself, for the identity checks at the tail. ----
+import {
+  JP_GOVERNOR_SEATS,
+  JP_SANGIIN_SEATS,
+  JP_SHUGIIN_SEATS,
+} from "../../src/lib/constants/states";
 import { JP_IDENTITY } from "../../src/lib/countries/jp/identity";
 import { JP_ECONOMY } from "../../src/lib/countries/jp/economy";
 import { JP_GEOGRAPHY } from "../../src/lib/countries/jp/geography";
@@ -401,6 +406,16 @@ const sameObject: Same[] = [
     JP_ECONOMY.tax.neutralFederalSalesTax,
   ],
   ["cabinet positions reachable", JP_INSTITUTIONS.cabinet.positions, JP_CABINET_POSITIONS],
+  // ⚠ THE SEAT TABLES ARE HERE BECAUSE THEY WERE DUPLICATED AND NOTHING NOTICED.
+  // They were declared in `constants/states.ts` AND again by value in
+  // `jp/elections.ts`; `===` said different objects, `JSON.stringify` said equal
+  // values. Nothing in this harness could see it, because every other check keys
+  // off a registry with a `JP:` key and `constants/states.ts` is keyed by REGION
+  // -- the country lives in the SYMBOL NAME. Four coverage rules missed the same
+  // file for the same reason.
+  ["JP_SHUGIIN_SEATS", JP_SHUGIIN_SEATS, JP_ELECTIONS.seats.byChamber.shugiin],
+  ["JP_SANGIIN_SEATS", JP_SANGIIN_SEATS, JP_ELECTIONS.seats.byChamber.sangiin],
+  ["JP_GOVERNOR_SEATS", JP_GOVERNOR_SEATS, JP_ELECTIONS.seats.byChamber.governor],
 ];
 
 let copies = 0;

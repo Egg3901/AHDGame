@@ -7,6 +7,11 @@ import {
   ensureJPGovernorElections,
   ensureJPRegionalCouncilElections,
 } from "./elections/perpetual";
+import {
+  JP_GOVERNOR_SEATS as governorSeats,
+  JP_SANGIIN_SEATS as sangiinSeats,
+  JP_SHUGIIN_SEATS as shugiinSeats,
+} from "./data/jpSeats";
 
 /**
  * Japan's elections. Phase D3.
@@ -27,41 +32,20 @@ import {
  * MOVED_THUNK_REGISTRIES pins them by resolved behaviour instead.
  */
 
-/** Per-region Shugiin seats. Sums to 465. */
-const shugiinSeats: Readonly<Record<string, number>> = {
-  HOK: 12,
-  TOH: 37,
-  KAN: 150,
-  CHU: 81,
-  KNS: 82,
-  CGK: 28,
-  SHI: 14,
-  KYU: 61,
-};
-
-/** Per-region Sangiin seats. Sums to 248. */
-const sangiinSeats: Readonly<Record<string, number>> = {
-  HOK: 7,
-  TOH: 20,
-  KAN: 80,
-  CHU: 44,
-  KNS: 44,
-  CGK: 14,
-  SHI: 8,
-  KYU: 31,
-};
-
-/** One governor per region. */
-const governorSeats: Readonly<Record<string, number>> = {
-  HOK: 1,
-  TOH: 1,
-  KAN: 1,
-  CHU: 1,
-  KNS: 1,
-  CGK: 1,
-  SHI: 1,
-  KYU: 1,
-};
+/**
+ * Japan's chamber seat tables.
+ *
+ * ⚠️ IMPORTED, NOT DECLARED, AND THAT IS THE WHOLE POINT. These were written
+ * out here by value AND in `constants/states.ts`, with nothing keeping the two
+ * in step. Measured, `===` said different objects and `JSON.stringify` said
+ * equal values: correct on the day it was written, silently divergent after the
+ * first edit to either side.
+ *
+ * The comment that used to sit here said they were "reproduced from the pre-move
+ * snapshot" and that a later phase would "decide whether it forwards". The
+ * decision is made: `jp/data/jpSeats.ts` holds them, `constants/states.ts`
+ * forwards, and this reads the same objects.
+ */
 
 /**
  * The continuity spawner. Shugiin (lower), Sangiin (upper, natural class), and
