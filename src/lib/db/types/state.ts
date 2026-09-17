@@ -81,6 +81,24 @@ export interface State {
   sectorRevenueEma?: number;
   sectorRevenueSnapshots?: Array<{ turn: number; value: number }>;
   /**
+   * Real-output shadow baseline (issue #1470 acceptance item 1, SHADOW ONLY):
+   * sum of owned-sector `producedUnits` (currency-free physical output) as of
+   * `sectorRealOutputUnitsTurn`, plus the last constant-price diagnostic print
+   * `sectorRealOutputShadowGrowth` (annualized percent, same bounds as the
+   * nominal sector signal, null while the baseline is immature). Nothing reads
+   * these: not the sectorGrowth node, not Okun's law, not taxes or approval.
+   *
+   * Cold start: absent means the backfill seeds at the measured level with no
+   * signal (see `resolveRealOutputShadowBaseline`); the shadow needs one full
+   * turn of gap before it can print. Migration: backfill reruns are no-ops
+   * (the persisted baseline is kept verbatim), so a retried migration cannot
+   * shift history. Written only when `realOutputShadowEnabled` is explicitly
+   * true, so flag-off worlds carry none of these fields.
+   */
+  sectorRealOutputUnits?: number;
+  sectorRealOutputUnitsTurn?: number;
+  sectorRealOutputShadowGrowth?: number | null;
+  /**
    * O1c (design §5, macroGrowthV1): the paid corporate growth cost (₳, per turn)
    * summed over this region's sectors, written by the corp turn. The metric
    * engine converts it to local-millions, caps it at 5% of region GDP/yr, and

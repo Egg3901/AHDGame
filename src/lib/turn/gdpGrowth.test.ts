@@ -1,12 +1,16 @@
 import { describe, it, expect } from "vitest";
 import {
   advanceRevenueEma,
+  computeConstantPriceOutputGrowthRate,
   computeConsumptionTaxAdjustedGrowthRate,
   computeRealizedRevenueGrowthRate,
   computeTrailingRevenueGrowthRate,
   computeWeightedGrowthRate,
+  realOutputShadowDivergence,
+  resolveRealOutputShadowBaseline,
   selectRevenueTrendBaseline,
   sumHostRealizedRevenue,
+  sumPhysicalOutputUnits,
   sumRealizedRevenue,
   updateRevenueSnapshots,
   REVENUE_EMA_ALPHA,
@@ -333,5 +337,131 @@ describe("computeTrailingRevenueGrowthRate", () => {
     const emaNow = advanceRevenueEma(1000, 1100); // 1015
     const out = computeTrailingRevenueGrowthRate(emaNow, { value: 1000, spanTurns: 48 }, 48);
     expect(Math.abs(out!)).toBeLessThan(2);
+  });
+});
+
+// ── Issue #1470 acceptance item 1: constant-price output vs nominal revenue ──
+//
+// Characterization first: the live plants signal measures host-currency
+// REALIZED revenue, so a shock that touches only prices (or only FX, ticket
+// #1084) prints as a real contraction and feeds Okun's law. The blocks below
+// pin that contamination with the EXISTING helpers, then specify the
+// constant-price shadow that must not move under the same shocks.
+
+describe("nominal signal contamination (issue #1470 item 1, characterization)", () => {
+  it("a price-only collapse reads as a deep contraction in nominal terms", () => {
+    // Physical output flat at 1,000 units; market price halves, so realized
+    // revenue halves. Annualized over one turn the print saturates the floor.
+    expect(computeRealizedRevenueGrowthRate(500, 1000, 1, 48)).toBe(SECTOR_SIGNAL_MIN);
+  });
+
+  it("an FX-only restatement reads as contraction in nominal terms", () => {
+    const local = 1000;
+    const prevAnchor = local / 0.8;
+    const nowAnchor = local / 0.8016;
+    expect(computeRealizedRevenueGrowthRate(nowAnchor, prevAnchor, 1, 48)).toBeCloseTo(-9.58, 1);
+  });
+});
+
+describe("computeConstantPriceOutputGrowthRate (issue #1470 item 1 shadow)", () => {
+  it("annualizes a physical-units delta exactly like the revenue signal", () => {
+    expect(computeConstantPriceOutputGrowthRate(1001, 1000, 1, 48)).toBeCloseTo(4.8, 10);
+    expect(computeConstantPriceOutputGrowthRate(1010, 1000, 4, 48)).toBeCloseTo(12, 10);
+    expect(computeConstantPriceOutputGrowthRate(995, 1000, 4, 48)).toBeCloseTo(-6, 10);
+  });
+
+  it("clamps to the shared signal bounds", () => {
+    expect(computeConstantPriceOutputGrowthRate(2000, 1000, 1, 48)).toBe(SECTOR_SIGNAL_MAX);
+    expect(computeConstantPriceOutputGrowthRate(1, 1000, 1, 48)).toBe(SECTOR_SIGNAL_MIN);
+  });
+
+  it("does not move on a price-only shock: flat units read 0 regardless of price", () => {
+    // Same 1,000 physical units both turns; revenue halved by a price collapse.
+    // The nominal signal floors at -10 (pinned above); the constant-price
+    // signal must read exactly 0.
+    expect(computeConstantPriceOutputGrowthRate(1000, 1000, 1, 48)).toBe(0);
+  });
+
+  it("does not move on an FX-only shock: units are currency-free", () => {
+    expect(computeConstantPriceOutputGrowthRate(1000, 1000, 1, 48)).toBe(0);
+  });
+
+  it("still registers a genuine physical contraction", () => {
+    // Units fall 20% with prices flat: both signals agree this is real.
+    expect(computeConstantPriceOutputGrowthRate(800, 1000, 1, 48)).toBe(SECTOR_SIGNAL_MIN);
+    expect(computeConstantPriceOutputGrowthRate(995, 1000, 4, 48)).toBeCloseTo(-6, 10);
+  });
+
+  it("returns null without a usable baseline", () => {
+    expect(computeConstantPriceOutputGrowthRate(1000, undefined, 1, 48)).toBeNull();
+    expect(computeConstantPriceOutputGrowthRate(1000, 0, 1, 48)).toBeNull();
+    expect(computeConstantPriceOutputGrowthRate(1000, -5, 1, 48)).toBeNull();
+    expect(computeConstantPriceOutputGrowthRate(1000, 900, 0, 48)).toBeNull();
+    expect(computeConstantPriceOutputGrowthRate(1000, 900, undefined, 48)).toBeNull();
+  });
+});
+
+describe("sumPhysicalOutputUnits (issue #1470 item 1 shadow)", () => {
+  it("sums produced units across sectors", () => {
+    expect(sumPhysicalOutputUnits([{ producedUnits: 600 }, { producedUnits: 450 }])).toBe(1050);
+  });
+
+  it("skips sectors without usable telemetry instead of poisoning the sum", () => {
+    expect(
+      sumPhysicalOutputUnits([
+        { producedUnits: 600 },
+        {},
+        { producedUnits: NaN },
+        { producedUnits: -3 },
+      ])
+    ).toBe(600);
+  });
+
+  it("reads 0 when no sector has telemetry yet (cold start, not NaN)", () => {
+    expect(sumPhysicalOutputUnits([{}, {}])).toBe(0);
+  });
+});
+
+describe("realOutputShadowDivergence (issue #1470 item 1 diagnostic)", () => {
+  it("is nominal minus real: positive when prices inflate the print", () => {
+    expect(realOutputShadowDivergence(5, 2)).toBeCloseTo(3, 10);
+  });
+
+  it("is negative when a price collapse masks flat output", () => {
+    // The characterization case above: nominal floors at -10, real reads 0.
+    expect(realOutputShadowDivergence(SECTOR_SIGNAL_MIN, 0)).toBeCloseTo(-10, 10);
+  });
+
+  it("is null when either leg is missing", () => {
+    expect(realOutputShadowDivergence(null, 0)).toBeNull();
+    expect(realOutputShadowDivergence(0, null)).toBeNull();
+    expect(realOutputShadowDivergence(NaN, 0)).toBeNull();
+  });
+});
+
+describe("resolveRealOutputShadowBaseline (cold-start/migration plan)", () => {
+  it("cold-starts by seeding at the measured level with no signal yet", () => {
+    const out = resolveRealOutputShadowBaseline(undefined, { units: 1050, turn: 10 });
+    expect(out).toEqual({ baseline: 1050, baselineTurn: 10, mature: false });
+  });
+
+  it("keeps the persisted baseline on re-runs (idempotent backfill)", () => {
+    const seeded = resolveRealOutputShadowBaseline(undefined, { units: 1050, turn: 10 });
+    const rerun = resolveRealOutputShadowBaseline(seeded, { units: 900, turn: 10 });
+    expect(rerun).toEqual({ baseline: 1050, baselineTurn: 10, mature: false });
+  });
+
+  it("matures once a full turn separates baseline from now", () => {
+    const seeded = resolveRealOutputShadowBaseline(undefined, { units: 1050, turn: 10 });
+    const matured = resolveRealOutputShadowBaseline(seeded, { units: 900, turn: 11 });
+    expect(matured).toEqual({ baseline: 1050, baselineTurn: 10, mature: true });
+  });
+
+  it("reseeds when the persisted baseline is unusable, never emitting a signal", () => {
+    const out = resolveRealOutputShadowBaseline(
+      { baseline: -4, baselineTurn: 9, mature: true },
+      { units: 1050, turn: 10 }
+    );
+    expect(out).toEqual({ baseline: 1050, baselineTurn: 10, mature: false });
   });
 });

@@ -338,6 +338,18 @@ export interface GameConfig {
    */
   simSandbox?: boolean;
   /**
+   * Real-output shadow experiment (issue #1470 acceptance item 1).
+   * Disabled by default: absent/undefined means OFF; only explicit `true`
+   * enables the shadow diagnostic. When on, future engine slices may
+   * ADDITIONALLY persist the constant-price print beside the live nominal
+   * signal for worldsim comparison. The live signal, unemployment, inflation,
+   * approval, taxes, and player-visible mechanics never change under this
+   * flag. Never enabled in the slice that introduces it; enabling requires
+   * its own balance-gated slice with a worldsim report.
+   * Resolve via `isRealOutputShadowEnabled`.
+   */
+  realOutputShadowEnabled?: boolean;
+  /**
    * Launch-safety governor for the clearing/throughput revenue legs. `cap` is
    * the max fractional deviation (0–1) those legs may take from the ledger
    * baseline; `rampTurns` is the fade-in window from the flip. Tunable live so

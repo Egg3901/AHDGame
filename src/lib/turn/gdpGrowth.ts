@@ -381,3 +381,156 @@ export function computeConsumptionTaxAdjustedGrowthRate(
   );
   return sectorGrowth - taxGap * SALES_TAX_GROWTH_COEFFICIENT;
 }
+
+// ── Constant-price real-output shadow (issue #1470 acceptance item 1) ────────
+//
+// The live plants signal (`computeRealizedRevenueGrowthRate`) measures
+// host-currency REALIZED revenue: physical output times market prices times
+// sales realization. A price-only collapse (or an FX-only restatement, ticket
+// #1084) therefore prints as a real contraction and feeds Okun's law and the
+// unemployment and inflation responses. The shadow below measures the physical
+// leg alone: sum of sector `producedUnits`, which is currency-free by
+// construction, with the SAME annualization and the SAME signal clamp, so the
+// two prints are directly comparable and any gap between them is
+// definitionally price or realization, not output.
+//
+// SHADOW ONLY in this slice: nothing here is read by the sectorGrowth node,
+// unemployment, inflation, approval, taxes, or live GDP. Engine consumption
+// arrives behind `isRealOutputShadowEnabled`
+// (src/lib/economy/realOutputShadow.ts), which defaults off and is never
+// enabled here.
+
+/**
+ * Sum of owned-sector PHYSICAL output for a region (the constant-price shadow
+ * rollup). Reads each sector's `producedUnits` telemetry: output units on the
+ * same DAILY basis as `revenue` but currency-free (nameplate implied units
+ * times the production-side realization legs). Sectors without usable
+ * telemetry (not yet reprocessed since the field shipped, NaN, negative) are
+ * skipped rather than poisoning the sum; no telemetry at all reads 0, and the
+ * baseline resolver below treats that first sighting as a seed, never a
+ * signal. Deliberately NOT `soldUnits`: cleared volume mixes sales
+ * realization back in, and this shadow isolates the physical leg.
+ */
+export function sumPhysicalOutputUnits(sectors: Array<{ producedUnits?: number }>): number {
+  let total = 0;
+  for (const s of sectors) {
+    if (
+      typeof s.producedUnits === "number" &&
+      Number.isFinite(s.producedUnits) &&
+      s.producedUnits >= 0
+    ) {
+      total += s.producedUnits;
+    }
+  }
+  return total;
+}
+
+/**
+ * Constant-price output growth: the annualized physical-units delta, in the
+ * same units and bounds as the nominal revenue signal. Identical formula
+ * (growth = (now / prev - 1) x 100 x (turnsPerYear / turnsSincePrev)),
+ * clamped to [SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX], so a price-only or
+ * FX-only shock that moves `computeRealizedRevenueGrowthRate` cannot move
+ * this: both endpoints are unit counts, and no price or exchange rate enters.
+ * Returns `null` on the same unusable-baseline conditions as the nominal
+ * helper (flip turn, unseeded region, zero or absent prior, non-positive gap).
+ */
+export function computeConstantPriceOutputGrowthRate(
+  unitsNow: number,
+  unitsPrev: number | undefined,
+  turnsSincePrev: number | undefined,
+  turnsPerYear: number
+): number | null {
+  if (typeof unitsPrev !== "number" || !Number.isFinite(unitsPrev) || unitsPrev <= 0) {
+    return null;
+  }
+  if (!Number.isFinite(unitsNow) || unitsNow < 0) return null;
+  if (
+    typeof turnsSincePrev !== "number" ||
+    !Number.isFinite(turnsSincePrev) ||
+    turnsSincePrev <= 0
+  ) {
+    return null;
+  }
+  const raw = (unitsNow / unitsPrev - 1) * 100 * (turnsPerYear / turnsSincePrev);
+  if (!Number.isFinite(raw)) return null;
+  return clamp(raw, SECTOR_SIGNAL_MIN, SECTOR_SIGNAL_MAX);
+}
+
+/**
+ * Shadow diagnostic: nominal print minus constant-price print. Positive when
+ * prices inflate measured growth, negative when a price collapse (or FX move)
+ * masks flat physical output, near 0 when the measured move is real.
+ * Null when either leg is missing, because a diagnostic must never invent a
+ * number.
+ */
+export function realOutputShadowDivergence(
+  nominalSignal: number | null | undefined,
+  realSignal: number | null | undefined
+): number | null {
+  if (
+    typeof nominalSignal !== "number" ||
+    !Number.isFinite(nominalSignal) ||
+    typeof realSignal !== "number" ||
+    !Number.isFinite(realSignal)
+  ) {
+    return null;
+  }
+  const out = nominalSignal - realSignal;
+  return Number.isFinite(out) ? out : null;
+}
+
+export interface RealOutputShadowBaseline {
+  baseline: number;
+  baselineTurn: number;
+  mature: boolean;
+}
+
+/**
+ * Cold-start, migration, and backfill plan for the persisted shadow baseline
+ * (`State.sectorRealOutputUnits` plus `sectorRealOutputUnitsTurn`), as a pure
+ * resolver so the policy is pinned by tests before any phase writes it:
+ *
+ * - Cold start (no persisted baseline): seed at the measured level THIS turn
+ *   with `mature: false`. Seeding emits no signal, because the shadow needs
+ *   one full turn of gap before `computeConstantPriceOutputGrowthRate` has a
+ *   baseline.
+ * - Backfill rerun (baseline persisted, any measured level): keep the
+ *   persisted baseline verbatim. Re-running the backfill is a no-op, so a
+ *   retried or double-applied migration cannot shift history (idempotent).
+ * - Maturation: `mature` flips true once a full turn separates baseline from
+ *   now; only then may a caller feed the pair to the growth helper.
+ * - Corrupt baseline (non-finite, non-positive, or from the future): reseed
+ *   at the measured level with `mature: false`, never emitting a signal.
+ *
+ * Historical repair is intentionally OUT of scope: this seeds forward-looking
+ * baselines only. Any repair of already-persisted state needs the bounded
+ * idempotent dry-run that acceptance item 5 requires, in its own slice.
+ */
+export function resolveRealOutputShadowBaseline(
+  existing: RealOutputShadowBaseline | undefined,
+  measured: { units: number; turn: number }
+): RealOutputShadowBaseline {
+  const usableMeasured =
+    Number.isFinite(measured.units) && measured.units >= 0 && Number.isFinite(measured.turn);
+  const fallbackTurn = Number.isFinite(measured.turn) ? measured.turn : 0;
+  const seed: RealOutputShadowBaseline = {
+    baseline: usableMeasured ? measured.units : 0,
+    baselineTurn: fallbackTurn,
+    mature: false,
+  };
+  if (!existing) return seed;
+  if (
+    !Number.isFinite(existing.baseline) ||
+    existing.baseline <= 0 ||
+    !Number.isFinite(existing.baselineTurn) ||
+    existing.baselineTurn > measured.turn
+  ) {
+    return seed;
+  }
+  return {
+    baseline: existing.baseline,
+    baselineTurn: existing.baselineTurn,
+    mature: measured.turn - existing.baselineTurn >= 1,
+  };
+}
