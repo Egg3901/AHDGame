@@ -1345,9 +1345,7 @@ function assembleSovereignFundDemand(
       bondUniverse:
         fund.kind === "bond"
           ? (universeBySlug.get(fund.slug) ??
-            (fund.countryId
-              ? ({ issuerType: "sovereign", homeOnly: true } as const)
-              : undefined))
+            (fund.countryId ? ({ issuerType: "sovereign", homeOnly: true } as const) : undefined))
           : undefined,
     });
   }

@@ -120,12 +120,8 @@ describe("economic experiment configuration", () => {
     expect(isGameplayOverrideArg("--equity-liquidity=true")).toBe(true);
     expect(isGameplayOverrideArg("--equity-liquidity=false")).toBe(true);
     expect(isGameplayOverrideArg("--index-fund-bond-liquidity=true")).toBe(true);
-    expect(isGameplayOverrideArg("--sovereign-issuance-consolidation=true")).toBe(
-      true
-    );
-    expect(isGameplayOverrideArg("--domestic-sovereign-bond-coverage=true")).toBe(
-      true
-    );
+    expect(isGameplayOverrideArg("--sovereign-issuance-consolidation=true")).toBe(true);
+    expect(isGameplayOverrideArg("--domestic-sovereign-bond-coverage=true")).toBe(true);
     expect(isGameplayOverrideArg("--brand-loyalty")).toBe(true);
     expect(isGameplayOverrideArg("--seed=run1")).toBe(false);
     expect(isGameplayOverrideArg("--equity-liquidity-facility")).toBe(false);
