@@ -1,4 +1,10 @@
 export { MACRO_TICK_INTERVAL, isMacroTickTurn, macroTickBucket } from "./schedule";
+export {
+  ACTIVE_MACRO_COUNTRY_FILTER,
+  buildDependencyRetirement,
+  isActiveMacroCountry,
+  type DependencyRetirement,
+} from "./retirement";
 export { computeMacroContribution, PLANNED_MARKET_LEAKAGE } from "./kernel";
 export { AUSTRIA_ENTITY_ID, buildAustria1953Seed, getAustria1953MacroCountry } from "./austria1953";
 export {
