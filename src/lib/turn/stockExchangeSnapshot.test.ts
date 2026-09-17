@@ -619,6 +619,101 @@ describe("stockExchangeSnapshot", () => {
       }
     });
 
+    it("persists finite price changes and tradability for a mixed snapshot", async () => {
+      const pubId = new ObjectId();
+      const soeId = new ObjectId();
+      const nanId = new ObjectId();
+      const noHistId = new ObjectId();
+      const noCeo = { ceoId: undefined, ceoVacant: true };
+      mockCollection
+        .mockReturnValueOnce(
+          createMockChain([
+            createCorporation({
+              _id: pubId,
+              name: "Pub Co",
+              sharePrice: 100,
+              totalShares: 1000,
+              publicFloat: 500,
+              ...noCeo,
+            }),
+            createCorporation({
+              _id: soeId,
+              name: "Zero SoE",
+              sharePrice: 100,
+              totalShares: 0,
+              publicFloat: 0,
+              countryOwnerId: "RU",
+              ...noCeo,
+            }),
+            createCorporation({
+              _id: nanId,
+              name: "Legacy NaN",
+              sharePrice: NaN,
+              totalShares: 1000,
+              publicFloat: 500,
+              ...noCeo,
+            }),
+            createCorporation({
+              _id: noHistId,
+              name: "No Hist",
+              sharePrice: 50,
+              totalShares: 500,
+              publicFloat: 100,
+              ...noCeo,
+            }),
+          ])
+        )
+        .mockReturnValueOnce(createMockChain([]))
+        .mockReturnValueOnce(
+          createMockChain([
+            {
+              _id: pubId,
+              h1: { turn: 99, sharePrice: 90, totalShares: 1000 },
+              h24: { turn: 76, sharePrice: 80, totalShares: 1000 },
+              h48: { turn: 52, sharePrice: 50, totalShares: 500 },
+            },
+            { _id: soeId, h1: { turn: 99, sharePrice: 50, totalShares: 0 } },
+            { _id: nanId, h1: { turn: 99, sharePrice: 90, totalShares: 1000 } },
+          ])
+        )
+        .mockReturnValueOnce(createMockChain([]))
+        .mockReturnValueOnce(createMockChain([]))
+        .mockReturnValueOnce(createMockChain([]))
+        .mockReturnValueOnce(createMockChain([]))
+        .mockReturnValueOnce(createMockChain([]));
+
+      vi.mocked(getPublicShareQuote).mockImplementation((corp: any) => corp.sharePrice ?? 100);
+      vi.mocked(getRoundedPublicMarketCap).mockImplementation(
+        (corp: any, totalShares: number) => (corp.sharePrice ?? 100) * totalShares
+      );
+
+      await generateStockExchangeSnapshots(100, mockDb);
+
+      const updateCall = mockUpdateOne.mock.calls.find((c) => c[0]?._id === "global");
+      expect(updateCall).toBeDefined();
+      const byName = new Map(
+        updateCall[1]?.$set?.listings?.map((l: { name: string } & Record<string, any>) => [
+          l.name,
+          l,
+        ])
+      );
+      for (const listing of byName.values()) {
+        for (const field of ["priceChange1h", "priceChange24h", "priceChange48h"] as const) {
+          expect(Number.isFinite(listing[field]), `${listing.name}.${field}`).toBe(true);
+        }
+      }
+      expect(byName.get("Pub Co").isTradable).toBe(true);
+      expect(byName.get("Pub Co").priceChange1h).toBe(11.11);
+      expect(byName.get("Zero SoE").isTradable).toBe(false);
+      expect(byName.get("Zero SoE").priceChange1h).toBe(0);
+      expect(byName.get("Zero SoE").priceChange24h).toBe(0);
+      expect(byName.get("Zero SoE").priceChange48h).toBe(0);
+      expect(byName.get("Legacy NaN").isTradable).toBe(true);
+      expect(byName.get("Legacy NaN").priceChange1h).toBe(0);
+      expect(byName.get("No Hist").isTradable).toBe(true);
+      expect(byName.get("No Hist").priceChange1h).toBe(0);
+    });
+
     it("calculates average sector growth correctly", async () => {
       const corpId = new ObjectId();
       mockCollection
