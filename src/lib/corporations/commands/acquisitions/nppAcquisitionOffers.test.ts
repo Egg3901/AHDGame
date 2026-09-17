@@ -154,6 +154,24 @@ describe("proposeAcquisitionOffer against NPP targets (#217)", () => {
     expect(db.collectionMocks.acquisitionOffers!.insertOne).not.toHaveBeenCalled();
   });
 
+  it("keeps ownership-state nationalized targets blocked even without a country owner", async () => {
+    const r = await propose(targetFixture({ ownershipState: "stateOwned" }), 5_000_000);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toMatch(/State-owned/);
+    expect(db.collectionMocks.acquisitionOffers!.insertOne).not.toHaveBeenCalled();
+    expect(vi.mocked(executeAgreedAcquisition)).not.toHaveBeenCalled();
+  });
+
+  it("flips the accepted offer to rejected when the executor throws and rethrows", async () => {
+    vi.mocked(executeAgreedAcquisition).mockRejectedValueOnce(new Error("payout failed"));
+    await expect(propose(targetFixture(), 1_100_000)).rejects.toThrow("payout failed");
+    const sets = db.collectionMocks.acquisitionOffers!.updateOne.mock.calls.map((c) => c[1]);
+    expect(sets.some((u) => (u as { $set: { status: string } }).$set.status === "rejected")).toBe(
+      true
+    );
+  });
+
   it("keeps self-acquisition, bad prices, divestiture bars, and duplicates blocked", async () => {
     const acquirer = acquirerFixture();
     const selfTarget = { ...targetFixture(), _id: ACQ } as unknown as Corporation;
