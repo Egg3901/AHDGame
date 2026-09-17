@@ -118,7 +118,8 @@ export function StateOrganizationTab({
   const [fxRate, setFxRate] = useState(1);
 
   useEffect(() => {
-    fetch("/api/political-operations/state-org/list")
+    const controller = new AbortController();
+    fetch("/api/political-operations/state-org/list", { signal: controller.signal })
       .then(async (r) => {
         if (r.status === 401 || r.status === 403) {
           setUnauthorized(true);
@@ -131,6 +132,7 @@ export function StateOrganizationTab({
           return;
         }
         const d: ListResponse = await r.json();
+        if (controller.signal.aborted) return;
         setRows(d.states ?? []);
         setFxRate(d.fxRate ?? 1);
         setRacePresence(d.racePresence ?? []);
@@ -139,9 +141,11 @@ export function StateOrganizationTab({
         setLoading(false);
       })
       .catch(() => {
+        if (controller.signal.aborted) return;
         setLoading(false);
         setError("Failed to load campaign presence");
       });
+    return () => controller.abort();
   }, [currentTurn]);
 
   const rowByState = useMemo(() => new Map(rows.map((r) => [r.stateId, r])), [rows]);
@@ -157,7 +161,7 @@ export function StateOrganizationTab({
    * onto the same state list so the map geometry stays identical.
    */
   const displayRows = useMemo<StateOrgRow[]>(() => {
-    if (!viewedCandidate) return rows;
+    if (!viewedCandidate || viewedCandidate.isSelf) return rows;
     return rows.map((r) => ({
       ...r,
       level: viewedCandidate.levelsByState[r.stateId] ?? 0,
@@ -228,7 +232,7 @@ export function StateOrganizationTab({
 
   const ownRow = selectedState ? rowByState.get(selectedState) : null;
   const selectedRow =
-    selectedState && viewedCandidate
+    selectedState && viewedCandidate && !viewedCandidate.isSelf
       ? {
           stateId: selectedState,
           level: viewedCandidate.levelsByState[selectedState] ?? 0,
