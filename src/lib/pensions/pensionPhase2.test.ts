@@ -13,6 +13,13 @@ vi.mock("@/lib/indexFunds/featureFlag", () => ({
   isIndexFundsEnabled: vi.fn().mockResolvedValue(true),
 }));
 
+// The scheme-invest spend runs standalone here: no replica set in unit tests.
+vi.mock("@/lib/db/runWithOptionalTransaction", () => ({
+  runWithOptionalTransaction: vi
+    .fn()
+    .mockImplementation(async (_inside: unknown, fallback: () => Promise<unknown>) => fallback()),
+}));
+
 const SCHEME_ID = new ObjectId();
 const UNION_ID = new ObjectId();
 const FUND_ID = new ObjectId();
@@ -228,7 +235,8 @@ describe("runPensionSchemeInvestments", () => {
     db.collection("indexFunds").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue(funds),
     });
-    db.collection("indexFundPositions").findOneAndUpdate.mockResolvedValue(null);
+    // No existing (fund, scheme) position: the spend inserts deterministically.
+    db.collection("indexFundPositions").findOne.mockResolvedValue(null);
   }
 
   it("subscribes whole units at NAV, debiting exactly what the units cost", async () => {
@@ -241,6 +249,8 @@ describe("runPensionSchemeInvestments", () => {
     expect(result.schemesInvesting).toBe(1);
     expect(result.investedAnchor).toBe(90_000);
 
+    // The keyed debit leg carries the legacy guard and the paired cumulative
+    // in one atomic write.
     const [filter, update] = db.collection("pensionSchemes").updateOne.mock.calls[0]! as [
       Record<string, unknown>,
       { $inc: Record<string, number> },
@@ -255,6 +265,12 @@ describe("runPensionSchemeInvestments", () => {
     };
     expect(fundUpdate.$inc.cashAnchor).toBe(90_000);
     expect(fundUpdate.$inc.unitSupply).toBe(900);
+
+    // One deterministic subscription audit row, and the financial-tx log fires
+    // once on the fresh attempt.
+    expect(db.collection("indexFundTransactions").insertOne).toHaveBeenCalledTimes(1);
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    expect(emitTx).toHaveBeenCalledTimes(1);
   });
 
   it("holds the liquidity buffer back for a scheme with pensioners", async () => {
@@ -296,11 +312,19 @@ describe("runPensionSchemeInvestments", () => {
       matchedCount: 0,
       modifiedCount: 0,
     });
+    // The row is still there (cash moved since the read): guard-rejected, not
+    // missing, and the prefix is empty so nothing compensates.
+    db.collection("pensionSchemes").findOne.mockResolvedValue(
+      baseScheme({ assetsAnchor: 100_000 })
+    );
 
     const result = await runPensionSchemeInvestments(db as unknown as Db, 12);
     expect(result.schemesInvesting).toBe(0);
-    expect(db.collection("indexFundPositions").findOneAndUpdate).not.toHaveBeenCalled();
+    expect(result.errors).toHaveLength(1);
+    expect(db.collection("indexFundPositions").insertOne).not.toHaveBeenCalled();
     expect(db.collection("indexFunds").updateOne).not.toHaveBeenCalled();
+    const { emitTx } = await import("@/lib/financialTxLog/emit");
+    expect(emitTx).not.toHaveBeenCalled();
   });
 });
 
@@ -319,7 +343,7 @@ describe("the funding ratio survives a subscription", () => {
     db.collection("indexFunds").find.mockReturnValue({
       toArray: vi.fn().mockResolvedValue([fund()]),
     });
-    db.collection("indexFundPositions").findOneAndUpdate.mockResolvedValue(null);
+    db.collection("indexFundPositions").findOne.mockResolvedValue(null);
 
     const result = await runPensionSchemeInvestments(db as unknown as Db, 12);
 

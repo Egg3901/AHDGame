@@ -93,6 +93,7 @@ import {
 } from "@/lib/indexFunds/fundCrossRebalancing";
 import { findRemovedConstituentHoldings } from "@/lib/indexFunds/fundConstituentLifecycle";
 import { writeOffDeadConstituentHoldings } from "@/lib/indexFunds/fundHoldingWriteOff";
+import { recoverHoldingWriteOffOrphans } from "@/lib/indexFunds/fundHoldingWriteOffSpend";
 import { remainingRedemptionUnits } from "@/lib/indexFunds/fundRedemptionQueue";
 import {
   applyQueuedRedemptionSpend,
@@ -1267,12 +1268,34 @@ export async function rebalanceConstituents(
   fund: IndexFund,
   corps: IndexFundCandidate[],
   exchangeRates: Partial<Record<string, number>>,
-  _currentTurn: number,
+  currentTurn: number,
   /** A7 part 2: corporations holding a committee waiver this turn. */
   waivedIds?: Set<string>
 ): Promise<RebalanceOutcome> {
+  // Crash recovery first: resume a write-off a dead rebalance left behind
+  // (pull landed, audit row missing), before the fresh removal list loads.
+  // Without this the next rebalance never re-flags the gone rows and the loss
+  // stays permanently unaudited. Recovery never breaks the pass.
+  let orphanedWriteOff = { writtenOffCount: 0, writtenOffValueAnchor: 0, unsellableCount: 0 };
+  try {
+    const orphan = await recoverHoldingWriteOffOrphans(db, fund._id, currentTurn);
+    if (orphan) {
+      orphanedWriteOff = {
+        writtenOffCount: orphan.writtenOffCount,
+        writtenOffValueAnchor: orphan.writtenOffValueAnchor,
+        unsellableCount: orphan.unsellableCount,
+      };
+      fund = (await getFundById(db, fund._id)) ?? fund;
+    }
+  } catch (err) {
+    console.warn(
+      `[indexfund-cron] holding write-off recovery for ${fund.slug} did not run: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
   const removed = findRemovedConstituentHoldings(fund, corps);
-  let writeOff = { writtenOffCount: 0, writtenOffValueAnchor: 0, unsellableCount: 0 };
+  let writeOff = { ...orphanedWriteOff };
   if (removed.length > 0) {
     const removalValue = computeHoldingsValueAnchor({ holdings: removed });
     if (removalValue > 0) {
@@ -1289,8 +1312,15 @@ export async function rebalanceConstituents(
     // and the position stays in the book at its last mark. Left alone it is
     // re-flagged and re-refused every rebalance forever, inflating NAV by
     // exactly the value of every corp that has ever died under this fund.
-    const wo = await writeOffDeadConstituentHoldings(db, fund, removed);
-    writeOff = wo;
+    const wo = await writeOffDeadConstituentHoldings(db, fund, removed, currentTurn);
+    // Tallies are disjoint by construction: a resumed orphan pulled rows the
+    // fresh removal list no longer contains, so the fresh key differs (or the
+    // fresh list is empty and this call is a no-op).
+    writeOff = {
+      writtenOffCount: writeOff.writtenOffCount + wo.writtenOffCount,
+      writtenOffValueAnchor: writeOff.writtenOffValueAnchor + wo.writtenOffValueAnchor,
+      unsellableCount: writeOff.unsellableCount + wo.unsellableCount,
+    };
     if (wo.writtenOffCount > 0) fund = (await getFundById(db, fund._id)) ?? fund;
   }
 

@@ -30,13 +30,21 @@
  */
 
 import type { Db } from "mongodb";
-import type { IndexFund, IndexFundTransaction } from "@/lib/db/types/indexFund";
+import type { IndexFund, IndexFundPosition } from "@/lib/db/types/indexFund";
 import type { PensionScheme } from "@/lib/db/types/pensionScheme";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 import { COUNTRY_CURRENCY_MAP } from "@/lib/constants/currencies";
 import { emitTx } from "@/lib/financialTxLog/emit";
 import { isIndexFundsEnabled } from "@/lib/indexFunds/featureFlag";
-import { creditFundPosition, insertFundTransaction } from "@/lib/indexFunds/fundQueries";
+import { FUND_POSITION_COLLECTION } from "@/lib/indexFunds/fundQueries";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
+import {
+  applyPensionSchemeInvestSpend,
+  buildPensionSchemeInvestFingerprint,
+  buildPensionSchemeInvestKey,
+  recoverPensionSchemeInvestOrphans,
+  resumePensionSchemeInvestByKey,
+} from "./pensionSchemeInvestSpend";
 import { pensionInvestableCashAnchor } from "./rules";
 import { PENSION_SCHEMES, INDEX_FUNDS } from "./schemeAssets";
 
@@ -86,6 +94,19 @@ export async function runPensionSchemeInvestments(
     .toArray();
   if (funds.length === 0) return result;
 
+  // Crash recovery first: resume investments a dead pass left behind, before
+  // the fresh roster loads, so a resumed debit lands before new plans compute
+  // against the same cash. Recovery never breaks the pass.
+  try {
+    const orphans = await recoverPensionSchemeInvestOrphans(db, currentTurn);
+    result.schemesInvesting += orphans.resumed;
+    result.investedAnchor += orphans.investedAnchor;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    result.errors.push(`Orphan recovery: ${message}`);
+  }
+
+  const now = new Date();
   for (const scheme of schemes) {
     try {
       const investable = pensionInvestableCashAnchor({
@@ -108,69 +129,114 @@ export async function runPensionSchemeInvestments(
       // number by construction.
       const costAnchor = units * fund.quotedNav;
 
-      const now = new Date();
-      // Guarded debit first. If the scheme's cash moved since the read (the
-      // benefit pass runs earlier in the same turn), no units are issued.
-      const debit = await db.collection<PensionScheme>(PENSION_SCHEMES).updateOne(
-        { _id: scheme._id, assetsAnchor: { $gte: costAnchor } },
-        {
-          $inc: { assetsAnchor: -costAnchor, totalInvestedAnchor: costAnchor },
-          $set: { updatedAt: now },
-        }
-      );
-      if (debit.matchedCount === 0) continue;
+      // Whether the scheme already holds this fund decides the position step
+      // shape (live-image update vs deterministic insert). Pinned at plan
+      // time; a same-key retry replays the stored flag, never a post-debit
+      // re-read.
+      const existingPosition =
+        (await db
+          .collection<IndexFundPosition>(FUND_POSITION_COLLECTION)
+          .findOne(
+            { fundId: fund._id, holderKind: "pension_scheme", pensionSchemeId: scheme._id },
+            { projection: { _id: 1 } }
+          )) !== null;
 
-      await creditFundPosition(
-        db,
-        fund._id,
-        "pension_scheme",
-        { pensionSchemeId: scheme._id },
-        units,
-        fund.quotedNav
-      );
-      await db
-        .collection<IndexFund>(INDEX_FUNDS)
-        .updateOne(
-          { _id: fund._id },
-          { $inc: { unitSupply: units, cashAnchor: costAnchor }, $set: { updatedAt: now } }
-        );
-      await insertFundTransaction(db, {
+      // One scheme invests at most once per turn, so scheme + turn names the
+      // attempt: a same-turn retry (crash recovery, same-turn double-fire)
+      // reconciles the stored plan instead of investing twice.
+      const key = buildPensionSchemeInvestKey(scheme._id, currentTurn);
+      const fingerprint = buildPensionSchemeInvestFingerprint({
+        schemeId: scheme._id,
         fundId: fund._id,
-        kind: "subscription",
         turn: currentTurn,
-        holderKind: "pension_scheme",
-        pensionSchemeId: scheme._id,
+        quotedNav: fund.quotedNav,
         units,
-        navAnchor: fund.quotedNav,
-        amountAnchor: costAnchor,
-        note: `${scheme.unionName} pension scheme`,
-        createdAt: now,
-      } as Omit<IndexFundTransaction, "_id">);
-
-      await emitTx(db, {
-        type: "index_fund_subscribe",
-        turn: currentTurn,
-        createdAt: now,
-        subjectType: "pension_scheme",
-        subjectId: scheme._id,
-        subjectName: `${scheme.unionName} pension scheme`,
-        amount: -costAnchor,
-        anchorAmount: -costAnchor,
-        currencyCode: (COUNTRY_CURRENCY_MAP[scheme.countryId] ?? "USD") as CurrencyCode,
-        counterpartyType: "system",
-        counterpartyName: fund.name,
-        meta: {
-          schemeId: scheme._id.toString(),
-          fundId: fund._id.toString(),
-          fundSlug: fund.slug,
-          units,
-          navAnchor: fund.quotedNav,
-          source: "cron",
-        },
+        costAnchor,
       });
 
-      result.schemesInvesting += 1;
-      result.investedAnchor += costAnchor;
+      let outcome: { investedAnchor: number; units: number };
+      let duplicate: boolean;
+      try {
+        ({ duplicate, outcome } = await applyPensionSchemeInvestSpend(db, {
+          schemeId: scheme._id,
+          turn: currentTurn,
+          fundId: fund._id,
+          fundSlug: fund.slug,
+          schemeName: scheme.unionName,
+          quotedNav: fund.quotedNav,
+          units,
+          costAnchor,
+          existingPosition,
+          fingerprint,
+          idempotencyKey: key,
+          now,
+        }));
+      } catch (err) {
+        // A same-key retry can land on a receipt the orphan driver could not
+        // resume (changed figures fail the fingerprint check by design, and a
+        // settled receipt fails terminal-closed). Reconcile by key: a
+        // resumable receipt completes here and tallies; anything else records
+        // the original error and the scheme invests next cycle under a new key.
+        if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+          try {
+            const reconciled = await resumePensionSchemeInvestByKey(
+              db,
+              key,
+              scheme._id,
+              currentTurn
+            );
+            if (reconciled) {
+              result.schemesInvesting += 1;
+              result.investedAnchor += reconciled.outcome.investedAnchor;
+              continue;
+            }
+          } catch {
+            // Fall through to the recorded error below.
+          }
+        }
+        throw err;
+      }
+
+      // A duplicate claim means this turn already invested under this key
+      // (same-turn re-run after the orphan driver resumed it, or a double
+      // pass): the money moved once, so the tally must not count it again.
+      if (!duplicate) {
+        result.schemesInvesting += 1;
+        result.investedAnchor += outcome.investedAnchor;
+
+        // The financial-tx log is audit delivery, not settlement: it fires
+        // only on the fresh attempt, never on a replay, and its failure must
+        // not unwind money that already moved.
+        try {
+          await emitTx(db, {
+            type: "index_fund_subscribe",
+            turn: currentTurn,
+            createdAt: now,
+            subjectType: "pension_scheme",
+            subjectId: scheme._id,
+            subjectName: `${scheme.unionName} pension scheme`,
+            amount: -costAnchor,
+            anchorAmount: -costAnchor,
+            currencyCode: (COUNTRY_CURRENCY_MAP[scheme.countryId] ?? "USD") as CurrencyCode,
+            counterpartyType: "system",
+            counterpartyName: fund.name,
+            meta: {
+              schemeId: scheme._id.toString(),
+              fundId: fund._id.toString(),
+              fundSlug: fund.slug,
+              units,
+              navAnchor: fund.quotedNav,
+              source: "cron",
+            },
+          });
+        } catch (err) {
+          console.warn(
+            `[pension] scheme ${scheme._id.toString()} subscription audit did not emit: ${
+              err instanceof Error ? err.message : String(err)
+            }`
+          );
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       result.errors.push(`Scheme ${scheme._id.toString()}: ${message}`);

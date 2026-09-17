@@ -2,8 +2,13 @@ import type { Db } from "mongodb";
 import { ObjectId } from "mongodb";
 
 import type { IndexFund, IndexFundHolding } from "@/lib/db/types";
-import { computeHoldingsValueAnchor } from "@/lib/indexFunds/fundAllocation";
-import { insertFundTransaction, updateFundHoldings } from "@/lib/indexFunds/fundQueries";
+import {
+  applyHoldingWriteOffSpend,
+  buildHoldingWriteOffFingerprint,
+  buildHoldingWriteOffKey,
+  resumeHoldingWriteOffByKey,
+} from "@/lib/indexFunds/fundHoldingWriteOffSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 
 export interface DeadHoldingWriteOffResult {
   /** Holdings removed at zero because the corporation no longer exists. */
@@ -36,11 +41,22 @@ const EMPTY: DeadHoldingWriteOffResult = {
  * write-off, not a sale. Holdings whose corporation is still alive are only
  * counted and reported: the corp may get a bid next turn, and zeroing a live
  * position would destroy real holder value to fix a bookkeeping problem.
+ *
+ * Crash safety (issue #1672): the removal runs as one surgical `$pull` of
+ * exactly the dead rows plus one deterministic audit row under a key derived
+ * from the fund and the flagged removal list (see
+ * `fundHoldingWriteOffSpend.ts`). A crash between the pull and the audit row
+ * resumes under the same key instead of vanishing like the legacy
+ * pull-then-insert (whose retry recomputed from post-pull holdings, found
+ * nothing, and reported EMPTY, leaving the loss permanently unaudited). A
+ * same-key retry after completion reports the stored outcome without
+ * re-pulling: the loss is never repeated.
  */
 export async function writeOffDeadConstituentHoldings(
   db: Db,
   fund: IndexFund,
-  flagged: IndexFundHolding[]
+  flagged: IndexFundHolding[],
+  turn: number
 ): Promise<DeadHoldingWriteOffResult> {
   if (flagged.length === 0) return EMPTY;
 
@@ -52,45 +68,39 @@ export async function writeOffDeadConstituentHoldings(
   );
   if (stillHeld.length === 0) return EMPTY;
 
-  const liveIds = new Set(
-    (
-      await db
-        .collection("corporations")
-        .find({ _id: { $in: stillHeld.map((h) => h.corporationId) } }, { projection: { _id: 1 } })
-        .toArray()
-    ).map((c) => String(c._id))
-  );
-
-  const dead = stillHeld.filter((h) => !liveIds.has(h.corporationId.toString()));
-  const unsellable = stillHeld.filter((h) => liveIds.has(h.corporationId.toString()));
-
-  const result: DeadHoldingWriteOffResult = {
-    writtenOffCount: dead.length,
-    writtenOffValueAnchor: computeHoldingsValueAnchor({ holdings: dead }),
-    unsellableCount: unsellable.length,
-    unsellableValueAnchor: computeHoldingsValueAnchor({ holdings: unsellable }),
-  };
-  if (dead.length === 0) return result;
-
-  const deadIds = new Set(dead.map((h) => h.corporationId.toString()));
-  const remaining = fund.holdings.filter((h) => !deadIds.has(h.corporationId.toString()));
-
-  await updateFundHoldings(db, fund._id, remaining);
-
-  await insertFundTransaction(db, {
+  // The flagged removal list names the attempt: it is computed from target
+  // constituents, not live holdings, so a same-turn retry names the same key
+  // and reconciles the stored plan instead of auditing a remainder twice.
+  const key = buildHoldingWriteOffKey(fund._id, turn, flagged);
+  const fingerprint = buildHoldingWriteOffFingerprint({
     fundId: fund._id,
-    kind: "holding_writeoff",
-    navAnchor: fund.quotedNav,
-    // Negative: this is backing leaving the fund, not proceeds arriving.
-    amountAnchor: -result.writtenOffValueAnchor,
-    note:
-      `Wrote off ${dead.length} holding(s) in dissolved corporations at zero. ` +
-      `No buyer exists for a corporation that no longer exists, so the position ` +
-      `could not be sold and was carried at a stale mark.`,
-    createdAt: new Date(),
+    turn,
+    flagged,
+    quotedNav: fund.quotedNav,
   });
 
-  return result;
+  try {
+    const { outcome } = await applyHoldingWriteOffSpend(db, {
+      fundId: fund._id,
+      quotedNav: fund.quotedNav,
+      flagged,
+      turn,
+      fingerprint,
+      idempotencyKey: key,
+    });
+    return outcome;
+  } catch (err) {
+    // A same-key retry can land on a receipt the orphan driver could not
+    // resume (changed figures fail the fingerprint check by design, and a
+    // settled receipt fails terminal-closed). Reconcile by key: a resumable
+    // receipt completes here and reports; anything else throws and the
+    // rebalance retries next cycle under a new key.
+    if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+      const reconciled = await resumeHoldingWriteOffByKey(db, key, fund._id, turn);
+      if (reconciled) return reconciled.outcome;
+    }
+    throw err;
+  }
 }
 
 /** Test seam: the ids a write-off would touch, without writing. */
