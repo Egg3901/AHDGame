@@ -6,7 +6,7 @@ import { requireCorporationActionsEnabled } from "@/lib/api/requireCorporationAc
 import { parseJsonBody } from "@/lib/api/validate";
 import { buyBondSchema } from "@/lib/api/schemas/bonds";
 import { handleRouteError } from "@/lib/api/errors";
-import type { Bond, Corporation } from "@/lib/db/types";
+import type { Bond } from "@/lib/db/types";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { checkRateLimit, rateLimitResponse } from "@/lib/api/rateLimit";
 import { resolveCorporation, requireCeo } from "@/lib/api/corporations/resolveQuery";
@@ -18,8 +18,13 @@ import {
   loadFxRatesRecord,
   resolveCorpLiquidCurrencyCode,
 } from "@/lib/currency/corporationCapital";
-import { distributeConversionSpread } from "@/lib/currency/marketMaker";
-import { creditBondPool, loadBondQuote } from "@/lib/bonds/marketPool";
+import { loadBondQuote } from "@/lib/bonds/marketPool";
+import {
+  applyBondBuybackSpend,
+  BOND_BUYBACK_FLOAT,
+  BOND_BUYBACK_FUNDS,
+} from "@/lib/bonds/bondBuybackSpend";
+import { MoneyFlowKeyConflictError, MoneyFlowTerminalError } from "@/lib/db/nonAtomicMoneyFlow";
 import { COUNTRY_CURRENCY_MAP, CURRENCY_SYMBOLS } from "@/lib/constants/currencies";
 import type { CurrencyCode } from "@/lib/constants/currencies";
 
@@ -48,6 +53,14 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const { units } = parsed.data;
+
+    // Crash-safe settlement (issue #1672): a client retry with the same key
+    // replays the stored buyback outcome instead of retiring again.
+    const headerKey = request.headers.get("Idempotency-Key");
+    if (headerKey !== null && (headerKey.length === 0 || headerKey.length > 128)) {
+      return NextResponse.json({ error: "Invalid Idempotency-Key header" }, { status: 400 });
+    }
+
     const db = await getDb();
 
     // Buyback is a corporate-market action (CEO retires outstanding debt with
@@ -140,7 +153,6 @@ export async function POST(request: Request, { params }: RouteParams) {
     }
 
     const now = new Date();
-    const retiredFaceValue = units * BOND_UNIT_FACE_VALUE;
     const holderUnits = bond.holders.reduce((sum, h) => sum + h.units, 0);
     const corpFxRate = await getCorpFxRate(db, issuingCorp);
     const costInCorpCapital =
@@ -148,63 +160,62 @@ export async function POST(request: Request, { params }: RouteParams) {
         ? corpPurchaseEstimate.spendAmount
         : anchorToCorpLiquidCapital(costAnchor, issuingCorp, corpFxRate);
 
-    const debitResult = await db
-      .collection<Corporation>("corporations")
-      .updateOne(
-        { _id: issuingCorp._id, liquidCapital: { $gte: costInCorpCapital } },
-        { $inc: { liquidCapital: -costInCorpCapital }, $set: { updatedAt: now } }
-      );
-    if (debitResult.modifiedCount === 0) {
-      return NextResponse.json(
-        { error: "Insufficient corporate funds (race with another transaction)." },
-        { status: 400 }
-      );
-    }
-
-    let bondUpdateFilter: Record<string, unknown> = {
-      _id: bond._id,
-      matured: false,
-      publicFloat: { $gte: units },
-    };
-    let bondUpdate: Record<string, unknown> = { updatedAt: now };
-    if (holderUnits <= 0 && bond.publicFloat === units) {
-      bondUpdateFilter = { _id: bond._id, matured: false, publicFloat: units };
-      bondUpdate = {
-        ...bondUpdate,
-        matured: true,
-        defaulted: false,
-        marketPrice: 1.0,
-      };
-    }
-
-    const floatClaim = await db.collection<Bond>("bonds").updateOne(bondUpdateFilter, {
-      $inc: { publicFloat: -units, totalIssued: -retiredFaceValue },
-      $set: bondUpdate,
-    });
-
-    if (floatClaim.modifiedCount === 0) {
-      await db
-        .collection<Corporation>("corporations")
-        .updateOne(
-          { _id: issuingCorp._id },
-          { $inc: { liquidCapital: costInCorpCapital }, $set: { updatedAt: new Date() } }
+    // Map a keyed-settlement failure back onto the historical surface: a lost
+    // corp-funds race is the 400 race refusal, a lost float race the 400
+    // float refusal with the refreshed float. The primitive already
+    // compensated any applied prefix.
+    try {
+      await applyBondBuybackSpend(db, {
+        bondId: bond._id,
+        corpId: issuingCorp._id,
+        units,
+        costLocal,
+        costInCorpCapital,
+        bondCurrency,
+        corpCurrency: corpCurrency ?? bondCurrency,
+        spreadFee:
+          corpCurrency && corpCurrency !== bondCurrency ? corpPurchaseEstimate.spreadFee : 0,
+        now,
+        fingerprint: `bond-buyback:${bond._id.toHexString()}:${issuingCorp._id.toHexString()}:${units}:${costLocal}:${costInCorpCapital}`,
+        ...(headerKey !== null ? { idempotencyKey: headerKey } : {}),
+      });
+    } catch (error) {
+      if (error instanceof MoneyFlowTerminalError) {
+        return NextResponse.json(
+          { error: "Buyback already settled; start a new attempt with a new key." },
+          { status: 409 }
         );
-      const refreshedBond = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
-      return NextResponse.json(
-        {
-          error: `Only ${refreshedBond?.publicFloat ?? 0} units available in public float`,
-        },
-        { status: 400 }
-      );
+      }
+      if (error instanceof MoneyFlowKeyConflictError) {
+        return NextResponse.json(
+          { error: "Idempotency key was reused for a different buyback." },
+          { status: 409 }
+        );
+      }
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith(BOND_BUYBACK_FUNDS)) {
+        return NextResponse.json(
+          { error: "Insufficient corporate funds (race with another transaction)." },
+          { status: 400 }
+        );
+      }
+      if (message.startsWith(BOND_BUYBACK_FLOAT)) {
+        const refreshedBond = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
+        return NextResponse.json(
+          {
+            error: `Only ${refreshedBond?.publicFloat ?? 0} units available in public float`,
+          },
+          { status: 400 }
+        );
+      }
+      throw error;
     }
-
-    // The retired units were the pool's; the issuer's cash is the pool's now.
-    await creditBondPool(db, bondCurrency, costLocal, "retiredIn", now);
 
     const refreshedBond = await db.collection<Bond>("bonds").findOne({ _id: bond._id });
     const remainingPublicFloat =
       refreshedBond?.publicFloat ?? Math.max(0, bond.publicFloat - units);
-    const newTotalIssued = refreshedBond?.totalIssued ?? bond.totalIssued - retiredFaceValue;
+    const newTotalIssued =
+      refreshedBond?.totalIssued ?? bond.totalIssued - units * BOND_UNIT_FACE_VALUE;
     const fullyRetired =
       (refreshedBond?.publicFloat ?? 0) <= 0 &&
       (refreshedBond?.holders?.reduce((sum, h) => sum + h.units, 0) ?? holderUnits) <= 0;
@@ -220,17 +231,6 @@ export async function POST(request: Request, { params }: RouteParams) {
             updatedAt: now,
           },
         }
-      );
-    }
-
-    // Route the FX spread the corp paid on a cross-currency buyback into the CB
-    // system (was destroyed). The corp already lost it via spendAmount above.
-    if (corpCurrency && corpCurrency !== bondCurrency) {
-      await distributeConversionSpread(
-        db,
-        corpPurchaseEstimate.spreadFee,
-        corpCurrency,
-        bondCurrency
       );
     }
 

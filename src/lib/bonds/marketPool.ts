@@ -15,6 +15,7 @@
 import type { ClientSession, Db } from "mongodb";
 import type { Bond, BondMarketPool, BondMarketPoolFlowKind } from "@/lib/db/types";
 import { BOND_MARKET_POOLS_COLLECTION } from "@/lib/db/types/bondMarketPool";
+import { applyKeyedUpdate, type MoneyFlowStep } from "@/lib/db/nonAtomicMoneyFlow";
 import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { COUNTRY_CURRENCY_MAP, type CurrencyCode } from "@/lib/constants/currencies";
 import { quoteBondPrices, type BondPoolQuote } from "@/lib/bonds/marketPoolQuotes";
@@ -98,6 +99,144 @@ export async function debitBondPoolGated(
   );
   if (!result) return { ok: false };
   return { ok: true, cashAfter: result.cashLocal };
+}
+
+/**
+ * Money-neutral shell for a currency that has never traded. Keyed pool steps
+ * below cannot upsert (an upsert is not a guarded idempotent write), so flows
+ * that credit a pool first ensure the document exists with zeros only — the
+ * same starting state {@link creditBondPool} would observe before its own
+ * `$inc`. No cash moves here, so running it on every attempt (fresh or
+ * resumed) is safe. Debit steps never need it: a missing pool simply cannot
+ * pay, which the gated step reports as a refusal, mirroring
+ * {@link debitBondPoolGated}.
+ */
+export async function ensureBondPoolShell(
+  db: Db,
+  currency: CurrencyCode,
+  now: Date = new Date(),
+  options?: { session?: ClientSession }
+): Promise<void> {
+  await db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION).updateOne(
+    { _id: currency },
+    {
+      $set: { updatedAt: now },
+      $setOnInsert: { targetCashLocal: 0, createdAt: now },
+    },
+    { upsert: true, ...(options?.session ? { session: options.session } : {}) }
+  );
+}
+
+function poolCreditUpdate(
+  amount: number,
+  kind: BondMarketPoolFlowKind,
+  now: Date
+): { $inc: Record<string, number>; $set: { updatedAt: Date } } {
+  return {
+    $inc: { cashLocal: amount, [`lifetime.${kind}`]: amount },
+    $set: { updatedAt: now },
+  };
+}
+
+/**
+ * A pool credit as a revertible money-flow step (issue #1672): the same
+ * `$inc` {@link creditBondPool} performs, but carrying the flow's
+ * idempotency key so a retried flow credits the pool exactly once. The pool
+ * document must exist (see {@link ensureBondPoolShell}); a pool deleted
+ * mid-flight reports `missing` instead of recreating value from nothing.
+ */
+export function makeBondPoolCreditStep(
+  key: string,
+  db: Db,
+  currency: CurrencyCode,
+  amountLocal: number,
+  kind: BondMarketPoolFlowKind,
+  now: Date
+): MoneyFlowStep {
+  const amount = roundCents(amountLocal);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new RangeError("Bond pool credit step needs a positive finite amount");
+  }
+  const pools = db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION);
+  return {
+    name: "pool-credit",
+    apply: (stepOpts) =>
+      applyKeyedUpdate(
+        key,
+        {
+          collection: pools,
+          filter: { _id: currency },
+          update: poolCreditUpdate(amount, kind, now),
+        },
+        stepOpts ?? {}
+      ),
+    revert: (stepOpts) =>
+      applyKeyedUpdate(
+        `${key}:compensate:pool-credit`,
+        {
+          collection: pools,
+          filter: { _id: currency },
+          update: poolCreditUpdate(-amount, kind, now),
+        },
+        stepOpts ?? {}
+      ),
+  };
+}
+
+/**
+ * A gated pool debit as a revertible money-flow step (issue #1672): the same
+ * guarded `$inc` {@link debitBondPoolGated} performs, keyed so a retried flow
+ * debits exactly once. A pool without the cash (or no pool at all) reports a
+ * refusal instead of writing, so the caller can skip the sale the way the
+ * legacy gated debit's `ok: false` allowed.
+ */
+export function makeBondPoolDebitStep(
+  key: string,
+  db: Db,
+  currency: CurrencyCode,
+  amountLocal: number,
+  kind: BondMarketPoolFlowKind,
+  now: Date
+): MoneyFlowStep {
+  const amount = roundCents(amountLocal);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new RangeError("Bond pool debit step needs a positive finite amount");
+  }
+  const pools = db.collection<BondMarketPool>(BOND_MARKET_POOLS_COLLECTION);
+  // Lifetime counters track gross flow per direction (see
+  // `BondMarketPoolFlowKind`): a debit lowers `cashLocal` but RAISES its
+  // `Out` counter, exactly like `debitBondPoolGated`; the revert unwinds both.
+  const debitUpdate = {
+    $inc: { cashLocal: -amount, [`lifetime.${kind}`]: amount },
+    $set: { updatedAt: now },
+  };
+  const debitRevert = {
+    $inc: { cashLocal: amount, [`lifetime.${kind}`]: -amount },
+    $set: { updatedAt: now },
+  };
+  return {
+    name: "pool-debit",
+    apply: (stepOpts) =>
+      applyKeyedUpdate(
+        key,
+        {
+          collection: pools,
+          filter: { _id: currency, cashLocal: { $gte: amount } },
+          update: debitUpdate,
+        },
+        stepOpts ?? {}
+      ),
+    revert: (stepOpts) =>
+      applyKeyedUpdate(
+        `${key}:compensate:pool-debit`,
+        {
+          collection: pools,
+          filter: { _id: currency },
+          update: debitRevert,
+        },
+        stepOpts ?? {}
+      ),
+  };
 }
 
 /**

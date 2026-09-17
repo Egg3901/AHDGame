@@ -68,7 +68,16 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * + gated pool debit + character/imperial/corporation payout via the
  * bondSellSpend primitive, with Idempotency-Key validation/forwarding and
  * route-level compensation/replay/invalid-key tests; zero-unit holder
- * cleanup stays post-commit best effort).
+ * cleanup stays post-commit best effort), bond buybacks (guarded corp debit
+ * + float retire + gated pool credit via the bondBuybackSpend primitive,
+ * with Idempotency-Key validation/forwarding and route-level
+ * compensation/replay/conflict tests; full-retirement flags stay post-commit
+ * best effort), index-fund bond purchases (guarded fund debit + keyed holder
+ * reserve + pool credit + deterministic tx row via purchaseBondUnitsForFund)
+ * and index-fund liquidity sales (per-bond release-first sub-flows — holder
+ * release, gated pool debit, fund credit, deterministic tx row — via
+ * sellFundBondHoldingsForCash, keyed per bond/units/proceeds; pool-depth and
+ * position races skip the bond, later failures compensate and abort).
  * Ownership-only and excluded (no balance writes): union leadership
  * accept/resign/decline/vote (ownerId/unionLeaderOf/vote rows only),
  * bargaining settlement (campaign claim + agreement insert + expectation
@@ -84,7 +93,9 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * status transition and the money writes there can still strand or double
  * value; migrating them means expressing each as keyed steps here.
  * Still on the legacy debit-first-plus-compensation fallback: bond
- * default/payoff/buyback/buy, index-fund cron/rebalancing, directAction,
+ * default/payoff/buy, index-fund cron/rebalancing orchestration (its bond
+ * purchase/sale legs are keyed; surrounding equity/dividend/cross-fund
+ * writes are not), directAction,
  * state-org build — multi-write status machines, positional holder
  * claims, and bulkWrite batches that need reserve/order/history support
  * beyond keyed single-document writes.
