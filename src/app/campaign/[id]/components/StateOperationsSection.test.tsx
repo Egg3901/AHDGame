@@ -292,3 +292,13 @@ describe("how a live attack against you reads", () => {
     expect(screen.getByText(/6 turns left/)).toBeTruthy();
   });
 });
+
+it("marks states already built this turn and prevents repeat selection", () => {
+  const data = view();
+  data.positives.presence[0].builtThisTurn = true;
+  renderSection({ positives: data.positives });
+  expect(screen.getByText("Built this turn: New Hampshire")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /Build presence/ }));
+  const state = screen.getByRole("button", { name: /New Hampshire.*Built this turn/ });
+  expect(state.hasAttribute("disabled")).toBe(true);
+});

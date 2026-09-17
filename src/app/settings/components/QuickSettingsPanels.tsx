@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
-  Bell,
   Check,
   Clock3,
   Contrast,
@@ -24,6 +23,13 @@ import { Slider } from "@/components/ui";
 import { useBrowserPreferences } from "@/contexts/BrowserPreferencesContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { parseBrowserPreferences } from "@/lib/browserPreferences";
+import { SettingsSwitch } from "./SettingsSwitch";
+export {
+  SettingsSwitch,
+  SETTINGS_SWITCH_THUMB_OFF,
+  SETTINGS_SWITCH_THUMB_ON,
+} from "./SettingsSwitch";
+import { NotificationPreferencesPanel } from "./NotificationPreferencesPanel";
 import { fetchJson } from "@/lib/observability/fetchJson";
 
 interface CountryChoice {
@@ -62,53 +68,6 @@ function Surface({
   );
 }
 
-/** Thumb travel for the 48×28 track with an 18px knob and 4px end insets. */
-export const SETTINGS_SWITCH_THUMB_OFF = "left-1 translate-x-0";
-export const SETTINGS_SWITCH_THUMB_ON = "left-1 translate-x-[22px]";
-
-/**
- * Settings control-panel switch. The thumb must keep an explicit `left-*`
- * anchor — translate-only absolute positioning used the static position and
- * parked the knob outside the track (ticket #998).
- */
-export function SettingsSwitch({
-  checked,
-  onChange,
-  label,
-  disabled = false,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className="relative inline-flex h-11 w-14 shrink-0 cursor-pointer items-center justify-center disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      <span
-        aria-hidden
-        className={`relative h-7 w-12 rounded-full border transition-colors duration-200 ease-out ${
-          checked ? "border-primary bg-primary" : "border-card-border bg-card-elevated"
-        }`}
-      >
-        <span
-          data-testid="settings-switch-thumb"
-          className={`pointer-events-none absolute top-1 h-[18px] w-[18px] rounded-full bg-white shadow-sm transition-transform duration-200 ease-out ${
-            checked ? SETTINGS_SWITCH_THUMB_ON : SETTINGS_SWITCH_THUMB_OFF
-          }`}
-        />
-      </span>
-    </button>
-  );
-}
-
 function Toggle(props: {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -127,9 +86,6 @@ export function GameQuickSettings({
 }) {
   const t = useTranslations("settings");
   const [turnMinutes, setTurnMinutes] = useState<number | null>(null);
-  const [turnAlerts, setTurnAlerts] = useState<boolean | null>(null);
-  const [notificationSaving, setNotificationSaving] = useState(false);
-  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -141,40 +97,9 @@ export function GameQuickSettings({
             setTurnMinutes(config.turnLengthMinutes);
           }
         }),
-      fetch("/api/notifications/preferences", { signal: controller.signal })
-        .then((response) => (response.ok ? response.json() : null))
-        .then((data) => {
-          if (Array.isArray(data?.mutedTypes)) {
-            setTurnAlerts(!data.mutedTypes.includes("turn_advance"));
-          }
-        }),
     ]).catch(() => {});
     return () => controller.abort();
   }, []);
-
-  const updateTurnAlerts = async (enabled: boolean) => {
-    const previous = turnAlerts;
-    setTurnAlerts(enabled);
-    setNotificationSaving(true);
-    setNotificationMessage("quick.game.saving");
-    try {
-      const response = await fetch("/api/notifications/preferences", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: enabled ? "unmute" : "mute",
-          type: "turn_advance",
-        }),
-      });
-      if (!response.ok) throw new Error("notification preference rejected");
-      setNotificationMessage("quick.game.saved");
-    } catch {
-      setTurnAlerts(previous);
-      setNotificationMessage("quick.game.couldNotSave");
-    } finally {
-      setNotificationSaving(false);
-    }
-  };
 
   const oneCountry = countries.length === 1 ? countries[0] : null;
 
@@ -217,29 +142,7 @@ export function GameQuickSettings({
           {singleplayer ? t("quick.game.playerControlled") : t("quick.game.worldControlled")}
         </span>
       </Surface>
-      <Surface
-        icon={<Bell className="h-4 w-4" />}
-        title={t("quick.game.turnNotifications")}
-        description={t("quick.game.alertMe")}
-      >
-        <div className="mt-3 flex items-center justify-between gap-3">
-          <span className="text-xs text-muted" aria-live="polite">
-            {notificationMessage
-              ? t(notificationMessage)
-              : turnAlerts === null
-                ? t("quick.game.loadingPreference")
-                : turnAlerts
-                  ? t("quick.game.on")
-                  : t("quick.game.muted")}
-          </span>
-          <Toggle
-            checked={turnAlerts ?? false}
-            onChange={updateTurnAlerts}
-            label={t("quick.game.turnNotifications")}
-            disabled={turnAlerts === null || notificationSaving}
-          />
-        </div>
-      </Surface>
+      <NotificationPreferencesPanel />
     </div>
   );
 }

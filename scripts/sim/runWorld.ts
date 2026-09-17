@@ -403,8 +403,7 @@ async function main() {
   const { bootstrapGameWorld } = await import("@/lib/admin/bootstrapGameWorld");
   const { forceFullAutonomy, stampInitialGameClock } = await import("@/lib/sim/forceFullAutonomy");
   const { backfillMissingSeats } = await import("@/lib/sim/backfillMissingSeats");
-  const { batchSpawnNppCorporations, NPP_CAPITAL_STATES } =
-    await import("@/lib/admin/spawnNppCorporation");
+  const { bootstrapWorldsimCorporations } = await import("@/lib/sim/worldsimCorporationBootstrap");
   const { processTurn, initializeGameState } = await import("@/lib/turnSystem");
   const { presetDefaultsToFoundingPhase } = await import("@/lib/seeds/presetSelector");
   const { ALL_COUNTRY_IDS } = await import("@/lib/constants/countries");
@@ -688,27 +687,15 @@ async function main() {
       log(
         "Spawning NPP-owned corporations (bootstrap seeds none — needed for stock/index-fund investing)"
       );
-      let countriesSpawned = 0;
-      for (const countryId of ALL_COUNTRY_IDS) {
-        if (!inSimScope(countryId)) continue;
-        if (!NPP_CAPITAL_STATES[countryId]) continue; // coming-soon: no seeded capital state
-        const existing = await db
-          .collection("corporations")
-          .countDocuments({ ceoType: "npp", countryId });
-        if (existing > 0) continue;
-        try {
-          const spawned = await batchSpawnNppCorporations(db, countryId, { perSectorCount: 3 });
-          if (spawned.length > 0) {
-            log(`  ${countryId}: spawned ${spawned.length} NPP corporations`);
-            countriesSpawned++;
-          }
-        } catch (error) {
-          log(
-            `  ${countryId}: corp spawn failed — ${error instanceof Error ? error.message : String(error)}`
-          );
-        }
-      }
-      log(`Corporation spawn complete: ${countriesSpawned} countries seeded`);
+      // Eligibility (planned economies keep their SOEs, zero private attempts)
+      // is determined inside, against the marketization-dial gate, before any
+      // creation attempt.
+      const corpBootstrap = await bootstrapWorldsimCorporations(db, {
+        countryIds: ALL_COUNTRY_IDS.filter(inSimScope),
+        perSectorCount: 3,
+        log,
+      });
+      log(`Corporation spawn complete: ${corpBootstrap.countriesSeeded} countries seeded`);
     }
 
     await simRuns.updateOne(

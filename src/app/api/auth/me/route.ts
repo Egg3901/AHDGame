@@ -1,3 +1,4 @@
+import { notificationTypeFilter } from "@/lib/notifications/visibility";
 import { isTokenRevokedByCutoff } from "@/lib/auth/revocationCutoff";
 import { withNoStore } from "@/lib/api/withNoStore";
 import { NextResponse } from "next/server";
@@ -199,6 +200,7 @@ export const GET = withNoStore(async () => {
           : Promise.resolve(null),
         db.collection<Notification>("notifications").countDocuments({
           userId: { $in: bundleIds },
+          ...notificationTypeFilter(user?.notificationPreferences, new Date()),
           read: false,
         }),
         db.collection("playerMail").countDocuments({
@@ -215,6 +217,7 @@ export const GET = withNoStore(async () => {
       [unreadCount, unreadMailCount] = await Promise.all([
         db.collection<Notification>("notifications").countDocuments({
           userId: { $in: bundleIds },
+          ...notificationTypeFilter(user?.notificationPreferences, new Date()),
           read: false,
         }),
         db.collection("playerMail").countDocuments({
@@ -333,7 +336,7 @@ export const GET = withNoStore(async () => {
               }
             : undefined,
           unreadCount,
-          unreadMailCount,
+          unreadMailCount: user?.notificationPreferences?.muteMail ? 0 : unreadMailCount,
           ...(notificationAccounts ? { notificationAccounts } : {}),
         },
       },

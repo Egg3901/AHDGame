@@ -5,6 +5,7 @@ import {
   valuation,
   buildAllocation,
   corpIncomeBasis,
+  cashAfterContracts,
 } from "./financialsModel";
 import type { Financials } from "../CorporationPageTypes";
 
@@ -40,6 +41,20 @@ const baseFinancials: Financials = {
   currentGrowthRate: 0,
   subsidyBenefit: 0,
 };
+
+describe("cashAfterContracts", () => {
+  it("adds last-turn supply-agreement CFD cash onto retained P&L", () => {
+    expect(
+      cashAfterContracts({
+        income: 50_400,
+        realizedIncome: 50_184,
+        realizedDividendPaid: 0,
+        dividendDistribution: 0,
+        supplyAgreementSettlementDaily: -65_304,
+      })
+    ).toBe(-15_120);
+  });
+});
 
 describe("scaleToPeriod", () => {
   it("divides by 24 for hourly", () => {
