@@ -83,9 +83,8 @@ async function main() {
     // Enrich runConfig with provenance only reachable here: the control-plane
     // job doc (seed/turns) and the repo's git state. The worldsim MCP ships as
     // part of the ops-dashboard, so its version is that package's version.
-    const job = await opsDb
-      .collection("simJobs")
-      .findOne({ _id: runId as never }, { projection: { seed: 1, turns: 1 } });
+    const job = await opsDb.collection("simJobs").findOne({ _id: runId as never });
+    const sandboxRun = await sandboxDb.collection("simRuns").findOne({ _id: runId });
     let mcpVersion: string | undefined;
     try {
       const { readFileSync } = await import("fs");
@@ -98,6 +97,32 @@ async function main() {
       seed: (job as { seed?: string } | null)?.seed,
       turns: (job as { turns?: number } | null)?.turns,
       jobId: runId,
+      requestedConfig: job
+        ? Object.fromEntries(
+            Object.entries(job).filter(([key]) =>
+              [
+                "preset",
+                "turns",
+                "seed",
+                "startPolicy",
+                "marketSystemMode",
+                "labourSystemMode",
+                "autonomyLevel",
+                "allFeatureFlags",
+                "freightSettlementMode",
+                "canonicalFreightBillingEnabled",
+                "shortageResponsiveSourcingEnabled",
+                "indexFundBondLiquidityEnabled",
+                "equityLiquidityFacilityEnabled",
+                "nppMarketCoverageEnabled",
+                "nppFragileMarketSupplyEnabled",
+              ].includes(key)
+            )
+          )
+        : undefined,
+      effectiveConfigInitial: (
+        sandboxRun as { effectiveConfigInitial?: Record<string, unknown> } | null
+      )?.effectiveConfigInitial,
       mcpVersion,
       ...(await gitProvenance()),
     };

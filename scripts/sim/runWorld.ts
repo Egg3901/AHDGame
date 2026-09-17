@@ -94,6 +94,21 @@ function hasFlag(flag: string): boolean {
   return process.argv.includes(`--${flag}`);
 }
 
+function scalarConfig(
+  doc: Record<string, unknown> | null
+): Record<string, boolean | number | string | null> {
+  const out: Record<string, boolean | number | string | null> = {};
+  for (const [key, value] of Object.entries(doc ?? {})) {
+    if (
+      key !== "_id" &&
+      (value === null || ["boolean", "number", "string"].includes(typeof value))
+    ) {
+      out[key] = value as boolean | number | string | null;
+    }
+  }
+  return out;
+}
+
 /**
  * Autonomy tier the run forces. Defaults to v3, matching every previous run of
  * this harness. Pass `--autonomy=v4` to exercise the global tier — running the
@@ -225,6 +240,7 @@ const brandLoyalty = hasFlag("brand-loyalty");
 const brandLoyaltySlice = hasFlag("brand-loyalty-slice");
 const sectorQuality = hasFlag("quality");
 const demographicsDemand = hasFlag("demographics");
+const allFeatureFlags = hasFlag("all-feature-flags");
 // Command Economy v2 A/B: --command-economy enables commandEconomyEnabled on the
 // sandbox gameConfig. Unlike the other tier flags this MUST be set BEFORE
 // bootstrap (below), because the multi-SOE split in the budget seed reads the
@@ -814,6 +830,19 @@ async function main() {
     log("Set macroGrowthV1=true on sandbox gameState");
   }
 
+  if (allFeatureFlags) {
+    const { DEFAULT_GAME_STATE_FLAGS } = await import("@/lib/seeds/reference/featureFlagDefaults");
+    const enabledFlags = Object.fromEntries(
+      Object.entries(DEFAULT_GAME_STATE_FLAGS)
+        .filter(([, value]) => typeof value === "boolean")
+        .map(([key]) => [key, true])
+    );
+    await db
+      .collection<GameState>("gameState")
+      .updateOne({ _id: "current" }, { $set: enabledFlags });
+    log(`Enabled all ${Object.keys(enabledFlags).length} compatible gameplay boolean flags`);
+  }
+
   // ── SIM-ONLY: elections-only turn profile + country scope ──────────────────
   // Runs for fresh, resumed AND clone worlds (idempotent) so the profile always
   // takes effect before the turn loop, mirroring how --market-mode is applied.
@@ -873,6 +902,24 @@ async function main() {
         nppForeignPolicyStage: foreignPolicyStage,
         preservePlayerRail,
         preserveLiveConfig,
+        effectiveConfigInitial: {
+          capturedAtTurn: Number(
+            (await db.collection<GameState>("gameState").findOne({ _id: "current" }))
+              ?.currentTurn ?? 0
+          ),
+          gameState: scalarConfig(
+            (await db.collection("gameState").findOne({ _id: "current" })) as Record<
+              string,
+              unknown
+            > | null
+          ),
+          gameConfig: scalarConfig(
+            (await db.collection("gameConfig").findOne({ _id: "default" })) as Record<
+              string,
+              unknown
+            > | null
+          ),
+        },
       },
     }
   );

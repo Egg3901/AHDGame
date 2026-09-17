@@ -31,3 +31,14 @@ export function canClaimAt(now: Date, window: ClaimWindow | null): boolean {
   if (window.startHour < window.endHour) return hour >= window.startHour && hour < window.endHour;
   return hour >= window.startHour || hour < window.endHour;
 }
+
+/** Filter for the next admissible queue job. Explicit interactive requests
+ * bypass the unattended claim window; legacy and scheduled jobs remain gated. */
+export function claimFilterAt(
+  now: Date,
+  window: ClaimWindow | null
+): { status: "queued"; startPolicy?: "immediate" } {
+  return canClaimAt(now, window)
+    ? { status: "queued" }
+    : { status: "queued", startPolicy: "immediate" };
+}

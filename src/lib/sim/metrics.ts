@@ -38,6 +38,47 @@ export interface BalanceReport {
   marketAccess: MarketAccessMetrics;
   /** The banking gate: a sim run is not clean unless this is open at the end. */
   banking: BankingGateMetrics;
+  fiscalByCountry: FiscalCountryMetrics[];
+  inflationByCountry: InflationCountryMetrics[];
+  corporateCashFlow: CorporateCashFlowMetrics;
+  military: MilitaryMetrics;
+}
+
+export interface FiscalCountryMetrics {
+  countryId: string;
+  gdp: number;
+  revenue: number;
+  spending: number;
+  surplus: number;
+  debt: number;
+  debtToGdpRatio: number;
+  treasuryBalance: number;
+  creditRating: string;
+  defenseBalance: number;
+  defenseArrearsRatio: number;
+}
+export interface InflationCountryMetrics {
+  countryId: string;
+  inflation: number;
+  gdp: number;
+  gdpGrowth: number;
+}
+export interface CorporateCashFlowMetrics {
+  corporationCount: number;
+  totalRevenueAnchor: number;
+  totalIncomeAnchor: number;
+  negativeIncomeShare: number;
+  byCountry: Record<string, { corporations: number; revenueAnchor: number; incomeAnchor: number }>;
+}
+export interface MilitaryMetrics {
+  unitCount: number;
+  personnel: number;
+  meanReadiness: number;
+  meanIntegrity: number;
+  meanSupply: number;
+  activeConflicts: number;
+  battleReports: number;
+  byCountry: Record<string, { units: number; personnel: number; meanReadiness: number }>;
 }
 
 /**
@@ -631,19 +672,35 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
   const gameState = await db.collection("gameState").findOne({ _id: "current" as never });
   const turn = (gameState?.currentTurn as number | undefined) ?? 0;
 
-  const [wealth, electoral, officeTurnover, crises, economy, capacity, vitalSigns, banking] =
-    await Promise.all([
-      collectWealthMetrics(db),
-      collectElectoralMetrics(db),
-      collectOfficeTurnoverMetrics(db),
-      collectCrisisMetrics(db),
-      collectEconomyMetrics(db),
-      collectCapacityMetrics(db),
-      db
-        .collection<EconomicVitalSigns>("economicVitalSigns")
-        .findOne({ turn }, { sort: { turn: -1 } }),
-      collectBankingGateMetrics(db),
-    ]);
+  const [
+    wealth,
+    electoral,
+    officeTurnover,
+    crises,
+    economy,
+    capacity,
+    vitalSigns,
+    banking,
+    fiscalByCountry,
+    inflationByCountry,
+    corporateCashFlow,
+    military,
+  ] = await Promise.all([
+    collectWealthMetrics(db),
+    collectElectoralMetrics(db),
+    collectOfficeTurnoverMetrics(db),
+    collectCrisisMetrics(db),
+    collectEconomyMetrics(db),
+    collectCapacityMetrics(db),
+    db
+      .collection<EconomicVitalSigns>("economicVitalSigns")
+      .findOne({ turn }, { sort: { turn: -1 } }),
+    collectBankingGateMetrics(db),
+    collectFiscalMetrics(db),
+    collectInflationMetrics(db),
+    collectCorporateCashFlowMetrics(db, turn),
+    collectMilitaryMetrics(db),
+  ]);
 
   return {
     turn,
@@ -655,6 +712,121 @@ export async function collectBalanceMetrics(db: Db): Promise<BalanceReport> {
     capacity,
     marketAccess: marketAccessMetricsFromSnapshot(vitalSigns),
     banking,
+    fiscalByCountry,
+    inflationByCountry,
+    corporateCashFlow,
+    military,
+  };
+}
+
+async function collectFiscalMetrics(db: Db): Promise<FiscalCountryMetrics[]> {
+  const rows = await db.collection("federalBudget").find({}).toArray();
+  return rows
+    .map((row) => ({
+      countryId: String(row.countryId ?? row._id),
+      gdp: Number(row.gdp ?? 0),
+      revenue: Number(row.revenue?.total ?? 0),
+      spending: Number(row.spending?.total ?? 0),
+      surplus: Number(row.surplus ?? 0),
+      debt: Number(row.debt?.principal ?? 0),
+      debtToGdpRatio: Number(row.debtToGdpRatio ?? 0),
+      treasuryBalance: Number(row.treasuryBalance ?? 0),
+      creditRating: String(row.creditRating ?? "unknown"),
+      defenseBalance: Number(row.defenseAppropriation?.balance ?? 0),
+      defenseArrearsRatio: Number(row.defenseAppropriation?.arrearsRatio ?? 0),
+    }))
+    .sort((a, b) => a.countryId.localeCompare(b.countryId));
+}
+
+async function collectInflationMetrics(db: Db): Promise<InflationCountryMetrics[]> {
+  const snapshot = await db.collection("gameHealthSnapshots").findOne({}, { sort: { turn: -1 } });
+  const rows = (snapshot?.economy?.byCountry ?? {}) as Record<string, Record<string, unknown>>;
+  return Object.entries(rows)
+    .map(([countryId, row]) => ({
+      countryId,
+      inflation: Number(row.inflation ?? 0),
+      gdp: Number(row.gdp ?? 0),
+      gdpGrowth: Number(row.gdpGrowth ?? 0),
+    }))
+    .sort((a, b) => a.countryId.localeCompare(b.countryId));
+}
+
+async function collectCorporateCashFlowMetrics(
+  db: Db,
+  turn: number
+): Promise<CorporateCashFlowMetrics> {
+  const rows = await db.collection("corporationHistory").find({ turn }).toArray();
+  const corps = await db
+    .collection("corporations")
+    .find({}, { projection: { countryOwnerId: 1, countryId: 1 } })
+    .toArray();
+  const countries = new Map(
+    corps.map((corp) => [
+      String(corp._id),
+      String(corp.countryOwnerId ?? corp.countryId ?? "unknown"),
+    ])
+  );
+  const byCountry: CorporateCashFlowMetrics["byCountry"] = {};
+  let totalRevenueAnchor = 0,
+    totalIncomeAnchor = 0,
+    negative = 0;
+  for (const row of rows) {
+    const rate = Number(row.fxRateAtWrite ?? 1);
+    const revenue = Number(row.revenue ?? 0) / (rate > 0 ? rate : 1);
+    const income = Number(row.income ?? 0) / (rate > 0 ? rate : 1);
+    const countryId = countries.get(String(row.corporationId)) ?? "unknown";
+    const bucket = byCountry[countryId] ?? { corporations: 0, revenueAnchor: 0, incomeAnchor: 0 };
+    bucket.corporations += 1;
+    bucket.revenueAnchor += revenue;
+    bucket.incomeAnchor += income;
+    byCountry[countryId] = bucket;
+    totalRevenueAnchor += revenue;
+    totalIncomeAnchor += income;
+    if (income < 0) negative += 1;
+  }
+  return {
+    corporationCount: rows.length,
+    totalRevenueAnchor,
+    totalIncomeAnchor,
+    negativeIncomeShare: rows.length ? negative / rows.length : 0,
+    byCountry,
+  };
+}
+
+async function collectMilitaryMetrics(db: Db): Promise<MilitaryMetrics> {
+  const units = await db.collection("militaryUnits").find({}).toArray();
+  const acc = new Map<string, { units: number; personnel: number; readiness: number }>();
+  for (const unit of units) {
+    const countryId = String(unit.countryId ?? "unknown");
+    const bucket = acc.get(countryId) ?? { units: 0, personnel: 0, readiness: 0 };
+    bucket.units += 1;
+    bucket.personnel += Number(unit.personnel ?? 0);
+    bucket.readiness += Number(unit.readiness ?? 0);
+    acc.set(countryId, bucket);
+  }
+  const byCountry = Object.fromEntries(
+    [...acc].map(([countryId, row]) => [
+      countryId,
+      {
+        units: row.units,
+        personnel: row.personnel,
+        meanReadiness: row.units ? row.readiness / row.units : 0,
+      },
+    ])
+  );
+  const [activeConflicts, battleReports] = await Promise.all([
+    db.collection("livingConflicts").countDocuments({ hasOpened: true }),
+    db.collection("battleReports").countDocuments({}),
+  ]);
+  return {
+    unitCount: units.length,
+    personnel: units.reduce((sum, unit) => sum + Number(unit.personnel ?? 0), 0),
+    meanReadiness: mean(units.map((unit) => Number(unit.readiness ?? 0))),
+    meanIntegrity: mean(units.map((unit) => Number(unit.integrity ?? 100))),
+    meanSupply: mean(units.map((unit) => Number(unit.supply ?? 100))),
+    activeConflicts,
+    battleReports,
+    byCountry,
   };
 }
 
