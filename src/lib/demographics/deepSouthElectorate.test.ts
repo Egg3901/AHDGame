@@ -29,7 +29,7 @@ import {
   ELECTORATE_REPRESENTATION_FRACTION,
   type GranularElectorateUnit,
 } from "./granularElectorate";
-import { deriveGranularCellsGeneric } from "./granularCells";
+import { deriveGranularCellsGeneric, type GenericGranularDimInput } from "./granularCells";
 import { SOUTHERN_REALIGNMENT_CHECKPOINT } from "./eraCheckpoints";
 import { stateCensusData1953 } from "@/lib/seeds/stateCensusData1953";
 import { getConditionedOffsetsForYear } from "@/lib/seeds/eraPositionsForYear";
@@ -228,7 +228,10 @@ describe("pruning representation invariants", () => {
     // states (every college/graduate cell sat below the 0.25% floor).
     for (const stateId of ["AL", "MS", "CA", "NY"]) {
       const { units } = substrate(stateId);
-      const marginals = stateCensusData1953[stateId] as Record<string, Record<string, number>>;
+      const marginals = stateCensusData1953[stateId] as unknown as Record<
+        string,
+        Record<string, number>
+      >;
       const mass: Record<string, number> = {};
       for (const u of units) {
         for (const [k, wgt] of Object.entries(u.bucketWeights)) {
@@ -259,7 +262,10 @@ describe("pruning representation invariants", () => {
     // in every Deep South state (Alabama holds 0.315 of a 0.32 marginal).
     for (const stateId of DEEP_SOUTH) {
       const { units } = substrate(stateId);
-      const marginals = stateCensusData1953[stateId] as Record<string, Record<string, number>>;
+      const marginals = stateCensusData1953[stateId] as unknown as Record<
+        string,
+        Record<string, number>
+      >;
       const censusBlack = (marginals.race.black as number) / 100;
       expect(censusBlack, `${stateId} census has a Black marginal`).toBeGreaterThan(0);
       const black = conditioned(units, "race:black");
@@ -288,7 +294,7 @@ describe("pruning representation invariants", () => {
 });
 
 describe("conditioned-offsets mechanism (unit level)", () => {
-  function toyDims() {
+  function toyDims(): GenericGranularDimInput[] {
     return [
       {
         name: "race",

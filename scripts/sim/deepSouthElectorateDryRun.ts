@@ -111,7 +111,10 @@ export function runDeepSouthDryRun(): DeepSouthDryRun {
     const units = substrate(stateId);
     const isDeepSouth = (DRY_RUN_DEEP_SOUTH as readonly string[]).includes(stateId);
     const brownUnits = isDeepSouth ? substrate(stateId, brown) : null;
-    const marginals = stateCensusData1953[stateId] as Record<string, Record<string, number>>;
+    const marginals = stateCensusData1953[stateId] as unknown as Record<
+      string,
+      Record<string, number>
+    >;
     const mass: Record<string, number> = {};
     for (const u of units) {
       for (const [k, wgt] of Object.entries(u.bucketWeights))
