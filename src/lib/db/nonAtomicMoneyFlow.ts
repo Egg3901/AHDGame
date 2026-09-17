@@ -217,6 +217,36 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * replay. There is no pass-level orphan driver for buys: unlike the queue,
  * no intent row exists to strand, so an unretried partial stays as the
  * crash left it and the next turn's buys run under new keys).
+ * Index-fund equity sales are migrated (one public-float sale via the
+ * fundShareSellSpend primitive, driven by the sellFundHoldingShares shell
+ * and sequenced by sellFundHoldingsForRedemptionCash: the shell owns the
+ * bid quote, the FX conversion, the order-flow eligibility read, the
+ * issuer-route decision, and the escrow split, and every computed figure
+ * (execution price, anchor price, proceeds, issuer debit with the escrow
+ * split, eligibility, currency, route, counterparty, holding average, note)
+ * is pinned on the receipt resume plan at claim time, so a same-key retry
+ * replays the stored amounts instead of repricing from post-debit pool
+ * state; issuer debit (pool-gated, escrow-floored with a pinned split, or
+ * liquid with issuance-proceeds capture folded in, matching the legacy
+ * routing) + corp float/shareholder release (positional decrement with the
+ * legacy sufficiency guard, zero-row pull as post-commit best effort) +
+ * fund credit (omitted for dust proceeds, exactly like the legacy no-op) +
+ * holdings image write (same formula the sale always used, computed from a
+ * live read inside the apply, restored exactly on revert with the pinned
+ * average) + deterministic audit row run as keyed steps under a
+ * per-fund-per-corp-per-turn-per-shares caller key, with same-key replay,
+ * fingerprint-conflict, terminal, crash-after-every-write,
+ * concurrent-seller, dust-credit, and sabotage-compensation tests; the
+ * trade-history row and the zero-row sweep stay post-commit best effort and
+ * fire only on the fresh attempt, never on a replay. The pass pins its full
+ * leg sequence on a parent receipt before the first sale, so a same-key
+ * retry replays the stored legs (completed legs reconcile as duplicates and
+ * reduce the remaining need) instead of recomputing from post-sale state: a
+ * resumed liquidation cannot sell the same shares twice or over-raise cash
+ * because earlier legs already landed. There is no pass-level orphan driver
+ * for sales: like buys, no intent row exists to strand, so an unretried
+ * partial stays as the crash left it and the next invocation measures its
+ * need from live cash.
  * Forex turn chair interventions are migrated
  * (applyForexInterventionSpend: deterministic per-turn key, resume plan
  * persisted on the receipt at claim, keyed rate-writeback + combined
@@ -237,8 +267,8 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * instead of throwing `RangeError`.
  * Still on the legacy debit-first-plus-compensation fallback:
  * index-fund cron/rebalancing orchestration (its bond purchase/sale legs
- * and its float-buy leg are keyed; surrounding equity sells, dividend
- * pass-through, and cross-fund writes are not).
+ * and its float-buy and equity-sale legs are keyed; dividend pass-through
+ * and cross-fund writes are not).
  *
  * Operations note: receipts accumulate one small document per keyed flow. The
  * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in

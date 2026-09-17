@@ -462,9 +462,19 @@ export async function rebalanceFundToTarget(
   // Sells first so freed cash funds the buys.
   for (const leg of plan.sells) {
     const refreshed = (await getFundById(db, fund._id)) ?? fund;
-    const res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
-      note: "Rebalance: trim overweight",
-    });
+    // A settled key reused for a different leg fails closed and is skipped,
+    // never sold twice: same convention as the buy loop below.
+    let res;
+    try {
+      res = await sellFundHoldingShares(db, refreshed, leg.corporationId, leg.shares, {
+        note: "Rebalance: trim overweight",
+      });
+    } catch (err) {
+      if (err instanceof MoneyFlowKeyConflictError || err instanceof MoneyFlowTerminalError) {
+        continue;
+      }
+      throw err;
+    }
     if (res.sharesSold > 0) sells++;
   }
 
