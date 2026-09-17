@@ -163,6 +163,7 @@ export async function appointCaretakerCeo(
           underlyingUserId: corp.userId,
           appointedTurn: turn,
           appointmentSource: "owner",
+          mandate: "active",
         },
         updatedAt: now,
       },
@@ -291,6 +292,7 @@ export function buildVacantCaretakerCeoUpdate(
       underlyingUserId: corp.userId,
       appointedTurn: turn,
       appointmentSource: "vacancy",
+      mandate: "active",
     };
   }
   return { set, unset };

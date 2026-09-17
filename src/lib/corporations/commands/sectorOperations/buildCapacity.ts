@@ -212,6 +212,13 @@ export async function buildCapacity(request: Request, { params }: RouteParams) {
     const ceoCheck = requireCeo(corporation, auth.user.userId);
     if (ceoCheck) return ceoCheck;
 
+    if (corporation.ceoType === "npp" && body.action === "build") {
+      return NextResponse.json(
+        { error: "Resume player control before building capacity for this corporation" },
+        { status: 403 }
+      );
+    }
+
     if (!ObjectId.isValid(sectorId)) {
       return NextResponse.json({ error: "Invalid sector ID" }, { status: 400 });
     }

@@ -16,10 +16,14 @@ import { TURNS_PER_DAY } from "@/lib/constants/corporations";
 export function pickBestNppTechNode(
   corp: Corporation,
   currentYear: number,
-  dailyGrossRevenue: number
+  dailyGrossRevenue: number,
+  options: { cashReserve?: number } = {}
 ): { node: TechTreeNode; cashCost: number } | null {
   const rdScore = corp.rdScore ?? 0;
-  const cashAvailable = corp.liquidCapital ?? 0;
+  const cashAvailable = Math.max(
+    0,
+    (corp.liquidCapital ?? 0) - Math.max(0, options.cashReserve ?? 0)
+  );
   const candidates = getTreeForType(corp.type)
     .map((node) => ({ node, cashCost: techNodeCashCost(node, dailyGrossRevenue) }))
     .filter(
@@ -57,10 +61,18 @@ export function maybePushNppTechUnlock(args: {
   turn: number;
   now: Date;
   corpUpdates: NppTechCorpUpdate[];
+  liquidCapitalDelta?: number;
+  cashReserve?: number;
 }): void {
   const { corp, sectors, techCurrentYear, turn, now } = args;
   const dailyGrossRevenue = sectors.reduce((sum, s) => sum + (s.revenue ?? 0), 0) * TURNS_PER_DAY;
-  const pick = pickBestNppTechNode(corp, techCurrentYear, dailyGrossRevenue);
+  const cashAfterDecision = Math.max(0, (corp.liquidCapital ?? 0) + (args.liquidCapitalDelta ?? 0));
+  const pick = pickBestNppTechNode(
+    { ...corp, liquidCapital: cashAfterDecision },
+    techCurrentYear,
+    dailyGrossRevenue,
+    { cashReserve: args.cashReserve }
+  );
   if (!pick) return;
   const { node: techNode, cashCost } = pick;
   const grants = sumStrengthGrants(techNode.effects);
