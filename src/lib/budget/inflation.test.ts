@@ -879,10 +879,7 @@ describe("Bretton Woods money-growth coefficient (issue #7)", () => {
 
   it("keeps the pegged coefficient by default (legacy worlds)", () => {
     const { breakdown } = calculateInflationWithBreakdown(excessMoney);
-    expect(breakdown.moneySupply).toBeCloseTo(
-      (10.0 - 2.0) * PEGGED_MONEY_GROWTH_COEFF,
-      10
-    );
+    expect(breakdown.moneySupply).toBeCloseTo((10.0 - 2.0) * PEGGED_MONEY_GROWTH_COEFF, 10);
   });
 
   it("loosens the money-growth term once the peg is gone", () => {

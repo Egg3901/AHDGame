@@ -86,7 +86,10 @@ export async function processBrettonWoodsTurn(
 
   const gameConfig = await db
     .collection<GameConfig>("gameConfig")
-    .findOne({ _id: "default" }, { projection: { brettonWoodsExitEnabled: 1, commandEconomyEnabled: 1 } });
+    .findOne(
+      { _id: "default" },
+      { projection: { brettonWoodsExitEnabled: 1, commandEconomyEnabled: 1 } }
+    );
   if (!isBrettonWoodsExitEnabled(gameConfig)) return empty;
   const commandEconomyEnabled = gameConfig?.commandEconomyEnabled === true;
 
@@ -122,7 +125,14 @@ export async function processBrettonWoodsTurn(
     .collection<CentralBank>("centralBanks")
     .find(
       {},
-      { projection: { countryId: 1, spreadFeeReserveBalances: 1, reserveBalance: 1, forexRevenue: 1 } }
+      {
+        projection: {
+          countryId: 1,
+          spreadFeeReserveBalances: 1,
+          reserveBalance: 1,
+          forexRevenue: 1,
+        },
+      }
     )
     .toArray();
   let foreignClaims = 0;
@@ -142,7 +152,10 @@ export async function processBrettonWoodsTurn(
   // so the budget row already carries the settled rate.
   const usBudget = await db
     .collection<FederalBudget>("federalBudget")
-    .findOne({ _id: getNationalBudgetId("US") }, { projection: { "economicFactors.inflationRate": 1 } });
+    .findOne(
+      { _id: getNationalBudgetId("US") },
+      { projection: { "economicFactors.inflationRate": 1 } }
+    );
   const usInflation = finiteOr(usBudget?.economicFactors?.inflationRate, NaN);
   const inflationGap =
     Number.isFinite(usInflation) && currentYear != null
@@ -159,8 +172,7 @@ export async function processBrettonWoodsTurn(
 
   const usdRegime = resolveMonetaryRegime(usDoc?.monetaryRegime);
   const suspendNow =
-    usDoc != null &&
-    shouldSuspendConvertibility({ currentYear, goldCover, regime: usdRegime });
+    usDoc != null && shouldSuspendConvertibility({ currentYear, goldCover, regime: usdRegime });
 
   const suspended: CountryId[] = [];
   const floated: CountryId[] = [];
@@ -168,7 +180,12 @@ export async function processBrettonWoodsTurn(
   for (const doc of rateDocs) {
     const countryId = doc.countryId as CountryId;
     if (!countryId) continue;
-    if (!participatesInFloat(countryId, isCommandEconomy(countryId, currentYear, commandEconomyEnabled))) {
+    if (
+      !participatesInFloat(
+        countryId,
+        isCommandEconomy(countryId, currentYear, commandEconomyEnabled)
+      )
+    ) {
       continue;
     }
     const regime = resolveMonetaryRegime(doc.monetaryRegime);

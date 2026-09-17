@@ -7,11 +7,7 @@ vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
 let db: MockDb;
 
-function rateDoc(
-  countryId: string,
-  currencyCode: string,
-  overrides: Record<string, unknown> = {}
-) {
+function rateDoc(countryId: string, currencyCode: string, overrides: Record<string, unknown> = {}) {
   return {
     _id: countryId,
     countryId,
@@ -61,11 +57,7 @@ function seed(opts: {
   );
 }
 
-const calmRates = () => [
-  rateDoc("US", "USD"),
-  rateDoc("UK", "GBP"),
-  rateDoc("JP", "JPY"),
-];
+const calmRates = () => [rateDoc("US", "USD"), rateDoc("UK", "GBP"), rateDoc("JP", "JPY")];
 
 // A calm US reserve position with small foreign claims: the cover drain reads
 // no pressure, so cover holds at full.
@@ -158,11 +150,7 @@ describe("suspend and float transitions", () => {
   it("suspends every participating currency once eligible with exhausted cover", async () => {
     seed({
       flag: true,
-      rates: [
-        rateDoc("US", "USD", { goldCover: 0.2 }),
-        rateDoc("UK", "GBP"),
-        rateDoc("JP", "JPY"),
-      ],
+      rates: [rateDoc("US", "USD", { goldCover: 0.2 }), rateDoc("UK", "GBP"), rateDoc("JP", "JPY")],
       banks: calmBanks(),
       usInflation: null,
     });
@@ -193,7 +181,11 @@ describe("suspend and float transitions", () => {
     seed({
       flag: true,
       rates: [
-        rateDoc("US", "USD", { goldCover: 0.1, monetaryRegime: "suspended", monetaryRegimeSetAtTurn: 900 }),
+        rateDoc("US", "USD", {
+          goldCover: 0.1,
+          monetaryRegime: "suspended",
+          monetaryRegimeSetAtTurn: 900,
+        }),
         rateDoc("UK", "GBP", { monetaryRegime: "suspended", monetaryRegimeSetAtTurn: 900 }),
         rateDoc("JP", "JPY", { monetaryRegime: "suspended", monetaryRegimeSetAtTurn: 900 }),
       ],
@@ -214,7 +206,11 @@ describe("suspend and float transitions", () => {
     seed({
       flag: true,
       rates: [
-        rateDoc("US", "USD", { goldCover: 0.1, monetaryRegime: "floating", monetaryRegimeSetAtTurn: 990 }),
+        rateDoc("US", "USD", {
+          goldCover: 0.1,
+          monetaryRegime: "floating",
+          monetaryRegimeSetAtTurn: 990,
+        }),
         rateDoc("UK", "GBP", { monetaryRegime: "floating", monetaryRegimeSetAtTurn: 990 }),
       ],
       banks: calmBanks(),
@@ -232,11 +228,7 @@ describe("suspend and float transitions", () => {
     seed({
       flag: true,
       commandEconomyEnabled: true,
-      rates: [
-        rateDoc("US", "USD", { goldCover: 0.2 }),
-        rateDoc("UK", "GBP"),
-        rateDoc("RU", "RUB"),
-      ],
+      rates: [rateDoc("US", "USD", { goldCover: 0.2 }), rateDoc("UK", "GBP"), rateDoc("RU", "RUB")],
       banks: calmBanks(),
       usInflation: null,
     });
@@ -246,7 +238,12 @@ describe("suspend and float transitions", () => {
   });
 
   it("no USD row and no transitions: nothing to persist, no write call", async () => {
-    seed({ flag: true, rates: [rateDoc("UK", "GBP"), rateDoc("JP", "JPY")], banks: [], usInflation: null });
+    seed({
+      flag: true,
+      rates: [rateDoc("UK", "GBP"), rateDoc("JP", "JPY")],
+      banks: [],
+      usInflation: null,
+    });
     const res = await processBrettonWoodsTurn(db as unknown as Db, 720, 1960);
     expect(res.enabled).toBe(true);
     expect(res.goldCover).toBeNull();
