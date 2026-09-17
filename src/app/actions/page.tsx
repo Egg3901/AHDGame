@@ -9,12 +9,13 @@ import type { Character, State } from "@/lib/db/types";
 import { calculatePoliticalInfluenceDecay } from "@shared/constants/formulas";
 import {
   getCampaignActionCost,
-  getCampaignFundCost,
   getAdvertiseActionCost,
   getDonorActionCost,
   getAdvertiseFundCost,
   getBuildDonorBaseFundCost,
   fundraiseYieldLocal,
+  isCampaignEligible,
+  quoteCampaignAction,
 } from "@/lib/actions";
 import { getHomeCurrency, getTotalPersonalLiquidWealth } from "@/lib/currency/characterFunds";
 import { getGdpBaseline } from "@/lib/utils/fundGeneration";
@@ -424,11 +425,31 @@ export default function ActionsPage() {
           countryId
         );
     const donorUpgradeCost = buildDonorBaseFundCost;
-    const campaignActionCost = getCampaignActionCost(influence);
-    const campaignFundCost = homeState
-      ? getCampaignFundCost(influence, homeState.gdp, homeState.population, countryId)
-      : 20_000;
-    const campaignMaxed = influence >= 100;
+    // Same rules quote the server executes: tiered AP cost, GDP-scaled fund
+    // cost and stat-scaled gain. When the quote rejects (maxed influence,
+    // unallocated stats, or home-state economics still loading), the AP tiers
+    // stay displayable from influence alone while the fund cost reports 0:
+    // GDP-scaled cards already block fund display until home-state data loads,
+    // and the server rejects execution with the quote reason.
+    const campaignQuote = quoteCampaignAction(
+      {
+        politicalInfluence: influence,
+        charisma: character.stats?.charisma,
+        intellect: character.stats?.intellect,
+      },
+      homeState
+        ? {
+            gdpMillions: homeState.gdp,
+            population: homeState.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    const campaignActionCost = campaignQuote.ok
+      ? campaignQuote.apCost
+      : getCampaignActionCost(influence);
+    const campaignFundCost = campaignQuote.ok ? campaignQuote.fundCostAnchor : 0;
+    const campaignMaxed = !isCampaignEligible(influence);
     const advertiseActionCost = getAdvertiseActionCost(character?.favorability ?? 0);
     const advertiseFundCost = homeState
       ? getAdvertiseFundCost(

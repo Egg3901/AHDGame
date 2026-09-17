@@ -5,7 +5,14 @@ import { CURRENCY_SYMBOLS, type CurrencyCode } from "@/lib/constants/currencies"
 import { statMultiplier } from "@/lib/stats/statMultiplier";
 import { campaignAnchorToLocal } from "@/lib/campaigns/campaignCurrency";
 import { DEBATE_PREP_ACTION_COST, NEUTRAL_STAT, type StatKey } from "@/lib/stats/statsConstants";
-import { FUNDRAISE_ACTION_COST, fundraiseYieldAnchor, isFundraiseEligible } from "./actions/rules";
+import {
+  FUNDRAISE_ACTION_COST,
+  fundraiseYieldAnchor,
+  isFundraiseEligible,
+  getFundMultiplier,
+  getCampaignActionCost,
+  quoteCampaignAction,
+} from "./actions/rules";
 
 export {
   FUNDRAISE_ACTION_COST,
@@ -13,6 +20,17 @@ export {
   fundraiseYieldAnchor,
   isFundraiseEligible,
   type FundraiseActor,
+  CAMPAIGN_BASE_FUND_COST,
+  CAMPAIGN_MAX_INFLUENCE,
+  getFundMultiplier,
+  getCampaignActionCost,
+  getCampaignFundCost,
+  campaignInfluenceGain,
+  isCampaignEligible,
+  quoteCampaignAction,
+  type CampaignQuoteActor,
+  type CampaignQuoteTarget,
+  type CampaignQuote,
 } from "./actions/rules";
 
 /**
@@ -123,35 +141,6 @@ export function calculateInfluenceAccrual(_currentInfluence: number): number {
 }
 
 /**
- * Tiered action-point cost for the Campaign action (raise state PI).
- * Tier 1–5 based on current state political influence.
- */
-export function getCampaignActionCost(influence: number): number {
-  const clampedInfluence = Math.max(0, Math.min(100, influence));
-  if (clampedInfluence >= 80) return 5;
-  if (clampedInfluence >= 60) return 4;
-  if (clampedInfluence >= 40) return 3;
-  if (clampedInfluence >= 20) return 2;
-  return 1;
-}
-
-/**
- * Fund cost for the Campaign action.
- * Base $20,000 × tier, scaled by state GDP per capita relative to country baseline.
- * GDP is stored in millions of dollars (e.g. CT = 289,500 → $289.5B).
- */
-export function getCampaignFundCost(
-  influence: number,
-  stateGdpMillions: number,
-  statePopulation: number,
-  countryId = "US"
-): number {
-  const tier = getCampaignActionCost(influence); // 1-5
-  const multiplier = getFundMultiplier(tier - 1, stateGdpMillions, statePopulation, countryId);
-  return Math.round((20_000 * tier * multiplier) / 1_000) * 1_000;
-}
-
-/**
  * Fund cost for the Advertise action.
  * Base $100,000 scaled by favorability tier and state GDP per capita.
  */
@@ -213,24 +202,6 @@ export function getDonorActionCost(
 ): number {
   if (action === "fundraise") return FUNDRAISE_ACTION_COST;
   return Math.min(20, Math.round(4 + Math.pow(donorBaseLevel / 75, 1.4) * 16));
-}
-
-/**
- * Shared fund-cost multiplier for actions that spend money.
- * multiplier = (1 + tier × 0.2) × gdpScalar
- * gdpScalar = clamp(gdpPerCapita / countryBaseline, 0.85, 2.0)
- * gdpMillions: state GDP stored in millions (e.g. 289_500 = $289.5B)
- */
-export function getFundMultiplier(
-  tier: number,
-  gdpMillions: number,
-  population: number,
-  countryId = "US"
-): number {
-  const baseline = getGdpBaseline(countryId);
-  const gdpPerCapita = (gdpMillions * 1_000_000) / population;
-  const gdpScalar = Math.max(0.85, Math.min(2.0, gdpPerCapita / baseline));
-  return (1 + tier * 0.2) * gdpScalar;
 }
 
 /**
@@ -306,43 +277,6 @@ export function diminishPassiveFavorabilityGain(
 }
 
 /**
- * Base political-influence gain for one "Campaign" action, before stat scaling.
- * Shared by player actions and NPP turn processing (mirrors
- * `advertiseFavorabilityGain`'s shape exactly, so the same "curves must
- * intersect" fix applies to both self-reinforcing stats).
- *
- * Root cause this closes: influence used to grow by a FLAT +1/action forever
- * while `calculatePoliticalInfluenceDecay` only takes 0.75% of the CURRENT
- * value/turn — at the 100 cap that's just -0.75, so one campaign action a
- * turn always won under the old formula and influence pinned at the cap for
- * the life of the world (see `shared/constants/formulas.ts`'s decay doc and
- * the 654-turn `ahd_sim_grand53fx` world's 3.6x/consecutive-incumbent
- * measurement). This gives the gain curve the same diminishing shape
- * favorability already has — base +1, penalized above 50 at 1/75 of the
- * excess, floored at 0.1 so campaigning is never fully wasted — so it has a
- * stable intersection with the proportional decay instead of racing it to the
- * cap.
- *
- * Equilibrium (base gain, one campaign/turn, mult=1): decay(I) = 0.0075·I;
- * gain(I) = 1 − (I−50)/75 for I>50. Setting them equal solves to I* = 80 —
- * a hard-campaigning character with charisma-neutral stats converges on ~80
- * influence, not 100, and does so from either side (a fresher/lower character
- * climbs toward it, an over-decayed one recovers toward it). Heavier
- * dedication (multiple banked campaign actions in one turn) raises the
- * practical ceiling but `getCampaignActionCost`'s own 1-5 AP tiers already
- * throttle sustained multi-action-per-turn campaigning as influence climbs,
- * so even a maximally-dedicated player converges below 100 rather than
- * re-pinning at the cap (simulated ~85-93 at 2x normal AP throughput).
- */
-export function campaignInfluenceGain(currentInfluence: number, effectivenessMult = 1): number {
-  const baseGain = 1;
-  const threshold = 50;
-  const rate = 1 / 75;
-  const penalty = currentInfluence > threshold ? (currentInfluence - threshold) * rate : 0;
-  return Math.max(0.1, (baseGain - penalty) * effectivenessMult);
-}
-
-/**
  * All available player actions.
  * Costs are balanced for ~25 starting actions per character, with 4 action points
  * regenerated per turn. Dynamic costs (campaign, advertise, donor actions) are
@@ -377,23 +311,29 @@ export const ACTIONS: Record<ActionType, ActionDefinition> = {
     baseCost: 1, // dynamic — actual cost computed via getCampaignActionCost()
     requiresState: false,
     effect: (character: Character, state?: State) => {
-      const influence = character.politicalInfluence ?? 0;
-      const rawFundCost = state
-        ? getCampaignFundCost(influence, state.gdp, state.population, character.countryId)
-        : 20_000;
-      // Intellect softens the campaign cost-scaling curve (higher → cheaper).
-      const fundCost = Math.round(rawFundCost / statMultiplier(statValue(character, "intellect")));
-      // Base +1 with diminishing returns above 50% and a floor of 0.1 (shared
-      // with NPP processing — see campaignInfluenceGain's doc comment for the
-      // equilibrium this creates), then charisma scales the result (gentle ±20%).
-      const piGain = campaignInfluenceGain(
-        influence,
-        statMultiplier(statValue(character, "charisma"))
+      // Single source of truth: the UI card quotes this same quote, so the
+      // advertised cost/gain can never drift from the debited/credited result.
+      // canPerformAction runs the quote first; the throw below is a defensive
+      // invariant for direct effect callers that skip validation.
+      const quote = quoteCampaignAction(
+        {
+          politicalInfluence: character.politicalInfluence,
+          charisma: character.stats?.charisma,
+          intellect: character.stats?.intellect,
+        },
+        state
+          ? {
+              gdpMillions: state.gdp,
+              population: state.population,
+              countryId: character.countryId,
+            }
+          : undefined
       );
+      if (!quote.ok) throw new Error(quote.error);
       return {
-        fundsChange: -fundCost,
-        politicalInfluenceChange: piGain,
-        message: `Campaigned in ${state?.name ?? "your state"} — gained ${piGain.toFixed(2)}% political influence.`,
+        fundsChange: -quote.fundCostAnchor,
+        politicalInfluenceChange: quote.influenceGain,
+        message: `Campaigned in ${state?.name ?? "your state"} — gained ${quote.influenceGain.toFixed(2)}% political influence.`,
       };
     },
   },
@@ -584,11 +524,28 @@ export function canPerformAction(
     return { canPerform: false, reason: "Invalid action type" };
   }
 
-  if (actionType === "campaign" && (character.politicalInfluence ?? 0) >= 100) {
-    return {
-      canPerform: false,
-      reason: "Your political influence is already at maximum (100%).",
-    };
+  // Campaign validates through the same rules quote the UI and the effect use:
+  // tiered AP cost, GDP-scaled fund cost, stat-scaled gain and the 100% cap.
+  // Missing stats or missing home-state economics reject here with the quote
+  // reason instead of falling back to neutral values.
+  if (actionType === "campaign") {
+    const quote = quoteCampaignAction(
+      {
+        politicalInfluence: character.politicalInfluence,
+        charisma: character.stats?.charisma,
+        intellect: character.stats?.intellect,
+      },
+      state
+        ? {
+            gdpMillions: state.gdp,
+            population: state.population,
+            countryId: character.countryId,
+          }
+        : undefined
+    );
+    if (!quote.ok) {
+      return { canPerform: false, reason: quote.error };
+    }
   }
 
   const actualCost = getActionPointCost(character, actionType);
