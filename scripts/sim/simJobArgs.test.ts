@@ -56,12 +56,12 @@ describe("sim worker runWorld argument emission", () => {
   });
 
   it("carries the frontier-entry gate for both trial arms without silent fallback (#991)", () => {
-    expect(
-      buildRunWorldArgs({ frontierEntryExperimentEnabled: true })
-    ).toContain("--frontier-entry-experiment=true");
-    expect(
-      buildRunWorldArgs({ frontierEntryExperimentEnabled: false })
-    ).toContain("--frontier-entry-experiment=false");
+    expect(buildRunWorldArgs({ frontierEntryExperimentEnabled: true })).toContain(
+      "--frontier-entry-experiment=true"
+    );
+    expect(buildRunWorldArgs({ frontierEntryExperimentEnabled: false })).toContain(
+      "--frontier-entry-experiment=false"
+    );
   });
 
   it("omits the frontier-entry flag when the job leaves it unset (#991)", () => {
@@ -73,9 +73,7 @@ describe("sim worker runWorld argument emission", () => {
     const job = {
       frontierEntryExperimentEnabled: "true",
     } as unknown as SimJobExperimentFields;
-    expect(() => buildRunWorldArgs(job)).toThrow(
-      "frontierEntryExperimentEnabled must be boolean"
-    );
+    expect(() => buildRunWorldArgs(job)).toThrow("frontierEntryExperimentEnabled must be boolean");
   });
 
   it("rejects unknown tiers and unsafe country tokens", () => {
