@@ -47,14 +47,19 @@
  *   until the savings read is authoritative, then by -D. A prop buy
  *   (cash C-M plus mark M) must equal cash C with no mark: counted once.
  *
- * Usage:
- *   npx tsx scripts/sim/takeoverBankNavEvidence.ts [--seed=X]
- *     [--source-worktree=NAME --source-commit=SHA]
- * The optional pin is shape-validated with the same simSource contract a
- * queued worldsim job uses, so this report can be stapled to that job.
- * NEVER point a sim at the live game database; this scenario opens no DB.
+ * GATE USAGE (documented entry point; also `npm run sim:takeover-evidence --`):
+ *   npx tsx scripts/sim/takeoverBankNavEvidence.ts
+ *     --source-worktree=NAME --source-commit=FULL_SHA [--seed=X] [--out=report.json]
+ * The pin is REQUIRED and is verified through the full simSource contract
+ * (shape, registered worktree, HEAD equality, clean checkout): unpinned,
+ * mismatched, or dirty checkouts fail closed with a failed
+ * G-source-verified invariant and exit 1. Any failed scenario invariant
+ * also exits 1. stdout (and --out when given) is the canonical stable JSON
+ * artifact. NEVER point a sim at the live game database; this scenario
+ * opens no DB.
  */
 
+import { writeFile } from "fs/promises";
 import { bankEquity } from "@/lib/banking/balanceSheet";
 import {
   applyBankNavFloor,
@@ -63,7 +68,12 @@ import {
 } from "@/lib/corporations/commands/takeovers/rules/bankNavFloor";
 import { HOSTILE_TAKEOVER_PREMIUM_RATE } from "@/lib/corporations/corporateOwnership";
 import { PRIVATIZATION_BUYOUT_PREMIUM } from "@/lib/constants/corporations";
-import { assertSimSourceShape } from "./simSource";
+import {
+  assertSimSourceShape,
+  defaultSimSourceDeps,
+  verifySimSource,
+  type SimSourceDeps,
+} from "./simSource";
 
 /** Pinned fixture-set version. The scenario is fully deterministic. */
 export const EVIDENCE_SEED = "issue-1750-v1";
@@ -150,7 +160,19 @@ export interface EvidenceInvariant {
   pass: boolean;
 }
 
+/** Operational kind tag. This artifact settles CEO-authenticated command
+ * paths deterministically in memory; it is NOT a turn-based worldsim
+ * regression run. Gate consumers must key on this tag and never mistake
+ * this artifact for runWorld coverage. */
+export const EVIDENCE_KIND = "deterministic-command-path" as const;
+
+export const WORLDSIM_NON_COVERAGE_NOTE =
+  "runWorld boots a sandbox world and advances processTurn; it has no hook that issues CEO-authenticated player commands (hostile squeeze-out, privatization vote, fund-only buyout), so it cannot traverse these paths. This report settles those paths' production pricing legs deterministically in memory and is not a turn-based worldsim regression run.";
+
 export interface EvidenceReport {
+  kind: typeof EVIDENCE_KIND;
+  worldsimCoversAuthenticatedCommands: false;
+  worldsimNote: string;
   seed: string;
   source: { worktree: string; commit: string } | null;
   cases: EvidenceCase[];
@@ -363,7 +385,86 @@ export function runTakeoverBankNavEvidence(
     )
   );
 
-  return { seed, source, cases, invariants, pass: invariants.every((i) => i.pass) };
+  return {
+    kind: EVIDENCE_KIND,
+    worldsimCoversAuthenticatedCommands: false,
+    worldsimNote: WORLDSIM_NON_COVERAGE_NOTE,
+    seed,
+    source,
+    cases,
+    invariants,
+    pass: invariants.every((i) => i.pass),
+  };
+}
+
+export function evidenceExitCode(report: EvidenceReport): 0 | 1 {
+  return report.pass ? 0 : 1;
+}
+
+/** Canonical byte-stable serialization for the gated artifact. */
+export function serializeEvidenceReport(report: EvidenceReport): string {
+  return `${JSON.stringify(sortKeys(report), null, 2)}\n`;
+}
+
+export interface GatedEvidenceRequest {
+  seed?: string;
+  sourceWorktree?: string;
+  sourceCommit?: string;
+}
+
+export interface GatedEvidenceResult {
+  report: EvidenceReport;
+  exitCode: 0 | 1;
+}
+
+function gateFailure(seed: string, message: string): GatedEvidenceResult {
+  const report = runTakeoverBankNavEvidence(seed, null);
+  report.invariants.push({
+    id: "G-source-verified",
+    statement: `pinned source verification failed: ${message}`,
+    pass: false,
+  });
+  report.pass = false;
+  return { report, exitCode: 1 };
+}
+
+/**
+ * Operational gate around the pure scenario. The pin is verified through
+ * the established simSource contract (full-SHA shape, registered worktree,
+ * HEAD equality, clean checkout) against live git unless the caller injects
+ * deps. Unpinned, mismatched, or dirty checkouts fail closed: the artifact
+ * carries a failed G-source-verified invariant, pass is false, and the exit
+ * code is 1. The pure runTakeoverBankNavEvidence stays pin-optional for
+ * unit tests; only this gate (and the CLI below) emits passable artifacts.
+ */
+export function runGatedTakeoverBankNavEvidence(
+  req: GatedEvidenceRequest = {},
+  deps: SimSourceDeps = defaultSimSourceDeps(),
+  opts?: { root?: string; main?: string }
+): GatedEvidenceResult {
+  const seed = req.seed ?? EVIDENCE_SEED;
+  let verified: { worktree: string; commit: string };
+  try {
+    const result = verifySimSource(
+      { sourceWorktree: req.sourceWorktree, sourceCommit: req.sourceCommit },
+      deps,
+      opts
+    );
+    if (!result) {
+      return gateFailure(
+        seed,
+        "evidence must be pinned: pass --source-worktree and --source-commit (unpinned runs cannot pass)"
+      );
+    }
+    verified = result;
+  } catch (err) {
+    return gateFailure(seed, err instanceof Error ? err.message : String(err));
+  }
+  const report = runTakeoverBankNavEvidence(seed, {
+    worktree: verified.worktree,
+    commit: verified.commit,
+  });
+  return { report, exitCode: evidenceExitCode(report) };
 }
 
 function sortKeys(value: unknown): unknown {
@@ -383,20 +484,25 @@ function argValue(argv: string[], name: string): string | undefined {
   return argv.find((a) => a.startsWith(prefix))?.slice(prefix.length);
 }
 
-/* istanbul ignore next: CLI entry; the test exercises runTakeoverBankNavEvidence directly. */
+/* istanbul ignore next: CLI entry; the gate is unit-tested via runGatedTakeoverBankNavEvidence. */
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
-  const seed = argValue(argv, "seed") ?? EVIDENCE_SEED;
-  const worktree = argValue(argv, "source-worktree");
-  const commit = argValue(argv, "source-commit");
-  // Shape-validated inside runTakeoverBankNavEvidence via assertSimSourceShape.
-  const pinned =
-    worktree !== undefined || commit !== undefined
-      ? { worktree: worktree ?? "", commit: commit ?? "" }
-      : null;
-  const report = runTakeoverBankNavEvidence(seed, pinned);
-  console.log(JSON.stringify(sortKeys(report), null, 2));
-  if (!report.pass) process.exitCode = 1;
+  const { report, exitCode } = runGatedTakeoverBankNavEvidence({
+    seed: argValue(argv, "seed"),
+    sourceWorktree: argValue(argv, "source-worktree"),
+    sourceCommit: argValue(argv, "source-commit"),
+  });
+  const json = serializeEvidenceReport(report);
+  const out = argValue(argv, "out");
+  if (out) {
+    await writeFile(out, json, "utf8");
+  }
+  process.stdout.write(json);
+  if (exitCode !== 0) {
+    const failed = report.invariants.filter((i) => !i.pass).map((i) => i.id);
+    console.error(`takeover-bank-nav evidence FAILED: ${failed.join(", ")}`);
+  }
+  process.exitCode = exitCode;
 }
 
 // ESM-safe direct-run check (no import.meta cycle under tsx/vitest).

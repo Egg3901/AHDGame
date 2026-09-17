@@ -8,7 +8,16 @@
  * fundOnlyBuyout) are the pre-simulation evidence for PR #1936.
  */
 import { describe, expect, it } from "vitest";
-import { EVIDENCE_SEED, runTakeoverBankNavEvidence } from "./takeoverBankNavEvidence";
+import {
+  EVIDENCE_KIND,
+  EVIDENCE_SEED,
+  evidenceExitCode,
+  runGatedTakeoverBankNavEvidence,
+  runTakeoverBankNavEvidence,
+  serializeEvidenceReport,
+  type EvidenceReport,
+} from "./takeoverBankNavEvidence";
+import type { SimSourceDeps } from "./simSource";
 
 const POINTER_NAV = 1_300_000_000;
 const AUTHORITATIVE_NAV = 1_250_000_000;
@@ -88,3 +97,104 @@ describe("takeover bank-NAV evidence (issue #1750, PR #1936 gate)", () => {
 function MINORITY_NAV(floorPerShare: number): number {
   return 100_000 * floorPerShare;
 }
+
+const GATE_SHA = "c".repeat(40);
+const OTHER_SHA = "d".repeat(40);
+const GATE_OPTS = { root: "/root/projects/AHDGame/worktrees", main: "/root/projects/AHDGame" };
+
+function gateDeps(over: Partial<SimSourceDeps> = {}): SimSourceDeps {
+  return {
+    realpath: (p: string) => p,
+    isDirectory: () => true,
+    gitHead: () => GATE_SHA,
+    gitPorcelain: () => "",
+    ...over,
+  };
+}
+
+function failReport(report: EvidenceReport, id: string): EvidenceReport {
+  return {
+    ...report,
+    invariants: report.invariants.map((i) => (i.id === id ? { ...i, pass: false } : i)),
+    pass: false,
+  };
+}
+
+describe("takeover bank-NAV evidence gate (operational contract)", () => {
+  it("stamps the deterministic command-path kind, not worldsim coverage", () => {
+    const { report, exitCode } = runGatedTakeoverBankNavEvidence(
+      { seed: EVIDENCE_SEED, sourceWorktree: "muse-1750", sourceCommit: GATE_SHA },
+      gateDeps(),
+      GATE_OPTS
+    );
+    expect(exitCode).toBe(0);
+    expect(report.pass).toBe(true);
+    expect(report.kind).toBe(EVIDENCE_KIND);
+    expect(report.kind).toBe("deterministic-command-path");
+    expect(report.worldsimCoversAuthenticatedCommands).toBe(false);
+    expect(report.worldsimNote).toMatch("runWorld");
+    expect(report.source).toEqual({ worktree: "muse-1750", commit: GATE_SHA });
+  });
+
+  it("cannot pass unpinned: exit 1 with a failed G-source-verified invariant", () => {
+    for (const req of [{}, { seed: EVIDENCE_SEED }]) {
+      const { report, exitCode } = runGatedTakeoverBankNavEvidence(req, gateDeps(), GATE_OPTS);
+      expect(exitCode).toBe(1);
+      expect(report.pass).toBe(false);
+      expect(evidenceExitCode(report)).toBe(1);
+      const gate = report.invariants.find((i) => i.id === "G-source-verified")!;
+      expect(gate.pass).toBe(false);
+      expect(gate.statement).toMatch("pinned");
+    }
+  });
+
+  it("rejects a source mismatch (stale pin) with exit 1", () => {
+    const { report, exitCode } = runGatedTakeoverBankNavEvidence(
+      { seed: EVIDENCE_SEED, sourceWorktree: "muse-1750", sourceCommit: OTHER_SHA },
+      gateDeps(),
+      GATE_OPTS
+    );
+    expect(exitCode).toBe(1);
+    expect(report.pass).toBe(false);
+    expect(report.invariants.find((i) => i.id === "G-source-verified")?.pass).toBe(false);
+  });
+
+  it("rejects a dirty checkout with exit 1", () => {
+    const { report, exitCode } = runGatedTakeoverBankNavEvidence(
+      { seed: EVIDENCE_SEED, sourceWorktree: "muse-1750", sourceCommit: GATE_SHA },
+      gateDeps({ gitPorcelain: () => " M src/lib/x.ts\n" }),
+      GATE_OPTS
+    );
+    expect(exitCode).toBe(1);
+    expect(report.pass).toBe(false);
+    expect(report.invariants.find((i) => i.id === "G-source-verified")?.pass).toBe(false);
+  });
+
+  it("reports a failed scenario invariant with exit 1 in the artifact", () => {
+    const { report } = runGatedTakeoverBankNavEvidence(
+      { seed: EVIDENCE_SEED, sourceWorktree: "muse-1750", sourceCommit: GATE_SHA },
+      gateDeps(),
+      GATE_OPTS
+    );
+    const broken = failReport(report, "A-closed-pointer-hostile");
+    expect(broken.pass).toBe(false);
+    expect(evidenceExitCode(broken)).toBe(1);
+    const parsed = JSON.parse(serializeEvidenceReport(broken)) as EvidenceReport;
+    expect(parsed.pass).toBe(false);
+    expect(parsed.invariants.find((i) => i.id === "A-closed-pointer-hostile")?.pass).toBe(false);
+  });
+
+  it("serializes canonically: two runs are byte-identical", () => {
+    const opts = { seed: EVIDENCE_SEED, sourceWorktree: "muse-1750", sourceCommit: GATE_SHA };
+    const a = serializeEvidenceReport(
+      runGatedTakeoverBankNavEvidence(opts, gateDeps(), GATE_OPTS).report
+    );
+    const b = serializeEvidenceReport(
+      runGatedTakeoverBankNavEvidence(opts, gateDeps(), GATE_OPTS).report
+    );
+    expect(a).toBe(b);
+    // Canonical form: sorted keys, trailing newline, parses back to the report.
+    expect(a.endsWith("\n")).toBe(true);
+    expect(JSON.parse(a)).toEqual(JSON.parse(b));
+  });
+});
