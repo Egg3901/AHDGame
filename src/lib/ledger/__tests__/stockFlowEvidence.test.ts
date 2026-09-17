@@ -17,8 +17,6 @@ function provenance(overrides: Partial<StockFlowProvenance> = {}): StockFlowProv
     codeRevision: REVISION,
     codeRevisionSource: "simExperimentReport",
     gitDirty: false,
-    bankingMode: "authoritative",
-    bankingActivationTurn: 100,
     sourceWorktree: "muse-992",
     sourceRequestedCommit: REVISION,
     sourceExecutedPath: "/root/projects/AHDGame/worktrees/muse-992",
@@ -33,6 +31,7 @@ function turn(
 ): StockFlowTurnEvidence {
   return {
     turn: turnNumber,
+    bankingMode: "authoritative",
     trialBalanceStatus: "green",
     trialBalanceUnbalancedCount: 0,
     stockVsFlowSkipped: false,
@@ -118,20 +117,34 @@ describe("validateStockFlowWindow", () => {
     );
   });
 
-  it("rejects turns at or before the banking activation turn", () => {
-    const result = validateStockFlowWindow(input(cleanTwelve(90)));
-    expect(result.ok).toBe(false);
-    expect(result.failures.some((f) => f.reason.includes("not post banking activation"))).toBe(
-      true
-    );
+  it("rejects a turn stamped with a non-authoritative banking mode", () => {
+    for (const bankingMode of ["shadow", "off"]) {
+      const turns = cleanTwelve(101);
+      turns[7] = turn(108, { bankingMode, overallStatus: "amber" });
+      const result = validateStockFlowWindow(input(turns));
+      expect(result.ok).toBe(false);
+      expect(result.qualifyingWindow).toBeNull();
+      expect(
+        result.failures.some((f) => f.turn === 108 && f.reason.includes("not authoritative"))
+      ).toBe(true);
+    }
   });
 
-  it("rejects a non-authoritative banking mode", () => {
-    for (const mode of ["shadow", "off", null]) {
-      const result = validateStockFlowWindow(input(cleanTwelve(101), { bankingMode: mode }));
-      expect(result.ok).toBe(false);
-      expect(result.failures.some((f) => f.reason.includes("not authoritative"))).toBe(true);
-    }
+  it("rejects legacy turn docs that predate the banking-mode stamp (null is unknown, not passing)", () => {
+    const turns = cleanTwelve(101);
+    turns[0] = turn(101, { bankingMode: null });
+    const result = validateStockFlowWindow(input(turns));
+    expect(result.ok).toBe(false);
+    expect(result.qualifyingWindow).toBeNull();
+    expect(
+      result.failures.some((f) => f.turn === 101 && f.reason.includes("not authoritative"))
+    ).toBe(true);
+  });
+
+  it("accepts clean turns at any turn number: each stamped turn proves itself post-activation", () => {
+    const result = validateStockFlowWindow(input(cleanTwelve(7)));
+    expect(result.ok).toBe(true);
+    expect(result.qualifyingWindow).toEqual({ startTurn: 7, endTurn: 18 });
   });
 
   it("rejects a gap in turn consecutiveness", () => {

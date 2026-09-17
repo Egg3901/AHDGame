@@ -7,12 +7,17 @@
  * and the banking activation turn, and calls {@link validateStockFlowWindow}.
  *
  * A window passes only when 12 consecutive turns are all genuine (the check
- * ran, not skipped), post banking activation, and show zero relevant
- * divergence: trial balance green with no unbalanced entries, stock-vs-flow
- * green with zero divergent accounts, money supply green, and an empty
- * unattributed bucket. A skipped check reports null/amber upstream (see
- * reconcileLedger), and this gate rejects it explicitly so a run of dead
- * turns can never satisfy the 12-turn criterion.
+ * ran, not skipped), each machine-recorded as running under authoritative
+ * banking, and show zero relevant divergence: trial balance green with no
+ * unbalanced entries, stock-vs-flow green with zero divergent accounts,
+ * money supply green, and an empty unattributed bucket. A skipped check
+ * reports null/amber upstream (see reconcileLedger), and this gate rejects
+ * it explicitly so a run of dead turns can never satisfy the 12-turn
+ * criterion. Post-activation proof is per-turn: reconcileTurn stamps the
+ * turn's `gameConfig.savingsAccountsMode` onto every persisted
+ * ledgerReconciliation doc, so an accepted turn proves itself
+ * post-activation. Docs that predate the stamp carry null (unknown, never
+ * authoritative) and fail closed.
  *
  * Machine-recorded provenance means pinned-source identity, not just a git
  * string in the report. Since sim pinned-source support (#1969), a queued job
@@ -29,11 +34,8 @@
  * executed path + worktree leaf. Legacy reports without runConfig.source fail
  * closed with the exact reason: rerun as a pinned job.
  *
- * Two inputs stay operator-supplied by necessity and are documented as such:
- * expectedCodeRevision (the branch revision the evidence must come from) and
- * bankingActivationTurn (no per-turn banking-mode history is machine-recorded;
- * the gate enforces the consequence: every qualifying turn is strictly after
- * it AND the run's gameConfig mode is authoritative at collection time).
+ * One input stays operator-supplied by necessity and is documented as such:
+ * expectedCodeRevision (the branch revision the evidence must come from).
  * Worker-side tree cleanliness is enforced fail-closed by the worker itself
  * (a dirty worktree fails the job, so no completed pinned run executed dirty);
  * the report's gitDirty flag covers the collector checkout and is still
@@ -54,6 +56,12 @@ export type ProvenanceSource = "simExperimentReport" | "operator";
 /** One turn of reconciliation evidence, projected from a persisted doc. */
 export interface StockFlowTurnEvidence {
   turn: number;
+  /**
+   * savingsAccountsMode the turn ran under, machine-stamped by
+   * reconcileTurn. Null on docs that predate the stamp: unknown, and the
+   * gate treats unknown as failing (never as authoritative).
+   */
+  bankingMode: string | null;
   trialBalanceStatus: ReconcileStatus;
   trialBalanceUnbalancedCount: number;
   stockVsFlowSkipped: boolean;
@@ -74,10 +82,6 @@ export interface StockFlowProvenance {
   codeRevisionSource: ProvenanceSource;
   /** True when the executing checkout had uncommitted changes. */
   gitDirty: boolean | null;
-  /** savingsAccountsMode observed on the run at collection time. */
-  bankingMode: string | null;
-  /** First turn AFTER banking activation cohorts completed. */
-  bankingActivationTurn: number;
   // Pinned-source identity from runConfig.source (#1966/#1969). Each field is
   // null on reports that predate pinned-source support (legacy: gate fails
   // closed). sourceWorktree is the registered worktree leaf the sim ran from.
@@ -115,13 +119,15 @@ function turnFailure(turn: number, reason: string): StockFlowWindowFailure {
 }
 
 /** Per-turn genuine + clean check. Returns failure reasons (empty = qualifies). */
-function qualifyTurn(evidence: StockFlowTurnEvidence, provenance: StockFlowProvenance): string[] {
+function qualifyTurn(evidence: StockFlowTurnEvidence): string[] {
   const reasons: string[] = [];
-  if (evidence.turn > provenance.bankingActivationTurn) {
-    // post-activation; the mode gate below still applies
-  } else {
+  // Post-activation proof is machine-recorded on the turn doc itself: the
+  // turn ran under authoritative banking. Shadow/off ran pre-activation (or
+  // outside the rollout); null predates the stamp and is unknown, not
+  // authoritative, so legacy docs fail closed here.
+  if (evidence.bankingMode !== "authoritative") {
     reasons.push(
-      `turn ${evidence.turn} is not post banking activation (activation turn ${provenance.bankingActivationTurn})`
+      `turn ${evidence.turn} ran under banking mode ${JSON.stringify(evidence.bankingMode)}, not authoritative (pre-activation or unstamped)`
     );
   }
   if (evidence.stockVsFlowSkipped || evidence.stockVsFlowDivergentCount === null) {
@@ -221,15 +227,6 @@ export function validateStockFlowWindow(input: StockFlowEvidenceInput): StockFlo
       reason: "executing checkout is dirty or its dirty flag is unknown",
     });
   }
-  if (provenance.bankingMode !== "authoritative") {
-    failures.push({
-      turn: null,
-      reason: `banking mode is ${JSON.stringify(provenance.bankingMode)}, not authoritative`,
-    });
-  }
-  if (!Number.isInteger(provenance.bankingActivationTurn) || provenance.bankingActivationTurn < 0) {
-    failures.push({ turn: null, reason: "bankingActivationTurn must be a non-negative integer" });
-  }
 
   const turns = [...input.turns].sort((a, b) => a.turn - b.turn);
   if (turns.length < STOCK_FLOW_WINDOW_TURNS) {
@@ -246,7 +243,7 @@ export function validateStockFlowWindow(input: StockFlowEvidenceInput): StockFlo
   const disqualified = new Map<number, string[]>();
 
   for (const evidence of turns) {
-    const turnReasons = qualifyTurn(evidence, provenance);
+    const turnReasons = qualifyTurn(evidence);
     if (turnReasons.length > 0) {
       disqualified.set(evidence.turn, turnReasons);
       runStart = null;

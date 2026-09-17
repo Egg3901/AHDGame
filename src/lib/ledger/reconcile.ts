@@ -26,6 +26,12 @@ function worseStatus(a: ReconcileStatus, b: ReconcileStatus): ReconcileStatus {
 
 export interface ReconcileInput {
   turn: number;
+  /**
+   * `gameConfig.savingsAccountsMode` the turn ran under (shell-supplied,
+   * plain data). Echoed onto the report so the persisted doc carries
+   * per-turn banking history. Absent means unknown, never authoritative.
+   */
+  bankingMode?: string | null;
   entries: LedgerEntry[];
   openingBalances: Record<string, number>;
   closingBalances: Record<string, number>;
@@ -183,6 +189,7 @@ export function reconcileLedger(input: ReconcileInput): ReconcileReport {
   return {
     turn,
     generatedAt: new Date(),
+    bankingMode: input.bankingMode ?? null,
     status,
     entriesChecked: entries.length,
     trialBalance: {
@@ -327,7 +334,7 @@ function cashMovementDelta(input: ReconcileInput, account: string): number {
 export async function reconcileTurn(
   db: Db,
   turn: number,
-  opts: { skipStockVsFlow?: boolean } = {}
+  opts: { skipStockVsFlow?: boolean; savingsAccountsMode?: string | null } = {}
 ): Promise<ReconcileReport | null> {
   try {
     const entries = await db
@@ -347,6 +354,7 @@ export async function reconcileTurn(
 
     const report = reconcileLedger({
       turn,
+      bankingMode: opts.savingsAccountsMode ?? null,
       entries,
       openingBalances: opening?.balances ?? {},
       closingBalances: closing?.balances ?? {},
