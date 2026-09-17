@@ -350,7 +350,7 @@ describe("runMinisterialGovernance reshuffle guard (I/O)", () => {
     });
     const first = await runMinisterialGovernance(db as unknown as Db, "IE", TURN, now);
     expect(first.reshuffled).toBe(1);
-    expect(govDoc.ministerialReshuffle).toBeDefined();
+    expect((govDoc as Record<string, unknown>).ministerialReshuffle).toBeDefined();
 
     // Next turn the seat is refilled (formNppCabinet stamps the new tenure)
     // and the same shortfall persists — the pre-fix code would fire again.
