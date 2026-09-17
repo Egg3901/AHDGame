@@ -60,6 +60,37 @@ export interface BrettonWoodsTurnResult {
   floated: boolean;
 }
 
+/** The regime slice `processForexTurn` consumes. */
+export interface ForexBwInput {
+  regime?: string | null;
+  regimeChangedAtTurn?: number | null;
+}
+
+/**
+ * Resolve the forex leg's regime input for this turn.
+ *
+ * Normal turns pass the BW phase result straight through (zero reads here —
+ * the phase already did them). When the turn resumes after a crash, the BW
+ * phase may be skipped as already-applied (`runPhase` returns null) while
+ * forex still runs — and the BW write already landed. Reloading the persisted
+ * regime keeps that one turn priced on the regime in force instead of falling
+ * back to the peg. Flag-off worlds never persist a regime, so the fallback
+ * reads back nothing and forex keeps its pegged default, byte-identical.
+ */
+export async function resolveForexBwInput(
+  db: Db,
+  brettonWoodsResult: BrettonWoodsTurnResult | null,
+  brettonWoodsResumeSkipped: boolean
+): Promise<ForexBwInput | null> {
+  if (brettonWoodsResult) return brettonWoodsResult;
+  if (!brettonWoodsResumeSkipped) return null;
+  const gs = await db
+    .collection<GameState>("gameState")
+    .findOne({ _id: "current" }, { projection: { bwRegime: 1, bwRegimeChangedAtTurn: 1 } });
+  if (!gs || gs.bwRegime == null) return null;
+  return { regime: gs.bwRegime, regimeChangedAtTurn: gs.bwRegimeChangedAtTurn ?? null };
+}
+
 function finiteOr(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }

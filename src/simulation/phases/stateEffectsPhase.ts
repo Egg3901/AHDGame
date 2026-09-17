@@ -40,7 +40,7 @@ import { processFiscalBaseGrowth } from "@/lib/turn/fiscalBaseGrowth";
 import { processEconomicModelTurn } from "@/lib/turn/economicModelTurn";
 import { mirrorTradeGrowth } from "@/lib/turn/tradeGrowthMirror";
 import { recalculateInflationPerTurn } from "@/lib/turn/inflationRecalc";
-import { processBrettonWoodsTurn } from "@/lib/turn/brettonWoodsTurn";
+import { processBrettonWoodsTurn, resolveForexBwInput } from "@/lib/turn/brettonWoodsTurn";
 import { processCommandEconomyTurn } from "@/lib/turn/commandEconomyTurn";
 import { processForexTurn } from "@/lib/turn/forexTurn";
 import { isLedgerShadowEnabledFromConfig } from "@/lib/ledger/featureFlag";
@@ -501,8 +501,18 @@ export const stateEffectsAndNationalAggregationPhase: TurnPhaseAdapter = {
       // rates), and the CURRENT in-game year so the target's inflation/
       // prime-rate deviations are judged against the era monetary baselines
       // the world has graduated into (monetaryEra.ts).
+      // Resume fallback: when this turn resumes after a crash, the BW phase
+      // above may have been skipped as already-applied (null) while forex
+      // still runs. Its write already landed, so reload the persisted regime
+      // instead of pricing one turn on the peg. Normal turns pass the live
+      // result through with zero extra reads.
+      const forexBwInput = await resolveForexBwInput(
+        db,
+        brettonWoodsResult,
+        phaseStatuses["brettonWoods"]?.reason === "upstreamAbort"
+      );
       const forexResult = await runtime.runPhase("forexTurn", () =>
-        processForexTurn(db, newTurn, gameState.preset, currentYear, brettonWoodsResult)
+        processForexTurn(db, newTurn, gameState.preset, currentYear, forexBwInput)
       );
       if (forexResult) {
         phaseResults.forexTurn = {

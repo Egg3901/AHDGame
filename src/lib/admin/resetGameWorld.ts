@@ -96,6 +96,14 @@ export const STALE_PROGRESS_GAME_STATE_UNSET: Readonly<Record<string, "">> = Obj
   // Counts terms served per country; the previous world's counts would term-limit
   // brand-new presidents in the new one.
   presidentialTenureByCountry: "",
+  // Bretton Woods exit state (src/lib/turn/brettonWoodsTurn.ts). The phase
+  // self-heals absent fields to full cover under the peg, so unsetting is the
+  // reset: carrying a suspended/floating regime (or drained cover) into a new
+  // world would float its currencies from turn 1 on the dead world's schedule.
+  bwGoldCover: "",
+  bwForeignClaims: "",
+  bwRegime: "",
+  bwRegimeChangedAtTurn: "",
 });
 
 interface ResetGameWorldOptions {

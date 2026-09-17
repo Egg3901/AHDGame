@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createMockDb, type MockDb } from "@/lib/test-utils/mockDb";
 import type { Db } from "mongodb";
-import { processBrettonWoodsTurn } from "./brettonWoodsTurn";
+import { processBrettonWoodsTurn, resolveForexBwInput } from "./brettonWoodsTurn";
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
@@ -115,5 +115,47 @@ describe("processBrettonWoodsTurn gate", () => {
     });
     const res = await processBrettonWoodsTurn(db as unknown as Db, 720, 1965);
     expect(res.goldCover).toBeLessThan(1);
+  });
+});
+
+describe("resolveForexBwInput", () => {
+  const liveResult = {
+    ran: true,
+    regime: "suspended" as const,
+    regimeChangedAtTurn: 900,
+    goldCover: 0.2,
+    foreignClaims: 1.5,
+    suspended: true,
+    floated: false,
+  };
+
+  it("passes the live phase result through with zero gameState reads", async () => {
+    db.collectionMocks["gameState"].findOne.mockClear();
+    const out = await resolveForexBwInput(db as unknown as Db, liveResult, false);
+    expect(out).toBe(liveResult);
+    expect(db.collectionMocks["gameState"].findOne).not.toHaveBeenCalled();
+  });
+
+  it("returns null without reading when nothing ran and nothing was skipped", async () => {
+    db.collectionMocks["gameState"].findOne.mockClear();
+    const out = await resolveForexBwInput(db as unknown as Db, null, false);
+    expect(out).toBeNull();
+    expect(db.collectionMocks["gameState"].findOne).not.toHaveBeenCalled();
+  });
+
+  it("reloads the persisted regime on a resume skip", async () => {
+    db.collectionMocks["gameState"].findOne.mockResolvedValue({
+      _id: "current",
+      bwRegime: "suspended",
+      bwRegimeChangedAtTurn: 900,
+    });
+    const out = await resolveForexBwInput(db as unknown as Db, null, true);
+    expect(out).toEqual({ regime: "suspended", regimeChangedAtTurn: 900 });
+  });
+
+  it("falls back to null (pegged math) when the resume read finds no regime", async () => {
+    db.collectionMocks["gameState"].findOne.mockResolvedValue({ _id: "current" });
+    const out = await resolveForexBwInput(db as unknown as Db, null, true);
+    expect(out).toBeNull();
   });
 });
