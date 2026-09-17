@@ -18,12 +18,15 @@ import {
   settleFloatSellDebit,
 } from "@/lib/corporations/shareEscrowSettlement";
 import { loadEquityQuote } from "@/lib/equities/marketPool";
+import type { CurrencyCode } from "@/lib/constants/currencies";
 import {
   fxRateForCorpFromMap,
   loadFxRatesByCurrency,
   resolveCorpLiquidCurrencyCode,
   shareTradeAnchorValue,
 } from "@/lib/currency/corporationCapital";
+import { emitTx, loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { insertFundTransaction, updateFundHoldings } from "@/lib/indexFunds/fundQueries";
 
 export type HoldingSaleInput = {
@@ -262,6 +265,9 @@ export async function sellFundHoldingsForRedemptionCash(
   let salesExecuted = 0;
   const turn = await getCurrentTurn(db);
   const now = new Date();
+  // #992 tranche 6: one thresholds read for the whole sale loop; the FX map
+  // above is reused per sale so neither is re-read per item.
+  const thresholds = await loadTxThresholds(db);
 
   for (const sale of plan) {
     if (cashRaisedAnchor >= cashNeededAnchor) break;
@@ -272,6 +278,8 @@ export async function sellFundHoldingsForRedemptionCash(
     const saleResult = await executeOneHoldingSale(db, fund, corp, sale, holdings, turn, now, {
       session: options?.session,
       note: options?.note,
+      thresholds,
+      fxByCurrency,
     });
     if (!saleResult) continue;
 
@@ -290,6 +298,13 @@ type OneHoldingSaleOptions = {
   session?: ClientSession;
   note?: string;
   settlementCounterparty?: "market" | "issuer";
+  /**
+   * #992 tranche 6: preloaded one-per-pass inputs so the per-sale body does
+   * no per-item reads of its own (thresholds for the ledger row, FX for the
+   * proceeds conversion). Callers that loop over sales load both once.
+   */
+  thresholds?: TxThresholds;
+  fxByCurrency?: ReadonlyMap<CurrencyCode, number>;
 };
 
 type OneHoldingSaleResult = {
@@ -352,7 +367,8 @@ async function executeOneHoldingSale(
     return null;
   }
 
-  const fxRate = fxRateForCorpFromMap(corp, await loadFxRatesByCurrency(db));
+  const fxByCurrency = options?.fxByCurrency ?? (await loadFxRatesByCurrency(db));
+  const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const proceedsAnchor =
     Math.round(
       shareTradeAnchorValue(sale.sharesToSell, { ...corp, sharePrice: executionPrice }, fxRate) *
@@ -389,6 +405,38 @@ async function executeOneHoldingSale(
       createdAt: now,
     },
     { session: options?.session }
+  );
+
+  // #992 tranche 6: fund-subject ledger leg for the cashAnchor credit above.
+  // The contra is the unmodeled public float (single-sided under the shared
+  // equity_transfer reason, same as the tranche-5 float-buy row and the
+  // character/corporation stock_trade_sell rows). Fund-subject rows never
+  // mirror, so this is the only ledger row for the credit. Emitted after the
+  // holdings write and the fund transaction both landed, inside the same
+  // guarded sale that returns null on any settlement failure — a skipped sale
+  // emits nothing, an executed sale emits exactly one row.
+  await emitTx(
+    db,
+    {
+      type: "stock_trade_sell",
+      turn,
+      createdAt: now,
+      subjectType: "fund",
+      subjectId: fund._id,
+      subjectName: fund.name,
+      amount: proceedsAnchor,
+      anchorAmount: proceedsAnchor,
+      currencyCode: fund.anchorCurrencyCode,
+      counterpartyType: "system",
+      counterpartyName: "Public float",
+      meta: {
+        corporationId: corp._id.toString(),
+        shares: sale.sharesToSell,
+        pricePerShareAnchor: sale.pricePerShareAnchor,
+        source: options?.note ?? "redemption-liquidity",
+      },
+    },
+    options?.thresholds
   );
 
   void recordShareTrade(db, {
@@ -474,7 +522,8 @@ export async function sellFundHoldingShares(
     return { cashRaisedAnchor: 0, sharesSold: 0, salesExecuted: 0 };
   }
 
-  const fxRate = fxRateForCorpFromMap(corp, await loadFxRatesByCurrency(db));
+  const fxByCurrency = await loadFxRatesByCurrency(db);
+  const fxRate = fxRateForCorpFromMap(corp, fxByCurrency);
   const pricePerShareAnchor = shareTradeAnchorValue(
     1,
     { ...corp, sharePrice: executionPrice },
@@ -495,7 +544,7 @@ export async function sellFundHoldingShares(
     [...fund.holdings],
     turn,
     now,
-    options
+    { ...options, thresholds: await loadTxThresholds(db), fxByCurrency }
   );
 
   if (!saleResult) {

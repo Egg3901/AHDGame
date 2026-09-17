@@ -12,6 +12,8 @@ import { BOND_UNIT_FACE_VALUE } from "@/lib/db/types/bond";
 import { corpCapitalToAnchor, loadFxRatesRecord } from "@/lib/currency/corporationCapital";
 import { loadBondPoolsByCurrency } from "@/lib/bonds/marketPool";
 import { purchaseBondUnitsForFund } from "@/lib/bonds/purchaseBondUnitsForFund";
+import { loadTxThresholds } from "@/lib/financialTxLog/emit";
+import type { TxThresholds } from "@/lib/db/types/financialTxLog";
 import { computeFundAllocationBreakdown } from "@/lib/indexFunds/fundAllocation";
 import { sovereignBondRemainingCapacityUnits } from "@/lib/bonds/holderCap";
 import { getAllFundDefinitions, type BondFundUniverse } from "@/lib/indexFunds/fundDefinitions";
@@ -193,7 +195,20 @@ export async function deployBondReserveFromCash(
   db: Db,
   fund: IndexFund,
   bondPrincipalAnchor: number,
-  options?: { liquidityTargetEnabled?: boolean }
+  options?: {
+    liquidityTargetEnabled?: boolean;
+    /**
+     * #992 tranche 6: game turn threaded to each bond purchase's fund-subject
+     * ledger row. When absent the purchases still settle but emit no rows.
+     */
+    turn?: number;
+    /**
+     * Preloaded thresholds for the purchase rows; loaded once per deploy
+     * pass when a turn is present and this is absent, so N purchases share
+     * one read instead of one per bond.
+     */
+    thresholds?: TxThresholds;
+  }
 ): Promise<DeployBondReserveResult> {
   const breakdown = computeFundAllocationBreakdown(fund, {
     bondPrincipalAnchor,
@@ -264,6 +279,9 @@ export async function deployBondReserveFromCash(
   const fxRates = await loadFxRatesRecord(db);
   // One pool read for the whole pass; each purchase advances the snapshot.
   const bondPools = await loadBondPoolsByCurrency(db);
+  // One thresholds read for the whole pass, shared by every purchase row.
+  const thresholds =
+    options?.turn !== undefined ? (options?.thresholds ?? (await loadTxThresholds(db))) : undefined;
   let deployedAnchor = 0;
   let unitsPurchased = 0;
 
@@ -284,7 +302,11 @@ export async function deployBondReserveFromCash(
     const units = Math.min(maxUnitsByBudget, maxUnitsByFloat, maxUnitsByPosition);
     if (units <= 0) continue;
 
-    const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, { bondPools });
+    const purchase = await purchaseBondUnitsForFund(db, fund, bond, units, {
+      bondPools,
+      turn: options?.turn,
+      thresholds,
+    });
     if (!purchase.ok) continue;
 
     deployedAnchor += purchase.costAnchor;

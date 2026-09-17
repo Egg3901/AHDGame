@@ -123,6 +123,10 @@ export function subjectAccount(
     case "government":
       return ids.countryId ? accountId("government", ids.countryId, currency) : null;
     case "fund":
+      // #992 tranche 6: fund-subject rows (bond purchases/sales, holding
+      // sales, order-fill seller legs, float buys) evidence the fund cash
+      // side directly, so they derive here against the cashAnchor snapshot
+      // below. They never mirror (see fundMirrorAccount).
       return ids.subjectId ? accountId("fund", ids.subjectId, currency) : null;
     case "pension_scheme":
       return ids.subjectId ? accountId("pension_scheme", ids.subjectId, currency) : null;
