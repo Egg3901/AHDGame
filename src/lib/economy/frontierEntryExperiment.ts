@@ -1,13 +1,14 @@
 /**
  * Rules for the capped frontier-entry experiment (issue #991).
  *
- * EXPERIMENT DEFINITION ONLY. Nothing here runs in the turn loop: activation
- * requires `frontierEntryExperimentEnabled` (default false) plus the
+ * The experiment runs in the real NPP turn path behind
+ * `frontierEntryExperimentEnabled` (default false, fail-closed, excluded from
+ * player-facing singleplayer controls). Activation still requires the
  * controlled 48-turn trial and largest-supplier-failure stress evidence the
  * issue gates require. The NPP entry funnel and state-sector coverage metrics
  * are the always-on evidence layer; this module states the experiment's
- * constraints and its rollback-observability contract so a future trial can
- * be evaluated against preregistered guardrails.
+ * constraints and its rollback-observability contract so a trial can be
+ * evaluated against preregistered guardrails.
  *
  * Rules-zone module: plain data in, plain data out. No database, clock,
  * randomness, environment, network, or async.
@@ -19,6 +20,11 @@
  *   per controlling entity per turn
  * - real financing and real founding costs: eligibility requires a priced
  *   founding quote covered by capital or an approved credit line
+ * - the experiment relaxes only expectational gates
+ *   (FRONTIER_ENTRY_RELAXABLE_REASONS): profitability, margin floor, and the
+ *   nominal pre-pricing cash floor. Policy, physical, and accounting gates
+ *   (state control, logistics, cohort stagger, retail pause, glut, per-turn
+ *   cap, real founding-cost affordability, facility size) stay binding
  * - no guaranteed survival: exits (including failures) are recorded, never
  *   prevented; rollback triggers only on guardrail breach, not on entrant
  *   failure
@@ -31,6 +37,28 @@
 
 /** At most one entrant per eligible state-country cohort per turn. */
 export const FRONTIER_ENTRY_MAX_ENTRANTS_PER_COHORT_PER_TURN = 1;
+
+export type FrontierEntryRelaxableReason = "unprofitable" | "margin_below_floor" | "cash_floor";
+
+/**
+ * Pre-pricing funnel reasons the experiment may override. These are
+ * expectational gates (profitability outlook, margin band, nominal surplus):
+ * the priced real-cost affordability check inside the founding block stays
+ * binding, so an override never funds a plant the corp cannot pay for.
+ * Every other reason names a policy, physical, pacing, or accounting
+ * constraint the experiment must preserve and therefore never relaxes.
+ */
+export const FRONTIER_ENTRY_RELAXABLE_REASONS: readonly FrontierEntryRelaxableReason[] = [
+  "unprofitable",
+  "margin_below_floor",
+  "cash_floor",
+] as const;
+
+export function isFrontierEntryRelaxableReason(
+  reason: string
+): reason is FrontierEntryRelaxableReason {
+  return (FRONTIER_ENTRY_RELAXABLE_REASONS as readonly string[]).includes(reason);
+}
 
 /** Absent or non-true resolves to disabled. Fail-closed like the flag. */
 export function frontierEntryExperimentEnabledFrom(value: unknown): boolean {
@@ -153,6 +181,46 @@ export interface FrontierExperimentReport {
   guardrailBreaches: FrontierGuardrailCheck[];
   /** Rollback triggers on guardrail breach only, never on entrant failure. */
   recommendation: "continue" | "rollback";
+}
+
+/**
+ * Trial-level observations derived from persisted entry-funnel diagnostics.
+ * Only diagnostics the turn path marked as experiment placements count; the
+ * mark carries the cohort, controller, and priced founding cost, so the
+ * rollback report is computable from the existing diagnostics collection with
+ * no new writes. Foundings observe as `active`: exit evolution (failure,
+ * divestiture, nationalization) is measured by the trial harness joining
+ * later turns, never by preventing the exit.
+ */
+export function frontierExperimentObservationsFromDiagnostics(args: {
+  turn: number;
+  diagnostics: readonly {
+    reason: string;
+    corporationId: string;
+    countryId: string;
+    targetStateId?: string;
+    targetSectorType?: string;
+    foundingCostLocal?: number;
+    frontierExperiment?: { cohortKey: string; controllerKey: string };
+  }[];
+}): FrontierEntrantObservation[] {
+  const observations: FrontierEntrantObservation[] = [];
+  for (const diagnostic of args.diagnostics) {
+    const mark = diagnostic.frontierExperiment;
+    if (diagnostic.reason !== "entered" || !mark) continue;
+    observations.push({
+      turn: args.turn,
+      cohortKey: mark.cohortKey,
+      controllerKey: mark.controllerKey,
+      corporationId: diagnostic.corporationId,
+      countryId: diagnostic.countryId,
+      stateId: diagnostic.targetStateId ?? "",
+      sectorType: diagnostic.targetSectorType ?? "",
+      foundingCostLocal: diagnostic.foundingCostLocal ?? 0,
+      exit: "active",
+    });
+  }
+  return observations;
 }
 
 export function summarizeFrontierExperiment(args: {

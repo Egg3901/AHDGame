@@ -149,6 +149,13 @@ import {
   setNppMarketEntryReason,
   type NppMarketEntryDiagnostic,
 } from "@/lib/turn/npp/entryDiagnostics";
+import {
+  frontierEntryCohortKey,
+  frontierEntryControllerKey,
+  frontierEntryExperimentEnabledFrom,
+  isFrontierEntryRelaxableReason,
+  recordFrontierEntry,
+} from "@/lib/economy/frontierEntryExperiment";
 import type {
   NppCorpDecision,
   NppCorpDecisionContext,
@@ -475,8 +482,20 @@ export async function processNppCorporationDecisions(
   // Cohort-wide kill switch, read once. Absent means ON.
   const strategyGate = await db
     .collection<GameState>("gameState")
-    .findOne({ _id: "current" }, { projection: { nppCorpStrategyEnabled: 1 } });
+    .findOne(
+      { _id: "current" },
+      { projection: { nppCorpStrategyEnabled: 1, frontierEntryExperimentEnabled: 1 } }
+    );
   const strategyLoopEnabled = strategyGate?.nppCorpStrategyEnabled !== false;
+  // Frontier-entry experiment (issue #991). Fail-closed: absent or non-true
+  // resolves to disabled, in which case no ctx carries experiment state and
+  // every decision is byte-identical to the legacy path. Read piggybacks on
+  // the strategy-gate fetch above: no new turn-path round trip.
+  const frontierEntryEnabled = frontierEntryExperimentEnabledFrom(
+    strategyGate?.frontierEntryExperimentEnabled
+  );
+  const frontierEnteredCohorts = new Set<string>();
+  const frontierEnteredControllers = new Set<string>();
 
   const { labourMode, retailExpansionPaused } = await loadNppBehaviorConfig(db, turn);
   const labourWagesEnabled = isLabourSystemMode(labourMode) && labourAtLeast(labourMode, "wages");
@@ -515,6 +534,13 @@ export async function processNppCorporationDecisions(
       labourWagesEnabled,
       currentYear: techCurrentYear > 0 ? techCurrentYear : undefined,
       techTreesEnabled,
+      frontierEntry: frontierEntryEnabled
+        ? {
+            enabled: true,
+            enteredCohorts: frontierEnteredCohorts,
+            enteredControllers: frontierEnteredControllers,
+          }
+        : undefined,
     };
     let decision = makeNppCorpDecision(
       decisionContext,
@@ -1308,10 +1334,78 @@ export function makeNppCorpDecision(
   // capacity observation can tell pre-evaluation gates (eligibility, demand)
   // from affordability gates; `newSectors` is still empty here, so the cap
   // term is trivially true and needs no gate of its own.
+  // ── 5b. Frontier-entry experiment fallback (issue #991) ───────────────────
+  // When the experiment flag is on, a policy-cleared candidate rejected only
+  // on an expectational gate (profitability, margin band, nominal cash
+  // surplus) gets one priced evaluation through the SAME founding block
+  // below: the same real quote, the same post-floor affordability, the same
+  // headroom/size/per-turn-cap gates, the same cash debit and unowned-pool
+  // draw. Only the relaxable reasons qualify, so state-controlled, glutted,
+  // retail-paused, cohort-staggered, cap-rejected, and candidate-less
+  // rejections never reach here, and the priced affordability inside stays
+  // binding: an override never funds a plant the corp cannot pay for.
+  // Slot check only at this stage: the founding block prices the quote, and
+  // a placement still requires its affordability gate to pass. Ordinary
+  // entries consume the same cohort/controller slots (recorded after the
+  // block), so a cohort that already entered this turn is ineligible.
+  // Clause map onto `frontierEntryEligible` in economy/frontierEntryExperiment
+  // (the contract definition, unit-tested there): experimentEnabled comes
+  // from the flag-gated ctx state, policyCleared holds because the candidate
+  // survived the partition/state-control/deposit filters, the set checks are
+  // the cohort/controller caps, and foundingCostPriced/financed are the
+  // affordability gate below operating on the real debited amounts.
+  const frontierTurnState = ctx.frontierEntry?.enabled === true ? ctx.frontierEntry : null;
+  const frontierRelaxedReason =
+    frontierTurnState != null &&
+    entryCandidate != null &&
+    entryDiagnostic != null &&
+    isFrontierEntryRelaxableReason(entryDiagnostic.reason)
+      ? entryDiagnostic.reason
+      : null;
+  const frontierCohortKey =
+    frontierRelaxedReason != null && entryCandidate != null
+      ? frontierEntryCohortKey(corp.countryId, entryCandidate.stateId)
+      : null;
+  const frontierControllerKey =
+    frontierTurnState != null
+      ? frontierEntryControllerKey({
+          corporationId: ownCorporationId,
+          controllingCorporationId: corp.parentDividendFloorSetByCorpId?.toString() ?? null,
+        })
+      : null;
+  // The funnel reason names the FIRST failing gate, so a relaxable reason
+  // does not prove the later gates passed: an unprofitable corp may also be
+  // cohort-staggered, logistics-capped, retail-paused, or glutted. Re-verify
+  // every non-expectational pre-pricing gate explicitly, mirroring the
+  // diagnostic inputs. Anything failing here keeps its own reason and never
+  // reaches the priced block. (The per-turn cap needs no check here:
+  // `foundingBlockEntered` below still enforces it.)
+  const frontierGatesHold =
+    entryCandidate != null &&
+    levers.allowExpansion &&
+    hasLogisticsCapacity &&
+    marketEntryEligible &&
+    !(ctx.retailExpansionPaused === true && entryCandidate.sectorType === "retail") &&
+    !ordinaryEntryTargetGlutted;
+  const frontierCandidate =
+    frontierTurnState != null &&
+    frontierRelaxedReason != null &&
+    frontierGatesHold &&
+    entryCandidate != null &&
+    frontierCohortKey != null &&
+    frontierControllerKey != null &&
+    !frontierTurnState.enteredCohorts.has(frontierCohortKey) &&
+    !frontierTurnState.enteredControllers.has(frontierControllerKey)
+      ? entryCandidate
+      : null;
+  // The ordinary target when the corp earned it, else the experiment's
+  // second-chance target. `expansion` is the entry candidate itself whenever
+  // it is non-null, so the block below prices the same slot either way.
+  const foundingTarget = expansion ?? frontierCandidate;
   const foundingBlockEntered =
-    expansion !== null &&
+    foundingTarget !== null &&
     newSectors.length < NPP_SHORTAGE_ENTRIES_PER_TURN &&
-    (ordinaryEntry || exceptionalShortageEntry);
+    (ordinaryEntry || exceptionalShortageEntry || frontierCandidate !== null);
   // Founding outcome tracked across the priced branches for the capacity
   // observation; see capacityDecisionTelemetry. Blank until a branch prices
   // the candidate: pre-pricing gates observe explicit zeros, never a
@@ -1321,12 +1415,12 @@ export function makeNppCorpDecision(
     if (plants?.enabled) {
       // NPPs and players found sectors on the same priced-capacity terms.
       const headroomUnits = unownedHeadroomUnitsOf(
-        expansion.sectorType as CorporationType,
-        expansion.headroomUnits,
-        expansion.revenue,
+        foundingTarget.sectorType as CorporationType,
+        foundingTarget.headroomUnits,
+        foundingTarget.revenue,
         plants.eraUnitScale
       );
-      const starterUnits = foundingStarterUnits(expansion.sectorType as CorporationType);
+      const starterUnits = foundingStarterUnits(foundingTarget.sectorType as CorporationType);
       // Per-unit founding price. computeBuildCost is linear in units and, at a
       // greenfield entry, the dominance multiplier is 1 (no presence yet), so a
       // one-unit quote scales exactly to any order size. The breakdown (not
@@ -1334,7 +1428,7 @@ export function makeNppCorpDecision(
       const foundingUnitQuote =
         starterUnits > 0
           ? computeBuildCost({
-              sectorType: expansion.sectorType as CorporationType,
+              sectorType: foundingTarget.sectorType as CorporationType,
               units: 1,
               // Greenfield entry: the sector does not exist yet and is founded
               // on the sector-type default strategy.
@@ -1343,12 +1437,12 @@ export function makeNppCorpDecision(
               eraUnitScale: plants.eraUnitScale,
               // No presence in this bucket yet — dominance is 1 by construction.
               marketSharePercent: 0,
-              primeRate: plants.primeRateOf(expansion.countryId),
+              primeRate: plants.primeRateOf(foundingTarget.countryId),
               // An NPP CEO is an NPP, not a Character, so it has no Business
               // Acumen to read. Neutral is the honest value and matches what
               // `computeBuildCost` assumes for a vacant seat.
               acumen: NEUTRAL_STAT,
-              hostCostOfLivingIndex: plants.costOfLivingOf(expansion.stateId),
+              hostCostOfLivingIndex: plants.costOfLivingOf(foundingTarget.stateId),
               founding: true,
             })
           : null;
@@ -1370,7 +1464,7 @@ export function makeNppCorpDecision(
       );
       const affordableUnits =
         perUnitFoundingLocal > 0 ? Math.floor(deployBudgetLocal / perUnitFoundingLocal) : 0;
-      const isExtraction = expansion.sectorType === "extraction";
+      const isExtraction = foundingTarget.sectorType === "extraction";
       // Extraction founds against a DEPOSIT, not local demand: its output is a
       // traded commodity sold wherever the commodity is short, so it has no
       // demand-headroom cap (headroomUnits is 0 for every extraction bucket by
@@ -1428,7 +1522,7 @@ export function makeNppCorpDecision(
       if (foundingOutcome.affordable) {
         const buildTurns = Math.max(
           1,
-          CAPACITY_BUILD_TURNS(expansion.sectorType as CorporationType, true)
+          CAPACITY_BUILD_TURNS(foundingTarget.sectorType as CorporationType, true)
         );
         // Legacy nameplate: demand-side sectors take the built share of the
         // pool; extraction has no pool, so it prices the nameplate off the units
@@ -1436,12 +1530,15 @@ export function makeNppCorpDecision(
         const nameplateShare = headroomUnits > 0 ? Math.min(1, buildUnits / headroomUnits) : 0;
         const nameplateAnchor = isExtraction
           ? buildUnits *
-            revenuePerCapacityUnit(expansion.sectorType as CorporationType, plants.eraUnitScale)
-          : expansion.revenue * nameplateShare;
+            revenuePerCapacityUnit(
+              foundingTarget.sectorType as CorporationType,
+              plants.eraUnitScale
+            )
+          : foundingTarget.revenue * nameplateShare;
         newSectors.push({
-          stateId: expansion.stateId,
-          countryId: expansion.countryId,
-          sectorType: expansion.sectorType,
+          stateId: foundingTarget.stateId,
+          countryId: foundingTarget.countryId,
+          sectorType: foundingTarget.sectorType,
           strategyId: foundingStrategyId,
           // Written in the corp's own currency, because that is what
           // `sectorTurn` reads it as (`readCorpEconomicAnchor` on the way in,
@@ -1462,10 +1559,10 @@ export function makeNppCorpDecision(
           },
         });
         unownedDraws.push({
-          stateId: expansion.stateId,
-          sectorType: expansion.sectorType as CorporationType,
+          stateId: foundingTarget.stateId,
+          sectorType: foundingTarget.sectorType as CorporationType,
           units: buildUnits,
-          countryId: expansion.countryId,
+          countryId: foundingTarget.countryId,
         });
         cashLocal = entryCapital - foundingCost;
         entryDiagnostic = setNppMarketEntryReason(entryDiagnostic, "entered");
@@ -1473,7 +1570,7 @@ export function makeNppCorpDecision(
         if (foundingOutcome.creditPath) {
           shortageCreditRequest = {
             amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
-            sectorType: expansion.sectorType as CorporationType,
+            sectorType: foundingTarget.sectorType as CorporationType,
           };
         }
         // Names the priced shortfall explicitly. Previously an
@@ -1508,11 +1605,11 @@ export function makeNppCorpDecision(
       });
       if (foundingOutcome.affordable) {
         newSectors.push({
-          stateId: expansion.stateId,
-          countryId: expansion.countryId,
-          sectorType: expansion.sectorType,
+          stateId: foundingTarget.stateId,
+          countryId: foundingTarget.countryId,
+          sectorType: foundingTarget.sectorType,
           strategyId: foundingStrategyId,
-          revenue: Math.round(expansion.revenue * 0.25),
+          revenue: Math.round(foundingTarget.revenue * 0.25),
           profitMargin: 35,
         });
         cashLocal = entryCapital - foundingCost;
@@ -1521,7 +1618,7 @@ export function makeNppCorpDecision(
         if (foundingOutcome.creditPath) {
           shortageCreditRequest = {
             amountLocal: Math.max(0, foundingCost + effectiveCashFloor - entryCapital),
-            sectorType: expansion.sectorType as CorporationType,
+            sectorType: foundingTarget.sectorType as CorporationType,
           };
         }
         entryDiagnostic = setNppMarketEntryReason(
@@ -1533,6 +1630,53 @@ export function makeNppCorpDecision(
           })
         );
       }
+    }
+  }
+
+  // Frontier experiment slot accounting. A placement consumes one
+  // state-country cohort slot and one controller slot for the rest of the
+  // turn, whether it entered through the ordinary path or the experiment
+  // fallback. A placement counts as the experiment's only when the founding
+  // block ran because of the fallback (neither ordinary nor exceptional entry
+  // held): note `expansion` alone cannot distinguish them, since a corp that
+  // earned a candidate but missed the nominal surplus band still prices that
+  // same candidate through the experiment. Experiment placements carry the
+  // trial marker so the rollback report is computable from persisted funnel
+  // diagnostics; the capacity observation below keeps the authoritative gate
+  // verdict (the relaxed reason), so the funnel still measures the
+  // un-overridden pipeline. No protection is attached to the founded sector:
+  // it divests, mothballs, and fails exactly like any ordinary founding.
+  if (
+    frontierTurnState != null &&
+    entryDiagnostic != null &&
+    entryDiagnostic.reason === "entered"
+  ) {
+    const experimentPlaced =
+      frontierCandidate != null && !ordinaryEntry && !exceptionalShortageEntry;
+    const slotCohortKey =
+      experimentPlaced && frontierCohortKey != null
+        ? frontierCohortKey
+        : frontierEntryCohortKey(
+            entryDiagnostic.countryId,
+            entryDiagnostic.targetStateId ?? entryCandidate?.stateId ?? ""
+          );
+    const slotControllerKey =
+      frontierControllerKey ?? frontierEntryControllerKey({ corporationId: ownCorporationId });
+    recordFrontierEntry(
+      frontierTurnState.enteredCohorts,
+      frontierTurnState.enteredControllers,
+      slotCohortKey,
+      slotControllerKey
+    );
+    if (experimentPlaced && frontierRelaxedReason != null) {
+      entryDiagnostic = {
+        ...entryDiagnostic,
+        frontierExperiment: {
+          cohortKey: slotCohortKey,
+          controllerKey: slotControllerKey,
+          relaxedReason: frontierRelaxedReason,
+        },
+      };
     }
   }
 

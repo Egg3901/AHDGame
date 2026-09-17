@@ -47,6 +47,18 @@ export interface NppMarketEntryDiagnostic {
   openMarketTypeFallback?: boolean;
   /** Diagnosed fragile commodity this existing entry slot was routed toward. */
   interventionTargetCommodity?: CommodityType;
+  /**
+   * Set only when this entry was placed by the capped frontier-entry
+   * experiment (issue #991) rather than the ordinary founding path. The
+   * reason reads `entered` either way; this marker attributes the entrant to
+   * the trial and names the expectational gate the experiment relaxed. Absent
+   * on every diagnostic while the experiment flag is off.
+   */
+  frontierExperiment?: {
+    cohortKey: string;
+    controllerKey: string;
+    relaxedReason: NppMarketEntryReason;
+  };
 }
 
 export interface NppMarketEntryFunnel {

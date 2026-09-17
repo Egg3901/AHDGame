@@ -5,6 +5,9 @@ import {
   frontierEntryControllerKey,
   frontierEntryEligible,
   frontierEntryExperimentEnabledFrom,
+  frontierExperimentObservationsFromDiagnostics,
+  isFrontierEntryRelaxableReason,
+  FRONTIER_ENTRY_RELAXABLE_REASONS,
   recordFrontierEntry,
   summarizeFrontierExperiment,
   type FrontierEntrantObservation,
@@ -67,6 +70,82 @@ describe("frontierEntryExperiment", () => {
       frontierEntryControllerKey({ corporationId: "corp-a", controllingCorporationId: "parent" })
     ).toBe("parent");
     expect(frontierEntryControllerKey({ corporationId: "corp-a" })).toBe("corp-a");
+  });
+
+  it("relaxes only expectational gates, never policy or physical ones", () => {
+    expect(FRONTIER_ENTRY_RELAXABLE_REASONS).toEqual([
+      "unprofitable",
+      "margin_below_floor",
+      "cash_floor",
+    ]);
+    expect(isFrontierEntryRelaxableReason("unprofitable")).toBe(true);
+    expect(isFrontierEntryRelaxableReason("margin_below_floor")).toBe(true);
+    expect(isFrontierEntryRelaxableReason("cash_floor")).toBe(true);
+    for (const reason of [
+      "entered",
+      "strategy_disallowed",
+      "no_enterable_market",
+      "state_controlled",
+      "logistics_capacity",
+      "cohort_ineligible",
+      "retail_paused",
+      "glutted_market",
+      "entry_cap",
+      "facility_size",
+      "founding_cost",
+      "credit_requested",
+      "state_credit_restricted",
+    ]) {
+      expect(isFrontierEntryRelaxableReason(reason)).toBe(false);
+    }
+  });
+
+  it("derives rollback observations from marked funnel diagnostics only", () => {
+    const diagnostics = [
+      {
+        reason: "entered",
+        corporationId: "corp-a",
+        countryId: "US",
+        targetStateId: "PA",
+        targetSectorType: "manufacturing",
+        foundingCostLocal: 1000,
+        frontierExperiment: { cohortKey: "US\0PA", controllerKey: "corp-a" },
+      },
+      {
+        reason: "entered",
+        corporationId: "corp-b",
+        countryId: "US",
+        targetStateId: "NY",
+        foundingCostLocal: 2000,
+      },
+      {
+        reason: "unprofitable",
+        corporationId: "corp-c",
+        countryId: "US",
+        frontierExperiment: { cohortKey: "US\0OH", controllerKey: "corp-c" },
+      },
+    ];
+    const observations = frontierExperimentObservationsFromDiagnostics({ turn: 7, diagnostics });
+    expect(observations).toHaveLength(1);
+    expect(observations[0]).toMatchObject({
+      turn: 7,
+      cohortKey: "US\0PA",
+      controllerKey: "corp-a",
+      corporationId: "corp-a",
+      foundingCostLocal: 1000,
+      exit: "active",
+    });
+    const steady = summarizeFrontierExperiment({
+      observations,
+      guardrails: [{ name: "pooled fill", before: 0.7, after: 0.69, maxDecline: 0.05 }],
+    });
+    expect(steady.recommendation).toBe("continue");
+    expect(steady.entrants).toBe(1);
+    const breached = summarizeFrontierExperiment({
+      observations,
+      guardrails: [{ name: "pooled fill", before: 0.7, after: 0.6, maxDecline: 0.05 }],
+    });
+    expect(breached.recommendation).toBe("rollback");
   });
 
   it("rolls back on guardrail breach, never on entrant failure", () => {

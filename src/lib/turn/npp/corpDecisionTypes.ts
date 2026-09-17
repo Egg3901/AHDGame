@@ -28,6 +28,19 @@ export interface NppCorpDecisionContext {
   strategyEligible?: boolean;
   ordinaryEntryEligible?: boolean;
   strategyLoopEnabled?: boolean;
+  /**
+   * Capped frontier-entry experiment state (issue #991), supplied by the turn
+   * shell only when `frontierEntryExperimentEnabled` resolves true. The sets
+   * are shared across the whole NPP cohort for the turn and enforce at most
+   * one entrant per state-country cohort and one per controlling entity.
+   * Absent (or disabled) reads as off and the decision is byte-identical to
+   * the legacy path.
+   */
+  frontierEntry?: {
+    enabled: boolean;
+    enteredCohorts: Set<string>;
+    enteredControllers: Set<string>;
+  };
   shortageEntryEligible?: boolean;
   shortageEntryCreditLocal?: number;
   /** Pause new Retail entry/growth while fake supply-derived demand unwinds. */
