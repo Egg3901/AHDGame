@@ -48,7 +48,7 @@ function composeFromNational(countryId: CountryId, text: IdentityText): Institut
 
 // ── Executive ────────────────────────────────────────────────────────────────
 
-const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
+export const EXECUTIVE_TEXT: Record<CountryId, IdentityText> = {
   US: {
     glyph: "★",
     serif: "mono",
@@ -235,7 +235,7 @@ export function getExecutiveIdentity(countryId: CountryId): InstitutionIdentity 
 
 // ── National Policy (code of law) ────────────────────────────────────────────
 
-const POLICY_TEXT: Record<CountryId, IdentityText> = {
+export const POLICY_TEXT: Record<CountryId, IdentityText> = {
   US: {
     glyph: "§",
     serif: "mono",

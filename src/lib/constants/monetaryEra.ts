@@ -72,7 +72,7 @@ export interface EraMonetaryBaseline extends MonetaryBaseline {
  * discount/bank rates from the respective central banks; CPI from national
  * statistical series. Values are gameplay-rounded.
  */
-const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+export const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   // Bank of Japan discount ~5.8%; post-Korean-War CPI spike cooling toward
   // low single digits by 1955; reconstruction boom (growth authored in the
   // JP 1953 metric presets).
@@ -181,7 +181,7 @@ const MONETARY_BASELINES_1953: Partial<Record<CountryId, EraMonetaryBaseline>> =
  * them 1979 resolution is value-identical to the pre-era-table behavior — and
  * add authored trend growth for the layer-1 growth fallback (was flat 2.5).
  */
-const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+export const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   US: { targetInflation: 10.0, neutralPrimeRate: 12.0 },
   UK: { targetInflation: 12.0, neutralPrimeRate: 14.0 },
   JP: JP_ECONOMY.monetary.byEra["1979"],
@@ -212,7 +212,7 @@ const MONETARY_BASELINES_1979: Partial<Record<CountryId, EraMonetaryBaseline>> =
  * ~66%/yr — all three far beyond the model's 15 cap, so they are authored
  * below it (12) to keep inflation dynamic instead of pinned at min=max=15.
  */
-const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+export const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   US: { targetInflation: 4.0, neutralPrimeRate: 6.0 },
   UK: { targetInflation: 4.5, neutralPrimeRate: 8.0 },
   JP: JP_ECONOMY.monetary.byEra["1991"],
@@ -242,7 +242,7 @@ const MONETARY_BASELINES_1991: Partial<Record<CountryId, EraMonetaryBaseline>> =
  * administered prices — RU/bloc values track their 1953 posture, not the West's
  * inflation, which is the whole point of the divergence.
  */
-const MONETARY_BASELINES_1971: Partial<Record<CountryId, EraMonetaryBaseline>> = {
+export const MONETARY_BASELINES_1971: Partial<Record<CountryId, EraMonetaryBaseline>> = {
   US: { targetInflation: 6.0, neutralPrimeRate: 7.5 },
   UK: { targetInflation: 9.0, neutralPrimeRate: 10.0 },
   DE: { targetInflation: 4.5, neutralPrimeRate: 6.0 },

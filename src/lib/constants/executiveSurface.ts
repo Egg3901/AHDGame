@@ -55,7 +55,7 @@ const PARLIAMENTARY_ACTS: Record<ExecutiveActKind, string> = {
   acting: "ACTING",
 };
 
-const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
+export const EXECUTIVE_SURFACE: Record<CountryId, ExecutiveSurfaceConfig> = {
   US: {
     clock: { kind: "election", label: "Term Clock", countdownNoun: "election" },
     actLabels: PRESIDENTIAL_ACTS,

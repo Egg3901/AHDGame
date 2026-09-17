@@ -7182,7 +7182,7 @@ export function getRegionalAddressName(countryId: CountryId): string {
   return REGIONAL_ADDRESS_NAME[countryId] ?? "State of the State";
 }
 
-const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
+export const NATIONAL_ADDRESS_NAME: Partial<Record<CountryId, string>> = {
   US: "State of the Union",
   UK: "Address to the Nation",
   DE: "Government Declaration",

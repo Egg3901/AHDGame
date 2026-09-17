@@ -39,7 +39,7 @@ export interface ParliamentaryExecutiveSurface {
   heroTitleUsesImperialPossessive?: boolean;
 }
 
-const SURFACES: Partial<Record<CountryId, ParliamentaryExecutiveSurface>> = {
+export const SURFACES: Partial<Record<CountryId, ParliamentaryExecutiveSurface>> = {
   UK: {
     executiveTitle: "Prime Minister",
     memberLabel: "MP",

@@ -32,7 +32,7 @@ export interface EconomyIdentity {
   accent: StatsAccent;
 }
 
-const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "accent">>> = {
+export const ECONOMY_TEXT: Partial<Record<CountryId, Omit<EconomyIdentity, "accent">>> = {
   US: {
     glyph: "US",
     serif: "mono",
