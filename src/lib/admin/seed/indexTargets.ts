@@ -187,6 +187,12 @@ export const INDEX_TARGETS = [
       "settlementPlays drain + per-turn indexes, the UNIQUE partial index that holds each character to one use of a personal play per turn, and the UNIQUE partial index on settlementCrises that stops two live German Questions. Required before the crisis is opened on a world that was never reset.",
   },
   {
+    id: "indexesMoneyFlow",
+    label: "Indexes — Money Flow",
+    description:
+      "TTL + status indexes on nonAtomicMoneyFlowReceipts, the idempotency receipts behind crash-safe money flows. Without the TTL every keyed transfer leaves a receipt document behind forever.",
+  },
+  {
     id: "indexesIntelligence",
     label: "Indexes — Intelligence",
     description:

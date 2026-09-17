@@ -32,19 +32,22 @@ import type { ObjectId } from "mongodb";
  *    so commit/abort keeps the old atomicity. The key guard is harmless
  *    there (a re-invoked transaction callback re-applies cleanly).
  *
- * COVERAGE (issue #1672): migrated call sites use
- * `src/lib/character/campaignTransfer.ts`. Every other
- * `runWithOptionalTransaction` money-flow site (party/region donations and
- * recruitment, treasury transfer, bonds, forex orders/direct, election
- * spending, canvassing, player ads, union/corporate/campaign/index-fund
- * flows) still runs the legacy debit-first-plus-compensation fallback and is
- * NOT crash-safe between writes. Migrating a site means expressing its
- * balance writes as legs here; sites whose credit side is not a keyed
- * single-document `$inc` cannot use this module until it is.
+ * COVERAGE (issue #1672): migrated call sites express their balance writes
+ * as legs (same-collection via `runMoneyFlowLegs`, cross-collection via
+ * per-leg `makeLegStep` + `runMoneyFlowSteps`) and their guarded `$set` /
+ * deterministic-insert side effects as revertible steps (`applyKeyedUpdate`,
+ * `insertKeyedDoc`). Still on the legacy debit-first-plus-compensation
+ * fallback: forex orders/direct/fill/cancel, bond sell/default/payoff,
+ * index-fund cron/rebalancing, directAction, state-org build, and bargaining
+ * escalation — multi-write status machines, positional holder claims, and
+ * bulkWrite batches that need reserve/order/history support beyond keyed
+ * single-document writes. Migrating one of those means expressing its writes
+ * as steps here, with an explicit inverse per step that mutates prior state.
  *
- * Operations note: receipts accumulate one small document per keyed flow. A
- * TTL index on `createdAt` should be added through the normal index-seeding
- * path; this module never creates indexes at runtime.
+ * Operations note: receipts accumulate one small document per keyed flow. The
+ * TTL index on `createdAt` is seeded by `seedMoneyFlowIndexes` (registered in
+ * `src/lib/admin/seed/seedIndexes.ts`); this module never creates indexes at
+ * runtime.
  */
 
 export const NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION = "nonAtomicMoneyFlowReceipts";
@@ -73,7 +76,7 @@ export interface MoneyFlowReceipt {
 
 /** Account documents that can carry keyed money-flow legs. */
 export interface MoneyFlowAccount {
-  _id: ObjectId;
+  _id: ObjectId | string;
   appliedMoneyFlowKeys?: string[];
 }
 
@@ -83,7 +86,7 @@ export interface MoneyFlowLeg<TDoc extends MoneyFlowAccount> {
   /** Stable name used in compensation keys (`${key}:compensate:${name}`). */
   name: string;
   collection: Collection<TDoc>;
-  docId: ObjectId;
+  docId: TDoc["_id"];
   /** Dotted balance field, e.g. `currencyBalances.campaign`. */
   field: string;
   /** Negative for a debit, positive for a credit. */
@@ -94,6 +97,26 @@ export interface MoneyFlowLeg<TDoc extends MoneyFlowAccount> {
    * check and the mutation are one atomic step.
    */
   minBalance?: number;
+  /**
+   * Extra `$inc` entries applied to the SAME document in the same atomic
+   * write (e.g. a combined actions+funds debit). Same-document legs must
+   * share one leg: two legs on one document under one key collide, because
+   * the first leg's key record trips the second leg's `$ne: key` guard and
+   * the second balance change is silently skipped. Compensation negates
+   * these alongside `delta`.
+   */
+  extraIncs?: Record<string, number>;
+  /**
+   * Extra filter clauses merged into the atomic guard (e.g. cooldown
+   * readiness, optimistic-concurrency stamps). Dropped on compensation so a
+   * revert is never guard-blocked.
+   */
+  extraFilter?: Filter<TDoc>;
+  /**
+   * Extra `$set` entries merged into the atomic write (e.g. `updatedAt`).
+   * Never a guard; kept on compensation.
+   */
+  set?: Record<string, unknown>;
 }
 
 export type MoneyFlowClaim = "fresh" | "in-progress" | "duplicate";
@@ -160,6 +183,21 @@ function validateLeg<TDoc extends MoneyFlowAccount>(leg: MoneyFlowLeg<TDoc>): vo
   if (leg.minBalance !== undefined && (!Number.isFinite(leg.minBalance) || leg.minBalance < 0)) {
     throw new RangeError(`Money flow leg "${leg.name}" needs a finite non-negative minBalance`);
   }
+  if (leg.extraIncs !== undefined) {
+    for (const [field, delta] of Object.entries(leg.extraIncs)) {
+      if (
+        typeof field !== "string" ||
+        field.length === 0 ||
+        !Number.isFinite(delta) ||
+        delta === 0
+      ) {
+        throw new RangeError(`Money flow leg "${leg.name}" needs finite non-zero extraIncs`);
+      }
+    }
+  }
+  if (leg.set !== undefined && (typeof leg.set !== "object" || leg.set === null)) {
+    throw new TypeError(`Money flow leg "${leg.name}" needs an object set`);
+  }
 }
 
 /**
@@ -180,9 +218,11 @@ export async function applyIdempotentLeg<TDoc extends MoneyFlowAccount>(
     _id: leg.docId,
     appliedMoneyFlowKeys: { $ne: key },
     ...(leg.minBalance !== undefined ? { [leg.field]: { $gte: leg.minBalance } } : {}),
+    ...(leg.extraFilter ?? {}),
   } as Filter<TDoc>;
   const update = {
-    $inc: { [leg.field]: leg.delta },
+    $inc: { [leg.field]: leg.delta, ...(leg.extraIncs ?? {}) },
+    ...(leg.set !== undefined ? { $set: leg.set } : {}),
     $push: {
       appliedMoneyFlowKeys: {
         $each: [key],
@@ -266,6 +306,233 @@ async function settleMoneyFlowReceipt(
 }
 
 /**
+ * A keyed single-document write that is not a balance leg: a guarded `$set`
+ * (travel state, turnout, sector flags, nomination pushes), a guarded claim,
+ * or any other update the caller can express idempotently. The caller's
+ * update MUST NOT touch `appliedMoneyFlowKeys`; the key record is merged in.
+ * Disambiguation reads by `_id` when the filter carries one, so a guard that
+ * no longer matches (stale stamp, lost race) reports `guard-rejected` rather
+ * than `missing`.
+ */
+export interface KeyedUpdate<TDoc extends MoneyFlowAccount = MoneyFlowAccount> {
+  collection: Collection<TDoc>;
+  filter: Filter<TDoc>;
+  update: Record<string, unknown>;
+}
+
+function updateTouchesFlowKeys(update: Record<string, unknown>): boolean {
+  for (const operator of ["$set", "$unset", "$push"]) {
+    const clause = update[operator];
+    if (clause !== null && typeof clause === "object" && "appliedMoneyFlowKeys" in clause) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export async function applyKeyedUpdate<TDoc extends MoneyFlowAccount>(
+  key: string,
+  update: KeyedUpdate<TDoc>,
+  options: MoneyFlowOptions = {}
+): Promise<MoneyFlowLegOutcome> {
+  validateKey(key);
+  if (!update || typeof update.collection?.updateOne !== "function") {
+    throw new TypeError("Keyed update needs a collection");
+  }
+  if (!update.filter || typeof update.filter !== "object") {
+    throw new TypeError("Keyed update needs a filter");
+  }
+  if (!update.update || typeof update.update !== "object") {
+    throw new TypeError("Keyed update needs an update document");
+  }
+  if (updateTouchesFlowKeys(update.update)) {
+    throw new TypeError("Keyed update must not touch appliedMoneyFlowKeys");
+  }
+  const keyPush = {
+    appliedMoneyFlowKeys: {
+      $each: [key],
+      $slice: -MAX_APPLIED_MONEY_FLOW_KEYS,
+    },
+  };
+  const existingPush =
+    update.update.$push !== null && typeof update.update.$push === "object"
+      ? (update.update.$push as Record<string, unknown>)
+      : undefined;
+  const merged = {
+    ...update.update,
+    $push: { ...(existingPush ?? {}), ...keyPush },
+  } as unknown as Parameters<Collection<TDoc>["updateOne"]>[1];
+  const filter = {
+    ...update.filter,
+    appliedMoneyFlowKeys: { $ne: key },
+  } as Filter<TDoc>;
+  const result = await update.collection.updateOne(filter, merged, sessionOpt(options));
+  if (result.matchedCount === 1) return "applied";
+
+  const rawFilter = update.filter as Record<string, unknown>;
+  const identityFilter = (
+    "_id" in rawFilter ? { _id: rawFilter._id } : update.filter
+  ) as Filter<TDoc>;
+  const existing = await update.collection.findOne(identityFilter, {
+    projection: { appliedMoneyFlowKeys: 1 },
+    ...sessionOpt(options),
+  });
+  if (!existing) return "missing";
+  if (existing.appliedMoneyFlowKeys?.includes(key)) return "already-applied";
+  return "guard-rejected";
+}
+
+/**
+ * Insert a document with a caller-supplied `_id` (pre-generated before the
+ * flow starts so every attempt and every recovery uses the same one). A
+ * duplicate key means this step already applied; anything else throws.
+ */
+export async function insertKeyedDoc<TSchema>(
+  collection: Collection<TSchema>,
+  doc: TSchema,
+  options: MoneyFlowOptions = {}
+): Promise<"applied" | "already-applied"> {
+  if (!collection || typeof collection.insertOne !== "function") {
+    throw new TypeError("Keyed insert needs a collection");
+  }
+  if (!doc || typeof doc !== "object" || (doc as { _id?: unknown })._id == null) {
+    throw new TypeError("Keyed insert needs a document with a pre-generated _id");
+  }
+  try {
+    await collection.insertOne(
+      doc as Parameters<Collection<TSchema>["insertOne"]>[0],
+      sessionOpt(options) as Parameters<Collection<TSchema>["insertOne"]>[1]
+    );
+    return "applied";
+  } catch (error) {
+    if (isDuplicateKeyError(error)) return "already-applied";
+    throw error;
+  }
+}
+
+/**
+ * One ordered step of a money flow: a keyed write plus its keyed inverse.
+ * Balance legs build steps with an automatic `$inc` inverse; side effects
+ * (guarded `$set`, deterministic inserts) supply their own inverse or none
+ * when they are terminal (nothing runs after them, so there is nothing to
+ * undo them for). A step with no inverse that fails after earlier steps
+ * applied settles the receipt `failed` with an `UNCOMPENSATED` marker
+ * (fail closed for ops) instead of pretending the prefix was reversed.
+ */
+export interface MoneyFlowStep {
+  name: string;
+  apply(options?: MoneyFlowOptions): Promise<MoneyFlowLegOutcome>;
+  revert?(options?: MoneyFlowOptions): Promise<MoneyFlowLegOutcome>;
+}
+
+/**
+ * A balance leg as a revertible step (inverse: negated `$inc`, guards off).
+ * Generic per leg so one flow can mix collections (`Collection<Character>`,
+ * `Collection<PoliticalParty>`, ...): `Collection<T>` is invariant (via
+ * `bulkWrite`), so heterogeneous legs meet only here behind the
+ * collection-erased `MoneyFlowStep`, never in a shared typed array.
+ */
+export function makeLegStep<TDoc extends MoneyFlowAccount>(
+  key: string,
+  leg: MoneyFlowLeg<TDoc>
+): MoneyFlowStep {
+  validateKey(key);
+  validateLeg(leg);
+  const negatedExtraIncs = Object.fromEntries(
+    Object.entries(leg.extraIncs ?? {}).map(([field, delta]) => [field, -delta])
+  );
+  return {
+    name: leg.name,
+    apply: (options) => applyIdempotentLeg(key, leg, options ?? {}),
+    revert: (options) =>
+      applyIdempotentLeg(
+        `${key}:compensate:${leg.name}`,
+        {
+          ...leg,
+          delta: -leg.delta,
+          minBalance: undefined,
+          extraFilter: undefined,
+          extraIncs: Object.keys(negatedExtraIncs).length > 0 ? negatedExtraIncs : undefined,
+        },
+        options ?? {}
+      ),
+  };
+}
+
+export interface MoneyFlowStepRef {
+  index: number;
+  name: string;
+}
+
+/**
+ * Run steps in order to exactly one terminal state. Idempotent: safe both as
+ * the first attempt and as crash recovery, because every step is keyed
+ * (invariant 1). On a step failure the applied prefix is reversed in order
+ * with each step's inverse before the receipt settles, so the receipt never
+ * rests partial. Throws the caller's mapped error for the failed step.
+ */
+export async function runMoneyFlowSteps(
+  receipts: Collection<MoneyFlowReceipt>,
+  key: string,
+  steps: MoneyFlowStep[],
+  mapStepError: (step: MoneyFlowStepRef, outcome: MoneyFlowLegOutcome) => Error,
+  options: MoneyFlowOptions = {}
+): Promise<void> {
+  validateKey(key);
+  if (!Array.isArray(steps) || steps.length === 0) {
+    throw new TypeError("Money flow needs at least one step");
+  }
+
+  const applied: MoneyFlowStep[] = [];
+  for (let index = 0; index < steps.length; index += 1) {
+    const step = steps[index]!;
+    const outcome = await step.apply(options);
+    if (outcome === "applied" || outcome === "already-applied") {
+      applied.push(step);
+      continue;
+    }
+
+    if (applied.length === 0) {
+      const error = mapStepError({ index, name: step.name }, outcome);
+      await settleMoneyFlowReceipt(receipts, key, "failed", error.message, options);
+      throw error;
+    }
+
+    for (let back = applied.length - 1; back >= 0; back -= 1) {
+      const done = applied[back]!;
+      if (!done.revert) {
+        const error = mapStepError({ index, name: step.name }, outcome);
+        await settleMoneyFlowReceipt(
+          receipts,
+          key,
+          "failed",
+          `UNCOMPENSATED:${done.name}:no-revert`,
+          options
+        );
+        throw error;
+      }
+      const reversal = await done.revert(options);
+      if (reversal !== "applied" && reversal !== "already-applied") {
+        const error = mapStepError({ index, name: step.name }, outcome);
+        await settleMoneyFlowReceipt(
+          receipts,
+          key,
+          "failed",
+          `UNCOMPENSATED:${done.name}:${reversal}`,
+          options
+        );
+        throw error;
+      }
+    }
+    const error = mapStepError({ index, name: step.name }, outcome);
+    await settleMoneyFlowReceipt(receipts, key, "compensated", error.message, options);
+    throw error;
+  }
+
+  await settleMoneyFlowReceipt(receipts, key, "completed", undefined, options);
+}
+
+/**
  * Run legs in order to exactly one terminal state. Idempotent: safe both as
  * the first attempt and as crash recovery, because every leg is keyed
  * (invariant 1). On a leg failure the already-applied prefix is reversed
@@ -279,45 +546,12 @@ export async function runMoneyFlowLegs<TDoc extends MoneyFlowAccount>(
   mapLegError: (index: number, outcome: MoneyFlowLegOutcome) => Error,
   options: MoneyFlowOptions = {}
 ): Promise<void> {
-  validateKey(key);
-  if (!Array.isArray(legs) || legs.length === 0) {
-    throw new TypeError("Money flow needs at least one leg");
-  }
   legs.forEach(validateLeg);
-
-  for (let index = 0; index < legs.length; index += 1) {
-    const outcome = await applyIdempotentLeg(key, legs[index]!, options);
-    if (outcome === "applied" || outcome === "already-applied") continue;
-
-    if (index === 0) {
-      const error = mapLegError(index, outcome);
-      await settleMoneyFlowReceipt(receipts, key, "failed", error.message, options);
-      throw error;
-    }
-
-    for (let back = index - 1; back >= 0; back -= 1) {
-      const forward = legs[back]!;
-      const reversal = await applyIdempotentLeg(
-        `${key}:compensate:${forward.name}`,
-        { ...forward, delta: -forward.delta, minBalance: undefined },
-        options
-      );
-      if (reversal !== "applied" && reversal !== "already-applied") {
-        const error = mapLegError(index, outcome);
-        await settleMoneyFlowReceipt(
-          receipts,
-          key,
-          "failed",
-          `UNCOMPENSATED:${forward.name}:${reversal}`,
-          options
-        );
-        throw error;
-      }
-    }
-    const error = mapLegError(index, outcome);
-    await settleMoneyFlowReceipt(receipts, key, "compensated", error.message, options);
-    throw error;
-  }
-
-  await settleMoneyFlowReceipt(receipts, key, "completed", undefined, options);
+  return runMoneyFlowSteps(
+    receipts,
+    key,
+    legs.map((leg) => makeLegStep(key, leg)),
+    (step, outcome) => mapLegError(step.index, outcome),
+    options
+  );
 }
