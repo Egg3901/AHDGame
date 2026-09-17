@@ -60,7 +60,13 @@ export async function processUkPartyConferenceTurn(
   const parties = await db
     .collection<PoliticalParty>("politicalParties")
     .find({ countryId: "UK" })
-    .project({ sequentialId: 1, name: 1, chairId: 1, economicPosition: 1, socialPosition: 1 })
+    .project<PoliticalParty>({
+      sequentialId: 1,
+      name: 1,
+      chairId: 1,
+      economicPosition: 1,
+      socialPosition: 1,
+    })
     .toArray();
   const year = conferenceYearForTurn(currentTurn);
 

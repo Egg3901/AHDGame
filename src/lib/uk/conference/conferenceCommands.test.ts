@@ -25,7 +25,11 @@ import {
 } from "./rules";
 import { createFakeLeadershipDb } from "../leadership/leadershipTestDb";
 import { buildEmbeddedVoteTallyUpdate } from "@/lib/votes/embeddedVoteTally";
-import { getUKPartyConferencesCollection } from "@/lib/db/collections/ukPartyConferences";
+import {
+  getUKPartyConferencesCollection,
+  getUKPartyPlatformsCollection,
+} from "@/lib/db/collections/ukPartyConferences";
+import { getUKPartyLeadershipCollection } from "@/lib/db/collections/ukPartyLeadership";
 import { pledgeCatalogFor } from "../manifesto/pledgeCatalog";
 import { ApiError } from "@/lib/api/errors";
 import type { PoliticalParty } from "@/lib/db/types";
@@ -189,8 +193,7 @@ describe("scheduleConference", () => {
       NOW()
     );
     expect(second.conferenceId).toBe(first.conferenceId);
-    const rows = await world.db
-      .collection("ukPartyConferences")
+    const rows = await getUKPartyConferencesCollection(world.db)
       .find({ _id: first.conferenceId })
       .toArray();
     expect(rows).toHaveLength(1);
@@ -370,7 +373,7 @@ describe("proposePlatform", () => {
 
 describe("voteOnPlatform and the embedded tally update", () => {
   it("emits a dotted-path pipeline update (never a nested proposal overwrite)", () => {
-    const update = buildEmbeddedVoteTallyUpdate({
+    const update = buildEmbeddedVoteTallyUpdate<"aye" | "nay">({
       voteField: "proposal.votes",
       voteKey: new ObjectId().toString(),
       vote: "aye" as const,
@@ -720,7 +723,7 @@ describe("resolveConference", () => {
     expect(after?.outcome).toBe("ratified");
     expect(after?.payoffDue).toBe(true);
 
-    const platform = await world.db.collection("ukPartyPlatforms").findOne({
+    const platform = await getUKPartyPlatformsCollection(world.db).findOne({
       _id: `UK:${world.partySeq}`,
     });
     expect(platform?.pledgeIds).toEqual(validPledgeIds());
@@ -770,7 +773,7 @@ describe("resolveConference", () => {
     expect(after?.payoffDue).toBe(false);
     expect(after?.proposal?.status).toBe("rejected");
     expect(
-      await world.db.collection("ukPartyPlatforms").findOne({ _id: `UK:${world.partySeq}` })
+      await getUKPartyPlatformsCollection(world.db).findOne({ _id: `UK:${world.partySeq}` })
     ).toBeNull();
   });
 
@@ -808,7 +811,7 @@ describe("resolveConference", () => {
       NOW()
     );
     expect(resolution.motionsPassed).toBe(1);
-    const leadership = await world.db.collection("ukPartyLeadership").findOne({
+    const leadership = await getUKPartyLeadershipCollection(world.db).findOne({
       _id: `UK:${world.partySeq}`,
     });
     expect(leadership?.ruleset?.triggerThresholdPct).toBe(0.2);
@@ -867,7 +870,7 @@ describe("resolveConference", () => {
     expect(motion?.status).toBe("void");
     expect(motion?.voidReason).toContain("cooldown");
     // The voided patch never applied; the direct amendment stands.
-    const leadership = await world.db.collection("ukPartyLeadership").findOne({
+    const leadership = await getUKPartyLeadershipCollection(world.db).findOne({
       _id: `UK:${world.partySeq}`,
     });
     expect(leadership?.ruleset?.triggerThresholdPct).not.toBe(0.2);
@@ -964,7 +967,7 @@ describe("NPP conferences", () => {
       NOW()
     );
     expect(resolution).toMatchObject({ completed: true, ratified: true });
-    const platform = await world.db.collection("ukPartyPlatforms").findOne({
+    const platform = await getUKPartyPlatformsCollection(world.db).findOne({
       _id: `UK:${world.partySeq}`,
     });
     expect(platform?.pledgeIds).toHaveLength(3);

@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ObjectId, type Db } from "mongodb";
 import { processUkPartyConferenceTurn } from "./ukPartyConferenceTurn";
 import { createFakeLeadershipDb } from "@/lib/uk/leadership/leadershipTestDb";
-import { getUKPartyConferencesCollection } from "@/lib/db/collections/ukPartyConferences";
+import {
+  getUKPartyConferencesCollection,
+  getUKPartyPlatformsCollection,
+} from "@/lib/db/collections/ukPartyConferences";
 import {
   conferenceOpensAtTurn,
   conferenceVotingClosesTurn,
@@ -216,7 +219,7 @@ describe("processUkPartyConferenceTurn", () => {
     await processUkPartyConferenceTurn(db, YEAR1_OPEN, NOW());
     const closed = await processUkPartyConferenceTurn(db, YEAR1_CLOSE, NOW());
     expect(closed).toMatchObject({ completed: 1, ratified: 1, payoffs: 1 });
-    const platform = await db.collection("ukPartyPlatforms").findOne({ _id: "UK:7" });
+    const platform = await getUKPartyPlatformsCollection(db).findOne({ _id: "UK:7" });
     expect(platform?.pledgeIds).toHaveLength(3);
   });
 

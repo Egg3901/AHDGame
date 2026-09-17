@@ -247,7 +247,7 @@ export async function getConferenceState(
     catalog: pledgeCatalogFor(countryId).map((e) => ({
       id: e.id,
       label: e.label,
-      blurb: e.blurb,
+      blurb: e.blurb ?? "",
     })),
     capabilities: {
       isPartyMember: isMember,
