@@ -513,6 +513,7 @@ describe("computeEconomicVitalSigns", () => {
       sharePrice: 10,
       sharePriceAnchor: 10,
       totalShares: 1000,
+      publicFloat: 500,
       marketCapAnchor: 10000,
       priceChange48h: 0,
     };
@@ -658,6 +659,118 @@ describe("computeEconomicVitalSigns", () => {
     expect(snapshot.securities.corporateSubscriptionRate.observations).toBe(0);
   });
 
+  it("measures per-listing trade concentration from named counterparties", () => {
+    const concentratedId = new ObjectId();
+    const sharedId = new ObjectId();
+    const alice = { characterId: new ObjectId(), name: "Alice" };
+    const bob = { characterId: new ObjectId(), name: "Bob" };
+    const carol = { characterId: new ObjectId(), name: "Carol" };
+    const dave = { characterId: new ObjectId(), name: "Dave" };
+    const snapshot = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      globalExchange: {
+        _id: "global",
+        listings: [{ _id: concentratedId }, { _id: sharedId }],
+        updatedAt: new Date(),
+      } as never,
+      trades: [
+        // Concentrated book: Alice takes 90 of 100 notional from the float.
+        {
+          _id: new ObjectId(),
+          corporationId: concentratedId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 90,
+          pricePerShareAnchor: 1,
+          totalAnchor: 90,
+          to: alice,
+          from: null,
+        },
+        {
+          _id: new ObjectId(),
+          corporationId: concentratedId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 10,
+          pricePerShareAnchor: 1,
+          totalAnchor: 10,
+          to: bob,
+          from: null,
+        },
+        // Shared book: Carol and Dave split 100 evenly across one peer fill.
+        {
+          _id: new ObjectId(),
+          corporationId: sharedId,
+          kind: "peer_fill",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 100,
+          pricePerShareAnchor: 1,
+          totalAnchor: 100,
+          to: dave,
+          from: carol,
+        },
+        // Non-economic kinds never count toward inventory concentration.
+        {
+          _id: new ObjectId(),
+          corporationId: sharedId,
+          kind: "issuance",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 1_000,
+          pricePerShareAnchor: 1,
+          totalAnchor: 1_000,
+          to: carol,
+          from: null,
+        },
+      ],
+    });
+
+    // Top shares [0.9, 0.5]: median 0.7 across the two traded listings.
+    expect(snapshot.securities.medianTopTraderNotionalShare48.value).toBeCloseTo(0.7, 10);
+    expect(snapshot.securities.medianTopTraderNotionalShare48.observations).toBe(2);
+    expect(snapshot.securities.medianTopTraderNotionalShare48.basis).toBe(
+      "named_counterparty_share_of_listing_notional_48_turns"
+    );
+  });
+
+  it("reports absent equity trade concentration as unknown, not as dispersed", () => {
+    const corpId = new ObjectId();
+    const floatOnly = computeEconomicVitalSigns({
+      ...emptyInput,
+      turn: 30,
+      globalExchange: {
+        _id: "global",
+        listings: [{ _id: corpId }],
+        updatedAt: new Date(),
+      } as never,
+      trades: [
+        {
+          _id: new ObjectId(),
+          corporationId: corpId,
+          kind: "market_buy",
+          turn: 29,
+          createdAt: new Date(),
+          shares: 1,
+          pricePerShareAnchor: 1,
+          totalAnchor: 10,
+          to: null,
+          from: null,
+        },
+      ],
+    });
+
+    expect(floatOnly.securities.medianTopTraderNotionalShare48.value).toBeNull();
+    expect(floatOnly.securities.medianTopTraderNotionalShare48.observations).toBe(0);
+
+    const empty = computeEconomicVitalSigns({ ...emptyInput, turn: 30 });
+    expect(empty.securities.medianTopTraderNotionalShare48.value).toBeNull();
+    expect(empty.securities.medianTopTraderNotionalShare48.observations).toBe(0);
+  });
+
   it("records a skipped stock versus flow check as unknown, not as zero divergences", () => {
     const reconciliation: LedgerReconciliation = {
       _id: new ObjectId(),
@@ -791,4 +904,127 @@ it("does not mix legacy money growth into the current median", () => {
     money: [money, { ...money, _id: "new", accountingVersion: 2, annualizedM2GrowthPct: 4 }],
   });
   expect(snapshot.money.medianAnnualizedM2GrowthPct.value).toBe(4);
+});
+
+it("measures securities breadth over tradable listings, intersecting the trade window", () => {
+  // Mixed snapshot (#2033): three ordinary public corporations, two
+  // zero-share/zero-float state enterprises, and a retained-window trade for
+  // a dissolved corporation that is no longer listed at all.
+  const tradableIds = [new ObjectId(), new ObjectId(), new ObjectId()];
+  const soeIds = [new ObjectId(), new ObjectId()];
+  const dissolvedId = new ObjectId();
+  const listing = (id: ObjectId, overrides: object) => ({
+    _id: id,
+    sequentialId: 1,
+    name: `Firm ${id.toString()}`,
+    type: "manufacturing",
+    sharePrice: 10,
+    sharePriceAnchor: 10,
+    totalShares: 1000,
+    publicFloat: 500,
+    marketCapAnchor: 10000,
+    priceChange48h: 0,
+    ...overrides,
+  });
+  const listings = [
+    listing(tradableIds[0]!, {}),
+    listing(tradableIds[1]!, {}),
+    listing(tradableIds[2]!, {}),
+    listing(soeIds[0]!, { totalShares: 0, publicFloat: 0, isNatcorp: true }),
+    listing(soeIds[1]!, { totalShares: 1000, publicFloat: 0, isNatcorp: true }),
+  ];
+  const trade = (corporationId: ObjectId) =>
+    ({
+      _id: new ObjectId(),
+      corporationId,
+      kind: "market_buy",
+      turn: 99,
+      createdAt: new Date(),
+      shares: 2,
+      pricePerShareAnchor: 5,
+      totalAnchor: 10,
+      to: null,
+      from: null,
+    }) as never;
+  const order = (corporationId: ObjectId, type: "buy" | "sell") =>
+    ({
+      _id: new ObjectId(),
+      corporationId,
+      characterId: new ObjectId(),
+      type,
+      shares: 10,
+      sharesRemaining: 10,
+      pricePerShare: type === "buy" ? 9 : 11,
+      escrowAmount: 0,
+      status: "open" as const,
+      createdAt: new Date("2026-08-29T00:00:00.000Z"),
+      updatedAt: new Date("2026-08-29T00:00:00.000Z"),
+    }) as never;
+
+  const snapshot = computeEconomicVitalSigns({
+    ...emptyInput,
+    turn: 100,
+    globalExchange: { _id: "global", listings } as never,
+    // Two eligible listings traded; the SOE trade and the dissolved-corp
+    // trade sit in the retained window but must not enter the numerator.
+    trades: [trade(tradableIds[0]!), trade(tradableIds[1]!), trade(soeIds[0]!), trade(dissolvedId)],
+    shareOrders: [
+      // Only the first eligible listing has both sides of the book. The
+      // zero-share SOE also carries a two-sided book, which must not count.
+      order(tradableIds[0]!, "buy"),
+      order(tradableIds[0]!, "sell"),
+      order(tradableIds[1]!, "buy"),
+      order(soeIds[0]!, "buy"),
+      order(soeIds[0]!, "sell"),
+    ],
+  });
+
+  // Denominator 3 (eligible), numerator 2 (eligible traded): 2/3, not 4/5
+  // and not the stale 3-or-4 over 5.
+  expect(snapshot.securities.activeTradedListingShare.value).toBeCloseTo(2 / 3, 10);
+  expect(snapshot.securities.activeTradedListingShare.observations).toBe(3);
+  expect(snapshot.securities.twoSidedListingShare.value).toBeCloseTo(1 / 3, 10);
+  expect(snapshot.securities.twoSidedListingShare.observations).toBe(3);
+  expect(snapshot.securities.organicTwoSidedListingShare.value).toBeCloseTo(1 / 3, 10);
+  // Rolling medians use the same eligible denominator with empty history.
+  expect(snapshot.securitiesRecent12.activeTradedListingShareMedian.value).toBeCloseTo(2 / 3, 10);
+  expect(snapshot.securitiesRecent12.twoSidedListingShareMedian.value).toBeCloseTo(1 / 3, 10);
+  for (const metric of [
+    snapshot.securities.activeTradedListingShare,
+    snapshot.securities.twoSidedListingShare,
+    snapshot.securities.organicTwoSidedListingShare,
+  ]) {
+    expect(metric.value).toBeGreaterThanOrEqual(0);
+    expect(metric.value).toBeLessThanOrEqual(1);
+  }
+});
+
+it("reports unknown breadth when no listing is tradable", () => {
+  const id = new ObjectId();
+  const snapshot = computeEconomicVitalSigns({
+    ...emptyInput,
+    turn: 100,
+    globalExchange: {
+      _id: "global",
+      listings: [
+        {
+          _id: id,
+          sequentialId: 1,
+          name: "SoE",
+          type: "manufacturing",
+          sharePrice: 10,
+          totalShares: 0,
+          publicFloat: 0,
+          marketCapAnchor: 0,
+          priceChange48h: 0,
+        },
+      ],
+    } as never,
+    trades: [],
+    shareOrders: [],
+  });
+
+  expect(snapshot.securities.activeTradedListingShare.value).toBeNull();
+  expect(snapshot.securities.twoSidedListingShare.value).toBeNull();
+  expect(snapshot.securities.organicTwoSidedListingShare.value).toBeNull();
 });

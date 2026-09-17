@@ -81,6 +81,7 @@ import { migration as centralBankPricingPhaseIn } from "./entries/2026-09-11-cen
 import { migration as providerIdentityIndexes } from "./entries/2026-09-10-provider-identity-indexes";
 import { migration as sourceFenceIndexes } from "./entries/2026-09-11-source-fence-indexes";
 import { migration as repriceCurrentSovereignRisk } from "./entries/2026-09-12-reprice-current-sovereign-risk";
+import { migration as repairDuplicateCorporationSequentialIds } from "./entries/2026-09-17-repair-duplicate-corporation-sequential-ids";
 
 export const MIGRATIONS: Migration[] = [
   // v0.2.6 currency cutover (declarative — shipped via standalone scripts)
@@ -250,6 +251,11 @@ export const MIGRATIONS: Migration[] = [
   // ladder after historical seed anchors stop rescaling live risk.
   repriceCurrentSovereignRisk,
   supplyListingIndexes,
+  // Issue #2028: worlds seeded while the FR/IT/ES/SE/TR/GR/AT/FI sovereign
+  // issuers reused 900_009-900_016 keep ambiguous corporation URLs and an
+  // unprotected collection until something renumbers them in place. Seed +
+  // bootstrap cover fresh/reset worlds; this reaches ones already running.
+  repairDuplicateCorporationSequentialIds,
   // Issue #2049: UK dual ministry. Classify rows into role slots, init shared
   // holder pools from current balances, and swap the one-seat index for the
   // role-slot index. Idempotent, dry-run safe, deletes nothing.

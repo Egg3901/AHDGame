@@ -223,6 +223,34 @@ describe("npcBanks", () => {
       expect(spawnedCountries.length).toBeGreaterThan(0);
     });
 
+    it("skips planned economies even when the command-economy flag is off", async () => {
+      db.collectionMocks.gameConfig!.findOne.mockResolvedValue({
+        _id: "default",
+        privateBankingEnabled: true,
+        commandEconomyEnabled: false,
+      });
+      db.collectionMocks.gameState!.findOne.mockResolvedValue({
+        _id: "current",
+        preset: "1953-default",
+        currentTurn: 1,
+        currentYear: 1953,
+      });
+      wireSpawnToIssueCharter();
+
+      const { seedNpcBanks } = await importNpcBanks();
+      const result = await seedNpcBanks(db as unknown as Db);
+
+      const spawnedCountries = spawnNppCorporation.mock.calls.map(
+        (c) => (c[1] as { countryId: string }).countryId
+      );
+      // The creation gate deliberately ignores the flag, so RU stays
+      // ineligible and is counted, not attempted.
+      expect(spawnedCountries).toEqual(expect.arrayContaining(["US", "UK"]));
+      expect(spawnedCountries).not.toContain("RU");
+      expect(result.skippedIneligible).toBeGreaterThanOrEqual(2);
+      expect(result.charterFailures).toBe(0);
+    });
+
     it("charters via the real issueCharter path (capital debited)", async () => {
       const { getCharterCapitalRequirement } = await import("../charter");
       const requirement = await getCharterCapitalRequirement(db as unknown as Db, "USD");
