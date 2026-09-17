@@ -11,6 +11,7 @@
  * under depreciation. No reads or writes here, only the turn inputs.
  */
 import { activeCapacityFraction } from "@/lib/corporations/investment/rules";
+import { getStrategy } from "@/lib/constants/sectorStrategies";
 import { seedCapitalStock } from "@/lib/market/capital";
 import { unitYieldForSupply } from "@/lib/constants/capacityEconomy";
 import type { CorporationType } from "@/lib/constants/corporations";
@@ -143,6 +144,27 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     typeof sector.capitalStock === "number" && sector.capitalStock > 0 ? sector.capitalStock : 0;
   const workingCapacity =
     healedOpex?.capitalStock != null ? Math.max(0, healedOpex.capitalStock) : storedCapacity;
+  const retoolBasis = {
+    sectorType: sector.sectorType,
+    strategyId: sector.strategyId,
+    transitionFromStrategyId: sector.transitionFromStrategyId,
+    transitionStartTurn: sector.transitionStartTurn,
+    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
+    operatingCapacityTurn: sector.operatingCapacityTurn,
+    currentTurn,
+  };
+  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
+  // Flip seed basis: owned stock converts to destination units at the retool
+  // boundary, so the seed arm must be destination-basis too while the blend
+  // ratio applies. Seeding from the blended recipe mixes bases in the max():
+  // the blended count can exceed the converted count and mint capacity the
+  // sector never built (measured ~2% on a manufacturing standard to premium
+  // flip, far more on extreme pairs). Off-transition the blended recipe is
+  // the destination recipe, so this is a no-op there.
+  const flipSeedSupply =
+    isFlipTurn && retoolCapacityRatio !== 1 && sector.transitionFromStrategyId
+      ? (getStrategy(sector.sectorType, sector.strategyId ?? "standard").supply ?? strategySupply)
+      : strategySupply;
 
   // D12: a mothballed sector's plants are cold — they produce nothing, offer
   // nothing (its persisted `producedUnits` is what the clearing pre-pass reads
@@ -159,7 +181,7 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
           workingCapacity,
           seedCapitalStock(
             preFlipNameplateRevenue,
-            strategySupply ?? {},
+            flipSeedSupply ?? {},
             COMMODITY_BASE_PRICES,
             eraUnitScale
           )
@@ -250,16 +272,6 @@ export function computePlantsCapacity(input: PlantsCapacityInput): PlantsCapacit
     ? unitYieldForSupply(strategySupply ?? {}, eraUnitScale)
     : 0;
   const plantsMixPrice = plantsMixPriceYield > 0 ? 1 / plantsMixPriceYield : 0;
-  const retoolBasis = {
-    sectorType: sector.sectorType,
-    strategyId: sector.strategyId,
-    transitionFromStrategyId: sector.transitionFromStrategyId,
-    transitionStartTurn: sector.transitionStartTurn,
-    retoolRescaleApplied: healedOpex?.retoolRescaleApplied ?? sector.retoolRescaleApplied,
-    operatingCapacityTurn: sector.operatingCapacityTurn,
-    currentTurn,
-  };
-  const retoolCapacityRatio = plantsEnabled ? retoolOperatingCapacityRatio(retoolBasis) : 1;
   const plantsCapacity = plantsOwnedCapacity * retoolCapacityRatio;
   const priorProductionUnitRatio = plantsEnabled ? retoolMeasurementRatio(retoolBasis) : 1;
   // The nameplate plants writes back to `sector.revenue`: what the OWNED
