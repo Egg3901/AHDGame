@@ -1269,47 +1269,6 @@ export async function applyForexTurnFillSpend(
   const runSpend = async (session?: ClientSession) => {
     const opts = session ? { session } : {};
 
-    // Pre-claim live read: pure skips stay writeless (no receipt), exactly
-    // like the legacy scan continuing past unfillable orders.
-    const live = await orders.findOne({ _id: input.orderId }, opts);
-    if (!live || live.type !== "limit" || (live.status !== "open" && live.status !== "partial")) {
-      return {
-        duplicate: false as boolean,
-        outcome: "skipped" as ForexTurnFillOutcome,
-        fillAmount: 0,
-        toAmount: 0,
-        filledRate: 0,
-        spreadAmount: 0,
-        centralBankShare: 0,
-        orderStatus: (live?.status ?? "open") as CurrencyOrder["status"],
-      };
-    }
-    const fillAmount = live.amount - live.filledAmount;
-    if (!(fillAmount > 0)) {
-      return {
-        duplicate: false as boolean,
-        outcome: "skipped" as ForexTurnFillOutcome,
-        fillAmount: 0,
-        toAmount: 0,
-        filledRate: 0,
-        spreadAmount: 0,
-        centralBankShare: 0,
-        orderStatus: live.status,
-      };
-    }
-    if (!Number.isFinite(input.crossRate) || input.crossRate <= 0) {
-      return {
-        duplicate: false as boolean,
-        outcome: "skipped" as ForexTurnFillOutcome,
-        fillAmount: 0,
-        toAmount: 0,
-        filledRate: 0,
-        spreadAmount: 0,
-        centralBankShare: 0,
-        orderStatus: live.status,
-      };
-    }
-
     const runPlan = async (plan: NormalizedTurnFillPlan): Promise<ForexTurnFillResult> => {
       await runMoneyFlowSteps(receipts, key, buildTurnFillSteps(db, key, plan), mapTurnFillError, opts);
       const settled = await orders.findOne(
@@ -1328,6 +1287,70 @@ export async function applyForexTurnFillSpend(
         orderStatus: status,
       };
     };
+
+    // Pre-claim live read: pure skips stay writeless (no receipt), exactly
+    // like the legacy scan continuing past unfillable orders — UNLESS this
+    // key already owns an attempt. A same-key retry after the settle landed
+    // re-reads a filled order (empty remainder), and a retry after an
+    // owner-gone expiry re-reads a closed one: both take the skip path below
+    // while the receipt holds a completed or in-progress attempt that must
+    // replay/resume instead of stranding. Terminal receipts fail closed.
+    const live = await orders.findOne({ _id: input.orderId }, opts);
+    const reconcileSkippedAttempt = async (): Promise<ForexTurnFillResult | null> => {
+      const existing = await receiptCollection.findOne({ _id: key }, opts);
+      if (!existing) return null;
+      if (existing.status === "completed") {
+        const stored = existing.forexTurnFillPlan;
+        if (
+          !isTurnFillPlan(stored) ||
+          stored.orderIdHex !== input.orderId.toHexString() ||
+          stored.turn !== input.turn
+        ) {
+          throw new MoneyFlowKeyConflictError(key);
+        }
+        return replayTurnFillOutcome(db, key, opts);
+      }
+      if (existing.status === "failed" || existing.status === "compensated") {
+        throw new MoneyFlowTerminalError(key, existing.status);
+      }
+      const stored = existing.forexTurnFillPlan;
+      // Crashed between the claim insert and the plan write: nothing applied
+      // yet, and the live row is unfillable — the orphan TTLs away while the
+      // scan treats the row as any other unfillable one.
+      if (!isTurnFillPlan(stored)) return null;
+      if (
+        live &&
+        !isRemainderOfTurnFillPlan(input.orderId, input.turn, live.filledAmount, stored)
+      ) {
+        throw new MoneyFlowKeyConflictError(key);
+      }
+      const result = await runPlan(normalizeTurnFillPlan(stored));
+      return { ...result, duplicate: true as boolean };
+    };
+    const skipped = async (orderStatus: CurrencyOrder["status"]): Promise<ForexTurnFillResult> => {
+      const resumed = await reconcileSkippedAttempt();
+      if (resumed) return resumed;
+      return {
+        duplicate: false as boolean,
+        outcome: "skipped" as ForexTurnFillOutcome,
+        fillAmount: 0,
+        toAmount: 0,
+        filledRate: 0,
+        spreadAmount: 0,
+        centralBankShare: 0,
+        orderStatus,
+      };
+    };
+    if (!live || live.type !== "limit" || (live.status !== "open" && live.status !== "partial")) {
+      return skipped((live?.status ?? "open") as CurrencyOrder["status"]);
+    }
+    const fillAmount = live.amount - live.filledAmount;
+    if (!(fillAmount > 0)) {
+      return skipped(live.status);
+    }
+    if (!Number.isFinite(input.crossRate) || input.crossRate <= 0) {
+      return skipped(live.status);
+    }
 
     let claim: Awaited<ReturnType<typeof claimMoneyFlowReceipt>>;
     try {

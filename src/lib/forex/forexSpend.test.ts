@@ -1589,15 +1589,19 @@ describe("applyForexTurnFillSpend (turn triggered fills)", () => {
     const db = freshDb();
     const orderId = seedTurnOrder(db);
     const key = forexTurnFillKey(TURN, orderId);
+    const input = fillInputFor(db, orderId);
     const receipts = db.collection(
       NON_ATOMIC_MONEY_FLOW_RECEIPTS_COLLECTION
     ) as unknown as Collection<MoneyFlowReceipt>;
-    expect(await claimMoneyFlowReceipt(receipts, key, "fp-terminal")).toBe("fresh");
+    // The terminal setup must claim under the input's real fingerprint: a
+    // mismatched fingerprint throws key-conflict before the terminal status
+    // is ever consulted, which would test the wrong failure.
+    expect(await claimMoneyFlowReceipt(receipts, key, input.fingerprint)).toBe("fresh");
     await failMoneyFlowReceipt(receipts, key, "FOREX_TURN_FILL_RACED:guard-rejected");
 
-    await expect(
-      applyForexTurnFillSpend(db as unknown as Db, fillInputFor(db, orderId))
-    ).rejects.toThrow(MoneyFlowTerminalError);
+    await expect(applyForexTurnFillSpend(db as unknown as Db, input)).rejects.toThrow(
+      MoneyFlowTerminalError
+    );
     expect(personalOf(db, makerId).GBP).toBe(0);
     expect(orderDoc(db, orderId).status).toBe("open");
   });

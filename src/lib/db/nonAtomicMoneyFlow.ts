@@ -112,14 +112,17 @@ import { ObjectId, type ClientSession, type Collection, type Filter } from "mong
  * bargaining settlement (campaign claim + agreement insert + expectation
  * restore move no balances), campaign upgrades (single-document guarded
  * spend).
- * Forex turn paths DO mutate money and remain legacy (BEWARE — the request
- * surfaces above being migrated does not cover these): the
- * triggered-limit matcher in processTriggeredLimitOrders credits takers
- * and central-bank spread slices with bare `$inc` writes, expireStaleOrders
- * refunds escrow via an unkeyed bulkWrite, and the intervention side
- * effects draw reserves the same way (all in src/lib/turn/forexTurn.ts,
- * run from the stateEffectsPhase forexTurn phase). A crash between the
- * status transition and the money writes there can still strand or double
+ * Forex turn triggered-limit fills are migrated (applyForexTurnFillSpend:
+ * deterministic per-turn key, resume plan persisted on the receipt at
+ * claim, keyed credit/settle/spread/history steps with legacy-exact
+ * amounts and phase order, same-key replay/resume/terminal semantics,
+ * key-only orphan recovery re-driven by the turn driver before its scan).
+ * Forex turn refund and intervention paths DO mutate money and remain
+ * legacy (BEWARE): expireStaleOrders refunds escrow via an unkeyed
+ * bulkWrite, and the intervention side effects draw reserves with bare
+ * writes (both in src/lib/turn/forexTurn.ts, run from the
+ * stateEffectsPhase forexTurn phase). A crash between the status
+ * transition and the money writes there can still strand or double
  * value; migrating them means expressing each as keyed steps here.
  * Still on the legacy debit-first-plus-compensation fallback: bond
  * default dissolution (bare bulkWrite holder/equity/central-bank writes),

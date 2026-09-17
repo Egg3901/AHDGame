@@ -14,6 +14,17 @@ import {
 
 vi.mock("@/lib/mongodb", () => ({ getDb: vi.fn() }));
 
+const { supportMock } = vi.hoisted(() => ({ supportMock: vi.fn() }));
+
+// The keyed turn-fill primitive settles through runWithOptionalTransaction:
+// resolving the probe false exercises the sequential (non-transaction)
+// branch, which never touches getMongoClient — so the mock above
+// deliberately provides no getMongoClient, and any session-path regression
+// surfaces as a missing-export throw instead of a silent pass.
+vi.mock("@/lib/db/transactionSupport", () => ({
+  assertTransactionSupportAtBoot: supportMock,
+}));
+
 // Mock volume tracker to avoid second-order DB mocking
 vi.mock("@/lib/currency/volumeTracker", () => ({
   computeCurrencyVolumes: vi.fn().mockResolvedValue({
@@ -53,6 +64,8 @@ function makeExchangeRate(countryId: string, currencyCode: string, rate: number,
 }
 
 beforeEach(() => {
+  vi.clearAllMocks();
+  supportMock.mockResolvedValue(false);
   db = createMockDb();
 
   // Pre-initialize all collections that forexTurn accesses
@@ -61,6 +74,7 @@ beforeEach(() => {
   db.collection("currencyOrders");
   db.collection("tradeHistory");
   db.collection("characters");
+  db.collection("nonAtomicMoneyFlowReceipts");
 
   // Default: 3 central banks with neutral values
   const banks = [
@@ -303,8 +317,13 @@ describe("processForexTurn", () => {
 
   it("stores triggered limit-order reserve spread fees in the collected currency", async () => {
     const { ObjectId } = await import("mongodb");
+    const { forexTurnFillKey } = await import("@/lib/forex/forexSpend");
     const charId = new ObjectId();
     const orderId = new ObjectId();
+    // Mutable fill state: the scan hands out the open order, the keyed
+    // settle flips it, and the primitive's findOne reads observe the flip.
+    let orderStatus = "open";
+    let orderFilledAmount = 0;
     const order = {
       _id: orderId,
       characterId: charId,
@@ -323,29 +342,85 @@ describe("processForexTurn", () => {
       updatedAt: new Date(),
     };
 
-    let findCallCount = 0;
-    db.collectionMocks.currencyOrders.find.mockImplementation(() => {
-      findCallCount++;
-      if (findCallCount === 1) {
-        return {
-          sort: vi.fn().mockReturnValue({
-            toArray: vi.fn().mockResolvedValue([order]),
-          }),
-          toArray: vi.fn().mockResolvedValue([order]),
-        };
-      }
-      return {
-        toArray: vi.fn().mockResolvedValue([]),
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        skip: vi.fn().mockReturnThis(),
-        project: vi.fn().mockReturnThis(),
-      };
+    const cursorFor = (docs: unknown[]) => ({
+      toArray: vi.fn().mockResolvedValue(docs),
+      sort: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(docs),
+      }),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
     });
+    db.collectionMocks.currencyOrders.find.mockImplementation(() => cursorFor([order]));
+    // The real primitive reads single docs (pre-claim live read, then the
+    // settled-status read with a projection) — not the scan cursor.
+    db.collectionMocks.currencyOrders.findOne.mockImplementation(
+      async (filter: { _id: unknown }, opts?: { projection?: unknown }) => {
+        if (String(filter._id) !== String(orderId)) return null;
+        if (opts?.projection) return { _id: orderId, status: orderStatus };
+        return { ...order, status: orderStatus, filledAmount: orderFilledAmount };
+      }
+    );
+    db.collectionMocks.currencyOrders.updateOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        if (String(filter._id) === String(orderId)) {
+          orderStatus = "filled";
+          orderFilledAmount = 10_000;
+        }
+        return { modifiedCount: 1, matchedCount: 1 };
+      }
+    );
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: charId,
+      currencyBalances: { personal: { USD: 0, GBP: 0 } },
+      appliedMoneyFlowKeys: [],
+    });
+
+    // Minimal stateful receipt store: claim insert, plan/$set updates, reads.
+    const receiptStore = new Map<string, Record<string, unknown>>();
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockImplementation(
+      async (filter: { _id: string }) => receiptStore.get(filter._id) ?? null
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mockImplementation(
+      async (doc: Record<string, unknown>) => {
+        if (receiptStore.has(doc._id as string)) {
+          const error = new Error("E11000 duplicate key error") as Error & { code: number };
+          error.code = 11000;
+          throw error;
+        }
+        receiptStore.set(doc._id as string, { ...doc });
+        return { insertedId: doc._id };
+      }
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.updateOne.mockImplementation(
+      async (filter: { _id: string }, update: { $set?: Record<string, unknown> }) => {
+        const doc = receiptStore.get(filter._id);
+        if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+        Object.assign(doc, update.$set ?? {});
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
 
     const result = await processForexTurn(db as unknown as Db, 50);
 
     expect(result.limitOrdersFilled).toBe(1);
+    // The fill ran through the keyed primitive, not bare writes: the
+    // topology probe was consulted, the order was read via findOne (live
+    // read, then the settled-status read), and the receipt was claimed
+    // under the deterministic per-turn key.
+    expect(supportMock).toHaveBeenCalled();
+    expect(db.collectionMocks.currencyOrders.findOne).toHaveBeenCalledWith({ _id: orderId }, {});
+    expect(
+      db.collectionMocks.currencyOrders.findOne.mock.calls.some(
+        (call: unknown[]) =>
+          String((call[0] as { _id: unknown })._id) === String(orderId) &&
+          (call[1] as { projection?: unknown } | undefined)?.projection !== undefined
+      )
+    ).toBe(true);
+    const expectedKey = forexTurnFillKey(50, orderId);
+    const claimCall = db.collectionMocks.nonAtomicMoneyFlowReceipts.insertOne.mock.calls[0];
+    expect(claimCall[0]).toMatchObject({ _id: expectedKey, status: "in_progress" });
+    expect(receiptStore.get(expectedKey)?.status).toBe("completed");
     // Cross-currency routing: the USD reserve slice (outflow currency) now
     // accrues to the *destination* (GBP→UK) central bank as a foreign reserve,
     // while forexRevenue stays with the source (US) bank.
@@ -368,6 +443,128 @@ describe("processForexTurn", () => {
     expect(
       (forexRevenueCall![1].$inc as Record<string, number>)["spreadFeeReserveBalances.USD"]
     ).toBeUndefined();
+  });
+
+  it("re-drives an in-progress prior-turn fill receipt before scanning", async () => {
+    const { ObjectId } = await import("mongodb");
+    const { forexTurnFillKey } = await import("@/lib/forex/forexSpend");
+    const charId = new ObjectId();
+    const orderId = new ObjectId();
+    const historyId = new ObjectId();
+    // Legacy-exact plan for a 10_000 USD -> GBP fill at 0.75: spread 64,
+    // net 9936, credit 7452, CB share 48, reserve 32, revenue 16.
+    const orphanKey = forexTurnFillKey(49, orderId);
+    const orphan = {
+      _id: orphanKey,
+      status: "in_progress",
+      fingerprint: "forex-turn-fill:old",
+      forexTurnFillPlan: {
+        version: 1,
+        orderIdHex: orderId.toHexString(),
+        turn: 49,
+        characterIdHex: charId.toHexString(),
+        fromCurrency: "USD",
+        toCurrency: "GBP",
+        priorStatus: "open",
+        orderAmount: 10_000,
+        priorFilledAmount: 0,
+        priorSpreadCharged: 0,
+        priorFilledRate: null,
+        priorUpdatedAtIso: new Date().toISOString(),
+        fillAmount: 10_000,
+        crossRate: 0.75,
+        spreadAmount: 64,
+        netAmount: 9_936,
+        toAmount: 7_452,
+        toReserveBalance: 32,
+        toForexRevenue: 16,
+        fromBankId: "US",
+        reserveBankId: "UK",
+        historyIdHex: historyId.toHexString(),
+        ownerMissing: false,
+        nowIso: new Date().toISOString(),
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const receiptStore = new Map<string, Record<string, unknown>>([[orphanKey, { ...orphan }]]);
+
+    const cursorFor = (docs: unknown[]) => ({
+      toArray: vi.fn().mockResolvedValue(docs),
+      sort: vi.fn().mockReturnValue({
+        toArray: vi.fn().mockResolvedValue(docs),
+      }),
+      limit: vi.fn().mockReturnThis(),
+      skip: vi.fn().mockReturnThis(),
+      project: vi.fn().mockReturnThis(),
+    });
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.find.mockImplementation(() =>
+      cursorFor([...receiptStore.values()].filter((r) => r.status === "in_progress"))
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.findOne.mockImplementation(
+      async (filter: { _id: string }) => receiptStore.get(filter._id) ?? null
+    );
+    db.collectionMocks.nonAtomicMoneyFlowReceipts.updateOne.mockImplementation(
+      async (filter: { _id: string }, update: { $set?: Record<string, unknown> }) => {
+        const doc = receiptStore.get(filter._id);
+        if (!doc) return { matchedCount: 0, modifiedCount: 0 };
+        Object.assign(doc, update.$set ?? {});
+        return { matchedCount: 1, modifiedCount: 1 };
+      }
+    );
+
+    // The live scan is empty (the orphaned order already settled out of the
+    // open/partial scan); the $in read backs the recovery notification.
+    let orderStatus = "open";
+    const recoveredOrder = {
+      _id: orderId,
+      characterId: charId,
+      characterName: "Trader",
+      fromCurrency: "USD",
+      toCurrency: "GBP",
+      status: "open",
+    };
+    db.collectionMocks.currencyOrders.find.mockImplementation((filter: Record<string, unknown>) =>
+      filter?._id && typeof filter._id === "object" && "$in" in (filter._id as object)
+        ? cursorFor([{ ...recoveredOrder, status: orderStatus }])
+        : cursorFor([])
+    );
+    db.collectionMocks.currencyOrders.findOne.mockImplementation(
+      async (filter: { _id: unknown }, opts?: { projection?: unknown }) => {
+        if (String(filter._id) !== String(orderId)) return null;
+        if (opts?.projection) return { _id: orderId, status: orderStatus };
+        return { ...recoveredOrder, status: orderStatus };
+      }
+    );
+    db.collectionMocks.currencyOrders.updateOne.mockImplementation(
+      async (filter: Record<string, unknown>) => {
+        if (String(filter._id) === String(orderId)) orderStatus = "filled";
+        return { modifiedCount: 1, matchedCount: 1 };
+      }
+    );
+    db.collectionMocks.characters.findOne.mockResolvedValue({
+      _id: charId,
+      currencyBalances: { personal: { USD: 0, GBP: 0 } },
+      appliedMoneyFlowKeys: [],
+    });
+
+    const result = await processForexTurn(db as unknown as Db, 50);
+
+    // The orphan converged through its stored plan: credit, settle, spread
+    // slices, and history all landed exactly once under the old key.
+    expect(result.limitOrdersFilled).toBe(1);
+    expect(result.totalSpreadRevenue).toBe(48);
+    expect(receiptStore.get(orphanKey)?.status).toBe("completed");
+    const creditCall = db.collectionMocks.characters.updateOne.mock.calls.find(
+      (call: Array<Record<string, unknown>>) =>
+        (call[1].$inc as Record<string, number> | undefined)?.["currencyBalances.personal.GBP"] ===
+        7_452
+    );
+    expect(creditCall).toBeDefined();
+    expect(db.collectionMocks.tradeHistory.insertOne).toHaveBeenCalledWith(
+      expect.objectContaining({ _id: historyId }),
+      undefined
+    );
   });
 
   it("rate stays near base with neutral macro inputs and no volume", async () => {
