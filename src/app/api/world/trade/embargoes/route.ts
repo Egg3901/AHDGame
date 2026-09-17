@@ -16,6 +16,12 @@ import { NATIONAL_TERMINAL_STATUSES } from "@/lib/congress/billProposalLimits";
 import { imposeEmbargo, liftEmbargo } from "@/lib/trade/commands/embargoCommands";
 import { resolveLegislatedEmbargoes } from "@/lib/trade/reconcileEmbargoes";
 import { getCabinetMembersCollection } from "@/lib/db/collections/cabinetMembers";
+import type { UnifiedCabinetMember } from "@/lib/db/types/unifiedCabinetMember";
+import {
+  refundMinisterialAction,
+  resolveMinisterialRemaining,
+  spendMinisterialAction,
+} from "@/lib/cabinet/ministerialActionPool";
 import { TRADE_MINISTER_POSITION_BY_COUNTRY } from "@/lib/constants/internationalOrganizations";
 import { TRADE_EMBARGO_MAX_DURATION_TURNS } from "@/lib/trade/constants";
 
@@ -65,28 +71,25 @@ export async function POST(request: Request) {
     const seatPositionId = TRADE_MINISTER_POSITION_BY_COUNTRY[sourceCountry];
     const charging = seatPositionId != null && minister.auth.positionId === seatPositionId;
     const membersCol = getCabinetMembersCollection(db);
-    let chargedMemberId: ObjectId | null = null;
+    let chargedMember: UnifiedCabinetMember | null = null;
     if (charging) {
       const member = await membersCol.findOne({
         countryId: sourceCountry,
         positionId: seatPositionId,
       });
-      // Backfill legacy members missing the action pool so the atomic spend matches.
-      if (member && member.ministerialActions == null) {
-        await membersCol.updateOne({ _id: member._id }, { $set: { ministerialActions: 2 } });
-        member.ministerialActions = 2;
-      }
-      if ((member?.ministerialActions ?? 0) < 1) {
+      if (!member) {
         throw badRequest("No cabinet actions remaining to impose an embargo this turn.");
       }
-      const spend = await membersCol.updateOne(
-        { _id: member!._id, ministerialActions: { $gte: 1 } },
-        { $inc: { ministerialActions: -1 } }
-      );
-      if (spend.modifiedCount === 0) {
+      // Shared UK pool: both offices of a dual holder spend one balance (issue #2049).
+      const actions = await resolveMinisterialRemaining(db, sourceCountry, member);
+      if (actions < 1) {
         throw badRequest("No cabinet actions remaining to impose an embargo this turn.");
       }
-      chargedMemberId = member!._id;
+      const spend = await spendMinisterialAction(db, sourceCountry, member);
+      if (!spend.ok) {
+        throw badRequest("No cabinet actions remaining to impose an embargo this turn.");
+      }
+      chargedMember = member;
     }
 
     const currentTurn = await getCurrentTurn(db);
@@ -106,8 +109,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ success: true, embargoId: result.embargoId.toString() });
     } catch (err) {
       // Refund the cabinet action — the embargo was rejected or failed to enact.
-      if (chargedMemberId) {
-        await membersCol.updateOne({ _id: chargedMemberId }, { $inc: { ministerialActions: 1 } });
+      if (chargedMember) {
+        await refundMinisterialAction(db, sourceCountry, chargedMember);
       }
       throw err;
     }

@@ -4,6 +4,7 @@ import type {
   Bond,
   CommodityPrice,
   CorporateSector,
+  Corporation,
   EconomicMetric,
   EconomicVitalSigns,
   ExchangeRate,
@@ -58,6 +59,10 @@ type Inputs = {
   ledgerTurnover: LedgerTurnoverRow[];
   /** How many ledger entries the window covered; a sample-size input only. */
   ledgerEntryCount: number;
+  /** One row per corporation carrying ring-fenced money (see summarizeRingFencedCash). */
+  ringFenced?: RingFencedCashRow[];
+  /** Anchor rates by currency code; unknown currencies convert 1:1. */
+  anchorRates?: Record<string, number>;
   commodityParticipants: CommodityParticipant[];
   unownedSectors?: UnownedSector[];
   entryFunnel?: NppMarketEntryFunnel | null;
@@ -292,6 +297,35 @@ function marketQuality(
     return [Math.abs(listing.priceChange48h) / (notional / 1_000_000)];
   });
 
+  // Per-listing inventory concentration: each economic trade's notional is
+  // split evenly across its distinct named counterparties, so a float-only
+  // leg attributes fully to the trader on the other side. Rows with no named
+  // party are unattributable and narrow the sample instead of diluting it.
+  const notionalByListingParty = new Map<string, Map<string, number>>();
+  for (const trade of trades) {
+    const notional = nonnegative(trade.totalAnchor);
+    if (notional <= 0) continue;
+    const parties = new Set(
+      [trade.from, trade.to].map(tradePartyKey).filter((key): key is string => key != null)
+    );
+    if (parties.size === 0) continue;
+    const share = notional / parties.size;
+    const key = trade.corporationId.toString();
+    let byParty = notionalByListingParty.get(key);
+    if (!byParty) {
+      byParty = new Map();
+      notionalByListingParty.set(key, byParty);
+    }
+    for (const party of parties) byParty.set(party, (byParty.get(party) ?? 0) + share);
+  }
+  const topTraderShares: number[] = [];
+  for (const [listingId, byParty] of notionalByListingParty) {
+    if (!listingById.has(listingId)) continue;
+    const total = [...byParty.values()].reduce((sum, value) => sum + value, 0);
+    if (total <= 0) continue;
+    topTraderShares.push(Math.max(...byParty.values()) / total);
+  }
+
   return {
     openBuyOrders: open.filter((order) => order.type === "buy").length,
     openSellOrders: open.filter((order) => order.type === "sell").length,
@@ -303,7 +337,16 @@ function marketQuality(
     organicDepthAnchor,
     executionHours,
     amihud,
+    topTraderShares,
   };
+}
+
+function tradePartyKey(party: ShareTradeHistory["from"]): string | null {
+  if (!party) return null;
+  if (party.characterId) return `character:${party.characterId.toString()}`;
+  if (party.imperialCharacterId) return `imperial:${party.imperialCharacterId.toString()}`;
+  if (party.corporationId) return `corporation:${party.corporationId.toString()}`;
+  return party.name ? `name:${party.name}` : null;
 }
 
 function relevantMarketDiagnostics(
@@ -459,6 +502,74 @@ export function summarizeLedgerTurnover(entries: LedgerEntry[]): LedgerTurnoverR
   return [...byAccount.entries()].map(([account, turnover]) => ({ account, turnover }));
 }
 
+/**
+ * One corporation's ring-fenced money: bank cash reserves plus share escrow.
+ *
+ * Both sit outside the shadow ledger. The bank's `cashReserves` are
+ * ring-fenced from the parent's `liquidCapital` (see `banking/bankCash.ts`),
+ * so the corporation ledger account never sees them; `shareEscrowBalance`
+ * settles float trades in escrow mode and likewise emits no ledger legs.
+ * Only active charters count as banks: revoked or failed charters hold no
+ * spendable bank money, and their cash is in recovery or already returned.
+ */
+export interface RingFencedCashRow {
+  charterActive: boolean;
+  charterCurrency: string;
+  /** Absent on charters written before the ring-fence: unclassified, not zero. */
+  cashReserves: number | undefined;
+  liquidCurrency: string;
+  /** Absent in instant settlement mode, which holds no escrow: zero, not unknown. */
+  escrowBalance: number | undefined;
+}
+
+export interface RingFencedCashSummary {
+  banksTotal: number;
+  banksReported: number;
+  bankCashAnchor: number;
+  escrowAnchor: number;
+  escrowContributors: number;
+}
+
+/**
+ * Aggregate ring-fenced money into anchor stocks.
+ *
+ * Conversion mirrors the balance snapshot's `toAnchor`: a missing or
+ * non-positive rate converts 1:1 rather than dropping the row. Negative
+ * escrow rows are buyback debt, not money, and floor per row exactly like the
+ * modeled balance stocks in `monetaryActivity`.
+ */
+export function summarizeRingFencedCash(
+  rows: RingFencedCashRow[],
+  rates: Record<string, number>
+): RingFencedCashSummary {
+  const toAnchor = (local: number, currency: string): number => {
+    const rate = rates[currency];
+    return rate && rate > 0 ? local / rate : local;
+  };
+  let banksTotal = 0;
+  let banksReported = 0;
+  let bankCashAnchor = 0;
+  let escrowAnchor = 0;
+  let escrowContributors = 0;
+  for (const row of rows) {
+    if (row.charterActive) {
+      banksTotal += 1;
+      if (typeof row.cashReserves === "number" && Number.isFinite(row.cashReserves)) {
+        banksReported += 1;
+        bankCashAnchor += toAnchor(nonnegative(row.cashReserves), row.charterCurrency);
+      }
+    }
+    if (typeof row.escrowBalance === "number" && Number.isFinite(row.escrowBalance)) {
+      const anchor = toAnchor(nonnegative(row.escrowBalance), row.liquidCurrency);
+      if (anchor > 0) {
+        escrowAnchor += anchor;
+        escrowContributors += 1;
+      }
+    }
+  }
+  return { banksTotal, banksReported, bankCashAnchor, escrowAnchor, escrowContributors };
+}
+
 function monetaryActivity(
   balanceSnapshot: BalanceSnapshot | null,
   turnoverRows: LedgerTurnoverRow[]
@@ -482,6 +593,7 @@ function monetaryActivity(
   let total = 0;
   let active = 0;
   const balanceByKind = new Map<string, number>();
+  const accountCountByKind = new Map<string, number>();
   for (const [account, rawBalance] of Object.entries(balances)) {
     if (!isRealAccount(account)) continue;
     const balance = nonnegative(rawBalance);
@@ -489,6 +601,7 @@ function monetaryActivity(
     if (activeAccounts.has(account)) active += balance;
     const kind = accountKind(account);
     balanceByKind.set(kind, (balanceByKind.get(kind) ?? 0) + balance);
+    accountCountByKind.set(kind, (accountCountByKind.get(kind) ?? 0) + 1);
   }
 
   const velocity = (kinds: readonly string[]): number | null => {
@@ -496,6 +609,16 @@ function monetaryActivity(
     const flow = kinds.reduce((sum, kind) => sum + (turnoverByKind.get(kind) ?? 0), 0);
     return ratio(flow, stock);
   };
+  const householdStock =
+    (balanceByKind.get("character") ?? 0) + (balanceByKind.get("character_savings") ?? 0);
+  const householdAccountCount =
+    (accountCountByKind.get("character") ?? 0) + (accountCountByKind.get("character_savings") ?? 0);
+  // An absent savings class is unmeasured, not zero: a 0/600 share would claim
+  // the economy holds no savings when savings accounts simply do not exist.
+  const savingsShare =
+    (accountCountByKind.get("character_savings") ?? 0) === 0
+      ? null
+      : ratio(balanceByKind.get("character_savings") ?? 0, householdStock);
   return {
     total,
     active,
@@ -504,6 +627,10 @@ function monetaryActivity(
     accountCount: Object.keys(balances).filter((account) => isRealAccount(account)).length,
     grossVelocity: ratio(grossTurnover, total),
     householdVelocity: velocity(["character", "character_savings"]),
+    transactionalVelocity: velocity(["character"]),
+    savingsVelocity: velocity(["character_savings"]),
+    savingsShare,
+    householdAccountCount,
     corporateVelocity: velocity(["corporation"]),
     partyVelocity: velocity(["party"]),
     governmentVelocity: velocity(["government"]),
@@ -725,6 +852,15 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   }
   const sovereignMaturityValues = [...sovereignFaceByMaturity.values()];
   const sovereignMaturityConcentration = concentration(sovereignMaturityValues);
+  const corporateFaceByMaturity = new Map<number, number>();
+  for (const bond of corporateBonds) {
+    corporateFaceByMaturity.set(
+      bond.maturityTurn,
+      (corporateFaceByMaturity.get(bond.maturityTurn) ?? 0) + nonnegative(bond.totalIssued)
+    );
+  }
+  const corporateMaturityValues = [...corporateFaceByMaturity.values()];
+  const corporateMaturityConcentration = concentration(corporateMaturityValues);
 
   const wealth = input.globalWealth?.entries.map((entry) => Math.max(0, entry.totalWealth)) ?? [];
   const aggregateWealth = wealth.reduce((sum, value) => sum + value, 0);
@@ -763,9 +899,17 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
   );
   const totalCredit = input.money.reduce((sum, row) => sum + Math.max(0, row.creditOutstanding), 0);
   const activity = monetaryActivity(input.balanceSnapshot, input.ledgerTurnover);
+  const ring = summarizeRingFencedCash(input.ringFenced ?? [], input.anchorRates ?? {});
+  const ringBankIncomplete = ring.banksTotal > ring.banksReported;
+  const ringTotal = ring.bankCashAnchor + ring.escrowAnchor;
   const history = input.history ?? [];
   const coverage = computeCoverage(input.turn, history);
   const measurementReasons: string[] = [];
+  if (ringBankIncomplete) {
+    measurementReasons.push(
+      `bank_cash_incomplete_${ring.banksReported}_of_${ring.banksTotal}_reporting`
+    );
+  }
   if (coverage.missingTurns.length > 0) {
     measurementReasons.push(`window_missing_${coverage.missingTurns.length}_turns`);
   }
@@ -987,10 +1131,20 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         sovereignMaturityValues.length,
         "sovereign_face_by_maturity_turn"
       ),
+      corporateMaturityHhi: metric(
+        corporateMaturityConcentration.hhi,
+        corporateMaturityValues.length,
+        "corporate_face_by_maturity_turn"
+      ),
       sovereignMedianPriceToParSpreadPct: metric(
         median(sovereignBonds.map((bond) => (1 - bond.marketPrice) * 100)),
         sovereignBonds.length,
         "unmatured_sovereign_issue_count"
+      ),
+      corporateMedianPriceToParSpreadPct: metric(
+        median(corporateBonds.map((bond) => (1 - bond.marketPrice) * 100)),
+        corporateBonds.length,
+        "unmatured_corporate_issue_count"
       ),
       openBuyOrders: quality.openBuyOrders,
       openSellOrders: quality.openSellOrders,
@@ -1032,6 +1186,11 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         median(quality.amihud),
         quality.amihud.length,
         "absolute_48h_return_pct_per_million_anchor_notional"
+      ),
+      medianTopTraderNotionalShare48: metric(
+        median(quality.topTraderShares),
+        quality.topTraderShares.length,
+        "named_counterparty_share_of_listing_notional_48_turns"
       ),
     },
     coverage,
@@ -1136,6 +1295,21 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.activeAccounts,
         "character_primary_ledger_flow_to_closing_balance"
       ),
+      householdTransactionalVelocity48: metric(
+        activity.transactionalVelocity,
+        activity.activeAccounts,
+        "character_primary_ledger_flow_to_closing_balance"
+      ),
+      householdSavingsVelocity48: metric(
+        activity.savingsVelocity,
+        activity.activeAccounts,
+        "character_savings_primary_ledger_flow_to_closing_balance"
+      ),
+      savingsShareOfHouseholdBalances: metric(
+        activity.savingsShare,
+        activity.householdAccountCount,
+        "character_savings_share_of_household_closing_balance"
+      ),
       corporateGrossVelocity48: metric(
         activity.corporateVelocity,
         activity.activeAccounts,
@@ -1156,6 +1330,24 @@ export function computeEconomicVitalSigns(input: Inputs): EconomicVitalSigns {
         activity.activeAccounts,
         "fund_org_npp_primary_ledger_flow_to_closing_balance"
       ),
+      bankCashReservesAnchor: metric(
+        ring.banksTotal === 0 || ring.banksReported > 0 ? ring.bankCashAnchor : null,
+        ring.banksReported,
+        "active_chartered_bank_cash_reserves_anchor"
+      ),
+      escrowCashAnchor: metric(
+        ring.escrowAnchor,
+        ring.escrowContributors,
+        "corporation_share_escrow_nonnegative_anchor"
+      ),
+      ringFencedShareOfLiquid: metric(
+        !input.balanceSnapshot || ringBankIncomplete || activity.total + ringTotal <= 0
+          ? null
+          : ratio(ringTotal, activity.total + ringTotal),
+        ring.banksReported + ring.escrowContributors,
+        "ring_fenced_to_ledger_backed_plus_ring_fenced_closing_stock"
+      ),
+      bankGrossVelocity48: metric(null, 0, "bank_turnover_not_in_ledger"),
     },
     measurement: { confidence: measurementConfidence, reasons: measurementReasons },
     reconciliation: {
@@ -1201,6 +1393,7 @@ export async function snapshotEconomicVitalSigns(
     ledgerEntryCount,
     groupMembership,
     exchangeRates,
+    ringFencedCorps,
     unownedSectors,
     entryFunnel,
     eraUnitScale,
@@ -1285,6 +1478,24 @@ export async function snapshotEconomicVitalSigns(
       .countDocuments({ turn: { $gte: windowStart, $lte: turn } }),
     resolveFormalizedGroups(db),
     db.collection<ExchangeRate>("exchangeRates").find({}).toArray(),
+    // Ring-fenced money lives on corporations, outside the ledger: active bank
+    // charter reserves plus share-escrow balances. Narrow projection on
+    // purpose: only the classification and balance fields below are read.
+    db
+      .collection<Corporation>("corporations")
+      .find(
+        { $or: [{ bankCharter: { $exists: true } }, { shareEscrowBalance: { $exists: true } }] },
+        {
+          projection: {
+            "bankCharter.status": 1,
+            "bankCharter.currency": 1,
+            "bankCharter.cashReserves": 1,
+            liquidCurrencyCode: 1,
+            shareEscrowBalance: 1,
+          },
+        }
+      )
+      .toArray(),
     db.collection<UnownedSector>("unownedSectors").find({}).toArray(),
     db
       .collection<NppMarketEntryFunnel>(NPP_MARKET_ENTRY_FUNNEL_COLLECTION)
@@ -1307,6 +1518,15 @@ export async function snapshotEconomicVitalSigns(
   ]);
   const fxByCurrency = new Map(exchangeRates.map((row) => [row.currencyCode, row.rate]));
   if (!fxByCurrency.has("USD")) fxByCurrency.set("USD", 1);
+  const ringFenced: RingFencedCashRow[] = ringFencedCorps.map((corp) => ({
+    charterActive: corp.bankCharter?.status === "active",
+    charterCurrency: corp.bankCharter?.currency ?? "USD",
+    cashReserves: corp.bankCharter?.cashReserves,
+    // Absent on pre-forex corps: home currency, same fallback the
+    // corporation type documents for liquidCapital.
+    liquidCurrency: corp.liquidCurrencyCode ?? "USD",
+    escrowBalance: corp.shareEscrowBalance,
+  }));
   const commodityParticipants: CommodityParticipant[] = [];
   for (const sector of sectors) {
     const corporationId = sector.corporationId.toString();
@@ -1360,6 +1580,8 @@ export async function snapshotEconomicVitalSigns(
     balanceSnapshot,
     ledgerTurnover,
     ledgerEntryCount,
+    ringFenced,
+    anchorRates: Object.fromEntries(fxByCurrency),
     commodityParticipants,
     unownedSectors,
     entryFunnel,
